@@ -36,6 +36,11 @@ export function touchesAnnouncements(e: { type: string; event?: string }): boole
   return e.type === 'hr.announcement.changed' || (e.type === 'notification' && e.event === 'hr.announcement_published');
 }
 
+/** A realtime event about an expense claim: the module's own nudge, or a notification that one was decided or paid. */
+export function touchesExpenses(e: { type: string; event?: string }): boolean {
+  return e.type === 'expense.claim.changed' || (e.type === 'notification' && typeof e.event === 'string' && e.event.startsWith('expense.'));
+}
+
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
@@ -68,6 +73,9 @@ export function wireQueryInvalidation(): void {
     if (touchesInvitations(e)) for (const queryKey of [['meetings'], ['calendar'], ['home']]) void queryClient.invalidateQueries({ queryKey });
     if (e.type === 'activity.new') void queryClient.invalidateQueries({ queryKey: ['home'] });
     if (e.type === 'hr.attendance.changed') void queryClient.invalidateQueries({ queryKey: ['hr'] });
+    // An expense claim was filed, decided, paid, linked or refunded (worksuite-desktop#159): the Expenses screens and a
+    // tender's Expenses tab, its cards and its history ask again. Only ids travel; each screen re-reads what it may see.
+    if (touchesExpenses(e)) for (const queryKey of [['expenses'], ['tenders']]) void queryClient.invalidateQueries({ queryKey });
     // An announcement was published, edited, withdrawn, expired or deleted (worksuite-desktop#98): Home's block, an open
     // reader (which then says it is no longer available) and HR's console ask again.
     if (touchesAnnouncements(e)) for (const queryKey of [['announcements'], ['hr', 'announcements']]) void queryClient.invalidateQueries({ queryKey });

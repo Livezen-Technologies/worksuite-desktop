@@ -4,6 +4,7 @@ import { apiUrl } from '../../core/api';
 import { app } from '../../core/app-state';
 import { errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
+import { navigate } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
@@ -23,6 +24,7 @@ import {
   editClaim,
   fetchClaim,
   KIND_WORD,
+  linkedLine,
   RECEIPT_ACCEPT,
   RECEIPT_MAX,
   reopenClaim,
@@ -50,7 +52,22 @@ import type { ExpenseView } from './Rail';
  * company, so a coarse permission only decides whether the button is worth
  * drawing.
  */
-export default function ClaimPanel({ id, org, orgs, onClose, onGo }: { id: number; org: string; orgs: Org[]; onClose: () => void; onGo: (view: ExpenseView, extra?: string) => void }) {
+export default function ClaimPanel({
+  id,
+  org,
+  orgs,
+  onClose,
+  onGo,
+  extra,
+}: {
+  id: number;
+  org: string;
+  orgs: Org[];
+  onClose: () => void;
+  onGo: (view: ExpenseView, extra?: string) => void;
+  /** What the screen that opened the claim adds above it — the tender's own actions, say. */
+  extra?: ReactNode;
+}) {
   const qc = useQueryClient();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const q = useQuery({ queryKey: CK.claim(org, id), queryFn: ({ signal }) => fetchClaim(id, signal), retry: false });
@@ -103,6 +120,7 @@ export default function ClaimPanel({ id, org, orgs, onClose, onGo }: { id: numbe
       {q.error ? <LoadFailed what="That claim" onRetry={() => void q.refetch()} /> : null}
       {c ? (
         <>
+          {extra}
           <Grid rows={facts(c)} />
 
           <ReceiptBox claim={c} writable={writable} onChanged={refresh} />
@@ -290,6 +308,19 @@ function facts(c: ClaimDetail): Array<[string, ReactNode]> {
     ['Department', c.department],
     ['Branch', c.branch],
     ['Project', c.project],
+    [
+      'Linked to',
+      c.linked ? (
+        c.linked.type === 'tender' ? (
+          <button type="button" className="text-left text-primary hover:underline" onClick={() => navigate(`/tenders?open=${c.linked!.id}&wt=expenses`)}>
+            {linkedLine(c.linked)}
+          </button>
+        ) : (
+          linkedLine(c.linked)
+        )
+      ) : null,
+    ],
+    ['Refund', c.refundable ? (c.refunded_at ? `Refunded ${shortDate(c.refunded_at)}${c.refunded_by ? ` · recorded by ${c.refunded_by}` : ''}` : 'Refundable — not refunded yet') : null],
     ['Vendor', c.vendor],
     ['Tax on it', c.tax_amount ? money(c.tax_amount, c.base_currency) : null],
     ['Distance', c.kind === 'mileage' && c.quantity ? `${c.quantity} units` : null],
