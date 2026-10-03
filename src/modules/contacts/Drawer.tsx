@@ -5,6 +5,7 @@ import { useCanOpen } from '../../core/access';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useTab } from '../../core/tab-context';
+import { toE164, waDigits } from '../../core/phone';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
@@ -46,6 +47,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
   const canMeet = useCanOpen('meet');
   const canCalendar = useCanOpen('calendar');
   const canTasks = useCanOpen('tasks');
+  const canWhatsapp = useCanOpen('whatsapp');
   const detail = useQuery({ queryKey: ['contacts', 'detail', id], queryFn: ({ signal }) => apiGet<ContactDetail>(`/api/contacts/${id}`, undefined, signal) });
   const notes = useQuery({ queryKey: ['contacts', 'notes', id], queryFn: ({ signal }) => apiGet<ContactNote[]>(`/api/contacts/${id}/notes`, undefined, signal) });
   const found: (Contact & Partial<ContactDetail>) | undefined = detail.data ?? card;
@@ -70,6 +72,8 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
   }
   const c = found;
   const email = c.work_email || c.personal_email;
+  // Their WhatsApp: the number in the WhatsApp field, else their mobile (#176).
+  const waNumber = toE164(c.social?.whatsapp) ?? toE164(c.mobile) ?? toE164(c.office_phone);
 
   const toggle = async (what: 'favorite' | 'archive') => {
     try {
@@ -105,6 +109,17 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
         if (!email) return toast('info', 'No email on file');
         void logAct(id, 'email', `Emailed ${email}`);
         navigate(`/mail?compose=1&to=${encodeURIComponent(email)}`);
+      },
+    },
+    {
+      label: 'WhatsApp',
+      icon: 'phone',
+      shown: canWhatsapp,
+      on: !!waNumber,
+      go: () => {
+        if (!waNumber) return toast('info', 'No phone number on file');
+        void logAct(id, 'chat', `Opened WhatsApp with ${c.display_name}`);
+        navigate(whatsappRoute({ to: waDigits(waNumber) }));
       },
     },
     {
@@ -214,7 +229,7 @@ export function ContactDrawer({ id, card, onClose, onEdit, onGone }: { id: numbe
                     <button
                       type="button"
                       aria-label={a.label}
-                      title={a.on ? a.label : a.label === 'Email' ? 'No email on file' : 'Link this contact to a team member to chat'}
+                      title={a.on ? a.label : a.label === 'Email' ? 'No email on file' : a.label === 'WhatsApp' ? 'No phone number on file' : 'Link this contact to a team member to chat'}
                       onClick={() => void a.go()}
                       className={cx('flex h-[46px] w-[46px] items-center justify-center rounded-full border', a.on ? 'border-[#DCE2F5] bg-selection text-primary hover:brightness-95 dark:border-line' : 'border-line bg-ground text-ink-3')}
                     >
