@@ -48,6 +48,7 @@ import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
 import { archName, DeviceService, platformName } from '../services/device';
 import { PmsLocks } from '../services/pms-locks';
+import { ContactSync } from '../services/contact-sync';
 import { createPos } from '../services/pos-ipc';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
@@ -518,6 +519,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     origin: () => auth.getServer()?.origin ?? null,
     allowed: () => sessionCtl.isReady() && canOpenApp('pms', sessionCtl.visibleApps()),
   });
+
+  // Contacts: iCloud, CardDAV and Mac Contacts synced from this computer (worksuite-desktop#175); passwords only in the OS keystore.
+  const contactSync = new ContactSync({
+    http,
+    fetch: fetchImpl,
+    secrets,
+    origin: () => auth.getServer()?.origin ?? null,
+    allowed: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('contacts', sessionCtl.visibleApps()),
+    deviceId: () => device.installId(),
+  });
+  contactSync.start();
 
   // Restaurant Manager: this computer as a paired terminal — its key, menu and floor copy, outbox and print agent.
   const restaurant = createRestaurant({
@@ -1383,6 +1395,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         restaurant.forgetAll();
         // The door-lock servers this computer's front desk talked to, and their secrets.
         pmsLocks.wipe();
+        // The iCloud and CardDAV passwords contact sync kept for this computer.
+        contactSync.wipe();
       }
       log.info('local data removed', { scope });
     },
@@ -1737,6 +1751,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   mailFiles.register(router);
   pos.register(router);
   pmsLocks.register(router);
+  contactSync.register(router);
   restaurant.register(router);
   localAI.register(router);
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));

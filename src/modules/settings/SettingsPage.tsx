@@ -29,6 +29,7 @@ import { discoverStudioModels, setStudioModels, STUDIO_KEY, studioState, testStu
 import { Checkbox } from '../../components/Checkbox';
 import { DriveSettings } from '../files/DriveSettings';
 import { MailSettings } from '../mail/MailSettings';
+import { AccountsSettings } from '../contacts/sync/AccountsSettings';
 import { LocalDataSection, LocalProfileSection } from '../guest/LocalSettings';
 import { useGuest } from '../../core/session';
 
@@ -43,6 +44,8 @@ const SECTIONS = [
   { id: 'files', label: 'Files & Sync', icon: 'folder' },
   { id: 'offline', label: 'Offline', icon: 'cloud-off' },
   { id: 'mail', label: 'Mail', icon: 'mail' },
+  // Contacts › Accounts & sync: Google, Outlook, iCloud, CardDAV, Mac Contacts (worksuite-desktop#175).
+  { id: 'contacts', label: 'Contacts', icon: 'contact' },
   { id: 'ai', label: 'AI Assistant', icon: 'sparkles' },
   { id: 'local-ai', label: 'Local AI', icon: 'cpu' },
   { id: 'meet', label: 'Meet', icon: 'video' },
@@ -66,12 +69,13 @@ export default function SettingsPage(_props: ModuleProps) {
   const section = shown.find((s) => s.id === path[1])?.id ?? 'general';
   const prefs = useStore(app, (s) => s.prefs);
   const hasMail = useCanOpen('mail');
+  const hasContacts = useCanOpen('contacts');
   if (!prefs) return null;
   return (
     <div className="flex h-full">
       <nav className="w-[230px] shrink-0 border-r border-line bg-surface p-3" aria-label="Settings sections">
         <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
-        {shown.filter((s) => s.id !== 'mail' || hasMail).map((s) => (
+        {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts)).map((s) => (
           <button key={s.id} type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
             <Icon name={s.icon} size={16} /> {s.label}
           </button>
@@ -88,6 +92,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'files' ? <FilesSection /> : null}
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}
           {section === 'mail' && hasMail ? <MailSettings query={query} /> : null}
+          {section === 'contacts' && hasContacts ? <AccountsSettings /> : null}
           {section === 'ai' ? <AiSection prefs={prefs} /> : null}
           {section === 'local-ai' ? <LocalAISection /> : null}
           {section === 'meet' ? <MeetSection /> : null}
