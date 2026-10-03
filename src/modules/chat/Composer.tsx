@@ -218,9 +218,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       typingSignal('stop');
     }
   };
-  const onTyped = () => {
-    const now = Date.now();
-    if (now - typingAt.current > TYPING_EVERY) {
+  const onTyped = (now: number) => {
+    if (!typingAt.current || now - typingAt.current > TYPING_EVERY) {
       typingAt.current = now;
       typingSignal('start');
     }
@@ -558,7 +557,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 value={text}
                 onChange={(e) => {
                   setText(e.target.value);
-                  if (!editing) onTyped();
+                  if (!editing) onTyped(e.timeStamp);
                   if (!editing) setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
                   if (group) {
                     const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
