@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
+import { apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
 import { canOpen } from '../../core/access';
 import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
@@ -8,16 +8,13 @@ import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { Icon } from '../../components/Icon';
-import { Button, Chip, Empty, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
-import { useFolders, useMailboxes, useSignatures } from './api';
+import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
+import { useFolders } from './api';
 import { deviceId } from './clientRules';
-import { plainText } from './model';
-import { textToHtml } from './sanitize';
-import type { Mailbox, Signature } from './types';
 
 /**
- * Settings › Mail › Signatures and Rules (MAIL-CMP-07, MAIL-RUL-01…03,
- * MAIL-V2-09): the person's signatures, their automatic reply, their filter
+ * Settings › Mail › Rules (MAIL-RUL-01…03, MAIL-V2-09; signatures are in
+ * signatures/SignaturesSettings): their automatic reply, their filter
  * rules and the senders they blocked. Rules run on the mail server through
  * ManageSieve; where a mailbox's provider has none, the page says so instead
  * of letting saved rules look active.
@@ -126,123 +123,6 @@ export function filterWords(f: MailFilter): string {
 }
 
 export const useRules = (enabled = true) => useQuery({ queryKey: ['mail', 'rules'], queryFn: () => apiGet<RulesData>('/api/mail/rules'), staleTime: 60_000, retry: false, enabled });
-
-export function Signatures() {
-  const qc = useQueryClient();
-  const list = useSignatures(true);
-  const [editing, setEditing] = useState<Signature | 'new' | null>(null);
-  const refresh = () => void qc.invalidateQueries({ queryKey: ['mail', 'signatures'] });
-  const act = async (run: () => Promise<unknown>, done: string) => {
-    try {
-      await run();
-      refresh();
-      toast('success', done);
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
-  };
-  const rows = list.data?.signatures ?? [];
-  const boxes = (useMailboxes().data?.mailboxes ?? []).filter((b) => !b.archived);
-  return (
-    <>
-      <div className="mb-4 flex items-center justify-between">
-        <h2 className="text-[20px] font-bold text-ink">{text('Signatures')}</h2>
-        <Button variant="primary" icon="plus" onClick={() => setEditing('new')}>
-          {text('New signature')}
-        </Button>
-      </div>
-      {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
-      {list.isSuccess && rows.length === 0 && editing === null ? <Empty icon="pen" title={text('No signature yet')} hint={text('A signature goes under every new message and reply you write.')} /> : null}
-      {rows.length ? (
-        <ul role="list" className="overflow-hidden rounded-[12px] border border-line bg-surface">
-          {rows.map((s) => (
-            <li key={s.id} className="flex items-start gap-3 border-b border-line px-4 py-3 last:border-b-0">
-              <span className="min-w-0 flex-1">
-                <span className="flex items-center gap-2 text-[14px] font-bold text-ink">
-                  {s.name}
-                  {s.is_default ? <Chip tone="indigo">{text('Default')}</Chip> : null}
-                  {s.default_new ? <Chip tone="success">{text('New mail')}</Chip> : null}
-                  {s.default_reply ? <Chip tone="success">{text('Replies')}</Chip> : null}
-                </span>
-                <span className="block text-[12px] text-ink-3">{s.mailbox ? (boxes.find((b) => b.id === s.mailbox)?.email ?? text('One account')) : text('Every account')}</span>
-                <span className="mt-1 block whitespace-pre-line text-[12.5px] text-ink-2">{plainText(s.html).slice(0, 240)}</span>
-              </span>
-              {!s.is_default ? (
-                <Button size="sm" onClick={() => void act(() => apiPost(`/api/mail/signatures/${s.id}/default`), text('Now your default signature.'))}>
-                  Make default
-                </Button>
-              ) : null}
-              <Button size="sm" onClick={() => setEditing(s)}>
-                Edit
-              </Button>
-              <Button size="sm" variant="ghost" className="!text-danger" onClick={() => void act(() => apiDelete(`/api/mail/signatures/${s.id}`), text('Signature removed.'))}>
-                {text('Remove')}
-              </Button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      {editing ? <SignatureEditor signature={editing === 'new' ? null : editing} first={rows.length === 0} boxes={boxes} onClose={() => setEditing(null)} onSaved={refresh} /> : null}
-    </>
-  );
-}
-
-function SignatureEditor({ signature, first, boxes, onClose, onSaved }: { signature: Signature | null; first: boolean; boxes: Mailbox[]; onClose: () => void; onSaved: () => void }) {
-  const [name, setName] = useState(signature?.name ?? '');
-  // Per account, for new mail and replies (DMO-CMP-06).
-  const [mailbox, setMailbox] = useState<number | ''>(signature?.mailbox ?? '');
-  const [forNew, setForNew] = useState(signature?.default_new ?? first);
-  const [forReply, setForReply] = useState(signature?.default_reply ?? first);
-  const [body, setBody] = useState(signature ? plainText(signature.html) : '');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const save = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const payload = { name: name.trim(), html: textToHtml(body.trim()), mailbox: mailbox === '' ? null : mailbox, default_new: forNew, default_reply: forReply, ...(signature ? {} : { is_default: first }) };
-      if (signature) await apiPut(`/api/mail/signatures/${signature.id}`, payload);
-      else await apiPost('/api/mail/signatures', payload);
-      onSaved();
-      toast('success', text('Signature saved.'));
-      onClose();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <section aria-label={signature ? text('Edit signature') : text('New signature')} className="mt-4 flex flex-col gap-3 rounded-[12px] border border-line bg-surface p-4">
-      <TextField label={text('Name')} value={name} onChange={(e) => setName(e.target.value)} placeholder={text('Work')} autoFocus />
-      <div className="flex flex-wrap items-end gap-4">
-        <div className="w-[260px]">
-          <Select label={text('For')} value={mailbox} options={[{ value: '', label: text('Every account') }, ...boxes.map((b) => ({ value: b.id, label: b.email }))]} onValueChange={(v) => setMailbox(v === '' ? '' : Number(v))} />
-        </div>
-        <label className="flex h-9 items-center gap-2 text-[13px] text-ink">
-          <Checkbox checked={forNew} onChange={(e) => setForNew(e.target.checked)} />
-          {text('Use for new messages')}
-        </label>
-        <label className="flex h-9 items-center gap-2 text-[13px] text-ink">
-          <Checkbox checked={forReply} onChange={(e) => setForReply(e.target.checked)} />
-          {text('Use for replies and forwards')}
-        </label>
-      </div>
-      <p className="text-[12px] text-ink-3">{text('Write {t1}, {t2}, {t3} or {t4} and each message gets your name, job title, phone or email from your WorkSuite profile.', { t1: '{name}', t2: '{title}', t3: '{phone}', t4: '{email}' })}</p>
-      <label className="flex flex-col gap-1">
-        <span className="text-[12.5px] font-semibold text-ink-2">{text('Signature')}</span>
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} className="rounded-[8px] border border-line bg-surface px-3 py-2 text-[13.5px] text-ink outline-none focus:border-primary" />
-      </label>
-      {error ? <ErrorNote error={error} /> : null}
-      <div className="flex justify-end gap-2">
-        <Button onClick={onClose}>{text('Cancel')}</Button>
-        <Button variant="primary" loading={busy} disabled={!name.trim() || !body.trim()} onClick={() => void save()}>
-          {text('Save')}
-        </Button>
-      </div>
-    </section>
-  );
-}
 
 export function Rules({ mailbox }: { mailbox: string | null }) {
   const qc = useQueryClient();

@@ -142,6 +142,50 @@ function canvasEncoder(img: CanvasImageSource): Encoder {
     });
 }
 
+/**
+ * A logo that disappears in dark mode (worksuite-desktop#166): see-through
+ * around dark marks — on a dark background, nothing shows. `pixels` is RGBA.
+ */
+export function darkModeRisk(pixels: ArrayLike<number>): boolean {
+  let clear = 0;
+  let lum = 0;
+  let solid = 0;
+  for (let i = 0; i + 3 < pixels.length; i += 4) {
+    const a = pixels[i + 3]!;
+    if (a < 250) clear++;
+    if (a < 64) continue;
+    solid++;
+    lum += (0.2126 * pixels[i]! + 0.7152 * pixels[i + 1]! + 0.0722 * pixels[i + 2]!) / 255;
+  }
+  return clear > 0 && solid > 0 && lum / solid < 0.35;
+}
+
+/** Reads a picture's pixels and says whether it would vanish on a dark background. */
+export async function darkModeRiskOf(src: string): Promise<boolean> {
+  try {
+    // An <img> rather than fetch: the app may show pictures (data:, the WorkSuite server) it may not fetch.
+    const img = await new Promise<HTMLImageElement>((resolve, reject) => {
+      const i = new Image();
+      if (/^https?:/i.test(src)) i.crossOrigin = 'anonymous';
+      i.onload = () => resolve(i);
+      i.onerror = () => reject(new Error('unreadable'));
+      i.src = src;
+    });
+    const w = Math.min(96, img.naturalWidth || 96);
+    const h = Math.min(96, img.naturalHeight || 96);
+    const c = document.createElement('canvas');
+    c.width = w;
+    c.height = h;
+    const ctx = c.getContext('2d');
+    if (!ctx) return false;
+    ctx.drawImage(img, 0, 0, w, h);
+    return darkModeRisk(ctx.getImageData(0, 0, w, h).data);
+  } catch {
+    // A picture whose pixels cannot be read (another site's, without CORS) is not judged.
+    return false;
+  }
+}
+
 function hasTransparency(img: HTMLImageElement): boolean {
   try {
     const w = Math.min(64, img.naturalWidth);
@@ -168,12 +212,19 @@ export interface Prepared {
   shrunk: boolean;
 }
 
-/** A picture file made ready to go inside the message. */
-export async function prepareImage(file: Blob): Promise<Prepared> {
+/**
+ * A picture file made ready to go inside the message. `maxBytes`: a
+ * signature's pictures are kept to about 500 KB. An SVG is drawn and goes
+ * as a PNG (no mail client can be trusted with SVG).
+ */
+export async function prepareImage(file: Blob, maxBytes = IMAGE_MAX_BYTES, maxWidth = IMAGE_MAX_WIDTH): Promise<Prepared> {
   const img = await load(file);
   try {
-    const transparent = file.type !== 'image/jpeg' && hasTransparency(img);
-    const fitted = await fitImage({ width: img.naturalWidth, height: img.naturalHeight, bytes: file.size, type: file.type, transparent }, canvasEncoder(img));
+    // An SVG without a size of its own draws at 300 px wide.
+    const width = img.naturalWidth || 300;
+    const height = img.naturalHeight || Math.round(width / 2);
+    const transparent = file.type !== 'image/jpeg' && (file.type === 'image/svg+xml' || hasTransparency(img));
+    const fitted = await fitImage({ width, height, bytes: file.size, type: file.type, transparent }, canvasEncoder(img), maxBytes, maxWidth);
     const blob = fitted.blob ?? file;
     return { src: await blobToDataUrl(blob), width: fitted.width, height: fitted.height, bytes: blob.size, shrunk: fitted.shrunk };
   } finally {

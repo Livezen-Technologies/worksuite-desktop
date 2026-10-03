@@ -21,7 +21,8 @@ import { MailMerge } from './MailMerge';
 import { canOpen } from '../../core/access';
 import { MAIL_TASKS, WRITING_TASKS, type TextTask } from '../ai/textTools';
 import { sendMessage, useQuickParts, useSignatures, useTemplates } from './api';
-import { cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, pickSignature, sendChecks, signatureBlock, splitSignature, textToComposeHtml, voteChoices, withVotePrompt, type ComposeDraft } from './composeHtml';
+import { chooseSignature as signatureFor, cleanComposeHtml, composeBody, composeText, migrateDraft, parseQuote, sendChecks, signatureBlock, splitSignature, textToComposeHtml, voteChoices, withVotePrompt, type ComposeDraft } from './composeHtml';
+import { fillSignature, valuesFor, withEmbedded } from './signatures/signatureHtml';
 import { MentionPopup } from './Mentions';
 import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
@@ -124,15 +125,40 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const [mine, signature] = splitSignature(v.html);
   const own = composeText(mine);
 
+  // A signature as it goes into this message: its fields filled for the From account and the profile
+  // (worksuite-desktop#166; an older server fills them itself), and, in embedded mode, its pictures inside.
+  const sigList = signatures.data?.signatures ?? [];
+  const sigValues = signatures.data?.values ? valuesFor(signatures.data.values, from) : null;
+  const blockOf = (s: Signature | null) => (s ? signatureBlock(withEmbedded(sigValues ? fillSignature(s.html, sigValues) : (s.filled ?? s.html), s.embedded)) : '');
+  const same = (a: string, b: string) => cleanComposeHtml(a) === cleanComposeHtml(b);
+
   // The default signature goes in once, below the message, on a message that has none yet.
-  // The account's own signature for new mail or for replies (DMO-CMP-06).
-  const sig = pickSignature(signatures.data?.signatures ?? [], fromId || null, seed.mode);
+  // The account's own signature for new mail or for replies (DMO-CMP-06), and where it goes.
+  const choice = signatureFor(sigList, signatures.data?.settings, fromId || null, seed.mode);
+  const sig = choice.signature;
+  // The signature the composer put in itself: changing From switches it; one chosen or edited by hand stays.
+  const autoSig = useRef<string | null>(null);
   useEffect(() => {
     if (!sig || v.signed || draft.restored || own.trim() || signature) return;
-    draft.setValue({ ...v, signed: true, html: `${mine}${signatureBlock(sig.filled ?? sig.html)}` });
+    const block = blockOf(sig);
+    autoSig.current = block;
+    draft.setValue({ ...v, signed: true, html: `${mine}${block}` });
     // Only when the signature arrives.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sig?.id]);
+  const lastFrom = useRef(fromId);
+  useEffect(() => {
+    if (lastFrom.current === fromId) return;
+    lastFrom.current = fromId;
+    if (autoSig.current === null || !signatures.data) return;
+    const [mineNow, sigNow] = splitSignature(latest.current.html);
+    if (!same(sigNow, autoSig.current)) return;
+    const next = blockOf(sig);
+    autoSig.current = next;
+    set({ html: `${mineNow}${next}`, signed: true });
+    // When the From account changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [fromId]);
 
   // AI writing tools (worksuite-desktop#53) work on what the person wrote — never on the signature or the quoted email.
   const [ai, setAi] = useState<{ task: TextTask; title: string } | null>(null);
@@ -203,9 +229,10 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   /** A signature chosen from the Signature menu replaces the one in the message (or takes it out). */
   const chooseSignature = (s: Signature | null) => {
     const [mineNow] = splitSignature(latest.current.html);
-    set({ html: `${mineNow}${s ? signatureBlock(s.filled ?? s.html) : ''}`, signed: true });
+    autoSig.current = null;
+    set({ html: `${mineNow}${blockOf(s)}`, signed: true });
   };
-  const currentSignature = signature ? String((signatures.data?.signatures ?? []).find((s) => signatureBlock(s.filled ?? s.html) === signature)?.id ?? 'custom') : '';
+  const currentSignature = signature ? String(sigList.find((s) => same(blockOf(s), signature))?.id ?? 'custom') : '';
 
   // The meeting link in the Insert menu: a WorkSuite Meet meeting for later, named after the subject.
   const meetingLink = canOpen('meet')
@@ -224,7 +251,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen }:
   const payload = (scheduleAt?: string) => {
     const d = latest.current;
     const votes = voteChoices(d.options?.vote);
-    const body = withVotePrompt(composeBody(d.html, d.quote), votes, text('Vote by replying with one of: {choices}.', { choices: votes.join(', ') }));
+    const body = withVotePrompt(composeBody(d.html, d.quote, choice.placement), votes, text('Vote by replying with one of: {choices}.', { choices: votes.join(', ') }));
     return {
       to: parseAddresses(d.to),
       cc: parseAddresses(d.cc),
