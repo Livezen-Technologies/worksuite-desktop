@@ -12,7 +12,7 @@ import { compareVersions, isBelowMinimum } from '@shared/version';
 import { createPublicKey, verify } from 'node:crypto';
 import { logger } from '../main/log';
 import type { FetchLike } from '../services/http';
-import { acceptUpdateResponse, isRequired, ucInstallType, type UcPackage } from './update-center';
+import { acceptUpdateResponse, isRequired, isTestChannel, ucInstallType, type UcPackage } from './update-center';
 
 const log = logger('updater');
 const run = promisify(execFile);
@@ -30,7 +30,9 @@ const run = promisify(execFile);
  *  3. the operating system's code signature on the new build, from the same
  *     publisher as the running one (macOS Developer ID team, Windows
  *     Authenticode signer). An unsigned running build cannot establish a
- *     publisher and therefore never installs updates itself.
+ *     publisher, so it installs updates itself only from a test channel
+ *     (BETA, DEV, INTERNAL), where steps 1 and 2 are the trust — as they are
+ *     for a Linux AppImage. A signed build never takes an unsigned update.
  *
  * Before restarting it asks what would be interrupted (uploads, queued
  * changes, drafts, a call) and offers Restart later / Review activity. A
@@ -63,6 +65,8 @@ interface Offer {
   critical: boolean;
   pkg: UcPackage;
   checkUrl: string;
+  /** The channel the Update Center answered from (signed), lower case. */
+  channel: string;
 }
 
 /** A self-hosted manifest's signature (the feed before the Update Center; kept for its tests). */
@@ -220,8 +224,8 @@ export class UpdaterService {
         this.set({ state: 'IDLE', availableVersion: null, error: r.status === 'CURRENT' ? null : r.message ?? null, lastCheckedAt: new Date().toISOString(), signatureVerified: true });
         return this.get();
       }
-      this.offer = { version, critical: r.release_type === 'CRITICAL', pkg, checkUrl: url };
-      const blocked = await this.installBlockedReason(pkg);
+      this.offer = { version, critical: r.release_type === 'CRITICAL', pkg, checkUrl: url, channel: r.channel.toLowerCase() };
+      const blocked = await this.installBlockedReason(this.offer);
       this.set({
         state: 'AVAILABLE',
         availableVersion: version,
@@ -241,7 +245,13 @@ export class UpdaterService {
     }
   }
 
-  private async installBlockedReason(pkg: UcPackage): Promise<string | null> {
+  /** An unsigned build may take an update only from a test channel, and only when this computer asked for one. */
+  private unsignedAllowed(offer: Offer): boolean {
+    return isTestChannel(offer.channel) && this.deps.channel() !== 'stable';
+  }
+
+  private async installBlockedReason(offer: Offer): Promise<string | null> {
+    const { pkg } = offer;
     if (!app.isPackaged) return 'Development builds do not install updates.';
     const wanted = ucInstallType(this.deps.platform, !!process.env.APPIMAGE);
     if (this.deps.platform === 'linux' && !wanted) return 'WorkSuite was installed from a package; update it with your package manager.';
@@ -249,11 +259,11 @@ export class UpdaterService {
     if (this.deps.platform === 'macos') {
       const bundle = bundlePath();
       if (!bundle) return 'The application bundle could not be located.';
-      if (!(await macTeamId(bundle))) return 'This build is not code-signed, so it cannot verify updates. Install new versions manually.';
+      if (!(await macTeamId(bundle)) && !this.unsignedAllowed(offer)) return 'This build is not code-signed, so it cannot verify updates. Install new versions manually.';
     }
     if (this.deps.platform === 'windows') {
       const me = await winSigner(process.execPath);
-      if (!me.valid) return 'This build is not code-signed, so it cannot verify updates. Install new versions manually.';
+      if (!me.valid && !this.unsignedAllowed(offer)) return 'This build is not code-signed, so it cannot verify updates. Install new versions manually.';
     }
     return null;
   }
@@ -307,7 +317,7 @@ export class UpdaterService {
     }
     await rename(partial, final);
     this.set({ state: 'VERIFIED', progress: 100 });
-    const staged = await this.stage(final, dir);
+    const staged = await this.stage(final, dir, offer);
     if (!staged) return;
     this.stagedPath = staged;
     const deadline = offer.critical || this.status.required ? new Date(Date.now() + this.deps.deadlineHours() * 3600_000).toISOString() : null;
@@ -347,8 +357,8 @@ export class UpdaterService {
     }
   }
 
-  /** Step 3 of the trust chain: the OS code signature, same publisher as us. */
-  private async stage(file: string, dir: string): Promise<string | null> {
+  /** Step 3 of the trust chain: the OS code signature, same publisher as us (an unsigned build on a test channel: steps 1–2 only). */
+  private async stage(file: string, dir: string, offer: Offer): Promise<string | null> {
     try {
       if (this.deps.platform === 'macos') {
         const target = join(dir, 'staged');
@@ -360,13 +370,16 @@ export class UpdaterService {
         if (!appName) throw new Error('the update archive contains no application');
         const newApp = join(target, appName);
         await run('/usr/bin/codesign', ['--verify', '--deep', '--strict', newApp], { timeout: 5 * 60_000 });
+        // Even ad hoc, the bundle must be intact (codesign above). A signed build
+        // needs the same team; an unsigned one may go on only from a test channel.
         const mine = await macTeamId(bundlePath() ?? '');
         const theirs = await macTeamId(newApp);
-        if (!mine || mine !== theirs) throw new Error('the update is signed by a different publisher');
+        if (mine ? mine !== theirs : !this.unsignedAllowed(offer)) throw new Error('the update is signed by a different publisher');
         return newApp;
       }
       if (this.deps.platform === 'windows') {
         const mine = await winSigner(process.execPath);
+        if (!mine.valid && this.unsignedAllowed(offer)) return file;
         const theirs = await winSigner(file);
         if (!theirs.valid || !mine.subject || mine.subject !== theirs.subject) throw new Error('the installer is not signed by the same publisher');
         return file;

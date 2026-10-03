@@ -60,19 +60,21 @@ fails with "pattern is too long". The build number must rise per channel — use
 UC_CI_TOKEN_FILE=~/.config/worksuite-release/ci-token \
 UC_CI_KEY_FILE=~/.config/worksuite-release/ci-attestation.key \
 node scripts/publish-release.mjs --app desktop --app-id lk.worksuite.desktop --channel BETA \
-  --version 0.2.124 --build 124 --commit <sha> --summary "WorkSuite Desktop 0.2.124" --notes notes.md \
-  --file windows:x64:exe:release/0.2.124/WorkSuite-Setup-0.2.124-x64.exe \
-  --file macos:arm64:dmg:release/0.2.124/WorkSuite-0.2.124-arm64.dmg \
-  --file macos:x64:dmg:release/0.2.124/WorkSuite-0.2.124-x64.dmg \
-  --file linux:x64:appimage:release/0.2.124/WorkSuite-0.2.124-x86_64.AppImage
+  --version 0.2.125 --build 125 --commit <sha> --summary "WorkSuite Desktop 0.2.125" --notes notes.md \
+  --file windows:x64:exe:release/0.2.125/WorkSuite-Setup-0.2.125-x64.exe \
+  --file macos:arm64:dmg:release/0.2.125/WorkSuite-0.2.125-arm64.dmg \
+  --file macos:x64:dmg:release/0.2.125/WorkSuite-0.2.125-x64.dmg \
+  --file linux:x64:appimage:release/0.2.125/WorkSuite-0.2.125-x86_64.AppImage
 ```
 
 The script stops at **READY_FOR_TEST**; people approve and publish in the
 Update Center's `/admin`. Unsigned installers are accepted on BETA, DEV and
 INTERNAL only; STABLE needs Authenticode, Developer ID + notarization and GPG
-for Linux, and two different approvers. An unsigned running build still never
-installs an update by itself (it says so and offers the download) — only a
-Linux AppImage, whose trust is the signed answer and its SHA-256, does.
+for Linux, and two different approvers. An unsigned running build installs
+an update by itself only from a test channel (BETA, DEV, INTERNAL) and only
+when it is set to that channel: the signed answer and the package's SHA-256
+are then the trust, as for a Linux AppImage. Stable never installs an unsigned
+update, and a signed build never takes an unsigned one.
 
 On a Mac the updater takes the `.app` out of the DMG (mounted read-only and
 hidden), checks its code signature against the running app's Team ID, and

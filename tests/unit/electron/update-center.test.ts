@@ -11,6 +11,7 @@ vi.mock('electron', () => ({
 import {
   acceptUpdateResponse,
   deviceRef,
+  isTestChannel,
   ucCanonicalJson,
   ucInstallType,
   updateCheckUrl,
@@ -127,6 +128,11 @@ describe('the update check', () => {
     const url = new URL(updateCheckUrl({ base: 'https://uc.test', version: '1.0.0', platform: 'windows', arch: 'x64', installType: 'exe', channel: 'org', installId: 'unknown', osVersion: null }));
     expect(url.searchParams.has('channel')).toBe(false);
     expect(url.searchParams.has('device_id')).toBe(false);
+  });
+
+  it('lets unsigned builds update themselves from test channels only', () => {
+    expect(['beta', 'BETA', 'dev', 'internal'].map(isTestChannel)).toEqual([true, true, true, true]);
+    expect(['stable', 'STABLE', 'custom', ''].map(isTestChannel)).toEqual([false, false, false, false]);
   });
 
   it('installs the exe on Windows, the dmg on a Mac, and only an AppImage on Linux', () => {

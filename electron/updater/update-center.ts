@@ -106,6 +106,14 @@ export function ucChannel(channel: UpdateChannel): string | null {
   return channel === 'org' ? null : channel.toUpperCase();
 }
 
+/**
+ * Test channels: an unsigned build may install their releases by itself,
+ * trusting the signed answer and the package's SHA-256. Stable never.
+ */
+export function isTestChannel(channel: string): boolean {
+  return ['beta', 'dev', 'internal'].includes(channel.toLowerCase());
+}
+
 /** The package type this installation installs by itself. */
 export function ucInstallType(platform: Platform, runningAsAppImage: boolean): string | null {
   if (platform === 'windows') return 'exe';
