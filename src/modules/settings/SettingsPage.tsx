@@ -35,6 +35,9 @@ import { AccountsSettings } from '../contacts/sync/AccountsSettings';
 import { LocalDataSection, LocalProfileSection } from '../guest/LocalSettings';
 import { useGuest } from '../../core/session';
 import { LinksSettings } from './LinksSettings';
+import { LauncherSettings, ShortcutRecorder } from './LauncherSettings';
+import { updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
+import { DEFAULT_LAUNCHER_SHORTCUT } from '@shared/launcher';
 import { SyncButton } from '../../components/SyncButton';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
@@ -42,6 +45,8 @@ const SECTIONS = [
   { id: 'general', label: 'General', icon: 'globe' },
   { id: 'preferences', label: 'Preferences', icon: 'settings' },
   { id: 'notifications', label: 'Notifications', icon: 'bell' },
+  // The app launcher's look, apps, groups, order and shortcut (worksuite-desktop#201).
+  { id: 'launcher', label: 'App launcher', icon: 'grid' },
   { id: 'security', label: 'Security', icon: 'lock' },
   { id: 'devices', label: 'Devices', icon: 'laptop' },
   { id: 'desktop', label: 'Desktop', icon: 'monitor' },
@@ -62,7 +67,7 @@ const SECTIONS = [
 ] as const;
 
 /** What a guest's Settings show: what applies to this computer and the Local Profile, nothing that needs an account. */
-const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'local-profile', 'local-data', 'about']);
+const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'launcher', 'local-profile', 'local-data', 'about']);
 const LOCAL_SECTIONS: ReadonlySet<string> = new Set(['local-profile', 'local-data']);
 
 export default function SettingsPage(_props: ModuleProps) {
@@ -90,6 +95,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'general' ? <General /> : null}
           {section === 'preferences' ? <PreferencesSection prefs={prefs} /> : null}
           {section === 'notifications' ? <NotificationsSection prefs={prefs} /> : null}
+          {section === 'launcher' ? <LauncherSettings /> : null}
           {section === 'security' ? <SecuritySection prefs={prefs} /> : null}
           {section === 'devices' ? <Devices /> : null}
           {section === 'desktop' ? <DesktopSection prefs={prefs} /> : null}
@@ -252,6 +258,7 @@ const SHORTCUT_LABELS: Record<string, string> = {
   settings: 'Settings',
   ai: 'AI Assistant',
   'switch-org': 'Switch organization',
+  launcher: 'App launcher',
   lock: 'Lock WorkSuite',
   help: 'Help & Diagnostics',
   'pdf-open': 'PDF Studio: open a PDF',
@@ -266,7 +273,8 @@ const SHORTCUT_LABELS: Record<string, string> = {
 };
 
 function Shortcuts({ prefs }: { prefs: Preferences }) {
-  const map = effectiveShortcuts(prefs.shortcuts);
+  const launcher = useLauncherPrefs();
+  const map: Record<string, string> = { ...effectiveShortcuts(prefs.shortcuts), launcher: launcher.shortcut };
   const clashes = conflicts(map);
   const [recording, setRecording] = useState<string | null>(null);
   // The AI Assistant's shortcut only for whoever has the AI app.
@@ -279,7 +287,20 @@ function Shortcuts({ prefs }: { prefs: Preferences }) {
           {clashes.map((c) => `${prettyAccelerator(c.accelerator)} is used by ${c.commands.map((id) => SHORTCUT_LABELS[id] ?? id).join(' and ')}`).join('. ')}. The shell command wins.
         </div>
       ) : null}
-      {Object.keys(SHORTCUT_LABELS).filter((id) => id !== 'ai' || hasAi).map((id) => (
+      {Object.keys(SHORTCUT_LABELS).filter((id) => id !== 'ai' || hasAi).map((id) =>
+        id === 'launcher' ? (
+          // Kept with the launcher's own preferences, synced to the person's devices, and checked against ⌘K.
+          <Row key={id} label={SHORTCUT_LABELS[id]!}>
+            <div className="flex items-center gap-2">
+              <ShortcutRecorder value={launcher.shortcut} onChange={(acc) => updateLauncherPrefs((p) => ({ ...p, shortcut: acc }))} />
+              {launcher.shortcut !== DEFAULT_LAUNCHER_SHORTCUT ? (
+                <Button size="sm" variant="ghost" onClick={() => updateLauncherPrefs((p) => ({ ...p, shortcut: DEFAULT_LAUNCHER_SHORTCUT }))}>
+                  Reset
+                </Button>
+              ) : null}
+            </div>
+          </Row>
+        ) : (
         <Row key={id} label={SHORTCUT_LABELS[id]!}>
           <div className="flex items-center gap-2">
             <button
@@ -314,7 +335,8 @@ function Shortcuts({ prefs }: { prefs: Preferences }) {
             ) : null}
           </div>
         </Row>
-      ))}
+        ),
+      )}
     </div>
   );
 }
