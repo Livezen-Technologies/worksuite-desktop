@@ -8,7 +8,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  * toolbar marks, link checks, the composer's allow-list, HTML + text on the
  * way out, drafts (including plain-text ones from before), AI on the
  * person's own words only, the quoted email left alone, recipient chips,
- * pasted pictures as attachments, and the Send split control.
+ * pasted pictures inside the message (worksuite-desktop#188; before, they
+ * became attachments), and the Send split control.
  */
 
 const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), request: vi.fn(), call: vi.fn(), toast: vi.fn(), send: vi.fn(), ai: null as null | { input: () => string; actions: Array<{ run: (t: string) => void }> }, sigs: [] as Array<{ id: number; name: string; html: string; is_default: boolean; mailbox?: number | null; default_new?: boolean; default_reply?: boolean }>, parts: [] as Array<{ id: number; name: string; html: string; org: boolean }> }));
@@ -21,16 +22,10 @@ vi.mock('../../../src/modules/mail/api', () => ({
   useSignatures: () => ({ data: { signatures: net.sigs } }),
   useQuickParts: () => ({ data: net.parts }),
 }));
-vi.mock('../../../src/modules/ai/AiMenuButton', () => ({
-  AiMenuButton: ({ items }: { items: Array<{ label: string; run: () => void; disabled?: boolean }> }) => (
-    <span>
-      {items.map((i) => (
-        <button key={i.label} type="button" disabled={i.disabled} onClick={i.run}>
-          {`AI: ${i.label}`}
-        </button>
-      ))}
-    </span>
-  ),
+// Pictures are decoded and made smaller with the browser's canvas, which jsdom does not have.
+vi.mock('../../../src/modules/mail/editor/images', async (orig) => ({
+  ...(await orig<typeof import('../../../src/modules/mail/editor/images')>()),
+  prepareImage: vi.fn(async () => ({ src: 'data:image/png;base64,iVBORw0KGgo=', width: 120, height: 80, bytes: 8, shrunk: false })),
 }));
 vi.mock('../../../src/components/DriveFilePicker', () => ({
   DriveFilePicker: ({ onChoose }: { onChoose: (f: Array<{ id: number; name: string; size: number; extension: string }>) => void }) => (
@@ -318,7 +313,9 @@ describe('composing', () => {
       box.innerHTML = `<div>Mine <b>here</b></div>${box.innerHTML}`;
       fireEvent.input(box);
     });
-    fireEvent.click(screen.getByRole('button', { name: 'AI: Improve writing' }));
+    // The AI tools are behind the toolbar's "Write with AI" (they were buttons of their own before #188).
+    fireEvent.click(screen.getByRole('button', { name: 'Write with AI' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Improve writing/ }));
     expect(net.ai!.input()).toBe('Mine here');
     fireEvent.click(screen.getByRole('button', { name: 'Apply AI text' }));
     expect(box.innerHTML).toBe('<div>Rewritten by AI</div><div>Second line</div><div><br></div><div><br></div><div>-- </div><div>Hasarinda</div><div>Livezen</div>');
@@ -361,7 +358,9 @@ describe('composing', () => {
   it('attaches a copy of a file from Files', async () => {
     net.post.mockImplementation(async (path: string) => (path === '/api/mail/upload/from-drive' ? { token: 'd1', name: 'Training_plan.pdf', size: 4096 } : {}));
     compose({ mode: 'new', to: 'a@b.co' });
-    fireEvent.click(screen.getByRole('button', { name: 'Attach from Files' }));
+    // Attach ▾ › From WorkSuite Files (a button of its own before #188).
+    fireEvent.click(screen.getByRole('button', { name: 'Attach' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /From WorkSuite Files/ }));
     fireEvent.click(screen.getByRole('button', { name: 'Pick Training_plan.pdf' }));
     expect(await screen.findByText('Training_plan.pdf')).toBeTruthy();
     expect(net.post).toHaveBeenCalledWith('/api/mail/upload/from-drive', { file_id: 41 });
@@ -371,15 +370,20 @@ describe('composing', () => {
     await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ attachments: ['d1'] })));
   });
 
-  it('attaches a pasted picture instead of putting it inline', async () => {
-    net.request.mockResolvedValue({ data: { token: 't1', name: 'shot.png', size: 2048 } });
-    compose({ mode: 'new', to: 'a@b.co' });
+  it('puts a pasted picture inside the message (sent as an inline part), and other files as attachments', async () => {
+    net.request.mockResolvedValue({ data: { token: 't1', name: 'notes.pdf', size: 2048 } });
+    compose({ mode: 'new', to: 'a@b.co', subject: 'Plan' });
     const pic = new File(['x'], 'shot.png', { type: 'image/png' });
     fireEvent.paste(screen.getByRole('textbox', { name: 'Message' }), { clipboardData: { files: [pic], getData: () => '' } });
-    expect(await screen.findByText('shot.png')).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Message' }).querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,iVBORw0KGgo='));
+    expect(net.request).not.toHaveBeenCalled();
+    const pdf = new File(['%PDF'], 'notes.pdf', { type: 'application/pdf' });
+    fireEvent.paste(screen.getByRole('textbox', { name: 'Message' }), { clipboardData: { files: [pdf], getData: () => '' } });
+    expect(await screen.findByText('notes.pdf')).toBeTruthy();
     expect(net.request).toHaveBeenCalledWith('POST', '/api/mail/upload', expect.anything());
-    expect(net.toast).toHaveBeenCalledWith('info', expect.stringMatching(/attachments/));
-    expect(screen.getByRole('textbox', { name: 'Message' }).querySelector('img')).toBeNull();
+    fireEvent.click(screen.getByRole('radio', { name: /Tomorrow morning/ }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send later…' }));
+    await waitFor(() => expect(net.post).toHaveBeenCalledWith('/api/mail/send', expect.objectContaining({ attachments: ['t1'], body_html: expect.stringContaining('<img src="data:image/png;base64,iVBORw0KGgo=" alt="shot" width="120"') })));
   });
 
   it('shows Send as one split control of equal halves, with later options behind the chevron', () => {
@@ -421,8 +425,10 @@ describe('message options, Quick Parts and send checks (ENH-MAIL-03 P2)', () => 
     net.parts = [{ id: 5, name: 'Directions', html: '<div>Gate 2</div><script>x()</script>', org: false }];
     const { box } = compose({ mode: 'new', to: 'ann@example.org' });
     await waitFor(() => expect(box().innerHTML).toContain('<div>Hasarinda</div>'));
-    fireEvent.click(screen.getByRole('button', { name: 'Quick Parts' }));
-    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Directions/ }));
+    // Quick Parts are under Template ▾ now (a button of their own before #188).
+    fireEvent.click(screen.getByRole('button', { name: 'Template' }));
+    fireEvent.click(within(screen.getByRole('menu')).getByRole('menuitem', { name: /Quick Parts/ }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: /Directions/ }));
     await waitFor(() => expect(box().innerHTML.startsWith('<div>Gate 2</div>')).toBe(true));
     expect(box().innerHTML).not.toContain('script');
     expect(box().innerHTML.indexOf('Gate 2')).toBeLessThan(box().innerHTML.indexOf('Hasarinda'));
