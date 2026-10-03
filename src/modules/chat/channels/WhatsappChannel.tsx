@@ -1,7 +1,10 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ChangeEvent, type KeyboardEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { call, errorMessage } from '../../../core/bridge';
+import type { ReplyTarget } from '../Thread';
 import { useDraft } from '../../../core/drafts';
+import { Checkbox } from '../../../components/Checkbox';
+import { Composer } from '../Composer';
 import { text as l10n } from '../../../core/i18n';
 import { useTab, useTabTitle } from '../../../core/tab-context';
 import { dateLabel, dayKey, listStamp, parseTs, timeLabel, todayInZone } from '../../../core/time';
@@ -13,9 +16,6 @@ import { SidePanel } from '../../../components/SidePanel';
 import { Avatar, Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { openChatAttachment, previewKind, type Attachment } from '../AttachmentViewer';
 import { mediaUrl } from '../types';
-import { useChatSavedReplies, type Turn } from '../replies';
-import { inSlashMenu, SlashMenu, type SlashMenuHandle } from '../SlashMenu';
-import { savedReplyQuery } from '../website/profile';
 import { LIST_WIDTH, rememberWhatsapp } from './channels';
 import {
   fileRefusal, isConnected, messageText, preview, readWa, sendWa, sendWaFiles, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaTemplates, useWaThread, waAttachment, waLimits, WA_SCOPES,
@@ -137,7 +137,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
         </aside>
       </SidePanel>
       <div className="flex min-w-0 flex-1 bg-ground">
-        {selected ? <WhatsappThread key={selected} id={selected} /> : <Empty icon="phone" title="Pick a conversation" hint={accounts.length ? 'Your WhatsApp conversations are in the list.' : undefined} />}
+        {selected ? <WhatsappThread key={selected} id={selected} onRelink={onRelink} /> : <Empty icon="phone" title="Pick a conversation" hint={accounts.length ? 'Your WhatsApp conversations are in the list.' : undefined} />}
       </div>
       {(starting || (to && !selected)) && !loading ? (
         <StartConversation
@@ -241,9 +241,10 @@ function ChatRow({ c, active, many, onOpen }: { c: WaChat; active: boolean; many
   );
 }
 
-function WhatsappThread({ id }: { id: string }) {
+function WhatsappThread({ id, onRelink }: { id: string; onRelink: (a: WaAccount) => void }) {
   const qc = useQueryClient();
   const thread = useWaThread(id);
+  const [reply, setReply] = useState<ReplyTarget | null>(null);
   const scroller = useRef<HTMLDivElement>(null);
   const data = thread.data;
   const count = data?.messages.length ?? 0;
@@ -286,9 +287,9 @@ function WhatsappThread({ id }: { id: string }) {
       <div ref={scroller} className="flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto px-4 py-3 scroll-thin">
         {data.has_more ? <div className="self-center text-[11px] text-ink-3">Earlier messages are on the web.</div> : null}
         {!data.messages.length ? <Empty icon="phone" title="No messages yet" /> : null}
-        {data.messages.map((m) => <Bubble key={m.id} m={m} gallery={gallery} />)}
+        {data.messages.map((m) => <Bubble key={m.id} m={m} gallery={gallery} onReply={() => setReply({ id: m.id, sender_name: m.sender_name ?? chat.name, snippet: messageText(m).slice(0, 120) })} />)}
       </div>
-      <WhatsappComposer chatId={chat.id} accountId={chat.account_id} name={chat.name} messages={data.messages} refusal={refusal} templates={!blocked} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
+      <WhatsappComposer chatId={chat.id} accountId={chat.account_id} name={chat.name} messages={data.messages} reply={reply} onClearReply={() => setReply(null)} reconnect={down ? () => onRelink(chat.account) : undefined} refusal={refusal} templates={!blocked} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
     </section>
   );
 }
@@ -314,7 +315,7 @@ const TICKS: Record<string, string> = { sent: 'Sent', delivered: 'Delivered', re
 const linkOut = (url: string) => void call('app:openInBrowser', { path: url });
 
 /** A message: its words, and its attachment — a picture shown, anything else by its name — opened in the shared preview. */
-function Bubble({ m, gallery }: { m: WaMessage; gallery: Attachment[] }) {
+function Bubble({ m, gallery, onReply }: { m: WaMessage; gallery: Attachment[]; onReply: () => void }) {
   const ours = m.direction === 'out';
   const file = waAttachment(m);
   return (
@@ -336,6 +337,7 @@ function Bubble({ m, gallery }: { m: WaMessage; gallery: Attachment[] }) {
         {!file && m.media_note ? <span className="block text-[11.5px] text-ink-3">{m.media_note}</span> : null}
       </div>
       <span className={cx('text-[11px]', m.status === 'failed' ? 'font-semibold text-danger' : 'text-ink-3')}>
+        <button type="button" aria-label="Reply to message" onClick={onReply} className="mr-2 text-primary hover:underline">Reply</button>
         {ours && m.sender_name ? `${m.sender_name} · ` : ''}
         {sentAt(m.sent_at ?? m.created_at)}
         {ours && m.status ? ` · ${TICKS[m.status] ?? m.status}` : ''}
@@ -350,143 +352,34 @@ function Bubble({ m, gallery }: { m: WaMessage; gallery: Attachment[] }) {
  * from this computer go with the words as their caption, within what the workspace allows; once the 24-hour window
  * has closed, an approved template is what can be sent (`templates`: this person may send on the number).
  */
-function WhatsappComposer({ chatId, accountId, name, messages, refusal, templates, onSent }: { chatId: number; accountId: number; name: string; messages: WaMessage[]; refusal: string | null; templates: boolean; onSent: () => void }) {
-  const draft = useDraft<string>('whatsapp', `chat:${chatId}`, '');
-  const [sending, setSending] = useState(false);
-  const [files, setFiles] = useState<File[]>([]);
+function WhatsappComposer({ chatId, accountId, name, messages, reply, onClearReply, reconnect, refusal, templates, onSent }: { chatId: number; accountId: number; name: string; messages: WaMessage[]; reply: ReplyTarget | null; onClearReply: () => void; reconnect?: () => void; refusal: string | null; templates: boolean; onSent: () => void }) {
   const [picking, setPicking] = useState(false);
-  const text = draft.value;
+  const blockedDraft = useDraft<boolean>('whatsapp', `blocked-drafting:${chatId}`, true);
   const settings = useWaSettings(true);
   const limits = waLimits(settings.data?.settings);
-  const picker = useRef<HTMLInputElement>(null);
-  // The "/" menu (worksuite-desktop#32): saved replies and suggestions, into the box, never sent by themselves.
-  const [slash, setSlash] = useState<{ start: number; word: string } | null>(null);
-  const slashMenu = useRef<SlashMenuHandle>(null);
-  const input = useRef<HTMLTextAreaElement>(null);
-  const replies = useChatSavedReplies(slash !== null);
-  const conversation = (): Turn[] => messages.map((m) => ({ mine: m.direction === 'out', name: m.direction === 'out' ? (m.sender_name ?? 'Me') : name, text: messageText(m) }));
-  const insertSlash = (body: string) => {
-    const start = slash?.start ?? text.length;
-    const end = slash ? slash.start + 1 + slash.word.length : start;
-    draft.setValue(`${text.slice(0, start)}${body}${text.slice(end)}`);
-    setSlash(null);
-    requestAnimationFrame(() => {
-      input.current?.focus();
-      input.current?.setSelectionRange(start + body.length, start + body.length);
-    });
-  };
-
-  const choose = (e: ChangeEvent<HTMLInputElement>) => {
-    const picked = [...(e.target.files ?? [])];
-    e.target.value = '';
-    const refused = picked.map((f) => fileRefusal(f, limits)).filter((r): r is string => !!r);
-    if (refused.length) toast('error', refused.join(' '));
-    setFiles((now) => [...now, ...picked.filter((f) => !fileRefusal(f, limits))].slice(0, 10));
-  };
-
-  const send = async () => {
-    const body = text.trim();
-    if ((!body && !files.length) || sending || refusal) return;
-    setSending(true);
-    try {
-      if (files.length) {
-        const r = await sendWaFiles(chatId, files, body);
-        if (r.failed > 0) {
-          const first = r.results.find((x) => !x.ok);
-          toast('error', `${r.sent ? `${r.sent} sent, ${r.failed} refused.` : 'Not sent.'} ${first?.error ? `${first.name}: ${first.error}` : ''}`.trim());
-          setFiles((now) => now.filter((f) => r.results.some((x) => !x.ok && x.name === f.name)));
+  return <>
+    <Composer roomId={`whatsapp:${chatId}`} roomName={name} group={false} reply={reply} onClearReply={onClearReply} channel={{
+      inputLabel: `Message ${name} on WhatsApp`, draftModule: 'whatsapp', draftContext: `chat:${chatId}`, refusal, allowBlockedDraft: blockedDraft.value, maxLength: 4000, maxCaptionLength: reply ? Math.max(1, 900 - reply.sender_name.length - reply.snippet.length - 5) : 900, voice: limits.kinds.audio,
+      attachChoices: [...(limits.kinds.document ? ['document' as const] : []), ...(limits.kinds.image ? ['image' as const, 'camera' as const] : []), ...(limits.kinds.video ? ['video' as const] : []), ...(limits.kinds.audio ? ['audio' as const, 'voice' as const] : []), 'drive'],
+      context: () => messages.map((m) => ({ mine: m.direction === 'out', name: m.direction === 'out' ? (m.sender_name ?? 'Me') : name, text: messageText(m) })),
+      refuseFile: (f) => fileRefusal(f, limits),
+      notice: refusal ? <p role="status" className="flex flex-wrap items-center gap-2 rounded-[8px] bg-subtle p-2 text-[12px] text-ink-2"><span className="min-w-0 flex-1">{refusal}</span><span>Your draft is kept.</span><label className="flex items-center gap-1"><Checkbox checked={blockedDraft.value} onChange={(e) => blockedDraft.setValue(e.target.checked)} />Allow drafting while blocked</label>{reconnect ? <Button size="sm" onClick={reconnect}>Link again</Button> : null}{templates ? <Button size="sm" icon="file-text" onClick={() => setPicking(true)}>{l10n('Send a template')}</Button> : null}</p> : null,
+      send: async (text, files) => {
+        if (refusal) return false;
+        if (files.length) {
+          const r = await sendWaFiles(chatId, files, reply ? `> ${reply.sender_name}: ${reply.snippet}\n${text}` : text, files[0]?.name.startsWith('Voice message.') ?? false);
           onSent();
-          return;
-        }
-        setFiles([]);
-      } else {
-        const r = await sendWa(chatId, body);
-        if (r.ok === false) {
-          toast('error', `Not sent. ${r.error ?? ''} Your message is kept.`.trim());
+          if (r.failed) { toast('error', `${r.sent} sent, ${r.failed} refused. ${r.results.find((x) => !x.ok)?.error ?? ''}`); return false; }
+        } else {
+          const r = await sendWa(chatId, text, messages.find((m) => m.id === reply?.id)?.external_id ?? undefined);
+          if (r.ok === false) { toast('error', `Not sent. ${r.error ?? ''} Your message is kept.`.trim()); return false; }
           onSent();
-          return;
         }
-      }
-      draft.setValue('');
-      await draft.clear();
-      onSent();
-    } catch (e) {
-      toast('error', `Not sent. ${errorMessage(e)} Your message is kept.`);
-    } finally {
-      setSending(false);
-    }
-  };
-  const onKeyDown = (e: KeyboardEvent<HTMLTextAreaElement>) => {
-    if (slash && slashMenu.current?.onKey(e)) return;
-    if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-      e.preventDefault();
-      void send();
-    }
-  };
-  const anyKind = Object.values(limits.kinds).some(Boolean);
-
-  return (
-    <div className="border-t border-line bg-surface px-4 py-3">
-      {refusal ? (
-        <p role="status" className="mb-2 flex flex-wrap items-center gap-2 rounded-[8px] bg-subtle p-2 text-[12px] text-ink-2">
-          <span className="min-w-0 flex-1">{refusal}</span>
-          {templates ? <Button size="sm" icon="file-text" onClick={() => setPicking(true)}>{l10n('Send a template')}</Button> : null}
-        </p>
-      ) : null}
-      {files.length ? (
-        <ul aria-label={l10n('Files to send')} className="mb-2 flex flex-wrap gap-1.5">
-          {files.map((f, i) => (
-            <li key={`${f.name}-${i}`} className="flex max-w-[220px] items-center gap-1.5 rounded-[8px] border border-line bg-ground px-2 py-1 text-[12px] text-ink">
-              <Icon name="paperclip" size={12} className="shrink-0 text-ink-3" />
-              <span className="min-w-0 truncate">{f.name}</span>
-              <button type="button" aria-label={`${l10n('Remove')} ${f.name}`} onClick={() => setFiles((now) => now.filter((_, j) => j !== i))} className="shrink-0 text-ink-3 hover:text-ink">
-                <Icon name="x" size={12} />
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <div className="relative flex items-end gap-2">
-        {slash ? (
-          <SlashMenu
-            ref={slashMenu}
-            word={slash.word}
-            replies={replies}
-            context={conversation}
-            onInsert={insertSlash}
-            onClose={() => (setSlash(null), input.current?.focus())}
-          />
-        ) : null}
-        {anyKind ? (
-          <>
-            <input ref={picker} type="file" multiple hidden onChange={choose} aria-hidden tabIndex={-1} />
-            <button type="button" aria-label={l10n('Attach files')} title={l10n('Attach files')} disabled={!!refusal} onClick={() => picker.current?.click()} className="flex h-[38px] w-[38px] shrink-0 items-center justify-center rounded-[10px] border border-line text-ink-2 hover:bg-subtle disabled:opacity-50">
-              <Icon name="paperclip" size={16} />
-            </button>
-          </>
-        ) : null}
-        <textarea
-          ref={input}
-          value={text}
-          onChange={(e) => {
-            draft.setValue(e.target.value);
-            setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
-          }}
-          onBlur={(e) => !inSlashMenu(e.relatedTarget) && setSlash(null)}
-          onKeyDown={onKeyDown}
-          rows={Math.min(6, Math.max(1, text.split('\n').length))}
-          maxLength={4000}
-          placeholder={files.length ? l10n('Add a caption') : `Message ${name} on WhatsApp · / for replies`}
-          aria-label={`Message ${name} on WhatsApp`}
-          className="min-h-[38px] flex-1 resize-none rounded-[10px] border border-line bg-ground px-3 py-2 text-[13px] text-ink outline-none focus:border-primary"
-        />
-        <Button variant="primary" icon="send" disabled={(!text.trim() && !files.length) || !!refusal} loading={sending} onClick={() => void send()} aria-label="Send">
-          Send
-        </Button>
-      </div>
-      {picking ? <TemplatePicker chatId={chatId} accountId={accountId} onClose={() => setPicking(false)} onSent={() => (setPicking(false), onSent())} /> : null}
-    </div>
-  );
+        return true;
+      },
+    }} />
+    {picking ? <TemplatePicker chatId={chatId} accountId={accountId} onClose={() => setPicking(false)} onSent={() => (setPicking(false), onSent())} /> : null}
+  </>;
 }
 
 /** Sending an approved template: the ones this number may use, each placeholder filled in, the result seen first. */

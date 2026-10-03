@@ -217,3 +217,15 @@ it('uses a minimized launcher when no display preference was saved (#127)', () =
   expect(aiWidget.get().open).toBe(true);
   expect(ui.get().dock).toBeNull();
 });
+
+
+it('hides the floating launcher when a visible composer supplies AI (#156)', async () => {
+  const composer = document.createElement('div');
+  composer.setAttribute('data-chat-composer', '');
+  vi.spyOn(composer, 'getClientRects').mockReturnValue({ length: 1 } as DOMRectList);
+  document.body.append(composer);
+  wrap(<AiWidget />);
+  expect(screen.queryByRole('button', { name: /^Ask AI/ })).toBeNull();
+  await act(async () => { composer.remove(); });
+  expect(launcher()).toBeTruthy();
+});
