@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.131 — 2026-10-03
+
+- **Updates come from the WorkSuite Update Center.** WorkSuite now asks https://download.worksuitecloud.com whether a newer version is out, instead of a manifest file on your WorkSuite server. The answer is signed by the Update Center and checked against a key built into the app, and the download must match the size and SHA-256 inside that signed answer, or it is deleted. Your channel (Stable, Beta, Dev) is sent as a request; the Update Center decides, and your organisation's policy there wins. The computer is identified only by a one-way code made from its install ID.
+- On a Mac the update now comes as the disk image: WorkSuite opens it out of sight, read-only, checks that the app inside is signed by the same publisher as the one running, and swaps it in when you restart.
+- Builds that are not code-signed still never install an update by themselves — they say a new version is out and leave installing it to you. Only the Linux AppImage updates itself without a code signature, trusting the signed answer and its checksum.
+- **Beta builds update themselves on Windows, Mac and Linux.** A build that is not code-signed (today's Beta builds) now downloads and installs a new version by itself when it comes from a test channel — Beta, Dev or Internal — and this computer is set to that channel. It trusts the Update Center's signed answer and the file's SHA-256, the same as the Linux AppImage already did; on a Mac the app inside the disk image must still pass macOS's own integrity check. Stable never installs an unsigned update, and a signed build never takes an unsigned one.
+- Installing still waits for you: WorkSuite asks before restarting if uploads, queued changes, drafts or a call would be interrupted.
+
 ## 0.2.130 — 2026-10-03
 
 - **WhatsApp says which number is linked only once it is (#157, first fix).** While a QR scan has not confirmed a

@@ -98,7 +98,8 @@ import { pdfPathsInArgv } from '../services/pdf/local-files';
 import { DEFAULT_PDF_POLICY } from '../services/pdf/service';
 import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
-import { POLICY_PUBLIC_KEY, RELEASE_PUBLIC_KEY } from '../updater/keys';
+import { POLICY_PUBLIC_KEY } from '../updater/keys';
+import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl } from '../updater/update-center';
 import { UpdaterService } from '../updater/updater';
 import { WindowManager } from '../windows/manager';
 
@@ -666,18 +667,21 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     fetch: fetchImpl,
     platform: platformName(),
     arch: archName(),
-    publicKeyPem: RELEASE_PUBLIC_KEY,
-    feedUrl: (channel) => {
-      if (allowInsecure && process.env.WS_UPDATE_FEED) return process.env.WS_UPDATE_FEED;
-      const server = auth.getServer();
-      if (!server) return null;
-      if (server.api === 'desktop-v1') {
-        return `${server.origin}/desktop/v1/releases/manifest?platform=${platformName()}&arch=${archName()}&channel=${channel}`;
-      }
-      // The existing API has no release endpoint: the server hosts the signed
-      // manifest as a static file beside the installers.
-      return `${server.origin}/desktop/releases/${channel}/manifest.json`;
-    },
+    responseKeys: UPDATE_CENTER_RESPONSE_KEYS,
+    // The WorkSuite Update Center decides (a tenant policy there wins over the
+    // channel asked for). WS_UPDATE_CENTER points a development build at a
+    // local or staging Update Center.
+    updateUrl: (channel) =>
+      updateCheckUrl({
+        base: (allowInsecure && process.env.WS_UPDATE_CENTER) || UPDATE_CENTER_URL,
+        version: app.getVersion(),
+        platform: platformName(),
+        arch: archName(),
+        installType: ucInstallType(platformName(), !!process.env.APPIMAGE),
+        channel,
+        installId: device.installId(),
+        osVersion: process.getSystemVersion(),
+      }),
     channel: () => settings.effective().updateChannel,
     busy,
     deadlineHours: () => sessionCtl.current()?.policy.forced_update_deadline_hours ?? 24,
