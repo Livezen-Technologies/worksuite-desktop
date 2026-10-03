@@ -29,11 +29,13 @@ export interface ParsedQuery {
   after: string | null;
   folder: string | null;
   label: string | null;
+  /** is:mentioned — mail that @mentions you (DMO-CMP-14), answered by the index. */
+  mentioned: boolean;
 }
 
 /** "BOQ from:sfcl.lk has:attachment" → the words and the operators. */
 export function parseQuery(q: string): ParsedQuery {
-  const out: ParsedQuery = { words: '', from: null, to: null, attachment: false, unread: false, starred: false, before: null, after: null, folder: null, label: null };
+  const out: ParsedQuery = { words: '', from: null, to: null, attachment: false, unread: false, starred: false, before: null, after: null, folder: null, label: null, mentioned: false };
   const words: string[] = [];
   for (const token of q.match(/(?:[^\s"]+|"[^"]*")+/g) ?? []) {
     const m = /^(from|to|has|is|before|after|folder|in|label):(.+)$/i.exec(token);
@@ -44,6 +46,7 @@ export function parseQuery(q: string): ParsedQuery {
     else if (key === 'has' && /^attach/i.test(value)) out.attachment = true;
     else if (key === 'is' && value.toLowerCase() === 'unread') out.unread = true;
     else if (key === 'is' && /^(starred|flagged)$/i.test(value)) out.starred = true;
+    else if (key === 'is' && /^mentioned$/i.test(value)) out.mentioned = true;
     else if (key === 'before' && /^\d{4}-\d{2}-\d{2}$/.test(value)) out.before = value;
     else if (key === 'after' && /^\d{4}-\d{2}-\d{2}$/.test(value)) out.after = value;
     else if (key === 'folder' || key === 'in') out.folder = value.toLowerCase();
@@ -140,21 +143,23 @@ export function SearchView({ initial, boxes, current, onOpen, onClose }: { initi
   const parsed = useMemo(() => parseQuery(asked), [asked]);
   const term = serverTerm(parsed);
   const scopeBox = !all && current && current !== 'unified' ? current : null;
+  const mentioned = parsed.mentioned;
   const local = useQuery({
-    queryKey: ['mail', 'search', term, scopeBox],
+    queryKey: ['mail', 'search', term, scopeBox, mentioned],
     queryFn: async () => {
       const t0 = performance.now();
-      const r = await apiGet<{ messages: MessageRow[]; total: number; unsearched: string[] }>('/api/mail/search', scopeBox ? { q: term, mailbox: scopeBox } : { q: term, scope: 'all' });
+      const r = await apiGet<{ messages: MessageRow[]; total: number; unsearched: string[] }>('/api/mail/search', { ...(scopeBox ? { mailbox: scopeBox } : { scope: 'all' }), q: term, ...(mentioned ? { mentioned: 1 } : {}) });
       return { ...r, ms: performance.now() - t0 };
     },
-    enabled: term.length >= 2,
+    enabled: term.length >= 2 || mentioned,
     staleTime: 30_000,
     retry: false,
   });
   const remote = useQuery({
     queryKey: ['mail', 'search-server', term, scopeBox],
     queryFn: async () => (await apiGetMeta<MessagePage>('/api/mail/messages', scopeBox ? { mailbox: scopeBox, folder: 'inbox', q: term, tail: 1, per_page: 50 } : { unified: 1, folder: 'inbox', q: term, per_page: 50 })).data,
-    enabled: server && term.length >= 2,
+    // The provider's own search cannot tell a mention from a name.
+    enabled: server && term.length >= 2 && !mentioned,
     retry: false,
   });
   const rows = useMemo(() => {
@@ -265,6 +270,9 @@ export function SearchView({ initial, boxes, current, onOpen, onClose }: { initi
         <Chip on={parsed.unread} onClick={() => toggle('is:unread')}>
           Unread
         </Chip>
+        <Chip on={mentioned} onClick={() => toggle('is:mentioned')}>
+          Mentioned me
+        </Chip>
         <span className="flex-1" />
         <button ref={sortBtn} type="button" onClick={() => setMenu('sort')} aria-haspopup="menu" className="inline-flex h-8 items-center gap-1 rounded-[8px] px-2 text-[12.5px] text-ink-3 hover:bg-subtle hover:text-ink">
           {text('Sort: {how}', { how: sort === 'best' ? text('Best match') : sort === 'newest' ? text('Newest first') : text('Oldest first') })}
@@ -286,7 +294,7 @@ export function SearchView({ initial, boxes, current, onOpen, onClose }: { initi
             {local.data ? <span className="text-[12px] font-semibold text-success">{text('Searched {n} mailboxes on this computer · {s} s', { n: searched, s: (local.data.ms / 1000).toFixed(2) })}</span> : null}
           </header>
           <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
-            {term.length < 2 ? <Empty icon="search" title={text('Type at least two letters')} hint={text('Try from: to: has:attachment before:2026-09-01 or is:unread.')} /> : local.isLoading ? <Spinner /> : local.error ? <div className="p-4"><ErrorNote error={local.error} onRetry={() => void local.refetch()} /></div> : rows.length === 0 && !remote.isLoading ? <Empty icon="search" title={text('Nothing found on this computer')} hint={text('Search the server for older mail.')} /> : null}
+            {term.length < 2 && !mentioned ? <Empty icon="search" title={text('Type at least two letters')} hint={text('Try from: to: has:attachment before:2026-09-01 or is:unread.')} /> : local.isLoading ? <Spinner /> : local.error ? <div className="p-4"><ErrorNote error={local.error} onRetry={() => void local.refetch()} /></div> : rows.length === 0 && !remote.isLoading ? <Empty icon="search" title={text('Nothing found on this computer')} hint={text('Search the server for older mail.')} /> : null}
             <ul role="list">
               {rows.map((m) => (
                 <li key={m.uid_key ?? `${m.mailbox?.id ?? ''}:${m.id}`}>

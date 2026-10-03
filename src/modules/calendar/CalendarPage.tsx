@@ -119,7 +119,7 @@ export default function CalendarPage(_props: ModuleProps) {
   const want = linked ? `event:${linked}` : wantNew ? 'new' : null;
   if (want && handled !== want && (want === 'new' ? canOpenApp('calendar', visible) && !offline : linkedEvent.data)) {
     setHandled(want);
-    setDrawer(want === 'new' ? { event: null, draft: { ...nextDraft(), title: (query.get('title') ?? '').slice(0, 200) || undefined } } : { event: { ...linkedEvent.data!, source: 'event' }, draft: null });
+    setDrawer(want === 'new' ? { event: null, draft: { ...nextDraft(), title: (query.get('title') ?? '').slice(0, 200) || undefined, people: (query.get('people') ?? '').split(',').map((a) => a.trim()).filter((a) => /^[^\s@]+@[^\s@]+$/.test(a)).slice(0, 50), description: (query.get('description') ?? '').slice(0, 2000) || undefined } } : { event: { ...linkedEvent.data!, source: 'event' }, draft: null });
   }
 
   const canCreate = canOpenApp('calendar', visible);

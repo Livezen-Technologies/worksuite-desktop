@@ -26,6 +26,8 @@ import { folderName, plainText, securityVerdict } from './model';
 import { blockedImageUrls, escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml, withProxiedImages } from './sanitize';
 import { TeamBar, TeamWork } from './Team';
 import { CategoryChip } from './parts';
+import { TaskFromMessage, meetingRoute, messageLink } from './MessageTask';
+import { AddContactDialog, parseSignature, type SignatureGuess } from './AddContact';
 import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, sendReceipt } from './MessageExtras';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 
@@ -95,7 +97,8 @@ export function MessageView(p: MessageViewProps) {
   const [ai, setAi] = useState<{ task: TextTask; title: string; lang?: string } | null>(null);
   const [source, setSource] = useState(false);
   // Report phishing or junk, and recall (ENH-MAIL-03 DMO-SEC-02, DMO-CMP-10).
-  const [extra, setExtra] = useState<'phishing' | 'junk' | 'recall' | null>(null);
+  const [extra, setExtra] = useState<'phishing' | 'junk' | 'recall' | 'task' | null>(null);
+  const [contactGuess, setContactGuess] = useState<SignatureGuess | null>(null);
   const [receiptAnswered, setReceiptAnswered] = useState<string | null>(null);
   const [menu, setMenu] = useState<'top' | 'bottom' | 'move' | 'label' | 'translate' | 'states' | null>(null);
   const statesBtn = useRef<HTMLButtonElement>(null);
@@ -209,13 +212,8 @@ export function MessageView(p: MessageViewProps) {
     if (!m) return;
     const c = context.data?.sender;
     if (c?.contact_id) return navigate(`/contacts?open=${c.contact_id}`);
-    try {
-      await apiPost('/api/contacts', { display_name: m.from_name || m.from_email, work_email: m.from_email });
-      void qc.invalidateQueries({ queryKey: ['mail', 'context'] });
-      toast('success', text('{name} is in your contacts.', { name: m.from_name || m.from_email }));
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
+    // Filled from the signature, for review (DMO-PPL-04).
+    setContactGuess(parseSignature(clean ? plainText(clean.html) : '', m.from_name, m.from_email));
   };
   const block = async () => {
     if (!m) return;
@@ -333,6 +331,8 @@ export function MessageView(p: MessageViewProps) {
   // D13 (the reader's More) and D14 (the action bar's More).
   const moreItems = (where: 'top' | 'bottom'): MenuSection[] => {
     const keep: MenuItem[] = [];
+    if (canOpen('calendar')) keep.push({ id: 'meeting', label: text('Reply with meeting'), description: text('A Calendar event with everyone on this email'), icon: 'calendar', disabled: p.offline, onSelect: () => navigate(meetingRoute(m, p.account?.email ?? null, messageLink(ref))) });
+    if (canOpen('tasks')) keep.push({ id: 'task', label: text('Create task…'), description: text('With assignee, list and due date'), icon: 'list-todo', onSelect: () => setExtra('task') });
     if (where === 'bottom' && canOpen('tasks')) keep.push({ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() });
     if (canOpen('notes')) keep.push({ id: 'note', label: text('Save as note'), icon: 'file-text', onSelect: () => void saveNote() });
     keep.push({ id: 'link', label: where === 'top' ? text('Copy link to email') : text('Copy link to this message'), icon: 'link', disabled: !origin, onSelect: copyLink });
@@ -609,6 +609,18 @@ export function MessageView(p: MessageViewProps) {
           onClose={() => setExtra(null)}
         />
       ) : null}
+      {contactGuess ? (
+        <AddContactDialog
+          guess={contactGuess}
+          email={m.from_email}
+          onSaved={() => {
+            setContactGuess(null);
+            void qc.invalidateQueries({ queryKey: ['mail', 'context'] });
+          }}
+          onClose={() => setContactGuess(null)}
+        />
+      ) : null}
+      {extra === 'task' ? <TaskFromMessage message={m} msgRef={ref} onClose={() => setExtra(null)} /> : null}
     </article>
   );
 }

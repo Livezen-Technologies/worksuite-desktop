@@ -1,7 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
 import { text } from '../../core/i18n';
+import { addDays, todayInZone } from '../../core/time';
 import { messageAction, moveMessage, stateAction } from './api';
+import { messageLink, taskDescription } from './MessageTask';
+import { plainText } from './model';
 import type { Target } from './MessageMenus';
 import { flagChoices, snoozeChoices, stateItem } from './states';
 import type { ComposeSeed, MessageDetail } from './types';
@@ -21,6 +24,9 @@ export interface QuickStepAction {
   level?: 'high' | 'normal' | 'low';
   to?: string;
   template_id?: number;
+  /** Create a task (DMO-TSK-05): for whom and on which list. */
+  assignee_id?: number;
+  list_id?: number;
 }
 
 export interface QuickStep {
@@ -36,8 +42,9 @@ export interface QuickStep {
 }
 
 /** Every action the editor offers, in the order it lists them. */
-export const QS_ACTIONS: Array<{ type: string; label: string; needs?: 'folder' | 'category' | 'when' | 'snoozeWhen' | 'level' | 'to' }> = [
+export const QS_ACTIONS: Array<{ type: string; label: string; needs?: 'folder' | 'category' | 'when' | 'snoozeWhen' | 'level' | 'to' | 'task' }> = [
   { type: 'move', label: 'Move to folder', needs: 'folder' },
+  { type: 'copy', label: 'Copy to folder', needs: 'folder' },
   { type: 'archive', label: 'Archive' },
   { type: 'delete', label: 'Delete' },
   { type: 'delete_forever', label: 'Permanently delete' },
@@ -54,7 +61,9 @@ export const QS_ACTIONS: Array<{ type: string; label: string; needs?: 'folder' |
   { type: 'reply_all', label: 'Reply all' },
   { type: 'forward', label: 'Forward', needs: 'to' },
   { type: 'new_message', label: 'New message to', needs: 'to' },
-  { type: 'create_task', label: 'Create a task' },
+  { type: 'create_task', label: 'Create a task', needs: 'task' },
+  { type: 'create_crm_activity', label: 'Log in CRM' },
+  { type: 'create_ticket', label: 'Create a helpdesk ticket' },
   { type: 'save_attachments', label: 'Save attachments to Files' },
 ];
 
@@ -192,9 +201,35 @@ export async function runQuickStep(step: QuickStep, targets: Target[], run: Runn
           case 'new_message':
             report.compose.push({ mode: 'new', to: a.to ?? '', mailbox: t.mailbox });
             break;
-          case 'create_task':
-            await run.post('/api/tasks', { title: t.row.subject || text('(no subject)'), description: text('From an email from {sender}', { sender: t.row.from_name || t.row.from_email }) });
+          case 'copy':
+            if (!a.folder) throw new Error(text('No folder chosen.'));
+            await run.post('/api/mail/folders-tree/copy', { from: t.folder, to: a.folder.replace(/^label:/, ''), uids: [Number(t.row.id)], ...(t.mailbox ? { mailbox: t.mailbox } : {}) });
             break;
+          case 'create_task': {
+            const due = taskDueDay(a.when ?? 'none');
+            await run.post('/api/tasks', {
+              title: (t.row.subject || text('(no subject)')).slice(0, 255),
+              description: taskDescription(t.row, messageLink(ref)),
+              ...(due ? { due_date: due } : {}),
+              ...(a.assignee_id ? { assignee_id: a.assignee_id } : {}),
+              ...(a.list_id ? { list_id: a.list_id } : {}),
+            });
+            break;
+          }
+          case 'create_crm_activity':
+            await logInCrm(t, messageLink(ref), run);
+            break;
+          case 'create_ticket': {
+            const detail = await run.get<MessageDetail>(`/api/mail/messages/${t.row.id}`, { folder: t.folder, ...(t.mailbox ? { mailbox: t.mailbox } : {}) });
+            const link = messageLink(ref);
+            await run.post('/api/tickets', {
+              subject: (t.row.subject || text('(no subject)')).slice(0, 255),
+              requester_name: t.row.from_name || null,
+              requester_email: t.row.from_email,
+              body: `${plainText(detail.body_html ?? '').slice(0, 20_000)}${link ? `\n\n${text('From the email: {link}', { link })}` : ''}`,
+            });
+            break;
+          }
           case 'save_attachments': {
             const detail = await run.get<MessageDetail>(`/api/mail/messages/${t.row.id}`, { folder: t.folder, ...(t.mailbox ? { mailbox: t.mailbox } : {}) });
             for (const att of detail.attachments ?? []) await run.post(`/api/mail/messages/${t.row.id}/attachments/${encodeURIComponent(att.ref)}/save`, { folder: t.folder, ...(t.mailbox ? { mailbox: t.mailbox } : {}) });
@@ -211,4 +246,41 @@ export async function runQuickStep(step: QuickStep, targets: Target[], run: Runn
     }
   }
   return report;
+}
+
+/** A Quick Step task's due day (DMO-TSK-05), on the person's calendar. */
+export function taskDueDay(when: string, today = todayInZone()): string | null {
+  const dow = new Date(`${today}T12:00:00Z`).getUTCDay();
+  if (when === 'today') return today;
+  if (when === 'tomorrow') return addDays(today, 1);
+  if (when === 'week') return addDays(today, Math.max(0, 5 - dow));
+  if (when === 'next-week') return addDays(today, (((8 - dow) % 7) || 7) + 4);
+  return null;
+}
+
+interface CrmRecord {
+  id: number;
+  email: string | null;
+}
+
+/**
+ * Log in CRM (DMO-QS-02): the email as an activity on the lead, or else the
+ * account, whose address is the sender's — exactly, never a near match. A
+ * sender CRM does not know is a failure for that message, not a guess.
+ */
+async function logInCrm(t: Target, link: string, run: Runner): Promise<void> {
+  const email = t.row.from_email.trim().toLowerCase();
+  const same = (r: CrmRecord) => (r.email ?? '').trim().toLowerCase() === email;
+  const title = text('Email: {subject}', { subject: t.row.subject || text('(no subject)') }).slice(0, 255);
+  const body = [t.row.preview ?? '', link].filter(Boolean).join('\n\n');
+  const leads = await run.get<{ leads?: CrmRecord[] }>('/api/crm/leads', { q: email, per_page: 20 });
+  const lead = (leads?.leads ?? []).find(same);
+  if (lead) {
+    await run.post(`/api/crm/leads/${lead.id}/activity`, { kind: 'email', title, body });
+    return;
+  }
+  const accounts = await run.get<{ accounts?: CrmRecord[] }>('/api/crm/accounts', { q: email, per_page: 20 });
+  const account = (accounts?.accounts ?? []).find(same);
+  if (!account) throw new Error(text('No CRM lead or account has the address {email}.', { email }));
+  await run.post(`/api/crm/accounts/${account.id}/activity`, { kind: 'email', title, body });
 }

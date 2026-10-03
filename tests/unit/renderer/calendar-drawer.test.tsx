@@ -72,6 +72,18 @@ describe('Calendar › a selected range remains a draft (#63)', () => {
   });
 });
 
+describe('Calendar › a meeting from an email thread (ENH-MAIL-03 DMO-CAL-06)', () => {
+  it('invites the thread’s colleagues and names the people it cannot invite', async () => {
+    net.apiGet.mockResolvedValue({ users: [{ id: 3, name: 'Kim Perera', email: 'Kim@livezen.lk' }, { id: 4, name: 'Lee', email: 'lee@livezen.lk' }] });
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><EventDrawer event={null} draft={{ start: '2026-10-01T09:00', end: '2026-10-01T10:00', allDay: false, title: 'Site visit', people: ['kim@livezen.lk', 'pat@client.example'], description: 'About the email' }} onClose={vi.fn()} /></QueryClientProvider>);
+    expect(await screen.findByText('Kim Perera')).toBeTruthy();
+    expect(screen.getByText('Attendees · 1')).toBeTruthy();
+    expect(screen.queryByText('Lee')).toBeNull();
+    expect(screen.getByText('Not invited — not in WorkSuite: pat@client.example. Send them the time by email.')).toBeTruthy();
+    expect((screen.getByLabelText('Description') as HTMLTextAreaElement).value).toBe('About the email');
+  });
+});
+
 describe('Calendar › an entry from another module (#64)', () => {
   it('names what it opens, shows its status, and opens that record once the calendar still has it', async () => {
     net.apiGetMeta.mockResolvedValue({ data: { events: [task] }, offline: false, cachedAt: null });
