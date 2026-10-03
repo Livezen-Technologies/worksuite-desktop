@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { useLocalFirstQuery } from '../../../core/local-first-query';
 import { ApiError, apiGet, apiPost } from '../../../core/api';
 import type { WaDisplay } from './wa-names';
 
@@ -132,39 +133,20 @@ export function isConnecting(a: Pick<WaAccount, 'status'>): boolean {
 const refused = (e: unknown) => e instanceof ApiError && (e.forbidden || e.status === 404);
 
 export function useWaAccounts(enabled: boolean) {
-  return useQuery({
-    queryKey: ['whatsapp', 'accounts'],
-    queryFn: ({ signal }) => apiGet<{ accounts: WaAccount[]; default_id: number | null }>(`${WA}/accounts`, undefined, signal),
-    enabled,
-    refetchInterval: (q) => (refused(q.state.error) ? false : 30_000),
-    retry: (n, e) => !refused(e) && n < 2,
-  });
+  return useLocalFirstQuery<{ accounts: WaAccount[]; default_id: number | null }>({ queryKey: ['whatsapp', 'accounts'], path: `${WA}/accounts`, enabled, interval: 30_000 });
 }
 
 export function useWaChats(params: { account: number; scope: WaScope; q: string }, enabled: boolean) {
   const q = params.q.trim();
-  return useQuery({
-    queryKey: ['whatsapp', 'chats', params.account, params.scope, q],
-    queryFn: ({ signal }) =>
-      apiGet<{ chats: WaChat[]; total: number }>(
-        `${WA}/chats`,
-        { scope: params.scope, per_page: '60', ...(params.account ? { account_id: String(params.account) } : {}), ...(q ? { q } : {}) },
-        signal,
-      ),
-    enabled,
-    // No realtime event for WhatsApp in the desktop app yet: poll, slower in the background.
-    refetchInterval: () => (document.visibilityState === 'visible' ? 15_000 : 60_000),
-    retry: (n, e) => !refused(e) && n < 2,
+  return useLocalFirstQuery<{ chats: WaChat[]; total: number }>({
+    queryKey: ['whatsapp', 'chats', params.account, params.scope, q], path: `${WA}/chats`,
+    params: { scope: params.scope, per_page: '60', ...(params.account ? { account_id: String(params.account) } : {}), ...(q ? { q } : {}) },
+    enabled, interval: 15_000,
   });
 }
 
 export function useWaThread(id: string) {
-  return useQuery({
-    queryKey: ['whatsapp', 'chat', id],
-    queryFn: ({ signal }) => apiGet<WaThread>(`${WA}/chats/${id}`, undefined, signal),
-    refetchInterval: () => (document.visibilityState === 'visible' ? 5_000 : 30_000),
-    retry: (n, e) => !refused(e) && n < 2,
-  });
+  return useLocalFirstQuery<WaThread>({ queryKey: ['whatsapp', 'chat', id], path: `${WA}/chats/${id}`, interval: 5_000 });
 }
 
 export function sendWa(chatId: number | string, text: string, replyTo?: string) {

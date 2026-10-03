@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.1 — 2026-10-03
+
+- Keep local WhatsApp cache reads scoped by server and organisation and support clearing refused API prefixes (#158).
+
 ## 1.7.0 — 2026-10-03
 
 - Sharing tells people: the share dialog has Notify people with a message and chat/email choices; Shared with me shows how many new shares you haven't opened (#164).

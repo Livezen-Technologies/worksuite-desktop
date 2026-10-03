@@ -5,6 +5,15 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.129 — 2026-10-03
+
+- **WhatsApp opens from what this computer saved (#158, first stage).** Accounts, chat lists and conversations you
+  have opened before appear at once from encrypted local reads while the latest loads in the background ("Updating").
+  Saved reads are kept apart per signed-in user, server and organisation, follow the offline storage policy, and are
+  removed when access is refused, an account is retired or you sign out. A conversation only scrolls to new messages
+  if you were already near the bottom. Delta sync, offline search and media, and the outbox are still to come (see
+  docs/WHATSAPP_LOCAL_SYNC.md).
+
 ## 0.2.128 — 2026-10-03
 
 Website chats: saved replies counted, and each website's own file limit.

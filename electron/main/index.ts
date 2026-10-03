@@ -1288,6 +1288,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/mail/labels', 'mail'],
     ['/api/mail/prefs', 'mail'],
     ['/api/mail/sync/status', 'mail'],
+    ['/api/whatsapp/accounts', 'chat'],
+    ['/api/whatsapp/chats', 'chat'],
     ['/api/chat/rooms', 'chat'],
     ['/api/chat/messages', 'chat'],
     ['/api/calendar/events', 'calendar'],
@@ -1729,6 +1731,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         const pol = sessionCtl.current()?.policy;
         return { enabled: caps.offlineCache, maxBytes: (pol?.offline_storage_max_mb ?? 2048) * 1024 * 1024 };
       },
+      cacheScope: () => `${auth.getServer()?.origin ?? ''}:${sessionCtl.current()?.user.organizationId ?? ''}`,
       mailBodiesCached: (path) => mailBodiesKept(settings.effective(), path),
       mailListCached: (path) => mailListKept(settings.effective(), path),
       // SalonMate's desk calls carry the key this computer was paired with.
