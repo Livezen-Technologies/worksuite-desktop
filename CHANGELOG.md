@@ -5,6 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.168 — 2026-10-04
+
+- **Incoming voice call (V-04).** The call window now follows the design:
+  - a phone in a green ring, with "Incoming voice call" and how long it has rung;
+  - the visitor and where they are chatting ("techubiz.com · in chat with Nuwan"), with their phone and email when
+    known;
+  - their last message;
+  - a full-width **Answer** and a **Decline**;
+  - a line naming your microphone or headset ("Headset: Jabra Evolve2 · mic ready"), with the answer shortcut.
+- **When it can't be answered.** A computer without a microphone shows the call, but cannot answer it. While
+  WorkSuite is locked, neither the shortcut nor the tray answers either. Decline still works in both cases.
+- With the call window off in Settings, an incoming call raises a system notification that opens the chat.
+- Needs the server update (Communication 1.35.0) for the visitor's phone and email.
+
 ## 0.2.167 — 2026-10-04
 
 - **On a voice call with a visitor (V-03).**
