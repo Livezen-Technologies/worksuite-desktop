@@ -551,6 +551,10 @@ export interface WebchatRingChat {
   silenced: boolean;
   /** A chat given to me that I have not joined passes on to the next available agent at this server stamp (RING-05, RING-12). */
   handoverAt?: string | null;
+  /** How many times the visitor has visited, for "3rd visit" (R-01); null where the server does not say. */
+  visits?: number | null;
+  /** How many colleagues it rings for besides me, for "2 others ringing" (R-01); null where the server does not say. */
+  othersRinging?: number | null;
 }
 
 /**

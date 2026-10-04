@@ -6,7 +6,8 @@ import { Avatar, cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { write, writerProblem, useWriter } from '../../ai/writer';
 import { useCanned } from './api';
-import { clock, handoverIn, stageLabel, waited } from './Ringing';
+import { text } from '../../../core/i18n';
+import { clock, handoverIn, ringsFor, stageLabel, stepLabel, visitLabel, waited } from './Ringing';
 
 /**
  * The website chat ringing card (worksuite-desktop#225), in the call window over other apps:
@@ -39,7 +40,7 @@ export function useFit(): (el: HTMLDivElement | null) => void {
 const minimise = () => void call('ring:minimise').catch(() => undefined);
 
 /** The card's frame: dark, the header's red dot and status, and minimise. */
-function Frame({ dot, status, badge, children, hint, after }: { dot: 'ringing' | 'silenced' | 'joined'; status: string; badge?: ReactNode; children: ReactNode; hint: string; after?: ReactNode }) {
+function Frame({ dot, status, badge, children, hint, after, footer }: { dot: 'ringing' | 'silenced' | 'joined'; status: string; badge?: ReactNode; children: ReactNode; hint: string; after?: ReactNode; footer?: ReactNode }) {
   // Esc minimises, wherever focus is in the card.
   return (
     <div className="flex flex-col bg-[#131838] text-[13px] text-[#E6E8F5]" onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), minimise())}>
@@ -54,28 +55,55 @@ function Frame({ dot, status, badge, children, hint, after }: { dot: 'ringing' |
       {children}
       {after}
       <p className="drag px-4 pt-3 pb-3.5 text-[11px] text-[#8C92B5]">{hint}</p>
+      {footer}
     </div>
   );
 }
 
-function Badge({ tone, children }: { tone: 'green' | 'red' | 'blue'; children: ReactNode }) {
-  return <span className={cx('shrink-0 rounded-full px-2 py-[3px] text-[11px] font-semibold', tone === 'green' ? 'bg-[rgba(34,197,94,0.12)] text-[#6EE7A0]' : tone === 'red' ? 'bg-[rgba(239,90,76,0.16)] text-[#FFB4A4]' : 'bg-[rgba(102,118,255,0.16)] text-[#C3CAFF]')}>{children}</span>;
+const BADGE = {
+  green: 'bg-[rgba(34,197,94,0.12)] text-[#6EE7A0]',
+  red: 'bg-[rgba(239,90,76,0.16)] text-[#FFB4A4]',
+  blue: 'bg-[rgba(102,118,255,0.16)] text-[#C3CAFF]',
+  // A VIP visitor (R-02 design): amber on the dark card.
+  vip: 'bg-[#5A2A14] text-[#F7C08F]',
+  plain: 'bg-[#1B2341] text-[#CBD1E8]',
+} as const;
+
+function Badge({ tone, children }: { tone: keyof typeof BADGE; children: ReactNode }) {
+  return <span className={cx('shrink-0 rounded-full px-2 py-[3px] text-[11px] font-semibold whitespace-nowrap', BADGE[tone])}>{children}</span>;
+}
+
+/**
+ * Who the card is about, in chips (R-01, RING-UI-01; RING-06, RING-20): the ladder's step — "Priority · step 1 of 3",
+ * red at risk, green when it is mine — then "3rd visit" (or new / returning where the count is not known).
+ */
+function RingChips({ c }: { c: WebchatRingChat }) {
+  const step = stepLabel(c);
+  const visits = visitLabel(c.visits);
+  return (
+    <span className="flex flex-wrap gap-1.5 pt-0.5">
+      {c.atRisk || c.mine ? <Badge tone={c.atRisk ? 'red' : 'green'}>{stageLabel(c)}</Badge> : step ? <Badge tone="blue">{step}</Badge> : <Badge tone="blue">{stageLabel(c)}</Badge>}
+      {c.priority === 'vip' ? <Badge tone="vip">VIP</Badge> : null}
+      {visits ? <Badge tone="plain">{visits}</Badge> : <Badge tone="plain">{c.returning ? 'Returning' : 'New visitor'}</Badge>}
+    </span>
+  );
 }
 
 /** Who the visitor is: name, new or returning, site · place · device, and how long they have waited. */
-function Visitor({ c, now, hidden, joined }: { c: Pick<WebchatRingChat, 'visitor' | 'site' | 'place' | 'device' | 'since'> & { returning?: boolean }; now: number; hidden: boolean; joined?: boolean }) {
+function Visitor({ c, now, hidden, joined, pulse, chips }: { c: Pick<WebchatRingChat, 'visitor' | 'site' | 'place' | 'device' | 'since'>; now: number; hidden: boolean; joined?: boolean; pulse?: boolean; chips?: ReactNode }) {
   return (
     <div className="flex items-center gap-3 px-4 pt-0.5 pb-3">
-      <span className="relative">
+      {/* Ringing, the avatar pulses (R-01, RING-30): under three times a second, and still with reduced motion. */}
+      <span className={cx('relative rounded-full', pulse && 'motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]')}>
         <Avatar name={hidden ? '?' : c.visitor} size={44} />
         <span className="absolute -right-px -bottom-px h-[11px] w-[11px] rounded-full border-2 border-[#131838] bg-[#22C55E]" aria-hidden />
       </span>
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className="flex items-center gap-2">
           <b className="truncate text-[16px] text-white">{hidden ? 'A website visitor' : c.visitor}</b>
-          {!hidden && c.returning !== undefined ? <Badge tone="blue">{c.returning ? 'Returning' : 'New visitor'}</Badge> : null}
         </span>
         <span className="truncate text-[12px] text-[#AEB3D1]">{hidden ? 'Unlock WorkSuite to see who.' : [c.site, c.place, c.device].filter(Boolean).join(' · ') || 'Website chat'}</span>
+        {!hidden ? chips : null}
       </span>
       <span className="flex shrink-0 flex-col items-end gap-0.5">
         <span className={cx('font-mono text-[15px] font-bold tabular-nums', joined ? 'text-[#AEB3D1]' : 'text-[#F2B77E]')}>{waited(c.since, now)}</span>
@@ -204,19 +232,33 @@ export function RingCard({ s, c, now, after }: { s: WebchatRingState; c: Webchat
     setBusy(false);
     if (ok) setDraft('');
   };
-  const hint = s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `Enter sends and joins${s.shortcut ? ` · ${joinKey} join` : ''} · Esc minimises · rings until someone joins`;
+  // "Rings until someone joins" is the footer's now (R-01), beside how many others it rings for.
+  const hint = s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `Enter sends and joins${s.shortcut ? ` · ${joinKey} join` : ''} · Esc minimises`;
+  const others = s.chats.length - 1;
   return (
     <Frame
       dot={c.silenced ? 'silenced' : 'ringing'}
-      status={c.silenced ? 'Website chat · ringing (silenced)' : 'Website chat · ringing'}
-      badge={<Badge tone={c.atRisk ? 'red' : c.mine ? 'green' : 'blue'}>{stageLabel(c)}</Badge>}
+      status={c.silenced ? 'Incoming website chat · silenced' : 'Incoming website chat'}
       hint={hint}
       after={after}
+      footer={
+        <>
+          {/* The footer (R-01, RING-UI-01; RING-23): it rings until someone joins, for how many others, and +N waiting. */}
+          <div className="drag flex items-center justify-between gap-3 bg-[#0C1430] px-4 py-2.5 text-[12px] text-[#9AA3C4]">
+            <span className="min-w-0 truncate">{ringsFor(c)}</span>
+            {others > 0 ? (
+              <button type="button" onClick={() => void call('ring:openInbox').catch(() => undefined)} className="no-drag shrink-0 font-bold text-[#B3C0FF] hover:text-white">
+                {text('+{n} waiting', { n: others })}
+              </button>
+            ) : null}
+          </div>
+        </>
+      }
     >
       <div className="sr-only" role="alert" aria-live="assertive">
         {s.hidden ? 'A website chat is waiting.' : `Website chat: ${c.visitor}${c.site ? ` on ${c.site}` : ''} is waiting.`}
       </div>
-      <Visitor c={c} now={now} hidden={s.hidden} />
+      <Visitor c={c} now={now} hidden={s.hidden} pulse={!c.silenced} chips={<RingChips c={c} />} />
       {!s.hidden && c.page ? <Reading page={c.page} /> : null}
       {!s.hidden && c.preview ? (
         <div className="flex flex-col gap-2 px-4 pt-3 pb-1">
@@ -242,36 +284,68 @@ export function RingCard({ s, c, now, after }: { s: WebchatRingState; c: Webchat
             Transfer
           </button>
         ) : null}
+        {/* Silence in words, as the design has it (R-01): a personal mute on all my devices until at risk (RING-11). */}
         <button
           type="button"
           aria-label={c.silenced ? 'Unmute ringing' : 'Silence ringing'}
           aria-pressed={c.silenced}
           title={c.silenced ? 'Unmute ringing' : 'Silence ringing'}
           onClick={() => silence(c.id, !c.silenced)}
-          className={cx('flex h-11 w-11 shrink-0 items-center justify-center rounded-[11px] border border-white/14 hover:bg-white/7', c.silenced && 'bg-white/10')}
+          className={cx('flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[11px] border border-white/14 px-3 text-[13px] font-semibold hover:bg-white/7', c.silenced && 'bg-white/10')}
         >
-          <Icon name="bell-off" size={17} />
+          <Icon name="bell-off" size={16} />
+          {c.silenced ? text('Unmute') : text('Silence')}
         </button>
       </div>
       {handover !== null ? (
-        // A chat given to me passes on if I do not join it in time (RING-UI-02).
-        <div className="px-4 pt-2.5" role="timer" aria-label={`Passes on in ${clock(handover)}`}>
-          <div className="h-1 overflow-hidden rounded-full bg-[#22305C]">
-            <div className="h-full rounded-full bg-[#8FA6E0] transition-[width] duration-1000 ease-linear" style={{ width: `${Math.min(100, (handover / 60) * 100)}%` }} />
-          </div>
-          <p className="mt-1 flex items-center gap-2 text-[11.5px] text-[#AEB3D1]">
-            <span className="flex-1">Passes to the next available agent in {clock(handover)} if you don't join</span>
-            <button type="button" onClick={() => void call('ring:pass', { id: c.id }).catch((e) => toast('error', errorMessage(e)))} className="font-semibold text-[#AEB8FF] hover:underline">
-              Pass now
-            </button>
-          </p>
+        // A chat given to me passes on if I do not join it in time (RING-UI-02): the same countdown as in the stack.
+        <div className="px-4 pt-2.5">
+          <Handover
+            left={handover}
+            pass={
+              <button type="button" onClick={() => void call('ring:pass', { id: c.id }).catch((e) => toast('error', errorMessage(e)))} className="font-semibold text-[#AEB8FF] hover:underline">
+                Pass now
+              </button>
+            }
+          />
         </div>
       ) : null}
     </Frame>
   );
 }
 
-/** One of several chats ringing, compact (#225, design 2): what they wrote, a reply box, Join and Silence. */
+/** The kind of card a chat is in the stack (R-02, RING-UI-02): at risk, assigned to me, or waiting. */
+function rowKind(c: Pick<WebchatRingChat, 'atRisk' | 'mine'>): 'risk' | 'mine' | 'waiting' {
+  return c.atRisk ? 'risk' : c.mine ? 'mine' : 'waiting';
+}
+
+const ROW = {
+  risk: 'border-[#8A3432] bg-[#4A1714] shadow-[0_16px_40px_rgba(0,0,0,0.45)]',
+  mine: 'border-[#273498] bg-[#1B2570]',
+  waiting: 'border-white/10 bg-[#131838]',
+} as const;
+
+/** The handover countdown on a chat given to me (R-02; RING-05, RING-12): the bar, the time, and Pass to next. */
+function Handover({ left, pass }: { left: number; pass: ReactNode }) {
+  return (
+    <div role="timer" aria-label={`Passes on in ${clock(left)}`}>
+      <div className="h-[5px] overflow-hidden rounded-full bg-[#273050]">
+        <div className="h-full rounded-full bg-[#8FA2FF] transition-[width] duration-1000 ease-linear" style={{ width: `${Math.min(100, (left / 60) * 100)}%` }} />
+      </div>
+      <p className="mt-1 flex items-center gap-2 text-[11.5px] text-[#B3C0FF]">
+        <span className="flex-1">Passes to the next available agent in {clock(left)} if you don't join</span>
+        {pass}
+      </p>
+    </div>
+  );
+}
+
+/**
+ * One of several chats ringing (#225, design 2; R-02, RING-UI-02): what they wrote, a reply box, Join. At risk it is
+ * the red card — AT RISK, "Stronger tone · supervisors told" — and Silence does not hold it (RING-06); assigned to me
+ * it is the blue one — ASSIGNED TO YOU, in turn or from whom, the handover countdown and Pass to next (RING-05,
+ * RING-12); waiting, a compact row with its site and step.
+ */
 function StackRow({ s, c, now }: { s: WebchatRingState; c: WebchatRingChat; now: number }) {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
@@ -283,20 +357,46 @@ function StackRow({ s, c, now }: { s: WebchatRingState; c: WebchatRingChat; now:
     if (ok) setDraft('');
   };
   const name = s.hidden ? 'A visitor' : c.visitor;
+  const kind = rowKind(c);
+  const handover = kind === 'mine' ? handoverIn(c.handoverAt, now) : null;
+  const step = stepLabel(c);
+  const pass = () => void call('ring:pass', { id: c.id }).catch((e) => toast('error', errorMessage(e)));
   return (
-    <li className="flex flex-col gap-2.5 rounded-[14px] border border-white/10 bg-[#131838] py-3 pr-3 pl-3.5" aria-label={name}>
+    <li className={cx('flex flex-col gap-2.5 rounded-[14px] border py-3 pr-3 pl-3.5', ROW[kind])} aria-label={name}>
+      {kind !== 'waiting' ? (
+        <div className="flex items-center gap-2">
+          <span className={cx('rounded-[6px] px-2 py-[3px] text-[11px] font-bold tracking-[1.2px] text-white uppercase', kind === 'risk' ? 'bg-[#D9483B]' : 'bg-[#637BF2]')}>{stageLabel(c)}</span>
+          <span className={cx('min-w-0 flex-1 truncate text-[12px]', kind === 'risk' ? 'text-[#F5B1A7]' : 'text-[#B3C0FF]')}>
+            {kind === 'risk' ? text('Stronger tone · supervisors told') : c.by && !s.hidden ? text('From {name}', { name: c.by }) : text('In turn')}
+          </span>
+        </div>
+      ) : null}
       <div className="flex items-center gap-2.5">
-        <Avatar name={s.hidden ? '?' : c.visitor} size={36} />
+        <span className={cx('rounded-full', kind === 'risk' && 'ring-[3px] ring-[#EF6B5A]')}>
+          <Avatar name={s.hidden ? '?' : c.visitor} size={36} />
+        </span>
         <span className="flex min-w-0 flex-1 flex-col gap-0.5">
           <span className="flex items-center gap-1.5">
             <b className="truncate text-[14px] text-white">{name}</b>
-            {!s.hidden && c.site ? <span className="truncate text-[11px] text-[#8C92B5]">{c.site}</span> : null}
-            {c.atRisk || c.mine ? <Badge tone={c.atRisk ? 'red' : 'green'}>{stageLabel(c)}</Badge> : null}
+            {!s.hidden && c.priority === 'vip' ? <Badge tone="vip">VIP</Badge> : null}
+            {!s.hidden && (c.site || (kind === 'waiting' && step)) ? (
+              <span className="truncate text-[11px] text-[#8C92B5]">{[c.site, kind === 'waiting' && step ? step.toLowerCase() : null].filter(Boolean).join(' · ')}</span>
+            ) : null}
           </span>
           <span className="truncate text-[13px] text-[#C9CDE6]">{s.hidden ? 'Unlock WorkSuite to see who.' : (c.preview ?? (c.page ? `Reading ${c.page}` : 'Waiting for someone'))}</span>
         </span>
-        <span className={cx('shrink-0 font-mono text-[13px] font-bold tabular-nums', c.atRisk ? 'text-[#FF8A73]' : 'text-[#F2B77E]')}>{waited(c.since, now)}</span>
+        <span className={cx('shrink-0 font-mono text-[13px] font-bold tabular-nums', kind === 'risk' ? 'text-[#FF8A73]' : kind === 'mine' ? 'text-white' : 'text-[#F2B77E]')}>{waited(c.since, now)}</span>
       </div>
+      {handover !== null ? (
+        <Handover
+          left={handover}
+          pass={
+            <button type="button" onClick={pass} className="font-semibold text-[#AEB8FF] hover:underline">
+              {text('Pass to next')}
+            </button>
+          }
+        />
+      ) : null}
       <div className="flex gap-1.5">
         <span className="flex h-9 flex-1 items-center rounded-[9px] border border-white/10 bg-[#0E1231] px-2.5">
           <label htmlFor={`ring-row-${c.id}`} className="sr-only">Reply to {name}</label>
@@ -318,17 +418,28 @@ function StackRow({ s, c, now }: { s: WebchatRingState; c: WebchatRingChat; now:
           />
         </span>
         <button type="button" disabled={s.hidden || busy} onClick={() => void go()} className="h-9 rounded-[9px] bg-[#22A35A] px-3.5 text-[13px] font-bold text-white hover:brightness-110 disabled:opacity-50">
-          {draft.trim() ? 'Join & send' : 'Join'}
+          {draft.trim() ? 'Join & send' : 'Join chat'}
         </button>
-        <button type="button" aria-label={`${c.silenced ? 'Unmute' : 'Silence'} ${name}`} aria-pressed={c.silenced} onClick={() => silence(c.id, !c.silenced)} className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-white/14 hover:bg-white/7', c.silenced && 'bg-white/10')}>
-          <Icon name="bell-off" size={15} />
-        </button>
+        {kind === 'mine' && handover === null ? (
+          // Mine without a countdown (the server does not pass it on): Pass to next is still mine to choose (RING-12).
+          <button type="button" onClick={pass} className="h-9 shrink-0 rounded-[9px] border border-white/14 px-2.5 text-[12px] font-semibold hover:bg-white/7">
+            {text('Pass to next')}
+          </button>
+        ) : kind !== 'mine' ? (
+          <button type="button" aria-label={`${c.silenced ? 'Unmute' : 'Silence'} ${name}`} aria-pressed={c.silenced} onClick={() => silence(c.id, !c.silenced)} className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-white/14 hover:bg-white/7', c.silenced && 'bg-white/10')}>
+            <Icon name="bell-off" size={15} />
+          </button>
+        ) : null}
       </div>
     </li>
   );
 }
 
-/** Several chats ringing (#225, design 2): "N chats waiting · Open inbox", then a compact card each. */
+/**
+ * Several chats ringing (#225, design 2; R-02, RING-UI-02; RING-23): "N website chats ringing", most urgent on top — at
+ * risk, then assigned to me, then the longest waiting — and Open inbox; a card each. Only the top one sounds (the
+ * ringer's tone follows it).
+ */
 export function RingStack({ s, chats, now, after }: { s: WebchatRingState; chats: WebchatRingChat[]; now: number; after?: ReactNode }) {
   const shown = chats.slice(0, 3);
   return (
@@ -336,7 +447,8 @@ export function RingStack({ s, chats, now, after }: { s: WebchatRingState; chats
       <div className="sr-only" role="alert" aria-live="assertive">{`${chats.length} website chats are waiting.`}</div>
       <div className="drag flex items-center gap-2 px-1 text-[12px] text-[#C9CDE6]">
         <span className="h-2 w-2 rounded-full bg-[#EF5A4C] motion-safe:animate-pulse" />
-        <b className="flex-1 font-semibold">{chats.length} chats waiting</b>
+        <b className="font-semibold">{chats.length} website chats ringing</b>
+        <span className="min-w-0 flex-1 truncate text-[11.5px] text-[#8C92B5]">{text('Most urgent on top')}</span>
         <button type="button" onClick={() => void call('ring:openInbox').catch(() => undefined)} className="no-drag font-semibold text-[#AEB8FF] hover:text-white">
           Open inbox
         </button>

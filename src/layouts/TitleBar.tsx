@@ -9,6 +9,7 @@ import { prettyAccelerator } from '../core/commands';
 import { Icon } from '../components/Icon';
 import { ClockControl } from '../app/overlays/ClockPopover';
 import { ActiveCalls } from '../app/ActiveCalls';
+import { RingAlertPill } from '../modules/chat/website/Ringing';
 import { UpdateIndicator } from '../app/screens/UpdateScreens';
 import { CountBadge, cx } from '../components/ui';
 import { UserPicture, useMe } from '../components/UserPicture';
@@ -79,6 +80,8 @@ export function TitleBar() {
 
       <div className="flex-1" />
 
+      {/* A website chat ringing, or silenced and still waiting (R-01, RING-25): the title bar's alert, on every module. */}
+      {hasChat ? <RingAlertPill /> : null}
       <ActiveCalls />
       <ClockControl />
 

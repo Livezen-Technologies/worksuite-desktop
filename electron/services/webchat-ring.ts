@@ -138,6 +138,8 @@ export interface RingingEntry extends WaitingContext {
   silenced?: boolean;
   handover_at?: string | null;
   by?: string | null;
+  /** How many colleagues it rings for besides me (R-01, RING-UI-01 footer); absent on an older server. */
+  others_ringing?: number | null;
 }
 
 /** Said when a ring stops for a reason other than me joining (RING-28). */
@@ -160,6 +162,8 @@ export interface WaitingContext {
   device?: string | null;
   browser?: string | null;
   returning?: boolean;
+  /** How many times they have visited (R-01 "3rd visit"); absent on an older server. */
+  visits?: number | null;
   priority?: string | null;
   offline?: boolean;
   waiting_since?: string | null;
@@ -173,6 +177,8 @@ const PRIORITIES = new Set(['low', 'normal', 'high', 'urgent', 'vip']);
 const LOUD = new Set(['high', 'urgent', 'vip']);
 const text = (v: unknown, max = 160): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 const id = (v: unknown): number | null => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null);
+/** A count the server sent, or null when it sent none (an older server). */
+const count = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v >= 0 ? v : null);
 
 /** The last few messages an event carries (worksuite-desktop#230), oldest first; null when it carries none. */
 export function recentOf(v: unknown): WebchatFollowUp['recent'] | null {
@@ -201,6 +207,7 @@ function fromContext(c: WaitingContext, prev: WebchatRingChat | undefined): Webc
     place: [text(c.city, 80), text(c.country, 80)].filter(Boolean).join(', ') || prev?.place || null,
     device: [text(c.device, 40), text(c.browser, 40)].filter(Boolean).join(' · ') || prev?.device || null,
     returning: c.returning ?? prev?.returning ?? false,
+    visits: count(c.visits) ?? prev?.visits ?? null,
     preview: text(c.preview, 280) ?? prev?.preview ?? null,
     priority,
     offline: c.offline ?? prev?.offline ?? false,
@@ -210,6 +217,7 @@ function fromContext(c: WaitingContext, prev: WebchatRingChat | undefined): Webc
     mine: false,
     by: null,
     silenced: prev?.silenced ?? false,
+    othersRinging: prev?.othersRinging ?? null,
   };
 }
 
@@ -217,7 +225,7 @@ function fromContext(c: WaitingContext, prev: WebchatRingChat | undefined): Webc
 export function fromRinging(r: RingingEntry, prev: WebchatRingChat | undefined): WebchatRingChat | null {
   const base = fromContext({ ...r, conversation_id: Number(r.conversation_id ?? r.id), waiting_since: r.since ?? r.waiting_since }, prev);
   if (!base) return null;
-  return { ...base, mine: !!r.mine, by: text(r.by, 120), silenced: !!r.silenced && !base.atRisk, handoverAt: text(r.handover_at, 32) };
+  return { ...base, mine: !!r.mine, by: text(r.by, 120), silenced: !!r.silenced && !base.atRisk, handoverAt: text(r.handover_at, 32), othersRinging: count(r.others_ringing) ?? prev?.othersRinging ?? null };
 }
 
 /** Order: at risk, then assigned to me, then oldest waiting (RING-23). */
@@ -274,8 +282,8 @@ export function stampMs(s: string): number {
 /**
  * What the tone does (RING-21, RING-47): nothing when every chat is silenced,
  * an offline enquiry (a card, not a ring), past the organisation's cap, or
- * quiet by the person's Do not disturb choice; the stronger tone for at-risk
- * and high, urgent and VIP chats.
+ * quiet by the person's Do not disturb choice; the stronger tone when the top
+ * chat — the one that sounds — is at risk, high, urgent or VIP.
  */
 export function toneFor(chats: WebchatRingChat[], opts: { ringSeconds: number; quiet: boolean; duringDnd: WebchatRingPrefs['duringDnd']; now: number; ringHere?: boolean | null; handoffs?: number; calls?: number }): WebchatRingState['tone'] {
   // Another of my devices plays the ring (RING-10): this one shows it without sound.
@@ -285,7 +293,9 @@ export function toneFor(chats: WebchatRingChat[], opts: { ringSeconds: number; q
   const live = chats.filter((c) => !c.silenced && !c.offline && (c.atRisk || opts.ringSeconds <= 0 || opts.now - stampMs(c.since) < opts.ringSeconds * 1000));
   // A colleague asking me in rings too, like a chat that has reached me (TEAM-23).
   if (!live.length) return (opts.handoffs ?? 0) > 0 && !(opts.quiet && opts.duringDnd !== 'ring') ? 'normal' : 'off';
-  const strong = live.some((c) => c.atRisk || LOUD.has(c.priority));
+  // Only the top card sounds (R-02, RING-23): its tone, not the loudest of the chats under it. At risk is always on top.
+  const top = orderChats(live)[0]!;
+  const strong = top.atRisk || LOUD.has(top.priority);
   if (opts.quiet) {
     if (opts.duringDnd === 'card') return 'off';
     if (opts.duringDnd === 'at_risk') return live.some((c) => c.atRisk) ? 'strong' : 'off';

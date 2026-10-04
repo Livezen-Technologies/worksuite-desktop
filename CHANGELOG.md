@@ -5,6 +5,26 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.170 — 2026-10-04
+
+- **A chat ringing while you work elsewhere (R-01).** The title bar shows a red **Website chat ringing** pill with
+  its timer, or an amber **Silenced · N waiting** one. A click opens the inbox; it never opens the chat, because that
+  would join it. The card is headed "Incoming website chat" and has new chips:
+  - which step of the ringing order reached you ("Priority · step 1 of 3");
+  - the visitor's visit ("3rd visit");
+  - **VIP**.
+
+  The visitor's picture pulses, Silence is spelt out, and the card says who else it rings ("Rings until someone
+  joins · 2 others ringing"). The visitor's first words come back after a restart.
+- **Several ringing (R-02).** "N website chats ringing", most urgent on top:
+  - **At risk** is red, with "Stronger tone · supervisors told".
+  - **Assigned to you** shows how it reached you ("In turn" or "From Nuwan") and the bar counting down to it passing
+    on, with **Pass to next**.
+  - **Waiting** says the site and the step.
+
+  Only the top chat sounds.
+- Needs the server update (Communication 1.37.0) for the visit count, first words and who else is rung.
+
 ## 0.2.169 — 2026-10-04
 
 - **Live status & calls (V-05).** Website Chats › Setup › Widget has a second tab beside Appearance. It covers:

@@ -46,7 +46,7 @@ describe('the website-chat call window (RING-UI-06)', () => {
     // On its own line, so it is never cut off.
     expect(screen.getByText('Reading: Pricing')).toBeTruthy();
     expect(screen.getByText('Do you ship to Galle?')).toBeTruthy();
-    expect(screen.getByText('Website chat · ringing')).toBeTruthy();
+    expect(screen.getByText('Incoming website chat')).toBeTruthy();
     expect(screen.getByText(/Enter sends and joins · Ctrl\+Shift\+J join/)).toBeTruthy();
     // The tone starts in an effect, which React may run a moment after the name is on screen (a slow CI runner).
     await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat', 0.8));
@@ -80,7 +80,7 @@ describe('the website-chat call window (RING-UI-06)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Silence ringing' }));
     expect(call).toHaveBeenCalledWith('ring:silence', { id: 7, on: true });
     act(() => push?.(state({ chats: [chat({ silenced: true })] })));
-    expect(screen.getByText('Website chat · ringing (silenced)')).toBeTruthy();
+    expect(screen.getByText('Incoming website chat · silenced')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Unmute ringing' }).getAttribute('aria-pressed')).toBe('true');
 
     fireEvent.click(screen.getByRole('button', { name: 'Minimise notification' }));
@@ -114,13 +114,13 @@ describe('the website-chat call window (RING-UI-06)', () => {
     show(<WebchatRingWindow />);
     await screen.findByText('Nimali');
     act(() => push?.(state({ tone: 'strong', chats: [chat({ id: 1, atRisk: true, visitor: 'Kamal' }), chat({ id: 2, mine: true, visitor: 'Ruwan', preview: 'Hello' })] })));
-    expect(screen.getByText('2 chats waiting')).toBeTruthy();
+    expect(screen.getByText('2 website chats ringing')).toBeTruthy();
     expect(screen.getAllByText('At risk').length).toBeGreaterThan(0);
     expect(vi.mocked(playTone)).toHaveBeenLastCalledWith('webchat-strong', 0.8);
 
     const ruwan = screen.getByRole('listitem', { name: 'Ruwan' });
     expect(within(ruwan).getByText('Hello')).toBeTruthy();
-    fireEvent.click(within(ruwan).getByRole('button', { name: 'Join' }));
+    fireEvent.click(within(ruwan).getByRole('button', { name: 'Join chat' }));
     expect(call).toHaveBeenCalledWith('ring:joinSend', { id: 2 });
 
     const kamal = screen.getByRole('listitem', { name: 'Kamal' });

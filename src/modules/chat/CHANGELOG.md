@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.43.0 — 2026-10-04
+
+- R-01/R-02 ringing to the design: the title bar's ringing and silenced pills, Incoming website chat with step, visit and VIP chips, a pulsing avatar, Silence in words, who else it rings; several ringing as website chats ringing, most urgent on top, with at-risk, assigned (In turn, the handover bar, Pass to next) and waiting cards; only the top chat sounds.
+
 ## 1.42.0 — 2026-10-04
 
 - V-05 Live status & calls: a second tab in the widget settings (Appearance / Live status & calls) for typing and read receipts shown to visitors, voice calls on or off, the call button, the call-back offer, who can take calls and whether they are available, and recording (not offered yet); its own save, shared section parts and save bar.

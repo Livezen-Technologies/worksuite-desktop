@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { WebchatCall, WebchatHandoff, WebchatMic, WebchatRingChat, WebchatRingState } from '@shared/types';
 import { call, errorMessage, isMac, on } from '../../../core/bridge';
 import { parseTs } from '../../../core/time';
+import { text } from '../../../core/i18n';
 import { toast } from '../../../core/toasts';
 import { cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
@@ -23,7 +24,8 @@ export function useRingState(): WebchatRingState {
   useEffect(() => {
     let live = true;
     void call('ring:state').then(
-      (x) => live && setS(x),
+      // A main process that has nothing to say (or an older one) leaves the empty state, never an unreadable one.
+      (x) => live && x && Array.isArray(x.chats) && setS(x),
       () => undefined,
     );
     const off = on<WebchatRingState>('ring:changed', (x) => setS(x));
@@ -84,6 +86,47 @@ export function stageLabel(c: Pick<WebchatRingChat, 'atRisk' | 'mine' | 'stage' 
     default:
       return 'New chat';
   }
+}
+
+/**
+ * Where on the ladder it is, as the card's chip says it (R-01, R-02; RING-06): "Priority · step 1 of 3" — the first
+ * step rings the priority agents who are free — then the rest of them, then everyone. Null where no step applies: a
+ * chat given to me, an offline enquiry, at risk (its own red chip), or a supervisor told at risk.
+ */
+export function stepLabel(c: Pick<WebchatRingChat, 'atRisk' | 'mine' | 'stage' | 'offline'>): string | null {
+  if (c.atRisk || c.mine || c.offline) return null;
+  switch (c.stage) {
+    case 'first':
+    case null:
+      return text('Priority · step {n} of 3', { n: 1 });
+    case 'priority':
+      return text('Priority · step {n} of 3', { n: 2 });
+    case 'everyone':
+    case 'released':
+      return text('Everyone · step {n} of 3', { n: 3 });
+    default:
+      return null;
+  }
+}
+
+/** "3rd visit" (R-01, RING-20), from the visitor's count of visits; null for a first visit or where it is not known. */
+export function visitLabel(visits: number | null | undefined): string | null {
+  if (!visits || visits < 2) return null;
+  const tens = visits % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : visits % 10 === 1 ? 'st' : visits % 10 === 2 ? 'nd' : visits % 10 === 3 ? 'rd' : 'th';
+  return text('{n} visit', { n: `${visits}${suffix}` });
+}
+
+/**
+ * The card's footer line (R-01, RING-UI-01; RING-23): it rings until somebody joins, and for how many colleagues
+ * besides me — none for a chat given to me, which rings for me alone (RING-05).
+ */
+export function ringsFor(c: Pick<WebchatRingChat, 'mine' | 'othersRinging'>): string {
+  if (c.mine) return text('Rings for you until you join');
+  const n = c.othersRinging;
+  if (n === null || n === undefined) return text('Rings until someone joins');
+  if (n === 0) return text('Rings until someone joins · only you');
+  return n === 1 ? text('Rings until someone joins · 1 other ringing') : text('Rings until someone joins · {n} others ringing', { n });
 }
 
 const join = (id: number) =>
@@ -480,5 +523,38 @@ export function RingingBar({ tone }: { tone: boolean }) {
         {top.silenced ? 'Unsilence' : 'Silence'}
       </button>
     </div>
+  );
+}
+
+/**
+ * The title bar's alert (R-01, DsTopBar "alert: ringing / silenced"; RING-25, RING-24): a red "Website chat ringing"
+ * pill with how long the top chat has waited, on every module while anything rings; amber "Silenced · N waiting" once
+ * every chat ringing is silenced for me. A visitor's call has its own pill (ActiveCalls). A click opens Website Chats'
+ * inbox — never the chat itself, which would join it.
+ */
+export function RingAlertPill() {
+  const s = useRingState();
+  const now = useNow();
+  if (!s.chats.length) return null;
+  const live = s.chats.filter((c) => !c.silenced);
+  const top = live[0] ?? s.chats[0]!;
+  const silenced = !live.length;
+  const time = waited(top.since, now);
+  const label = silenced ? text('Silenced · {n} waiting', { n: s.chats.length }) : text('Website chat ringing');
+  return (
+    <button
+      type="button"
+      onClick={() => void call('ring:openInbox').catch(() => undefined)}
+      aria-label={`${label}, ${time}. ${text('Open Website Chats')}`}
+      title={text('Open Website Chats')}
+      className={cx(
+        'no-drag flex h-8 shrink-0 items-center gap-2 rounded-full px-3 text-[12px] whitespace-nowrap',
+        silenced ? 'border border-[#B7822F] bg-[#3B2C17] font-semibold text-[#F3C77E] hover:bg-[#4A3820]' : 'bg-[#C2392D] font-bold text-white hover:bg-[#D2453A]',
+      )}
+    >
+      <Icon name={silenced ? 'bell-off' : 'bell'} size={14} className={cx('shrink-0', !silenced && 'motion-safe:animate-pulse')} />
+      {label}
+      <span role="timer" className={cx('font-mono text-[11px] tabular-nums', !silenced && 'rounded-full bg-[#8C2219] px-[7px] py-0.5')}>{time}</span>
+    </button>
   );
 }
