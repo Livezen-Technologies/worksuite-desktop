@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.25.0 — 2026-10-04
+
+- Website chats: a Callbacks section (to do / handled, overdue mark, Call now, WhatsApp, Reply by email, Mark contacted, Couldn't reach, Done), the callback card at the top of its conversation, "Callback requested" on rows, the wait clock amber at the callback offer and red after it, and a link to the WhatsApp chat a visitor continued on (#223, #224)
+
 ## 1.24.0 — 2026-10-04
 
 - Ringing card redesign: Join & send, quick and AI replies, a mini chat after joining, minimise, a compact card per chat when several ring (#225)

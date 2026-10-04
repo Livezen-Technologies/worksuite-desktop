@@ -62,13 +62,17 @@ const ring = (over: Partial<WebchatRingChat>): WebchatRingChat => ({
 
 let callbacks: WebsiteCallback[] = [];
 let missedList: unknown[] = [];
+// A server with the Callbacks section (worksuite-desktop#223): its counts, and its lists by status.
+let structured: { counts: { todo: number; overdue: number; mine: number }; todo: WebsiteCallback[]; handled: WebsiteCallback[] } | null = null;
 
 function serve(rows = ROWS, chats: WebchatRingChat[] = [ring({})], handoffs: NonNullable<WebchatRingState['handoffs']> = []) {
-  vi.mocked(apiGet).mockImplementation((async (path: string) => {
+  vi.mocked(apiGet).mockImplementation((async (path: string, params?: unknown) => {
     if (path === '/api/chat/widget-admin/conversations') return { conversations: rows, can: { view: true, reply: true, manage: false } };
     if (path === '/api/chat/widget-admin/visitors') return { visitors: [{ id: 1 }, { id: 2 }] };
     if (path === '/api/chat/widget-admin/missed/count') return { count: 1 };
     if (path === '/api/chat/widget-admin/missed') return { missed: missedList, count: missedList.length };
+    if (structured && path === '/api/chat/widget-admin/callbacks/counts') return structured.counts;
+    if (structured && path === '/api/chat/widget-admin/callbacks') return { callbacks: (params as { status?: string } | undefined)?.status === 'handled' ? structured.handled : structured.todo, counts: structured.counts };
     if (path === '/api/chat/widget-admin/callbacks') return { callbacks };
     throw new Error(`unexpected ${path}`);
   }) as never);
@@ -87,6 +91,7 @@ beforeEach(() => {
   app.set({ auth: { stage: 'ready', user: { id: '7' } } as never });
   callbacks = [];
   missedList = [];
+  structured = null;
   serve();
 });
 afterEach(() => cleanup());
@@ -106,7 +111,8 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
   it('draws each row with its timer, chips and site, and marks a chat silenced here', async () => {
     wrap(<WebsiteWorkspace />);
     const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
-    expect(within(hasitha).getByText(/^3:0\d$/).className).toContain('text-danger');
+    // Red throughout on a site that offers no callbacks.
+    expect(within(hasitha).getByText(/^waiting 3:0\d$/).className).toContain('text-danger');
     expect(within(hasitha).getByText('Awaiting reply')).toBeTruthy();
     expect(within(hasitha).getByText('Reading /pricing')).toBeTruthy();
     expect(within(hasitha).getByText('On the site now')).toBeTruthy();
@@ -258,6 +264,55 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     await within(list()).findByText('Hasitha');
     fireEvent.keyDown(window, { key: 'j' });
     expect(tab.go).not.toHaveBeenCalled();
+  });
+});
+
+describe('Callbacks (worksuite-desktop#223)', () => {
+  const cb = (over: Partial<WebsiteCallback> = {}): WebsiteCallback => ({
+    id: 5, conversation_id: 9, phone: '+94771234567', best_time: 'This afternoon', visitor: 'Kamal Perera', site: 'techubiz.com', missed_call: false,
+    created_at: ago(600_000), reference: 'CB-1042', email: 'kamal@example.lk', channel: 'whatsapp', how: 'on WhatsApp', message: 'Renewal quote please',
+    due_at: ago(60_000), overdue: true, status: 'open', attempts: 0, ...over,
+  });
+
+  it('has its own section with the count and an overdue mark; each callback can be acted on and opens its chat', async () => {
+    structured = { counts: { todo: 2, overdue: 1, mine: 0 }, todo: [cb(), cb({ id: 6, conversation_id: 10, visitor: 'Nimali', reference: 'CB-1043', overdue: false, channel: 'call', how: 'by phone' })], handled: [] };
+    serve(ROWS, []);
+    tab.route = '/chat?view=website&section=callbacks';
+    wrap(<WebsiteWorkspace />);
+    const nav = screen.getByRole('navigation', { name: 'Website chats' });
+    const item = await within(nav).findByRole('button', { name: /Callbacks/ });
+    await waitFor(() => expect(within(item).getByRole('img', { name: '1 overdue' })).toBeTruthy());
+    expect(item.textContent).toContain('2');
+    // The missed count no longer carries them.
+    await waitFor(() => expect(within(nav).getByRole('button', { name: /Missed chats/ }).textContent).toBe('Missed chats1'));
+
+    const kamal = await screen.findByRole('group', { name: 'Callback CB-1042 for Kamal Perera' });
+    expect(within(kamal).getByText('Overdue')).toBeTruthy();
+    expect(within(kamal).getByText(/Wants to be contacted on WhatsApp · This afternoon/)).toBeTruthy();
+    fireEvent.click(within(kamal).getByRole('button', { name: 'Mark contacted' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/callbacks/5/contacted', {}));
+    fireEvent.click(within(kamal).getByRole('button', { name: "Couldn't reach" }));
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Try again' })).getByRole('menuitem', { name: 'Try again in an hour' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/callbacks/5/unreachable', { retry_minutes: 60 }));
+    fireEvent.click(within(kamal).getByRole('button', { name: 'Call now' }));
+    expect(call).toHaveBeenCalledWith('app:openExternal', { url: 'tel:+94771234567' });
+    fireEvent.click(within(kamal).getByText('Kamal Perera'));
+    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=callbacks&website=9');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Handled' }));
+    expect(await screen.findByText('No callbacks handled yet')).toBeTruthy();
+  });
+
+  it('a row says a callback was requested, and its wait turns amber at the offer and red after it', async () => {
+    structured = { counts: { todo: 1, overdue: 0, mine: 0 }, todo: [], handled: [] };
+    const rows = ROWS.map((r) => (r.visitor_name === 'Hasitha' ? { ...r, wait_amber: 120, wait_red: 600, callback: { id: 5, reference: 'CB-1042', status: 'open', due_at: null, overdue: false } } : r));
+    serve(rows, []);
+    wrap(<WebsiteWorkspace />);
+    const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
+    expect(within(hasitha).getByText('Callback requested')).toBeTruthy();
+    const clock = within(hasitha).getByText(/^waiting 3:0\d$/);
+    expect(clock.getAttribute('data-tone')).toBe('amber');
+    expect(clock.getAttribute('title')).toBe('Offered a callback');
   });
 });
 

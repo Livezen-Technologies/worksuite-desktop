@@ -5,6 +5,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.152 — 2026-10-04
+
+- **Callbacks in Website chats (#223).** A visitor can now ask to be contacted from the website widget. They get a
+  reference, like CB-1042. Their request shows in a new **Callbacks** section, with a red mark when one is overdue.
+  Each one says how they want to be reached (a call, WhatsApp or email), when, and what about. It also has buttons:
+  - **Call now**, **WhatsApp** (opens the chat in WorkSuite) and **Reply by email** (a new email in Mail);
+  - **Mark contacted**, **Couldn't reach** (try again in 30 minutes, an hour, 3 hours or tomorrow) and **Done**.
+
+  The same card sits at the top of its conversation until it is handled. The conversation's row says "Callback
+  requested" (or "Callback overdue").
+- **The wait clock on a waiting chat** now reads "waiting 4:32". It turns amber once the visitor has waited as long
+  as it takes to be offered a callback, and red after it. On a site that offers no callbacks it stays red, as before.
+- **A visitor who went on to WhatsApp** from the widget is linked from their website chat: "Continued on WhatsApp ·
+  Techubiz Sales" opens that WhatsApp chat (#224).
+- Needs the server update (Communication 1.22.0). An older server keeps call-backs under Missed chats, as before.
+
 ## 0.2.151 — 2026-10-04
 
 - **The website chat ringing card is redesigned so you can answer from it (#225).** It shows who is waiting, their

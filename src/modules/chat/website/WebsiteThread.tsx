@@ -3,6 +3,8 @@ import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { OfflineMutation } from '@shared/types';
 import { WEBSITE_REPLY_LABEL, websiteDraftKey } from '@shared/website-reply';
 import { useCanOpen } from '../../../core/access';
+import { text } from '../../../core/i18n';
+import { navigate } from '../../../core/tabs';
 import { ApiError, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
 import { call, errorMessage, on, registerDropped } from '../../../core/bridge';
@@ -22,6 +24,7 @@ import { openChatAttachment } from '../AttachmentViewer';
 import { openWebsiteChatWindow } from '../window';
 import { InThisChat, InviteDialog, NoteBox, TeamFaces, TransferDialog, useDeclined } from './Team';
 import { CallBar } from './CallBar';
+import { CallbackCard, isPending } from './Callbacks';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
 
@@ -158,6 +161,19 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         </div>
         {/* A voice call in this chat (ENH-WCHAT-05): over the transcript, which goes on under it. */}
         <CallBar data={data} me={me} visitor={name} onInvite={!mini && t?.can.invite ? () => setDialog('invite') : undefined} onTransfer={!mini && t?.can.transfer ? () => setDialog('transfer') : undefined} onDone={refresh} />
+        {/* The callback the visitor asked for, with everything about it and the actions on it (#223). */}
+        {data.callback && isPending(data.callback) && !mini ? <CallbackCard b={data.callback} /> : null}
+        {/* They went on to WhatsApp from the widget, and their message was matched to this chat (#224). */}
+        {data.whatsapp?.length && !mini ? (
+          <div className="mx-4 mt-2 flex flex-wrap items-center gap-1.5 text-[12px] text-ink-2">
+            <Icon name="message-circle" size={12} className="text-success" />
+            {data.whatsapp.map((w) => (
+              <button key={w.chat_id} type="button" onClick={() => navigate(`/chat?channel=whatsapp&wa=${w.chat_id}`)} className="font-semibold text-primary hover:underline">
+                {text('Continued on WhatsApp · {account}', { account: w.account })}
+              </button>
+            ))}
+          </div>
+        ) : null}
         <div ref={scroller} className={cx('flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto py-3 scroll-thin', mini ? 'px-3' : 'px-4')}>
           {c.started_at ? <div className="self-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}

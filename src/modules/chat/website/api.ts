@@ -56,6 +56,19 @@ export interface WebsiteRow {
   my_role?: TeamRole | null;
   /** A voice call on in this chat now (ENH-WCHAT-05, VOICE-UI-02): "On a call · 02:14". */
   call?: { status: 'ringing' | 'active' | 'on_hold'; since: string | null } | null;
+  /** The callback still to do in this chat (worksuite-desktop#223): "Callback requested" on the row. */
+  callback?: { id: number; reference: string | null; status: string; due_at: string | null; overdue: boolean } | null;
+  /** When the wait clock turns amber and red, in seconds; null where the site offers no callbacks (#223). */
+  wait_amber?: number | null;
+  wait_red?: number | null;
+}
+
+/** The wait clock's colour (#223): amber at the callback threshold, red after it; red throughout where there is none. */
+export function waitTone(seconds: number, amber: number | null | undefined, red: number | null | undefined): 'plain' | 'amber' | 'red' {
+  if (!amber && !red) return 'red';
+  if (red && seconds >= red) return 'red';
+  if (amber && seconds >= amber) return 'amber';
+  return 'plain';
 }
 
 /** Message-id marks that only move forward (LIVE-05): how far the visitor has the team's messages, and each person the visitor's. */
@@ -246,6 +259,10 @@ export interface WebsiteConversation {
   call?: WebsiteCall | null;
   /** Whether I take website voice calls here: answer, join, hold, offer. */
   can_call?: boolean;
+  /** The callback the visitor asked for (worksuite-desktop#223): one still to do, else the last; absent on an older server. */
+  callback?: WebsiteCallback | null;
+  /** The WhatsApp chats this visitor continued on, matched by their reference (#224). */
+  whatsapp?: Array<{ account: string; chat_id: number; ref: string; linked_at: string | null; link: string }>;
   can?: WebsiteCan;
 }
 
@@ -272,17 +289,37 @@ export interface WebsiteCall {
 /** Whether a call is ringing or on. */
 export const callLive = (c: Pick<WebsiteCall, 'status'> | null | undefined): boolean => !!c && (c.status === 'ringing' || c.status === 'active' || c.status === 'on_hold');
 
-/** A visitor waiting to be called back (VOICE-16). */
+/**
+ * A visitor waiting to be contacted (VOICE-16; worksuite-desktop#223). The fields after `created_at` come from a
+ * server with structured callbacks: a reference, how and when, a due time, and what has been done.
+ */
 export interface WebsiteCallback {
   id: number;
   conversation_id: number;
-  phone: string;
+  phone: string | null;
   best_time: string | null;
   visitor: string;
   site: string | null;
   /** Asked for after a call nobody answered. */
   missed_call: boolean;
   created_at: string;
+  reference?: string | null;
+  name?: string | null;
+  email?: string | null;
+  channel?: 'call' | 'whatsapp' | 'email';
+  /** "by phone", "on WhatsApp", "by email". */
+  how?: string;
+  message?: string | null;
+  due_at?: string | null;
+  overdue?: boolean;
+  status?: 'open' | 'unreachable' | 'contacted' | 'done';
+  outcome?: string | null;
+  attempts?: number;
+  retry_at?: string | null;
+  waited_seconds?: number | null;
+  assignee?: string | null;
+  contacted_at?: string | null;
+  handled_at?: string | null;
 }
 
 export type CallbackOutcome = 'answered' | 'no_answer' | 'wrong_number';
@@ -307,7 +344,7 @@ export const PRIORITIES: Array<{ id: string; label: string }> = [
 ];
 
 /** The workspace's sections (WebChatInbox, left). */
-export type Section = 'inbox' | 'live' | 'offline' | 'missed' | 'mine' | 'invited' | 'unassigned' | 'awaiting' | 'starred' | 'closed';
+export type Section = 'inbox' | 'live' | 'offline' | 'missed' | 'callbacks' | 'mine' | 'invited' | 'unassigned' | 'awaiting' | 'starred' | 'closed';
 
 /** Which open rows a section shows. */
 export function sectionRows(rows: WebsiteRow[], section: Section, me: number | null): WebsiteRow[] {

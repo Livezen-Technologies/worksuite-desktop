@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
@@ -26,7 +26,7 @@ vi.mock('../../../src/core/tab-context', () => ({
   useTabTitle: () => undefined,
 }));
 
-import { apiGet } from '../../../src/core/api';
+import { apiGet, apiPost } from '../../../src/core/api';
 import { openChatAttachment } from '../../../src/modules/chat/AttachmentViewer';
 import { openWebsiteChatWindow } from '../../../src/modules/chat/window';
 import type { WebsiteConversation } from '../../../src/modules/chat/website/api';
@@ -133,5 +133,42 @@ describe('the website thread (CHAT-UI-01)', () => {
     fireEvent.click(files[0]!);
     expect(openChatAttachment).toHaveBeenCalledWith(expect.objectContaining({ filename: 'Adobe-CC-Teams-Quote.pdf', url: '/api/chat/widget-admin/files/def' }), expect.any(Function));
     expect(screen.getByText(/On the site now · reading \/shop\/adobe/)).toBeTruthy();
+  });
+});
+
+describe('a callback in its conversation (worksuite-desktop#223, #224)', () => {
+  it('sits at the top with what the visitor asked for and the actions; a WhatsApp chat they continued on is linked', async () => {
+    const data = {
+      ...conversation(),
+      callback: {
+        id: 5, conversation_id: 41, phone: '+94771234567', best_time: 'As soon as possible', visitor: 'Ravi', site: 'techubiz.com', missed_call: false,
+        created_at: ago(120_000), reference: 'CB-1042', email: 'ravi@studio.lk', channel: 'call' as const, how: 'by phone', message: 'Lifetime or yearly?',
+        due_at: ago(-3_600_000), overdue: false, status: 'open' as const, attempts: 0,
+      },
+      whatsapp: [{ account: 'Techubiz Sales', chat_id: 55, ref: 'E5C9', linked_at: ago(60_000), link: '/whatsapp?chat=55' }],
+    };
+    vi.mocked(apiGet).mockImplementation((async (path: string) => {
+      if (path === '/api/chat/widget-admin/conversations/41') return data;
+      if (path === '/api/chat/widget-admin/canned') return { responses: [] };
+      if (path === '/api/chat/widget-admin/agents') return { agents: [] };
+      throw new Error(`unexpected ${path}`);
+    }) as never);
+    mount();
+
+    const card = await screen.findByRole('group', { name: 'Callback CB-1042 for Ravi' });
+    expect(within(card).getByText('Callback requested')).toBeTruthy();
+    expect(within(card).getByText('Lifetime or yearly?')).toBeTruthy();
+    expect(within(card).getByText('+94771234567 · ravi@studio.lk')).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'WhatsApp' })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Reply by email' })).toBeTruthy();
+    fireEvent.click(within(card).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/callbacks/5/done', {}));
+    expect(screen.getByRole('button', { name: 'Continued on WhatsApp · Techubiz Sales' })).toBeTruthy();
+  });
+
+  it('in the small window, no callback card', async () => {
+    mount(true);
+    await screen.findByText('Yearly, renewed each March.');
+    expect(screen.queryByText('Callback requested')).toBeNull();
   });
 });

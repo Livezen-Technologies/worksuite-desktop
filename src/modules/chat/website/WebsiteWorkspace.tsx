@@ -12,7 +12,8 @@ import { listStamp, parseTs } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
-import { isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, type CallbackOutcome, type Section, type WebsiteCallback, type WebsiteRow } from './api';
+import { isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, waitTone, WEBSITE, type CallbackOutcome, type Section, type WebsiteCallback, type WebsiteRow } from './api';
+import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
 import { clock, handoffAsk, handoffTitle, useRingState, waited } from './Ringing';
 import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
@@ -32,6 +33,8 @@ const SECTIONS: Array<{ id: Section; label: string }> = [
   { id: 'live', label: 'Live chats' },
   { id: 'offline', label: 'Offline enquiries' },
   { id: 'missed', label: 'Missed chats' },
+  // Visitors who asked to be contacted, with a reference and a due time (worksuite-desktop#223).
+  { id: 'callbacks', label: 'Callbacks' },
   // Chats I own or take part in (ENH-WCHAT-03, TEAM-09).
   { id: 'mine', label: 'Mine' },
   // Invitations and transfers waiting for me.
@@ -109,9 +112,14 @@ export function WebsiteWorkspace() {
     refetchInterval: 60_000,
     retry: false,
   });
-  // Visitors waiting to be called back (VOICE-16): first in Missed chats.
-  const callbacks = useCallbacks(true);
-  const callbackList = callbacks.data ?? [];
+  // Visitors waiting to be called back (VOICE-16): first in Missed chats on a server without the Callbacks section;
+  // with it (#223), they have that section, its count and its overdue mark.
+  const callbackCounts = useCallbackCounts();
+  const structured = callbackCounts.isSuccess;
+  const callbacks = useCallbacks(!structured);
+  const callbackList = structured ? [] : (callbacks.data ?? []);
+  const [cbStatus, setCbStatus] = useState<'todo' | 'handled'>('todo');
+  const cbList = useCallbackList(cbStatus, mineOnly, section === 'callbacks' && structured);
   // What rings on this computer: the row shows it, and a silenced one is marked (RING-24).
   const ring = useRingState();
   const ringing = new Map(ring.chats.map((c) => [c.id, c]));
@@ -120,14 +128,15 @@ export function WebsiteWorkspace() {
   const typingRows = useVisitorsTyping();
   const openRows = open.data?.conversations ?? [];
   const sites = open.data && 'sites' in open.data ? ((open.data as { sites?: Array<{ widget_id: number; site: string }> }).sites ?? []) : [];
-  const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) + callbackList.length : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
+  const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) + callbackList.length : s === 'callbacks' ? (callbackCounts.data?.todo ?? 0) : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
+  const overdue = callbackCounts.data?.overdue ?? 0;
   const source = section === 'closed' ? closed : open;
   const pill = section === 'closed' ? 'closed' : mineOnly ? 'mine' : 'open';
   const onSite = (r: WebsiteRow) => !site || r.widget_id === site;
   const isMine = (r: WebsiteRow) => mineFor(r, me);
   const openHere = sectionRows(openRows, section === 'closed' ? 'inbox' : section, me).filter(onSite);
   const typed = q.trim().toLowerCase();
-  const searching = section !== 'missed' && section !== 'invited' && needle.length >= 2 && typed.length >= 2;
+  const searching = section !== 'missed' && section !== 'invited' && section !== 'callbacks' && needle.length >= 2 && typed.length >= 2;
   const found = useWebsiteSearch(searching ? needle : '', section === 'closed');
   // Until the server answers, the list narrows by what it already has.
   const rows = (searching && found.data ? found.data.conversations : sectionRows(source.data?.conversations ?? [], section, me))
@@ -161,7 +170,8 @@ export function WebsiteWorkspace() {
   }, [section, selected]);
 
   // J and K move through the list (CHAT-UI-00) while this tab is in front and nothing is being typed.
-  const ids = section === 'missed' ? (missed.data?.missed ?? []).map((m) => m.id) : section === 'invited' ? handoffs.map((h) => h.conversationId) : rows.map((r) => r.id);
+  const ids = section === 'missed' ? (missed.data?.missed ?? []).map((m) => m.id) : section === 'invited' ? handoffs.map((h) => h.conversationId)
+    : section === 'callbacks' ? (cbList.data?.callbacks ?? []).map((b) => b.conversation_id) : rows.map((r) => r.id);
   const idsKey = ids.join(',');
   useEffect(() => {
     if (!active || live || designing) return;
@@ -188,12 +198,14 @@ export function WebsiteWorkspace() {
           <button type="button" onClick={() => go('/chat')} className="px-2 pb-2 text-left font-semibold text-primary hover:underline">‹ Back to Chat</button>
           <b className="px-2 pb-1.5 text-[15px] text-ink">Website Chats</b>
           <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">CONVERSATIONS</div>
-          {SECTIONS.map((s) => {
+          {SECTIONS.filter((s) => s.id !== 'callbacks' || structured).map((s) => {
             const n = count(s.id);
             return (
               <button key={s.id} type="button" aria-current={section === s.id ? 'page' : undefined} onClick={() => to({ section: s.id, website: null })} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
                 <span className="flex-1">{s.label}</span>
-                {n ? <span className={cx('text-[11.5px] font-bold', s.id === 'missed' ? 'text-danger' : s.id === 'invited' ? 'text-primary' : 'text-ink-2')}>{n}</span> : null}
+                {/* Overdue callbacks: a red dot beside the count, and said (#223). */}
+                {s.id === 'callbacks' && overdue ? <span className="mr-1 h-1.5 w-1.5 rounded-full bg-danger" role="img" aria-label={text('{n} overdue', { n: overdue })} title={text('{n} overdue', { n: overdue })} /> : null}
+                {n ? <span className={cx('text-[11.5px] font-bold', s.id === 'missed' || (s.id === 'callbacks' && overdue) ? 'text-danger' : s.id === 'invited' ? 'text-primary' : 'text-ink-2')}>{n}</span> : null}
               </button>
             );
           })}
@@ -241,7 +253,13 @@ export function WebsiteWorkspace() {
             <Icon name="search" size={14} className="pointer-events-none absolute left-2.5 text-ink-3" />
             <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, messages, email…" className="h-8 w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 text-[13px] outline-none focus:border-primary" />
           </span>
-          {section !== 'missed' && section !== 'invited' ? (
+          {section === 'callbacks' ? (
+            <div className="flex gap-1 text-[11.5px] font-semibold" role="group" aria-label="Show">
+              <Pill on={cbStatus === 'todo'} onClick={() => setCbStatus('todo')}>{text('To do · {n}', { n: callbackCounts.data?.todo ?? 0 })}</Pill>
+              <Pill on={cbStatus === 'handled'} onClick={() => setCbStatus('handled')}>{text('Handled')}</Pill>
+              <Pill on={mineOnly} onClick={() => setMineOnly((m) => !m)}>{text('Mine')}</Pill>
+            </div>
+          ) : section !== 'missed' && section !== 'invited' ? (
             <div className="flex gap-1 text-[11.5px] font-semibold" role="group" aria-label="Show">
               <Pill on={pill === 'open'} onClick={() => showOpen(false)}>Open · {openHere.length}</Pill>
               <Pill on={pill === 'mine'} onClick={() => showOpen(true)}>Mine · {openHere.filter(isMine).length}</Pill>
@@ -250,7 +268,13 @@ export function WebsiteWorkspace() {
           ) : null}
         </div>
         <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
-          {section === 'invited' ? (
+          {section === 'callbacks' ? (
+            cbList.isLoading ? <Spinner /> : cbList.error ? <div className="p-4"><ErrorNote error={cbList.error} onRetry={() => void cbList.refetch()} /></div> : !(cbList.data?.callbacks.length) ? (
+              <Empty icon="phone" title={cbStatus === 'todo' ? 'Nobody is waiting to be contacted' : 'No callbacks handled yet'} hint={cbStatus === 'todo' ? 'When a visitor asks for a callback on the website, it waits here with its reference and when it is due.' : undefined} />
+            ) : (
+              cbList.data.callbacks.map((b) => <CallbackCard key={b.id} b={b} compact active={selected === String(b.conversation_id)} onOpen={() => to({ website: String(b.conversation_id) })} />)
+            )
+          ) : section === 'invited' ? (
             handoffs.length === 0 ? <Empty icon="users" title="No invitations" hint="When a colleague invites you into a website chat, or transfers one to you, it waits here." /> : handoffs.map((h) => (
               <InvitedRow key={h.id} h={h} hidden={ring.hidden} active={selected === String(h.conversationId)} onOpen={() => to({ website: String(h.conversationId) })} />
             ))
@@ -409,7 +433,7 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { 
         <span className="flex items-center gap-1.5">
           <b className={cx('flex-1 truncate text-ink', r.awaiting_reply ? 'font-bold' : 'font-semibold')}>{name}</b>
           {ring ? <Icon name={ring.silenced ? 'bell-off' : 'bell'} size={12} className={ring.silenced ? 'shrink-0 text-warning' : 'shrink-0 text-danger'} label={ring.silenced ? text('Silenced on this computer') : text('Ringing')} /> : null}
-          {r.awaiting_reply && since && !closed ? <WaitClock since={since} /> : <span className="shrink-0 text-[11px] text-ink-3">{listStamp(r.last_message?.at ?? r.last_visitor_at ?? r.updated_at)}</span>}
+          {r.awaiting_reply && since && !closed ? <WaitClock since={since} amber={r.wait_amber} red={r.wait_red} /> : <span className="shrink-0 text-[11px] text-ink-3">{listStamp(r.last_message?.at ?? r.last_visitor_at ?? r.updated_at)}</span>}
         </span>
         <span className="flex min-w-0 items-center gap-1.5">
           {r.call && !closed ? (
@@ -428,6 +452,7 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { 
         <span className="flex min-w-0 items-center gap-[5px] text-[11px]">
           {closed ? <Tag tone="muted">Closed</Tag> : r.awaiting_reply ? <Tag tone="danger">Awaiting reply</Tag> : mine ? <Tag tone="indigo">You</Tag> : helping ? <Tag tone="indigo">Participant</Tag> : null}
           {r.at_risk && !closed ? <Tag tone="danger">At risk</Tag> : null}
+          {r.callback && !closed ? <Tag tone={r.callback.overdue ? 'danger' : 'indigo'}>{r.callback.overdue ? text('Callback overdue') : text('Callback requested')}</Tag> : null}
           {r.is_offline ? <Tag tone="muted">Offline</Tag> : null}
           {PRIORITY_TAG[r.priority] ? <Tag tone="warning">{PRIORITY_TAG[r.priority]}</Tag> : null}
           <span className="min-w-0 truncate text-ink-3">
@@ -514,11 +539,21 @@ function CallbackRow({ b, active, onOpen }: { b: WebsiteCallback; active: boolea
   );
 }
 
-function WaitClock({ since }: { since: string }) {
+/**
+ * How long a visitor has waited, counting while it is under an hour (then when they wrote). Amber once they have
+ * waited as long as it takes to be offered a callback, red after it (#223); red throughout on a site without offers.
+ */
+function WaitClock({ since, amber, red }: { since: string; amber?: number | null; red?: number | null }) {
   const now = useNow(1_000);
   const at = parseTs(since).getTime();
   if (Number.isNaN(at) || now - at >= 3_600_000) return <span className="shrink-0 text-[11px] text-ink-3">{listStamp(since)}</span>;
-  return <span className="shrink-0 text-[11.5px] font-bold text-danger tabular-nums">{waited(since, now)}</span>;
+  const tone = waitTone((now - at) / 1000, amber, red);
+  return (
+    <span data-tone={tone} title={tone === 'amber' ? text('Offered a callback') : tone === 'red' && (amber || red) ? text('Waiting past the callback offers') : undefined}
+      className={cx('shrink-0 text-[11.5px] font-bold tabular-nums', tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
+      {text('waiting {time}', { time: waited(since, now) })}
+    </span>
+  );
 }
 
 /**
