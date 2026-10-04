@@ -1,14 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useMemo, useState, type ReactNode } from 'react';
-import { call, errorMessage } from '../../../../core/bridge';
+import { errorMessage } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
 import { useTab, useTabTitle } from '../../../../core/tab-context';
 import { Select } from '../../../../components/Select';
 import { Button, Card, Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
 import { Segmented } from '../live/LiveDashboard';
-import { Area, Choice, Section, Toggle } from './parts';
+import { Area, Choice, Labelled, Section, Toggle } from './parts';
 import { BehaviourTab, EmbedTab, useBehaviour } from './Behaviour';
+import { ChatbotTab, useChatbot } from './ChatbotTab';
 import { LiveStatusCalls } from './LiveStatusCalls';
 import { StaffTab, useStaffList } from './StaffTab';
 import { siteOf } from './Widgets';
@@ -58,8 +59,8 @@ import { WidgetPreview, type PreviewScreen } from './WidgetPreview';
  * puts back what is saved. BEHAVIOUR (S-03, X-UI-16) has its own Cancel and Save in the same header and saves only what
  * it changed (`PUT widgets/{id}/behaviour`); beside its rules, and alone on the Embed code tab, are the snippet with
  * Copy, the install check and the install guides. STAFF (S-04, X-UI-17) is the table of who answers, with "Add people"
- * in the header; each change there is saved as it is made. Live status & calls (V-05) saves on its own. The Chatbot is
- * on the web until its screen comes (S-05). Anybody who can see website chats can look; only somebody who may configure
+ * in the header; each change there is saved as it is made. Live status & calls (V-05) saves on its own. CHATBOT (S-05,
+ * X-UI-18) saves from the header's Save, only what it changed (`PUT widgets/{id}/chatbot`), beside its Try it panel. Anybody who can see website chats can look; only somebody who may configure
  * widgets can save, and the screen says so.
  */
 
@@ -145,30 +146,6 @@ function Swatches({ label, value, swatches, onChange, error }: { label: string; 
   );
 }
 
-/** A field label above its control, as the design's cards set them out. */
-function Labelled({ label, children, className }: { label: string; children: ReactNode; className?: string }) {
-  return (
-    <div className={cx('flex flex-col gap-1.5', className)}>
-      <span className="text-[12.5px] font-semibold text-ink">{label}</span>
-      {children}
-    </div>
-  );
-}
-
-/** A tab whose screen is still the web's: what is there, and the way to it. */
-function OnTheWeb({ icon, title, hint }: { icon: string; title: string; hint: string }) {
-  return (
-    <div className="flex flex-1">
-      <Empty
-        icon={icon}
-        title={title}
-        hint={hint}
-        action={<Button className="mt-2" onClick={() => void call('app:openInBrowser', { path: '/website-chats?tab=widgets' })}>Open on the web ↗</Button>}
-      />
-    </div>
-  );
-}
-
 function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab: WidgetTab; onList?: () => void }) {
   const id = row.id;
   const formId = useId();
@@ -190,6 +167,8 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
   const b = useBehaviour(id);
   const [adding, setAdding] = useState(false);
   const staffList = useStaffList(id, Boolean(seen.staff));
+  // The Chatbot (S-05) saves from this header too.
+  const bot = useChatbot(id, Boolean(seen.chatbot));
 
   const saved = useMemo(() => (q.data?.design ? withDefaults(q.data.design, q.data.widget?.name ?? row.name) : null), [q.data, row.name]);
   const design = draft ?? saved;
@@ -270,6 +249,11 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
           </>
         ) : tab === 'staff' ? (
           <Button type="button" variant="primary" disabled={!staffList.data} onClick={() => setAdding(true)}>Add people</Button>
+        ) : tab === 'chatbot' && bot.settings ? (
+          <>
+            {bot.blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
+            <Button type="button" variant="primary" loading={bot.busy} disabled={!bot.can || bot.busy || bot.blocked || !bot.dirty} onClick={() => void bot.save()}>Save</Button>
+          </>
         ) : null}
       </div>
       <div role="tablist" aria-label="Widget settings" className="flex gap-0.5 border-b border-line">
@@ -334,7 +318,7 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
       ) : null}
       {tab === 'chatbot' ? (
         <div role="tabpanel" id="widget-panel-chatbot" aria-labelledby="widget-tab-chatbot" className="flex min-h-0 flex-1">
-          <OnTheWeb icon="sparkles" title="The chatbot is set on the web for now" hint="The assistant, what it knows and when it hands over to the team." />
+          <ChatbotTab id={id} c={bot} />
         </div>
       ) : null}
       {tab === 'embed' ? (

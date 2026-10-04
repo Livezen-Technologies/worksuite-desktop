@@ -5,6 +5,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.178 — 2026-10-04
+
+- **Chatbot (S-05).** The widget's Chatbot tab is now in the app: "Assistant answers first", its name and avatar,
+  the model, what it answers from (the knowledge base or a published AI assistant), when it hands to a person, and
+  how many replies before it stops. **Try it** lets you chat with it; test chats are not saved and ring nobody.
+- **Automated messages (S-07).** A new Setup section, second under Widgets & embed. Each rule shows what triggers it
+  ("Address contains /pricing · after 30 s · once per visit"), how often it was sent and how many replied, with an
+  on/off switch. The editor sets when it is sent, on which widget, once per visit or per visitor, never to someone
+  already chatting, who it posts as, and the message. **New rule** adds one.
+- Needs the server's Communication 1.44.0.
+
 ## 0.2.177 — 2026-10-04
 
 - **Widget behaviour (S-03).** The Behaviour tab is now in the app: who gets a new chat, when to ask for contact

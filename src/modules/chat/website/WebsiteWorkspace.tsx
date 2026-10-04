@@ -27,6 +27,7 @@ import { VoiceCalls } from './VoiceCalls';
 import { WidgetSettings } from './widget/WidgetSettings';
 import { WebsiteWidgets } from './widget/Widgets';
 import { WebsiteInsights, type InsightsPeriod } from './Insights';
+import { AutomatedMessages } from './Automated';
 import { ConversationMenu } from '../ConversationMenu';
 import { MyStatus } from '../MyStatus';
 import { Select } from '../../../components/Select';
@@ -36,7 +37,8 @@ import { SidePanel } from '../../../components/SidePanel';
  * Website chats as their own workspace (WebChatInbox): the sections down the
  * left, the conversations in the chosen one, then the visitor's thread and
  * dossier. Widgets & embed is this app's own (S-01, S-02): the widgets as cards, and each widget's editor with a live
- * preview; Insights is read here (L-07); the rest of setup stays on the web, where it is edited.
+ * preview; Insights is read here (L-07); Automated messages are edited here (S-07); the rest of setup stays on the web,
+ * where it is edited.
  */
 const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
   // In the order of the design (C-01, DsWsNav): what comes in, then what is mine, then the rest.
@@ -78,7 +80,6 @@ const ON_WEB: Array<{ head: string; items: Array<{ label: string; tab: string; i
   {
     head: 'SETUP',
     items: [
-      { label: 'Automated messages', tab: 'triggers', icon: 'zap' },
       { label: 'Conversation starters', tab: 'starters', icon: 'message-circle' },
       { label: 'Saved replies', tab: 'canned', icon: 'bookmark' },
       { label: 'Business hours', tab: 'hours', icon: 'clock' },
@@ -116,8 +117,10 @@ export function WebsiteWorkspace() {
   const insights = query.get('section') === 'insights';
   const insightsPeriod: InsightsPeriod = query.get('period') === '7d' ? '7d' : query.get('period') === 'all' ? 'all' : '30d';
   const insightsWidget = Number(query.get('widget')) || null;
+  // Automated messages (S-07, X-UI-19): the rules and the one open, `rule` in the address (`new` for a new one).
+  const automated = query.get('section') === 'automated';
   // Everything that takes the whole width, hiding the list and the thread.
-  const wide = live || widgetList || designing || calling || insights;
+  const wide = live || widgetList || designing || calling || insights || automated;
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
   const [site, setSite] = useState(0);
   // The Mine pill narrows whichever open section is showing; Closed is a section of its own.
@@ -337,6 +340,8 @@ export function WebsiteWorkspace() {
               <MenuHead>{g.head}</MenuHead>
               {/* The widgets and each one's editor, with a live preview, are this app's own (S-01, S-02). */}
               {g.head === 'SETUP' ? <MenuItem icon="code" label="Widgets & embed" here={widgetList || designing} onClick={() => go('/chat?view=website&section=widgets')} /> : null}
+              {/* Automated messages are this app's own too (S-07), second under SETUP as the design has them. */}
+              {g.head === 'SETUP' ? <MenuItem icon="zap" label="Automated messages" here={automated} onClick={() => go('/chat?view=website&section=automated')} /> : null}
               {g.head === 'REPORTS' ? <MenuItem icon="chart" label="Insights" here={insights} onClick={() => go('/chat?view=website&section=insights')} /> : null}
               {g.items.map((i) => (
                 <MenuItem key={i.tab} icon={i.icon} label={i.label} here={false} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/website-chats?tab=${i.tab}` })}>
@@ -366,6 +371,9 @@ export function WebsiteWorkspace() {
         />
       ) : null}
       {designing ? <WidgetSettings key={query.get('widget') ?? ''} onList={() => go('/chat?view=website&section=widgets')} /> : null}
+      {automated ? (
+        <AutomatedMessages selected={query.get('rule')} onSelect={(rule) => go(`/chat?${new URLSearchParams({ view: 'website', section: 'automated', ...(rule ? { rule } : {}) }).toString()}`)} />
+      ) : null}
       {insights ? (
         <WebsiteInsights
           period={insightsPeriod}

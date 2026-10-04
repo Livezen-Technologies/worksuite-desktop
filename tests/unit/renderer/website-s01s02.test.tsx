@@ -310,7 +310,7 @@ describe('S-02 · a widget\'s editor and Appearance with live preview', () => {
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(ROWS[0]!.embed_code));
   });
 
-  it('opens the widget the address names, and the Chatbot on the web until its screen comes', async () => {
+  it('opens the widget the address names, and the Chatbot is the app\'s own (S-05)', async () => {
     tabQuery = new URLSearchParams('widget=2');
     payload = { ...payload, widget: { ...payload.widget, id: 2, name: 'TechHub Lanka', domain: 'techhub.com.lk' }, design: design({ name: 'TechHub Lanka' }) };
     wrap(<WidgetSettings />);
@@ -318,10 +318,11 @@ describe('S-02 · a widget\'s editor and Appearance with live preview', () => {
     expect(apiGet).toHaveBeenCalledWith('/api/chat/widget-admin/widgets/2/design', undefined, expect.anything());
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toBe('Widgets & embed › techhub.com.lk');
 
-    // Behaviour is built in the app since S-03 (website-s03s04.test.tsx).
+    // Behaviour is built in the app since S-03 (website-s03s04.test.tsx), the Chatbot since S-05 (website-s05s07.test.tsx).
     fireEvent.click(screen.getByRole('tab', { name: 'Chatbot' }));
-    expect(screen.getByText('The chatbot is set on the web for now')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Open on the web ↗' }));
-    expect(call).toHaveBeenCalledWith('app:openInBrowser', { path: '/website-chats?tab=widgets' });
+    expect(screen.getByRole('tab', { name: 'Chatbot' }).getAttribute('aria-selected')).toBe('true');
+    expect(screen.getByRole('tabpanel', { name: 'Chatbot' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Open on the web ↗' })).toBeNull();
+    expect(call).not.toHaveBeenCalledWith('app:openInBrowser', expect.anything());
   });
 });

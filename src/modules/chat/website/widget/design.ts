@@ -116,6 +116,8 @@ export interface WidgetRow {
   allowed_domains?: string | null;
   brand_color?: string;
   embed_code?: string;
+  /** The chatbot's name: what an automated message posted as the assistant is signed with (S-07). */
+  bot_name?: string | null;
   ai_enabled?: boolean;
   voice_enabled?: boolean;
   open_conversations?: number;

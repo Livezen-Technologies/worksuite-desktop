@@ -17,6 +17,16 @@ export function Group({ title, children }: { title: string; children: ReactNode 
   );
 }
 
+/** A field label above its control, as the design's cards set them out (Appearance, Chatbot). */
+export function Labelled({ label, children, className, htmlFor }: { label: string; children: ReactNode; className?: string; htmlFor?: string }) {
+  return (
+    <div className={cx('flex flex-col gap-1.5', className)}>
+      {htmlFor ? <label htmlFor={htmlFor} className="text-[12.5px] font-semibold text-ink">{label}</label> : <span className="text-[12.5px] font-semibold text-ink">{label}</span>}
+      {children}
+    </div>
+  );
+}
+
 export function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (
     <section className="flex flex-col gap-3 border-b border-line py-5 first:pt-0 last:border-b-0">
