@@ -85,6 +85,22 @@ describe('Settings › About › Updates switches (worksuite-desktop#205)', () =
   });
 });
 
+describe('the Beta channel by default', () => {
+  it('is where a new computer and a server without a channel policy start', () => {
+    expect(new SettingsService(database()).raw().updateChannel).toBe('beta');
+    expect(DEFAULT_POLICY.update_channel).toBe('beta');
+    expect(normalizePolicy({}, false).update_channel).toBe('beta');
+    expect(normalizePolicy({}, false).update_channel_default).toBe('beta');
+    const s = new SettingsService(database());
+    s.setPolicy(normalizePolicy({}, false));
+    expect(s.effective().updateChannel).toBe('beta');
+  });
+  it('falls back to Stable when the organisation does not allow Beta, and follows an explicit Stable', () => {
+    expect(normalizePolicy({ allowed_update_channels: ['stable', 'dev'] }, true).update_channel_default).toBe('stable');
+    expect(normalizePolicy({ update_channel: 'stable' }, true).update_channel).toBe('stable');
+  });
+});
+
 describe('the policy key allowed_update_channels', () => {
   it('keeps known channels in order, and never none', () => {
     expect(normalizePolicy({ allowed_update_channels: ['dev', 'stable'] }, true).allowed_update_channels).toEqual(['stable', 'dev']);

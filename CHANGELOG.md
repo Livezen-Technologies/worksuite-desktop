@@ -5,6 +5,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.148 — 2026-10-04
+
+- **Beta is the default update channel.** A new install, and any computer whose organisation sets no channel, now follows **Beta**: the channel that takes the current test builds. If an organisation doesn't allow Beta, it falls back to Stable. A channel you picked yourself in **Settings › About**, or one your organisation sets, still wins. This needs the server's Desktop 1.5.0 for organisations that rely on the server default.
+
 ## 0.2.147 — 2026-10-03
 
 - **A small organisation switcher everywhere (#214).** Home's big "All organizations" box is now a compact pill on the date line — no thick blue ring after you click it — showing the organisation's initials, or stacked initials for All and "N organisations" for several. It opens the standard menu under the pill: search (with more than five), tick several and press **Apply**, or click a name to pick just that one; the default organisation has a badge and can be changed from **Default organisation ›**, and **Manage organisations** is there if you may manage them. Keyboard: arrows, Space to tick, Enter to apply, Esc to close. Home's cards reload for the chosen organisations (with due-today counts per organisation), and the numbers line up in the app font.
