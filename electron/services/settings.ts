@@ -2,7 +2,7 @@ import { normalizeLanguage } from '@shared/localization';
 import { DEFAULT_DARK_PROFILE, normalizeDarkProfile } from '@shared/theme-profiles';
 import { app } from 'electron';
 import { join } from 'node:path';
-import type { DesktopPolicy, Preferences, PreferenceLock } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, type DesktopPolicy, type Preferences, type PreferenceLock } from '@shared/types';
 import { defaultDrivePrefs, normalizeDrivePrefs } from '@shared/transfers';
 import type { Database } from './db';
 import { stricterPrivacy } from './policy';
@@ -68,6 +68,7 @@ export function defaultPreferences(): Preferences {
     shortcuts: {},
     backgroundServices: { notifications: true, realtime: true },
     webchatRinging: { window: true, duringDnd: 'card', shortcut: true, volume: 80 },
+    webchatFollowUps: { ...FOLLOW_UP_DEFAULTS },
     ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false, autoMinimizeWhenWorking: true },
     meetRecording: { method: 'cloud', quality: '720p', layout: 'grid', folder: 'Meeting Recordings', localFolder: join(videos, 'WorkSuite Recordings'), keepLocal: '7' },
     drive: defaultDrivePrefs(),

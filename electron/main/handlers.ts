@@ -366,6 +366,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:minimise', () => ctx.webchat.minimise());
   router.handle('ring:fit', (input) => ctx.webchat.fit(input.height));
   router.handle('ring:openInbox', () => ctx.webchat.openInbox());
+  // A visitor who wrote again in my chat (#230): the card's actions, and which conversation the main window shows.
+  router.handle('ring:followUp', (input) => ctx.webchat.followUp(input.id, input.action, input.message));
+  router.handle('ring:viewing', (input) => ctx.webchat.setViewing(input.id));
   router.handle('ring:handoff', (input) => ctx.webchat.answer(input.id, input.accept));
   router.handle('ring:call', (input) => ctx.webchat.answerCall(input.id, input.accept));
   router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has));

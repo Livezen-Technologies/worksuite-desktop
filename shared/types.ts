@@ -295,6 +295,8 @@ export interface Preferences {
   backgroundServices: { notifications: boolean; realtime: boolean };
   /** Website chat ringing on this computer (WS-WCHAT ENH-01 §14.3). */
   webchatRinging: WebchatRingPrefs;
+  /** When a visitor writes again in a chat I have and I am away from it (worksuite-desktop#230). Unset: the defaults. */
+  webchatFollowUps?: WebchatFollowUpPrefs;
   /** The AI Assistant on this computer (Settings › AI Assistant). */
   ai: AiPrefs;
   /** Meet › Recording (worksuite-desktop#68). */
@@ -477,6 +479,46 @@ export interface WebchatRingPrefs {
 }
 
 /**
+ * A visitor writing again in a chat I have while I am away from it (worksuite-desktop#230): how it gets my attention.
+ * Do not disturb (quiet hours) silences the chime as it does every sound.
+ */
+export interface WebchatFollowUpPrefs {
+  /** The card over other apps, with the visitor's words, a reply box, Open chat and Snooze. */
+  card: boolean;
+  /** A system notification, with Reply, while WorkSuite is not in front. */
+  desktop: boolean;
+  /** A short chime, unlike the new-chat ring. */
+  sound: boolean;
+  /** Minutes without keyboard or mouse in the conversation before I count as away from it. */
+  idleMinutes: 1 | 2 | 5 | 10;
+}
+
+export const FOLLOW_UP_DEFAULTS: WebchatFollowUpPrefs = { card: true, desktop: true, sound: true, idleMinutes: 2 };
+
+/**
+ * A visitor wrote again in a chat I have, or am in, and nobody has answered (worksuite-desktop#230): from the
+ * `chat.widget.message` and `chat.widget.followup` events. Several messages make one entry.
+ */
+export interface WebchatFollowUp {
+  /** The conversation. */
+  id: number;
+  visitor: string;
+  site: string | null;
+  /** The visitor's latest message and the one or two before it (theirs or ours), oldest first. */
+  recent: Array<{ from: 'visitor' | 'agent'; body: string; at: string | null }>;
+  /** Since when the visitor has waited for an answer. */
+  since: string;
+  /** New messages from the visitor since the card came up. */
+  count: number;
+  /** replied: the visitor wrote; reminder: still no answer; team: the team was alerted (Take over is offered). */
+  stage: 'replied' | 'reminder' | 'team';
+  /** The chat is mine (assigned to me), rather than one the team was alerted about. */
+  mine: boolean;
+  /** Who has it, when that is not me. */
+  agent: string | null;
+}
+
+/**
  * A website chat ringing for this person (ENH-WCHAT-01): who, where, and how
  * long, from the server's own pending list and events — never from opening
  * the conversation, which would join it.
@@ -593,6 +635,12 @@ export interface WebchatRingState {
   minimised?: boolean;
   /** The card's own height, as it measured itself: the window fits it, so there is no empty space under it. */
   fit?: number | null;
+  /** Visitors who wrote again in my chats while I was away from them, longest waiting first (worksuite-desktop#230). */
+  followUps?: WebchatFollowUp[];
+  /** Goes up by one each time the "visitor replied" chime should play once. */
+  chime?: number;
+  /** Whether the follow-up card shows over other apps (Settings › Website chats). */
+  followUpCard?: boolean;
 }
 
 /** A chat joined from the ringing card, shown there as a mini chat (worksuite-desktop#225). */
@@ -632,7 +680,8 @@ export interface StatusSnapshot {
   network: NetworkStatus;
   realtime: RealtimeState;
   pendingChanges: number;
-  unread: { mail: number; chat: number; notifications: number; tasks: number };
+  /** `webchat`: visitors who wrote again in my website chats while I was away from them (worksuite-desktop#230), on the badge. */
+  unread: { mail: number; chat: number; notifications: number; tasks: number; webchat?: number };
   notificationsPausedUntil: string | null;
   /** Whether the operating system lets this app show notifications (false: banners are blocked there). */
   notificationsSupported?: boolean;

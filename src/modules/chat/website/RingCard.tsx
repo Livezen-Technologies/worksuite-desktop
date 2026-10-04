@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { WebchatJoined, WebchatRingChat, WebchatRingState } from '@shared/types';
+import type { WebchatFollowUp, WebchatJoined, WebchatRingChat, WebchatRingState } from '@shared/types';
 import { call, errorMessage, isMac } from '../../../core/bridge';
 import { toast } from '../../../core/toasts';
 import { Avatar, cx } from '../../../components/ui';
@@ -390,6 +390,99 @@ export function JoinedCard({ j, now }: { j: WebchatJoined; now: number }) {
           <Icon name="external" size={14} />
         </button>
       </div>
+    </Frame>
+  );
+}
+
+/** The follow-up card's actions (worksuite-desktop#230), in the main process. */
+async function followUp(id: number, action: 'reply' | 'open' | 'snooze' | 'takeOver', message?: string): Promise<boolean> {
+  try {
+    const r = await call('ring:followUp', { id, action, ...(message ? { message } : {}) });
+    if (!r.ok && r.why) toast('error', r.why);
+    return r.ok;
+  } catch (e) {
+    toast('error', errorMessage(e));
+    return false;
+  }
+}
+
+/** What the card says it is: the visitor wrote, they still wait, or the team was alerted. */
+export function followUpStatus(f: Pick<WebchatFollowUp, 'stage' | 'mine' | 'agent' | 'count'>): string {
+  if (f.stage === 'team') return f.mine ? 'Still no reply · the team was alerted' : `Team alert · ${f.agent ? `${f.agent}'s chat` : 'no reply yet'}`;
+  if (f.stage === 'reminder') return 'Reminder · the visitor is still waiting';
+  return f.count > 1 ? `Visitor replied · ${f.count} new messages` : 'Visitor replied';
+}
+
+/**
+ * A visitor wrote again in my chat while I was away from it (worksuite-desktop#230): who and where, their new message
+ * with the one or two before it, how long they have waited, a reply box that sends without leaving what I am doing,
+ * Open chat and Snooze 5 min. A colleague's chat the team was alerted about has Take over instead of the reply box.
+ * Several: the longest waiting as this card, the others as rows under it.
+ */
+export function FollowUpCard({ s, f, rest, now }: { s: WebchatRingState; f: WebchatFollowUp; rest: WebchatFollowUp[]; now: number }) {
+  const [draft, setDraft] = useState('');
+  const [busy, setBusy] = useState(false);
+  const theirs = !f.mine && f.stage === 'team';
+  const lastSaid = [...f.recent].reverse().find((m) => m.from === 'visitor')?.body ?? null;
+  const send = async () => {
+    if (busy || !draft.trim()) return;
+    setBusy(true);
+    const ok = await followUp(f.id, 'reply', draft.trim());
+    setBusy(false);
+    if (ok) setDraft('');
+  };
+  return (
+    <Frame
+      dot={f.stage === 'replied' ? 'ringing' : 'silenced'}
+      status={followUpStatus(f)}
+      badge={<Badge tone={f.stage === 'team' ? 'red' : 'green'}>{f.mine ? 'Your chat' : 'Team'}</Badge>}
+      hint={s.outcome ? s.outcome.text : 'Enter sends · Esc minimises · the card goes when someone answers'}
+    >
+      <div className="sr-only" role="alert" aria-live="assertive">
+        {s.hidden ? 'A website visitor is waiting for a reply.' : `${f.visitor}${f.site ? ` on ${f.site}` : ''} wrote again and is waiting for a reply.`}
+      </div>
+      <Visitor c={{ visitor: f.visitor, site: f.site, place: null, device: null, since: f.since }} now={now} hidden={s.hidden} />
+      {!s.hidden && f.recent.length ? (
+        <div className="flex flex-col gap-2 px-4 pb-1" aria-label="Latest messages">
+          {f.recent.map((m, i) => (m.from === 'visitor' ? <Theirs key={i} text={m.body} /> : <Mine key={i} text={m.body} last={false} />))}
+        </div>
+      ) : null}
+      {!s.hidden && !theirs ? (
+        <div className="px-4 pt-2.5">
+          <ReplyBox id={`followup-reply-${f.id}`} label={`Reply to ${f.visitor}`} placeholder="Type a reply" sendLabel="Send" draft={draft} setDraft={setDraft} onSend={() => void send()} busy={busy} visitorSaid={lastSaid} />
+        </div>
+      ) : null}
+      <div className="flex gap-2 px-4 pt-3">
+        {theirs ? (
+          <button type="button" disabled={s.hidden} onClick={() => void followUp(f.id, 'takeOver')} className="flex h-11 flex-[1.4] items-center justify-center gap-2 rounded-[11px] bg-[#22A35A] text-[14px] font-bold text-white hover:brightness-110 disabled:opacity-50">
+            <Icon name="chat" size={16} />
+            Take over
+          </button>
+        ) : null}
+        <button type="button" disabled={s.hidden} onClick={() => void followUp(f.id, 'open')} className={cx('flex h-11 flex-1 items-center justify-center gap-2 rounded-[11px] text-[13px] font-semibold disabled:opacity-50', theirs ? 'border border-white/14 hover:bg-white/7' : 'bg-[#4F5FEF] text-white hover:brightness-110')}>
+          Open chat
+        </button>
+        <button type="button" onClick={() => void followUp(f.id, 'snooze')} className="h-11 flex-1 rounded-[11px] border border-white/14 text-[13px] font-semibold hover:bg-white/7">
+          Snooze 5 min
+        </button>
+      </div>
+      {rest.length ? (
+        <ul className="mt-3 flex flex-col border-t border-white/10" aria-label="Other visitors waiting for you">
+          {rest.slice(0, 3).map((x) => (
+            <li key={x.id} className="flex h-[44px] items-center gap-2 border-b border-white/10 px-4">
+              <span className="min-w-0 flex-1 truncate">
+                <b className="text-white">{s.hidden ? 'A visitor' : x.visitor}</b>
+                <span className="text-[#AEB3D1]">{s.hidden ? '' : ` · ${[...x.recent].reverse().find((m) => m.from === 'visitor')?.body ?? 'wrote again'}`}</span>
+              </span>
+              <span className="shrink-0 font-mono text-[12px] text-[#F2B77E]">{waited(x.since, now)}</span>
+              <button type="button" disabled={s.hidden} onClick={() => void followUp(x.id, 'open')} className="h-8 rounded-[7px] bg-white/10 px-2.5 text-[12px] font-bold text-white hover:bg-white/15 disabled:opacity-50">
+                Open
+              </button>
+            </li>
+          ))}
+          {rest.length > 3 ? <li className="px-4 py-1.5 text-[11.5px] text-[#AEB3D1]">+{rest.length - 3} more waiting for you</li> : null}
+        </ul>
+      ) : null}
     </Frame>
   );
 }

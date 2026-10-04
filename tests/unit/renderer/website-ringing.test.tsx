@@ -3,7 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import type { WebchatRingChat, WebchatRingState } from '@shared/types';
+import type { WebchatFollowUp, WebchatRingChat, WebchatRingState } from '@shared/types';
 
 let push: ((s: WebchatRingState) => void) | null = null;
 vi.mock('../../../src/core/bridge', () => ({
@@ -16,10 +16,10 @@ vi.mock('../../../src/core/bridge', () => ({
   isMac: false,
 }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
-vi.mock('../../../src/modules/calls/tones', () => ({ playTone: vi.fn(() => ({ stop: vi.fn(), setVolume: vi.fn() })) }));
+vi.mock('../../../src/modules/calls/tones', () => ({ playTone: vi.fn(() => ({ stop: vi.fn(), setVolume: vi.fn() })), playOnce: vi.fn() }));
 
 import { call } from '../../../src/core/bridge';
-import { playTone } from '../../../src/modules/calls/tones';
+import { playOnce, playTone } from '../../../src/modules/calls/tones';
 import { RingingBar, WebchatRingWindow, clock, stageLabel, waited } from '../../../src/modules/chat/website/Ringing';
 
 const chat = (over: Partial<WebchatRingChat>): WebchatRingChat => ({
@@ -271,5 +271,56 @@ describe('a visitor\'s voice call in the call window and the bar (ENH-WCHAT-05, 
     expect(screen.getByRole('status', { name: 'Voice call ringing' }).textContent).toContain('Kamal · creativefx.lk');
     fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
     expect(call).toHaveBeenCalledWith('ring:call', { id: 31, accept: true });
+  });
+});
+
+describe('a visitor who wrote again in my chat (#230)', () => {
+  const f = (over: Partial<WebchatFollowUp> = {}): WebchatFollowUp => ({
+    id: 41, visitor: 'Visitor CC1B', site: 'techubiz.com', since: new Date(Date.now() - 45_000).toISOString(), count: 1, stage: 'replied', mine: true, agent: null,
+    recent: [{ from: 'agent', body: 'It is yearly.', at: null }, { from: 'visitor', body: 'Are u there', at: null }], ...over,
+  });
+
+  it('the card: who, their last messages, how long, a reply box that sends without opening, Open chat and Snooze 5 min', async () => {
+    vi.mocked(call).mockImplementation((async (channel: string) => (channel === 'ring:state' ? state({ chats: [], tone: 'off', followUps: [f(), f({ id: 42, visitor: 'Kasun', recent: [{ from: 'visitor', body: 'Hello?', at: null }] })] }) : { ok: true, why: null })) as never);
+    show(<WebchatRingWindow />);
+    await screen.findByText('Visitor CC1B');
+    expect(screen.getByText('Visitor replied')).toBeTruthy();
+    expect(screen.getByText('It is yearly.')).toBeTruthy();
+    expect(screen.getByText('Are u there')).toBeTruthy();
+    expect(screen.getAllByText(/^0:4\d$/).length).toBe(2);
+    fireEvent.change(screen.getByLabelText('Reply to Visitor CC1B'), { target: { value: 'Sorry, yes — 12,000 a year.' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('ring:followUp', { id: 41, action: 'reply', message: 'Sorry, yes — 12,000 a year.' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Snooze 5 min' }));
+    expect(call).toHaveBeenCalledWith('ring:followUp', { id: 41, action: 'snooze' });
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
+    expect(call).toHaveBeenCalledWith('ring:followUp', { id: 41, action: 'open' });
+    // The other visitor waiting on me, as a row with its own Open.
+    const others = screen.getByRole('list', { name: 'Other visitors waiting for you' });
+    expect(within(others).getByText('Kasun')).toBeTruthy();
+    fireEvent.click(within(others).getByRole('button', { name: 'Open' }));
+    expect(call).toHaveBeenCalledWith('ring:followUp', { id: 42, action: 'open' });
+  });
+
+  it('a colleague’s chat the team was alerted about offers Take over instead of a reply box', async () => {
+    vi.mocked(call).mockImplementation((async (channel: string) => (channel === 'ring:state' ? state({ chats: [], tone: 'off', followUps: [f({ stage: 'team', mine: false, agent: 'Hasarinda' })] }) : { ok: true, why: null })) as never);
+    show(<WebchatRingWindow />);
+    await screen.findByText("Team alert · Hasarinda's chat");
+    expect(screen.queryByLabelText('Reply to Visitor CC1B')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Take over' }));
+    expect(call).toHaveBeenCalledWith('ring:followUp', { id: 41, action: 'takeOver' });
+  });
+
+  it('the main window’s bar says so, and chimes once for each new one (not for those before it opened)', async () => {
+    vi.mocked(playOnce).mockClear();
+    vi.mocked(call).mockResolvedValue(state({ chats: [], tone: 'off', followUps: [f({ count: 2 })], chime: 3 }) as never);
+    show(<RingingBar tone={false} />);
+    await screen.findByText('Visitor replied · 2 new messages');
+    expect(screen.getByText(/Visitor CC1B: “Are u there” · waiting 0:4\d/)).toBeTruthy();
+    expect(playOnce).not.toHaveBeenCalled();
+    act(() => push?.(state({ chats: [], tone: 'off', followUps: [f({ count: 3 })], chime: 4 })));
+    expect(playOnce).toHaveBeenCalledWith('reply', 0.8);
+    fireEvent.click(screen.getByRole('button', { name: 'Open chat' }));
+    expect(call).toHaveBeenCalledWith('ring:followUp', { id: 41, action: 'open' });
   });
 });

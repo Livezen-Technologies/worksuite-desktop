@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { SubmitResult } from '@shared/ipc/contract';
-import type { WebchatCall, WebchatHandoff, WebchatJoined, WebchatRingChat, WebchatRingPrefs, WebchatRingState } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, type WebchatCall, type WebchatFollowUp, type WebchatFollowUpPrefs, type WebchatHandoff, type WebchatJoined, type WebchatRingChat, type WebchatRingPrefs, type WebchatRingState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -155,6 +155,21 @@ const LOUD = new Set(['high', 'urgent', 'vip']);
 const text = (v: unknown, max = 160): string | null => (typeof v === 'string' && v.trim() ? v.trim().slice(0, max) : null);
 const id = (v: unknown): number | null => (Number.isInteger(Number(v)) && Number(v) > 0 ? Number(v) : null);
 
+/** The last few messages an event carries (worksuite-desktop#230), oldest first; null when it carries none. */
+export function recentOf(v: unknown): WebchatFollowUp['recent'] | null {
+  if (!Array.isArray(v)) return null;
+  const out = v
+    .map((m) => (m && typeof m === 'object' ? (m as Record<string, unknown>) : null))
+    .filter((m): m is Record<string, unknown> => !!m && !!text(m.body, 400))
+    .map((m) => ({ from: m.from === 'agent' ? ('agent' as const) : ('visitor' as const), body: text(m.body, 400)!, at: text(m.at, 40) }));
+  return out.length ? out.slice(-3) : null;
+}
+
+/** How long Snooze holds a card (worksuite-desktop#230). */
+export const SNOOZE_MS = 5 * 60_000;
+/** A card for a visitor still unanswered after this long has done what it can; the list and the team have it. */
+const FOLLOW_UP_KEEP_MS = 2 * 60 * 60_000;
+
 function fromContext(c: WaitingContext, prev: WebchatRingChat | undefined): WebchatRingChat | null {
   const cid = id(c.conversation_id);
   if (!cid) return null;
@@ -297,6 +312,10 @@ export interface WebchatRingDeps {
   deviceId: () => string;
   /** WorkSuite's main window is in front. */
   focused: () => boolean;
+  /** When a visitor writes again in my chat (worksuite-desktop#230): the card, the notification, the chime, and when I count as away. */
+  followUpPrefs?: () => WebchatFollowUpPrefs;
+  /** Seconds since the last keyboard or mouse input on this computer. */
+  idleSeconds?: () => number;
 }
 
 /** How often this computer tells the server it is here to ring (RING-10). */
@@ -345,6 +364,14 @@ export class WebchatRinger {
   private minimisedFor: string | null = null;
   /** The card's measured height. */
   private fitHeight: number | null = null;
+  /** Visitors who wrote again in my chats while I was away from them, by conversation (worksuite-desktop#230). */
+  private followUps = new Map<number, WebchatFollowUp>();
+  /** Snoozed follow-ups, until when (epoch ms). */
+  private snoozed = new Map<number, number>();
+  /** The website conversation in front in the main window, as its page says; null when none is. */
+  private viewingId: number | null = null;
+  /** Each time the "visitor replied" chime should play once. */
+  private chimes = 0;
   shortcut = false;
   answerShortcut = false;
 
@@ -360,8 +387,12 @@ export class WebchatRinger {
     this.timer.unref?.();
     this.beatTimer = setInterval(() => void this.beat(), HEARTBEAT_MS);
     this.beatTimer.unref?.();
-    // The organisation's cap and Do not disturb change with the clock, not with events.
-    this.tick = setInterval(() => this.emit(), 5_000);
+    // The organisation's cap and Do not disturb change with the clock, not with events; so do snoozes running out
+    // and my coming back to a conversation (#230).
+    this.tick = setInterval(() => {
+      this.sweepFollowUps();
+      this.emit();
+    }, 5_000);
     this.tick.unref?.();
   }
 
@@ -372,6 +403,8 @@ export class WebchatRinger {
     this.chats.clear();
     this.handoffs.clear();
     this.calls.clear();
+    this.followUps.clear();
+    this.snoozed.clear();
     this.ringHere = null;
     this.sessions = false;
     this.outcome = null;
@@ -380,6 +413,7 @@ export class WebchatRinger {
 
   state(): WebchatRingState {
     const chats = orderChats([...this.chats.values()]);
+    const followUps = this.shownFollowUps();
     const prefs = this.deps.prefs();
     const hidden = this.deps.locked();
     const now = Date.now();
@@ -402,7 +436,187 @@ export class WebchatRinger {
       joined: hidden ? null : this.joined,
       minimised: this.minimisedFor !== null && this.minimisedFor === this.ringingKey(),
       fit: this.fitHeight,
+      followUps: hidden ? followUps.map((f) => ({ ...f, visitor: 'A visitor', recent: [], agent: null })) : followUps,
+      chime: this.chimes,
+      followUpCard: this.followUpPrefs().card,
     };
+  }
+
+  private followUpPrefs(): WebchatFollowUpPrefs {
+    return { ...FOLLOW_UP_DEFAULTS, ...(this.deps.followUpPrefs?.() ?? {}) };
+  }
+
+  /**
+   * Whether I am looking at this conversation now (worksuite-desktop#230): it is the one in front in WorkSuite's main
+   * window, the window is in front (not minimised, not behind another app), the app is not locked, and there has
+   * been keyboard or mouse input within the time I chose. Anything else and a visitor's message is unattended.
+   */
+  attending(conversationId: number): boolean {
+    if (this.viewingId !== conversationId || !this.deps.focused() || this.deps.locked()) return false;
+    const idle = this.deps.idleSeconds?.() ?? 0;
+    return idle < this.followUpPrefs().idleMinutes * 60;
+  }
+
+  /** The main window says which website conversation is in front (or none): looking at one clears its card. */
+  setViewing(conversationId: number | null): void {
+    this.viewingId = conversationId;
+    if (conversationId !== null && this.followUps.has(conversationId) && this.attending(conversationId)) {
+      this.followUps.delete(conversationId);
+      this.snoozed.delete(conversationId);
+      this.changed();
+    }
+  }
+
+  /** The follow-ups to show: not snoozed, longest waiting first. */
+  private shownFollowUps(now = Date.now()): WebchatFollowUp[] {
+    return [...this.followUps.values()].filter((f) => (this.snoozed.get(f.id) ?? 0) <= now).sort((a, b) => stampMs(a.since) - stampMs(b.since));
+  }
+
+  /** Every five seconds: a card I came back to goes, a snooze that ran out brings its card back with the chime, and an old one is let go. */
+  private sweepFollowUps(): void {
+    const now = Date.now();
+    let changed = false;
+    for (const [cid, f] of this.followUps) {
+      if (this.attending(cid) || now - stampMs(f.since) > FOLLOW_UP_KEEP_MS) {
+        this.followUps.delete(cid);
+        this.snoozed.delete(cid);
+        changed = true;
+      }
+    }
+    for (const [cid, until] of this.snoozed) {
+      if (until > now) continue;
+      this.snoozed.delete(cid);
+      if (this.followUps.has(cid)) {
+        this.ding();
+        changed = true;
+      }
+    }
+    if (changed) this.changed();
+  }
+
+  /** The chime, once — unless sounds are off, Do not disturb is on, or the volume is nothing. */
+  private ding(): void {
+    if (this.followUpPrefs().sound && !this.deps.quiet() && this.deps.prefs().volume > 0) this.chimes++;
+  }
+
+  /**
+   * A visitor wrote (worksuite-desktop#230). In a chat I have or am in that the team has already answered, and while
+   * I am away from it, that is a follow-up: a card (or the one there, with the new words and one more in its count),
+   * the chime, and the badge. A chat still ringing has its ringing card instead.
+   */
+  private visitorWrote(cid: number, ev: Record<string, unknown>): void {
+    const me = this.deps.me();
+    const owner = id(ev.assigned_to);
+    const participants = Array.isArray(ev.participants) ? ev.participants.map((x) => id(x)).filter((x): x is number => x !== null) : [];
+    const before = this.followUps.get(cid);
+    const mineOrIn = me !== null && (owner === me || participants.includes(me));
+    if (!before && !(ev.followup === true && mineOrIn)) return;
+    if (this.chats.has(cid)) return;
+    if (this.attending(cid)) {
+      if (before && this.followUps.delete(cid)) this.changed();
+      return;
+    }
+    const said = text(ev.preview, 400);
+    const at = text(ev.at, 40);
+    const recent = recentOf(ev.recent) ?? [...(before?.recent ?? []), ...(said ? [{ from: 'visitor' as const, body: said, at }] : [])].slice(-3);
+    this.followUps.set(cid, {
+      id: cid,
+      visitor: text(ev.visitor, 120) ?? before?.visitor ?? 'A visitor',
+      site: text(ev.site, 120) ?? before?.site ?? null,
+      recent,
+      since: text(ev.waiting_since, 40) ?? before?.since ?? at ?? new Date().toISOString(),
+      count: (before?.count ?? 0) + 1,
+      stage: before?.stage ?? 'replied',
+      mine: owner === null ? (before?.mine ?? true) : owner === me,
+      agent: before?.agent ?? null,
+    });
+    if ((this.snoozed.get(cid) ?? 0) <= Date.now()) this.ding();
+    this.changed();
+  }
+
+  /**
+   * The server's follow-up steps (worksuite-desktop#230): a reminder to me, the team alerted (a card with Take over
+   * for the others), and the end of it — answered, taken over or reassigned.
+   */
+  private followUpStep(cid: number, ev: Record<string, unknown>): void {
+    const stage = ev.stage;
+    if (stage === 'answered' || stage === 'taken' || stage === 'reassigned') {
+      const had = this.followUps.delete(cid);
+      this.snoozed.delete(cid);
+      if (had) this.changed();
+      return;
+    }
+    if (stage !== 'reminder' && stage !== 'team') return;
+    if (this.chats.has(cid) || this.attending(cid)) return;
+    const me = this.deps.me();
+    const owner = id(ev.assigned_to);
+    const before = this.followUps.get(cid);
+    const mine = owner !== null && owner === me;
+    this.followUps.set(cid, {
+      id: cid,
+      visitor: text(ev.visitor, 120) ?? before?.visitor ?? 'A visitor',
+      site: text(ev.site, 120) ?? before?.site ?? null,
+      recent: recentOf(ev.recent) ?? before?.recent ?? (text(ev.preview, 400) ? [{ from: 'visitor', body: text(ev.preview, 400)!, at: null }] : []),
+      since: text(ev.waiting_since, 40) ?? before?.since ?? new Date().toISOString(),
+      count: Math.max(1, before?.count ?? 1),
+      stage: stage === 'team' ? 'team' : before?.stage === 'team' ? 'team' : 'reminder',
+      mine,
+      agent: mine ? null : (text(ev.agent, 120) ?? before?.agent ?? null),
+    });
+    if ((this.snoozed.get(cid) ?? 0) <= Date.now()) this.ding();
+    this.changed();
+  }
+
+  /**
+   * The follow-up card's actions (worksuite-desktop#230): Send (a reply, as the conversation's composer sends one,
+   * without leaving what I am doing), Open chat, Snooze 5 min, and Take over for a colleague's chat the team was
+   * alerted about.
+   */
+  async followUp(cid: number, action: 'reply' | 'open' | 'snooze' | 'takeOver', message?: string): Promise<{ ok: boolean; why: string | null }> {
+    const f = this.followUps.get(cid);
+    if (action === 'snooze') {
+      if (!f) return { ok: false, why: 'This visitor has been answered.' };
+      this.snoozed.set(cid, Date.now() + SNOOZE_MS);
+      this.changed();
+      return { ok: true, why: null };
+    }
+    if (action === 'open') {
+      this.followUps.delete(cid);
+      this.snoozed.delete(cid);
+      this.changed();
+      this.deps.open(cid);
+      return { ok: true, why: null };
+    }
+    if (action === 'takeOver') {
+      try {
+        await this.deps.http.post(`${WEBSITE}/conversations/${cid}/take-over`);
+      } catch (e) {
+        const why = isDesktopError(e) && e.status === 409 ? e.message || 'Someone else has this chat now.' : `Could not take it over: ${e instanceof Error ? e.message : 'the server did not answer'}`;
+        this.say(cid, why);
+        this.changed();
+        return { ok: false, why };
+      }
+      this.followUps.delete(cid);
+      this.snoozed.delete(cid);
+      this.changed();
+      this.deps.open(cid);
+      return { ok: true, why: null };
+    }
+    const words = message?.trim() ?? '';
+    if (!words) return { ok: false, why: 'Type a reply first.' };
+    if (!this.deps.reply) return { ok: false, why: 'Open the chat to reply.' };
+    const r = await this.deps.reply(cid, words);
+    if (!r.delivered && !r.queued) return { ok: false, why: r.error ?? 'The reply was not sent.' };
+    this.followUps.delete(cid);
+    this.snoozed.delete(cid);
+    this.say(cid, r.queued && !r.delivered ? 'Your reply will be sent when you are back online.' : 'Reply sent.');
+    this.changed();
+    return { ok: true, why: null };
+  }
+
+  /** How many visitors wait on me in my chats: the badge's part (worksuite-desktop#230). */
+  followUpCount(): number {
+    return this.shownFollowUps().length;
   }
 
   /** Whether this chat is ringing for me now. */
@@ -412,7 +626,8 @@ export class WebchatRinger {
 
   /** What is ringing, as one string: minimising holds while it stays the same. */
   private ringingKey(): string {
-    return [...[...this.chats.keys()].map((k) => `c${k}`), ...[...this.handoffs.keys()].map((k) => `h${k}`), ...[...this.calls.keys()].map((k) => `v${k}`)].sort().join(',');
+    // A visitor writing again in my chat brings a minimised card back too (#230).
+    return [...[...this.chats.keys()].map((k) => `c${k}`), ...[...this.handoffs.keys()].map((k) => `h${k}`), ...[...this.calls.keys()].map((k) => `v${k}`), ...this.shownFollowUps().map((f) => `f${f.id}:${f.count}:${f.stage}`)].sort().join(',');
   }
 
   /**
@@ -596,8 +811,12 @@ export class WebchatRinger {
           this.chats.set(cid, { ...c, preview });
           this.changed();
         }
+        this.visitorWrote(cid, ev);
         break;
       }
+      case 'chat.widget.followup':
+        this.followUpStep(cid, ev);
+        break;
       case 'chat.taken': {
         if (!this.chats.has(cid)) return;
         this.chats.delete(cid);

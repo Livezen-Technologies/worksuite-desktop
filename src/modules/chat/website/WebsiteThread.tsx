@@ -17,6 +17,7 @@ import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, TextField, cx }
 import { Composer, type ComposerHandle } from '../Composer';
 import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
+import { useViewing } from './viewing';
 import type { ReplyTarget } from '../Thread';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
@@ -57,6 +58,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   // Typing and receipts, live (ENH-WCHAT-04): reading counts while this tab is in front and the window can be seen.
   const pageVisible = usePageVisible();
   const live = useLiveStatus(Number(id), q.data, q.dataUpdatedAt, me, tabActive && pageVisible);
+  // In front in the main window: a visitor writing again here raises no card (#230). The mini chat window does not count.
+  useViewing(Number(id), !mini && tabActive && pageVisible);
   const canned = useCanned(true);
   const outbox = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const waiting = (outbox.data ?? []).filter((m: OfflineMutation) => m.module === 'website-chat' && m.entityId === id && m.state !== 'DONE');

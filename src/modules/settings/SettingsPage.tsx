@@ -3,7 +3,7 @@ import { DarkProfilePicker } from './Appearance';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
-import { QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences, type RemoteControlIdentity, type RemoteControlView } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences, type RemoteControlIdentity, type RemoteControlView, type WebchatFollowUpPrefs } from '@shared/types';
 import { useCanOpen, useVisibleIds } from '../../core/access';
 import { app, isLocked, updatePrefs } from '../../core/app-state';
 import { call, errorMessage, isMac, on } from '../../core/bridge';
@@ -22,7 +22,7 @@ import { Icon } from '../../components/Icon';
 import { Button, Chip, Modal, Switch, TextField, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
-import { playTone } from '../calls/tones';
+import { playOnce, playTone } from '../calls/tones';
 import { useRingState } from '../chat/website/Ringing';
 import { apiGet, request } from '../../core/api';
 import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
@@ -522,6 +522,47 @@ function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
         </div>
       </Row>
       <Toggle k="startWithOs" prefs={prefs} label="Start WorkSuite with this computer" hint="So website chats can ring before you open anything." />
+      <FollowUpPrefs prefs={prefs} />
+    </>
+  );
+}
+
+/**
+ * When a visitor writes again in a chat I have and I am away from it (worksuite-desktop#230): another module or app,
+ * the window minimised or behind, the computer locked, or no input for a while.
+ */
+function FollowUpPrefs({ prefs }: { prefs: Preferences }) {
+  const f = { ...FOLLOW_UP_DEFAULTS, ...prefs.webchatFollowUps };
+  const set = (patch: Partial<WebchatFollowUpPrefs>) => void updatePrefs({ webchatFollowUps: { ...f, ...patch } });
+  return (
+    <>
+      <h4 className="mt-6 mb-1 text-[14px] font-bold text-ink">When a visitor writes again in your chat</h4>
+      <p className="mb-1 text-[13px] text-ink-2">While you are in another module or app, away from the computer, or the chat is not in front. Nothing is shown while you are reading it.</p>
+      <Row label="Card over other apps" hint="Their new message and the one before it, a reply box, Open chat and Snooze 5 min.">
+        <Switch label="Card over other apps" checked={f.card} onChange={(v) => set({ card: v })} />
+      </Row>
+      <Row label="Desktop notification" hint="While WorkSuite is not in front, with Reply. Several messages make one notification.">
+        <Switch label="Desktop notification" checked={f.desktop} onChange={(v) => set({ desktop: v })} />
+      </Row>
+      <Row label="Chime" hint="A short sound, unlike the new-chat ring. Quiet during Do not disturb.">
+        <div className="flex items-center gap-3">
+          <Switch label="Chime" checked={f.sound} onChange={(v) => set({ sound: v })} />
+          <Button onClick={() => playOnce('reply', prefs.webchatRinging.volume / 100)}>Test</Button>
+        </div>
+      </Row>
+      <Row label="Count me away after" hint="With the chat open but no keyboard or mouse for this long.">
+        <Select<WebchatFollowUpPrefs['idleMinutes']>
+          label="Count me away after"
+          value={f.idleMinutes}
+          options={[
+            { value: 1, label: '1 minute' },
+            { value: 2, label: '2 minutes' },
+            { value: 5, label: '5 minutes' },
+            { value: 10, label: '10 minutes' },
+          ]}
+          onValueChange={(v) => set({ idleMinutes: v })}
+        />
+      </Row>
     </>
   );
 }

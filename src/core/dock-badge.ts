@@ -69,7 +69,8 @@ export async function paint(label: string): Promise<string> {
 /** Called with every status push; repaints only when the label changes. */
 export async function updateDockBadge(status: StatusSnapshot | null, signedIn: boolean, enabled = true): Promise<void> {
   const u = status?.unread;
-  const label = signedIn && u && enabled ? badgeLabel(attentionCount(u.chat, u.notifications)) : '';
+  // Visitors waiting on me in my website chats count with chat (worksuite-desktop#230).
+  const label = signedIn && u && enabled ? badgeLabel(attentionCount(u.chat + (u.webchat ?? 0), u.notifications)) : '';
   if (label === shown) return;
   shown = label;
   try {

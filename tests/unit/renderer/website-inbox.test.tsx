@@ -267,6 +267,19 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
   });
 });
 
+describe('a visitor who wrote again in my chat (#230)', () => {
+  it('goes to the top of the list, marked Visitor replied with its wait', async () => {
+    serve([...ROWS.slice(0, 2), row({ id: 3, visitor_name: 'Kasun P.', assigned_to: 7, agent: 'Me', awaiting_reply: true, reply_waiting_since: ago(45_000), waiting_since: ago(45_000), reply_stage: null })]);
+    wrap(<WebsiteWorkspace />);
+    await within(list()).findByText('Kasun P.');
+    const rows = [...list().querySelectorAll('[data-website-row]')].map((el) => el.getAttribute('data-website-row'));
+    expect(rows[0]).toBe('3');
+    const kasun = within(list()).getByText('Kasun P.').closest('button')!;
+    expect(within(kasun).getByText('Visitor replied')).toBeTruthy();
+    expect(within(kasun).getByText(/^waiting 0:4\d$/)).toBeTruthy();
+  });
+});
+
 describe('Callbacks (worksuite-desktop#223)', () => {
   const cb = (over: Partial<WebsiteCallback> = {}): WebsiteCallback => ({
     id: 5, conversation_id: 9, phone: '+94771234567', best_time: 'This afternoon', visitor: 'Kamal Perera', site: 'techubiz.com', missed_call: false,

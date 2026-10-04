@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { WebchatCall, WebchatHandoff, WebchatRingChat, WebchatRingState } from '@shared/types';
 import { call, errorMessage, isMac, on } from '../../../core/bridge';
 import { parseTs } from '../../../core/time';
@@ -6,8 +6,8 @@ import { toast } from '../../../core/toasts';
 import { Avatar, cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useNow } from '../../calls/parts';
-import { playTone } from '../../calls/tones';
-import { JoinedCard, RingCard, RingStack, useFit } from './RingCard';
+import { playOnce, playTone } from '../../calls/tones';
+import { FollowUpCard, JoinedCard, RingCard, RingStack, followUpStatus, useFit } from './RingCard';
 
 /**
  * Website chats ringing like calls (WS-WCHAT ENH-01): the native call window
@@ -44,6 +44,22 @@ export function useRingTone(s: WebchatRingState, enabled = true): void {
     const t = playTone(kind === 'strong' ? 'webchat-strong' : 'webchat', volume);
     return () => t.stop();
   }, [kind, volume]);
+}
+
+/**
+ * The "visitor replied" chime (worksuite-desktop#230): once each time the ringer says so — it has already weighed my
+ * sound setting, Do not disturb and the volume. Played by the main window only, so it never sounds twice.
+ */
+export function useFollowUpChime(s: WebchatRingState): void {
+  const chime = s.chime;
+  const volume = s.volume / 100;
+  // The first state from the main process is where we start: nothing plays for chimes from before this window opened.
+  const heard = useRef<number | null>(null);
+  useEffect(() => {
+    if (chime === undefined) return;
+    if (heard.current !== null && chime > heard.current) playOnce('reply', volume);
+    heard.current = chime;
+  }, [chime, volume]);
 }
 
 export function waited(since: string, now: number): string {
@@ -128,6 +144,8 @@ export function WebchatRingWindow() {
   else if (handoffs[0]) body = <HandoffCard s={s} h={handoffs[0]} rest={handoffs.slice(1)} now={now} />;
   // A chat just joined from the card: a mini chat until the full chat is opened or the card minimised (#225).
   else if (s.joined) body = <JoinedCard j={s.joined} now={now} />;
+  // A visitor who wrote again in my chat while I was away from it (#230).
+  else if (s.followUps?.[0]) body = <FollowUpCard s={s} f={s.followUps[0]} rest={s.followUps.slice(1)} now={now} />;
   else {
     body = (
       <div className="drag flex min-h-[72px] items-center gap-3 bg-[#0F1B3D] px-4 py-4 text-[13px] text-[#E6ECFA]" role="status" aria-live="polite">
@@ -287,9 +305,11 @@ export function RingingBar({ tone }: { tone: boolean }) {
   const s = useRingState();
   const now = useNow();
   useRingTone(s, tone);
+  useFollowUpChime(s);
   const [top] = s.chats;
   const h = s.handoffs?.[0];
   const [c] = s.calls ?? [];
+  const f = s.followUps?.[0];
   if (c) {
     // A visitor calling (VOICE-10): before everything else.
     return (
@@ -322,6 +342,32 @@ export function RingingBar({ tone }: { tone: boolean }) {
         </button>
         <button type="button" onClick={() => answer(h.id, false)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">
           Decline
+        </button>
+      </div>
+    );
+  }
+  if (!top && f) {
+    // A visitor who wrote again in my chat (#230): who, what, how long, Open chat and Snooze.
+    const said = [...f.recent].reverse().find((m) => m.from === 'visitor')?.body;
+    const more = (s.followUps?.length ?? 1) - 1;
+    return (
+      <div role="status" aria-label="Visitor waiting for your reply" className="flex h-9 shrink-0 items-center gap-2.5 border-b border-[#F2D39B] bg-warning-bg px-3.5 text-[12.5px] text-[#7A4308] dark:text-warning">
+        <Icon name="chat" size={15} className="shrink-0" />
+        <b className="shrink-0">{followUpStatus(f)}</b>
+        <span className="min-w-0 flex-1 truncate">
+          {s.hidden ? '' : `${f.visitor}${said ? `: “${said}”` : ''}`} · waiting {waited(f.since, now)}
+          {more > 0 ? ` · +${more} more` : ''}
+        </span>
+        {!f.mine && f.stage === 'team' ? (
+          <button type="button" onClick={() => void call('ring:followUp', { id: f.id, action: 'takeOver' }).catch((e) => toast('error', errorMessage(e)))} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
+            Take over
+          </button>
+        ) : null}
+        <button type="button" onClick={() => void call('ring:followUp', { id: f.id, action: 'open' }).catch((e) => toast('error', errorMessage(e)))} className={cx('h-7 rounded-[7px] px-3 font-bold', !f.mine && f.stage === 'team' ? 'border border-current/30 hover:bg-black/5' : 'bg-primary text-white hover:bg-primary-hover')}>
+          Open chat
+        </button>
+        <button type="button" onClick={() => void call('ring:followUp', { id: f.id, action: 'snooze' }).catch(() => undefined)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">
+          Snooze 5 min
         </button>
       </div>
     );

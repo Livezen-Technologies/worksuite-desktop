@@ -4,7 +4,7 @@
  */
 type Note = { hz: number[]; at: number; len: number };
 
-export type ToneKind = 'ring' | 'ringback' | 'webchat' | 'webchat-strong' | 'hand';
+export type ToneKind = 'ring' | 'ringback' | 'webchat' | 'webchat-strong' | 'hand' | 'reply';
 
 const PATTERNS: Record<ToneKind, { every: number; notes: Note[]; level: number }> = {
   // Two rising notes, twice, then a pause.
@@ -47,6 +47,17 @@ const PATTERNS: Record<ToneKind, { every: number; notes: Note[]; level: number }
     notes: [
       { hz: [660], at: 0, len: 0.12 },
       { hz: [990], at: 0.14, len: 0.2 },
+    ],
+  },
+  // A visitor wrote again in my chat while I was away from it (worksuite-desktop#230): a short falling chime, three
+  // notes, unlike the rising new-chat ring. Played once.
+  reply: {
+    every: 60_000,
+    level: 0.16,
+    notes: [
+      { hz: [1319], at: 0, len: 0.1 },
+      { hz: [1047], at: 0.12, len: 0.1 },
+      { hz: [784], at: 0.24, len: 0.22 },
     ],
   },
   // The familiar two-tone ringback, quietly.

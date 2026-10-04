@@ -187,6 +187,7 @@ export const preferencesPatchSchema = z
     shortcuts: z.record(z.string().max(64), z.string().max(64)),
     backgroundServices: z.object({ notifications: z.boolean(), realtime: z.boolean() }),
     webchatRinging: z.object({ window: z.boolean(), duringDnd: z.enum(['card', 'at_risk', 'ring']), shortcut: z.boolean(), volume: z.number().int().min(0).max(100) }),
+    webchatFollowUps: z.object({ card: z.boolean(), desktop: z.boolean(), sound: z.boolean(), idleMinutes: z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]) }),
     ai: z.object({
       quickAsk: z.boolean(),
       shortcut: z.enum(['Alt+Space', 'Control+Alt+Space', 'CommandOrControl+Shift+Space']),
@@ -442,6 +443,10 @@ export const contract = {
   'ring:minimise': ch(none, { session: true, whileLocked: true, rate: 10 }),
   'ring:fit': ch(z.object({ height: z.number().int().min(80).max(1200) }), { session: true, whileLocked: true, rate: 30 }),
   'ring:openInbox': ch(none, { session: true, rate: 4 }),
+  // A visitor who wrote again in my chat (worksuite-desktop#230): reply from the card, open the chat, snooze it for
+  // five minutes, or take it over (the team step); and which conversation is in front in the main window.
+  'ring:followUp': ch(z.object({ id: z.number().int().positive(), action: z.enum(['reply', 'open', 'snooze', 'takeOver']), message: z.string().min(1).max(4000).optional() }), { session: true, rate: 10 }),
+  'ring:viewing': ch(z.object({ id: z.number().int().positive().nullable() }), { session: true, whileLocked: true, rate: 60 }),
   // An invitation or transfer into a website chat (ENH-WCHAT-03): Join chat / Accept, or Decline.
   'ring:handoff': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
   // A visitor's voice call (ENH-WCHAT-05): Answer or Decline; whether this computer has a microphone; the call it is on.
@@ -1428,6 +1433,8 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:minimise': void;
   'ring:fit': void;
   'ring:openInbox': void;
+  'ring:followUp': { ok: boolean; why: string | null };
+  'ring:viewing': void;
   'ring:handoff': boolean;
   'ring:call': boolean;
   'ring:mic': void;

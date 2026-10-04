@@ -108,6 +108,9 @@ describe('the call window place (RING-40)', () => {
   });
 });
 
+/** What the ringer reads about this computer, changeable in a test (#230). */
+const env = { focused: false, idle: 0, quiet: false, followUps: { card: true, desktop: true, sound: true, idleMinutes: 2 as const } };
+
 function ringer(answers: Array<PendingAnswer | Error>, over: Partial<{ locked: boolean; me: number }> = {}) {
   const get = vi.fn(async () => {
     const a = answers.length > 1 ? answers.shift()! : answers[0]!;
@@ -130,14 +133,16 @@ function ringer(answers: Array<PendingAnswer | Error>, over: Partial<{ locked: b
     locked: () => over.locked ?? false,
     me: () => over.me ?? 5,
     prefs: () => prefs,
-    quiet: () => false,
+    quiet: () => env.quiet,
     open: (id, callId) => {
       opened.push(id);
       if (callId) onCalls.push([id, callId]);
     },
     onChanged: (s) => states.push(s),
     deviceId: () => 'desktop-12',
-    focused: () => false,
+    focused: () => env.focused,
+    followUpPrefs: () => env.followUps,
+    idleSeconds: () => env.idle,
     reply,
     openInbox: inbox,
   });
@@ -603,5 +608,147 @@ describe('WebchatRinger: Join & send and the mini chat (#225)', () => {
     locked = false;
     expect(r.state().joined?.visitor).toBe('Nimali');
     r.stop();
+  });
+});
+
+describe('WebchatRinger: a visitor writes again while I am away (#230)', () => {
+  afterEach(() => {
+    Object.assign(env, { focused: false, idle: 0, quiet: false, followUps: { card: true, desktop: true, sound: true, idleMinutes: 2 } });
+    vi.useRealTimers();
+  });
+  const said = (over: Record<string, unknown> = {}) => ({
+    type: 'chat.widget.message',
+    conversation_id: 41,
+    visitor: 'Visitor CC1B',
+    site: 'techubiz.com',
+    preview: 'Are u there',
+    at: stamp(1_000),
+    assigned_to: 5,
+    participants: [5],
+    followup: true,
+    waiting_since: stamp(45_000),
+    recent: [
+      { from: 'agent', body: 'It is yearly.', at: stamp(120_000) },
+      { from: 'visitor', body: 'Ok and the price?', at: stamp(45_000) },
+      { from: 'visitor', body: 'Are u there', at: stamp(1_000) },
+    ],
+    ...over,
+  });
+
+  it('a follow-up in my chat while I am elsewhere: a card with the last messages, the chime, and the count', async () => {
+    const { r } = ringer([{}]);
+    r.start();
+    r.handle(said() as never);
+    const f = r.state().followUps![0]!;
+    expect(f).toMatchObject({ id: 41, visitor: 'Visitor CC1B', site: 'techubiz.com', since: stamp(45_000), count: 1, stage: 'replied', mine: true });
+    expect(f.recent.map((m) => m.body)).toEqual(['It is yearly.', 'Ok and the price?', 'Are u there']);
+    expect(r.state().chime).toBe(1);
+    expect(r.followUpCount()).toBe(1);
+    // Another message: the same card, one more in its count, the chime again.
+    r.handle(said({ preview: 'Hello??', recent: undefined }) as never);
+    expect(r.state().followUps).toHaveLength(1);
+    expect(r.state().followUps![0]!.count).toBe(2);
+    expect(r.state().followUps![0]!.recent.at(-1)!.body).toBe('Hello??');
+    expect(r.state().chime).toBe(2);
+    r.stop();
+  });
+
+  it('nothing for a chat that is not mine, one not answered yet, or one I am looking at', async () => {
+    const { r } = ringer([{}]);
+    r.start();
+    r.handle(said({ assigned_to: 9, participants: [9] }) as never);
+    r.handle(said({ conversation_id: 42, followup: false }) as never);
+    Object.assign(env, { focused: true, idle: 10 });
+    r.setViewing(43);
+    r.handle(said({ conversation_id: 43 }) as never);
+    expect(r.state().followUps).toEqual([]);
+    expect(r.state().chime).toBe(0);
+    // The same chat while I am idle past my two minutes counts as unattended.
+    env.idle = 130;
+    r.handle(said({ conversation_id: 43 }) as never);
+    expect(r.state().followUps!.map((f) => f.id)).toEqual([43]);
+    r.stop();
+  });
+
+  it('coming back to the conversation clears its card; answered, taken over or reassigned clears it too', async () => {
+    const { r } = ringer([{}]);
+    r.start();
+    r.handle(said() as never);
+    r.handle(said({ conversation_id: 42 }) as never);
+    Object.assign(env, { focused: true, idle: 0 });
+    r.setViewing(41);
+    expect(r.state().followUps!.map((f) => f.id)).toEqual([42]);
+    r.handle({ type: 'chat.widget.followup', conversation_id: 42, stage: 'answered', by: 5 } as never);
+    expect(r.state().followUps).toEqual([]);
+    r.stop();
+  });
+
+  it('a reminder, then the team step: a colleague’s card offers Take over, which takes it and opens it', async () => {
+    const { r, post, opened } = ringer([{}], { me: 7 });
+    r.start();
+    r.handle({ type: 'chat.widget.followup', conversation_id: 41, stage: 'team', visitor: 'Visitor CC1B', site: 'techubiz.com', assigned_to: 5, agent: 'Hasarinda', waiting_since: stamp(200_000), recent: [{ from: 'visitor', body: 'Are u there', at: null }] } as never);
+    expect(r.state().followUps![0]).toMatchObject({ stage: 'team', mine: false, agent: 'Hasarinda' });
+    expect(await r.followUp(41, 'takeOver')).toEqual({ ok: true, why: null });
+    expect(post).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/take-over');
+    expect(opened).toEqual([41]);
+    expect(r.state().followUps).toEqual([]);
+    r.stop();
+  });
+
+  it('replies from the card without opening anything, and Snooze hides it for five minutes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const { r, reply, opened } = ringer([{}]);
+    r.start();
+    r.handle(said() as never);
+    r.handle(said({ conversation_id: 42 }) as never);
+    expect(await r.followUp(41, 'reply', '  Yes, sorry — it is 12,000 a year. ')).toEqual({ ok: true, why: null });
+    expect(reply).toHaveBeenCalledWith(41, 'Yes, sorry — it is 12,000 a year.');
+    expect(opened).toEqual([]);
+    expect(r.state().followUps!.map((f) => f.id)).toEqual([42]);
+    await r.followUp(42, 'snooze');
+    expect(r.state().followUps).toEqual([]);
+    expect(r.followUpCount()).toBe(0);
+    vi.setSystemTime(Date.now() + 5 * 60_000 + 1_000);
+    expect(r.state().followUps!.map((f) => f.id)).toEqual([42]);
+    r.stop();
+  });
+
+  it('no chime when sounds are off or during Do not disturb; hidden details while locked', async () => {
+    env.followUps = { ...env.followUps, sound: false };
+    const { r } = ringer([{}]);
+    r.start();
+    r.handle(said() as never);
+    expect(r.state().chime).toBe(0);
+    env.followUps = { ...env.followUps, sound: true };
+    env.quiet = true;
+    r.handle(said({ conversation_id: 42 }) as never);
+    expect(r.state().chime).toBe(0);
+    r.stop();
+    const locked = ringer([{}], { locked: true });
+    locked.r.start();
+    locked.r.handle(said() as never);
+    expect(locked.r.state().followUps![0]).toMatchObject({ visitor: 'A visitor', recent: [] });
+    locked.r.stop();
+  });
+
+  it('a chat still ringing has its ringing card, not a follow-up', async () => {
+    const { r } = ringer([{ waiting: [{ conversation_id: 41, visitor: 'Visitor CC1B' }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    r.handle(said() as never);
+    expect(r.state().followUps).toEqual([]);
+    r.stop();
+  });
+});
+
+describe('recentOf', () => {
+  it('keeps the last three messages with words, oldest first', async () => {
+    const { recentOf } = await import('../../../electron/services/webchat-ring');
+    expect(recentOf([{ from: 'visitor', body: 'a' }, { from: 'agent', body: ' ' }, { from: 'agent', body: 'b' }, { from: 'x', body: 'c' }, { from: 'visitor', body: 'd' }])).toEqual([
+      { from: 'agent', body: 'b', at: null },
+      { from: 'visitor', body: 'c', at: null },
+      { from: 'visitor', body: 'd', at: null },
+    ]);
+    expect(recentOf('nope')).toBeNull();
   });
 });

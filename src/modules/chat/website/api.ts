@@ -61,6 +61,20 @@ export interface WebsiteRow {
   /** When the wait clock turns amber and red, in seconds; null where the site offers no callbacks (#223). */
   wait_amber?: number | null;
   wait_red?: number | null;
+  /** The visitor wrote again after the team answered and is still waiting (worksuite-desktop#230); then `waiting_since` is this. */
+  reply_waiting_since?: string | null;
+  /** How far that has gone: a reminder sent, the team alerted, or the chat reassigned. */
+  reply_stage?: 'reminded' | 'team' | 'reassigned' | null;
+}
+
+/**
+ * A visitor who wrote again in one of my chats and waits (worksuite-desktop#230) goes to the top of the list, the
+ * longest waiting first; the rest keep their order.
+ */
+export function followUpsFirst(rows: WebsiteRow[], mine: (r: WebsiteRow) => boolean): WebsiteRow[] {
+  const waiting = (r: WebsiteRow) => !!r.reply_waiting_since && r.awaiting_reply && mine(r);
+  const top = rows.filter(waiting).sort((a, b) => a.reply_waiting_since!.localeCompare(b.reply_waiting_since!));
+  return top.length ? [...top, ...rows.filter((r) => !waiting(r))] : rows;
 }
 
 /** The wait clock's colour (#223): amber at the callback threshold, red after it; red throughout where there is none. */

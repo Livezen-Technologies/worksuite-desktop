@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.27.0 — 2026-10-04
+
+- A visitor writing again in my chat while I am away from it (#230): a card over other apps with their last messages, a reply box, Open chat, Snooze 5 min and Take over for the team step; a system notification with Reply while WorkSuite is not in front, one per conversation; a chime; the Dock/taskbar badge and '(1) Website chats'; the row goes to the top marked Visitor replied; nothing while I am reading it.
+
 ## 1.26.0 — 2026-10-04
 
 - Visitors online and the Live dashboard are two views of their own (#231): each lit alone in the menu and apart from Live chats; a visitor is selected by a click or the arrow keys and kept in the address; their details show language, landing page, earlier chats and linked contact, with Start chat (saved replies), Open the chat, Invite a colleague and Block; Enter or a double-click opens the chat; the status says Waiting/Chatting/Active and goes there; the dashboard's cards open what they count; a visitor who leaves is said to have left.

@@ -72,6 +72,8 @@ export interface Incoming {
   mail?: MailNotice | null;
   /** A website visitor's message: its banner takes a reply where the system has one (RDC-15). */
   website?: WebsiteNotice | null;
+  /** How many of the visitor's messages this banner stands for (worksuite-desktop#230). */
+  websiteCount?: number;
   /** A flagged message's reminder (ENH-MAIL-03 DMO-TSK-02): Snooze 1 hour and Mark complete on the banner. */
   flag?: FlagNotice | null;
 }
@@ -255,6 +257,12 @@ export class NotificationService {
   sendWebsiteReply: ((conversationId: number, text: string) => Promise<SubmitResult>) | null = null;
   /** A reply typed in a banner that was not sent: main keeps it as the conversation's draft and opens it. */
   websiteReplyRefused: (notice: WebsiteNotice, text: string, error: string) => void = () => undefined;
+  /** Whether I am looking at this website conversation now: then a visitor's message raises nothing (worksuite-desktop#230). */
+  websiteAttending: (conversationId: number) => boolean = () => false;
+  /** Whether a visitor writing again in my chat raises a system notification (Settings › Website chats; #230). */
+  followUpDesktop: () => boolean = () => true;
+  /** The last banner shown for each website conversation, and how many messages it stands for: a new one replaces it (#230). */
+  private websiteShown = new Map<number, { note: Notification; count: number; at: number }>();
 
   constructor(
     private readonly db: Database,
@@ -615,16 +623,40 @@ export class NotificationService {
         const conv = String(e.conversation_id ?? '');
         const visitor = String(e.visitor ?? 'Visitor');
         const id = Number(conv);
+        const valid = Number.isSafeInteger(id) && id > 0;
+        // Nothing while I am looking at that conversation (worksuite-desktop#230).
+        if (valid && this.websiteAttending(id)) break;
+        // A visitor writing again in my chat (#230): "Visitor CC1B: Are u there", with Reply and Open — while WorkSuite
+        // is not in front; in front, its card says so instead.
+        const me = Number(this.userId);
+        const participants = Array.isArray(e.participants) ? e.participants.map(Number) : [];
+        const followUp = e.followup === true && Number.isFinite(me) && (Number(e.assigned_to) === me || participants.includes(me));
+        if (followUp && (!this.followUpDesktop() || this.isFocused())) break;
+        const preview = String(e.preview ?? '');
+        const before = valid ? this.websiteShown.get(id) : undefined;
+        const count = before && Date.now() - before.at < 30 * 60_000 ? before.count + 1 : 1;
+        const site = typeof e.site === 'string' && e.site ? e.site : null;
         this.notify({
           id: `webchat:${conv}:${String(e.message_id ?? e.event_id ?? Date.now())}`,
           module: 'chat',
-          title: `${visitor} · website chat`,
-          body: String(e.preview ?? ''),
+          title: followUp ? `${visitor}: ${preview.slice(0, 80)}` : `${visitor} · website chat`,
+          // Several messages make one banner, saying how many.
+          body: followUp ? [count > 1 ? `${count} new messages` : null, site, 'Your website chat'].filter(Boolean).join(' · ') : count > 1 ? `${preview}\n${count} new messages` : preview,
           sender: visitor,
           link: `/chat?website=${conv}`,
           critical: false,
-          website: Number.isSafeInteger(id) && id > 0 ? { conversationId: id, visitor } : null,
+          website: valid ? { conversationId: id, visitor } : null,
+          websiteCount: count,
         });
+        break;
+      }
+      case 'chat.widget.followup': {
+        // Answered, taken over or passed on: its banner goes (#230).
+        const id = Number(e.conversation_id);
+        if (['answered', 'taken', 'reassigned'].includes(String(e.stage)) && this.websiteShown.has(id)) {
+          this.websiteShown.get(id)!.note.close();
+          this.websiteShown.delete(id);
+        }
         break;
       }
       case 'chat.assigned': {
@@ -728,6 +760,11 @@ export class NotificationService {
                 : undefined,
       timeoutType: n.critical ? 'never' : 'default',
     });
+    // One banner per website conversation: a new message replaces the last (worksuite-desktop#230).
+    if (n.website) {
+      this.websiteShown.get(n.website.conversationId)?.note.close();
+      this.websiteShown.set(n.website.conversationId, { note, count: n.websiteCount ?? 1, at: Date.now() });
+    }
     note.on('click', () => {
       this.onClick(n.link, n.module);
       if (/^\d+$/.test(n.id)) void this.markRead([n.id]).catch(() => undefined);

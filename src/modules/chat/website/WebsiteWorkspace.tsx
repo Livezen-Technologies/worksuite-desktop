@@ -12,7 +12,7 @@ import { listStamp, parseTs } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
-import { isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, waitTone, WEBSITE, type CallbackOutcome, type Section, type WebsiteCallback, type WebsiteRow } from './api';
+import { followUpsFirst, isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, waitTone, WEBSITE, type CallbackOutcome, type Section, type WebsiteCallback, type WebsiteRow } from './api';
 import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
 import { clock, handoffAsk, handoffTitle, useRingState, waited } from './Ringing';
 import { WebsiteLive, type LiveView, type OnlineVisitor } from './WebsiteLive';
@@ -85,7 +85,7 @@ export function WebsiteWorkspace() {
   const [site, setSite] = useState(0);
   // The Mine pill narrows whichever open section is showing; Closed is a section of its own.
   const [mineOnly, setMineOnly] = useState(false);
-  useTabTitle(selected ? null : 'Website chats');
+
   const [q, setQ] = useState('');
   // The conversation menu at the mouse, shared with Chat's other channels (worksuite-desktop#183).
   const [rowMenu, setRowMenu] = useState<{ x: number; y: number; r: WebsiteRow } | null>(null);
@@ -126,6 +126,9 @@ export function WebsiteWorkspace() {
   const cbList = useCallbackList(cbStatus, mineOnly, section === 'callbacks' && structured);
   // What rings on this computer: the row shows it, and a silenced one is marked (RING-24).
   const ring = useRingState();
+  // Visitors waiting on me in my chats (#230): "(1) Website chats".
+  const waitingOnMe = ring.followUps?.length ?? 0;
+  useTabTitle(selected ? null : waitingOnMe ? `(${waitingOnMe}) Website chats` : 'Website chats');
   const ringing = new Map(ring.chats.map((c) => [c.id, c]));
   const handoffs = ring.handoffs ?? [];
   // Visitors typing now, for their rows (LIVE-02).
@@ -143,10 +146,13 @@ export function WebsiteWorkspace() {
   const searching = section !== 'missed' && section !== 'invited' && section !== 'callbacks' && needle.length >= 2 && typed.length >= 2;
   const found = useWebsiteSearch(searching ? needle : '', section === 'closed');
   // Until the server answers, the list narrows by what it already has.
-  const rows = (searching && found.data ? found.data.conversations : sectionRows(source.data?.conversations ?? [], section, me))
-    .filter(onSite)
-    .filter((r) => pill !== 'mine' || isMine(r))
-    .filter((r) => (searching && found.data) || !typed || [r.label, r.visitor_name, r.email, r.site, r.current_url, r.last_message?.body].some((v) => v?.toLowerCase().includes(typed)));
+  const rows = followUpsFirst(
+    (searching && found.data ? found.data.conversations : sectionRows(source.data?.conversations ?? [], section, me))
+      .filter(onSite)
+      .filter((r) => pill !== 'mine' || isMine(r))
+      .filter((r) => (searching && found.data) || !typed || [r.label, r.visitor_name, r.email, r.site, r.current_url, r.last_message?.body].some((v) => v?.toLowerCase().includes(typed))),
+    isMine,
+  );
   const list = searching && found.data ? found : source;
   const to = (params: Record<string, string | null>) => {
     const next = new URLSearchParams({ view: 'website', section });
@@ -464,7 +470,7 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { 
           ) : null}
         </span>
         <span className="flex min-w-0 items-center gap-[5px] text-[11px]">
-          {closed ? <Tag tone="muted">Closed</Tag> : r.awaiting_reply ? <Tag tone="danger">Awaiting reply</Tag> : mine ? <Tag tone="indigo">You</Tag> : helping ? <Tag tone="indigo">Participant</Tag> : null}
+          {closed ? <Tag tone="muted">Closed</Tag> : r.awaiting_reply && r.reply_waiting_since ? <Tag tone="danger">{r.reply_stage === 'team' ? text('Visitor replied · team alerted') : text('Visitor replied')}</Tag> : r.awaiting_reply ? <Tag tone="danger">Awaiting reply</Tag> : mine ? <Tag tone="indigo">You</Tag> : helping ? <Tag tone="indigo">Participant</Tag> : null}
           {r.at_risk && !closed ? <Tag tone="danger">At risk</Tag> : null}
           {r.callback && !closed ? <Tag tone={r.callback.overdue ? 'danger' : 'indigo'}>{r.callback.overdue ? text('Callback overdue') : text('Callback requested')}</Tag> : null}
           {r.is_offline ? <Tag tone="muted">Offline</Tag> : null}

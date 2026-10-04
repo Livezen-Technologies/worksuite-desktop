@@ -130,3 +130,39 @@ describe('replying to a website visitor from the banner (RDC-15)', () => {
     expect(websiteDraftKey(41)).toEqual({ module: 'website-chat', context: 'conversation:41' });
   });
 });
+
+describe('a visitor writing again in my chat (#230)', () => {
+  const again = (service: NotificationService, over: Record<string, unknown> = {}) =>
+    service.handleRealtime({ type: 'chat.widget.message', conversation_id: 41, visitor: 'Visitor CC1B', preview: 'Are u there', site: 'techubiz.com', message_id: `m${notes.length + Math.random()}`, assigned_to: 5, participants: [5], followup: true, ...over } as never);
+
+  it('says "Visitor CC1B: Are u there" with Reply while WorkSuite is not in front, and one banner stands for several messages', () => {
+    const { service } = setup();
+    again(service);
+    expect(notes[0]!.options).toMatchObject({ title: 'Visitor CC1B: Are u there', body: 'techubiz.com · Your website chat', hasReply: true });
+    again(service, { preview: 'Hello??' });
+    expect(notes[0]!.closed).toBe(true);
+    expect(notes[1]!.options).toMatchObject({ title: 'Visitor CC1B: Hello??', body: '2 new messages · techubiz.com · Your website chat' });
+    // Answered: its banner goes.
+    service.handleRealtime({ type: 'chat.widget.followup', conversation_id: 41, stage: 'answered' } as never);
+    expect(notes[1]!.closed).toBe(true);
+  });
+
+  it('nothing while I am looking at the chat, while WorkSuite is in front (the card has it), or when I turned it off', () => {
+    const { service } = setup();
+    service.websiteAttending = (id) => id === 41;
+    again(service);
+    service.handleRealtime({ type: 'chat.widget.message', conversation_id: 41, visitor: 'Visitor CC1B', preview: 'not a follow-up', message_id: 'x1' } as never);
+    expect(notes).toHaveLength(0);
+    service.websiteAttending = () => false;
+    service.isFocused = () => true;
+    again(service);
+    expect(notes).toHaveLength(0);
+    service.isFocused = () => false;
+    service.followUpDesktop = () => false;
+    again(service);
+    expect(notes).toHaveLength(0);
+    // Somebody else's chat is the usual banner.
+    again(service, { assigned_to: 9, participants: [9] });
+    expect(notes[0]!.options.title).toBe('Visitor CC1B · website chat');
+  });
+});

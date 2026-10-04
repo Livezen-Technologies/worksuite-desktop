@@ -24,7 +24,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import type { Bootstrap, BusyReport, UpdateActivity, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, UpdateStatus, WebchatOnCall, WebchatRingState } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, type Bootstrap, type BusyReport, type UpdateActivity, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
@@ -992,12 +992,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── status ─────────────────────────────────────────────────────────────
   let statusTimer: NodeJS.Timeout | null = null;
+  // Visitors waiting on me in my website chats (#230), from the ringer: on the Dock and taskbar badge.
+  let followUpCount = 0;
   const snapshot = (): StatusSnapshot => {
     const uid = sessionCtl?.userId();
     const raw = notifications.counts();
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
-    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0 };
+    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -1028,7 +1030,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         offline: s.network === 'OFFLINE',
         pending: s.pendingChanges,
         error: failed ? `${failed[0]} stopped — open Diagnostics` : null,
-        unreadChat: s.unread.chat,
+        unreadChat: s.unread.chat + (s.unread.webchat ?? 0),
         unreadMail: s.unread.mail,
         unreadOther: s.unread.notifications,
         badge: settings.effective().badgeCount !== false,
@@ -1128,7 +1130,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const heartbeatPresence = async (): Promise<void> => {
     if (!sessionCtl.isReady() || lock.isLocked()) return;
     try {
-      await http.post('/api/chat/presence', { active: powerMonitor.getSystemIdleTime() < 300 });
+      // In a meeting or on a call, the server counts me busy: a visitor writing again in my chat goes straight to the
+      // team, and no new chat is given to me (worksuite-desktop#230). An older server ignores the field.
+      const doing = updateActivity();
+      await http.post('/api/chat/presence', { active: powerMonitor.getSystemIdleTime() < 300, busy_reason: doing.meeting ? 'meeting' : doing.call ? 'call' : null });
     } catch (e) {
       // No chat for this person (or no such endpoint): stop asking.
       if (isDesktopError(e) && (e.code === 'PERMISSION_DENIED' || e.code === 'APP_ACCESS_DENIED' || e.code === 'NOT_FOUND')) stopPresence();
@@ -1338,12 +1343,24 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       const d = Number(device.current()?.id);
       return Number.isInteger(d) && d > 0 ? `desktop-${d}` : 'desktop-unregistered';
     },
-    focused: () => !!windows.getMain()?.isFocused(),
+    // Minimised counts as away from the conversation (#230): a minimised window is never focused.
+    focused: () => {
+      const w = windows.getMain();
+      return !!w && !w.isMinimized() && w.isFocused();
+    },
+    followUpPrefs: () => ({ ...FOLLOW_UP_DEFAULTS, ...settings.effective().webchatFollowUps }),
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
+      // A visitor who wrote again in my chat has the card too, when I keep it on (#230).
+      const followUps = s.followUpCard !== false && !!s.followUps?.length;
+      if ((s.followUps?.length ?? 0) !== followUpCount) {
+        followUpCount = s.followUps?.length ?? 0;
+        emitStatus();
+      }
       // The card, or the mini chat on a chat just joined from it (#225), unless minimised; as tall as it measured itself.
-      if ((s.chats.length || s.handoffs?.length || s.calls?.length || s.outcome || s.joined) && !s.minimised && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(s.fit ?? ringerHeight(s));
+      if ((s.chats.length || s.handoffs?.length || s.calls?.length || s.outcome || s.joined || followUps) && !s.minimised && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(s.fit ?? ringerHeight(s));
       else windows.hideRinger();
       tray.update(trayCalls(s));
       const live = s.chats.some((c) => !c.silenced) || !!s.handoffs?.length;
@@ -1352,6 +1369,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       webchat.answerShortcut = answerShortcut(!!s.calls?.length && prefs.shortcut);
     },
   });
+  // A visitor's message raises nothing while I look at that conversation; one writing again in my chat follows my
+  // choice in Settings, and only while WorkSuite is not in front (worksuite-desktop#230).
+  notifications.websiteAttending = (id) => webchat.attending(id);
+  notifications.followUpDesktop = () => ({ ...FOLLOW_UP_DEFAULTS, ...settings.effective().webchatFollowUps }).desktop;
+  notifications.isFocused = () => {
+    const w = windows.getMain();
+    return !!w && !w.isMinimized() && w.isFocused();
+  };
   notifications.ringerShowing = () => settings.effective().webchatRinging.window && (webchat.state().chats.length > 0 || !!webchat.state().handoffs?.length || !!webchat.state().calls?.length);
   const webchatOnCall = (c: WebchatOnCall | null): void => {
     onCall = c;

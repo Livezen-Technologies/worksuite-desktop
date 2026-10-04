@@ -85,6 +85,8 @@ export const INVOKE_CHANNELS = [
   'ring:minimise',
   'ring:fit',
   'ring:openInbox',
+  'ring:followUp',
+  'ring:viewing',
   'ring:handoff',
   'ring:call',
   'ring:mic',
