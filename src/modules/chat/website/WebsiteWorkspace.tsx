@@ -97,6 +97,9 @@ export function WebsiteWorkspace() {
   // Voice calls (V-01): a LIVE view of its own, full width, with the picked call in the address.
   const calling = query.get('section') === 'calls';
   const pickedCall = Number(query.get('voice')) || null;
+  // Its Call-backs half (V-02), with the opened request in the address too.
+  const callBacks = calling && query.get('show') === 'callbacks';
+  const pickedCallback = Number(query.get('callback')) || null;
   // Everything that takes the whole width, hiding the list and the thread.
   const wide = live || designing || calling;
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
@@ -340,12 +343,17 @@ export function WebsiteWorkspace() {
       {designing ? <WidgetSettings /> : null}
       {calling ? (
         <VoiceCalls
+          // Before the counts answer, a server with Call-backs is assumed: the half asked for shows without a flash of Calls.
+          show={callBacks && !callbackCounts.isError ? 'callbacks' : 'calls'}
           selected={pickedCall}
           onSelect={(id) => go(`/chat?${new URLSearchParams({ view: 'website', section: 'calls', ...(id ? { voice: String(id) } : {}) }).toString()}`)}
           onOpenChat={(id) => go(`/chat?view=website&section=inbox&website=${id}`)}
-          // Call-backs (V-02) are the Callbacks section; on a server without it, they are still in Missed chats.
-          onCallbacks={() => go(`/chat?view=website&section=${structured ? 'callbacks' : 'missed'}`)}
+          // Call-backs (V-02) are the hub's other half; on a server without them, they are still in Missed chats.
+          onCallbacks={() => go(structured ? '/chat?view=website&section=calls&show=callbacks' : '/chat?view=website&section=missed')}
+          onCalls={() => go('/chat?view=website&section=calls')}
           callbacksOpen={structured ? (callbackCounts.data?.todo ?? 0) : callbackList.length}
+          pickedCallback={pickedCallback}
+          onPickCallback={(id) => go(`/chat?${new URLSearchParams({ view: 'website', section: 'calls', show: 'callbacks', ...(id ? { callback: String(id) } : {}) }).toString()}`)}
         />
       ) : null}
       {tableView && table ? (

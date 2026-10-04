@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.166 — 2026-10-04
+
+- **Call-backs (V-02).** Voice calls has a **Call-backs** side for visitors who called when nobody could answer and
+  asked to be called back. It has **Open**, **Mine** and **Done** filters with counts.
+- Each request shows the visitor and their company, the missed call with how long they waited and the page they
+  were on ("outside hours" when it was), and their best time (red while it is now). It also shows their phone, what
+  they asked about, and who has it.
+- **Call back** dials through the WorkSuite phone, or copies the number where there is none, and logs the attempt.
+  **Assign** gives the request to a colleague.
+- **Mark done** asks how it went: Reached — sorted; Reached — needs a follow-up; No answer — keep it open; or Wrong
+  number. It also takes a staff-only note.
+- Needs the server update (Communication 1.33.0).
+
 ## 0.2.165 — 2026-10-04
 
 - **Voice calls (V-01).** Website Chats has a **Voice calls** section, with an amber count of calls ringing or on.

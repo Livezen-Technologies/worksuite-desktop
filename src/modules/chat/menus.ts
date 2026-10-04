@@ -258,18 +258,27 @@ export function websiteMenu(c: WebsiteRow, me: number | null, agents: Array<{ id
  * Star or Unstar (Unstar when all of them are starred), and Close or Reopen. The bulk bar's dropdowns are the
  * submenus of the same items, so the bar and a right-click on the picked rows offer the same.
  */
+/**
+ * Assign to me · Assign to (each colleague) · Unassign: the bulk bar's Assign to… and a call-back's Assign ▾ (V-02)
+ * offer the same people the same way. `current` ticks who has it now.
+ */
+export function assignSections(me: number | null, agents: Array<{ id: number; name: string }>, pick: (userId: number | null) => void, opts: { unassign: boolean; current?: number | null }): MenuSection[] {
+  const others = agents.filter((a) => a.id !== me);
+  const on = (id: number) => (opts.current === undefined ? {} : { checked: opts.current === id, radio: true });
+  return [
+    { id: 'me', items: me !== null ? [{ id: 'assign-me', label: 'Assign to me', icon: 'user', ...on(me), onSelect: () => pick(me) }] : [] },
+    { id: 'agents', label: others.length ? 'Assign to' : undefined, items: others.map((a) => ({ id: `agent-${a.id}`, label: a.name, icon: 'user', ...on(a.id), onSelect: () => pick(a.id) })) },
+    { id: 'nobody', items: opts.unassign ? [{ id: 'unassign', label: 'Unassign', icon: 'x', onSelect: () => pick(null) }] : [] },
+  ];
+}
+
 export function websiteBulkMenu(rows: WebsiteRow[], me: number | null, agents: Array<{ id: number; name: string }>, run: (a: WebsiteBulkAction, extra?: WebsiteBulkExtra) => void): MenuSection[] {
   const n = rows.length;
   const allStarred = n > 0 && rows.every((r) => r.is_starred);
   const allClosed = n > 0 && rows.every((r) => r.status === 'closed');
   const anyAssigned = rows.some((r) => r.assigned_to !== null);
   const shared = n > 0 && rows.every((r) => r.priority === rows[0]!.priority) ? rows[0]!.priority : null;
-  const others = agents.filter((a) => a.id !== me);
-  const assign: MenuSection[] = [
-    { id: 'me', items: me !== null ? [{ id: 'assign-me', label: 'Assign to me', icon: 'user', onSelect: () => run('assign', { user_id: me }) }] : [] },
-    { id: 'agents', label: others.length ? 'Assign to' : undefined, items: others.map((a) => ({ id: `agent-${a.id}`, label: a.name, icon: 'user', onSelect: () => run('assign', { user_id: a.id }) })) },
-    { id: 'nobody', items: anyAssigned ? [{ id: 'unassign', label: 'Unassign', icon: 'x', onSelect: () => run('assign', { user_id: null }) }] : [] },
-  ];
+  const assign = assignSections(me, agents, (userId) => run('assign', { user_id: userId }), { unassign: anyAssigned });
   return [
     {
       id: 'organise',

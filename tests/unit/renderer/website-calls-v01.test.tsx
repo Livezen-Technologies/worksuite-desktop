@@ -166,7 +166,7 @@ describe('the Voice calls view (UX-CALL-01)', () => {
     const cb = within(show).getByRole('radio', { name: /Call-backs/ });
     await waitFor(() => expect(cb.textContent).toBe('Call-backs 2'));
     fireEvent.click(cb);
-    expect(tab.go).toHaveBeenCalledWith('/chat?view=website&section=callbacks');
+    expect(tab.go).toHaveBeenCalledWith('/chat?view=website&section=calls&show=callbacks');
     expect(within(view()).getByRole('combobox', { name: 'Site' }).textContent).toContain('All sites');
     expect(within(view()).getByRole('combobox', { name: 'Period' }).textContent).toContain('Last 7 days');
     expect(callsAsked()[0]).toMatchObject({ result: 'all', days: '7', page: '1' });
@@ -197,7 +197,7 @@ describe('the Voice calls view (UX-CALL-01)', () => {
     fireEvent.click(within(tiles).getByRole('listitem', { name: /^Missed: 5/ }));
     await waitFor(() => expect(callsAsked().at(-1)).toMatchObject({ result: 'missed', page: '1' }));
     fireEvent.click(within(tiles).getByRole('listitem', { name: /^Call-backs open: 2/ }));
-    expect(tab.go).toHaveBeenCalledWith('/chat?view=website&section=callbacks');
+    expect(tab.go).toHaveBeenCalledWith('/chat?view=website&section=calls&show=callbacks');
   });
 
   it('lists the calls in the design’s columns, with who answered and how each ended', async () => {

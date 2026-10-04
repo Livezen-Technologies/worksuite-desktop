@@ -1,7 +1,9 @@
 import type { ReactNode } from 'react';
 import type { WebchatRingChat } from '@shared/types';
 import { text } from '../../../core/i18n';
-import { listStamp, parseTs } from '../../../core/time';
+import { app } from '../../../core/app-state';
+import { useStore } from '../../../core/store';
+import { conversationStamp, listStamp, parseTs, timeLabel } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
@@ -41,6 +43,18 @@ export function FilterPill({ on, onClick, children }: { on: boolean; onClick: ()
 
 /** The priorities a card row marks; the table says every one. */
 export const PRIORITY_TAG: Record<string, string> = { vip: 'VIP', urgent: 'Urgent', high: 'High' };
+
+/** WHEN on Voice calls and its Call-backs (V-01, V-02): the time today, else the day and the time — "Thu 15:02". */
+export function whenLabel(at: string, now = new Date()): string {
+  const day = conversationStamp(at, now);
+  const time = timeLabel(at);
+  return day === time ? time : `${day} ${time}`;
+}
+
+/** The signed-in person's id: "with You" on a call's banner, "Assigned to You" on a call-back (V-01, V-02). */
+export function useMe(): number | null {
+  return useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
+}
 
 /** A site's name from a link, as "Came from" says it: no scheme, no www, no path. */
 export const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');

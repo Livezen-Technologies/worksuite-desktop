@@ -1,20 +1,18 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type KeyboardEvent as ReactKeyboardEvent } from 'react';
 import { ApiError, apiGet, apiPost } from '../../../core/api';
-import { app } from '../../../core/app-state';
 import { call, errorMessage } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
-import { useStore } from '../../../core/store';
-import { conversationStamp, dayKey, parseTs, timeLabel } from '../../../core/time';
+import { dayKey, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Select } from '../../../components/Select';
 import { Avatar, Button, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
 import { WEBSITE } from './api';
-import { dial } from './Callbacks';
+import { CallbackBoard, dial } from './Callbacks';
 import { Segmented, Tile } from './live/LiveDashboard';
 import { clock } from './Ringing';
-import { FilterPill, PANEL_HEADING, ROW_PICKED, TABLE_FRAME, TABLE_HEAD, Tag } from './rowParts';
+import { FilterPill, PANEL_HEADING, ROW_PICKED, TABLE_FRAME, TABLE_HEAD, Tag, useMe, whenLabel } from './rowParts';
 
 /**
  * Voice calls (V-01, X-UI-08; UX-CALL-01/02): the website widget's calls in one place — the calls on now in a green
@@ -22,8 +20,9 @@ import { FilterPill, PANEL_HEADING, ROW_PICKED, TABLE_FRAME, TABLE_HEAD, Tag } f
  * calls themselves filtered All / Answered / Missed / Recorded by site and period, and the picked call's details: what
  * happened in order, whether it was recorded, the staff's call notes with Add note, Open chat and Call back.
  *
- * Its Call-backs half is the Callbacks section (V-02), one switch away. The list and the details are the server's
- * (`GET calls`, `GET calls/{id}`); a call on now is followed in its chat, where the call bar is (VOICE-13).
+ * Its Call-backs half (V-02, X-UI-09) is one switch away, under the same heading: the requests visitors left when
+ * nobody could answer, worked here (CallbackBoard). The list and the details are the server's (`GET calls`,
+ * `GET calls/{id}`); a call on now is followed in its chat, where the call bar is (VOICE-13).
  */
 
 export type CallResult = 'answered' | 'transferred' | 'missed' | 'cancelled' | 'dropped' | 'live';
@@ -154,12 +153,8 @@ export function useVoiceCall(id: number | null) {
 /** "0:12", or a dash when there is none. */
 const span = (s: number | null | undefined) => (s === null || s === undefined ? '—' : clock(s));
 
-/** WHEN: the time today, else the day and the time — "Thu 15:02". */
-export function whenLabel(at: string, now = new Date()): string {
-  const day = conversationStamp(at, now);
-  const time = timeLabel(at);
-  return day === time ? time : `${day} ${time}`;
-}
+/** WHEN: the time today, else the day and the time — shared with Call-backs (V-02). */
+export { whenLabel };
 
 /** The timeline's clock, to the second: "10:44:02". */
 function secondsLabel(at: string): string {
@@ -211,19 +206,27 @@ export function stepWords(s: CallStep): { text: string; strong?: boolean } {
   }
 }
 
-export function VoiceCalls({ selected, onSelect, onOpenChat, onCallbacks, callbacksOpen }: {
+export function VoiceCalls({ show = 'calls', selected, onSelect, onOpenChat, onCallbacks, onCalls, callbacksOpen, pickedCallback = null, onPickCallback }: {
+  /** Which half shows: the calls (V-01) or the call-backs (V-02). */
+  show?: 'calls' | 'callbacks';
   selected: number | null;
   onSelect: (id: number | null) => void;
   onOpenChat: (conversationId: number) => void;
-  /** The Call-backs half (V-02): the Callbacks section. */
+  /** The Call-backs half (V-02); on a server without it, Missed chats, where VOICE-16 kept them. */
   onCallbacks: () => void;
+  /** Back to the Calls half. */
+  onCalls?: () => void;
   callbacksOpen: number | null;
+  /** The call-back opened on the Call-backs half. */
+  pickedCallback?: number | null;
+  onPickCallback?: (id: number | null) => void;
 }) {
+  const backs = show === 'callbacks';
   const [result, setResult] = useState<CallFilter>('all');
   const [site, setSite] = useState(0);
   const [days, setDays] = useState(7);
   const [page, setPage] = useState(1);
-  const calls = useVoiceCalls({ result, site, days, page });
+  const calls = useVoiceCalls({ result, site, days, page }, !backs);
   const d = calls.data;
   const rows = d?.calls ?? [];
   // Nothing picked: the first call's details, as the design opens on.
@@ -253,14 +256,22 @@ export function VoiceCalls({ selected, onSelect, onOpenChat, onCallbacks, callba
       <div className="flex flex-wrap items-center gap-2.5">
         <div className="min-w-0 flex-1">
           <h1 className="text-[21px] font-bold text-ink">{text('Voice calls')}</h1>
-          <p className="text-[12.5px] text-ink-3">{text('Calls from the website widget — live, answered, missed, and the call-backs visitors asked for.')}</p>
+          <p className="text-[12.5px] text-ink-3">
+            {backs ? text('Visitors who called when nobody could answer and asked us to call them back.') : text('Calls from the website widget — live, answered, missed, and the call-backs visitors asked for.')}
+          </p>
         </div>
-        <Segmented<'calls' | 'callbacks'> label="Show" value="calls" onChange={(v) => v === 'callbacks' && onCallbacks()} options={[['calls', 'Calls'], ['callbacks', 'Call-backs', cbOpen]]} />
-        <Select aria-label="Site" value={site} onValueChange={(v) => (setSite(v), setPage(1))} options={[{ value: 0, label: 'All sites' }, ...(d?.sites ?? []).map((x) => ({ value: x.widget_id, label: x.site }))]} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
-        <Select aria-label="Period" value={days} onValueChange={(v) => (setDays(v), setPage(1))} options={PERIODS} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
+        <Segmented<'calls' | 'callbacks'> label="Show" value={show} onChange={(v) => (v === 'callbacks' ? !backs && onCallbacks() : backs && onCalls?.())} options={[['calls', 'Calls'], ['callbacks', 'Call-backs', cbOpen]]} />
+        {backs ? null : (
+          <>
+            <Select aria-label="Site" value={site} onValueChange={(v) => (setSite(v), setPage(1))} options={[{ value: 0, label: 'All sites' }, ...(d?.sites ?? []).map((x) => ({ value: x.widget_id, label: x.site }))]} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
+            <Select aria-label="Period" value={days} onValueChange={(v) => (setDays(v), setPage(1))} options={PERIODS} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
+          </>
+        )}
       </div>
 
-      {calls.isLoading ? <Spinner /> : missing ? (
+      {backs ? (
+        <CallbackBoard picked={pickedCallback} onPick={(id) => onPickCallback?.(id)} onOpenChat={onOpenChat} />
+      ) : calls.isLoading ? <Spinner /> : missing ? (
         <Empty icon="phone" title="Voice calls need a newer WorkSuite" hint="Ask your administrator to update the server." />
       ) : calls.error && !d ? (
         <ErrorNote error={calls.error} onRetry={() => void calls.refetch()} />
@@ -369,10 +380,6 @@ function LiveBanner({ c, onOpen }: { c: LiveVoiceCall; onOpen: () => void }) {
   );
 }
 
-/** The signed-in person's id, to say "with You" on the banner. */
-function useMe(): number | null {
-  return useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
-}
 
 /**
  * The picked call's details (UX-CALL-02): who and when, Open chat; WHAT HAPPENED in order; RECORDING; CALL NOTES ·

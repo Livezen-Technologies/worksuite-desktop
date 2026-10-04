@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.39.0 — 2026-10-04
+
+- V-02 Call-backs in the Voice calls hub: Open / Mine / Done, request cards with the missed call, best time and who has it, Call back through the WorkSuite phone (else copy the number) with the attempt logged, Assign, and Mark done with how it went.
+
 ## 1.38.0 — 2026-10-04
 
 - V-01 Voice calls: a Voice calls section with its live count in the menu; the live call banner, six tiles, filters, the calls table with result chips, paging, and call details with what happened, recording, staff notes, Open chat, Add note and Call back.

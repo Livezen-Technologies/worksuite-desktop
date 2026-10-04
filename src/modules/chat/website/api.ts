@@ -385,9 +385,27 @@ export interface WebsiteCallback {
   assignee?: string | null;
   contacted_at?: string | null;
   handled_at?: string | null;
+  /** Where they asked: queue, home, away, call (a missed voice call). */
+  source?: string | null;
+  assigned_to?: number | null;
+  /** The staff note Mark done… (V-02) or an action left on it. */
+  note?: string | null;
+  /** Who handled it, by name. */
+  handled_by?: string | null;
+  /** The Call-backs card (V-02): "Malini Perera · Lanka Traders". */
+  company?: string | null;
+  /** The page they called from, else the one they are on: "· techubiz.com/shop/coreldraw" (V-02). */
+  page_url?: string | null;
+  /** Asked for while the business hours were closed: "(outside hours)" (V-02). */
+  outside_hours?: boolean;
+  /** Call back logged an attempt whose outcome is still to be said (V-02, UX-CALL-04). */
+  called_at?: string | null;
 }
 
 export type CallbackOutcome = 'answered' | 'no_answer' | 'wrong_number';
+
+/** Mark done…'s answers on Voice calls › Call-backs (V-02, UX-CALL-03); `keep_open` is No answer — keep it open. */
+export type CallbackDoneOutcome = 'sorted' | 'follow_up' | 'keep_open' | 'wrong_number';
 
 export function useCallbacks(enabled: boolean) {
   return useQuery({
