@@ -21,7 +21,7 @@ import { ShowMeHost } from '../modules/ai/help/ShowMe';
 import { LockScreen } from './screens/LockScreen';
 import { AddPictureScreen } from './screens/AddPictureScreen';
 import { LockBoundary } from './Boundaries';
-import { UpdateRequired } from './screens/UpdateScreens';
+import { ModulesLocked, useModulesLocked } from './screens/MandatoryUpdate';
 import { WindowRoot } from './WindowRoot';
 import { RemoteControlWindow } from './RemoteControlWindow';
 import { WebchatRingWindow } from '../modules/chat/website/Ringing';
@@ -48,7 +48,8 @@ export function App() {
   const auth = useStore(app, (s) => s.auth);
   const prefs = useStore(app, s => s.prefs);
   const locked = useStore(app, (s) => s.lock?.locked ?? false);
-  const required = useStore(app, (s) => s.update?.required ?? false);
+  // A required update past its deadline, or a version the server refuses: modules are locked until it is installed.
+  const required = useModulesLocked();
   // A profile picture the server requires (#46). Not from a copy kept offline: nothing could be sent, so it would only lock the app.
   const pictureOwedBy = useStore(app, (s) => (s.bootstrap?.user.pictureRequired === true && !s.bootstrap.offline ? s.bootstrap.user.id : null));
   // Who has just sent one, so a refresh that fails does not bring the screen back — for them, not the next person to sign in.
@@ -75,7 +76,7 @@ export function App() {
   if (locked && auth.stage === 'ready' && !required && scope?.kind === 'chat-mini' && prefs?.lockedAllowChat && scope.room) return <LockedChat room={scope.room} />;
   let body;
   const guest = session.mode === 'guest' && auth.stage !== 'ready' && !hash.startsWith('#/window/');
-  if (required && auth.stage !== 'revoked') body = <UpdateRequired />;
+  if (required && auth.stage !== 'revoked') body = <ModulesLocked />;
   // A guest never meets the account's picture gate or setup wizard: guest mode is the shell with its own apps.
   else if (guest && !session.signingIn) body = !local?.profile || local.locked ? <GuestGate /> : <Shell key="guest" />;
   else if (auth.stage !== 'ready') body = <Onboarding auth={auth} />;

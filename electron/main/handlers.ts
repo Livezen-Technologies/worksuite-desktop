@@ -1067,6 +1067,20 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('updates:reinstall', () => ctx.updater.reinstall());
   router.handle('updates:dismissNotice', () => ctx.updater.dismissNotice());
   router.handle('updates:prepared', (input) => ctx.updatePrepared(input.token));
+  router.handle('updates:pauseDownload', () => ctx.updater.pauseDownload());
+  router.handle('updates:resumeDownload', () => ctx.updater.resumeDownload());
+  router.handle('updates:cancelDownload', () => ctx.updater.cancelDownload());
+  router.handle('updates:installWhenFree', () => ctx.updater.installWhenFree());
+  router.handle('updates:diagnostics', () => ctx.updateDiagnostics());
+  router.handle('updates:exportDiagnostics', async (input, c) => {
+    const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
+    const opts = { title: 'Save update diagnostics', defaultPath: `WorkSuite-update-diagnostics-${stamp}.txt`, filters: [{ name: 'Text', extensions: ['txt'] }] };
+    const w = winOf(c.sender);
+    const res = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
+    if (res.canceled || !res.filePath) return null;
+    await writeFile(res.filePath, input.report, 'utf8');
+    return res.filePath;
+  });
   // Settings › About › Channel (#205): only what the organisation allows; a less stable channel once confirmed.
   router.handle('updates:setChannel', async (input) => {
     try {

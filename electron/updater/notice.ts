@@ -7,10 +7,20 @@ export interface UpdateNotice {
   body: string;
   /** A critical or security update: the notification stays until dismissed. */
   critical?: boolean;
+  /** "What's new" lines, shown under the body where the system shows them. */
+  highlights?: string[];
+  /** The notification's button: Update Now (download, or restart to install). */
+  action?: 'update';
+}
+
+/** The body with "What's new:" and up to three bullets. */
+export function noticeText(n: UpdateNotice): string {
+  const lines = (n.highlights ?? []).slice(0, 3);
+  return lines.length ? `${n.body}\nWhat's new:\n${lines.map((l) => `• ${l}`).join('\n')}` : n.body;
 }
 
 /**
- * What a new version tells the person outside the window, beside the title-bar icon (Settings › Desktop › Updates):
+ * What a new version tells the person outside the window, beside the title-bar icon (Settings › Updates):
  * "available" while it waits for their Download (updates do not download by themselves here, or this build cannot
  * install them), and "ready" once it is downloaded and waits for a restart. One that downloads by itself says nothing
  * until it is ready. A required update says it is required; a security update says so (worksuite-desktop#205).
@@ -18,16 +28,22 @@ export interface UpdateNotice {
 export function updateNotice(s: UpdateStatus, autoDownload: boolean): UpdateNotice | null {
   const v = s.availableVersion;
   if (!v) return null;
+  const extra = (n: UpdateNotice): UpdateNotice => (s.notes?.highlights?.length ? { ...n, highlights: s.notes.highlights.slice(0, 3) } : n);
+  // A required update with a deadline is said once, as soon as it is known, whatever stage it is at.
+  if (s.required && s.mandatory?.deadline && s.state !== 'STAGED' && !s.installBlockedReason) {
+    const by = new Date(s.mandatory.deadline).toLocaleString([], { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+    return extra({ key: `required:${v}`, title: 'Update required', body: `WorkSuite ${v} must be installed by ${by}.`, critical: true, action: 'update' });
+  }
   if (s.state === 'STAGED') {
     if (s.required) return { key: `ready:${v}`, title: 'Update required', body: `WorkSuite ${v} is ready. Restart WorkSuite to install it; this version is no longer supported.`, critical: true };
     if (s.security) return { key: `ready:${v}`, title: 'Security update ready', body: `WorkSuite ${v} is ready. Restart to update.`, critical: true };
-    return { key: `ready:${v}`, title: 'Update ready', body: `WorkSuite ${v} is ready. Restart to update.` };
+    return extra({ key: `ready:${v}`, title: 'Update ready', body: `WorkSuite ${v} is ready. Restart to update.`, ...(s.notes?.highlights?.length ? { action: 'update' as const } : {}) });
   }
   if (s.state !== 'AVAILABLE') return null;
   if (s.installBlockedReason) return { key: `available:${v}`, title: 'Update available', body: `WorkSuite ${v} is available. ${s.installBlockedReason}` };
   // It is downloading by itself, and says so once it is ready.
   if (autoDownload || s.critical || s.required) return null;
-  return { key: `available:${v}`, title: 'Update available', body: `WorkSuite ${v} is available. Click to download it.` };
+  return extra({ key: `available:${v}`, title: 'Update available', body: `WorkSuite ${v} is available. Click to download it.`, ...(s.notes?.highlights?.length ? { action: 'update' as const } : {}) });
 }
 
 export interface AnnounceDeps {

@@ -84,15 +84,16 @@ describe('the title-bar update icon', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Update ready: WorkSuite 0.2.132. Restart to install it.' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Restart to update' }));
     await waitFor(() => expect(net.call).toHaveBeenCalledWith('updates:installNow', { force: false }));
-    fireEvent.click(await screen.findByRole('button', { name: 'Restart anyway' }));
-    await waitFor(() => expect(net.call).toHaveBeenCalledWith('updates:installNow', { force: true }));
+    expect(await screen.findByText('1 file uploading')).toBeTruthy();
+    fireEvent.click(await screen.findByRole('button', { name: 'Restart when work finishes' }));
+    await waitFor(() => expect(net.call).toHaveBeenCalledWith('updates:installWhenFree'));
   });
 
   it('opens the update settings', async () => {
     show(status({ state: 'AVAILABLE' }));
     act(() => ui.set({ overlay: 'update' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Update settings' }));
-    expect(net.navigate).toHaveBeenCalledWith('/settings/desktop');
+    expect(net.navigate).toHaveBeenCalledWith('/settings/updates');
     expect(ui.get().overlay).toBeNull();
   });
 });

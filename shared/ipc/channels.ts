@@ -364,6 +364,12 @@ export const INVOKE_CHANNELS = [
   'updates:reinstall',
   'updates:dismissNotice',
   'updates:prepared',
+  'updates:pauseDownload',
+  'updates:resumeDownload',
+  'updates:cancelDownload',
+  'updates:installWhenFree',
+  'updates:diagnostics',
+  'updates:exportDiagnostics',
 
   'settings:get',
   'settings:set',

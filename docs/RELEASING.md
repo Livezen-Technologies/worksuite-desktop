@@ -81,7 +81,7 @@ hidden), checks its code signature against the running app's Team ID, and
 swaps it in after quit.
 
 A new version downloads by itself and waits for the person's restart. People
-can turn that off (Settings › Desktop › Download updates automatically) only
+can turn that off (Settings › Updates › Download updates automatically) only
 where the server's desktop policy sets `auto_update` to `user_choice`; the
 default, `enforced`, keeps it on. Critical and required releases download
 either way. The title-bar update icon and one system notification per version
@@ -93,7 +93,7 @@ app.
 
 ## 4a. Channels, notices and the first run (worksuite-desktop#205)
 
-**Channels.** The updates card (Settings › Desktop and Settings › About) offers Stable, Beta and Dev / Nightly — only those the
+**Channels.** Settings › Updates offers Stable, Beta and Dev / Nightly — only those the
 organisation's desktop policy allows (`auto_update: enforced` locks the channel to `update_channel`;
 `user_choice` offers `allowed_update_channels` — Stable always, default all three — and starts a computer on
 `update_channel_default` (Beta by default) until its person picks one; a channel the organisation stops allowing is shown as
@@ -117,6 +117,49 @@ the app says there is nothing to reinstall and waits for the channel to catch up
 launch). `highlights` (up to 8 lines) and an optional `summary` are "What's new in X"; `release_notes_url` is
 "View full release notes". Pass `--summary` and `--notes` to the publish script so these are filled.
 
+**Fields for the Updates & License screens.** All optional; the app shows what it gets and leaves the rest out.
+They sit inside the signed answer like everything else:
+
+| Field | Type | Used for |
+|---|---|---|
+| `build_number` | integer | "Version 2.7.0 · build 27001" (update dialog) |
+| `published_at` | ISO 8601 | "Recommended · 24 Sep 2026" (Settings › Updates) |
+| `publisher` | string | "Signed by …" under the package line. Without it the dialog says "Signed release". |
+| `security_fixes`, `known_issues[]` | integer, strings | "Security: 1 fix · Known issues: none" |
+| `mandatory` | boolean | `true` makes the release required, like status `UPDATE_REQUIRED` |
+| `required_by` | ISO 8601 | A required release's own install-by time. Without it the deadline is when this computer first learnt the update was required, plus the desktop policy's `forced_update_deadline_hours`. |
+| `max_deferrals` | integer 0–20 | How often a required update may be put off (default 3) |
+| `grace_minutes` | integer 1–120 | A `CRITICAL` release installs this many minutes after it is staged (default 5) |
+| `package.size`, `package.type` | as before | The package line ("Windows x64 · EXE · 320 MB") |
+
+The app also reads `key_id` (shown as the manifest key) and the existing `release_type` (the badge: RECOMMENDED,
+SECURITY, CRITICAL…). The package is always the full installer: there are no delta packages.
+
+**Required updates and the deadline.** A computer is required to update when its version is below the policy's
+`minimum_version` for its platform (or the answer's `effective_minimum`), when the answer is `UPDATE_REQUIRED`,
+`UNSUPPORTED`, `RELEASE_WITHDRAWN` or `mandatory: true`, or when a business API refuses it. Until the deadline the
+app shows a banner with Remind me later (only while the reminder comes back before the deadline, and at most
+`max_deferrals` times) and Update Now, and a countdown in the last 6 hours. After the deadline Mail, Chat, Files and
+the other modules lock; Settings › Updates, its Diagnostics, License and Sign Out stay open. The first time a
+computer learns it is required is kept in `updates/required.json`, so restarting does not reset the clock.
+
+**The server refusing a version.** Any API answer with `code: "UPDATE_REQUIRED"` (or `VERSION_UNSUPPORTED`, or
+HTTP 426) locks modules at once, whatever the deadline. A realtime event `desktop.release.published` makes the app
+ask the Update Center at once instead of at the next 4-hourly check.
+
+**CRITICAL releases.** `release_type: CRITICAL` downloads even when automatic downloads are off, saves drafts and
+open tabs as soon as it is staged, shows the Critical Security Update modal with the time left, and installs when
+`grace_minutes` (default 5) are up, ending a call or meeting. `SECURITY` keeps the gentler path above.
+
+**Downloads** resume with HTTP `Range` after Pause, a lost connection (5 tries, up to a minute apart) or a restart
+of WorkSuite. The CDN should answer `206 Partial Content` with `Content-Range`; a server that ignores Range still
+works, from the start. The download grant is asked once for a fresh URL when the signed URL is refused.
+
+**Diagnostics** (Settings › Updates › Diagnostics) asks the Update Center once without changing anything, asks the
+package URL for one byte, reads free space (the package twice on Windows and Linux, three times on macOS for the
+DMG, the app and the rollback copy), checks that the install folder is writable, runs SQLite `quick_check`, and
+reads when the sign-in was last confirmed. Export saves it as text.
+
 **Checks** run 30 s after launch, every 4 hours and 15 s after the computer wakes. Every check, download,
 install, Later, rollback and channel change is written to `updates/history.jsonl` and is `updates.json` in the
 Diagnostics report.
@@ -130,7 +173,10 @@ is healthy once its main window has loaded and stayed up 10 s (`health-<version>
 | Linux AppImage | The previous image is kept as `<AppImage>.previous`; a watchdog script does the same as on macOS. |
 | Windows (NSIS) | Not possible automatically: the per-user NSIS installer replaces the previous version and no copy is kept. The failure is reported in the app and in Diagnostics; Safe Mode follows repeated crashes; the person can reinstall from the Update Center. |
 
-The person sees "Updated to X · What's new" once, or a notice that the update was rolled back.
+The person sees "What's New in X" once (the release's `highlights`, and the local database schema change if the
+start migrated it) unless they turned it off in Settings › Updates, or "Updated to X · What's new" when the release
+sent no highlights. A rollback shows the Update Failed panel in Settings › Updates with its code
+(`UPDATE_INSTALL_FAILED`), the rollback state and a reference (`UA-XXXX-XX`, also in `history.jsonl`).
 
 **Signing and installer formats.** Nothing here changes signing. macOS updates still need Developer ID +
 notarisation for Stable (section 2); the updater checks the new app's Team ID against the running one. Windows

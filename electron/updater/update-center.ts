@@ -88,6 +88,21 @@ export const updateResponseSchema = z.object({
   summary: z.string().max(500).nullable().optional(),
   package: ucPackageSchema.nullable().optional(),
   message: z.string().nullable().optional(),
+  /** The build number of the version on offer ("build 27001"). */
+  build_number: z.number().int().nonnegative().nullable().optional(),
+  /** When the release was published (ISO 8601). */
+  published_at: z.string().max(40).nullable().optional(),
+  /** A required release's own install-by time (ISO 8601); else the policy's forced_update_deadline_hours applies. */
+  required_by: z.string().max(40).nullable().optional(),
+  /** How many times a required release may be put off (default 3). */
+  max_deferrals: z.number().int().min(0).max(20).nullable().optional(),
+  /** A CRITICAL release installs after this many minutes (default 5). */
+  grace_minutes: z.number().int().min(1).max(120).nullable().optional(),
+  /** Who signed the build, as shown under the package line. */
+  publisher: z.string().max(200).nullable().optional(),
+  /** "Security: 1 fix · Known issues: none". */
+  security_fixes: z.number().int().min(0).max(1000).nullable().optional(),
+  known_issues: z.array(z.string().max(300)).max(20).nullable().optional(),
   issued_at: z.string(),
   expires_at: z.string(),
   key_id: z.string(),
@@ -99,8 +114,16 @@ export type UcPackage = z.infer<typeof ucPackageSchema>;
 
 /** Statuses that mean this version has to go (the deadline logic applies). */
 export function isRequired(r: UpdateResponse): boolean {
-  return r.status === 'UPDATE_REQUIRED' || r.status === 'UNSUPPORTED' || r.status === 'RELEASE_WITHDRAWN';
+  return r.status === 'UPDATE_REQUIRED' || r.status === 'UNSUPPORTED' || r.status === 'RELEASE_WITHDRAWN' || r.mandatory === true;
 }
+
+/** A critical release: it installs after a short grace period, saving everything first. */
+export function isCriticalRelease(r: Pick<UpdateResponse, 'release_type'>): boolean {
+  return r.release_type === 'CRITICAL';
+}
+
+/** The grace period before a critical release installs, in minutes. */
+export const DEFAULT_GRACE_MINUTES = 5;
 
 /**
  * The channel hint. The Update Center decides: a tenant policy wins, and a

@@ -24,7 +24,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import type { Bootstrap, BusyReport, UpdateActivity, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, UpdateStatus, WebchatOnCall, WebchatRingState } from '@shared/types';
+import type { Bootstrap, BusyReport, UpdateActivity, UpdateDiagnostics, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, UpdateStatus, WebchatOnCall, WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
@@ -103,10 +103,12 @@ import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
 import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl } from '../updater/update-center';
-import { announce } from '../updater/notice';
+import { announce, noticeText } from '../updater/notice';
+import { runUpdateDiagnostics } from '../updater/diagnostics';
+import type { TrayUpdate } from '../tray/tray';
 import { UpdaterService } from '../updater/updater';
 import { UpdateHealth, UpdateHistory, UpdateNotifier } from '../updater/update-flow';
-import { allowedChannels, channelLockReason } from '@shared/updates';
+import { CHANNEL_INFO, allowedChannels, channelLockReason, channelSource, idleInstallDue } from '@shared/updates';
 import { WindowManager } from '../windows/manager';
 
 /**
@@ -293,7 +295,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     onDeviceDirective: (code, message) => {
       if (code === 'DEVICE_REVOKED') void sessionCtl?.wipe(message);
       else if (code === 'DESKTOP_ACCESS_DISABLED') sessionCtl?.handleDirective({ kind: 'block', reason: message });
-      else if (code === 'VERSION_UNSUPPORTED') updater.requireUpdate(null);
+      else if (code === 'VERSION_UNSUPPORTED' || code === 'UPDATE_REQUIRED') updater.serverRejected();
     },
   });
 
@@ -714,7 +716,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const busy = (): BusyReport => {
     const id = sessionCtl.userId();
     const c = transfers.activeCounts();
-    return { uploads: c.uploads, downloads: c.downloads, pendingMutations: id ? queue.pendingCount(id) : 0, drafts: id ? queue.draftCount(id) : 0, activeCall, activity: updateActivity() };
+    const running = c.uploads + c.downloads > 0 ? transfers.list().filter((t) => t.state === 'running' || t.state === 'queued') : [];
+    return {
+      uploads: c.uploads,
+      downloads: c.downloads,
+      pendingMutations: id ? queue.pendingCount(id) : 0,
+      drafts: id ? queue.draftCount(id) : 0,
+      activeCall,
+      activity: updateActivity(),
+      details: {
+        calls: calls.list().map((x) => ({ kind: x.kind, title: x.title })),
+        transfers: running.slice(0, 5).map((t) => ({ name: t.name, direction: t.direction === 'upload' ? 'upload' : 'download', percent: t.total > 0 ? Math.min(100, (t.bytes / t.total) * 100) : 0 })),
+        draftModules: id ? queue.draftModules(id) : {},
+      },
+    };
   };
 
   // Before an update's restart every window saves its drafts and tabs (`update:prepare` → `updates:prepared`).
@@ -761,17 +776,26 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       systemEnabled: () => p.notificationsEnabled && p.updateNotifications !== false && Notification.isSupported(),
       told: { get: () => db.getConfig<string[]>('update_notices') ?? [], set: (keys) => db.setConfig('update_notices', keys) },
       show: (n) => {
-        const note = new Notification({ title: n.title, body: n.body, urgency: n.critical ? 'critical' : 'normal', timeoutType: n.critical ? 'never' : 'default' });
-        note.on('click', () => navigate({ route: '/settings/desktop', source: 'notification' }));
+        // What's new under the body; View What's New is the click, and Update Now a button where the system has them (macOS).
+        const note = new Notification({
+          title: n.title,
+          body: noticeText(n),
+          urgency: n.critical ? 'critical' : 'normal',
+          timeoutType: n.critical ? 'never' : 'default',
+          actions: n.action === 'update' ? [{ type: 'button', text: 'Update Now' }] : [],
+        });
+        note.on('click', () => navigate({ route: '/settings/updates', source: 'notification' }));
+        note.on('action', () => updateNow());
         note.show();
       },
       bell: (n) => {
-        notifications.addLocal({ id: `update:${n.key}`, title: n.title, body: n.body, link: '/settings/desktop' });
+        notifications.addLocal({ id: `update:${n.key}`, title: n.title, body: n.body, link: '/settings/updates' });
         emitStatus();
       },
     });
   };
 
+  let lastTray = '';
   const updater: UpdaterService = new UpdaterService({
     fetch: fetchImpl,
     platform: platformName(),
@@ -808,9 +832,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     updatesDir: p.updates,
     onStatus: (s) => {
       broadcast('update:changed', s);
-      tray.update({ updateReady: s.state === 'STAGED' });
+      // The tray menu is rebuilt only when its update lines change (the download reports progress often).
+      const t = { updateReady: s.state === 'STAGED', update: trayUpdate(s) };
+      const key = JSON.stringify(t);
+      if (key !== lastTray) {
+        lastTray = key;
+        tray.update(t);
+      }
       announceUpdate(s);
     },
+    schema: () => (db.migratedFrom > 0 && db.migratedFrom !== db.version ? { from: db.migratedFrom, to: db.version } : null),
     onWarning: (text) => broadcast('toast', { kind: 'warning', text }),
     prepareRestart,
     beforeQuit: async () => {
@@ -821,7 +852,79 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     health: updateHealth,
     notifier: updateNotifier,
   });
-  onUpdateActivity = () => updateNotifier.activityChanged();
+  onUpdateActivity = () => {
+    updateNotifier.activityChanged();
+    void updater.workChanged();
+  };
+
+  // The tray's update lines (worksuite-desktop: Updates & License): on offer, ready, or required by a deadline.
+  const trayUpdate = (s: UpdateStatus): TrayUpdate | null => {
+    if (s.required) return { kind: 'required', version: s.availableVersion, deadline: s.mandatory?.deadline ?? null };
+    if (s.state === 'STAGED') return { kind: 'ready', version: s.availableVersion, deadline: null };
+    if (s.availableVersion && (s.state === 'AVAILABLE' || s.state === 'DOWNLOADING' || s.state === 'VERIFIED')) return { kind: 'available', version: s.availableVersion, deadline: null };
+    return null;
+  };
+  // Update Now (tray, notification): restart when ready — asking in the window over work in progress — else download.
+  const updateNow = (): void => {
+    const s = updater.get();
+    if (s.state === 'STAGED') void updater.install(false).then((r) => !r.started && navigate({ route: '/settings/updates', source: 'tray' }));
+    else {
+      void updater.downloadNow();
+      navigate({ route: '/settings/updates', source: 'tray' });
+    }
+  };
+  // A required update's countdown in the tray menu, kept current.
+  setInterval(() => {
+    if (updater.get().required) tray.update({});
+  }, 60_000).unref?.();
+  // Settings › Updates › Install automatically when idle: 02:00–04:00, the computer idle, nothing to interrupt.
+  setInterval(() => {
+    const prefs = settings.effective();
+    if (!prefs.updateInstallWhenIdle || updater.get().state !== 'STAGED') return;
+    // Nothing would be interrupted (drafts and queued changes are kept), so it installs without asking.
+    if (idleInstallDue(new Date(), powerMonitor.getSystemIdleTime(), busy())) void updater.install(true);
+  }, 5 * 60_000).unref?.();
+
+  const updateDiagnostics = async (): Promise<UpdateDiagnostics> => {
+    const s = updater.get();
+    const pol = sessionCtl?.current()?.policy ?? null;
+    const prefsNow = settings.effective();
+    const platform = platformName();
+    const installType = !app.isPackaged
+      ? 'development build'
+      : platform === 'windows'
+        ? 'NSIS per-user'
+        : platform === 'macos'
+          ? 'app bundle'
+          : process.env.APPIMAGE
+            ? 'AppImage'
+            : 'package manager';
+    const boot = sessionCtl?.current() ?? null;
+    return runUpdateDiagnostics({
+      now: () => new Date(),
+      host: new URL((allowInsecure && process.env.WS_UPDATE_CENTER) || UPDATE_CENTER_URL).host,
+      probe: () => updater.probe(),
+      version: app.getVersion(),
+      platform,
+      arch: archName(),
+      installType,
+      required: s.required ? { minimum: s.minimumVersion } : null,
+      channel: { label: CHANNEL_INFO[s.channel].label, source: channelSource(pol, !!settings.raw().updateChannelChosen), fallback: !!s.channelFallback },
+      freeBytes: () => updater.freeBytes(),
+      installWritable: () => updater.installWritable(),
+      database: () => {
+        try {
+          return { result: db.integrityCheck(), schema: db.version };
+        } catch (e) {
+          return { result: String((e as Error)?.message ?? e), schema: null };
+        }
+      },
+      license: () => ({ signedIn: sessionCtl?.isReady() ?? false, offline: !!boot?.offline, lastVerifiedAt: boot?.cachedAt ?? null }),
+    }).then((r) => {
+      updateHistory.add('diagnostics', { detail: r.checks.map((c) => `${c.id}:${c.status}`).join(' '), channel: prefsNow.updateChannel });
+      return r;
+    });
+  };
 
   // ── navigation (deep links, notifications, tray) ──────────────────────
   const pendingNav: NavigateRequest[] = [];
@@ -1063,6 +1166,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
     // `access.changed` (the person's apps changed) and `profile.updated`: fetch the bootstrap again.
     accessWatch.onEvent(e);
+    // A desktop release was published: ask the Update Center now rather than at the next 4-hourly check.
+    if ((e as { type?: string }).type === 'desktop.release.published') void updater.check();
   };
   realtime.onResync = () => {
     broadcast('realtime:resync');
@@ -1232,9 +1337,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     openSettings: () => navigate({ route: '/settings', source: 'tray' }),
     checkUpdates: () => {
-      if (updater.get().state === 'STAGED') void updater.install(false).then((r) => !r.started && navigate({ route: '/settings/about', source: 'tray' }));
-      else void updater.check().then(() => navigate({ route: '/settings/about', source: 'tray' }));
+      if (updater.get().state === 'STAGED') void updater.install(false).then((r) => !r.started && navigate({ route: '/settings/updates', source: 'tray' }));
+      else void updater.check().then(() => navigate({ route: '/settings/updates', source: 'tray' }));
     },
+    updateNow: () => updateNow(),
     quit,
     lock: () => lock.lock('manual'),
     pauseRemoteControl: () => {
@@ -1468,7 +1574,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         broadcast('command', { id, arg });
       },
       {
-        checkUpdates: () => void updater.check().then(() => navigate({ route: '/settings/about', source: 'menu' })),
+        checkUpdates: () => void updater.check().then(() => navigate({ route: '/settings/updates', source: 'menu' })),
         diagnostics: () => navigate({ route: '/diagnostics', source: 'menu' }),
         quit,
       },
@@ -1983,6 +2089,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     activeCall: () => activeCall,
     updateBusy: busy,
     updatePrepared,
+    updateDiagnostics,
     lastPasteGesture: (id) => pasteGestures.get(id) ?? 0,
     flushNavigation,
     navigate,
@@ -2201,7 +2308,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   app.on('before-quit', () => {
     windows.quitting = true;
-    // Settings › About › Updates › Install when quitting (#205): the installer starts now and finishes after we exit.
+    // Settings › Updates › Install when quitting (#205): the installer starts now and finishes after we exit.
     updater.installOnQuitSync();
     // The Document Server saves after the last editor leaves; the sessions are ended on the way out.
     office.closeAll(true);

@@ -40,36 +40,45 @@ import { updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs
 import { setOrgSelectionShared, useOrgPrefs } from '../../core/org-prefs';
 import { DEFAULT_LAUNCHER_SHORTCUT } from '@shared/launcher';
 import { SyncButton } from '../../components/SyncButton';
-import { UpdatesCard } from './UpdatesCard';
+import { UpdatesRow } from './UpdatesCard';
+import { UpdateDiagnosticsPage, UpdatesPage } from './UpdatesPage';
+import { LicensePage } from './LicensePage';
+
+/** Pages laid out in cards side by side get the wider column. */
+const WIDE: ReadonlySet<string> = new Set(['updates', 'update-diagnostics', 'license']);
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
-  { id: 'general', label: 'General', icon: 'globe' },
-  { id: 'preferences', label: 'Preferences', icon: 'settings' },
-  { id: 'notifications', label: 'Notifications', icon: 'bell' },
+  { id: 'general', label: 'General', icon: 'globe', group: 'Account' },
+  { id: 'preferences', label: 'Preferences', icon: 'settings', group: 'Account' },
+  { id: 'notifications', label: 'Notifications', icon: 'bell', group: 'Account' },
   // The app launcher's look, apps, groups, order and shortcut (worksuite-desktop#201).
-  { id: 'launcher', label: 'App launcher', icon: 'grid' },
-  { id: 'security', label: 'Security', icon: 'lock' },
-  { id: 'devices', label: 'Devices', icon: 'laptop' },
-  { id: 'desktop', label: 'Desktop', icon: 'monitor' },
-  { id: 'files', label: 'Files & Sync', icon: 'folder' },
-  { id: 'offline', label: 'Offline', icon: 'cloud-off' },
-  { id: 'mail', label: 'Mail', icon: 'mail' },
+  { id: 'launcher', label: 'App launcher', icon: 'grid', group: 'Account' },
+  { id: 'security', label: 'Security', icon: 'lock', group: 'Account' },
+  { id: 'devices', label: 'Devices', icon: 'laptop', group: 'Account' },
+  { id: 'desktop', label: 'Desktop', icon: 'monitor', group: 'Desktop' },
+  { id: 'files', label: 'Files & Sync', icon: 'folder', group: 'Desktop' },
+  { id: 'offline', label: 'Offline', icon: 'cloud-off', group: 'Desktop' },
+  // Updates as its own page, with its Diagnostics (Updates & License design).
+  { id: 'updates', label: 'Updates', icon: 'download', group: 'Desktop' },
+  { id: 'update-diagnostics', label: 'Updates › Diagnostics', icon: 'stethoscope', group: 'Desktop' },
+  { id: 'mail', label: 'Mail', icon: 'mail', group: 'Apps' },
   // Contacts › Accounts & sync: Google, Outlook, iCloud, CardDAV, Mac Contacts (worksuite-desktop#175).
-  { id: 'contacts', label: 'Contacts', icon: 'contact' },
-  { id: 'ai', label: 'AI Assistant', icon: 'sparkles' },
-  { id: 'local-ai', label: 'Local AI', icon: 'cpu' },
-  { id: 'meet', label: 'Meet', icon: 'video' },
-  { id: 'remote-control', label: 'Remote control', icon: 'screen-share' },
-  { id: 'monitoring', label: 'Monitoring', icon: 'eye' },
-  { id: 'about', label: 'About', icon: 'info' },
+  { id: 'contacts', label: 'Contacts', icon: 'contact', group: 'Apps' },
+  { id: 'ai', label: 'AI Assistant', icon: 'sparkles', group: 'Apps' },
+  { id: 'local-ai', label: 'Local AI', icon: 'cpu', group: 'Apps' },
+  { id: 'meet', label: 'Meet', icon: 'video', group: 'Apps' },
+  { id: 'remote-control', label: 'Remote control', icon: 'screen-share', group: 'Apps' },
+  { id: 'monitoring', label: 'Monitoring', icon: 'eye', group: 'Apps' },
+  { id: 'about', label: 'About', icon: 'info', group: 'About' },
+  { id: 'license', label: 'License', icon: 'key', group: 'About' },
   // Guest mode's own (#149): the Local Profile and its data, where an account's profile and data settings are.
-  { id: 'local-profile', label: 'Profile', icon: 'user' },
-  { id: 'local-data', label: 'Backup & data', icon: 'download' },
-] as const;
+  { id: 'local-profile', label: 'Profile', icon: 'user', group: 'This device' },
+  { id: 'local-data', label: 'Backup & data', icon: 'download', group: 'This device' },
+] as ReadonlyArray<{ id: string; label: string; icon: string; group: string }>;
 
 /** What a guest's Settings show: what applies to this computer and the Local Profile, nothing that needs an account. */
-const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'launcher', 'local-profile', 'local-data', 'about']);
+const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'launcher', 'updates', 'update-diagnostics', 'local-profile', 'local-data', 'about']);
 const LOCAL_SECTIONS: ReadonlySet<string> = new Set(['local-profile', 'local-data']);
 
 export default function SettingsPage(_props: ModuleProps) {
@@ -86,14 +95,17 @@ export default function SettingsPage(_props: ModuleProps) {
     <div className="flex h-full">
       <nav className="w-[230px] shrink-0 border-r border-line bg-surface p-3" aria-label="Settings sections">
         <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
-        {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts)).map((s) => (
-          <button key={s.id} type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-            <Icon name={s.icon} size={16} /> {s.label}
-          </button>
+        {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts)).map((s, i, list) => (
+          <div key={s.id}>
+            {s.group !== list[i - 1]?.group ? <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{s.group}</div> : null}
+            <button type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
+              <Icon name={s.icon} size={16} /> {s.label}
+            </button>
+          </div>
         ))}
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto px-10 py-8 scroll-thin">
-        <div className="max-w-[760px]">
+        <div className={WIDE.has(section) ? 'max-w-[1040px]' : 'max-w-[760px]'}>
           {section === 'general' ? <General /> : null}
           {section === 'preferences' ? <PreferencesSection prefs={prefs} /> : null}
           {section === 'notifications' ? <NotificationsSection prefs={prefs} /> : null}
@@ -103,6 +115,8 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'desktop' ? <DesktopSection prefs={prefs} /> : null}
           {section === 'files' ? <FilesSection /> : null}
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}
+          {section === 'updates' ? <UpdatesPage onDiagnostics={() => go('/settings/update-diagnostics')} /> : null}
+          {section === 'update-diagnostics' ? <UpdateDiagnosticsPage /> : null}
           {section === 'mail' && hasMail ? <MailSettings query={query} /> : null}
           {section === 'contacts' && hasContacts ? <AccountsSettings /> : null}
           {section === 'ai' ? <AiSection prefs={prefs} /> : null}
@@ -111,6 +125,7 @@ export default function SettingsPage(_props: ModuleProps) {
           {section === 'remote-control' ? <RemoteControlSection /> : null}
           {section === 'monitoring' ? <Monitoring /> : null}
           {section === 'about' ? <About /> : null}
+          {section === 'license' ? <LicensePage /> : null}
           {section === 'local-profile' ? <LocalProfileSection /> : null}
           {section === 'local-data' ? <LocalDataSection /> : null}
         </div>
@@ -949,8 +964,8 @@ function DesktopSection({ prefs }: { prefs: Preferences }) {
   return (
     <>
       <H title="Desktop" />
-      {/* Updates: where they stand, the next step, the channel, what's new and the switches (#204, #205). */}
-      <UpdatesCard />
+      {/* Updates have their own page (Settings › Updates); this row says where they stand. */}
+      <UpdatesRow />
       <Row label="Tab suspension" hint="Tabs you haven't looked at for this long are unloaded to save memory, and reload when you return.">
         <Select label="Tab suspension" value={prefs.tabSuspendMinutes} options={[15, 30, 60, 120, 480].map((m) => ({ value: m, label: m < 60 ? `${m} minutes` : `${m / 60} hour${m === 60 ? '' : 's'}` }))} onValueChange={(v) => void updatePrefs({ tabSuspendMinutes: v })} />
       </Row>
@@ -1621,8 +1636,8 @@ export function About() {
           {info?.version} ({info?.platform} {info?.arch})
         </span>
       </Row>
-      {/* Channel, update state, what's new and the update switches — the same card as Settings › Desktop (#205). */}
-      <UpdatesCard />
+      {/* Where updates stand, and the way to Settings › Updates. */}
+      <UpdatesRow />
       <Row label="Components">
         <span className="font-mono text-[12px] text-ink-3">
           Electron {info?.electron} · Chromium {info?.chrome} · Node {info?.node}

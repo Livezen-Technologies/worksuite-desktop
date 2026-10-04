@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BusyReport, Preferences, UpdateStatus } from '../../../shared/types';
@@ -237,9 +237,9 @@ describe('the title-bar indicator when an update is ready', () => {
     expect(pop.textContent).toContain('0.2.127');
     expect(pop.textContent).toContain('Faster mail search.');
     fireEvent.click(screen.getByRole('button', { name: /Later/ }));
-    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['In 1 hour', 'Tonight', 'On next app launch']);
-    fireEvent.click(screen.getByRole('menuitem', { name: 'Tonight' }));
-    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:later', { choice: 'tonight' }));
+    expect(screen.getAllByRole('menuitem').map((m) => m.textContent)).toEqual(['1 hour', '4 hours', 'Tomorrow']);
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Tomorrow' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:later', { choice: 'tomorrow' }));
     await waitFor(() => expect(screen.getByRole('button', { name: pill }).textContent).not.toContain('Update ready'));
   });
 
@@ -252,28 +252,44 @@ describe('the title-bar indicator when an update is ready', () => {
     expect(mocked).not.toHaveBeenCalledWith('updates:installNow', { force: true });
   });
 
-  it('asks "3 changes waiting to sync. Restart anyway?" and warns about a call first', async () => {
+  it('lists what a restart would affect — a call BLOCKS, queued changes are SAFE — and restarts when work finishes', async () => {
     app.set({ update: ready() });
     handlers.set('updates:installNow', (i) => ((i as { force: boolean }).force ? { started: true, busy: null, message: null } : { started: false, busy: { ...idle, pendingMutations: 3, activeCall: true }, message: 'WorkSuite is busy.' }));
+    handlers.set('updates:installWhenFree', () => ready({ restartWhenFree: true }));
     shown();
     act(() => ui.set({ overlay: 'update' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Restart to update' }));
-    expect(await screen.findByText('3 changes waiting to sync. Restart anyway?')).toBeTruthy();
-    expect(screen.getByText('You are in a call. Restarting will end it.')).toBeTruthy();
+    const dialog = await screen.findByRole('dialog', { name: 'WorkSuite Update Ready' });
+    const rows = within(dialog).getAllByRole('listitem').map((li) => li.textContent);
+    expect(rows).toEqual(['Call in progressRestarting would end itBLOCKS', '3 offline changes queuedKept in the offline queue and sent after the restartSAFE']);
     expect(mocked).not.toHaveBeenCalledWith('updates:installNow', { force: true });
-    fireEvent.click(screen.getByRole('button', { name: 'Restart anyway' }));
-    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:installNow', { force: true }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Restart when work finishes' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:installWhenFree'));
+    expect(mocked).not.toHaveBeenCalledWith('updates:installNow', { force: true });
   });
 
-  it('Not now keeps WorkSuite running', async () => {
+  it('Restart Later keeps WorkSuite running and puts the reminder off an hour', async () => {
     app.set({ update: ready() });
     handlers.set('updates:installNow', () => ({ started: false, busy: { ...idle, activity: { meeting: true, call: false, screenShare: false, remoteControl: false } }, message: 'WorkSuite is busy.' }));
+    handlers.set('updates:later', () => ready({ snoozedUntil: new Date(Date.now() + 3600_000).toISOString() }));
     shown();
     act(() => ui.set({ overlay: 'update' }));
     fireEvent.click(await screen.findByRole('button', { name: 'Restart to update' }));
-    expect(await screen.findByText('You are in a meeting. Restarting will end it. Restart anyway?')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    expect(await screen.findByText('Meet call in progress')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restart Later' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:later', { choice: 'hour' }));
     expect(mocked).not.toHaveBeenCalledWith('updates:installNow', { force: true });
+  });
+
+  it('with only drafts and queued changes, offers Restart now', async () => {
+    app.set({ update: ready() });
+    handlers.set('updates:installNow', (i) => ((i as { force: boolean }).force ? { started: true, busy: null, message: null } : { started: false, busy: { ...idle, pendingMutations: 2, drafts: 1, details: { calls: [], transfers: [], draftModules: { mail: 1 } } }, message: 'WorkSuite is busy.' }));
+    shown();
+    act(() => ui.set({ overlay: 'update' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Restart to update' }));
+    expect(await screen.findByText('1 unsent mail draft')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Restart now' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:installNow', { force: true }));
   });
 });
 

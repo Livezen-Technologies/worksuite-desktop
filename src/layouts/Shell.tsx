@@ -29,6 +29,8 @@ import { closeItemDialog, openItemLink } from '../core/item-links';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner, UpdatePopover } from '../app/screens/UpdateScreens';
 import { UpdateNotices } from '../app/overlays/UpdateControls';
+import { MandatoryBanner } from '../app/screens/MandatoryUpdate';
+import { UpdateDialogs } from '../app/screens/UpdateDialogs';
 import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
 import { RingingBar } from '../modules/chat/website/Ringing';
 import { watchMicrophone } from '../modules/chat/website/mic';
@@ -274,8 +276,10 @@ export function Shell() {
       <div className="flex min-h-0 flex-1">
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
+          <MandatoryBanner />
           <UpdateBanner />
           <UpdateNotices />
+          <UpdateDialogs />
           <TabStrip />
           {hasChat ? <RingingBar tone={!ringWindow} /> : null}
           <div className="relative flex min-h-0 flex-1">
