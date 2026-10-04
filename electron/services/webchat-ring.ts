@@ -82,6 +82,8 @@ export interface HandoffEntry extends WaitingContext {
   /** Seconds left by the server's clock (C-09). */
   expires_in?: number | null;
   created_at?: string | null;
+  /** A voice call is on in the chat (V-03, WF-V3): accepting joins it too. Absent on an older server. */
+  on_call?: boolean;
 }
 
 /** A handoff card as this computer shows it, or null when it cannot be read. `now` is when it was received. */
@@ -105,6 +107,7 @@ export function fromHandoff(h: HandoffEntry, now = Date.now()): WebchatHandoff |
     createdAt: text(h.created_at, 32),
     // The server's count, made local once on arrival (C-09): never the server's stamp against this computer's clock.
     endsAt: typeof h.expires_in === 'number' && Number.isFinite(h.expires_in) ? now + Math.max(0, h.expires_in) * 1000 : null,
+    onCall: h.on_call === true,
   };
 }
 
@@ -884,8 +887,11 @@ export class WebchatRinger {
   async answer(handoffId: number, accept: boolean): Promise<boolean> {
     const h = this.handoffs.get(handoffId);
     if (!h) return false;
+    // With a voice call on in the chat, accepting says which (V-03, WF-V3): the chat opens on it and joins its audio.
+    let callId: number | undefined;
     try {
-      await this.deps.http.post(`${WEBSITE}/handoffs/${handoffId}/${accept ? 'accept' : 'decline'}`);
+      const r = await this.deps.http.post<{ call_id?: number | null } | null>(`${WEBSITE}/handoffs/${handoffId}/${accept ? 'accept' : 'decline'}`);
+      callId = id(r?.call_id) ?? undefined;
     } catch (e) {
       if (isDesktopError(e) && (e.status === 409 || e.status === 404 || e.status === 403)) {
         this.handoffs.delete(handoffId);
@@ -900,7 +906,7 @@ export class WebchatRinger {
     this.handoffs.delete(handoffId);
     this.outcome = null;
     this.changed();
-    if (accept) this.deps.open(h.conversationId);
+    if (accept) this.deps.open(h.conversationId, callId);
     this.reconcileSoon();
     return true;
   }

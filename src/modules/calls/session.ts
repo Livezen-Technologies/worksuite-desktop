@@ -139,6 +139,16 @@ export function savedSpeaker(): string {
   }
 }
 
+/** Remember the speaker calls play through on this computer ('' for the system's): every kind of call shares it. */
+export function saveSpeaker(id: string): void {
+  try {
+    if (id) localStorage.setItem(SPEAKER_KEY, id);
+    else localStorage.removeItem(SPEAKER_KEY);
+  } catch {
+    // Remembering is a convenience; the call in hand still uses it.
+  }
+}
+
 /** Play into this output device ('' for the system's). Not every element or system can: then the default plays. */
 export async function sinkTo(el: HTMLMediaElement, id: string): Promise<void> {
   const sink = el as HTMLMediaElement & { setSinkId?: (id: string) => Promise<void> };
@@ -502,12 +512,7 @@ export class CallSession {
   /** Play the call through this speaker ('' for the system's), now and next time. */
   async setSpeaker(id: string): Promise<void> {
     this.speakerId = id;
-    try {
-      if (id) localStorage.setItem(SPEAKER_KEY, id);
-      else localStorage.removeItem(SPEAKER_KEY);
-    } catch {
-      // Remembering is a convenience; this call still uses it.
-    }
+    saveSpeaker(id);
     await Promise.all([...this.audio].map((el) => sinkTo(el, id)));
     this.changed();
   }

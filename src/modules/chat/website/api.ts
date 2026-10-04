@@ -349,6 +349,10 @@ export interface WebsiteCall {
   rings_me: boolean;
   /** Who of the team is on it. */
   on: Array<{ user_id: number; name: string }>;
+  /** Recorded (VOICE-22): the in-call bar's "Recording", else "not recorded" (V-03). Absent on an older server. */
+  recorded?: boolean;
+  /** My call notes so far, kept by the server while the call is on (V-03); absent on an older server. */
+  my_notes?: string;
 }
 
 /** Whether a call is ringing or on. */

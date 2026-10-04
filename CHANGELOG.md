@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.167 — 2026-10-04
+
+- **On a voice call with a visitor (V-03).**
+  - **The call bar:** reads "Voice call · Visitor 4F2A 2:14" over "Good connection · not recorded". It turns amber on
+    hold or while reconnecting.
+  - **Call notes:** a staff-only panel beside the thread is saved as you type. When the call ends, the notes become
+    your internal note in the chat.
+  - **Call lines in the chat:** shown as pills, green for answered ("Voice call started by the visitor · you answered
+    after 0:12") and red for missed or dropped.
+- **A colleague you invite or transfer to during a call** joins its audio as they accept.
+- **Audio devices** on the bar chooses the microphone and speaker. A headset's or keyboard's mute key mutes the call.
+  A visitor call shows in the title bar's call pill too.
+- Screen readers hear when the call changes, not the timer every second.
+- Needs the server update (Communication 1.34.0) for saved notes and joining on accept.
+
 ## 0.2.166 — 2026-10-04
 
 - **Call-backs (V-02).** Voice calls has a **Call-backs** side for visitors who called when nobody could answer and

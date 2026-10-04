@@ -582,6 +582,8 @@ export interface WebchatHandoff {
    * and TRANSFER TO YOU countdowns run true on a computer whose clock is off. Absent from an older server.
    */
   endsAt?: number | null;
+  /** A voice call is on in the chat (V-03, WF-V3): joining the chat joins the call too, and the card says so. */
+  onCall?: boolean;
 }
 
 /** A visitor's voice call ringing for me (WS-WCHAT ENH-WCHAT-05, VOICE-10). */

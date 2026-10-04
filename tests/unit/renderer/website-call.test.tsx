@@ -131,7 +131,8 @@ describe('a call ringing in the thread (VOICE-10, VOICE-12)', () => {
     const room = lk.FakeRoom.made[0]!;
     await waitFor(() => expect(room.connect).toHaveBeenCalledWith('wss://lk.example', 'staff-token'));
     expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
-    await waitFor(() => expect(screen.getByRole('status', { name: 'Voice call' }).textContent).toMatch(/On a call1:1\d/));
+    // V-03's call controls: "Voice call · Kamal Perera 1:14".
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Call controls' }).textContent).toMatch(/Voice call · Kamal Perera 1:1\d/));
     expect(call).toHaveBeenCalledWith('ring:onCall', expect.objectContaining({ conversationId: 41, visitor: 'Kamal Perera', held: false }));
     expect(call).toHaveBeenCalledWith('updates:setActiveCall', { active: true });
   });
@@ -183,7 +184,7 @@ describe('on the call (VOICE-13)', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith(`/api/chat/widget-admin/calls/${cid}/hold`, { on: true }));
     await screen.findByRole('button', { name: 'Resume' });
     expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenLastCalledWith(false);
-    expect(screen.getByRole('status', { name: 'Voice call' }).textContent).toContain('On hold');
+    expect(screen.getByRole('region', { name: 'Call controls' }).textContent).toContain('On hold');
   });
 
   it('End asks for notes, ends it for everybody and lets the room go', async () => {
@@ -202,11 +203,11 @@ describe('on the call (VOICE-13)', () => {
     tab.query = `view=website&website=41&call=${cid}`;
     mount();
     await screen.findByRole('button', { name: 'Mute' });
-    expect(screen.getByRole('status', { name: 'Voice call' }).textContent).toContain('with Nimal Silva');
+    expect(screen.getByRole('region', { name: 'Call controls' }).textContent).toContain('with Nimal Silva');
     fireEvent.click(screen.getByRole('button', { name: 'End' }));
     await screen.findByRole('dialog', { name: 'End the call' });
     fireEvent.click(screen.getByRole('button', { name: 'Leave the call' }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(`/api/chat/widget-admin/calls/${cid}/end`, { for_everyone: false, notes: null }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(`/api/chat/widget-admin/calls/${cid}/end`, { for_everyone: false, notes: '' }));
   });
 });
 

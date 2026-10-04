@@ -127,14 +127,16 @@ export function handoffHeadline(h: Pick<WebchatHandoff, 'kind' | 'from' | 'toAny
  * What else the card says, under the note (C-09; TEAM-25, TEAM-41, TEAM-42): warm or handed over now, and a department
  * that is asked as one — the first to answer takes it.
  */
-export function handoffDetail(h: Pick<WebchatHandoff, 'kind' | 'mode' | 'from' | 'toAny' | 'department'>): string | null {
+export function handoffDetail(h: Pick<WebchatHandoff, 'kind' | 'mode' | 'from' | 'toAny' | 'department' | 'onCall'>): string | null {
   const who = h.from ? firstName(h.from) : null;
   const team = h.department ? `Sent to the ${h.department} team — the first to ${h.kind === 'invite' ? 'join' : 'accept'} takes it` : null;
-  if (h.kind === 'invite') return team;
+  // On a voice call with the visitor now (V-03, WF-V3): Join chat or Accept brings you into the call too.
+  const call = h.onCall ? 'On a voice call now — you join the call too' : null;
+  if (h.kind === 'invite') return [call, team].filter(Boolean).join(' · ') || null;
   const mode = h.mode === 'cold'
     ? who ? `Handed over now — ${who} has left; it rings for you until you join` : 'It rings for everybody covering the website until someone joins'
     : who ? `Warm transfer — ${who} stays until you join` : 'Warm transfer — nothing changes until you accept';
-  return team ? `${mode} · ${team}` : mode;
+  return [call, mode, team].filter(Boolean).join(' · ');
 }
 
 /**

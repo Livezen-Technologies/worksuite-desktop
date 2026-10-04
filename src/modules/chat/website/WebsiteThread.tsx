@@ -29,7 +29,7 @@ import { sharedFilesOf, type SharedFile } from '../kit/SharedFiles';
 import { useNow } from '../../calls/parts';
 import { openWebsiteChatWindow } from '../window';
 import { DeclinedNotice, InThisChat, InviteDialog, LeaveChat, MessageTypeTabs, TeamFaces, TransferDialog, useDeclined } from './Team';
-import { CallBar } from './CallBar';
+import { CallBar, CallNotes, callNotice } from './CallBar';
 import { CallbackCard, isPending } from './Callbacks';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
 import { BlockDialog, ContactCard, SharedFilesCard, TagsCard } from './panelCards';
@@ -121,16 +121,19 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   // Messages and the visitor's page visits in one timeline, through the kit's adapters (C-02; #229).
   const replyOpen = canReply && c.status !== 'closed';
   const items = byTime([
-    ...data.messages.map((m) =>
-      fromWebsiteMessage(m, {
+    ...data.messages.map((m) => {
+      const k = fromWebsiteMessage(m, {
         me,
         visitor: name,
         canReply: replyOpen,
         // Sent, delivered or read by the visitor, on the team's messages; who read the visitor's latest (LIVE-08).
         status: data.marks && m.from === 'agent' && m.visibility !== 'internal' ? visitorHas(m.id, data.marks) : undefined,
         footer: data.marks ? footerFor(m, data, me) : null,
-      }),
-    ),
+      });
+      // A voice call's line, as staff read it (V-03): "Voice call started by the visitor · you answered after 0:12".
+      const notice = m.from === 'system' ? callNotice(m.body, m.agent_id, me) : null;
+      return notice ? { ...k, body: notice.body, tone: notice.tone } : k;
+    }),
     ...eventsForThread(data.events, c.started_at).map((e, i) => fromWidgetEvent(e, i)),
   ]);
   const handlers: MessageHandlers = {
@@ -284,6 +287,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           canReply={canReply}
           files={sharedFilesOf(items)}
           onDone={refresh}
+          // On the call here: CALL NOTES · STAFF ONLY leads the panel (V-03, VOICE-UI-02).
+          top={<CallNotes call={data.call} />}
           people={t ? <InThisChat data={data} me={me} fetchedAt={q.dataUpdatedAt} onInvite={() => setDialog('invite')} onDone={refresh} /> : null}
           peopleFirst={multi}
           foot={t ? <LeaveChat data={data} onTransfer={() => setDialog('transfer')} onClose={() => void websiteAction(c.id, 'close').then(refresh, (e) => toast('error', errorMessage(e)))} onDone={refresh} /> : null}
@@ -399,7 +404,7 @@ interface Stop {
  * site, Email and Block; how to reach them and their local time; Site, Device, Visits and Came from; this visit's
  * journey with dwell times and where the chat started; the chat's tags; and the files shared, as a grid.
  */
-function VisitorPanel({ v, data, online, canReply, files, onDone, people, peopleFirst = false, foot }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; people?: ReactNode; peopleFirst?: boolean; foot?: ReactNode }) {
+function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, peopleFirst = false, foot }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; top?: ReactNode; people?: ReactNode; peopleFirst?: boolean; foot?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
   const [busy, setBusy] = useState(false);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
@@ -458,6 +463,7 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, people, people
   return (
     <SidePanel id="website-visitor" label="the visitor details" side="right">
       <aside aria-label="Visitor details" className="flex w-[240px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-ground px-3 py-3.5 text-[12px] scroll-thin">
+        {top}
         {/* With several staff in it the people card leads, as the C-08 panel has it; otherwise it follows the facts. */}
         {peopleFirst ? people : null}
         <h3 className={HEADING}>Visitor</h3>

@@ -393,6 +393,18 @@ describe('WebchatRinger: invitations and transfers', () => {
     r.stop();
   });
 
+  it('accepted during a voice call, the chat opens on the call so its audio is joined (V-03, WF-V3)', async () => {
+    const { r, post, onCalls } = ringer([{ ringing: [], handoffs: [card({ on_call: true })] }]);
+    post.mockImplementation(async () => ({ conversation_id: 3, kind: 'invite', role: 'participant', call_id: 77 }));
+    r.start();
+    await vi.waitFor(() => expect(r.state().handoffs).toHaveLength(1));
+    expect(r.state().handoffs![0]!.onCall).toBe(true);
+    expect(await r.answer(21, true)).toBe(true);
+    expect(onCalls).toEqual([[3, 77]]);
+    expect(fromHandoff({ handoff_id: 5, conversation_id: 3, visitor: 'V' } as HandoffEntry)?.onCall).toBe(false);
+    r.stop();
+  });
+
   it('says nothing about who while locked, and stays quiet while another device has the ring', async () => {
     const { r } = ringer([{ ringing: [], handoffs: [card()], ring_here: false }], { locked: true });
     r.start();

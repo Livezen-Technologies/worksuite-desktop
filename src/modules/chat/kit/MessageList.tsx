@@ -43,6 +43,21 @@ export function DayDivider({ day, look }: { day: string; look: Look }) {
 /** A notice: "Nuwan joined the chat". One only staff see is the chat's event log (TEAM-63): amber, with a lock. */
 export function SystemLine({ m, look }: { m: KitMessage; look: Look }) {
   const words = `${m.body ?? ''}${m.timed ? ` · ${timeLabel(m.at)}` : ''}`;
+  // A voice call's line (V-03, VOICE-UI-02): a pill with the phone, green — red for one nobody answered or that dropped.
+  if (m.tone && !m.internal) {
+    return (
+      <div data-system data-tone={m.tone} className="my-2 flex justify-center">
+        <span
+          className={cx(
+            'flex items-center gap-1.5 rounded-[12px] border px-3 py-1.5 text-center text-[12px] font-semibold',
+            m.tone === 'call' ? 'border-[#BFE3CC] bg-success-bg text-[#1F6B40] dark:border-success/40 dark:text-success' : 'border-[#F6C4B8] bg-danger-bg text-[#8C2A14] dark:border-danger/40 dark:text-danger',
+          )}
+        >
+          <Icon name={m.tone === 'call' ? 'phone' : 'phone-off'} size={12} className="shrink-0" /> {words}
+        </span>
+      </div>
+    );
+  }
   if (m.internal) {
     return (
       <div data-system className="my-2 flex justify-center">

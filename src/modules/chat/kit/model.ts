@@ -72,6 +72,11 @@ export interface KitMessage {
   pending?: boolean;
   /** What this person may do with it, as the server says. */
   can?: MessageCan;
+  /**
+   * A system line about a voice call (V-03): `call` is drawn as the green call pill ("Voice call started by the visitor
+   * · you answered after 0:12"), `missed` red. Plain otherwise.
+   */
+  tone?: 'call' | 'missed';
   /** A system line that carries its time ("Nuwan joined the chat · 10:41"). */
   timed?: boolean;
   /** A page the visitor opened (ActivityEvent). */
