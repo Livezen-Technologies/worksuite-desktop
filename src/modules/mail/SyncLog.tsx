@@ -1,6 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Fragment, useState } from 'react';
-import { apiGet } from '../../core/api';
+import { apiGet, apiPost } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { timeLabel } from '../../core/time';
@@ -9,7 +9,7 @@ import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import { mailboxLetter } from './model';
 import { AccountAvatar } from './parts';
 import { accountName, syncAt } from './sync';
-import type { Mailbox, SyncAccount, SyncRun, SyncRunFolder } from './types';
+import type { FetchErrorGroup, Mailbox, SyncAccount, SyncRun, SyncRunFolder } from './types';
 
 /**
  * The sync log (D18, DMO-SYN-10; worksuite-desktop#190): one row per run —
@@ -62,15 +62,47 @@ export function logText(email: string, runs: SyncRun[]): string {
   return lines.join('\n');
 }
 
+/** "Syncing · headers 2 of 27 folders · started 11:20" (#228), while a pass is going. */
+export function syncingLine(a: SyncAccount): string | null {
+  if (!a.running) return null;
+  const parts = [text('Syncing')];
+  if (a.folders && a.complete === false) parts.push(text('headers {done} of {n} folders', { done: a.folders_done, n: a.folders }));
+  if (a.running_since) parts.push(text('started {time}', { time: timeLabel(a.running_since) }));
+  return parts.join(' · ');
+}
+
+/** "Waiting for a free connection × 23 · last 11:32" (#228). */
+export function errorLine(g: FetchErrorGroup): string {
+  return `${g.label} × ${g.hits}${g.last_at ? ` · ${text('last {time}', { time: timeLabel(g.last_at) })}` : ''}`;
+}
+
 export function SyncLog({ box, account, onClose, onRepair }: { box: Mailbox; account: SyncAccount | null; onClose: () => void; onRepair: () => void }) {
+  const qc = useQueryClient();
   const q = useQuery({
     queryKey: ['mail', 'sync-log', box.id],
-    queryFn: () => apiGet<{ runs: SyncRun[]; account: SyncAccount }>(`/api/mail/mailboxes/${box.id}/sync-log`),
+    queryFn: () => apiGet<{ runs: SyncRun[]; account: SyncAccount; fetch_errors?: FetchErrorGroup[] }>(`/api/mail/mailboxes/${box.id}/sync-log`),
     // While a run is going its row fills in.
     refetchInterval: (query) => ((query.state.data?.runs ?? []).some((r) => r.result === 'running') ? 3_000 : false),
   });
   const runs = q.data?.runs ?? [];
   const a = q.data?.account ?? account;
+  // Messages that could not be opened, apart from the runs (#228).
+  const errorGroups = q.data?.fetch_errors ?? [];
+  const errorCount = errorGroups.reduce((n, g) => n + g.messages, 0);
+  const [tab, setTab] = useState<'runs' | 'errors'>('runs');
+  const [busy, setBusy] = useState(false);
+  const retryAll = async () => {
+    setBusy(true);
+    try {
+      await apiPost(`/api/mail/mailboxes/${box.id}/fetch-errors/retry`, {});
+      toast('success', text('Cleared. They will be fetched again when opened.'));
+      void qc.invalidateQueries({ queryKey: ['mail', 'sync-log', box.id] });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
   const failed = a?.last_result === 'failed';
   const [open, setOpen] = useState<Set<number>>(() => new Set());
   const toggle = (id: number) =>
@@ -104,14 +136,43 @@ export function SyncLog({ box, account, onClose, onRepair }: { box: Mailbox; acc
         <AccountAvatar letter={mailboxLetter(box)} colour={box.colour} size={24} />
         <span className="min-w-0 flex-1">
           <b className="block truncate text-[14px] text-ink">{text('Sync log · {name}', { name: a ? accountName(a, box) : box.email })}</b>
-          <span className="block truncate text-[12px] text-ink-3">{text('{email} · last {n} runs', { email: box.email, n: runs.length })}</span>
+          <span className="block truncate text-[12px] text-ink-3">{(a ? syncingLine(a) : null) ?? text('{email} · last {n} runs', { email: box.email, n: runs.length })}</span>
         </span>
         <button type="button" onClick={onClose} aria-label={text('Close')} className="h-8 w-8 rounded-[8px] text-ink-3 hover:bg-subtle hover:text-ink">
           ×
         </button>
       </header>
       {failed && a ? <p className="m-4 mb-0 rounded-[8px] border border-danger/40 bg-danger-bg p-3 text-[12.5px] text-danger">{text('Last attempt failed {time} — {why}. Last success {ok}.', { time: a.last_attempt_at ? timeLabel(a.last_attempt_at) : '', why: a.error ?? '', ok: a.last_ok_at ? syncAt(a.last_ok_at) : text('never') })}</p> : null}
-      <div className="min-h-0 flex-1 overflow-auto p-4 scroll-thin">
+      {q.data?.fetch_errors ? (
+        <div role="tablist" aria-label={text('Sync log')} className="flex gap-1 border-b border-line px-4 pt-2 text-[12.5px] font-semibold">
+          {(['runs', 'errors'] as const).map((t) => (
+            <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('rounded-t-[6px] px-3 py-1.5', tab === t ? 'border-b-2 border-primary text-primary' : 'text-ink-2 hover:text-ink')}>
+              {t === 'runs' ? text('Sync runs') : errorCount ? text('Fetch errors · {n}', { n: errorCount }) : text('Fetch errors')}
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {tab === 'errors' ? (
+        <div className="min-h-0 flex-1 overflow-auto p-4 scroll-thin" role="tabpanel" aria-label={text('Fetch errors')}>
+          {errorGroups.length === 0 ? <p className="text-[13px] text-ink-3">{text('Every email that was opened could be read.')}</p> : null}
+          <ul className="flex flex-col gap-2">
+            {errorGroups.map((g) => (
+              <li key={g.kind} className="rounded-[8px] border border-line p-2.5">
+                <b className="block text-[12.5px] text-ink">{errorLine(g)}</b>
+                <span className="block text-[11.5px] text-ink-3">{text('{n} emails', { n: g.messages })}</span>
+                <ul className="mt-1.5 flex flex-col gap-0.5 font-mono text-[11.5px] text-ink-2" aria-label={text('Emails')}>
+                  {g.items.map((i) => (
+                    <li key={`${i.folder}:${i.uid}`} className="break-words">
+                      {i.folder} · UID {i.uid} · UIDVALIDITY {i.uidvalidity ?? '-'} · Message-ID {i.message_id ?? '-'}{i.hits > 1 ? ` · ×${i.hits}` : ''}
+                    </li>
+                  ))}
+                </ul>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+      <div className={cx('min-h-0 flex-1 overflow-auto p-4 scroll-thin', tab === 'errors' && 'hidden')}>
         {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : runs.length === 0 ? <p className="text-[13px] text-ink-3">{text('No runs recorded yet.')}</p> : null}
         {runs.length ? (
           <table className="w-full min-w-[700px] text-left text-[12px]">
@@ -197,6 +258,11 @@ export function SyncLog({ box, account, onClose, onRepair }: { box: Mailbox; acc
         {failed && box.auth_state === 'problem' ? (
           <Button variant="primary" onClick={onRepair}>
             {text('Sign in again')}
+          </Button>
+        ) : null}
+        {tab === 'errors' && errorGroups.length ? (
+          <Button variant="primary" disabled={busy} onClick={() => void retryAll()}>
+            {text('Retry all')}
           </Button>
         ) : null}
         <Button onClick={() => void copy()}>{text('Copy log for support')}</Button>

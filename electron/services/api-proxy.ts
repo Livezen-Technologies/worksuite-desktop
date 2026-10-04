@@ -79,7 +79,8 @@ function isSharerGrant(pathOnly: string, apiPath: string): boolean {
   }
 }
 
-const FORWARD_HEADERS = ['content-type', 'accept', 'if-match', 'if-none-match', 'idempotency-key', 'x-folder-password', 'range'];
+// `x-mail-priority`: fetching mail ahead says so, and never takes the connection kept for what a person opens (#228).
+const FORWARD_HEADERS = ['content-type', 'accept', 'if-match', 'if-none-match', 'idempotency-key', 'x-folder-password', 'range', 'x-mail-priority'];
 const RETURN_HEADERS = ['content-type', 'content-disposition', 'content-length', 'etag', 'last-modified', 'accept-ranges', 'content-range', 'retry-after'];
 const MAX_BODY = 25 * 1024 * 1024;
 

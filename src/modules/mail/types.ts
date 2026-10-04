@@ -279,6 +279,19 @@ export interface SyncAccount {
   /** Messages mirrored, and bodies kept, on the WorkSuite server. */
   messages?: number;
   bodies?: number;
+  /** When the pass going now began (#228): "Syncing · headers 2 of 27 folders · started 11:20". */
+  running_since?: string | null;
+}
+
+/** Messages that could not be opened, grouped by why (GET mailboxes/{id}/sync-log, #228). */
+export interface FetchErrorGroup {
+  kind: 'busy' | 'timeout' | 'signin' | 'gone' | 'moved' | 'no_uid' | 'not_found' | string;
+  label: string;
+  /** How many messages, and how many times in all. */
+  messages: number;
+  hits: number;
+  last_at: string | null;
+  items: Array<{ folder: string; uid: number; uidvalidity: number | null; message_id: string | null; response: string | null; hits: number; last_at: string | null }>;
 }
 
 export interface SyncOverall {

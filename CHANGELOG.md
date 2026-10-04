@@ -5,6 +5,28 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.153 — 2026-10-04
+
+- **Opening an email while an account syncs works (#228).** Before, the WorkSuite server had two connections per
+  web server for all of its mailboxes together. This computer's offline download of message bodies kept both busy,
+  so opening an email failed at once with "Both mail reading slots were busy". The same messages also failed again
+  and again in the background. Now each account has its own connections, and one is always kept for what you open.
+  The download and the reader's fetch-ahead say they are background work, so they never take that one. If every
+  connection is busy, opening an email waits for one, and after two seconds the reader says "Waiting for a free
+  connection…". Only after ten seconds does it say it timed out, with **Retry**.
+- **Background fetches give way.** A body that could not be fetched waits 30 seconds, then 2 minutes, then 10 before
+  it is tried again, instead of straight away. While an account is still building its first copy of the headers,
+  the download waits. Every request says which message it is (UIDVALIDITY and Message-ID).
+- **No more "UID 0".** A list row without a server ID is never asked for. Opening one says "This email has no server
+  ID yet. Its folder is being synced again", with **Refresh folder**. The server rebuilds that folder from the mail
+  server.
+- **The sync log separates runs from fetch errors.** A message that could not be opened is no longer a "sync run"
+  of its own (0.0 s · Partial · 0 of 1 folders). It is listed under **Fetch errors**, grouped by why, for example
+  "Waiting for a free connection × 23 · last 11:32". Each group lists its messages with their UID, UIDVALIDITY and
+  Message-ID, and **Retry all** clears them. While a pass is going, the log says "Syncing · headers 2 of 27 folders ·
+  started 11:20".
+- Needs the server update (Mail 1.x with `mail_fetch_errors`). An older server works as before.
+
 ## 0.2.152 — 2026-10-04
 
 - **Callbacks in Website chats (#223).** A visitor can now ask to be contacted from the website widget. They get a

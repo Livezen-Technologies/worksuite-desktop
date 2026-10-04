@@ -26,6 +26,13 @@ const log = logger('mail-bodies');
  * Polite by design: one pass at a time, two requests at once at most, a
  * pause between them, at most PER_PASS bodies a pass, and it stops as soon as
  * the server is out of reach or the person signs out.
+ *
+ * And it gives way (#228): every request says `X-Mail-Priority: background`,
+ * so the server never gives it the connection kept for what a person opens,
+ * and answers "busy" at once rather than queueing it. A body that could not
+ * be fetched waits 30 seconds, then 2 minutes, then 10 before it is tried
+ * again; while the account is still building its first copy of the headers
+ * the download waits. A row without a server ID (UID 0) is never asked for.
  */
 export interface BodyPrefs {
   mailCacheDays: number;
@@ -58,7 +65,17 @@ interface ListedRow {
   id: number;
   is_read?: boolean;
   created_at?: string;
+  /** The message's identity, so the server can find it if its UID moved (#209, #228). */
+  uidvalidity?: number | null;
+  message_id?: string | null;
+  message_id_hash?: string | null;
 }
+
+/** A body that could not be fetched waits this long before the next try: 30 seconds, 2 minutes, then 10 (#228). */
+export const BACKOFF_MS = [30_000, 120_000, 600_000];
+
+/** While the account builds its first copy of the headers, the download waits this long before asking again. */
+export const SYNCING_PAUSE_MS = 60_000;
 
 /** A folder's messages read back this far at most, per pass. */
 const MAX_PAGES = 40;
@@ -77,7 +94,12 @@ interface Wanted {
   path: string;
   unreadInbox: boolean;
   at: number;
+  /** `uidvalidity=…&message_id=…`: who the message is, for the request only (the saved key is `path`). */
+  ident?: string;
 }
+
+/** What the server said to one download. */
+type Got = 'ok' | 'failed' | 'busy' | 'syncing';
 
 /** The folders a mailbox keeps bodies for: its own "recent" choices, else Inbox, Sent and Drafts. */
 export function bodyFolders(prefs: BodyPrefs, mailbox: string): string[] {
@@ -97,6 +119,16 @@ export function stampMs(s: string | undefined): number {
   return Date.parse(iso);
 }
 
+/** Who a listed message is, as the reader says it: its UIDVALIDITY and Message-ID (or the hash of it). */
+export function identity(m: Pick<ListedRow, 'uidvalidity' | 'message_id' | 'message_id_hash'>): string | undefined {
+  const q = new URLSearchParams();
+  if (m.message_id) q.set('message_id', m.message_id);
+  else if (m.message_id_hash) q.set('mid_hash', m.message_id_hash);
+  if (m.uidvalidity) q.set('uidvalidity', String(m.uidvalidity));
+  const s = q.toString();
+  return s || undefined;
+}
+
 /** The path a body is kept under — the one the reader asks for, without `peek`. */
 export function bodyPath(mailbox: string, folder: string, id: number): string {
   return `/api/mail/messages/${id}?${new URLSearchParams({ folder, mailbox }).toString()}`;
@@ -110,6 +142,10 @@ export class MailBodies {
   private stopped = true;
   /** Each mailbox's wanted bodies as last listed, and when, and under which settings. */
   private readonly listed = new Map<string, { at: number; key: string; want: Wanted[] }>();
+  /** Bodies that failed, and until when they wait (#228). */
+  private readonly failed = new Map<string, { n: number; until: number }>();
+  /** Mailboxes still building their first headers: not asked again before this. */
+  private readonly pausedUntil = new Map<string, number>();
 
   constructor(private readonly deps: MailBodiesDeps) {}
 
@@ -135,6 +171,8 @@ export class MailBodies {
     this.soon = null;
     this.state.clear();
     this.listed.clear();
+    this.failed.clear();
+    this.pausedUntil.clear();
   }
 
   /** A pass soon: after the setting changed, the server came back, or a sync brought new mail (`relist`). */
@@ -190,6 +228,11 @@ export class MailBodies {
       return 0;
     }
     const p: MailBodiesProgress = { stored: prev?.stored ?? 0, wanted: prev?.wanted ?? 0, running: true, doneAt: prev?.doneAt ?? null, error: null };
+    // The account is still building its first copy of the headers: the download waits (#228).
+    if ((this.pausedUntil.get(box) ?? 0) > this.now()) {
+      this.state.set(box, { ...p, running: false });
+      return 0;
+    }
     this.state.set(box, p);
     const cutoff = this.now() - days * 86_400_000;
     let fetched = 0;
@@ -204,16 +247,26 @@ export class MailBodies {
       p.wanted = want.length;
       p.stored = want.length - missing.length;
 
-      // Two at a time.
-      const queue = missing.slice(0, Math.max(0, budget));
+      // Two at a time; a body that failed lately waits its turn (#228).
+      const now = this.now();
+      const queue = missing.filter((w) => (this.failed.get(w.path)?.until ?? 0) <= now).slice(0, Math.max(0, budget));
+      let stop = false;
       const worker = async (): Promise<void> => {
-        while (queue.length && this.ok()) {
+        while (queue.length && this.ok() && !stop) {
           const next = queue.shift()!;
-          if (await this.download(user, next.path)) {
+          const got = await this.download(user, next);
+          if (got === 'ok') {
+            this.failed.delete(next.path);
             p.stored++;
             fetched++;
+          } else if (got === 'syncing') {
+            this.pausedUntil.set(box, this.now() + SYNCING_PAUSE_MS);
+            stop = true;
+          } else {
+            this.backOff(next.path);
           }
-          if (this.deps.pauseMs !== 0) await new Promise((r) => setTimeout(r, this.deps.pauseMs ?? 150));
+          const pause = got === 'busy' ? 2_000 : (this.deps.pauseMs ?? 150);
+          if (this.deps.pauseMs !== 0) await new Promise((r) => setTimeout(r, pause));
         }
       };
       await Promise.all([worker(), worker()]);
@@ -241,8 +294,10 @@ export class MailBodies {
             older = true;
             continue;
           }
+          // Never a row without a server ID: it could only be asked for as "UID 0" (#228).
+          if (!(Number(m.id) > 0)) continue;
           const path = bodyPath(box, folder, m.id);
-          if (mailBodiesKept(prefs, path)) want.push({ path, unreadInbox: folder === 'inbox' && m.is_read === false, at: Number.isFinite(at) ? at : 0 });
+          if (mailBodiesKept(prefs, path)) want.push({ path, unreadInbox: folder === 'inbox' && m.is_read === false, at: Number.isFinite(at) ? at : 0, ident: identity(m) });
         }
         if (older || !r?.has_more || rows.length === 0) break;
       }
@@ -250,15 +305,26 @@ export class MailBodies {
     return want.sort((a, b) => Number(b.unreadInbox) - Number(a.unreadInbox) || b.at - a.at);
   }
 
-  /** One body, read with peek=1 and saved under the reader's own key. */
-  private async download(user: string, path: string): Promise<boolean> {
-    const res = await this.deps.http.raw('GET', this.deps.http.url(`${path}&peek=1`), { timeoutMs: 60_000 });
+  /** One body, read with peek=1 in the background and saved under the reader's own key. */
+  private async download(user: string, w: Wanted): Promise<Got> {
+    const url = this.deps.http.url(`${w.path}${w.ident ? `&${w.ident}` : ''}&peek=1`);
+    const res = await this.deps.http.raw('GET', url, { timeoutMs: 60_000, headers: { 'X-Mail-Priority': 'background' } });
     const type = res.headers.get('content-type') ?? '';
-    if (res.status !== 200 || !type.includes('json')) return false;
+    if (res.status === 503) {
+      const reason = await res.json().then((b: { reason?: string; errors?: { reason?: string } | null }) => b?.errors?.reason ?? b?.reason, () => undefined);
+      return reason === 'syncing' ? 'syncing' : 'busy';
+    }
+    if (res.status !== 200 || !type.includes('json')) return 'failed';
     const body = await res.text();
-    this.deps.cache.put(user, 'mail', path, { status: 200, contentType: type, body }, this.deps.limits());
-    if (this.deps.afterBody) await this.deps.afterBody(user, path, body).catch(() => undefined);
-    return true;
+    this.deps.cache.put(user, 'mail', w.path, { status: 200, contentType: type, body }, this.deps.limits());
+    if (this.deps.afterBody) await this.deps.afterBody(user, w.path, body).catch(() => undefined);
+    return 'ok';
+  }
+
+  /** 30 seconds, then 2 minutes, then 10, before this body is asked for again. */
+  private backOff(path: string): void {
+    const n = (this.failed.get(path)?.n ?? 0) + 1;
+    this.failed.set(path, { n, until: this.now() + BACKOFF_MS[Math.min(n, BACKOFF_MS.length) - 1]! });
   }
 
   private now(): number {

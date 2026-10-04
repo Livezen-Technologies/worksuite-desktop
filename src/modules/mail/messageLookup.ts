@@ -19,7 +19,7 @@ import type { MessageRef } from './types';
  *  - server: anything else — the technical details, Copy and Retry.
  */
 
-export type LookupProblem = 'offline' | 'signin' | 'gone' | 'server';
+export type LookupProblem = 'offline' | 'signin' | 'gone' | 'server' | 'busy' | 'resync';
 
 /** Where the server says a message went (`moved` on a message it found again). */
 export interface MovedTo {
@@ -48,6 +48,9 @@ export function lookupProblem(e: unknown, networkOffline: boolean): LookupProble
   const code = codeOf(e);
   if (code === 'message_gone') return 'gone';
   if (code === 'mail_signin') return 'signin';
+  // Every connection to the mail server was busy for ten seconds (#228); or the list row had no server ID.
+  if (code === 'mail_busy') return 'busy';
+  if (code === 'needs_resync') return 'resync';
   if (networkOffline || code === 'NETWORK_UNREACHABLE' || (e instanceof ApiError && (e.status === 0 || (e.status === 503 && !code)))) return 'offline';
   // An older server answers a message it could not find with a bare 404.
   if (e instanceof ApiError && e.status === 404) return 'gone';
@@ -58,6 +61,8 @@ export function problemTitle(p: LookupProblem): string {
   if (p === 'offline') return text('Offline: showing the saved header only');
   if (p === 'signin') return text("Couldn't sign in to the account");
   if (p === 'gone') return text('This email was deleted or moved on another device');
+  if (p === 'busy') return text('Timed out waiting for a connection to the mail server');
+  if (p === 'resync') return text('This email has no server ID yet. Its folder is being synced again');
   return text('The mail server could not open this email');
 }
 

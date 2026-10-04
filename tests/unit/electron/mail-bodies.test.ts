@@ -161,3 +161,53 @@ describe('mail bodies downloaded for reading offline', () => {
     expect(contract['offline:mailStats']).toBeDefined();
   });
 });
+
+describe('giving way to what a person opens (worksuite-desktop#228)', () => {
+  const answer = (status: number, body: unknown) => new Response(JSON.stringify(body), { status, headers: { 'Content-Type': 'application/json' } });
+
+  it('asks in the background, says who the message is, and never asks for a row without a server ID', async () => {
+    const t = setup({
+      '3:inbox': [
+        { id: 30, is_read: false, created_at: stamp(3600_000), uidvalidity: 1700000000, message_id: '<a30@x>' } as Row,
+        { id: 0, is_read: false, created_at: stamp(3600_000) },
+      ],
+    });
+    await t.bodies.pass();
+    expect(t.fetched).toEqual(['/api/mail/messages/30?folder=inbox&mailbox=3&message_id=%3Ca30%40x%3E&uidvalidity=1700000000&peek=1']);
+    expect((t.http.raw.mock.calls[0] as unknown[])[2]).toMatchObject({ headers: { 'X-Mail-Priority': 'background' } });
+    // Kept under the reader's own key, without who-it-is.
+    expect(t.cache.has('u1', bodyPath('3', 'inbox', 30))).toBe(true);
+  });
+
+  it('a body the server was too busy for waits 30 seconds before it is asked for again', async () => {
+    const t = setup({ '3:inbox': [{ id: 30, is_read: false, created_at: stamp(3600_000) }, { id: 31, is_read: false, created_at: stamp(7200_000) }] });
+    t.http.raw.mockImplementation(async (_m: string, url: string) => {
+      const u = new URL(url);
+      t.fetched.push(`${u.pathname}${u.search}`);
+      return u.pathname.endsWith('/30')
+        ? answer(503, { status: 'error', message: 'Waiting for a free connection.', errors: { code: 'mail_busy', reason: 'busy' } })
+        : answer(200, { status: 'success', data: { id: 31, body_html: '<p>hi</p>' } });
+    });
+    await t.bodies.pass();
+    expect(t.fetched.map((f) => f.split('?')[0])).toEqual(['/api/mail/messages/30', '/api/mail/messages/31']);
+    t.fetched.length = 0;
+    (t.bodies as unknown as { listed: Map<string, unknown> }).listed.clear();
+    await t.bodies.pass();
+    expect(t.fetched).toEqual([]);
+  });
+
+  it('while the account builds its first headers, the download stops and waits', async () => {
+    const t = setup({ '3:inbox': [{ id: 30, is_read: false, created_at: stamp(3600_000) }, { id: 31, is_read: false, created_at: stamp(7200_000) }] });
+    t.http.raw.mockImplementation(async (_m: string, url: string) => {
+      t.fetched.push(new URL(url).pathname);
+      return answer(503, { status: 'error', message: 'Fetching ahead waits until this mailbox has its headers.', errors: { code: 'mail_busy', reason: 'syncing' } });
+    });
+    await t.bodies.pass();
+    // Stopped at the first answer (the second worker may have asked once too), then nothing until the pause ends.
+    expect(t.fetched.length).toBeLessThanOrEqual(2);
+    t.fetched.length = 0;
+    await t.bodies.pass();
+    expect(t.fetched).toEqual([]);
+    expect(t.bodies.progress()['3']!.running).toBe(false);
+  });
+});

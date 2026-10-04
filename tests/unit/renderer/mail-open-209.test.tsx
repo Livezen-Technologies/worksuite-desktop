@@ -243,9 +243,12 @@ describe('the lookup’s pieces (#209)', () => {
     expect(lookupProblem(new ApiError(404, 'x', null, { code: 'message_gone' }), false)).toBe('gone');
     expect(lookupProblem(new ApiError(404, 'Message not found', null), false)).toBe('gone');
     expect(lookupProblem(new ApiError(502, 'x', null, { code: 'mail_signin' }), false)).toBe('signin');
+    // Every connection busy for ten seconds, and a row without a server ID (#228).
+    expect(lookupProblem(new ApiError(503, 'x', null, { code: 'mail_busy' }), false)).toBe('busy');
+    expect(lookupProblem(new ApiError(409, 'x', null, { code: 'needs_resync' }), false)).toBe('resync');
     expect(lookupProblem(new ApiError(0, 'x', 'INTERNAL'), true)).toBe('offline');
     expect(lookupProblem(new ApiError(503, 'x', 'NETWORK_UNREACHABLE'), false)).toBe('offline');
-    expect(lookupProblem(new ApiError(503, 'busy', null, { code: 'mail_busy' }), false)).toBe('server');
+    expect(lookupProblem(new ApiError(503, 'busy', null, { code: 'mail_busy' }), false)).toBe('busy');
     expect(lookupProblem(new ApiError(500, 'x', null), false)).toBe('server');
   });
 });
