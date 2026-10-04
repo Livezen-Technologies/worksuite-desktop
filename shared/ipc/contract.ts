@@ -451,7 +451,8 @@ export const contract = {
   'ring:handoff': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
   // A visitor's voice call (ENH-WCHAT-05): Answer or Decline; whether this computer has a microphone; the call it is on.
   'ring:call': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
-  'ring:mic': ch(z.object({ has: z.boolean() }), { session: true, rate: 10 }),
+  // With the microphone's name and whether it is a headset, for the incoming call's device line (V-04, VOICE-14).
+  'ring:mic': ch(z.object({ has: z.boolean(), label: z.string().max(120).nullable().optional(), headset: z.boolean().optional() }), { session: true, rate: 10 }),
   'ring:onCall': ch(
     z.object({ conversationId: z.number().int().positive(), visitor: z.string().max(120), since: z.number().int().nonnegative(), held: z.boolean() }).nullable(),
     { session: true, rate: 20 },

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { SubmitResult } from '@shared/ipc/contract';
-import { FOLLOW_UP_DEFAULTS, type WebchatCall, type WebchatFollowUp, type WebchatFollowUpPrefs, type WebchatHandoff, type WebchatJoined, type WebchatRingChat, type WebchatRingPrefs, type WebchatRingState } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, type WebchatCall, type WebchatFollowUp, type WebchatFollowUpPrefs, type WebchatHandoff, type WebchatJoined, type WebchatMic, type WebchatRingChat, type WebchatRingPrefs, type WebchatRingState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -39,6 +39,9 @@ export interface CallEntry extends WaitingContext {
   requested_at?: string | null;
   last_message?: string | null;
   owner?: string | null;
+  /** The contact details the visitor gave before calling, or the chat already had (UX-WGT-10). */
+  visitor_email?: string | null;
+  visitor_phone?: string | null;
 }
 
 /** A call card as this computer shows it, or null when it cannot be read. */
@@ -57,6 +60,9 @@ export function fromCall(c: CallEntry): WebchatCall | null {
     owner: text(c.owner, 120),
     stage: c.call_stage === 'everyone' ? 'everyone' : 'first',
     requestedAt: text(c.requested_at, 32),
+    // Who to call back if the line drops, on the card itself (V-04, UX-WGT-10): only what the server knows.
+    ...(text(c.visitor_email, 160) ? { email: text(c.visitor_email, 160) } : {}),
+    ...(text(c.visitor_phone, 40) ? { phone: text(c.visitor_phone, 40) } : {}),
   };
 }
 
@@ -354,6 +360,9 @@ export class WebchatRinger {
   private calls = new Map<number, WebchatCall>();
   /** Whether this computer has a microphone, as its main window last found; null until it says (VOICE-11). */
   private hasMic: boolean | null = null;
+  /** Its name and whether it is a headset, for the call card's device line (V-04, VOICE-14). */
+  private micLabel: string | null = null;
+  private micHeadset = false;
   private ringSeconds = 0;
   /** Whether the server has this computer play the ring; null when it does not choose (no ring sessions there). */
   private ringHere: boolean | null = null;
@@ -436,8 +445,9 @@ export class WebchatRinger {
     return {
       chats: hidden ? chats.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, device: null, preview: null, by: null })) : chats,
       handoffs: hidden ? handoffs.map((h) => ({ ...h, visitor: 'A visitor', page: null, note: null, from: null })) : handoffs,
-      calls: hidden ? calls.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, preview: null, owner: null })) : calls,
+      calls: hidden ? calls.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, preview: null, owner: null, email: null, phone: null })) : calls,
       answerShortcut: this.answerShortcut,
+      mic: this.mic(),
       tone: toneFor(chats, { ringSeconds: this.ringSeconds, quiet: this.deps.quiet(), duringDnd: prefs.duringDnd, now, ringHere: this.ringHere, handoffs: handoffs.length, calls: calls.length }),
       volume: Math.max(0, Math.min(100, prefs.volume)),
       outcome: this.outcome,
@@ -918,6 +928,14 @@ export class WebchatRinger {
   async answerCall(callId: number, accept: boolean): Promise<boolean> {
     const c = this.calls.get(callId);
     if (!c) return false;
+    // Ctrl/Cmd+Shift+A and the tray answer as the card's Answer does (V-04): not behind WorkSuite's lock — the call
+    // would open the chat and the microphone with nobody shown to be there — and not without a microphone (VOICE-11).
+    // Declining stays open to both, so the ring can still be stopped.
+    if (accept && (this.deps.locked() || this.hasMic === false)) {
+      this.say(c.conversationId, this.deps.locked() ? 'Unlock WorkSuite to answer the call.' : 'No microphone on this computer — plug one in to answer.');
+      this.changed();
+      return false;
+    }
     try {
       await this.deps.http.post(`${WEBSITE}/calls/${callId}/${accept ? 'answer' : 'decline'}`);
     } catch (e) {
@@ -945,10 +963,25 @@ export class WebchatRinger {
   }
 
   /** Whether this computer has a microphone (VOICE-11): told by the main window, sent with the next heartbeat. */
-  setMic(has: boolean): void {
-    if (this.hasMic === has) return;
+  setMic(has: boolean, label: string | null = null, headset = false): void {
+    const name = has ? text(label, 120) : null;
+    const isHeadset = has && headset;
+    const named = name !== this.micLabel || isHeadset !== this.micHeadset;
+    this.micLabel = name;
+    this.micHeadset = isHeadset;
+    if (this.hasMic === has) {
+      // Only its name changed (another headset plugged in): the card's device line says so; the server need not know.
+      if (named) this.changed();
+      return;
+    }
     this.hasMic = has;
+    this.changed();
     void this.beat();
+  }
+
+  /** The device line's microphone (V-04), or null before the main window has looked. */
+  private mic(): WebchatMic | null {
+    return this.hasMic === null ? null : { ready: this.hasMic, label: this.micLabel, headset: this.micHeadset };
   }
 
   /** The top chat still ringing, for Ctrl/Cmd+Shift+J and the tray. */

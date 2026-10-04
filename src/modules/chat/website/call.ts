@@ -5,6 +5,7 @@ import { call, errorMessage } from '../../../core/bridge';
 import { deviceProblem, saveSpeaker, savedSpeaker, sinkTo } from '../../calls/session';
 import { readPrefs, savePrefs } from '../../meet/devices';
 import { WEBSITE } from './api';
+import { micChanged } from './mic';
 
 /**
  * A visitor's voice call on this computer (WS-WCHAT ENH-WCHAT-05, VOICE-12, VOICE-13): audio only, the microphone and
@@ -208,6 +209,8 @@ export class WebsiteCallSession {
   async useDevice(kind: 'mic' | 'speaker', id: string): Promise<void> {
     if (kind === 'mic') {
       savePrefs({ ...readPrefs(), micId: id });
+      // The next call's card names this microphone (V-04 device line).
+      micChanged();
       await this.room?.switchActiveDevice('audioinput', id || 'default').catch(() => undefined);
     } else {
       saveSpeaker(id);

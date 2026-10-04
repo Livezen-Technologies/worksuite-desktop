@@ -504,6 +504,53 @@ describe('WebchatRinger: visitors\' voice calls (ENH-WCHAT-05)', () => {
     r.stop();
   });
 
+  it('V-04: the card carries the contact details the visitor gave, hidden while locked (UX-WGT-10)', async () => {
+    expect(fromCall(card({ visitor_email: ' kamal@techubiz.com ', visitor_phone: '+94 77 123 4567' }))).toMatchObject({ email: 'kamal@techubiz.com', phone: '+94 77 123 4567' });
+    expect(fromCall(card({ visitor_email: '', visitor_phone: null }))).not.toHaveProperty('phone');
+    const { r } = ringer([{ ringing: [], calls: [card({ visitor_email: 'kamal@techubiz.com', visitor_phone: '+94 77 123 4567' })] }], { locked: true });
+    r.start();
+    await vi.waitFor(() => expect(r.state().calls).toHaveLength(1));
+    expect(r.state().calls![0]).toMatchObject({ email: null, phone: null });
+    r.stop();
+  });
+
+  it('V-04: the device line names the microphone; only whether there is one goes to the server', async () => {
+    const { r, post } = ringer([{ ringing: [] }]);
+    expect(r.state().mic).toBeNull();
+    r.start();
+    r.setMic(true, 'Jabra Evolve2', true);
+    await vi.waitFor(() => expect(post).toHaveBeenLastCalledWith('/api/chat/ring/heartbeat', expect.objectContaining({ has_mic: true })));
+    expect(r.state().mic).toEqual({ ready: true, label: 'Jabra Evolve2', headset: true });
+    const beats = post.mock.calls.length;
+    // Another headset plugged in: the card says so; the server is not told again.
+    r.setMic(true, 'Poly Voyager', true);
+    expect(r.state().mic).toEqual({ ready: true, label: 'Poly Voyager', headset: true });
+    expect(post.mock.calls.length).toBe(beats);
+    r.setMic(false, 'ignored', true);
+    expect(r.state().mic).toEqual({ ready: false, label: null, headset: false });
+    r.stop();
+  });
+
+  it('V-04: Ctrl/Cmd+Shift+A and the tray do not answer behind the lock or without a microphone; Decline still works', async () => {
+    let locked = true;
+    const { r, post, opened } = ringer([{ ringing: [], calls: [card()] }]);
+    (r as unknown as { deps: { locked: () => boolean } }).deps.locked = () => locked;
+    r.start();
+    await vi.waitFor(() => expect(r.state().calls).toHaveLength(1));
+    expect(await r.answerCall(31, true)).toBe(false);
+    expect(r.state().outcome?.text).toBe('Unlock WorkSuite to answer the call.');
+    locked = false;
+    r.setMic(false);
+    expect(await r.answerCall(31, true)).toBe(false);
+    expect(r.state().outcome?.text).toBe('No microphone on this computer — plug one in to answer.');
+    expect(post).not.toHaveBeenCalledWith('/api/chat/widget-admin/calls/31/answer');
+    expect(opened).toEqual([]);
+    expect(r.state().calls).toHaveLength(1);
+    expect(await r.answerCall(31, false)).toBe(true);
+    expect(post).toHaveBeenCalledWith('/api/chat/widget-admin/calls/31/decline');
+    r.stop();
+  });
+
   it('the call window counts a call as a card', () => {
     const c = fromCall(card())!;
     expect(ringerHeight({ chats: [], outcome: null, calls: [c] })).toBe(272);

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.41.0 — 2026-10-04
+
+- V-04 Incoming voice call window to the design: phone in a green ring, Incoming voice call with its timer, who and where, the last message, Answer and Decline pills, the microphone or headset line with the answer shortcut; no answering without a microphone or while locked; a system notification when the call window is off.
+
 ## 1.40.0 — 2026-10-04
 
 - V-03 On a call: the call bar (Voice call · visitor · time, connection and not recorded), a call notes panel saved as you type and kept as an internal note when the call ends, green and red call lines in the thread, accepting an invitation or transfer during a call joins its audio, Audio devices for microphone and speaker, the system mute key, and quieter screen reader announcements.

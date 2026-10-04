@@ -1378,6 +1378,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return !!w && !w.isMinimized() && w.isFocused();
   };
   notifications.ringerShowing = () => settings.effective().webchatRinging.window && (webchat.state().chats.length > 0 || !!webchat.state().handoffs?.length || !!webchat.state().calls?.length);
+  // The call window shows a visitor's call whenever it is on and the lock lets it (V-04): as onChanged decides.
+  notifications.callWindowOn = () => settings.effective().webchatRinging.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false);
   const webchatOnCall = (c: WebchatOnCall | null): void => {
     onCall = c;
     webchatCallLive = !!c;

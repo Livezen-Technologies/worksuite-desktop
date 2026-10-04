@@ -245,9 +245,11 @@ describe('a visitor\'s voice call in the call window and the bar (ENH-WCHAT-05, 
     show(<WebchatRingWindow />);
     await screen.findByText('Kamal');
     expect(screen.getByText('Incoming voice call')).toBeTruthy();
-    expect(screen.getByText('creativefx.lk · Colombo, Sri Lanka · With Samali Perera')).toBeTruthy();
+    // V-04: "techubiz.com · in chat with Nuwan".
+    expect(screen.getByText('creativefx.lk · in chat with Samali')).toBeTruthy();
     expect(screen.getByText('“Can I call you?”')).toBeTruthy();
-    expect(screen.getByText(/1 more waiting · Audio only, in WorkSuite · Ctrl\+Shift\+A to answer/)).toBeTruthy();
+    expect(screen.getByText('1 more waiting')).toBeTruthy();
+    expect(screen.getByLabelText('Ctrl+Shift+A to answer')).toBeTruthy();
     expect(screen.queryByText('Nimali')).toBeNull();
     await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat-strong', 0.8));
     fireEvent.click(screen.getByRole('button', { name: 'Answer' }));

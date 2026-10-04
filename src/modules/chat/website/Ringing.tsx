@@ -1,9 +1,9 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { WebchatCall, WebchatHandoff, WebchatRingChat, WebchatRingState } from '@shared/types';
+import type { WebchatCall, WebchatHandoff, WebchatMic, WebchatRingChat, WebchatRingState } from '@shared/types';
 import { call, errorMessage, isMac, on } from '../../../core/bridge';
 import { parseTs } from '../../../core/time';
 import { toast } from '../../../core/toasts';
-import { Avatar, cx } from '../../../components/ui';
+import { cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useNow } from '../../calls/parts';
 import { playOnce, playTone } from '../../calls/tones';
@@ -201,66 +201,111 @@ export function WebchatRingWindow() {
 }
 
 /**
- * A visitor's voice call as the call window's card (VOICE-UI-03): who, where, what they last wrote, how long they
- * have waited, and Answer or Decline. Answering brings WorkSuite forward on the chat, on the call.
+ * The incoming call's device line (V-04, VOICE-11, VOICE-14): which headset or microphone the call would use, or that
+ * there is none — then Answer is off, as the server would not ring this computer for calls either.
+ */
+export function deviceLine(mic: WebchatMic | null | undefined): string {
+  if (!mic) return 'Audio only, in WorkSuite';
+  if (!mic.ready) return 'No microphone — plug one in to answer';
+  return mic.label ? `${mic.headset ? 'Headset' : 'Microphone'}: ${mic.label} · mic ready` : 'Microphone ready';
+}
+
+/** "techubiz.com · in chat with Nuwan" (V-04): where the visitor is, and whose chat it is. */
+export function callWhere(c: Pick<WebchatCall, 'site' | 'owner'>): string {
+  return [c.site, c.owner ? `in chat with ${firstName(c.owner)}` : null].filter(Boolean).join(' · ') || 'Website voice call';
+}
+
+/**
+ * A visitor's voice call as the call window's card (V-04, VOICE-UI-03): the native window's title, the phone in its
+ * ring, INCOMING VOICE CALL with how long it has rung, who, where and whose chat, the last message, Answer and
+ * Decline, then the device line with the answer shortcut. Answering brings WorkSuite forward on the chat, on the call.
  */
 function CallCard({ s, c, rest, more, now }: { s: WebchatRingState; c: WebchatCall; rest: WebchatCall[]; more: number; now: number }) {
   const answerKey = isMac ? '⌘⇧A' : 'Ctrl+Shift+A';
+  // No microphone here: nothing to answer with (VOICE-11). Locked: nobody is shown, so nothing is answered either.
+  const noMic = s.mic?.ready === false;
+  const contact = s.hidden ? null : [c.phone, c.email].filter(Boolean).join(' · ') || null;
+  const status = s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : more ? `${more} more waiting` : null;
   return (
-    <div className="flex h-full flex-col bg-[#0F1B3D] text-[13px] text-[#E6ECFA]">
+    <section aria-label="Incoming voice call" className="flex h-full flex-col overflow-hidden border border-[#2F9E67] bg-[#111B3B] text-[13px] text-[#F1F4FB]">
       <div className="sr-only" role="alert" aria-live="assertive">
         {s.hidden ? 'A website visitor is calling.' : `Voice call: ${c.visitor}${c.site ? ` on ${c.site}` : ''} is calling.`}
       </div>
-      <div className="drag flex items-center gap-2 px-4 pt-3 text-[11.5px] font-bold tracking-[.06em] text-[#8FE3B7] uppercase">
-        <span className="h-2 w-2 rounded-full bg-[#3DD68C] motion-safe:animate-pulse" />
-        <span className="flex-1">Incoming voice call</span>
-        <span className="rounded-full bg-[#1C3A2E] px-2 py-0.5 text-[10.5px] tracking-normal text-[#8FE3B7] normal-case">{c.stage === 'first' ? 'Your chat' : 'Everyone'}</span>
+      <div className="drag flex h-8 shrink-0 items-center gap-2 bg-[#0B1430] px-3.5 text-[12px] text-[#C9CFE3]">
+        <span aria-hidden className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-[#4A63E8] text-[10px] font-bold text-white">W</span>
+        WorkSuite · Website voice call
       </div>
-      <div className="flex gap-3 px-4 pt-3">
-        <span className="relative shrink-0 rounded-full motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
-          <Avatar name={s.hidden ? '?' : c.visitor} size={46} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <b className="truncate text-[15px] text-white">{s.hidden ? 'A website visitor' : c.visitor}</b>
-          <span className="truncate text-[12px] text-[#AFC0E8]">{s.hidden ? 'Unlock WorkSuite to see who.' : [c.site, c.place, c.owner ? `With ${c.owner}` : null].filter(Boolean).join(' · ') || 'Website voice call'}</span>
-          {!s.hidden && c.page ? <span className="truncate text-[12px] text-[#C9D5F5]">Reading {c.page}</span> : null}
-        </span>
-        {c.requestedAt ? (
-          <span className="shrink-0 font-mono text-[12px] text-[#AFC0E8]" aria-label={`Calling for ${waited(c.requestedAt, now)}`}>
-            {waited(c.requestedAt, now)}
+      <div className="drag flex items-center gap-4 px-[18px] pt-[18px] pb-2">
+        <span aria-hidden className="flex h-[82px] w-[82px] shrink-0 items-center justify-center rounded-full border-2 border-[#65B385]/45 motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
+          <span className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-[#2F9E67] text-white">
+            <Icon name="phone" size={26} />
           </span>
-        ) : null}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <span className="text-[11px] font-bold tracking-[1px] text-[#A7E3C3] uppercase">
+            <span>Incoming voice call</span>
+            {c.requestedAt ? (
+              <>
+                {' · '}
+                <span role="timer" className="font-mono tabular-nums" aria-label={`Calling for ${waited(c.requestedAt, now)}`}>{waited(c.requestedAt, now)}</span>
+              </>
+            ) : null}
+          </span>
+          <b className="truncate text-[19px] font-bold text-white">{s.hidden ? 'A website visitor' : c.visitor}</b>
+          <span className="truncate text-[13px] text-[#AAB2C9]">{s.hidden ? 'Unlock WorkSuite to see who.' : callWhere(c)}</span>
+          {!s.hidden && c.page ? <span className="truncate text-[12px] text-[#C9D5F5]">Reading {c.page}</span> : null}
+          {/* The details the visitor gave before calling (UX-WGT-10): who to ring back if the line drops. */}
+          {contact ? <span className="truncate text-[12px] text-[#C9D5F5]">{contact}</span> : null}
+        </span>
       </div>
-      {!s.hidden && c.preview ? <p className="mx-4 mt-2 line-clamp-2 rounded-[8px] bg-[#16254F] px-2.5 py-1.5 text-[12.5px] text-[#E6ECFA]">“{c.preview}”</p> : null}
-      <div className="flex gap-2 px-4 pt-3">
-        <button type="button" disabled={s.hidden} onClick={() => answerCall(c.id, true)} className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[9px] bg-[#3DD68C] text-[14px] font-bold text-[#0B2A1D] hover:brightness-105 disabled:opacity-50">
-          <Icon name="phone" size={16} />
+      {!s.hidden && c.preview ? (
+        <p className="mx-[18px] mt-1.5 line-clamp-2 rounded-[10px] border border-[#24306A] bg-[#1A2550] px-3 py-2.5 text-[13px] break-words">
+          Last message: <span>“{c.preview}”</span>
+        </p>
+      ) : null}
+      <div className="flex gap-2.5 px-[18px] py-3.5">
+        <button
+          type="button"
+          disabled={s.hidden || noMic}
+          title={noMic ? 'No microphone on this computer' : undefined}
+          onClick={() => answerCall(c.id, true)}
+          className="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-full bg-[#2F9E67] text-[15px] font-bold text-white hover:brightness-110 disabled:opacity-50"
+        >
           Answer
         </button>
-        <button type="button" onClick={() => answerCall(c.id, false)} className="h-11 flex-1 rounded-[9px] bg-[#C2412D] text-[14px] font-bold text-white hover:brightness-110">
+        <button type="button" onClick={() => answerCall(c.id, false)} className="h-[46px] w-[124px] shrink-0 rounded-full bg-[#D9483B] text-[14px] font-bold text-white hover:brightness-110">
           Decline
         </button>
       </div>
       {rest.length ? (
-        <ul className="mt-3 flex flex-col border-t border-[#22305C]" aria-label="Other calls">
+        <ul className="flex flex-col border-t border-[#22305C]" aria-label="Other calls">
           {rest.slice(0, 3).map((x) => (
-            <li key={`c${x.id}`} className="flex h-[46px] items-center gap-2 border-b border-[#22305C] px-4">
-              <Icon name="phone" size={13} className="shrink-0 text-[#8FE3B7]" />
+            <li key={`c${x.id}`} className="flex h-[46px] items-center gap-2 border-b border-[#22305C] px-[18px]">
+              <Icon name="phone" size={13} className="shrink-0 text-[#A7E3C3]" />
               <span className="min-w-0 flex-1 truncate">
                 <b className="text-white">{s.hidden ? 'A visitor' : x.visitor}</b>
                 <span className="text-[#AFC0E8]"> · Voice call{x.site && !s.hidden ? ` · ${x.site}` : ''}</span>
               </span>
-              <button type="button" disabled={s.hidden} onClick={() => answerCall(x.id, true)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
+              <button type="button" disabled={s.hidden || noMic} onClick={() => answerCall(x.id, true)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
                 Answer
               </button>
             </li>
           ))}
         </ul>
       ) : null}
-      <p className="drag mt-auto px-4 pt-2 pb-2.5 text-[11px] text-[#8FA6E0]">
-        {s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `${more ? `${more} more waiting · ` : ''}Audio only, in WorkSuite${s.answerShortcut ? ` · ${answerKey} to answer` : ''}`}
-      </p>
-    </div>
+      {status ? <p className="px-[18px] pt-2 text-[11.5px] text-[#B3C0FF]" role="status">{status}</p> : null}
+      <div className="drag mt-auto flex items-center justify-between gap-3 px-[18px] pt-2 pb-3 text-[12px] text-[#8B93AD]">
+        <span className={cx('flex min-w-0 items-center gap-1.5 truncate', noMic && 'text-[#F2A79E]')}>
+          {noMic ? <Icon name="mic-off" size={13} className="shrink-0" /> : null}
+          {deviceLine(s.mic)}
+        </span>
+        {s.answerShortcut ? (
+          <kbd className="shrink-0 font-mono" aria-label={`${answerKey} to answer`} title={`${answerKey} answers from any app`}>
+            {answerKey}
+          </kbd>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
@@ -359,7 +404,9 @@ export function RingingBar({ tone }: { tone: boolean }) {
           {c.requestedAt ? ` · ${waited(c.requestedAt, now)}` : ''}
           {(s.calls?.length ?? 0) > 1 ? ` · +${(s.calls?.length ?? 0) - 1} more` : ''}
         </span>
-        <button type="button" onClick={() => answerCall(c.id, true)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
+        {/* Without a microphone there is nothing to answer with (V-04, VOICE-11): the bar says so instead. */}
+        {s.mic?.ready === false ? <span className="shrink-0 text-[12px]">No microphone</span> : null}
+        <button type="button" disabled={s.mic?.ready === false} onClick={() => answerCall(c.id, true)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110 disabled:opacity-50">
           Answer
         </button>
         <button type="button" onClick={() => answerCall(c.id, false)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">

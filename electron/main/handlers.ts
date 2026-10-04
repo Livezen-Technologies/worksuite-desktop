@@ -371,7 +371,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:viewing', (input) => ctx.webchat.setViewing(input.id));
   router.handle('ring:handoff', (input) => ctx.webchat.answer(input.id, input.accept));
   router.handle('ring:call', (input) => ctx.webchat.answerCall(input.id, input.accept));
-  router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has));
+  router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has, input.label ?? null, input.headset ?? false));
   router.handle('ring:onCall', (input) => ctx.webchatOnCall(input));
 
   // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────

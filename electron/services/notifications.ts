@@ -235,6 +235,11 @@ export class NotificationService {
   private pausedUntil: number | null = null;
   /** The website-chat call window is showing: a ringing chat needs no toast as well. */
   ringerShowing: () => boolean = () => false;
+  /**
+   * Whether a visitor's voice call shows in the call window (V-04): asked before the ringer has heard of the call, so
+   * it is the setting, not what the window shows now.
+   */
+  callWindowOn: () => boolean = () => false;
   private live = new Map<string, Notification>();
   private unread = { mail: 0, chat: 0, notifications: 0, tasks: 0 };
   private lastMailCount: number | null = null;
@@ -682,6 +687,32 @@ export class NotificationService {
             this.live.delete(key);
           }
         }
+        break;
+      }
+      case 'chat.widget.call': {
+        // A website visitor calling (V-04, VOICE-10) with the call window off in Settings: the system's call banner
+        // instead, so it is not missed behind other apps. With the window on, the window is the alert (RING-40).
+        const key = `webchat-call:${String(e.call_id ?? '')}`;
+        if (e.what !== 'ringing') {
+          // Answered, declined, missed or hung up: the banner goes, wherever it was.
+          this.live.get(key)?.close();
+          this.live.delete(key);
+          break;
+        }
+        if (this.callWindowOn()) break;
+        const visitor = String(e.visitor ?? 'A visitor');
+        const site = e.site ? String(e.site) : null;
+        this.notify({
+          id: key,
+          module: 'chat',
+          category: 'incoming-call',
+          title: `Incoming voice call · ${visitor}`,
+          body: [site, e.owner ? `in chat with ${String(e.owner).trim().split(/\s+/)[0]}` : null, e.last_message ? `“${String(e.last_message)}”` : null].filter(Boolean).join(' · ') || 'Website voice call',
+          sender: visitor,
+          link: `/chat?view=website&website=${String(e.conversation_id ?? '')}`,
+          critical: true,
+          call: true,
+        });
         break;
       }
       case 'chat.call.stopped': {

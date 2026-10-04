@@ -603,6 +603,19 @@ export interface WebchatCall {
   stage: 'first' | 'everyone';
   /** Server stamp. */
   requestedAt: string | null;
+  /** What the visitor gave before calling, or the chat already knew (UX-WGT-10); absent on an older server. */
+  email?: string | null;
+  phone?: string | null;
+}
+
+/** The microphone a visitor's call would use on this computer, as the main window found it (V-04, VOICE-11, VOICE-14). */
+export interface WebchatMic {
+  /** This computer has a microphone at all: without one it is not rung, and cannot answer. */
+  ready: boolean;
+  /** The device's name ("Jabra Evolve2"), once the system names it; null before the microphone was ever allowed. */
+  label: string | null;
+  /** The microphone has a speaker of its own — a headset — so the call is heard through it. */
+  headset: boolean;
 }
 
 /** The website call this computer is on, as the tray says it (VOICE-UI-03). */
@@ -623,6 +636,8 @@ export interface WebchatRingState {
   calls?: WebchatCall[];
   /** Ctrl/Cmd+Shift+A answers the top call now. */
   answerShortcut?: boolean;
+  /** The microphone a call would use (V-04 device line); null until the main window has looked. */
+  mic?: WebchatMic | null;
   /** What the tone does now: off (none left unsilenced, Do not disturb, the organisation's cap), or which tone. */
   tone: 'off' | 'normal' | 'strong';
   volume: number;
