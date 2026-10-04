@@ -15,7 +15,7 @@ import { useNow } from '../../calls/parts';
 import { isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, waitTone, WEBSITE, type CallbackOutcome, type Section, type WebsiteCallback, type WebsiteRow } from './api';
 import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
 import { clock, handoffAsk, handoffTitle, useRingState, waited } from './Ringing';
-import { WebsiteLive, type OnlineVisitor } from './WebsiteLive';
+import { WebsiteLive, type LiveView, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
 import { WidgetSettings } from './widget/WidgetSettings';
 import { ConversationMenu } from '../ConversationMenu';
@@ -75,7 +75,11 @@ export function WebsiteWorkspace() {
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   const myName = useStore(app, (s) => s.bootstrap?.user?.name ?? null);
   const selected = query.get('website');
-  const live = query.get('section') === 'live';
+  // The LIVE views (worksuite-desktop#231): each its own section — not `live`, which is the Live chats section and
+  // lit up beside both — with the selected visitor in the address.
+  const liveView: LiveView | null = query.get('section') === 'dashboard' ? 'dashboard' : query.get('section') === 'visitors' ? 'visitors' : null;
+  const live = liveView !== null;
+  const liveVisitor = Number(query.get('visitor')) || null;
   const designing = query.get('section') === 'widget';
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
   const [site, setSite] = useState(0);
@@ -200,8 +204,10 @@ export function WebsiteWorkspace() {
           <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">CONVERSATIONS</div>
           {SECTIONS.filter((s) => s.id !== 'callbacks' || structured).map((s) => {
             const n = count(s.id);
+            // Lit only while it is what shows: not under a LIVE view or the Widget (#231).
+            const here = !live && !designing && section === s.id;
             return (
-              <button key={s.id} type="button" aria-current={section === s.id ? 'page' : undefined} onClick={() => to({ section: s.id, website: null })} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
+              <button key={s.id} type="button" aria-current={here ? 'page' : undefined} onClick={() => to({ section: s.id, website: null, visitor: null })} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', here ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
                 <span className="flex-1">{s.label}</span>
                 {/* Overdue callbacks: a red dot beside the count, and said (#223). */}
                 {s.id === 'callbacks' && overdue ? <span className="mr-1 h-1.5 w-1.5 rounded-full bg-danger" role="img" aria-label={text('{n} overdue', { n: overdue })} title={text('{n} overdue', { n: overdue })} /> : null}
@@ -210,11 +216,11 @@ export function WebsiteWorkspace() {
             );
           })}
           <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">LIVE</div>
-          {[
-            ['Visitors online', visitorsOnline],
-            ['Live dashboard', null],
-          ].map(([label, n]) => (
-            <button key={label} type="button" aria-current={live && label === 'Live dashboard' ? 'page' : undefined} onClick={() => go('/chat?view=website&section=live')} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', live ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
+          {([
+            ['visitors', 'Visitors online', visitorsOnline],
+            ['dashboard', 'Live dashboard', null],
+          ] as const).map(([id, label, n]) => (
+            <button key={id} type="button" aria-current={liveView === id ? 'page' : undefined} onClick={() => go(`/chat?view=website&section=${id}`)} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', liveView === id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
               <span className="flex-1">{label}</span>
               {n ? <span className="text-[11.5px] font-bold text-ink-2">{n}</span> : null}
             </button>
@@ -238,7 +244,15 @@ export function WebsiteWorkspace() {
           ))}
         </nav>
       </SidePanel>
-      {live ? <WebsiteLive onOpenChat={(id) => go(`/chat?view=website&section=inbox&website=${id}`)} /> : null}
+      {liveView ? (
+        <WebsiteLive
+          view={liveView}
+          selected={liveVisitor}
+          onSelect={(id) => go(`/chat?${new URLSearchParams({ view: 'website', section: liveView, ...(id ? { visitor: String(id) } : {}) }).toString()}`)}
+          onOpenChat={(id, then) => go(`/chat?view=website&section=inbox&website=${id}${then === 'invite' ? '&invite=1' : ''}`)}
+          onSection={(s) => go(`/chat?view=website&section=${s}`)}
+        />
+      ) : null}
       {designing ? <WidgetSettings /> : null}
       <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', (live || designing) && 'hidden')}>
         <div className="flex flex-col gap-2 border-b border-line p-3">
@@ -311,7 +325,7 @@ export function WebsiteWorkspace() {
         {selected ? (
           <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} />
         ) : (
-          <PickConversation rows={openRows} longest={longest} visitors={online.isSuccess ? visitorsOnline : null} onLongest={openLongest} onVisitors={() => go('/chat?view=website&section=live')} />
+          <PickConversation rows={openRows} longest={longest} visitors={online.isSuccess ? visitorsOnline : null} onLongest={openLongest} onVisitors={() => go('/chat?view=website&section=visitors')} />
         )}
       </div>
     </div>

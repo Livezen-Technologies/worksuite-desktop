@@ -538,7 +538,9 @@ export const team = {
 export const ROLE_LABEL: Record<TeamRole, string> = { owner: 'Owner', participant: 'Participant', observer: 'Monitoring' };
 
 /** What a visitor is doing, in the list's one word. */
-export function visitorStatus(v: { conversation_status: string | null; idle_seconds: number }): ['Chatting' | 'Active' | 'Inactive', string] {
+export function visitorStatus(v: { conversation_status: string | null; idle_seconds: number; chat?: { awaiting: boolean } | null }): ['Waiting' | 'Chatting' | 'Active' | 'Inactive', string] {
+  // Waiting: their chat is open and they spoke last (worksuite-desktop#231).
+  if ((v.conversation_status === 'open' || v.conversation_status === 'pending') && v.chat?.awaiting) return ['Waiting', 'text-[#9A4A06] dark:text-warning'];
   if (v.conversation_status === 'open' || v.conversation_status === 'pending') return ['Chatting', 'text-primary'];
   return v.idle_seconds < 120 ? ['Active', 'text-success'] : ['Inactive', 'text-ink-3'];
 }

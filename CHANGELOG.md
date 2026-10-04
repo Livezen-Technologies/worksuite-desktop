@@ -5,6 +5,28 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.154 — 2026-10-04
+
+- **Visitors online and the Live dashboard are two views (#231).** Before, both menu items opened the same screen and
+  both lit up, along with Live chats, which shared its address. Now each opens its own view, and only the one you are
+  on is lit.
+- **Clicking a visitor opens their details** beside the list: where they are, device and browser, language, the page
+  they are reading, the page they landed on, where they came from, their visits, this visit's pages, their earlier
+  chats and the contact they are linked to. The selection is kept in the address, so it survives Back and a refresh
+  of the list. **Start chat** can begin from a saved reply. A visitor already in a chat has **Open the chat** and
+  **Invite a colleague**, which opens the chat with the invite dialog up. **Block** blocks them for a week.
+- **Keyboard.** The arrow keys move through the visitors, Enter or a double-click opens their chat (or Start chat if
+  they have none), and Escape closes the details.
+- **The status says what they are doing and goes there.** Waiting (their chat waits on us) or Chatting opens the
+  chat; Active selects them and puts the cursor in Start chat. Visitors online can show only one status.
+- **The dashboard's cards open what they count.** On the site now goes to Visitors online, Waiting on us and At risk
+  to Awaiting reply, Chats started and Open chats to the Inbox, and Median first reply to Missed chats. **See all**
+  appears when there are more visitors than the dashboard lists.
+- **A visitor who leaves while selected** stays in the panel with "Left the site · 11:42", instead of the panel
+  going blank.
+- Needs the server update (Communication 1.23.0) for the extra details and for blocking somebody without a chat. An
+  older server shows the rest.
+
 ## 0.2.153 — 2026-10-04
 
 - **Opening an email while an account syncs works (#228).** Before, the WorkSuite server had two connections per

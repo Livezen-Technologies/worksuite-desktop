@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.26.0 — 2026-10-04
+
+- Visitors online and the Live dashboard are two views of their own (#231): each lit alone in the menu and apart from Live chats; a visitor is selected by a click or the arrow keys and kept in the address; their details show language, landing page, earlier chats and linked contact, with Start chat (saved replies), Open the chat, Invite a colleague and Block; Enter or a double-click opens the chat; the status says Waiting/Chatting/Active and goes there; the dashboard's cards open what they count; a visitor who leaves is said to have left.
+
 ## 1.25.0 — 2026-10-04
 
 - Website chats: a Callbacks section (to do / handled, overdue mark, Call now, WhatsApp, Reply by email, Mark contacted, Couldn't reach, Done), the callback card at the top of its conversation, "Callback requested" on rows, the wait clock amber at the callback offer and red after it, and a link to the WhatsApp chat a visitor continued on (#223, #224)

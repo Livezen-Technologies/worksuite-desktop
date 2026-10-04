@@ -105,7 +105,7 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open the longest waiting' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=inbox&website=2');
     fireEvent.click(await screen.findByRole('button', { name: 'Visitors online · 2' }));
-    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=live');
+    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=visitors');
   });
 
   it('draws each row with its timer, chips and site, and marks a chat silenced here', async () => {

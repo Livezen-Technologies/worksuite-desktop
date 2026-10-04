@@ -51,8 +51,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   // The composer writes to the visitor, or a note only staff see (TEAM-60).
   const [tab, setTab] = useState<'reply' | 'note'>('reply');
   const { active: tabActive, query: tabQuery } = useTab();
-  // From the ringing card's Transfer (#225): the chat opens with the transfer dialog up.
-  const [dialog, setDialog] = useState<'invite' | 'transfer' | null>(() => (tabQuery?.get('transfer') === '1' ? 'transfer' : null));
+  // From the ringing card's Transfer (#225), or a visitor's Invite a colleague (#231): the chat opens with that dialog up.
+  const [dialog, setDialog] = useState<'invite' | 'transfer' | null>(() => (tabQuery?.get('transfer') === '1' ? 'transfer' : tabQuery?.get('invite') === '1' ? 'invite' : null));
   const declined = useDeclined(Number(id), me, q.data?.team);
   // Typing and receipts, live (ENH-WCHAT-04): reading counts while this tab is in front and the window can be seen.
   const pageVisible = usePageVisible();
