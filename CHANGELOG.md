@@ -5,6 +5,18 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.172 — 2026-10-04
+
+- **Reply and join from the alert (R-05).** The incoming-chat window is redrawn to the design: the visitor's message,
+  two saved-reply chips plus "/ saved", a **Reply and join** box with **Send & join**, **Join chat** and **Silence**.
+  Send & join and Join chat now open the thread. If a colleague joins first while you are typing, your words are
+  kept and the window asks "Nuwan joined — send to the chat as a participant?" — nothing is sent until you choose.
+  With the call window off, the notification has an inline reply that joins and sends.
+- **Tray, title bar and Dock (R-06).** While chats ring, clicking the tray icon opens a ringing menu ("3 WEBSITE
+  CHATS RINGING"): the most urgent chat expanded with Join and a reply box, the others with Reply and Join. The
+  normal tray menu gains "Reply from here…". The title bar reads "3 website chats ringing", the tab title carries
+  the count, and the Dock/taskbar badge counts ringing chats that are not silenced for you.
+
 ## 0.2.171 — 2026-10-04
 
 - **How a ring ends (R-03).** The call window says what happened:

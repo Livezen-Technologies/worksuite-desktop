@@ -1,4 +1,4 @@
-import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions, type NativeImage } from 'electron';
+import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions, type NativeImage, type Rectangle } from 'electron';
 import { join } from 'node:path';
 import { attentionCount, trayState, trayTooltip, type TrayState } from '@shared/network';
 import { logger } from '../main/log';
@@ -29,8 +29,8 @@ export interface TrayModel {
   updateReady: boolean;
   /** Someone controls this computer (RC04): who, and whether it is paused. First in the menu while it lasts. */
   remoteControl: { controller: string; paused: boolean } | null;
-  /** Website chats ringing for me (RING-43): listed first, with Join; the icon shows it. */
-  webchatRinging: Array<{ id: number; label: string }>;
+  /** Website chats ringing for me (RING-43): listed first, with Join; the icon shows it. Silenced ones are not on the badge. */
+  webchatRinging: Array<{ id: number; label: string; silenced?: boolean }>;
   /** Visitors' voice calls ringing for me (VOICE-10): first of all, with Answer. Optional for older callers. */
   webchatCalls?: Array<{ id: number; label: string }>;
   /** The website call this computer is on (VOICE-UI-03), with a way back to it. */
@@ -70,6 +70,20 @@ export interface TrayActions {
   quickAsk: () => void;
   aiChanges: () => void;
   ringingSettings: () => void;
+  /**
+   * The ringing menu with its reply box (R-06, UX-ALR-02), by the tray icon (`anchor`, or null where it is not known):
+   * whether it opened. Optional for older callers, which keep the plain menu.
+   */
+  showRingMenu?: (anchor: Rectangle | null) => boolean;
+}
+
+/**
+ * What is ringing for me and not silenced (R-05, R-06; RING-44): it goes on the app's badge beside what is unread,
+ * until joined or silenced.
+ */
+export function ringingCount(m: Pick<TrayModel, 'signedIn' | 'apps' | 'webchatRinging' | 'webchatCalls'>): number {
+  if (!m.signedIn || !m.apps.includes('chat')) return 0;
+  return m.webchatRinging.filter((c) => !c.silenced).length + (m.webchatCalls?.length ?? 0);
 }
 
 function resourcesDir(): string {
@@ -119,6 +133,8 @@ export class TrayService {
     apps: [],
   };
   private lastState: TrayState | null = null;
+  /** The menu, kept to pop up on a right-click while a click opens the ringing menu (macOS, R-06). */
+  private menu: Menu | null = null;
 
   constructor(private readonly actions: TrayActions) {}
 
@@ -131,8 +147,21 @@ export class TrayService {
       return;
     }
     this.tray.setToolTip('WorkSuite');
-    if (process.platform !== 'darwin') this.tray.on('click', () => this.actions.open());
+    // While chats ring, a click opens the ringing menu with its reply box (R-06, UX-ALR-02); otherwise it opens
+    // WorkSuite (Windows, Linux) or shows the menu (macOS).
+    this.tray.on('click', (_e, bounds) => {
+      if (this.ringMenu(bounds)) return;
+      if (process.platform !== 'darwin') this.actions.open();
+    });
+    if (process.platform === 'darwin') this.tray.on('right-click', () => this.menu && this.tray?.popUpContextMenu(this.menu));
     this.render();
+  }
+
+  /** Opens the ringing menu by the icon, when something rings and the app has one: whether it did. */
+  private ringMenu(bounds: Rectangle | undefined): boolean {
+    const m = this.model;
+    if (!this.actions.showRingMenu || !m.signedIn || !m.apps.includes('chat') || !m.webchatRinging.length) return false;
+    return this.actions.showRingMenu(bounds && bounds.width > 0 ? bounds : (this.tray?.getBounds() ?? null));
   }
 
   update(patch: Partial<TrayModel>): void {
@@ -156,7 +185,8 @@ export class TrayService {
     const ringing = m.signedIn && hasChat ? m.webchatRinging.length + (m.webchatCalls?.length ?? 0) : 0;
     const state = ringing ? 'unread' : trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
     try {
-      app.setBadgeCount(m.signedIn && m.badge && process.platform !== 'darwin' ? unread : 0);
+      // Ringing chats count too, until joined or silenced (R-05/R-06 dock and taskbar badge; RING-44).
+      app.setBadgeCount(m.signedIn && m.badge && process.platform !== 'darwin' ? unread + ringingCount(m) : 0);
     } catch {
       /* not supported on this desktop */
     }
@@ -180,7 +210,11 @@ export class TrayService {
     if (process.platform === 'darwin') this.tray.setTitle(ringing ? ` ${ringing} ringing` : '');
     if (ringing) this.tray.setToolTip(m.webchatCalls?.length ? 'WorkSuite — a website visitor is calling' : `WorkSuite — ${ringing === 1 ? 'a website chat is' : `${ringing} website chats are`} ringing`);
     else if (m.signedIn && hasChat && m.webchatOnCall) this.tray.setToolTip(`WorkSuite — on a call with ${m.webchatOnCall.label}${m.webchatOnCall.held ? ' (on hold)' : ''}`);
-    this.tray.setContextMenu(Menu.buildFromTemplate(trayMenu(m, this.actions)));
+    this.menu = Menu.buildFromTemplate(trayMenu(m, this.actions));
+    // On macOS a menu set on the icon opens on every click: while chats ring, the click opens the ringing menu and a
+    // right-click this one (R-06).
+    const popover = process.platform === 'darwin' && ringing > 0 && m.webchatRinging.length > 0 && !!this.actions.showRingMenu;
+    this.tray.setContextMenu(popover ? null : this.menu);
   }
 
   destroy(): void {
@@ -219,6 +253,8 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
   if (m.signedIn && has('chat') && m.webchatRinging.length) {
     items.push({ label: m.webchatRinging.length === 1 ? 'Website chat ringing' : `${m.webchatRinging.length} website chats ringing`, enabled: false });
     for (const c of m.webchatRinging.slice(0, 5)) items.push({ label: `Join — ${c.label}`, click: () => a.joinWebchat(c.id) });
+    // Where the icon's click does not reach (most Linux trays), the ringing menu with its reply box from here (R-06).
+    if (a.showRingMenu) items.push({ label: 'Reply from here…', click: () => void a.showRingMenu?.(null) });
     items.push({ label: 'Open Website Chats', click: () => a.openRoute('/chat?view=website') });
     items.push({ label: 'Ringing settings…', click: a.ringingSettings });
     items.push({ type: 'separator' });

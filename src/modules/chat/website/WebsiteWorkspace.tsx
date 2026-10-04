@@ -156,8 +156,8 @@ export function WebsiteWorkspace() {
   const cbList = useCallbackList(cbStatus, mineOnly, section === 'callbacks' && structured);
   // What rings on this computer: the row shows it, and a silenced one is marked (RING-24).
   const ring = useRingState();
-  // Visitors waiting on me in my chats (#230): "(1) Website chats".
-  const waitingOnMe = ring.followUps?.length ?? 0;
+  // Visitors waiting on me in my chats (#230), and chats ringing for me (R-06, RING-45): "(3) Website chats".
+  const waitingOnMe = (ring.followUps?.length ?? 0) + ring.chats.length;
   useTabTitle(selected ? null : waitingOnMe ? `(${waitingOnMe}) Website chats` : 'Website chats');
   const ringing = new Map(ring.chats.map((c) => [c.id, c]));
   const handoffs = ring.handoffs ?? [];

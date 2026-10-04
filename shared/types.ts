@@ -672,6 +672,11 @@ export interface WebchatRingState {
   chime?: number;
   /** Whether the follow-up card shows over other apps (Settings › Website chats). */
   followUpCard?: boolean;
+  /**
+   * What I have typed to each ringing visitor, by conversation (R-05, R-06; UX-ALR-04): the call window and the tray's
+   * menu share it, and it is kept if a colleague joins first. Empty behind the lock.
+   */
+  drafts?: Record<number, string>;
 }
 
 /**
@@ -694,6 +699,11 @@ export interface WebchatRingOutcome {
   by?: string | null;
   email?: string | null;
   missed?: boolean;
+  /**
+   * What I had typed to the visitor when a colleague got there first (R-05, UX-ALR-04): kept, never sent unless I
+   * choose "Send to the chat" — then it goes as a participant's reply (TEAM-02). Absent behind the lock.
+   */
+  draft?: string | null;
 }
 
 /** A chat joined from the ringing card, shown there as a mini chat (worksuite-desktop#225). */
@@ -734,7 +744,8 @@ export interface StatusSnapshot {
   realtime: RealtimeState;
   pendingChanges: number;
   /** `webchat`: visitors who wrote again in my website chats while I was away from them (worksuite-desktop#230), on the badge. */
-  unread: { mail: number; chat: number; notifications: number; tasks: number; webchat?: number };
+  /** `ringing`: website chats and visitors' calls ringing for me and not silenced (R-05, R-06; RING-44), on the badge too. */
+  unread: { mail: number; chat: number; notifications: number; tasks: number; webchat?: number; ringing?: number };
   notificationsPausedUntil: string | null;
   /** Whether the operating system lets this app show notifications (false: banners are blocked there). */
   notificationsSupported?: boolean;
@@ -890,7 +901,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'quick-ask';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {

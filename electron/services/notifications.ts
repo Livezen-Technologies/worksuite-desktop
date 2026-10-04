@@ -613,6 +613,7 @@ export class NotificationService {
         const conv = String(e.conversation_id ?? '');
         const visitor = String(e.visitor_label ?? e.visitor ?? 'A visitor');
         const site = e.site ? String(e.site) : 'your website';
+        const id = Number(conv);
         this.notify({
           id: `webchat:${conv}:${String(e.event_id ?? Date.now())}`,
           module: 'chat',
@@ -621,6 +622,9 @@ export class NotificationService {
           sender: visitor,
           link: `/chat?website=${conv}`,
           critical: true,
+          // The native alert answers too (R-05, UX-ALR-01; RDC-15): a reply typed in it joins the ringing chat and is
+          // sent in one step, first come — as Send & join does in the call window.
+          website: Number.isSafeInteger(id) && id > 0 ? { conversationId: id, visitor } : null,
         });
         break;
       }

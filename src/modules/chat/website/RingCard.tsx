@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { WebchatFollowUp, WebchatJoined, WebchatRingChat, WebchatRingState } from '@shared/types';
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode } from 'react';
+import type { WebchatFollowUp, WebchatJoined, WebchatRingChat, WebchatRingOutcome, WebchatRingState } from '@shared/types';
 import { call, errorMessage, isMac } from '../../../core/bridge';
 import { toast } from '../../../core/toasts';
 import { Avatar, cx } from '../../../components/ui';
@@ -23,14 +23,14 @@ import { clock, firstName, handoverIn, ringsFor, silencedFor, stageLabel, stepLa
 
 const QUICK = ['Hi! How can I help?', 'One moment, checking for you', 'Can I call you back?'];
 
-/** The window takes the card's height. */
-export function useFit(): (el: HTMLDivElement | null) => void {
+/** The window takes the card's height: the call window's (`ring:fit`), or the tray's ringing menu's (R-06). */
+export function useFit(channel: 'ring:fit' | 'ring:trayFit' = 'ring:fit'): (el: HTMLDivElement | null) => void {
   const observer = useRef<ResizeObserver | null>(null);
   useEffect(() => () => observer.current?.disconnect(), []);
   return (el) => {
     observer.current?.disconnect();
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const report = () => void call('ring:fit', { height: Math.max(80, Math.min(1200, Math.ceil(el.getBoundingClientRect().height))) }).catch(() => undefined);
+    const report = () => void call(channel, { height: Math.max(80, Math.min(1200, Math.ceil(el.getBoundingClientRect().height))) }).catch(() => undefined);
     observer.current = new ResizeObserver(report);
     observer.current.observe(el);
     report();
@@ -38,6 +38,59 @@ export function useFit(): (el: HTMLDivElement | null) => void {
 }
 
 const minimise = () => void call('ring:minimise').catch(() => undefined);
+
+/**
+ * The native window's title strip (R-05, V-04): WorkSuite's mark, what the window is — "WorkSuite · Website chat" — and,
+ * on the ringing chat, that it stays on top of other apps (RING-40); minimise at its end where the card has one.
+ */
+export function WindowStrip({ title, badge, canMinimise }: { title: string; badge?: string; canMinimise?: boolean }) {
+  return (
+    <div className="drag flex h-8 shrink-0 items-center gap-2 bg-[#0B1430] px-3.5 text-[12px] text-[#C9CFE3]">
+      <span aria-hidden className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-[#4A63E8] text-[10px] font-bold text-white">W</span>
+      {title}
+      <span className="flex-1" />
+      {badge ? <span className="rounded-[4px] bg-[#1F2A5B] px-1.5 py-0.5 text-[11px] text-[#B3C0FF]">{badge}</span> : null}
+      {canMinimise ? (
+        <button type="button" aria-label="Minimise notification" title="Minimise (Esc)" onClick={minimise} className="no-drag -mr-1.5 flex h-6 w-6 items-center justify-center rounded-[6px] text-[#8C92B5] hover:bg-white/7 hover:text-white">
+          <Icon name="minus" size={13} />
+        </button>
+      ) : null}
+    </div>
+  );
+}
+
+/**
+ * What I type to a ringing visitor (R-05, R-06; UX-ALR-04): kept in the main process as well as here, so the call
+ * window and the tray's menu show the same words and a colleague joining first does not lose them.
+ */
+export function useRingDraft(id: number, kept: string | undefined): [string, (v: string) => void] {
+  const [draft, set] = useState(kept ?? '');
+  const pending = useRef<{ timer: ReturnType<typeof setTimeout>; text: string } | null>(null);
+  const tell = (t: string) => void call('ring:draft', { id, text: t }).catch(() => undefined);
+  useEffect(
+    () => () => {
+      // Said at once when the card goes, so the last words typed are not lost.
+      if (pending.current) {
+        clearTimeout(pending.current.timer);
+        tell(pending.current.text);
+      }
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [id],
+  );
+  const setDraft = (v: string) => {
+    set(v);
+    if (pending.current) clearTimeout(pending.current.timer);
+    pending.current = {
+      text: v,
+      timer: setTimeout(() => {
+        pending.current = null;
+        tell(v);
+      }, 200),
+    };
+  };
+  return [draft, setDraft];
+}
 
 /** The card's frame: dark, the header's red dot and status, and minimise. */
 function Frame({ dot, status, badge, children, hint, after, footer }: { dot: 'ringing' | 'silenced' | 'joined'; status: string; badge?: ReactNode; children: ReactNode; hint: string; after?: ReactNode; footer?: ReactNode }) {
@@ -69,7 +122,7 @@ const BADGE = {
   plain: 'bg-[#1B2341] text-[#CBD1E8]',
 } as const;
 
-function Badge({ tone, children }: { tone: keyof typeof BADGE; children: ReactNode }) {
+export function Badge({ tone, children }: { tone: keyof typeof BADGE; children: ReactNode }) {
   return <span className={cx('shrink-0 rounded-full px-2 py-[3px] text-[11px] font-semibold whitespace-nowrap', BADGE[tone])}>{children}</span>;
 }
 
@@ -140,9 +193,21 @@ function Mine({ text, last }: { text: string; last: boolean }) {
  * The reply box: what is typed, the AI button (a reply to what the visitor wrote, when this workspace has the
  * writing assistant) and Send. Enter sends.
  */
-function ReplyBox({ id, label, placeholder, sendLabel, draft, setDraft, onSend, busy, visitorSaid, disabled }: {
-  id: string; label: string; placeholder: string; sendLabel: string; draft: string; setDraft: (v: string) => void; onSend: () => void; busy: boolean; visitorSaid: string | null; disabled?: boolean;
+const LOOK = {
+  // The cards' own box: dark, blue Send.
+  card: { box: 'rounded-[12px] border bg-[#0E1231] py-1 pr-1 pl-3', on: 'border-[#6676FF]', off: 'border-white/10', input: 'h-[38px] text-[14px] text-[#E6E8F5] placeholder:text-[#8C92B5]', ai: 'h-[34px] w-[34px] text-[#AEB8FF] hover:bg-white/7', send: 'h-[38px] rounded-[9px] px-3 text-[13px] font-semibold', ready: 'bg-[#4F5FEF] hover:brightness-110', idle: 'bg-[#3A4170] text-white/70', icon: 15 },
+  // The native alert's (R-05): a white pill in a blue ring, green Send & join.
+  alert: { box: 'rounded-full bg-white py-1 pr-1 pl-3 shadow-[0_0_0_3px_rgba(74,99,232,0.45)]', on: '', off: '', input: 'h-9 text-[13.5px] text-[#161A2C] placeholder:text-[#6B7083]', ai: 'h-9 w-9 rounded-full text-[#273498] hover:bg-[#EEF1FD]', send: 'h-9 rounded-full px-3 text-[13px] font-bold', ready: 'bg-[#2F9E67] hover:brightness-110', idle: 'bg-[#2F9E67]/60 text-white/90', icon: 14 },
+  // The tray's ringing menu (R-06): smaller, a blue border on white.
+  menu: { box: 'rounded-full border border-primary bg-surface py-[3px] pr-[3px] pl-2.5 shadow-[0_0_0_3px_var(--color-selection)]', on: '', off: '', input: 'h-[26px] text-[12px] text-ink placeholder:text-ink-3', ai: 'h-[26px] w-[26px] rounded-full text-primary hover:bg-selection', send: 'h-[26px] rounded-full px-2.5 text-[11.5px] font-bold', ready: 'bg-[#2F9E67] hover:brightness-110', idle: 'bg-[#2F9E67]/60 text-white/90', icon: 11 },
+} as const;
+
+export function ReplyBox({ id, label, placeholder, sendLabel, sendAria, draft, setDraft, onSend, busy, visitorSaid, disabled, look = 'card', onKeys }: {
+  id: string; label: string; placeholder: string; sendLabel: string; sendAria?: string; draft: string; setDraft: (v: string) => void; onSend: () => void; busy: boolean; visitorSaid: string | null; disabled?: boolean; look?: keyof typeof LOOK;
+  /** Keys the box does not handle itself (the saved replies list's arrows, R-05). */
+  onKeys?: (e: KeyboardEvent<HTMLInputElement>) => boolean;
 }) {
+  const L = LOOK[look];
   const writer = useWriter();
   const canWrite = !!writer.data?.available && writer.data.actions.some((a) => a.key === 'reply') && !!visitorSaid;
   const [thinking, setThinking] = useState(false);
@@ -159,7 +224,7 @@ function ReplyBox({ id, label, placeholder, sendLabel, draft, setDraft, onSend, 
   };
   const ready = !!draft.trim() && !busy && !disabled;
   return (
-    <div className={cx('flex items-center gap-1.5 rounded-[12px] border bg-[#0E1231] py-1 pr-1 pl-3', draft ? 'border-[#6676FF]' : 'border-white/10')}>
+    <div className={cx('flex items-center gap-1.5', L.box, draft ? L.on : L.off)}>
       <label htmlFor={id} className="sr-only">{label}</label>
       <input
         id={id}
@@ -169,47 +234,93 @@ function ReplyBox({ id, label, placeholder, sendLabel, draft, setDraft, onSend, 
         maxLength={4000}
         onChange={(e) => setDraft(e.target.value)}
         onKeyDown={(e) => {
+          if (onKeys?.(e)) return;
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
             if (ready) onSend();
           }
         }}
         placeholder={placeholder}
-        className="h-[38px] min-w-0 flex-1 bg-transparent text-[14px] text-[#E6E8F5] outline-none placeholder:text-[#8C92B5]"
+        className={cx('min-w-0 flex-1 bg-transparent outline-none', L.input)}
       />
       {canWrite ? (
-        <button type="button" aria-label="Write with AI" title="Write a reply with AI" disabled={thinking || disabled} onClick={() => void ai()} className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] text-[#AEB8FF] hover:bg-white/7 disabled:opacity-50">
+        <button type="button" aria-label="Write with AI" title="Write a reply with AI" disabled={thinking || disabled} onClick={() => void ai()} className={cx('flex items-center justify-center rounded-[9px] disabled:opacity-50', L.ai)}>
           <Icon name={thinking ? 'spinner' : 'sparkles'} size={16} className={cx(thinking && 'animate-spin')} />
         </button>
       ) : null}
-      <button type="button" disabled={!ready} onClick={onSend} className={cx('flex h-[38px] items-center gap-1.5 rounded-[9px] px-3 text-[13px] font-semibold text-white', ready ? 'bg-[#4F5FEF] hover:brightness-110' : 'bg-[#3A4170] text-white/70')}>
-        <Icon name="send" size={15} />
+      <button type="button" aria-label={sendAria} disabled={!ready} onClick={onSend} className={cx('flex shrink-0 items-center gap-1.5 whitespace-nowrap text-white', L.send, ready ? L.ready : L.idle)}>
+        <Icon name="send" size={L.icon} />
         {sendLabel}
       </button>
     </div>
   );
 }
 
-/** Quick replies: the team's most used saved replies, or three plain ones; a click puts one in the box. */
-function Chips({ pick, enabled }: { pick: (text: string) => void; enabled: boolean }) {
+/**
+ * Quick replies: the team's most used saved replies, or plain ones; a click puts one in the box (and which saved reply
+ * it was, counted once sent — RDC-03). With `onSaved`, the native alert's "/ saved" chip opens the whole list (R-05).
+ */
+function Chips({ pick, enabled, max = 3, onSaved, savedOpen, className }: { pick: (text: string, cannedId?: number) => void; enabled: boolean; max?: number; onSaved?: () => void; savedOpen?: boolean; className?: string }) {
   const canned = useCanned(enabled);
-  const chips = (canned.data?.responses ?? []).slice(0, 3).map((r) => ({ label: r.title || r.body, text: r.body }));
-  const list = chips.length ? chips : QUICK.map((t) => ({ label: t, text: t }));
+  const responses = canned.data?.responses ?? [];
+  const chips = responses.slice(0, max).map((r) => ({ label: r.title || r.body, text: r.body, id: r.id }));
+  const list = chips.length ? chips : QUICK.slice(0, max).map((t) => ({ label: t, text: t, id: undefined }));
   return (
-    <div className="flex flex-wrap gap-1.5 px-4 pt-1.5" role="group" aria-label="Quick replies">
+    <div className={cx('flex flex-wrap gap-1.5 px-4 pt-1.5', className)} role="group" aria-label="Quick replies">
       {list.map((c) => (
-        <button key={c.label} type="button" onClick={() => pick(c.text)} className="h-[30px] max-w-full truncate rounded-full border border-white/14 bg-white/[.04] px-[11px] text-[12px] font-medium text-[#E6E8F5] hover:bg-white/10">
+        <button key={c.label} type="button" onClick={() => pick(c.text, c.id)} className="h-[28px] max-w-full truncate rounded-full border border-[#2A3870] bg-[#1A2550] px-2.5 text-[12px] font-medium text-[#DFE3F0] hover:bg-[#22306A]">
           {c.label}
         </button>
       ))}
+      {onSaved && responses.length ? (
+        <button type="button" aria-expanded={!!savedOpen} aria-label="Saved replies" onClick={onSaved} className="h-[28px] rounded-full border border-[#2A3870] bg-[#1A2550] px-2.5 font-mono text-[12px] text-[#B3C0FF] hover:bg-[#22306A]">
+          / saved
+        </button>
+      ) : null}
     </div>
   );
 }
 
-/** Join chat and Join & send: one request, first come; a moment too late, the card says who has it. */
-async function joinSend(id: number, message?: string): Promise<boolean> {
+/** A saved reply matches what follows "/" in the box: its shortcut, title or words. */
+export function savedMatches<T extends { shortcut: string | null; title: string; body: string }>(list: T[], query: string): T[] {
+  const q = query.trim().toLowerCase();
+  if (!q) return list;
+  return list.filter((r) => [r.shortcut, r.title, r.body].some((v) => v?.toLowerCase().includes(q)));
+}
+
+/**
+ * The team's saved replies in the native alert (R-05, UX-ALR-01): opened by the "/ saved" chip, or by typing "/" in
+ * the reply box, narrowed by what follows; picking one puts it in the box.
+ */
+function SavedReplies({ query, pick }: { query: string; pick: (text: string, cannedId: number) => void }) {
+  const canned = useCanned(true);
+  const list = savedMatches(canned.data?.responses ?? [], query).slice(0, 6);
+  return (
+    <ul role="listbox" aria-label="Saved replies" className="mx-[18px] mt-2 flex max-h-[180px] flex-col overflow-y-auto rounded-[10px] border border-[#2A3870] bg-[#0E1534] py-1">
+      {list.length ? (
+        list.map((r) => (
+          <li key={r.id} role="option" aria-selected={false} tabIndex={-1} onMouseDown={(e) => e.preventDefault()} onClick={() => pick(r.body, r.id)} className="flex cursor-pointer flex-col gap-0.5 px-3 py-1.5 hover:bg-[#1A2550]">
+            <span className="truncate text-[12.5px] font-semibold text-white">
+              {r.shortcut ? <span className="mr-1.5 font-mono text-[#B3C0FF]">/{r.shortcut}</span> : null}
+              {r.title || r.body}
+            </span>
+            {r.title ? <span className="truncate text-[11.5px] text-[#AAB2C9]">{r.body}</span> : null}
+          </li>
+        ))
+      ) : (
+        <li className="px-3 py-1.5 text-[12px] text-[#AAB2C9]">{canned.isLoading ? text('Loading…') : text('No saved replies match.')}</li>
+      )}
+    </ul>
+  );
+}
+
+/**
+ * Join chat and Join & send: one request, first come; a moment too late, the card says who has it. `open`: the thread
+ * opens after (R-05, RING-41); `cannedId`: the saved reply it came from (RDC-03).
+ */
+export async function joinSend(id: number, message?: string, opts: { open?: boolean; cannedId?: number } = {}): Promise<boolean> {
   try {
-    const r = await call('ring:joinSend', { id, ...(message ? { message } : {}) });
+    const r = await call('ring:joinSend', { id, ...(message ? { message } : {}), ...(opts.open ? { open: true } : {}), ...(message && opts.cannedId ? { cannedId: opts.cannedId } : {}) });
     return r.ok;
   } catch (e) {
     toast('error', errorMessage(e));
@@ -219,88 +330,103 @@ async function joinSend(id: number, message?: string): Promise<boolean> {
 
 const silence = (id: number, on: boolean) => void call('ring:silence', { id, on }).catch(() => undefined);
 
-/** One chat ringing (#225, design 1). */
+/** The outcome's words where a card says them in a line: not words kept for me, which have their own card (UX-ALR-04). */
+export function outcomeLine(s: Pick<WebchatRingState, 'outcome'>): string | null {
+  return s.outcome && !s.outcome.draft ? s.outcome.text : null;
+}
+
+/**
+ * One chat ringing, as the native incoming-chat window over another app (R-05, RING-UI-06, X-UI-10; RING-40/41/46,
+ * UX-ALR-01): the title strip — "WorkSuite · Website chat", Always on top — the visitor in the pulsing ring with
+ * INCOMING WEBSITE CHAT and how long they have waited, the site and the page they are on, what they wrote, quick
+ * replies with "/ saved", a reply box whose Send & join joins, sends, stops the ring for everyone and opens the thread,
+ * then Join chat and Silence, and "Rings until someone joins" with the keys. The step and visit chips (R-01) stay.
+ */
 export function RingCard({ s, c, now, after }: { s: WebchatRingState; c: WebchatRingChat; now: number; after?: ReactNode }) {
-  const [draft, setDraft] = useState('');
+  const [draft, setDraft] = useRingDraft(c.id, s.drafts?.[c.id]);
+  const [canned, setCanned] = useState<number | null>(null);
+  const [savedOpen, setSavedOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const joinKey = isMac ? '⌘⇧J' : 'Ctrl+Shift+J';
   const handover = c.mine ? handoverIn(c.handoverAt, now) : null;
   const send = async (withText: boolean) => {
     if (busy) return;
+    const words = withText ? draft.trim() : '';
     setBusy(true);
-    const ok = await joinSend(c.id, withText ? draft.trim() : undefined);
+    // Both open the thread (RING-41): with words, they are in it, delivered (WF-X1).
+    const ok = await joinSend(c.id, words || undefined, { open: true, ...(words && canned ? { cannedId: canned } : {}) });
     setBusy(false);
-    if (ok) setDraft('');
+    if (ok && words) {
+      setDraft('');
+      setCanned(null);
+    }
   };
-  // "Rings until someone joins" is the footer's now (R-01), beside how many others it rings for.
-  const hint = s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `Enter sends and joins${s.shortcut ? ` · ${joinKey} join` : ''} · Esc minimises`;
+  const type = (v: string) => {
+    setDraft(v);
+    setCanned(null);
+    // "/" first opens the saved replies, narrowed by what follows.
+    setSavedOpen(v.startsWith('/'));
+  };
+  const pick = (t: string, id?: number) => {
+    setDraft(t);
+    setCanned(id ?? null);
+    setSavedOpen(false);
+  };
+  const name = s.hidden ? 'A website visitor' : c.visitor;
+  const time = waited(c.since, now);
+  const status = outcomeLine(s) ?? (s.elsewhere ? 'Ringing on your other device — shown here without sound' : null);
   const others = s.chats.length - 1;
   return (
-    <Frame
-      dot={c.silenced ? 'silenced' : 'ringing'}
-      status={c.silenced ? 'Incoming website chat · silenced' : 'Incoming website chat'}
-      hint={hint}
-      after={after}
-      footer={
-        <>
-          {/* The footer (R-01, RING-UI-01; RING-23): it rings until someone joins, for how many others, and +N waiting. */}
-          <div className="drag flex items-center justify-between gap-3 bg-[#0C1430] px-4 py-2.5 text-[12px] text-[#9AA3C4]">
-            <span className="min-w-0 truncate">{ringsFor(c)}</span>
-            {others > 0 ? (
-              <button type="button" onClick={() => void call('ring:openInbox').catch(() => undefined)} className="no-drag shrink-0 font-bold text-[#B3C0FF] hover:text-white">
-                {text('+{n} waiting', { n: others })}
-              </button>
-            ) : null}
-          </div>
-        </>
-      }
-    >
+    <section aria-label="WorkSuite incoming website chat" className="flex flex-col bg-[#111B3B] text-[13px] text-[#F1F4FB]" onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), savedOpen ? setSavedOpen(false) : minimise())}>
+      <WindowStrip title="WorkSuite · Website chat" badge="Always on top" canMinimise />
       <div className="sr-only" role="alert" aria-live="assertive">
         {s.hidden ? 'A website chat is waiting.' : `Website chat: ${c.visitor}${c.site ? ` on ${c.site}` : ''} is waiting.`}
       </div>
-      <Visitor c={c} now={now} hidden={s.hidden} pulse={!c.silenced} chips={<RingChips c={c} />} />
-      {!s.hidden && c.page ? <Reading page={c.page} /> : null}
-      {!s.hidden && c.preview ? (
-        <div className="flex flex-col gap-2 px-4 pt-3 pb-1">
-          <Theirs text={c.preview} />
-        </div>
-      ) : null}
-      {c.mine && c.by ? <p className="px-4 pt-1 text-[11.5px] text-[#AEB3D1]">Assigned to you by {c.by}</p> : null}
+      <div className="drag flex items-center gap-4 px-[18px] pt-[18px] pb-2">
+        {/* Ringing, the ring pulses (RING-30): under three times a second, and still with reduced motion. */}
+        <span aria-hidden className="flex h-[82px] w-[82px] shrink-0 items-center justify-center rounded-full border-2 border-[rgba(99,123,242,0.35)] motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
+          <Avatar name={s.hidden ? '?' : c.visitor} size={62} />
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <span className="text-[11px] font-bold tracking-[1px] text-[#F7B0A4] uppercase">
+            <span>Incoming website chat</span>
+            {' · '}
+            <span role="timer" aria-label={`Waiting ${time}`} className="font-mono tabular-nums">{time}</span>
+          </span>
+          <b className="truncate text-[19px] font-bold text-white">{name}</b>
+          <span className="truncate text-[13px] text-[#AAB2C9]">{s.hidden ? 'Unlock WorkSuite to see who.' : [c.site, c.page].filter(Boolean).join(' · ') || 'Website chat'}</span>
+          {!s.hidden ? <RingChips c={c} /> : null}
+        </span>
+      </div>
+      {c.mine && c.by && !s.hidden ? <p className="px-[18px] text-[11.5px] text-[#AEB3D1]">Assigned to you by {c.by}</p> : null}
+      {!s.hidden && c.preview ? <p className="mx-[18px] mt-1.5 rounded-[10px] border border-[#24306A] bg-[#1A2550] px-3 py-2.5 text-[13px] leading-[1.45] break-words whitespace-pre-wrap">{c.preview}</p> : null}
       {!s.hidden ? (
         <>
-          <Chips pick={setDraft} enabled={!s.hidden} />
-          <div className="px-4 pt-2.5">
-            <ReplyBox id={`ring-reply-${c.id}`} label="Reply to visitor" placeholder="Type a reply to join and send" sendLabel="Join & send" draft={draft} setDraft={setDraft} onSend={() => void send(true)} busy={busy} visitorSaid={c.preview} />
+          <Chips pick={pick} enabled={!s.hidden} max={2} onSaved={() => setSavedOpen((o) => !o)} savedOpen={savedOpen} className="px-[18px] pt-3" />
+          {savedOpen ? <SavedReplies query={draft.startsWith('/') ? draft.slice(1) : ''} pick={pick} /> : null}
+          <div className="mx-[18px] mt-2.5">
+            <ReplyBox id={`ring-reply-${c.id}`} label="Reply and join" placeholder={text('Type a reply…')} sendLabel="Send & join" sendAria="Send and join" draft={draft} setDraft={type} onSend={() => void send(true)} busy={busy} visitorSaid={c.preview} look="alert" />
           </div>
+          <p className="drag px-[22px] pt-1.5 text-[11.5px] text-[#8B93AD]">Sending joins you to the chat, stops the ring for everyone and opens the thread.</p>
         </>
       ) : null}
-      <div className="flex gap-2 px-4 pt-3">
-        <button type="button" disabled={s.hidden || busy} onClick={() => void send(false)} className="flex h-11 flex-[1.4] items-center justify-center gap-2 rounded-[11px] bg-[#22A35A] text-[14px] font-bold text-white hover:brightness-110 disabled:opacity-50">
-          <Icon name="chat" size={16} />
+      <div className="flex gap-2.5 px-[18px] py-3">
+        <button type="button" disabled={s.hidden || busy} onClick={() => void send(false)} className="h-[42px] flex-1 rounded-full bg-[#2F9E67] text-[14.5px] font-bold text-white hover:brightness-110 disabled:opacity-50">
           Join chat
         </button>
         {c.mine ? (
-          <button type="button" disabled={s.hidden} onClick={() => void call('ring:join', { id: c.id, then: 'transfer' }).catch((e) => toast('error', errorMessage(e)))} className="h-11 flex-1 rounded-[11px] border border-white/14 text-[13px] font-semibold hover:bg-white/7 disabled:opacity-50">
+          <button type="button" disabled={s.hidden} onClick={() => void call('ring:join', { id: c.id, then: 'transfer' }).catch((e) => toast('error', errorMessage(e)))} className="h-[42px] shrink-0 rounded-full border border-[#3A4468] px-4 text-[13.5px] font-semibold hover:bg-white/5 disabled:opacity-50">
             Transfer
           </button>
         ) : null}
-        {/* Silence in words, as the design has it (R-01): a personal mute on all my devices until at risk (RING-11). */}
-        <button
-          type="button"
-          aria-label={c.silenced ? 'Unsilence ringing' : 'Silence ringing'}
-          aria-pressed={c.silenced}
-          title={c.silenced ? 'Unsilence ringing' : 'Silence ringing'}
-          onClick={() => silence(c.id, !c.silenced)}
-          className={cx('flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[11px] border border-white/14 px-3 text-[13px] font-semibold hover:bg-white/7', c.silenced && 'bg-white/10')}
-        >
-          <Icon name="bell-off" size={16} />
-          {/* Taken back in R-04's word: Unsilence. */}
+        {/* Silence in words (R-05): a personal mute on all my devices until at risk (RING-11). */}
+        <button type="button" aria-pressed={c.silenced} onClick={() => silence(c.id, !c.silenced)} className={cx('h-[42px] w-[104px] shrink-0 rounded-full border border-[#3A4468] text-[13.5px] font-semibold text-[#F1F4FB] hover:bg-white/5', c.silenced && 'bg-white/10')}>
           {c.silenced ? text('Unsilence') : text('Silence')}
         </button>
       </div>
       {handover !== null ? (
         // A chat given to me passes on if I do not join it in time (RING-UI-02): the same countdown as in the stack.
-        <div className="px-4 pt-2.5">
+        <div className="px-[18px] pb-2">
           <Handover
             left={handover}
             pass={
@@ -311,7 +437,49 @@ export function RingCard({ s, c, now, after }: { s: WebchatRingState; c: Webchat
           />
         </div>
       ) : null}
-    </Frame>
+      {after}
+      {status ? <p role="status" className="drag px-[18px] pt-1 text-[11.5px] text-[#B3C0FF]">{status}</p> : null}
+      {/* The footer (R-05; R-01 RING-23): it rings until someone joins — for how many others — and the keys. */}
+      <div className="drag flex items-center justify-between gap-3 px-[18px] pt-1 pb-3 text-[12px] text-[#8B93AD]">
+        <span className="min-w-0 truncate">{ringsFor(c)}</span>
+        {others > 0 ? (
+          <button type="button" onClick={() => void call('ring:openInbox').catch(() => undefined)} className="no-drag shrink-0 font-bold text-[#B3C0FF] hover:text-white">
+            {text('+{n} waiting', { n: others })}
+          </button>
+        ) : null}
+        <span className="shrink-0 font-mono">{s.shortcut ? `↵ send · ${joinKey} join` : '↵ send'}</span>
+      </div>
+    </section>
+  );
+}
+
+const outcomeAct = (action: 'view' | 'missed' | 'dismiss' | 'participant') => void call('ring:outcome', { action }).catch(() => undefined);
+
+/**
+ * A colleague joined while I was typing to the visitor (R-05, R-06; UX-ALR-04): "Nuwan joined — send to the chat as a
+ * participant?", my words as I left them, and the choice — Send to the chat (as a participant, TEAM-02), View, or
+ * Discard. Nothing is sent without it.
+ */
+export function ParticipantCard({ o }: { o: WebchatRingOutcome }) {
+  return (
+    <section role="alert" aria-label="A colleague joined first" className="flex flex-col gap-2.5 bg-[#111B3B] px-[18px] py-3.5 text-[13px] text-[#F1F4FB]">
+      <div className="drag flex items-center gap-2.5">
+        <Avatar name={o.by ?? '?'} size={34} />
+        <b className="min-w-0 flex-1 text-[14px] leading-snug">{o.text}</b>
+      </div>
+      <p aria-label="Your reply, not sent" className="rounded-[10px] border border-[#24306A] bg-[#1A2550] px-3 py-2.5 leading-[1.45] break-words whitespace-pre-wrap">{o.draft}</p>
+      <div className="flex gap-2">
+        <button type="button" onClick={() => outcomeAct('participant')} className="h-10 flex-1 rounded-full bg-[#2F9E67] text-[13.5px] font-bold text-white hover:brightness-110">
+          {text('Send to the chat')}
+        </button>
+        <button type="button" onClick={() => outcomeAct('view')} className="h-10 shrink-0 rounded-full border border-[#3A4468] px-4 text-[13px] font-semibold hover:bg-white/5">
+          {text('View')}
+        </button>
+        <button type="button" onClick={() => outcomeAct('dismiss')} className="h-10 shrink-0 rounded-full border border-[#3A4468] px-4 text-[13px] font-semibold hover:bg-white/5">
+          {text('Discard')}
+        </button>
+      </div>
+    </section>
   );
 }
 
@@ -348,7 +516,8 @@ function Handover({ left, pass }: { left: number; pass: ReactNode }) {
  * RING-12); waiting, a compact row with its site and step.
  */
 function StackRow({ s, c, now }: { s: WebchatRingState; c: WebchatRingChat; now: number }) {
-  const [draft, setDraft] = useState('');
+  // Kept like the single card's, so a colleague joining first does not lose it (UX-ALR-04).
+  const [draft, setDraft] = useRingDraft(c.id, s.drafts?.[c.id]);
   const [busy, setBusy] = useState(false);
   const go = async () => {
     if (busy) return;
@@ -462,7 +631,7 @@ export function RingStack({ s, chats, now, after }: { s: WebchatRingState; chats
       </ul>
       {chats.length > shown.length ? <p className="px-1 text-[11.5px] text-[#AEB3D1]">+{chats.length - shown.length} more waiting</p> : null}
       {after}
-      {s.outcome ? <p className="px-1 text-[11.5px] text-[#AEB3D1]">{s.outcome.text}</p> : null}
+      {outcomeLine(s) ? <p className="px-1 text-[11.5px] text-[#AEB3D1]">{outcomeLine(s)}</p> : null}
     </div>
   );
 }
@@ -544,7 +713,7 @@ export function SilencedCard({ s, c, now }: { s: WebchatRingState; c: WebchatRin
         </button>
       </div>
       <p className="drag flex items-center gap-3 text-[12px] text-[#9AA3C4]">
-        <span className="min-w-0 flex-1">{s.outcome ? s.outcome.text : text('It rings for you again if it becomes at risk.')}</span>
+        <span className="min-w-0 flex-1">{outcomeLine(s) ?? text('It rings for you again if it becomes at risk.')}</span>
         {others > 0 ? (
           <button type="button" onClick={() => void call('ring:openInbox').catch(() => undefined)} className="no-drag shrink-0 font-bold text-[#B3C0FF] hover:text-white">
             {text('+{n} waiting', { n: others })}
@@ -555,7 +724,7 @@ export function SilencedCard({ s, c, now }: { s: WebchatRingState; c: WebchatRin
   );
 }
 
-const outcomeAction = (action: 'view' | 'missed' | 'dismiss') => void call('ring:outcome', { action }).catch(() => undefined);
+const outcomeAction = outcomeAct;
 
 /**
  * How the ring ended (R-03, RING-UI-03; RING-02, RING-03, RING-28), when nothing else is ringing:

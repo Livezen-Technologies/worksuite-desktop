@@ -8,7 +8,7 @@ import { cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useNow } from '../../calls/parts';
 import { playOnce, playTone } from '../../calls/tones';
-import { FollowUpCard, JoinedCard, OutcomeCard, RingCard, RingStack, SilencedCard, followUpStatus, useFit } from './RingCard';
+import { FollowUpCard, JoinedCard, OutcomeCard, ParticipantCard, RingCard, RingStack, SilencedCard, WindowStrip, followUpStatus, useFit } from './RingCard';
 
 /**
  * Website chats ringing like calls (WS-WCHAT ENH-01): the native call window
@@ -240,6 +240,8 @@ export function WebchatRingWindow() {
   const [firstCall, ...otherCalls] = s.calls ?? [];
   // Invitations and transfers ringing beside chats, under the chat card.
   const asks = handoffs.length && top ? <HandoffRows s={s} list={handoffs.slice(0, 2)} more={handoffs.length - 2} now={now} first /> : null;
+  // A colleague joined while I was typing (UX-ALR-04): my words and the choice, above whatever else still rings.
+  const offer = s.outcome?.draft && !s.hidden ? <ParticipantCard o={s.outcome} /> : null;
 
   let body: ReactNode;
   // A visitor on the line comes before everything else (VOICE-10).
@@ -247,15 +249,20 @@ export function WebchatRingWindow() {
   // Every chat silenced for me: the compact "still waiting" card (R-04, RING-24) — at risk clears a silence, so it
   // never hides one. One chat: the full card with its reply box; several: a compact card each (#225).
   else if (top && !asks && s.chats.every((c) => c.silenced)) body = <SilencedCard s={s} c={top} now={now} />;
-  else if (top) body = s.chats.length > 1 ? <RingStack s={s} chats={s.chats} now={now} after={asks} /> : <RingCard s={s} c={top} now={now} after={asks} />;
+  else if (top) body = s.chats.length > 1 ? <RingStack s={s} chats={s.chats} now={now} after={asks} /> : <RingCard key={top.id} s={s} c={top} now={now} after={asks} />;
   else if (handoffs[0]) body = <HandoffCard s={s} h={handoffs[0]} rest={handoffs.slice(1)} now={now} />;
   // A chat just joined from the card: a mini chat until the full chat is opened or the card minimised (#225).
   else if (s.joined) body = <JoinedCard j={s.joined} now={now} colleagues={s.youJoined?.id === s.joined.conversationId ? s.youJoined.colleagues : null} />;
   // A visitor who wrote again in my chat while I was away from it (#230).
   else if (s.followUps?.[0]) body = <FollowUpCard s={s} f={s.followUps[0]} rest={s.followUps.slice(1)} now={now} />;
   // How the ring ended (R-03, RING-UI-03).
-  else body = <OutcomeCard s={s} />;
-  return <div ref={fit}>{body}</div>;
+  else body = offer ? null : <OutcomeCard s={s} />;
+  return (
+    <div ref={fit}>
+      {offer}
+      {body}
+    </div>
+  );
 }
 
 /**
@@ -289,10 +296,7 @@ function CallCard({ s, c, rest, more, now }: { s: WebchatRingState; c: WebchatCa
       <div className="sr-only" role="alert" aria-live="assertive">
         {s.hidden ? 'A website visitor is calling.' : `Voice call: ${c.visitor}${c.site ? ` on ${c.site}` : ''} is calling.`}
       </div>
-      <div className="drag flex h-8 shrink-0 items-center gap-2 bg-[#0B1430] px-3.5 text-[12px] text-[#C9CFE3]">
-        <span aria-hidden className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-[#4A63E8] text-[10px] font-bold text-white">W</span>
-        WorkSuite · Website voice call
-      </div>
+      <WindowStrip title="WorkSuite · Website voice call" />
       <div className="drag flex items-center gap-4 px-[18px] pt-[18px] pb-2">
         <span aria-hidden className="flex h-[82px] w-[82px] shrink-0 items-center justify-center rounded-full border-2 border-[#65B385]/45 motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
           <span className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-[#2F9E67] text-white">
@@ -555,7 +559,8 @@ export function RingAlertPill() {
   const top = live[0] ?? s.chats[0]!;
   const silenced = !live.length;
   const time = waited(top.since, now);
-  const label = silenced ? text('Silenced · {n} waiting', { n: s.chats.length }) : text('Website chat ringing');
+  // Several ringing: "3 website chats ringing" (R-06, DsTopBar ring-text), as the tray and the dock count them.
+  const label = silenced ? text('Silenced · {n} waiting', { n: s.chats.length }) : live.length > 1 ? text('{n} website chats ringing', { n: live.length }) : text('Website chat ringing');
   return (
     <button
       type="button"

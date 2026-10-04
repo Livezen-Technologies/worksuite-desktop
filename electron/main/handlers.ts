@@ -360,13 +360,17 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:join', (input) => ctx.webchat.join(input.id, input.then));
   router.handle('ring:silence', (input) => ctx.webchat.silence(input.id, input.on));
   router.handle('ring:pass', (input) => ctx.webchat.pass(input.id));
-  router.handle('ring:joinSend', (input) => ctx.webchat.joinAndSend(input.id, input.message ?? null));
+  router.handle('ring:joinSend', (input) => ctx.webchat.joinAndSend(input.id, input.message ?? null, { ...(input.open ? { open: true } : {}), ...(input.cannedId ? { cannedId: input.cannedId } : {}) }));
+  router.handle('ring:draft', (input) => ctx.webchat.setDraft(input.id, input.text));
   router.handle('ring:reply', (input) => ctx.webchat.replyJoined(input.message));
   router.handle('ring:closeJoined', (input) => ctx.webchat.closeJoined(input.open));
   router.handle('ring:minimise', () => ctx.webchat.minimise());
   router.handle('ring:fit', (input) => ctx.webchat.fit(input.height));
   router.handle('ring:openInbox', () => ctx.webchat.openInbox());
   router.handle('ring:outcome', (input) => ctx.webchat.outcomeAction(input.action));
+  // The tray's ringing menu (R-06): its height, and Open Website Chats, Ringing settings…, Quit WorkSuite.
+  router.handle('ring:trayFit', (input) => ctx.ringTray.fit(input.height));
+  router.handle('ring:tray', (input) => ctx.ringTray.act(input.action));
   // A visitor who wrote again in my chat (#230): the card's actions, and which conversation the main window shows.
   router.handle('ring:followUp', (input) => ctx.webchat.followUp(input.id, input.action, input.message));
   router.handle('ring:viewing', (input) => ctx.webchat.setViewing(input.id));

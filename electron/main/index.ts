@@ -994,12 +994,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   let statusTimer: NodeJS.Timeout | null = null;
   // Visitors waiting on me in my website chats (#230), from the ringer: on the Dock and taskbar badge.
   let followUpCount = 0;
+  // Website chats and calls ringing for me and not silenced (R-05, R-06; RING-44): on the badge until joined or silenced.
+  let ringingCount = 0;
   const snapshot = (): StatusSnapshot => {
     const uid = sessionCtl?.userId();
     const raw = notifications.counts();
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
-    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0 };
+    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -1257,6 +1259,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     quickAsk: () => void quickAsk.open(),
     aiChanges: () => openAiChanges(),
     ringingSettings: () => navigate({ route: '/settings/notifications', source: 'tray' }),
+    showRingMenu: (anchor) => ringTray.show(anchor),
   });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
@@ -1316,7 +1319,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return answerHeld;
   };
   const trayCalls = (s: WebchatRingState) => ({
-    webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })),
+    webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor, silenced: c.silenced })),
     webchatCalls: (s.calls ?? []).map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })),
     webchatOnCall: onCall ? { conversationId: onCall.conversationId, label: onCall.visitor, held: onCall.held } : null,
   });
@@ -1365,6 +1368,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if ((s.chats.length || s.handoffs?.length || s.calls?.length || s.outcome || s.joined || followUps) && !s.minimised && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(s.fit ?? ringerHeight(s));
       else windows.hideRinger();
       tray.update(trayCalls(s));
+      // The Dock and taskbar badge count what rings until it is joined or silenced (RING-44).
+      const nowRinging = s.chats.filter((c) => !c.silenced).length + (s.calls?.length ?? 0);
+      if (nowRinging !== ringingCount) {
+        ringingCount = nowRinging;
+        emitStatus();
+      }
+      // The tray's ringing menu goes with the last chat ringing, and behind the lock (R-06).
+      if (!s.chats.length || s.hidden) windows.hideRingTray();
       const live = s.chats.some((c) => !c.silenced) || !!s.handoffs?.length;
       attention(live || !!s.calls?.length);
       webchat.shortcut = joinShortcut(live && prefs.shortcut);
@@ -1382,6 +1393,27 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   notifications.ringerShowing = () => settings.effective().webchatRinging.window && (webchat.state().chats.length > 0 || !!webchat.state().handoffs?.length || !!webchat.state().calls?.length);
   // The call window shows a visitor's call whenever it is on and the lock lets it (V-04): as onChanged decides.
   notifications.callWindowOn = () => settings.effective().webchatRinging.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false);
+  // The tray's ringing menu (R-06, RING-UI-07; UX-ALR-02): by the icon while chats ring, never behind the lock — the
+  // plain menu says only what it always says there.
+  let ringTrayHeight: number | null = null;
+  const ringTray = {
+    show: (anchor: Electron.Rectangle | null): boolean => {
+      const s = webchat.state();
+      if (lock.isLocked() || s.hidden || !s.chats.length) return false;
+      windows.showRingTray(anchor, ringTrayHeight ?? 120 + Math.min(4, s.chats.length) * 64);
+      return true;
+    },
+    fit: (height: number): void => {
+      ringTrayHeight = height;
+      windows.fitRingTray(height);
+    },
+    act: (action: 'inbox' | 'settings' | 'quit' | 'close'): void => {
+      windows.hideRingTray();
+      if (action === 'inbox') navigate({ route: '/chat?view=website&section=inbox', source: 'tray' });
+      else if (action === 'settings') navigate({ route: '/settings/notifications', source: 'tray' });
+      else if (action === 'quit') quit();
+    },
+  };
   const webchatOnCall = (c: WebchatOnCall | null): void => {
     onCall = c;
     webchatCallLive = !!c;
@@ -2026,6 +2058,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     navigate,
     webchat,
     webchatOnCall,
+    ringTray,
     quickAsk,
     ai,
     office,

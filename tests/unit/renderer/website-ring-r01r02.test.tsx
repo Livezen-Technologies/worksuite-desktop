@@ -45,11 +45,12 @@ describe('R-01: the ringing card', () => {
     await screen.findByText('Visitor 4F2A');
     expect(screen.getByText('Priority · step 1 of 3')).toBeTruthy();
     expect(screen.getByText('3rd visit')).toBeTruthy();
-    expect(screen.getByText('Reading: /shop/adobe-creative-cloud')).toBeTruthy();
+    // R-05 says where they are reading in the site's line.
+    expect(screen.getByText('techubiz.com · /shop/adobe-creative-cloud')).toBeTruthy();
     expect(screen.getByText('Rings until someone joins · 2 others ringing')).toBeTruthy();
     // One chat: nothing else waiting.
     expect(screen.queryByText(/\+\d+ waiting/)).toBeNull();
-    const silence = screen.getByRole('button', { name: 'Silence ringing' });
+    const silence = screen.getByRole('button', { name: 'Silence' });
     expect(silence.textContent).toContain('Silence');
     fireEvent.click(silence);
     expect(call).toHaveBeenCalledWith('ring:silence', { id: 7, on: true });

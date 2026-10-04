@@ -117,6 +117,8 @@ export interface AppContext {
   webchat: WebchatRinger;
   /** The website voice call the main window is on, or none: the tray says so (ENH-WCHAT-05). */
   webchatOnCall: (call: WebchatOnCall | null) => void;
+  /** The tray's ringing menu (R-06, UX-ALR-02): its height as it measured itself, and its plain items. */
+  ringTray: { fit: (height: number) => void; act: (action: 'inbox' | 'settings' | 'quit' | 'close') => void };
   /** Quick Ask over any app (AI Assistant). */
   quickAsk: QuickAsk;
   /** The assistant's rules here, confirming its proposals, files from this computer (DSK-2…7). */

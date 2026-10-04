@@ -118,7 +118,7 @@ describe('R-04: silenced for me, still waiting', () => {
     expect(within(card).getByRole('timer').textContent).toMatch(/^1:3\d$/);
     expect(within(card).getByText('It rings for you again if it becomes at risk.')).toBeTruthy();
     // No tone, no reply box: it is not ringing for me.
-    expect(screen.queryByLabelText('Reply to visitor')).toBeNull();
+    expect(screen.queryByLabelText('Reply and join')).toBeNull();
     vi.mocked(call).mockResolvedValueOnce({ ok: true, why: null } as never);
     fireEvent.click(within(card).getByRole('button', { name: 'Join chat' }));
     expect(call).toHaveBeenCalledWith('ring:joinSend', { id: 7 });

@@ -38,46 +38,46 @@ beforeEach(() => {
 afterEach(() => cleanup());
 
 describe('the website-chat call window (RING-UI-06)', () => {
-  it('shows who, where, what they are reading and what they asked, and rings (#225)', async () => {
+  it('shows who, where, what they are reading and what they asked, and rings (#225, R-05)', async () => {
     show(<WebchatRingWindow />);
     await screen.findByText('Nimali');
     expect(screen.getByText('Returning')).toBeTruthy();
-    expect(screen.getByText('creativefx.lk · Kandy, Sri Lanka · desktop · Chrome')).toBeTruthy();
-    // On its own line, so it is never cut off.
-    expect(screen.getByText('Reading: Pricing')).toBeTruthy();
+    // R-05: the site and the page they are on, in one line.
+    expect(screen.getByText('creativefx.lk · Pricing')).toBeTruthy();
     expect(screen.getByText('Do you ship to Galle?')).toBeTruthy();
     expect(screen.getByText('Incoming website chat')).toBeTruthy();
-    expect(screen.getByText(/Enter sends and joins · Ctrl\+Shift\+J join/)).toBeTruthy();
+    expect(screen.getByText('↵ send · Ctrl+Shift+J join')).toBeTruthy();
     // The tone starts in an effect, which React may run a moment after the name is on screen (a slow CI runner).
     await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat', 0.8));
   });
 
-  it('a quick reply goes into the box, and Join & send joins and sends it in one step (#225)', async () => {
+  it('a quick reply goes into the box, and Send & join joins, sends and opens the thread in one step (#225, R-05)', async () => {
     show(<WebchatRingWindow />);
     await screen.findByText('Nimali');
     fireEvent.click(within(screen.getByRole('group', { name: 'Quick replies' })).getByRole('button', { name: 'One moment, checking for you' }));
-    const box = screen.getByLabelText('Reply to visitor') as HTMLInputElement;
+    const box = screen.getByLabelText('Reply and join') as HTMLInputElement;
     expect(box.value).toBe('One moment, checking for you');
 
     vi.mocked(call).mockResolvedValueOnce({ ok: true, why: null } as never);
-    fireEvent.click(screen.getByRole('button', { name: 'Join & send' }));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('ring:joinSend', { id: 7, message: 'One moment, checking for you' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Send and join' }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('ring:joinSend', { id: 7, message: 'One moment, checking for you', open: true }));
     await waitFor(() => expect(box.value).toBe(''));
 
     // Enter sends and joins too.
     fireEvent.change(box, { target: { value: 'Yes, island-wide.' } });
     vi.mocked(call).mockResolvedValueOnce({ ok: true, why: null } as never);
     fireEvent.keyDown(box, { key: 'Enter' });
-    await waitFor(() => expect(call).toHaveBeenCalledWith('ring:joinSend', { id: 7, message: 'Yes, island-wide.' }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('ring:joinSend', { id: 7, message: 'Yes, island-wide.', open: true }));
   });
 
   it('Join chat joins without sending; Silence toggles; Esc and the minimise button put the card away (#225)', async () => {
     show(<WebchatRingWindow />);
     await screen.findByText('Nimali');
     fireEvent.click(screen.getByRole('button', { name: 'Join chat' }));
-    expect(call).toHaveBeenCalledWith('ring:joinSend', { id: 7 });
+    // R-05, RING-41: Join chat brings WorkSuite forward on the conversation.
+    expect(call).toHaveBeenCalledWith('ring:joinSend', { id: 7, open: true });
     await waitFor(() => expect((screen.getByRole('button', { name: 'Join chat' }) as HTMLButtonElement).disabled).toBe(false));
-    fireEvent.click(screen.getByRole('button', { name: 'Silence ringing' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Silence' }));
     expect(call).toHaveBeenCalledWith('ring:silence', { id: 7, on: true });
     // Silenced, it is R-04's compact card (website-ring-r03r04.test.tsx); Unsilence brings the full card back.
     act(() => push?.(state({ chats: [chat({ silenced: true })] })));
@@ -89,7 +89,7 @@ describe('the website-chat call window (RING-UI-06)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Minimise notification' }));
     expect(call).toHaveBeenCalledWith('ring:minimise');
     vi.mocked(call).mockClear();
-    fireEvent.keyDown(screen.getByLabelText('Reply to visitor'), { key: 'Escape' });
+    fireEvent.keyDown(screen.getByLabelText('Reply and join'), { key: 'Escape' });
     expect(call).toHaveBeenCalledWith('ring:minimise');
     // Transfer is for a chat given to me.
     expect(screen.queryByRole('button', { name: 'Transfer' })).toBeNull();

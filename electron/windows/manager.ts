@@ -34,10 +34,27 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'rc-indicator': { width: 560, height: 52, minWidth: 560, minHeight: 52 },
   'rc-pointer': { width: 220, height: 30, minWidth: 220, minHeight: 30 },
   'webchat-ring': { width: 420, height: 250, minWidth: 420, minHeight: 72 },
+  'ring-tray': { width: 340, height: 360, minWidth: 340, minHeight: 120 },
   'quick-ask': { width: 600, height: 480, minWidth: 600, minHeight: 480 },
 };
 /** Remote control's own windows: placed by remote control, never remembered. */
-const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'quick-ask']);
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask']);
+
+/**
+ * The tray's ringing menu's place (R-06, RING-UI-07): under the menu-bar icon on macOS (or a tray at the top), over it
+ * where the taskbar is at the bottom — beside the icon, inside the screen. Where the system does not say where its
+ * icon is (most Linux desktops), the corner its tray is usually in: top right, or bottom right on Windows.
+ */
+export function ringTrayBounds(workArea: Rectangle, anchor: Rectangle | null, height: number, platform: NodeJS.Platform = process.platform): Rectangle {
+  const width = SIZES['ring-tray'].width;
+  const h = Math.max(SIZES['ring-tray'].minHeight, Math.min(height, workArea.height - 16));
+  const known = !!anchor && anchor.width > 0 && anchor.height > 0;
+  const centre = known ? anchor!.x + anchor!.width / 2 - width / 2 : workArea.x + workArea.width - width - 8;
+  const x = Math.round(Math.max(workArea.x + 8, Math.min(centre, workArea.x + workArea.width - width - 8)));
+  const top = known ? anchor!.y + anchor!.height / 2 < workArea.y + workArea.height / 2 : platform !== 'win32';
+  const y = top ? workArea.y + 4 : workArea.y + workArea.height - h - 4;
+  return { x, y, width, height: h };
+}
 
 /** The website-chat call window's place: bottom right of the primary display, clear of the taskbar (RING-40). */
 export function ringerBounds(workArea: Rectangle, height: number): Rectangle {
@@ -313,6 +330,73 @@ export class WindowManager {
     win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
     void win.loadURL(this.url('/window/webchat-ring'));
     return win;
+  }
+
+  private ringTray: BrowserWindow | null = null;
+  private ringTrayAnchor: Rectangle | null = null;
+
+  /**
+   * The tray's ringing menu (R-06, RING-UI-07; UX-ALR-02): a menu with a reply box, so a window drawn as one — by the
+   * tray icon, over other apps, taking the keyboard (it is opened to be typed in) and gone when it loses the focus,
+   * as a menu goes. One window; its height follows what it lists.
+   */
+  showRingTray(anchor: Rectangle | null, height: number): BrowserWindow {
+    this.ringTrayAnchor = anchor;
+    const display = anchor && anchor.width > 0 ? screen.getDisplayMatching(anchor) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
+    const bounds = ringTrayBounds(display.workArea, anchor, height);
+    const existing = this.ringTray && !this.ringTray.isDestroyed() ? this.ringTray : null;
+    if (existing) {
+      existing.setBounds(bounds);
+      existing.show();
+      existing.focus();
+      return existing;
+    }
+    const win = new BrowserWindow({
+      ...bounds,
+      show: false,
+      frame: false,
+      resizable: false,
+      maximizable: false,
+      minimizable: false,
+      fullscreenable: false,
+      skipTaskbar: true,
+      alwaysOnTop: true,
+      title: 'Website chats ringing',
+      backgroundColor: '#FFFFFF',
+      webPreferences: this.webPreferences(),
+    });
+    win.setAlwaysOnTop(true, 'pop-up-menu');
+    win.setVisibleOnAllWorkspaces(true, { visibleOnFullScreen: true });
+    this.kinds.set(win.id, 'ring-tray');
+    const wid = win.id;
+    this.ringTray = win;
+    win.on('blur', () => !win.isDestroyed() && win.close());
+    win.on('closed', () => {
+      this.kinds.delete(wid);
+      if (this.ringTray === win) this.ringTray = null;
+    });
+    win.once('ready-to-show', () => {
+      win.show();
+      win.focus();
+    });
+    win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
+    void win.loadURL(this.url('/window/ring-tray'));
+    return win;
+  }
+
+  /** The ringing menu measured itself: it takes that height, where it is. */
+  fitRingTray(height: number): void {
+    const win = this.ringTray && !this.ringTray.isDestroyed() ? this.ringTray : null;
+    if (!win) return;
+    const b = win.getBounds();
+    const area = screen.getDisplayMatching(b).workArea;
+    const next = ringTrayBounds(area, this.ringTrayAnchor, height);
+    if (next.height !== b.height || next.y !== b.y) win.setBounds(next);
+  }
+
+  hideRingTray(): void {
+    if (this.ringTray && !this.ringTray.isDestroyed()) this.ringTray.close();
+    this.ringTray = null;
   }
 
   private quickAsk: BrowserWindow | null = null;

@@ -188,6 +188,14 @@ function joinedOutcome(byName: string | null, visitor: string): Omit<WebchatRing
 }
 
 /**
+ * A colleague joined while I was typing to the visitor (R-05, UX-ALR-04): my words are kept and the alert asks
+ * "Nuwan joined — send to the chat as a participant?"; nothing is sent until I choose.
+ */
+export function participantOutcome(byName: string | null, visitor: string, draft: string): Omit<WebchatRingOutcome, 'id' | 'at'> {
+  return { kind: 'joined', by: byName ?? 'A colleague', visitor, draft, text: `${byName ? firstName(byName) : 'A colleague'} joined — send to the chat as a participant?` };
+}
+
+/**
  * A Join that lost the race (RING-02; R-03 "too late"): "You pressed Join a moment late — Dilini already has this
  * chat." Who has it comes with the server's 409 (`by_name`); an older server only says it in words, which are kept.
  */
@@ -332,7 +340,8 @@ export function hideOutcome(o: WebchatRingOutcome): WebchatRingOutcome {
     visitor_left: 'A visitor left the site before anyone joined. Ringing stopped.',
     visitor_ended: 'A visitor ended the chat. Ringing stopped.',
   };
-  return { ...o, text: (o.kind && words[o.kind]) || o.text, visitor: o.visitor ? 'A visitor' : o.visitor, by: null, email: null };
+  // A draft kept for me (UX-ALR-04) is not shown behind the lock either; it is still there after the unlock.
+  return { ...o, text: (o.kind && words[o.kind]) || o.text, visitor: o.visitor ? 'A visitor' : o.visitor, by: null, email: null, draft: null };
 }
 
 /** Server stamps are true UTC without a zone. */
@@ -413,6 +422,16 @@ export interface WebchatRingDeps {
   idleSeconds?: () => number;
 }
 
+/** What `joinAndSend` does after joining: a mini chat on the card (#225), nothing more, or the thread opened (R-05). */
+export interface JoinSendOptions {
+  /** False: no mini chat (a reply typed in a system notification or the tray's menu). */
+  stay?: boolean;
+  /** Bring WorkSuite forward on the thread (R-05, UX-ALR-01; RING-41): the native window's Send & join and Join chat. */
+  open?: boolean;
+  /** The saved reply the words came from, counted once sent (RDC-03). */
+  cannedId?: number;
+}
+
 /** How often this computer tells the server it is here to ring (RING-10). */
 export const HEARTBEAT_MS = 20_000;
 
@@ -472,6 +491,8 @@ export class WebchatRinger {
   private viewingId: number | null = null;
   /** Each time the "visitor replied" chime should play once. */
   private chimes = 0;
+  /** What I have typed to each ringing visitor (R-05, R-06; UX-ALR-04), shared by the call window and the tray. */
+  private drafts = new Map<number, string>();
   shortcut = false;
   answerShortcut = false;
 
@@ -505,6 +526,7 @@ export class WebchatRinger {
     this.calls.clear();
     this.followUps.clear();
     this.snoozed.clear();
+    this.drafts.clear();
     this.ringHere = null;
     this.sessions = false;
     this.outcome = null;
@@ -543,7 +565,34 @@ export class WebchatRinger {
       followUps: hidden ? followUps.map((f) => ({ ...f, visitor: 'A visitor', recent: [], agent: null })) : followUps,
       chime: this.chimes,
       followUpCard: this.followUpPrefs().card,
+      // Only for chats still ringing, and nothing of it behind the lock.
+      drafts: hidden ? {} : Object.fromEntries([...this.drafts].filter(([cid, t]) => t && this.chats.has(cid))),
     };
+  }
+
+  /**
+   * What is typed to a ringing visitor (R-05, R-06; UX-ALR-04), as the call window or the tray's menu says it: kept
+   * here so it is the same in both, and so a colleague joining first does not lose it.
+   */
+  setDraft(conversationId: number, words: string): void {
+    const t = words.slice(0, 4000);
+    if ((this.drafts.get(conversationId) ?? '') === t) return;
+    if (!t.trim()) this.drafts.delete(conversationId);
+    else if (this.chats.has(conversationId)) this.drafts.set(conversationId, t);
+    else return;
+    this.changed();
+  }
+
+  /**
+   * A colleague got the chat first (R-03, RING-28): with words typed to the visitor, they are kept and the alert asks
+   * whether to send them as a participant (UX-ALR-04); without, it is said as R-03 says it.
+   */
+  private takenByOther(cid: number, byName: string | null, visitor: string, plain: Omit<WebchatRingOutcome, 'id' | 'at'>, typed?: string | null): void {
+    const draft = (typed ?? this.drafts.get(cid) ?? '').trim();
+    this.drafts.delete(cid);
+    // Asked in the call window, which must be on to ask it; off, a banner's refused reply is kept as the chat's draft.
+    if (draft && this.deps.prefs().window) this.say(cid, '', participantOutcome(byName, visitor, draft));
+    else this.say(cid, '', plain);
   }
 
   private followUpPrefs(): WebchatFollowUpPrefs {
@@ -740,14 +789,15 @@ export class WebchatRinger {
    * mini chat on it. A moment too late, it says who has it and nothing is sent. With `stay: false` (a reply typed in
    * a system notification) there is no mini chat.
    */
-  async joinAndSend(conversationId: number, message: string | null, opts: { stay?: boolean } = {}): Promise<{ ok: boolean; why: string | null }> {
+  async joinAndSend(conversationId: number, message: string | null, opts: JoinSendOptions = {}): Promise<{ ok: boolean; why: string | null }> {
     const c = this.chats.get(conversationId);
     if (!c) return { ok: false, why: 'This chat is no longer ringing.' };
     const text = message?.trim() || null;
     const key = { headers: { 'Idempotency-Key': `ring-join-${conversationId}-${randomUUID()}` } };
+    const canned = text && opts.cannedId ? { canned_id: opts.cannedId } : {};
     try {
       try {
-        await this.deps.http.post(`${WEBSITE}/conversations/${conversationId}/join-reply`, text ? { message: text } : {}, key);
+        await this.deps.http.post(`${WEBSITE}/conversations/${conversationId}/join-reply`, text ? { message: text, ...canned } : {}, key);
       } catch (e) {
         // A server from before Join & send: Accept, then the reply, as two requests.
         if (!(isDesktopError(e) && e.status === 404 && !/conversation/i.test(e.message))) throw e;
@@ -758,14 +808,27 @@ export class WebchatRinger {
       // A moment late (R-03): who has it, in the design's words; anything else, why it did not work.
       const late = isDesktopError(e) && e.status === 409 ? lateOutcome(e) : null;
       const why = late ? late.text : `Could not join: ${e instanceof Error ? e.message : 'the server did not answer'}`;
-      if (late) this.chats.delete(conversationId);
-      this.say(conversationId, why, late ?? undefined);
+      if (late) {
+        this.chats.delete(conversationId);
+        // What I was sending is kept, and nothing goes without my choosing (UX-ALR-04).
+        // A reply typed in a banner (`stay: false`) is kept by the notification as the chat's draft instead (RDC-15).
+        if (late.kind === 'late' && opts.stay !== false) this.takenByOther(conversationId, late.by ?? null, c.visitor, late, text);
+        else this.say(conversationId, why, late);
+      } else this.say(conversationId, why);
       this.changed();
       return { ok: false, why };
     }
     this.chats.delete(conversationId);
+    this.drafts.delete(conversationId);
     this.joinedNow(c);
     this.minimisedFor = null;
+    if (opts.open) {
+      // The native window's Send & join and Join chat (R-05, UX-ALR-01; RING-41): the thread opens with the message in it.
+      this.changed();
+      this.deps.open(conversationId);
+      this.reconcileSoon();
+      return { ok: true, why: null };
+    }
     if (opts.stay !== false) {
       this.joined = { conversationId, visitor: c.visitor, site: c.site, place: c.place, device: c.device, page: c.page, preview: c.preview, since: c.since, sent: text ? [text] : [] };
     }
@@ -880,8 +943,10 @@ export class WebchatRinger {
         if (!c) return;
         this.chats.delete(cid);
         if (ev.reason === 'joined') {
-          if (by !== null && !me) this.say(cid, '', joinedOutcome(text(ev.by_name, 120), c.visitor));
+          if (by !== null && !me) this.takenByOther(cid, text(ev.by_name, 120), c.visitor, joinedOutcome(text(ev.by_name, 120), c.visitor));
+          else this.drafts.delete(cid);
         } else {
+          this.drafts.delete(cid);
           const o = stopOutcome(ev.reason, c.visitor, ev);
           if (o) this.say(cid, o.text, o);
         }
@@ -938,8 +1003,11 @@ export class WebchatRinger {
         if (!c) return;
         this.chats.delete(cid);
         const by = id(ev.by);
-        if (ev.how === 'closed') this.say(cid, STOP_WORDS.closed!);
-        else if (by !== null && by !== this.deps.me()) this.say(cid, '', joinedOutcome(text(ev.by_name, 120), c.visitor));
+        if (ev.how === 'closed') {
+          this.drafts.delete(cid);
+          this.say(cid, STOP_WORDS.closed!);
+        } else if (by !== null && by !== this.deps.me()) this.takenByOther(cid, text(ev.by_name, 120), c.visitor, joinedOutcome(text(ev.by_name, 120), c.visitor));
+        else this.drafts.delete(cid);
         this.changed();
         break;
       }
@@ -960,7 +1028,8 @@ export class WebchatRinger {
           // A moment too late: the server says who has it (RING-02; R-03 "You pressed Join a moment late").
           this.chats.delete(conversationId);
           const late = lateOutcome(e);
-          this.say(conversationId, late.text, late);
+          if (late.kind === 'late') this.takenByOther(conversationId, late.by ?? null, c.visitor, late);
+          else this.say(conversationId, late.text, late);
           this.changed();
           return false;
         }
@@ -970,6 +1039,7 @@ export class WebchatRinger {
       }
     }
     this.chats.delete(conversationId);
+    this.drafts.delete(conversationId);
     this.joinedNow(c);
     this.changed();
     this.deps.open(conversationId, undefined, then);
@@ -1008,7 +1078,7 @@ export class WebchatRinger {
       return false;
     }
     this.handoffs.delete(handoffId);
-    this.outcome = null;
+    this.clearOutcome();
     this.changed();
     if (accept) this.deps.open(h.conversationId, callId);
     this.reconcileSoon();
@@ -1044,7 +1114,7 @@ export class WebchatRinger {
       return false;
     }
     this.calls.delete(callId);
-    this.outcome = null;
+    this.clearOutcome();
     this.changed();
     if (accept) this.deps.open(c.conversationId, callId);
     this.reconcileSoon();
@@ -1115,6 +1185,7 @@ export class WebchatRinger {
     try {
       const r = await this.deps.http.post<{ passed?: string }>(`${WEBSITE}/conversations/${conversationId}/pass`);
       this.chats.delete(conversationId);
+      this.drafts.delete(conversationId);
       this.say(conversationId, r?.passed === 'handed' ? 'Passed to the next available agent.' : 'Passed to everybody covering the website.');
       this.changed();
       this.reconcileSoon();
@@ -1176,6 +1247,7 @@ export class WebchatRinger {
       if (typeof answer?.ring_here === 'boolean') this.ringHere = answer.ring_here;
       const next = mergeAnswer(answer ?? {}, this.chats);
       this.chats = new Map(next.map((c) => [c.id, c]));
+      for (const cid of this.drafts.keys()) if (!this.chats.has(cid)) this.drafts.delete(cid);
       // The server's list of invitations and transfers is the truth, where it has one (ENH-WCHAT-03).
       if (Array.isArray(answer?.handoffs)) {
         this.handoffs = new Map(answer.handoffs.map((x: HandoffEntry) => fromHandoff(x)).filter((h): h is WebchatHandoff => h !== null).map((h) => [h.id, h]));
@@ -1213,9 +1285,13 @@ export class WebchatRinger {
    * with something to do (View, Open in Missed) is said for longer, until it is used or dismissed.
    */
   private say(conversationId: number, words: string, o?: Omit<WebchatRingOutcome, 'id' | 'at'>): void {
+    // Words kept for me (UX-ALR-04) stay until I choose what to do with them: another note does not replace them.
+    if (this.outcome?.draft && !o?.draft) return;
     this.outcome = { kind: 'note', ...o, id: conversationId, text: o?.text || words, at: Date.now() };
     const act = this.outcome.kind === 'joined' || (this.outcome.kind === 'visitor_left' && !!this.outcome.missed);
     if (this.outcomeTimer) clearTimeout(this.outcomeTimer);
+    this.outcomeTimer = null;
+    if (this.outcome.draft) return;
     this.outcomeTimer = setTimeout(() => {
       this.outcome = null;
       this.outcomeTimer = null;
@@ -1229,7 +1305,7 @@ export class WebchatRinger {
    * as many as the card said it rang for besides me, until the server's count comes with its stop event.
    */
   private joinedNow(c: WebchatRingChat): void {
-    this.outcome = null;
+    this.clearOutcome();
     this.youJoined = { id: c.id, colleagues: c.mine ? 0 : (c.othersRinging ?? null) };
   }
 
@@ -1237,15 +1313,39 @@ export class WebchatRinger {
    * The outcome card's buttons (R-03): View the chat a colleague joined, Open in Missed for a visitor who left before
    * anyone joined — never the inbox, where opening it would join it — or Dismiss.
    */
-  outcomeAction(action: 'view' | 'missed' | 'dismiss'): void {
+  async outcomeAction(action: 'view' | 'missed' | 'dismiss' | 'participant'): Promise<void> {
     const o = this.outcome;
     if (this.outcomeTimer) clearTimeout(this.outcomeTimer);
     this.outcomeTimer = null;
     this.outcome = null;
     this.changed();
     if (!o || action === 'dismiss') return;
+    if (action === 'participant') return this.sendAsParticipant(o);
     if (action === 'view' && o.kind === 'joined') this.deps.open(o.id);
     else if (action === 'missed' && o.kind === 'visitor_left' && o.missed) (this.deps.openMissed ?? this.deps.open)(o.id);
+  }
+
+  /**
+   * "Send to the chat" on the kept words (UX-ALR-04): a reply to a chat a colleague has, so the server joins me as a
+   * participant (TEAM-02) — sent as the conversation's composer sends one. Refused, the words stay with the reason.
+   */
+  private async sendAsParticipant(o: WebchatRingOutcome): Promise<void> {
+    if (!o.draft) return;
+    const r = this.deps.reply ? await this.deps.reply(o.id, o.draft) : null;
+    if (r && (r.delivered || r.queued)) {
+      this.say(o.id, r.queued && !r.delivered ? 'Your reply will be sent when you are back online.' : 'Sent — you are in the chat as a participant.');
+      this.changed();
+      return;
+    }
+    const { id: cid, at: _at, ...kept } = o;
+    this.say(cid, '', { ...kept, text: `Not sent: ${r?.error ?? 'open the chat to reply.'} Send to the chat as a participant?` });
+    this.changed();
+  }
+
+  /** Nothing more to say — except words kept for me, which wait for my choice (UX-ALR-04). */
+  private clearOutcome(): void {
+    if (this.outcome?.draft) return;
+    this.outcome = null;
   }
 
   private changed(): void {
