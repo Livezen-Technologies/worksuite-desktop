@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.158 — 2026-10-04
+
+- **Website chat lists as a table, with bulk actions (C-03).** Live chats, Unassigned, Assigned to me, Awaiting reply
+  and Starred show a full-width table while no chat is open. Its columns are Visitor (with their last message), Site,
+  Status (At risk, Awaiting reply, Chatting), Priority, Owner and Waiting. Opening a chat brings back the narrow list
+  beside it.
+- Tick rows, or use Ctrl/⌘-click, Shift-click or Space, to bring up the bulk bar: **Assign to…**, **Priority**,
+  **Star** and **Close**. It acts on up to 200 at a time, and each assignee is alerted. Clear or Esc ends the
+  selection. Filter by priority and sort by longest waiting, newest activity or name.
+- The selection and its bar are shared with Team Chat's list.
+- A conversation's right-click menu adds Star and Priority. Star from that menu now stars the chat; before, it sent
+  nothing and the server took it as Unstar.
+
 ## 0.2.157 — 2026-10-04
 
 - **Website chats use the same message view as Team Chat (#229, C-02).** Messages from one person run together, with

@@ -12,9 +12,11 @@ import { listStamp, parseTs } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
-import { followUpsFirst, isMine as mineFor, lastSaid, longestWaiting, sectionRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, waitTone, WEBSITE, type CallbackOutcome, type Section, type WebsiteCallback, type WebsiteRow } from './api';
+import { followUpsFirst, isMine as mineFor, longestWaiting, PRIORITIES, sectionRows, sortWebsiteRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, WEBSITE_SORTS, type CallbackOutcome, type Section, type WebsiteCallback, type WebsitePriority, type WebsiteRow, type WebsiteSort } from './api';
 import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
-import { clock, handoffAsk, handoffTitle, useRingState, waited } from './Ringing';
+import { clock, handoffAsk, handoffTitle, useRingState } from './Ringing';
+import { CallLine, pathOf, PRIORITY_TAG, rowPreview, Tag, WaitClock } from './rowParts';
+import { WebsiteTable } from './WebsiteTable';
 import { WebsiteLive, type LiveView, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
 import { WidgetSettings } from './widget/WidgetSettings';
@@ -46,6 +48,22 @@ const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
   { id: 'starred', label: 'Starred', icon: 'star' },
   { id: 'closed', label: 'Closed', icon: 'archive' },
 ];
+
+/**
+ * The list views drawn as one table while nothing is open (C-03, UX-LIST-01): each with its own heading. Invited stays
+ * the list of invitations, each with its own answer; the rest keep the card list.
+ */
+const TABLE: Partial<Record<Section, { title: string; subtitle: string; footnote?: string }>> = {
+  live: {
+    title: 'Live chats',
+    subtitle: 'Open conversations with a visitor still on the site.',
+    footnote: 'Departed visitors leave this list at once; their open chats stay under Awaiting reply until closed or swept as inactive.',
+  },
+  unassigned: { title: 'Unassigned', subtitle: 'Open conversations nobody has taken yet.' },
+  mine: { title: 'Assigned to me', subtitle: 'Open conversations you own or take part in.' },
+  awaiting: { title: 'Awaiting reply', subtitle: 'Visitors who spoke last and are waiting for an answer.' },
+  starred: { title: 'Starred', subtitle: 'Open conversations starred to come back to.' },
+};
 
 const ON_WEB: Array<{ head: string; items: Array<{ label: string; tab: string; icon: string }> }> = [
   { head: 'REPORTS', items: [{ label: 'Insights', tab: 'reports', icon: 'chart' }] },
@@ -87,6 +105,11 @@ export function WebsiteWorkspace() {
   const [site, setSite] = useState(0);
   // The Mine pill narrows whichever open section is showing; Closed is a section of its own.
   const [mineOnly, setMineOnly] = useState(false);
+
+  // The list views' priority filter and order (UX-LIST-01).
+  const [priority, setPriority] = useState<WebsitePriority | ''>('');
+  const [sort, setSort] = useState<WebsiteSort>('waiting');
+  const table = TABLE[section] ?? null;
 
   const [q, setQ] = useState('');
   // The conversation menu at the mouse, shared with Chat's other channels (worksuite-desktop#183).
@@ -140,7 +163,8 @@ export function WebsiteWorkspace() {
   const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) + callbackList.length : s === 'callbacks' ? (callbackCounts.data?.todo ?? 0) : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
   const overdue = callbackCounts.data?.overdue ?? 0;
   const source = section === 'closed' ? closed : open;
-  const pill = section === 'closed' ? 'closed' : mineOnly ? 'mine' : 'open';
+  // The list views have no pills: a Mine left on from another section does not narrow them unseen.
+  const pill = section === 'closed' ? 'closed' : mineOnly && !table ? 'mine' : 'open';
   const onSite = (r: WebsiteRow) => !site || r.widget_id === site;
   const isMine = (r: WebsiteRow) => mineFor(r, me);
   const openHere = sectionRows(openRows, section === 'closed' ? 'inbox' : section, me).filter(onSite);
@@ -148,13 +172,16 @@ export function WebsiteWorkspace() {
   const searching = section !== 'missed' && section !== 'invited' && section !== 'callbacks' && needle.length >= 2 && typed.length >= 2;
   const found = useWebsiteSearch(searching ? needle : '', section === 'closed');
   // Until the server answers, the list narrows by what it already has.
-  const rows = followUpsFirst(
-    (searching && found.data ? found.data.conversations : sectionRows(source.data?.conversations ?? [], section, me))
-      .filter(onSite)
-      .filter((r) => pill !== 'mine' || isMine(r))
-      .filter((r) => (searching && found.data) || !typed || [r.label, r.visitor_name, r.email, r.site, r.current_url, r.last_message?.body].some((v) => v?.toLowerCase().includes(typed))),
-    isMine,
-  );
+  const narrowed = (searching && found.data ? found.data.conversations : sectionRows(source.data?.conversations ?? [], section, me))
+    .filter(onSite)
+    .filter((r) => pill !== 'mine' || isMine(r))
+    .filter((r) => (searching && found.data) || !typed || [r.label, r.visitor_name, r.email, r.site, r.current_url, r.last_message?.body].some((v) => v?.toLowerCase().includes(typed)));
+  // The list views (the table, and the card list beside an open chat) filter by priority and keep their own order.
+  const rows = table
+    ? (sort === 'waiting' ? (l: WebsiteRow[]) => followUpsFirst(l, isMine) : (l: WebsiteRow[]) => l)(sortWebsiteRows(narrowed.filter((r) => !priority || r.priority === priority), sort))
+    : followUpsFirst(narrowed, isMine);
+  // Full width while nothing is open; beside an open chat, the card list.
+  const tableView = !!table && !selected && !live && !designing;
   const list = searching && found.data ? found : source;
   const to = (params: Record<string, string | null>) => {
     const next = new URLSearchParams({ view: 'website', section });
@@ -169,6 +196,22 @@ export function WebsiteWorkspace() {
     setMineOnly(mine);
     if (section === 'closed') to({ section: 'inbox', website: null });
   };
+  // A spinner, an error, or the section's empty text, in place of the rows of either list.
+  const listPlaceholder: ReactNode = list.isLoading ? <Spinner /> : list.error ? <div className="p-4"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div> : rows.length === 0 ? (
+    <Empty icon="globe" title={typed ? text('Nothing matches “{q}”', { q: q.trim() }) : pill === 'mine' || section === 'mine' ? 'No chats assigned to you' : section === 'awaiting' ? 'Nobody is waiting' : 'No website chats'} />
+  ) : null;
+  const searchBox = (wide: boolean) => (
+    <span className={cx('relative flex items-center', wide && 'w-[280px] shrink-0')}>
+      <Icon name="search" size={14} className="pointer-events-none absolute left-2.5 text-ink-3" />
+      <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, messages, email…" className={cx('w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 outline-none focus:border-primary', wide ? 'h-8 text-[12.5px]' : 'h-[34px] text-[13px]')} />
+    </span>
+  );
+  const siteSelect = (
+    <Select aria-label="Site" value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink">
+      <option value={0}>All sites</option>
+      {sites.map((s) => <option key={s.widget_id} value={s.widget_id}>{s.site}</option>)}
+    </Select>
+  );
   const longest = longestWaiting(openRows);
   const openLongest = () => {
     if (!longest) return;
@@ -278,26 +321,47 @@ export function WebsiteWorkspace() {
         />
       ) : null}
       {designing ? <WidgetSettings /> : null}
-      <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', (live || designing) && 'hidden')}>
+      {tableView && table ? (
+        <WebsiteTable
+          title={table.title}
+          subtitle={table.subtitle}
+          footnote={table.footnote}
+          filters={
+            <div className="flex flex-wrap items-center gap-2">
+              {searchBox(true)}
+              {siteSelect}
+              <Select<WebsitePriority | ''> aria-label="Priority" value={priority} onValueChange={setPriority} options={[{ value: '', label: 'Any priority' }, ...PRIORITIES.map((p) => ({ value: p.id, label: p.label }))]} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
+              <span className="flex-1" />
+              <span className="text-[12.5px] text-ink-3">{text('Sort')}</span>
+              <Select<WebsiteSort> aria-label="Sort" value={sort} onValueChange={setSort} options={WEBSITE_SORTS.map((o) => ({ value: o.id, label: o.label }))} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
+            </div>
+          }
+          rows={rows}
+          placeholder={listPlaceholder ?? undefined}
+          me={me}
+          myName={myName}
+          ringing={ringing}
+          typing={typingRows}
+          active={active}
+          onOpen={(r) => to({ website: String(r.id) })}
+          onMenu={(e, r) => (e.preventDefault(), setRowMenu({ x: e.clientX, y: e.clientY, r }))}
+        />
+      ) : null}
+      {rowMenu ? <ConversationMenu x={rowMenu.x} y={rowMenu.y} target={{ kind: 'website', row: rowMenu.r }} onClose={() => setRowMenu(null)} /> : null}
+      <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', (live || designing || tableView) && 'hidden')}>
         <div className="flex flex-col gap-2 border-b border-line p-3">
           <div className="flex items-center">
             <b className="flex-1 text-[18px] text-ink">{SECTIONS.find((s) => s.id === section)?.label}</b>
-            <Select aria-label="Site" value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink">
-              <option value={0}>All sites</option>
-              {sites.map((s) => <option key={s.widget_id} value={s.widget_id}>{s.site}</option>)}
-            </Select>
+            {siteSelect}
           </div>
-          <span className="relative flex items-center">
-            <Icon name="search" size={14} className="pointer-events-none absolute left-2.5 text-ink-3" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, messages, email…" className="h-[34px] w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 text-[13px] outline-none focus:border-primary" />
-          </span>
+          {searchBox(false)}
           {section === 'callbacks' ? (
             <div className="flex gap-1.5 text-[12px] font-semibold" role="group" aria-label="Show">
               <Pill on={cbStatus === 'todo'} onClick={() => setCbStatus('todo')}>{text('To do · {n}', { n: callbackCounts.data?.todo ?? 0 })}</Pill>
               <Pill on={cbStatus === 'handled'} onClick={() => setCbStatus('handled')}>{text('Handled')}</Pill>
               <Pill on={mineOnly} onClick={() => setMineOnly((m) => !m)}>{text('Mine')}</Pill>
             </div>
-          ) : section !== 'missed' && section !== 'invited' ? (
+          ) : section !== 'missed' && section !== 'invited' && !table ? (
             <div className="flex gap-1.5 text-[12px] font-semibold" role="group" aria-label="Show">
               <Pill on={pill === 'open'} onClick={() => showOpen(false)}>Open · {openHere.length}</Pill>
               <Pill on={pill === 'mine'} onClick={() => showOpen(true)}>Mine · {openHere.filter(isMine).length}</Pill>
@@ -337,15 +401,12 @@ export function WebsiteWorkspace() {
               ))}
               </>
             )
-          ) : list.isLoading ? <Spinner /> : list.error ? <div className="p-4"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div> : rows.length === 0 ? (
-            <Empty icon="globe" title={typed ? text('Nothing matches “{q}”', { q: q.trim() }) : pill === 'mine' || section === 'mine' ? 'No chats assigned to you' : section === 'awaiting' ? 'Nobody is waiting' : 'No website chats'} />
-          ) : (
+          ) : listPlaceholder ?? (
             rows.map((r) => <Row key={r.id} r={r} me={me} myName={myName} ring={ringing.get(r.id)} typing={typingRows.has(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} onMenu={(e) => (e.preventDefault(), setRowMenu({ x: e.clientX, y: e.clientY, r }))} />)
           )}
         </div>
-        {rowMenu ? <ConversationMenu x={rowMenu.x} y={rowMenu.y} target={{ kind: 'website', row: rowMenu.r }} onClose={() => setRowMenu(null)} /> : null}
       </section>
-      <div className={cx('flex min-w-0 flex-1', (live || designing) && 'hidden')}>
+      <div className={cx('flex min-w-0 flex-1', (live || designing || tableView) && 'hidden')}>
         {selected ? (
           <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} />
         ) : (
@@ -362,27 +423,6 @@ function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; chi
       {children}
     </button>
   );
-}
-
-const TAG = {
-  danger: 'bg-danger-bg text-danger',
-  indigo: 'bg-selection text-primary',
-  warning: 'bg-warning-bg text-[#9A4A06] dark:text-warning',
-  muted: 'bg-subtle text-ink-3',
-};
-
-function Tag({ tone, children }: { tone: keyof typeof TAG; children: ReactNode }) {
-  return <span className={cx('shrink-0 rounded-[5px] px-1.5 py-px text-[10.5px] font-bold', TAG[tone])}>{children}</span>;
-}
-
-const PRIORITY_TAG: Record<string, string> = { vip: 'VIP', urgent: 'Urgent', high: 'High' };
-
-function pathOf(url: string): string {
-  try {
-    return new URL(url).pathname || '/';
-  } catch {
-    return url;
-  }
 }
 
 /** Which visitors are typing now, from the live frames (LIVE-02): a start lasts seven seconds unless a stop comes first. */
@@ -444,17 +484,7 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { 
   const since = waitingSince(r);
   const page = r.current_url ? pathOf(r.current_url) : null;
   const unread = closed ? 0 : (r.unread ?? 0);
-  const line = ring?.preview
-    ? `“${ring.preview}”`
-    : r.last_message
-      ? lastSaid(r.last_message, myName)
-      : r.online && page && !closed
-      ? text('Reading {page}', { page })
-      : r.agent
-        ? mine
-          ? text('With you')
-          : text('With {name}', { name: r.agent })
-        : (r.email ?? '');
+  const line = rowPreview(r, { me, myName, ring });
   const presence = closed ? null : r.online ? 'online' : 'away';
   return (
     <button
@@ -511,21 +541,6 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { 
   );
 }
 
-/** How long a visitor has waited: counting while it is under an hour, then when they wrote. */
-/** "On a call · 2:14" on a row (VOICE-UI-02): calling, on, or on hold. */
-function CallLine({ call }: { call: NonNullable<WebsiteRow['call']> }) {
-  const now = useNow(1_000);
-  const at = call.since ? parseTs(call.since).getTime() : NaN;
-  const time = Number.isNaN(at) ? '' : ` · ${clock((now - at) / 1000)}`;
-  const words = call.status === 'ringing' ? text('Calling') : call.status === 'on_hold' ? text('On hold') : text('On a call');
-  return (
-    <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-[12px] font-semibold text-success">
-      <Icon name={call.status === 'ringing' ? 'phone-incoming' : 'phone'} size={12} className={cx('shrink-0', call.status === 'ringing' && 'motion-safe:animate-pulse')} />
-      <span className="truncate tabular-nums">{words}{time}</span>
-    </span>
-  );
-}
-
 const OUTCOMES: Array<{ id: CallbackOutcome; label: string }> = [
   { id: 'answered', label: 'Answered' },
   { id: 'no_answer', label: 'No answer' },
@@ -575,24 +590,6 @@ function CallbackRow({ b, active, onOpen }: { b: WebsiteCallback; active: boolea
         ))}
       </span>
     </div>
-  );
-}
-
-/**
- * How long a visitor has waited, counting while it is under an hour (then when they wrote). Amber once they have
- * waited as long as it takes to be offered a callback, red after it (#223); red throughout on a site without offers.
- */
-function WaitClock({ since, amber, red }: { since: string; amber?: number | null; red?: number | null }) {
-  const now = useNow(1_000);
-  const at = parseTs(since).getTime();
-  if (Number.isNaN(at) || now - at >= 3_600_000) return <span className="shrink-0 text-[11px] text-ink-3">{listStamp(since)}</span>;
-  const tone = waitTone((now - at) / 1000, amber, red);
-  return (
-    <span data-tone={tone} title={tone === 'amber' ? text('Offered a callback') : tone === 'red' && (amber || red) ? text('Waiting past the callback offers') : undefined}
-      aria-label={text('waiting {time}', { time: waited(since, now) })}
-      className={cx('shrink-0 font-mono text-[11px] font-bold tabular-nums', tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
-      {waited(since, now)}
-    </span>
   );
 }
 

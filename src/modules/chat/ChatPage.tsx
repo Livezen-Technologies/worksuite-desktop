@@ -26,6 +26,8 @@ import { useAgents, useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from '.
 import { WebsiteThread } from './website/WebsiteThread';
 import { WebsiteWorkspace } from './website/WebsiteWorkspace';
 import { MyStatus } from './MyStatus';
+import { BulkBar, BulkIconButton } from './BulkBar';
+import { useMultiSelect } from './selection';
 import { SidePanel } from '../../components/SidePanel';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import { canOpenWeb, useCanOpen } from '../../core/access';
@@ -317,10 +319,6 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
   const [visitorMenu, setVisitorMenu] = useState<{ x: number; y: number; c: WebsiteRow } | null>(null);
   const agents = useAgents(websiteAccess && !!visitorMenu);
   const websiteRun = useWebsiteActions(me, (c) => go(`/chat?view=website&website=${c.id}`));
-  // The multi-select (worksuite-desktop#183): Ctrl/⌘-click, Shift-click, or Select mode.
-  const [picked, setPicked] = useState<number[]>([]);
-  const [selecting, setSelecting] = useState(false);
-  const [anchor, setAnchor] = useState<number | null>(null);
   const web = useWebsiteInbox(false, websiteAccess);
   const needle = q.trim().toLowerCase();
   // Chat › Calls: the call log, beside the conversations (worksuite-desktop#113).
@@ -351,37 +349,19 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
   ];
   const list = useResizableWidth('chat.list', LIST_WIDTH);
   const order = sections.flatMap(([, l]) => l);
+  // The multi-select (worksuite-desktop#183): Ctrl/⌘-click, Shift-click, or Select mode — shared with Website chats.
+  const sel = useMultiSelect(order.map((r) => r.id), { current: selected && rooms.some((x) => String(x.id) === selected) ? Number(selected) : null });
+  const { picked, selecting } = sel;
   const byId = (ids: number[]) => rooms.filter((r) => ids.includes(r.id));
   const pickedRooms = byId(picked);
   const pinnedNow = rooms.filter((r) => r.pinned).length;
-  const endSelect = () => {
-    setPicked([]);
-    setSelecting(false);
-    setAnchor(null);
-  };
+  const endSelect = sel.clear;
   const runBulk = (targets: Room[], a: BulkAction) => {
     actions.bulk(targets, a);
     if (a !== 'delete') endSelect();
   };
   const click = (r: Room, e: ReactMouseEvent) => {
-    const mod = isMac ? e.metaKey : e.ctrlKey;
-    if (e.shiftKey && anchor !== null) {
-      const from = order.findIndex((x) => x.id === anchor);
-      const to = order.findIndex((x) => x.id === r.id);
-      if (from >= 0 && to >= 0) {
-        setPicked(order.slice(Math.min(from, to), Math.max(from, to) + 1).map((x) => x.id));
-        return;
-      }
-    }
-    if (mod || selecting) {
-      setAnchor(r.id);
-      // Ctrl-clicking a second conversation picks the open one too, as a file list does.
-      const base = picked.length === 0 && !selecting && selected && selected !== String(r.id) && rooms.some((x) => String(x.id) === selected) ? [Number(selected)] : picked;
-      setPicked(base.includes(r.id) ? base.filter((id) => id !== r.id) : [...base, r.id]);
-      return;
-    }
-    setAnchor(r.id);
-    if (picked.length) setPicked([]);
+    if (sel.onRowClick(e, r.id)) return;
     go(`/chat?room=${r.id}`);
   };
   const contextMenu = (r: Room, e: ReactMouseEvent) => {
@@ -400,10 +380,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
       next?.focus();
       return;
     }
-    if (e.key === 'Escape' && (picked.length || selecting)) {
-      endSelect();
-      return;
-    }
+    if (sel.escape(e)) return;
     if (picked.length > 1) {
       const lead = pickedRooms[0];
       const a = lead ? shortcutAction(e, lead, isMac) : null;
@@ -432,7 +409,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
           <button type="button" aria-label="Starred messages" title="Starred messages" onClick={onStarred} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle">
             <Icon name="star" size={15} />
           </button>
-          <button type="button" aria-label="Select conversations" title="Select conversations" aria-pressed={selecting} onClick={() => (selecting ? endSelect() : setSelecting(true))} className={cx('flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle', selecting && '!border-primary !bg-selection !text-primary')}>
+          <button type="button" aria-label="Select conversations" title="Select conversations" aria-pressed={selecting} onClick={() => (selecting ? endSelect() : sel.setSelecting(true))} className={cx('flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle', selecting && '!border-primary !bg-selection !text-primary')}>
             <Icon name="check-circle" size={15} />
           </button>
           <button type="button" data-guide="chat.new" aria-label="New conversation" title="New conversation" onClick={onNew} className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-white hover:bg-primary-hover">
@@ -474,8 +451,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
         ) : null}
         {offline ? <OfflineNote cachedAt={offline} /> : null}
         {picked.length || selecting ? (
-          <div role="toolbar" aria-label="Selected conversations" className="flex items-center gap-1 rounded-[8px] bg-selection px-2 py-1 text-[12px] text-ink">
-            <b className="mr-auto">{picked.length} selected</b>
+          <BulkBar tone="rail" label="Selected conversations" count={picked.length} onClear={endSelect}>
             {(
               [
                 ['read', 'Mark read', 'check'],
@@ -484,14 +460,9 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
                 ['delete', 'Delete', 'trash'],
               ] as Array<[BulkAction, string, string]>
             ).map(([a, label, icon]) => (
-              <button key={a} type="button" aria-label={label} title={label} disabled={!picked.length} onClick={() => runBulk(pickedRooms, a)} className="flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-surface disabled:opacity-40">
-                <Icon name={icon} size={14} />
-              </button>
+              <BulkIconButton key={a} label={label} icon={icon} disabled={!picked.length} onClick={() => runBulk(pickedRooms, a)} />
             ))}
-            <button type="button" aria-label="Stop selecting" title="Stop selecting" onClick={endSelect} className="flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-surface">
-              <Icon name="x" size={14} />
-            </button>
-          </div>
+          </BulkBar>
         ) : null}
       </div>
       {filter === 'calls' ? (
@@ -558,7 +529,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
           x={visitorMenu.x}
           y={visitorMenu.y}
           label={`Actions — ${visitorMenu.c.visitor_name || visitorMenu.c.label}`}
-          sections={websiteMenu(visitorMenu.c, me, agents.data?.agents ?? [], (a, userId) => websiteRun(visitorMenu.c, a, userId))}
+          sections={websiteMenu(visitorMenu.c, me, agents.data?.agents ?? [], (a, userId, priority) => websiteRun(visitorMenu.c, a, userId, priority))}
           onClose={() => setVisitorMenu(null)}
         />
       ) : null}

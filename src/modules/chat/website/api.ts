@@ -1,5 +1,7 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiGet, request } from '../../../core/api';
+import { errorMessage } from '../../../core/bridge';
+import { toast } from '../../../core/toasts';
 import { text } from '../../../core/i18n';
 import { parseTs } from '../../../core/time';
 
@@ -373,7 +375,10 @@ export function useCallbacks(enabled: boolean) {
   });
 }
 
-export const PRIORITIES: Array<{ id: string; label: string }> = [
+/** A website chat's priority, as the server keeps it (IncomingChats::PRIORITIES). */
+export type WebsitePriority = 'low' | 'normal' | 'high' | 'urgent' | 'vip';
+
+export const PRIORITIES: Array<{ id: WebsitePriority; label: string }> = [
   { id: 'low', label: 'Low' },
   { id: 'normal', label: 'Normal' },
   { id: 'high', label: 'High' },
@@ -424,6 +429,37 @@ export function filterRows(rows: WebsiteRow[], filter: WebsiteFilter, me: number
 export function sortRows(rows: WebsiteRow[], filter: WebsiteFilter): WebsiteRow[] {
   const key = (r: WebsiteRow) => (filter === 'waiting' ? (r.waiting_since ?? r.last_visitor_at ?? r.started_at ?? '') : r.updated_at);
   return [...rows].sort((a, b) => (filter === 'waiting' ? key(a).localeCompare(key(b)) : key(b).localeCompare(key(a))));
+}
+
+/** How the list views order their rows (UX-LIST-01): longest waiting first unless asked otherwise. */
+export type WebsiteSort = 'waiting' | 'recent' | 'name';
+
+export const WEBSITE_SORTS: Array<{ id: WebsiteSort; label: string }> = [
+  { id: 'waiting', label: 'Longest waiting first' },
+  { id: 'recent', label: 'Newest activity' },
+  { id: 'name', label: 'Visitor name' },
+];
+
+/**
+ * The list views' order (UX-LIST-01). Longest waiting first: visitors waiting for a reply first, the longest wait at
+ * the top, then the rest by their latest activity. Newest activity: what was said or done last, newest first.
+ * Visitor name: A to Z.
+ */
+export function sortWebsiteRows(rows: WebsiteRow[], sort: WebsiteSort): WebsiteRow[] {
+  const stamp = (v: string | null | undefined) => {
+    const t = v ? parseTs(v).getTime() : Number.NaN;
+    return Number.isNaN(t) ? 0 : t;
+  };
+  const activity = (r: WebsiteRow) => stamp(r.last_message?.at ?? r.last_visitor_at ?? r.updated_at);
+  const name = (r: WebsiteRow) => (r.visitor_name || r.label || '').toLowerCase();
+  if (sort === 'name') return [...rows].sort((a, b) => name(a).localeCompare(name(b)) || a.id - b.id);
+  if (sort === 'recent') return [...rows].sort((a, b) => activity(b) - activity(a) || b.id - a.id);
+  const waits = (r: WebsiteRow) => r.awaiting_reply && r.status !== 'closed';
+  return [...rows].sort((a, b) => {
+    if (waits(a) !== waits(b)) return waits(a) ? -1 : 1;
+    if (waits(a)) return (stamp(waitingSince(a)) || Infinity) - (stamp(waitingSince(b)) || Infinity) || a.id - b.id;
+    return activity(b) - activity(a) || b.id - a.id;
+  });
 }
 
 /** The pills over the workspace's list (CHAT-UI-00): Open, Mine and Closed. */
@@ -559,6 +595,44 @@ export function tagList(tags: string[] | string | null | undefined): string[] {
 
 export async function websiteAction(id: number | string, action: string, extra: Record<string, unknown> = {}): Promise<void> {
   await request('POST', `${WEBSITE}/conversations/${id}/action`, { body: { action, ...extra } });
+}
+
+/** What the server's bulk endpoint does (INB-08): close, reopen, star, unstar, assign, priority. */
+export type WebsiteBulkAction = 'assign' | 'priority' | 'star' | 'unstar' | 'close' | 'reopen';
+
+/** Its extra fields: whom to assign to (null to unassign) and which priority. */
+export interface WebsiteBulkExtra {
+  user_id?: number | null;
+  priority?: WebsitePriority;
+}
+
+/** The most the server takes in one bulk action (INB-08). */
+export const BULK_LIMIT = 200;
+
+/**
+ * One action on several website chats (INB-08, UX-LIST-02): `POST conversations/bulk`. Assigning goes one by one on
+ * the server, so each assignee is alerted. Resolves to the server's own sentence ("2 updated").
+ */
+export async function websiteBulk(ids: number[], action: WebsiteBulkAction, extra: WebsiteBulkExtra = {}): Promise<string | null> {
+  const res = await request<{ count: number }>('POST', `${WEBSITE}/conversations/bulk`, { body: { ids, action, ...extra } });
+  return res.message ?? null;
+}
+
+/** `websiteBulk` for a screen: the server's sentence as a toast, a refusal as an error, and the lists read again. */
+export function useWebsiteBulk() {
+  const qc = useQueryClient();
+  return (ids: number[], action: WebsiteBulkAction, extra: WebsiteBulkExtra = {}): Promise<boolean> =>
+    websiteBulk(ids, action, extra).then(
+      (message) => {
+        toast('success', message ?? text('Updated.'));
+        void qc.invalidateQueries({ queryKey: ['website'] });
+        return true;
+      },
+      (e) => {
+        toast('error', errorMessage(e));
+        return false;
+      },
+    );
 }
 
 /**

@@ -45,5 +45,5 @@ function WebsiteMenu({ x, y, row, onClose }: { x: number; y: number; row: Websit
   const me = useMe();
   const agents = useAgents(true);
   const run = useWebsiteActions(me, (c) => go(`/chat?view=website&website=${c.id}`));
-  return <ContextMenu x={x} y={y} label={`Actions — ${row.visitor_name || row.label}`} sections={websiteMenu(row, me, agents.data?.agents ?? [], (a, userId) => run(row, a, userId))} onClose={onClose} />;
+  return <ContextMenu x={x} y={y} label={`Actions — ${row.visitor_name || row.label}`} sections={websiteMenu(row, me, agents.data?.agents ?? [], (a, userId, priority) => run(row, a, userId, priority))} onClose={onClose} />;
 }

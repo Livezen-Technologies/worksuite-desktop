@@ -147,7 +147,7 @@ describe('what the menu offers for each kind of conversation', () => {
     expect(run.mock.calls).toEqual([['archive'], ['mute-week']]);
   });
 
-  it('WhatsApp adds contacts, assigning and waiting or done; Website chats assign, transfer and close', () => {
+  it('WhatsApp adds contacts, assigning and waiting or done; Website chats assign, transfer, star, set a priority and close', () => {
     const wa = { id: 7, kind: 'direct', name: 'Nimal', phone: '94770000007', status: 'open', unread: 1, is_pinned: 0, is_muted: 0, assigned_name: null } as unknown as WaChat;
     const w = whatsappMenu(wa, vi.fn());
     expect(labels(w)).toEqual(['Open on the web', 'Mark as read', 'Pin', 'Mute', 'Add to contacts', 'Assign to…', 'Mark as waiting', 'Mark as done']);
@@ -158,11 +158,14 @@ describe('what the menu offers for each kind of conversation', () => {
     const web = { id: 3, status: 'open', assigned_to: 7, visitor_name: 'Visitor', label: 'Visitor' } as unknown as WebsiteRow;
     const run = vi.fn();
     const m = websiteMenu(web, 7, [{ id: 7, name: 'Me' }, { id: 8, name: 'Kasun' }], run);
-    expect(labels(m)).toEqual(['Open', 'Transfer', 'Unassign', 'Close conversation']);
+    expect(labels(m)).toEqual(['Open', 'Transfer', 'Unassign', 'Star', 'Priority', 'Close conversation']);
     item(item(m, 'Transfer')!.submenu!, 'Kasun')!.onSelect!();
     expect(run).toHaveBeenCalledWith('transfer', 8);
-    expect(labels(websiteMenu({ ...web, assigned_to: null }, 7, [], vi.fn()))).toEqual(['Open', 'Assign to me', 'Assign to…', 'Close conversation']);
-    expect(labels(websiteMenu({ ...web, status: 'closed' }, 7, [], vi.fn()))).toEqual(['Open', 'Reopen conversation']);
+    expect(labels(item(m, 'Priority')!.submenu!)).toEqual(['Low', 'Normal', 'High', 'Urgent', 'VIP']);
+    item(item(m, 'Priority')!.submenu!, 'Urgent')!.onSelect!();
+    expect(run).toHaveBeenCalledWith('priority', undefined, 'urgent');
+    expect(labels(websiteMenu({ ...web, assigned_to: null }, 7, [], vi.fn()))).toEqual(['Open', 'Assign to me', 'Assign to…', 'Star', 'Priority', 'Close conversation']);
+    expect(labels(websiteMenu({ ...web, status: 'closed', is_starred: true }, 7, [], vi.fn()))).toEqual(['Open', 'Unstar', 'Priority', 'Reopen conversation']);
   });
 
   it('several conversations: mark read, archive, mute and delete', () => {
