@@ -4,6 +4,146 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.54.1 — 2026-10-04
+
+- W-02: widget preview's home status in two lines, Expand then Minimise, as the visitor widget
+
+## 1.54.0 — 2026-10-04
+
+- P-04: one composer kit with per-channel caps (TEAM_COMPOSER/WEBSITE_COMPOSER), design button order, @ and mic on Team Chat, website attach menu (screenshot, photo, Drive copy), uploading %, inline refusals, / header, one-line reply bar, Save to Drive and server delete window; P-03 Ringing under Setup
+
+## 1.53.0 — 2026-10-04
+
+- P-02: Notifications & calls settings to the design (ringtone and Test ring, ring on speakers too, call window on top, Focus/Do not disturb incl. system Focus, start at login and keep in tray, shortcuts incl. Live map and dashboard on/off)
+
+## 1.52.0 — 2026-10-04
+
+- S-08/S-09/S-10: Conversation starters (table, reorder, instant answer, preview), Saved replies (search, per-widget, monthly use, composer preview), Business hours (timezone, open-now pill, week editor and chart, offline message)
+
+## 1.51.0 — 2026-10-04
+
+- S-05/S-07: Chatbot tab (assistant settings, Answers from, hand-off, Try it) and Automated messages section (rule list with sent and replied, editor with when, widget, once per visit, posts as)
+
+## 1.50.0 — 2026-10-04
+
+- S-03/S-04: Behaviour tab (new chats, visitor alerts, allowed domains), embed code card with install check and guides, Staff tab (table, priority, voice, suspend, add and remove)
+
+## 1.49.0 — 2026-10-04
+
+- S-01/S-02: Website widgets list with cards and weekly analytics, New widget, seven-tab widget editor with the Appearance design and a New chat live preview
+
+## 1.48.0 — 2026-10-04
+
+- L-06/L-07: Wall mode sheet (pick a display, keep awake, cycle map views, open at start, tray closes it) and native Insights (periods, widget filter, tiles with change, per-day chart, sources, devices, agents, Export CSV)
+
+## 1.47.0 — 2026-10-04
+
+- L-04/L-05: pop-out Live map window, at-risk notification with Join and Show on map, menu-bar count, tray mini-dashboard with reply and join, wall mode on a second display, global shortcuts
+
+## 1.46.0 — 2026-10-04
+
+- L-02/L-03: full map (zoom presets with home country, pan/zoom/pinch, edge chips per country, lazy 1:10m country outlines, state and multi-site filters, bookmarkable view, place panel with precision and today counts) and dark wall mode (names hidden, ticker, keep-awake, full screen)
+
+## 1.45.0 — 2026-10-04
+
+- R-05/R-06: native incoming-chat window redrawn (Reply and join, saved replies, Send & join opens the thread, kept-draft question when a colleague joins first), tray ringing menu with reply and join, title bar pill and tab ringing count, badge counts unsilenced ringing chats
+
+## 1.44.0 — 2026-10-04
+
+- R-03/R-04 how a ring ends and silenced chats: a toast for each ending (a colleague joined with View, too late with who has it, visitor left with Missed and their email, visitor ended), You joined with how many it stopped ringing for, a compact card when every chat is silenced for you with Unsilence, and silenced rows in the lists (amber edge, Ringing · silenced, Nobody yet).
+
+## 1.43.0 — 2026-10-04
+
+- R-01/R-02 ringing to the design: the title bar's ringing and silenced pills, Incoming website chat with step, visit and VIP chips, a pulsing avatar, Silence in words, who else it rings; several ringing as website chats ringing, most urgent on top, with at-risk, assigned (In turn, the handover bar, Pass to next) and waiting cards; only the top chat sounds.
+
+## 1.42.0 — 2026-10-04
+
+- V-05 Live status & calls: a second tab in the widget settings (Appearance / Live status & calls) for typing and read receipts shown to visitors, voice calls on or off, the call button, the call-back offer, who can take calls and whether they are available, and recording (not offered yet); its own save, shared section parts and save bar.
+
+## 1.41.0 — 2026-10-04
+
+- V-04 Incoming voice call window to the design: phone in a green ring, Incoming voice call with its timer, who and where, the last message, Answer and Decline pills, the microphone or headset line with the answer shortcut; no answering without a microphone or while locked; a system notification when the call window is off.
+
+## 1.40.0 — 2026-10-04
+
+- V-03 On a call: the call bar (Voice call · visitor · time, connection and not recorded), a call notes panel saved as you type and kept as an internal note when the call ends, green and red call lines in the thread, accepting an invitation or transfer during a call joins its audio, Audio devices for microphone and speaker, the system mute key, and quieter screen reader announcements.
+
+## 1.39.0 — 2026-10-04
+
+- V-02 Call-backs in the Voice calls hub: Open / Mine / Done, request cards with the missed call, best time and who has it, Call back through the WorkSuite phone (else copy the number) with the attempt logged, Assign, and Mark done with how it went.
+
+## 1.38.0 — 2026-10-04
+
+- V-01 Voice calls: a Voice calls section with its live count in the menu; the live call banner, six tiles, filters, the calls table with result chips, paging, and call details with what happened, recording, staff notes, Open chat, Add note and Call back.
+
+## 1.37.0 — 2026-10-04
+
+- C-09 Invite and transfer: the invite dialog with people and departments in one search, status and team on each row, and 'Invite N people'; the transfer dialog with A person / A department / Next available and warm or hand over now; the invitee's Invitation and Transfer to you cards with the server's countdown; the amber declined notice with dismiss.
+
+## 1.36.0 — 2026-10-04
+
+- C-08 Several staff in one chat: Reply to visitor / Internal note tabs over the shared composer (note mode with @colleagues, staff-only typing, own draft), notes labelled with their author, colleagues' bubbles tinted with their photo and yours as You, and the In this chat card with presence, role, join time, the invite countdown, Invite someone and Leave chat with the owner's warning.
+
+## 1.35.0 — 2026-10-04
+
+- C-07 Visitors online: the design's table (status dot and city, reading now, time on site, pages, visit, last active), a reading-now viewer with time on page and scroll, this visit's timeline and chips, and Speak first through the shared composer with saved-reply chips.
+
+## 1.34.0 — 2026-10-04
+
+- C-06 Closed chat: closed rows with outcome, closer and stars; a read-only closed detail with who closed it and when, the rating card, Star / Block / Reopen and a summary panel (first reply, duration, priority, rating, tags, contact with past chats, shared files); visitor panel cards shared with the live thread.
+
+## 1.33.0 — 2026-10-04
+
+- C-05 Offline enquiries: their own list from `GET offline` (answered ones too) with the reason chip (Outside hours / Nobody online) and Not replied / Emailed by … / Back on the site; a review detail with their message, email, phone and page, a staff-only note, Assign, Close and Reply by email (`conversations/{id}/email`), the visitor and why nobody answered. An enquiry whose visitor came back and wrote is in Live chats too. The row shell, visit facts and the Reply by email dialog are shared with Missed chats. An older server keeps the inbox's offline rows.
+
+## 1.32.0 — 2026-10-04
+
+- C-04 Missed chats: To follow up / Handled tabs with counts, rows with the visitor's first words, how long they waited and who handled them, a review detail that does not claim the chat, Reply by email and Mark handled.
+
+## 1.31.0 — 2026-10-04
+
+- C-03 list views with bulk actions (UX-LIST-01/02, INB-08): Live chats, Unassigned, Assigned to me, Awaiting reply and Starred are one full-width table while nothing is open (visitor and last message, site, status chip, priority, owner, wait), with a priority filter and a sort (longest waiting first, newest activity, visitor name). Rows are picked with checkboxes, Ctrl/⌘-click, Shift-click or Space; the bulk bar assigns, sets a priority, stars and closes up to 200 at a time through `conversations/bulk`. Picking and the bar are shared with Chat's own list (`useMultiSelect`, `BulkBar`). A website chat's menu gains Star/Unstar and Priority, and Star now sends `on` (it used to take the star off).
+
+## 1.30.2 — 2026-10-04
+
+- Link cards in website chats (#229): the first link in a message gets its card, read through the server's guarded link-preview endpoint and kept a day.
+
+## 1.30.1 — 2026-10-04
+
+- Website chats use the server's thumbnails, previews and readable file names, show deleted messages, and delete a message for the visitor within 15 minutes (#229).
+
+## 1.30.0 — 2026-10-04
+
+- C-02 one chat kit (#229): Team Chat and website chats draw their messages with the same components (`kit/`): day dividers, runs of bubbles (avatar on the first, time on the last, corners by position), the reply quote inside the bubble, the bot's teal "Name · bot", amber dashed internal notes, ticks and "Read by", system lines, the visitor's page visits ("→ Opened /shop/x · 2 min"), typing and pending bubbles. Pictures are drawn by type (never extension) up to 280 px in their own shape, several in a 2–4 grid with "+N" in website chats; files show a readable name instead of a machine's ("Photo – Oct 4, 11:31.jpg"); long links read as site and path. Actions follow the channel: a website chat offers Reply and Copy. The visitor drawer to UX-DRW-01: profile with Email and Block, contact with copy and local time, Site/Device/Visits/Came from, this visit's journey with dwell and where the chat started, tags, and shared files as a grid.
+
+## 1.29.0 — 2026-10-04
+
+- C-00 Live dashboard to the design: live pill, six KPI tiles, the world map (countries shaded by visitors, city markers with state rings, at-risk halo and callout, country-only rings, legend, country rows, Now/Today, zoom presets), the Needs you / In a chat / Browsing list with Join, Open and Start chat, the visitor drawer, Full map and Wall mode (names hidden).
+
+## 1.28.0 — 2026-10-04
+
+- C-01 Inbox to the design: the Website Chats menu in the design's order with icons, count pills (red for missed, green for visitors online) and a lit bar; Mine is 'Assigned to me'; Back to Chat as a tile with Ctrl/Cmd+[; the shared 'Set your status' control at its foot as 'Taking chats · N open'; 36px avatars, a plain mono wait clock, 13px previews and 'site · /path' on rows; the empty panel at the design's sizes.
+
+## 1.27.0 — 2026-10-04
+
+- A visitor writing again in my chat while I am away from it (#230): a card over other apps with their last messages, a reply box, Open chat, Snooze 5 min and Take over for the team step; a system notification with Reply while WorkSuite is not in front, one per conversation; a chime; the Dock/taskbar badge and '(1) Website chats'; the row goes to the top marked Visitor replied; nothing while I am reading it.
+
+## 1.26.0 — 2026-10-04
+
+- Visitors online and the Live dashboard are two views of their own (#231): each lit alone in the menu and apart from Live chats; a visitor is selected by a click or the arrow keys and kept in the address; their details show language, landing page, earlier chats and linked contact, with Start chat (saved replies), Open the chat, Invite a colleague and Block; Enter or a double-click opens the chat; the status says Waiting/Chatting/Active and goes there; the dashboard's cards open what they count; a visitor who leaves is said to have left.
+
+## 1.25.0 — 2026-10-04
+
+- Website chats: a Callbacks section (to do / handled, overdue mark, Call now, WhatsApp, Reply by email, Mark contacted, Couldn't reach, Done), the callback card at the top of its conversation, "Callback requested" on rows, the wait clock amber at the callback offer and red after it, and a link to the WhatsApp chat a visitor continued on (#223, #224)
+
+## 1.24.0 — 2026-10-04
+
+- Ringing card redesign: Join & send, quick and AI replies, a mini chat after joining, minimise, a compact card per chat when several ring (#225)
+
+## 1.23.0 — 2026-10-04
+
+- Website chats: Block this visitor asks for how long — a day, a week (the default), a month or until somebody lifts it — and why, and says where to lift it on the web (WS-WCHAT GATE-08, SEC-10). Needs the server's Communication 1.20.0 for the length; an older server blocks until lifted, as before.
+
 ## 1.22.0 — 2026-10-03
 
 - Website chats › Widget (#207): choose Auto, Light or Dark for the widget, move the launcher with bottom/right/left offsets, see the organisation name used when the website name is empty, and preview the polished widget — one set of controls, no web address in the header.

@@ -23,6 +23,9 @@ vi.mock('../../../src/modules/mail/api', () => ({
   useTemplates: () => ({ data: { templates: net.templates }, isLoading: false }),
   useSignatures: () => ({ data: { signatures: [] } }),
   useQuickParts: () => ({ data: [] }),
+  // The account tags beside From (#227).
+  useMailboxes: () => ({ data: undefined }),
+  useMailPrefs: () => ({ prefs: {}, loaded: true, set: () => undefined }),
 }));
 vi.mock('../../../src/modules/ai/AiTextDialog', () => ({ AiTextDialog: () => null }));
 

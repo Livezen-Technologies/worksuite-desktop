@@ -1,12 +1,14 @@
-import { useEffect, useState } from 'react';
-import type { WebchatCall, WebchatHandoff, WebchatRingChat, WebchatRingState } from '@shared/types';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
+import type { WebchatCall, WebchatHandoff, WebchatMic, WebchatRingChat, WebchatRingState } from '@shared/types';
 import { call, errorMessage, isMac, on } from '../../../core/bridge';
 import { parseTs } from '../../../core/time';
+import { text } from '../../../core/i18n';
 import { toast } from '../../../core/toasts';
-import { Avatar, cx } from '../../../components/ui';
+import { cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useNow } from '../../calls/parts';
-import { playTone } from '../../calls/tones';
+import { playOnce, playTone } from '../../calls/tones';
+import { FollowUpCard, JoinedCard, OutcomeCard, ParticipantCard, RingCard, RingStack, SilencedCard, WindowStrip, followUpStatus, useFit } from './RingCard';
 
 /**
  * Website chats ringing like calls (WS-WCHAT ENH-01): the native call window
@@ -22,7 +24,8 @@ export function useRingState(): WebchatRingState {
   useEffect(() => {
     let live = true;
     void call('ring:state').then(
-      (x) => live && setS(x),
+      // A main process that has nothing to say (or an older one) leaves the empty state, never an unreadable one.
+      (x) => live && x && Array.isArray(x.chats) && setS(x),
       () => undefined,
     );
     const off = on<WebchatRingState>('ring:changed', (x) => setS(x));
@@ -34,15 +37,33 @@ export function useRingState(): WebchatRingState {
   return s;
 }
 
-/** Plays the tone while the state says so, at the person's volume (RING-21). */
+/** Plays the tone while the state says so, at the person's volume, in their ringtone, where they chose (RING-21, RING-42). */
 export function useRingTone(s: WebchatRingState, enabled = true): void {
   const kind = enabled ? s.tone : 'off';
   const volume = s.volume / 100;
+  const ringtone = s.ringtone ?? 'classic';
+  const ringOn = s.ringOn ?? 'both';
   useEffect(() => {
     if (kind === 'off') return;
-    const t = playTone(kind === 'strong' ? 'webchat-strong' : 'webchat', volume);
+    const t = playTone(kind === 'strong' ? 'webchat-strong' : 'webchat', volume, { ringtone, ringOn });
     return () => t.stop();
-  }, [kind, volume]);
+  }, [kind, volume, ringtone, ringOn]);
+}
+
+/**
+ * The "visitor replied" chime (worksuite-desktop#230): once each time the ringer says so — it has already weighed my
+ * sound setting, Do not disturb and the volume. Played by the main window only, so it never sounds twice.
+ */
+export function useFollowUpChime(s: WebchatRingState): void {
+  const chime = s.chime;
+  const volume = s.volume / 100;
+  // The first state from the main process is where we start: nothing plays for chimes from before this window opened.
+  const heard = useRef<number | null>(null);
+  useEffect(() => {
+    if (chime === undefined) return;
+    if (heard.current !== null && chime > heard.current) playOnce('reply', volume);
+    heard.current = chime;
+  }, [chime, volume]);
 }
 
 export function waited(since: string, now: number): string {
@@ -69,10 +90,69 @@ export function stageLabel(c: Pick<WebchatRingChat, 'atRisk' | 'mine' | 'stage' 
   }
 }
 
+/**
+ * Where on the ladder it is, as the card's chip says it (R-01, R-02; RING-06): "Priority · step 1 of 3" — the first
+ * step rings the priority agents who are free — then the rest of them, then everyone. Null where no step applies: a
+ * chat given to me, an offline enquiry, at risk (its own red chip), or a supervisor told at risk.
+ */
+export function stepLabel(c: Pick<WebchatRingChat, 'atRisk' | 'mine' | 'stage' | 'offline'>): string | null {
+  if (c.atRisk || c.mine || c.offline) return null;
+  switch (c.stage) {
+    case 'first':
+    case null:
+      return text('Priority · step {n} of 3', { n: 1 });
+    case 'priority':
+      return text('Priority · step {n} of 3', { n: 2 });
+    case 'everyone':
+    case 'released':
+      return text('Everyone · step {n} of 3', { n: 3 });
+    default:
+      return null;
+  }
+}
+
+/** "3rd visit" (R-01, RING-20), from the visitor's count of visits; null for a first visit or where it is not known. */
+export function visitLabel(visits: number | null | undefined): string | null {
+  if (!visits || visits < 2) return null;
+  const tens = visits % 100;
+  const suffix = tens >= 11 && tens <= 13 ? 'th' : visits % 10 === 1 ? 'st' : visits % 10 === 2 ? 'nd' : visits % 10 === 3 ? 'rd' : 'th';
+  return text('{n} visit', { n: `${visits}${suffix}` });
+}
+
+/**
+ * The card's footer line (R-01, RING-UI-01; RING-23): it rings until somebody joins, and for how many colleagues
+ * besides me — none for a chat given to me, which rings for me alone (RING-05).
+ */
+export function ringsFor(c: Pick<WebchatRingChat, 'mine' | 'othersRinging'>): string {
+  if (c.mine) return text('Rings for you until you join');
+  const n = c.othersRinging;
+  if (n === null || n === undefined) return text('Rings until someone joins');
+  if (n === 0) return text('Rings until someone joins · only you');
+  return n === 1 ? text('Rings until someone joins · 1 other ringing') : text('Rings until someone joins · {n} others ringing', { n });
+}
+
+/**
+ * The silenced card's line (R-04, RING-UI-04; RING-11, RING-24): silenced for me alone — "still ringing for 2
+ * colleagues" as the server counts them; just "Silenced for you" where it does not say, or nobody else is rung.
+ */
+export function silencedFor(c: Pick<WebchatRingChat, 'mine' | 'othersRinging'>): string {
+  const n = c.othersRinging;
+  if (c.mine || !n) return text('Silenced for you');
+  return n === 1 ? text('Silenced for you · still ringing for 1 colleague') : text('Silenced for you · still ringing for {n} colleagues', { n });
+}
+
+/**
+ * The line where I joined (R-03 "YOU JOIN"; RING-22, RING-28): "You joined the chat · ringing stopped for 2
+ * colleagues" — only "You joined the chat" when it rang for nobody else, or that is not known.
+ */
+export function youJoinedLine(colleagues: number | null | undefined): string {
+  if (!colleagues) return text('You joined the chat');
+  return colleagues === 1 ? text('You joined the chat · ringing stopped for 1 colleague') : text('You joined the chat · ringing stopped for {n} colleagues', { n: colleagues });
+}
+
 const join = (id: number) =>
   void call('ring:join', { id }).catch((e) => toast('error', errorMessage(e)));
 const silence = (id: number, onOff: boolean) => void call('ring:silence', { id, on: onOff }).catch(() => undefined);
-const pass = (id: number) => void call('ring:pass', { id }).catch((e) => toast('error', errorMessage(e)));
 const answer = (id: number, accept: boolean) => void call('ring:handoff', { id, accept }).catch((e) => toast('error', errorMessage(e)));
 const answerCall = (id: number, accept: boolean) => void call('ring:call', { id, accept }).catch((e) => toast('error', errorMessage(e)));
 
@@ -90,8 +170,48 @@ export function handoffAsk(h: Pick<WebchatHandoff, 'kind' | 'mode' | 'from' | 'd
   return h.mode === 'cold' ? `${who} handed this chat over${to}` : `${who} asks you to take over${to}`;
 }
 
-/** The server's accept time by default: how long a chat given to me rings before it passes on (RING-05). */
-const ACCEPT_SECONDS = 60;
+/** "Nuwan" for "Nuwan Silva": the cards speak of a colleague the way the design does (C-09). */
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+/**
+ * The card's headline (C-09, TEAM-UI-02): "Nuwan invites you to a chat with Visitor 4F2A", "Nuwan is handing you
+ * Visitor 4F2A"; a chat nobody took, or an owner who went offline, is WorkSuite's, with nobody named.
+ */
+export function handoffHeadline(h: Pick<WebchatHandoff, 'kind' | 'from' | 'toAny' | 'visitor'>, hidden = false): string {
+  const visitor = hidden ? 'a website visitor' : h.visitor;
+  const who = h.from ? firstName(h.from) : null;
+  if (h.kind === 'invite') return `${who ?? 'WorkSuite'} invites you to a chat with ${visitor}`;
+  if (who) return `${who} is handing you ${visitor}`;
+  return h.toAny ? `${hidden ? 'A website visitor' : h.visitor} needs someone — nobody took the chat` : `You're asked to take over ${visitor}`;
+}
+
+/**
+ * What else the card says, under the note (C-09; TEAM-25, TEAM-41, TEAM-42): warm or handed over now, and a department
+ * that is asked as one — the first to answer takes it.
+ */
+export function handoffDetail(h: Pick<WebchatHandoff, 'kind' | 'mode' | 'from' | 'toAny' | 'department' | 'onCall'>): string | null {
+  const who = h.from ? firstName(h.from) : null;
+  const team = h.department ? `Sent to the ${h.department} team — the first to ${h.kind === 'invite' ? 'join' : 'accept'} takes it` : null;
+  // On a voice call with the visitor now (V-03, WF-V3): Join chat or Accept brings you into the call too.
+  const call = h.onCall ? 'On a voice call now — you join the call too' : null;
+  if (h.kind === 'invite') return [call, team].filter(Boolean).join(' · ') || null;
+  const mode = h.mode === 'cold'
+    ? who ? `Handed over now — ${who} has left; it rings for you until you join` : 'It rings for everybody covering the website until someone joins'
+    : who ? `Warm transfer — ${who} stays until you join` : 'Warm transfer — nothing changes until you accept';
+  return [call, mode, team].filter(Boolean).join(' · ');
+}
+
+/**
+ * Seconds left on an invitation or transfer ringing for me, or null when it rings until somebody takes it: by the
+ * server's count when it gave one (C-09), so a computer whose clock is off still counts down true.
+ */
+export function handoffLeft(h: Pick<WebchatHandoff, 'expiresAt' | 'endsAt'>, now: number): number | null {
+  // Only what reads as a time: a state of another shape (an older main process) shows no countdown rather than throwing.
+  const ends = typeof h.endsAt === 'number' ? h.endsAt : typeof h.expiresAt === 'string' && h.expiresAt ? parseTs(h.expiresAt).getTime() : null;
+  return ends === null || !Number.isFinite(ends) ? null : Math.max(0, Math.round((ends - now) / 1000));
+}
 
 /** m:ss for a count of seconds. */
 export function clock(seconds: number): string {
@@ -115,215 +235,190 @@ export function WebchatRingWindow() {
   const s = useRingState();
   const now = useNow();
   useRingTone(s);
-  const [top, ...rest] = s.chats;
+  // The window is as tall as what it shows (#225): measured here, once, whichever card that is.
+  const fit = useFit();
+  const top = s.chats[0];
   const handoffs = s.handoffs ?? [];
-  const joinKey = isMac ? '⌘⇧J' : 'Ctrl+Shift+J';
-  const handover = top ? handoverIn(top.handoverAt, now) : null;
   const [firstCall, ...otherCalls] = s.calls ?? [];
+  // Invitations and transfers ringing beside chats, under the chat card.
+  const asks = handoffs.length && top ? <HandoffRows s={s} list={handoffs.slice(0, 2)} more={handoffs.length - 2} now={now} first /> : null;
+  // A colleague joined while I was typing (UX-ALR-04): my words and the choice, above whatever else still rings.
+  const offer = s.outcome?.draft && !s.hidden ? <ParticipantCard o={s.outcome} /> : null;
 
+  let body: ReactNode;
   // A visitor on the line comes before everything else (VOICE-10).
-  if (firstCall) return <CallCard s={s} c={firstCall} rest={otherCalls} more={s.chats.length + handoffs.length} now={now} />;
-  if (!top && handoffs[0]) return <HandoffCard s={s} h={handoffs[0]} rest={handoffs.slice(1)} now={now} />;
-  if (!top) {
-    return (
-      <div className="drag flex h-full items-center gap-3 bg-[#0F1B3D] px-4 text-[13px] text-[#E6ECFA]" role="status" aria-live="polite">
-        <Icon name="check-circle" size={18} className="shrink-0 text-[#3DD68C]" />
-        <span className="min-w-0 flex-1">{s.outcome?.text ?? 'Nothing is ringing.'}</span>
-      </div>
-    );
-  }
+  if (firstCall) body = <CallCard s={s} c={firstCall} rest={otherCalls} more={s.chats.length + handoffs.length} now={now} />;
+  // Every chat silenced for me: the compact "still waiting" card (R-04, RING-24) — at risk clears a silence, so it
+  // never hides one. One chat: the full card with its reply box; several: a compact card each (#225).
+  else if (top && !asks && s.chats.every((c) => c.silenced)) body = <SilencedCard s={s} c={top} now={now} />;
+  else if (top) body = s.chats.length > 1 ? <RingStack s={s} chats={s.chats} now={now} after={asks} /> : <RingCard key={top.id} s={s} c={top} now={now} after={asks} />;
+  else if (handoffs[0]) body = <HandoffCard s={s} h={handoffs[0]} rest={handoffs.slice(1)} now={now} />;
+  // A chat just joined from the card: a mini chat until the full chat is opened or the card minimised (#225).
+  else if (s.joined) body = <JoinedCard j={s.joined} now={now} colleagues={s.youJoined?.id === s.joined.conversationId ? s.youJoined.colleagues : null} />;
+  // A visitor who wrote again in my chat while I was away from it (#230).
+  else if (s.followUps?.[0]) body = <FollowUpCard s={s} f={s.followUps[0]} rest={s.followUps.slice(1)} now={now} />;
+  // How the ring ended (R-03, RING-UI-03).
+  else body = offer ? null : <OutcomeCard s={s} />;
   return (
-    <div className="flex h-full flex-col bg-[#0F1B3D] text-[13px] text-[#E6ECFA]">
-      <div className="sr-only" role="alert" aria-live="assertive">
-        {s.hidden ? 'A website chat is waiting.' : `Website chat: ${top.visitor}${top.site ? ` on ${top.site}` : ''} is waiting.`}
-      </div>
-      <div className={cx('drag flex items-center gap-2 px-4 pt-3 text-[11.5px] font-bold tracking-[.06em] uppercase', top.atRisk ? 'text-[#FF8A73]' : 'text-[#AFC0E8]')}>
-        <span className={cx('h-2 w-2 rounded-full', top.silenced ? 'bg-[#F5B94A]' : 'bg-[#F0503A] motion-safe:animate-pulse')} />
-        <span className="flex-1">{top.silenced ? 'Silenced for you' : 'Website chat ringing'}</span>
-        <span className={cx('rounded-full px-2 py-0.5 text-[10.5px] tracking-normal normal-case', top.atRisk ? 'bg-[#5A1F17] text-[#FFB4A4]' : top.mine ? 'bg-[#1C3A2E] text-[#8FE3B7]' : 'bg-[#22305C] text-[#C9D5F5]')}>{stageLabel(top)}</span>
-      </div>
-      <div className="flex gap-3 px-4 pt-3">
-        <span className={cx('relative shrink-0 rounded-full', !top.silenced && 'motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]')}>
-          <Avatar name={s.hidden ? '?' : top.visitor} size={46} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <b className="truncate text-[15px] text-white">{s.hidden ? 'A website visitor' : top.visitor}</b>
-          <span className="truncate text-[12px] text-[#AFC0E8]">
-            {s.hidden ? 'Unlock WorkSuite to see who.' : [top.site, top.place, top.device, top.returning ? 'Returning' : null].filter(Boolean).join(' · ') || 'Website chat'}
-          </span>
-          {!s.hidden && top.page ? <span className="truncate text-[12px] text-[#C9D5F5]">Reading {top.page}</span> : null}
-        </span>
-        <span className="shrink-0 font-mono text-[12px] text-[#AFC0E8]" aria-label={`Waiting ${waited(top.since, now)}`}>
-          {waited(top.since, now)}
-        </span>
-      </div>
-      {!s.hidden && top.preview ? <p className="mx-4 mt-2 line-clamp-2 rounded-[8px] bg-[#16254F] px-2.5 py-1.5 text-[12.5px] text-[#E6ECFA]">“{top.preview}”</p> : null}
-      {top.mine && top.by ? <p className="mx-4 mt-1.5 text-[11.5px] text-[#AFC0E8]">Assigned to you by {top.by}</p> : null}
-      {top.mine && handover !== null ? (
-        // A chat given to me passes on if I do not join it in time (RING-UI-02).
-        <div className="mx-4 mt-2" role="timer" aria-label={`Passes on in ${clock(handover)}`}>
-          <div className="h-1 overflow-hidden rounded-full bg-[#22305C]">
-            <div className="h-full rounded-full bg-[#8FA6E0] transition-[width] duration-1000 ease-linear" style={{ width: `${Math.min(100, (handover / ACCEPT_SECONDS) * 100)}%` }} />
-          </div>
-          <p className="mt-1 text-[11.5px] text-[#AFC0E8]">Passes to the next available agent in {clock(handover)} if you don't join</p>
-        </div>
-      ) : null}
-      <div className="flex gap-2 px-4 pt-3">
-        <button type="button" disabled={s.hidden} onClick={() => join(top.id)} className="h-11 flex-1 rounded-[9px] bg-[#3DD68C] text-[14px] font-bold text-[#0B2A1D] hover:brightness-105 disabled:opacity-50">
-          Join chat
-        </button>
-        {top.mine && handover !== null ? (
-          <button type="button" onClick={() => pass(top.id)} className="h-11 flex-1 rounded-[9px] border border-[#33477E] text-[14px] font-semibold hover:bg-white/5">
-            Pass to next
-          </button>
-        ) : (
-          <button type="button" onClick={() => silence(top.id, !top.silenced)} className="h-11 flex-1 rounded-[9px] border border-[#33477E] text-[14px] font-semibold hover:bg-white/5">
-            {top.silenced ? 'Unsilence' : 'Silence'}
-          </button>
-        )}
-      </div>
-      {rest.length ? (
-        <ul className="mt-3 flex flex-col border-t border-[#22305C]" aria-label="Other chats waiting">
-          {rest.slice(0, 3).map((c) => (
-            <li key={c.id} className="flex h-[46px] items-center gap-2 border-b border-[#22305C] px-4">
-              <span className={cx('h-1.5 w-1.5 shrink-0 rounded-full', c.atRisk ? 'bg-[#F0503A]' : c.silenced ? 'bg-[#F5B94A]' : 'bg-[#8FA6E0]')} />
-              <span className="min-w-0 flex-1 truncate">
-                <b className="text-white">{s.hidden ? 'A visitor' : c.visitor}</b>
-                <span className="text-[#AFC0E8]"> · {stageLabel(c)}{c.site && !s.hidden ? ` · ${c.site}` : ''}</span>
-              </span>
-              <span className="font-mono text-[11.5px] text-[#AFC0E8]">{waited(c.since, now)}</span>
-              <button type="button" disabled={s.hidden} onClick={() => join(c.id)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
-                Join
-              </button>
-            </li>
-          ))}
-          {rest.length > 3 ? <li className="px-4 py-1 text-[11.5px] text-[#AFC0E8]">+{rest.length - 3} more waiting</li> : null}
-        </ul>
-      ) : null}
-      {handoffs.length ? <HandoffRows s={s} list={handoffs.slice(0, Math.max(1, 3 - rest.length))} more={handoffs.length - Math.max(1, 3 - rest.length)} first={!rest.length} /> : null}
-      <p className="drag mt-auto px-4 pt-2 pb-2.5 text-[11px] text-[#8FA6E0]">
-        {s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `Rings until someone joins${s.shortcut ? ` · ${joinKey} to join` : ''}`}
-      </p>
+    <div ref={fit}>
+      {offer}
+      {body}
     </div>
   );
 }
 
 /**
- * A visitor's voice call as the call window's card (VOICE-UI-03): who, where, what they last wrote, how long they
- * have waited, and Answer or Decline. Answering brings WorkSuite forward on the chat, on the call.
+ * The incoming call's device line (V-04, VOICE-11, VOICE-14): which headset or microphone the call would use, or that
+ * there is none — then Answer is off, as the server would not ring this computer for calls either.
+ */
+export function deviceLine(mic: WebchatMic | null | undefined): string {
+  if (!mic) return 'Audio only, in WorkSuite';
+  if (!mic.ready) return 'No microphone — plug one in to answer';
+  return mic.label ? `${mic.headset ? 'Headset' : 'Microphone'}: ${mic.label} · mic ready` : 'Microphone ready';
+}
+
+/** "techubiz.com · in chat with Nuwan" (V-04): where the visitor is, and whose chat it is. */
+export function callWhere(c: Pick<WebchatCall, 'site' | 'owner'>): string {
+  return [c.site, c.owner ? `in chat with ${firstName(c.owner)}` : null].filter(Boolean).join(' · ') || 'Website voice call';
+}
+
+/**
+ * A visitor's voice call as the call window's card (V-04, VOICE-UI-03): the native window's title, the phone in its
+ * ring, INCOMING VOICE CALL with how long it has rung, who, where and whose chat, the last message, Answer and
+ * Decline, then the device line with the answer shortcut. Answering brings WorkSuite forward on the chat, on the call.
  */
 function CallCard({ s, c, rest, more, now }: { s: WebchatRingState; c: WebchatCall; rest: WebchatCall[]; more: number; now: number }) {
   const answerKey = isMac ? '⌘⇧A' : 'Ctrl+Shift+A';
+  // No microphone here: nothing to answer with (VOICE-11). Locked: nobody is shown, so nothing is answered either.
+  const noMic = s.mic?.ready === false;
+  const contact = s.hidden ? null : [c.phone, c.email].filter(Boolean).join(' · ') || null;
+  const status = s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : more ? `${more} more waiting` : null;
   return (
-    <div className="flex h-full flex-col bg-[#0F1B3D] text-[13px] text-[#E6ECFA]">
+    <section aria-label="Incoming voice call" className="flex h-full flex-col overflow-hidden border border-[#2F9E67] bg-[#111B3B] text-[13px] text-[#F1F4FB]">
       <div className="sr-only" role="alert" aria-live="assertive">
         {s.hidden ? 'A website visitor is calling.' : `Voice call: ${c.visitor}${c.site ? ` on ${c.site}` : ''} is calling.`}
       </div>
-      <div className="drag flex items-center gap-2 px-4 pt-3 text-[11.5px] font-bold tracking-[.06em] text-[#8FE3B7] uppercase">
-        <span className="h-2 w-2 rounded-full bg-[#3DD68C] motion-safe:animate-pulse" />
-        <span className="flex-1">Incoming voice call</span>
-        <span className="rounded-full bg-[#1C3A2E] px-2 py-0.5 text-[10.5px] tracking-normal text-[#8FE3B7] normal-case">{c.stage === 'first' ? 'Your chat' : 'Everyone'}</span>
-      </div>
-      <div className="flex gap-3 px-4 pt-3">
-        <span className="relative shrink-0 rounded-full motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
-          <Avatar name={s.hidden ? '?' : c.visitor} size={46} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <b className="truncate text-[15px] text-white">{s.hidden ? 'A website visitor' : c.visitor}</b>
-          <span className="truncate text-[12px] text-[#AFC0E8]">{s.hidden ? 'Unlock WorkSuite to see who.' : [c.site, c.place, c.owner ? `With ${c.owner}` : null].filter(Boolean).join(' · ') || 'Website voice call'}</span>
-          {!s.hidden && c.page ? <span className="truncate text-[12px] text-[#C9D5F5]">Reading {c.page}</span> : null}
-        </span>
-        {c.requestedAt ? (
-          <span className="shrink-0 font-mono text-[12px] text-[#AFC0E8]" aria-label={`Calling for ${waited(c.requestedAt, now)}`}>
-            {waited(c.requestedAt, now)}
+      <WindowStrip title="WorkSuite · Website voice call" />
+      <div className="drag flex items-center gap-4 px-[18px] pt-[18px] pb-2">
+        <span aria-hidden className="flex h-[82px] w-[82px] shrink-0 items-center justify-center rounded-full border-2 border-[#65B385]/45 motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
+          <span className="flex h-[62px] w-[62px] items-center justify-center rounded-full bg-[#2F9E67] text-white">
+            <Icon name="phone" size={26} />
           </span>
-        ) : null}
+        </span>
+        <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+          <span className="text-[11px] font-bold tracking-[1px] text-[#A7E3C3] uppercase">
+            <span>Incoming voice call</span>
+            {c.requestedAt ? (
+              <>
+                {' · '}
+                <span role="timer" className="font-mono tabular-nums" aria-label={`Calling for ${waited(c.requestedAt, now)}`}>{waited(c.requestedAt, now)}</span>
+              </>
+            ) : null}
+          </span>
+          <b className="truncate text-[19px] font-bold text-white">{s.hidden ? 'A website visitor' : c.visitor}</b>
+          <span className="truncate text-[13px] text-[#AAB2C9]">{s.hidden ? 'Unlock WorkSuite to see who.' : callWhere(c)}</span>
+          {!s.hidden && c.page ? <span className="truncate text-[12px] text-[#C9D5F5]">Reading {c.page}</span> : null}
+          {/* The details the visitor gave before calling (UX-WGT-10): who to ring back if the line drops. */}
+          {contact ? <span className="truncate text-[12px] text-[#C9D5F5]">{contact}</span> : null}
+        </span>
       </div>
-      {!s.hidden && c.preview ? <p className="mx-4 mt-2 line-clamp-2 rounded-[8px] bg-[#16254F] px-2.5 py-1.5 text-[12.5px] text-[#E6ECFA]">“{c.preview}”</p> : null}
-      <div className="flex gap-2 px-4 pt-3">
-        <button type="button" disabled={s.hidden} onClick={() => answerCall(c.id, true)} className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[9px] bg-[#3DD68C] text-[14px] font-bold text-[#0B2A1D] hover:brightness-105 disabled:opacity-50">
-          <Icon name="phone" size={16} />
+      {!s.hidden && c.preview ? (
+        <p className="mx-[18px] mt-1.5 line-clamp-2 rounded-[10px] border border-[#24306A] bg-[#1A2550] px-3 py-2.5 text-[13px] break-words">
+          Last message: <span>“{c.preview}”</span>
+        </p>
+      ) : null}
+      <div className="flex gap-2.5 px-[18px] py-3.5">
+        <button
+          type="button"
+          disabled={s.hidden || noMic}
+          title={noMic ? 'No microphone on this computer' : undefined}
+          onClick={() => answerCall(c.id, true)}
+          className="flex h-[46px] flex-1 items-center justify-center gap-2 rounded-full bg-[#2F9E67] text-[15px] font-bold text-white hover:brightness-110 disabled:opacity-50"
+        >
           Answer
         </button>
-        <button type="button" onClick={() => answerCall(c.id, false)} className="h-11 flex-1 rounded-[9px] bg-[#C2412D] text-[14px] font-bold text-white hover:brightness-110">
+        <button type="button" onClick={() => answerCall(c.id, false)} className="h-[46px] w-[124px] shrink-0 rounded-full bg-[#D9483B] text-[14px] font-bold text-white hover:brightness-110">
           Decline
         </button>
       </div>
       {rest.length ? (
-        <ul className="mt-3 flex flex-col border-t border-[#22305C]" aria-label="Other calls">
+        <ul className="flex flex-col border-t border-[#22305C]" aria-label="Other calls">
           {rest.slice(0, 3).map((x) => (
-            <li key={`c${x.id}`} className="flex h-[46px] items-center gap-2 border-b border-[#22305C] px-4">
-              <Icon name="phone" size={13} className="shrink-0 text-[#8FE3B7]" />
+            <li key={`c${x.id}`} className="flex h-[46px] items-center gap-2 border-b border-[#22305C] px-[18px]">
+              <Icon name="phone" size={13} className="shrink-0 text-[#A7E3C3]" />
               <span className="min-w-0 flex-1 truncate">
                 <b className="text-white">{s.hidden ? 'A visitor' : x.visitor}</b>
                 <span className="text-[#AFC0E8]"> · Voice call{x.site && !s.hidden ? ` · ${x.site}` : ''}</span>
               </span>
-              <button type="button" disabled={s.hidden} onClick={() => answerCall(x.id, true)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
+              <button type="button" disabled={s.hidden || noMic} onClick={() => answerCall(x.id, true)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
                 Answer
               </button>
             </li>
           ))}
         </ul>
       ) : null}
-      <p className="drag mt-auto px-4 pt-2 pb-2.5 text-[11px] text-[#8FA6E0]">
-        {s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `${more ? `${more} more waiting · ` : ''}Audio only, in WorkSuite${s.answerShortcut ? ` · ${answerKey} to answer` : ''}`}
-      </p>
-    </div>
+      {status ? <p className="px-[18px] pt-2 text-[11.5px] text-[#B3C0FF]" role="status">{status}</p> : null}
+      <div className="drag mt-auto flex items-center justify-between gap-3 px-[18px] pt-2 pb-3 text-[12px] text-[#8B93AD]">
+        <span className={cx('flex min-w-0 items-center gap-1.5 truncate', noMic && 'text-[#F2A79E]')}>
+          {noMic ? <Icon name="mic-off" size={13} className="shrink-0" /> : null}
+          {deviceLine(s.mic)}
+        </span>
+        {s.answerShortcut ? (
+          <kbd className="shrink-0 font-mono" aria-label={`${answerKey} to answer`} title={`${answerKey} answers from any app`}>
+            {answerKey}
+          </kbd>
+        ) : null}
+      </div>
+    </section>
   );
 }
 
 /**
- * An invitation or a transfer as the call window's card (TEAM-UI-02): who asks and why, the note, the visitor, how
- * long it rings for, Join chat or Accept, and Decline.
+ * An invitation or a transfer as the call window's card (C-09, TEAM-UI-02; TEAM-23, TEAM-41, TEAM-42): the call-style
+ * card the design draws — INVITATION or TRANSFER TO YOU with its countdown, who asks for what, the staff-only note,
+ * warm or handed over now, and Join chat or Accept beside Decline. Others ringing too are rows under it.
  */
-function HandoffCard({ s, h, rest, now }: { s: WebchatRingState; h: WebchatHandoff; rest: WebchatHandoff[]; now: number }) {
-  const left = h.expiresAt ? Math.max(0, Math.round((parseTs(h.expiresAt).getTime() - now) / 1000)) : null;
-  const total = h.expiresAt && h.createdAt ? Math.max(1, Math.round((parseTs(h.expiresAt).getTime() - parseTs(h.createdAt).getTime()) / 1000)) : null;
+export function HandoffCard({ s, h, rest, now }: { s: WebchatRingState; h: WebchatHandoff; rest: WebchatHandoff[]; now: number }) {
+  const left = handoffLeft(h, now);
+  const invite = h.kind === 'invite';
+  const detail = s.hidden ? null : handoffDetail(h);
   return (
-    <div className="flex h-full flex-col bg-[#0F1B3D] text-[13px] text-[#E6ECFA]">
+    <div className="flex h-full flex-col bg-[#111B3B] text-[13px] text-[#F1F4FB]">
       <div className="sr-only" role="alert" aria-live="assertive">
-        {s.hidden ? 'A colleague is asking you into a website chat.' : `${handoffTitle(h)}: ${handoffAsk(h)}, with ${h.visitor}.`}
+        {s.hidden ? 'A colleague is asking you into a website chat.' : `${handoffTitle(h)}: ${handoffHeadline(h)}.`}
       </div>
-      <div className="drag flex items-center gap-2 px-4 pt-3 text-[11.5px] font-bold tracking-[.06em] text-[#AFC0E8] uppercase">
-        <span className="h-2 w-2 rounded-full bg-[#8FA6E0] motion-safe:animate-pulse" />
-        <span className="flex-1">{handoffTitle(h)}</span>
-        {h.kind === 'transfer' ? <span className="rounded-full bg-[#22305C] px-2 py-0.5 text-[10.5px] tracking-normal text-[#C9D5F5] normal-case">{h.mode === 'cold' ? 'Handed over now' : 'Warm transfer'}</span> : null}
-      </div>
-      <div className="flex gap-3 px-4 pt-3">
-        <span className="relative shrink-0 rounded-full motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
-          <Avatar name={s.hidden ? '?' : h.visitor} size={46} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <b className="truncate text-[15px] text-white">{s.hidden ? 'A website visitor' : h.visitor}</b>
-          <span className="truncate text-[12px] text-[#AFC0E8]">{s.hidden ? 'Unlock WorkSuite to see who.' : handoffAsk(h)}</span>
-          {!s.hidden && (h.site || h.page) ? <span className="truncate text-[12px] text-[#C9D5F5]">{[h.site, h.page ? `Reading ${h.page}` : null].filter(Boolean).join(' · ')}</span> : null}
-        </span>
-      </div>
-      {!s.hidden && h.note ? <p className="mx-4 mt-2 line-clamp-2 rounded-[8px] bg-[#16254F] px-2.5 py-1.5 text-[12.5px] text-[#E6ECFA]" title="Only staff see this note">“{h.note}”</p> : null}
-      {left !== null ? (
-        <div className="mx-4 mt-2" role="timer" aria-label={`Rings for ${clock(left)} more`}>
-          <div className="h-1 overflow-hidden rounded-full bg-[#22305C]">
-            <div className="h-full rounded-full bg-[#8FA6E0] transition-[width] duration-1000 ease-linear" style={{ width: `${total ? Math.min(100, (left / total) * 100) : 100}%` }} />
-          </div>
-          <p className="mt-1 text-[11.5px] text-[#AFC0E8]">{h.kind === 'invite' ? 'The invitation' : 'The transfer'} expires in {clock(left)}</p>
+      <section aria-label={invite ? 'Invitation' : 'Transfer request'} className="flex flex-col gap-2.5 px-[18px] pt-4">
+        <div className="drag flex items-center gap-2">
+          <span className={cx('rounded-[6px] px-2 py-[3px] text-[11px] font-bold tracking-[1.2px] text-white uppercase', invite ? 'bg-[#1F7A6E]' : 'bg-[#4A63E8]')}>{handoffTitle(h)}</span>
+          <span className="flex-1" />
+          {left !== null ? (
+            // "1:40 left" on an invitation, "0:48" on a transfer, as designed.
+            <span role="timer" aria-label={`Rings for ${clock(left)} more`} className="font-mono text-[13px] text-[#C9CFE3] tabular-nums">{invite ? `${clock(left)} left` : clock(left)}</span>
+          ) : null}
         </div>
-      ) : null}
-      <div className="flex gap-2 px-4 pt-3">
-        <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-11 flex-1 rounded-[9px] bg-[#3DD68C] text-[14px] font-bold text-[#0B2A1D] hover:brightness-105 disabled:opacity-50">
-          {h.kind === 'invite' ? 'Join chat' : 'Accept'}
-        </button>
-        <button type="button" onClick={() => answer(h.id, false)} className="h-11 flex-1 rounded-[9px] border border-[#33477E] text-[14px] font-semibold hover:bg-white/5">
-          Decline
-        </button>
-      </div>
-      {rest.length ? <HandoffRows s={s} list={rest.slice(0, 3)} more={rest.length - 3} first /> : null}
-      <p className="drag mt-auto px-4 pt-2 pb-2.5 text-[11px] text-[#8FA6E0]">{s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : 'A colleague is asking you into a website chat'}</p>
+        <b className="text-[16px] leading-snug font-bold text-white">{handoffHeadline(h, s.hidden)}</b>
+        {!s.hidden && (h.site || h.page) ? <span className="-mt-1.5 truncate text-[12px] text-[#AFC0E8]">{[h.site, h.page ? `Reading ${h.page}` : null].filter(Boolean).join(' · ')}</span> : null}
+        {!s.hidden && h.note ? (
+          <p className="rounded-[10px] bg-[#1A2550] px-3 py-2.5 text-[13px] break-words text-[#DFE3F0]" title="Only staff see this note">{invite ? `“${h.note}”` : h.note}</p>
+        ) : null}
+        {detail ? <span className="text-[12px] text-[#B3C0FF]">{detail}</span> : null}
+        <div className="flex gap-2.5">
+          <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-11 flex-1 rounded-full bg-[#2F9E67] text-[15px] font-bold text-white hover:brightness-110 disabled:opacity-50">
+            {invite ? 'Join chat' : 'Accept'}
+          </button>
+          <button type="button" onClick={() => answer(h.id, false)} className="h-11 w-[116px] shrink-0 rounded-full border border-[#3A4468] font-semibold text-[#F1F4FB] hover:bg-white/5">
+            Decline
+          </button>
+        </div>
+      </section>
+      {rest.length ? <HandoffRows s={s} list={rest.slice(0, 3)} more={rest.length - 3} now={now} first /> : null}
+      <p className="drag mt-auto px-[18px] pt-2.5 pb-3 text-[11px] text-[#8FA6E0]">{s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : 'A colleague is asking you into a website chat'}</p>
     </div>
   );
 }
 
 /** Other invitations and transfers, under the card, each with Join and Decline. */
-function HandoffRows({ s, list, more, first }: { s: WebchatRingState; list: WebchatHandoff[]; more: number; first: boolean }) {
+function HandoffRows({ s, list, more, first, now }: { s: WebchatRingState; list: WebchatHandoff[]; more: number; first: boolean; now?: number }) {
   return (
     <ul className={cx('flex flex-col', first ? 'mt-3 border-t border-[#22305C]' : '')} aria-label="Invitations and transfers">
       {list.map((h) => (
@@ -333,6 +428,7 @@ function HandoffRows({ s, list, more, first }: { s: WebchatRingState; list: Webc
             <b className="text-white">{s.hidden ? 'A visitor' : h.visitor}</b>
             <span className="text-[#AFC0E8]"> · {handoffTitle(h)}{h.from && !s.hidden ? ` from ${h.from}` : ''}</span>
           </span>
+          {now !== undefined && handoffLeft(h, now) !== null ? <span className="shrink-0 font-mono text-[12px] text-[#C9CFE3] tabular-nums">{clock(handoffLeft(h, now)!)}</span> : null}
           <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
             {h.kind === 'invite' ? 'Join' : 'Accept'}
           </button>
@@ -356,9 +452,11 @@ export function RingingBar({ tone }: { tone: boolean }) {
   const s = useRingState();
   const now = useNow();
   useRingTone(s, tone);
+  useFollowUpChime(s);
   const [top] = s.chats;
   const h = s.handoffs?.[0];
   const [c] = s.calls ?? [];
+  const f = s.followUps?.[0];
   if (c) {
     // A visitor calling (VOICE-10): before everything else.
     return (
@@ -370,7 +468,9 @@ export function RingingBar({ tone }: { tone: boolean }) {
           {c.requestedAt ? ` · ${waited(c.requestedAt, now)}` : ''}
           {(s.calls?.length ?? 0) > 1 ? ` · +${(s.calls?.length ?? 0) - 1} more` : ''}
         </span>
-        <button type="button" onClick={() => answerCall(c.id, true)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
+        {/* Without a microphone there is nothing to answer with (V-04, VOICE-11): the bar says so instead. */}
+        {s.mic?.ready === false ? <span className="shrink-0 text-[12px]">No microphone</span> : null}
+        <button type="button" disabled={s.mic?.ready === false} onClick={() => answerCall(c.id, true)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110 disabled:opacity-50">
           Answer
         </button>
         <button type="button" onClick={() => answerCall(c.id, false)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">
@@ -386,11 +486,38 @@ export function RingingBar({ tone }: { tone: boolean }) {
         <Icon name="users" size={15} className="shrink-0 text-primary" />
         <b className="shrink-0">{handoffTitle(h)}</b>
         <span className="min-w-0 flex-1 truncate">{s.hidden ? '' : `${handoffAsk(h)} · ${h.visitor}`}{(s.handoffs?.length ?? 0) > 1 ? ` · +${(s.handoffs?.length ?? 0) - 1} more` : ''}</span>
+        {handoffLeft(h, now) !== null ? <span className="shrink-0 font-mono text-[12px] text-ink-2 tabular-nums" aria-label={`Rings for ${clock(handoffLeft(h, now)!)} more`}>{clock(handoffLeft(h, now)!)}</span> : null}
         <button type="button" onClick={() => answer(h.id, true)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
           {h.kind === 'invite' ? 'Join chat' : 'Accept'}
         </button>
         <button type="button" onClick={() => answer(h.id, false)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">
           Decline
+        </button>
+      </div>
+    );
+  }
+  if (!top && f) {
+    // A visitor who wrote again in my chat (#230): who, what, how long, Open chat and Snooze.
+    const said = [...f.recent].reverse().find((m) => m.from === 'visitor')?.body;
+    const more = (s.followUps?.length ?? 1) - 1;
+    return (
+      <div role="status" aria-label="Visitor waiting for your reply" className="flex h-9 shrink-0 items-center gap-2.5 border-b border-[#F2D39B] bg-warning-bg px-3.5 text-[12.5px] text-[#7A4308] dark:text-warning">
+        <Icon name="chat" size={15} className="shrink-0" />
+        <b className="shrink-0">{followUpStatus(f)}</b>
+        <span className="min-w-0 flex-1 truncate">
+          {s.hidden ? '' : `${f.visitor}${said ? `: “${said}”` : ''}`} · waiting {waited(f.since, now)}
+          {more > 0 ? ` · +${more} more` : ''}
+        </span>
+        {!f.mine && f.stage === 'team' ? (
+          <button type="button" onClick={() => void call('ring:followUp', { id: f.id, action: 'takeOver' }).catch((e) => toast('error', errorMessage(e)))} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
+            Take over
+          </button>
+        ) : null}
+        <button type="button" onClick={() => void call('ring:followUp', { id: f.id, action: 'open' }).catch((e) => toast('error', errorMessage(e)))} className={cx('h-7 rounded-[7px] px-3 font-bold', !f.mine && f.stage === 'team' ? 'border border-current/30 hover:bg-black/5' : 'bg-primary text-white hover:bg-primary-hover')}>
+          Open chat
+        </button>
+        <button type="button" onClick={() => void call('ring:followUp', { id: f.id, action: 'snooze' }).catch(() => undefined)} className="h-7 rounded-[7px] border border-current/30 px-2.5 font-semibold hover:bg-black/5">
+          Snooze 5 min
         </button>
       </div>
     );
@@ -417,5 +544,39 @@ export function RingingBar({ tone }: { tone: boolean }) {
         {top.silenced ? 'Unsilence' : 'Silence'}
       </button>
     </div>
+  );
+}
+
+/**
+ * The title bar's alert (R-01, DsTopBar "alert: ringing / silenced"; RING-25, RING-24): a red "Website chat ringing"
+ * pill with how long the top chat has waited, on every module while anything rings; amber "Silenced · N waiting" once
+ * every chat ringing is silenced for me. A visitor's call has its own pill (ActiveCalls). A click opens Website Chats'
+ * inbox — never the chat itself, which would join it.
+ */
+export function RingAlertPill() {
+  const s = useRingState();
+  const now = useNow();
+  if (!s.chats.length) return null;
+  const live = s.chats.filter((c) => !c.silenced);
+  const top = live[0] ?? s.chats[0]!;
+  const silenced = !live.length;
+  const time = waited(top.since, now);
+  // Several ringing: "3 website chats ringing" (R-06, DsTopBar ring-text), as the tray and the dock count them.
+  const label = silenced ? text('Silenced · {n} waiting', { n: s.chats.length }) : live.length > 1 ? text('{n} website chats ringing', { n: live.length }) : text('Website chat ringing');
+  return (
+    <button
+      type="button"
+      onClick={() => void call('ring:openInbox').catch(() => undefined)}
+      aria-label={`${label}, ${time}. ${text('Open Website Chats')}`}
+      title={text('Open Website Chats')}
+      className={cx(
+        'no-drag flex h-8 shrink-0 items-center gap-2 rounded-full px-3 text-[12px] whitespace-nowrap',
+        silenced ? 'border border-[#B7822F] bg-[#3B2C17] font-semibold text-[#F3C77E] hover:bg-[#4A3820]' : 'bg-[#C2392D] font-bold text-white hover:bg-[#D2453A]',
+      )}
+    >
+      <Icon name={silenced ? 'bell-off' : 'bell'} size={14} className={cx('shrink-0', !silenced && 'motion-safe:animate-pulse')} />
+      {label}
+      <span role="timer" className={cx('font-mono text-[11px] tabular-nums', !silenced && 'rounded-full bg-[#8C2219] px-[7px] py-0.5')}>{time}</span>
+    </button>
   );
 }

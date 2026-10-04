@@ -8,6 +8,7 @@ import { useStore } from '../../core/store';
 import { bytes, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { FormattingSettings } from './ReadingSettings';
+import { AccountTagSettings } from './AccountTagSettings';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
 import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
@@ -340,6 +341,7 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
         <SwitchRow label={text('Include in All Accounts')} hint={text('Show its Inbox, Drafts, Sent and other folders in All Accounts, and sync it with Sync all.')} checked={b.in_unified !== false} onChange={(v) => void save({ in_unified: v })} />
         <SwitchRow label={text('Notify me about new mail')} hint={text('Desktop notifications for mail arriving in this mailbox.')} checked={(b as Mailbox & { notify?: boolean }).notify !== false} onChange={(v) => void save({ notify: v } as Partial<Mailbox>)} />
         {!b.shared ? <SwitchRow label={text('Pause syncing')} hint={text('Stop checking for new mail until you turn this off.')} checked={!!b.sync_paused} onChange={(v) => void save({ sync_paused: v })} /> : null}
+        <AccountTagSettings box={b} />
         <div className="flex flex-wrap gap-2 border-t border-line pt-4">
           {!b.is_default && !b.shared ? <Button onClick={() => void act(() => apiPost(`/api/mail/mailboxes/${b.id}/default`), text('Now your default mailbox.'))}>Make default</Button> : null}
           <SyncButton
@@ -656,6 +658,8 @@ function Layout() {
         {seg('markRead', prefs.markRead, 'open', [['open', 'When opened'], ['delay', 'After a few seconds'], ['change', 'When I move on'], ['never', 'Never']], 'Mark as read')}
         {prefs.markRead === 'delay' ? seg('markReadDelay', prefs.markReadDelay, 5, [[0, '0 s'], [5, '5 s'], [10, '10 s'], [30, '30 s']], 'After') : null}
         {seg('openIn', prefs.openIn, 'tabs', [['tabs', 'Tabs'], ['windows', 'Windows'], ['both', 'Both']], 'Open messages in')}
+        {/* Which account a message came to, on the rows of the combined views (#227); each account's own label and colour are under Accounts. */}
+        {seg('accountTag', prefs.accountTag, 'name', [['name', 'Name tag'], ['dot', 'Dot only'], ['off', 'Off']], 'Account tag')}
       </section>
       <InboxAndKeyboard prefs={prefs} set={set} />
       <FormattingSettings prefs={prefs} set={set} />

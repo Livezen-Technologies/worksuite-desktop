@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setRegional } from '../../../src/core/time';
-import { CHIPS, SMART_VIEWS, accountTone, agoShort, applyFilters, dateBand, filtersFor, folderName, groupRows, mailboxBadge, mailboxLetter, plainText, queueKey, queuedByMessage, securityVerdict, smartView, sortRows, step, stripPrefix } from '../../../src/modules/mail/model';
+import { CHIPS, SMART_VIEWS, accountTone, agoShort, applyFilters, dateBand, filtersFor, folderName, groupRows, mailboxLetter, plainText, queueKey, queuedByMessage, securityVerdict, smartView, sortRows, step, stripPrefix } from '../../../src/modules/mail/model';
 import { afterClose, withTab, MAX_TABS, type OpenTab } from '../../../src/modules/mail/ReadingPane';
 import { matches, parseQuery, serverTerm } from '../../../src/modules/mail/SearchView';
 import { laterChoices, draftContext } from '../../../src/modules/mail/Compose';
@@ -90,12 +90,7 @@ describe('sorting and grouping', () => {
 });
 
 describe('accounts', () => {
-  it('tags each account the way the combined list shows it', () => {
-    expect(mailboxBadge({ email: 'sales@example.lk', shared: true })).toBe('SALES');
-    expect(mailboxBadge({ email: 'me@gmail.com' })).toBe('GMAIL');
-    expect(mailboxBadge({ email: 'me@example.lk', provider: 'google' })).toBe('GMAIL');
-    expect(mailboxBadge({ email: 'me@example.lk', account_type: 'local_mailbox' })).toBe('WS');
-    expect(mailboxBadge({ email: 'me@livezen.lk' })).toBe('LI');
+  it('gives each account its letter', () => {
     expect(mailboxLetter({ email: 'me@x.lk', account_type: 'local_mailbox' })).toBe('W');
     expect(mailboxLetter({ email: 'me@x.lk', provider: 'gmail' })).toBe('G');
     expect(mailboxLetter({ email: 'hm@x.lk' })).toBe('H');

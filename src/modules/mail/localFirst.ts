@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
-import { apiGetMeta, peekCached, withMailbox, type ApiResult, type Query } from '../../core/api';
+import { peekCached, request as apiRequest, withMailbox, type ApiResult, type Query } from '../../core/api';
 import { call } from '../../core/bridge';
 import type { OfflineMutation } from '@shared/types';
 import type { MessageDetail, MessageRef } from './types';
@@ -66,17 +66,43 @@ export const PREFETCH_AHEAD = 3;
  * read, so moving down the list opens each at once. Ones already here (in
  * memory, or recently opened) are left alone.
  */
-export function prefetchMessages(qc: QueryClient, refs: MessageRef[]): void {
+export function prefetchMessages(qc: QueryClient, refs: MessageRef[], now = Date.now()): void {
   for (const ref of refs.slice(0, PREFETCH_AHEAD)) {
+    // Never a row without a server ID (#228): it could only be asked for as "UID 0".
+    if (!(Number(ref.uid) > 0)) continue;
     const key = messageKey(ref);
     if (qc.getQueryData(key) !== undefined) continue;
+    const name = `${ref.mailbox ?? ''}:${ref.folder}:${ref.uid}`;
+    if ((prefetchFailed.get(name)?.until ?? 0) > now) continue;
     const req = messageRequest(ref, true);
-    void qc.prefetchQuery({
-      queryKey: key,
-      queryFn: async ({ signal }) => ({ ...(await apiGetMeta<MessageDetail>(req.path, req.query, signal)), peeked: true }),
-      staleTime: 60_000,
-    });
+    void qc
+      .prefetchQuery({
+        queryKey: key,
+        // Fetching ahead says so: the server never gives it the connection kept for what a person opens (#228).
+        queryFn: async ({ signal }) => ({ ...(await apiRequest<MessageDetail>('GET', req.path, { query: req.query, signal, headers: { 'X-Mail-Priority': 'background' } })), peeked: true }),
+        staleTime: 60_000,
+        retry: false,
+      })
+      .then(() => {
+        if (qc.getQueryState(key)?.status === 'error') noteFailed(name, now);
+        else prefetchFailed.delete(name);
+      });
   }
+}
+
+/** A failed fetch ahead waits before it is tried again: 30 seconds, 2 minutes, then 10 (#228). */
+export const PREFETCH_BACKOFF = [30_000, 120_000, 600_000];
+
+const prefetchFailed = new Map<string, { n: number; until: number }>();
+
+function noteFailed(name: string, now: number): void {
+  const n = (prefetchFailed.get(name)?.n ?? 0) + 1;
+  prefetchFailed.set(name, { n, until: now + PREFETCH_BACKOFF[Math.min(n, PREFETCH_BACKOFF.length) - 1]! });
+}
+
+/** Tests: forget the backoff. */
+export function forgetPrefetchFailures(): void {
+  prefetchFailed.clear();
 }
 
 /**

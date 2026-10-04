@@ -1,8 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { app } from '../../core/app-state';
-import { apiGet, apiGetMeta, apiPost } from '../../core/api';
-import { errorMessage, isMac } from '../../core/bridge';
+import { apiGet, apiGetMeta } from '../../core/api';
+import { isMac } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { listStamp, parseTs } from '../../core/time';
@@ -25,6 +25,9 @@ import { useRoomActions, useWebsiteActions } from './RoomActions';
 import { useAgents, useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from './website/api';
 import { WebsiteThread } from './website/WebsiteThread';
 import { WebsiteWorkspace } from './website/WebsiteWorkspace';
+import { MyStatus } from './MyStatus';
+import { BulkBar, BulkIconButton } from './BulkBar';
+import { useMultiSelect } from './selection';
 import { SidePanel } from '../../components/SidePanel';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import { canOpenWeb, useCanOpen } from '../../core/access';
@@ -54,13 +57,6 @@ import { useWaAccounts, waNumber } from './channels/whatsapp';
  */
 type Filter = 'all' | 'unread' | 'mentions' | 'archived' | 'calls';
 
-const STATUS_CHOICES: Array<{ id: string; label: string; dot: string }> = [
-  { id: 'available', label: 'Available', dot: 'bg-success' },
-  { id: 'busy', label: 'Busy', dot: 'bg-danger' },
-  { id: 'dnd', label: 'Do not disturb', dot: 'bg-danger' },
-  { id: 'away', label: 'Away', dot: 'bg-warning' },
-  { id: 'offline', label: 'Appear offline', dot: 'bg-line' },
-];
 
 export default function ChatPage({ tabId }: ModuleProps) {
   const { query, go, path } = useTab();
@@ -323,10 +319,6 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
   const [visitorMenu, setVisitorMenu] = useState<{ x: number; y: number; c: WebsiteRow } | null>(null);
   const agents = useAgents(websiteAccess && !!visitorMenu);
   const websiteRun = useWebsiteActions(me, (c) => go(`/chat?view=website&website=${c.id}`));
-  // The multi-select (worksuite-desktop#183): Ctrl/⌘-click, Shift-click, or Select mode.
-  const [picked, setPicked] = useState<number[]>([]);
-  const [selecting, setSelecting] = useState(false);
-  const [anchor, setAnchor] = useState<number | null>(null);
   const web = useWebsiteInbox(false, websiteAccess);
   const needle = q.trim().toLowerCase();
   // Chat › Calls: the call log, beside the conversations (worksuite-desktop#113).
@@ -357,37 +349,19 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
   ];
   const list = useResizableWidth('chat.list', LIST_WIDTH);
   const order = sections.flatMap(([, l]) => l);
+  // The multi-select (worksuite-desktop#183): Ctrl/⌘-click, Shift-click, or Select mode — shared with Website chats.
+  const sel = useMultiSelect(order.map((r) => r.id), { current: selected && rooms.some((x) => String(x.id) === selected) ? Number(selected) : null });
+  const { picked, selecting } = sel;
   const byId = (ids: number[]) => rooms.filter((r) => ids.includes(r.id));
   const pickedRooms = byId(picked);
   const pinnedNow = rooms.filter((r) => r.pinned).length;
-  const endSelect = () => {
-    setPicked([]);
-    setSelecting(false);
-    setAnchor(null);
-  };
+  const endSelect = sel.clear;
   const runBulk = (targets: Room[], a: BulkAction) => {
     actions.bulk(targets, a);
     if (a !== 'delete') endSelect();
   };
   const click = (r: Room, e: ReactMouseEvent) => {
-    const mod = isMac ? e.metaKey : e.ctrlKey;
-    if (e.shiftKey && anchor !== null) {
-      const from = order.findIndex((x) => x.id === anchor);
-      const to = order.findIndex((x) => x.id === r.id);
-      if (from >= 0 && to >= 0) {
-        setPicked(order.slice(Math.min(from, to), Math.max(from, to) + 1).map((x) => x.id));
-        return;
-      }
-    }
-    if (mod || selecting) {
-      setAnchor(r.id);
-      // Ctrl-clicking a second conversation picks the open one too, as a file list does.
-      const base = picked.length === 0 && !selecting && selected && selected !== String(r.id) && rooms.some((x) => String(x.id) === selected) ? [Number(selected)] : picked;
-      setPicked(base.includes(r.id) ? base.filter((id) => id !== r.id) : [...base, r.id]);
-      return;
-    }
-    setAnchor(r.id);
-    if (picked.length) setPicked([]);
+    if (sel.onRowClick(e, r.id)) return;
     go(`/chat?room=${r.id}`);
   };
   const contextMenu = (r: Room, e: ReactMouseEvent) => {
@@ -406,10 +380,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
       next?.focus();
       return;
     }
-    if (e.key === 'Escape' && (picked.length || selecting)) {
-      endSelect();
-      return;
-    }
+    if (sel.escape(e)) return;
     if (picked.length > 1) {
       const lead = pickedRooms[0];
       const a = lead ? shortcutAction(e, lead, isMac) : null;
@@ -438,7 +409,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
           <button type="button" aria-label="Starred messages" title="Starred messages" onClick={onStarred} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle">
             <Icon name="star" size={15} />
           </button>
-          <button type="button" aria-label="Select conversations" title="Select conversations" aria-pressed={selecting} onClick={() => (selecting ? endSelect() : setSelecting(true))} className={cx('flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle', selecting && '!border-primary !bg-selection !text-primary')}>
+          <button type="button" aria-label="Select conversations" title="Select conversations" aria-pressed={selecting} onClick={() => (selecting ? endSelect() : sel.setSelecting(true))} className={cx('flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle', selecting && '!border-primary !bg-selection !text-primary')}>
             <Icon name="check-circle" size={15} />
           </button>
           <button type="button" data-guide="chat.new" aria-label="New conversation" title="New conversation" onClick={onNew} className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-white hover:bg-primary-hover">
@@ -480,8 +451,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
         ) : null}
         {offline ? <OfflineNote cachedAt={offline} /> : null}
         {picked.length || selecting ? (
-          <div role="toolbar" aria-label="Selected conversations" className="flex items-center gap-1 rounded-[8px] bg-selection px-2 py-1 text-[12px] text-ink">
-            <b className="mr-auto">{picked.length} selected</b>
+          <BulkBar tone="rail" label="Selected conversations" count={picked.length} onClear={endSelect}>
             {(
               [
                 ['read', 'Mark read', 'check'],
@@ -490,14 +460,9 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
                 ['delete', 'Delete', 'trash'],
               ] as Array<[BulkAction, string, string]>
             ).map(([a, label, icon]) => (
-              <button key={a} type="button" aria-label={label} title={label} disabled={!picked.length} onClick={() => runBulk(pickedRooms, a)} className="flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-surface disabled:opacity-40">
-                <Icon name={icon} size={14} />
-              </button>
+              <BulkIconButton key={a} label={label} icon={icon} disabled={!picked.length} onClick={() => runBulk(pickedRooms, a)} />
             ))}
-            <button type="button" aria-label="Stop selecting" title="Stop selecting" onClick={endSelect} className="flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-surface">
-              <Icon name="x" size={14} />
-            </button>
-          </div>
+          </BulkBar>
         ) : null}
       </div>
       {filter === 'calls' ? (
@@ -564,7 +529,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
           x={visitorMenu.x}
           y={visitorMenu.y}
           label={`Actions — ${visitorMenu.c.visitor_name || visitorMenu.c.label}`}
-          sections={websiteMenu(visitorMenu.c, me, agents.data?.agents ?? [], (a, userId) => websiteRun(visitorMenu.c, a, userId))}
+          sections={websiteMenu(visitorMenu.c, me, agents.data?.agents ?? [], (a, userId, priority) => websiteRun(visitorMenu.c, a, userId, priority))}
           onClose={() => setVisitorMenu(null)}
         />
       ) : null}
@@ -635,48 +600,3 @@ function VisitorRow({ c, active, onOpen, onMenu }: { c: WebsiteRow; active: bool
   );
 }
 
-/** "Set your status": the choice everybody sees on your avatar (presence heartbeats keep it live). */
-function MyStatus() {
-  const qc = useQueryClient();
-  const user = useStore(app, (s) => s.auth?.user);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const me = useQuery({ queryKey: ['chat', 'presence', 'me'], queryFn: ({ signal }) => apiGet<{ status: string; choice: string }>('/api/chat/presence/me', undefined, signal), refetchInterval: 60_000 });
-  const choice = STATUS_CHOICES.find((c) => c.id === (me.data?.choice ?? 'available')) ?? STATUS_CHOICES[0]!;
-  useEffect(() => {
-    if (!open) return;
-    const off = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
-    window.addEventListener('mousedown', off);
-    return () => window.removeEventListener('mousedown', off);
-  }, [open]);
-  const pick = async (id: string) => {
-    setOpen(false);
-    try {
-      await apiPost('/api/chat/presence', { status: id, active: true });
-      void qc.invalidateQueries({ queryKey: ['chat', 'presence'] });
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
-  };
-  return (
-    <div ref={ref} className="relative flex flex-1 items-center gap-2">
-      <span className="relative shrink-0">
-        <UserAvatar userId={user?.id} name={user?.name} size={32} />
-        <span className={cx('absolute -right-px -bottom-px h-[10px] w-[10px] rounded-full border-2 border-surface', choice.dot)} />
-      </span>
-      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} className="h-[30px] flex-1 truncate rounded-[7px] border border-line px-2 text-left text-[12px] text-ink-2 hover:bg-subtle">
-        Set your status · {choice.label}
-      </button>
-      {open ? (
-        <div role="menu" className="absolute top-9 left-0 z-30 w-52 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
-          {STATUS_CHOICES.map((c) => (
-            <button key={c.id} type="button" role="menuitemradio" aria-checked={c.id === choice.id} onClick={() => void pick(c.id)} className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] text-ink hover:bg-subtle">
-              <span className={cx('h-2.5 w-2.5 rounded-full', c.dot)} /> {c.label}
-              {c.id === choice.id ? <Icon name="check" size={14} className="ml-auto text-primary" /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}

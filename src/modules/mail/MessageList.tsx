@@ -1,4 +1,4 @@
-import { useRef, useState, type ReactNode } from 'react';
+import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { text } from '../../core/i18n';
 import { bytes } from '../../core/time';
 import { Icon } from '../../components/Icon';
@@ -6,8 +6,9 @@ import { Menu, type MenuSection } from '../../components/Menu';
 import { Checkbox } from '../../components/Checkbox';
 import { Avatar, Empty, ErrorNote, cx } from '../../components/ui';
 import { VirtualList } from '../../components/VirtualList';
-import { CHIPS, mailboxBadge, rowStamp, type ChipId, type QueuedAction, type RowGroup } from './model';
-import { AccountBadge, CategoryChip } from './parts';
+import { CHIPS, rowStamp, type ChipId, type QueuedAction, type RowGroup } from './model';
+import { AccountTag, CategoryChip } from './parts';
+import { accountTags, tagShows, type AccountTagInfo } from './accountTags';
 import { MAIL_DRAG } from './TodoPane';
 import { rowFormat } from './ReadingSettings';
 import type { MailPrefs, Mailbox, MessageRow } from './types';
@@ -50,6 +51,8 @@ export interface MessageListProps {
   onSearch: (q: string) => void;
   onSearchAll: (q: string) => void;
   unified: boolean;
+  /** The mailbox shown when it is one, for its tag where it shows in every view (#227). */
+  mailboxId?: number | null;
   boxes: Mailbox[];
   offline: boolean;
   offlineDays: number;
@@ -153,6 +156,9 @@ export function viewMenuSections(p: Pick<MessageListProps, 'prefs' | 'onPrefs' |
 
 export function MessageList(p: MessageListProps) {
   const view = p.prefs.view ?? 'compact';
+  // Every account's tag at once, so no two share a label (#227).
+  const tagPrefs = p.prefs.accountTags;
+  const tags = useMemo(() => accountTags(p.boxes, { accountTags: tagPrefs }), [p.boxes, tagPrefs]);
   const flat = p.groups.flatMap((g) => g.items);
   const [menu, setMenu] = useState<'density' | 'sort' | null>(null);
   const densityBtn = useRef<HTMLButtonElement>(null);
@@ -286,7 +292,7 @@ export function MessageList(p: MessageListProps) {
       </div>
       {p.toolbar}
       {view === 'table' && flat.length ? <TableHead unified={p.unified} /> : null}
-      <div className="min-h-0 flex-1 border-t border-line" role="listbox" tabIndex={0} aria-label="Messages" aria-activedescendant={p.selectedKey && flat.some((r) => r.key === p.selectedKey) ? `mail-row-${p.selectedKey}` : undefined}>
+      <div className="@container min-h-0 flex-1 border-t border-line" role="listbox" tabIndex={0} aria-label="Messages" aria-activedescendant={p.selectedKey && flat.some((r) => r.key === p.selectedKey) ? `mail-row-${p.selectedKey}` : undefined}>
         {p.loading ? (
           <Placeholders view={view} label={text('Loading the latest messages…')} />
         ) : p.error && flat.length === 0 ? (
@@ -300,7 +306,7 @@ export function MessageList(p: MessageListProps) {
         ) : null}
         {items.length > 0 ? (
           items.length > 150 ? (
-            <VirtualList items={items} estimate={view === 'classic' ? 78 : view === 'compact' ? 52 : 36} getKey={(it) => (it.kind === 'head' ? `h:${it.g.key}` : it.r.key)} onEndReached={() => p.hasMore && !p.loadingMore && p.onMore()} render={(it) => (it.kind === 'head' ? <GroupHead g={it.g} /> : <Row r={it.r} {...p} view={view} />)} />
+            <VirtualList items={items} estimate={view === 'classic' ? 78 : view === 'compact' ? 52 : 36} getKey={(it) => (it.kind === 'head' ? `h:${it.g.key}` : it.r.key)} onEndReached={() => p.hasMore && !p.loadingMore && p.onMore()} render={(it) => (it.kind === 'head' ? <GroupHead g={it.g} /> : <Row r={it.r} {...p} tags={tags} view={view} />)} />
           ) : (
             <div
               className="h-full overflow-y-auto scroll-thin"
@@ -311,7 +317,7 @@ export function MessageList(p: MessageListProps) {
                 if (p.hasMore && !p.loadingMore && el.scrollTop + el.clientHeight >= el.scrollHeight - NEAR_END) p.onMore();
               }}
             >
-              {items.map((it) => (it.kind === 'head' ? <GroupHead key={`h:${it.g.key}`} g={it.g} /> : <Row key={it.r.key} r={it.r} {...p} view={view} />))}
+              {items.map((it) => (it.kind === 'head' ? <GroupHead key={`h:${it.g.key}`} g={it.g} /> : <Row key={it.r.key} r={it.r} {...p} tags={tags} view={view} />))}
               {p.loadingMore ? <Placeholders view={view} label={text('Loading more…')} rows={3} /> : null}
               {p.hasMore && !p.loadingMore ? (
                 <div className="p-3 text-center">
@@ -415,7 +421,7 @@ function StateMarks({ m }: { m: MessageRow }) {
   );
 }
 
-function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRowMenu, selection, onSelect, rowActions }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']> }) {
+function Row({ r, view, selectedKey, onOpen, onStar, unified, mailboxId, prefs, onRowMenu, selection, onSelect, rowActions, tags }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']>; tags: Map<number, AccountTagInfo> }) {
   const m = r.row;
   // Settings › Reading › Show message previews in the list (D10).
   const preview = prefs.previews === false ? '' : m.preview;
@@ -426,8 +432,9 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, boxes, prefs, onRo
   const fmt = rowFormat(m, prefs.formatRules);
   const ink = fmt?.cls ?? 'text-ink';
   const strong = unread || !!fmt?.bold;
-  const box = m.mailbox ? boxes.find((b) => b.id === m.mailbox!.id) : null;
-  const badge = unified && m.mailbox ? <AccountBadge text={mailboxBadge(box ?? { email: m.mailbox.email })} colour={box?.colour ?? m.mailbox.colour} title={m.mailbox.email} /> : null;
+  // Which account it came to (#227): its tag in the combined views, and in every view for an account set so.
+  const tag = tags.get(m.mailbox?.id ?? (unified ? -1 : (mailboxId ?? -1)));
+  const badge = tag && tagShows(tag, prefs.accountTag, unified) ? <AccountTag tag={tag} mode={prefs.accountTag} /> : null;
   const queued = r.queued ? <span className="shrink-0 text-[11.5px] font-semibold text-warning">{text(QUEUED_LABEL[r.queued])}</span> : null;
   const sender = m.from_name || m.from_email || text('(unknown sender)');
   const subject = m.subject || text('(no subject)');

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.0 — 2026-10-04
+
+- Website chat banners (#230): none while I am reading that conversation; a visitor writing again in my chat says 'Visitor CC1B: Are u there' with Reply, only while WorkSuite is not in front; one banner per conversation, saying how many messages; it goes when the chat is answered; the badge counts visitors waiting on me.
+
 ## 1.6.1 — 2026-10-03
 
 - A bell entry when a WorkSuite update is ready, once per version (#205).

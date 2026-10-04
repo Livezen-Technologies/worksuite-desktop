@@ -25,6 +25,9 @@ import { ModulesLocked, useModulesLocked } from './screens/MandatoryUpdate';
 import { WindowRoot } from './WindowRoot';
 import { RemoteControlWindow } from './RemoteControlWindow';
 import { WebchatRingWindow } from '../modules/chat/website/Ringing';
+import { RingTrayWindow } from '../modules/chat/website/RingTray';
+import { LiveMapWindow, WallWindow } from '../modules/chat/website/live/LiveMapWindow';
+import { WallSheetWindow } from '../modules/chat/website/live/WallSheet';
 import { QuickAskWindow } from './QuickAskWindow';
 import { MailLinkGuard } from '../modules/mail/LinkGuard';
 import { MailReminders } from '../modules/mail/Reminders';
@@ -68,6 +71,8 @@ export function App() {
   if (hash.startsWith('#/rc/')) return <RemoteControlWindow hash={hash} />;
   // The website-chat call window: above the lock screen too, saying only that a chat waits while locked (RING-40).
   if (hash.startsWith('#/window/webchat-ring')) return <WebchatRingWindow />;
+  // The tray's ringing menu (R-06): what rings says nothing about who while locked, and main never opens it then.
+  if (hash.startsWith('#/window/ring-tray')) return <RingTrayWindow />;
 
   const windowKind = hash.replace('#/window/', '').split('?')[0] ?? '';
   const scope = lockedScope(`app://bundle/${hash}`, windowKind);
@@ -81,6 +86,11 @@ export function App() {
   else if (guest && !session.signingIn) body = !local?.profile || local.locked ? <GuestGate /> : <Shell key="guest" />;
   else if (auth.stage !== 'ready') body = <Onboarding auth={auth} />;
   else if (hash.startsWith('#/window/quick-ask')) body = <QuickAskWindow />;
+  // The Live map window and wall mode on a display (L-04, L-05; MAP-21, MAP-24): Chat's, so only with Chat.
+  else if (hash.startsWith('#/window/live-map')) body = canOpen('chat') ? <LiveMapWindow /> : null;
+  // The Wall mode sheet before the wall itself: both start with "wall" (L-06, MAP-UI-06).
+  else if (hash.startsWith('#/window/wall-sheet')) body = canOpen('chat') ? <WallSheetWindow /> : null;
+  else if (hash.startsWith('#/window/wall')) body = canOpen('chat') ? <WallWindow /> : null;
   else if (hash.startsWith('#/window/')) body = <WindowRoot hash={hash} />;
   else if (auth.setupPending) body = <SetupWizard />;
   else if (pictureOwedBy !== null && pictureOwedBy !== pictureSentBy) body = <AddPictureScreen onDone={() => setPictureSentBy(pictureOwedBy)} />;

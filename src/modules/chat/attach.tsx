@@ -12,7 +12,7 @@ import { Button, FileBadge, Modal, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 
 /** What the paperclip offers (ChatComposer, "Attach"). */
-export type AttachChoice = 'document' | 'image' | 'video' | 'audio' | 'any' | 'drive' | 'camera' | 'voice';
+export type AttachChoice = 'document' | 'image' | 'video' | 'audio' | 'any' | 'drive' | 'camera' | 'voice' | 'upload' | 'paste';
 
 const ALL_CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: string; tone: string }> = [
   { id: 'document', icon: 'file-text', label: 'Document', hint: 'PDF, Word, Excel…', tone: 'bg-[#E6ECFF] text-[#23349E] dark:bg-selection dark:text-primary' },
@@ -23,10 +23,23 @@ const ALL_CHOICES: Array<{ id: AttachChoice; icon: string; label: string; hint: 
   { id: 'drive', icon: 'disk', label: 'From Drive', hint: 'Share from Drive', tone: 'bg-[#E1F2F4] text-[#0E7C86] dark:bg-teal/15 dark:text-[#5CC6CF]' },
   { id: 'camera', icon: 'camera', label: 'Camera / Photo', hint: 'Take a picture', tone: 'bg-[#FCE7EF] text-[#B83280] dark:bg-[#3A1830] dark:text-[#F08CC0]' },
   { id: 'voice', icon: 'mic', label: 'Voice message', hint: 'Record and send', tone: 'bg-danger-bg text-danger' },
+  // The website channel's picker (P-04 AttachmentPicker · website): any file the visitor can receive, and the clipboard.
+  { id: 'upload', icon: 'upload', label: 'Upload a file', hint: '', tone: 'bg-[#E6ECFF] text-[#23349E] dark:bg-selection dark:text-primary' },
+  { id: 'paste', icon: 'clipboard-paste', label: 'Paste a screenshot', hint: '', tone: 'bg-[#E3F4EC] text-[#1F7A4D] dark:bg-success-bg dark:text-success' },
 ];
 
-export function AttachMenu({ onPick, onClose, compact, align = 'left', only }: { onPick: (c: AttachChoice) => void; onClose: () => void; compact?: boolean; align?: 'left' | 'right'; /** The choices a channel offers (a website visitor: documents, images, the camera). */ only?: AttachChoice[] }) {
-  const CHOICES = only ? ALL_CHOICES.filter((c) => only.includes(c.id)) : ALL_CHOICES;
+export function AttachMenu({ onPick, onClose, compact, align = 'left', only, copy }: {
+  onPick: (c: AttachChoice) => void;
+  onClose: () => void;
+  compact?: boolean;
+  align?: 'left' | 'right';
+  /** The choices a channel offers, in its order (a website visitor: upload, paste, a photo, a copy from Drive). */
+  only?: AttachChoice[];
+  /** A channel's own words for a choice (ComposerCaps.attachCopy); with them, the choices come in `only`'s order. */
+  copy?: Partial<Record<AttachChoice, { label: string; hint?: string }>>;
+}) {
+  const CHOICES = (only && copy ? only.map((id) => ALL_CHOICES.find((c) => c.id === id)).filter((c): c is (typeof ALL_CHOICES)[number] => !!c) : only ? ALL_CHOICES.filter((c) => only.includes(c.id)) : ALL_CHOICES)
+    .map((c) => (copy?.[c.id] ? { ...c, label: copy[c.id]!.label, hint: copy[c.id]!.hint ?? '' } : c));
   const ref = useRef<HTMLDivElement>(null);
   const [at, setAt] = useState(0);
   // "From Drive" browses Files: only for whoever has it.
@@ -76,7 +89,7 @@ export function AttachMenu({ onPick, onClose, compact, align = 'left', only }: {
           </span>
           <span className="flex min-w-0 flex-col">
             <b className="text-[12.5px] text-ink">{c.label}</b>
-            <span className="truncate text-[11.5px] text-ink-3">{c.hint}</span>
+            {c.hint ? <span className="text-[11.5px] text-ink-3">{c.hint}</span> : null}
           </span>
         </button>
       ))}
@@ -98,14 +111,15 @@ type Look = { label: string; tone: 'ready' | 'sending' | 'failed' | 'waiting'; p
 function lookOf(s: Staged, t: Transfer | undefined): Look {
   if (s.kind === 'blob') {
     if (s.state === 'failed') return { label: 'Failed', tone: 'failed', progress: null, error: s.error };
-    if (s.state === 'sending') return { label: `Sending… ${Math.round(s.progress * 100)}%`, tone: 'sending', progress: s.progress, error: null };
+    if (s.state === 'sending') return { label: `uploading ${Math.round(s.progress * 100)}%`, tone: 'sending', progress: s.progress, error: null };
     return { label: 'Ready to send', tone: 'ready', progress: null, error: null };
   }
   if (!s.transfer) return { label: 'Ready to send', tone: 'ready', progress: null, error: null };
   if (!t || t.state === 'queued' || t.state === 'paused') return { label: 'Waiting', tone: 'waiting', progress: null, error: null };
   if (t.state === 'failed' || t.state === 'cancelled') return { label: t.state === 'cancelled' ? 'Cancelled' : 'Failed', tone: 'failed', progress: null, error: t.error };
   const p = t.total ? t.bytes / t.total : 0;
-  return { label: `Sending… ${Math.round(p * 100)}%`, tone: 'sending', progress: p, error: null };
+  // "screenshot.png · uploading 60%" (P-04 AttachmentTray).
+  return { label: `uploading ${Math.round(p * 100)}%`, tone: 'sending', progress: p, error: null };
 }
 
 /** The files ready to send, each with how it is getting on (ChatComposer, "Files ready to send"). */
@@ -325,5 +339,24 @@ export function CameraCapture({ onTaken, onClose }: { onTaken: (blob: Blob, name
         {state === 'failed' ? <span className="absolute px-6 text-center text-[13px] text-white/80">The camera could not start.</span> : null}
       </div>
     </Modal>
+  );
+}
+
+/**
+ * Files refused before any upload, each with why (P-04 AttachmentTray; RDC-04): "logo.svg can't be sent to a visitor —
+ * use PNG or PDF". Under the tray, until dismissed, sent past or replaced by the next choice.
+ */
+export function RefusedNotes({ notes, onDismiss }: { notes: Array<{ key: string; text: string }>; onDismiss: (key: string) => void }) {
+  return (
+    <div className="flex flex-col gap-1 px-1 pt-1" role="alert">
+      {notes.map((n) => (
+        <div key={n.key} data-refused className="flex items-center gap-2 rounded-[10px] border border-[#F3C1BB] bg-[#FDECEA] px-2.5 py-2 text-[12px] text-[#A63224] dark:border-danger/40 dark:bg-danger-bg dark:text-danger">
+          <span className="min-w-0 flex-1">{n.text}</span>
+          <button type="button" aria-label="Dismiss" title="Dismiss" onClick={() => onDismiss(n.key)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full hover:bg-white/60 dark:hover:bg-transparent">
+            <Icon name="x" size={12} />
+          </button>
+        </div>
+      ))}
+    </div>
   );
 }

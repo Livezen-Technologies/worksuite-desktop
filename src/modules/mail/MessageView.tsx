@@ -1137,8 +1137,16 @@ function SavedHeader({ row }: { row: MessageRow }) {
   );
 }
 
-/** Downloading: the saved header at once, the body as a placeholder until it arrives. */
+/**
+ * Downloading: the saved header at once, the body as a placeholder until it arrives. After two seconds it says it is
+ * waiting for a free connection (#228): the server queues an open for up to ten seconds while the account syncs.
+ */
 function MessagePending({ row }: { row: MessageRow | null }) {
+  const [slow, setSlow] = useState(false);
+  useEffect(() => {
+    const t = setTimeout(() => setSlow(true), 2_000);
+    return () => clearTimeout(t);
+  }, []);
   if (!row) return <Spinner />;
   return (
     <div className="p-6" role="status" aria-label={text('Downloading…')}>
@@ -1148,7 +1156,7 @@ function MessagePending({ row }: { row: MessageRow | null }) {
         <span className="h-3 w-4/5 animate-pulse rounded bg-subtle motion-reduce:animate-none" />
         <span className="h-3 w-2/3 animate-pulse rounded bg-subtle motion-reduce:animate-none" />
       </div>
-      <p className="mt-3 text-[12.5px] text-ink-3">{text('Downloading…')}</p>
+      <p className="mt-3 text-[12.5px] text-ink-3">{slow ? text('Waiting for a free connection…') : text('Downloading…')}</p>
     </div>
   );
 }
@@ -1171,9 +1179,11 @@ function MessageProblem({ problem, error, msgRef, row, retrying, onRetry, onFixA
           {problemTitle(problem)}
         </span>
         {problem === 'gone' ? <span className="text-[12.5px] text-ink-2">{text('It is no longer in this folder or any other folder of the account. It has been taken off the list.')}</span> : null}
+        {problem === 'busy' ? <span className="text-[12.5px] text-ink-2">{text('The account is busy syncing. Retry in a moment.')}</span> : null}
+        {problem === 'resync' ? <span className="text-[12.5px] text-ink-2">{text('Refresh the folder in a minute and open it again.')}</span> : null}
         <span className="flex flex-wrap items-center gap-2">
           {problem === 'signin' && onFixAccount ? <Button size="sm" variant="primary" onClick={onFixAccount}>{text('Fix account')}</Button> : null}
-          {problem === 'gone' && onRefreshFolder ? <Button size="sm" variant="primary" onClick={onRefreshFolder}>{text('Refresh folder')}</Button> : null}
+          {(problem === 'gone' || problem === 'resync') && onRefreshFolder ? <Button size="sm" variant="primary" onClick={onRefreshFolder}>{text('Refresh folder')}</Button> : null}
           {problem !== 'gone' ? (
             <Button size="sm" variant="secondary" onClick={onRetry} disabled={retrying}>
               {retrying ? text('Looking for it…') : text('Retry')}

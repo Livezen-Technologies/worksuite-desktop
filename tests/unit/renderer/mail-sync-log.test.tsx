@@ -9,12 +9,12 @@ vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreAp
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => null), on: () => () => undefined, errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), isMac: false, hasDesktop: () => true }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 
-import { ApiError, apiGet } from '../../../src/core/api';
+import { ApiError, apiGet, apiPost } from '../../../src/core/api';
 import { app } from '../../../src/core/app-state';
 import { call } from '../../../src/core/bridge';
 import { toast } from '../../../src/core/toasts';
 import { AccountsSync, downloading, progressWords, sizeWords } from '../../../src/modules/mail/AccountsSync';
-import { SyncLog, folderWord, logText, resultWord, took } from '../../../src/modules/mail/SyncLog';
+import { SyncLog, errorLine, folderWord, logText, resultWord, syncingLine, took } from '../../../src/modules/mail/SyncLog';
 import type { Mailbox, SyncAccount, SyncRun } from '../../../src/modules/mail/types';
 
 /**
@@ -141,5 +141,42 @@ describe('an account’s progress in Settings › Mail › Accounts (#190)', () 
     await waitFor(() => expect(within(row).getByLabelText('Progress').textContent).toBe('Headers 12 of 27 folders · Bodies 340 of 1,200 · 17.4 MB on this computer'));
     expect(within(row).getByText('Partly synced')).toBeTruthy();
     expect(within(row).getByRole('button', { name: /Sync/ })).toBeTruthy();
+  });
+});
+
+describe('fetch errors apart from the runs (worksuite-desktop#228)', () => {
+  const groups = [
+    { kind: 'busy', label: 'Waiting for a free connection', messages: 2, hits: 23, last_at: '2026-10-04 11:32:00', items: [
+      { folder: 'inbox', uid: 262877, uidvalidity: 1700000000, message_id: '<a@x>', response: 'Waiting for a free connection', hits: 20, last_at: '2026-10-04 11:32:00' },
+      { folder: 'inbox', uid: 262548, uidvalidity: null, message_id: null, response: 'Waiting for a free connection', hits: 3, last_at: '2026-10-04 11:30:00' },
+    ] },
+  ];
+
+  beforeEach(() => {
+    app.set({ status: { network: 'ONLINE' } as never, prefs: { mailCacheDays: 30, moduleNotifications: {}, badgeCount: true, theme: 'light' } as never, bootstrap: { user: { id: '9', name: 'Me', email: 'me@example.test' } } as never, apps: [] });
+    vi.mocked(apiGet).mockReset().mockImplementation((async (path: string) => {
+      if (path === '/api/mail/mailboxes/4/sync-log') return { runs: RUNS, account: acct({ running: true, complete: false, folders_done: 2, running_since: '2026-10-04 11:20:00' }), fetch_errors: groups };
+      throw new ApiError(404, path, null);
+    }) as never);
+    vi.mocked(apiPost).mockReset().mockResolvedValue({ cleared: 2 } as never);
+  });
+
+  it('says how far a pass going now has got', () => {
+    expect(syncingLine(acct({ running: true, complete: false, folders_done: 2, running_since: '2026-10-04 11:20:00' }))).toMatch(/^Syncing · headers 2 of 27 folders · started /);
+    expect(syncingLine(acct())).toBeNull();
+    expect(errorLine(groups[0] as never)).toMatch(/^Waiting for a free connection × 23 · last /);
+  });
+
+  it('groups them under their own tab, with the messages and their IDs, and Retry all', async () => {
+    wrap(<SyncLog box={BOX} account={null} onClose={vi.fn()} onRepair={vi.fn()} />);
+    const tab = await screen.findByRole('tab', { name: 'Fetch errors · 2' });
+    expect(screen.getByRole('tab', { name: 'Sync runs' }).getAttribute('aria-selected')).toBe('true');
+    fireEvent.click(tab);
+    const panel = screen.getByRole('tabpanel', { name: 'Fetch errors' });
+    expect(within(panel).getByText(/^Waiting for a free connection × 23/)).toBeTruthy();
+    expect(within(panel).getByText('inbox · UID 262877 · UIDVALIDITY 1700000000 · Message-ID <a@x> · ×20')).toBeTruthy();
+    expect(within(panel).getByText('inbox · UID 262548 · UIDVALIDITY - · Message-ID - · ×3')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry all' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/mail/mailboxes/4/fetch-errors/retry', {}));
   });
 });

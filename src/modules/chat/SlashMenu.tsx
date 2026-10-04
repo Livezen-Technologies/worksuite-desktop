@@ -95,7 +95,7 @@ export function SlashMenu({
       )}
     >
       {view === 'root' ? (
-        <Root items={items} pick={pick} setPick={setPick} choose={choose} />
+        <Root word={word} items={items} pick={pick} setPick={setPick} choose={choose} />
       ) : view === 'saved' ? (
         <Saved initial={word} replies={replies} onInsert={onInsert} onBack={() => setView('root')} onClose={onClose} />
       ) : (
@@ -108,10 +108,12 @@ export function SlashMenu({
 const optionCls = (on: boolean) => cx('flex w-full items-start gap-2.5 rounded-[8px] px-2 py-1.5 text-left', on ? 'bg-selection' : 'hover:bg-subtle');
 const footCls = 'border-t border-line px-2.5 py-1.5 text-[11px] text-ink-3';
 
-function Root({ items, pick, setPick, choose }: { items: Item[]; pick: number; setPick: (i: number) => void; choose: (it: Item) => void }) {
+function Root({ word, items, pick, setPick, choose }: { word: string; items: Item[]; pick: number; setPick: (i: number) => void; choose: (it: Item) => void }) {
   const firstReply = items.findIndex((it) => it.kind === 'reply');
   return (
     <>
+      {/* What was typed after the "/", over what it found (P-04 Saved replies · "/" picker: "/edu"). */}
+      {word ? <div data-slash-query className="border-b border-line px-3 py-2 text-[12px] text-ink-3">/{word}</div> : null}
       <div role="listbox" aria-label="Quick actions" className="min-h-0 flex-1 overflow-y-auto p-1 scroll-thin">
         {items.map((it, i) => (
           <div key={it.kind === 'action' ? it.key : `r${it.reply.id}`}>
@@ -139,14 +141,18 @@ function Root({ items, pick, setPick, choose }: { items: Item[]; pick: number; s
   );
 }
 
-function ReplyLine({ r }: { r: SavedReply }) {
+/**
+ * A saved reply in the "/" list, as S-09 draws it: "/education · Education discount" over the start of its words. The
+ * Saved replies screen's IN THE COMPOSER preview shows the same lines.
+ */
+export function ReplyLine({ r }: { r: SavedReply }) {
   return (
     <span className="flex min-w-0 flex-col">
-      <span className="truncate text-[12.5px] font-semibold text-ink">
-        {r.title}
-        {r.shortcut ? <span className="ml-2 font-mono text-[11.5px] font-normal text-ink-3">/{r.shortcut}</span> : null}
-      </span>
-      <span className="line-clamp-2 text-[11.5px] text-ink-3">{r.body}</span>
+      <b className="truncate text-[13px] text-ink">
+        {r.shortcut ? <span>/{r.shortcut} · </span> : null}
+        <span>{r.title}</span>
+      </b>
+      <span className="line-clamp-2 text-[12px] text-ink-2">{r.body}</span>
     </span>
   );
 }

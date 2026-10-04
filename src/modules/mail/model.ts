@@ -208,16 +208,6 @@ export function rowStamp(stamp: string, today = todayInZone()): string {
   }
 }
 
-/** The account's short tag on a row in the combined list: GMAIL, the shared mailbox's name, or its domain's first letters. */
-export function mailboxBadge(m: Pick<Mailbox, 'email'> & Partial<Pick<Mailbox, 'provider' | 'shared' | 'account_type' | 'oauth_provider'>>): string {
-  const [local = '', domain = ''] = m.email.toLowerCase().split('@');
-  if (m.shared || m.account_type === 'shared_mailbox') return local.replace(/[^a-z0-9]/g, '').slice(0, 6).toUpperCase() || 'SHARED';
-  if (/gmail|google/.test(m.provider ?? '') || m.oauth_provider === 'google' || /^(gmail|googlemail)\./.test(domain)) return 'GMAIL';
-  if (m.account_type === 'local_mailbox' || m.provider === 'local') return 'WS';
-  const name = domain.split('.')[0] ?? '';
-  return name.slice(0, 2).toUpperCase() || '@';
-}
-
 /** The account's first letter, for its round avatar. */
 export function mailboxLetter(m: Pick<Mailbox, 'email'> & Partial<Pick<Mailbox, 'provider' | 'account_type' | 'oauth_provider'>>): string {
   if (m.account_type === 'local_mailbox' || m.provider === 'local') return 'W';

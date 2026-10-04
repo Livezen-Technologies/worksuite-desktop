@@ -26,7 +26,7 @@ const WEBSITE_EVENTS = new Set(['chat.widget.message', 'chat.widget.activity', '
   // Several staff in one chat (ENH-WCHAT-03): who is in it, a note, an invitation or a transfer answered.
   'chat.widget.participants', 'chat.widget.note', 'chat.widget.handoff', 'chat.widget.handoff.resolved',
   // A visitor's voice call ringing, answered, held or over, and a call back asked for (ENH-WCHAT-05).
-  'chat.widget.call', 'chat.widget.callback']);
+  'chat.widget.call', 'chat.widget.callback', 'chat.widget.message.deleted']);
 
 /** Events that change nothing a list or thread shows; refetching every message on each keystroke was waste. */
 const QUIET_CHAT_EVENTS = /^chat\.(typing\.|presence$|call\.)/;

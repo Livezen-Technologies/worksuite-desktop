@@ -4,8 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.20.0 — 2026-10-04
+
+- P-03: Admin Center tab with Chat › Ringing (who is rung and when, when it stops without a join)
+
+## 1.19.0 — 2026-10-04
+
+- P-02: Notifications & calls settings to the design (ringtone and Test ring, ring on speakers too, call window on top, Focus/Do not disturb incl. system Focus, start at login and keep in tray, shortcuts incl. Live map and dashboard on/off)
+
 ## 1.18.0 — 2026-10-04
 
+- Settings › Website chats › When a visitor writes again in your chat (#230): card over other apps, desktop notification, chime (with Test), and how long without input counts as away.
 - Updates and License pages (Updates, Updates › Diagnostics, License), grouped navigation, update dialogs, mandatory update banner and locked screen, What's New after updating.
 
 ## 1.17.0 — 2026-10-03

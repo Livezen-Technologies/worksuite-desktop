@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
+import type * as AttachmentViewer from '../../../src/modules/chat/AttachmentViewer';
 
 /**
  * A visitor's voice call in their thread on the desktop (WS-WCHAT ENH-WCHAT-05, VOICE-10…15, VOICE-UI-03): Answer and
@@ -45,7 +46,7 @@ vi.mock('../../../src/core/bridge', () => ({
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 vi.mock('../../../src/modules/chat/Composer', () => ({ Composer: () => <div>The composer</div> }));
 vi.mock('../../../src/modules/chat/window', () => ({ openWebsiteChatWindow: vi.fn(async () => undefined) }));
-vi.mock('../../../src/modules/chat/AttachmentViewer', () => ({ openChatAttachment: vi.fn() }));
+vi.mock('../../../src/modules/chat/AttachmentViewer', async (orig) => ({ ...(await orig<typeof AttachmentViewer>()), openChatAttachment: vi.fn() }));
 const tab = { query: 'view=website&website=41' };
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ query: new URLSearchParams(tab.query), path: ['chat'], go: vi.fn(), active: true, openLink: vi.fn() }),
@@ -130,7 +131,8 @@ describe('a call ringing in the thread (VOICE-10, VOICE-12)', () => {
     const room = lk.FakeRoom.made[0]!;
     await waitFor(() => expect(room.connect).toHaveBeenCalledWith('wss://lk.example', 'staff-token'));
     expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenCalledWith(true);
-    await waitFor(() => expect(screen.getByRole('status', { name: 'Voice call' }).textContent).toMatch(/On a call1:1\d/));
+    // V-03's call controls: "Voice call · Kamal Perera 1:14".
+    await waitFor(() => expect(screen.getByRole('region', { name: 'Call controls' }).textContent).toMatch(/Voice call · Kamal Perera 1:1\d/));
     expect(call).toHaveBeenCalledWith('ring:onCall', expect.objectContaining({ conversationId: 41, visitor: 'Kamal Perera', held: false }));
     expect(call).toHaveBeenCalledWith('updates:setActiveCall', { active: true });
   });
@@ -182,7 +184,7 @@ describe('on the call (VOICE-13)', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith(`/api/chat/widget-admin/calls/${cid}/hold`, { on: true }));
     await screen.findByRole('button', { name: 'Resume' });
     expect(room.localParticipant.setMicrophoneEnabled).toHaveBeenLastCalledWith(false);
-    expect(screen.getByRole('status', { name: 'Voice call' }).textContent).toContain('On hold');
+    expect(screen.getByRole('region', { name: 'Call controls' }).textContent).toContain('On hold');
   });
 
   it('End asks for notes, ends it for everybody and lets the room go', async () => {
@@ -201,11 +203,11 @@ describe('on the call (VOICE-13)', () => {
     tab.query = `view=website&website=41&call=${cid}`;
     mount();
     await screen.findByRole('button', { name: 'Mute' });
-    expect(screen.getByRole('status', { name: 'Voice call' }).textContent).toContain('with Nimal Silva');
+    expect(screen.getByRole('region', { name: 'Call controls' }).textContent).toContain('with Nimal Silva');
     fireEvent.click(screen.getByRole('button', { name: 'End' }));
     await screen.findByRole('dialog', { name: 'End the call' });
     fireEvent.click(screen.getByRole('button', { name: 'Leave the call' }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(`/api/chat/widget-admin/calls/${cid}/end`, { for_everyone: false, notes: null }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith(`/api/chat/widget-admin/calls/${cid}/end`, { for_everyone: false, notes: '' }));
   });
 });
 

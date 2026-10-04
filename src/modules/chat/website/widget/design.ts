@@ -24,6 +24,17 @@ export type Position = 'bottom_right' | 'bottom_left';
 export type Theme = 'auto' | 'light' | 'dark';
 
 export interface WidgetDesign {
+  /**
+   * S-02 (UX-SET-03, WGT-03, WGT-05): the widget's own name, the header's title, the welcome, the accent colour (the
+   * send button), the panel's corner radius (0–32px) and auto-open (0–300 seconds, 0 is Never). A server from before
+   * S-02 sends none of them; `withDefaults` fills them in, and the server ignores them when they are saved.
+   */
+  name: string;
+  header_title: string | null;
+  welcome_message: string | null;
+  accent_color: string;
+  border_radius: number;
+  auto_open_delay: number;
   website_name: string | null;
   brand_color: string;
   logo_url: string | null;
@@ -77,7 +88,10 @@ export interface HoursSummary {
 }
 
 export interface DesignPayload {
-  widget: { id: number; name: string; widget_key: string; status: string };
+  /** `domain`: the site, for "Widgets & embed › techubiz.com" (S-02). */
+  widget: { id: number; name: string; widget_key: string; status: string; domain?: string | null };
+  /** The widget's conversation starters, which the preview shows under the welcome (S-02). */
+  starters?: string[];
   design: WidgetDesign;
   agents: DesignAgent[];
   preview_agents: PublicAgent[];
@@ -90,11 +104,32 @@ export interface DesignPayload {
   fallback_name?: string | null;
 }
 
+/**
+ * A widget as the widgets list has it (S-01, UX-SET-01). Everything past `status` is optional: a server from before
+ * S-01 does not send the card's counts, and the card then leaves them out.
+ */
 export interface WidgetRow {
   id: number;
   name: string;
   website_name: string | null;
   status: string;
+  allowed_domains?: string | null;
+  brand_color?: string;
+  embed_code?: string;
+  /** The chatbot's name: what an automated message posted as the assistant is signed with (S-07). */
+  bot_name?: string | null;
+  ai_enabled?: boolean;
+  voice_enabled?: boolean;
+  open_conversations?: number;
+  open_now?: boolean;
+  /** When a closed widget opens next: "08:30", "08:30 tomorrow", "08:30 Monday". */
+  opens_at?: string | null;
+  /** Visitors on the site now. */
+  online?: number;
+  staff?: number;
+  starters?: number;
+  /** Its active automated messages. */
+  rules?: number;
 }
 
 export interface HoursDay {
@@ -112,6 +147,12 @@ export interface HoursPayload {
 
 export const MAX_LINKS = 5;
 export const OFFSET_MAX = 200;
+export const RADIUS_MAX = 32;
+export const AUTO_OPEN_MAX = 300;
+/** The ready colours beside the hex field (S-02). */
+export const BRAND_SWATCHES = ['#273498', '#1F7A6E', '#B4322B', '#111B3B'];
+export const ACCENT_SWATCHES = ['#2F9E67', '#E8A33D'];
+const HEX = /^#[0-9a-f]{6}$/i;
 
 /** A launcher offset as the server keeps it: whole pixels, 0–200, 20 when there is nothing to go on. */
 export const clampOffset = (v: number) => Math.max(0, Math.min(OFFSET_MAX, Math.round(Number.isFinite(v) ? v : 20)));
@@ -120,9 +161,16 @@ export const clampOffset = (v: number) => Math.max(0, Math.min(OFFSET_MAX, Math.
  * The design as this screen edits it, from what the server sent: a server from before #207 sends the theme as
  * `dark_mode` only, and no offsets.
  */
-export function withDefaults(d: WidgetDesign): WidgetDesign {
+export function withDefaults(d: WidgetDesign, widgetName = ''): WidgetDesign {
   return {
     ...d,
+    // A server from before S-02 does not send the name: the widget's own, from the payload, stands in.
+    name: d.name ?? widgetName,
+    header_title: d.header_title ?? null,
+    welcome_message: d.welcome_message ?? null,
+    accent_color: d.accent_color ?? d.brand_color,
+    border_radius: d.border_radius ?? 16,
+    auto_open_delay: d.auto_open_delay ?? 0,
     theme: d.theme ?? d.dark_mode ?? 'auto',
     launcher_offset_bottom: d.launcher_offset_bottom ?? 20,
     launcher_offset_right: d.launcher_offset_right ?? 20,
@@ -152,7 +200,7 @@ export const widgetsList = (signal?: AbortSignal) => apiGet<{ widgets: WidgetRow
 export const designOf = (id: number, signal?: AbortSignal) => apiGet<DesignPayload>(`${WEBSITE}/widgets/${id}/design`, undefined, signal);
 export const hoursOf = (id: number, signal?: AbortSignal) => apiGet<HoursPayload>(`${WEBSITE}/widgets/${id}/hours`, undefined, signal);
 
-/** Save the design: only the design's own fields and the photos shown, never the widget's domains or its name. */
+/** Save the design: only the design's own fields (the widget's name among them since S-02) and the photos shown, never the widget's domains or status. */
 export function saveDesign(id: number, design: WidgetDesign, shown: Record<number, boolean>): Promise<DesignPayload> {
   // `theme` is the setting; `dark_mode` is only its older name and is not sent back.
   const { dark_mode: _older, ...fields } = design;
@@ -212,8 +260,12 @@ export function hoursText(days: HoursDay[]): string {
 /** What is wrong with the design, field by field, before the server is asked. */
 export function problems(d: WidgetDesign): Partial<Record<keyof WidgetDesign | 'quick_links', string>> {
   const out: Partial<Record<keyof WidgetDesign | 'quick_links', string>> = {};
+  if (!d.name.trim()) out.name = 'Name this widget';
+  if (!HEX.test(d.accent_color)) out.accent_color = 'Use a six-digit hex colour, like #2F9E67';
+  if (!Number.isInteger(d.border_radius) || d.border_radius < 0 || d.border_radius > RADIUS_MAX) out.border_radius = `A number of pixels, 0 to ${RADIUS_MAX}`;
+  if (!Number.isInteger(d.auto_open_delay) || d.auto_open_delay < 0 || d.auto_open_delay > AUTO_OPEN_MAX) out.auto_open_delay = `0 to ${AUTO_OPEN_MAX} seconds`;
   if (looksLikeAddress(d.website_name)) out.website_name = 'Enter the company\'s name, not its web address: the widget shows it in its header';
-  if (!/^#[0-9a-f]{6}$/i.test(d.brand_color)) out.brand_color = 'Use a six-digit hex colour, like #2F3FB5';
+  if (!HEX.test(d.brand_color)) out.brand_color = 'Use a six-digit hex colour, like #2F3FB5';
   for (const k of ['launcher_offset_bottom', 'launcher_offset_right', 'launcher_offset_left'] as const) {
     if (!Number.isInteger(d[k]) || d[k] < 0 || d[k] > OFFSET_MAX) out[k] = `A number of pixels, 0 to ${OFFSET_MAX}`;
   }

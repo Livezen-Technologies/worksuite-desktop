@@ -357,12 +357,30 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
 
   // ── website chats ringing (ENH-WCHAT-01, RING-49) ───────────────────────
   router.handle('ring:state', () => ctx.webchat.state());
-  router.handle('ring:join', (input) => ctx.webchat.join(input.id));
+  // `visitor`: a Needs you row of the tray or the Live map window, which may not be ringing for me (UX-ALR-03).
+  router.handle('ring:join', (input) => ctx.webchat.join(input.id, input.then, input.visitor));
   router.handle('ring:silence', (input) => ctx.webchat.silence(input.id, input.on));
   router.handle('ring:pass', (input) => ctx.webchat.pass(input.id));
+  router.handle('ring:joinSend', (input) => ctx.webchat.joinAndSend(input.id, input.message ?? null, { ...(input.open ? { open: true } : {}), ...(input.cannedId ? { cannedId: input.cannedId } : {}), ...(input.visitor ? { visitor: input.visitor } : {}) }));
+  router.handle('ring:draft', (input) => ctx.webchat.setDraft(input.id, input.text));
+  router.handle('ring:reply', (input) => ctx.webchat.replyJoined(input.message));
+  router.handle('ring:closeJoined', (input) => ctx.webchat.closeJoined(input.open));
+  router.handle('ring:minimise', () => ctx.webchat.minimise());
+  router.handle('ring:fit', (input) => ctx.webchat.fit(input.height));
+  router.handle('ring:openInbox', () => ctx.webchat.openInbox());
+  router.handle('ring:outcome', (input) => ctx.webchat.outcomeAction(input.action));
+  // The tray's ringing menu (R-06): its height, and Open Website Chats, Ringing settings…, Quit WorkSuite.
+  router.handle('ring:trayFit', (input) => ctx.ringTray.fit(input.height));
+  router.handle('ring:tray', (input) => ctx.ringTray.act(input.action));
+  router.handle('live:open', (input) => ctx.liveDesk.open(input.to, input.id));
+  router.handle('live:info', () => ctx.liveDesk.info());
+  router.handle('live:wall', (input) => ctx.liveDesk.wall(input));
+  // A visitor who wrote again in my chat (#230): the card's actions, and which conversation the main window shows.
+  router.handle('ring:followUp', (input) => ctx.webchat.followUp(input.id, input.action, input.message));
+  router.handle('ring:viewing', (input) => ctx.webchat.setViewing(input.id));
   router.handle('ring:handoff', (input) => ctx.webchat.answer(input.id, input.accept));
   router.handle('ring:call', (input) => ctx.webchat.answerCall(input.id, input.accept));
-  router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has));
+  router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has, input.label ?? null, input.headset ?? false));
   router.handle('ring:onCall', (input) => ctx.webchatOnCall(input));
 
   // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────
@@ -604,6 +622,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/billing/payments/${input.paymentSlip.payment}/slips/${input.paymentSlip.slip}`
       : rep
       ? `/api/oms/reports/${rep.report}?${new URLSearchParams({ from: rep.from, to: rep.to, format: 'csv', ...(rep.org ? { org: rep.org } : {}), ...(rep.report === 'sales' && rep.group ? { group: rep.group } : {}) })}`
+      : input.websiteInsights
+      ? `/api/chat/widget-admin/insights/export?${new URLSearchParams({ period: input.websiteInsights.period, ...(input.websiteInsights.widget ? { widget_id: String(input.websiteInsights.widget) } : {}) })}`
       : oc
       ? `/api/oms/orders/export?${new URLSearchParams(Object.entries({ org: oc.org, status: oc.status, source: oc.source, priority: oc.priority, q: oc.q, mine: oc.mine ? '1' : undefined }).filter((e): e is [string, string] => !!e[1]))}`
       : input.picture

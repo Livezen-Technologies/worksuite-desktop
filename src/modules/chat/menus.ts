@@ -1,7 +1,7 @@
 import type { MenuItem, MenuSection } from '../../components/Menu';
 import type { WaChat } from './channels/whatsapp';
 import { canCall, type Room } from './types';
-import type { WebsiteRow } from './website/api';
+import { PRIORITIES, type WebsiteBulkAction, type WebsiteBulkExtra, type WebsitePriority, type WebsiteRow } from './website/api';
 
 /**
  * The conversation menu (worksuite-desktop#183): one menu for every chat
@@ -212,10 +212,15 @@ export function whatsappMenu(c: WaChat, run: (a: WaAction) => void, contactItems
   ];
 }
 
-export type WebsiteAction = 'open' | 'assign-me' | 'transfer' | 'unassign' | 'close' | 'reopen' | 'star';
+export type WebsiteAction = 'open' | 'assign-me' | 'transfer' | 'unassign' | 'close' | 'reopen' | 'star' | 'unstar' | 'priority';
 
-/** Website chats' menu: assign, transfer to another agent, close. */
-export function websiteMenu(c: WebsiteRow, me: number | null, agents: Array<{ id: number; name: string }>, run: (a: WebsiteAction, userId?: number) => void): MenuSection[] {
+/** The Priority submenu: one radio item each, the conversations' own (when they share one) ticked. */
+function priorityItems(current: string | null, pick: (p: WebsitePriority) => void): MenuSection[] {
+  return [{ id: 'priorities', items: PRIORITIES.map((p) => ({ id: `priority-${p.id}`, label: p.label, radio: true, checked: current === p.id, onSelect: () => pick(p.id) })) }];
+}
+
+/** Website chats' menu: assign, transfer to another agent, star, priority, close. */
+export function websiteMenu(c: WebsiteRow, me: number | null, agents: Array<{ id: number; name: string }>, run: (a: WebsiteAction, userId?: number, priority?: WebsitePriority) => void): MenuSection[] {
   const closed = c.status === 'closed';
   const others = agents.filter((a) => a.id !== me && a.id !== c.assigned_to);
   return [
@@ -237,6 +242,53 @@ export function websiteMenu(c: WebsiteRow, me: number | null, agents: Array<{ id
             ...(c.assigned_to !== null ? [{ id: 'unassign', label: 'Unassign', icon: 'x', onSelect: () => run('unassign') }] : []),
           ],
     },
+    {
+      id: 'organise',
+      items: [
+        c.is_starred ? { id: 'unstar', label: 'Unstar', icon: 'star', onSelect: () => run('unstar') } : { id: 'star', label: 'Star', icon: 'star', onSelect: () => run('star') },
+        { id: 'priority', label: 'Priority', icon: 'flag', submenu: priorityItems(c.priority, (p) => run('priority', undefined, p)) },
+      ],
+    },
     { id: 'state', items: [closed ? { id: 'reopen', label: 'Reopen conversation', icon: 'refresh', onSelect: () => run('reopen') } : { id: 'close', label: 'Close conversation', icon: 'check', danger: true, onSelect: () => run('close') }] },
+  ];
+}
+
+/**
+ * The menu for several picked website chats (UX-LIST-02): Assign to… (me, each colleague, or nobody), Priority,
+ * Star or Unstar (Unstar when all of them are starred), and Close or Reopen. The bulk bar's dropdowns are the
+ * submenus of the same items, so the bar and a right-click on the picked rows offer the same.
+ */
+/**
+ * Assign to me · Assign to (each colleague) · Unassign: the bulk bar's Assign to… and a call-back's Assign ▾ (V-02)
+ * offer the same people the same way. `current` ticks who has it now.
+ */
+export function assignSections(me: number | null, agents: Array<{ id: number; name: string }>, pick: (userId: number | null) => void, opts: { unassign: boolean; current?: number | null }): MenuSection[] {
+  const others = agents.filter((a) => a.id !== me);
+  const on = (id: number) => (opts.current === undefined ? {} : { checked: opts.current === id, radio: true });
+  return [
+    { id: 'me', items: me !== null ? [{ id: 'assign-me', label: 'Assign to me', icon: 'user', ...on(me), onSelect: () => pick(me) }] : [] },
+    { id: 'agents', label: others.length ? 'Assign to' : undefined, items: others.map((a) => ({ id: `agent-${a.id}`, label: a.name, icon: 'user', ...on(a.id), onSelect: () => pick(a.id) })) },
+    { id: 'nobody', items: opts.unassign ? [{ id: 'unassign', label: 'Unassign', icon: 'x', onSelect: () => pick(null) }] : [] },
+  ];
+}
+
+export function websiteBulkMenu(rows: WebsiteRow[], me: number | null, agents: Array<{ id: number; name: string }>, run: (a: WebsiteBulkAction, extra?: WebsiteBulkExtra) => void): MenuSection[] {
+  const n = rows.length;
+  const allStarred = n > 0 && rows.every((r) => r.is_starred);
+  const allClosed = n > 0 && rows.every((r) => r.status === 'closed');
+  const anyAssigned = rows.some((r) => r.assigned_to !== null);
+  const shared = n > 0 && rows.every((r) => r.priority === rows[0]!.priority) ? rows[0]!.priority : null;
+  const assign = assignSections(me, agents, (userId) => run('assign', { user_id: userId }), { unassign: anyAssigned });
+  return [
+    {
+      id: 'organise',
+      label: n === 1 ? '1 conversation' : `${n} conversations`,
+      items: [
+        { id: 'assign', label: 'Assign to…', icon: 'users', submenu: assign },
+        { id: 'priority', label: 'Priority', icon: 'flag', submenu: priorityItems(shared, (p) => run('priority', { priority: p })) },
+        allStarred ? { id: 'unstar', label: 'Unstar', icon: 'star', onSelect: () => run('unstar') } : { id: 'star', label: 'Star', icon: 'star', onSelect: () => run('star') },
+      ],
+    },
+    { id: 'state', items: [allClosed ? { id: 'reopen', label: 'Reopen', icon: 'refresh', onSelect: () => run('reopen') } : { id: 'close', label: 'Close', icon: 'check', danger: true, onSelect: () => run('close') }] },
   ];
 }

@@ -24,7 +24,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import type { Bootstrap, BusyReport, UpdateActivity, UpdateDiagnostics, NavigateRequest, RealtimeState, ServiceHealth, StatusSnapshot, UpdateStatus, WebchatOnCall, WebchatRingState } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
@@ -63,6 +63,8 @@ import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
+import { SystemFocus } from '../services/system-focus';
+import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '../services/live-desk';
 import { QuickAsk } from '../services/quick-ask';
 import { AiService } from '../services/ai';
 import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
@@ -1095,12 +1097,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── status ─────────────────────────────────────────────────────────────
   let statusTimer: NodeJS.Timeout | null = null;
+  // Visitors waiting on me in my website chats (#230), from the ringer: on the Dock and taskbar badge.
+  let followUpCount = 0;
+  // Website chats and calls ringing for me and not silenced (R-05, R-06; RING-44): on the badge until joined or silenced.
+  let ringingCount = 0;
   const snapshot = (): StatusSnapshot => {
     const uid = sessionCtl?.userId();
     const raw = notifications.counts();
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
-    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0 };
+    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -1131,7 +1137,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         offline: s.network === 'OFFLINE',
         pending: s.pendingChanges,
         error: failed ? `${failed[0]} stopped — open Diagnostics` : null,
-        unreadChat: s.unread.chat,
+        unreadChat: s.unread.chat + (s.unread.webchat ?? 0),
         unreadMail: s.unread.mail,
         unreadOther: s.unread.notifications,
         badge: settings.effective().badgeCount !== false,
@@ -1203,6 +1209,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   notifications.sendWebsiteReply = async (conversationId, text) => {
     const me = sessionCtl.userId();
     if (!me) return { delivered: false, queued: false, id: null, status: null, data: null, error: 'You are signed out.', code: 'NOT_SIGNED_IN' };
+    // A chat still ringing: the reply joins it and is sent in one step, first come (#225). Too late, it is refused.
+    if (webchat.isRinging(conversationId)) {
+      const r = await webchat.joinAndSend(conversationId, text, { stay: false });
+      return { delivered: r.ok, queued: false, id: null, status: r.ok ? 200 : 409, data: null, error: r.why, code: r.ok ? null : 'TAKEN' };
+    }
     return queue.submit(me, websiteReplyMutation(conversationId, text));
   };
   notifications.websiteReplyRefused = (w, text, error) => {
@@ -1228,7 +1239,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const heartbeatPresence = async (): Promise<void> => {
     if (!sessionCtl.isReady() || lock.isLocked()) return;
     try {
-      await http.post('/api/chat/presence', { active: powerMonitor.getSystemIdleTime() < 300 });
+      // In a meeting or on a call, the server counts me busy: a visitor writing again in my chat goes straight to the
+      // team, and no new chat is given to me (worksuite-desktop#230). An older server ignores the field.
+      const doing = updateActivity();
+      await http.post('/api/chat/presence', { active: powerMonitor.getSystemIdleTime() < 300, busy_reason: doing.meeting ? 'meeting' : doing.call ? 'call' : null });
     } catch (e) {
       // No chat for this person (or no such endpoint): stop asking.
       if (isDesktopError(e) && (e.code === 'PERMISSION_DENIED' || e.code === 'APP_ACCESS_DENIED' || e.code === 'NOT_FOUND')) stopPresence();
@@ -1353,10 +1367,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     quickAsk: () => void quickAsk.open(),
     aiChanges: () => openAiChanges(),
     ringingSettings: () => navigate({ route: '/settings/notifications', source: 'tray' }),
+    showRingMenu: (anchor) => ringTray.show(anchor),
+    liveDashboard: () => liveDesk.open('dashboard'),
+    liveMap: () => liveDesk.open('map'),
   });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
   const JOIN_SHORTCUT = 'CommandOrControl+Shift+J';
+  // "Silence for 15 minutes" in the tray (MAP-22): website chats ring without the tone, and at-risk notifications
+  // come without sound, until then — as Do not disturb kept to the card would (RING-47). Nothing else is paused.
+  let liveSilencedUntil = 0;
+  const liveSilenced = (): boolean => liveSilencedUntil > Date.now();
+  // The system's own Focus / Do not disturb counts as Do not disturb for the ring, where it can be read (RING-47).
+  const systemFocus = new SystemFocus({ onChange: () => webchat.refresh() });
+  systemFocus.start();
   // Answers a visitor's voice call (ENH-WCHAT-05), held only while one rings.
   const ANSWER_SHORTCUT = 'CommandOrControl+Shift+A';
   let answerHeld = false;
@@ -1412,7 +1436,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return answerHeld;
   };
   const trayCalls = (s: WebchatRingState) => ({
-    webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })),
+    webchatRinging: s.chats.map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor, silenced: c.silenced })),
     webchatCalls: (s.calls ?? []).map((c) => ({ id: c.id, label: c.site ? `${c.visitor} · ${c.site}` : c.visitor })),
     webchatOnCall: onCall ? { conversationId: onCall.conversationId, label: onCall.visitor, held: onCall.held } : null,
   });
@@ -1423,33 +1447,205 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     me: () => (sessionCtl.get().user?.id ? Number(sessionCtl.get().user?.id) : null),
     prefs: () => {
       const p = settings.effective();
-      return { ...p.webchatRinging, volume: !p.notificationSounds || lock.isLocked() && p.lockedNotificationSounds === false ? 0 : p.webchatRinging.volume };
+      return { ...p.webchatRinging, ...(liveSilenced() ? { duringDnd: 'card' as const } : {}), volume: !p.notificationSounds || lock.isLocked() && p.lockedNotificationSounds === false ? 0 : p.webchatRinging.volume };
     },
     quiet: () => {
       const p = settings.effective();
-      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null;
+      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null || liveSilenced() || systemFocus.active();
     },
     // With a call just answered, the thread joins its audio (`call=`).
-    open: (id, callId) => navigate({ route: `/chat?view=website&website=${id}${callId ? `&call=${callId}` : ''}`, source: 'notification' }),
+    open: (id, callId, then) => navigate({ route: `/chat?view=website&website=${id}${callId ? `&call=${callId}` : ''}${then === 'transfer' ? '&transfer=1' : ''}`, source: 'notification' }),
+    openInbox: () => navigate({ route: '/chat?view=website&section=inbox', source: 'notification' }),
+    // A visitor who left before anyone joined (R-03): their chat in Missed chats, never opened in the inbox (which joins).
+    openMissed: (id) => navigate({ route: `/chat?view=website&section=missed&website=${id}`, source: 'notification' }),
+    // The ringing card's mini chat replies as the conversation's composer does (#225).
+    reply: (conversationId, text) => notifications.sendWebsiteReply?.(conversationId, text) ?? Promise.resolve({ delivered: false, queued: false, id: null, status: null, data: null, error: 'You are signed out.', code: 'NOT_SIGNED_IN' }),
     // This installation as a ringing device (RING-10): the registered device's id, stable across restarts.
     deviceId: () => {
       const d = Number(device.current()?.id);
       return Number.isInteger(d) && d > 0 ? `desktop-${d}` : 'desktop-unregistered';
     },
-    focused: () => !!windows.getMain()?.isFocused(),
+    // Minimised counts as away from the conversation (#230): a minimised window is never focused.
+    focused: () => {
+      const w = windows.getMain();
+      return !!w && !w.isMinimized() && w.isFocused();
+    },
+    followUpPrefs: () => ({ ...FOLLOW_UP_DEFAULTS, ...settings.effective().webchatFollowUps }),
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
-      if ((s.chats.length || s.handoffs?.length || s.calls?.length || s.outcome) && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(ringerHeight(s));
+      // A visitor who wrote again in my chat has the card too, when I keep it on (#230).
+      const followUps = s.followUpCard !== false && !!s.followUps?.length;
+      if ((s.followUps?.length ?? 0) !== followUpCount) {
+        followUpCount = s.followUps?.length ?? 0;
+        emitStatus();
+      }
+      // The card, or the mini chat on a chat just joined from it (#225), unless minimised; as tall as it measured itself.
+      if ((s.chats.length || s.handoffs?.length || s.calls?.length || s.outcome || s.joined || followUps) && !s.minimised && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(s.fit ?? ringerHeight(s));
       else windows.hideRinger();
       tray.update(trayCalls(s));
+      // The Dock and taskbar badge count what rings until it is joined or silenced (RING-44).
+      const nowRinging = s.chats.filter((c) => !c.silenced).length + (s.calls?.length ?? 0);
+      if (nowRinging !== ringingCount) {
+        ringingCount = nowRinging;
+        emitStatus();
+      }
+      // The tray's ringing menu goes with the last chat ringing, and behind the lock (R-06) — unless it is the Live
+      // mini-dashboard, which stays while it is open (L-05).
+      if (s.hidden) windows.closeRingTray();
+      else if (!s.chats.length && !livePulse.get()) windows.hideRingTray();
+      // An at-risk chat as a system notification, withdrawn when somebody joins (MAP-23); the icon red while it lasts.
+      atRisk.update(s);
+      syncLive();
       const live = s.chats.some((c) => !c.silenced) || !!s.handoffs?.length;
       attention(live || !!s.calls?.length);
       webchat.shortcut = joinShortcut(live && prefs.shortcut);
       webchat.answerShortcut = answerShortcut(!!s.calls?.length && prefs.shortcut);
     },
   });
+  // A visitor's message raises nothing while I look at that conversation; one writing again in my chat follows my
+  // choice in Settings, and only while WorkSuite is not in front (worksuite-desktop#230).
+  notifications.websiteAttending = (id) => webchat.attending(id);
+  notifications.followUpDesktop = () => ({ ...FOLLOW_UP_DEFAULTS, ...settings.effective().webchatFollowUps }).desktop;
+  notifications.isFocused = () => {
+    const w = windows.getMain();
+    return !!w && !w.isMinimized() && w.isFocused();
+  };
   notifications.ringerShowing = () => settings.effective().webchatRinging.window && (webchat.state().chats.length > 0 || !!webchat.state().handoffs?.length || !!webchat.state().calls?.length);
+  // The call window shows a visitor's call whenever it is on and the lock lets it (V-04): as onChanged decides.
+  notifications.callWindowOn = () => settings.effective().webchatRinging.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false);
+  // The tray's ringing menu (R-06, RING-UI-07; UX-ALR-02): by the icon while chats ring, never behind the lock — the
+  // plain menu says only what it always says there.
+  let ringTrayHeight: number | null = null;
+  const ringTray = {
+    show: (anchor: Electron.Rectangle | null): boolean => {
+      const s = webchat.state();
+      // For website staff the menu is the Live mini-dashboard (L-05, MAP-22), ringing or not.
+      const live = !!livePulse.get();
+      if (lock.isLocked() || s.hidden || (!s.chats.length && !live)) return false;
+      windows.showRingTray(anchor, ringTrayHeight ?? (live ? 640 : 120 + Math.min(4, s.chats.length) * 64), live);
+      void livePulse.read();
+      return true;
+    },
+    fit: (height: number): void => {
+      ringTrayHeight = height;
+      windows.fitRingTray(height);
+    },
+    act: (action: 'inbox' | 'settings' | 'quit' | 'close' | 'dashboard' | 'liveMap' | 'wall' | 'silence'): void => {
+      windows.hideRingTray();
+      if (action === 'inbox') navigate({ route: '/chat?view=website&section=inbox', source: 'tray' });
+      else if (action === 'settings') navigate({ route: '/settings/notifications', source: 'tray' });
+      else if (action === 'quit') quit();
+      else if (action === 'dashboard') liveDesk.open('dashboard');
+      else if (action === 'liveMap') liveDesk.open('map');
+      // Wall mode on Display 2 asks first which screen and how (WF-M3); while the wall is up, the item closes it (MAP-24).
+      else if (action === 'wall') liveDesk.open(windows.wallOpen() ? 'wallClose' : 'wallSheet');
+      else if (action === 'silence') {
+        liveSilencedUntil = Date.now() + 15 * 60_000;
+        webchat.refresh();
+      }
+    },
+  };
+
+  // ── the Live dashboard outside the main window (L-04, L-05; MAP-21…25) ──
+  // The figures the menu-bar icon carries, read with the main window closed (MAP-22).
+  const livePulse = new LivePulse({
+    http,
+    allowed: () => sessionCtl.isReady() && canOpenApp('chat', sessionCtl.visibleApps()),
+    onChanged: () => syncLive(),
+  });
+  const atRisk = new AtRiskAlerts({
+    allowed: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('chat', sessionCtl.visibleApps()) && settings.effective().notificationsEnabled !== false,
+    quiet: () => {
+      const p = settings.effective();
+      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null || liveSilenced() || systemFocus.active();
+    },
+    duringDnd: () => (liveSilenced() ? 'card' : settings.effective().webchatRinging.duringDnd),
+    sound: () => settings.effective().notificationSounds,
+    join: (id) => void webchat.join(id),
+    showOnMap: (id) => liveDesk.open('map', id),
+  });
+  // ⌘⇧M shows or hides the Live map window and ⌘⇧D opens the Live dashboard from other apps (MAP-21, MAP-22). Held
+  // only while WorkSuite is not in front: in WorkSuite the keys keep their own meanings (Dock Tab Beside, mute on a call),
+  // and the Live map window and the tray's mini-dashboard answer them themselves.
+  const LIVE_MAP_SHORTCUT = 'CommandOrControl+Shift+M';
+  const LIVE_DASHBOARD_SHORTCUT = 'CommandOrControl+Shift+D';
+  let liveKeysHeld = false;
+  const syncLiveKeys = (): void => {
+    // Unless turned off in Settings › Notifications & calls › Shortcuts.
+    const want = settings.effective().webchatRinging.liveShortcuts !== false && !!livePulse.get() && !lock.isLocked() && !BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused());
+    if (want === liveKeysHeld) return;
+    if (want) {
+      try {
+        const map = globalShortcut.register(LIVE_MAP_SHORTCUT, () => liveDesk.open('toggleMap'));
+        const dash = globalShortcut.register(LIVE_DASHBOARD_SHORTCUT, () => liveDesk.open('dashboard'));
+        liveKeysHeld = map || dash;
+      } catch {
+        liveKeysHeld = false;
+      }
+    } else {
+      globalShortcut.unregister(LIVE_MAP_SHORTCUT);
+      globalShortcut.unregister(LIVE_DASHBOARD_SHORTCUT);
+      liveKeysHeld = false;
+    }
+  };
+  app.on('browser-window-focus', () => syncLiveKeys());
+  app.on('browser-window-blur', () => setImmediate(syncLiveKeys));
+  // Open wall mode when WorkSuite starts (L-06, MAP-24): once a launch, as soon as the dashboard answers for somebody
+  // who staffs website chat.
+  let wallStarted = false;
+  const syncLive = (): void => {
+    const f = livePulse.get();
+    if (f && !wallStarted) {
+      wallStarted = true;
+      if (wallPrefsOf(settings.effective().wallMode).openAtStart && !lock.isLocked()) liveDesk.open('wall');
+    }
+    tray.update({ live: f ? { online: f.online, atRisk: f.atRisk > 0 || webchat.state().chats.some((c) => c.atRisk) } : null });
+    syncLiveKeys();
+  };
+  // When the wall's screen was last unplugged (MAP-24 "the tray says so"), until the wall opens again.
+  let wallGoneAt: string | null = null;
+  const wallTo = () => wallTarget(screen.getAllDisplays(), screen.getPrimaryDisplay().id, wallPrefsOf(settings.effective().wallMode).displayId);
+  const liveDesk = {
+    open: (to: 'map' | 'toggleMap' | 'dashboard' | 'wall' | 'wallSheet' | 'wallClose' | 'chat', id?: number): void => {
+      windows.hideRingTray();
+      if (to === 'map') windows.showLiveMap(id ?? null);
+      else if (to === 'toggleMap') windows.toggleLiveMap();
+      else if (to === 'dashboard') navigate({ route: '/chat?view=website&section=dashboard', source: 'tray' });
+      else if (to === 'wall') {
+        wallGoneAt = null;
+        windows.showWall(wallTo()?.id ?? null, { keepAwake: wallPrefsOf(settings.effective().wallMode).keepAwake });
+      } else if (to === 'wallSheet') windows.showWallSheet();
+      else if (to === 'wallClose') windows.closeWall();
+      else if (to === 'chat' && id) navigate({ route: `/chat?view=website&website=${id}`, source: 'tray' });
+    },
+    info: () => {
+      const t = wallTo();
+      const prefs = wallPrefsOf(settings.effective().wallMode);
+      return {
+        wall: t ? { display: t.display, name: t.name } : null,
+        displays: wallDisplays(screen.getAllDisplays(), windows.mainDisplayId()),
+        wallPrefs: { ...prefs, displayId: t?.id ?? prefs.displayId },
+        wallOpen: windows.wallOpen(),
+        wallGone: wallGoneAt,
+        silencedUntil: liveSilenced() ? new Date(liveSilencedUntil).toISOString() : null,
+        shortcuts: liveKeysHeld,
+      };
+    },
+    // The sheet's Open on Display 2 (MAP-24): its choices kept for next time, the wall opened there, the sheet gone.
+    wall: (choice: { displayId: number; keepAwake: boolean; cycle: boolean; openAtStart: boolean }): void => {
+      settings.update({ wallMode: wallPrefsOf(choice) });
+      windows.closeWallSheet();
+      liveDesk.open('wall');
+    },
+  };
+  // The wall's display was unplugged (MAP-24): its window has closed, and WorkSuite says so — a notification now, and
+  // the tray's mini-dashboard until the wall opens again.
+  windows.onWallGone = () => {
+    wallGoneAt = new Date().toISOString();
+    if (Notification.isSupported()) new Notification({ title: 'Wall mode closed', body: 'Its display was disconnected.', silent: true }).show();
+  };
   const webchatOnCall = (c: WebchatOnCall | null): void => {
     onCall = c;
     webchatCallLive = !!c;
@@ -1613,6 +1809,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
     webchat.start();
+    livePulse.start();
     syncQuickAsk();
     // Quick Ask waits on the company's rules; once they are known, it is offered (or not).
     void ai.refresh().then(() => {
@@ -1661,6 +1858,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     mailBodies.stop();
     void remoteControl.shutdown('logout');
     webchat.stop();
+    livePulse.stop();
+    atRisk.clear();
+    liveSilencedUntil = 0;
+    windows.closeRingTray();
     quickAsk.release();
     ai.forget();
     aiPending.stop();
@@ -2095,6 +2296,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     navigate,
     webchat,
     webchatOnCall,
+    ringTray,
+    liveDesk,
     quickAsk,
     ai,
     office,
@@ -2281,6 +2484,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
     applyMailtoHandler(prefs.mailtoHandler === true);
     webchat.refresh();
+    syncLiveKeys();
     syncQuickAsk();
     broadcast('settings:changed', prefs);
     if (prefs.backgroundServices.realtime && sessionCtl.isReady()) realtime.start();
@@ -2314,6 +2518,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     office.closeAll(true);
     officeLocal.stop();
     webchat.stop();
+    livePulse.stop();
+    atRisk.clear();
     quickAsk.release();
     void askHelper?.then((h) => h?.stop());
     // Windows' places are saved while the database is open; timers that read it stop first.

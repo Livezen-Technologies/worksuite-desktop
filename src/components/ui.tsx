@@ -191,18 +191,23 @@ export function Card({ title, action, children, className, bodyClassName }: { ti
   );
 }
 
-export function TextField({ label, hint, error, className, ...rest }: InputHTMLAttributes<HTMLInputElement> & { label?: string; hint?: string; error?: string | null }) {
+/**
+ * A labelled text input. `error`: the message under it, or `true` to mark it invalid while the message is shown
+ * elsewhere (a narrow field in a settings row, whose message sits under the row's own words).
+ */
+export function TextField({ label, hint, error, className, ...rest }: InputHTMLAttributes<HTMLInputElement> & { label?: string; hint?: string; error?: string | boolean | null }) {
   return (
     <label className={cx('flex flex-col gap-1', className)}>
       {label ? <span className="text-[12.5px] font-semibold text-ink-2">{label}</span> : null}
       <input
+        aria-invalid={error ? true : undefined}
         {...rest}
         className={cx(
           'h-9 rounded-[8px] border bg-surface px-3 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-primary',
           error ? 'border-danger' : 'border-line',
         )}
       />
-      {error ? <span className="text-[12px] text-danger">{error}</span> : hint ? <span className="text-[12px] text-ink-3">{hint}</span> : null}
+      {typeof error === 'string' && error ? <span className="text-[12px] text-danger">{error}</span> : hint ? <span className="text-[12px] text-ink-3">{hint}</span> : null}
     </label>
   );
 }

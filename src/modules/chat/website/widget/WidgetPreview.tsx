@@ -2,7 +2,7 @@ import type { CSSProperties, ReactNode } from 'react';
 import { Icon } from '../../../../components/Icon';
 import { text } from '../../../../core/i18n';
 import { cx } from '../../../../components/ui';
-import { clampOffset, firstName, initialsOf, namesLine, palette, type HoursSummary, type PreviewPerson, type WidgetDesign } from './design';
+import { RADIUS_MAX, clampOffset, firstName, initialsOf, namesLine, palette, type HoursSummary, type PreviewPerson, type WidgetDesign } from './design';
 
 /**
  * A live preview of the visitor widget (worksuite-desktop#199): the home screen, a conversation, the away screen and
@@ -14,10 +14,17 @@ import { clampOffset, firstName, initialsOf, namesLine, palette, type HoursSumma
  * one status line; a start card that is just the message box; a dark theme with a darker brand header; and on the
  * Launcher screen, the launcher where its offsets put it.
  *
+ * S-02 (UX-SET-03) adds the new chat as Widget › Appearance draws it — the header with the header title and subtitle,
+ * the welcome message, the conversation starters, the message box with the send button in the accent colour, and the
+ * button (an icon, or the icon and its words) — and every screen takes the panel's corner radius and the accent.
+ *
  * Nothing in it can be focused or pressed: it is a picture of a page, described for a screen reader by its label.
  */
 
-export type PreviewScreen = 'home' | 'chat' | 'away' | 'launcher';
+export type PreviewScreen = 'start' | 'home' | 'chat' | 'away' | 'launcher';
+
+/** What the away screen says without an offline message of the widget's own (and what Business hours shows then, S-10). */
+export const AWAY_MESSAGE = 'Leave a message and we will reply by email when we are back.';
 
 const TINTS: Array<[string, string]> = [['#F4B183', '#5A2A08'], ['#A7D3F5', '#0B3B63'], ['#C9E6B8', '#23431A'], ['#D9C8F2', '#3B1F6B'], ['#F7D27A', '#4A3500'], ['#F5B8C4', '#5C1426']];
 
@@ -98,12 +105,12 @@ function Logo({ design, name, color }: { design: WidgetDesign; name: string | nu
   );
 }
 
-/** Minimise and maximise, as the widget draws them at the top right of its header (#207). */
+/** Expand and minimise, as the widget draws them at the top right of its header (#207, W-02). */
 function Controls({ bg, color }: { bg: string; color?: string }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5" data-testid="preview-controls" style={{ color }}>
+      <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: bg }} title="Expand chat"><Icon name="maximize" size={16} /></span>
       <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: bg }} title="Minimise chat"><Icon name="minus" size={16} /></span>
-      <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: bg }} title="Maximise chat"><Icon name="maximize" size={16} /></span>
     </span>
   );
 }
@@ -132,11 +139,11 @@ function Hero({ design, name, people, replyTime, away, hours, accent, onAccent }
   const fg = away ? '#ffffff' : onAccent;
   const ctl = fg === '#ffffff' ? 'rgba(255,255,255,.16)' : 'rgba(18,22,51,.08)';
   const greeting = away ? 'We are away\nright now' : design.greeting || 'Hi there,\nhow can we help?';
-  const tag = away ? design.offline_message || 'Leave a message and we will reply by email when we are back.' : design.header_subtitle || 'Ask us anything, and someone from the team will reply here.';
+  const tag = away ? design.offline_message || AWAY_MESSAGE : design.header_subtitle || 'Ask us anything, and someone from the team will reply here.';
   const online = people.length ? `${namesLine(people.map((p) => firstName(p.name)))} ${people.length === 1 ? 'is' : 'are'} online` : 'We are online';
-  // One status line while the team is here (#207): "Hasarinda is online · usually replies in a few minutes".
-  const line1 = away ? (hours?.back_at ? `Back at ${hours.back_at}` : 'We will reply as soon as we are back') : replyTime ? `${online} · ${replyTime.charAt(0).toLowerCase()}${replyTime.slice(1)}` : online;
-  const line2 = away ? (hours ? `Business hours: ${hours.text}${hours.zone ? ` (${hours.zone})` : ''}` : '') : '';
+  // "Hasarinda is online" over "Usually replies in a few minutes" while the team is here (W-02), as the widget says it.
+  const line1 = away ? (hours?.back_at ? `Back at ${hours.back_at}` : 'We will reply as soon as we are back') : online;
+  const line2 = away ? (hours ? `Business hours: ${hours.text}${hours.zone ? ` (${hours.zone})` : ''}` : '') : replyTime ?? '';
   return (
     <div className="flex shrink-0 flex-col gap-[18px] px-5 pt-5 pb-[60px]" style={{ background: bg, color: fg }}>
       <div className="flex items-center justify-between gap-2.5">
@@ -180,6 +187,7 @@ function Pill({ t, on, children }: { t: Tokens; on: boolean; children: ReactNode
 
 function HomeScreen({ design, name, people, replyTime, hours, away, dark, t }: { design: WidgetDesign; name: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; away: boolean; dark: boolean; t: Tokens }) {
   const p = palette(design.brand_color);
+  const send = palette(design.accent_color);
   const links = design.quick_links.filter((l) => l.label.trim() && l.url.trim());
   const field = { background: t.fl, border: `1px solid ${t.fln}`, color: t.mut };
   return (
@@ -206,7 +214,7 @@ function HomeScreen({ design, name, people, replyTime, hours, away, dark, t }: {
           <Card t={t}>
             <span className="flex items-center gap-2 rounded-[12px] py-1.5 pr-1.5 pl-3.5" style={field} data-testid="preview-start">
               <span className="flex-1 text-[14px]">Write a message…</span>
-              <span className="flex h-10 w-10 items-center justify-center rounded-[10px]" style={{ background: p.accent, color: p.onAccent }}><Svg d={SEND} /></span>
+              <span className="flex h-10 w-10 items-center justify-center rounded-[10px]" style={{ background: send.accent, color: send.onAccent }} data-testid="preview-send"><Svg d={SEND} /></span>
             </span>
           </Card>
         )}
@@ -296,7 +304,7 @@ function ChatScreen({ design, people, t }: { design: WidgetDesign; people: Previ
             <Icon name="smile" size={18} className="m-[9px]" />
             <Icon name="paperclip" size={18} className="m-[9px]" />
           </span>
-          <span className="flex h-[46px] w-[46px] items-center justify-center rounded-[14px]" style={{ background: p.accent, color: p.onAccent }}><Svg d={SEND} /></span>
+          <span className="flex h-[46px] w-[46px] items-center justify-center rounded-[14px]" style={{ background: palette(design.accent_color).accent, color: palette(design.accent_color).onAccent }}><Svg d={SEND} /></span>
         </div>
         <span className="text-center text-[11px]" style={{ color: t.mut }}>Powered by <b style={{ color: t.ink }}>WorkSuite</b></span>
       </div>
@@ -338,14 +346,78 @@ function Greeting({ design, name, people, t }: { design: WidgetDesign; name: str
   );
 }
 
-export function WidgetPreview({ design, siteName, people, replyTime, hours, screen, dark }: { design: WidgetDesign; siteName: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; screen: PreviewScreen; dark: boolean }) {
+/** The panel's corners, as the widget holds them: 0–32px. */
+const radiusOf = (design: WidgetDesign) => Math.max(0, Math.min(RADIUS_MAX, Math.round(design.border_radius)));
+
+/**
+ * The new chat as S-02 draws it: what a visitor sees on opening the chat — the header in the brand colour with the
+ * company's initials, the header title and subtitle; the welcome message and the conversation starters; the message box
+ * with the send button in the accent colour — and under it the button, an icon or the icon and its words.
+ */
+function StartScreen({ design, siteName, starters, dark, launcher = true }: { design: WidgetDesign; siteName: string | null; starters: string[]; dark: boolean; launcher?: boolean }) {
+  const t = dark ? DARK : LIGHT;
+  const p = palette(design.brand_color);
+  const send = palette(design.accent_color);
+  const left = design.position === 'bottom_left';
+  const title = design.header_title?.trim() || siteName || 'Chat with us';
+  const head = dark ? p.darkHeader : p.accent;
+  const onHead = dark ? '#ffffff' : p.onAccent;
+  const round = design.launcher_style === 'bubble';
+  return (
+    <div className={cx('flex w-full flex-col gap-3', left ? 'items-start' : 'items-end')} data-testid="preview-start-chat">
+      <div className="w-[310px] max-w-full overflow-hidden" style={{ borderRadius: radiusOf(design), background: t.sf, color: t.ink, boxShadow: '0 16px 40px rgba(17,27,59,0.18)' }} data-testid="preview-panel">
+        <div className="flex items-center gap-2.5 px-4 py-3.5" style={{ background: head, color: onHead }}>
+          <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold" style={{ background: onHead === '#ffffff' ? 'rgba(255,255,255,0.2)' : 'rgba(18,22,51,0.1)' }}>{initialsOf(title)}</span>
+          <span className="flex min-w-0 flex-1 flex-col">
+            <b className="truncate text-[14px]">{title}</b>
+            {design.header_subtitle ? <span className="truncate text-[11.5px] opacity-85">{design.header_subtitle}</span> : null}
+          </span>
+        </div>
+        <div className="flex min-h-[170px] flex-col gap-2.5 p-3.5" style={{ background: dark ? t.bg : '#F8F9FC' }}>
+          {design.welcome_message ? (
+            <span className="self-start px-3 py-2 text-[13px] whitespace-pre-line" style={{ background: t.sf, border: `1px solid ${t.ln}`, borderRadius: '12px 12px 12px 4px' }}>{design.welcome_message}</span>
+          ) : null}
+          {starters.length ? (
+            <span className="flex flex-wrap gap-1.5">
+              {starters.slice(0, 4).map((x, i) => (
+                <span key={i} className="rounded-[14px] px-2.5 py-1.5 text-[12px] font-semibold" style={{ border: `1px solid ${dark ? p.accentSoft : p.accentText}`, color: dark ? p.accentSoft : p.accentText }}>{x}</span>
+              ))}
+            </span>
+          ) : null}
+        </div>
+        <div className="flex items-center gap-2 px-3 py-2.5" style={{ borderTop: `1px solid ${t.ln}` }}>
+          <span className="flex-1 text-[12.5px]" style={{ color: t.mut }}>Write a message…</span>
+          <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full" style={{ background: send.accent, color: send.onAccent }} data-testid="preview-send"><Svg d={SEND} size={15} /></span>
+        </div>
+      </div>
+      {launcher ? <span
+        className={cx('flex h-[52px] items-center justify-center gap-2 rounded-full text-[14px] font-bold', round ? 'w-[52px]' : 'px-5')}
+        style={{ background: p.accent, color: p.onAccent, boxShadow: '0 8px 20px rgba(17,27,59,0.25)' }}
+        data-testid="preview-button"
+      >
+        <Icon name="message-circle" size={24} />
+        {round ? null : <span>{design.header_title?.trim() || 'Chat with us'}</span>}
+      </span> : null}
+    </div>
+  );
+}
+
+/** `launcher`: the button under the new chat; Conversation starters' preview (S-08) shows the chat alone. */
+export function WidgetPreview({ design, siteName, people, replyTime, hours, screen, dark, starters = [], launcher = true }: { design: WidgetDesign; siteName: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; screen: PreviewScreen; dark: boolean; starters?: string[]; launcher?: boolean }) {
+  if (screen === 'start') {
+    return (
+      <div role="img" aria-label="Preview of a new chat" data-testid="widget-preview" className="flex w-full" style={{ fontFamily: '"Plus Jakarta Sans", -apple-system, "Segoe UI", system-ui, sans-serif' }}>
+        <StartScreen design={design} siteName={siteName} starters={starters} dark={dark} launcher={launcher} />
+      </div>
+    );
+  }
   const t = dark ? DARK : LIGHT;
   const p = palette(design.brand_color);
   const left = design.position === 'bottom_left';
   // Where the launcher sits on the page: its offsets from the bottom and from its side (#207).
   const bottom = clampOffset(design.launcher_offset_bottom);
   const side = clampOffset(left ? design.launcher_offset_left : design.launcher_offset_right);
-  const label = { home: 'the home screen', chat: 'a conversation', away: 'the away screen', launcher: 'the launcher' }[screen];
+  const label = { home: 'the home screen', chat: 'a conversation', away: 'the away screen', launcher: 'the launcher' }[screen as Exclude<PreviewScreen, 'start'>];
   return (
     <div
       role="img"
@@ -365,7 +437,7 @@ export function WidgetPreview({ design, siteName, people, replyTime, hours, scre
         </div>
       ) : (
         <>
-          <div className="flex h-[600px] w-[380px] flex-col overflow-hidden rounded-[20px]" style={{ boxShadow: '0 24px 60px -16px rgba(18,22,51,.35), 0 0 0 1px rgba(18,22,51,.06)' }}>
+          <div className="flex h-[600px] w-[380px] flex-col overflow-hidden" style={{ borderRadius: radiusOf(design), boxShadow: '0 24px 60px -16px rgba(18,22,51,.35), 0 0 0 1px rgba(18,22,51,.06)' }}>
             {screen === 'chat' ? <ChatScreen design={design} people={people} t={t} /> : <HomeScreen design={design} name={siteName} people={people} replyTime={replyTime} hours={hours} away={screen === 'away'} dark={dark} t={t} />}
           </div>
           {/* Open, the launcher is the cross that closes it, 16px under the panel. */}

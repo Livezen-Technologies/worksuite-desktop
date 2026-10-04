@@ -9,7 +9,7 @@ vi.mock('electron', () => ({
 }));
 
 import { DesktopError } from '../../../electron/main/errors';
-import { fromCall, mergeAnswer, orderChats, ringerHeight, stampMs, toneFor, WebchatRinger, type CallEntry, type PendingAnswer, type RingingEntry } from '../../../electron/services/webchat-ring';
+import { fromCall, fromHandoff, mergeAnswer, orderChats, ringerHeight, stampMs, toneFor, WebchatRinger, type CallEntry, type HandoffEntry, type PendingAnswer, type RingingEntry } from '../../../electron/services/webchat-ring';
 import { ringerBounds } from '../../../electron/windows/manager';
 import type { HttpClient } from '../../../electron/services/http';
 
@@ -100,12 +100,16 @@ describe('the tone (RING-21, RING-47, RING-08)', () => {
 describe('the call window place (RING-40)', () => {
   it('sits bottom right of the work area and grows with the list, never past it', () => {
     const area = { x: 0, y: 25, width: 1440, height: 875 };
-    expect(ringerBounds(area, 272)).toEqual({ x: 1044, y: 612, width: 380, height: 272 });
+    expect(ringerBounds(area, 272)).toEqual({ x: 1004, y: 612, width: 420, height: 272 });
     expect(ringerBounds(area, 5000).height).toBe(843);
-    expect(ringerHeight({ chats: [chat({}), chat({ id: 2 })], outcome: null })).toBe(318);
+    expect(ringerHeight({ chats: [chat({}), chat({ id: 2 })], outcome: null })).toBe(280);
+    expect(ringerHeight({ chats: [chat({})], outcome: null })).toBe(430);
     expect(ringerHeight({ chats: [], outcome: { id: 1, text: 'x', at: 0 } })).toBe(120);
   });
 });
+
+/** What the ringer reads about this computer, changeable in a test (#230). */
+const env = { focused: false, idle: 0, quiet: false, followUps: { card: true, desktop: true, sound: true, idleMinutes: 2 as const } };
 
 function ringer(answers: Array<PendingAnswer | Error>, over: Partial<{ locked: boolean; me: number }> = {}) {
   const get = vi.fn(async () => {
@@ -113,29 +117,36 @@ function ringer(answers: Array<PendingAnswer | Error>, over: Partial<{ locked: b
     if (a instanceof Error) throw a;
     return a;
   });
-  const post = vi.fn(async (_path: string, _body?: unknown): Promise<unknown> => ({}));
+  const post = vi.fn(async (_path: string, _body?: unknown, _opts?: unknown): Promise<unknown> => ({}));
   const request = vi.fn(async (_method: string, _path: string): Promise<unknown> => ({}));
   const states: WebchatRingState[] = [];
   const opened: number[] = [];
   // Chats opened on a call just answered: [conversation, call].
   const onCalls: Array<[number, number]> = [];
   const prefs: WebchatRingPrefs = { window: true, duringDnd: 'card', shortcut: true, volume: 80 };
+  // A reply from the mini chat (#225), as the conversation's composer sends one.
+  const reply = vi.fn(async (_id: number, _text: string) => ({ delivered: true, queued: false, error: null }) as never);
+  const inbox = vi.fn();
   const r = new WebchatRinger({
     http: { get, post, request } as unknown as HttpClient,
     signedIn: () => true,
     locked: () => over.locked ?? false,
     me: () => over.me ?? 5,
     prefs: () => prefs,
-    quiet: () => false,
+    quiet: () => env.quiet,
     open: (id, callId) => {
       opened.push(id);
       if (callId) onCalls.push([id, callId]);
     },
     onChanged: (s) => states.push(s),
     deviceId: () => 'desktop-12',
-    focused: () => false,
+    focused: () => env.focused,
+    followUpPrefs: () => env.followUps,
+    idleSeconds: () => env.idle,
+    reply,
+    openInbox: inbox,
   });
-  return { r, get, post, request, states, opened, onCalls, prefs };
+  return { r, get, post, request, states, opened, onCalls, prefs, reply, inbox };
 }
 
 describe('WebchatRinger', () => {
@@ -151,7 +162,8 @@ describe('WebchatRinger', () => {
 
     r.handle({ type: 'chat.taken', conversation_id: 12, by: 8, by_name: 'Dilini', how: 'accepted' } as never);
     expect(r.state().chats).toHaveLength(0);
-    expect(r.state().outcome?.text).toBe('Dilini joined the chat.');
+    // R-03: "Nuwan joined the chat with Visitor 4F2A", with View.
+    expect(r.state().outcome).toMatchObject({ kind: 'joined', by: 'Dilini', visitor: 'Visitor 12', text: 'Dilini joined the chat with Visitor 12' });
     r.stop();
   });
 
@@ -186,7 +198,8 @@ describe('WebchatRinger', () => {
     await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
     expect(await r.join(3)).toBe(false);
     expect(opened).toEqual([]);
-    expect(r.state().outcome?.text).toBe('Kasun has already taken this chat.');
+    // R-03 "too late": who has it, in the design's words — from an older server's sentence too.
+    expect(r.state().outcome).toMatchObject({ kind: 'late', by: 'Kasun', text: 'You pressed Join a moment late — Kasun already has this chat.' });
     expect(r.state().chats).toHaveLength(0);
     r.stop();
   });
@@ -291,11 +304,12 @@ describe('WebchatRinger with ring sessions on the server', () => {
     r.start();
     await vi.waitFor(() => expect(r.state().chats).toHaveLength(3));
     r.handle({ type: 'chat.ring.stopped', conversation_id: 3, reason: 'visitor_left' } as never);
-    expect(r.state().outcome?.text).toBe('The visitor left the site before anyone joined.');
+    // R-03: the visitor by name; an older server does not say the chat is in Missed chats, so neither does this.
+    expect(r.state().outcome).toMatchObject({ kind: 'visitor_left', visitor: 'Nimali', missed: false, text: 'Nimali left the site before anyone joined. Ringing stopped.' });
     r.handle({ type: 'chat.ring.stopped', conversation_id: 4, reason: 'joined', by: 8, by_name: 'Kasun' } as never);
-    expect(r.state().outcome?.text).toBe('Kasun joined the chat.');
+    expect(r.state().outcome?.text).toBe('Kasun joined the chat with Nimali');
     r.handle({ type: 'chat.ring.stopped', conversation_id: 5, reason: 'visitor_ended' } as never);
-    expect(r.state().outcome?.text).toBe('The visitor ended the chat.');
+    expect(r.state().outcome).toMatchObject({ kind: 'visitor_ended', text: 'Nimali ended the chat. Ringing stopped.' });
     expect(r.state().chats).toHaveLength(0);
     r.stop();
   });
@@ -341,6 +355,17 @@ describe('WebchatRinger: invitations and transfers', () => {
     r.stop();
   });
 
+  it('counts down by the server\'s seconds left, not its stamp against this computer\'s clock (C-09)', async () => {
+    // This computer's clock is an hour fast: the stamp has "passed", but the server says 90 seconds are left.
+    const { r } = ringer([{ ringing: [], handoffs: [card({ expires_at: stamp(3_600_000), expires_in: 90 })] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().handoffs).toHaveLength(1));
+    expect(r.state().handoffs![0]!.endsAt! - Date.now()).toBeGreaterThan(85_000);
+    expect(fromHandoff({ handoff_id: 5, conversation_id: 3, visitor: 'V', expires_in: 48 } as HandoffEntry, 1_000)?.endsAt).toBe(49_000);
+    expect(fromHandoff({ handoff_id: 5, conversation_id: 3, visitor: 'V', expires_at: null, expires_in: null } as HandoffEntry, 1_000)?.endsAt).toBeNull();
+    r.stop();
+  });
+
   it('one that ran out stops ringing before the server says so', async () => {
     const { r } = ringer([{ ringing: [], handoffs: [card({ expires_at: stamp(1000) })] }]);
     r.start();
@@ -368,6 +393,18 @@ describe('WebchatRinger: invitations and transfers', () => {
     expect(await r.answer(23, true)).toBe(false);
     expect(r.state().outcome?.text).toBe('Amaya Silva accepted this invitation first.');
     expect(r.state().handoffs).toEqual([]);
+    r.stop();
+  });
+
+  it('accepted during a voice call, the chat opens on the call so its audio is joined (V-03, WF-V3)', async () => {
+    const { r, post, onCalls } = ringer([{ ringing: [], handoffs: [card({ on_call: true })] }]);
+    post.mockImplementation(async () => ({ conversation_id: 3, kind: 'invite', role: 'participant', call_id: 77 }));
+    r.start();
+    await vi.waitFor(() => expect(r.state().handoffs).toHaveLength(1));
+    expect(r.state().handoffs![0]!.onCall).toBe(true);
+    expect(await r.answer(21, true)).toBe(true);
+    expect(onCalls).toEqual([[3, 77]]);
+    expect(fromHandoff({ handoff_id: 5, conversation_id: 3, visitor: 'V' } as HandoffEntry)?.onCall).toBe(false);
     r.stop();
   });
 
@@ -470,9 +507,321 @@ describe('WebchatRinger: visitors\' voice calls (ENH-WCHAT-05)', () => {
     r.stop();
   });
 
+  it('V-04: the card carries the contact details the visitor gave, hidden while locked (UX-WGT-10)', async () => {
+    expect(fromCall(card({ visitor_email: ' kamal@techubiz.com ', visitor_phone: '+94 77 123 4567' }))).toMatchObject({ email: 'kamal@techubiz.com', phone: '+94 77 123 4567' });
+    expect(fromCall(card({ visitor_email: '', visitor_phone: null }))).not.toHaveProperty('phone');
+    const { r } = ringer([{ ringing: [], calls: [card({ visitor_email: 'kamal@techubiz.com', visitor_phone: '+94 77 123 4567' })] }], { locked: true });
+    r.start();
+    await vi.waitFor(() => expect(r.state().calls).toHaveLength(1));
+    expect(r.state().calls![0]).toMatchObject({ email: null, phone: null });
+    r.stop();
+  });
+
+  it('V-04: the device line names the microphone; only whether there is one goes to the server', async () => {
+    const { r, post } = ringer([{ ringing: [] }]);
+    expect(r.state().mic).toBeNull();
+    r.start();
+    r.setMic(true, 'Jabra Evolve2', true);
+    await vi.waitFor(() => expect(post).toHaveBeenLastCalledWith('/api/chat/ring/heartbeat', expect.objectContaining({ has_mic: true })));
+    expect(r.state().mic).toEqual({ ready: true, label: 'Jabra Evolve2', headset: true });
+    const beats = post.mock.calls.length;
+    // Another headset plugged in: the card says so; the server is not told again.
+    r.setMic(true, 'Poly Voyager', true);
+    expect(r.state().mic).toEqual({ ready: true, label: 'Poly Voyager', headset: true });
+    expect(post.mock.calls.length).toBe(beats);
+    r.setMic(false, 'ignored', true);
+    expect(r.state().mic).toEqual({ ready: false, label: null, headset: false });
+    r.stop();
+  });
+
+  it('V-04: Ctrl/Cmd+Shift+A and the tray do not answer behind the lock or without a microphone; Decline still works', async () => {
+    let locked = true;
+    const { r, post, opened } = ringer([{ ringing: [], calls: [card()] }]);
+    (r as unknown as { deps: { locked: () => boolean } }).deps.locked = () => locked;
+    r.start();
+    await vi.waitFor(() => expect(r.state().calls).toHaveLength(1));
+    expect(await r.answerCall(31, true)).toBe(false);
+    expect(r.state().outcome?.text).toBe('Unlock WorkSuite to answer the call.');
+    locked = false;
+    r.setMic(false);
+    expect(await r.answerCall(31, true)).toBe(false);
+    expect(r.state().outcome?.text).toBe('No microphone on this computer — plug one in to answer.');
+    expect(post).not.toHaveBeenCalledWith('/api/chat/widget-admin/calls/31/answer');
+    expect(opened).toEqual([]);
+    expect(r.state().calls).toHaveLength(1);
+    expect(await r.answerCall(31, false)).toBe(true);
+    expect(post).toHaveBeenCalledWith('/api/chat/widget-admin/calls/31/decline');
+    r.stop();
+  });
+
   it('the call window counts a call as a card', () => {
     const c = fromCall(card())!;
     expect(ringerHeight({ chats: [], outcome: null, calls: [c] })).toBe(272);
     expect(ringerHeight({ chats: [chat({})], outcome: null, calls: [c] })).toBe(318);
+  });
+});
+
+/*
+ * The card itself (worksuite-desktop#225): Join & send claims and replies in one step, the card becomes a mini chat,
+ * and it can be put away without stopping the ring.
+ */
+describe('WebchatRinger: Join & send and the mini chat (#225)', () => {
+  it('claims the chat and posts the reply in one request, then the card is a mini chat on it', async () => {
+    const { r, post, opened } = ringer([{ waiting: [{ conversation_id: 3, visitor: 'Nimali', preview: 'Do you ship to Galle?' }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect(r.isRinging(3)).toBe(true);
+    expect(await r.joinAndSend(3, '  Yes, island-wide.  ')).toEqual({ ok: true, why: null });
+    const [path, body, opts] = post.mock.calls.find(([p]) => String(p).endsWith('/join-reply'))!;
+    expect(path).toBe('/api/chat/widget-admin/conversations/3/join-reply');
+    expect(body).toEqual({ message: 'Yes, island-wide.' });
+    expect((opts as { headers: Record<string, string> }).headers['Idempotency-Key']).toMatch(/^ring-join-3-/);
+    expect(r.state().chats).toHaveLength(0);
+    expect(r.state().joined).toMatchObject({ conversationId: 3, visitor: 'Nimali', preview: 'Do you ship to Galle?', sent: ['Yes, island-wide.'] });
+    expect(opened).toEqual([]);
+    r.stop();
+  });
+
+  it('Join chat without a message sends nothing but the claim', async () => {
+    const { r, post } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect((await r.joinAndSend(3, null)).ok).toBe(true);
+    expect(post.mock.calls.find(([p]) => String(p).endsWith('/join-reply'))?.[1]).toEqual({});
+    expect(r.state().joined?.sent).toEqual([]);
+    r.stop();
+  });
+
+  it('a moment too late: told who has it, nothing sent, no mini chat', async () => {
+    const { r, post } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/join-reply')) throw new DesktopError('CONFLICT', 'Kasun has already taken this chat.', 409);
+      return {};
+    });
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect(await r.joinAndSend(3, 'Hello')).toEqual({ ok: false, why: 'You pressed Join a moment late — Kasun already has this chat.' });
+    expect(r.state().chats).toHaveLength(0);
+    expect(r.state().joined).toBeNull();
+    expect(post.mock.calls.some(([p]) => String(p).endsWith('/reply'))).toBe(false);
+    r.stop();
+  });
+
+  it('an older server without Join & send: accept, then the reply', async () => {
+    const { r, post } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/join-reply')) throw new DesktopError('NOT_FOUND', 'Not found', 404);
+      return {};
+    });
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect((await r.joinAndSend(3, 'Hello')).ok).toBe(true);
+    expect(post.mock.calls.map(([p]) => p)).toEqual(expect.arrayContaining([
+      '/api/chat/widget-admin/conversations/3/accept',
+      '/api/chat/widget-admin/conversations/3/reply',
+    ]));
+    r.stop();
+  });
+
+  it('a reply typed in a notification joins without a mini chat', async () => {
+    const { r } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect((await r.joinAndSend(3, 'Hi', { stay: false })).ok).toBe(true);
+    expect(r.state().joined).toBeNull();
+    r.stop();
+  });
+
+  it('the mini chat replies, opens the full chat, or is put away', async () => {
+    const { r, reply, opened } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    await r.joinAndSend(3, 'Hi');
+    expect(await r.replyJoined('Delivery takes two days.')).toEqual({ ok: true, why: null });
+    expect(reply).toHaveBeenCalledWith(3, 'Delivery takes two days.');
+    expect(r.state().joined?.sent).toEqual(['Hi', 'Delivery takes two days.']);
+
+    reply.mockResolvedValueOnce({ delivered: false, queued: false, error: 'Offline' } as never);
+    expect(await r.replyJoined('Lost')).toEqual({ ok: false, why: 'Offline' });
+    expect(r.state().joined?.sent).toHaveLength(2);
+
+    r.closeJoined(true);
+    expect(r.state().joined).toBeNull();
+    expect(opened).toEqual([3]);
+    expect(await r.replyJoined('Too late')).toMatchObject({ ok: false });
+    r.stop();
+  });
+
+  it('minimise puts the card away while the same chats ring; a new one brings it back', async () => {
+    const { r, inbox } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    r.minimise();
+    expect(r.state()).toMatchObject({ minimised: true, tone: 'normal' });
+    r.handle({ type: 'chat.incoming', conversation_id: 12, visitor: 'Visitor 12', waiting_since: stamp(1000) } as never);
+    expect(r.state().minimised).toBe(false);
+
+    r.openInbox();
+    expect(inbox).toHaveBeenCalledTimes(1);
+    expect(r.state().minimised).toBe(true);
+    r.stop();
+  });
+
+  it('takes the height the card measured, and keeps the mini chat out of sight while locked', async () => {
+    let locked = false;
+    const { r } = ringer([{ waiting: [{ conversation_id: 3, visitor: 'Nimali' }] }]);
+    (r as unknown as { deps: { locked: () => boolean } }).deps.locked = () => locked;
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    r.fit(312);
+    expect(r.state().fit).toBe(312);
+    await r.joinAndSend(3, 'Hi');
+    locked = true;
+    expect(r.state().joined).toBeNull();
+    locked = false;
+    expect(r.state().joined?.visitor).toBe('Nimali');
+    r.stop();
+  });
+});
+
+describe('WebchatRinger: a visitor writes again while I am away (#230)', () => {
+  afterEach(() => {
+    Object.assign(env, { focused: false, idle: 0, quiet: false, followUps: { card: true, desktop: true, sound: true, idleMinutes: 2 } });
+    vi.useRealTimers();
+  });
+  const said = (over: Record<string, unknown> = {}) => ({
+    type: 'chat.widget.message',
+    conversation_id: 41,
+    visitor: 'Visitor CC1B',
+    site: 'techubiz.com',
+    preview: 'Are u there',
+    at: stamp(1_000),
+    assigned_to: 5,
+    participants: [5],
+    followup: true,
+    waiting_since: stamp(45_000),
+    recent: [
+      { from: 'agent', body: 'It is yearly.', at: stamp(120_000) },
+      { from: 'visitor', body: 'Ok and the price?', at: stamp(45_000) },
+      { from: 'visitor', body: 'Are u there', at: stamp(1_000) },
+    ],
+    ...over,
+  });
+
+  it('a follow-up in my chat while I am elsewhere: a card with the last messages, the chime, and the count', async () => {
+    const { r } = ringer([{}]);
+    r.start();
+    r.handle(said() as never);
+    const f = r.state().followUps![0]!;
+    expect(f).toMatchObject({ id: 41, visitor: 'Visitor CC1B', site: 'techubiz.com', since: stamp(45_000), count: 1, stage: 'replied', mine: true });
+    expect(f.recent.map((m) => m.body)).toEqual(['It is yearly.', 'Ok and the price?', 'Are u there']);
+    expect(r.state().chime).toBe(1);
+    expect(r.followUpCount()).toBe(1);
+    // Another message: the same card, one more in its count, the chime again.
+    r.handle(said({ preview: 'Hello??', recent: undefined }) as never);
+    expect(r.state().followUps).toHaveLength(1);
+    expect(r.state().followUps![0]!.count).toBe(2);
+    expect(r.state().followUps![0]!.recent.at(-1)!.body).toBe('Hello??');
+    expect(r.state().chime).toBe(2);
+    r.stop();
+  });
+
+  it('nothing for a chat that is not mine, one not answered yet, or one I am looking at', async () => {
+    const { r } = ringer([{}]);
+    r.start();
+    r.handle(said({ assigned_to: 9, participants: [9] }) as never);
+    r.handle(said({ conversation_id: 42, followup: false }) as never);
+    Object.assign(env, { focused: true, idle: 10 });
+    r.setViewing(43);
+    r.handle(said({ conversation_id: 43 }) as never);
+    expect(r.state().followUps).toEqual([]);
+    expect(r.state().chime).toBe(0);
+    // The same chat while I am idle past my two minutes counts as unattended.
+    env.idle = 130;
+    r.handle(said({ conversation_id: 43 }) as never);
+    expect(r.state().followUps!.map((f) => f.id)).toEqual([43]);
+    r.stop();
+  });
+
+  it('coming back to the conversation clears its card; answered, taken over or reassigned clears it too', async () => {
+    const { r } = ringer([{}]);
+    r.start();
+    r.handle(said() as never);
+    r.handle(said({ conversation_id: 42 }) as never);
+    Object.assign(env, { focused: true, idle: 0 });
+    r.setViewing(41);
+    expect(r.state().followUps!.map((f) => f.id)).toEqual([42]);
+    r.handle({ type: 'chat.widget.followup', conversation_id: 42, stage: 'answered', by: 5 } as never);
+    expect(r.state().followUps).toEqual([]);
+    r.stop();
+  });
+
+  it('a reminder, then the team step: a colleague’s card offers Take over, which takes it and opens it', async () => {
+    const { r, post, opened } = ringer([{}], { me: 7 });
+    r.start();
+    r.handle({ type: 'chat.widget.followup', conversation_id: 41, stage: 'team', visitor: 'Visitor CC1B', site: 'techubiz.com', assigned_to: 5, agent: 'Hasarinda', waiting_since: stamp(200_000), recent: [{ from: 'visitor', body: 'Are u there', at: null }] } as never);
+    expect(r.state().followUps![0]).toMatchObject({ stage: 'team', mine: false, agent: 'Hasarinda' });
+    expect(await r.followUp(41, 'takeOver')).toEqual({ ok: true, why: null });
+    expect(post).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/take-over');
+    expect(opened).toEqual([41]);
+    expect(r.state().followUps).toEqual([]);
+    r.stop();
+  });
+
+  it('replies from the card without opening anything, and Snooze hides it for five minutes', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const { r, reply, opened } = ringer([{}]);
+    r.start();
+    r.handle(said() as never);
+    r.handle(said({ conversation_id: 42 }) as never);
+    expect(await r.followUp(41, 'reply', '  Yes, sorry — it is 12,000 a year. ')).toEqual({ ok: true, why: null });
+    expect(reply).toHaveBeenCalledWith(41, 'Yes, sorry — it is 12,000 a year.');
+    expect(opened).toEqual([]);
+    expect(r.state().followUps!.map((f) => f.id)).toEqual([42]);
+    await r.followUp(42, 'snooze');
+    expect(r.state().followUps).toEqual([]);
+    expect(r.followUpCount()).toBe(0);
+    vi.setSystemTime(Date.now() + 5 * 60_000 + 1_000);
+    expect(r.state().followUps!.map((f) => f.id)).toEqual([42]);
+    r.stop();
+  });
+
+  it('no chime when sounds are off or during Do not disturb; hidden details while locked', async () => {
+    env.followUps = { ...env.followUps, sound: false };
+    const { r } = ringer([{}]);
+    r.start();
+    r.handle(said() as never);
+    expect(r.state().chime).toBe(0);
+    env.followUps = { ...env.followUps, sound: true };
+    env.quiet = true;
+    r.handle(said({ conversation_id: 42 }) as never);
+    expect(r.state().chime).toBe(0);
+    r.stop();
+    const locked = ringer([{}], { locked: true });
+    locked.r.start();
+    locked.r.handle(said() as never);
+    expect(locked.r.state().followUps![0]).toMatchObject({ visitor: 'A visitor', recent: [] });
+    locked.r.stop();
+  });
+
+  it('a chat still ringing has its ringing card, not a follow-up', async () => {
+    const { r } = ringer([{ waiting: [{ conversation_id: 41, visitor: 'Visitor CC1B' }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    r.handle(said() as never);
+    expect(r.state().followUps).toEqual([]);
+    r.stop();
+  });
+});
+
+describe('recentOf', () => {
+  it('keeps the last three messages with words, oldest first', async () => {
+    const { recentOf } = await import('../../../electron/services/webchat-ring');
+    expect(recentOf([{ from: 'visitor', body: 'a' }, { from: 'agent', body: ' ' }, { from: 'agent', body: 'b' }, { from: 'x', body: 'c' }, { from: 'visitor', body: 'd' }])).toEqual([
+      { from: 'agent', body: 'b', at: null },
+      { from: 'visitor', body: 'c', at: null },
+      { from: 'visitor', body: 'd', at: null },
+    ]);
+    expect(recentOf('nope')).toBeNull();
   });
 });

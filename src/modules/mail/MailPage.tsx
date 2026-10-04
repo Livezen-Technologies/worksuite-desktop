@@ -742,6 +742,7 @@ function MailWorkspace({ active }: ModuleProps) {
         onSearch={setSearch}
         onSearchAll={(q) => setSearching(q)}
         unified={unified}
+        mailboxId={effectiveBox ? Number(effectiveBox) : null}
         boxes={boxes}
         offline={offline}
         offlineDays={cacheDays}

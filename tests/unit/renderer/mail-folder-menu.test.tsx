@@ -4,17 +4,17 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
-vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiGetMeta: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
+vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiGetMeta: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn(), request: vi.fn() }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => null), on: () => () => undefined, errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), isMac: false, hasDesktop: () => true }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 
-import { apiGet, apiGetMeta, apiPost } from '../../../src/core/api';
+import { ApiError, apiGet, apiGetMeta, apiPost, request } from '../../../src/core/api';
 import { call } from '../../../src/core/bridge';
 import { toast } from '../../../src/core/toasts';
 import { MailSidebar, type SidebarProps } from '../../../src/modules/mail/Sidebar';
 import { moveTargets } from '../../../src/modules/mail/FolderDialogs';
 import { isCoreFolder, isEmptyableFolder, mailKeys } from '../../../src/modules/mail/api';
-import { PREFETCH_AHEAD, prefetchMessages, seedFromLocal, seedMessage } from '../../../src/modules/mail/localFirst';
+import { forgetPrefetchFailures, PREFETCH_AHEAD, prefetchMessages, seedFromLocal, seedMessage } from '../../../src/modules/mail/localFirst';
 import { syncSummary } from '../../../src/modules/mail/sync';
 import { offlineMailSearch } from '../../../src/modules/mail/SearchView';
 import type { Folder, Mailbox } from '../../../src/modules/mail/types';
@@ -263,14 +263,31 @@ describe('cached first, then fresh', () => {
   });
 
   it('fetches the next few messages ahead without marking them read, skipping ones already here', async () => {
-    vi.mocked(apiGetMeta).mockResolvedValue({ data: { id: 1 }, offline: false, cachedAt: null });
+    forgetPrefetchFailures();
+    vi.mocked(request).mockReset().mockResolvedValue({ data: { id: 1 }, offline: false, cachedAt: null });
     const qc = new QueryClient();
     qc.setQueryData(['mail', 'message', '4', 'inbox', '2'], { data: { id: 2 } });
     prefetchMessages(qc, [1, 2, 3, 4, 5].map((n) => ({ uid: String(n), folder: 'inbox', mailbox: '4' })));
-    await waitFor(() => expect(apiGetMeta).toHaveBeenCalledTimes(PREFETCH_AHEAD - 1));
-    expect(apiGetMeta).toHaveBeenCalledWith('/api/mail/messages/1', { folder: 'inbox', peek: 1, mailbox: '4' }, expect.anything());
-    expect(vi.mocked(apiGetMeta).mock.calls.map((c) => c[0])).not.toContain('/api/mail/messages/2');
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(PREFETCH_AHEAD - 1));
+    // In the background: the server never gives it the connection kept for what a person opens (#228).
+    expect(request).toHaveBeenCalledWith('GET', '/api/mail/messages/1', { query: { folder: 'inbox', peek: 1, mailbox: '4' }, signal: expect.anything(), headers: { 'X-Mail-Priority': 'background' } });
+    expect(vi.mocked(request).mock.calls.map((c) => c[1])).not.toContain('/api/mail/messages/2');
     await waitFor(() => expect(qc.getQueryData(['mail', 'message', '4', 'inbox', '1'])).toMatchObject({ peeked: true }));
+  });
+
+  it('never fetches ahead a row without a server ID, and a failed one waits before the next try (#228)', async () => {
+    forgetPrefetchFailures();
+    vi.mocked(request).mockReset().mockRejectedValue(new ApiError(503, 'Waiting for a free connection.', null, { code: 'mail_busy' }));
+    const qc = new QueryClient();
+    prefetchMessages(qc, [{ uid: '0', folder: 'inbox', mailbox: '4' }, { uid: '7', folder: 'inbox', mailbox: '4' }], 1_000);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(1));
+    expect(vi.mocked(request).mock.calls[0]![1]).toBe('/api/mail/messages/7');
+    await waitFor(() => expect(qc.getQueryState(['mail', 'message', '4', 'inbox', '7'])?.status).toBe('error'));
+    await new Promise((r) => setTimeout(r, 0));
+    qc.removeQueries();
+    prefetchMessages(qc, [{ uid: '7', folder: 'inbox', mailbox: '4' }], 20_000);
+    prefetchMessages(qc, [{ uid: '7', folder: 'inbox', mailbox: '4' }], 32_000);
+    await waitFor(() => expect(request).toHaveBeenCalledTimes(2));
   });
 });
 

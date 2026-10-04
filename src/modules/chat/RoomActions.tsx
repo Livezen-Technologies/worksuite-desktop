@@ -10,7 +10,7 @@ import { startCall } from '../calls/start';
 import { MAX_PINNED, MUTE_MINUTES, roomKind, type BulkAction, type RoomAction, type WaAction, type WebsiteAction } from './menus';
 import { WA, readWa, type WaChat } from './channels/whatsapp';
 import type { Room } from './types';
-import { websiteAction, type WebsiteRow } from './website/api';
+import { websiteAction, type WebsitePriority, type WebsiteRow } from './website/api';
 import { openChatWindow } from './window';
 
 /**
@@ -391,7 +391,7 @@ export function useWebsiteActions(me: number | null, open: (c: WebsiteRow) => vo
       () => (toast('success', done), void qc.invalidateQueries({ queryKey: ['website'] })),
       (e) => toast('error', errorMessage(e)),
     );
-  return (c: WebsiteRow, a: WebsiteAction, userId?: number) => {
+  return (c: WebsiteRow, a: WebsiteAction, userId?: number, priority?: WebsitePriority) => {
     switch (a) {
       case 'open':
         return open(c);
@@ -405,8 +405,13 @@ export function useWebsiteActions(me: number | null, open: (c: WebsiteRow) => vo
         return act(c, 'close', {}, 'Conversation closed.');
       case 'reopen':
         return act(c, 'reopen', {}, 'Conversation reopened.');
+      // The server reads `on`: without it, a star is taken off.
       case 'star':
-        return act(c, 'star', {}, 'Starred.');
+        return act(c, 'star', { on: true }, 'Starred.');
+      case 'unstar':
+        return act(c, 'star', { on: false }, 'Unstarred.');
+      case 'priority':
+        return priority ? act(c, 'priority', { priority }, 'Priority updated.') : undefined;
     }
   };
 }

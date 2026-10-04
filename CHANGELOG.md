@@ -5,8 +5,500 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.182 — 2026-10-04
+
+- **Widget preview matches the visitor widget (W-02).** The preview's home screen shows the status in two lines
+  ("Hasarinda is online" / "Usually replies in a few minutes") and the controls as Expand, then Minimise, as the
+  widget on customer sites now does.
+
+## 0.2.181 — 2026-10-04
+
+- **Admin Center › Chat › Ringing (P-03).** People who manage website chats get an Admin Center tab in Settings (and
+  a Ringing item under Website chats › Setup). It sets who is rung and when (the four timings) and what happens when
+  nobody joins (2, 5 or 10 minutes, and offline enquiries). The other Admin Center pages open on the web.
+- **One chat kit (P-04).** Team Chat and website chats share one composer that offers each channel only what it can
+  do.
+  - Team Chat gains **@** (mention someone) and a mic for voice messages, and Emoji moves left of the box.
+  - Website chats can attach a screenshot, a photo, or a copy of a Drive file ("visitors can't open Drive links").
+    AI tools is now **Writing assistant**.
+  - In both: the tray shows "uploading 60%", files that can't be sent show a red note under the tray instead of a
+    toast, the "/" list shows what you typed, and the reply bar is one line.
+  - **Save to Drive** now works on a visitor's files, and Delete for the visitor follows the server's time window.
+
+## 0.2.180 — 2026-10-04
+
+- **Notifications & calls (P-02).** Settings › Notifications & calls follows the design: "Website chat ringing on this
+  computer", with the ringtone and **Test ring** (the same tone you chose on the web), where the ring plays, the call
+  window on top of other apps, what Focus or Do not disturb does, start at login and keep in the tray, and the
+  shortcuts (Join chat ⌘⇧J, Answer call ⌘⇧A). The ⌘⇧M and ⌘⇧D shortcuts for the Live map and dashboard can now be
+  turned off.
+- **Speakers too (changed).** With a headset as the output, a website-chat ring now also plays on the computer's own
+  speakers, so you hear it with the headset off. "System output only" turns this off.
+- **System Focus (changed).** Focus on macOS and Do not disturb on GNOME now count as Do not disturb: by default the
+  call window still appears, without the tone. Windows Focus Assist can't be read by apps.
+
+## 0.2.179 — 2026-10-04
+
+- **Conversation starters (S-08).** Setup › Conversation starters is now in the app: each widget's starters with
+  their instant answer, how often they were used, and an on/off switch. Drag to reorder (or use the arrow keys),
+  edit beside the list, and see the widget preview update as you type.
+- **Saved replies (S-09).** Setup › Saved replies: search, add, edit and delete replies, choose whether one is for
+  all widgets or one, and see how often it was used this month. In a chat, the "/" list now shows
+  "/education · Education discount" and offers only the replies for that chat's widget.
+- **Business hours (S-10).** Setup › Business hours: the timezone, whether the widget is open now, each day's hours,
+  a chart of the week, and what visitors see outside hours. A day that closes before it opens can't be saved, here
+  or in the widget's Hours tab.
+- Needs the server's Communication 1.45.0.
+
+## 0.2.178 — 2026-10-04
+
+- **Chatbot (S-05).** The widget's Chatbot tab is now in the app: "Assistant answers first", its name and avatar,
+  the model, what it answers from (the knowledge base or a published AI assistant), when it hands to a person, and
+  how many replies before it stops. **Try it** lets you chat with it; test chats are not saved and ring nobody.
+- **Automated messages (S-07).** A new Setup section, second under Widgets & embed. Each rule shows what triggers it
+  ("Address contains /pricing · after 30 s · once per visit"), how often it was sent and how many replied, with an
+  on/off switch. The editor sets when it is sent, on which widget, once per visit or per visitor, never to someone
+  already chatting, who it posts as, and the message. **New rule** adds one.
+- Needs the server's Communication 1.44.0.
+
+## 0.2.177 — 2026-10-04
+
+- **Widget behaviour (S-03).** The Behaviour tab is now in the app: who gets a new chat, when to ask for contact
+  details, when a chat counts as missed, when quiet chats close, alerts for visitors reading closely, and the
+  allowed domains. Only what changed is saved.
+- **Embed code.** The code card shows whether the widget has been seen on your site ("Seen on techubiz.com 2
+  minutes ago"), with install guides for WordPress, Shopify and Google Tag Manager.
+- **Widget staff (S-04).** The Staff tab lists who answers the widget: their status now, priority, voice calls and
+  whether they are active. Edit, suspend, remove or add people here instead of on the web. Anyone who lost "See
+  website chats" is flagged.
+- Team photos moved to Appearance; Manage staff in Live status & calls opens the Staff tab. "Paused" is now
+  "Suspended".
+
+## 0.2.176 — 2026-10-04
+
+- **Website widgets (S-01).** Widgets & embed now opens in the app: one card per widget with its colour, site,
+  "Open now" or "Closed · opens 08:30", who is online, open chats, staff, and what is on (chatbot, voice calls,
+  starters, rules, offline enquiries), with **Customise** and **Embed code**. **New widget** creates one. Below,
+  "Widget analytics · this week" with **Open Insights →**.
+- **Widget appearance (S-02).** Each widget opens in an editor with seven tabs (Appearance, Behaviour, Live status &
+  calls, Staff, Hours, Chatbot, Embed code) and one Save. Appearance has the widget and website names, header title
+  and subtitle, welcome and offline messages, brand and accent colours, position, corner radius, button style and
+  auto-open, with a live preview of a new chat. Hours and team photos moved to their own tabs. Behaviour and Chatbot
+  still open on the web for now.
+- **Changed wording:** Company name is now Website name, Away message is Offline message, Round button is Icon.
+
+## 0.2.175 — 2026-10-04
+
+- **Wall mode on a second display (L-06).** Wall mode, from the tray or the Live dashboard, now asks first: which
+  display to show on, keep the display awake, cycle the map every 60 s (World → Asia → Sri Lanka), and open wall
+  mode when WorkSuite starts. Visitor names and messages are always hidden. The tray item reads "Close wall mode"
+  while it is up, and says so if its display was unplugged. The choices are remembered.
+- **Insights (L-07).** Website chats › Insights is now in the app, not a link to the web: 7 days, 30 days or All
+  time, for all widgets or one; conversations, first response, resolution, rating, missed and visitors, each
+  against the previous period; conversations per day (answered and missed); traffic sources; devices; and how each
+  agent did. **Export CSV** saves the report.
+
+## 0.2.174 — 2026-10-04
+
+- **Live map in its own window (L-04).** **Pop out** on the Live dashboard (or ⌘⇧M from another app) opens a small
+  Live map window: counts, the map, and the people who need you, with reply and join. It can be pinned on top,
+  dragged to another display, and remembers where it was. "Wall mode ↗" sends it full screen.
+- **At-risk notification.** "Anne · Acme Ltd is at risk — 3:12 in Kandy", with **Join** and **Show on map**. Once
+  per chat, only on the device that rings, silent in "card only" Focus, withdrawn when someone joins.
+- **Menu bar.** On macOS the menu bar reads "18 · 2 waiting", and the icon turns red while a chat is at risk, even
+  with the main window closed.
+- **Tray mini-dashboard (L-05).** For website staff, the tray icon opens a small dashboard: counts, a map, "Needs
+  you" with reply and join (the first one open with Send & join), "Yours" with Open, and Open Live dashboard,
+  Show Live map window, Wall mode on Display 2, Silence for 15 minutes and Quit. The map shows "· You" on your own
+  chats.
+- **Shortcuts.** ⌘⇧M (Live map) and ⌘⇧D (Live dashboard) work from other apps. Inside WorkSuite they keep their
+  old meanings (mute on a call, Dock Tab Beside).
+
+## 0.2.173 — 2026-10-04
+
+- **Full map (L-02).** Live › Full map has the design's presets (World · Asia · South Asia · your home country), drag
+  to pan, scroll or pinch to zoom, and a ⤢ button to show everyone. Chips at the edge say where the visitors outside
+  the view are ("↖ India · 3 outside this view"). Zoomed in, countries get detailed outlines, loaded only when
+  needed. Filter by state (All · Needs you · In a chat · Browsing) and by one or several sites. The view is kept in
+  the address, so it can be bookmarked. The place panel says how precise a position is ("City · GeoIP",
+  "Country only · browser timezone") and gives today's visitors and chats there.
+- **Wall mode (L-03).** A dark full-screen view for a wall screen, with names hidden: tiles, the map, and a "Just now"
+  ticker ("Arrived from google.com · Mumbai"). It keeps the screen awake, and Esc closes it. It shows no names,
+  emails or agents.
+- Waiting places now get the amber halo too, and the Live pill turns amber after 30 s without data.
+
+## 0.2.172 — 2026-10-04
+
+- **Reply and join from the alert (R-05).** The incoming-chat window is redrawn to the design: the visitor's message,
+  two saved-reply chips plus "/ saved", a **Reply and join** box with **Send & join**, **Join chat** and **Silence**.
+  Send & join and Join chat now open the thread. If a colleague joins first while you are typing, your words are
+  kept and the window asks "Nuwan joined — send to the chat as a participant?" — nothing is sent until you choose.
+  With the call window off, the notification has an inline reply that joins and sends.
+- **Tray, title bar and Dock (R-06).** While chats ring, clicking the tray icon opens a ringing menu ("3 WEBSITE
+  CHATS RINGING"): the most urgent chat expanded with Join and a reply box, the others with Reply and Join. The
+  normal tray menu gains "Reply from here…". The title bar reads "3 website chats ringing", the tab title carries
+  the count, and the Dock/taskbar badge counts ringing chats that are not silenced for you.
+
+## 0.2.171 — 2026-10-04
+
+- **How a ring ends (R-03).** The call window says what happened:
+  - "**Nuwan** joined the chat with Visitor 4F2A", with **View**;
+  - "You pressed Join a moment late — **Dilini** already has this chat";
+  - the visitor left before anyone joined, so the chat is in Missed chats, with their email and **Open in Missed**;
+  - "Visitor 4F2A ended the chat. Ringing stopped."
+
+  Joining from the card says "You joined the chat · ringing stopped for 2 colleagues", and the chat is marked
+  **Yours**.
+- **Silenced for you, still waiting (R-04).** When every chat ringing is silenced for you, the window shrinks to a
+  small card: "Visitor 4F2A is still waiting · Silenced for you · still ringing for 2 colleagues", with the wait,
+  **Join chat** and **Unsilence**. It rings for you again if the chat becomes at risk. In the lists, a silenced chat
+  has an amber edge, "Ringing · silenced", "Nobody yet" and an amber wait.
+- Needs the server update (Communication 1.38.0).
+
+## 0.2.170 — 2026-10-04
+
+- **A chat ringing while you work elsewhere (R-01).** The title bar shows a red **Website chat ringing** pill with
+  its timer, or an amber **Silenced · N waiting** one. A click opens the inbox; it never opens the chat, because that
+  would join it. The card is headed "Incoming website chat" and has new chips:
+  - which step of the ringing order reached you ("Priority · step 1 of 3");
+  - the visitor's visit ("3rd visit");
+  - **VIP**.
+
+  The visitor's picture pulses, Silence is spelt out, and the card says who else it rings ("Rings until someone
+  joins · 2 others ringing"). The visitor's first words come back after a restart.
+- **Several ringing (R-02).** "N website chats ringing", most urgent on top:
+  - **At risk** is red, with "Stronger tone · supervisors told".
+  - **Assigned to you** shows how it reached you ("In turn" or "From Nuwan") and the bar counting down to it passing
+    on, with **Pass to next**.
+  - **Waiting** says the site and the step.
+
+  Only the top chat sounds.
+- Needs the server update (Communication 1.37.0) for the visit count, first words and who else is rung.
+
+## 0.2.169 — 2026-10-04
+
+- **Live status & calls (V-05).** Website Chats › Setup › Widget has a second tab beside Appearance. It covers:
+  - whether visitors see staff typing and "Read by Nuwan";
+  - whether visitors can call from the widget, and how the call button shows;
+  - when to offer a call-back;
+  - who can take calls, each marked when available now, with a warning when nobody can;
+  - recording, which shows as Off because it is not offered yet.
+
+  It saves only these settings, and edits survive switching tabs.
+- Needs the server update (Communication 1.36.0).
+
+## 0.2.168 — 2026-10-04
+
+- **Incoming voice call (V-04).** The call window now follows the design:
+  - a phone in a green ring, with "Incoming voice call" and how long it has rung;
+  - the visitor and where they are chatting ("techubiz.com · in chat with Nuwan"), with their phone and email when
+    known;
+  - their last message;
+  - a full-width **Answer** and a **Decline**;
+  - a line naming your microphone or headset ("Headset: Jabra Evolve2 · mic ready"), with the answer shortcut.
+- **When it can't be answered.** A computer without a microphone shows the call, but cannot answer it. While
+  WorkSuite is locked, neither the shortcut nor the tray answers either. Decline still works in both cases.
+- With the call window off in Settings, an incoming call raises a system notification that opens the chat.
+- Needs the server update (Communication 1.35.0) for the visitor's phone and email.
+
+## 0.2.167 — 2026-10-04
+
+- **On a voice call with a visitor (V-03).**
+  - **The call bar:** reads "Voice call · Visitor 4F2A 2:14" over "Good connection · not recorded". It turns amber on
+    hold or while reconnecting.
+  - **Call notes:** a staff-only panel beside the thread is saved as you type. When the call ends, the notes become
+    your internal note in the chat.
+  - **Call lines in the chat:** shown as pills, green for answered ("Voice call started by the visitor · you answered
+    after 0:12") and red for missed or dropped.
+- **A colleague you invite or transfer to during a call** joins its audio as they accept.
+- **Audio devices** on the bar chooses the microphone and speaker. A headset's or keyboard's mute key mutes the call.
+  A visitor call shows in the title bar's call pill too.
+- Screen readers hear when the call changes, not the timer every second.
+- Needs the server update (Communication 1.34.0) for saved notes and joining on accept.
+
+## 0.2.166 — 2026-10-04
+
+- **Call-backs (V-02).** Voice calls has a **Call-backs** side for visitors who called when nobody could answer and
+  asked to be called back. It has **Open**, **Mine** and **Done** filters with counts.
+- Each request shows the visitor and their company, the missed call with how long they waited and the page they
+  were on ("outside hours" when it was), and their best time (red while it is now). It also shows their phone, what
+  they asked about, and who has it.
+- **Call back** dials through the WorkSuite phone, or copies the number where there is none, and logs the attempt.
+  **Assign** gives the request to a colleague.
+- **Mark done** asks how it went: Reached — sorted; Reached — needs a follow-up; No answer — keep it open; or Wrong
+  number. It also takes a staff-only note.
+- Needs the server update (Communication 1.33.0).
+
+## 0.2.165 — 2026-10-04
+
+- **Voice calls (V-01).** Website Chats has a **Voice calls** section, with an amber count of calls ringing or on.
+  - A banner shows the call you are on now, with **Open call**.
+  - Tiles count calls, answered, missed, average wait, average length and open call-backs.
+  - Filter by site and period (today, 7 or 30 days) and by All, Answered, Missed or Recorded.
+  - The table lists each call: the visitor, when, who answered, the wait, the length and the result (Answered, Missed
+    · call-back, Cancelled by visitor, Transferred).
+- **Selecting a call** shows what happened, step by step, with the page the visitor called from. It also shows the
+  recording (none yet: recording is not offered) and staff-only notes, with **Open chat**, **Add note** and **Call
+  back**.
+- Call-backs open the Callbacks section.
+- Needs the server update (Communication 1.32.0).
+
+## 0.2.164 — 2026-10-04
+
+- **Invite and transfer (C-09).**
+  - **Invite** searches people and departments together. Each person shows their status, chats and team ("Available ·
+    1 chat · Education sales"), with a note for them and **Invite N people**.
+  - **Transfer** offers **A person**, **A department** or **Next available**. A warm transfer keeps you in the chat
+    until they join; **Hand over now** leaves at once and it rings for them.
+- **The invitee's cards** in the call window say who is asking and for what ("Nuwan invites you to a chat with
+  Visitor 4F2A", "Nuwan is handing you Visitor 4F2A"). They show the note and a countdown kept by the server's clock,
+  so it is right even when this computer's clock is not. The bar under your tabs and the Invited list count down too.
+- A declined invitation shows as an amber notice you can dismiss.
+- Needs the server update (Communication 1.31.0).
+
+## 0.2.163 — 2026-10-04
+
+- **Several staff in one chat (C-08).** **Reply to visitor** and **Internal note** are now tabs over the one composer.
+  A note looks like the note it will be and is words only. It can @mention colleagues, shows only staff that you are
+  typing, and keeps its own draft. A note is labelled with who wrote it ("Internal note · Nuwan · only staff see
+  this").
+- Your messages say "You". A colleague's are tinted and carry their photo and name.
+- **In this chat** lists who is in the conversation, with presence, role and when they joined. A pending invitation
+  shows its countdown and **Cancel**. **Invite someone** is greyed out when the chat is full. **Leave chat** at the
+  foot of the panel warns the owner to transfer the chat first.
+- Someone monitoring a chat opens it on Internal note.
+- Needs the server update (Communication 1.30.0) for presence and an exact countdown.
+
+## 0.2.162 — 2026-10-04
+
+- **Visitors online (C-07).** The table now has the design's columns:
+  - **Visitor**, with a status dot and their city ("≈" when placed by timezone only).
+  - **Reading now**, **On the site**, **Pages** and **Visits** ("3rd visit").
+  - **Last active**: "Now", "Waiting 1:38", "40 s ago" or "Just arrived".
+
+  The site filter lists your sites here too.
+- **Selecting someone** opens a panel with what they are reading: how long they have been on the page, how far down
+  they have scrolled, and the section in view where the site marks one. It also shows this visit's pages, newest
+  first, with how long each held them and where they arrived from, plus chips for place, browser, visit number and
+  last visit.
+- **Speak first** uses the same composer as every chat, with saved-reply chips: "Start the conversation — it opens the
+  widget on their page". The new chat opens once the first message is sent. **Block** works for someone who has not
+  chatted yet.
+- The composer has a **Saved replies** button in website chats too.
+- Needs the server update (Communication 1.29.0). An older server shows the visitors without the reading details.
+
+## 0.2.161 — 2026-10-04
+
+- **Closed chats (C-06).** Each row says how the chat ended: what it was about and who closed it ("Activation fixed ·
+  Nuwan"), or "Inactive · closed automatically". The visitor's rating shows as stars. The list is ordered by when the
+  chats closed, and the search says "Search closed chats…".
+- Opening one shows who closed it, when, and how long it lasted, then the transcript and the visitor's rating and
+  comment. A note explains that the chat must be reopened before you can reply. **Star**, **Block visitor** and
+  **Reopen** sit in the header.
+- A summary sits beside it: first reply time, duration, priority, rating, who handled it, tags, the visitor's contact
+  details and how many chats they have had, and the files shared.
+- The visitor panel's cards are now shared by live and closed chats.
+- Needs the server update (Communication 1.28.0). An older server shows less.
+
+## 0.2.160 — 2026-10-04
+
+- **Offline enquiries (C-05).** Each row says why the visitor left a message (**Outside hours** or **Nobody
+  online**) and where it stands: **Not replied**, replied by email, or **Back on the site**. Replied enquiries stay
+  in the list until closed.
+- Opening one shows the visitor's message with their email, phone and the page they were on, why nobody answered,
+  and a staff-only note. It offers **Reply by email**, **Assign** and **Close**. It no longer claims the chat, so if
+  the visitor comes back while staff are online, it rings in Live chats as usual. **Open chat** appears while they
+  are back on the site.
+- Needs the server update (Communication 1.27.0). An older server shows the list as before.
+
+## 0.2.159 — 2026-10-04
+
+- **Missed chats (C-04).** The list has **To follow up** and **Handled** tabs with counts. Each row shows the visitor,
+  their first words, how long they waited before leaving, and whether they left an email; a handled row says who
+  handled it and how.
+- Opening a missed chat shows what was said and when the visitor left, with their contact and visit details. It no
+  longer joins or claims the chat, so a visitor who comes back still rings for everyone.
+- **Reply by email** writes to a visitor who left an address. The message goes into the chat too and counts as the
+  reply. **Mark handled** files the chat under Handled with your name.
+- Needs the server update (Communication 1.26.0). An older server shows the single list as before.
+
+## 0.2.158 — 2026-10-04
+
+- **Website chat lists as a table, with bulk actions (C-03).** Live chats, Unassigned, Assigned to me, Awaiting reply
+  and Starred show a full-width table while no chat is open. Its columns are Visitor (with their last message), Site,
+  Status (At risk, Awaiting reply, Chatting), Priority, Owner and Waiting. Opening a chat brings back the narrow list
+  beside it.
+- Tick rows, or use Ctrl/⌘-click, Shift-click or Space, to bring up the bulk bar: **Assign to…**, **Priority**,
+  **Star** and **Close**. It acts on up to 200 at a time, and each assignee is alerted. Clear or Esc ends the
+  selection. Filter by priority and sort by longest waiting, newest activity or name.
+- The selection and its bar are shared with Team Chat's list.
+- A conversation's right-click menu adds Star and Priority. Star from that menu now stars the chat; before, it sent
+  nothing and the server took it as Unstar.
+
+## 0.2.157 — 2026-10-04
+
+- **Website chats use the same message view as Team Chat (#229, C-02).** Messages from one person run together, with
+  the avatar on the first and the time on the last, and days have dividers. A reply quotes the message inside the
+  bubble, with read ticks under it. Messages from the website's bot are teal and marked "· bot". Internal notes are
+  amber with a dashed border. The pages a visitor opened appear between the messages ("→ Opened /shop/… · 2 min").
+  Long links are shortened to the site and path.
+- **Pictures show as pictures.** Images, including iPhone photos and pictures without an extension, show as
+  thumbnails up to 280px. Several sent together make a small grid with "+N", and a click opens the full-screen
+  viewer. Files have readable names, never an upload ID: the original name, or "Photo – 4 Oct 2026, 11:31.jpg".
+  Delete removes a message you wrote for the visitor too, within 15 minutes.
+- **The visitor panel follows the design:** Email and Block, the visitor's local time, Site, Device, Visits and Came
+  from, this visit's pages with how long each held them, tags, and shared files as a grid.
+- **Live dashboard (C-00):** a world map of who is on your sites, tiles that open what they count, the Needs you / In
+  a chat / Browsing list with Join, Open and Start chat, Full map, and Wall mode with names hidden.
+- **Inbox (C-01):** the Website Chats menu has icons and count pills, and Back to Chat answers Ctrl/⌘+[. Taking chats,
+  and your status, are at the foot of the menu.
+- Team Chat looks slightly different too, because it now draws from the same components: a run of messages shows one
+  avatar, quotes sit inside the bubble, receipts are ticks, and long links are shortened.
+- Needs the server update (Communication 1.25.0) for thumbnails, readable names and Delete. An older server shows the
+  rest.
+
+## 0.2.156 — 2026-10-04
+
+- **When a visitor writes again in your chat, you hear about it (#230).** Before, if you answered a website chat and
+  then went to Mail, another app or away from the keyboard, a visitor's "Are u there?" got nobody's attention. Now,
+  if the chat is yours (or you are in it), the team has already answered, and you are not looking at it:
+  - **A card over other apps** shows the visitor, the site, their new message with the one or two before it, and
+    how long they have waited. You can reply from the card without leaving what you are doing, or use **Open
+    chat** or **Snooze 5 min**. More messages update the same card ("Visitor replied · 3 new messages").
+  - **A system notification** says "Visitor CC1B: Are u there", with Reply, while WorkSuite is not in front. One
+    notification stands for several messages, and it goes when the chat is answered.
+  - **A short chime**, unlike the new-chat ring. It is quiet during Do not disturb.
+  - The Dock or taskbar **badge** counts them, the tab says "(1) Website chats", and the chat moves to the top of
+    the list marked **Visitor replied** with its wait.
+- **"Not looking at it"** means: another tab or module is in front, WorkSuite is not the app in front or is
+  minimised, the computer is locked, or there has been no keyboard or mouse input for two minutes. Nothing shows
+  while you are reading the conversation.
+- **When the team is alerted** because nobody answered in time, colleagues get the card with **Take over**. A
+  reminder, the team alert, a takeover or a reassignment each clear or update the card.
+- **Settings › Website chats › When a visitor writes again in your chat:** the card, the desktop notification, the
+  chime (with Test), and how long without input counts as away (1, 2, 5 or 10 minutes).
+- In a meeting or on a call, WorkSuite tells the server you are busy, so a visitor's follow-up goes straight to the
+  team and no new chat is given to you.
+- Needs the server update (Communication 1.24.0). An older server sends none of this, and nothing changes.
+
+## 0.2.155 — 2026-10-04
+
+- **Mail rows say which account by name (#227).** In All Accounts and the other combined views, each row used to
+  carry two letters of the domain in a dark chip ("LI"), so hasarinda@ and acc@ on the same domain looked the same,
+  and the chip stood out more than the sender. Now it is a small soft pill: the account's first name ("Hasarinda"),
+  or the address before the @ when there is no name or the name is a role like "Accounts" ("Acc"). It is drawn in a
+  light tint of the account's colour with the name in a darker shade, readable in both themes, and sits before the
+  date. The address and kind of account are in its tooltip.
+- **No two accounts look alike.** When two would get the same name, the second gets the first letter of its domain
+  or a number ("Hasarinda G", "Hasarinda 2"), and each account gets its own colour.
+- **Set it per account** in Settings › Mail › Accounts › Manage: the tag label (up to 12 characters), one of eight
+  colours or your own, and where it shows (Combined views, All views or Never). The pill previews as you type, and
+  **Reset to default** brings back the automatic label and colour. The settings are kept with your account, so every
+  computer shows the same tags.
+- **Name tag, Dot only or Off** in Settings › Mail › Appearance & reading › Account tag. A list narrower than 340px
+  shows the dot alone.
+- The same tag is beside the account in the sidebar, in **From** when you write, and above the message you read.
+- Needs the server update (Mail 1.14.1) to keep the tags. An older server shows the automatic ones.
+
+## 0.2.154 — 2026-10-04
+
+- **Visitors online and the Live dashboard are two views (#231).** Before, both menu items opened the same screen and
+  both lit up, along with Live chats, which shared its address. Now each opens its own view, and only the one you are
+  on is lit.
+- **Clicking a visitor opens their details** beside the list: where they are, device and browser, language, the page
+  they are reading, the page they landed on, where they came from, their visits, this visit's pages, their earlier
+  chats and the contact they are linked to. The selection is kept in the address, so it survives Back and a refresh
+  of the list. **Start chat** can begin from a saved reply. A visitor already in a chat has **Open the chat** and
+  **Invite a colleague**, which opens the chat with the invite dialog up. **Block** blocks them for a week.
+- **Keyboard.** The arrow keys move through the visitors, Enter or a double-click opens their chat (or Start chat if
+  they have none), and Escape closes the details.
+- **The status says what they are doing and goes there.** Waiting (their chat waits on us) or Chatting opens the
+  chat; Active selects them and puts the cursor in Start chat. Visitors online can show only one status.
+- **The dashboard's cards open what they count.** On the site now goes to Visitors online, Waiting on us and At risk
+  to Awaiting reply, Chats started and Open chats to the Inbox, and Median first reply to Missed chats. **See all**
+  appears when there are more visitors than the dashboard lists.
+- **A visitor who leaves while selected** stays in the panel with "Left the site · 11:42", instead of the panel
+  going blank.
+- Needs the server update (Communication 1.23.0) for the extra details and for blocking somebody without a chat. An
+  older server shows the rest.
+
+## 0.2.153 — 2026-10-04
+
+- **Opening an email while an account syncs works (#228).** Before, the WorkSuite server had two connections per
+  web server for all of its mailboxes together. This computer's offline download of message bodies kept both busy,
+  so opening an email failed at once with "Both mail reading slots were busy". The same messages also failed again
+  and again in the background. Now each account has its own connections, and one is always kept for what you open.
+  The download and the reader's fetch-ahead say they are background work, so they never take that one. If every
+  connection is busy, opening an email waits for one, and after two seconds the reader says "Waiting for a free
+  connection…". Only after ten seconds does it say it timed out, with **Retry**.
+- **Background fetches give way.** A body that could not be fetched waits 30 seconds, then 2 minutes, then 10 before
+  it is tried again, instead of straight away. While an account is still building its first copy of the headers,
+  the download waits. Every request says which message it is (UIDVALIDITY and Message-ID).
+- **No more "UID 0".** A list row without a server ID is never asked for. Opening one says "This email has no server
+  ID yet. Its folder is being synced again", with **Refresh folder**. The server rebuilds that folder from the mail
+  server.
+- **The sync log separates runs from fetch errors.** A message that could not be opened is no longer a "sync run"
+  of its own (0.0 s · Partial · 0 of 1 folders). It is listed under **Fetch errors**, grouped by why, for example
+  "Waiting for a free connection × 23 · last 11:32". Each group lists its messages with their UID, UIDVALIDITY and
+  Message-ID, and **Retry all** clears them. While a pass is going, the log says "Syncing · headers 2 of 27 folders ·
+  started 11:20".
+- Needs the server update (Mail 1.14.0). An older server works as before.
+
+## 0.2.152 — 2026-10-04
+
+- **Callbacks in Website chats (#223).** A visitor can now ask to be contacted from the website widget. They get a
+  reference, like CB-1042. Their request shows in a new **Callbacks** section, with a red mark when one is overdue.
+  Each one says how they want to be reached (a call, WhatsApp or email), when, and what about. It also has buttons:
+  - **Call now**, **WhatsApp** (opens the chat in WorkSuite) and **Reply by email** (a new email in Mail);
+  - **Mark contacted**, **Couldn't reach** (try again in 30 minutes, an hour, 3 hours or tomorrow) and **Done**.
+
+  The same card sits at the top of its conversation until it is handled. The conversation's row says "Callback
+  requested" (or "Callback overdue").
+- **The wait clock on a waiting chat** now reads "waiting 4:32". It turns amber once the visitor has waited as long
+  as it takes to be offered a callback, and red after it. On a site that offers no callbacks it stays red, as before.
+- **A visitor who went on to WhatsApp** from the widget is linked from their website chat: "Continued on WhatsApp ·
+  Techubiz Sales" opens that WhatsApp chat (#224).
+- Needs the server update (Communication 1.22.0). An older server keeps call-backs under Missed chats, as before.
+
+## 0.2.151 — 2026-10-04
+
+- **The website chat ringing card is redesigned so you can answer from it (#225).** It shows who is waiting, their
+  site, place and device, what they are reading (on its own line, so it is never cut off) and what they asked, as a
+  chat bubble. Type a reply — or pick one of your team's top three saved replies, or **Write with AI** — and **Join &
+  send** (or Enter) joins the chat and sends it in one step. **Join chat** joins without sending. Either way the chat
+  is yours only if nobody got there first; a moment too late, the card says who has it and nothing is sent.
+- **After joining, the card is a mini chat** with what you sent and a box for the next reply; **Open full chat** brings
+  WorkSuite forward on the conversation. A chat assigned to you has **Transfer**, which opens it with the transfer
+  dialog up.
+- **Minimise (or Esc) puts the card away** while the same chats ring; the ring goes on, and a new chat brings the card
+  back. **Silence** is now an icon with a tooltip, and a silenced chat says so in the header.
+- **Several chats ringing** show as a compact card each — name, last message, its own reply box, Join or Join & send,
+  and Silence — under "N chats waiting", with **Open inbox**. The card window grows to fit what it shows.
+- Needs the server update (Communication 1.21.0) for Join & send in one request; an older server is sent the join and
+  the reply one after the other.
+
+## 0.2.150 — 2026-10-04
+
+- **On a Mac the window stays clear of the menu bar and the Dock (#221).** A WorkSuite window that had spread over
+  the whole display, with its top under the menu bar (hiding the red, yellow and green buttons) and its bottom behind
+  the Dock (hiding the composer and the status bar), is put back inside the area between them. This happens when it is
+  shown, zoomed, moved or resized, and whenever the Dock moves, grows or starts hiding, or a display is connected or
+  removed. A window zoomed last time is zoomed again once it is on screen, where macOS keeps it above the Dock. A
+  window you drag partly off a side or behind the Dock yourself is left where you put it.
+- **Full screen is the Mac's own.** The green button, ⌃⌘F or View › Enter Full Screen puts WorkSuite in its own
+  Space, where the Dock and menu bar hide until you touch the screen's edge. In full screen the top bar drops the
+  space it keeps for the window buttons.
+- **The Window menu** has Minimise (⌘M), Zoom, Enter Full Screen and Bring All to Front. ⌘W on the last tab closes the
+  window, and closing the window keeps WorkSuite in the Dock (it used to leave the Dock too); click its icon to bring
+  it back.
+
 ## 0.2.149 — 2026-10-04
 
+- **Blocking a website visitor asks for how long.** **Block this visitor** now offers a day, a week (the default), a
+  month or until somebody lifts it, and takes a reason the team sees later. A block ends by itself when its time is up,
+  and the web's **Website chats › Blocked visitors** lists every block in force and lifts one early. Before, a block was
+  for good and nobody could undo it, so blocking one person on a shared office address shut the whole office out.
+  Needs the server update (Communication 1.20.0); an older server blocks until lifted, as before.
 - **A clearer update experience.** When a new version is out, a dialog shows what's new, the package and its size. You can **Download & Install**, or choose **Later** for 1 hour, 4 hours or tomorrow. **Settings › Updates** is now its own page:
   - your version, the latest version, your channel and the minimum supported version;
   - live download progress, including speed and time left. You can pause, resume or cancel, and downloads pick up again after a network drop;

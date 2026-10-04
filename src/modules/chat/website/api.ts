@@ -1,7 +1,10 @@
-import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { ApiError, apiGet, request } from '../../../core/api';
+import { errorMessage } from '../../../core/bridge';
+import { toast } from '../../../core/toasts';
 import { text } from '../../../core/i18n';
 import { parseTs } from '../../../core/time';
+import type { SavedReply } from './profile';
 
 /**
  * Website chat (UI-08: "group, direct and website-chat conversations") — the
@@ -26,6 +29,8 @@ export interface WebsiteRow {
   label: string;
   visitor_name: string | null;
   email: string | null;
+  /** Their company, for "Anne · Acme Ltd" on the Closed list (C-06); absent on an older server. */
+  company?: string | null;
   country: string | null;
   browser: string | null;
   os: string | null;
@@ -44,6 +49,14 @@ export interface WebsiteRow {
   at_risk: boolean;
   awaiting_reply: boolean;
   rating: number | null;
+  /**
+   * How a closed chat ended (C-06, IDL-03), for the Closed list's row: when, why — `agent`, `visitor` or `idle`; null on
+   * a chat closed before the reason was kept — who closed it, and its subject. Absent on an older server.
+   */
+  closed_at?: string | null;
+  closed_reason?: ClosedReason | null;
+  closed_by?: string | null;
+  subject?: string | null;
   is_starred: boolean;
   tags: string[] | null;
   /** What was said last, notices aside (CHAT-UI-00): the row's preview. */
@@ -56,6 +69,33 @@ export interface WebsiteRow {
   my_role?: TeamRole | null;
   /** A voice call on in this chat now (ENH-WCHAT-05, VOICE-UI-02): "On a call · 02:14". */
   call?: { status: 'ringing' | 'active' | 'on_hold'; since: string | null } | null;
+  /** The callback still to do in this chat (worksuite-desktop#223): "Callback requested" on the row. */
+  callback?: { id: number; reference: string | null; status: string; due_at: string | null; overdue: boolean } | null;
+  /** When the wait clock turns amber and red, in seconds; null where the site offers no callbacks (#223). */
+  wait_amber?: number | null;
+  wait_red?: number | null;
+  /** The visitor wrote again after the team answered and is still waiting (worksuite-desktop#230); then `waiting_since` is this. */
+  reply_waiting_since?: string | null;
+  /** How far that has gone: a reminder sent, the team alerted, or the chat reassigned. */
+  reply_stage?: 'reminded' | 'team' | 'reassigned' | null;
+}
+
+/**
+ * A visitor who wrote again in one of my chats and waits (worksuite-desktop#230) goes to the top of the list, the
+ * longest waiting first; the rest keep their order.
+ */
+export function followUpsFirst(rows: WebsiteRow[], mine: (r: WebsiteRow) => boolean): WebsiteRow[] {
+  const waiting = (r: WebsiteRow) => !!r.reply_waiting_since && r.awaiting_reply && mine(r);
+  const top = rows.filter(waiting).sort((a, b) => a.reply_waiting_since!.localeCompare(b.reply_waiting_since!));
+  return top.length ? [...top, ...rows.filter((r) => !waiting(r))] : rows;
+}
+
+/** The wait clock's colour (#223): amber at the callback threshold, red after it; red throughout where there is none. */
+export function waitTone(seconds: number, amber: number | null | undefined, red: number | null | undefined): 'plain' | 'amber' | 'red' {
+  if (!amber && !red) return 'red';
+  if (red && seconds >= red) return 'red';
+  if (amber && seconds >= amber) return 'amber';
+  return 'plain';
 }
 
 /** Message-id marks that only move forward (LIVE-05): how far the visitor has the team's messages, and each person the visitor's. */
@@ -97,6 +137,8 @@ export interface WebsitePerson {
   invited_by?: number | null;
   invited_by_name?: string | null;
   joined_at?: string | null;
+  /** At their desk or not, as Team Chat says it (C-08, UX-DRW-03); absent from an older server. */
+  presence?: 'online' | 'busy' | 'dnd' | 'away' | 'offline';
 }
 
 /** An invitation or transfer still waiting for an answer, in its chat's "In this chat" panel. */
@@ -110,6 +152,8 @@ export interface WebsitePending {
   to_users: number[];
   note: string | null;
   expires_at: string | null;
+  /** Seconds left by the server's clock when it answered (C-08): the panel's countdown, true on a skewed computer. */
+  expires_in?: number | null;
   created_at: string | null;
 }
 
@@ -161,7 +205,13 @@ export interface WebsiteMessage {
   from: 'visitor' | 'agent' | 'bot' | 'system';
   agent: string | null;
   at: string;
-  file: { url: string; filename: string; mime: string; size: number; is_image: boolean } | null;
+  /**
+   * The file (#229): `name` is the readable one (the original, or "Photo – 4 Oct 2026, 11:31.jpg"); `thumb_url` and
+   * `preview_url` are small copies the server made — an iPhone photo too — and `url` the original to download.
+   */
+  file: { url: string; filename: string; mime: string; size: number; is_image: boolean; id?: number; name?: string; thumb_url?: string | null; preview_url?: string | null; width?: number | null; height?: number | null; kind?: string } | null;
+  /** Deleted for the visitor too (#229): no words, no file. */
+  deleted?: boolean;
   /** Who wrote it, and their photo (TEAM-05). */
   agent_id?: number | null;
   avatar?: string | null;
@@ -170,6 +220,21 @@ export interface WebsiteMessage {
   /** The message this one answers (RDC-10): an excerpt both the agent and the visitor see above it. */
   reply_to?: number | null;
   reply?: WebsiteQuote | null;
+}
+
+/**
+ * One thing the visitor did on the site (`chat_widget_events`, WidgetAdminController::timeline): a page they opened,
+ * how long it held them (`seconds`, null for the page they are on or a gap too long to be reading), and whether it
+ * opened a new visit.
+ */
+export interface WebsiteEvent {
+  id?: number;
+  kind: 'page_view' | (string & {});
+  url: string | null;
+  title: string | null;
+  at: string;
+  seconds: number | null;
+  new_visit: boolean;
 }
 
 /** A quoted message: its first words, who wrote it, and its file's name. */
@@ -212,6 +277,9 @@ export interface WebsiteVisitor {
   is_blocked: boolean;
 }
 
+/** Why a chat closed (IDL-03): an agent finished it, the visitor ended it, or it went quiet and closed itself. */
+export type ClosedReason = 'agent' | 'visitor' | 'idle';
+
 export interface WebsiteConversation {
   conversation: {
     id: number;
@@ -226,16 +294,29 @@ export interface WebsiteConversation {
     closed_at: string | null;
     rating: number | null;
     rating_comment: string | null;
-    tags: string[] | null;
+    /** Why it closed and who closed it (C-06, IDL-03); absent on an older server. */
+    closed_reason?: ClosedReason | null;
+    closed_by?: { id: number; name: string; avatar?: string | null } | null;
+    /** When the team first answered: the closed summary's First reply tile (UX-CLS-02). */
+    first_response_at?: string | null;
+    subject?: string | null;
+    /** The server stores them as one comma-separated line; a list from a newer one is read the same (see `tagList`). */
+    tags: string[] | string | null;
     is_starred: boolean;
     priority?: string;
     /** The largest file this website's visitors may be sent (RDC-04); absent on an older server, which means 5 MB. */
     max_upload_kb?: number;
+    /** Its widget: the composer offers the saved replies for every widget and this one's (CAN-01, S-09); absent on an older server. */
+    widget_id?: number;
   };
   visitor: WebsiteVisitor | null;
   messages: WebsiteMessage[];
   journey?: Array<{ url: string | null; title: string | null; at: string }>;
+  /** The visitor's timeline, oldest first, with dwell times and visit breaks (C-02 ActivityEvent; #229); absent on an older server. */
+  events?: WebsiteEvent[];
   history?: Array<{ id: number; status: string; started_at: string | null; rating: number | null; other_device: boolean }>;
+  /** How many chats this customer has had here, this one included, and when the first began (C-06: "2nd chat · first on 12 Sep"). */
+  chats?: { count: number; first_at: string | null };
   /** Null or absent on a server without team chats. */
   team?: WebsiteTeam | null;
   /** Delivered and read, both ways (ENH-WCHAT-04, LIVE-08); null on a server without them. */
@@ -246,7 +327,17 @@ export interface WebsiteConversation {
   call?: WebsiteCall | null;
   /** Whether I take website voice calls here: answer, join, hold, offer. */
   can_call?: boolean;
+  /** The callback the visitor asked for (worksuite-desktop#223): one still to do, else the last; absent on an older server. */
+  callback?: WebsiteCallback | null;
+  /** The WhatsApp chats this visitor continued on, matched by their reference (#224). */
+  whatsapp?: Array<{ account: string; chat_id: number; ref: string; linked_at: string | null; link: string }>;
   can?: WebsiteCan;
+  /**
+   * The shared kit's message actions (P-04, RDC-12): minutes Delete for the visitor is offered (0: no limit), and whether
+   * Save to Drive has a Drive to save into. Absent on an older server: 15 minutes, and no Save to Drive.
+   */
+  delete_window_minutes?: number;
+  can_save_to_drive?: boolean;
 }
 
 /** A voice call in a website chat as the thread has it (WidgetCalls::forThread). */
@@ -267,25 +358,67 @@ export interface WebsiteCall {
   rings_me: boolean;
   /** Who of the team is on it. */
   on: Array<{ user_id: number; name: string }>;
+  /** Recorded (VOICE-22): the in-call bar's "Recording", else "not recorded" (V-03). Absent on an older server. */
+  recorded?: boolean;
+  /** My call notes so far, kept by the server while the call is on (V-03); absent on an older server. */
+  my_notes?: string;
 }
 
 /** Whether a call is ringing or on. */
 export const callLive = (c: Pick<WebsiteCall, 'status'> | null | undefined): boolean => !!c && (c.status === 'ringing' || c.status === 'active' || c.status === 'on_hold');
 
-/** A visitor waiting to be called back (VOICE-16). */
+/**
+ * A visitor waiting to be contacted (VOICE-16; worksuite-desktop#223). The fields after `created_at` come from a
+ * server with structured callbacks: a reference, how and when, a due time, and what has been done.
+ */
 export interface WebsiteCallback {
   id: number;
   conversation_id: number;
-  phone: string;
+  phone: string | null;
   best_time: string | null;
   visitor: string;
   site: string | null;
   /** Asked for after a call nobody answered. */
   missed_call: boolean;
   created_at: string;
+  reference?: string | null;
+  name?: string | null;
+  email?: string | null;
+  channel?: 'call' | 'whatsapp' | 'email';
+  /** "by phone", "on WhatsApp", "by email". */
+  how?: string;
+  message?: string | null;
+  due_at?: string | null;
+  overdue?: boolean;
+  status?: 'open' | 'unreachable' | 'contacted' | 'done';
+  outcome?: string | null;
+  attempts?: number;
+  retry_at?: string | null;
+  waited_seconds?: number | null;
+  assignee?: string | null;
+  contacted_at?: string | null;
+  handled_at?: string | null;
+  /** Where they asked: queue, home, away, call (a missed voice call). */
+  source?: string | null;
+  assigned_to?: number | null;
+  /** The staff note Mark done… (V-02) or an action left on it. */
+  note?: string | null;
+  /** Who handled it, by name. */
+  handled_by?: string | null;
+  /** The Call-backs card (V-02): "Malini Perera · Lanka Traders". */
+  company?: string | null;
+  /** The page they called from, else the one they are on: "· techubiz.com/shop/coreldraw" (V-02). */
+  page_url?: string | null;
+  /** Asked for while the business hours were closed: "(outside hours)" (V-02). */
+  outside_hours?: boolean;
+  /** Call back logged an attempt whose outcome is still to be said (V-02, UX-CALL-04). */
+  called_at?: string | null;
 }
 
 export type CallbackOutcome = 'answered' | 'no_answer' | 'wrong_number';
+
+/** Mark done…'s answers on Voice calls › Call-backs (V-02, UX-CALL-03); `keep_open` is No answer — keep it open. */
+export type CallbackDoneOutcome = 'sorted' | 'follow_up' | 'keep_open' | 'wrong_number';
 
 export function useCallbacks(enabled: boolean) {
   return useQuery({
@@ -298,7 +431,10 @@ export function useCallbacks(enabled: boolean) {
   });
 }
 
-export const PRIORITIES: Array<{ id: string; label: string }> = [
+/** A website chat's priority, as the server keeps it (IncomingChats::PRIORITIES). */
+export type WebsitePriority = 'low' | 'normal' | 'high' | 'urgent' | 'vip';
+
+export const PRIORITIES: Array<{ id: WebsitePriority; label: string }> = [
   { id: 'low', label: 'Low' },
   { id: 'normal', label: 'Normal' },
   { id: 'high', label: 'High' },
@@ -307,13 +443,15 @@ export const PRIORITIES: Array<{ id: string; label: string }> = [
 ];
 
 /** The workspace's sections (WebChatInbox, left). */
-export type Section = 'inbox' | 'live' | 'offline' | 'missed' | 'mine' | 'invited' | 'unassigned' | 'awaiting' | 'starred' | 'closed';
+export type Section = 'inbox' | 'live' | 'offline' | 'missed' | 'callbacks' | 'mine' | 'invited' | 'unassigned' | 'awaiting' | 'starred' | 'closed';
 
 /** Which open rows a section shows. */
 export function sectionRows(rows: WebsiteRow[], section: Section, me: number | null): WebsiteRow[] {
   switch (section) {
     case 'live':
-      return rows.filter((r) => r.online && !r.is_offline);
+      // An offline enquiry whose visitor came back and wrote while staff are online is live again (C-05, MIS-02): the
+      // server opens it (`pending` → `open`) and it rings once; it stays under Offline enquiries too.
+      return rows.filter((r) => r.online && (!r.is_offline || r.status === 'open'));
     case 'offline':
       return rows.filter((r) => r.is_offline);
     case 'mine':
@@ -349,6 +487,37 @@ export function filterRows(rows: WebsiteRow[], filter: WebsiteFilter, me: number
 export function sortRows(rows: WebsiteRow[], filter: WebsiteFilter): WebsiteRow[] {
   const key = (r: WebsiteRow) => (filter === 'waiting' ? (r.waiting_since ?? r.last_visitor_at ?? r.started_at ?? '') : r.updated_at);
   return [...rows].sort((a, b) => (filter === 'waiting' ? key(a).localeCompare(key(b)) : key(b).localeCompare(key(a))));
+}
+
+/** How the list views order their rows (UX-LIST-01): longest waiting first unless asked otherwise. */
+export type WebsiteSort = 'waiting' | 'recent' | 'name';
+
+export const WEBSITE_SORTS: Array<{ id: WebsiteSort; label: string }> = [
+  { id: 'waiting', label: 'Longest waiting first' },
+  { id: 'recent', label: 'Newest activity' },
+  { id: 'name', label: 'Visitor name' },
+];
+
+/**
+ * The list views' order (UX-LIST-01). Longest waiting first: visitors waiting for a reply first, the longest wait at
+ * the top, then the rest by their latest activity. Newest activity: what was said or done last, newest first.
+ * Visitor name: A to Z.
+ */
+export function sortWebsiteRows(rows: WebsiteRow[], sort: WebsiteSort): WebsiteRow[] {
+  const stamp = (v: string | null | undefined) => {
+    const t = v ? parseTs(v).getTime() : Number.NaN;
+    return Number.isNaN(t) ? 0 : t;
+  };
+  const activity = (r: WebsiteRow) => stamp(r.last_message?.at ?? r.last_visitor_at ?? r.updated_at);
+  const name = (r: WebsiteRow) => (r.visitor_name || r.label || '').toLowerCase();
+  if (sort === 'name') return [...rows].sort((a, b) => name(a).localeCompare(name(b)) || a.id - b.id);
+  if (sort === 'recent') return [...rows].sort((a, b) => activity(b) - activity(a) || b.id - a.id);
+  const waits = (r: WebsiteRow) => r.awaiting_reply && r.status !== 'closed';
+  return [...rows].sort((a, b) => {
+    if (waits(a) !== waits(b)) return waits(a) ? -1 : 1;
+    if (waits(a)) return (stamp(waitingSince(a)) || Infinity) - (stamp(waitingSince(b)) || Infinity) || a.id - b.id;
+    return activity(b) - activity(a) || b.id - a.id;
+  });
 }
 
 /** The pills over the workspace's list (CHAT-UI-00): Open, Mine and Closed. */
@@ -446,10 +615,14 @@ export function useWebsiteAccess(): boolean {
   return q.isSuccess && q.data.can?.view !== false;
 }
 
-export function useWebsiteConversation(id: string) {
+/**
+ * `review` reads a chat back without arriving in it (C-04): the server neither joins, claims nor handles it, so a
+ * missed chat's detail can be looked at before anybody decides what to do, and a returning visitor still rings.
+ */
+export function useWebsiteConversation(id: string, { review = false }: { review?: boolean } = {}) {
   return useQuery({
-    queryKey: ['website', 'conversation', id],
-    queryFn: ({ signal }) => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, undefined, signal),
+    queryKey: review ? ['website', 'conversation', id, 'review'] : ['website', 'conversation', id],
+    queryFn: ({ signal }) => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, signal),
     // No realtime event for replies or visitor typing: poll, slower in the background.
     refetchInterval: () => (document.visibilityState === 'visible' ? 5_000 : 30_000),
   });
@@ -466,18 +639,71 @@ export function useAgents(enabled: boolean, conversationId?: number) {
   });
 }
 
-export function useCanned(enabled: boolean) {
+export interface CannedPayload {
+  responses: SavedReply[];
+  can?: { view: boolean; reply: boolean; manage: boolean };
+}
+
+/**
+ * The saved replies (CAN-01, RDC-03). With a widget, only those for every widget and that widget's own, as its
+ * conversations' composer offers them (S-09); without one, all of them, as Website chats › Saved replies lists them.
+ */
+export function useCanned(enabled: boolean, widgetId?: number | null) {
   return useQuery({
-    queryKey: ['website', 'canned'],
-    queryFn: ({ signal }) => apiGet<{ responses: Array<{ id: number; shortcut: string | null; title: string; body: string }> }>(`${WEBSITE}/canned`, undefined, signal),
+    queryKey: ['website', 'canned', widgetId || 'all'],
+    queryFn: ({ signal }) => apiGet<CannedPayload>(`${WEBSITE}/canned`, widgetId ? { widget_id: String(widgetId) } : undefined, signal),
     enabled,
     staleTime: 5 * 60_000,
     retry: false,
   });
 }
 
+/** A conversation's tags as a list, however the server sent them. */
+export function tagList(tags: string[] | string | null | undefined): string[] {
+  const all = Array.isArray(tags) ? tags : (tags ?? '').split(',');
+  return [...new Set(all.map((t) => t.trim()).filter(Boolean))];
+}
+
 export async function websiteAction(id: number | string, action: string, extra: Record<string, unknown> = {}): Promise<void> {
   await request('POST', `${WEBSITE}/conversations/${id}/action`, { body: { action, ...extra } });
+}
+
+/** What the server's bulk endpoint does (INB-08): close, reopen, star, unstar, assign, priority. */
+export type WebsiteBulkAction = 'assign' | 'priority' | 'star' | 'unstar' | 'close' | 'reopen';
+
+/** Its extra fields: whom to assign to (null to unassign) and which priority. */
+export interface WebsiteBulkExtra {
+  user_id?: number | null;
+  priority?: WebsitePriority;
+}
+
+/** The most the server takes in one bulk action (INB-08). */
+export const BULK_LIMIT = 200;
+
+/**
+ * One action on several website chats (INB-08, UX-LIST-02): `POST conversations/bulk`. Assigning goes one by one on
+ * the server, so each assignee is alerted. Resolves to the server's own sentence ("2 updated").
+ */
+export async function websiteBulk(ids: number[], action: WebsiteBulkAction, extra: WebsiteBulkExtra = {}): Promise<string | null> {
+  const res = await request<{ count: number }>('POST', `${WEBSITE}/conversations/bulk`, { body: { ids, action, ...extra } });
+  return res.message ?? null;
+}
+
+/** `websiteBulk` for a screen: the server's sentence as a toast, a refusal as an error, and the lists read again. */
+export function useWebsiteBulk() {
+  const qc = useQueryClient();
+  return (ids: number[], action: WebsiteBulkAction, extra: WebsiteBulkExtra = {}): Promise<boolean> =>
+    websiteBulk(ids, action, extra).then(
+      (message) => {
+        toast('success', message ?? text('Updated.'));
+        void qc.invalidateQueries({ queryKey: ['website'] });
+        return true;
+      },
+      (e) => {
+        toast('error', errorMessage(e));
+        return false;
+      },
+    );
 }
 
 /**
@@ -501,7 +727,9 @@ export const team = {
 export const ROLE_LABEL: Record<TeamRole, string> = { owner: 'Owner', participant: 'Participant', observer: 'Monitoring' };
 
 /** What a visitor is doing, in the list's one word. */
-export function visitorStatus(v: { conversation_status: string | null; idle_seconds: number }): ['Chatting' | 'Active' | 'Inactive', string] {
+export function visitorStatus(v: { conversation_status: string | null; idle_seconds: number; chat?: { awaiting: boolean } | null }): ['Waiting' | 'Chatting' | 'Active' | 'Inactive', string] {
+  // Waiting: their chat is open and they spoke last (worksuite-desktop#231).
+  if ((v.conversation_status === 'open' || v.conversation_status === 'pending') && v.chat?.awaiting) return ['Waiting', 'text-[#9A4A06] dark:text-warning'];
   if (v.conversation_status === 'open' || v.conversation_status === 'pending') return ['Chatting', 'text-primary'];
   return v.idle_seconds < 120 ? ['Active', 'text-success'] : ['Inactive', 'text-ink-3'];
 }

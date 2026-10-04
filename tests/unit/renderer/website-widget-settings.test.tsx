@@ -10,7 +10,8 @@ import type * as CoreApi from '../../../src/core/api';
  * and the away screen, the launcher and its greeting card — and a save that sends the design and nothing else.
  *
  * #207: the theme, the launcher's offsets, a company name that is never a web address, and the preview as the widget
- * now draws itself (minimise and maximise in its header, one status line, a start card that is just the message box).
+ * now draws itself (expand and minimise in its header, who is online over when they reply, a start card that is just the
+ * message box).
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPut: vi.fn(), apiPost: vi.fn(async () => ({})) }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => undefined), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false }));
@@ -23,6 +24,7 @@ import { clampOffset, contrast, hoursText, looksLikeAddress, namesLine, palette,
 import { WidgetSettings } from '../../../src/modules/chat/website/widget/WidgetSettings';
 
 const design = (extra: Partial<WidgetDesign> = {}): WidgetDesign => ({
+  name: 'Main', header_title: 'Chat with us', welcome_message: null, accent_color: '#2F3FB5', border_radius: 16, auto_open_delay: 0,
   website_name: 'Livezen Technologies', brand_color: '#2F3FB5', logo_url: null, greeting: 'Hi there,\nhow can we help?', header_subtitle: null,
   quick_links: [{ label: 'Pricing and plans', url: 'https://livezen.example/pricing' }], staff_display: 'name_role', show_agents: true,
   offline_message: null, whatsapp_number: '+94771234567', launcher_style: 'pill', position: 'bottom_right', greeting_delay: 5,
@@ -128,10 +130,12 @@ describe('Website chats → Widget', () => {
   it('previews the home screen from the saved design: greeting, photos with green dots, reply time and quick help', async () => {
     mount();
     await screen.findByTestId('widget-preview');
+    fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     expect(screen.getByRole('img', { name: 'Preview of the home screen' })).toBeTruthy();
     expect(preview().getByText(/Hi there,/)).toBeTruthy();
     // One status line (#207).
-    expect(preview().getByText('Samali and Dimuthu are online · usually replies in a few minutes')).toBeTruthy();
+    expect(preview().getByText('Samali and Dimuthu are online')).toBeTruthy();
+    expect(preview().getByText('Usually replies in a few minutes')).toBeTruthy();
     expect(preview().getByText('Pricing and plans')).toBeTruthy();
     expect(preview().getByText('SG')).toBeTruthy();
   });
@@ -140,8 +144,10 @@ describe('Website chats → Widget', () => {
     mount();
     await screen.findByTestId('widget-preview');
 
+    fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Brand colour' }), { target: { value: '#FACC15' } });
     fireEvent.change(screen.getByLabelText('Greeting'), { target: { value: 'Welcome to Livezen' } });
+    // Whose photos and how they are named: the Team photos card under Appearance, since S-04 gave Staff its table.
     fireEvent.click(screen.getByRole('radio', { name: 'First name only' }));
 
     expect(preview().getByText('Welcome to Livezen')).toBeTruthy();
@@ -157,8 +163,11 @@ describe('Website chats → Widget', () => {
   it('shows the away screen with the hours being edited, the away message and WhatsApp', async () => {
     mount();
     await screen.findByTestId('widget-preview');
-    fireEvent.change(screen.getByLabelText('Away message'), { target: { value: 'We are closed for the holiday.' } });
+    // The design's "Offline message" (S-02) is the away screen's message; the hours are on the Hours tab.
+    fireEvent.change(screen.getByLabelText('Offline message'), { target: { value: 'We are closed for the holiday.' } });
+    fireEvent.click(screen.getByRole('tab', { name: 'Hours' }));
     fireEvent.click(screen.getByRole('switch', { name: 'Open on Saturday' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Appearance' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Away' }));
 
     expect(preview().getByText('We are closed for the holiday.')).toBeTruthy();
@@ -176,12 +185,12 @@ describe('Website chats → Widget', () => {
     expect(preview().getByText('Chat with us')).toBeTruthy();
 
     fireEvent.change(screen.getByRole('spinbutton', { name: /Greeting card after \(seconds\)/ }), { target: { value: '0' } });
-    fireEvent.click(screen.getByRole('radio', { name: 'Round button' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Icon' }));
     expect(preview().queryByText('Hi there. Looking for hosting, a website or WorkSuite?')).toBeNull();
     expect(preview().queryByText('Chat with us')).toBeNull();
   });
 
-  it('saves the design and whose photos are shown — never the widget\'s domains or name — and the hours', async () => {
+  it('saves the design and whose photos are shown — never the widget\'s domains or status — and the hours', async () => {
     mount();
     await screen.findByTestId('widget-preview');
     fireEvent.change(screen.getByLabelText('Link 1 label'), { target: { value: 'Plans' } });
@@ -189,6 +198,7 @@ describe('Website chats → Widget', () => {
     fireEvent.change(screen.getByLabelText('Link 2 label'), { target: { value: 'Book a demo' } });
     fireEvent.change(screen.getByLabelText('Link 2 address'), { target: { value: 'https://livezen.example/demo' } });
     fireEvent.click(screen.getByRole('switch', { name: 'Show Kasun Jayasuriya to visitors' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Hours' }));
     fireEvent.click(screen.getByRole('switch', { name: 'Open on Saturday' }));
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
 
@@ -197,7 +207,9 @@ describe('Website chats → Widget', () => {
     expect(body.quick_links).toEqual([{ label: 'Plans', url: 'https://livezen.example/pricing' }, { label: 'Book a demo', url: 'https://livezen.example/demo' }]);
     expect(body.agents).toEqual([{ user_id: 8, shown: true }]);
     expect(body).not.toHaveProperty('allowed_domains');
-    expect(body).not.toHaveProperty('name');
+    // The widget's name is on the Appearance tab since S-02; its domains and status are still the web's.
+    expect(body.name).toBe('Main');
+    expect(body).not.toHaveProperty('status');
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/chat/widget-admin/widgets/1/hours', expect.objectContaining({ timezone: 'Asia/Colombo' })));
     const week = (vi.mocked(apiPut).mock.calls.find(([p]) => p === '/api/chat/widget-admin/widgets/1/hours')![1] as { days: Array<{ weekday: number; is_open: boolean }> }).days;
     expect(week.find((d) => d.weekday === 6)!.is_open).toBe(true);
@@ -212,13 +224,14 @@ describe('Website chats → Widget', () => {
     expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('previews the header as the widget draws it now: the name, minimise and maximise, and a start card that is just the box (#207)', async () => {
+  it('previews the header as the widget draws it now: the name, expand and minimise (W-02), and a start card that is just the box (#207)', async () => {
     mount();
     await screen.findByTestId('widget-preview');
+    fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     expect(preview().getByText('Livezen Technologies')).toBeTruthy();
     expect(screen.getByTestId('preview-logo').textContent).toBe('L');
-    expect(within(screen.getAllByTestId('preview-controls')[0]!).getByTitle('Minimise chat')).toBeTruthy();
-    expect(within(screen.getAllByTestId('preview-controls')[0]!).getByTitle('Maximise chat')).toBeTruthy();
+    const controls = within(screen.getAllByTestId('preview-controls')[0]!);
+    expect(controls.getAllByTitle(/chat$/).map((c) => c.getAttribute('title'))).toEqual(['Expand chat', 'Minimise chat']);
     expect(preview().queryByText('Start a conversation')).toBeNull();
     expect(preview().queryByText('We are online')).toBeNull();
     expect(preview().queryByText(/Type your question/)).toBeNull();
@@ -232,13 +245,14 @@ describe('Website chats → Widget', () => {
     payload = { ...payload, fallback_name: 'Livezen Technologies (Pvt) Ltd', design: design({ website_name: 'https://tenderhub.lk/' }) };
     mount();
     await screen.findByTestId('widget-preview');
+    fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     expect(preview().getByText('Livezen Technologies (Pvt) Ltd')).toBeTruthy();
     expect(preview().queryByText(/tenderhub/)).toBeNull();
     expect(screen.getByTestId('preview-logo').textContent).toBe('L');
     expect(screen.getByText('Enter the company\'s name, not its web address: the widget shows it in its header')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
 
-    fireEvent.change(screen.getByRole('textbox', { name: /Company name/ }), { target: { value: '' } });
+    fireEvent.change(screen.getByRole('textbox', { name: /Website name/ }), { target: { value: '' } });
     expect(preview().getByText('Livezen Technologies (Pvt) Ltd')).toBeTruthy();
     expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(false);
   });
@@ -247,6 +261,7 @@ describe('Website chats → Widget', () => {
     mount();
     await screen.findByTestId('widget-preview');
     fireEvent.click(screen.getByRole('radio', { name: 'Dark' }));
+    fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     const header = preview().getByText(/Hi there,/).closest('[style]') as HTMLElement;
     expect(header.style.background).not.toBe('');
     expect(header.style.color).toBe('rgb(255, 255, 255)');

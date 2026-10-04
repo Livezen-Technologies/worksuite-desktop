@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ApiError, apiPost } from '../../../core/api';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ApiError } from '../../../core/api';
 import { errorMessage, on } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
 import { dateLabel, parseTs, timeLabel } from '../../../core/time';
@@ -7,16 +7,18 @@ import { toast } from '../../../core/toasts';
 import { Checkbox } from '../../../components/Checkbox';
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
-import { Avatar, Button, Chip, Modal, cx } from '../../../components/ui';
-import { ROLE_LABEL, team, useAgents, WEBSITE, type Colleague, type WebsiteConversation, type WebsitePerson, type WebsiteTeam } from './api';
+import { Avatar, Button, Chip, Modal, cx, initials } from '../../../components/ui';
+import { useNow } from '../../calls/parts';
+import { PRESENCE } from '../Details';
+import { usePresence } from '../presence';
+import { ROLE_LABEL, team, useAgents, type Colleague, type WebsiteConversation, type WebsitePending, type WebsitePerson, type WebsiteTeam } from './api';
+import { PANEL_CARD, PANEL_HEADING } from './rowParts';
 
 /**
  * Several staff in one website chat (WS-WCHAT ENH-WCHAT-03, TEAM-UI-01 and TEAM-UI-02): the faces in the thread's
  * header, the "In this chat" panel, the invite and transfer dialogs, a note only staff see, and the notice when an
  * invitation or a transfer was declined. Every rule is the server's; these say it and pass on what was chosen.
  */
-
-const HEADING = 'text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase';
 
 const STATUS: Record<NonNullable<Colleague['status']>, { label: string; dot: string }> = {
   available: { label: 'Available', dot: 'bg-success' },
@@ -30,15 +32,16 @@ function refusal(e: unknown): string {
   return e instanceof ApiError ? e.message : errorMessage(e);
 }
 
-/** Who is in the chat, owner first, as small faces in the thread's header (TEAM-04). */
+/** Who is in the chat, owner first, as overlapping faces in the thread's header (TEAM-04; C-08: 28 px, as designed). */
 export function TeamFaces({ people }: { people: WebsitePerson[] }) {
-  const shown = people.filter((p) => p.role !== 'observer');
+  // The server sends the owner first; kept so here too, whatever an older one sends.
+  const shown = people.filter((p) => p.role !== 'observer').sort((a, b) => Number(b.role === 'owner') - Number(a.role === 'owner'));
   if (shown.length < 2) return null;
   return (
     <span className="flex shrink-0 items-center" aria-label={text('In this chat: {names}', { names: shown.map((p) => `${p.name}${p.role === 'owner' ? ' (owner)' : ''}`).join(', ') })}>
       {shown.slice(0, 4).map((p, i) => (
-        <span key={p.user_id} title={`${p.name} · ${ROLE_LABEL[p.role]}`} className={cx('rounded-full ring-2 ring-surface', i > 0 && '-ml-1.5')}>
-          <Avatar name={p.name} src={p.avatar} size={24} />
+        <span key={p.user_id} title={`${p.name} · ${ROLE_LABEL[p.role]}`} className={cx('rounded-full ring-2 ring-surface', i > 0 && '-ml-2')}>
+          <Avatar name={p.name} src={p.avatar} size={28} />
         </span>
       ))}
       {shown.length > 4 ? <span className="ml-1 text-[11px] font-semibold text-ink-3">+{shown.length - 4}</span> : null}
@@ -46,17 +49,9 @@ export function TeamFaces({ people }: { people: WebsitePerson[] }) {
   );
 }
 
-/**
- * "In this chat" (TEAM-04, TEAM-06, TEAM-07): everybody in it with their role and when they joined, the invitations and
- * transfers still waiting with Cancel, Leave chat, Remove for the owner, and a supervisor's Monitor, Join and Take over.
- */
-export function InThisChat({ data, me, onInvite, onTransfer, onClose, onDone }: { data: WebsiteConversation; me: number | null; onInvite: () => void; onTransfer: () => void; onClose: () => void; onDone: () => void }) {
-  const t = data.team;
+/** One team action at a time, its refusal in the server's words, the chat read again after. */
+function useTeamRun(onDone: () => void) {
   const [busy, setBusy] = useState(false);
-  const [owning, setOwning] = useState(false);
-  if (!t) return null;
-  const id = data.conversation.id;
-  const closed = data.conversation.status === 'closed';
   const run = async (fn: () => Promise<unknown>, done?: string) => {
     setBusy(true);
     try {
@@ -69,70 +64,140 @@ export function InThisChat({ data, me, onInvite, onTransfer, onClose, onDone }: 
       onDone();
     }
   };
-  const leave = () => {
-    // The owner cannot leave it alone: they are offered Transfer or Close (AC-T07).
-    if (t.my_role === 'owner') {
-      setOwning(true);
-      return;
-    }
-    void run(() => team.leave(id), 'You left the chat.');
-  };
+  return { busy, run };
+}
+
+/** "1:30": what is left of an invitation or transfer's ring. */
+export function countdown(seconds: number): string {
+  const s = Math.max(0, Math.ceil(seconds));
+  return `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`;
+}
+
+/**
+ * Seconds left on a pending invitation or transfer: by the server's own count when it gave one (C-08), so a computer
+ * whose clock is off still shows the true countdown; else by its expiry time. Null when it waits until answered.
+ */
+export function secondsLeft(h: Pick<WebsitePending, 'expires_at' | 'expires_in'>, fetchedAt: number, now: number): number | null {
+  if (h.expires_in !== undefined && h.expires_in !== null) return h.expires_in - (now - fetchedAt) / 1000;
+  return h.expires_at ? (parseTs(h.expires_at).getTime() - now) / 1000 : null;
+}
+
+const ROW_AVATAR = 'flex h-8 w-8 shrink-0 items-center justify-center rounded-full text-[11px] font-bold';
+
+/**
+ * "In this chat" (C-08, X-UI-07; TEAM-04, TEAM-07, UX-DRW-03): a card of everybody in it — presence, role pill and when
+ * they joined — the invitations and transfers still ringing with a dashed face, a countdown and Cancel, Invite someone,
+ * Remove for the owner, and a supervisor's Monitor, Join and Take over. Leaving is the panel's foot (`LeaveChat`).
+ */
+export function InThisChat({ data, me, fetchedAt, onInvite, onDone }: { data: WebsiteConversation; me: number | null; fetchedAt: number; onInvite: () => void; onDone: () => void }) {
+  const t = data.team;
+  const { busy, run } = useTeamRun(onDone);
+  const now = useNow(1_000);
+  // The server says each person's presence; an older one does not, and Team Chat's shared store is asked instead (#183).
+  const ask = !!t && t.people.some((p) => !p.presence);
+  const presenceOf = usePresence(ask ? t.people.map((p) => p.user_id) : [], ask);
+  if (!t) return null;
+  const id = data.conversation.id;
+  const closed = data.conversation.status === 'closed';
+  const staff = t.people.filter((p) => p.role !== 'observer').length;
+  const full = staff >= t.max;
+  const rows = t.people.length + t.pending.length;
   return (
-    <section aria-label="In this chat" className="flex flex-col gap-1.5 border-t border-line pt-2.5">
-      <span className="flex items-center gap-2">
-        <h3 className={cx(HEADING, 'flex-1')}>In this chat · {t.people.filter((p) => p.role !== 'observer').length}/{t.max}</h3>
-        {t.can.invite && !closed ? (
-          <button type="button" onClick={onInvite} className="text-[12px] font-semibold text-primary hover:underline">Invite</button>
-        ) : null}
+    <section aria-label="In this chat" className={PANEL_CARD}>
+      <span className="flex items-center">
+        <h3 className={cx(PANEL_HEADING, 'flex-1')}>In this chat</h3>
+        <span className="text-[11px] text-ink-3" title={text('{n} of at most {max} staff', { n: staff, max: t.max })}>{rows}</span>
       </span>
-      {t.people.length === 0 ? <span className="text-[12px] text-ink-3">Nobody has joined yet.</span> : null}
-      <ul className="flex flex-col gap-1.5">
-        {t.people.map((p) => (
-          <li key={p.user_id} className="flex items-center gap-2">
-            <Avatar name={p.name} src={p.avatar} size={26} />
-            <span className="flex min-w-0 flex-1 flex-col">
-              <span className="flex items-center gap-1.5">
-                <b className="truncate text-ink">{p.name}{p.user_id === me ? ' (you)' : ''}</b>
-                <Chip tone={p.role === 'owner' ? 'indigo' : p.role === 'observer' ? 'warning' : 'muted'}>{ROLE_LABEL[p.role]}</Chip>
+      {t.people.length === 0 && t.pending.length === 0 ? <span className="text-[12px] text-ink-3">Nobody has joined yet.</span> : null}
+      <ul className="flex flex-col gap-2">
+        {t.people.map((p) => {
+          const st = PRESENCE[p.presence ?? presenceOf(p.user_id) ?? ''];
+          return (
+            <li key={p.user_id} className="flex items-center gap-2.5">
+              <span className="relative shrink-0">
+                <Avatar name={p.name} src={p.avatar} size={32} />
+                {st ? <span className={cx('absolute -right-px -bottom-px h-2.5 w-2.5 rounded-full border-2 border-surface', st.dot)} title={st.label} aria-label={st.label} /> : null}
               </span>
-              <span className="truncate text-[11px] text-ink-3">
-                {p.joined_at ? `Joined ${timeLabel(p.joined_at)}` : 'In the chat'}
-                {p.invited_by_name ? ` · invited by ${p.invited_by_name}` : ''}
-                {p.role === 'observer' ? ' · the visitor does not see them' : ''}
+              <span className="flex min-w-0 flex-1 flex-col">
+                <b className="truncate text-[13px] text-ink">{p.name}{p.user_id === me ? ' (you)' : ''}</b>
+                <span className="flex min-w-0 items-center gap-1.5 text-[11.5px]">
+                  <Chip tone={p.role === 'observer' ? 'warning' : 'indigo'} className="!px-1.5 !py-px !text-[10.5px] !font-bold">{ROLE_LABEL[p.role]}</Chip>
+                  <span className="truncate text-ink-3">
+                    {[p.joined_at ? joinedLabel(p.joined_at) : null, p.invited_by_name ? `invited by ${p.invited_by_name}` : null, p.role === 'observer' ? 'the visitor does not see them' : null].filter(Boolean).join(' · ')}
+                  </span>
+                </span>
               </span>
-            </span>
-            {t.can.remove && p.role !== 'owner' && p.user_id !== me && !closed ? (
-              <button type="button" disabled={busy} aria-label={`Remove ${p.name} from the chat`} title="Remove from the chat" onClick={() => void run(() => team.remove(id, p.user_id), `${p.name} was removed.`)} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-danger">
-                <Icon name="user-x" size={14} />
-              </button>
-            ) : null}
-          </li>
-        ))}
-      </ul>
-      {t.pending.length ? (
-        <ul className="flex flex-col gap-1" aria-label="Waiting for an answer">
-          {t.pending.map((h) => (
-            <li key={h.id} className="flex items-center gap-2 rounded-[8px] border border-dashed border-line px-2 py-1.5 text-[12px]">
-              <Icon name={h.kind === 'invite' ? 'user-plus' : 'transfers'} size={14} className="shrink-0 text-ink-3" />
-              <span className="min-w-0 flex-1">
-                <span className="block truncate text-ink">{h.kind === 'invite' ? `Invited ${h.to}` : `${h.mode === 'cold' ? 'Handed over to' : 'Transfer to'} ${h.to}`}</span>
-                <span className="block truncate text-[11px] text-ink-3">{h.expires_at ? `Waiting · expires ${timeLabel(h.expires_at)}` : 'Waiting until somebody takes it'}{h.from_name ? ` · by ${h.from_name}` : ''}</span>
-              </span>
-              {(h.from === me || t.my_role === 'owner' || t.can.take_over) && !closed ? (
-                <button type="button" disabled={busy} onClick={() => void run(() => team.cancel(h.id), 'Cancelled.')} className="shrink-0 font-semibold text-primary hover:underline">Cancel</button>
+              {t.can.remove && p.role !== 'owner' && p.user_id !== me && !closed ? (
+                <button type="button" disabled={busy} aria-label={`Remove ${p.name} from the chat`} title="Remove from the chat" onClick={() => void run(() => team.remove(id, p.user_id), `${p.name} was removed.`)} className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-danger">
+                  <Icon name="user-x" size={14} />
+                </button>
               ) : null}
             </li>
-          ))}
-        </ul>
+          );
+        })}
+        {t.pending.map((h) => {
+          const left = secondsLeft(h, fetchedAt, now);
+          const what = h.kind === 'invite' ? 'Invited' : h.mode === 'cold' ? 'Handed over' : 'Transfer';
+          return (
+            <li key={`h${h.id}`} className="flex items-center gap-2.5" title={h.from_name ? `${what} by ${h.from_name}` : undefined}>
+              <span aria-hidden className={cx(ROW_AVATAR, 'border-[1.5px] border-dashed border-line text-ink-3')}>{initials(h.to)}</span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <b className="truncate text-[13px] text-ink">{h.to}</b>
+                <span className="truncate text-[11.5px] font-semibold text-[#9A5B10] dark:text-warning">{left === null ? `${what} · waiting` : `${what} · ${countdown(left)}`}</span>
+              </span>
+              {(h.from === me || t.my_role === 'owner' || t.can.take_over) && !closed ? (
+                <button type="button" disabled={busy} aria-label={`Cancel ${h.kind === 'invite' ? 'the invitation to' : 'the transfer to'} ${h.to}`} onClick={() => void run(() => team.cancel(h.id), 'Cancelled.')} className="h-6 shrink-0 rounded-[6px] border border-line bg-surface px-2 text-[11px] font-semibold text-danger hover:bg-danger-bg">
+                  Cancel
+                </button>
+              ) : null}
+            </li>
+          );
+        })}
+      </ul>
+      {t.can.invite && !closed ? (
+        // At the limit nobody more can come in (TEAM-03): said here rather than refused after picking.
+        <button type="button" onClick={onInvite} disabled={full} title={full ? text('This chat has {max} staff in it, the most one chat can have.', { max: t.max }) : undefined} className="flex h-[30px] items-center justify-center gap-1.5 rounded-[8px] border border-dashed border-[#C3CCF6] bg-selection/50 text-[12px] font-bold text-primary hover:bg-selection disabled:cursor-not-allowed disabled:opacity-55 dark:border-primary/40">
+          <Icon name="plus" size={12} /> Invite someone
+        </button>
       ) : null}
-      <span className="flex flex-wrap gap-1.5 pt-0.5">
-        {t.can.transfer && !closed ? <Button size="sm" icon="transfers" disabled={busy} onClick={onTransfer}>Transfer</Button> : null}
-        {t.can.leave || t.my_role === 'owner' ? <Button size="sm" disabled={busy} onClick={leave}>{t.my_role === 'observer' ? 'Stop monitoring' : 'Leave chat'}</Button> : null}
-        {t.can.monitor ? <Button size="sm" icon="eye" disabled={busy} onClick={() => void run(() => team.monitor(id), 'Monitoring: the visitor does not see you.')}>Monitor</Button> : null}
-        {t.can.join ? <Button size="sm" disabled={busy} onClick={() => void run(() => team.join(id), 'You joined the chat.')}>Join</Button> : null}
-        {t.can.take_over ? <Button size="sm" disabled={busy} onClick={() => void run(() => team.takeOver(id), 'The chat is yours.')}>Take over</Button> : null}
-      </span>
+      {t.can.monitor || t.can.join || t.can.take_over ? (
+        <span className="flex flex-wrap gap-1.5">
+          {t.can.monitor ? <Button size="sm" icon="eye" disabled={busy} onClick={() => void run(() => team.monitor(id), 'Monitoring: the visitor does not see you.')}>Monitor</Button> : null}
+          {t.can.join ? <Button size="sm" disabled={busy} onClick={() => void run(() => team.join(id), 'You joined the chat.')}>Join</Button> : null}
+          {t.can.take_over ? <Button size="sm" disabled={busy} onClick={() => void run(() => team.takeOver(id), 'The chat is yours.')}>Take over</Button> : null}
+        </span>
+      ) : null}
       {t.transfer_count > 0 ? <span className="text-[11px] text-ink-3">Transferred {t.transfer_count === 1 ? 'once' : `${t.transfer_count} times`}</span> : null}
+    </section>
+  );
+}
+
+/**
+ * The people panel's foot (C-08, X-UI-07; TEAM-06): Leave chat, and for the owner the warning that they must transfer
+ * it first. An owner who leaves anyway is offered Transfer or Close (AC-T07); an observer stops monitoring.
+ */
+export function LeaveChat({ data, onTransfer, onClose, onDone }: { data: WebsiteConversation; onTransfer: () => void; onClose: () => void; onDone: () => void }) {
+  const t = data.team;
+  const { busy, run } = useTeamRun(onDone);
+  const [owning, setOwning] = useState(false);
+  if (!t || !(t.can.leave || t.my_role === 'owner')) return null;
+  const id = data.conversation.id;
+  const open = data.conversation.status !== 'closed';
+  const owner = t.my_role === 'owner' && open;
+  const leave = () => {
+    if (owner) setOwning(true);
+    else void run(() => team.leave(id), t.my_role === 'observer' ? 'You stopped monitoring.' : 'You left the chat.');
+  };
+  return (
+    <>
+      {owner ? (
+        <div role="note" className="rounded-[12px] border border-[#F0D08F] bg-warning-bg px-3 py-2.5 text-[12px] text-[#6B4A10] dark:border-warning/40 dark:text-warning">
+          You own this chat — transfer it before you leave.
+        </div>
+      ) : null}
+      <button type="button" disabled={busy} onClick={leave} className="flex h-9 shrink-0 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface text-[13px] font-semibold text-ink hover:bg-subtle disabled:opacity-60">
+        <Icon name="logout" size={14} className="text-ink-2" /> {t.my_role === 'observer' ? 'Stop monitoring' : 'Leave chat'}
+      </button>
       {owning ? (
         <Modal title="You own this chat" labelledBy="website-owner-leave" onClose={() => setOwning(false)} width={420} footer={
           <>
@@ -144,30 +209,83 @@ export function InThisChat({ data, me, onInvite, onTransfer, onClose, onDone }: 
           <p className="text-[13px] text-ink-2">The visitor would be left with nobody. Transfer the chat to a colleague first, or close it.</p>
         </Modal>
       ) : null}
-    </section>
+    </>
   );
 }
 
-/** The colleague picker's rows: availability, open chats and department, offline people not pickable (TEAM-20, TEAM-21). */
+/**
+ * Reply to visitor / Internal note, above the shared composer (C-08, TEAM-60): the one box writes to the visitor or a
+ * note only staff see. Arrow keys move between the two, as tabs do.
+ */
+export function MessageTypeTabs({ value, onChange }: { value: 'reply' | 'note'; onChange: (v: 'reply' | 'note') => void }) {
+  const tabs = [['reply', 'Reply to visitor'], ['note', 'Internal note']] as const;
+  return (
+    <div role="tablist" aria-label="Message type" className="flex gap-1" onKeyDown={(e) => {
+      if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+      e.preventDefault();
+      onChange(value === 'reply' ? 'note' : 'reply');
+    }}>
+      {tabs.map(([k, label]) => (
+        <button
+          key={k}
+          type="button"
+          role="tab"
+          aria-selected={value === k}
+          tabIndex={value === k ? 0 : -1}
+          onClick={() => onChange(k)}
+          className={cx(
+            'h-7 rounded-[8px] px-3 text-[12px]',
+            value === k ? (k === 'note' ? 'bg-warning-bg font-bold text-[#9A6A12] dark:text-warning' : 'bg-selection font-bold text-primary') : k === 'note' ? 'font-semibold text-[#9A6A12] hover:bg-subtle dark:text-warning' : 'font-semibold text-ink-3 hover:bg-subtle hover:text-ink',
+          )}
+        >
+          {label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+/** How each availability reads in the pickers (C-09): Available in green, Busy in amber, the rest quiet. */
+const STATUS_TONE: Record<NonNullable<Colleague['status']>, string> = {
+  available: 'text-success',
+  busy: 'text-[#9A5B10] dark:text-warning',
+  away: 'text-ink-3',
+  offline: 'text-ink-3',
+};
+
+/** A picker row's frame (C-09): ruled between rows, a picked one tinted with the primary bar down its left edge. */
+function PickRow({ picked, disabled, children }: { picked: boolean; disabled: boolean; children: ReactNode }) {
+  return (
+    <label className={cx('relative flex items-center gap-2.5 border-t border-line px-3 py-2.5 first:border-t-0', disabled ? 'text-ink-3' : 'cursor-pointer hover:bg-subtle', picked && 'bg-selection/60')}>
+      {picked ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
+      {children}
+    </label>
+  );
+}
+
+/**
+ * The colleague picker's rows (C-09, TEAM-20, TEAM-21): "Available · 1 chat · Education sales", coloured by
+ * availability; offline people, and anybody already in it, not pickable; somebody who does not staff this website
+ * marked so.
+ */
 function ColleagueRow({ a, picked, disabled, why, onPick, multi }: { a: Colleague; picked: boolean; disabled: boolean; why: string | null; onPick: () => void; multi: boolean }) {
   const st = STATUS[a.status ?? 'available'];
+  // Offline says just that, as designed: nothing else about somebody who cannot be asked.
+  const line = why === 'Offline' ? why : [
+    why ?? st.label,
+    a.open_chats !== undefined ? `${a.open_chats} chat${a.open_chats === 1 ? '' : 's'}` : null,
+    a.department || null,
+    a.on_staff === false ? "not on this site's staff" : null,
+  ].filter(Boolean).join(' · ');
   return (
-    <label className={cx('flex items-center gap-2.5 rounded-[8px] px-2 py-1.5', disabled ? 'opacity-55' : 'cursor-pointer hover:bg-subtle', picked && 'bg-selection')}>
+    <PickRow picked={picked} disabled={disabled}>
       {multi ? <Checkbox checked={picked} disabled={disabled} onChange={onPick} /> : <input type="radio" name="colleague" checked={picked} disabled={disabled} onChange={onPick} className="accent-primary" />}
-      <span className="relative shrink-0">
-        <Avatar name={a.name} size={28} />
-        <span aria-hidden className={cx('absolute -right-0.5 -bottom-0.5 h-2.5 w-2.5 rounded-full ring-2 ring-surface', st.dot)} />
-      </span>
+      <span className={cx('shrink-0', disabled && 'opacity-55 grayscale')}><Avatar name={a.name} size={30} /></span>
       <span className="flex min-w-0 flex-1 flex-col">
-        <b className="truncate text-[13px] text-ink">{a.name}</b>
-        <span className="truncate text-[11.5px] text-ink-3">
-          {why ?? st.label}
-          {a.open_chats !== undefined ? ` · ${a.open_chats} open chat${a.open_chats === 1 ? '' : 's'}` : ''}
-          {a.department ? ` · ${a.department}` : ''}
-          {a.on_staff === false ? " · not on this site's staff" : ''}
-        </span>
+        <b className="truncate text-[13px] font-semibold">{a.name}</b>
+        <span className={cx('truncate text-[12px]', disabled ? 'text-ink-3' : STATUS_TONE[a.status ?? 'available'])}>{line}</span>
       </span>
-    </label>
+    </PickRow>
   );
 }
 
@@ -180,19 +298,36 @@ function unpickable(a: Colleague, me: number | null, transfer: boolean): string 
   return null;
 }
 
+type Department = { id: number; name: string; available: number };
+
+/** Colleagues and departments whose name, or department, has what was typed (C-09: "Search people or departments"). */
+function matching<T extends { name: string; department?: string | null }>(list: T[], q: string): T[] {
+  const k = q.trim().toLowerCase();
+  return k ? list.filter((x) => `${x.name} ${x.department ?? ''}`.toLowerCase().includes(k)) : list;
+}
+
+const FIELD = 'rounded-[8px] border border-line bg-surface px-3 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-primary';
+const LIST = 'flex flex-col overflow-y-auto rounded-[10px] border border-line scroll-thin';
+
+/** The dialogs' one line under the title (C-09). */
+function Lede({ children }: { children: ReactNode }) {
+  return <p className="-mt-1 text-[13px] text-ink-2">{children}</p>;
+}
+
 /**
- * Invite (TEAM-UI-02, TEAM-20…22): one or more colleagues, or a department, with a note only staff see. Each invitation
- * rings for two minutes unless the organisation set otherwise.
+ * Invite (C-09, TEAM-UI-02, TEAM-20…22, TEAM-25): one or more colleagues, or a department — found by one search —
+ * with a note only staff see. Each invitation rings for two minutes unless the organisation set otherwise.
  */
-export function InviteDialog({ conversationId, me, onClose, onDone }: { conversationId: number; me: number | null; onClose: () => void; onDone: () => void }) {
+export function InviteDialog({ conversationId, me, owner = true, onClose, onDone }: { conversationId: number; me: number | null; owner?: boolean; onClose: () => void; onDone: () => void }) {
   const agents = useAgents(true, conversationId);
   const [q, setQ] = useState('');
   const [picked, setPicked] = useState<number[]>([]);
   const [dept, setDept] = useState(0);
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const list = useMemo(() => (agents.data?.agents ?? []).filter((a) => !q.trim() || `${a.name} ${a.department ?? ''}`.toLowerCase().includes(q.trim().toLowerCase())), [agents.data, q]);
-  const departments = agents.data?.departments ?? [];
+  const people = useMemo(() => matching(agents.data?.agents ?? [], q), [agents.data, q]);
+  const departments = useMemo(() => matching<Department>(agents.data?.departments ?? [], q), [agents.data, q]);
+  const deptName = (agents.data?.departments ?? []).find((d) => d.id === dept)?.name;
   const send = async () => {
     setBusy(true);
     try {
@@ -206,54 +341,71 @@ export function InviteDialog({ conversationId, me, onClose, onDone }: { conversa
       setBusy(false);
     }
   };
+  // "Invite 1 person", as designed; a department is asked as one (TEAM-25).
+  const label = dept ? `Invite the ${deptName ?? 'department'} team` : picked.length === 1 ? 'Invite 1 person' : picked.length > 1 ? `Invite ${picked.length} people` : 'Invite';
   return (
     <Modal title="Invite to this chat" labelledBy="website-invite" onClose={onClose} width={480} footer={
       <>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" loading={busy} disabled={!dept && !picked.length} onClick={() => void send()}>{dept ? 'Invite the department' : picked.length > 1 ? `Invite ${picked.length}` : 'Invite'}</Button>
+        <Button variant="primary" loading={busy} disabled={!dept && !picked.length} onClick={() => void send()}>{label}</Button>
       </>
     }>
-      <div className="flex flex-col gap-2.5">
-        <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Find a colleague" placeholder="Find a colleague…" className="h-8 rounded-[8px] border border-line bg-surface px-2.5 text-[13px] outline-none focus:border-primary" autoFocus />
-        <div role="group" aria-label="Colleagues" className="flex max-h-[260px] flex-col overflow-y-auto scroll-thin">
-          {agents.isLoading ? <span className="p-2 text-[12px] text-ink-3">Loading…</span> : null}
-          {list.map((a) => {
+      <div className="flex flex-col gap-3">
+        <Lede>{owner ? 'They join alongside you. You stay the owner.' : 'They join alongside you.'}</Lede>
+        <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search people or departments" placeholder="Search people or departments" className={cx(FIELD, 'h-[38px]')} autoFocus />
+        <div role="group" aria-label="Colleagues" className={cx(LIST, 'max-h-[260px]')}>
+          {agents.isLoading ? <span className="p-3 text-[12px] text-ink-3">Loading…</span> : null}
+          {people.map((a) => {
             const why = unpickable(a, me, false);
-            return <ColleagueRow key={a.id} a={a} multi picked={picked.includes(a.id)} disabled={!!why || !!dept} why={why} onPick={() => setPicked((p) => (p.includes(a.id) ? p.filter((x) => x !== a.id) : [...p, a.id]))} />;
+            return <ColleagueRow key={a.id} a={a} multi picked={picked.includes(a.id)} disabled={!!why} why={why} onPick={() => (setDept(0), setPicked((p) => (p.includes(a.id) ? p.filter((x) => x !== a.id) : [...p, a.id])))} />;
           })}
-          {!agents.isLoading && !list.length ? <span className="p-2 text-[12px] text-ink-3">Nobody matches.</span> : null}
+          {departments.map((d) => (
+            // A department: its available members are rung in the widget's order, the first to accept joins (TEAM-25).
+            <PickRow key={`d${d.id}`} picked={dept === d.id} disabled={!d.available}>
+              <Checkbox checked={dept === d.id} disabled={!d.available} onChange={() => (setPicked([]), setDept((x) => (x === d.id ? 0 : d.id)))} aria-label={`The ${d.name} team`} />
+              <span aria-hidden className={cx('flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full bg-subtle text-ink-2', !d.available && 'opacity-55')}><Icon name="users" size={15} /></span>
+              <span className="flex min-w-0 flex-1 flex-col">
+                <b className="truncate text-[13px] font-semibold">{d.name}</b>
+                <span className={cx('truncate text-[12px]', d.available ? 'text-success' : 'text-ink-3')}>{d.available ? `Department · ${d.available} available · the first to accept joins` : 'Department · nobody available'}</span>
+              </span>
+            </PickRow>
+          ))}
+          {!agents.isLoading && !people.length && !departments.length ? <span className="p-3 text-[12px] text-ink-3">Nobody matches.</span> : null}
         </div>
-        {departments.length ? (
-          <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
-            Or a department
-            <Select aria-label="Department" value={dept} onChange={(e) => setDept(Number(e.target.value))} className="h-8 flex-1 rounded-[7px] border border-line bg-surface px-1.5 text-[12.5px] text-ink">
-              <option value={0}>None — the people ticked above</option>
-              {departments.map((d) => <option key={d.id} value={d.id} disabled={!d.available}>{d.name} · {d.available} available</option>)}
-            </Select>
-          </label>
-        ) : null}
-        <label className="flex flex-col gap-1 text-[12.5px] text-ink-2">
-          Note for them (only staff see it)
-          <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 500))} rows={2} placeholder="What do you need help with?" className="rounded-[8px] border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-primary" />
+        <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
+          Note for them (staff only)
+          <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 500))} rows={2} placeholder="What do you need help with?" className={cx(FIELD, 'resize-none py-2 font-normal')} />
         </label>
       </div>
     </Modal>
   );
 }
 
+/** Who a cold transfer rings, for "it rings for Dilini until they join" (C-09). */
+function ringsFor(to: 'person' | 'department' | 'any', person: Colleague | undefined, dept: Department | undefined): string {
+  if (to === 'person') return person ? person.name.split(' ')[0]! : 'them';
+  if (to === 'department') return dept ? `the ${dept.name} team` : 'the department';
+  return 'everybody available';
+}
+
 /**
- * Transfer (TEAM-UI-02, TEAM-40…43): to a colleague, a department or the next available agent; warm — you keep the chat
- * until they accept — or hand over now; with a handover note only staff see.
+ * Transfer (C-09, TEAM-UI-02, TEAM-40…43): to a person, a department (its next available member by the widget's rule)
+ * or the next available agent; warm — you stay until they join, so the visitor is never left alone — or hand over now;
+ * with a handover note only staff see.
  */
 export function TransferDialog({ conversationId, me, onClose, onDone }: { conversationId: number; me: number | null; onClose: () => void; onDone: () => void }) {
   const agents = useAgents(true, conversationId);
   const [to, setTo] = useState<'person' | 'department' | 'any'>('person');
   const [person, setPerson] = useState(0);
+  const [q, setQ] = useState('');
+  const [choosing, setChoosing] = useState(true);
   const [dept, setDept] = useState(0);
   const [mode, setMode] = useState<'warm' | 'cold'>('warm');
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
   const departments = agents.data?.departments ?? [];
+  const chosen = (agents.data?.agents ?? []).find((a) => a.id === person);
+  const people = useMemo(() => matching(agents.data?.agents ?? [], q), [agents.data, q]);
   const ready = to === 'any' || (to === 'person' ? person > 0 : dept > 0);
   const send = async () => {
     setBusy(true);
@@ -272,164 +424,93 @@ export function TransferDialog({ conversationId, me, onClose, onDone }: { conver
       setBusy(false);
     }
   };
+  const target = ringsFor(to, chosen, departments.find((d) => d.id === dept));
   return (
     <Modal title="Transfer this chat" labelledBy="website-transfer" onClose={onClose} width={480} footer={
       <>
         <Button onClick={onClose}>Cancel</Button>
-        <Button variant="primary" loading={busy} disabled={!ready} onClick={() => void send()}>{mode === 'cold' ? 'Hand over now' : 'Transfer'}</Button>
+        <Button variant="primary" loading={busy} disabled={!ready} onClick={() => void send()}>Transfer</Button>
       </>
     }>
       <div className="flex flex-col gap-3">
-        <div role="radiogroup" aria-label="Transfer to" className="flex gap-1 text-[12px] font-semibold">
-          {([['person', 'A colleague'], ['department', 'A department'], ['any', 'Next available']] as const).map(([k, label]) => (
-            <button key={k} type="button" role="radio" aria-checked={to === k} onClick={() => setTo(k)} className={cx('rounded-[10px] px-2.5 py-1', to === k ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>{label}</button>
+        <Lede>The new owner answers for it from now on.</Lede>
+        {/* A segmented control, as designed; radios to assistive technology. */}
+        <div role="radiogroup" aria-label="Transfer to" className="flex gap-1 rounded-[10px] bg-subtle p-[3px]">
+          {([['person', 'A person'], ['department', 'A department'], ['any', 'Next available']] as const).map(([k, label]) => (
+            <button key={k} type="button" role="radio" aria-checked={to === k} onClick={() => setTo(k)} className={cx('flex-1 rounded-[8px] px-2 py-[7px] text-[13px]', to === k ? 'bg-surface font-bold text-primary shadow-[0_1px_3px_rgba(17,27,59,0.12)]' : 'text-ink-2 hover:text-ink')}>{label}</button>
           ))}
         </div>
         {to === 'person' ? (
-          <div role="group" aria-label="Colleagues" className="flex max-h-[220px] flex-col overflow-y-auto scroll-thin">
-            {(agents.data?.agents ?? []).map((a) => {
-              const why = unpickable(a, me, true);
-              return <ColleagueRow key={a.id} a={a} multi={false} picked={person === a.id} disabled={!!why} why={why} onPick={() => setPerson(a.id)} />;
-            })}
-          </div>
+          chosen && !choosing ? (
+            // The one chosen, as a field: "Dilini Perera · Available". Clicking it chooses again.
+            <button type="button" onClick={() => setChoosing(true)} aria-label={`Transfer to ${chosen.name}. Change`} className={cx(FIELD, 'flex h-10 items-center gap-2 px-2.5 text-left hover:bg-subtle')}>
+              <Avatar name={chosen.name} size={26} />
+              <span className="min-w-0 flex-1 truncate">{chosen.name} · <span className={STATUS_TONE[chosen.status ?? 'available']}>{STATUS[chosen.status ?? 'available'].label}</span></span>
+              <Icon name="chevron-down" size={14} className="text-ink-3" />
+            </button>
+          ) : (
+            <>
+              <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search people" placeholder="Search people" className={cx(FIELD, 'h-10')} />
+              <div role="group" aria-label="Colleagues" className={cx(LIST, 'max-h-[200px]')}>
+                {people.map((a) => {
+                  const why = unpickable(a, me, true);
+                  return <ColleagueRow key={a.id} a={a} multi={false} picked={person === a.id} disabled={!!why} why={why} onPick={() => (setPerson(a.id), setChoosing(false), setQ(''))} />;
+                })}
+                {!agents.isLoading && !people.length ? <span className="p-3 text-[12px] text-ink-3">Nobody matches.</span> : null}
+              </div>
+            </>
+          )
         ) : to === 'department' ? (
-          <Select aria-label="Department" value={dept} onChange={(e) => setDept(Number(e.target.value))} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12.5px] text-ink">
+          <Select aria-label="Department" value={dept} onChange={(e) => setDept(Number(e.target.value))} className="h-10 rounded-[8px] border border-line bg-surface px-2 text-[13px] text-ink">
             <option value={0}>Choose a department</option>
             {departments.map((d) => <option key={d.id} value={d.id} disabled={!d.available}>{d.name} · {d.available} available</option>)}
           </Select>
         ) : (
-          <p className="text-[12.5px] text-ink-2">Everybody available on this website is asked; the first to accept takes it.</p>
+          <p className="text-[13px] text-ink-2">Everybody available on this website is asked, the next by the website's rule first; the first to accept takes it.</p>
         )}
-        <div role="radiogroup" aria-label="How" className="flex flex-col gap-1.5 text-[12.5px]">
+        <div role="radiogroup" aria-label="How" className="flex flex-col gap-2">
           {([
-            ['warm', 'Transfer when they accept', 'You keep answering until they do; then you stay in as a participant and can leave.'],
-            ['cold', 'Hand over now', 'You leave the chat at once. If nobody takes it, it rings everybody covering the website.'],
+            ['warm', 'Warm — stay until they join', 'The visitor is never left alone.'],
+            ['cold', 'Hand over now', `You leave at once; it rings for ${target} until ${to === 'person' ? 'they join' : 'someone joins'}.`],
           ] as const).map(([k, label, hint]) => (
-            <label key={k} className={cx('flex cursor-pointer items-start gap-2 rounded-[8px] border px-2.5 py-1.5', mode === k ? 'border-primary bg-selection' : 'border-line hover:bg-subtle')}>
-              <input type="radio" name="mode" checked={mode === k} onChange={() => setMode(k)} className="mt-0.5 accent-primary" />
-              <span className="flex flex-col"><b className="text-ink">{label}</b><span className="text-[11.5px] text-ink-3">{hint}</span></span>
+            <label key={k} className={cx('flex cursor-pointer items-start gap-2.5 rounded-[10px] px-3 py-2.5', mode === k ? 'border-2 border-primary bg-selection/60' : 'border border-line hover:bg-subtle')}>
+              <input type="radio" name="mode" checked={mode === k} onChange={() => setMode(k)} className="mt-[3px] accent-primary" />
+              <span className="flex flex-col">
+                <b className={cx('text-[13px] text-ink', mode === k ? 'font-bold' : 'font-semibold')}>{label}</b>
+                <span className="text-[12px] text-ink-2">{hint}</span>
+              </span>
             </label>
           ))}
         </div>
-        <label className="flex flex-col gap-1 text-[12.5px] text-ink-2">
-          Handover note (only staff see it)
-          <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 500))} rows={2} placeholder="What should they know?" className="rounded-[8px] border border-line bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-primary" />
+        <label className="flex flex-col gap-1.5 text-[13px] font-semibold text-ink">
+          Handover note (staff only)
+          <textarea value={note} onChange={(e) => setNote(e.target.value.slice(0, 500))} rows={2} placeholder="What should they know?" className={cx(FIELD, 'resize-none py-2 font-normal')} />
         </label>
       </div>
     </Modal>
   );
 }
 
-/** The @word being typed at the caret, for the mention list. */
-export function mentionQuery(value: string, caret: number): { start: number; word: string } | null {
-  const before = value.slice(0, caret);
-  const m = /(^|\s)@([\p{L}\p{N}._-]{0,40})$/u.exec(before);
-  return m ? { start: before.length - m[2]!.length - 1, word: m[2]!.toLowerCase() } : null;
-}
-
-/**
- * The composer's Internal note tab (TEAM-60, TEAM-61): amber, "Only staff see this", never sent to the visitor; @ names
- * a colleague, who is notified. Enter sends; Shift+Enter is a new line.
- */
-export function NoteBox({ conversationId, onSent, compact = false }: { conversationId: number; onSent: () => void; compact?: boolean }) {
-  const agents = useAgents(true, conversationId);
-  const [value, setValue] = useState('');
-  const [named, setNamed] = useState<Array<{ id: number; name: string }>>([]);
-  const [at, setAt] = useState<{ start: number; word: string } | null>(null);
-  const [busy, setBusy] = useState(false);
-  const box = useRef<HTMLTextAreaElement>(null);
-  // Colleagues see "Nimal (a note)" typing; the visitor never sees a note being written (LIVE-03).
-  const typingAt = useRef(0);
-  const typing = (state: 'start' | 'stop') => {
-    if (state === 'start') {
-      if (Date.now() - typingAt.current < 3_000) return;
-      typingAt.current = Date.now();
-    } else {
-      if (!typingAt.current) return;
-      typingAt.current = 0;
-    }
-    void apiPost(`${WEBSITE}/conversations/${conversationId}/typing`, { state, internal: true }).catch(() => undefined);
-  };
-  const matches = at ? (agents.data?.agents ?? []).filter((a) => a.name.toLowerCase().includes(at.word)).slice(0, 5) : [];
-  const pick = (a: Colleague) => {
-    if (!at) return;
-    const first = a.name.split(' ')[0] ?? a.name;
-    const next = `${value.slice(0, at.start)}@${first} ${value.slice(at.start + 1 + at.word.length)}`;
-    setValue(next);
-    setNamed((n) => (n.some((x) => x.id === a.id) ? n : [...n, { id: a.id, name: first }]));
-    setAt(null);
-    box.current?.focus();
-  };
-  const send = async () => {
-    const words = value.trim();
-    if (!words || busy) return;
-    setBusy(true);
-    try {
-      // Only the colleagues still named in the words are mentioned.
-      const mentions = named.filter((n) => words.includes(`@${n.name}`)).map((n) => n.id);
-      typing('stop');
-      await team.note(conversationId, words, mentions);
-      setValue('');
-      setNamed([]);
-      onSent();
-    } catch (e) {
-      toast('error', refusal(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <div className={cx('relative border-t border-dashed border-[#E2B04A] bg-[#FFF6E0] dark:bg-warning-bg', compact ? 'px-2.5 py-2' : 'px-3.5 py-2.5')}>
-      {matches.length ? (
-        <ul role="listbox" aria-label="Mention a colleague" className="absolute bottom-full left-3 z-10 mb-1 w-[240px] overflow-hidden rounded-[8px] border border-line bg-surface shadow-lg">
-          {matches.map((a) => (
-            <li key={a.id} role="option" aria-selected={false}>
-              <button type="button" onMouseDown={(e) => (e.preventDefault(), pick(a))} className="flex w-full items-center gap-2 px-2.5 py-1.5 text-left text-[12.5px] hover:bg-subtle">
-                <Avatar name={a.name} size={20} /> <span className="truncate">{a.name}</span>
-              </button>
-            </li>
-          ))}
-        </ul>
-      ) : null}
-      <span className="mb-1 flex items-center gap-1.5 text-[11px] font-bold text-[#7A4308] dark:text-warning">
-        <Icon name="lock" size={12} /> Only staff see this · the visitor never does
-      </span>
-      <span className="flex items-end gap-2">
-        <textarea
-          ref={box}
-          value={value}
-          aria-label="Internal note"
-          placeholder="Write a note for your colleagues — @ to mention someone"
-          rows={compact ? 1 : 2}
-          onChange={(e) => {
-            setValue(e.target.value.slice(0, 4000));
-            setAt(mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
-            typing(e.target.value ? 'start' : 'stop');
-          }}
-          onBlur={() => typing('stop')}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter' && !e.shiftKey && !e.nativeEvent.isComposing) {
-              e.preventDefault();
-              if (matches[0]) pick(matches[0]);
-              else void send();
-            } else if (e.key === 'Escape' && at) setAt(null);
-          }}
-          className="min-h-[36px] flex-1 resize-none rounded-[8px] border border-[#E2B04A] bg-surface px-2.5 py-1.5 text-[13px] text-ink outline-none focus:border-[#C88A12]"
-        />
-        <Button variant="primary" loading={busy} disabled={!value.trim()} onClick={() => void send()}>Add note</Button>
-      </span>
-    </div>
-  );
+export interface Declined {
+  /** "Dilini declined", "Dilini didn't answer". */
+  who: string;
+  /** The visitor, in bold in the notice. */
+  visitor: string;
+  /** What follows: " is still yours." — or the whole sentence when nobody took a chat handed over. */
+  rest: string;
+  retry: 'invite' | 'transfer' | null;
 }
 
 /**
  * An invitation or transfer this person sent came back declined, unanswered or with nobody taking it (TEAM-24, WF-T2):
- * said in the thread, with Try someone else.
+ * "Dilini declined — Visitor 4F2A is still yours", with Try someone else (C-09).
  */
-export function useDeclined(conversationId: number, me: number | null, t: WebsiteTeam | null | undefined): { text: string; retry: 'invite' | 'transfer' | null } | null {
-  const [notice, setNotice] = useState<{ cid: number; text: string; retry: 'invite' | 'transfer' | null } | null>(null);
+export function useDeclined(conversationId: number, me: number | null, t: WebsiteTeam | null | undefined): (Declined & { dismiss: () => void }) | null {
+  const [notice, setNotice] = useState<(Declined & { cid: number }) | null>(null);
   const mine = useRef(new Map<number, { kind: 'invite' | 'transfer'; to: string }>());
+  const owner = useRef(false);
   useEffect(() => {
+    owner.current = t?.my_role === 'owner';
     for (const h of t?.pending ?? []) if (h.from === me) mine.current.set(h.id, { kind: h.kind, to: h.to });
   }, [t, me]);
   useEffect(() => {
@@ -439,12 +520,33 @@ export function useDeclined(conversationId: number, me: number | null, t: Websit
       if (!h || (e.status !== 'declined' && e.status !== 'expired')) return;
       const who = e.status === 'declined' ? `${e.by_name ?? h.to} declined` : `${h.to} didn't answer`;
       const visitor = e.visitor ?? 'The visitor';
+      // Yours when you own it — a transfer's sender still does (TEAM-41); a participant's invitation leaves it the owner's.
       setNotice(e.released
-        ? { cid: conversationId, text: `${who} — nobody took the chat, so it now rings everybody covering the website.`, retry: null }
-        : { cid: conversationId, text: `${who} — ${visitor} is still ${h.kind === 'invite' ? 'in your chat' : 'yours'}.`, retry: h.kind });
+        ? { cid: conversationId, who, visitor: '', rest: 'nobody took the chat, so it now rings everybody covering the website.', retry: null }
+        : { cid: conversationId, who, visitor, rest: h.kind === 'transfer' || owner.current ? ' is still yours.' : ' is still in your chat.', retry: h.kind });
     });
   }, [conversationId]);
-  return notice && notice.cid === conversationId ? { text: notice.text, retry: notice.retry } : null;
+  if (!notice || notice.cid !== conversationId) return null;
+  const { cid: _cid, ...rest } = notice;
+  return { ...rest, dismiss: () => setNotice(null) };
+}
+
+/**
+ * The declined notice (C-09, TEAM-UI-02; TEAM-24): amber, as designed — "Dilini declined — **Visitor 4F2A** is still
+ * yours. Try someone else" — over the composer of the chat it is about.
+ */
+export function DeclinedNotice({ d, onRetry }: { d: Declined & { dismiss: () => void }; onRetry: (() => void) | null }) {
+  return (
+    <div role="status" className="mx-3.5 mt-2 flex items-start gap-2 rounded-[14px] border border-[#F0D08F] bg-warning-bg px-3.5 py-3 text-[13px] text-[#6B4A10] dark:border-warning/40 dark:text-warning">
+      <span className="min-w-0 flex-1">
+        {d.who} — {d.visitor ? <b>{d.visitor}</b> : null}{d.rest}
+        {onRetry ? <> <button type="button" onClick={() => (d.dismiss(), onRetry())} className="font-semibold text-primary underline-offset-2 hover:underline">Try someone else</button></> : null}
+      </span>
+      <button type="button" aria-label="Dismiss" onClick={d.dismiss} className="-mt-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-full hover:bg-black/5">
+        <Icon name="x" size={13} />
+      </button>
+    </div>
+  );
 }
 
 /** When somebody joined, said briefly for the panel. */

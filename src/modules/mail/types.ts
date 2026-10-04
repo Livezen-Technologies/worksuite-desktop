@@ -279,6 +279,19 @@ export interface SyncAccount {
   /** Messages mirrored, and bodies kept, on the WorkSuite server. */
   messages?: number;
   bodies?: number;
+  /** When the pass going now began (#228): "Syncing · headers 2 of 27 folders · started 11:20". */
+  running_since?: string | null;
+}
+
+/** Messages that could not be opened, grouped by why (GET mailboxes/{id}/sync-log, #228). */
+export interface FetchErrorGroup {
+  kind: 'busy' | 'timeout' | 'signin' | 'gone' | 'moved' | 'no_uid' | 'not_found' | string;
+  label: string;
+  /** How many messages, and how many times in all. */
+  messages: number;
+  hits: number;
+  last_at: string | null;
+  items: Array<{ folder: string; uid: number; uidvalidity: number | null; message_id: string | null; response: string | null; hits: number; last_at: string | null }>;
 }
 
 export interface SyncOverall {
@@ -350,6 +363,10 @@ export interface AllCounts {
 
 /** The list's layout, kept on the server (GET/PUT /api/mail/prefs). */
 export interface MailPrefs {
+  /** How rows show which account a message came to: its name tag (default), its colour dot, or nothing (#227). */
+  accountTag?: 'name' | 'dot' | 'off';
+  /** Each account's tag label, colour and where it shows, by mailbox id (#227). */
+  accountTags?: Record<string, { label?: string; colour?: string; show?: 'combined' | 'all' | 'never' }>;
   /** My Day on the right of Mail (DMO-TSK-04). */
   todoPane?: boolean;
   view?: 'classic' | 'compact' | 'super' | 'table';

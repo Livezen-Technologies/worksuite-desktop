@@ -28,7 +28,8 @@ import { fillSignature, valuesFor, withEmbedded } from './signatures/signatureHt
 import { MentionPopup } from './Mentions';
 import { mailboxLetter } from './model';
 import { sendAfterUndoWindow } from './outgoing';
-import { AccountAvatar } from './parts';
+import { AccountAvatar, AccountTag } from './parts';
+import { useAccountTags } from './useAccountTags';
 import { RecipientField, addressOf, domainOf } from './Recipients';
 import { unquote } from './quote';
 import { escapeHtml, parseAddresses } from './sanitize';
@@ -181,6 +182,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
   // The mailbox it goes from: the draft's, else the one the page names, else the first (the list may arrive after the composer opens).
   const from = boxes.find((b) => String(b.id) === v.from) ?? boxes.find((b) => String(b.id) === defaultBox) ?? boxes.find((b) => b.is_default) ?? boxes[0] ?? null;
   const fromId = from ? String(from.id) : v.from;
+  const accountTagList = useAccountTags();
+  const fromTag = from ? accountTagList.tags.get(from.id) : undefined;
   // What the person wrote, and the signature below it: AI and templates work on the first and keep the second.
   const [mine, signature] = splitSignature(v.html);
   const own = composeText(mine);
@@ -606,7 +609,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
           <Field label={text('From')}>
             {from ? <AccountAvatar letter={mailboxLetter(from)} colour={from.colour} size={22} /> : null}
             {boxes.length > 1 ? (
-              <Select aria-label={text('From')} value={fromId} onValueChange={(x) => set({ from: String(x) })} options={boxes.map((b) => ({ value: String(b.id), label: boxLabel(b), hint: boxKind(b) || undefined }))} className="h-8 max-w-[420px] min-w-0" />
+              <Select aria-label={text('From')} value={fromId} onValueChange={(x) => set({ from: String(x) })} options={boxes.map((b) => ({ value: String(b.id), label: boxLabel(b), hint: [accountTagList.tags.get(b.id)?.label, boxKind(b)].filter(Boolean).join(' · ') || undefined }))} className="h-8 max-w-[420px] min-w-0" />
             ) : from ? (
               <span className="min-w-0 truncate text-[13.5px] text-ink">
                 {from.display_name && from.display_name !== from.email ? (
@@ -618,6 +621,8 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
                 )}
               </span>
             ) : null}
+            {/* The account's tag, as on the list's rows (#227). */}
+            {fromTag && fromTag.show !== 'never' && accountTagList.mode !== 'off' ? <AccountTag tag={fromTag} mode={accountTagList.mode} /> : null}
           </Field>
           <Field label={text('To')}>
             <RecipientField label="To" value={v.to} onChange={(to) => set({ to })} names={v.names ?? {}} onName={named} placeholder={text('Add recipients')} autoFocus={!v.to} internal={ownDomains} />

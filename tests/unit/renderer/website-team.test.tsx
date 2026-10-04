@@ -2,7 +2,9 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import type { ReactNode } from 'react';
 import type * as CoreApi from '../../../src/core/api';
+import type * as AttachmentViewer from '../../../src/modules/chat/AttachmentViewer';
 
 /**
  * Several staff in one website chat on the desktop (WS-WCHAT ENH-WCHAT-03, TEAM-UI-01/02): who is in the chat, Invite
@@ -26,9 +28,18 @@ vi.mock('../../../src/core/bridge', () => ({
   registerDropped: vi.fn(),
 }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
-vi.mock('../../../src/modules/chat/Composer', () => ({ Composer: () => <div>The composer</div> }));
+// The shared composer, stood in for: its tabs (`extras`) drawn, and which mode it is in (C-08: one box, note mode).
+vi.mock('../../../src/modules/chat/Composer', () => ({
+  websiteNoteDraftKey: (id: number) => ({ module: 'website-chat', context: `conversation:${id}:note` }),
+  Composer: (p: { extras?: ReactNode; website?: { note?: boolean } }) => (
+    <div>
+      {p.extras}
+      <div>{p.website?.note ? 'The note composer' : 'The composer'}</div>
+    </div>
+  ),
+}));
 vi.mock('../../../src/modules/chat/window', () => ({ openWebsiteChatWindow: vi.fn(async () => undefined) }));
-vi.mock('../../../src/modules/chat/AttachmentViewer', () => ({ openChatAttachment: vi.fn() }));
+vi.mock('../../../src/modules/chat/AttachmentViewer', async (orig) => ({ ...(await orig<typeof AttachmentViewer>()), openChatAttachment: vi.fn() }));
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ query: new URLSearchParams('view=website&website=41'), path: ['chat'], go: vi.fn(), active: true, openLink: vi.fn() }),
   useTabTitle: () => undefined,
@@ -38,7 +49,6 @@ import { apiGet, request } from '../../../src/core/api';
 import { app } from '../../../src/core/app-state';
 import { toast } from '../../../src/core/toasts';
 import type { WebsiteConversation, WebsiteTeam } from '../../../src/modules/chat/website/api';
-import { mentionQuery } from '../../../src/modules/chat/website/Team';
 import { WebsiteThread } from '../../../src/modules/chat/website/WebsiteThread';
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -112,34 +122,41 @@ describe('who is in the chat (TEAM-UI-01)', () => {
   it('shows the faces, each person\'s role and who invited them, what is pending, and the owner\'s Remove and Cancel', async () => {
     mount();
     const panel = await screen.findByRole('region', { name: 'In this chat' });
-    expect(within(panel).getByText('In this chat · 2/4')).toBeTruthy();
+    // Two in it and one invited (C-08): three rows; the invitation rings down.
+    expect(within(panel).getByText('In this chat')).toBeTruthy();
+    expect(within(panel).getByTitle('2 of at most 4 staff').textContent).toBe('3');
     expect(within(panel).getByText('Owner')).toBeTruthy();
     expect(within(panel).getByText(/invited by Samali Perera/)).toBeTruthy();
-    expect(within(panel).getByText('Invited Kasun Jayasuriya')).toBeTruthy();
+    expect(within(panel).getByText('Kasun Jayasuriya')).toBeTruthy();
+    expect(within(panel).getByText(/^Invited · 1:\d\d$/)).toBeTruthy();
     expect(screen.getByLabelText('In this chat: Samali Perera (owner), Nimal Silva')).toBeTruthy();
 
     fireEvent.click(within(panel).getByRole('button', { name: 'Remove Nimal Silva from the chat' }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('DELETE', '/api/chat/widget-admin/conversations/41/participants/7'));
-    fireEvent.click(within(panel).getByRole('button', { name: 'Cancel' }));
+    fireEvent.click(within(panel).getByRole('button', { name: 'Cancel the invitation to Kasun Jayasuriya' }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('DELETE', '/api/chat/widget-admin/handoffs/51'));
   });
 
   it('names each person on their first message in a run, and marks what only staff see', async () => {
     mount();
     await screen.findByText('It is yearly.');
-    // Samali signs her first reply once; her second runs on.
-    expect(screen.getAllByText('Samali Perera').length).toBeGreaterThanOrEqual(1);
+    // Samali (me) signs her first reply once, as "You" (C-08); her second runs on.
+    expect(screen.getByText('It is yearly.').closest('[data-bubble]')!.textContent).toMatch(/^You/);
+    expect(screen.getByText('And renewals are 20% off.').closest('[data-bubble]')!.textContent).not.toMatch(/^You/);
     const note = screen.getByText('Can we match last year\'s price?');
-    expect(note.className).toContain('border-dashed');
-    expect(note.parentElement!.parentElement!.textContent).toContain('Only staff see this');
+    // The shared kit's note bubble (C-02, #229): amber and dashed, labelled above.
+    expect(note.closest('[data-bubble-body]')!.className).toContain('border-dashed');
+    expect(note.closest('[data-bubble]')!.textContent).toContain('Internal note · Nimal · only staff see this');
     expect(screen.getByText(/Samali Perera invited Kasun Jayasuriya/).getAttribute('title')).toBe('Only staff see this');
   });
 
   it('the owner cannot leave alone: offered Transfer or Close (AC-T07)', async () => {
     team = teamOf({ can: { ...teamOf().can, leave: false } });
     mount();
-    const panel = await screen.findByRole('region', { name: 'In this chat' });
-    fireEvent.click(within(panel).getByRole('button', { name: 'Leave chat' }));
+    await screen.findByRole('region', { name: 'In this chat' });
+    // At the panel's foot, with the owner's warning (C-08).
+    expect(screen.getByText('You own this chat — transfer it before you leave.')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave chat' }));
     const dialog = await screen.findByRole('dialog');
     expect(within(dialog).getByText(/Transfer the chat to a colleague first, or close it/)).toBeTruthy();
     fireEvent.click(within(dialog).getByRole('button', { name: 'Transfer' }));
@@ -153,7 +170,8 @@ describe('who is in the chat (TEAM-UI-01)', () => {
     mount();
     const panel = await screen.findByRole('region', { name: 'In this chat' });
     expect(screen.queryByRole('button', { name: 'Transfer' })).toBeNull();
-    fireEvent.click(within(panel).getByRole('button', { name: 'Leave chat' }));
+    expect(screen.queryByText('You own this chat — transfer it before you leave.')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Leave chat' }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('POST', '/api/chat/widget-admin/conversations/41/leave'));
     fireEvent.click(within(panel).getByRole('button', { name: 'Take over' }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('POST', '/api/chat/widget-admin/conversations/41/take-over'));
@@ -163,13 +181,13 @@ describe('who is in the chat (TEAM-UI-01)', () => {
 describe('Invite and Transfer (TEAM-UI-02)', () => {
   it('invites colleagues with a note: availability, open chats and department shown, offline and already-in not pickable', async () => {
     mount();
-    // In the header beside Close, and in the "In this chat" panel.
+    // In the header beside Close, and as Invite someone in the "In this chat" panel.
     await screen.findByRole('region', { name: 'In this chat' });
-    expect(screen.getAllByRole('button', { name: /Invite$/ })).toHaveLength(2);
-    fireEvent.click(screen.getAllByRole('button', { name: /Invite$/ })[0]!);
+    expect(screen.getAllByRole('button', { name: /^Invite( someone)?$/ })).toHaveLength(2);
+    fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
     const dialog = await screen.findByRole('dialog', { name: 'Invite to this chat' });
     await within(dialog).findByText('Kasun Jayasuriya');
-    expect(within(dialog).getByText("Busy · 4 open chats · Billing · not on this site's staff")).toBeTruthy();
+    expect(within(dialog).getByText("Busy · 4 chats · Billing · not on this site's staff")).toBeTruthy();
     const boxes = within(dialog).getAllByRole('checkbox') as HTMLInputElement[];
     const byName = (n: string) => boxes.find((b) => b.closest('label')!.textContent!.includes(n))!;
     expect(byName('Ruwan Offline').disabled).toBe(true);
@@ -179,7 +197,7 @@ describe('Invite and Transfer (TEAM-UI-02)', () => {
     fireEvent.click(byName('Kasun Jayasuriya'));
     fireEvent.click(byName('Amaya Silva'));
     fireEvent.change(within(dialog).getByRole('textbox', { name: /Note for them/ }), { target: { value: 'Education pricing, please.' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Invite 2' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Invite 2 people' }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('POST', '/api/chat/widget-admin/conversations/41/invites', { body: { user_ids: [8, 10], note: 'Education pricing, please.' } }));
     expect(apiGet).toHaveBeenCalledWith('/api/chat/widget-admin/agents', { conversation_id: '41' }, expect.anything());
   });
@@ -189,10 +207,10 @@ describe('Invite and Transfer (TEAM-UI-02)', () => {
     vi.mocked(request).mockRejectedValueOnce(new ApiError(409, 'A chat can have 4 staff at most, owner included: this one has 4.', null));
     mount();
     await screen.findByRole('region', { name: 'In this chat' });
-    fireEvent.click(screen.getAllByRole('button', { name: /Invite$/ })[1]!);
+    fireEvent.click(screen.getByRole('button', { name: 'Invite someone' }));
     const dialog = await screen.findByRole('dialog', { name: 'Invite to this chat' });
     fireEvent.click((await within(dialog).findByText('Amaya Silva')).closest('label')!.querySelector('input')!);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Invite' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Invite 1 person' }));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('error', 'A chat can have 4 staff at most, owner included: this one has 4.'));
   });
 
@@ -213,34 +231,22 @@ describe('Invite and Transfer (TEAM-UI-02)', () => {
     fireEvent.click(within(dialog).getByRole('combobox', { name: 'Department' }));
     fireEvent.click(screen.getByRole('option', { name: 'Billing · 1 available' }));
     fireEvent.click(within(dialog).getByText('Hand over now'));
+    expect(within(dialog).getByText('You leave at once; it rings for the Billing team until someone joins.')).toBeTruthy();
     fireEvent.change(within(dialog).getByRole('textbox', { name: /Handover note/ }), { target: { value: 'Refund for invoice 1182' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Hand over now' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Transfer' }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('POST', '/api/chat/widget-admin/conversations/41/transfer', { body: { department_id: 2, mode: 'cold', note: 'Refund for invoice 1182' } }));
   });
 });
 
 describe('the Internal note tab (TEAM-60, TEAM-61)', () => {
-  it('writes a note only staff see, @mentioning a colleague, never through the visitor\'s reply', async () => {
+  it('switches the one shared composer between the visitor and a note only staff see', async () => {
     mount();
+    expect(await screen.findByText('The composer')).toBeTruthy();
     fireEvent.click(await screen.findByRole('tab', { name: 'Internal note' }));
-    expect(screen.queryByText('The composer')).toBeNull();
-    expect(screen.getByText(/Only staff see this · the visitor never does/)).toBeTruthy();
-    const box = screen.getByRole('textbox', { name: 'Internal note' }) as HTMLTextAreaElement;
-    fireEvent.change(box, { target: { value: 'Can we match it, @Ka', selectionStart: 20 } });
-    const option = await screen.findByRole('option', { name: /Kasun Jayasuriya/ });
-    fireEvent.mouseDown(within(option).getByRole('button'));
-    expect(box.value).toBe('Can we match it, @Kasun ');
-    fireEvent.change(box, { target: { value: 'Can we match it, @Kasun?' } });
-    fireEvent.keyDown(box, { key: 'Enter' });
-    await waitFor(() => expect(request).toHaveBeenCalledWith('POST', '/api/chat/widget-admin/conversations/41/note', { body: { message: 'Can we match it, @Kasun?', mentions: [8] } }));
+    expect(screen.getByText('The note composer')).toBeTruthy();
+    expect(screen.getByRole('tab', { name: 'Internal note' }).getAttribute('aria-selected')).toBe('true');
     fireEvent.click(screen.getByRole('tab', { name: 'Reply to visitor' }));
     expect(screen.getByText('The composer')).toBeTruthy();
-  });
-
-  it('finds the @word being typed', () => {
-    expect(mentionQuery('Hi @Sam', 7)).toEqual({ start: 3, word: 'sam' });
-    expect(mentionQuery('email@example', 13)).toBeNull();
-    expect(mentionQuery('@', 1)).toEqual({ start: 0, word: '' });
   });
 });
 
@@ -249,7 +255,8 @@ describe('a declined invitation comes back to whoever sent it (TEAM-24, WF-T2)',
     mount();
     await screen.findByRole('region', { name: 'In this chat' });
     act(() => realtime({ type: 'chat.widget.handoff.resolved', handoff_id: 51, conversation_id: 41, status: 'declined', by: 8, by_name: 'Kasun Jayasuriya', visitor: 'Visitor 4F2A' }));
-    expect(await screen.findByText('Kasun Jayasuriya declined — Visitor 4F2A is still in your chat.')).toBeTruthy();
+    const notice = await screen.findByText((_, el) => el?.getAttribute('role') === 'status' && !!el.textContent?.startsWith('Kasun Jayasuriya declined — Visitor 4F2A is still yours.'));
+    expect(within(notice).getByText('Visitor 4F2A').tagName).toBe('B');
     fireEvent.click(screen.getByRole('button', { name: 'Try someone else' }));
     expect(await screen.findByRole('dialog', { name: 'Invite to this chat' })).toBeTruthy();
   });
@@ -261,5 +268,6 @@ describe('a declined invitation comes back to whoever sent it (TEAM-24, WF-T2)',
     act(() => realtime({ type: 'chat.widget.participants', conversation_id: 41, what: 'removed', text: 'Samali Perera removed you from the chat' }));
     expect(toast).toHaveBeenCalledWith('info', 'Samali Perera removed you from the chat');
     expect(call).toHaveBeenCalledWith('offline:deleteDraft', { module: 'website-chat', context: 'conversation:41' });
+    expect(call).toHaveBeenCalledWith('offline:deleteDraft', { module: 'website-chat', context: 'conversation:41:note' });
   });
 });

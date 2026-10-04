@@ -1,8 +1,9 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
+import type * as AttachmentViewer from '../../../src/modules/chat/AttachmentViewer';
 
 /**
  * The website thread's visitor panel as drawn in WS-WCHAT-SRS v1.5 (CHAT-UI-01): who the visitor is at the top,
@@ -20,13 +21,13 @@ vi.mock('../../../src/modules/chat/Composer', () => ({
   ),
 }));
 vi.mock('../../../src/modules/chat/window', () => ({ openWebsiteChatWindow: vi.fn(async () => undefined) }));
-vi.mock('../../../src/modules/chat/AttachmentViewer', () => ({ openChatAttachment: vi.fn() }));
+vi.mock('../../../src/modules/chat/AttachmentViewer', async (orig) => ({ ...(await orig<typeof AttachmentViewer>()), openChatAttachment: vi.fn() }));
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ query: new URLSearchParams('view=website&website=41'), path: ['chat'], go: vi.fn(), active: true, openLink: vi.fn() }),
   useTabTitle: () => undefined,
 }));
 
-import { apiGet } from '../../../src/core/api';
+import { apiGet, apiPost } from '../../../src/core/api';
 import { openChatAttachment } from '../../../src/modules/chat/AttachmentViewer';
 import { openWebsiteChatWindow } from '../../../src/modules/chat/window';
 import type { WebsiteConversation } from '../../../src/modules/chat/website/api';
@@ -98,14 +99,20 @@ describe('reply quotes in the website thread (RDC-10)', () => {
   it('shows what a reply answers, and Reply on a message quotes it in the composer', async () => {
     mount();
     const answer = await screen.findByText('Yearly, renewed each March.');
-    const quote = answer.parentElement!.parentElement!.firstElementChild!;
+    // The quote sits inside the answer's bubble (C-02, #229).
+    const quote = answer.closest('[data-bubble-body]')!.querySelector('[data-reply-quote]')!;
     expect(quote.textContent).toBe('Visitor 4F2A · Hi, is the Adobe licence lifetime or yearly?');
-    fireEvent.click(screen.getAllByRole('button', { name: 'Reply to this message' })[0]!);
+    // Reply is in the message's actions, the same menu as Team Chat's (RDC-12).
+    const replyTo = (el: HTMLElement) => {
+      fireEvent.click(within(el.closest('[data-bubble]') as HTMLElement).getByRole('button', { name: 'Message actions' }));
+      fireEvent.click(screen.getByRole('menuitem', { name: 'Reply' }));
+    };
+    replyTo(screen.getByText('Hi, is the Adobe licence lifetime or yearly?', { selector: '[data-bubble-body] span' }));
     const bar = screen.getByRole('button', { name: 'Replying to Visitor 4F2A: Hi, is the Adobe licence lifetime or yearly?' });
     fireEvent.click(bar);
     expect(screen.queryByText(/^Replying to/)).toBeNull();
     // A file alone is quoted by its name.
-    fireEvent.click(screen.getAllByRole('button', { name: 'Reply to this message' })[1]!);
+    replyTo(screen.getByRole('button', { name: 'Open screenshot-pricing.png' }));
     expect(screen.getByText('Replying to Visitor 4F2A: screenshot-pricing.png')).toBeTruthy();
   });
 });
@@ -123,15 +130,55 @@ describe('the website thread (CHAT-UI-01)', () => {
     expect(within(panel).getByRole('heading', { name: 'Visitor' })).toBeTruthy();
     expect(within(panel).getByText('Colombo, LK')).toBeTruthy();
     expect(within(panel).getByRole('heading', { name: 'Journey' })).toBeTruthy();
+    // This visit's pages, the page they are on first (UX-DRW-01).
     const journey = within(panel).getByRole('list');
-    expect(within(journey).getAllByRole('listitem').map((li) => li.firstChild?.textContent)).toEqual(['/', '/shop/adobe']);
+    expect(within(journey).getAllByRole('listitem').map((li) => li.firstChild?.textContent)).toEqual(['/shop/adobe', '/']);
     expect(within(journey).getByText('Reading now')).toBeTruthy();
     expect(within(panel).getByRole('heading', { name: 'Shared files · 2' })).toBeTruthy();
-    // Newest first; a file opens in the attachment preview.
-    const files = within(panel).getAllByRole('button').filter((b) => /\.(pdf|png)/.test(b.textContent ?? ''));
-    expect(files.map((b) => b.textContent)).toEqual([expect.stringContaining('Adobe-CC-Teams-Quote.pdf'), expect.stringContaining('screenshot-pricing.png')]);
+    // Pictures as a grid of thumbnails, other files listed with size and sender; each opens in the attachment preview.
+    expect(within(panel).getByRole('button', { name: 'Open screenshot-pricing.png, sent by Visitor 4F2A' }).querySelector('img')).toBeTruthy();
+    const files = within(panel).getAllByRole('button').filter((b) => /\.pdf/.test(b.textContent ?? ''));
+    expect(files.map((b) => b.textContent)).toEqual([expect.stringContaining('Adobe-CC-Teams-Quote.pdf')]);
+    expect(files[0]!.textContent).toContain('Nuwan');
     fireEvent.click(files[0]!);
     expect(openChatAttachment).toHaveBeenCalledWith(expect.objectContaining({ filename: 'Adobe-CC-Teams-Quote.pdf', url: '/api/chat/widget-admin/files/def' }), expect.any(Function));
     expect(screen.getByText(/On the site now · reading \/shop\/adobe/)).toBeTruthy();
+  });
+});
+
+describe('a callback in its conversation (worksuite-desktop#223, #224)', () => {
+  it('sits at the top with what the visitor asked for and the actions; a WhatsApp chat they continued on is linked', async () => {
+    const data = {
+      ...conversation(),
+      callback: {
+        id: 5, conversation_id: 41, phone: '+94771234567', best_time: 'As soon as possible', visitor: 'Ravi', site: 'techubiz.com', missed_call: false,
+        created_at: ago(120_000), reference: 'CB-1042', email: 'ravi@studio.lk', channel: 'call' as const, how: 'by phone', message: 'Lifetime or yearly?',
+        due_at: ago(-3_600_000), overdue: false, status: 'open' as const, attempts: 0,
+      },
+      whatsapp: [{ account: 'Techubiz Sales', chat_id: 55, ref: 'E5C9', linked_at: ago(60_000), link: '/whatsapp?chat=55' }],
+    };
+    vi.mocked(apiGet).mockImplementation((async (path: string) => {
+      if (path === '/api/chat/widget-admin/conversations/41') return data;
+      if (path === '/api/chat/widget-admin/canned') return { responses: [] };
+      if (path === '/api/chat/widget-admin/agents') return { agents: [] };
+      throw new Error(`unexpected ${path}`);
+    }) as never);
+    mount();
+
+    const card = await screen.findByRole('group', { name: 'Callback CB-1042 for Ravi' });
+    expect(within(card).getByText('Callback requested')).toBeTruthy();
+    expect(within(card).getByText('Lifetime or yearly?')).toBeTruthy();
+    expect(within(card).getByText('+94771234567 · ravi@studio.lk')).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'WhatsApp' })).toBeTruthy();
+    expect(within(card).getByRole('button', { name: 'Reply by email' })).toBeTruthy();
+    fireEvent.click(within(card).getByRole('button', { name: 'Done' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/callbacks/5/done', {}));
+    expect(screen.getByRole('button', { name: 'Continued on WhatsApp · Techubiz Sales' })).toBeTruthy();
+  });
+
+  it('in the small window, no callback card', async () => {
+    mount(true);
+    await screen.findByText('Yearly, renewed each March.');
+    expect(screen.queryByText('Callback requested')).toBeNull();
   });
 });

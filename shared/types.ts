@@ -299,6 +299,10 @@ export interface Preferences {
   backgroundServices: { notifications: boolean; realtime: boolean };
   /** Website chat ringing on this computer (WS-WCHAT ENH-01 §14.3). */
   webchatRinging: WebchatRingPrefs;
+  /** When a visitor writes again in a chat I have and I am away from it (worksuite-desktop#230). Unset: the defaults. */
+  webchatFollowUps?: WebchatFollowUpPrefs;
+  /** Wall mode on a display (L-06, MAP-24): saved by its sheet. Unset: WALL_MODE_DEFAULTS. */
+  wallMode?: WallModePrefs;
   /** The AI Assistant on this computer (Settings › AI Assistant). */
   ai: AiPrefs;
   /** Meet › Recording (worksuite-desktop#68). */
@@ -478,6 +482,79 @@ export interface WebchatRingPrefs {
   shortcut: boolean;
   /** Ringtone volume, 0–100. */
   volume: number;
+  /**
+   * Where the ring plays (RING-42, RING-UI-08 "Ring on"): the system's output and the computer's own speakers when the
+   * output is a headset (default), or the system's output only. Unset: both.
+   */
+  ringOn?: 'both' | 'default';
+  /** ⌘⇧M (Live map) and ⌘⇧D (Live dashboard) from other apps (MAP-21, MAP-22). Unset: on. */
+  liveShortcuts?: boolean;
+}
+
+/**
+ * A visitor writing again in a chat I have while I am away from it (worksuite-desktop#230): how it gets my attention.
+ * Do not disturb (quiet hours) silences the chime as it does every sound.
+ */
+export interface WebchatFollowUpPrefs {
+  /** The card over other apps, with the visitor's words, a reply box, Open chat and Snooze. */
+  card: boolean;
+  /** A system notification, with Reply, while WorkSuite is not in front. */
+  desktop: boolean;
+  /** A short chime, unlike the new-chat ring. */
+  sound: boolean;
+  /** Minutes without keyboard or mouse in the conversation before I count as away from it. */
+  idleMinutes: 1 | 2 | 5 | 10;
+}
+
+/** One screen as the Wall mode sheet shows it (L-06, MAP-UI-06). */
+export interface WallDisplay {
+  id: number;
+  /** "Display 2": its place in the system's list. */
+  display: string;
+  /** "Built-in · this window", or the screen's own name ("LG UltraFine 27″"), or "External". */
+  detail: string;
+}
+
+/**
+ * Wall mode on a display (L-06; MAP-24, MAP-UI-06), as the sheet saves it on this computer. Names are always hidden on
+ * the wall, so there is no choice for it.
+ */
+export interface WallModePrefs {
+  /** The screen picked; null, or one no longer connected: the first that is not the main one. */
+  displayId: number | null;
+  /** Keep the display awake while the wall is up. */
+  keepAwake: boolean;
+  /** Cycle the map World → region → home country every 60 s. */
+  cycle: boolean;
+  /** Open wall mode when WorkSuite starts (a dedicated support-room screen). */
+  openAtStart: boolean;
+}
+
+export const WALL_MODE_DEFAULTS: WallModePrefs = { displayId: null, keepAwake: true, cycle: true, openAtStart: false };
+
+export const FOLLOW_UP_DEFAULTS: WebchatFollowUpPrefs = { card: true, desktop: true, sound: true, idleMinutes: 2 };
+
+/**
+ * A visitor wrote again in a chat I have, or am in, and nobody has answered (worksuite-desktop#230): from the
+ * `chat.widget.message` and `chat.widget.followup` events. Several messages make one entry.
+ */
+export interface WebchatFollowUp {
+  /** The conversation. */
+  id: number;
+  visitor: string;
+  site: string | null;
+  /** The visitor's latest message and the one or two before it (theirs or ours), oldest first. */
+  recent: Array<{ from: 'visitor' | 'agent'; body: string; at: string | null }>;
+  /** Since when the visitor has waited for an answer. */
+  since: string;
+  /** New messages from the visitor since the card came up. */
+  count: number;
+  /** replied: the visitor wrote; reminder: still no answer; team: the team was alerted (Take over is offered). */
+  stage: 'replied' | 'reminder' | 'team';
+  /** The chat is mine (assigned to me), rather than one the team was alerted about. */
+  mine: boolean;
+  /** Who has it, when that is not me. */
+  agent: string | null;
 }
 
 /**
@@ -513,6 +590,10 @@ export interface WebchatRingChat {
   silenced: boolean;
   /** A chat given to me that I have not joined passes on to the next available agent at this server stamp (RING-05, RING-12). */
   handoverAt?: string | null;
+  /** How many times the visitor has visited, for "3rd visit" (R-01); null where the server does not say. */
+  visits?: number | null;
+  /** How many colleagues it rings for besides me, for "2 others ringing" (R-01); null where the server does not say. */
+  othersRinging?: number | null;
 }
 
 /**
@@ -539,6 +620,13 @@ export interface WebchatHandoff {
   /** Server stamp; null rings until somebody takes it. */
   expiresAt: string | null;
   createdAt: string | null;
+  /**
+   * When it runs out by this computer's clock (ms), from the server's own count of seconds left (C-09): the INVITATION
+   * and TRANSFER TO YOU countdowns run true on a computer whose clock is off. Absent from an older server.
+   */
+  endsAt?: number | null;
+  /** A voice call is on in the chat (V-03, WF-V3): joining the chat joins the call too, and the card says so. */
+  onCall?: boolean;
 }
 
 /** A visitor's voice call ringing for me (WS-WCHAT ENH-WCHAT-05, VOICE-10). */
@@ -558,6 +646,19 @@ export interface WebchatCall {
   stage: 'first' | 'everyone';
   /** Server stamp. */
   requestedAt: string | null;
+  /** What the visitor gave before calling, or the chat already knew (UX-WGT-10); absent on an older server. */
+  email?: string | null;
+  phone?: string | null;
+}
+
+/** The microphone a visitor's call would use on this computer, as the main window found it (V-04, VOICE-11, VOICE-14). */
+export interface WebchatMic {
+  /** This computer has a microphone at all: without one it is not rung, and cannot answer. */
+  ready: boolean;
+  /** The device's name ("Jabra Evolve2"), once the system names it; null before the microphone was ever allowed. */
+  label: string | null;
+  /** The microphone has a speaker of its own — a headset — so the call is heard through it. */
+  headset: boolean;
 }
 
 /** The website call this computer is on, as the tray says it (VOICE-UI-03). */
@@ -578,11 +679,22 @@ export interface WebchatRingState {
   calls?: WebchatCall[];
   /** Ctrl/Cmd+Shift+A answers the top call now. */
   answerShortcut?: boolean;
+  /** The microphone a call would use (V-04 device line); null until the main window has looked. */
+  mic?: WebchatMic | null;
   /** What the tone does now: off (none left unsilenced, Do not disturb, the organisation's cap), or which tone. */
   tone: 'off' | 'normal' | 'strong';
   volume: number;
-  /** How a ring ended, said for a few seconds (RING-28). */
-  outcome: { id: number; text: string; at: number } | null;
+  /** My ringtone, kept on the server with my other ringing settings so every device sounds the same (RING-29). */
+  ringtone?: string;
+  /** Where the ring plays (RING-42): with a headset on, the speakers too, unless I chose the system's output only. */
+  ringOn?: 'both' | 'default';
+  /** How a ring ended, said for a few seconds (RING-28); `kind` and the rest draw it as R-03 does. */
+  outcome: WebchatRingOutcome | null;
+  /**
+   * The chat I just joined, and how many colleagues its ring stopped for (R-03 "You joined the chat · ringing stopped
+   * for 2 colleagues"); null where the count is not known.
+   */
+  youJoined?: { id: number; colleagues: number | null } | null;
   /** Locked: the window says a chat is waiting, and nothing about who. */
   hidden: boolean;
   /** Ctrl/Cmd+Shift+J is registered now. */
@@ -591,6 +703,91 @@ export interface WebchatRingState {
   elsewhere?: boolean;
   /** Whether the server has this computer play my ring (RING-10, RING-49); null where it does not choose. */
   ringHere?: boolean | null;
+  /** The chat I just joined from the card (worksuite-desktop#225): the card is a mini chat on it until I open the full chat or minimise it. */
+  joined?: WebchatJoined | null;
+  /** The card is minimised while these chats ring; a new one brings it back. The tone goes on. */
+  minimised?: boolean;
+  /** The card's own height, as it measured itself: the window fits it, so there is no empty space under it. */
+  fit?: number | null;
+  /** Visitors who wrote again in my chats while I was away from them, longest waiting first (worksuite-desktop#230). */
+  followUps?: WebchatFollowUp[];
+  /** Goes up by one each time the "visitor replied" chime should play once. */
+  chime?: number;
+  /** Whether the follow-up card shows over other apps (Settings › Website chats). */
+  followUpCard?: boolean;
+  /**
+   * What I have typed to each ringing visitor, by conversation (R-05, R-06; UX-ALR-04): the call window and the tray's
+   * menu share it, and it is kept if a colleague joins first. Empty behind the lock.
+   */
+  drafts?: Record<number, string>;
+}
+
+/**
+ * What the tray's mini-dashboard and the Live map window need from this computer (L-04, L-05; MAP-21, MAP-22, MAP-24).
+ */
+export interface LiveDeskInfo {
+  /**
+   * Where "Wall mode on Display 2" opens: the display in words ("Display 2") and the screen's own name ("LG 27″") when
+   * the system says it. The first screen that is not the main one; the main one when there is only one.
+   */
+  wall: { display: string; name: string | null } | null;
+  /**
+   * The screens the Wall mode sheet offers (L-06, MAP-UI-06 "SHOW ON"), in the system's order: "Display 1" and what it
+   * is — "Built-in · this window", or the screen's own name ("LG UltraFine 27″"). Optional for an older main process.
+   */
+  displays?: WallDisplay[];
+  /** The sheet's choices as last saved (MAP-24): the screen, keep awake, cycle the map, open when WorkSuite starts. */
+  wallPrefs?: WallModePrefs;
+  /** Wall mode is up on a screen now: the tray's item closes it (MAP-24 "Esc or the tray menu closes it"). */
+  wallOpen?: boolean;
+  /** When the wall's screen was unplugged and its window closed (MAP-24 "the tray says so"); null once opened again. */
+  wallGone?: string | null;
+  /** "Silence for 15 minutes" from the tray: until this ISO time; null when not silenced. */
+  silencedUntil: string | null;
+  /** ⌘⇧M and ⌘⇧D answer from other apps (registered while WorkSuite is not in front). */
+  shortcuts: boolean;
+}
+
+/**
+ * How a ring ended, as the call window tells it (R-03, RING-UI-03; RING-02, RING-03, RING-28). `text` is the whole
+ * thing in plain words (the tray, a screen reader, an older window); `kind` and the rest are what the card draws:
+ *
+ * - `joined`: a colleague (`by`) joined the chat with `visitor` — a toast with View;
+ * - `late`: I pressed Join a moment late — `by` already has it;
+ * - `visitor_left`: the visitor left the site before anyone joined — in Missed chats when `missed`, with the `email`
+ *   they left, Open in Missed and Dismiss;
+ * - `visitor_ended`: the visitor ended the chat;
+ * - `note`: anything else (closed, blocked, a pass, a call or an invitation resolving, an error).
+ */
+export interface WebchatRingOutcome {
+  id: number;
+  text: string;
+  at: number;
+  kind?: 'joined' | 'late' | 'visitor_left' | 'visitor_ended' | 'note';
+  visitor?: string | null;
+  by?: string | null;
+  email?: string | null;
+  missed?: boolean;
+  /**
+   * What I had typed to the visitor when a colleague got there first (R-05, UX-ALR-04): kept, never sent unless I
+   * choose "Send to the chat" — then it goes as a participant's reply (TEAM-02). Absent behind the lock.
+   */
+  draft?: string | null;
+}
+
+/** A chat joined from the ringing card, shown there as a mini chat (worksuite-desktop#225). */
+export interface WebchatJoined {
+  conversationId: number;
+  visitor: string;
+  site: string | null;
+  place: string | null;
+  device: string | null;
+  page: string | null;
+  /** What the visitor wrote, as the card showed it. */
+  preview: string | null;
+  since: string;
+  /** What I have sent from the card, oldest first. */
+  sent: string[];
 }
 
 export interface PreferenceLock {
@@ -615,7 +812,9 @@ export interface StatusSnapshot {
   network: NetworkStatus;
   realtime: RealtimeState;
   pendingChanges: number;
-  unread: { mail: number; chat: number; notifications: number; tasks: number };
+  /** `webchat`: visitors who wrote again in my website chats while I was away from them (worksuite-desktop#230), on the badge. */
+  /** `ringing`: website chats and visitors' calls ringing for me and not silenced (R-05, R-06; RING-44), on the badge too. */
+  unread: { mail: number; chat: number; notifications: number; tasks: number; webchat?: number; ringing?: number };
   notificationsPausedUntil: string | null;
   /** Whether the operating system lets this app show notifications (false: banners are blocked there). */
   notificationsSupported?: boolean;
@@ -886,7 +1085,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'quick-ask';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask' | 'live-map' | 'wall' | 'wall-sheet';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {

@@ -4,7 +4,7 @@ import { canOpen, canOpenWeb, refuse, useCanOpen, useVisibleIds } from '../core/
 import { app, isGuest } from '../core/app-state';
 import { useGuest } from '../core/session';
 import { GuestProfileMenu } from '../modules/guest/GuestProfileMenu';
-import { call, errorMessage, on } from '../core/bridge';
+import { call, errorMessage, isMac, on } from '../core/bridge';
 import { accelerator, commandForAccelerator, getCommand, registerCommand, runCommand } from '../core/commands';
 import { initLauncherPrefs, shellShortcuts } from '../core/launcher-prefs';
 import { initOrgPrefs } from '../core/org-prefs';
@@ -110,7 +110,20 @@ export function Shell() {
       registerCommand({ id: 'search', label: 'Search', group: 'Shell', run: () => openOverlay('search') }),
       registerCommand({ id: 'palette', label: 'Command palette', group: 'Shell', run: () => openOverlay('palette') }),
       registerCommand({ id: 'new-tab', label: 'New tab', group: 'Shell', run: () => openTab('/home') }),
-      registerCommand({ id: 'close-tab', label: 'Close tab', group: 'Shell', run: () => { const t = activeTab(); if (t && !t.pinned) closeTab(t.id); } }),
+      registerCommand({
+        id: 'close-tab',
+        label: 'Close tab',
+        group: 'Shell',
+        run: () => {
+          const t = activeTab();
+          // On a Mac, ⌘W on the last tab closes the window, as it does in any Mac app; WorkSuite stays in the Dock (#221).
+          if (isMac && (!t || tabsStore.get().tabs.length <= 1)) {
+            void call('windows:close').catch(() => undefined);
+            return;
+          }
+          if (t && !t.pinned) closeTab(t.id);
+        },
+      }),
       registerCommand({ id: 'restore-tab', label: 'Reopen closed tab', group: 'Shell', run: restoreClosed }),
       registerCommand({ id: 'move-tab-to-window', label: 'Move tab to new window', group: 'Shell', keywords: 'tear off detach undock window', run: () => { const t = activeTab(); if (t) void detachTab(t.id); } }),
       registerCommand({

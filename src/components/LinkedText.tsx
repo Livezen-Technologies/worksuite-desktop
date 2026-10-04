@@ -77,7 +77,11 @@ export function openAnyLink(href: string): void {
   else void call('app:openExternal', { url: t.url });
 }
 
-export function LinkedText({ text, className }: { text: string; className?: string }) {
+/**
+ * `display` draws an address shorter than it is (the chat kit's long links, C-02); the whole address stays the link
+ * and its tooltip.
+ */
+export function LinkedText({ text, className, display }: { text: string; className?: string; display?: (href: string) => string }) {
   const parts = splitLinks(text);
   return (
     <>
@@ -91,9 +95,10 @@ export function LinkedText({ text, className }: { text: string; className?: stri
               e.stopPropagation();
               openAnyLink(p.href!);
             }}
+            title={display && display(p.href) !== p.text ? p.href : undefined}
             className={cx('break-all underline decoration-1 underline-offset-2 hover:decoration-2', className)}
           >
-            {p.text}
+            {display ? display(p.href) : p.text}
           </a>
         ) : (
           <Fragment key={i}>{p.text}</Fragment>

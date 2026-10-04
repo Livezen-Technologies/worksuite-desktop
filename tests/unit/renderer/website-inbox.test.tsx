@@ -8,7 +8,7 @@ import type * as CoreApi from '../../../src/core/api';
 
 /**
  * The Website Chats inbox as drawn in WS-WCHAT-SRS v1.5 (CHAT-UI-00): Open, Mine and Closed over the list, rows
- * with the on-site dot, waiting timer and chips, a chat silenced on this computer marked amber (RING-UI-04), the
+ * with the on-site dot, waiting timer and chips, a chat silenced for me marked amber (RING-UI-04, R-04), the
  * "Pick a conversation" empty state, and J / K through the list.
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({})) }));
@@ -27,6 +27,7 @@ vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 vi.mock('../../../src/modules/calls/tones', () => ({ playTone: vi.fn(() => ({ stop: vi.fn(), setVolume: vi.fn() })) }));
 vi.mock('../../../src/modules/chat/website/WebsiteThread', () => ({ WebsiteThread: ({ id }: { id: string }) => <div>Thread {id}</div> }));
 vi.mock('../../../src/modules/chat/website/widget/WidgetSettings', () => ({ WidgetSettings: () => <div>The widget settings</div> }));
+vi.mock('../../../src/modules/chat/website/widget/Widgets', () => ({ WebsiteWidgets: () => <div>The widgets list</div> }));
 const tab = { route: '/chat?view=website', go: vi.fn(), active: true };
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => {
@@ -62,13 +63,17 @@ const ring = (over: Partial<WebchatRingChat>): WebchatRingChat => ({
 
 let callbacks: WebsiteCallback[] = [];
 let missedList: unknown[] = [];
+// A server with the Callbacks section (worksuite-desktop#223): its counts, and its lists by status.
+let structured: { counts: { todo: number; overdue: number; mine: number }; todo: WebsiteCallback[]; handled: WebsiteCallback[] } | null = null;
 
 function serve(rows = ROWS, chats: WebchatRingChat[] = [ring({})], handoffs: NonNullable<WebchatRingState['handoffs']> = []) {
-  vi.mocked(apiGet).mockImplementation((async (path: string) => {
+  vi.mocked(apiGet).mockImplementation((async (path: string, params?: unknown) => {
     if (path === '/api/chat/widget-admin/conversations') return { conversations: rows, can: { view: true, reply: true, manage: false } };
     if (path === '/api/chat/widget-admin/visitors') return { visitors: [{ id: 1 }, { id: 2 }] };
     if (path === '/api/chat/widget-admin/missed/count') return { count: 1 };
     if (path === '/api/chat/widget-admin/missed') return { missed: missedList, count: missedList.length };
+    if (structured && path === '/api/chat/widget-admin/callbacks/counts') return structured.counts;
+    if (structured && path === '/api/chat/widget-admin/callbacks') return { callbacks: (params as { status?: string } | undefined)?.status === 'handled' ? structured.handled : structured.todo, counts: structured.counts };
     if (path === '/api/chat/widget-admin/callbacks') return { callbacks };
     throw new Error(`unexpected ${path}`);
   }) as never);
@@ -87,6 +92,7 @@ beforeEach(() => {
   app.set({ auth: { stage: 'ready', user: { id: '7' } } as never });
   callbacks = [];
   missedList = [];
+  structured = null;
   serve();
 });
 afterEach(() => cleanup());
@@ -100,19 +106,20 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open the longest waiting' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=inbox&website=2');
     fireEvent.click(await screen.findByRole('button', { name: 'Visitors online · 2' }));
-    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=live');
+    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=visitors');
   });
 
-  it('draws each row with its timer, chips and site, and marks a chat silenced here', async () => {
+  it('draws each row with its timer, chips and site, and marks a chat silenced for me (R-04)', async () => {
     wrap(<WebsiteWorkspace />);
     const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
-    expect(within(hasitha).getByText(/^3:0\d$/).className).toContain('text-danger');
+    // Red throughout on a site that offers no callbacks.
+    expect(within(hasitha).getByLabelText(/^waiting 3:0\d$/).className).toContain('text-danger');
     expect(within(hasitha).getByText('Awaiting reply')).toBeTruthy();
     expect(within(hasitha).getByText('Reading /pricing')).toBeTruthy();
     expect(within(hasitha).getByText('On the site now')).toBeTruthy();
 
     const ahmed = within(list()).getByText('Ahmed').closest('button')!;
-    expect(await within(ahmed).findByRole('img', { name: 'Silenced on this computer' })).toBeTruthy();
+    expect(await within(ahmed).findByRole('img', { name: 'Silenced for you' })).toBeTruthy();
     expect(ahmed.className).toContain('bg-warning-bg');
     expect(within(ahmed).getByText('“Is the Windows 7 ISO still available?”')).toBeTruthy();
     expect(within(ahmed).getByText('VIP')).toBeTruthy();
@@ -261,19 +268,108 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
   });
 });
 
-describe('Website chats → Widget (#199)', () => {
-  it('is in Setup, in the app rather than on the web, and takes the place of the list and the thread', async () => {
+describe('the Website Chats menu (C-01)', () => {
+  it('lists the sections in order with icons and count pills, lights only the one showing, and goes back to Chat with Ctrl+[', async () => {
     wrap(<WebsiteWorkspace />);
-    const item = await screen.findByRole('button', { name: 'Widget' });
+    const menu = screen.getByRole('navigation', { name: 'Website chats' });
+    await within(menu).findByText('Assigned to me');
+    const labels = within(menu).getAllByRole('button').map((b) => b.textContent ?? '');
+    const order = ['Inbox', 'Live chats', 'Offline enquiries', 'Missed chats', 'Assigned to me', 'Unassigned', 'Awaiting reply', 'Invited', 'Starred', 'Closed', 'Live dashboard', 'Visitors online'];
+    const at = order.map((l) => labels.findIndex((t) => t.startsWith(l)));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(within(menu).getAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'page').map((b) => b.textContent)).toEqual([expect.stringMatching(/^Inbox/)]);
+    // Missed is a red pill; Visitors online a green one.
+    expect(within(within(menu).getByRole('button', { name: /^Missed chats/ })).getByText('1').className).toContain('bg-danger');
+    expect(within(within(menu).getByRole('button', { name: /^Visitors online/ })).getByText('2').className).toContain('bg-success-bg');
+    fireEvent.keyDown(window, { key: '[', ctrlKey: true });
+    expect(tab.go).toHaveBeenLastCalledWith('/chat');
+  });
+});
+
+describe('a visitor who wrote again in my chat (#230)', () => {
+  it('goes to the top of the list, marked Visitor replied with its wait', async () => {
+    serve([...ROWS.slice(0, 2), row({ id: 3, visitor_name: 'Kasun P.', assigned_to: 7, agent: 'Me', awaiting_reply: true, reply_waiting_since: ago(45_000), waiting_since: ago(45_000), reply_stage: null })]);
+    wrap(<WebsiteWorkspace />);
+    await within(list()).findByText('Kasun P.');
+    const rows = [...list().querySelectorAll('[data-website-row]')].map((el) => el.getAttribute('data-website-row'));
+    expect(rows[0]).toBe('3');
+    const kasun = within(list()).getByText('Kasun P.').closest('button')!;
+    expect(within(kasun).getByText('Visitor replied')).toBeTruthy();
+    expect(within(kasun).getByLabelText(/^waiting 0:4\d$/)).toBeTruthy();
+  });
+});
+
+describe('Callbacks (worksuite-desktop#223)', () => {
+  const cb = (over: Partial<WebsiteCallback> = {}): WebsiteCallback => ({
+    id: 5, conversation_id: 9, phone: '+94771234567', best_time: 'This afternoon', visitor: 'Kamal Perera', site: 'techubiz.com', missed_call: false,
+    created_at: ago(600_000), reference: 'CB-1042', email: 'kamal@example.lk', channel: 'whatsapp', how: 'on WhatsApp', message: 'Renewal quote please',
+    due_at: ago(60_000), overdue: true, status: 'open', attempts: 0, ...over,
+  });
+
+  it('has its own section with the count and an overdue mark; each callback can be acted on and opens its chat', async () => {
+    structured = { counts: { todo: 2, overdue: 1, mine: 0 }, todo: [cb(), cb({ id: 6, conversation_id: 10, visitor: 'Nimali', reference: 'CB-1043', overdue: false, channel: 'call', how: 'by phone' })], handled: [] };
+    serve(ROWS, []);
+    tab.route = '/chat?view=website&section=callbacks';
+    wrap(<WebsiteWorkspace />);
+    const nav = screen.getByRole('navigation', { name: 'Website chats' });
+    const item = await within(nav).findByRole('button', { name: /Callbacks/ });
+    await waitFor(() => expect(within(item).getByRole('img', { name: '1 overdue' })).toBeTruthy());
+    expect(item.textContent).toContain('2');
+    // The missed count no longer carries them.
+    await waitFor(() => expect(within(nav).getByRole('button', { name: /Missed chats/ }).textContent).toBe('Missed chats1'));
+
+    const kamal = await screen.findByRole('group', { name: 'Callback CB-1042 for Kamal Perera' });
+    expect(within(kamal).getByText('Overdue')).toBeTruthy();
+    expect(within(kamal).getByText(/Wants to be contacted on WhatsApp · This afternoon/)).toBeTruthy();
+    fireEvent.click(within(kamal).getByRole('button', { name: 'Mark contacted' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/callbacks/5/contacted', {}));
+    fireEvent.click(within(kamal).getByRole('button', { name: "Couldn't reach" }));
+    fireEvent.click(within(screen.getByRole('menu', { name: 'Try again' })).getByRole('menuitem', { name: 'Try again in an hour' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/callbacks/5/unreachable', { retry_minutes: 60 }));
+    fireEvent.click(within(kamal).getByRole('button', { name: 'Call now' }));
+    expect(call).toHaveBeenCalledWith('app:openExternal', { url: 'tel:+94771234567' });
+    fireEvent.click(within(kamal).getByText('Kamal Perera'));
+    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=callbacks&website=9');
+
+    fireEvent.click(screen.getByRole('button', { name: 'Handled' }));
+    expect(await screen.findByText('No callbacks handled yet')).toBeTruthy();
+  });
+
+  it('a row says a callback was requested, and its wait turns amber at the offer and red after it', async () => {
+    structured = { counts: { todo: 1, overdue: 0, mine: 0 }, todo: [], handled: [] };
+    const rows = ROWS.map((r) => (r.visitor_name === 'Hasitha' ? { ...r, wait_amber: 120, wait_red: 600, callback: { id: 5, reference: 'CB-1042', status: 'open', due_at: null, overdue: false } } : r));
+    serve(rows, []);
+    wrap(<WebsiteWorkspace />);
+    const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
+    expect(within(hasitha).getByText('Callback requested')).toBeTruthy();
+    const clock = within(hasitha).getByLabelText(/^waiting 3:0\d$/);
+    expect(clock.getAttribute('data-tone')).toBe('amber');
+    expect(clock.getAttribute('title')).toBe('Offered a callback');
+  });
+});
+
+describe('Website chats → Widgets & embed (S-01, S-02)', () => {
+  it('is in Setup, in the app rather than on the web, lit for the list and for a widget\'s editor, and takes the place of the list and the thread', async () => {
+    wrap(<WebsiteWorkspace />);
+    const item = await screen.findByRole('button', { name: 'Widgets & embed' });
     expect(item.getAttribute('title')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Widget' })).toBeNull();
     fireEvent.click(item);
-    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=widget');
+    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=widgets');
 
     cleanup();
-    tab.route = '/chat?view=website&section=widget';
+    tab.route = '/chat?view=website&section=widgets';
+    wrap(<WebsiteWorkspace />);
+    expect(await screen.findByText('The widgets list')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Widgets & embed' }).getAttribute('aria-current')).toBe('page');
+    expect(list().className).toContain('hidden');
+
+    cleanup();
+    tab.route = '/chat?view=website&section=widget&widget=2';
     wrap(<WebsiteWorkspace />);
     expect(await screen.findByText('The widget settings')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Widget' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('button', { name: 'Widgets & embed' }).getAttribute('aria-current')).toBe('page');
     expect(list().className).toContain('hidden');
   });
 });

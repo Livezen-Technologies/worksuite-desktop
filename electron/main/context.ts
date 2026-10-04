@@ -49,7 +49,7 @@ export interface ClockExtra {
 import type { WindowManager } from '../windows/manager';
 import type { BootState } from './boot';
 import type { SessionController } from './session';
-import type { BusyReport, StatusSnapshot, UpdateDiagnostics, WebchatOnCall } from '@shared/types';
+import type { BusyReport, LiveDeskInfo, StatusSnapshot, UpdateDiagnostics, WallModePrefs, WebchatOnCall } from '@shared/types';
 import type { Vault } from '../services/vault';
 
 /** Every main-process service, for the IPC handlers. */
@@ -119,6 +119,10 @@ export interface AppContext {
   webchat: WebchatRinger;
   /** The website voice call the main window is on, or none: the tray says so (ENH-WCHAT-05). */
   webchatOnCall: (call: WebchatOnCall | null) => void;
+  /** The tray's ringing menu (R-06, UX-ALR-02): its height as it measured itself, and its plain items. */
+  ringTray: { fit: (height: number) => void; act: (action: 'inbox' | 'settings' | 'quit' | 'close' | 'dashboard' | 'liveMap' | 'wall' | 'silence') => void };
+  /** The Live map window, the Live dashboard and wall mode on a display (L-04, L-05; MAP-21, MAP-22, MAP-24). */
+  liveDesk: { open: (to: 'map' | 'toggleMap' | 'dashboard' | 'wall' | 'wallSheet' | 'wallClose' | 'chat', id?: number) => void; info: () => LiveDeskInfo; wall: (choice: Omit<WallModePrefs, 'displayId'> & { displayId: number }) => void };
   /** Quick Ask over any app (AI Assistant). */
   quickAsk: QuickAsk;
   /** The assistant's rules here, confirming its proposals, files from this computer (DSK-2…7). */

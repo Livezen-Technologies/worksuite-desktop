@@ -37,8 +37,9 @@ const replies = [
 
 describe('the website channel profile (ENH-WCHAT-02)', () => {
   it('refuses what a visitor cannot receive, with the reason (RDC-04)', () => {
-    expect(refuseForVisitor('logo.svg', 1000)).toBe("SVG files can't be sent to a visitor.");
-    expect(refuseForVisitor('Makefile', 10)).toBe("Files without a type can't be sent to a visitor.");
+    // P-04's words: "logo.svg can't be sent to a visitor — use PNG or PDF".
+    expect(refuseForVisitor('logo.svg', 1000)).toBe("logo.svg can't be sent to a visitor — use PNG or PDF");
+    expect(refuseForVisitor('Makefile', 10)).toBe("Makefile can't be sent to a visitor — use PNG or PDF");
     expect(refuseForVisitor('quote.PDF', 1000)).toBeNull();
     expect(refuseForVisitor('scan.png', 6 * 1024 * 1024)).toBe('scan.png is larger than the 5 MB a visitor can receive.');
     expect(refuseForVisitor('scan.png', 6 * 1024 * 1024, 10240)).toBeNull();
@@ -79,15 +80,15 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
   });
   afterEach(() => cleanup());
 
-  it('has no @mentions, urgent, sharing or voice; attach offers documents, images, the camera and Drive', () => {
+  it('has no @mentions, urgent, sharing or voice; attach offers upload, paste, a photo and a copy from Drive (P-04)', () => {
     mount();
     expect(screen.queryByRole('button', { name: 'Urgent' })).toBeNull();
     expect(screen.queryByRole('button', { name: 'Share from WorkSuite' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Mention someone' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Record a voice message' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Attach' }));
     const items = screen.getAllByRole('menuitem').map((b) => b.textContent ?? '');
-    expect(items.some((t) => t.startsWith('Document'))).toBe(true);
-    expect(items.some((t) => t.startsWith('Image'))).toBe(true);
-    expect(items.some((t) => t.startsWith('From Drive'))).toBe(true);
+    expect(items).toEqual(['Upload a file', 'Paste a screenshot', 'Take a photo', "From DriveSends a copy — visitors can't open Drive links"]);
     expect(items.some((t) => /Video|Audio|Voice/.test(t))).toBe(false);
     expect(screen.getByText(/for saved and suggested replies/)).toBeTruthy();
   });
@@ -121,7 +122,8 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
   it('answers one visitor message with a quote of it (RDC-10)', async () => {
     const clear = vi.fn();
     mount({ id: 7, sender_name: 'Visitor 4F2A', snippet: 'And for students?' }, clear);
-    expect(screen.getByText('Replying to Visitor 4F2A')).toBeTruthy();
+    // ReplyBar (P-04): "Replying to Visitor 4F2A · And for students?", the name in bold.
+    expect(document.querySelector('[data-reply-bar]')?.textContent).toBe('Replying to Visitor 4F2A · And for students?');
     const box = screen.getByRole('textbox', { name: 'Message' });
     fireEvent.change(box, { target: { value: 'Students get 50% off.' } });
     await act(async () => {
@@ -175,7 +177,8 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     const ref2 = mount();
     act(() => ref2.current?.stage([big]));
     expect(screen.queryByText('brochure.pdf')).toBeNull();
-    expect(vi.mocked(toast)).toHaveBeenCalledWith('error', expect.stringContaining('5'));
+    // Said under the tray, where the file would have been (P-04 AttachmentTray).
+    expect(screen.getByRole('alert').textContent).toContain('brochure.pdf is larger than the 5 MB a visitor can receive.');
   });
 
   it('refuses a dropped file a visitor cannot receive before any upload, and sends the rest to the widget', async () => {
@@ -186,7 +189,7 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     });
     const ref = mount();
     act(() => ref.current?.stage([{ handle: 'h1', name: 'logo.svg', size: 900 }, { handle: 'h2', name: 'quote.pdf', size: 90_000 }]));
-    expect(vi.mocked(toast)).toHaveBeenCalledWith('error', "SVG files can't be sent to a visitor.");
+    expect(screen.getByText("logo.svg can't be sent to a visitor — use PNG or PDF")).toBeTruthy();
     expect(screen.queryByText('logo.svg')).toBeNull();
     expect(screen.getByText('quote.pdf')).toBeTruthy();
     await act(async () => {

@@ -32,7 +32,8 @@ export const VISITOR_MAX_KB = 5120;
 export function refuseForVisitor(name: string, size: number, maxKb = VISITOR_MAX_KB): string | null {
   const dot = name.lastIndexOf('.');
   const ext = dot > 0 ? name.slice(dot + 1).toLowerCase() : '';
-  if (!ext || !VISITOR_TYPES[ext]) return `${ext ? `${ext.toUpperCase()} files` : 'Files without a type'} can't be sent to a visitor.`;
+  // P-04's words: "logo.svg can't be sent to a visitor — use PNG or PDF".
+  if (!ext || !VISITOR_TYPES[ext]) return `${name} can't be sent to a visitor — use PNG or PDF`;
   const limit = Math.max(64, maxKb) * 1024;
   if (size > limit) return `${name} is larger than the ${(limit / 1024 / 1024).toFixed(1).replace(/\.0$/, '')} MB a visitor can receive.`;
   return null;
@@ -43,6 +44,12 @@ export interface SavedReply {
   shortcut: string | null;
   title: string;
   body: string;
+  /** Uses in all; the composer's chips are the most used (RDC-03). */
+  uses?: number;
+  /** The widget it is for; null for every widget (CAN-01). From S-09. */
+  widget_id?: number | null;
+  /** Uses this month: "Used 54 times this month" (S-09, UX-SET-10). */
+  month_uses?: number;
 }
 
 /** A "/" being typed at the start of a word, with what follows it (RDC-03). */

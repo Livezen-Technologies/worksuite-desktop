@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { accountTone } from './model';
+import { tagVars, type AccountTagInfo, type AccountTagMode } from './accountTags';
 
 /** Each account tone as whole class names, so the stylesheet keeps them (theme tokens, light and dark). */
 const BG: Record<string, string> = {
@@ -29,11 +30,33 @@ export function AccountAvatar({ letter, colour, size = 18, className }: { letter
   );
 }
 
-/** An account's tag on a row of the combined list. */
-export function AccountBadge({ text, colour, title }: { text: string; colour: string | null | undefined; title?: string }) {
+/**
+ * An account's tag (#227): a soft pill — a tint of the account's colour with its first name in the darker shade, and
+ * a dot before it — quieter than the sender beside it. `dot` draws the dot alone; so does a list narrower than 340px
+ * (the list is the container). The address and kind of account are in the tooltip.
+ */
+export function AccountTag({ tag, mode = 'name', className }: { tag: AccountTagInfo; mode?: AccountTagMode; className?: string }) {
+  if (mode === 'off') return null;
+  const dot = <span aria-hidden className="h-1.5 w-1.5 shrink-0 rounded-full bg-[var(--tag-fg)] dark:bg-[var(--tag-dk)]" />;
+  if (mode === 'dot') {
+    return (
+      <span role="img" aria-label={tag.label} title={tag.title} style={tagVars(tag.palette)} className={cx('inline-flex h-5 shrink-0 items-center px-0.5', className)}>
+        {dot}
+      </span>
+    );
+  }
   return (
-    <span title={title} className={cx('inline-flex h-[17px] shrink-0 items-center rounded-[4px] px-1.5 text-[10.5px] font-bold tracking-wide text-white', accountBg(colour))}>
-      {text}
+    <span
+      title={tag.title}
+      style={tagVars(tag.palette)}
+      className={cx(
+        'inline-flex h-5 max-w-[118px] shrink-0 items-center gap-1 rounded-[6px] bg-[var(--tag-bg)] px-[7px] text-[11px] font-semibold text-[var(--tag-fg)] dark:bg-[color-mix(in_srgb,var(--tag-dk)_16%,transparent)] dark:text-[var(--tag-dk)]',
+        '@max-[340px]:bg-transparent @max-[340px]:px-0.5 dark:@max-[340px]:bg-transparent',
+        className,
+      )}
+    >
+      {dot}
+      <span className="truncate @max-[340px]:sr-only">{tag.label}</span>
     </span>
   );
 }
