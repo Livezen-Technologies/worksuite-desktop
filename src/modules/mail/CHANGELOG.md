@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.19.0 — 2026-10-04
+
+- Fetching ahead gives way to what a person opens (background priority, backoff, no UID 0); the reader tells a busy server and a message without a server ID apart; the sync log's Fetch errors tab and the running pass's progress (#228)
+
 ## 1.18.0 — 2026-10-03
 
 - Reading-pane header (#212): about half the height — subject with folder and External badges on one row, the sender on one line with a verification shield, 'to me ▾' for full details, a short date, Star and ⋯ for everything else; the account dot only in combined views; Super compact, Compact and Classic follow the list density; it shrinks to a 48px bar when the message scrolls, and badges move under the subject in a narrow pane.
