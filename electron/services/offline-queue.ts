@@ -317,6 +317,13 @@ export class OfflineQueue {
     return Number(this.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM drafts WHERE user_id = ?', userId)?.n ?? 0);
   }
 
+  /** Saved drafts by module ("1 unsent mail draft" in the Update Ready dialog). */
+  draftModules(userId: string): Record<string, number> {
+    const out: Record<string, number> = {};
+    for (const r of this.db.all<{ module: string; n: number }>('SELECT module, COUNT(*) AS n FROM drafts WHERE user_id = ? GROUP BY module', userId)) out[r.module] = Number(r.n);
+    return out;
+  }
+
   wipeUser(userId: string, includeDrafts: boolean): void {
     this.db.run('DELETE FROM offline_mutations WHERE user_id = ?', userId);
     if (includeDrafts) this.db.run('DELETE FROM drafts WHERE user_id = ?', userId);

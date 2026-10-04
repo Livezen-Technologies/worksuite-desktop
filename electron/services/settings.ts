@@ -63,6 +63,8 @@ export function defaultPreferences(): Preferences {
     autoUpdate: true,
     updateNotifications: true,
     updateInstallOnQuit: true,
+    updateShowWhatsNew: true,
+    updateInstallWhenIdle: false,
     sidebarMode: 'expanded',
     pinnedApps: [],
     shortcuts: {},

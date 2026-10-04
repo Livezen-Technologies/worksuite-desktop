@@ -499,6 +499,12 @@ const api = {
     reinstall: call('updates:reinstall'),
     dismissNotice: call('updates:dismissNotice'),
     prepared: call('updates:prepared'),
+    pauseDownload: call('updates:pauseDownload'),
+    resumeDownload: call('updates:resumeDownload'),
+    cancelDownload: call('updates:cancelDownload'),
+    installWhenFree: call('updates:installWhenFree'),
+    diagnostics: call('updates:diagnostics'),
+    exportDiagnostics: call('updates:exportDiagnostics'),
   },
   settings: {
     get: call('settings:get'),

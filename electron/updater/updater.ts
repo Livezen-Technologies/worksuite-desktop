@@ -1,19 +1,20 @@
 import { app } from 'electron';
 import { execFile, spawn } from 'node:child_process';
-import { createHash } from 'node:crypto';
-import { chmodSync, copyFileSync, createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
-import { chmod, mkdir, readdir, rename, rm, stat, writeFile } from 'node:fs/promises';
+import { chmodSync, constants as fsConstants, copyFileSync, createReadStream, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
+import { access, chmod, mkdir, readdir, rename, rm, stat, statfs, writeFile } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { canonicalJson } from '@shared/canonical-json';
 import { DEADLINE_WARNINGS_MS, isNewer, resolveArtifactUrl } from '@shared/release';
-import type { Arch, BusyReport, Platform, ReleaseNotes, UpdateActivity, UpdateChannel, UpdateStatus } from '@shared/types';
-import { CHANNEL_INFO, acceptsVersion, channelChange, waitingFor, type LaterChoice } from '@shared/updates';
+import type { Arch, BusyReport, MandatoryUpdate, PipelineStep, PipelineStepId, Platform, ReleaseInfo, ReleaseNotes, UpdateActivity, UpdateChannel, UpdateFailure, UpdateStatus } from '@shared/types';
+import { CHANNEL_INFO, DEFAULT_MAX_DEFERRALS, acceptsVersion, channelChange, failureRef, laterUntil, mandatoryView, restartImpact, restartWaits, waitingFor, type LaterChoice } from '@shared/updates';
 import { compareVersions, isBelowMinimum } from '@shared/version';
-import { createPublicKey, verify } from 'node:crypto';
+import { createHash, createPublicKey, verify } from 'node:crypto';
 import { logger } from '../main/log';
 import type { FetchLike } from '../services/http';
-import { acceptUpdateResponse, isRequired, isSecurityRelease, isTestChannel, ucInstallType, type UcPackage } from './update-center';
+import { DEFAULT_GRACE_MINUTES, acceptUpdateResponse, isCriticalRelease, isRequired, isSecurityRelease, isTestChannel, ucInstallType, type UcPackage } from './update-center';
+import { ResumableDownload } from './downloader';
+import type { UpdateProbe } from './diagnostics';
 import { linuxWatchdogScript, macRestoreScript, macSwapScript, UpdateScheduler, type UpdateHealth, type UpdateHistory, type UpdateNotifier } from './update-flow';
 
 const log = logger('updater');
@@ -65,7 +66,7 @@ export interface UpdaterDeps {
   updateUrl: (channel: UpdateChannel, opts?: { allowDowngrade?: boolean }) => string | null;
   channel: () => UpdateChannel;
   /**
-   * Whether a new version downloads by itself (Settings › Desktop › Updates). Off, it is offered and waits for the
+   * Whether a new version downloads by itself (Settings › Updates). Off, it is offered and waits for the
    * person's Download; a critical or required update downloads either way.
    */
   autoDownload: () => boolean;
@@ -76,7 +77,7 @@ export interface UpdaterDeps {
   onStatus: (s: UpdateStatus) => void;
   onWarning: (text: string) => void;
   beforeQuit: () => Promise<void>;
-  /** Settings › About › Updates › Install when quitting (default on). */
+  /** Settings › Updates › Install when quitting (default on). */
   installOnQuit?: () => boolean;
   /** The channels this computer may follow, and why it may not choose (organisation policy). */
   channels?: () => { allowed: UpdateChannel[]; lockReason: string | null };
@@ -89,6 +90,8 @@ export interface UpdaterDeps {
   history?: UpdateHistory;
   health?: UpdateHealth;
   notifier?: UpdateNotifier;
+  /** The local database's schema before and after this start's migrations ("What's New" after an update). */
+  schema?: () => { from: number; to: number } | null;
 }
 
 /** What the Update Center offered: the version, and the package for this computer. */
@@ -101,6 +104,9 @@ interface Offer {
   channel: string;
   notes: ReleaseNotes | null;
   downgrade: boolean;
+  release?: ReleaseInfo;
+  /** A critical release: installs after this many minutes. */
+  graceMinutes?: number | null;
 }
 
 /** Downloaded and verified, kept on disk so a critical update put off twice can install at the next launch. */
@@ -174,6 +180,11 @@ export class UpdaterService {
   private allowDowngrade = false;
   private scheduler: UpdateScheduler | null = null;
   private quitInstallTried = false;
+  /** The download in progress, for Pause and Cancel. */
+  private job: ResumableDownload | null = null;
+  private partialPath: string | null = null;
+  private graceTimer: NodeJS.Timeout | null = null;
+  private freeTimer: NodeJS.Timeout | null = null;
 
   constructor(private readonly deps: UpdaterDeps) {
     this.status = {
@@ -196,6 +207,13 @@ export class UpdaterService {
       security: false,
       downgrade: false,
       rollback: null,
+      release: null,
+      download: null,
+      pipeline: null,
+      mandatory: null,
+      failure: null,
+      restartWhenFree: false,
+      immediate: null,
     };
   }
 
@@ -210,14 +228,91 @@ export class UpdaterService {
       channel,
       allowedChannels: ch.allowed,
       channelLockReason: ch.lockReason,
-      snoozedUntil: n?.snoozedUntil() ?? null,
-      postponed: this.status.availableVersion && n ? n.postponed(this.status.availableVersion) : 0,
+      snoozedUntil: n?.snoozedUntil(this.laterKey()) ?? null,
+      postponed: this.laterKey() && n ? n.postponed(this.laterKey()!) : 0,
       installOnNextLaunch: !!this.status.availableVersion && n?.installAtLaunch() === this.status.availableVersion,
       waitingForChannel: ahead && !this.status.availableVersion ? { channel: ahead, version: app.getVersion() } : null,
       justUpdated: notice && notice.version === app.getVersion() ? { version: notice.version, notesUrl: notice.notesUrl ?? null } : null,
       quietReason: n?.quietReason() ?? null,
       channelFallback: this.fallback(channel, ch),
+      nextCheckAt: this.scheduler?.nextAt()?.toISOString() ?? null,
+      justUpdatedNotes: notice && notice.version === app.getVersion() ? { highlights: notice.highlights ?? [], summary: notice.summary ?? null, schema: this.deps.schema?.() ?? null } : null,
     };
+  }
+
+  // ── The verification pipeline and failures (Settings › Updates) ───────────
+
+  private static readonly STEPS: PipelineStepId[] = ['manifest', 'download', 'sha256', 'codesign', 'stage'];
+
+  private freshPipeline(manifestDetail: string): PipelineStep[] {
+    return UpdaterService.STEPS.map((id) => (id === 'manifest' ? { id, state: 'done', detail: manifestDetail } : { id, state: 'pending', detail: 'Pending' }));
+  }
+
+  private step(id: PipelineStepId, state: PipelineStep['state'], detail: string): void {
+    const pipeline = (this.status.pipeline ?? this.freshPipeline('Signature valid')).map((p) => (p.id === id ? { id, state, detail } : p));
+    this.set({ pipeline });
+  }
+
+  /** A failed update: the state, the message people already see, and a code and reference for support. */
+  private fail(code: string, error: string, extra: Partial<UpdateFailure> = {}, patch: Partial<UpdateStatus> = {}): void {
+    const failure: UpdateFailure = { code, message: error, version: this.offer?.version ?? this.status.availableVersion, rollback: 'none', ref: failureRef(), at: new Date().toISOString(), ...extra };
+    this.record('failure', `${code} ${failure.ref}`, failure.version);
+    this.set({ state: 'FAILED', error, failure, download: null, ...patch });
+  }
+
+  /** A failed install (rolled back or not) stays on show until dismissed; a failed check or download goes with the next good check. */
+  private keptFailure(): UpdateFailure | null {
+    const f = this.status.failure ?? null;
+    return f && f.code === 'UPDATE_INSTALL_FAILED' ? f : null;
+  }
+
+  // ── Required updates: since when, and by when ──────────────────────────────
+
+  private requiredFile(): string {
+    return join(this.deps.updatesDir, 'required.json');
+  }
+
+  /**
+   * This version has to go. The clock starts the first time that is known for this minimum (or release) and
+   * survives restarts; the deadline is that plus the policy's forced_update_deadline_hours, or the release's own
+   * `required_by`. The server refusing this version locks modules at once.
+   */
+  private markRequired(reason: MandatoryUpdate['reason'], opts: { requiredBy?: string | null; maxDeferrals?: number | null } = {}): void {
+    const key = reason === 'server' ? `server:${app.getVersion()}` : `${this.minimum ?? this.offer?.version ?? 'release'}`;
+    let rec: { key: string; since: string } | null = null;
+    try {
+      rec = existsSync(this.requiredFile()) ? (JSON.parse(readFileSync(this.requiredFile(), 'utf8')) as { key: string; since: string }) : null;
+    } catch {
+      rec = null;
+    }
+    const prev = this.status.mandatory ?? null;
+    if (!rec || (rec.key !== key && reason !== 'server')) {
+      rec = { key, since: prev?.since ?? new Date().toISOString() };
+      try {
+        mkdirSync(this.deps.updatesDir, { recursive: true });
+        writeFileSync(this.requiredFile(), JSON.stringify(rec), { mode: 0o600 });
+      } catch {
+        /* the deadline then counts from this start */
+      }
+    }
+    const own = opts.requiredBy && Number.isFinite(Date.parse(opts.requiredBy)) ? new Date(opts.requiredBy).toISOString() : null;
+    const deadline = own ?? prev?.deadline ?? new Date(Date.parse(rec.since) + this.deps.deadlineHours() * 3600_000).toISOString();
+    const mandatory: MandatoryUpdate = {
+      reason: prev?.reason === 'server' ? 'server' : reason,
+      requiredVersion: this.minimum ?? prev?.requiredVersion ?? null,
+      since: rec.since,
+      deadline,
+      serverRejected: !!prev?.serverRejected || reason === 'server',
+      maxDeferrals: opts.maxDeferrals ?? prev?.maxDeferrals ?? DEFAULT_MAX_DEFERRALS,
+    };
+    if (mandatory.reason !== prev?.reason || mandatory.deadline !== prev?.deadline) this.record('required', `${mandatory.reason}, install by ${deadline}`, this.offer?.version ?? null);
+    this.set({ required: true, mandatory });
+  }
+
+  /** The server refused this version on a business API (UPDATE_REQUIRED, VERSION_UNSUPPORTED): lock modules now. */
+  serverRejected(): void {
+    this.markRequired('server');
+    void this.check();
   }
 
   /** The person's channel is no longer allowed: this computer follows `to` instead (no downgrade). */
@@ -258,9 +353,10 @@ export class UpdaterService {
     if (this.minimum && compareVersions(version, this.minimum) <= 0) return;
     this.minimum = version;
     const required = isBelowMinimum(app.getVersion(), version);
-    this.set({ minimumVersion: version, required });
+    this.set({ minimumVersion: version, required: required || this.status.required });
     if (required) {
       log.warn('installed version is below the minimum', { installed: app.getVersion(), minimum: version });
+      this.markRequired('minimum');
       void this.check();
     }
   }
@@ -271,8 +367,7 @@ export class UpdaterService {
       this.setMinimum(version);
       return;
     }
-    this.set({ required: true });
-    void this.check();
+    this.serverRejected();
   }
 
   start(): void {
@@ -294,6 +389,7 @@ export class UpdaterService {
         return t;
       },
       clear: (h) => clearTimeout(h as NodeJS.Timeout),
+      now: () => Date.now(),
     });
     this.scheduler.start();
     void this.installAtLaunch();
@@ -308,6 +404,10 @@ export class UpdaterService {
     this.scheduler?.stop();
     for (const t of this.deadlineTimers) clearTimeout(t);
     this.deadlineTimers = [];
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+    this.graceTimer = null;
+    if (this.freeTimer) clearInterval(this.freeTimer);
+    this.freeTimer = null;
   }
 
   check(): Promise<UpdateStatus> {
@@ -358,7 +458,7 @@ export class UpdaterService {
     this.stagedPath = null;
     for (const t of this.deadlineTimers) clearTimeout(t);
     this.deadlineTimers = [];
-    this.set({ state: 'IDLE', availableVersion: null, notes: null, notesUrl: null, deadline: null, downgrade: false, critical: false, security: false, error: null, progress: 0 });
+    this.set({ state: 'IDLE', availableVersion: null, notes: null, notesUrl: null, deadline: null, downgrade: false, critical: false, security: false, error: null, progress: 0, release: null, pipeline: null, download: null, immediate: null });
   }
 
   private async doCheck(): Promise<UpdateStatus> {
@@ -383,12 +483,16 @@ export class UpdaterService {
         // Fail closed: an answer that does not verify is ignored entirely.
         log.error('update response refused; ignoring it', { reason: accepted.reason });
         this.record('check-refused', accepted.reason, null);
-        this.set({ state: 'FAILED', error: 'The update could not be verified and was ignored.', signatureVerified: false, lastCheckedAt: new Date().toISOString() });
+        this.fail('UPDATE_SIGNATURE_INVALID', 'The update could not be verified and was ignored.', { version: null }, {
+          signatureVerified: false,
+          lastCheckedAt: new Date().toISOString(),
+          pipeline: UpdaterService.STEPS.map((id) => (id === 'manifest' ? { id, state: 'failed' as const, detail: `Signature not valid (${accepted.reason})` } : { id, state: 'pending' as const, detail: 'Pending' })),
+        });
         return this.get();
       }
       const r = accepted.response;
       if (r.effective_minimum) this.setMinimum(r.effective_minimum);
-      if (isRequired(r)) this.set({ required: true });
+      if (isRequired(r)) this.markRequired('release', { requiredBy: r.required_by ?? null, maxDeferrals: r.max_deferrals ?? null });
       const pkg = r.package ?? null;
       const version = r.latest_version ?? null;
       // The signed answer's channel wins (a tenant policy at the Update Center), else the one asked for.
@@ -399,20 +503,33 @@ export class UpdaterService {
         log.warn('update refused: pre-release on a channel that does not take one', { version, channel: effective });
         this.record('check-result', `refused ${version}: not a ${effective} version`, version);
         this.offer = null;
-        this.set({ state: 'IDLE', availableVersion: null, error: null, lastCheckedAt: new Date().toISOString(), signatureVerified: true });
+        this.set({ state: 'IDLE', availableVersion: null, error: null, lastCheckedAt: new Date().toISOString(), signatureVerified: true, release: null, pipeline: null, failure: this.keptFailure() });
         return this.get();
       }
       if ((r.status === 'CURRENT' && !downgrade) || !pkg || !version || !wanted) {
         this.offer = null;
         this.record('check-result', `up to date (${r.status.toLowerCase()})`, version);
-        this.set({ state: 'IDLE', availableVersion: null, notes: null, error: r.status === 'CURRENT' ? null : r.message ?? null, lastCheckedAt: new Date().toISOString(), signatureVerified: true });
+        this.set({ state: 'IDLE', availableVersion: null, notes: null, error: r.status === 'CURRENT' ? null : r.message ?? null, lastCheckedAt: new Date().toISOString(), signatureVerified: true, release: null, pipeline: null, failure: this.keptFailure() });
         return this.get();
       }
       const security = isSecurityRelease(r);
       const highlights = (r.highlights ?? []).filter((h) => h.trim()).slice(0, 8);
       const notes: ReleaseNotes = { version, summary: r.summary ?? highlights[0] ?? null, highlights, url: r.release_notes_url ?? null };
       const isDowngrade = compareVersions(version, app.getVersion()) < 0;
-      this.offer = { version, critical: security, pkg, checkUrl: url, channel: answered, notes, downgrade: isDowngrade };
+      const release: ReleaseInfo = {
+        buildNumber: r.build_number ?? null,
+        publishedAt: r.published_at ?? null,
+        releaseType: r.release_type ?? null,
+        channel: answered,
+        packageType: pkg.type,
+        packageSize: pkg.size,
+        keyId: r.key_id,
+        publisher: r.publisher ?? null,
+        securityFixes: r.security_fixes ?? null,
+        knownIssues: (r.known_issues ?? []).filter((k) => k.trim()),
+      };
+      const graceMinutes = isCriticalRelease(r) ? (r.grace_minutes ?? DEFAULT_GRACE_MINUTES) : null;
+      this.offer = { version, critical: security, pkg, checkUrl: url, channel: answered, notes, downgrade: isDowngrade, release, graceMinutes };
       const blocked = await this.installBlockedReason(this.offer);
       this.record('check-result', `${version} offered${security ? ' (security)' : ''}${isDowngrade ? ' (reinstall)' : ''}`, version);
       this.set({
@@ -427,6 +544,9 @@ export class UpdaterService {
         installSupported: blocked === null,
         installBlockedReason: blocked,
         lastCheckedAt: new Date().toISOString(),
+        release,
+        failure: null,
+        pipeline: this.freshPipeline(`Ed25519 signature valid · key ${r.key_id}`),
       });
       // In the background, unless downloads are left to the person — a required or critical update downloads anyway,
       // and so does a reinstall the person just asked for.
@@ -437,7 +557,7 @@ export class UpdaterService {
       this.record('check-failed', errorText(e), null);
       // A check that failed is not a download that failed: nothing stays on offer until the next check answers.
       this.offer = null;
-      this.set({ state: 'FAILED', availableVersion: null, notes: null, error: 'Could not check for updates.', lastCheckedAt: new Date().toISOString() });
+      this.fail('UPDATE_CHECK_FAILED', 'Could not check for updates.', { version: null }, { availableVersion: null, notes: null, lastCheckedAt: new Date().toISOString(), release: null, pipeline: null });
       return this.get();
     }
   }
@@ -478,21 +598,125 @@ export class UpdaterService {
     return null;
   }
 
-  /** Downloads the update on offer (Settings › About › Download, when automatic downloads are off). */
+  /** Downloads the update on offer (Settings › Updates › Download, when automatic downloads are off), or resumes a paused one. */
   download(): Promise<void> {
     if (this.downloading) return this.downloading;
     const offer = this.offer;
-    if (!offer || this.status.state !== 'AVAILABLE' || !this.status.installSupported) return Promise.resolve();
+    const resuming = this.status.state === 'DOWNLOADING' && !!this.status.download?.paused;
+    if (!offer || !(this.status.state === 'AVAILABLE' || resuming) || !this.status.installSupported) return Promise.resolve();
     this.downloading = this.doDownload(offer)
       .catch((e) => {
         log.error('update download failed', { error: errorText(e) });
         this.record('download-failed', errorText(e), offer.version);
-        this.set({ state: 'FAILED', error: 'The update could not be downloaded.' });
+        this.fail('UPDATE_DOWNLOAD_FAILED', 'The update could not be downloaded.');
       })
       .finally(() => {
         this.downloading = null;
+        this.job = null;
       });
     return this.downloading;
+  }
+
+  // ── Diagnostics (Settings › Updates › Diagnostics) ─────────────────────────
+
+  /**
+   * Asks the Update Center once, without changing anything: how long it took, whether the answer verifies, and
+   * whether the package's download URL answers (one byte, by Range).
+   */
+  async probe(): Promise<UpdateProbe> {
+    const url = this.deps.updateUrl(this.deps.channel());
+    const none: UpdateProbe = { reached: false, ms: 0, status: null, verified: null, keyId: null, reason: 'no update service is configured', pkg: null, download: null };
+    if (!url) return none;
+    const t0 = Date.now();
+    let res: Response;
+    try {
+      res = await this.deps.fetch(url, { method: 'GET', headers: { Accept: 'application/json' }, signal: AbortSignal.timeout(15_000) });
+    } catch (e) {
+      return { ...none, reason: errorText(e) };
+    }
+    const ms = Date.now() - t0;
+    if (!res.ok) return { ...none, reached: true, ms, status: res.status, reason: `HTTP ${res.status}` };
+    let raw: Record<string, unknown>;
+    try {
+      raw = (await res.json()) as Record<string, unknown>;
+    } catch {
+      return { ...none, reached: true, ms, status: res.status, verified: false, reason: 'malformed' };
+    }
+    const accepted = acceptUpdateResponse(raw, this.deps.responseKeys, app.getVersion());
+    const keyId = typeof raw.key_id === 'string' ? raw.key_id : null;
+    if (!accepted.ok) return { reached: true, ms, status: res.status, verified: false, keyId, reason: accepted.reason, pkg: null, download: null };
+    const pkg = accepted.response.package ?? null;
+    const latest = accepted.response.latest_version ?? null;
+    if (!pkg || !latest || !isNewer(latest, app.getVersion())) return { reached: true, ms, status: res.status, verified: true, keyId, reason: null, pkg: null, download: null };
+    const dl = resolveArtifactUrl(pkg.download_url, url, this.deps.allowInsecure);
+    let download: UpdateProbe['download'] = { ok: false, status: null };
+    if (dl) {
+      try {
+        const r = await this.deps.fetch(dl, { method: 'GET', headers: { Range: 'bytes=0-0' }, signal: AbortSignal.timeout(15_000) });
+        download = { ok: r.ok, status: r.status };
+        await r.body?.cancel().catch(() => undefined);
+      } catch {
+        download = { ok: false, status: null };
+      }
+    }
+    return { reached: true, ms, status: res.status, verified: true, keyId, reason: null, pkg: { size: pkg.size }, download };
+  }
+
+  /** Free space where updates are downloaded. */
+  async freeBytes(): Promise<number | null> {
+    try {
+      await mkdir(this.deps.updatesDir, { recursive: true });
+      const s = await statfs(this.deps.updatesDir);
+      return Number(s.bavail) * Number(s.bsize);
+    } catch {
+      return null;
+    }
+  }
+
+  /** Whether this copy can replace itself where it is installed (no elevation needed), or null when it does not update itself. */
+  async installWritable(): Promise<{ ok: boolean; detail: string } | null> {
+    if (!app.isPackaged) return null;
+    const where = this.deps.platform === 'macos' ? (bundlePath() ? dirname(bundlePath()!) : null) : this.deps.platform === 'linux' ? (process.env.APPIMAGE ? dirname(process.env.APPIMAGE) : null) : dirname(process.execPath);
+    if (!where) return null;
+    try {
+      await access(where, fsConstants.W_OK);
+      return { ok: true, detail: this.deps.platform === 'windows' ? 'Per-user install · no elevation needed' : `${where} is writable · no elevation needed` };
+    } catch {
+      return { ok: false, detail: `${where} is not writable by you` };
+    }
+  }
+
+  /** Pause: what has arrived is kept, and Resume carries on from there (HTTP Range). */
+  async pauseDownload(): Promise<UpdateStatus> {
+    if (this.job && this.status.state === 'DOWNLOADING') {
+      this.job.pause();
+      await this.downloading;
+    }
+    return this.get();
+  }
+
+  async resumeDownload(): Promise<UpdateStatus> {
+    if (this.status.state === 'DOWNLOADING' && this.status.download?.paused) void this.download();
+    return this.get();
+  }
+
+  /** Cancel: what has arrived is deleted, and the version stays on offer. */
+  async cancelDownload(): Promise<UpdateStatus> {
+    if (this.status.state !== 'DOWNLOADING') return this.get();
+    if (this.job) {
+      this.job.cancel();
+      await this.downloading;
+    } else {
+      if (this.partialPath) await rm(this.partialPath, { force: true });
+      this.afterCancel();
+    }
+    return this.get();
+  }
+
+  private afterCancel(): void {
+    this.record('download-cancelled', null, this.offer?.version ?? null);
+    const pipeline = (this.status.pipeline ?? []).map((p) => (p.id === 'manifest' ? p : { ...p, state: 'pending' as const, detail: 'Pending' }));
+    this.set({ state: 'AVAILABLE', progress: 0, download: null, pipeline });
   }
 
   private async doDownload(offer: Offer): Promise<void> {
@@ -500,7 +724,7 @@ export class UpdaterService {
     const url = resolveArtifactUrl(pkg.download_url, offer.checkUrl, this.deps.allowInsecure);
     if (!url) {
       this.record('download-failed', 'not https', offer.version);
-      this.set({ state: 'FAILED', error: 'The update is not served over HTTPS.' });
+      this.fail('UPDATE_DOWNLOAD_FAILED', 'The update is not served over HTTPS.');
       return;
     }
     const dir = join(this.deps.updatesDir, offer.version);
@@ -508,61 +732,102 @@ export class UpdaterService {
     const name = pkg.file_name.replace(/[^A-Za-z0-9._-]/g, '_') || `update-${pkg.type}`;
     const final = join(dir, name);
     const partial = `${final}.partial`;
-    this.set({ state: 'DOWNLOADING', progress: 0 });
-    this.record('download-start', `${pkg.size} bytes`, offer.version);
-    let res = await this.deps.fetch(url, { method: 'GET', signal: AbortSignal.timeout(2 * 3600_000) });
-    if (!res.ok && pkg.download_grant) {
-      // The signed URL lasts 15 minutes; the grant buys a fresh one for the same file.
-      const fresh = await this.redeemGrant(pkg.download_grant, offer.checkUrl);
-      if (fresh) res = await this.deps.fetch(fresh, { method: 'GET', signal: AbortSignal.timeout(2 * 3600_000) });
-    }
-    if (!res.ok || !res.body) {
-      this.record('download-failed', `HTTP ${res.status}`, offer.version);
-      this.set({ state: 'FAILED', error: `Download failed (${res.status}).` });
+    this.partialPath = partial;
+    const already = await stat(partial).then((st) => Math.min(st.size, pkg.size), () => 0);
+    const resumable = already > 0;
+    this.set({
+      state: 'DOWNLOADING',
+      progress: Math.floor((already / pkg.size) * 100),
+      download: { received: already, total: pkg.size, bytesPerSecond: 0, secondsLeft: null, paused: false, retrying: false, resumable },
+    });
+    this.step('download', 'active', resumable ? `Resuming at ${Math.floor((already / pkg.size) * 100)}%` : 'Starting');
+    this.record(resumable ? 'download-resume' : 'download-start', `${resumable ? `${already} of ` : ''}${pkg.size} bytes`, offer.version);
+    const job = new ResumableDownload(
+      { fetch: this.deps.fetch },
+      {
+        url,
+        partial,
+        size: pkg.size,
+        // The signed URL lasts 15 minutes; the grant buys a fresh one for the same file.
+        refresh: pkg.download_grant ? () => this.redeemGrant(pkg.download_grant!, offer.checkUrl) : undefined,
+        onProgress: (p) => {
+          const pct = Math.min(100, Math.floor((p.received / p.total) * 100));
+          this.status = { ...this.status, progress: pct, download: { ...p, paused: false } };
+          this.step('download', 'active', p.retrying ? 'Network lost · retrying' : `${p.resumable ? 'Resumable · ' : ''}${pct}%`);
+        },
+      },
+    );
+    this.job = job;
+    const r = await job.run();
+    this.job = null;
+    if (!r.ok) {
+      if (r.reason === 'paused') {
+        this.record('download-paused', null, offer.version);
+        this.step('download', 'active', 'Paused');
+        this.set({ download: { ...(this.status.download ?? { received: 0, total: pkg.size, bytesPerSecond: 0, secondsLeft: null, resumable: false }), paused: true, retrying: false, bytesPerSecond: 0, secondsLeft: null } });
+        return;
+      }
+      if (r.reason === 'cancelled') {
+        this.afterCancel();
+        return;
+      }
+      this.step('download', 'failed', r.reason === 'http' ? `HTTP ${r.status}` : r.reason === 'too-large' ? 'Larger than announced' : 'Network lost');
+      this.record('download-failed', r.reason === 'http' ? `HTTP ${r.status}` : r.reason, offer.version);
+      this.fail('UPDATE_DOWNLOAD_FAILED', r.reason === 'http' ? `Download failed (${r.status}).` : 'The update could not be downloaded.');
       return;
     }
-    const hash = createHash('sha256');
-    const out = createWriteStream(partial, { mode: 0o600 });
-    let bytes = 0;
-    let shown = -1;
-    const reader = res.body.getReader();
-    try {
-      for (;;) {
-        const { done, value } = await reader.read();
-        if (done) break;
-        hash.update(value);
-        if (!out.write(value)) await new Promise<void>((r) => out.once('drain', () => r()));
-        bytes += value.byteLength;
-        if (bytes > pkg.size) throw new Error('update larger than announced');
-        const pct = Math.round((bytes / pkg.size) * 100);
-        if (pct !== shown) {
-          shown = pct;
-          this.set({ progress: pct });
-        }
-      }
-    } finally {
-      await new Promise<void>((r) => out.end(() => r()));
-    }
-    const digest = hash.digest('hex');
-    if (bytes !== pkg.size || digest !== pkg.sha256) {
+    this.step('download', 'done', 'Downloaded');
+    if (r.bytes !== pkg.size || r.sha256 !== pkg.sha256) {
       await rm(partial, { force: true });
-      log.error('update checksum mismatch', { expected: pkg.sha256, got: digest, bytes });
+      log.error('update checksum mismatch', { expected: pkg.sha256, got: r.sha256, bytes: r.bytes });
       this.record('download-failed', 'checksum mismatch', offer.version);
-      this.set({ state: 'FAILED', error: 'The downloaded update did not match its checksum and was deleted.' });
+      this.step('sha256', 'failed', 'Did not match the signed checksum');
+      this.fail('UPDATE_CHECKSUM_MISMATCH', 'The downloaded update did not match its checksum and was deleted.');
       return;
     }
     await rename(partial, final);
+    this.partialPath = null;
     this.record('download-done', 'sha256 verified', offer.version);
-    this.set({ state: 'VERIFIED', progress: 100 });
+    this.status = { ...this.status, pipeline: (this.status.pipeline ?? []).map((p) => (p.id === 'sha256' ? { id: p.id, state: 'done', detail: 'Matches the signed answer' } : p)) };
+    this.set({ state: 'VERIFIED', progress: 100, download: null });
     const staged = await this.stage(final, dir, offer);
     if (!staged) return;
     this.stagedPath = staged;
+    this.status = { ...this.status, pipeline: (this.status.pipeline ?? []).map((p) => (p.id === 'stage' ? { id: p.id, state: 'done', detail: 'Ready to install' } : p)) };
     await this.saveStaged({ version: offer.version, file: final, offer: { version: offer.version, critical: offer.critical, pkg: offer.pkg, channel: offer.channel, notes: offer.notes, downgrade: offer.downgrade } });
-    const deadline = offer.critical || this.status.required ? new Date(Date.now() + this.deps.deadlineHours() * 3600_000).toISOString() : null;
+    const required = this.status.required ? (this.status.mandatory?.deadline ?? null) : null;
+    const deadline = required ?? (offer.critical || this.status.required ? new Date(Date.now() + this.deps.deadlineHours() * 3600_000).toISOString() : null);
     this.record('staged', deadline ? `installs by ${deadline}` : null, offer.version);
     this.set({ state: 'STAGED', deadline });
     if (deadline) this.armDeadline(new Date(deadline).getTime());
     this.deps.notifier?.onReady({ version: offer.version, critical: offer.critical, summary: offer.notes?.summary ?? null });
+    if (offer.graceMinutes) void this.startGrace(offer.version, offer.graceMinutes);
+  }
+
+  /**
+   * A critical release: everything is saved now (drafts, tabs; the offline queue is already on disk), and it installs
+   * when the grace period ends — a call or meeting then ends too, which the modal says.
+   */
+  private async startGrace(version: string, minutes: number): Promise<void> {
+    const ends = Date.now() + minutes * 60_000;
+    const base = { version, graceMinutes: minutes, graceEndsAt: new Date(ends).toISOString() };
+    this.record('critical-grace', `${minutes} min`, version);
+    this.set({ immediate: { ...base, saved: null } });
+    let flushed = false;
+    if (this.deps.prepareRestart) {
+      try {
+        await this.deps.prepareRestart();
+        flushed = true;
+      } catch (e) {
+        log.warn('saving before a critical update did not finish', { error: errorText(e) });
+      }
+    }
+    const b = this.deps.busy();
+    if (this.status.state !== 'STAGED') return;
+    this.set({ immediate: { ...base, saved: { flushed, drafts: b.drafts, pendingMutations: b.pendingMutations } } });
+    if (this.graceTimer) clearTimeout(this.graceTimer);
+    this.graceTimer = setTimeout(() => void this.install(true), Math.max(0, ends - Date.now()));
+    this.graceTimer.unref?.();
   }
 
   private stagedFile(): string {
@@ -619,6 +884,7 @@ export class UpdaterService {
 
   /** Step 3 of the trust chain: the OS code signature, same publisher as us (an unsigned build on a test channel: steps 1–2 only). */
   private async stage(file: string, dir: string, offer: Pick<Offer, 'channel'>): Promise<string | null> {
+    this.step('codesign', 'active', 'Checking');
     try {
       if (this.deps.platform === 'macos') {
         const target = join(dir, 'staged');
@@ -635,22 +901,29 @@ export class UpdaterService {
         const mine = await macTeamId(bundlePath() ?? '');
         const theirs = await macTeamId(newApp);
         if (mine ? mine !== theirs : !this.unsignedAllowed(offer)) throw new Error('the update is signed by a different publisher');
+        this.step('codesign', mine ? 'done' : 'skipped', mine ? `Developer ID · team ${theirs}` : 'Unsigned build on a test channel');
         return newApp;
       }
       if (this.deps.platform === 'windows') {
         const mine = await winSigner(process.execPath);
-        if (!mine.valid && this.unsignedAllowed(offer)) return file;
+        if (!mine.valid && this.unsignedAllowed(offer)) {
+          this.step('codesign', 'skipped', 'Unsigned build on a test channel');
+          return file;
+        }
         const theirs = await winSigner(file);
         if (!theirs.valid || !mine.subject || mine.subject !== theirs.subject) throw new Error('the installer is not signed by the same publisher');
+        this.step('codesign', 'done', 'Authenticode valid');
         return file;
       }
       // Linux AppImage: the signed update response and its SHA-256 are the trust.
       await chmod(file, 0o755);
+      this.step('codesign', 'skipped', 'AppImage: the signed answer and SHA-256 are the check');
       return file;
     } catch (e) {
       log.error('update failed code-signature verification', { error: errorText(e) });
       this.record('verify-failed', errorText(e), null);
-      this.set({ state: 'FAILED', error: 'The update failed signature verification and was not installed.' });
+      this.step('codesign', 'failed', 'Not signed by the same publisher');
+      this.fail('UPDATE_CODESIGN_FAILED', 'The update failed signature verification and was not installed.');
       return null;
     }
   }
@@ -673,12 +946,59 @@ export class UpdaterService {
     this.deadlineTimers.push(t);
   }
 
-  /** Later: In 1 hour, Tonight, or On next app launch. */
+  /** What Later puts off: the version on offer, or a required update that has nothing on offer yet. */
+  private laterKey(): string | null {
+    return this.status.availableVersion ?? (this.status.required ? `required:${this.status.minimumVersion ?? 'server'}` : null);
+  }
+
+  /**
+   * Later: in 1 hour, 4 hours, tomorrow (Tonight and the next launch for older callers). A required update may be put
+   * off only until its deadline, and only as often as the release allows.
+   */
   later(choice: LaterChoice = 'hour'): UpdateStatus {
-    const r = this.deps.notifier?.later(choice);
+    if (this.status.required) {
+      const now = new Date();
+      const m = mandatoryView(this.get(), now);
+      const until = laterUntil(choice, now);
+      const refuse = m.locked
+        ? 'The deadline for this update has passed.'
+        : m.deferralsLeft <= 0
+          ? 'This update cannot be put off again.'
+          : !until || (m.deadline && until.getTime() > m.deadline.getTime())
+            ? 'That is after the deadline for this update.'
+            : null;
+      if (refuse) throw Object.assign(new Error(refuse), { code: 'POLICY_DENIED' });
+    }
+    const r = this.deps.notifier?.later(choice, this.laterKey());
     this.record('later', `${choice}${r?.installOnNextLaunch ? ' (installs at next launch)' : ''}`, this.status.availableVersion);
     this.publish();
     return this.get();
+  }
+
+  /**
+   * "Restart when work finishes": WorkSuite restarts as soon as nothing would be interrupted — no call, meeting,
+   * screen share or remote control, and no transfer still running. Drafts and the offline queue are kept either way.
+   */
+  installWhenFree(): UpdateStatus {
+    if (this.status.state !== 'STAGED') return this.get();
+    this.record('restart-when-free', null, this.status.availableVersion);
+    this.set({ restartWhenFree: true });
+    if (!this.freeTimer) {
+      this.freeTimer = setInterval(() => void this.workChanged(), 30_000);
+      this.freeTimer.unref?.();
+    }
+    void this.workChanged();
+    return this.get();
+  }
+
+  /** A call, meeting, share or transfer ended (and every 30 s while waiting): restart if that was all. */
+  async workChanged(): Promise<void> {
+    if (!this.status.restartWhenFree || this.status.state !== 'STAGED') return;
+    if (restartWaits(restartImpact(this.deps.busy()))) return;
+    if (this.freeTimer) clearInterval(this.freeTimer);
+    this.freeTimer = null;
+    this.set({ restartWhenFree: false });
+    await this.install(true);
   }
 
   /** The older IPC name for Later (one hour). */
@@ -706,7 +1026,7 @@ export class UpdaterService {
       if (relaunch) await this.deps.prepareRestart?.().catch((e) => log.warn('saving before the restart did not finish', { error: errorText(e) }));
       await this.deps.beforeQuit();
       const rollbackPossible = this.deps.platform !== 'windows';
-      this.deps.health?.beforeInstall(app.getVersion(), version, rollbackPossible, relaunch, this.status.notes?.url ?? this.status.notesUrl);
+      this.deps.health?.beforeInstall(app.getVersion(), version, rollbackPossible, relaunch, this.status.notes?.url ?? this.status.notesUrl, new Date(), { highlights: this.status.notes?.highlights, summary: this.status.notes?.summary });
       if (relaunch) this.deps.health?.requestSessionRestore();
       this.deps.notifier?.doneWith(version);
       this.launchInstaller(this.stagedPath, version, relaunch);
@@ -714,13 +1034,13 @@ export class UpdaterService {
     } catch (e) {
       log.error('install failed', { error: errorText(e) });
       this.record('install-failed', errorText(e), version);
-      this.set({ state: 'FAILED', error: 'The update could not be installed. The current version keeps running.' });
+      this.fail('UPDATE_INSTALL_FAILED', 'The update could not be installed. The current version keeps running.', { version });
       return { started: false, busy, message: 'The update could not be installed.' };
     }
   }
 
   /**
-   * Install when quitting (Settings › About › Updates). Runs inside `before-quit`, which cannot wait, so every step
+   * Install when quitting (Settings › Updates). Runs inside `before-quit`, which cannot wait, so every step
    * here is synchronous: the installer (or the macOS swap script) starts and carries on after WorkSuite has gone.
    * It does not reopen WorkSuite; the next launch checks the new version's health.
    */
@@ -731,7 +1051,7 @@ export class UpdaterService {
     const version = this.status.availableVersion ?? this.offer?.version ?? 'unknown';
     try {
       this.record('install', 'on quit', version);
-      this.deps.health?.beforeInstall(app.getVersion(), version, this.deps.platform !== 'windows', false, this.status.notes?.url ?? this.status.notesUrl);
+      this.deps.health?.beforeInstall(app.getVersion(), version, this.deps.platform !== 'windows', false, this.status.notes?.url ?? this.status.notesUrl, new Date(), { highlights: this.status.notes?.highlights, summary: this.status.notes?.summary });
       this.deps.notifier?.doneWith(version);
       this.launchInstaller(this.stagedPath, version, false);
       this.status = { ...this.status, state: 'INSTALLING' };
@@ -804,13 +1124,9 @@ export class UpdaterService {
       this.record(v.kind, v.reason, v.failedVersion);
       log.error('the last update did not take', { kind: v.kind, failed: v.failedVersion, reason: v.reason });
       const restored = v.kind === 'rolled-back';
-      this.set({
-        rollback: {
-          failedVersion: v.failedVersion,
-          restored,
-          message: restored ? `WorkSuite ${v.failedVersion} did not start, so the previous version was put back. ${v.reason}` : `WorkSuite ${v.failedVersion} did not install. ${v.reason}`,
-        },
-      });
+      const message = restored ? `WorkSuite ${v.failedVersion} did not start, so the previous version was put back. ${v.reason}` : `WorkSuite ${v.failedVersion} did not install. ${v.reason}`;
+      this.set({ rollback: { failedVersion: v.failedVersion, restored, message } });
+      this.fail('UPDATE_INSTALL_FAILED', message, { version: v.failedVersion, rollback: restored ? 'ok' : 'none' }, { state: this.status.state, error: this.status.error });
       return;
     }
     // Rollback: this version started too many times without becoming healthy.
@@ -822,7 +1138,10 @@ export class UpdaterService {
   /** Puts the previous version back from inside a new version that keeps failing (macOS, Linux AppImage). */
   private async rollBack(failed: string, previous: string): Promise<void> {
     const health = this.deps.health;
-    const report = (restored: boolean, message: string) => this.set({ rollback: { failedVersion: failed, restored, message } });
+    const report = (restored: boolean, message: string) => {
+      this.set({ rollback: { failedVersion: failed, restored, message } });
+      this.fail('UPDATE_INSTALL_FAILED', message, { version: failed, rollback: this.deps.platform === 'windows' ? 'not-possible' : 'failed' }, { state: this.status.state, error: this.status.error });
+    };
     try {
       if (this.deps.platform === 'macos') {
         const target = bundlePath();
@@ -868,7 +1187,7 @@ export class UpdaterService {
 
   dismissNotice(): UpdateStatus {
     this.deps.health?.dismissNotice();
-    this.set({ rollback: null });
+    this.set({ rollback: null, failure: null });
     return this.get();
   }
 
