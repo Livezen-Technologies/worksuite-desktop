@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.149 — 2026-10-04
+
+- **Blocking a website visitor asks for how long.** **Block this visitor** now offers a day, a week (the default), a
+  month or until somebody lifts it, and takes a reason the team sees later. A block ends by itself when its time is up,
+  and the web's **Website chats › Blocked visitors** lists every block in force and lifts one early. Before, a block was
+  for good and nobody could undo it, so blocking one person on a shared office address shut the whole office out.
+  Needs the server update (Communication 1.20.0); an older server blocks until lifted, as before.
+
 ## 0.2.148 — 2026-10-04
 
 - **Beta is the default update channel.** A new install, and any computer whose organisation sets no channel, now follows **Beta**: the channel that takes the current test builds. If an organisation doesn't allow Beta, it falls back to Stable. A channel you picked yourself in **Settings › About**, or one your organisation sets, still wins. This needs the server's Desktop 1.5.0 for organisations that rely on the server default.

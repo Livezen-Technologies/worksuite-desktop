@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.23.0 — 2026-10-04
+
+- Website chats: Block this visitor asks for how long — a day, a week (the default), a month or until somebody lifts it — and why, and says where to lift it on the web (WS-WCHAT GATE-08, SEC-10). Needs the server's Communication 1.20.0 for the length; an older server blocks until lifted, as before.
+
 ## 1.22.0 — 2026-10-03
 
 - Website chats › Widget (#207): choose Auto, Light or Dark for the widget, move the launcher with bottom/right/left offsets, see the organisation name used when the website name is empty, and preview the polished widget — one set of controls, no web address in the header.
