@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.161 — 2026-10-04
+
+- **Closed chats (C-06).** Each row says how the chat ended: what it was about and who closed it ("Activation fixed ·
+  Nuwan"), or "Inactive · closed automatically". The visitor's rating shows as stars. The list is ordered by when the
+  chats closed, and the search says "Search closed chats…".
+- Opening one shows who closed it, when, and how long it lasted, then the transcript and the visitor's rating and
+  comment. A note explains that the chat must be reopened before you can reply. **Star**, **Block visitor** and
+  **Reopen** sit in the header.
+- A summary sits beside it: first reply time, duration, priority, rating, who handled it, tags, the visitor's contact
+  details and how many chats they have had, and the files shared.
+- The visitor panel's cards are now shared by live and closed chats.
+- Needs the server update (Communication 1.28.0). An older server shows less.
+
 ## 0.2.160 — 2026-10-04
 
 - **Offline enquiries (C-05).** Each row says why the visitor left a message (**Outside hours** or **Nobody

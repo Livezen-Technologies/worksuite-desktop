@@ -14,6 +14,7 @@ import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../com
 import { useNow } from '../../calls/parts';
 import { followUpsFirst, isMine as mineFor, longestWaiting, PRIORITIES, sectionRows, sortWebsiteRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, WEBSITE_SORTS, type CallbackOutcome, type Section, type WebsiteCallback, type WebsitePriority, type WebsiteRow, type WebsiteSort } from './api';
 import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
+import { ClosedDetail, ClosedRow } from './Closed';
 import { MissedDetail, MissedRow, useMissed, type MissedTab } from './Missed';
 import { OfflineDetail, OfflineRow, useOffline } from './Offline';
 import { clock, handoffAsk, handoffTitle, useRingState } from './Ringing';
@@ -199,7 +200,7 @@ export function WebsiteWorkspace() {
   const searchBox = (wide: boolean) => (
     <span className={cx('relative flex items-center', wide && 'w-[280px] shrink-0')}>
       <Icon name="search" size={14} className="pointer-events-none absolute left-2.5 text-ink-3" />
-      <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, messages, email…" className={cx('w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 outline-none focus:border-primary', wide ? 'h-8 text-[12.5px]' : 'h-[34px] text-[13px]')} />
+      <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder={section === 'closed' ? text('Search closed chats…') : text('Search visitors, messages, email…')} className={cx('w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 outline-none focus:border-primary', wide ? 'h-8 text-[12.5px]' : 'h-[34px] text-[13px]')} />
     </span>
   );
   const siteSelect = (
@@ -376,7 +377,7 @@ export function WebsiteWorkspace() {
               <Pill on={cbStatus === 'handled'} onClick={() => setCbStatus('handled')}>{text('Handled')}</Pill>
               <Pill on={mineOnly} onClick={() => setMineOnly((m) => !m)}>{text('Mine')}</Pill>
             </div>
-          ) : !ownList && section !== 'invited' && !table ? (
+          ) : !ownList && section !== 'invited' && section !== 'closed' && !table ? (
             <div className="flex gap-1.5 text-[12px] font-semibold" role="group" aria-label="Show">
               <Pill on={pill === 'open'} onClick={() => showOpen(false)}>Open · {openHere.length}</Pill>
               <Pill on={pill === 'mine'} onClick={() => showOpen(true)}>Mine · {openHere.filter(isMine).length}</Pill>
@@ -423,6 +424,13 @@ export function WebsiteWorkspace() {
               {missedRows.map((m) => <MissedRow key={m.id} m={m} active={selected === String(m.id)} onOpen={() => to({ website: String(m.id) })} />)}
               </>
             )
+          ) : section === 'closed' ? (
+            // C-06: each closed chat says how it ended and what it was rated, in the order chats ended.
+            list.isLoading || list.error ? listPlaceholder : rows.length === 0 ? (
+              <Empty icon="archive" title={typed ? text('Nothing matches “{q}”', { q: q.trim() }) : text('No closed chats')} hint={typed ? undefined : text('Chats closed by the team, ended by the visitor or closed as inactive are kept here.')} />
+            ) : (
+              rows.map((r) => <ClosedRow key={r.id} r={r} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)
+            )
           ) : listPlaceholder ?? (
             rows.map((r) => <Row key={r.id} r={r} me={me} myName={myName} ring={ringing.get(r.id)} typing={typingRows.has(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} onMenu={(e) => (e.preventDefault(), setRowMenu({ x: e.clientX, y: e.clientY, r }))} />)
           )}
@@ -431,6 +439,9 @@ export function WebsiteWorkspace() {
       <div className={cx('flex min-w-0 flex-1', (live || designing || tableView) && 'hidden')}>
         {selected && offlineDetail ? (
           <OfflineDetail key={selected} id={selected} e={offlineOpen} me={me} onOpenChat={() => to({ section: 'inbox', website: selected })} onClosed={() => to({ website: null })} />
+        ) : selected && section === 'closed' ? (
+          // A closed chat is read back with its summary (C-06); Reopen takes it to the open thread to reply in.
+          <ClosedDetail key={selected} id={selected} row={(source.data?.conversations ?? []).find((r) => String(r.id) === selected) ?? found.data?.conversations.find((r) => String(r.id) === selected)} onReopened={() => to({ section: 'inbox', website: selected })} />
         ) : selected && missedDetail ? (
           <MissedDetail key={selected} id={selected} m={missedOpen} onOpenChat={() => to({ section: 'inbox', website: selected })} />
         ) : selected ? (

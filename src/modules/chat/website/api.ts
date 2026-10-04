@@ -28,6 +28,8 @@ export interface WebsiteRow {
   label: string;
   visitor_name: string | null;
   email: string | null;
+  /** Their company, for "Anne · Acme Ltd" on the Closed list (C-06); absent on an older server. */
+  company?: string | null;
   country: string | null;
   browser: string | null;
   os: string | null;
@@ -46,6 +48,14 @@ export interface WebsiteRow {
   at_risk: boolean;
   awaiting_reply: boolean;
   rating: number | null;
+  /**
+   * How a closed chat ended (C-06, IDL-03), for the Closed list's row: when, why — `agent`, `visitor` or `idle`; null on
+   * a chat closed before the reason was kept — who closed it, and its subject. Absent on an older server.
+   */
+  closed_at?: string | null;
+  closed_reason?: ClosedReason | null;
+  closed_by?: string | null;
+  subject?: string | null;
   is_starred: boolean;
   tags: string[] | null;
   /** What was said last, notices aside (CHAT-UI-00): the row's preview. */
@@ -262,6 +272,9 @@ export interface WebsiteVisitor {
   is_blocked: boolean;
 }
 
+/** Why a chat closed (IDL-03): an agent finished it, the visitor ended it, or it went quiet and closed itself. */
+export type ClosedReason = 'agent' | 'visitor' | 'idle';
+
 export interface WebsiteConversation {
   conversation: {
     id: number;
@@ -276,6 +289,12 @@ export interface WebsiteConversation {
     closed_at: string | null;
     rating: number | null;
     rating_comment: string | null;
+    /** Why it closed and who closed it (C-06, IDL-03); absent on an older server. */
+    closed_reason?: ClosedReason | null;
+    closed_by?: { id: number; name: string; avatar?: string | null } | null;
+    /** When the team first answered: the closed summary's First reply tile (UX-CLS-02). */
+    first_response_at?: string | null;
+    subject?: string | null;
     /** The server stores them as one comma-separated line; a list from a newer one is read the same (see `tagList`). */
     tags: string[] | string | null;
     is_starred: boolean;
@@ -289,6 +308,8 @@ export interface WebsiteConversation {
   /** The visitor's timeline, oldest first, with dwell times and visit breaks (C-02 ActivityEvent; #229); absent on an older server. */
   events?: WebsiteEvent[];
   history?: Array<{ id: number; status: string; started_at: string | null; rating: number | null; other_device: boolean }>;
+  /** How many chats this customer has had here, this one included, and when the first began (C-06: "2nd chat · first on 12 Sep"). */
+  chats?: { count: number; first_at: string | null };
   /** Null or absent on a server without team chats. */
   team?: WebsiteTeam | null;
   /** Delivered and read, both ways (ENH-WCHAT-04, LIVE-08); null on a server without them. */

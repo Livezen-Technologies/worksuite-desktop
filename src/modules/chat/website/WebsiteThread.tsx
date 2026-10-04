@@ -13,9 +13,9 @@ import { useTab, useTabTitle } from '../../../core/tab-context';
 import { dateLabel, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
-import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, TextField, cx } from '../../../components/ui';
+import { Avatar, Button, Chip, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { Composer, type ComposerHandle } from '../Composer';
-import { callLive, PRIORITIES, quoteAuthor, readBy, tagList, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
 import { useViewing } from './viewing';
 import type { ReplyTarget } from '../Thread';
@@ -25,13 +25,18 @@ import { WEBSITE_CAPS } from '../kit/caps';
 import type { MessageHandlers } from '../kit/MessageActions';
 import { MessageList, PendingBubble, TypingLine } from '../kit/MessageList';
 import { byTime, dwell, eventsForThread, fromWebsiteMessage, fromWidgetEvent, pathOf } from '../kit/model';
-import { SharedFiles, sharedFilesOf, type SharedFile } from '../kit/SharedFiles';
+import { sharedFilesOf, type SharedFile } from '../kit/SharedFiles';
 import { useNow } from '../../calls/parts';
 import { openWebsiteChatWindow } from '../window';
 import { InThisChat, InviteDialog, NoteBox, TeamFaces, TransferDialog, useDeclined } from './Team';
 import { CallBar } from './CallBar';
 import { CallbackCard, isPending } from './Callbacks';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
+import { BlockDialog, ContactCard, SharedFilesCard, TagsCard } from './panelCards';
+import { ClosedNotice } from './Closed';
+
+// Kept importable from here, where the drawer first had it.
+export { visitorLocalTime } from './panelCards';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
 
@@ -256,9 +261,9 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         {c.status !== 'closed' && noting ? (
           <NoteBox conversationId={c.id} onSent={refresh} compact={mini} />
         ) : c.status === 'closed' ? (
-          <div className="flex items-center justify-between border-t border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-3">
-            This chat is closed{c.closed_at ? ` since ${dateLabel(c.closed_at)}` : ''}.
-            {canReply ? <Button size="sm" onClick={() => void websiteAction(c.id, 'reopen').then(refresh, (e) => toast('error', errorMessage(e)))}>Reopen</Button> : null}
+          // The composer gives way to the locked notice (C-06, UX-CLS-01), the same one the Closed section shows.
+          <div className="border-t border-line bg-surface px-3.5 py-2.5">
+            <ClosedNotice className="border-0 p-0" onReopen={canReply ? () => void websiteAction(c.id, 'reopen').then(refresh, (e) => toast('error', errorMessage(e))) : undefined} />
           </div>
         ) : canReply ? (
           <Composer
@@ -377,17 +382,6 @@ function Controls({ data, row, me, canReply, onDone, compact = false }: { data: 
 }
 
 
-/** The visitor's clock now, from their browser's time zone (UX-DRW-01); nothing for a zone this computer does not know. */
-export function visitorLocalTime(tz: string | null | undefined, now: number): string | null {
-  if (!tz) return null;
-  try {
-    return new Date(now).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: tz });
-  } catch {
-    return null;
-  }
-}
-
-
 /** One page on the journey: where, when, and how long it held them. */
 interface Stop {
   url: string | null;
@@ -403,11 +397,7 @@ interface Stop {
  */
 function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; children?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
-  // For how long, and why (GATE-08, SEC-10): a week unless somebody chooses otherwise; '' is until lifted.
-  const [blockFor, setBlockFor] = useState('7');
-  const [blockWhy, setBlockWhy] = useState('');
   const [busy, setBusy] = useState(false);
-  const [tagging, setTagging] = useState<string | null>(null);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
   const support = useCanOpen('support');
   const mail = useCanOpen('mail');
@@ -424,9 +414,7 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { 
   const chatStop = Number.isNaN(startedAt) ? -1 : recent.findIndex((p) => parseTs(p.at).getTime() <= startedAt + 1000);
   const arrived = stops.length ? parseTs(stops[0]!.at).getTime() : Number.NaN;
   const onSite = online && !Number.isNaN(arrived) ? dwell(Math.max(0, (now - arrived) / 1000)) : null;
-  const local = visitorLocalTime(v?.timezone, now);
   const cameFrom = v?.referrer ? hostOf(v.referrer) : (v?.utm_source ?? v?.utm_campaign ?? null);
-  const tags = tagList(c.tags);
 
   const facts: Array<[string, string | null | undefined]> = v
     ? [
@@ -438,12 +426,6 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { 
         ['Campaign', v.referrer ? (v.utm_campaign ?? v.utm_source) : null],
       ]
     : [];
-
-  const saveTags = (next: string[]) =>
-    void websiteAction(c.id, 'tag', { tags: next.join(',') }).then(
-      () => onDone(),
-      (e) => toast('error', errorMessage(e)),
-    );
 
   const email = () => {
     if (!v?.email) return;
@@ -499,34 +481,7 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { 
             </div>
           ) : null}
         </div>
-        {v?.email || v?.phone || v?.city || v?.country ? (
-          <div className={CARD}>
-            {v.email ? (
-              <div className="flex items-center gap-2">
-                <Icon name="mail" size={14} className="shrink-0 text-ink-3" />
-                <span className="min-w-0 flex-1 truncate font-semibold text-ink selectable" title={v.email}>{v.email}</span>
-                <button type="button" aria-label={text('Copy email')} title={text('Copy email')} onClick={() => void navigator.clipboard.writeText(v.email!).then(() => toast('success', text('Copied.')))} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle hover:text-ink">
-                  <Icon name="copy" size={13} />
-                </button>
-              </div>
-            ) : null}
-            {v.phone ? (
-              <div className="flex items-center gap-2">
-                <Icon name="phone" size={14} className="shrink-0 text-ink-3" />
-                <span className="min-w-0 flex-1 truncate font-semibold text-ink selectable">{v.phone}</span>
-              </div>
-            ) : null}
-            {v.city || v.country ? (
-              <div className="flex items-center gap-2">
-                <Icon name="map-pin" size={14} className="shrink-0 text-ink-3" />
-                <span className="min-w-0 text-ink-2">
-                  <span>{[v.city, v.country].filter(Boolean).join(', ')}</span>
-                  {local ? <span className="text-ink-3"> · {text('{time} local', { time: local })}</span> : null}
-                </span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        <ContactCard v={v} />
         {facts.some(([, val]) => val) ? (
           <div className={CARD}>
             {facts.filter(([, val]) => val).map(([k, val]) => (
@@ -563,53 +518,8 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { 
             </ol>
           </div>
         ) : null}
-        <div className={CARD}>
-          <h3 className={HEADING}>Tags</h3>
-          <div className="flex flex-wrap gap-[5px]">
-            {tags.map((t) => (
-              <span key={t} className="flex items-center gap-1 rounded-[8px] bg-selection px-2 py-0.5 text-[11px] font-semibold text-primary">
-                {t}
-                {canReply ? (
-                  <button type="button" aria-label={text('Remove tag {tag}', { tag: t })} onClick={() => saveTags(tags.filter((x) => x !== t))} className="text-primary/70 hover:text-primary">
-                    <Icon name="x" size={10} />
-                  </button>
-                ) : null}
-              </span>
-            ))}
-            {canReply ? (
-              tagging === null ? (
-                <button type="button" onClick={() => setTagging('')} className="rounded-[8px] border border-dashed border-line px-2 py-0.5 text-[11px] text-ink-3 hover:text-ink">
-                  + {text('Tag')}
-                </button>
-              ) : (
-                <input
-                  autoFocus
-                  aria-label={text('New tag')}
-                  value={tagging}
-                  maxLength={40}
-                  onChange={(e) => setTagging(e.target.value)}
-                  onBlur={() => setTagging(null)}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Escape') setTagging(null);
-                    if (e.key === 'Enter' && tagging.trim()) {
-                      saveTags([...tags, tagging.trim().replace(/,/g, ' ')]);
-                      setTagging(null);
-                    }
-                  }}
-                  className="h-6 w-24 rounded-[8px] border border-primary bg-surface px-1.5 text-[11px] outline-none"
-                />
-              )
-            ) : !tags.length ? (
-              <span className="text-[11px] text-ink-3">{text('No tags')}</span>
-            ) : null}
-          </div>
-        </div>
-        {files.length ? (
-          <div className={CARD}>
-            <h3 className={HEADING}>Shared files · {files.length}</h3>
-            <SharedFiles files={files} />
-          </div>
-        ) : null}
+        <TagsCard conversationId={c.id} tags={c.tags} canEdit={canReply} onDone={onDone} />
+        <SharedFilesCard files={files} />
         <div className={CARD}>
           <h3 className={HEADING}>Previous chats · {history.length}</h3>
           {history.slice(0, 5).map((h) => (
@@ -621,41 +531,7 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { 
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
           {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
         </div>
-        {blocking ? (
-          <Modal
-            title="Block this visitor?"
-            onClose={() => setBlocking(false)}
-            width={420}
-            footer={
-              <>
-                <Button onClick={() => setBlocking(false)}>Cancel</Button>
-                <Button
-                  variant="danger"
-                  onClick={() => {
-                    setBlocking(false);
-                    void websiteAction(data.conversation.id, 'block', { reason: blockWhy.trim() || null, ...(blockFor ? { days: Number(blockFor) } : {}) }).then(
-                      () => (toast('success', 'Visitor blocked.'), onDone()),
-                      (e) => toast('error', errorMessage(e)),
-                    );
-                  }}
-                >
-                  Block
-                </Button>
-              </>
-            }
-          >
-            <p className="text-[13px] text-ink-2">{v?.name || v?.label || 'This visitor'} will no longer be able to start chats on your websites until the block ends. You can lift it sooner on the web, under Website chats › Blocked visitors.</p>
-            <div className="mt-3 grid gap-3">
-              <Select
-                label="For"
-                value={blockFor}
-                options={[{ value: '1', label: 'A day' }, { value: '7', label: 'A week' }, { value: '30', label: 'A month' }, { value: '', label: 'Until somebody lifts it' }]}
-                onValueChange={(v) => setBlockFor(String(v))}
-              />
-              <TextField label="Reason" placeholder="Spam, abuse…" maxLength={190} value={blockWhy} onChange={(e) => setBlockWhy(e.target.value)} />
-            </div>
-          </Modal>
-        ) : null}
+        {blocking ? <BlockDialog conversationId={c.id} name={v?.name || v?.label || 'This visitor'} onClose={() => setBlocking(false)} onDone={onDone} /> : null}
       </aside>
     </SidePanel>
   );

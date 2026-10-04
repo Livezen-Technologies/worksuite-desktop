@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.34.0 — 2026-10-04
+
+- C-06 Closed chat: closed rows with outcome, closer and stars; a read-only closed detail with who closed it and when, the rating card, Star / Block / Reopen and a summary panel (first reply, duration, priority, rating, tags, contact with past chats, shared files); visitor panel cards shared with the live thread.
+
 ## 1.33.0 — 2026-10-04
 
 - C-05 Offline enquiries: their own list from `GET offline` (answered ones too) with the reason chip (Outside hours / Nobody online) and Not replied / Emailed by … / Back on the site; a review detail with their message, email, phone and page, a staff-only note, Assign, Close and Reply by email (`conversations/{id}/email`), the visitor and why nobody answered. An enquiry whose visitor came back and wrote is in Live chats too. The row shell, visit facts and the Reply by email dialog are shared with Missed chats. An older server keeps the inbox's offline rows.
