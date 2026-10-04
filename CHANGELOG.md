@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.182 — 2026-10-04
+
+- **Widget preview matches the visitor widget (W-02).** The preview's home screen shows the status in two lines
+  ("Hasarinda is online" / "Usually replies in a few minutes") and the controls as Expand, then Minimise, as the
+  widget on customer sites now does.
+
 ## 0.2.181 — 2026-10-04
 
 - **Admin Center › Chat › Ringing (P-03).** People who manage website chats get an Admin Center tab in Settings (and

@@ -10,7 +10,8 @@ import type * as CoreApi from '../../../src/core/api';
  * and the away screen, the launcher and its greeting card — and a save that sends the design and nothing else.
  *
  * #207: the theme, the launcher's offsets, a company name that is never a web address, and the preview as the widget
- * now draws itself (minimise and maximise in its header, one status line, a start card that is just the message box).
+ * now draws itself (expand and minimise in its header, who is online over when they reply, a start card that is just the
+ * message box).
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPut: vi.fn(), apiPost: vi.fn(async () => ({})) }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => undefined), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false }));
@@ -133,7 +134,8 @@ describe('Website chats → Widget', () => {
     expect(screen.getByRole('img', { name: 'Preview of the home screen' })).toBeTruthy();
     expect(preview().getByText(/Hi there,/)).toBeTruthy();
     // One status line (#207).
-    expect(preview().getByText('Samali and Dimuthu are online · usually replies in a few minutes')).toBeTruthy();
+    expect(preview().getByText('Samali and Dimuthu are online')).toBeTruthy();
+    expect(preview().getByText('Usually replies in a few minutes')).toBeTruthy();
     expect(preview().getByText('Pricing and plans')).toBeTruthy();
     expect(preview().getByText('SG')).toBeTruthy();
   });
@@ -222,14 +224,14 @@ describe('Website chats → Widget', () => {
     expect((screen.getByRole('button', { name: 'Save' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('previews the header as the widget draws it now: the name, minimise and maximise, and a start card that is just the box (#207)', async () => {
+  it('previews the header as the widget draws it now: the name, expand and minimise (W-02), and a start card that is just the box (#207)', async () => {
     mount();
     await screen.findByTestId('widget-preview');
     fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     expect(preview().getByText('Livezen Technologies')).toBeTruthy();
     expect(screen.getByTestId('preview-logo').textContent).toBe('L');
-    expect(within(screen.getAllByTestId('preview-controls')[0]!).getByTitle('Minimise chat')).toBeTruthy();
-    expect(within(screen.getAllByTestId('preview-controls')[0]!).getByTitle('Maximise chat')).toBeTruthy();
+    const controls = within(screen.getAllByTestId('preview-controls')[0]!);
+    expect(controls.getAllByTitle(/chat$/).map((c) => c.getAttribute('title'))).toEqual(['Expand chat', 'Minimise chat']);
     expect(preview().queryByText('Start a conversation')).toBeNull();
     expect(preview().queryByText('We are online')).toBeNull();
     expect(preview().queryByText(/Type your question/)).toBeNull();

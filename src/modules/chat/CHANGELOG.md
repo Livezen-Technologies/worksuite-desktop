@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.54.1 — 2026-10-04
+
+- W-02: widget preview's home status in two lines, Expand then Minimise, as the visitor widget
+
 ## 1.54.0 — 2026-10-04
 
 - P-04: one composer kit with per-channel caps (TEAM_COMPOSER/WEBSITE_COMPOSER), design button order, @ and mic on Team Chat, website attach menu (screenshot, photo, Drive copy), uploading %, inline refusals, / header, one-line reply bar, Save to Drive and server delete window; P-03 Ringing under Setup

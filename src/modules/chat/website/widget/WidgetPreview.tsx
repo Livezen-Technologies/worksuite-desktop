@@ -105,12 +105,12 @@ function Logo({ design, name, color }: { design: WidgetDesign; name: string | nu
   );
 }
 
-/** Minimise and maximise, as the widget draws them at the top right of its header (#207). */
+/** Expand and minimise, as the widget draws them at the top right of its header (#207, W-02). */
 function Controls({ bg, color }: { bg: string; color?: string }) {
   return (
     <span className="flex shrink-0 items-center gap-1.5" data-testid="preview-controls" style={{ color }}>
+      <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: bg }} title="Expand chat"><Icon name="maximize" size={16} /></span>
       <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: bg }} title="Minimise chat"><Icon name="minus" size={16} /></span>
-      <span className="flex h-8 w-8 items-center justify-center rounded-[8px]" style={{ background: bg }} title="Maximise chat"><Icon name="maximize" size={16} /></span>
     </span>
   );
 }
@@ -141,9 +141,9 @@ function Hero({ design, name, people, replyTime, away, hours, accent, onAccent }
   const greeting = away ? 'We are away\nright now' : design.greeting || 'Hi there,\nhow can we help?';
   const tag = away ? design.offline_message || AWAY_MESSAGE : design.header_subtitle || 'Ask us anything, and someone from the team will reply here.';
   const online = people.length ? `${namesLine(people.map((p) => firstName(p.name)))} ${people.length === 1 ? 'is' : 'are'} online` : 'We are online';
-  // One status line while the team is here (#207): "Hasarinda is online · usually replies in a few minutes".
-  const line1 = away ? (hours?.back_at ? `Back at ${hours.back_at}` : 'We will reply as soon as we are back') : replyTime ? `${online} · ${replyTime.charAt(0).toLowerCase()}${replyTime.slice(1)}` : online;
-  const line2 = away ? (hours ? `Business hours: ${hours.text}${hours.zone ? ` (${hours.zone})` : ''}` : '') : '';
+  // "Hasarinda is online" over "Usually replies in a few minutes" while the team is here (W-02), as the widget says it.
+  const line1 = away ? (hours?.back_at ? `Back at ${hours.back_at}` : 'We will reply as soon as we are back') : online;
+  const line2 = away ? (hours ? `Business hours: ${hours.text}${hours.zone ? ` (${hours.zone})` : ''}` : '') : replyTime ?? '';
   return (
     <div className="flex shrink-0 flex-col gap-[18px] px-5 pt-5 pb-[60px]" style={{ background: bg, color: fg }}>
       <div className="flex items-center justify-between gap-2.5">
