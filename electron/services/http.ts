@@ -59,6 +59,7 @@ const KNOWN_CODES = new Set<DesktopErrorCode>([
   'DEVICE_NOT_REGISTERED',
   'DESKTOP_ACCESS_DISABLED',
   'VERSION_UNSUPPORTED',
+  'UPDATE_REQUIRED',
   'ORG_ACCESS_DENIED',
   'FILE_LOCKED',
   'RATE_LIMITED',
@@ -180,9 +181,10 @@ export class HttpClient {
       }
       res = await attempt();
     }
-    if (res.status === 403 || res.status === 426) {
+    // A version the server no longer accepts may be refused with 426 or with any error carrying UPDATE_REQUIRED.
+    if (res.status === 403 || res.status === 426 || (res.status >= 400 && res.status !== 401 && res.status < 500)) {
       const body = await readEnvelope(res.clone());
-      if (body?.code === 'DESKTOP_ACCESS_DISABLED' || body?.code === 'VERSION_UNSUPPORTED') {
+      if (body?.code === 'DESKTOP_ACCESS_DISABLED' || body?.code === 'VERSION_UNSUPPORTED' || body?.code === 'UPDATE_REQUIRED') {
         this.deps.onDeviceDirective?.(body.code as DesktopErrorCode, body.message ?? body.code);
       }
     }

@@ -28,6 +28,8 @@ export interface TrayModel {
   notificationsPausedUntil: string | null;
   attendance: { linked: boolean; clockedIn: boolean; since: string | null } | null;
   updateReady: boolean;
+  /** A newer version: on offer, ready, or required by a deadline (the first lines of the menu). Optional for older callers. */
+  update?: TrayUpdate | null;
   /** Someone controls this computer (RC04): who, and whether it is paused. First in the menu while it lasts. */
   remoteControl: { controller: string; paused: boolean } | null;
   /** Website chats ringing for me (RING-43): listed first, with Join; the icon shows it. Silenced ones are not on the badge. */
@@ -50,6 +52,39 @@ export interface TrayModel {
   live?: { online: number; atRisk: boolean } | null;
 }
 
+export interface TrayUpdate {
+  kind: 'available' | 'ready' | 'required';
+  version: string | null;
+  /** A required update's install-by time (ISO). */
+  deadline: string | null;
+}
+
+/** "Install by 18:00 · 02:14:37". */
+function installBy(deadline: string, now: Date): string {
+  const at = new Date(deadline);
+  const left = Math.max(0, at.getTime() - now.getTime());
+  const s = Math.floor(left / 1000);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  const sameDay = at.toDateString() === now.toDateString();
+  const when = at.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+  return `Install by ${sameDay ? when : `${at.toLocaleDateString([], { day: 'numeric', month: 'short' })} ${when}`} · ${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+}
+
+/** The update lines at the top of the tray menu: "Update available: 2.7.0 · Update Now", or the required update's deadline. */
+export function trayUpdateItems(u: TrayUpdate | null | undefined, a: Pick<TrayActions, 'updateNow'>, now = new Date()): MenuItemConstructorOptions[] {
+  if (!u || !a.updateNow) return [];
+  if (u.kind === 'required') {
+    return [
+      { label: '⚠ Update Required', enabled: false },
+      ...(u.deadline ? [{ label: installBy(u.deadline, now), enabled: false }] : []),
+      { label: 'Update & Restart', click: a.updateNow },
+      { type: 'separator' },
+    ];
+  }
+  if (!u.version) return [];
+  return [{ label: u.kind === 'ready' ? `Update ready: ${u.version}` : `Update available: ${u.version}`, enabled: false }, { label: u.kind === 'ready' ? 'Restart to Update' : 'Update Now', click: a.updateNow }, { type: 'separator' }];
+}
+
 /** Quick Actions, each of its app: offered only to whoever may open that app. */
 export const QUICK_ACTIONS: ReadonlyArray<{ app: string; label: string; route: string }> = [
   { app: 'tasks', label: 'New Task', route: '/tasks?new=1' },
@@ -67,6 +102,8 @@ export interface TrayActions {
   pauseNotifications: (minutes: number | null) => void;
   openSettings: () => void;
   checkUpdates: () => void;
+  /** The update lines' action: download, or restart to install. Optional for older callers. */
+  updateNow?: () => void;
   quit: () => void;
   lock: () => void;
   pauseRemoteControl: () => void;
@@ -288,6 +325,7 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     items.push({ label: [m.userName, m.organization].filter(Boolean).join(' · ') || 'WorkSuite', enabled: false });
     items.push({ type: 'separator' });
   }
+  items.push(...trayUpdateItems(m.update, a));
   items.push({ label: 'Open WorkSuite', click: a.open });
   if (m.signedIn && m.quickAsk && has('ai')) items.push({ label: 'Quick Ask', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
   if (m.signedIn && m.aiChanges > 0 && has('ai')) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant is waiting' : `${m.aiChanges} changes from the assistant are waiting`, click: a.aiChanges });

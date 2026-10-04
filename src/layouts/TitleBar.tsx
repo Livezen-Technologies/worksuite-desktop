@@ -11,6 +11,7 @@ import { ClockControl } from '../app/overlays/ClockPopover';
 import { ActiveCalls } from '../app/ActiveCalls';
 import { RingAlertPill } from '../modules/chat/website/Ringing';
 import { UpdateIndicator } from '../app/screens/UpdateScreens';
+import { MandatoryChip } from '../app/screens/MandatoryUpdate';
 import { CountBadge, cx } from '../components/ui';
 import { UserPicture, useMe } from '../components/UserPicture';
 import { unreadLabel, useAssistantActivity } from '../app/overlays/AiDock';
@@ -90,8 +91,10 @@ export function TitleBar() {
         {pill.text}
       </button>
 
-      {/* A newer version: on offer, on its way, or ready (the Update ready pill, #205) — Settings › Desktop › Updates. */}
+      {/* A newer version: on offer, on its way, or ready (the Update ready pill, #205) — Settings › Updates. */}
       <UpdateIndicator />
+      {/* A required update with time left: the chip opens Settings › Updates. */}
+      <MandatoryChip />
       {guest ? null : <TopButton icon="transfers" label={t('shell.transfers')} onClick={() => openOverlay('transfers')} active={overlay === 'transfers'} count={activeTransfers} countTone="indigo" />}
       {hasChat ? <TopButton icon="chat" label="Chat" onClick={() => (dock === 'chat' ? minimiseChatDrawer() : openChatDrawer(null))} active={dock === 'chat'} count={status?.unread.chat ?? 0} /> : null}
       {guest ? null : <TopButton icon="bell" label={t('nav.notifications')} onClick={() => openOverlay('notifications')} active={overlay === 'notifications'} count={unread} />}

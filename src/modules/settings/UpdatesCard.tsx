@@ -8,6 +8,7 @@ import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { Button, Chip, Modal, Switch } from '../../components/ui';
 import { UpdateActions, updateHint } from '../../app/screens/UpdateScreens';
+import { useTab } from '../../core/tab-context';
 
 /**
  * The one updates card, shown in Settings › About and Settings › Desktop (worksuite-desktop#204, #205): the update
@@ -248,7 +249,23 @@ export function UpdateSwitches({ prefs }: { prefs: Preferences | null }) {
   );
 }
 
-/** Channel, state, what's new and the switches, together (Settings › About). */
+/** One row in Settings › Desktop and About: where updates stand, the next step, and the way to Settings › Updates. */
+export function UpdatesRow() {
+  const u = useStore(app, (s) => s.update);
+  const auto = useStore(app, (st) => st.prefs?.autoUpdate !== false);
+  const { navigate } = useTab();
+  const s = updateStateLabel(u, auto);
+  return (
+    <AboutRow label="Updates" hint={s.detail}>
+      <div className="flex items-center gap-2">
+        <Chip tone={s.tone}>{s.word}</Chip>
+        <Button onClick={() => navigate('/settings/updates')}>Open Updates</Button>
+      </div>
+    </AboutRow>
+  );
+}
+
+/** Channel, state, what's new and the switches, together. */
 export function UpdatesCard() {
   const u = useStore(app, (s) => s.update);
   const prefs = useStore(app, (s) => s.prefs);

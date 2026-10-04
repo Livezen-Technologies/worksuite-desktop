@@ -62,6 +62,7 @@ export interface SchedulerDeps {
   setTimeout: (fn: () => void, ms: number) => unknown;
   setInterval: (fn: () => void, ms: number) => unknown;
   clear: (handle: unknown) => void;
+  now?: () => number;
 }
 
 export const CHECK_AFTER_LAUNCH_MS = 30_000;
@@ -73,11 +74,23 @@ export const CHECK_AFTER_WAKE_MS = 15_000;
 export class UpdateScheduler {
   private handles: unknown[] = [];
   private wakeTimer: unknown = null;
+  private startedAt: number | null = null;
 
   constructor(private readonly deps: SchedulerDeps) {}
 
+  /** When the next scheduled check runs ("next check in 5 h 48 m"), or null when stopped. */
+  nextAt(): Date | null {
+    if (this.startedAt === null) return null;
+    const now = (this.deps.now ?? Date.now)();
+    const first = this.startedAt + CHECK_AFTER_LAUNCH_MS;
+    if (now < first) return new Date(first);
+    const n = Math.floor((now - this.startedAt) / CHECK_EVERY_MS) + 1;
+    return new Date(this.startedAt + n * CHECK_EVERY_MS);
+  }
+
   start(): void {
     this.stop();
+    this.startedAt = (this.deps.now ?? Date.now)();
     this.handles.push(this.deps.setTimeout(() => this.deps.check('launch'), CHECK_AFTER_LAUNCH_MS));
     this.handles.push(this.deps.setInterval(() => this.deps.check('interval'), CHECK_EVERY_MS));
   }
@@ -96,6 +109,7 @@ export class UpdateScheduler {
     this.handles = [];
     if (this.wakeTimer) this.deps.clear(this.wakeTimer);
     this.wakeTimer = null;
+    this.startedAt = null;
   }
 }
 
@@ -195,9 +209,12 @@ export class UpdateNotifier {
     return !!this.ready && !this.snoozed(this.ready.version) && !this.quietReason();
   }
 
-  /** Later: returns when the reminder comes back (null: next launch). */
-  later(choice: LaterChoice): { until: Date | null; installOnNextLaunch: boolean } {
-    const u = this.ready;
+  /**
+   * Later: returns when the reminder comes back (null: next launch). `version` puts off an update that is not
+   * downloaded yet (the Update available dialog, a required update's banner); a ready one is put off by default.
+   */
+  later(choice: LaterChoice, version?: string | null): { until: Date | null; installOnNextLaunch: boolean } {
+    const u = this.ready && (!version || version === this.ready.version) ? this.ready : version ? { version, critical: false, summary: null } : null;
     if (!u) return { until: null, installOnNextLaunch: false };
     const s = this.state();
     s.postponed[u.version] = (s.postponed[u.version] ?? 0) + 1;
@@ -218,11 +235,11 @@ export class UpdateNotifier {
     return { until, installOnNextLaunch: s.installOnNextLaunch === u.version };
   }
 
-  snoozedUntil(): string | null {
-    const u = this.ready;
-    if (!u) return null;
-    if (this.untilNextLaunch.has(u.version)) return 'next-launch';
-    const until = this.state().snoozedUntil[u.version];
+  snoozedUntil(version?: string | null): string | null {
+    const v = version ?? this.ready?.version;
+    if (!v) return null;
+    if (this.untilNextLaunch.has(v)) return 'next-launch';
+    const until = this.state().snoozedUntil[v];
     return typeof until === 'number' && until > this.deps.now().getTime() ? new Date(until).toISOString() : null;
   }
 
@@ -267,6 +284,16 @@ export interface InstallMarker {
   restoreSession: boolean;
   /** The release notes, for "Updated to X · What's new". */
   notesUrl?: string | null;
+  /** "What's New in X", shown once after the restart. */
+  highlights?: string[];
+  summary?: string | null;
+}
+
+export interface UpdatedNotice {
+  version: string;
+  notesUrl?: string | null;
+  highlights?: string[];
+  summary?: string | null;
 }
 
 export type LaunchVerdict =
@@ -319,8 +346,16 @@ export class UpdateHealth {
     return this.read<InstallMarker>(this.markerPath);
   }
 
-  beforeInstall(from: string, to: string, rollbackPossible: boolean, restoreSession: boolean, notesUrl: string | null = null, now = new Date()): InstallMarker {
-    const m: InstallMarker = { from, to, at: now.toISOString(), attempts: 0, rollbackPossible, restoreSession, notesUrl };
+  beforeInstall(
+    from: string,
+    to: string,
+    rollbackPossible: boolean,
+    restoreSession: boolean,
+    notesUrl: string | null = null,
+    now = new Date(),
+    notes: { highlights?: string[]; summary?: string | null } = {},
+  ): InstallMarker {
+    const m: InstallMarker = { from, to, at: now.toISOString(), attempts: 0, rollbackPossible, restoreSession, notesUrl, ...(notes.highlights?.length ? { highlights: notes.highlights.slice(0, 8) } : {}), ...(notes.summary ? { summary: notes.summary } : {}) };
     rmSync(this.healthFile(to), { force: true });
     rmSync(this.rolledBackPath, { force: true });
     this.write(this.markerPath, m);
@@ -357,13 +392,13 @@ export class UpdateHealth {
       /* the watchdog then rolls back; better than not knowing */
     }
     rmSync(this.markerPath, { force: true });
-    this.write(this.noticePath, { version: current, notesUrl: m.notesUrl ?? null, at: new Date().toISOString() });
+    this.write(this.noticePath, { version: current, notesUrl: m.notesUrl ?? null, highlights: m.highlights ?? [], summary: m.summary ?? null, at: new Date().toISOString() });
     return current;
   }
 
   /** "Updated to X": shown once, until dismissed. */
-  notice(): { version: string; notesUrl?: string | null } | null {
-    return this.read<{ version: string; notesUrl?: string | null }>(this.noticePath);
+  notice(): UpdatedNotice | null {
+    return this.read<UpdatedNotice>(this.noticePath);
   }
 
   dismissNotice(): void {

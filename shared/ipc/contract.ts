@@ -105,6 +105,7 @@ import type {
   QuickAskContext,
   Transfer,
   UpdateStatus,
+  UpdateDiagnostics,
   MailStoreStats,
 } from '../types';
 
@@ -183,6 +184,8 @@ export const preferencesPatchSchema = z
     autoUpdate: z.boolean(),
     updateNotifications: z.boolean(),
     updateInstallOnQuit: z.boolean(),
+    updateShowWhatsNew: z.boolean(),
+    updateInstallWhenIdle: z.boolean(),
     sidebarMode: z.enum(['expanded', 'collapsed', 'auto-hide']),
     pinnedApps: z.array(z.string().max(64)).max(64),
     shortcuts: z.record(z.string().max(64), z.string().max(64)),
@@ -1222,7 +1225,16 @@ export const contract = {
   'updates:setChannel': ch(z.object({ channel: z.enum(['stable', 'beta', 'dev', 'org']), confirmed: z.boolean().optional() })),
   'updates:setActiveCall': ch(z.object({ active: z.boolean() }), { session: true }),
   'updates:busy': ch(none, { whileLocked: true }),
-  'updates:later': ch(z.object({ choice: z.enum(['hour', 'tonight', 'next-launch']) })),
+  'updates:later': ch(z.object({ choice: z.enum(['hour', 'four-hours', 'tomorrow', 'tonight', 'next-launch']) })),
+  // Settings › Updates: the download's Pause, Resume and Cancel (it resumes with HTTP Range).
+  'updates:pauseDownload': ch(none, { whileLocked: true }),
+  'updates:resumeDownload': ch(none, { whileLocked: true, rate: 2 }),
+  'updates:cancelDownload': ch(none, { whileLocked: true }),
+  // The Update Ready dialog: restart as soon as nothing would be interrupted.
+  'updates:installWhenFree': ch(none, { whileLocked: true }),
+  // Settings › Updates › Diagnostics: run the checks, and save the report.
+  'updates:diagnostics': ch(none, { whileLocked: true, rate: 1 }),
+  'updates:exportDiagnostics': ch(z.object({ report: z.string().max(100_000) }), { whileLocked: true, rate: 1 }),
   'updates:reinstall': ch(none, { rate: 1 }),
   'updates:dismissNotice': ch(none),
   // A window saved its drafts and tabs before an update's restart (`update:prepare`).
@@ -1679,6 +1691,12 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'updates:reinstall': UpdateStatus;
   'updates:dismissNotice': UpdateStatus;
   'updates:prepared': void;
+  'updates:pauseDownload': UpdateStatus;
+  'updates:resumeDownload': UpdateStatus;
+  'updates:cancelDownload': UpdateStatus;
+  'updates:installWhenFree': UpdateStatus;
+  'updates:diagnostics': UpdateDiagnostics;
+  'updates:exportDiagnostics': string | null;
   'settings:get': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:set': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:launcherDefaults': { pinned: string[]; order: string[] };
@@ -1712,6 +1730,7 @@ export type DesktopErrorCode =
   | 'DEVICE_LIMIT'
   | 'DESKTOP_ACCESS_DISABLED'
   | 'VERSION_UNSUPPORTED'
+  | 'UPDATE_REQUIRED'
   | 'ORG_ACCESS_DENIED'
   | 'APP_ACCESS_DENIED'
   | 'NOT_FOUND'

@@ -271,6 +271,8 @@ export type Row = Record<string, unknown>;
 export class Database {
   readonly raw: DatabaseSync;
   private closed = false;
+  /** The schema version this start found, before its migrations ran ("What's New" after an update says what changed). */
+  migratedFrom = 0;
 
   constructor(path: string) {
     this.raw = new DatabaseSync(path);
@@ -284,6 +286,7 @@ export class Database {
   private migrate(): void {
     const row = this.raw.prepare('PRAGMA user_version').get() as { user_version: number };
     const current = row.user_version;
+    this.migratedFrom = current;
     for (let v = current; v < MIGRATIONS.length; v++) {
       this.raw.exec('BEGIN');
       try {

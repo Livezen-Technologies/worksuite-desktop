@@ -15,6 +15,7 @@ the root CHANGELOG.md.
 ## 1.18.0 — 2026-10-04
 
 - Settings › Website chats › When a visitor writes again in your chat (#230): card over other apps, desktop notification, chime (with Test), and how long without input counts as away.
+- Updates and License pages (Updates, Updates › Diagnostics, License), grouped navigation, update dialogs, mandatory update banner and locked screen, What's New after updating.
 
 ## 1.17.0 — 2026-10-03
 

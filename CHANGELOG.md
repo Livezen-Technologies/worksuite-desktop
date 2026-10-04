@@ -499,6 +499,16 @@ person who has to live with the change — what it does, and where it bites.
   and the web's **Website chats › Blocked visitors** lists every block in force and lifts one early. Before, a block was
   for good and nobody could undo it, so blocking one person on a shared office address shut the whole office out.
   Needs the server update (Communication 1.20.0); an older server blocks until lifted, as before.
+- **A clearer update experience.** When a new version is out, a dialog shows what's new, the package and its size. You can **Download & Install**, or choose **Later** for 1 hour, 4 hours or tomorrow. **Settings › Updates** is now its own page:
+  - your version, the latest version, your channel and the minimum supported version;
+  - live download progress, including speed and time left. You can pause, resume or cancel, and downloads pick up again after a network drop;
+  - each check the update goes through: signature, download, SHA-256, code signature, ready to install;
+  - What's new, and an option to install automatically between 02:00 and 04:00 when you're away.
+- **Restarting won't cut you off.** When an update is ready, WorkSuite lists anything a restart would affect: a call or screen share (**blocks**), uploads in progress (**waits**), and drafts and queued offline changes (**safe**, they are kept). Pick **Restart when work finishes**, and it installs as soon as nothing is in the way.
+- **Required updates give you time.** If your version falls below your organisation's minimum, a banner shows the deadline. It counts down in the final hours and shows how many reminders you have left. Once the deadline passes, the app's modules lock until you update, though Updates, Diagnostics, License and Sign out stay open. The same locked screen appears if the server refuses this version. Critical security updates save your work first, then give a short grace period before installing.
+- **After an update**, a "What's new" card appears once; you can turn it off. If an update fails, Settings › Updates shows what went wrong, whether it was rolled back, and a reference number, with **Retry** and **Copy details**. **Updates › Diagnostics** runs nine checks, including disk space and download access, and suggests a fix.
+- **Settings › License** shows your organisation, this device, how its sign-in is stored, and which modules you can use. Edition, licence key, expiry date and offline grace show "Needs server" until the server provides them.
+- The tray menu and the desktop notification now show the update, the deadline for a required one, and an **Update Now** button (the button is macOS only; elsewhere, click the notification).
 
 ## 0.2.148 — 2026-10-04
 

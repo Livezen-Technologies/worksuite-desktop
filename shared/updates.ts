@@ -1,4 +1,4 @@
-import type { BusyReport, DesktopPolicy, Preferences, UpdateActivity, UpdateChannel } from './types';
+import type { BusyReport, DesktopPolicy, Preferences, UpdateActivity, UpdateChannel, UpdateDiagnosticCheck, UpdateStatus } from './types';
 import { channelAccepts } from './release';
 import { parseVersion } from './version';
 
@@ -148,21 +148,131 @@ export function waitingFor(channel: UpdateChannel, currentVersion: string): Upda
 
 // ── Later ────────────────────────────────────────────────────────────────
 
-export type LaterChoice = 'hour' | 'tonight' | 'next-launch';
-export const LATER_LABELS: Record<LaterChoice, string> = { hour: 'In 1 hour', tonight: 'Tonight', 'next-launch': 'On next app launch' };
+/** Remind me in 1 hour, 4 hours or tomorrow (the update dialogs); Tonight and the next launch are kept for older callers. */
+export type LaterChoice = 'hour' | 'four-hours' | 'tomorrow' | 'tonight' | 'next-launch';
+export const LATER_LABELS: Record<LaterChoice, string> = { hour: '1 hour', 'four-hours': '4 hours', tomorrow: 'Tomorrow', tonight: 'Tonight', 'next-launch': 'On next app launch' };
+/** What the Later menus offer. */
+export const REMIND_CHOICES: readonly LaterChoice[] = ['hour', 'four-hours', 'tomorrow'];
 /** "Tonight" is 8 pm local time. */
 export const TONIGHT_HOUR = 20;
+/** "Tomorrow" is 9 am local time. */
+export const TOMORROW_HOUR = 9;
 
 /**
- * When a reminder put off with Later comes back: an hour from now; tonight at 8 pm (or two hours from now when
- * it is already later than half past seven); or not again until WorkSuite next starts (null).
+ * When a reminder put off with Later comes back: an hour or four hours from now; tomorrow at 9 am; tonight at 8 pm
+ * (or two hours from now when it is already later than half past seven); or not again until WorkSuite next starts
+ * (null).
  */
 export function laterUntil(choice: LaterChoice, now: Date): Date | null {
   if (choice === 'hour') return new Date(now.getTime() + 3600_000);
+  if (choice === 'four-hours') return new Date(now.getTime() + 4 * 3600_000);
   if (choice === 'next-launch') return null;
+  if (choice === 'tomorrow') {
+    const t = new Date(now);
+    t.setDate(t.getDate() + 1);
+    t.setHours(TOMORROW_HOUR, 0, 0, 0);
+    return t;
+  }
   const tonight = new Date(now);
   tonight.setHours(TONIGHT_HOUR, 0, 0, 0);
   return tonight.getTime() - now.getTime() >= 30 * 60_000 ? tonight : new Date(now.getTime() + 2 * 3600_000);
+}
+
+export interface RemindOption {
+  choice: LaterChoice;
+  label: string;
+  until: Date | null;
+  /** It would come back after the install-by deadline, so it cannot be chosen. */
+  pastDeadline: boolean;
+}
+
+/** The Remind me choices, each greyed out when it would come back after the deadline. */
+export function remindOptions(now: Date, deadline: Date | null): RemindOption[] {
+  return REMIND_CHOICES.map((choice) => {
+    const until = laterUntil(choice, now);
+    return { choice, label: LATER_LABELS[choice], until, pastDeadline: !!deadline && (!until || until.getTime() > deadline.getTime()) };
+  });
+}
+
+// ── Mandatory updates ──────────────────────────────────────────────────────
+
+/** How many times a required update may be put off when the release does not say. */
+export const DEFAULT_MAX_DEFERRALS = 3;
+/** The countdown card shows in the last hours before the deadline. */
+export const FINAL_HOURS_MS = 6 * 3600_000;
+
+export interface MandatoryView {
+  required: boolean;
+  deadline: Date | null;
+  msLeft: number | null;
+  /** The deadline passed, there is none, or the server refuses this version: modules are locked. */
+  locked: boolean;
+  finalHours: boolean;
+  maxDeferrals: number;
+  deferralsLeft: number;
+}
+
+/**
+ * Where a required update stands at `now`. Without a deadline (an older main process, or the server refusing this
+ * version) it is locked at once, as the Update required screen always was.
+ */
+export function mandatoryView(u: UpdateStatus | null | undefined, now: Date): MandatoryView {
+  const m = u?.mandatory ?? null;
+  const maxDeferrals = m?.maxDeferrals ?? DEFAULT_MAX_DEFERRALS;
+  if (!u?.required) return { required: false, deadline: null, msLeft: null, locked: false, finalHours: false, maxDeferrals, deferralsLeft: maxDeferrals };
+  const deadline = m?.deadline ? new Date(m.deadline) : null;
+  const valid = !!deadline && Number.isFinite(deadline.getTime());
+  const msLeft = valid ? Math.max(0, deadline!.getTime() - now.getTime()) : null;
+  const locked = !m || m.serverRejected || !valid || msLeft === 0;
+  return {
+    required: true,
+    deadline: valid ? deadline : null,
+    msLeft,
+    locked,
+    finalHours: !locked && msLeft !== null && msLeft <= FINAL_HOURS_MS,
+    maxDeferrals,
+    deferralsLeft: Math.max(0, maxDeferrals - (u.postponed ?? 0)),
+  };
+}
+
+/** "2 h 14 m", "14 m", "less than a minute". */
+export function durationLeft(ms: number): string {
+  const mins = Math.floor(ms / 60_000);
+  if (mins < 1) return 'less than a minute';
+  const h = Math.floor(mins / 60);
+  const m = mins % 60;
+  return h ? `${h} h ${m} m` : `${m} m`;
+}
+
+const pad = (n: number) => String(n).padStart(2, '0');
+
+/** "02:14:37". */
+export function countdown(ms: number): string {
+  const s = Math.max(0, Math.floor(ms / 1000));
+  return `${pad(Math.floor(s / 3600))}:${pad(Math.floor((s % 3600) / 60))}:${pad(s % 60)}`;
+}
+
+/** "04:59". */
+export function minutesSeconds(ms: number): string {
+  const s = Math.max(0, Math.ceil(ms / 1000));
+  return `${pad(Math.floor(s / 60))}:${pad(s % 60)}`;
+}
+
+/** Where the channel comes from, in words (Settings › Updates, Diagnostics). */
+export function channelSource(policy: Pick<DesktopPolicy, 'auto_update' | 'update_channel_default'> | null | undefined, chosen: boolean): string {
+  if (policy?.auto_update === 'enforced') return 'Set by organization policy';
+  if (chosen) return 'Chosen by you';
+  if (policy?.update_channel_default) return 'Organization default';
+  return 'Default';
+}
+
+/** A short reference for a failed update ("UA-7F3C-21"), quoted to support and kept in the update history. */
+export function failureRef(random: () => number = Math.random): string {
+  const hex = (n: number) =>
+    Array.from({ length: n }, () => Math.floor(random() * 16).toString(16))
+      .join('')
+      .toUpperCase();
+  return `UA-${hex(4)}-${hex(2)}`;
 }
 
 // ── Do not disturb, and what a restart interrupts ──────────────────────────
@@ -205,4 +315,104 @@ export function restartCheck(b: BusyReport | null | undefined): RestartCheck {
   const first = waiting.length ? waiting.join(', ') : null;
   const question = first ? `${first.charAt(0).toUpperCase()}${first.slice(1)}. Restart anyway?` : callWarning ? `${callWarning} Restart anyway?` : null;
   return { waiting, question, callWarning };
+}
+
+// ── What a restart would affect (the Update Ready dialog) ──────────────────
+
+export interface RestartImpactRow {
+  id: 'meeting' | 'call' | 'share' | 'remote' | 'uploads' | 'downloads' | 'drafts' | 'queue';
+  /** Blocks: restarting would end it. Waits: WorkSuite waits for it to finish. Safe: it is kept. */
+  verdict: 'blocks' | 'waits' | 'safe';
+  title: string;
+  detail: string;
+}
+
+const MODULE_NAMES: Record<string, string> = { mail: 'mail', chat: 'chat', notes: 'note', tasks: 'task', crm: 'CRM' };
+
+/**
+ * What restarting now would affect, from what the app knows: a call or meeting, a screen share or remote control
+ * (blocks), transfers still running (waits), drafts and queued offline changes (safe: they are kept). Anything the
+ * app does not track is left out.
+ */
+export function restartImpact(b: BusyReport | null | undefined): RestartImpactRow[] {
+  if (!b) return [];
+  const rows: RestartImpactRow[] = [];
+  const a = b.activity;
+  const d = b.details;
+  const meets = (d?.calls ?? []).filter((c) => c.kind === 'meet');
+  const calls = (d?.calls ?? []).filter((c) => c.kind === 'call');
+  if (a?.meeting) {
+    const title = meets.map((m) => m.title).filter(Boolean)[0];
+    rows.push({ id: 'meeting', verdict: 'blocks', title: 'Meet call in progress', detail: [title, a.screenShare ? 'screen sharing' : null].filter(Boolean).join(' · ') || 'Restarting would end it' });
+  } else if (a?.screenShare) {
+    rows.push({ id: 'share', verdict: 'blocks', title: 'Screen sharing', detail: 'Restarting would stop it' });
+  }
+  if (b.activeCall || a?.call) {
+    const title = calls.map((c) => c.title).filter(Boolean)[0];
+    rows.push({ id: 'call', verdict: 'blocks', title: 'Call in progress', detail: title || 'Restarting would end it' });
+  }
+  if (a?.remoteControl) rows.push({ id: 'remote', verdict: 'blocks', title: 'Remote control session', detail: 'Restarting would end it' });
+  const named = (dir: 'upload' | 'download') =>
+    (d?.transfers ?? [])
+      .filter((t) => t.direction === dir)
+      .slice(0, 3)
+      .map((t) => `${t.name} ${Math.round(t.percent)}%`)
+      .join(' · ');
+  if (b.uploads > 0) rows.push({ id: 'uploads', verdict: 'waits', title: `${plural(b.uploads, 'file')} uploading`, detail: named('upload') || 'WorkSuite waits for them to finish' });
+  if (b.downloads > 0) rows.push({ id: 'downloads', verdict: 'waits', title: `${plural(b.downloads, 'file')} downloading`, detail: named('download') || 'WorkSuite waits for them to finish' });
+  if (b.drafts > 0) {
+    const mods = Object.entries(d?.draftModules ?? {}).filter(([, n]) => n > 0);
+    const only = mods.length === 1 ? MODULE_NAMES[mods[0]![0]] : undefined;
+    rows.push({ id: 'drafts', verdict: 'safe', title: `${b.drafts} unsent ${only ? `${only} ` : ''}draft${b.drafts === 1 ? '' : 's'}`, detail: 'Saved locally — will be kept' });
+  }
+  if (b.pendingMutations > 0) rows.push({ id: 'queue', verdict: 'safe', title: `${plural(b.pendingMutations, 'offline change')} queued`, detail: 'Kept in the offline queue and sent after the restart' });
+  return rows;
+}
+
+/** Something would be interrupted or is still running: restarting now is not free. */
+export function restartWaits(rows: RestartImpactRow[]): boolean {
+  return rows.some((r) => r.verdict !== 'safe');
+}
+
+// ── Install automatically when idle ────────────────────────────────────────
+
+/** Settings › Updates › Install automatically when idle: between 02:00 and 04:00 local time. */
+export const IDLE_INSTALL_FROM_HOUR = 2;
+export const IDLE_INSTALL_TO_HOUR = 4;
+/** Idle at least this long (the system's idle time). */
+export const IDLE_INSTALL_MIN_SECONDS = 15 * 60;
+
+/** Whether a downloaded update may install now: in the night window, the computer idle, nothing to interrupt. */
+export function idleInstallDue(now: Date, idleSeconds: number, busy: BusyReport | null | undefined): boolean {
+  const h = now.getHours();
+  if (h < IDLE_INSTALL_FROM_HOUR || h >= IDLE_INSTALL_TO_HOUR) return false;
+  if (idleSeconds < IDLE_INSTALL_MIN_SECONDS) return false;
+  return !restartWaits(restartImpact(busy));
+}
+
+// ── Update diagnostics ────────────────────────────────────────────────────
+
+const FIXES: Record<string, { fail: string; low?: string }> = {
+  service: { fail: 'Check the network connection or proxy, then select Run again.' },
+  signature: { fail: 'The update answer did not verify. Check the date and time on this computer, then select Run again.' },
+  download: { fail: 'The download server could not be reached. Check that your network allows downloads, then select Retry.' },
+  disk: { fail: 'Free up disk space, then select Retry.', low: 'Free up some disk space before the next update.' },
+  permissions: { fail: 'WorkSuite cannot write to where it is installed. Ask your administrator to reinstall it or to update it for you.' },
+  database: { fail: 'The local database reported a problem. Restart WorkSuite; if it continues, export this report for support.' },
+  license: { fail: 'Sign in again so your organization can be checked.', low: 'Connect to the internet so your sign-in can be checked again.' },
+  channel: { fail: 'Pick a channel your organization allows in Settings › Updates.' },
+  version: { fail: 'Install the current version from your organization.' },
+};
+
+/** The first problem's fix, in words: a failed check before a low one. */
+export function suggestedFix(checks: UpdateDiagnosticCheck[]): string | null {
+  for (const level of ['fail', 'low'] as const) {
+    for (const c of checks) {
+      if (c.status !== level) continue;
+      const fix = FIXES[c.id]?.[level];
+      if (c.fix) return c.fix;
+      if (fix) return fix;
+    }
+  }
+  return null;
 }
