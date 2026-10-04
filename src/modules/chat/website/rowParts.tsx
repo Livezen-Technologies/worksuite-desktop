@@ -27,6 +27,18 @@ export function Tag({ tone, size = 'sm', children }: { tone: keyof typeof TAG; s
   return <span className={cx('shrink-0 font-bold', size === 'chip' ? 'rounded-[8px] px-2 py-0.5 text-[11px]' : 'rounded-[5px] px-1.5 py-px text-[10.5px]', TAG[tone])}>{children}</span>;
 }
 
+/**
+ * A filter pill, pressed or not: the lists' Open / Mine / Closed, To follow up / Handled (C-04), and the Voice calls
+ * list's All / Answered / Missed / Recorded (V-01).
+ */
+export function FilterPill({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
+  return (
+    <button type="button" aria-pressed={on} onClick={onClick} className={cx('h-7 rounded-[14px] px-3', on ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
+      {children}
+    </button>
+  );
+}
+
 /** The priorities a card row marks; the table says every one. */
 export const PRIORITY_TAG: Record<string, string> = { vip: 'VIP', urgent: 'Urgent', high: 'High' };
 

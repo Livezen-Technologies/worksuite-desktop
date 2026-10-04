@@ -191,7 +191,7 @@ function LivePill({ updated }: { updated: number | null }) {
 
 /* ---------------------------------------------------------------- the six figures */
 
-type Tone = 'plain' | 'amber' | 'red' | 'green';
+export type Tone = 'plain' | 'amber' | 'red' | 'green';
 
 function Tiles({ d, now, skew, onSection }: { d: Dashboard; now: number; skew: number; onSection: (s: 'visitors' | Section) => void }) {
   const waited = d.now.waiting_on_us ? since(d.now.longest_wait_since, now, skew) : null;
@@ -221,7 +221,8 @@ const TILE: Record<Tone, { box: string; value: string }> = {
   green: { box: 'border-line bg-surface', value: 'text-[#2b7a4b] dark:text-success' },
 };
 
-function Tile({ label, value, sub, tone, live, big, action, onClick }: { label: string; value: string; sub: string; tone: Tone; live?: boolean; big?: boolean; action?: string; onClick?: () => void }) {
+/** One figure (C-00's six, the wall's; V-01's call tiles): its name, the number, and a line under it when there is one. */
+export function Tile({ label, value, sub, tone, live, big, action, onClick }: { label: string; value: string; sub?: string; tone: Tone; live?: boolean; big?: boolean; action?: string; onClick?: () => void }) {
   const body = (
     <>
       <span className="flex items-center gap-1.5 text-[10.5px] font-bold tracking-[0.8px] whitespace-nowrap text-ink-3 uppercase">
@@ -230,7 +231,7 @@ function Tile({ label, value, sub, tone, live, big, action, onClick }: { label: 
       </span>
       <span className="flex items-baseline gap-2 whitespace-nowrap">
         <span className={cx('leading-[1.15] font-bold tabular-nums', big ? 'text-[44px]' : 'text-[26px]', TILE[tone].value)}>{value}</span>
-        <span className="truncate text-[11.5px] text-ink-3">{sub}</span>
+        {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
       </span>
     </>
   );
@@ -300,12 +301,18 @@ function WhereTheyAre({ d, visitors, now, skew }: { d: Dashboard; visitors: Onli
   );
 }
 
-function Segmented<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: ReadonlyArray<readonly [T, string]> }) {
+/**
+ * A segmented switch (C-00's Now / Today, the map's zooms; V-01's Calls / Call-backs). An option may carry a count, drawn
+ * as V-01's amber pill beside its words.
+ */
+export function Segmented<T extends string>({ label, value, onChange, options }: { label: string; value: T; onChange: (v: T) => void; options: ReadonlyArray<readonly [T, string] | readonly [T, string, number | null]> }) {
   return (
     <div role="radiogroup" aria-label={text(label)} className="flex gap-0.5 rounded-[8px] bg-subtle p-0.5">
-      {options.map(([k, l]) => (
-        <button key={k} type="button" role="radio" aria-checked={value === k} onClick={() => onChange(k)} className={cx(SEG, value === k ? SEG_ON : SEG_OFF)}>
+      {options.map(([k, l, n]) => (
+        <button key={k} type="button" role="radio" aria-checked={value === k} onClick={() => onChange(k)} className={cx(SEG, 'gap-1.5', value === k ? SEG_ON : SEG_OFF)}>
           {text(l)}
+          {n ? ' ' : null}
+          {n ? <span className="rounded-[8px] bg-warning-bg px-1.5 text-[10.5px] font-bold text-[#9a5b10] dark:text-warning">{n}</span> : null}
         </button>
       ))}
     </div>

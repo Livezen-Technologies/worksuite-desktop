@@ -18,10 +18,11 @@ import { ClosedDetail, ClosedRow } from './Closed';
 import { MissedDetail, MissedRow, useMissed, type MissedTab } from './Missed';
 import { OfflineDetail, OfflineRow, useOffline } from './Offline';
 import { clock, handoffAsk, handoffLeft, handoffTitle, useRingState } from './Ringing';
-import { CallLine, pathOf, PRIORITY_TAG, rowPreview, Tag, WaitClock } from './rowParts';
+import { CallLine, FilterPill as Pill, pathOf, PRIORITY_TAG, rowPreview, Tag, WaitClock } from './rowParts';
 import { WebsiteTable } from './WebsiteTable';
 import { WebsiteLive, type LiveView, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
+import { VoiceCalls } from './VoiceCalls';
 import { WidgetSettings } from './widget/WidgetSettings';
 import { ConversationMenu } from '../ConversationMenu';
 import { MyStatus } from '../MyStatus';
@@ -93,6 +94,11 @@ export function WebsiteWorkspace() {
   const live = liveView !== null;
   const liveVisitor = Number(query.get('visitor')) || null;
   const designing = query.get('section') === 'widget';
+  // Voice calls (V-01): a LIVE view of its own, full width, with the picked call in the address.
+  const calling = query.get('section') === 'calls';
+  const pickedCall = Number(query.get('voice')) || null;
+  // Everything that takes the whole width, hiding the list and the thread.
+  const wide = live || designing || calling;
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
   const [site, setSite] = useState(0);
   // The Mine pill narrows whichever open section is showing; Closed is a section of its own.
@@ -155,6 +161,8 @@ export function WebsiteWorkspace() {
   // Visitors typing now, for their rows (LIVE-02).
   const typingRows = useVisitorsTyping();
   const openRows = open.data?.conversations ?? [];
+  // Calls ringing or on now, from the list the inbox already polls: the Voice calls entry's count (V-01).
+  const liveCalls = openRows.filter((r) => !!r.call).length;
   const sites = open.data && 'sites' in open.data ? ((open.data as { sites?: Array<{ widget_id: number; site: string }> }).sites ?? []) : [];
   const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) + callbackList.length : s === 'callbacks' ? (callbackCounts.data?.todo ?? 0) : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : s === 'offline' && offline.data ? offline.data.count : sectionRows(openRows, s, me).length);
   const overdue = callbackCounts.data?.overdue ?? 0;
@@ -178,7 +186,7 @@ export function WebsiteWorkspace() {
     ? (sort === 'waiting' ? (l: WebsiteRow[]) => followUpsFirst(l, isMine) : (l: WebsiteRow[]) => l)(sortWebsiteRows(narrowed.filter((r) => !priority || r.priority === priority), sort))
     : followUpsFirst(narrowed, isMine);
   // Full width while nothing is open; beside an open chat, the card list.
-  const tableView = !!table && !selected && !live && !designing;
+  const tableView = !!table && !selected && !wide;
   const list = searching && found.data ? found : source;
   const to = (params: Record<string, string | null>) => {
     const next = new URLSearchParams({ view: 'website', section });
@@ -249,7 +257,7 @@ export function WebsiteWorkspace() {
     : section === 'callbacks' ? (cbList.data?.callbacks ?? []).map((b) => b.conversation_id) : rows.map((r) => r.id);
   const idsKey = ids.join(',');
   useEffect(() => {
-    if (!active || live || designing) return;
+    if (!active || wide) return;
     const list = idsKey ? idsKey.split(',').map(Number) : [];
     const onKey = (e: KeyboardEvent) => {
       if (e.defaultPrevented || e.ctrlKey || e.metaKey || e.altKey || (e.key !== 'j' && e.key !== 'k')) return;
@@ -264,7 +272,7 @@ export function WebsiteWorkspace() {
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [active, live, designing, idsKey, selected, section, go]);
+  }, [active, wide, idsKey, selected, section, go]);
 
   return (
     <div className="flex h-full min-w-0 flex-1 text-[13px]">
@@ -285,7 +293,7 @@ export function WebsiteWorkspace() {
           {SECTIONS.filter((s) => s.id !== 'callbacks' || structured).map((s) => {
             const n = count(s.id);
             // Lit only while it is what shows: not under a LIVE view or the Widget (#231).
-            const here = !live && !designing && section === s.id;
+            const here = !wide && section === s.id;
             return (
               <MenuItem key={s.id} icon={s.icon} label={s.label} here={here} onClick={() => to({ section: s.id, website: null, visitor: null })}>
                 {/* Overdue callbacks: a red dot beside the count, and said (#223). */}
@@ -296,11 +304,13 @@ export function WebsiteWorkspace() {
           })}
           <MenuHead>LIVE</MenuHead>
           {([
-            ['dashboard', 'Live dashboard', 'activity', null],
-            ['visitors', 'Visitors online', 'eye', visitorsOnline],
-          ] as const).map(([id, label, icon, n]) => (
-            <MenuItem key={id} icon={icon} label={label} here={liveView === id} onClick={() => go(`/chat?view=website&section=${id}`)}>
-              <CountPill n={n} here={liveView === id} tone="green" />
+            ['dashboard', 'Live dashboard', 'activity', null, 'green'],
+            ['visitors', 'Visitors online', 'eye', visitorsOnline, 'green'],
+            // Voice calls (V-01; C-01's DsWsNav): the calls ringing or on now, amber.
+            ['calls', 'Voice calls', 'phone', liveCalls, 'amber'],
+          ] as const).map(([id, label, icon, n, tone]) => (
+            <MenuItem key={id} icon={icon} label={label} here={query.get('section') === id} onClick={() => go(`/chat?view=website&section=${id}`)}>
+              <CountPill n={n} here={query.get('section') === id} tone={tone} />
             </MenuItem>
           ))}
           {ON_WEB.map((g) => (
@@ -328,6 +338,16 @@ export function WebsiteWorkspace() {
         />
       ) : null}
       {designing ? <WidgetSettings /> : null}
+      {calling ? (
+        <VoiceCalls
+          selected={pickedCall}
+          onSelect={(id) => go(`/chat?${new URLSearchParams({ view: 'website', section: 'calls', ...(id ? { voice: String(id) } : {}) }).toString()}`)}
+          onOpenChat={(id) => go(`/chat?view=website&section=inbox&website=${id}`)}
+          // Call-backs (V-02) are the Callbacks section; on a server without it, they are still in Missed chats.
+          onCallbacks={() => go(`/chat?view=website&section=${structured ? 'callbacks' : 'missed'}`)}
+          callbacksOpen={structured ? (callbackCounts.data?.todo ?? 0) : callbackList.length}
+        />
+      ) : null}
       {tableView && table ? (
         <WebsiteTable
           title={table.title}
@@ -355,7 +375,7 @@ export function WebsiteWorkspace() {
         />
       ) : null}
       {rowMenu ? <ConversationMenu x={rowMenu.x} y={rowMenu.y} target={{ kind: 'website', row: rowMenu.r }} onClose={() => setRowMenu(null)} /> : null}
-      <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', (live || designing || tableView) && 'hidden')}>
+      <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', (wide || tableView) && 'hidden')}>
         <div className="flex flex-col gap-2 border-b border-line p-3">
           <div className="flex items-center gap-2">
             <b className="flex-1 text-[18px] text-ink">{SECTIONS.find((s) => s.id === section)?.label}</b>
@@ -436,7 +456,7 @@ export function WebsiteWorkspace() {
           )}
         </div>
       </section>
-      <div className={cx('flex min-w-0 flex-1', (live || designing || tableView) && 'hidden')}>
+      <div className={cx('flex min-w-0 flex-1', (wide || tableView) && 'hidden')}>
         {selected && offlineDetail ? (
           <OfflineDetail key={selected} id={selected} e={offlineOpen} me={me} onOpenChat={() => to({ section: 'inbox', website: selected })} onClosed={() => to({ website: null })} />
         ) : selected && section === 'closed' ? (
@@ -451,14 +471,6 @@ export function WebsiteWorkspace() {
         )}
       </div>
     </div>
-  );
-}
-
-function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
-  return (
-    <button type="button" aria-pressed={on} onClick={onClick} className={cx('h-7 rounded-[14px] px-3', on ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
-      {children}
-    </button>
   );
 }
 
@@ -676,11 +688,11 @@ function MenuItem({ icon, label, here, onClick, title, children }: { icon: strin
   );
 }
 
-/** A count as a small pill: plain, ringed on the lit entry, red for missed, green for visitors online. */
-function CountPill({ n, here, tone }: { n: number | null; here: boolean; tone: 'plain' | 'danger' | 'green' }) {
+/** A count as a small pill: plain, ringed on the lit entry, red for missed, green for visitors online, amber for calls on now (V-01). */
+function CountPill({ n, here, tone }: { n: number | null; here: boolean; tone: 'plain' | 'danger' | 'green' | 'amber' }) {
   if (!n) return null;
   return (
-    <span className={cx('inline-flex h-[18px] min-w-[20px] shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold', tone === 'danger' ? 'bg-danger text-white' : tone === 'green' ? 'bg-success-bg text-success' : here ? 'bg-surface text-primary ring-1 ring-primary/40' : 'bg-subtle text-ink-2')}>
+    <span className={cx('inline-flex h-[18px] min-w-[20px] shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold', tone === 'danger' ? 'bg-danger text-white' : tone === 'green' ? 'bg-success-bg text-success' : tone === 'amber' ? 'bg-warning-bg text-[#9A4A06] dark:text-warning' : here ? 'bg-surface text-primary ring-1 ring-primary/40' : 'bg-subtle text-ink-2')}>
       {n}
     </span>
   );

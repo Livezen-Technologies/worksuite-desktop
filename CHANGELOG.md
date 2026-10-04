@@ -5,6 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.165 — 2026-10-04
+
+- **Voice calls (V-01).** Website Chats has a **Voice calls** section, with an amber count of calls ringing or on.
+  - A banner shows the call you are on now, with **Open call**.
+  - Tiles count calls, answered, missed, average wait, average length and open call-backs.
+  - Filter by site and period (today, 7 or 30 days) and by All, Answered, Missed or Recorded.
+  - The table lists each call: the visitor, when, who answered, the wait, the length and the result (Answered, Missed
+    · call-back, Cancelled by visitor, Transferred).
+- **Selecting a call** shows what happened, step by step, with the page the visitor called from. It also shows the
+  recording (none yet: recording is not offered) and staff-only notes, with **Open chat**, **Add note** and **Call
+  back**.
+- Call-backs open the Callbacks section.
+- Needs the server update (Communication 1.32.0).
+
 ## 0.2.164 — 2026-10-04
 
 - **Invite and transfer (C-09).**

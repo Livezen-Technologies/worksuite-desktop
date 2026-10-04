@@ -55,8 +55,8 @@ const RETRY = [
   { minutes: 1440, label: 'tomorrow' },
 ];
 
-/** The digits and the +, as a dialler or WhatsApp takes them. */
-const dial = (phone: string | null | undefined) => (phone ?? '').replace(/[^\d+]/g, '');
+/** The digits and the +, as a dialler or WhatsApp takes them; Voice calls' Call back dials the same way (V-01). */
+export const dial = (phone: string | null | undefined) => (phone ?? '').replace(/[^\d+]/g, '');
 
 export function isPending(b: Pick<WebsiteCallback, 'status'>): boolean {
   return !b.status || b.status === 'open' || b.status === 'unreachable';

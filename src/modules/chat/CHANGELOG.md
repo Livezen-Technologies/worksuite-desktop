@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.38.0 — 2026-10-04
+
+- V-01 Voice calls: a Voice calls section with its live count in the menu; the live call banner, six tiles, filters, the calls table with result chips, paging, and call details with what happened, recording, staff notes, Open chat, Add note and Call back.
+
 ## 1.37.0 — 2026-10-04
 
 - C-09 Invite and transfer: the invite dialog with people and departments in one search, status and team on each row, and 'Invite N people'; the transfer dialog with A person / A department / Next available and warm or hand over now; the invitee's Invitation and Transfer to you cards with the server's countdown; the amber declined notice with dismiss.
