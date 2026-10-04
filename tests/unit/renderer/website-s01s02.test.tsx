@@ -303,13 +303,14 @@ describe('S-02 · a widget\'s editor and Appearance with live preview', () => {
     wrap(<WidgetSettings />);
     const panel = within(await screen.findByRole('tabpanel', { name: 'Embed code' }));
     expect(screen.getByRole('tab', { name: 'Embed code' }).getAttribute('aria-selected')).toBe('true');
-    expect(panel.getByLabelText('Embed code').textContent).toBe(ROWS[0]!.embed_code);
+    // Set out as the design sets it (S-03): the tag and its address, then an attribute a line; Copy copies one line.
+    expect((await panel.findByLabelText('Embed code')).textContent).toBe('<script src="https://ws.example/widget.js"\n  data-widget-id="KEY1"\n  charset="utf-8"\n  async></script>');
     expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
     fireEvent.click(panel.getByRole('button', { name: 'Copy' }));
     await waitFor(() => expect(writeText).toHaveBeenCalledWith(ROWS[0]!.embed_code));
   });
 
-  it('opens the widget the address names, and Behaviour and Chatbot on the web until their screens come', async () => {
+  it('opens the widget the address names, and the Chatbot on the web until its screen comes', async () => {
     tabQuery = new URLSearchParams('widget=2');
     payload = { ...payload, widget: { ...payload.widget, id: 2, name: 'TechHub Lanka', domain: 'techhub.com.lk' }, design: design({ name: 'TechHub Lanka' }) };
     wrap(<WidgetSettings />);
@@ -317,11 +318,10 @@ describe('S-02 · a widget\'s editor and Appearance with live preview', () => {
     expect(apiGet).toHaveBeenCalledWith('/api/chat/widget-admin/widgets/2/design', undefined, expect.anything());
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toBe('Widgets & embed › techhub.com.lk');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Behaviour' }));
-    expect(screen.getByText('Behaviour is set on the web for now')).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Open on the web ↗' }));
-    expect(call).toHaveBeenCalledWith('app:openInBrowser', { path: '/website-chats?tab=widgets' });
+    // Behaviour is built in the app since S-03 (website-s03s04.test.tsx).
     fireEvent.click(screen.getByRole('tab', { name: 'Chatbot' }));
     expect(screen.getByText('The chatbot is set on the web for now')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Open on the web ↗' }));
+    expect(call).toHaveBeenCalledWith('app:openInBrowser', { path: '/website-chats?tab=widgets' });
   });
 });

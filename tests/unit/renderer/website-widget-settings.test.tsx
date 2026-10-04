@@ -145,10 +145,8 @@ describe('Website chats → Widget', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Home' }));
     fireEvent.change(screen.getByRole('textbox', { name: 'Brand colour' }), { target: { value: '#FACC15' } });
     fireEvent.change(screen.getByLabelText('Greeting'), { target: { value: 'Welcome to Livezen' } });
-    // Whose photos and how they are named are on the Staff tab now (S-02).
-    fireEvent.click(screen.getByRole('tab', { name: 'Staff' }));
+    // Whose photos and how they are named: the Team photos card under Appearance, since S-04 gave Staff its table.
     fireEvent.click(screen.getByRole('radio', { name: 'First name only' }));
-    fireEvent.click(screen.getByRole('tab', { name: 'Appearance' }));
 
     expect(preview().getByText('Welcome to Livezen')).toBeTruthy();
     // Light brand: the header's text turns ink so it stays readable.
@@ -197,7 +195,6 @@ describe('Website chats → Widget', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Add a link' }));
     fireEvent.change(screen.getByLabelText('Link 2 label'), { target: { value: 'Book a demo' } });
     fireEvent.change(screen.getByLabelText('Link 2 address'), { target: { value: 'https://livezen.example/demo' } });
-    fireEvent.click(screen.getByRole('tab', { name: 'Staff' }));
     fireEvent.click(screen.getByRole('switch', { name: 'Show Kasun Jayasuriya to visitors' }));
     fireEvent.click(screen.getByRole('tab', { name: 'Hours' }));
     fireEvent.click(screen.getByRole('switch', { name: 'Open on Saturday' }));

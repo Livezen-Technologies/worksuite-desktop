@@ -126,13 +126,14 @@ describe('Widget settings › Live status & calls (V-05)', () => {
     expect(screen.getByRole('tab', { name: 'Live status & calls' }).getAttribute('aria-selected')).toBe('true');
   });
 
-  it('lists who can take calls and who could be rung now, and opens staff on the web', async () => {
+  it('lists who can take calls and who could be rung now, and opens the editor\'s Staff tab (S-04)', async () => {
     const form = await openTab();
     const who = form.getByRole('group', { name: 'People who take calls' });
     expect(who.textContent).toContain('Nimal Silva · available now');
     expect(who.textContent).toContain('Samali Perera');
     fireEvent.click(form.getByRole('button', { name: 'Manage staff' }));
-    expect(call).toHaveBeenCalledWith('app:openInBrowser', { path: '/website-chats?tab=widgets' });
+    expect(screen.getByRole('tab', { name: 'Staff' }).getAttribute('aria-selected')).toBe('true');
+    expect(call).not.toHaveBeenCalledWith('app:openInBrowser', { path: '/website-chats?tab=widgets' });
   });
 
   it('says when nobody can take calls, so the button stays hidden', async () => {

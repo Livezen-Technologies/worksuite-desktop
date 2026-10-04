@@ -1,12 +1,21 @@
 import { useId, type ReactNode } from 'react';
-import { Button, Switch, cx } from '../../../../components/ui';
+import { Button, Card, Switch, cx } from '../../../../components/ui';
 
 /**
- * The widget settings' building blocks (worksuite-desktop#199), shared by its tabs: Appearance, Staff and Hours
- * (WidgetSettings) and Live status & calls (V-05, LiveStatusCalls) — a titled section, a text area, a row of choices,
- * a switch with its line, and the sticky Save bar Live status & calls ends with (the design's tabs save from the
- * editor's header since S-02).
+ * The widget settings' building blocks (worksuite-desktop#199), shared by its tabs: Appearance and Hours
+ * (WidgetSettings), Live status & calls (V-05, LiveStatusCalls) and Behaviour (S-03, Behaviour) — a titled section, a
+ * card under a small-capitals heading, a text area, a row of choices, a switch with its line, and the sticky Save bar
+ * Live status & calls ends with (the design's tabs save from the editor's header since S-02).
  */
+
+/** A card with the design's small capitals heading over its rows: "WHAT THE VISITOR SEES", "NEW CHATS". */
+export function Group({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <Card title={<span className="text-[11px] font-bold tracking-[1px] text-ink-3 uppercase">{title}</span>} bodyClassName="pb-1">
+      {children}
+    </Card>
+  );
+}
 
 export function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
   return (

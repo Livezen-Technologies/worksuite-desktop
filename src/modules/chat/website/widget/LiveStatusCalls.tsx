@@ -1,14 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useId, useState, type ReactNode } from 'react';
+import { useId, useState } from 'react';
 import { ApiError } from '../../../../core/api';
 import { call, errorMessage } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
 import { Select } from '../../../../components/Select';
-import { Card, Empty, ErrorNote, Spinner, Switch } from '../../../../components/ui';
+import { Empty, ErrorNote, Spinner, Switch } from '../../../../components/ui';
 import { Note, Pill, SettingRow } from '../../../account/parts';
 import { VOICE_OFFERS, callSettingsOf, changedFields, saveCallSettings, waitOptions, type CallSettings, type CallSettingsPayload } from './callSettings';
-import { SaveBar } from './parts';
+import { Group, SaveBar } from './parts';
 
 /**
  * Widget settings › Live status & calls (V-05, VOICE-UI-04), a tab of the desktop's widget settings beside the design
@@ -19,7 +19,7 @@ import { SaveBar } from './parts';
  * Saving sends only what was changed (`PUT widgets/{id}/calls`). Recording is shown as Off and cannot be turned on:
  * nothing records yet (VOICE-22), and a visitor must never be promised a notice nobody gives.
  */
-export function LiveStatusCalls({ id }: { id: number }) {
+export function LiveStatusCalls({ id, onManageStaff }: { id: number; onManageStaff?: () => void }) {
   const qc = useQueryClient();
   const key = ['website', 'widget-calls', id];
   const q = useQuery({ queryKey: key, queryFn: ({ signal }) => callSettingsOf(id, signal), retry: false });
@@ -95,7 +95,8 @@ export function LiveStatusCalls({ id }: { id: number }) {
               </>
             }
           >
-            <button type="button" onClick={() => void call('app:openInBrowser', { path: '/website-chats?tab=widgets' })} title="Opens on the web" className="text-[13px] font-bold text-primary hover:underline disabled:opacity-60">
+            {/* The editor's own Staff tab (S-04); on its own, this page still sends people to the web. */}
+            <button type="button" onClick={onManageStaff ?? (() => void call('app:openInBrowser', { path: '/website-chats?tab=widgets' }))} title={onManageStaff ? undefined : 'Opens on the web'} className="text-[13px] font-bold text-primary hover:underline disabled:opacity-60">
               Manage staff
             </button>
           </SettingRow>
@@ -113,15 +114,6 @@ export function LiveStatusCalls({ id }: { id: number }) {
       </fieldset>
       <SaveBar can={can} busy={busy} dirty={dirty} undoLabel="Cancel" onUndo={() => setDraft(null)} />
     </form>
-  );
-}
-
-/** A card with the design's small capitals heading over its rows. */
-function Group({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <Card title={<span className="text-[11px] font-bold tracking-[1px] text-ink-3 uppercase">{title}</span>} bodyClassName="pb-1">
-      {children}
-    </Card>
   );
 }
 

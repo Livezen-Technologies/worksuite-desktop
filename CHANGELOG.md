@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.177 — 2026-10-04
+
+- **Widget behaviour (S-03).** The Behaviour tab is now in the app: who gets a new chat, when to ask for contact
+  details, when a chat counts as missed, when quiet chats close, alerts for visitors reading closely, and the
+  allowed domains. Only what changed is saved.
+- **Embed code.** The code card shows whether the widget has been seen on your site ("Seen on techubiz.com 2
+  minutes ago"), with install guides for WordPress, Shopify and Google Tag Manager.
+- **Widget staff (S-04).** The Staff tab lists who answers the widget: their status now, priority, voice calls and
+  whether they are active. Edit, suspend, remove or add people here instead of on the web. Anyone who lost "See
+  website chats" is flagged.
+- Team photos moved to Appearance; Manage staff in Live status & calls opens the Staff tab. "Paused" is now
+  "Suspended".
+
 ## 0.2.176 — 2026-10-04
 
 - **Website widgets (S-01).** Widgets & embed now opens in the app: one card per widget with its colour, site,

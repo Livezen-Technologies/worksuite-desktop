@@ -8,7 +8,9 @@ import { Select } from '../../../../components/Select';
 import { Button, Card, Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
 import { Segmented } from '../live/LiveDashboard';
 import { Area, Choice, Section, Toggle } from './parts';
+import { BehaviourTab, EmbedTab, useBehaviour } from './Behaviour';
 import { LiveStatusCalls } from './LiveStatusCalls';
+import { StaffTab, useStaffList } from './StaffTab';
 import { siteOf } from './Widgets';
 import {
   ACCENT_SWATCHES,
@@ -51,10 +53,14 @@ import { WidgetPreview, type PreviewScreen } from './WidgetPreview';
  * follows every field before it is saved. The rest of the widget's look from #199/#207 (logo, theme, home screen,
  * WhatsApp, the launcher's place and greeting card) stays below them, and the preview can show those screens too.
  *
- * Appearance, Staff and Hours are one form: Save sends the design (`PUT widgets/{id}/design`), whose photos are shown
- * and the hours (`widgets/{id}/hours`); Cancel puts back what is saved. Live status & calls (V-05) saves on its own.
- * Behaviour and Chatbot are on the web until their screens come (S-03, S-05); Embed code shows the snippet to copy.
- * Anybody who can see website chats can look; only somebody who may configure widgets can save, and the screen says so.
+ * Appearance and Hours are one form: Save sends the design (`PUT widgets/{id}/design`), whose photos are shown — the
+ * Team photos card, under Appearance since S-04 gave Staff its own table — and the hours (`widgets/{id}/hours`); Cancel
+ * puts back what is saved. BEHAVIOUR (S-03, X-UI-16) has its own Cancel and Save in the same header and saves only what
+ * it changed (`PUT widgets/{id}/behaviour`); beside its rules, and alone on the Embed code tab, are the snippet with
+ * Copy, the install check and the install guides. STAFF (S-04, X-UI-17) is the table of who answers, with "Add people"
+ * in the header; each change there is saved as it is made. Live status & calls (V-05) saves on its own. The Chatbot is
+ * on the web until its screen comes (S-05). Anybody who can see website chats can look; only somebody who may configure
+ * widgets can save, and the screen says so.
  */
 
 /** Whether this computer prefers a dark theme: what "Match the visitor" looks like to the person editing. */
@@ -83,7 +89,7 @@ export const WIDGET_TABS: Array<{ id: WidgetTab; label: string }> = [
 ];
 
 /** The tabs Save and Cancel act on: one form, one save. */
-const DESIGN_TABS: WidgetTab[] = ['appearance', 'staff', 'hours'];
+const DESIGN_TABS: WidgetTab[] = ['appearance', 'hours'];
 
 /** `?tab=` as the address carries it; `design` is the Appearance tab's name from before S-02. */
 export function tabOf(q: string | null): WidgetTab {
@@ -163,20 +169,6 @@ function OnTheWeb({ icon, title, hint }: { icon: string; title: string; hint: st
   );
 }
 
-/** Embed code: the snippet to paste before </body>, and Copy. */
-function EmbedCode({ row }: { row: WidgetRow }) {
-  const copy = () => void navigator.clipboard?.writeText(row.embed_code ?? '').then(() => toast('success', text('Embed code copied.')));
-  return (
-    <div className="flex max-w-[860px] flex-col gap-3 overflow-y-auto">
-      <Card title="Embed code" action={<Button size="sm" icon="copy" disabled={!row.embed_code} onClick={copy}>Copy</Button>}>
-        <p className="mb-2 text-[12.5px] text-ink-3">{text('Paste it before </body> on every page of {site}.', { site: siteOf(row) })}</p>
-        <pre aria-label="Embed code" className="overflow-x-auto rounded-[8px] border border-line bg-subtle p-3 font-mono text-[12px] whitespace-pre-wrap break-all text-ink">{row.embed_code ?? '—'}</pre>
-        <p className="mt-2 text-[12px] text-ink-3">Install guides and the install check are on the web for now.</p>
-      </Card>
-    </div>
-  );
-}
-
 function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab: WidgetTab; onList?: () => void }) {
   const id = row.id;
   const formId = useId();
@@ -194,6 +186,10 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
   const [hoursTouched, setHoursTouched] = useState(false);
   const [screen, setScreen] = useState<PreviewScreen>('start');
   const [busy, setBusy] = useState(false);
+  // Behaviour (S-03) saves from this header, so its draft lives here; Staff (S-04) adds from it.
+  const b = useBehaviour(id);
+  const [adding, setAdding] = useState(false);
+  const staffList = useStaffList(id, Boolean(seen.staff));
 
   const saved = useMemo(() => (q.data?.design ? withDefaults(q.data.design, q.data.widget?.name ?? row.name) : null), [q.data, row.name]);
   const design = draft ?? saved;
@@ -266,6 +262,14 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
             <Button type="button" disabled={busy || !dirty} onClick={undo}>Cancel</Button>
             <Button type="submit" form={formId} variant="primary" loading={busy} disabled={!can || busy || blocked || !design}>Save</Button>
           </>
+        ) : tab === 'behaviour' && b.settings ? (
+          <>
+            {b.blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
+            <Button type="button" disabled={b.busy || !b.dirty} onClick={b.undo}>Cancel</Button>
+            <Button type="button" variant="primary" loading={b.busy} disabled={!b.can || b.busy || b.blocked || !b.dirty} onClick={() => void b.save()}>Save</Button>
+          </>
+        ) : tab === 'staff' ? (
+          <Button type="button" variant="primary" disabled={!staffList.data} onClick={() => setAdding(true)}>Add people</Button>
         ) : null}
       </div>
       <div role="tablist" aria-label="Widget settings" className="flex gap-0.5 border-b border-line">
@@ -307,6 +311,7 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
                 setHoursTouched={setHoursTouched}
                 screen={screen}
                 setScreen={setScreen}
+                onStaff={() => open('staff')}
               />
             </fieldset>
           </form>
@@ -314,12 +319,17 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
       ) : null}
       {seen.calls ? (
         <div role="tabpanel" id="widget-panel-calls" aria-labelledby="widget-tab-calls" hidden={tab !== 'calls'} className={cx('-mx-[22px] min-h-0 flex-1', tab === 'calls' ? 'flex' : 'hidden')}>
-          <LiveStatusCalls key={id} id={id} />
+          <LiveStatusCalls key={id} id={id} onManageStaff={() => open('staff')} />
         </div>
       ) : null}
       {tab === 'behaviour' ? (
         <div role="tabpanel" id="widget-panel-behaviour" aria-labelledby="widget-tab-behaviour" className="flex min-h-0 flex-1">
-          <OnTheWeb icon="settings" title="Behaviour is set on the web for now" hint="Who gets a new chat, when to ask for contact details, when a chat counts as missed, browsing alerts and the allowed domains." />
+          <BehaviourTab b={b} site={site} fallbackCode={row.embed_code ?? null} />
+        </div>
+      ) : null}
+      {tab === 'staff' ? (
+        <div role="tabpanel" id="widget-panel-staff" aria-labelledby="widget-tab-staff" className="flex min-h-0 flex-1">
+          <StaffTab id={id} widgetName={title} adding={adding} setAdding={setAdding} />
         </div>
       ) : null}
       {tab === 'chatbot' ? (
@@ -329,7 +339,7 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
       ) : null}
       {tab === 'embed' ? (
         <div role="tabpanel" id="widget-panel-embed" aria-labelledby="widget-tab-embed" className="flex min-h-0 flex-1">
-          <EmbedCode row={row} />
+          <EmbedTab b={b} site={site} fallbackCode={row.embed_code ?? null} />
         </div>
       ) : null}
     </main>
@@ -351,10 +361,12 @@ interface PanelProps {
   setHoursTouched: (v: boolean) => void;
   screen: PreviewScreen;
   setScreen: (s: PreviewScreen) => void;
+  /** Opens the Staff tab, where people are added (S-04). */
+  onStaff: () => void;
 }
 
-/** Appearance, Staff and Hours: the panels of the one design form, each kept mounted so nothing typed is lost. */
-function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week, setWeek, hoursOn, setHoursOn, setHoursTouched, screen, setScreen }: PanelProps) {
+/** Appearance and Hours: the panels of the one design form, each kept mounted so nothing typed is lost. */
+function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week, setWeek, hoursOn, setHoursOn, setHoursTouched, screen, setScreen, onStaff }: PanelProps) {
   const set = <K extends keyof WidgetDesign>(k: K, v: WidgetDesign[K]) => setDesign((d) => ({ ...(d ?? design), [k]: v }));
   const { people, sample } = previewPeople(p, design, shown);
   const hoursPreview: HoursSummary | null = hoursOn && week ? { timezone: week.timezone, zone: p?.hours?.zone && p.hours.timezone === week.timezone ? p.hours.zone : week.timezone.replace(/_/g, ' '), text: hoursText(week.days), open_now: false, back_at: p?.hours?.back_at ?? '9:00 AM tomorrow' } : null;
@@ -479,6 +491,30 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
                 <Area label="Greeting card message" value={design.greeting_text ?? ''} max={300} onChange={(v) => set('greeting_text', v || null)} placeholder="Hi there. Looking for hosting, a website or WorkSuite? Ask us anything." hint="Its quick replies are the widget's conversation starters." />
               </div>
             </Card>
+            {/* Whose photos visitors see and how they are named (#199): what the widget shows, so with its look. */}
+            <Card title="Team photos">
+              <Section title="Team" hint="Visitors see up to three photos of the people online, and how many more are. Real profile photos, initials where there is none.">
+                <Toggle label="Show the team's photos" checked={design.show_agents} onChange={(v) => set('show_agents', v)} />
+                <Choice label="Name staff as" value={design.staff_display} onChange={(v) => set('staff_display', v)} options={[{ value: 'name_role', label: 'Name and role' }, { value: 'first_name', label: 'First name only' }]} />
+                {p?.agents.length ? (
+                  <ul aria-label="Whose photos are shown" className="flex flex-col divide-y divide-line rounded-[10px] border border-line">
+                    {p.agents.map((a) => (
+                      <li key={a.user_id} className="flex items-center gap-3 px-3 py-2">
+                        <span className="flex min-w-0 flex-1 flex-col">
+                          <span className="truncate text-[13px] font-semibold text-ink">{a.name}</span>
+                          <span className="truncate text-[12px] text-ink-3">{[a.role, a.presence === 'online' ? text('Online now') : a.presence === 'away' ? text('Away') : text('Offline'), a.active ? null : text('Suspended')].filter(Boolean).join(' · ')}</span>
+                        </span>
+                        <Switch label={text('Show {name} to visitors', { name: a.name })} checked={shown[a.user_id] ?? a.shown} onChange={(v) => setShown((s) => ({ ...s, [a.user_id]: v }))} />
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="text-[12.5px] text-ink-3">Nobody is added to this widget, so everybody who answers website chats is shown. Add people on the Staff tab to choose.</p>
+                )}
+                {sample && design.show_agents ? <span className="text-[12px] text-ink-3">The preview uses stand-in people until somebody is here.</span> : null}
+                <Button type="button" className="self-start" onClick={onStaff}>Manage staff</Button>
+              </Section>
+            </Card>
           </div>
           <aside aria-label="Preview" className="relative flex w-[380px] shrink-0 flex-col items-end justify-end gap-3 overflow-hidden rounded-[12px] border border-line bg-subtle p-[18px]">
             <div className="absolute top-3 right-3.5 left-3.5 flex flex-wrap items-center gap-1">
@@ -496,36 +532,6 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
               <WidgetPreview design={design} siteName={siteNameOf(design, p?.fallback_name)} people={people} replyTime={p?.reply_time ?? 'Usually replies in a few minutes'} hours={hoursPreview} screen={screen} dark={darkFor(design.theme)} starters={p?.starters ?? []} />
             </div>
           </aside>
-        </div>,
-      )}
-      {panel(
-        'staff',
-        <div className="flex max-w-[860px] flex-1 flex-col gap-3 overflow-y-auto pb-4 scroll-thin">
-          <Card>
-            <div className="pt-4">
-              <Section title="Team" hint="Visitors see up to three photos of the people online, and how many more are. Real profile photos, initials where there is none.">
-                <Toggle label="Show the team's photos" checked={design.show_agents} onChange={(v) => set('show_agents', v)} />
-                <Choice label="Name staff as" value={design.staff_display} onChange={(v) => set('staff_display', v)} options={[{ value: 'name_role', label: 'Name and role' }, { value: 'first_name', label: 'First name only' }]} />
-                {p?.agents.length ? (
-                  <ul aria-label="Whose photos are shown" className="flex flex-col divide-y divide-line rounded-[10px] border border-line">
-                    {p.agents.map((a) => (
-                      <li key={a.user_id} className="flex items-center gap-3 px-3 py-2">
-                        <span className="flex min-w-0 flex-1 flex-col">
-                          <span className="truncate text-[13px] font-semibold text-ink">{a.name}</span>
-                          <span className="truncate text-[12px] text-ink-3">{[a.role, a.presence === 'online' ? text('Online now') : a.presence === 'away' ? text('Away') : text('Offline'), a.active ? null : text('Paused')].filter(Boolean).join(' · ')}</span>
-                        </span>
-                        <Switch label={text('Show {name} to visitors', { name: a.name })} checked={shown[a.user_id] ?? a.shown} onChange={(v) => setShown((s) => ({ ...s, [a.user_id]: v }))} />
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <p className="text-[12.5px] text-ink-3">Nobody is assigned to this widget, so everybody who answers website chats is shown. Assign staff on the web to choose.</p>
-                )}
-                {sample && design.show_agents ? <span className="text-[12px] text-ink-3">The preview uses stand-in people until somebody is here.</span> : null}
-                <Button type="button" className="self-start" onClick={() => void call('app:openInBrowser', { path: '/website-chats?tab=widgets' })}>Manage staff on the web ↗</Button>
-              </Section>
-            </div>
-          </Card>
         </div>,
       )}
       {panel(

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.50.0 — 2026-10-04
+
+- S-03/S-04: Behaviour tab (new chats, visitor alerts, allowed domains), embed code card with install check and guides, Staff tab (table, priority, voice, suspend, add and remove)
+
 ## 1.49.0 — 2026-10-04
 
 - S-01/S-02: Website widgets list with cards and weekly analytics, New widget, seven-tab widget editor with the Appearance design and a New chat live preview
