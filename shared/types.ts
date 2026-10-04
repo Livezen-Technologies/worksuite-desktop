@@ -478,6 +478,13 @@ export interface WebchatRingPrefs {
   shortcut: boolean;
   /** Ringtone volume, 0–100. */
   volume: number;
+  /**
+   * Where the ring plays (RING-42, RING-UI-08 "Ring on"): the system's output and the computer's own speakers when the
+   * output is a headset (default), or the system's output only. Unset: both.
+   */
+  ringOn?: 'both' | 'default';
+  /** ⌘⇧M (Live map) and ⌘⇧D (Live dashboard) from other apps (MAP-21, MAP-22). Unset: on. */
+  liveShortcuts?: boolean;
 }
 
 /**
@@ -673,6 +680,10 @@ export interface WebchatRingState {
   /** What the tone does now: off (none left unsilenced, Do not disturb, the organisation's cap), or which tone. */
   tone: 'off' | 'normal' | 'strong';
   volume: number;
+  /** My ringtone, kept on the server with my other ringing settings so every device sounds the same (RING-29). */
+  ringtone?: string;
+  /** Where the ring plays (RING-42): with a headset on, the speakers too, unless I chose the system's output only. */
+  ringOn?: 'both' | 'default';
   /** How a ring ended, said for a few seconds (RING-28); `kind` and the rest draw it as R-03 does. */
   outcome: WebchatRingOutcome | null;
   /**

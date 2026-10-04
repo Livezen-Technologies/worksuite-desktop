@@ -64,21 +64,76 @@ const PATTERNS: Record<ToneKind, { every: number; notes: Note[]; level: number }
   ringback: { every: 4_000, level: 0.05, notes: [{ hz: [440, 480], at: 0, len: 1.6 }] },
 };
 
-/** Starts a pattern at `volume` (0–1); returns the function that stops it. */
-export function playTone(kind: ToneKind, volume = 1): { stop: () => void; setVolume: (v: number) => void } {
-  const pattern = PATTERNS[kind];
-  let ctx: AudioContext | null = null;
-  let master: GainNode | null = null;
+/**
+ * The website-chat ringtones a person can choose (RING-29, P-01/P-02), the same names the web app offers and the server
+ * keeps for every device of theirs. Each moves the notes of the two chat tones — never the rhythm, which is what tells
+ * a chat from a call. Classic phone is the tone this app always played.
+ */
+export const RINGTONES = [
+  { id: 'classic', label: 'Classic phone', pitch: 1 },
+  { id: 'soft', label: 'Soft', pitch: 2 / 3 },
+  { id: 'bright', label: 'Bright', pitch: 4 / 3 },
+] as const;
+
+/** A ringtone name the server sent, or Classic phone for one this app does not know. */
+export function ringtoneId(id: string | null | undefined): (typeof RINGTONES)[number]['id'] {
+  return RINGTONES.find((t) => t.id === id)?.id ?? 'classic';
+}
+
+/** Where a ring plays (RING-42): the system's output, and the computer's own speakers too when that is a headset. */
+export type RingOn = 'both' | 'default';
+
+const SPEAKERS = /speaker|built-?in|internal/i;
+
+/**
+ * The speakers to ring on as well as the system's output (RING-UI-08 "Speakers too, so you hear it with the headset
+ * off"): none when the output already is the speakers or the system names no devices; else the first output that
+ * looks like the computer's own speakers and is not part of the same device as the output.
+ */
+export function speakersBesides(devices: ReadonlyArray<Pick<MediaDeviceInfo, 'kind' | 'deviceId' | 'groupId' | 'label'>>): string[] {
+  const outs = devices.filter((d) => d.kind === 'audiooutput');
+  const current = outs.find((d) => d.deviceId === 'default') ?? outs[0];
+  if (!current || SPEAKERS.test(current.label)) return [];
+  const speakers = outs.find((d) => d.deviceId !== 'default' && d.deviceId !== 'communications' && d.deviceId !== current.deviceId && (!d.groupId || d.groupId !== current.groupId) && SPEAKERS.test(d.label));
+  return speakers ? [speakers.deviceId] : [];
+}
+
+async function extraOutputs(): Promise<string[]> {
   try {
-    ctx = new AudioContext();
-    master = ctx.createGain();
-    master.gain.value = Math.max(0, Math.min(1, volume));
-    master.connect(ctx.destination);
+    return speakersBesides(await navigator.mediaDevices.enumerateDevices());
   } catch {
-    return { stop: () => undefined, setVolume: () => undefined };
+    return [];
   }
-  const play = () => {
-    if (!ctx || !master) return;
+}
+
+/**
+ * Starts a pattern at `volume` (0–1); returns the function that stops it. A website-chat tone takes the person's
+ * `ringtone`, and with `ringOn` 'both' plays on the computer's speakers too when the output is a headset.
+ */
+export function playTone(kind: ToneKind, volume = 1, opts: { ringtone?: string | null; ringOn?: RingOn } = {}): { stop: () => void; setVolume: (v: number) => void } {
+  const base = PATTERNS[kind];
+  const chat = kind === 'webchat' || kind === 'webchat-strong';
+  const pitch = chat ? (RINGTONES.find((t) => t.id === ringtoneId(opts.ringtone))?.pitch ?? 1) : 1;
+  const pattern = pitch === 1 ? base : { ...base, notes: base.notes.map((n) => ({ ...n, hz: n.hz.map((hz) => Math.round(hz * pitch)) })) };
+  let level = Math.max(0, Math.min(1, volume));
+  let stopped = false;
+  const outputs: Array<{ ctx: AudioContext; master: GainNode }> = [];
+  const open = (sinkId?: string): { ctx: AudioContext; master: GainNode } | null => {
+    try {
+      const ctx = new AudioContext();
+      const master = ctx.createGain();
+      master.gain.value = level;
+      master.connect(ctx.destination);
+      if (sinkId) void (ctx as AudioContext & { setSinkId?: (id: string) => Promise<void> }).setSinkId?.(sinkId).catch(() => undefined);
+      const out = { ctx, master };
+      outputs.push(out);
+      return out;
+    } catch {
+      return null;
+    }
+  };
+  if (!open()) return { stop: () => undefined, setVolume: () => undefined };
+  const playOn = ({ ctx, master }: { ctx: AudioContext; master: GainNode }) => {
     const t0 = ctx.currentTime + 0.05;
     for (const n of pattern.notes) {
       const g = ctx.createGain();
@@ -97,16 +152,26 @@ export function playTone(kind: ToneKind, volume = 1): { stop: () => void; setVol
       }
     }
   };
+  const play = () => {
+    for (const out of outputs) playOn(out);
+  };
   play();
   const timer = setInterval(play, pattern.every);
+  // The speakers join from the next ring on, once the system has said which they are.
+  if (chat && (opts.ringOn ?? 'both') === 'both') {
+    void extraOutputs().then((ids) => {
+      for (const id of ids) if (!stopped) open(id);
+    });
+  }
   return {
     stop: () => {
+      stopped = true;
       clearInterval(timer);
-      void ctx?.close();
-      ctx = null;
+      for (const { ctx } of outputs.splice(0)) void ctx.close();
     },
     setVolume: (v) => {
-      if (master) master.gain.value = Math.max(0, Math.min(1, v));
+      level = Math.max(0, Math.min(1, v));
+      for (const { master } of outputs) master.gain.value = level;
     },
   };
 }

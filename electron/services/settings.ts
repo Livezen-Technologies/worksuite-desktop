@@ -67,7 +67,7 @@ export function defaultPreferences(): Preferences {
     pinnedApps: [],
     shortcuts: {},
     backgroundServices: { notifications: true, realtime: true },
-    webchatRinging: { window: true, duringDnd: 'card', shortcut: true, volume: 80 },
+    webchatRinging: { window: true, duringDnd: 'card', shortcut: true, volume: 80, ringOn: 'both', liveShortcuts: true },
     webchatFollowUps: { ...FOLLOW_UP_DEFAULTS },
     ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false, autoMinimizeWhenWorking: true },
     meetRecording: { method: 'cloud', quality: '720p', layout: 'grid', folder: 'Meeting Recordings', localFolder: join(videos, 'WorkSuite Recordings'), keepLocal: '7' },

@@ -37,15 +37,17 @@ export function useRingState(): WebchatRingState {
   return s;
 }
 
-/** Plays the tone while the state says so, at the person's volume (RING-21). */
+/** Plays the tone while the state says so, at the person's volume, in their ringtone, where they chose (RING-21, RING-42). */
 export function useRingTone(s: WebchatRingState, enabled = true): void {
   const kind = enabled ? s.tone : 'off';
   const volume = s.volume / 100;
+  const ringtone = s.ringtone ?? 'classic';
+  const ringOn = s.ringOn ?? 'both';
   useEffect(() => {
     if (kind === 'off') return;
-    const t = playTone(kind === 'strong' ? 'webchat-strong' : 'webchat', volume);
+    const t = playTone(kind === 'strong' ? 'webchat-strong' : 'webchat', volume, { ringtone, ringOn });
     return () => t.stop();
-  }, [kind, volume]);
+  }, [kind, volume, ringtone, ringOn]);
 }
 
 /**

@@ -22,7 +22,7 @@ import { Icon } from '../../components/Icon';
 import { Button, Chip, Modal, Switch, TextField, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
-import { playOnce, playTone } from '../calls/tones';
+import { playOnce, playTone, ringtoneId, RINGTONES, type RingOn } from '../calls/tones';
 import { useRingState } from '../chat/website/Ringing';
 import { apiGet, request } from '../../core/api';
 import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
@@ -46,7 +46,7 @@ import { UpdatesCard } from './UpdatesCard';
 const SECTIONS = [
   { id: 'general', label: 'General', icon: 'globe' },
   { id: 'preferences', label: 'Preferences', icon: 'settings' },
-  { id: 'notifications', label: 'Notifications', icon: 'bell' },
+  { id: 'notifications', label: 'Notifications & calls', icon: 'bell' },
   // The app launcher's look, apps, groups, order and shortcut (worksuite-desktop#201).
   { id: 'launcher', label: 'App launcher', icon: 'grid' },
   { id: 'security', label: 'Security', icon: 'lock' },
@@ -387,7 +387,7 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
   const hasChat = useStore(app, (s) => s.apps.some((a) => a.id === 'chat'));
   return (
     <>
-      <H title="Notifications" hint="How this computer shows notifications — even when WorkSuite's window is closed, from the tray." />
+      <H title="Notifications & calls" hint="How this computer shows notifications — even when WorkSuite's window is closed, from the tray." />
       <Row label="What reaches you, and when" hint="Each app by channel, quiet hours, and how this computer shows them.">
         <Button icon="bell" onClick={() => navigate('/notifications/settings')}>
           Open notification settings
@@ -443,85 +443,137 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
 }
 
 /**
- * Website chats ringing on this computer (RING-UI-08): the call window, Do
- * not disturb, the join shortcut, the ringtone, and starting with the
- * computer so a chat can ring before anything is opened (RING-48).
+ * Website chat ringing on this computer (RING-UI-08, design P-02 "Desktop › Notifications & calls"): which device rings,
+ * the ringtone and its test, where it plays, the call window, system Focus / Do not disturb, starting at login and
+ * keeping to the tray (RING-48), and the shortcuts; then the volume, where to ring and the Live shortcuts.
  */
-function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
+export function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
   const r = prefs.webchatRinging;
   const set = (patch: Partial<Preferences['webchatRinging']>) => void updatePrefs({ webchatRinging: { ...r, ...patch } });
   const [testing, setTesting] = useState(false);
   const ring = useRingState();
   const qc = useQueryClient();
-  // Where my ring plays is kept on the server, for every device of mine (RING-10, RING-29); an older server has no say.
-  const where = useQuery({ queryKey: ['website', 'ring-prefs'], queryFn: ({ signal }) => apiGet<{ prefs: { ring_where: RingWhere } }>('/api/chat/ring/prefs', undefined, signal), retry: false });
-  const setWhere = async (v: RingWhere) => {
+  // My ringtone and where my ring plays are kept on the server, for every device of mine (RING-10, RING-29); an older server has no say.
+  const server = useQuery({ queryKey: ['website', 'ring-prefs'], queryFn: ({ signal }) => apiGet<{ prefs: { ring_where: RingWhere; ringtone?: string } }>('/api/chat/ring/prefs', undefined, signal), retry: false });
+  const save = async (body: { ring_where?: RingWhere; ringtone?: string }) => {
     try {
-      await request('PUT', '/api/chat/ring/prefs', { body: { ring_where: v } });
+      await request('PUT', '/api/chat/ring/prefs', { body });
       void qc.invalidateQueries({ queryKey: ['website', 'ring-prefs'] });
     } catch (e) {
       toast('error', errorMessage(e));
     }
   };
+  const ringtone = ringtoneId(server.data?.prefs.ringtone ?? ring.ringtone);
+  const ringOn = r.ringOn ?? 'both';
   const test = () => {
     if (testing) return;
     setTesting(true);
-    const t = playTone('webchat', r.volume / 100);
+    const t = playTone('webchat', r.volume / 100, { ringtone, ringOn });
     setTimeout(() => {
       t.stop();
       setTesting(false);
     }, 3_000);
   };
+  const startLock = isLocked('startWithOs');
+  const keys = (mac: string, other: string) => <kbd className="rounded-[6px] border border-line bg-subtle px-2 py-1 font-mono text-[12px] text-ink">{isMac ? mac : other}</kbd>;
   return (
     <>
-      <h3 className="mt-8 mb-1 text-[16px] font-bold text-ink">Website chats</h3>
-      <p className="mb-1 text-[13px] text-ink-2">A chat from your websites rings on this computer until someone joins it — while WorkSuite runs, with its window closed too.</p>
+      <h3 className="mt-8 mb-1 text-[22px] font-bold text-ink">Website chat ringing on this computer</h3>
+      <p className="mb-3 text-[14px] text-ink-2">A new website chat or visitor call rings here like a phone until someone joins.</p>
       {ring.ringHere === true ? (
-        <p className="my-2 flex items-center gap-2 rounded-[10px] bg-success-bg px-3 py-2 text-[13px] text-success"><Icon name="check-circle" size={15} /> This computer rings for you. Your browser tabs show the chat without sound.</p>
+        <p className="mb-3 flex items-center gap-3 rounded-[12px] border border-success/30 bg-success-bg px-4 py-3 text-[13px] text-success"><Icon name="check" size={18} /> This computer rings for you. Your browser tabs show the card silently.</p>
       ) : ring.ringHere === false ? (
-        <p className="my-2 flex items-center gap-2 rounded-[10px] bg-subtle px-3 py-2 text-[13px] text-ink-2"><Icon name="bell-off" size={15} /> Another of your devices rings for you. This computer shows the chat without sound.</p>
+        <p className="mb-3 flex items-center gap-3 rounded-[12px] border border-line bg-subtle px-4 py-3 text-[13px] text-ink-2"><Icon name="bell-off" size={18} /> Another of your devices rings for you. This computer shows the chat without sound.</p>
       ) : null}
-      {where.isSuccess ? (
-        <Row label="Where to ring" hint="Only one of your devices rings at a time; the others show the chat without sound.">
+      <div className="rounded-[12px] border border-line bg-surface px-[18px] [&>div:last-child]:border-b-0">
+        <Row label="Ringtone">
+          <div className="flex items-center gap-3">
+            {server.isSuccess ? (
+              <Select
+                label="Ringtone"
+                value={ringtone}
+                className="w-[210px]"
+                options={RINGTONES.map((t) => ({ value: t.id, label: t.label }))}
+                onValueChange={(v) => void save({ ringtone: v })}
+              />
+            ) : null}
+            <Button onClick={test} disabled={testing}>
+              {testing ? 'Ringing…' : 'Test ring'}
+            </Button>
+          </div>
+        </Row>
+        <Row label="Ring on" hint="Speakers too, so you hear it with the headset off.">
+          <Select<RingOn>
+            label="Ring on"
+            value={ringOn}
+            className="w-[280px]"
+            options={[
+              { value: 'both', label: 'Speakers and headset' },
+              { value: 'default', label: 'System output only' },
+            ]}
+            onValueChange={(v) => set({ ringOn: v })}
+          />
+        </Row>
+        <Row label="Call window on top of other apps" hint="Bottom-right, even with WorkSuite closed to the tray.">
+          <Switch label="Call window on top of other apps" checked={r.window} onChange={(v) => set({ window: v })} />
+        </Row>
+        <Row label="During Focus / Do not disturb" hint="The window still appears; this decides the sound.">
+          <Select
+            label="During Focus / Do not disturb"
+            value={r.duringDnd}
+            className="w-[280px]"
+            options={[
+              { value: 'card', label: 'Show the window without ringing' },
+              { value: 'at_risk', label: 'Ring only when a chat is at risk' },
+              { value: 'ring', label: 'Ring as usual' },
+            ]}
+            onValueChange={(v) => set({ duringDnd: v })}
+          />
+        </Row>
+        <Row label="Start at login and keep in the tray" lock={startLock}>
+          <Switch
+            label="Start at login and keep in the tray"
+            checked={prefs.startWithOs && prefs.minimizeToTray}
+            disabled={!!startLock}
+            onChange={(v) => void updatePrefs(v ? { startWithOs: true, minimizeToTray: true } : { startWithOs: false })}
+          />
+        </Row>
+        <Row label="Shortcuts">
+          <div className="flex flex-wrap items-center justify-end gap-3">
+            <span className="text-[12px] text-ink-2">Join chat</span>
+            {keys('⌘⇧J', 'Ctrl+Shift+J')}
+            <span className="text-[12px] text-ink-2">Answer call</span>
+            {keys('⌘⇧A', 'Ctrl+Shift+A')}
+            <Switch label="Shortcuts" checked={r.shortcut} onChange={(v) => set({ shortcut: v })} />
+          </div>
+        </Row>
+      </div>
+      <Row label="Volume" hint="At risk, high, urgent and VIP chats use a stronger tone.">
+        <input type="range" min={0} max={100} step={5} value={r.volume} aria-label="Volume" onChange={(e) => set({ volume: Number(e.target.value) })} className="w-40" />
+      </Row>
+      {server.isSuccess ? (
+        <Row label="Where to ring" hint="Only one of your devices rings at a time.">
           <Select<RingWhere>
             label="Where to ring"
-            value={where.data.prefs.ring_where}
+            value={server.data.prefs.ring_where}
             options={[
-              { value: 'desktop_first', label: 'This app when it is running, else the browser' },
+              { value: 'desktop_first', label: 'Desktop app when running, else browser' },
               { value: 'browser', label: 'The browser first' },
               { value: 'all', label: 'Every device' },
             ]}
-            onValueChange={(v) => void setWhere(v)}
+            onValueChange={(v) => void save({ ring_where: v })}
           />
         </Row>
       ) : null}
-      <Row label="Ring over other apps" hint="A small window at the bottom right, over full-screen apps where the system allows. Off: the bar under your tabs and the tray only.">
-        <Switch label="Ring over other apps" checked={r.window} onChange={(v) => set({ window: v })} />
-      </Row>
-      <Row label="During Do not disturb" hint="Quiet hours, or notifications paused.">
-        <Select
-          label="During Do not disturb"
-          value={r.duringDnd}
-          options={[
-            { value: 'card', label: 'Show the window, no sound' },
-            { value: 'at_risk', label: 'Ring only when a chat is at risk' },
-            { value: 'ring', label: 'Ring as usual' },
-          ]}
-          onValueChange={(v) => set({ duringDnd: v })}
-        />
-      </Row>
-      <Row label={`Join with ${isMac ? '⌘⇧J' : 'Ctrl+Shift+J'}`} hint="From any app, while a chat is ringing. Released as soon as nothing rings.">
-        <Switch label="Join shortcut" checked={r.shortcut} onChange={(v) => set({ shortcut: v })} />
-      </Row>
-      <Row label="Ringtone volume" hint="At risk, high, urgent and VIP chats use a stronger tone.">
-        <div className="flex items-center gap-3">
-          <input type="range" min={0} max={100} step={5} value={r.volume} aria-label="Ringtone volume" onChange={(e) => set({ volume: Number(e.target.value) })} className="w-40" />
-          <Button onClick={test} disabled={testing}>
-            {testing ? 'Ringing…' : 'Test'}
-          </Button>
+      <Row label="Live map and dashboard" hint="From other apps, while WorkSuite is not in front.">
+        <div className="flex flex-wrap items-center justify-end gap-3">
+          <span className="text-[12px] text-ink-2">Live map</span>
+          {keys('⌘⇧M', 'Ctrl+Shift+M')}
+          <span className="text-[12px] text-ink-2">Live dashboard</span>
+          {keys('⌘⇧D', 'Ctrl+Shift+D')}
+          <Switch label="Live map and dashboard shortcuts" checked={r.liveShortcuts !== false} onChange={(v) => set({ liveShortcuts: v })} />
         </div>
       </Row>
-      <Toggle k="startWithOs" prefs={prefs} label="Start WorkSuite with this computer" hint="So website chats can ring before you open anything." />
       <FollowUpPrefs prefs={prefs} />
     </>
   );

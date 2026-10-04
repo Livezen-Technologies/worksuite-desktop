@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.53.0 — 2026-10-04
+
+- P-02: Notifications & calls settings to the design (ringtone and Test ring, ring on speakers too, call window on top, Focus/Do not disturb incl. system Focus, start at login and keep in tray, shortcuts incl. Live map and dashboard on/off)
+
 ## 1.52.0 — 2026-10-04
 
 - S-08/S-09/S-10: Conversation starters (table, reorder, instant answer, preview), Saved replies (search, per-widget, monthly use, composer preview), Business hours (timezone, open-now pill, week editor and chart, offline message)

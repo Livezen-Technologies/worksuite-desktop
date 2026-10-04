@@ -48,7 +48,7 @@ describe('the website-chat call window (RING-UI-06)', () => {
     expect(screen.getByText('Incoming website chat')).toBeTruthy();
     expect(screen.getByText('↵ send · Ctrl+Shift+J join')).toBeTruthy();
     // The tone starts in an effect, which React may run a moment after the name is on screen (a slow CI runner).
-    await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat', 0.8));
+    await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat', 0.8, { ringtone: 'classic', ringOn: 'both' }));
   });
 
   it('a quick reply goes into the box, and Send & join joins, sends and opens the thread in one step (#225, R-05)', async () => {
@@ -119,7 +119,7 @@ describe('the website-chat call window (RING-UI-06)', () => {
     act(() => push?.(state({ tone: 'strong', chats: [chat({ id: 1, atRisk: true, visitor: 'Kamal' }), chat({ id: 2, mine: true, visitor: 'Ruwan', preview: 'Hello' })] })));
     expect(screen.getByText('2 website chats ringing')).toBeTruthy();
     expect(screen.getAllByText('At risk').length).toBeGreaterThan(0);
-    expect(vi.mocked(playTone)).toHaveBeenLastCalledWith('webchat-strong', 0.8);
+    expect(vi.mocked(playTone)).toHaveBeenLastCalledWith('webchat-strong', 0.8, { ringtone: 'classic', ringOn: 'both' });
 
     const ruwan = screen.getByRole('listitem', { name: 'Ruwan' });
     expect(within(ruwan).getByText('Hello')).toBeTruthy();
@@ -254,7 +254,7 @@ describe('a visitor\'s voice call in the call window and the bar (ENH-WCHAT-05, 
     expect(screen.getByText('1 more waiting')).toBeTruthy();
     expect(screen.getByLabelText('Ctrl+Shift+A to answer')).toBeTruthy();
     expect(screen.queryByText('Nimali')).toBeNull();
-    await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat-strong', 0.8));
+    await waitFor(() => expect(vi.mocked(playTone)).toHaveBeenCalledWith('webchat-strong', 0.8, { ringtone: 'classic', ringOn: 'both' }));
     fireEvent.click(screen.getByRole('button', { name: 'Answer' }));
     expect(call).toHaveBeenCalledWith('ring:call', { id: 31, accept: true });
     fireEvent.click(screen.getByRole('button', { name: 'Decline' }));

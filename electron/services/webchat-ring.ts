@@ -25,6 +25,8 @@ export interface PendingAnswer {
   ringing?: RingingEntry[];
   /** Whether this device plays my ring (RING-10); null when the server does not choose. */
   ring_here?: boolean | null;
+  /** My ringing settings as the server keeps them (RING-29): the ringtone is what this computer plays. */
+  ring_prefs?: { ringtone?: string | null } | null;
   /** Invitations and transfers waiting for me (ENH-WCHAT-03); absent on a server without team chats. */
   handoffs?: HandoffEntry[];
   /** Visitors' voice calls ringing for me (ENH-WCHAT-05); absent on a server without them, or for whoever does not take calls. */
@@ -477,6 +479,8 @@ export class WebchatRinger {
   private ringSeconds = 0;
   /** Whether the server has this computer play the ring; null when it does not choose (no ring sessions there). */
   private ringHere: boolean | null = null;
+  /** My ringtone as the server keeps it (RING-29, P-02); classic until it says. */
+  private ringtone = 'classic';
   /** The server keeps ring sessions: silence is sent to it, and its list is the truth. */
   private sessions = false;
   /** The server has no heartbeat (an older WorkSuite): this computer decides alone. */
@@ -567,6 +571,8 @@ export class WebchatRinger {
       mic: this.mic(),
       tone: toneFor(chats, { ringSeconds: this.ringSeconds, quiet: this.deps.quiet(), duringDnd: prefs.duringDnd, now, ringHere: this.ringHere, handoffs: handoffs.length, calls: calls.length }),
       volume: Math.max(0, Math.min(100, prefs.volume)),
+      ringtone: this.ringtone,
+      ringOn: prefs.ringOn ?? 'both',
       // Behind the lock an outcome says what happened, never to whom or by whom.
       outcome: hidden && this.outcome ? hideOutcome(this.outcome) : this.outcome,
       youJoined: hidden ? null : this.youJoined,
@@ -1264,6 +1270,8 @@ export class WebchatRinger {
       this.ringSeconds = Math.max(0, Number(answer?.ring_seconds ?? 0) || 0);
       this.sessions = Array.isArray(answer?.ringing);
       if (typeof answer?.ring_here === 'boolean') this.ringHere = answer.ring_here;
+      const tone = answer?.ring_prefs?.ringtone;
+      if (typeof tone === 'string' && /^[a-z0-9_-]{1,20}$/.test(tone)) this.ringtone = tone;
       const next = mergeAnswer(answer ?? {}, this.chats);
       this.chats = new Map(next.map((c) => [c.id, c]));
       for (const cid of this.drafts.keys()) if (!this.chats.has(cid)) this.drafts.delete(cid);

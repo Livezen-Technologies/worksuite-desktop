@@ -5,6 +5,18 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.180 — 2026-10-04
+
+- **Notifications & calls (P-02).** Settings › Notifications & calls follows the design: "Website chat ringing on this
+  computer", with the ringtone and **Test ring** (the same tone you chose on the web), where the ring plays, the call
+  window on top of other apps, what Focus or Do not disturb does, start at login and keep in the tray, and the
+  shortcuts (Join chat ⌘⇧J, Answer call ⌘⇧A). The ⌘⇧M and ⌘⇧D shortcuts for the Live map and dashboard can now be
+  turned off.
+- **Speakers too (changed).** With a headset as the output, a website-chat ring now also plays on the computer's own
+  speakers, so you hear it with the headset off. "System output only" turns this off.
+- **System Focus (changed).** Focus on macOS and Do not disturb on GNOME now count as Do not disturb: by default the
+  call window still appears, without the tone. Windows Focus Assist can't be read by apps.
+
 ## 0.2.179 — 2026-10-04
 
 - **Conversation starters (S-08).** Setup › Conversation starters is now in the app: each widget's starters with

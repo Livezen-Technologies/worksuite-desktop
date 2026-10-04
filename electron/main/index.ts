@@ -63,6 +63,7 @@ import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
+import { SystemFocus } from '../services/system-focus';
 import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '../services/live-desk';
 import { QuickAsk } from '../services/quick-ask';
 import { AiService } from '../services/ai';
@@ -1271,6 +1272,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // come without sound, until then — as Do not disturb kept to the card would (RING-47). Nothing else is paused.
   let liveSilencedUntil = 0;
   const liveSilenced = (): boolean => liveSilencedUntil > Date.now();
+  // The system's own Focus / Do not disturb counts as Do not disturb for the ring, where it can be read (RING-47).
+  const systemFocus = new SystemFocus({ onChange: () => webchat.refresh() });
+  systemFocus.start();
   // Answers a visitor's voice call (ENH-WCHAT-05), held only while one rings.
   const ANSWER_SHORTCUT = 'CommandOrControl+Shift+A';
   let answerHeld = false;
@@ -1341,7 +1345,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     quiet: () => {
       const p = settings.effective();
-      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null || liveSilenced();
+      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null || liveSilenced() || systemFocus.active();
     },
     // With a call just answered, the thread joins its audio (`call=`).
     open: (id, callId, then) => navigate({ route: `/chat?view=website&website=${id}${callId ? `&call=${callId}` : ''}${then === 'transfer' ? '&transfer=1' : ''}`, source: 'notification' }),
@@ -1449,7 +1453,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     allowed: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('chat', sessionCtl.visibleApps()) && settings.effective().notificationsEnabled !== false,
     quiet: () => {
       const p = settings.effective();
-      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null || liveSilenced();
+      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null || liveSilenced() || systemFocus.active();
     },
     duringDnd: () => (liveSilenced() ? 'card' : settings.effective().webchatRinging.duringDnd),
     sound: () => settings.effective().notificationSounds,
@@ -1463,7 +1467,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const LIVE_DASHBOARD_SHORTCUT = 'CommandOrControl+Shift+D';
   let liveKeysHeld = false;
   const syncLiveKeys = (): void => {
-    const want = !!livePulse.get() && !lock.isLocked() && !BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused());
+    // Unless turned off in Settings › Notifications & calls › Shortcuts.
+    const want = settings.effective().webchatRinging.liveShortcuts !== false && !!livePulse.get() && !lock.isLocked() && !BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused());
     if (want === liveKeysHeld) return;
     if (want) {
       try {
@@ -2372,6 +2377,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
     applyMailtoHandler(prefs.mailtoHandler === true);
     webchat.refresh();
+    syncLiveKeys();
     syncQuickAsk();
     broadcast('settings:changed', prefs);
     if (prefs.backgroundServices.realtime && sessionCtl.isReady()) realtime.start();
