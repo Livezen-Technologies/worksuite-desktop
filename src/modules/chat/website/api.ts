@@ -136,6 +136,8 @@ export interface WebsitePerson {
   invited_by?: number | null;
   invited_by_name?: string | null;
   joined_at?: string | null;
+  /** At their desk or not, as Team Chat says it (C-08, UX-DRW-03); absent from an older server. */
+  presence?: 'online' | 'busy' | 'dnd' | 'away' | 'offline';
 }
 
 /** An invitation or transfer still waiting for an answer, in its chat's "In this chat" panel. */
@@ -149,6 +151,8 @@ export interface WebsitePending {
   to_users: number[];
   note: string | null;
   expires_at: string | null;
+  /** Seconds left by the server's clock when it answered (C-08): the panel's countdown, true on a skewed computer. */
+  expires_in?: number | null;
   created_at: string | null;
 }
 

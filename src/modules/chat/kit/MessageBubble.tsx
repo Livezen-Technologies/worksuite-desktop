@@ -50,11 +50,19 @@ const CORNERS: Record<'left' | 'right', Record<Position, string>> = {
 
 export const BOT_TONE = 'border border-[#B5DDE0] bg-[#E3F4F5] text-ink dark:border-[#1D6F78]/50 dark:bg-[#12393C]';
 export const NOTE_TONE = 'border border-dashed border-[#D9A441] bg-[#FDF4E3] text-[#6B4A10] dark:bg-warning-bg dark:text-ink';
+/** A colleague's reply on our side of a website chat (C-08): tinted with their name colour (`--c`), so whose is whose shows. */
+export const COLLEAGUE_TONE = 'border border-[color:color-mix(in_srgb,var(--c)_28%,var(--color-surface))] bg-[color:color-mix(in_srgb,var(--c)_10%,var(--color-surface))] text-ink';
+
+/** Written on our side by somebody else: a colleague in a website chat with several staff (C-08, TEAM-05). */
+export function isColleague(m: Pick<KitMessage, 'own'> & { author: { role: KitRole } }): boolean {
+  return m.own && m.author.role === 'staff';
+}
 
 /** The bubble's colours: our side, the other side, the bot, or a staff-only note. */
 export function bubbleTone(m: Pick<KitMessage, 'own' | 'internal'> & { author: { role: KitRole } }, look: Look): string {
   if (m.internal) return NOTE_TONE;
   if (m.author.role === 'bot') return BOT_TONE;
+  if (look === 'page' && isColleague(m)) return COLLEAGUE_TONE;
   if (look === 'drawer') return m.own ? 'bg-[#DCE3FB] dark:bg-[#26366E]' : 'bg-surface dark:bg-well';
   return m.own ? 'bg-primary text-white' : 'border border-line bg-surface text-ink';
 }
@@ -63,7 +71,7 @@ export function bubbleTone(m: Pick<KitMessage, 'own' | 'internal'> & { author: {
 function accentOf(m: KitMessage, look: Look): string {
   if (m.internal || m.author.role === 'bot') return 'text-primary';
   if (look === 'drawer') return m.own ? 'text-primary dark:text-[#B4C3FF]' : 'text-primary';
-  return m.own ? 'text-white' : 'text-primary';
+  return m.own && !isColleague(m) ? 'text-white' : 'text-primary';
 }
 
 export function KitAvatar({ author, size }: { author: KitMessage['author']; size: number }) {
@@ -71,11 +79,15 @@ export function KitAvatar({ author, size }: { author: KitMessage['author']; size
   return person ? <UserAvatar userId={author.id} name={author.name} size={size} src={author.avatar} /> : <Avatar name={author.name} src={author.avatar} size={size} />;
 }
 
-/** "Internal note — only staff see this" (TEAM-60). */
-export function InternalLabel() {
+/**
+ * "Internal note — only staff see this" (TEAM-60); with its author, "INTERNAL NOTE · NUWAN · ONLY STAFF SEE THIS" as the
+ * several-staff design labels it (C-08), the note naming who wrote it in place of the name above other bubbles.
+ */
+export function InternalLabel({ author }: { author?: string | null } = {}) {
+  const first = author?.trim().split(/\s+/)[0];
   return (
-    <span className="flex items-center gap-1 text-[11px] font-bold text-[#7A4308] dark:text-warning">
-      <Icon name="lock" size={10} /> {text('Internal note — only staff see this')}
+    <span className={cx('flex items-center gap-1 font-bold text-[#7A4308] dark:text-warning', first ? 'text-[10px] tracking-[0.6px] uppercase' : 'text-[11px]')}>
+      <Icon name="lock" size={10} /> {first ? text('Internal note · {name} · only staff see this', { name: first }) : text('Internal note — only staff see this')}
     </span>
   );
 }
@@ -90,7 +102,7 @@ function ReplyQuote({ m, look, inside }: { m: KitMessage; look: Look; inside: bo
   if (m.replyRemoved && !m.reply) return <div className="mb-1 border-l-[3px] border-line px-2 py-1 text-[11.5px] text-ink-3 italic">{text('A removed message')}</div>;
   const q = m.reply;
   if (!q) return null;
-  const onIndigo = inside && look === 'page' && m.own && !m.internal;
+  const onIndigo = inside && look === 'page' && m.own && !m.internal && !isColleague(m);
   if (look === 'drawer') {
     return (
       <div data-reply-quote className={cx('mb-1 rounded-[6px] border-l-[3px] border-primary bg-black/[.04] px-2 py-1 text-[11.5px] dark:bg-white/5', m.own && 'dark:border-[#B4C3FF]')}>
@@ -180,7 +192,9 @@ function PageBubble({ m, position, caps, handlers: h, renderers, cardContinuatio
   const carded = named || (!!m.chat?.card && !m.deleted);
   const items = messageActionItems(m, caps, h, 'page', setDeleting);
   const reactable = canReact(m, caps, h);
-  const header = !cardContinuation && first && (!own || !!m.signed) && m.author.role !== 'bot';
+  // A note names its author in its label instead (C-08).
+  const header = !cardContinuation && first && (!own || !!m.signed) && m.author.role !== 'bot' && !m.internal;
+  const colleague = isColleague(m);
   const files = !m.deleted ? (m.files ?? []) : [];
   const accent = accentOf(m, 'page');
   const attachment = files.length ? <MessageAttachments files={files} at={m.at} look="page" own={own} voice={caps.voice || m.chat?.type === 'voice'} seed={m.id} accent={accent} /> : null;
@@ -194,16 +208,18 @@ function PageBubble({ m, position, caps, handlers: h, renderers, cardContinuatio
       {!own ? first && !cardContinuation ? <KitAvatar author={m.author} size={30} /> : <span aria-hidden="true" className="w-[30px] shrink-0" /> : null}
       <div data-bubble className={cx('relative flex min-w-0 flex-col gap-1', own ? 'items-end' : 'items-start', carded ? 'w-[400px] max-w-full' : 'max-w-[560px]')}>
         {!carded ? actions : null}
-        {m.internal && first ? <InternalLabel /> : null}
+        {m.internal && first ? <InternalLabel author={m.signed ? m.author.name : null} /> : null}
         {header ? (
-          <span className="text-[12px]">
-            <b className="text-ink">{m.author.name}</b> <span className="text-ink-3">{!carded ? timeLabel(m.at) : null}</span>
+          // Each staff message named, with the colleague's photo; my own say "You" (C-08, TEAM-05).
+          <span className="flex items-center gap-1.5 text-[12px]">
+            {colleague ? <KitAvatar author={m.author} size={16} /> : null}
+            <b className="text-ink">{m.signed && m.author.role === 'self' ? text('You') : m.author.name}</b> <span className="text-ink-3">{!carded ? timeLabel(m.at) : null}</span>
           </span>
         ) : null}
         {!inBubble && !m.deleted && !carded ? <ReplyQuote m={m} look="page" inside={false} /> : null}
         {m.urgent && !m.deleted ? <span className="text-[10.5px] font-bold tracking-[0.5px] text-danger uppercase">Urgent</span> : null}
         {inBubble ? (
-          <div data-bubble-body className={cx('whitespace-pre-wrap break-words px-[13px] py-[9px] text-[13.5px] leading-[1.55] selectable', bubbleTone(m, 'page'), CORNERS[own ? 'right' : 'left'][position])}>
+          <div data-bubble-body style={colleague ? { ['--c' as string]: nameColour(m.author.name) } : undefined} className={cx('whitespace-pre-wrap break-words px-[13px] py-[9px] text-[13.5px] leading-[1.55] selectable', bubbleTone(m, 'page'), CORNERS[own ? 'right' : 'left'][position])}>
             {m.author.role === 'bot' ? <BotLabel name={m.author.name} /> : null}
             <ReplyQuote m={m} look="page" inside />
             <span>

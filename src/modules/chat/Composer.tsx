@@ -34,7 +34,8 @@ import { transcript, useChatSavedReplies, type RepliesState, type Turn } from '.
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
-import type { WebsiteConversation } from './website/api';
+import { team, useAgents, type WebsiteConversation } from './website/api';
+import { NOTE_TONE } from './kit/MessageBubble';
 import { usePresence } from './presence';
 
 /**
@@ -73,7 +74,19 @@ export interface WebsiteChannel {
   conversationId: number;
   replies: SavedReply[];
   maxUploadKb?: number;
+  /**
+   * The Internal note tab (C-08, TEAM-60, TEAM-61): this same box writes a note only staff see — amber and dashed as the
+   * note's bubble is, words only, @ to mention a colleague, who is notified. It never goes through the visitor's outbox,
+   * and colleagues see "typing" for it while the visitor never does (LIVE-03).
+   */
+  note?: boolean;
 }
+
+/** Where an unsent internal note waits: beside the reply's draft, never mixed with it (C-08). */
+export const websiteNoteDraftKey = (conversationId: number): { module: string; context: string } => {
+  const k = websiteDraftKey(conversationId);
+  return { module: k.module, context: `${k.context}:note` };
+};
 
 /** At most one "typing" signal per few seconds; "stopped" after a pause or on send. */
 const TYPING_EVERY = 4_000;
@@ -120,8 +133,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 }) {
   const qc = useQueryClient();
   const site = website ?? null;
-  // A website draft keeps the key the website thread always used, so none is lost in the move (RDC-06).
-  const draft = useDraft<string>(channel?.draftModule ?? (site ? websiteDraftKey(site.conversationId).module : 'chat'), channel?.draftContext ?? (site ? websiteDraftKey(site.conversationId).context : `room:${roomId}`), '');
+  const note = !!site?.note;
+  // A website draft keeps the key the website thread always used, so none is lost in the move (RDC-06); a note has its own.
+  const siteKey = site ? (note ? websiteNoteDraftKey(site.conversationId) : websiteDraftKey(site.conversationId)) : null;
+  const draft = useDraft<string>(channel?.draftModule ?? siteKey?.module ?? 'chat', channel?.draftContext ?? siteKey?.context ?? `room:${roomId}`, '');
   const canUrgent = useStore(app, (s) => !site && !channel && !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
   const transfers = useStore(app, (s) => s.transfers);
   const [sending, setSending] = useState(false);
@@ -158,7 +173,19 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     enabled: group && asking !== null,
     staleTime: 30_000,
   });
-  const found = asking ? suggestions.data : undefined;
+  // In a note, @ names a colleague who answers this website's chats (TEAM-61): the invite picker's list, not a room's.
+  const colleagues = useAgents(note, site?.conversationId);
+  const myId = useStore(app, (s) => s.auth?.user?.id ?? null);
+  const noteFound = (word: string): Mentionable => ({
+    everyone: [],
+    teams: [],
+    departments: [],
+    people: (colleagues.data?.agents ?? [])
+      .filter((a) => String(a.id) !== String(myId) && a.name.toLowerCase().includes(word.toLowerCase()))
+      .slice(0, 8)
+      .map((a) => ({ type: 'user', id: a.id, name: a.name, detail: a.department ?? null })),
+  });
+  const found = asking ? (note ? noteFound(asking.word) : suggestions.data) : undefined;
   const people = found?.people ?? [];
   const options = found ? [...found.everyone, ...people, ...found.teams, ...found.departments].slice(0, 10) : [];
   const presenceOf = usePresence(people.map((p) => p.id));
@@ -184,6 +211,11 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     });
 
   const stage = (all: Staged[]) => {
+    // A note is words only (TEAM-60): files go to the visitor, from Reply to visitor.
+    if (note) {
+      toast('error', 'A note is words only. Attach files from Reply to visitor.');
+      return;
+    }
     // What a visitor cannot receive is refused here, with the reason, before anything is uploaded (RDC-04).
     const items = channel ? all.filter((it) => {
       if (it.kind !== 'blob') { toast('error', 'Choose channel files using Attach.'); return false; }
@@ -219,7 +251,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     if (channel) return;
     // A website visitor sees "Nuwan is typing…" at once, and it goes at once on send, clear or blur (LIVE-03, LIVE-04).
     if (site) {
-      void apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/typing`, { state }).catch(() => undefined);
+      // Writing a note: colleagues see "Nimal (a note)", the visitor nothing (LIVE-03, C-08).
+      void apiPost(`/api/chat/widget-admin/conversations/${site.conversationId}/typing`, note ? { state, internal: true } : { state }).catch(() => undefined);
       return;
     }
     void apiPost('/api/chat/typing', { room_id: Number(roomId), state }).catch(() => undefined);
@@ -309,6 +342,19 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 
   /** Words go through the offline queue (urgent ones only while online, so they are never late). */
   const sendWords = async (words: string, asUrgent: boolean): Promise<boolean> => {
+    if (site && note) {
+      // A note goes straight to the server, never the visitor's outbox; only colleagues still named in it are mentioned.
+      const named = picked.current.filter((t) => t.type === 'user' && words.includes(`@${t.name}`)).map((t) => t.id);
+      try {
+        await team.note(site.conversationId, words, named);
+      } catch (e) {
+        toast('error', errorMessage(e));
+        return false;
+      }
+      picked.current = [];
+      void qc.invalidateQueries({ queryKey: ['website'] });
+      return true;
+    }
     if (site) {
       // A reply to a visitor goes through the outbox too: pending while offline, sent once on reconnecting (RDC-07).
       const r = await call('offline:submit', websiteReplyMutation(site.conversationId, words, reply?.id ?? null, cannedUsed.current));
@@ -512,7 +558,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   // The "/" menu (worksuite-desktop#32): a website conversation's saved replies are the website chat's.
   const chatReplies = useChatSavedReplies(!site && !channel?.replies && slash !== null);
   // A website conversation's, or the channel's own (speaking first, C-07); Team Chat's otherwise.
-  const ownReplies = site?.replies ?? channel?.replies ?? null;
+  const ownReplies = note ? null : (site?.replies ?? channel?.replies ?? null);
   const replies: RepliesState = ownReplies ? { state: 'ready', replies: ownReplies } : chatReplies;
   const me = useStore(app, (s) => s.bootstrap?.user?.id ?? null);
   const myName = useStore(app, (s) => s.bootstrap?.user?.name ?? 'Me');
@@ -564,14 +610,16 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const tool = cx('flex shrink-0 items-center justify-center text-ink-2 hover:bg-subtle hover:text-ink', look === 'pill' ? 'rounded-full' : 'rounded-[8px]', size);
   const hint = editing
     ? 'Enter to save · Esc to cancel'
-    : site
+    : note
+      ? 'Enter to add the note · Shift + Enter for a new line · @ to mention a colleague'
+      : site
       ? 'Enter to send · Shift + Enter for a new line · / for saved and suggested replies'
       : urgent
       ? 'Urgent: reaches people who only want priority notifications'
       : `Enter to send · Shift + Enter for a new line${group ? ' · @ to mention' : ''} · / for replies`;
 
 
-  const attachBtn = !editing ? (
+  const attachBtn = !editing && !note ? (
                 <span className="relative">
                   <button type="button" aria-label="Attach" title="Attach" aria-haspopup="menu" aria-expanded={menu === 'attach'} onClick={() => setMenu(menu === 'attach' ? null : 'attach')} className={cx(tool, menu === 'attach' && '!bg-selection !text-primary')}>
                     <Icon name="paperclip" size={compact ? 16 : 18} />
@@ -594,8 +642,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 onChange={(e) => {
                   setText(e.target.value);
                   if (!editing) onTyped(e.timeStamp);
-                  if (!editing) setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
-                  if (group) {
+                  if (!editing && !note) setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
+                  if (group || note) {
                     const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
                     setAsking(q ? { ...q, left: leftOf(e.target, q.start) } : null);
                     setPick(0);
@@ -651,8 +699,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                 disabled={!!channel?.refusal && !channel.allowBlockedDraft}
                 maxLength={limit ?? (site ? 4000 : undefined)}
                 rows={1}
-                placeholder={editing ? 'Edit your message' : tray.length ? 'Add a caption…' : look === 'pill' ? 'Message' : 'Type a message…'}
-                aria-label={channel?.inputLabel ?? "Message"}
+                placeholder={editing ? 'Edit your message' : note ? 'Write a note for your colleagues — @ to mention someone' : tray.length ? 'Add a caption…' : look === 'pill' ? 'Message' : site ? 'Type a message… / for saved replies' : 'Type a message…'}
+                aria-label={note ? 'Internal note' : (channel?.inputLabel ?? 'Message')}
                 className={cx('bare-focus field-sizing-content max-h-40 min-w-0 flex-1 resize-none bg-transparent px-1 outline-none', compact ? 'min-h-[30px] py-[5px] text-[13px]' : 'min-h-[34px] py-[7px] text-[13.5px]')}
               />
   );
@@ -729,8 +777,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const sendBtn = channel?.refusal ? null : (
               <button
                 type="button"
-                aria-label={editing ? 'Save the change' : 'Send'}
-                title={editing ? 'Save the change' : 'Send (Enter)'}
+                aria-label={editing ? 'Save the change' : note ? 'Add note' : 'Send'}
+                title={editing ? 'Save the change' : note ? 'Add the note (Enter)' : 'Send (Enter)'}
                 disabled={!canSend || sending}
                 onClick={() => void send()}
                 className={cx(
@@ -815,7 +863,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           <div className="min-h-0 flex-1 overflow-y-auto p-1 scroll-thin">
             {options.map((t, i) => {
               const heading =
-                t.type === 'user' && options.findIndex((o) => o.type === 'user') === i ? 'PEOPLE IN THIS CHAT'
+                t.type === 'user' && options.findIndex((o) => o.type === 'user') === i ? (note ? 'COLLEAGUES' : 'PEOPLE IN THIS CHAT')
                   : t.type !== 'user' && t.type !== 'everyone' && options.findIndex((o) => o.type !== 'user' && o.type !== 'everyone') === i ? 'TEAMS AND DEPARTMENTS'
                     : null;
               const state = t.type === 'user' ? (presenceOf(t.id) ?? 'offline') : '';
@@ -941,12 +989,20 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       {mentionsEl}
       {repliesEl}
       {chipsEl}
+      {note ? (
+        <span className="flex items-center gap-1.5 px-1 text-[11px] font-bold text-[#7A4308] dark:text-warning">
+          <Icon name="lock" size={12} /> Only staff see this · the visitor never does
+        </span>
+      ) : null}
       {menu === 'emoji' ? <EmojiPicker className="absolute right-3 bottom-full mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
       <div
         className={cx(
           'relative flex flex-col gap-1.5 rounded-[12px] border transition-colors',
           compact ? 'px-1.5 py-1' : 'px-2 py-1.5',
-          urgent && !editing
+          // The note's own look (C-08): the amber, dashed edge its bubble will have in the thread.
+          note
+            ? cx(NOTE_TONE, 'focus-within:ring-2 focus-within:ring-[#D9A441]/25')
+            : urgent && !editing
             ? 'border-danger bg-danger-bg/40 focus-within:ring-2 focus-within:ring-danger/20'
             : editing
               ? 'border-[#D97706] focus-within:ring-2 focus-within:ring-[#D97706]/20'

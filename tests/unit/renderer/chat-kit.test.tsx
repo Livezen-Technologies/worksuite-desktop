@@ -223,7 +223,8 @@ describe('who wrote it (RDC-11)', () => {
     expect(within(bot as HTMLElement).getByText('Olema · bot')).toBeTruthy();
     const note = screen.getByText('Match last year?').closest('[data-bubble-body]')!;
     expect(note.className).toContain('border-dashed');
-    expect(note.closest('[data-bubble]')!.textContent).toContain('Internal note — only staff see this');
+    // Named in its label, as several staff see it (C-08): INTERNAL NOTE · NUWAN · ONLY STAFF SEE THIS.
+    expect(note.closest('[data-bubble]')!.textContent).toContain('Internal note · Nuwan · only staff see this');
   });
 });
 

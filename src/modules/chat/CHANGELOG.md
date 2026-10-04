@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.36.0 — 2026-10-04
+
+- C-08 Several staff in one chat: Reply to visitor / Internal note tabs over the shared composer (note mode with @colleagues, staff-only typing, own draft), notes labelled with their author, colleagues' bubbles tinted with their photo and yours as You, and the In this chat card with presence, role, join time, the invite countdown, Invite someone and Leave chat with the owner's warning.
+
 ## 1.35.0 — 2026-10-04
 
 - C-07 Visitors online: the design's table (status dot and city, reading now, time on site, pages, visit, last active), a reading-now viewer with time on page and scroll, this visit's timeline and chips, and Speak first through the shared composer with saved-reply chips.

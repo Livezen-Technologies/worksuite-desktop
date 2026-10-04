@@ -14,7 +14,7 @@ import { dateLabel, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Chip, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
-import { Composer, type ComposerHandle } from '../Composer';
+import { Composer, websiteNoteDraftKey, type ComposerHandle } from '../Composer';
 import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
 import { useViewing } from './viewing';
@@ -28,7 +28,7 @@ import { byTime, dwell, eventsForThread, fromWebsiteMessage, fromWidgetEvent, pa
 import { sharedFilesOf, type SharedFile } from '../kit/SharedFiles';
 import { useNow } from '../../calls/parts';
 import { openWebsiteChatWindow } from '../window';
-import { InThisChat, InviteDialog, NoteBox, TeamFaces, TransferDialog, useDeclined } from './Team';
+import { InThisChat, InviteDialog, LeaveChat, MessageTypeTabs, TeamFaces, TransferDialog, useDeclined } from './Team';
 import { CallBar } from './CallBar';
 import { CallbackCard, isPending } from './Callbacks';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
@@ -60,8 +60,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const composer = useRef<ComposerHandle>(null);
   const [drag, setDrag] = useState(false);
   const [reply, setReply] = useState<ReplyTarget | null>(null);
-  // The composer writes to the visitor, or a note only staff see (TEAM-60).
-  const [tab, setTab] = useState<'reply' | 'note'>('reply');
+  // The composer writes to the visitor, or a note only staff see (TEAM-60); null until chosen (see `mode` below).
+  const [tab, setTab] = useState<'reply' | 'note' | null>(null);
   const { active: tabActive, query: tabQuery } = useTab();
   // From the ringing card's Transfer (#225), or a visitor's Invite a colleague (#231): the chat opens with that dialog up.
   const [dialog, setDialog] = useState<'invite' | 'transfer' | null>(() => (tabQuery?.get('transfer') === '1' ? 'transfer' : tabQuery?.get('invite') === '1' ? 'invite' : null));
@@ -88,6 +88,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         if (e.type !== 'chat.widget.participants' || e.what !== 'removed' || e.conversation_id !== Number(id)) return;
         toast('info', e.text ?? 'You were removed from the chat.');
         void call('offline:deleteDraft', websiteDraftKey(Number(id))).catch(() => undefined);
+        void call('offline:deleteDraft', websiteNoteDraftKey(Number(id))).catch(() => undefined);
         setTab('reply');
         void qc.invalidateQueries({ queryKey: ['website'] });
       }),
@@ -112,7 +113,11 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const online = row?.online ?? (v?.last_seen ? q.dataUpdatedAt - parseTs(v.last_seen).getTime() < 120_000 : false);
   const page = v?.current_url ? pathOf(v.current_url) : null;
   const t = data.team ?? null;
-  const noting = tab === 'note' && !!t?.can.note;
+  // Somebody monitoring reads along unseen and writes notes: their box opens on Internal note (C-08, TEAM-62).
+  const mode = tab ?? (t?.my_role === 'observer' ? 'note' : 'reply');
+  const noting = mode === 'note' && !!t?.can.note;
+  // Several staff in it, or somebody asked to join: the people card leads the panel (C-08, X-UI-07).
+  const multi = !!t && (t.people.filter((p) => p.role !== 'observer').length > 1 || t.pending.length > 0);
   // Messages and the visitor's page visits in one timeline, through the kit's adapters (C-02; #229).
   const replyOpen = canReply && c.status !== 'closed';
   const items = byTime([
@@ -133,6 +138,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
     onReply: (k) => {
       const m = data.messages.find((x) => x.id === k.id);
       if (!m) return;
+      // A quote goes to the visitor, so answering one is a reply, never a note.
+      setTab('reply');
       setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: m.body ?? m.file?.filename ?? '' });
       composer.current?.focus();
     },
@@ -249,41 +256,42 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             {declined.retry && t?.can[declined.retry] ? <button type="button" onClick={() => setDialog(declined.retry)} className="shrink-0 font-semibold text-primary hover:underline">Try someone else</button> : null}
           </div>
         ) : null}
-        {t?.can.note && c.status !== 'closed' && canReply ? (
-          <div role="tablist" aria-label="Write" className="flex gap-1 border-t border-line bg-surface px-3 pt-1.5 text-[12px] font-semibold">
-            {([['reply', 'Reply to visitor'], ['note', 'Internal note']] as const).map(([k, label]) => (
-              <button key={k} type="button" role="tab" aria-selected={tab === k} onClick={() => setTab(k)} className={cx('rounded-t-[7px] border-b-2 px-2.5 py-1', tab === k ? (k === 'note' ? 'border-[#C88A12] text-[#7A4308] dark:text-warning' : 'border-primary text-primary') : 'border-transparent text-ink-3 hover:text-ink')}>
-                {label}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {c.status !== 'closed' && noting ? (
-          <NoteBox conversationId={c.id} onSent={refresh} compact={mini} />
-        ) : c.status === 'closed' ? (
+        {c.status === 'closed' ? (
           // The composer gives way to the locked notice (C-06, UX-CLS-01), the same one the Closed section shows.
           <div className="border-t border-line bg-surface px-3.5 py-2.5">
             <ClosedNotice className="border-0 p-0" onReopen={canReply ? () => void websiteAction(c.id, 'reopen').then(refresh, (e) => toast('error', errorMessage(e))) : undefined} />
           </div>
         ) : canReply ? (
+          // One shared composer for both tabs (C-08): its note mode is the amber Internal note; remounted per tab, so
+          // each keeps its own draft and nothing typed for the visitor slips into a note.
           <Composer
+            key={noting ? 'note' : 'reply'}
             ref={composer}
             roomId={`website-${c.id}`}
             roomName={name}
             compact={mini}
             group={false}
-            reply={reply}
+            reply={noting ? null : reply}
             onClearReply={() => setReply(null)}
-            website={{ conversationId: c.id, replies: canned.data?.responses ?? [], maxUploadKb: c.max_upload_kb }}
+            extras={t?.can.note ? <MessageTypeTabs value={noting ? 'note' : 'reply'} onChange={setTab} /> : undefined}
+            website={{ conversationId: c.id, replies: canned.data?.responses ?? [], maxUploadKb: c.max_upload_kb, note: noting }}
           />
         ) : (
           <div className="border-t border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-3">You can read this chat but not reply to it.</div>
         )}
       </section>
       {!mini ? (
-        <VisitorPanel v={v} data={data} online={online} canReply={canReply} files={sharedFilesOf(items)} onDone={refresh}>
-          {t ? <InThisChat data={data} me={me} onInvite={() => setDialog('invite')} onTransfer={() => setDialog('transfer')} onClose={() => void websiteAction(c.id, 'close').then(refresh, (e) => toast('error', errorMessage(e)))} onDone={refresh} /> : null}
-        </VisitorPanel>
+        <VisitorPanel
+          v={v}
+          data={data}
+          online={online}
+          canReply={canReply}
+          files={sharedFilesOf(items)}
+          onDone={refresh}
+          people={t ? <InThisChat data={data} me={me} fetchedAt={q.dataUpdatedAt} onInvite={() => setDialog('invite')} onDone={refresh} /> : null}
+          peopleFirst={multi}
+          foot={t ? <LeaveChat data={data} onTransfer={() => setDialog('transfer')} onClose={() => void websiteAction(c.id, 'close').then(refresh, (e) => toast('error', errorMessage(e)))} onDone={refresh} /> : null}
+        />
       ) : null}
       {dialog === 'invite' ? <InviteDialog conversationId={c.id} me={me} onClose={() => setDialog(null)} onDone={refresh} /> : null}
       {dialog === 'transfer' ? <TransferDialog conversationId={c.id} me={me} onClose={() => setDialog(null)} onDone={refresh} /> : null}
@@ -395,7 +403,7 @@ interface Stop {
  * site, Email and Block; how to reach them and their local time; Site, Device, Visits and Came from; this visit's
  * journey with dwell times and where the chat started; the chat's tags; and the files shared, as a grid.
  */
-function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; children?: ReactNode }) {
+function VisitorPanel({ v, data, online, canReply, files, onDone, people, peopleFirst = false, foot }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; people?: ReactNode; peopleFirst?: boolean; foot?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
   const [busy, setBusy] = useState(false);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
@@ -454,6 +462,8 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { 
   return (
     <SidePanel id="website-visitor" label="the visitor details" side="right">
       <aside aria-label="Visitor details" className="flex w-[240px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-ground px-3 py-3.5 text-[12px] scroll-thin">
+        {/* With several staff in it the people card leads, as the C-08 panel has it; otherwise it follows the facts. */}
+        {peopleFirst ? people : null}
         <h3 className={HEADING}>Visitor</h3>
         <div className={cx(CARD, 'items-center pt-3.5 text-center')}>
           <Avatar name={name} size={52} presence={c.status === 'closed' ? null : online ? 'online' : 'away'} />
@@ -492,7 +502,7 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { 
             ))}
           </div>
         ) : null}
-        {children}
+        {peopleFirst ? null : people}
         {recent.length ? (
           <div className={CARD}>
             <div className="flex items-center">
@@ -530,6 +540,8 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { 
         </div>
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
           {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
+          {/* Leave chat, with the owner's warning, at the panel's foot (C-08, TEAM-06). */}
+          {foot}
         </div>
         {blocking ? <BlockDialog conversationId={c.id} name={v?.name || v?.label || 'This visitor'} onClose={() => setBlocking(false)} onDone={onDone} /> : null}
       </aside>

@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.163 — 2026-10-04
+
+- **Several staff in one chat (C-08).** **Reply to visitor** and **Internal note** are now tabs over the one composer.
+  A note looks like the note it will be and is words only. It can @mention colleagues, shows only staff that you are
+  typing, and keeps its own draft. A note is labelled with who wrote it ("Internal note · Nuwan · only staff see
+  this").
+- Your messages say "You". A colleague's are tinted and carry their photo and name.
+- **In this chat** lists who is in the conversation, with presence, role and when they joined. A pending invitation
+  shows its countdown and **Cancel**. **Invite someone** is greyed out when the chat is full. **Leave chat** at the
+  foot of the panel warns the owner to transfer the chat first.
+- Someone monitoring a chat opens it on Internal note.
+- Needs the server update (Communication 1.30.0) for presence and an exact countdown.
+
 ## 0.2.162 — 2026-10-04
 
 - **Visitors online (C-07).** The table now has the design's columns:
