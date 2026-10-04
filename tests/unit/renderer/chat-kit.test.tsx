@@ -263,3 +263,18 @@ describe('one conversation, two channels, the same bubbles (C-02 parity)', () =>
     expect(b.map((x) => x.body)).toEqual(a.map((x) => x.body));
   });
 });
+
+describe('website files and deleting from the server (#229)', () => {
+  const base = { id: 9, body: null, from: 'agent' as const, agent: 'Nuwan', agent_id: 3, at: new Date(Date.now() - 60_000).toISOString() };
+  it('uses the readable name, the thumbnail and the preview, and keeps the original to download', () => {
+    const k = fromWebsiteMessage({ ...base, file: { url: '/chat/widget-admin/files/t', filename: 'IMG_1.heic', name: 'Photo – 4 Oct 2026, 11:31.jpg', mime: 'image/heic', size: 4_600_000, is_image: true, thumb_url: '/chat/widget-admin/files/t/thumb', preview_url: '/chat/widget-admin/files/t/preview', width: 1280, height: 960 } }, { me: 3, visitor: 'Visitor CC1B', canReply: true });
+    expect(k.files![0]).toMatchObject({ filename: 'Photo – 4 Oct 2026, 11:31.jpg', thumb_url: '/api/chat/widget-admin/files/t/thumb', url: '/api/chat/widget-admin/files/t/preview', download_url: '/api/chat/widget-admin/files/t', width: 1280 });
+    expect(k.can?.delete_everyone).toBe(true);
+  });
+  it('a deleted message has no file, no reply or copy, and cannot be deleted again; an old one cannot be deleted', () => {
+    const gone = fromWebsiteMessage({ ...base, deleted: true, file: null }, { me: 3, visitor: 'V', canReply: true });
+    expect([gone.deleted, gone.files, gone.can?.reply, gone.can?.delete_everyone]).toEqual([true, [], false, false]);
+    const old = fromWebsiteMessage({ ...base, body: 'Hi', file: null, at: new Date(Date.now() - 20 * 60_000).toISOString() }, { me: 3, visitor: 'V', canReply: true });
+    expect(old.can?.delete_everyone).toBe(false);
+  });
+});

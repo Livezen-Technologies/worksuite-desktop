@@ -5,6 +5,28 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.157 — 2026-10-04
+
+- **Website chats use the same message view as Team Chat (#229, C-02).** Messages from one person run together, with
+  the avatar on the first and the time on the last, and days have dividers. A reply quotes the message inside the
+  bubble, with read ticks under it. Messages from the website's bot are teal and marked "· bot". Internal notes are
+  amber with a dashed border. The pages a visitor opened appear between the messages ("→ Opened /shop/… · 2 min").
+  Long links are shortened to the site and path.
+- **Pictures show as pictures.** Images, including iPhone photos and pictures without an extension, show as
+  thumbnails up to 280px. Several sent together make a small grid with "+N", and a click opens the full-screen
+  viewer. Files have readable names, never an upload ID: the original name, or "Photo – 4 Oct 2026, 11:31.jpg".
+  Delete removes a message you wrote for the visitor too, within 15 minutes.
+- **The visitor panel follows the design:** Email and Block, the visitor's local time, Site, Device, Visits and Came
+  from, this visit's pages with how long each held them, tags, and shared files as a grid.
+- **Live dashboard (C-00):** a world map of who is on your sites, tiles that open what they count, the Needs you / In
+  a chat / Browsing list with Join, Open and Start chat, Full map, and Wall mode with names hidden.
+- **Inbox (C-01):** the Website Chats menu has icons and count pills, and Back to Chat answers Ctrl/⌘+[. Taking chats,
+  and your status, are at the foot of the menu.
+- Team Chat looks slightly different too, because it now draws from the same components: a run of messages shows one
+  avatar, quotes sit inside the bubble, receipts are ticks, and long links are shortened.
+- Needs the server update (Communication 1.25.0) for thumbnails, readable names and Delete. An older server shows the
+  rest.
+
 ## 0.2.156 — 2026-10-04
 
 - **When a visitor writes again in your chat, you hear about it (#230).** Before, if you answered a website chat and

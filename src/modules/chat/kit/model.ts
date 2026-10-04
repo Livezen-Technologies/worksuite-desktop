@@ -129,6 +129,8 @@ export interface WebsiteContext {
   canReply: boolean;
   status?: 'sent' | 'delivered' | 'read';
   footer?: string | null;
+  /** How long after writing a message it can still be deleted for the visitor (#229). */
+  deleteMinutes?: number;
 }
 
 /** A website chat message (RDC-11): the visitor's, a colleague's, the bot's, a notice or an internal note. */
@@ -151,7 +153,11 @@ export function fromWebsiteMessage(m: WebsiteMessage, ctx: WebsiteContext): KitM
     own: m.from === 'agent',
     signed: m.from === 'agent',
     body: m.body,
-    files: m.file && file ? [{ filename: m.file.filename, mime: m.file.mime, size: m.file.size, is_image: m.file.is_image, url: file, download_url: file, by: author.name }] : [],
+    files:
+      m.file && file && !m.deleted
+        ? [{ filename: m.file.name ?? m.file.filename, mime: m.file.mime, size: m.file.size, is_image: m.file.is_image, url: m.file.preview_url ? websiteFileUrl(m.file.preview_url) : file, download_url: file, thumb_url: m.file.thumb_url ? websiteFileUrl(m.file.thumb_url) : null, width: m.file.width ?? null, height: m.file.height ?? null, by: author.name }]
+        : [],
+    deleted: m.deleted,
     reply: q ? { author: quoteAuthor(q, ctx.visitor), snippet: q.body ?? (q.file ? `📎 ${q.file}` : text('A removed message')) } : null,
     replyRemoved: !q && !!m.reply_to,
     receipt: ctx.status,
@@ -162,7 +168,8 @@ export function fromWebsiteMessage(m: WebsiteMessage, ctx: WebsiteContext): KitM
     time: ms(m.at),
     timed: m.from === 'system',
     // Reactions are never added in a website chat (RDC-12); a quote goes to the visitor, so never of a note.
-    can: { reply: ctx.canReply && m.from !== 'system' && !internal, react: false, copy: true },
+    // Deleting reaches the visitor too, for what I wrote, within the server's window (#229); the server has the last word.
+    can: { reply: ctx.canReply && m.from !== 'system' && !internal && !m.deleted, react: false, copy: !m.deleted, delete_everyone: m.from === 'agent' && !m.deleted && author.role === 'self' && Date.now() - ms(m.at) < (ctx.deleteMinutes ?? 15) * 60_000 },
   };
 }
 

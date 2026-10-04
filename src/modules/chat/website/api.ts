@@ -188,7 +188,13 @@ export interface WebsiteMessage {
   from: 'visitor' | 'agent' | 'bot' | 'system';
   agent: string | null;
   at: string;
-  file: { url: string; filename: string; mime: string; size: number; is_image: boolean } | null;
+  /**
+   * The file (#229): `name` is the readable one (the original, or "Photo – 4 Oct 2026, 11:31.jpg"); `thumb_url` and
+   * `preview_url` are small copies the server made — an iPhone photo too — and `url` the original to download.
+   */
+  file: { url: string; filename: string; mime: string; size: number; is_image: boolean; id?: number; name?: string; thumb_url?: string | null; preview_url?: string | null; width?: number | null; height?: number | null; kind?: string } | null;
+  /** Deleted for the visitor too (#229): no words, no file. */
+  deleted?: boolean;
   /** Who wrote it, and their photo (TEAM-05). */
   agent_id?: number | null;
   avatar?: string | null;

@@ -130,6 +130,16 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: m.body ?? m.file?.filename ?? '' });
       composer.current?.focus();
     },
+    // Delete for the visitor too, within the window (#229).
+    onDelete: (k) => {
+      void apiPost(`${WEBSITE}/conversations/${c.id}/messages/${k.id}/delete`, {}).then(
+        () => {
+          toast('success', text('Message deleted for everyone.'));
+          void qc.invalidateQueries({ queryKey: ['website', 'conversation', String(c.id)] });
+        },
+        (e) => toast('error', errorMessage(e)),
+      );
+    },
   };
 
   return (
@@ -210,7 +220,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           {c.started_at ? <div className="mb-1 text-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
           {/* The shared chat kit (C-02, RDC-11, LIVE-12; #229): Team Chat's bubbles, meta, ticks and attachments, with what a visitor cannot receive turned off. */}
-          <MessageList items={items} caps={WEBSITE_CAPS} look="page" handlers={handlers} />
+          <MessageList items={items} caps={{ ...WEBSITE_CAPS, deleteForVisitorMinutes: 15 }} look="page" handlers={handlers} />
           {waiting.map((p) => (
             <PendingBubble
               key={p.id}
