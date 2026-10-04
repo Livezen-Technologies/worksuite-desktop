@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.30.2 — 2026-10-04
+
+- Link cards in website chats (#229): the first link in a message gets its card, read through the server's guarded link-preview endpoint and kept a day.
+
 ## 1.30.1 — 2026-10-04
 
 - Website chats use the server's thumbnails, previews and readable file names, show deleted messages, and delete a message for the visitor within 15 minutes (#229).

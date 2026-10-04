@@ -12,7 +12,7 @@ import { recordsIn, withoutRecordLines } from '../cards/recordLinks';
 import { EmojiPicker } from '../parts';
 import type { ChannelCaps } from './caps';
 import { isFirst, isLast, type Position } from './grouping';
-import { shortUrl } from './LinkPreview';
+import { MessageLinkPreview, shortUrl } from './LinkPreview';
 import { DeleteDialog, DrawerActions, MessageMenu, REACTION_BAR, canReact, messageActionItems, type MessageHandlers } from './MessageActions';
 import { MessageAttachments, type Look } from './MessageAttachment';
 import { MessageMeta } from './MessageMeta';
@@ -220,6 +220,7 @@ function PageBubble({ m, position, caps, handlers: h, renderers, cardContinuatio
           </RecordMessage>
         ) : null}
         {!carded ? attachment : null}
+        {inBubble && caps.linkPreviewPath ? <MessageLinkPreview body={shown} path={caps.linkPreviewPath} /> : null}
         <Reactions m={m} look="page" enabled={reactable} onReact={react} />
         {meta}
         {m.footer ? <span className="text-[11px] text-ink-3">{m.footer}</span> : null}

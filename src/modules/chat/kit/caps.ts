@@ -29,6 +29,8 @@ export interface ChannelCaps {
    * then Delete is not shown at all.
    */
   deleteForVisitorMinutes?: number | null;
+  /** Where the server reads a link's card (#229); left out, links are shortened but get no card. */
+  linkPreviewPath?: string;
 }
 
 export const TEAM_CAPS: ChannelCaps = {
@@ -65,4 +67,5 @@ export const WEBSITE_CAPS: ChannelCaps = {
   createTask: false,
   gridImages: true,
   deleteForVisitorMinutes: null,
+  linkPreviewPath: '/api/chat/widget-admin/link-preview',
 };

@@ -278,3 +278,13 @@ describe('website files and deleting from the server (#229)', () => {
     expect(old.can?.delete_everyone).toBe(false);
   });
 });
+
+describe('link cards (#229)', () => {
+  it('finds the first link in a message', async () => {
+    const { firstUrl } = await import('../../../src/modules/chat/kit/LinkPreview');
+    expect(firstUrl('See https://techubiz.com/shop/adobe-creative-cloud?x=1, thanks')).toBe('https://techubiz.com/shop/adobe-creative-cloud?x=1');
+    expect(firstUrl('no link here')).toBeNull();
+    expect(WEBSITE_CAPS.linkPreviewPath).toBe('/api/chat/widget-admin/link-preview');
+    expect(TEAM_CAPS.linkPreviewPath).toBeUndefined();
+  });
+});

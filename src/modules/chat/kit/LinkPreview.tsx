@@ -1,3 +1,5 @@
+import { useQuery } from '@tanstack/react-query';
+import { apiGet } from '../../../core/api';
 import { openAnyLink } from '../../../components/LinkedText';
 import { cx } from '../../../components/ui';
 
@@ -65,4 +67,29 @@ export function LinkPreview({ preview, own = false, className }: { preview?: Lin
       </span>
     </a>
   );
+}
+
+/** The first web address in a message, if any. */
+export function firstUrl(body: string | null | undefined): string | null {
+  const m = body?.match(/https?:\/\/[^\s<>"')]+/i);
+  return m ? m[0].replace(/[.,;:!?]+$/, '') : null;
+}
+
+/**
+ * The card for the first link in a message (#229), read through the server — which fetches the page itself, with its
+ * guard against private addresses — and kept a day. A link it cannot read gets no card.
+ */
+export function MessageLinkPreview({ body, path, own }: { body: string | null | undefined; path?: string; own?: boolean }) {
+  const url = path ? firstUrl(body) : null;
+  const q = useQuery({
+    queryKey: ['link-preview', url],
+    queryFn: async ({ signal }) => {
+      const r = await apiGet<{ url: string; title?: string | null; description?: string | null; image?: string | null; site_name?: string | null }>(path!, { url: url! }, signal);
+      return { url: r.url, title: r.title, description: r.description, image: r.image, site: r.site_name } satisfies LinkPreviewData;
+    },
+    enabled: !!url,
+    staleTime: 24 * 60 * 60_000,
+    retry: false,
+  });
+  return q.data ? <LinkPreview preview={q.data} own={own} /> : null;
 }
