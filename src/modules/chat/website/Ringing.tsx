@@ -106,6 +106,47 @@ export function handoffAsk(h: Pick<WebchatHandoff, 'kind' | 'mode' | 'from' | 'd
   return h.mode === 'cold' ? `${who} handed this chat over${to}` : `${who} asks you to take over${to}`;
 }
 
+/** "Nuwan" for "Nuwan Silva": the cards speak of a colleague the way the design does (C-09). */
+export function firstName(name: string): string {
+  return name.trim().split(/\s+/)[0] || name;
+}
+
+/**
+ * The card's headline (C-09, TEAM-UI-02): "Nuwan invites you to a chat with Visitor 4F2A", "Nuwan is handing you
+ * Visitor 4F2A"; a chat nobody took, or an owner who went offline, is WorkSuite's, with nobody named.
+ */
+export function handoffHeadline(h: Pick<WebchatHandoff, 'kind' | 'from' | 'toAny' | 'visitor'>, hidden = false): string {
+  const visitor = hidden ? 'a website visitor' : h.visitor;
+  const who = h.from ? firstName(h.from) : null;
+  if (h.kind === 'invite') return `${who ?? 'WorkSuite'} invites you to a chat with ${visitor}`;
+  if (who) return `${who} is handing you ${visitor}`;
+  return h.toAny ? `${hidden ? 'A website visitor' : h.visitor} needs someone — nobody took the chat` : `You're asked to take over ${visitor}`;
+}
+
+/**
+ * What else the card says, under the note (C-09; TEAM-25, TEAM-41, TEAM-42): warm or handed over now, and a department
+ * that is asked as one — the first to answer takes it.
+ */
+export function handoffDetail(h: Pick<WebchatHandoff, 'kind' | 'mode' | 'from' | 'toAny' | 'department'>): string | null {
+  const who = h.from ? firstName(h.from) : null;
+  const team = h.department ? `Sent to the ${h.department} team — the first to ${h.kind === 'invite' ? 'join' : 'accept'} takes it` : null;
+  if (h.kind === 'invite') return team;
+  const mode = h.mode === 'cold'
+    ? who ? `Handed over now — ${who} has left; it rings for you until you join` : 'It rings for everybody covering the website until someone joins'
+    : who ? `Warm transfer — ${who} stays until you join` : 'Warm transfer — nothing changes until you accept';
+  return team ? `${mode} · ${team}` : mode;
+}
+
+/**
+ * Seconds left on an invitation or transfer ringing for me, or null when it rings until somebody takes it: by the
+ * server's count when it gave one (C-09), so a computer whose clock is off still counts down true.
+ */
+export function handoffLeft(h: Pick<WebchatHandoff, 'expiresAt' | 'endsAt'>, now: number): number | null {
+  // Only what reads as a time: a state of another shape (an older main process) shows no countdown rather than throwing.
+  const ends = typeof h.endsAt === 'number' ? h.endsAt : typeof h.expiresAt === 'string' && h.expiresAt ? parseTs(h.expiresAt).getTime() : null;
+  return ends === null || !Number.isFinite(ends) ? null : Math.max(0, Math.round((ends - now) / 1000));
+}
+
 /** m:ss for a count of seconds. */
 export function clock(seconds: number): string {
   const s = Math.max(0, Math.round(seconds));
@@ -134,7 +175,7 @@ export function WebchatRingWindow() {
   const handoffs = s.handoffs ?? [];
   const [firstCall, ...otherCalls] = s.calls ?? [];
   // Invitations and transfers ringing beside chats, under the chat card.
-  const asks = handoffs.length && top ? <HandoffRows s={s} list={handoffs.slice(0, 2)} more={handoffs.length - 2} first /> : null;
+  const asks = handoffs.length && top ? <HandoffRows s={s} list={handoffs.slice(0, 2)} more={handoffs.length - 2} now={now} first /> : null;
 
   let body: ReactNode;
   // A visitor on the line comes before everything else (VOICE-10).
@@ -222,57 +263,51 @@ function CallCard({ s, c, rest, more, now }: { s: WebchatRingState; c: WebchatCa
 }
 
 /**
- * An invitation or a transfer as the call window's card (TEAM-UI-02): who asks and why, the note, the visitor, how
- * long it rings for, Join chat or Accept, and Decline.
+ * An invitation or a transfer as the call window's card (C-09, TEAM-UI-02; TEAM-23, TEAM-41, TEAM-42): the call-style
+ * card the design draws — INVITATION or TRANSFER TO YOU with its countdown, who asks for what, the staff-only note,
+ * warm or handed over now, and Join chat or Accept beside Decline. Others ringing too are rows under it.
  */
-function HandoffCard({ s, h, rest, now }: { s: WebchatRingState; h: WebchatHandoff; rest: WebchatHandoff[]; now: number }) {
-  const left = h.expiresAt ? Math.max(0, Math.round((parseTs(h.expiresAt).getTime() - now) / 1000)) : null;
-  const total = h.expiresAt && h.createdAt ? Math.max(1, Math.round((parseTs(h.expiresAt).getTime() - parseTs(h.createdAt).getTime()) / 1000)) : null;
+export function HandoffCard({ s, h, rest, now }: { s: WebchatRingState; h: WebchatHandoff; rest: WebchatHandoff[]; now: number }) {
+  const left = handoffLeft(h, now);
+  const invite = h.kind === 'invite';
+  const detail = s.hidden ? null : handoffDetail(h);
   return (
-    <div className="flex h-full flex-col bg-[#0F1B3D] text-[13px] text-[#E6ECFA]">
+    <div className="flex h-full flex-col bg-[#111B3B] text-[13px] text-[#F1F4FB]">
       <div className="sr-only" role="alert" aria-live="assertive">
-        {s.hidden ? 'A colleague is asking you into a website chat.' : `${handoffTitle(h)}: ${handoffAsk(h)}, with ${h.visitor}.`}
+        {s.hidden ? 'A colleague is asking you into a website chat.' : `${handoffTitle(h)}: ${handoffHeadline(h)}.`}
       </div>
-      <div className="drag flex items-center gap-2 px-4 pt-3 text-[11.5px] font-bold tracking-[.06em] text-[#AFC0E8] uppercase">
-        <span className="h-2 w-2 rounded-full bg-[#8FA6E0] motion-safe:animate-pulse" />
-        <span className="flex-1">{handoffTitle(h)}</span>
-        {h.kind === 'transfer' ? <span className="rounded-full bg-[#22305C] px-2 py-0.5 text-[10.5px] tracking-normal text-[#C9D5F5] normal-case">{h.mode === 'cold' ? 'Handed over now' : 'Warm transfer'}</span> : null}
-      </div>
-      <div className="flex gap-3 px-4 pt-3">
-        <span className="relative shrink-0 rounded-full motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]">
-          <Avatar name={s.hidden ? '?' : h.visitor} size={46} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <b className="truncate text-[15px] text-white">{s.hidden ? 'A website visitor' : h.visitor}</b>
-          <span className="truncate text-[12px] text-[#AFC0E8]">{s.hidden ? 'Unlock WorkSuite to see who.' : handoffAsk(h)}</span>
-          {!s.hidden && (h.site || h.page) ? <span className="truncate text-[12px] text-[#C9D5F5]">{[h.site, h.page ? `Reading ${h.page}` : null].filter(Boolean).join(' · ')}</span> : null}
-        </span>
-      </div>
-      {!s.hidden && h.note ? <p className="mx-4 mt-2 line-clamp-2 rounded-[8px] bg-[#16254F] px-2.5 py-1.5 text-[12.5px] text-[#E6ECFA]" title="Only staff see this note">“{h.note}”</p> : null}
-      {left !== null ? (
-        <div className="mx-4 mt-2" role="timer" aria-label={`Rings for ${clock(left)} more`}>
-          <div className="h-1 overflow-hidden rounded-full bg-[#22305C]">
-            <div className="h-full rounded-full bg-[#8FA6E0] transition-[width] duration-1000 ease-linear" style={{ width: `${total ? Math.min(100, (left / total) * 100) : 100}%` }} />
-          </div>
-          <p className="mt-1 text-[11.5px] text-[#AFC0E8]">{h.kind === 'invite' ? 'The invitation' : 'The transfer'} expires in {clock(left)}</p>
+      <section aria-label={invite ? 'Invitation' : 'Transfer request'} className="flex flex-col gap-2.5 px-[18px] pt-4">
+        <div className="drag flex items-center gap-2">
+          <span className={cx('rounded-[6px] px-2 py-[3px] text-[11px] font-bold tracking-[1.2px] text-white uppercase', invite ? 'bg-[#1F7A6E]' : 'bg-[#4A63E8]')}>{handoffTitle(h)}</span>
+          <span className="flex-1" />
+          {left !== null ? (
+            // "1:40 left" on an invitation, "0:48" on a transfer, as designed.
+            <span role="timer" aria-label={`Rings for ${clock(left)} more`} className="font-mono text-[13px] text-[#C9CFE3] tabular-nums">{invite ? `${clock(left)} left` : clock(left)}</span>
+          ) : null}
         </div>
-      ) : null}
-      <div className="flex gap-2 px-4 pt-3">
-        <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-11 flex-1 rounded-[9px] bg-[#3DD68C] text-[14px] font-bold text-[#0B2A1D] hover:brightness-105 disabled:opacity-50">
-          {h.kind === 'invite' ? 'Join chat' : 'Accept'}
-        </button>
-        <button type="button" onClick={() => answer(h.id, false)} className="h-11 flex-1 rounded-[9px] border border-[#33477E] text-[14px] font-semibold hover:bg-white/5">
-          Decline
-        </button>
-      </div>
-      {rest.length ? <HandoffRows s={s} list={rest.slice(0, 3)} more={rest.length - 3} first /> : null}
-      <p className="drag mt-auto px-4 pt-2 pb-2.5 text-[11px] text-[#8FA6E0]">{s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : 'A colleague is asking you into a website chat'}</p>
+        <b className="text-[16px] leading-snug font-bold text-white">{handoffHeadline(h, s.hidden)}</b>
+        {!s.hidden && (h.site || h.page) ? <span className="-mt-1.5 truncate text-[12px] text-[#AFC0E8]">{[h.site, h.page ? `Reading ${h.page}` : null].filter(Boolean).join(' · ')}</span> : null}
+        {!s.hidden && h.note ? (
+          <p className="rounded-[10px] bg-[#1A2550] px-3 py-2.5 text-[13px] break-words text-[#DFE3F0]" title="Only staff see this note">{invite ? `“${h.note}”` : h.note}</p>
+        ) : null}
+        {detail ? <span className="text-[12px] text-[#B3C0FF]">{detail}</span> : null}
+        <div className="flex gap-2.5">
+          <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-11 flex-1 rounded-full bg-[#2F9E67] text-[15px] font-bold text-white hover:brightness-110 disabled:opacity-50">
+            {invite ? 'Join chat' : 'Accept'}
+          </button>
+          <button type="button" onClick={() => answer(h.id, false)} className="h-11 w-[116px] shrink-0 rounded-full border border-[#3A4468] font-semibold text-[#F1F4FB] hover:bg-white/5">
+            Decline
+          </button>
+        </div>
+      </section>
+      {rest.length ? <HandoffRows s={s} list={rest.slice(0, 3)} more={rest.length - 3} now={now} first /> : null}
+      <p className="drag mt-auto px-[18px] pt-2.5 pb-3 text-[11px] text-[#8FA6E0]">{s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : 'A colleague is asking you into a website chat'}</p>
     </div>
   );
 }
 
 /** Other invitations and transfers, under the card, each with Join and Decline. */
-function HandoffRows({ s, list, more, first }: { s: WebchatRingState; list: WebchatHandoff[]; more: number; first: boolean }) {
+function HandoffRows({ s, list, more, first, now }: { s: WebchatRingState; list: WebchatHandoff[]; more: number; first: boolean; now?: number }) {
   return (
     <ul className={cx('flex flex-col', first ? 'mt-3 border-t border-[#22305C]' : '')} aria-label="Invitations and transfers">
       {list.map((h) => (
@@ -282,6 +317,7 @@ function HandoffRows({ s, list, more, first }: { s: WebchatRingState; list: Webc
             <b className="text-white">{s.hidden ? 'A visitor' : h.visitor}</b>
             <span className="text-[#AFC0E8]"> · {handoffTitle(h)}{h.from && !s.hidden ? ` from ${h.from}` : ''}</span>
           </span>
+          {now !== undefined && handoffLeft(h, now) !== null ? <span className="shrink-0 font-mono text-[12px] text-[#C9CFE3] tabular-nums">{clock(handoffLeft(h, now)!)}</span> : null}
           <button type="button" disabled={s.hidden} onClick={() => answer(h.id, true)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
             {h.kind === 'invite' ? 'Join' : 'Accept'}
           </button>
@@ -337,6 +373,7 @@ export function RingingBar({ tone }: { tone: boolean }) {
         <Icon name="users" size={15} className="shrink-0 text-primary" />
         <b className="shrink-0">{handoffTitle(h)}</b>
         <span className="min-w-0 flex-1 truncate">{s.hidden ? '' : `${handoffAsk(h)} · ${h.visitor}`}{(s.handoffs?.length ?? 0) > 1 ? ` · +${(s.handoffs?.length ?? 0) - 1} more` : ''}</span>
+        {handoffLeft(h, now) !== null ? <span className="shrink-0 font-mono text-[12px] text-ink-2 tabular-nums" aria-label={`Rings for ${clock(handoffLeft(h, now)!)} more`}>{clock(handoffLeft(h, now)!)}</span> : null}
         <button type="button" onClick={() => answer(h.id, true)} className="h-7 rounded-[7px] bg-[#1F7A4D] px-3 font-bold text-white hover:brightness-110">
           {h.kind === 'invite' ? 'Join chat' : 'Accept'}
         </button>

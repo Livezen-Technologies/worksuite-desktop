@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.37.0 — 2026-10-04
+
+- C-09 Invite and transfer: the invite dialog with people and departments in one search, status and team on each row, and 'Invite N people'; the transfer dialog with A person / A department / Next available and warm or hand over now; the invitee's Invitation and Transfer to you cards with the server's countdown; the amber declined notice with dismiss.
+
 ## 1.36.0 — 2026-10-04
 
 - C-08 Several staff in one chat: Reply to visitor / Internal note tabs over the shared composer (note mode with @colleagues, staff-only typing, own draft), notes labelled with their author, colleagues' bubbles tinted with their photo and yours as You, and the In this chat card with presence, role, join time, the invite countdown, Invite someone and Leave chat with the owner's warning.

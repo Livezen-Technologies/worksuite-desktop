@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.164 — 2026-10-04
+
+- **Invite and transfer (C-09).**
+  - **Invite** searches people and departments together. Each person shows their status, chats and team ("Available ·
+    1 chat · Education sales"), with a note for them and **Invite N people**.
+  - **Transfer** offers **A person**, **A department** or **Next available**. A warm transfer keeps you in the chat
+    until they join; **Hand over now** leaves at once and it rings for them.
+- **The invitee's cards** in the call window say who is asking and for what ("Nuwan invites you to a chat with
+  Visitor 4F2A", "Nuwan is handing you Visitor 4F2A"). They show the note and a countdown kept by the server's clock,
+  so it is right even when this computer's clock is not. The bar under your tabs and the Invited list count down too.
+- A declined invitation shows as an amber notice you can dismiss.
+- Needs the server update (Communication 1.31.0).
+
 ## 0.2.163 — 2026-10-04
 
 - **Several staff in one chat (C-08).** **Reply to visitor** and **Internal note** are now tabs over the one composer.

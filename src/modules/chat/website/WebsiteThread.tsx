@@ -28,7 +28,7 @@ import { byTime, dwell, eventsForThread, fromWebsiteMessage, fromWidgetEvent, pa
 import { sharedFilesOf, type SharedFile } from '../kit/SharedFiles';
 import { useNow } from '../../calls/parts';
 import { openWebsiteChatWindow } from '../window';
-import { InThisChat, InviteDialog, LeaveChat, MessageTypeTabs, TeamFaces, TransferDialog, useDeclined } from './Team';
+import { DeclinedNotice, InThisChat, InviteDialog, LeaveChat, MessageTypeTabs, TeamFaces, TransferDialog, useDeclined } from './Team';
 import { CallBar } from './CallBar';
 import { CallbackCard, isPending } from './Callbacks';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
@@ -249,12 +249,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           {live.staffTyping.length ? <TypingLine side="right">{typingWords(live.staffTyping)}</TypingLine> : null}
         </div>
         {declined ? (
-          // An invitation or transfer this person sent came back (TEAM-24, WF-T2).
-          <div role="status" className="flex items-center gap-2 border-t border-line bg-selection px-3.5 py-2 text-[12.5px] text-ink">
-            <Icon name="info" size={14} className="shrink-0 text-primary" />
-            <span className="min-w-0 flex-1">{declined.text}</span>
-            {declined.retry && t?.can[declined.retry] ? <button type="button" onClick={() => setDialog(declined.retry)} className="shrink-0 font-semibold text-primary hover:underline">Try someone else</button> : null}
-          </div>
+          // An invitation or transfer this person sent came back (TEAM-24, WF-T2; C-09: amber, Try someone else).
+          <DeclinedNotice d={declined} onRetry={declined.retry && t?.can[declined.retry] ? () => setDialog(declined.retry) : null} />
         ) : null}
         {c.status === 'closed' ? (
           // The composer gives way to the locked notice (C-06, UX-CLS-01), the same one the Closed section shows.
@@ -293,7 +289,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           foot={t ? <LeaveChat data={data} onTransfer={() => setDialog('transfer')} onClose={() => void websiteAction(c.id, 'close').then(refresh, (e) => toast('error', errorMessage(e)))} onDone={refresh} /> : null}
         />
       ) : null}
-      {dialog === 'invite' ? <InviteDialog conversationId={c.id} me={me} onClose={() => setDialog(null)} onDone={refresh} /> : null}
+      {dialog === 'invite' ? <InviteDialog conversationId={c.id} me={me} owner={t?.my_role === 'owner'} onClose={() => setDialog(null)} onDone={refresh} /> : null}
       {dialog === 'transfer' ? <TransferDialog conversationId={c.id} me={me} onClose={() => setDialog(null)} onDone={refresh} /> : null}
     </div>
   );

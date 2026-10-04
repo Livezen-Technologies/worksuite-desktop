@@ -8,7 +8,7 @@ import { app } from '../../../core/app-state';
 import { text } from '../../../core/i18n';
 import { useStore } from '../../../core/store';
 import { useTab, useTabTitle } from '../../../core/tab-context';
-import { listStamp, parseTs } from '../../../core/time';
+import { listStamp } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
@@ -17,7 +17,7 @@ import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
 import { ClosedDetail, ClosedRow } from './Closed';
 import { MissedDetail, MissedRow, useMissed, type MissedTab } from './Missed';
 import { OfflineDetail, OfflineRow, useOffline } from './Offline';
-import { clock, handoffAsk, handoffTitle, useRingState } from './Ringing';
+import { clock, handoffAsk, handoffLeft, handoffTitle, useRingState } from './Ringing';
 import { CallLine, pathOf, PRIORITY_TAG, rowPreview, Tag, WaitClock } from './rowParts';
 import { WebsiteTable } from './WebsiteTable';
 import { WebsiteLive, type LiveView, type OnlineVisitor } from './WebsiteLive';
@@ -484,7 +484,8 @@ function useVisitorsTyping(): Set<number> {
  */
 function InvitedRow({ h, hidden, active, onOpen }: { h: WebchatHandoff; hidden: boolean; active: boolean; onOpen: () => void }) {
   const now = useNow(1_000);
-  const left = h.expiresAt ? Math.max(0, Math.round((parseTs(h.expiresAt).getTime() - now) / 1000)) : null;
+  // By the server's count, as the call card's (C-09).
+  const left = handoffLeft(h, now);
   const answer = (accept: boolean) => void call('ring:handoff', { id: h.id, accept }).catch(() => undefined);
   return (
     <div data-website-row={h.conversationId} className={cx('relative flex flex-col gap-1.5 border-b border-line py-2.5 pr-3 pl-3.5', active ? 'bg-selection' : 'hover:bg-subtle')}>

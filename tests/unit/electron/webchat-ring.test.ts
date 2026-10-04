@@ -9,7 +9,7 @@ vi.mock('electron', () => ({
 }));
 
 import { DesktopError } from '../../../electron/main/errors';
-import { fromCall, mergeAnswer, orderChats, ringerHeight, stampMs, toneFor, WebchatRinger, type CallEntry, type PendingAnswer, type RingingEntry } from '../../../electron/services/webchat-ring';
+import { fromCall, fromHandoff, mergeAnswer, orderChats, ringerHeight, stampMs, toneFor, WebchatRinger, type CallEntry, type HandoffEntry, type PendingAnswer, type RingingEntry } from '../../../electron/services/webchat-ring';
 import { ringerBounds } from '../../../electron/windows/manager';
 import type { HttpClient } from '../../../electron/services/http';
 
@@ -349,6 +349,17 @@ describe('WebchatRinger: invitations and transfers', () => {
     r.handle({ type: 'chat.widget.handoff.resolved', handoff_id: 22, conversation_id: 4, status: 'cancelled', by: 8 } as never);
     expect(r.state().outcome?.text).toBe('The transfer for Nimali: it was cancelled.');
     expect(r.state()).toMatchObject({ handoffs: [], tone: 'off' });
+    r.stop();
+  });
+
+  it('counts down by the server\'s seconds left, not its stamp against this computer\'s clock (C-09)', async () => {
+    // This computer's clock is an hour fast: the stamp has "passed", but the server says 90 seconds are left.
+    const { r } = ringer([{ ringing: [], handoffs: [card({ expires_at: stamp(3_600_000), expires_in: 90 })] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().handoffs).toHaveLength(1));
+    expect(r.state().handoffs![0]!.endsAt! - Date.now()).toBeGreaterThan(85_000);
+    expect(fromHandoff({ handoff_id: 5, conversation_id: 3, visitor: 'V', expires_in: 48 } as HandoffEntry, 1_000)?.endsAt).toBe(49_000);
+    expect(fromHandoff({ handoff_id: 5, conversation_id: 3, visitor: 'V', expires_at: null, expires_in: null } as HandoffEntry, 1_000)?.endsAt).toBeNull();
     r.stop();
   });
 

@@ -187,7 +187,7 @@ describe('Invite and Transfer (TEAM-UI-02)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Invite' }));
     const dialog = await screen.findByRole('dialog', { name: 'Invite to this chat' });
     await within(dialog).findByText('Kasun Jayasuriya');
-    expect(within(dialog).getByText("Busy · 4 open chats · Billing · not on this site's staff")).toBeTruthy();
+    expect(within(dialog).getByText("Busy · 4 chats · Billing · not on this site's staff")).toBeTruthy();
     const boxes = within(dialog).getAllByRole('checkbox') as HTMLInputElement[];
     const byName = (n: string) => boxes.find((b) => b.closest('label')!.textContent!.includes(n))!;
     expect(byName('Ruwan Offline').disabled).toBe(true);
@@ -197,7 +197,7 @@ describe('Invite and Transfer (TEAM-UI-02)', () => {
     fireEvent.click(byName('Kasun Jayasuriya'));
     fireEvent.click(byName('Amaya Silva'));
     fireEvent.change(within(dialog).getByRole('textbox', { name: /Note for them/ }), { target: { value: 'Education pricing, please.' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Invite 2' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Invite 2 people' }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('POST', '/api/chat/widget-admin/conversations/41/invites', { body: { user_ids: [8, 10], note: 'Education pricing, please.' } }));
     expect(apiGet).toHaveBeenCalledWith('/api/chat/widget-admin/agents', { conversation_id: '41' }, expect.anything());
   });
@@ -210,7 +210,7 @@ describe('Invite and Transfer (TEAM-UI-02)', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Invite someone' }));
     const dialog = await screen.findByRole('dialog', { name: 'Invite to this chat' });
     fireEvent.click((await within(dialog).findByText('Amaya Silva')).closest('label')!.querySelector('input')!);
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Invite' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Invite 1 person' }));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('error', 'A chat can have 4 staff at most, owner included: this one has 4.'));
   });
 
@@ -231,8 +231,9 @@ describe('Invite and Transfer (TEAM-UI-02)', () => {
     fireEvent.click(within(dialog).getByRole('combobox', { name: 'Department' }));
     fireEvent.click(screen.getByRole('option', { name: 'Billing · 1 available' }));
     fireEvent.click(within(dialog).getByText('Hand over now'));
+    expect(within(dialog).getByText('You leave at once; it rings for the Billing team until someone joins.')).toBeTruthy();
     fireEvent.change(within(dialog).getByRole('textbox', { name: /Handover note/ }), { target: { value: 'Refund for invoice 1182' } });
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Hand over now' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Transfer' }));
     await waitFor(() => expect(request).toHaveBeenCalledWith('POST', '/api/chat/widget-admin/conversations/41/transfer', { body: { department_id: 2, mode: 'cold', note: 'Refund for invoice 1182' } }));
   });
 });
@@ -254,7 +255,8 @@ describe('a declined invitation comes back to whoever sent it (TEAM-24, WF-T2)',
     mount();
     await screen.findByRole('region', { name: 'In this chat' });
     act(() => realtime({ type: 'chat.widget.handoff.resolved', handoff_id: 51, conversation_id: 41, status: 'declined', by: 8, by_name: 'Kasun Jayasuriya', visitor: 'Visitor 4F2A' }));
-    expect(await screen.findByText('Kasun Jayasuriya declined — Visitor 4F2A is still in your chat.')).toBeTruthy();
+    const notice = await screen.findByText((_, el) => el?.getAttribute('role') === 'status' && !!el.textContent?.startsWith('Kasun Jayasuriya declined — Visitor 4F2A is still yours.'));
+    expect(within(notice).getByText('Visitor 4F2A').tagName).toBe('B');
     fireEvent.click(screen.getByRole('button', { name: 'Try someone else' }));
     expect(await screen.findByRole('dialog', { name: 'Invite to this chat' })).toBeTruthy();
   });

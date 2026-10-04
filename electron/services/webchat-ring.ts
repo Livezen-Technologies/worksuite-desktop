@@ -79,11 +79,13 @@ export interface HandoffEntry extends WaitingContext {
   to_any?: boolean;
   note?: string | null;
   expires_at?: string | null;
+  /** Seconds left by the server's clock (C-09). */
+  expires_in?: number | null;
   created_at?: string | null;
 }
 
-/** A handoff card as this computer shows it, or null when it cannot be read. */
-export function fromHandoff(h: HandoffEntry): WebchatHandoff | null {
+/** A handoff card as this computer shows it, or null when it cannot be read. `now` is when it was received. */
+export function fromHandoff(h: HandoffEntry, now = Date.now()): WebchatHandoff | null {
   const hid = id(h.handoff_id);
   const cid = id(h.conversation_id);
   if (!hid || !cid) return null;
@@ -101,7 +103,15 @@ export function fromHandoff(h: HandoffEntry): WebchatHandoff | null {
     note: text(h.note, 500),
     expiresAt: text(h.expires_at, 32),
     createdAt: text(h.created_at, 32),
+    // The server's count, made local once on arrival (C-09): never the server's stamp against this computer's clock.
+    endsAt: typeof h.expires_in === 'number' && Number.isFinite(h.expires_in) ? now + Math.max(0, h.expires_in) * 1000 : null,
   };
+}
+
+/** When a handoff runs out here (ms), or null when it rings until somebody takes it (C-09). */
+export function handoffEnds(h: Pick<WebchatHandoff, 'expiresAt' | 'endsAt'>): number | null {
+  if (typeof h.endsAt === 'number') return h.endsAt;
+  return h.expiresAt ? stampMs(h.expiresAt) : null;
 }
 
 /** Said to whoever an invitation or transfer was for when it resolves without them. */
@@ -418,7 +428,7 @@ export class WebchatRinger {
     const hidden = this.deps.locked();
     const now = Date.now();
     // One that ran out stops ringing at once; the server says so at the next read.
-    const handoffs = [...this.handoffs.values()].filter((h) => !h.expiresAt || stampMs(h.expiresAt) > now).sort((a, b) => a.id - b.id);
+    const handoffs = [...this.handoffs.values()].filter((h) => (handoffEnds(h) ?? Infinity) > now).sort((a, b) => a.id - b.id);
     const calls = [...this.calls.values()].sort((a, b) => a.id - b.id);
     return {
       chats: hidden ? chats.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, device: null, preview: null, by: null })) : chats,
@@ -1035,7 +1045,7 @@ export class WebchatRinger {
       this.chats = new Map(next.map((c) => [c.id, c]));
       // The server's list of invitations and transfers is the truth, where it has one (ENH-WCHAT-03).
       if (Array.isArray(answer?.handoffs)) {
-        this.handoffs = new Map(answer.handoffs.map(fromHandoff).filter((h): h is WebchatHandoff => h !== null).map((h) => [h.id, h]));
+        this.handoffs = new Map(answer.handoffs.map((x: HandoffEntry) => fromHandoff(x)).filter((h): h is WebchatHandoff => h !== null).map((h) => [h.id, h]));
       }
       // And of visitors' calls ringing for me (ENH-WCHAT-05).
       if (Array.isArray(answer?.calls)) {

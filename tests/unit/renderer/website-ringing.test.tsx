@@ -201,7 +201,7 @@ describe('invitations and transfers in the call window (ENH-WCHAT-03, TEAM-UI-02
     vi.mocked(call).mockResolvedValue(state({ chats: [], handoffs: [handoff({})] }) as never);
     show(<WebchatRingWindow />);
     await screen.findByText('Invitation');
-    expect(screen.getByText('Nuwan invites you to join')).toBeTruthy();
+    expect(screen.getByText('Nuwan invites you to a chat with Visitor 4F2A')).toBeTruthy();
     expect(screen.getByText('“Can you take the education pricing?”')).toBeTruthy();
     expect(screen.getByRole('timer').getAttribute('aria-label')).toMatch(/^Rings for 1:3\d more$/);
     fireEvent.click(screen.getByRole('button', { name: 'Join chat' }));
@@ -214,8 +214,8 @@ describe('invitations and transfers in the call window (ENH-WCHAT-03, TEAM-UI-02
     vi.mocked(call).mockResolvedValue(state({ chats: [], handoffs: [handoff({ kind: 'transfer', mode: 'cold', from: 'Dilini' })] }) as never);
     show(<WebchatRingWindow />);
     await screen.findByText('Transfer to you');
-    expect(screen.getByText('Handed over now')).toBeTruthy();
-    expect(screen.getByText('Dilini handed this chat over')).toBeTruthy();
+    expect(screen.getByText('Dilini is handing you Visitor 4F2A')).toBeTruthy();
+    expect(screen.getByText('Handed over now — Dilini has left; it rings for you until you join')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Accept' }));
     expect(call).toHaveBeenCalledWith('ring:handoff', { id: 21, accept: true });
   });

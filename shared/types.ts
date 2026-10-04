@@ -577,6 +577,11 @@ export interface WebchatHandoff {
   /** Server stamp; null rings until somebody takes it. */
   expiresAt: string | null;
   createdAt: string | null;
+  /**
+   * When it runs out by this computer's clock (ms), from the server's own count of seconds left (C-09): the INVITATION
+   * and TRANSFER TO YOU countdowns run true on a computer whose clock is off. Absent from an older server.
+   */
+  endsAt?: number | null;
 }
 
 /** A visitor's voice call ringing for me (WS-WCHAT ENH-WCHAT-05, VOICE-10). */
