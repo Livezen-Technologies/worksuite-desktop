@@ -393,7 +393,9 @@ export type Section = 'inbox' | 'live' | 'offline' | 'missed' | 'callbacks' | 'm
 export function sectionRows(rows: WebsiteRow[], section: Section, me: number | null): WebsiteRow[] {
   switch (section) {
     case 'live':
-      return rows.filter((r) => r.online && !r.is_offline);
+      // An offline enquiry whose visitor came back and wrote while staff are online is live again (C-05, MIS-02): the
+      // server opens it (`pending` → `open`) and it rings once; it stays under Offline enquiries too.
+      return rows.filter((r) => r.online && (!r.is_offline || r.status === 'open'));
     case 'offline':
       return rows.filter((r) => r.is_offline);
     case 'mine':

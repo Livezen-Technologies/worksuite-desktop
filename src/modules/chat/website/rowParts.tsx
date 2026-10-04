@@ -18,6 +18,8 @@ const TAG = {
   indigo: 'bg-selection text-primary',
   warning: 'bg-warning-bg text-[#9A4A06] dark:text-warning',
   muted: 'bg-subtle text-ink-3',
+  // "Back on the site" on an offline enquiry (C-05).
+  success: 'bg-success-bg text-success',
 };
 
 /** A small chip on a row; `chip` is the table's larger status chip. */

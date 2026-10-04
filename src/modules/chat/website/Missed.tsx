@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { apiGet, apiPost } from '../../../core/api';
 import { errorMessage } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
@@ -9,7 +9,7 @@ import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../.
 import { WEBSITE_CAPS } from '../kit/caps';
 import { MessageList } from '../kit/MessageList';
 import { byTime, eventsForThread, fromWebsiteMessage, fromWidgetEvent } from '../kit/model';
-import { useWebsiteConversation, WEBSITE } from './api';
+import { useWebsiteConversation, WEBSITE, type WebsiteConversation } from './api';
 import { ordinal } from './live/liveMap';
 import { clock } from './Ringing';
 import { hostOf, PANEL_CARD, PANEL_HEADING, pathOf, siteAndPath, Tag } from './rowParts';
@@ -69,7 +69,7 @@ export function missedStamp(at: string | null | undefined): string {
   return d.toDateString() === new Date().toDateString() ? text('Today {time}', { time: timeLabel(at) }) : listStamp(at);
 }
 
-const firstName = (name: string) => (/^visitor\b/i.test(name) ? name : name.split(/\s+/)[0] ?? name);
+export const firstName = (name: string) => (/^visitor\b/i.test(name) ? name : name.split(/\s+/)[0] ?? name);
 
 /** "Handled by Dilini · no contact left" (C-04): who dealt with it, how, and whether there was ever a way back. */
 export function handledLine(m: Pick<Missed, 'handled' | 'email' | 'phone'>): string | null {
@@ -79,40 +79,69 @@ export function handledLine(m: Pick<Missed, 'handled' | 'email' | 'phone'>): str
   return m.email || m.phone ? who : `${who} · ${text('no contact left')}`;
 }
 
+/**
+ * A visitor to follow up, as a row: the shell Missed chats (C-04) and Offline enquiries (C-05) share — the visitor
+ * with their on-site dot, when, one line of what they said, and the chips underneath — so the two lists read alike.
+ */
+export function FollowUpRow({ id, name, online, stamp, line, active, dim = false, onOpen, children }: { id: number; name: string; online: boolean; stamp: string; line: string; active: boolean; dim?: boolean; onOpen: () => void; children: ReactNode }) {
+  return (
+    <button
+      type="button"
+      data-website-row={id}
+      aria-current={active ? 'true' : undefined}
+      onClick={onOpen}
+      className={cx('relative flex w-full items-start gap-2.5 border-b border-line py-3 pr-3 pl-3.5 text-left', active ? 'bg-selection' : 'hover:bg-subtle', dim && !active && 'opacity-60')}
+    >
+      {active ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
+      <Avatar name={name} size={34} presence={online ? 'online' : null} />
+      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
+        <span className="flex items-center gap-[7px]">
+          <b className="flex-1 truncate text-[13.5px] text-ink">{name}</b>
+          <span className="shrink-0 text-[11.5px] text-ink-3">{stamp}</span>
+        </span>
+        <span className="truncate text-[12px] text-ink-2">{line}</span>
+        {children}
+      </span>
+    </button>
+  );
+}
+
 /** A missed chat in the list: the visitor, when, what they asked, how long they waited, and the contact they left. */
 export function MissedRow({ m, active, onOpen }: { m: Missed; active: boolean; onOpen: () => void }) {
   const handled = handledLine(m);
   const line = m.preview ? `“${m.preview}”` : (m.email ?? m.phone ?? text('No way to reach them')) + (m.place ? ` · ${m.place}` : '');
   return (
-    <button
-      type="button"
-      data-website-row={m.id}
-      aria-current={active ? 'true' : undefined}
-      onClick={onOpen}
-      className={cx('relative flex w-full items-start gap-2.5 border-b border-line py-3 pr-3 pl-3.5 text-left', active ? 'bg-selection' : 'hover:bg-subtle', handled && !active && 'opacity-60')}
-    >
-      {active ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
-      <Avatar name={m.visitor} size={34} presence={m.online ? 'online' : null} />
-      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span className="flex items-center gap-[7px]">
-          <b className="flex-1 truncate text-[13.5px] text-ink">{m.visitor}</b>
-          <span className="shrink-0 text-[11.5px] text-ink-3">{missedStamp(m.started_at ?? m.missed_at)}</span>
+    <FollowUpRow id={m.id} name={m.visitor} online={!!m.online} stamp={missedStamp(m.started_at ?? m.missed_at)} line={line} active={active} dim={!!handled} onOpen={onOpen}>
+      {handled ? (
+        <span className="mt-0.5 truncate text-[11.5px] font-semibold text-success">{handled}</span>
+      ) : (
+        <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
+          {m.online ? <Tag tone="indigo">{text('Back on the site')}</Tag> : m.waited_seconds != null ? <Tag tone="danger">{text('Left after {time}', { time: clock(m.waited_seconds) })}</Tag> : null}
+          {m.email ? <Tag tone="muted">{text('Email left')}</Tag> : null}
+          {m.phone ? <Tag tone="muted">{text('Phone left')}</Tag> : null}
+          {!m.email && !m.phone ? <Tag tone="muted">{text('No contact left')}</Tag> : null}
+          {m.preview === undefined ? <span className="truncate text-[11px] text-ink-3">{m.widget}</span> : null}
         </span>
-        <span className="truncate text-[12px] text-ink-2">{line}</span>
-        {handled ? (
-          <span className="mt-0.5 truncate text-[11.5px] font-semibold text-success">{handled}</span>
-        ) : (
-          <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
-            {m.online ? <Tag tone="indigo">{text('Back on the site')}</Tag> : m.waited_seconds != null ? <Tag tone="danger">{text('Left after {time}', { time: clock(m.waited_seconds) })}</Tag> : null}
-            {m.email ? <Tag tone="muted">{text('Email left')}</Tag> : null}
-            {m.phone ? <Tag tone="muted">{text('Phone left')}</Tag> : null}
-            {!m.email && !m.phone ? <Tag tone="muted">{text('No contact left')}</Tag> : null}
-            {m.preview === undefined ? <span className="truncate text-[11px] text-ink-3">{m.widget}</span> : null}
-          </span>
-        )}
-      </span>
-    </button>
+      )}
+    </FollowUpRow>
   );
+}
+
+/**
+ * What is known about the visit, in the two lines both details show (C-04, C-05): "Kandy, LK · Safari · macOS" and
+ * "1st visit · 5 pages · from facebook.com".
+ */
+export function visitFacts(data: WebsiteConversation, place?: string | null): { placeLine: string; visitLine: string } {
+  const v = data.visitor;
+  const visit = eventsForThread(data.events, data.conversation.started_at);
+  const pages = visit.filter((e) => e.kind === 'page_view').length || (data.journey?.length ?? 0);
+  const placeLine = [[v?.city, v?.country].filter(Boolean).join(', ') || place, v?.browser, v?.os].filter(Boolean).join(' · ');
+  const visitLine = [
+    v?.visits ? text('{n} visit', { n: ordinal(v.visits) }) : null,
+    pages ? (pages === 1 ? text('1 page') : text('{n} pages', { n: pages })) : null,
+    v?.referrer ? text('from {site}', { site: hostOf(v.referrer) }) : null,
+  ].filter(Boolean).join(' · ');
+  return { placeLine, visitLine };
 }
 
 /**
@@ -142,7 +171,6 @@ export function MissedDetail({ id, m, onOpenChat }: { id: string; m: Missed | un
   const handled = m ? handledLine(m) : null;
   const canReply = data.can?.reply !== false;
   const visit = eventsForThread(data.events, c.started_at);
-  const pages = visit.filter((e) => e.kind === 'page_view').length || (data.journey?.length ?? 0);
   const startPage = data.journey?.[0]?.url ? pathOf(data.journey[0].url) : null;
   const where = v?.current_url ?? m?.url ?? null;
   const items = byTime([
@@ -165,12 +193,7 @@ export function MissedDetail({ id, m, onOpenChat }: { id: string; m: Missed | un
     );
   };
 
-  const placeLine = [[v?.city, v?.country].filter(Boolean).join(', ') || m?.place, v?.browser, v?.os].filter(Boolean).join(' · ');
-  const visitLine = [
-    v?.visits ? text('{n} visit', { n: ordinal(v.visits) }) : null,
-    pages ? (pages === 1 ? text('1 page') : text('{n} pages', { n: pages })) : null,
-    v?.referrer ? text('from {site}', { site: hostOf(v.referrer) }) : null,
-  ].filter(Boolean).join(' · ');
+  const { placeLine, visitLine } = visitFacts(data, m?.place);
 
   return (
     <div className="flex h-full min-w-0 flex-1 flex-col bg-ground">
@@ -236,16 +259,17 @@ export function MissedDetail({ id, m, onOpenChat }: { id: string; m: Missed | un
 }
 
 /**
- * Reply by email (UX-MISS-02): the answer goes into the conversation and to the address they left, with the way back
- * to the chat; the server sends both or neither.
+ * Reply by email (UX-MISS-02), from a missed chat (C-04) or an offline enquiry (C-05): the answer goes into the
+ * conversation and to the address they left, with the way back to the chat; the server sends both or neither.
+ * `path` is where it is posted — `missed/{id}/email` by default, `conversations/{id}/email` for an enquiry.
  */
-function ReplyByEmail({ id, to, name, onClose, onSent }: { id: number; to: string; name: string; onClose: () => void; onSent: () => void }) {
+export function ReplyByEmail({ id, to, name, path, onClose, onSent }: { id: number; to: string; name: string; path?: string; onClose: () => void; onSent: () => void }) {
   const [body, setBody] = useState('');
   const [busy, setBusy] = useState(false);
   const send = () => {
     if (!body.trim()) return;
     setBusy(true);
-    void apiPost<{ to?: string }>(`${WEBSITE}/missed/${id}/email`, { message: body.trim() }).then(
+    void apiPost<{ to?: string }>(path ?? `${WEBSITE}/missed/${id}/email`, { message: body.trim() }).then(
       () => {
         toast('success', text('Emailed to {email}', { email: to }));
         onSent();

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.33.0 — 2026-10-04
+
+- C-05 Offline enquiries: their own list from `GET offline` (answered ones too) with the reason chip (Outside hours / Nobody online) and Not replied / Emailed by … / Back on the site; a review detail with their message, email, phone and page, a staff-only note, Assign, Close and Reply by email (`conversations/{id}/email`), the visitor and why nobody answered. An enquiry whose visitor came back and wrote is in Live chats too. The row shell, visit facts and the Reply by email dialog are shared with Missed chats. An older server keeps the inbox's offline rows.
+
 ## 1.32.0 — 2026-10-04
 
 - C-04 Missed chats: To follow up / Handled tabs with counts, rows with the visitor's first words, how long they waited and who handled them, a review detail that does not claim the chat, Reply by email and Mark handled.

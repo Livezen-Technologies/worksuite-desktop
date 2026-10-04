@@ -5,6 +5,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.160 — 2026-10-04
+
+- **Offline enquiries (C-05).** Each row says why the visitor left a message (**Outside hours** or **Nobody
+  online**) and where it stands: **Not replied**, replied by email, or **Back on the site**. Replied enquiries stay
+  in the list until closed.
+- Opening one shows the visitor's message with their email, phone and the page they were on, why nobody answered,
+  and a staff-only note. It offers **Reply by email**, **Assign** and **Close**. It no longer claims the chat, so if
+  the visitor comes back while staff are online, it rings in Live chats as usual. **Open chat** appears while they
+  are back on the site.
+- Needs the server update (Communication 1.27.0). An older server shows the list as before.
+
 ## 0.2.159 — 2026-10-04
 
 - **Missed chats (C-04).** The list has **To follow up** and **Handled** tabs with counts. Each row shows the visitor,

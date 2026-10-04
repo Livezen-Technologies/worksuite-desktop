@@ -15,6 +15,7 @@ import { useNow } from '../../calls/parts';
 import { followUpsFirst, isMine as mineFor, longestWaiting, PRIORITIES, sectionRows, sortWebsiteRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, WEBSITE_SORTS, type CallbackOutcome, type Section, type WebsiteCallback, type WebsitePriority, type WebsiteRow, type WebsiteSort } from './api';
 import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
 import { MissedDetail, MissedRow, useMissed, type MissedTab } from './Missed';
+import { OfflineDetail, OfflineRow, useOffline } from './Offline';
 import { clock, handoffAsk, handoffTitle, useRingState } from './Ringing';
 import { CallLine, pathOf, PRIORITY_TAG, rowPreview, Tag, WaitClock } from './rowParts';
 import { WebsiteTable } from './WebsiteTable';
@@ -129,6 +130,12 @@ export function WebsiteWorkspace() {
     refetchInterval: 60_000,
     retry: false,
   });
+  /*
+   * Offline enquiries (C-05): their own list, answered ones too, with why each was left. An older server has no such
+   * list (404) and the section keeps showing the inbox's `is_offline` rows as before.
+   */
+  const offline = useOffline();
+  const enquiries = !offline.isError;
   // Visitors waiting to be called back (VOICE-16): first in Missed chats on a server without the Callbacks section;
   // with it (#223), they have that section, its count and its overdue mark.
   const callbackCounts = useCallbackCounts();
@@ -148,7 +155,7 @@ export function WebsiteWorkspace() {
   const typingRows = useVisitorsTyping();
   const openRows = open.data?.conversations ?? [];
   const sites = open.data && 'sites' in open.data ? ((open.data as { sites?: Array<{ widget_id: number; site: string }> }).sites ?? []) : [];
-  const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) + callbackList.length : s === 'callbacks' ? (callbackCounts.data?.todo ?? 0) : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : sectionRows(openRows, s, me).length);
+  const count = (s: Section): number => (s === 'missed' ? (missedCount.data?.count ?? 0) + callbackList.length : s === 'callbacks' ? (callbackCounts.data?.todo ?? 0) : s === 'invited' ? handoffs.length : s === 'closed' ? 0 : s === 'offline' && offline.data ? offline.data.count : sectionRows(openRows, s, me).length);
   const overdue = callbackCounts.data?.overdue ?? 0;
   const source = section === 'closed' ? closed : open;
   // The list views have no pills: a Mine left on from another section does not narrow them unseen.
@@ -157,7 +164,8 @@ export function WebsiteWorkspace() {
   const isMine = (r: WebsiteRow) => mineFor(r, me);
   const openHere = sectionRows(openRows, section === 'closed' ? 'inbox' : section, me).filter(onSite);
   const typed = q.trim().toLowerCase();
-  const searching = section !== 'missed' && section !== 'invited' && section !== 'callbacks' && needle.length >= 2 && typed.length >= 2;
+  const ownList = section === 'missed' || (section === 'offline' && enquiries);
+  const searching = !ownList && section !== 'invited' && section !== 'callbacks' && needle.length >= 2 && typed.length >= 2;
   const found = useWebsiteSearch(searching ? needle : '', section === 'closed');
   // Until the server answers, the list narrows by what it already has.
   const narrowed = (searching && found.data ? found.data.conversations : sectionRows(source.data?.conversations ?? [], section, me))
@@ -216,6 +224,12 @@ export function WebsiteWorkspace() {
   // A legacy call back in Missed chats opens its conversation, as it always has.
   const missedDetail = section === 'missed' && !!selected && (!!missedOpen || (!callbackList.some((b) => String(b.conversation_id) === selected) && missedTabs));
 
+  // The enquiries, narrowed by the site picked and the search box; the open one may be outside them (C-05).
+  const offlineRows = (offline.data?.offline ?? []).filter((e) => !site || e.widget_id === site)
+    .filter((e) => !typed || [e.visitor, e.company, e.email, e.phone, e.preview, e.widget, e.place].some((v) => v?.toLowerCase().includes(typed)));
+  const offlineDetail = section === 'offline' && enquiries && !!selected;
+  const offlineOpen = offlineDetail ? (offline.data?.offline ?? []).find((e) => String(e.id) === selected) : undefined;
+
   // Ctrl/Cmd+[ goes back to Chat (C-01), while this tab is in front.
   useEffect(() => {
     if (!active) return;
@@ -230,7 +244,7 @@ export function WebsiteWorkspace() {
   }, [active, go]);
 
   // J and K move through the list (CHAT-UI-00) while this tab is in front and nothing is being typed.
-  const ids = section === 'missed' ? missedRows.map((m) => m.id) : section === 'invited' ? handoffs.map((h) => h.conversationId)
+  const ids = section === 'missed' ? missedRows.map((m) => m.id) : section === 'offline' && enquiries ? offlineRows.map((e) => e.id) : section === 'invited' ? handoffs.map((h) => h.conversationId)
     : section === 'callbacks' ? (cbList.data?.callbacks ?? []).map((b) => b.conversation_id) : rows.map((r) => r.id);
   const idsKey = ids.join(',');
   useEffect(() => {
@@ -349,6 +363,7 @@ export function WebsiteWorkspace() {
             {section !== 'missed' ? siteSelect : null}
           </div>
           {section === 'missed' ? <div className="-mt-1 text-[12px] text-ink-3">{text('Visitors who wrote and left before anyone replied.')}</div> : null}
+          {section === 'offline' ? <div className="-mt-1 text-[12px] text-ink-3">{text('Messages left while nobody was available or outside business hours.')}</div> : null}
           {searchBox(false)}
           {section === 'missed' && missedTabs ? (
             <div className="flex gap-1.5 text-[12px] font-semibold" role="group" aria-label="Show">
@@ -361,7 +376,7 @@ export function WebsiteWorkspace() {
               <Pill on={cbStatus === 'handled'} onClick={() => setCbStatus('handled')}>{text('Handled')}</Pill>
               <Pill on={mineOnly} onClick={() => setMineOnly((m) => !m)}>{text('Mine')}</Pill>
             </div>
-          ) : section !== 'missed' && section !== 'invited' && !table ? (
+          ) : !ownList && section !== 'invited' && !table ? (
             <div className="flex gap-1.5 text-[12px] font-semibold" role="group" aria-label="Show">
               <Pill on={pill === 'open'} onClick={() => showOpen(false)}>Open · {openHere.length}</Pill>
               <Pill on={pill === 'mine'} onClick={() => showOpen(true)}>Mine · {openHere.filter(isMine).length}</Pill>
@@ -380,6 +395,16 @@ export function WebsiteWorkspace() {
             handoffs.length === 0 ? <Empty icon="users" title="No invitations" hint="When a colleague invites you into a website chat, or transfers one to you, it waits here." /> : handoffs.map((h) => (
               <InvitedRow key={h.id} h={h} hidden={ring.hidden} active={selected === String(h.conversationId)} onOpen={() => to({ website: String(h.conversationId) })} />
             ))
+          ) : section === 'offline' && enquiries ? (
+            offline.isLoading ? <Spinner /> : !offlineRows.length ? (
+              <Empty
+                icon="mail"
+                title={typed ? text('Nothing matches “{q}”', { q: q.trim() }) : text('No offline enquiries')}
+                hint={typed ? undefined : text('When a visitor writes while nobody is available or outside business hours, their message waits here.')}
+              />
+            ) : (
+              offlineRows.map((e) => <OfflineRow key={e.id} e={e} active={selected === String(e.id)} onOpen={() => to({ website: String(e.id) })} />)
+            )
           ) : section === 'missed' ? (
             missed.isLoading ? <Spinner /> : missed.error ? <div className="p-4"><ErrorNote error={missed.error} onRetry={() => void missed.refetch()} /></div> : !missedRows.length && !(missedTab === 'todo' && callbackList.length) ? (
               <Empty
@@ -404,7 +429,9 @@ export function WebsiteWorkspace() {
         </div>
       </section>
       <div className={cx('flex min-w-0 flex-1', (live || designing || tableView) && 'hidden')}>
-        {selected && missedDetail ? (
+        {selected && offlineDetail ? (
+          <OfflineDetail key={selected} id={selected} e={offlineOpen} me={me} onOpenChat={() => to({ section: 'inbox', website: selected })} onClosed={() => to({ website: null })} />
+        ) : selected && missedDetail ? (
           <MissedDetail key={selected} id={selected} m={missedOpen} onOpenChat={() => to({ section: 'inbox', website: selected })} />
         ) : selected ? (
           <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} />
