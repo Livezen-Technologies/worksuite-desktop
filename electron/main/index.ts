@@ -63,6 +63,7 @@ import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
+import { AtRiskAlerts, LivePulse, wallTarget } from '../services/live-desk';
 import { QuickAsk } from '../services/quick-ask';
 import { AiService } from '../services/ai';
 import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
@@ -1260,10 +1261,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     aiChanges: () => openAiChanges(),
     ringingSettings: () => navigate({ route: '/settings/notifications', source: 'tray' }),
     showRingMenu: (anchor) => ringTray.show(anchor),
+    liveDashboard: () => liveDesk.open('dashboard'),
+    liveMap: () => liveDesk.open('map'),
   });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
   const JOIN_SHORTCUT = 'CommandOrControl+Shift+J';
+  // "Silence for 15 minutes" in the tray (MAP-22): website chats ring without the tone, and at-risk notifications
+  // come without sound, until then — as Do not disturb kept to the card would (RING-47). Nothing else is paused.
+  let liveSilencedUntil = 0;
+  const liveSilenced = (): boolean => liveSilencedUntil > Date.now();
   // Answers a visitor's voice call (ENH-WCHAT-05), held only while one rings.
   const ANSWER_SHORTCUT = 'CommandOrControl+Shift+A';
   let answerHeld = false;
@@ -1330,11 +1337,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     me: () => (sessionCtl.get().user?.id ? Number(sessionCtl.get().user?.id) : null),
     prefs: () => {
       const p = settings.effective();
-      return { ...p.webchatRinging, volume: !p.notificationSounds || lock.isLocked() && p.lockedNotificationSounds === false ? 0 : p.webchatRinging.volume };
+      return { ...p.webchatRinging, ...(liveSilenced() ? { duringDnd: 'card' as const } : {}), volume: !p.notificationSounds || lock.isLocked() && p.lockedNotificationSounds === false ? 0 : p.webchatRinging.volume };
     },
     quiet: () => {
       const p = settings.effective();
-      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null;
+      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null || liveSilenced();
     },
     // With a call just answered, the thread joins its audio (`call=`).
     open: (id, callId, then) => navigate({ route: `/chat?view=website&website=${id}${callId ? `&call=${callId}` : ''}${then === 'transfer' ? '&transfer=1' : ''}`, source: 'notification' }),
@@ -1374,8 +1381,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         ringingCount = nowRinging;
         emitStatus();
       }
-      // The tray's ringing menu goes with the last chat ringing, and behind the lock (R-06).
-      if (!s.chats.length || s.hidden) windows.hideRingTray();
+      // The tray's ringing menu goes with the last chat ringing, and behind the lock (R-06) — unless it is the Live
+      // mini-dashboard, which stays while it is open (L-05).
+      if (s.hidden) windows.closeRingTray();
+      else if (!s.chats.length && !livePulse.get()) windows.hideRingTray();
+      // An at-risk chat as a system notification, withdrawn when somebody joins (MAP-23); the icon red while it lasts.
+      atRisk.update(s);
+      syncLive();
       const live = s.chats.some((c) => !c.silenced) || !!s.handoffs?.length;
       attention(live || !!s.calls?.length);
       webchat.shortcut = joinShortcut(live && prefs.shortcut);
@@ -1399,20 +1411,97 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const ringTray = {
     show: (anchor: Electron.Rectangle | null): boolean => {
       const s = webchat.state();
-      if (lock.isLocked() || s.hidden || !s.chats.length) return false;
-      windows.showRingTray(anchor, ringTrayHeight ?? 120 + Math.min(4, s.chats.length) * 64);
+      // For website staff the menu is the Live mini-dashboard (L-05, MAP-22), ringing or not.
+      const live = !!livePulse.get();
+      if (lock.isLocked() || s.hidden || (!s.chats.length && !live)) return false;
+      windows.showRingTray(anchor, ringTrayHeight ?? (live ? 640 : 120 + Math.min(4, s.chats.length) * 64), live);
+      void livePulse.read();
       return true;
     },
     fit: (height: number): void => {
       ringTrayHeight = height;
       windows.fitRingTray(height);
     },
-    act: (action: 'inbox' | 'settings' | 'quit' | 'close'): void => {
+    act: (action: 'inbox' | 'settings' | 'quit' | 'close' | 'dashboard' | 'liveMap' | 'wall' | 'silence'): void => {
       windows.hideRingTray();
       if (action === 'inbox') navigate({ route: '/chat?view=website&section=inbox', source: 'tray' });
       else if (action === 'settings') navigate({ route: '/settings/notifications', source: 'tray' });
       else if (action === 'quit') quit();
+      else if (action === 'dashboard') liveDesk.open('dashboard');
+      else if (action === 'liveMap') liveDesk.open('map');
+      else if (action === 'wall') liveDesk.open('wall');
+      else if (action === 'silence') {
+        liveSilencedUntil = Date.now() + 15 * 60_000;
+        webchat.refresh();
+      }
     },
+  };
+
+  // ── the Live dashboard outside the main window (L-04, L-05; MAP-21…25) ──
+  // The figures the menu-bar icon carries, read with the main window closed (MAP-22).
+  const livePulse = new LivePulse({
+    http,
+    allowed: () => sessionCtl.isReady() && canOpenApp('chat', sessionCtl.visibleApps()),
+    onChanged: () => syncLive(),
+  });
+  const atRisk = new AtRiskAlerts({
+    allowed: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('chat', sessionCtl.visibleApps()) && settings.effective().notificationsEnabled !== false,
+    quiet: () => {
+      const p = settings.effective();
+      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null || liveSilenced();
+    },
+    duringDnd: () => (liveSilenced() ? 'card' : settings.effective().webchatRinging.duringDnd),
+    sound: () => settings.effective().notificationSounds,
+    join: (id) => void webchat.join(id),
+    showOnMap: (id) => liveDesk.open('map', id),
+  });
+  // ⌘⇧M shows or hides the Live map window and ⌘⇧D opens the Live dashboard from other apps (MAP-21, MAP-22). Held
+  // only while WorkSuite is not in front: in WorkSuite the keys keep their own meanings (Dock Tab Beside, mute on a call),
+  // and the Live map window and the tray's mini-dashboard answer them themselves.
+  const LIVE_MAP_SHORTCUT = 'CommandOrControl+Shift+M';
+  const LIVE_DASHBOARD_SHORTCUT = 'CommandOrControl+Shift+D';
+  let liveKeysHeld = false;
+  const syncLiveKeys = (): void => {
+    const want = !!livePulse.get() && !lock.isLocked() && !BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused());
+    if (want === liveKeysHeld) return;
+    if (want) {
+      try {
+        const map = globalShortcut.register(LIVE_MAP_SHORTCUT, () => liveDesk.open('toggleMap'));
+        const dash = globalShortcut.register(LIVE_DASHBOARD_SHORTCUT, () => liveDesk.open('dashboard'));
+        liveKeysHeld = map || dash;
+      } catch {
+        liveKeysHeld = false;
+      }
+    } else {
+      globalShortcut.unregister(LIVE_MAP_SHORTCUT);
+      globalShortcut.unregister(LIVE_DASHBOARD_SHORTCUT);
+      liveKeysHeld = false;
+    }
+  };
+  app.on('browser-window-focus', () => syncLiveKeys());
+  app.on('browser-window-blur', () => setImmediate(syncLiveKeys));
+  const syncLive = (): void => {
+    const f = livePulse.get();
+    tray.update({ live: f ? { online: f.online, atRisk: f.atRisk > 0 || webchat.state().chats.some((c) => c.atRisk) } : null });
+    syncLiveKeys();
+  };
+  const liveDesk = {
+    open: (to: 'map' | 'toggleMap' | 'dashboard' | 'wall' | 'chat', id?: number): void => {
+      windows.hideRingTray();
+      if (to === 'map') windows.showLiveMap(id ?? null);
+      else if (to === 'toggleMap') windows.toggleLiveMap();
+      else if (to === 'dashboard') navigate({ route: '/chat?view=website&section=dashboard', source: 'tray' });
+      else if (to === 'wall') windows.showWall(wallTarget(screen.getAllDisplays(), screen.getPrimaryDisplay().id)?.id ?? null);
+      else if (to === 'chat' && id) navigate({ route: `/chat?view=website&website=${id}`, source: 'tray' });
+    },
+    info: () => {
+      const t = wallTarget(screen.getAllDisplays(), screen.getPrimaryDisplay().id);
+      return { wall: t ? { display: t.display, name: t.name } : null, silencedUntil: liveSilenced() ? new Date(liveSilencedUntil).toISOString() : null, shortcuts: liveKeysHeld };
+    },
+  };
+  // The wall's display was unplugged (MAP-24): its window has closed, and WorkSuite says so.
+  windows.onWallGone = () => {
+    if (Notification.isSupported()) new Notification({ title: 'Wall mode closed', body: 'Its display was disconnected.', silent: true }).show();
   };
   const webchatOnCall = (c: WebchatOnCall | null): void => {
     onCall = c;
@@ -1577,6 +1666,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
     webchat.start();
+    livePulse.start();
     syncQuickAsk();
     // Quick Ask waits on the company's rules; once they are known, it is offered (or not).
     void ai.refresh().then(() => {
@@ -1625,6 +1715,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     mailBodies.stop();
     void remoteControl.shutdown('logout');
     webchat.stop();
+    livePulse.stop();
+    atRisk.clear();
+    liveSilencedUntil = 0;
+    windows.closeRingTray();
     quickAsk.release();
     ai.forget();
     aiPending.stop();
@@ -2059,6 +2153,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     webchat,
     webchatOnCall,
     ringTray,
+    liveDesk,
     quickAsk,
     ai,
     office,
@@ -2278,6 +2373,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     office.closeAll(true);
     officeLocal.stop();
     webchat.stop();
+    livePulse.stop();
+    atRisk.clear();
     quickAsk.release();
     void askHelper?.then((h) => h?.stop());
     // Windows' places are saved while the database is open; timers that read it stop first.

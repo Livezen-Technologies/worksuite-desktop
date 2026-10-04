@@ -680,6 +680,21 @@ export interface WebchatRingState {
 }
 
 /**
+ * What the tray's mini-dashboard and the Live map window need from this computer (L-04, L-05; MAP-21, MAP-22, MAP-24).
+ */
+export interface LiveDeskInfo {
+  /**
+   * Where "Wall mode on Display 2" opens: the display in words ("Display 2") and the screen's own name ("LG 27″") when
+   * the system says it. The first screen that is not the main one; the main one when there is only one.
+   */
+  wall: { display: string; name: string | null } | null;
+  /** "Silence for 15 minutes" from the tray: until this ISO time; null when not silenced. */
+  silencedUntil: string | null;
+  /** ⌘⇧M and ⌘⇧D answer from other apps (registered while WorkSuite is not in front). */
+  shortcuts: boolean;
+}
+
+/**
  * How a ring ended, as the call window tells it (R-03, RING-UI-03; RING-02, RING-03, RING-28). `text` is the whole
  * thing in plain words (the tray, a screen reader, an older window); `kind` and the rest are what the card draws:
  *
@@ -901,7 +916,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask' | 'live-map' | 'wall';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {

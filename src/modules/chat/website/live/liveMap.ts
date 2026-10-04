@@ -23,6 +23,8 @@ export interface LiveChat {
   agent_typing?: boolean;
   /** A voice call on in it (ENH-WCHAT-05). */
   call?: { status: 'ringing' | 'active' | 'on_hold'; since: string | null } | null;
+  /** Assigned to me: "· You" on the dashboard, and the tray's and the Live map window's "Yours" (MAP-22); absent on an older server. */
+  mine?: boolean;
 }
 
 /** Somebody on the sites now, as GET /visitors sends them. */

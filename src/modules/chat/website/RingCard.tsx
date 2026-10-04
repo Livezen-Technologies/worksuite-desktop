@@ -318,9 +318,10 @@ function SavedReplies({ query, pick }: { query: string; pick: (text: string, can
  * Join chat and Join & send: one request, first come; a moment too late, the card says who has it. `open`: the thread
  * opens after (R-05, RING-41); `cannedId`: the saved reply it came from (RDC-03).
  */
-export async function joinSend(id: number, message?: string, opts: { open?: boolean; cannedId?: number } = {}): Promise<boolean> {
+export async function joinSend(id: number, message?: string, opts: { open?: boolean; cannedId?: number; visitor?: string } = {}): Promise<boolean> {
   try {
-    const r = await call('ring:joinSend', { id, ...(message ? { message } : {}), ...(opts.open ? { open: true } : {}), ...(message && opts.cannedId ? { cannedId: opts.cannedId } : {}) });
+    // `visitor`: a Needs you row of the tray's mini-dashboard or the Live map window, which may not ring for me (UX-ALR-03).
+    const r = await call('ring:joinSend', { id, ...(message ? { message } : {}), ...(opts.open ? { open: true } : {}), ...(message && opts.cannedId ? { cannedId: opts.cannedId } : {}), ...(opts.visitor ? { visitor: opts.visitor } : {}) });
     return r.ok;
   } catch (e) {
     toast('error', errorMessage(e));

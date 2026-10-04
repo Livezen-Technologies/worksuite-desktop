@@ -4,7 +4,7 @@ import { Icon } from '../../../../components/Icon';
 import { Menu } from '../../../../components/Menu';
 import { cx, ErrorNote, Spinner } from '../../../../components/ui';
 import { ApiError, apiPost } from '../../../../core/api';
-import { errorMessage } from '../../../../core/bridge';
+import { call, errorMessage, isMac } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { parseTs, timeLabel } from '../../../../core/time';
 import { toast } from '../../../../core/toasts';
@@ -189,6 +189,10 @@ export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, o
           <button type="button" onClick={() => onLive({ wall: true })} disabled={!d} className={OUTLINE}>
             <Icon name="monitor" size={14} /> {text('Wall mode')}
           </button>
+          {/* The map in a native window of its own, over other apps or on another display (L-04, MAP-21). */}
+          <button type="button" onClick={() => void call('live:open', { to: 'map' }).catch(() => undefined)} disabled={!d} title={text('Open the Live map in its own window ({keys})', { keys: MAP_KEYS })} className={OUTLINE}>
+            <Icon name="external" size={14} /> {text('Pop out')}
+          </button>
         </>,
       )}
       {dash.error && !d ? <ErrorNote error={dash.error} onRetry={() => void dash.refetch()} /> : null}
@@ -290,8 +294,13 @@ function SitePicker({ widgets, sites, onSites, count = true }: { widgets: Dashbo
   );
 }
 
+/** ⌘⇧M, or Ctrl+Shift+M off a Mac: the Live map window's shortcut (MAP-21). */
+export const MAP_KEYS = isMac ? '⌘⇧M' : 'Ctrl+Shift+M';
+/** ⌘⇧D, or Ctrl+Shift+D: Open Live dashboard from the tray (MAP-22). */
+export const DASHBOARD_KEYS = isMac ? '⌘⇧D' : 'Ctrl+Shift+D';
+
 /** The home preset's country (MAP-08): the organisation's, else wherever most of those on the site now are. */
-function homeOf(d: Dashboard, visitors: OnlineVisitor[]): string | null {
+export function homeOf(d: Dashboard, visitors: OnlineVisitor[]): string | null {
   return d.home_country ?? byCountry(placesNow(visitors))[0]?.name ?? byCountry(placesOf(d, [], 'today'))[0]?.name ?? null;
 }
 
@@ -332,9 +341,18 @@ const WALL: Record<Tone, string> = { plain: 'text-[#f1f4fb]', amber: 'text-[#f3c
 
 /**
  * One figure (C-00's six, the wall's; V-01's call tiles): its name, the number, and a line under it when there is one.
- * `wall` draws it for the dark wall screen, readable across a room (MAP-UI-03).
+ * `wall` draws it for the dark wall screen, readable across a room (MAP-UI-03); `compact`, the four small figures of the
+ * Live map window and the tray's mini-dashboard (MAP-UI-04/05).
  */
-export function Tile({ label, value, sub, tone, live, big, wall, action, onClick }: { label: string; value: string; sub?: string; tone: Tone; live?: boolean; big?: boolean; wall?: boolean; action?: string; onClick?: () => void }) {
+export function Tile({ label, value, sub, tone, live, big, wall, compact, action, onClick }: { label: string; value: string; sub?: string; tone: Tone; live?: boolean; big?: boolean; wall?: boolean; compact?: boolean; action?: string; onClick?: () => void }) {
+  if (compact) {
+    return (
+      <div role="listitem" aria-label={`${text(label)}: ${value}`} className={cx('flex min-w-0 flex-1 flex-col rounded-[10px] border px-2.5 py-[7px]', TILE[tone].box)}>
+        <span className="truncate text-[9.5px] font-bold tracking-[0.8px] whitespace-nowrap text-ink-3 uppercase">{text(label)}</span>
+        <span className={cx('text-[21px] leading-[1.15] font-bold tabular-nums', TILE[tone].value)}>{value}</span>
+      </div>
+    );
+  }
   const body = (
     <>
       <span className={cx('flex items-center gap-1.5 font-bold whitespace-nowrap uppercase', wall ? 'text-[12px] tracking-[1.2px] text-[#9aa3c4]' : 'text-[10.5px] tracking-[0.8px] text-ink-3')}>
@@ -438,7 +456,7 @@ const SEG_ON = 'bg-surface font-bold text-primary shadow-[0_1px_2px_rgba(17,27,5
 const SEG_OFF = 'text-ink-2 hover:text-ink';
 
 /** The map's ready zooms (MAP-08): World, the region, (on the full map) the part of it, and the home country. */
-function Zooms({ presets, box, onBox, onPreset }: { presets: Preset[]; box: Box; onBox: (b: Box) => void; onPreset?: (p: Preset) => void }) {
+export function Zooms({ presets, box, onBox, onPreset }: { presets: Preset[]; box: Box; onBox: (b: Box) => void; onPreset?: (p: Preset) => void }) {
   return (
     <div role="group" aria-label={text('Zoom to')} className="flex gap-0.5 rounded-[8px] bg-subtle p-0.5">
       {presets.map((p) => (

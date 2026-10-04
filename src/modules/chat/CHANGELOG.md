@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.47.0 — 2026-10-04
+
+- L-04/L-05: pop-out Live map window, at-risk notification with Join and Show on map, menu-bar count, tray mini-dashboard with reply and join, wall mode on a second display, global shortcuts
+
 ## 1.46.0 — 2026-10-04
 
 - L-02/L-03: full map (zoom presets with home country, pan/zoom/pinch, edge chips per country, lazy 1:10m country outlines, state and multi-site filters, bookmarkable view, place panel with precision and today counts) and dark wall mode (names hidden, ticker, keep-awake, full screen)

@@ -357,10 +357,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
 
   // ── website chats ringing (ENH-WCHAT-01, RING-49) ───────────────────────
   router.handle('ring:state', () => ctx.webchat.state());
-  router.handle('ring:join', (input) => ctx.webchat.join(input.id, input.then));
+  // `visitor`: a Needs you row of the tray or the Live map window, which may not be ringing for me (UX-ALR-03).
+  router.handle('ring:join', (input) => ctx.webchat.join(input.id, input.then, input.visitor));
   router.handle('ring:silence', (input) => ctx.webchat.silence(input.id, input.on));
   router.handle('ring:pass', (input) => ctx.webchat.pass(input.id));
-  router.handle('ring:joinSend', (input) => ctx.webchat.joinAndSend(input.id, input.message ?? null, { ...(input.open ? { open: true } : {}), ...(input.cannedId ? { cannedId: input.cannedId } : {}) }));
+  router.handle('ring:joinSend', (input) => ctx.webchat.joinAndSend(input.id, input.message ?? null, { ...(input.open ? { open: true } : {}), ...(input.cannedId ? { cannedId: input.cannedId } : {}), ...(input.visitor ? { visitor: input.visitor } : {}) }));
   router.handle('ring:draft', (input) => ctx.webchat.setDraft(input.id, input.text));
   router.handle('ring:reply', (input) => ctx.webchat.replyJoined(input.message));
   router.handle('ring:closeJoined', (input) => ctx.webchat.closeJoined(input.open));
@@ -371,6 +372,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   // The tray's ringing menu (R-06): its height, and Open Website Chats, Ringing settings…, Quit WorkSuite.
   router.handle('ring:trayFit', (input) => ctx.ringTray.fit(input.height));
   router.handle('ring:tray', (input) => ctx.ringTray.act(input.action));
+  router.handle('live:open', (input) => ctx.liveDesk.open(input.to, input.id));
+  router.handle('live:info', () => ctx.liveDesk.info());
   // A visitor who wrote again in my chat (#230): the card's actions, and which conversation the main window shows.
   router.handle('ring:followUp', (input) => ctx.webchat.followUp(input.id, input.action, input.message));
   router.handle('ring:viewing', (input) => ctx.webchat.setViewing(input.id));

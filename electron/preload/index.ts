@@ -149,6 +149,10 @@ const api = {
     mic: call('ring:mic'),
     onCall: call('ring:onCall'),
   },
+  live: {
+    open: call('live:open'),
+    info: call('live:info'),
+  },
   tabs: {
     save: call('tabs:save'),
     restore: call('tabs:restore'),

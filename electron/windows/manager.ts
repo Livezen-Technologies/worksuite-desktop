@@ -1,4 +1,4 @@
-import { app, BrowserWindow, screen, type Rectangle } from 'electron';
+import { app, BrowserWindow, powerSaveBlocker, screen, type Rectangle } from 'electron';
 import { join } from 'node:path';
 import type { DetachedWindow, WindowKind } from '@shared/types';
 import type { Database } from '../services/db';
@@ -15,7 +15,8 @@ const log = logger('windows');
  * remembered per window kind; a window whose display is gone comes back
  * fully visible on the primary display.
  */
-const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet']);
+// The Live map window can be pinned on top of other apps (MAP-21, "📌 On top").
+const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map']);
 /** Windows that can shrink to float over other apps while a call or meeting goes on. */
 const COMPACTABLE = new Set<WindowKind>(['call', 'video-call', 'meet']);
 /** One call at a time: a second "call" window focuses the one already open. */
@@ -36,17 +37,21 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'webchat-ring': { width: 420, height: 250, minWidth: 420, minHeight: 72 },
   'ring-tray': { width: 340, height: 360, minWidth: 340, minHeight: 120 },
   'quick-ask': { width: 600, height: 480, minWidth: 600, minHeight: 480 },
+  // The Live map window (L-04, MAP-UI-04): the design's 500 wide, tall enough for the map and two Needs you rows.
+  'live-map': { width: 500, height: 680, minWidth: 380, minHeight: 440 },
+  // Wall mode on a display (MAP-24): the whole screen it is on; this is only its size before it goes full screen.
+  wall: { width: 1280, height: 720, minWidth: 640, minHeight: 360 },
 };
 /** Remote control's own windows: placed by remote control, never remembered. */
-const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask']);
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall']);
 
 /**
  * The tray's ringing menu's place (R-06, RING-UI-07): under the menu-bar icon on macOS (or a tray at the top), over it
  * where the taskbar is at the bottom — beside the icon, inside the screen. Where the system does not say where its
- * icon is (most Linux desktops), the corner its tray is usually in: top right, or bottom right on Windows.
+ * icon is (most Linux desktops), the corner its tray is usually in: top right, or bottom right on Windows. `width`: the
+ * Live mini-dashboard's 380 (L-05, MAP-UI-05) where the ringing menu has 340.
  */
-export function ringTrayBounds(workArea: Rectangle, anchor: Rectangle | null, height: number, platform: NodeJS.Platform = process.platform): Rectangle {
-  const width = SIZES['ring-tray'].width;
+export function ringTrayBounds(workArea: Rectangle, anchor: Rectangle | null, height: number, platform: NodeJS.Platform = process.platform, width: number = SIZES['ring-tray'].width): Rectangle {
   const h = Math.max(SIZES['ring-tray'].minHeight, Math.min(height, workArea.height - 16));
   const known = !!anchor && anchor.width > 0 && anchor.height > 0;
   const centre = known ? anchor!.x + anchor!.width / 2 - width / 2 : workArea.x + workArea.width - width - 8;
@@ -55,6 +60,12 @@ export function ringTrayBounds(workArea: Rectangle, anchor: Rectangle | null, he
   const y = top ? workArea.y + 4 : workArea.y + workArea.height - h - 4;
   return { x, y, width, height: h };
 }
+
+/** What the Live map window and the wall window show, as a route: the Live dashboard, which is Chat's. */
+export const LIVE_ROUTE = '/chat?view=website&section=dashboard';
+
+/** The tray's Live mini-dashboard is the design's 380 wide (L-05, MAP-UI-05). */
+export const LIVE_TRAY_WIDTH = 380;
 
 /** The website-chat call window's place: bottom right of the primary display, clear of the taskbar (RING-40). */
 export function ringerBounds(workArea: Rectangle, height: number): Rectangle {
@@ -334,16 +345,20 @@ export class WindowManager {
 
   private ringTray: BrowserWindow | null = null;
   private ringTrayAnchor: Rectangle | null = null;
+  private ringTrayWidth: number = SIZES['ring-tray'].width;
 
   /**
    * The tray's ringing menu (R-06, RING-UI-07; UX-ALR-02): a menu with a reply box, so a window drawn as one — by the
    * tray icon, over other apps, taking the keyboard (it is opened to be typed in) and gone when it loses the focus,
-   * as a menu goes. One window; its height follows what it lists.
+   * as a menu goes. One window; its height follows what it lists. It is put away, not closed, when it loses the focus,
+   * so the Live mini-dashboard (L-05) opens again at once with what it last showed; locked or signed out, it closes.
+   * `live`: the mini-dashboard's width (MAP-UI-05).
    */
-  showRingTray(anchor: Rectangle | null, height: number): BrowserWindow {
+  showRingTray(anchor: Rectangle | null, height: number, live = false): BrowserWindow {
     this.ringTrayAnchor = anchor;
+    this.ringTrayWidth = live ? LIVE_TRAY_WIDTH : SIZES['ring-tray'].width;
     const display = anchor && anchor.width > 0 ? screen.getDisplayMatching(anchor) : screen.getDisplayNearestPoint(screen.getCursorScreenPoint());
-    const bounds = ringTrayBounds(display.workArea, anchor, height);
+    const bounds = ringTrayBounds(display.workArea, anchor, height, process.platform, this.ringTrayWidth);
     const existing = this.ringTray && !this.ringTray.isDestroyed() ? this.ringTray : null;
     if (existing) {
       existing.setBounds(bounds);
@@ -370,7 +385,7 @@ export class WindowManager {
     this.kinds.set(win.id, 'ring-tray');
     const wid = win.id;
     this.ringTray = win;
-    win.on('blur', () => !win.isDestroyed() && win.close());
+    win.on('blur', () => !win.isDestroyed() && win.hide());
     win.on('closed', () => {
       this.kinds.delete(wid);
       if (this.ringTray === win) this.ringTray = null;
@@ -390,13 +405,104 @@ export class WindowManager {
     if (!win) return;
     const b = win.getBounds();
     const area = screen.getDisplayMatching(b).workArea;
-    const next = ringTrayBounds(area, this.ringTrayAnchor, height);
-    if (next.height !== b.height || next.y !== b.y) win.setBounds(next);
+    const next = ringTrayBounds(area, this.ringTrayAnchor, height, process.platform, this.ringTrayWidth);
+    if (next.height !== b.height || next.y !== b.y || next.width !== b.width) win.setBounds(next);
   }
 
+  /** Put away, as a menu goes once used: kept, so it opens again at once. */
   hideRingTray(): void {
+    if (this.ringTray && !this.ringTray.isDestroyed() && this.ringTray.isVisible()) this.ringTray.hide();
+  }
+
+  /** Gone with what it showed: locked, or signed out. */
+  closeRingTray(): void {
     if (this.ringTray && !this.ringTray.isDestroyed()) this.ringTray.close();
     this.ringTray = null;
+  }
+
+  /**
+   * The Live map window (L-04, MAP-21; MAP-UI-04): a native window of its own — the figures, the map and who needs us
+   * — that can be pinned on top of other apps or dragged to another display, and opens again where it was left, as big
+   * as it was (its region preset and its pin are the page's own). One window; `focus` brings it to a waiting visitor's
+   * place ("Show on map", MAP-23).
+   */
+  showLiveMap(focus?: number | null): BrowserWindow {
+    const existing = this.liveMap();
+    if (existing) {
+      if (existing.isMinimized()) existing.restore();
+      existing.show();
+      existing.focus();
+      if (focus) existing.webContents.send('live:focus', { conversationId: focus });
+      return existing;
+    }
+    return this.create('live-map', { hash: `/window/live-map${focus ? `?focus=${focus}` : ''}`, title: 'Live map' });
+  }
+
+  /**
+   * ⌘⇧M (MAP-21): the Live map window shows, or goes when it is already in sight — in front, or pinned on top of other
+   * apps. Behind other windows, it comes forward. Whether it is open after.
+   */
+  toggleLiveMap(): boolean {
+    const win = this.liveMap();
+    if (win && win.isVisible() && !win.isMinimized() && (win.isFocused() || win.isAlwaysOnTop())) {
+      win.close();
+      return false;
+    }
+    this.showLiveMap();
+    return true;
+  }
+
+  private liveMap(): BrowserWindow | null {
+    return BrowserWindow.getAllWindows().find((w) => !w.isDestroyed() && this.kinds.get(w.id) === 'live-map') ?? null;
+  }
+
+  private wall: BrowserWindow | null = null;
+  /** The wall's display was unplugged and its window closed (MAP-24): the tray says so. */
+  onWallGone: () => void = () => undefined;
+
+  /**
+   * Wall mode on a display (MAP-24, MAP-UI-05 "Wall mode on Display 2"): the whole of that screen, kept awake while it
+   * is up, names hidden as the wall always hides them. Unplugging the display closes it.
+   */
+  showWall(displayId: number | null): BrowserWindow {
+    const display = screen.getAllDisplays().find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
+    const existing = this.wall && !this.wall.isDestroyed() ? this.wall : null;
+    if (existing) {
+      if (existing.isFullScreen()) existing.setFullScreen(false);
+      existing.setBounds(display.bounds);
+      existing.setFullScreen(true);
+      existing.show();
+      return existing;
+    }
+    const win = new BrowserWindow({
+      ...display.bounds,
+      show: false,
+      frame: false,
+      fullscreen: true,
+      title: 'Website chats — live',
+      backgroundColor: '#0B1430',
+      webPreferences: this.webPreferences(),
+    });
+    this.kinds.set(win.id, 'wall');
+    const wid = win.id;
+    this.wall = win;
+    const awake = powerSaveBlocker.start('prevent-display-sleep');
+    const unplugged = (_e: unknown, d: { id: number }) => {
+      if (d.id !== display.id || win.isDestroyed()) return;
+      win.close();
+      this.onWallGone();
+    };
+    screen.on('display-removed', unplugged);
+    win.on('closed', () => {
+      this.kinds.delete(wid);
+      if (this.wall === win) this.wall = null;
+      screen.removeListener('display-removed', unplugged);
+      if (powerSaveBlocker.isStarted(awake)) powerSaveBlocker.stop(awake);
+    });
+    win.once('ready-to-show', () => win.show());
+    win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
+    void win.loadURL(this.url('/window/wall'));
+    return win;
   }
 
   private quickAsk: BrowserWindow | null = null;
@@ -862,5 +968,7 @@ export class WindowManager {
 export function windowRoute(url: string): string | null {
   const hash = url.split('#')[1] ?? '';
   if (!hash.startsWith('/window/')) return null;
+  // The Live map window and wall mode are the Live dashboard's (L-04, MAP-24): they close with Chat, and at sign-out.
+  if (/^\/window\/(live-map|wall)(\?|$)/.test(hash)) return LIVE_ROUTE;
   return new URLSearchParams(hash.split('?')[1] ?? '').get('route');
 }

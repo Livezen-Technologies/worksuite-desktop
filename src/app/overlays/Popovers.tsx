@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
-import { shownPresence } from '../../core/presence';
+import { PRESENCE_SHOWN, shownPresence } from '../../core/presence';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { closeOverlay, openOverlay } from '../../core/ui';
@@ -36,13 +36,7 @@ const PRESENCE: Array<{ id: 'available' | 'busy' | 'dnd' | 'away' | 'offline'; l
   { id: 'away', label: 'Away', dot: '#F79009' },
   { id: 'offline', label: 'Appear offline', dot: '#8A91A5' },
 ];
-const SHOWN: Record<string, { label: string; dot: string }> = {
-  online: { label: 'Online', dot: '#22A861' },
-  busy: { label: 'Busy', dot: '#D92D20' },
-  dnd: { label: 'Do not disturb', dot: '#D92D20' },
-  away: { label: 'Away', dot: '#F79009' },
-  offline: { label: 'Offline', dot: '#8A91A5' },
-};
+const SHOWN = PRESENCE_SHOWN;
 
 export function ProfileMenu() {
   const qc = useQueryClient();

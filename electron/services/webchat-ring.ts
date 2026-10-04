@@ -430,6 +430,22 @@ export interface JoinSendOptions {
   open?: boolean;
   /** The saved reply the words came from, counted once sent (RDC-03). */
   cannedId?: number;
+  /**
+   * A Needs you row of the tray's mini-dashboard or the Live map window (UX-ALR-03): a chat waiting on us that may not
+   * ring for me (the escalation has not reached me, say). Who the visitor is, so it can be joined all the same.
+   */
+  visitor?: string;
+}
+
+/**
+ * A chat waiting on us that is not ringing for me, as a Needs you row names it (L-04, L-05; UX-ALR-03): joined and
+ * answered by the same requests, and told the same way when a colleague was first.
+ */
+export function liveRowChat(conversationId: number, visitor: string): WebchatRingChat {
+  return {
+    id: conversationId, visitor: visitor.slice(0, 200) || 'A visitor', site: null, page: null, place: null, device: null, returning: false, preview: null,
+    priority: 'normal', offline: false, since: new Date().toISOString().slice(0, 19).replace('T', ' '), stage: null, atRisk: false, mine: false, by: null, silenced: false,
+  };
 }
 
 /** How often this computer tells the server it is here to ring (RING-10). */
@@ -790,7 +806,7 @@ export class WebchatRinger {
    * a system notification) there is no mini chat.
    */
   async joinAndSend(conversationId: number, message: string | null, opts: JoinSendOptions = {}): Promise<{ ok: boolean; why: string | null }> {
-    const c = this.chats.get(conversationId);
+    const c = this.chats.get(conversationId) ?? (opts.visitor ? liveRowChat(conversationId, opts.visitor) : undefined);
     if (!c) return { ok: false, why: 'This chat is no longer ringing.' };
     const text = message?.trim() || null;
     const key = { headers: { 'Idempotency-Key': `ring-join-${conversationId}-${randomUUID()}` } };
@@ -1016,9 +1032,12 @@ export class WebchatRinger {
     }
   }
 
-  /** Join (RING-02/22): accept a waiting chat — or open one assigned to me, which joins it — and bring WorkSuite forward on it. */
-  async join(conversationId: number, then?: 'transfer'): Promise<boolean> {
-    const c = this.chats.get(conversationId);
+  /**
+   * Join (RING-02/22): accept a waiting chat — or open one assigned to me, which joins it — and bring WorkSuite forward on
+   * it. `visitor`: a Needs you row of the tray or the Live map window, which may not be ringing for me (UX-ALR-03).
+   */
+  async join(conversationId: number, then?: 'transfer', visitor?: string): Promise<boolean> {
+    const c = this.chats.get(conversationId) ?? (visitor ? liveRowChat(conversationId, visitor) : undefined);
     if (!c) return false;
     if (!c.mine) {
       try {

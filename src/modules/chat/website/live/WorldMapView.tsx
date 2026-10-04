@@ -114,7 +114,7 @@ const labelOf = (p: Place, style: MapLabels): string => {
   return `${name} ${p.count}`;
 };
 
-export function LiveMap({ places, box: asked, onBox, selected = null, onSelect, callout, caption, className, label = 'Map of visitors', theme = 'light', labels: labelStyle = 'count', fit = false, edges = true }: {
+export function LiveMap({ places, box: asked, onBox, selected = null, onSelect, callout, caption, className, label = 'Map of visitors', theme = 'light', labels: labelStyle = 'count', fit = false, edges = true, zoomButtons = true }: {
   places: Place[];
   box: Box;
   /** Zoomed or panned: by the buttons, a scroll, a pinch or a drag (MAP-08). Without it the map stays where it is. */
@@ -133,6 +133,8 @@ export function LiveMap({ places, box: asked, onBox, selected = null, onSelect, 
   fit?: boolean;
   /** Chips for who is outside the view ("↖ India · 3 outside this view"). */
   edges?: boolean;
+  /** + and − over the map; off where the region presets sit in their place (the Live map window, MAP-UI-04). */
+  zoomButtons?: boolean;
 }) {
   const look = LOOK[theme];
   // The frame's size, so the box fits it and a marker can be sized in pixels.
@@ -355,7 +357,7 @@ export function LiveMap({ places, box: asked, onBox, selected = null, onSelect, 
           : null}
       </svg>
 
-      {onBox ? (
+      {onBox && zoomButtons ? (
         <div className="absolute top-2.5 right-2.5 flex flex-col overflow-hidden rounded-[8px] border border-line bg-surface shadow-[0_2px_6px_rgba(17,27,59,0.08)]">
           <button type="button" aria-label={text('Zoom in')} onClick={() => onBox(zoomed(asked, 0.6))} className={cx(ZOOM, 'border-b border-line')}>
             <Icon name="plus" size={14} />

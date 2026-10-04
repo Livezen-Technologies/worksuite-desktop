@@ -16,7 +16,7 @@ const GROUPS: Array<{ id: Group; title: string }> = [
 ];
 
 /** The design's row tints for the two who need us (C-00): at risk red, waiting amber, each with a bar at the left. */
-const TINT: Partial<Record<string, string>> = {
+export const TINT: Partial<Record<string, string>> = {
   at_risk: 'bg-[#fdecea] shadow-[inset_3px_0_0_#c2392d] dark:bg-danger-bg',
   waiting: 'bg-[#fdf6e7] shadow-[inset_3px_0_0_#d9922e] dark:bg-warning-bg',
 };
@@ -76,7 +76,8 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
               const waited = g.id === 'needs' ? since(v.chat?.waiting_since, now, skew) : null;
               const call = onCall(v.chat) ? since(v.chat?.call?.since, now, skew) : null;
               const said = v.conversation_id && lastOf ? lastOf(v.conversation_id) : null;
-              const agent = v.chat?.agent ?? text('Nobody yet');
+              // Mine: "You" (MAP-UI-04 "On a call 02:14 · You").
+              const agent = v.chat?.mine ? text('You') : (v.chat?.agent ?? text('Nobody yet'));
               const detail =
                 g.id === 'needs'
                   ? `${text('Waiting')} · ${pathOf(v.current_url)}`
@@ -96,8 +97,6 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
                       ]
                         .filter(Boolean)
                         .join(' · ');
-              // The avatar's ring says who needs us, or is on a call; the rest go without.
-              const ring = s === 'at_risk' || s === 'waiting' || s === 'on_call' ? STATE[s].colour : null;
               return (
                 <li
                   key={v.id}
@@ -106,14 +105,7 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
                   onClick={onSelect ? () => onSelect(v) : undefined}
                   className={cx('flex items-center gap-2.5 px-3.5 py-2', TINT[s] ?? (selected === v.id ? 'bg-selection' : 'hover:bg-subtle'), onSelect && 'cursor-pointer')}
                 >
-                  <span
-                    className={cx('flex h-[30px] w-[30px] shrink-0 items-center justify-center rounded-full text-[10.5px] font-bold', avatarTone(who))}
-                    style={ring ? { boxShadow: `0 0 0 2px var(--ws-surface), 0 0 0 4px ${ring}` } : undefined}
-                    title={text(STATE[s].label)}
-                    aria-hidden
-                  >
-                    {initialsOf(v)}
-                  </span>
+                  <VisitorAvatar v={v} />
                   <span className="min-w-0 flex-1">
                     <span className="block truncate text-[13px] font-semibold text-ink">
                       {who}
@@ -156,10 +148,31 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
   );
 }
 
-function Pill({ tone, onClick, children }: { tone?: 'join'; onClick: () => void; children: string }) {
+/**
+ * A visitor's initials in their colour, ringed in their state's colour when they need us or are on a call (C-00); the
+ * Live map window's and the tray's rows draw it a little smaller (MAP-UI-04/05).
+ */
+export function VisitorAvatar({ v, small }: { v: OnlineVisitor; small?: boolean }) {
+  const s = stateOf(v);
+  const ring = s === 'at_risk' || s === 'waiting' || s === 'on_call' ? STATE[s].colour : null;
+  return (
+    <span
+      className={cx('flex shrink-0 items-center justify-center rounded-full text-[10.5px] font-bold', small ? 'h-7 w-7' : 'h-[30px] w-[30px]', avatarTone(v.name || v.label))}
+      style={ring ? { boxShadow: `0 0 0 2px var(--ws-surface), 0 0 0 4px ${ring}` } : undefined}
+      title={text(STATE[s].label)}
+      aria-hidden
+    >
+      {initialsOf(v)}
+    </span>
+  );
+}
+
+/** A row's action: Join in green, Open and Start chat outlined (C-00); the Live map window and the tray use them too. */
+export function Pill({ tone, onClick, children, label }: { tone?: 'join'; onClick: () => void; children: string; label?: string }) {
   return (
     <button
       type="button"
+      aria-label={label}
       onClick={(e) => {
         e.stopPropagation();
         onClick();

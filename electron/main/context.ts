@@ -49,7 +49,7 @@ export interface ClockExtra {
 import type { WindowManager } from '../windows/manager';
 import type { BootState } from './boot';
 import type { SessionController } from './session';
-import type { BusyReport, StatusSnapshot, WebchatOnCall } from '@shared/types';
+import type { BusyReport, LiveDeskInfo, StatusSnapshot, WebchatOnCall } from '@shared/types';
 import type { Vault } from '../services/vault';
 
 /** Every main-process service, for the IPC handlers. */
@@ -118,7 +118,9 @@ export interface AppContext {
   /** The website voice call the main window is on, or none: the tray says so (ENH-WCHAT-05). */
   webchatOnCall: (call: WebchatOnCall | null) => void;
   /** The tray's ringing menu (R-06, UX-ALR-02): its height as it measured itself, and its plain items. */
-  ringTray: { fit: (height: number) => void; act: (action: 'inbox' | 'settings' | 'quit' | 'close') => void };
+  ringTray: { fit: (height: number) => void; act: (action: 'inbox' | 'settings' | 'quit' | 'close' | 'dashboard' | 'liveMap' | 'wall' | 'silence') => void };
+  /** The Live map window, the Live dashboard and wall mode on a display (L-04, L-05; MAP-21, MAP-22, MAP-24). */
+  liveDesk: { open: (to: 'map' | 'toggleMap' | 'dashboard' | 'wall' | 'chat', id?: number) => void; info: () => LiveDeskInfo };
   /** Quick Ask over any app (AI Assistant). */
   quickAsk: QuickAsk;
   /** The assistant's rules here, confirming its proposals, files from this computer (DSK-2…7). */

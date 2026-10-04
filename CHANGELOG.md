@@ -5,6 +5,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.174 — 2026-10-04
+
+- **Live map in its own window (L-04).** **Pop out** on the Live dashboard (or ⌘⇧M from another app) opens a small
+  Live map window: counts, the map, and the people who need you, with reply and join. It can be pinned on top,
+  dragged to another display, and remembers where it was. "Wall mode ↗" sends it full screen.
+- **At-risk notification.** "Anne · Acme Ltd is at risk — 3:12 in Kandy", with **Join** and **Show on map**. Once
+  per chat, only on the device that rings, silent in "card only" Focus, withdrawn when someone joins.
+- **Menu bar.** On macOS the menu bar reads "18 · 2 waiting", and the icon turns red while a chat is at risk, even
+  with the main window closed.
+- **Tray mini-dashboard (L-05).** For website staff, the tray icon opens a small dashboard: counts, a map, "Needs
+  you" with reply and join (the first one open with Send & join), "Yours" with Open, and Open Live dashboard,
+  Show Live map window, Wall mode on Display 2, Silence for 15 minutes and Quit. The map shows "· You" on your own
+  chats.
+- **Shortcuts.** ⌘⇧M (Live map) and ⌘⇧D (Live dashboard) work from other apps. Inside WorkSuite they keep their
+  old meanings (mute on a call, Dock Tab Beside).
+
 ## 0.2.173 — 2026-10-04
 
 - **Full map (L-02).** Live › Full map has the design's presets (World · Asia · South Asia · your home country), drag

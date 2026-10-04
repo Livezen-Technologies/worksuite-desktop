@@ -89,6 +89,8 @@ export const INVOKE_CHANNELS = [
   'ring:draft',
   'ring:trayFit',
   'ring:tray',
+  'live:open',
+  'live:info',
   'ring:followUp',
   'ring:viewing',
   'ring:handoff',
@@ -429,6 +431,8 @@ export const EVENT_CHANNELS = [
   'rc:changed',
   'rc:switchScreen',
   'ring:changed',
+  // "Show on map" on an at-risk notification (MAP-23): the Live map window goes to that visitor's place.
+  'live:focus',
   'quickask:changed',
   'ai:open',
   'salon:changed',

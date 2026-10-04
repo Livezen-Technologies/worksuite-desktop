@@ -2,6 +2,7 @@ import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions, type Nat
 import { join } from 'node:path';
 import { attentionCount, trayState, trayTooltip, type TrayState } from '@shared/network';
 import { logger } from '../main/log';
+import { liveTitle } from '../services/live-desk';
 
 const log = logger('tray');
 
@@ -41,6 +42,12 @@ export interface TrayModel {
   aiChanges: number;
   /** The catalogue ids of the apps the person may open (shared/access.ts): the menu offers nothing else. */
   apps: string[];
+  /**
+   * The Live dashboard's figures for website staff (L-04, L-05; MAP-22): on the sites now, and whether somebody is at
+   * risk. The menu bar then reads "18 · 2 waiting" — waiting on me, as the badge counts it (MAP-25) — red while one is
+   * at risk, and a click opens the mini-dashboard. Null for anybody else, or before the first answer.
+   */
+  live?: { online: number; atRisk: boolean } | null;
 }
 
 /** Quick Actions, each of its app: offered only to whoever may open that app. */
@@ -75,6 +82,9 @@ export interface TrayActions {
    * whether it opened. Optional for older callers, which keep the plain menu.
    */
   showRingMenu?: (anchor: Rectangle | null) => boolean;
+  /** Open Live dashboard (⌘⇧D) and Show Live map window (⌘⇧M), for website staff (L-05, MAP-21/22). */
+  liveDashboard?: () => void;
+  liveMap?: () => void;
 }
 
 /**
@@ -90,9 +100,10 @@ function resourcesDir(): string {
   return app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources');
 }
 
-function icon(state: TrayState): NativeImage {
+/** `colour`: the menu-bar icon in colour rather than as a template — its red dot showing while one is at risk (MAP-22). */
+function icon(state: TrayState, colour = false): NativeImage {
   const dir = join(resourcesDir(), 'tray');
-  if (process.platform === 'darwin') {
+  if (process.platform === 'darwin' && !colour) {
     const img = nativeImage.createFromPath(join(dir, `${state}Template.png`));
     img.setTemplateImage(true);
     return img;
@@ -132,7 +143,7 @@ export class TrayService {
     aiChanges: 0,
     apps: [],
   };
-  private lastState: TrayState | null = null;
+  private lastState: string | null = null;
   /** The menu, kept to pop up on a right-click while a click opens the ringing menu (macOS, R-06). */
   private menu: Menu | null = null;
 
@@ -147,8 +158,8 @@ export class TrayService {
       return;
     }
     this.tray.setToolTip('WorkSuite');
-    // While chats ring, a click opens the ringing menu with its reply box (R-06, UX-ALR-02); otherwise it opens
-    // WorkSuite (Windows, Linux) or shows the menu (macOS).
+    // While chats ring — or always, for website staff, as the Live mini-dashboard (L-05, MAP-22) — a click opens the
+    // menu with its reply box (R-06, UX-ALR-02); otherwise it opens WorkSuite (Windows, Linux) or shows the menu (macOS).
     this.tray.on('click', (_e, bounds) => {
       if (this.ringMenu(bounds)) return;
       if (process.platform !== 'darwin') this.actions.open();
@@ -160,7 +171,7 @@ export class TrayService {
   /** Opens the ringing menu by the icon, when something rings and the app has one: whether it did. */
   private ringMenu(bounds: Rectangle | undefined): boolean {
     const m = this.model;
-    if (!this.actions.showRingMenu || !m.signedIn || !m.apps.includes('chat') || !m.webchatRinging.length) return false;
+    if (!this.actions.showRingMenu || !m.signedIn || !m.apps.includes('chat') || (!m.webchatRinging.length && !m.live)) return false;
     return this.actions.showRingMenu(bounds && bounds.width > 0 ? bounds : (this.tray?.getBounds() ?? null));
   }
 
@@ -191,9 +202,13 @@ export class TrayService {
       /* not supported on this desktop */
     }
     if (!this.tray) return;
-    if (state !== this.lastState) {
-      this.tray.setImage(icon(state));
-      this.lastState = state;
+    // Red while somebody is at risk (MAP-22): the icon's red dot in colour in the menu bar.
+    const live = m.signedIn && hasChat ? (m.live ?? null) : null;
+    const red = !!live?.atRisk;
+    const look = red ? `${ringing ? 'unread' : state}:red` : state;
+    if (look !== this.lastState) {
+      this.tray.setImage(icon(red ? 'unread' : state, red));
+      this.lastState = look;
     }
     this.tray.setToolTip(
       trayTooltip({
@@ -207,13 +222,15 @@ export class TrayService {
         unreadOther: m.unreadOther,
       }),
     );
-    if (process.platform === 'darwin') this.tray.setTitle(ringing ? ` ${ringing} ringing` : '');
+    // "18 · 2 waiting" for website staff (MAP-UI-04): on the sites, and waiting on me as the badge counts them (MAP-25).
+    if (process.platform === 'darwin') this.tray.setTitle(live ? ` ${liveTitle(live.online, ringingCount(m))}` : ringing ? ` ${ringing} ringing` : '');
+    if (live && !ringing) this.tray.setToolTip(`WorkSuite — ${live.online === 1 ? '1 visitor' : `${live.online} visitors`} on your sites${live.atRisk ? ' · somebody is at risk' : ''}`);
     if (ringing) this.tray.setToolTip(m.webchatCalls?.length ? 'WorkSuite — a website visitor is calling' : `WorkSuite — ${ringing === 1 ? 'a website chat is' : `${ringing} website chats are`} ringing`);
     else if (m.signedIn && hasChat && m.webchatOnCall) this.tray.setToolTip(`WorkSuite — on a call with ${m.webchatOnCall.label}${m.webchatOnCall.held ? ' (on hold)' : ''}`);
     this.menu = Menu.buildFromTemplate(trayMenu(m, this.actions));
     // On macOS a menu set on the icon opens on every click: while chats ring, the click opens the ringing menu and a
     // right-click this one (R-06).
-    const popover = process.platform === 'darwin' && ringing > 0 && m.webchatRinging.length > 0 && !!this.actions.showRingMenu;
+    const popover = process.platform === 'darwin' && !!this.actions.showRingMenu && ((ringing > 0 && m.webchatRinging.length > 0) || !!live);
     this.tray.setContextMenu(popover ? null : this.menu);
   }
 
@@ -257,6 +274,14 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     if (a.showRingMenu) items.push({ label: 'Reply from here…', click: () => void a.showRingMenu?.(null) });
     items.push({ label: 'Open Website Chats', click: () => a.openRoute('/chat?view=website') });
     items.push({ label: 'Ringing settings…', click: a.ringingSettings });
+    items.push({ type: 'separator' });
+  }
+  // The Live dashboard for website staff (L-05, MAP-22): the mini-dashboard where the click does not reach, and the two
+  // windows with their shortcuts — shown, not registered here (main holds them while WorkSuite is not in front).
+  if (m.signedIn && has('chat') && m.live) {
+    if (a.showRingMenu && !m.webchatRinging.length) items.push({ label: 'Live dashboard…', click: () => void a.showRingMenu?.(null) });
+    if (a.liveDashboard) items.push({ label: 'Open Live dashboard', accelerator: 'CmdOrCtrl+Shift+D', registerAccelerator: false, click: a.liveDashboard });
+    if (a.liveMap) items.push({ label: 'Show Live map window', accelerator: 'CmdOrCtrl+Shift+M', registerAccelerator: false, click: a.liveMap });
     items.push({ type: 'separator' });
   }
   if (m.signedIn) {
