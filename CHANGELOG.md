@@ -25,7 +25,7 @@ person who has to live with the change — what it does, and where it bites.
   "Waiting for a free connection × 23 · last 11:32". Each group lists its messages with their UID, UIDVALIDITY and
   Message-ID, and **Retry all** clears them. While a pass is going, the log says "Syncing · headers 2 of 27 folders ·
   started 11:20".
-- Needs the server update (Mail 1.x with `mail_fetch_errors`). An older server works as before.
+- Needs the server update (Mail 1.14.0). An older server works as before.
 
 ## 0.2.152 — 2026-10-04
 
