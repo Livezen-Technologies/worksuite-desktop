@@ -8,7 +8,7 @@ import { cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useNow } from '../../calls/parts';
 import { playOnce, playTone } from '../../calls/tones';
-import { FollowUpCard, JoinedCard, RingCard, RingStack, followUpStatus, useFit } from './RingCard';
+import { FollowUpCard, JoinedCard, OutcomeCard, RingCard, RingStack, SilencedCard, followUpStatus, useFit } from './RingCard';
 
 /**
  * Website chats ringing like calls (WS-WCHAT ENH-01): the native call window
@@ -129,6 +129,25 @@ export function ringsFor(c: Pick<WebchatRingChat, 'mine' | 'othersRinging'>): st
   return n === 1 ? text('Rings until someone joins · 1 other ringing') : text('Rings until someone joins · {n} others ringing', { n });
 }
 
+/**
+ * The silenced card's line (R-04, RING-UI-04; RING-11, RING-24): silenced for me alone — "still ringing for 2
+ * colleagues" as the server counts them; just "Silenced for you" where it does not say, or nobody else is rung.
+ */
+export function silencedFor(c: Pick<WebchatRingChat, 'mine' | 'othersRinging'>): string {
+  const n = c.othersRinging;
+  if (c.mine || !n) return text('Silenced for you');
+  return n === 1 ? text('Silenced for you · still ringing for 1 colleague') : text('Silenced for you · still ringing for {n} colleagues', { n });
+}
+
+/**
+ * The line where I joined (R-03 "YOU JOIN"; RING-22, RING-28): "You joined the chat · ringing stopped for 2
+ * colleagues" — only "You joined the chat" when it rang for nobody else, or that is not known.
+ */
+export function youJoinedLine(colleagues: number | null | undefined): string {
+  if (!colleagues) return text('You joined the chat');
+  return colleagues === 1 ? text('You joined the chat · ringing stopped for 1 colleague') : text('You joined the chat · ringing stopped for {n} colleagues', { n: colleagues });
+}
+
 const join = (id: number) =>
   void call('ring:join', { id }).catch((e) => toast('error', errorMessage(e)));
 const silence = (id: number, onOff: boolean) => void call('ring:silence', { id, on: onOff }).catch(() => undefined);
@@ -225,21 +244,17 @@ export function WebchatRingWindow() {
   let body: ReactNode;
   // A visitor on the line comes before everything else (VOICE-10).
   if (firstCall) body = <CallCard s={s} c={firstCall} rest={otherCalls} more={s.chats.length + handoffs.length} now={now} />;
-  // One chat: the full card with its reply box; several: a compact card each (#225).
+  // Every chat silenced for me: the compact "still waiting" card (R-04, RING-24) — at risk clears a silence, so it
+  // never hides one. One chat: the full card with its reply box; several: a compact card each (#225).
+  else if (top && !asks && s.chats.every((c) => c.silenced)) body = <SilencedCard s={s} c={top} now={now} />;
   else if (top) body = s.chats.length > 1 ? <RingStack s={s} chats={s.chats} now={now} after={asks} /> : <RingCard s={s} c={top} now={now} after={asks} />;
   else if (handoffs[0]) body = <HandoffCard s={s} h={handoffs[0]} rest={handoffs.slice(1)} now={now} />;
   // A chat just joined from the card: a mini chat until the full chat is opened or the card minimised (#225).
-  else if (s.joined) body = <JoinedCard j={s.joined} now={now} />;
+  else if (s.joined) body = <JoinedCard j={s.joined} now={now} colleagues={s.youJoined?.id === s.joined.conversationId ? s.youJoined.colleagues : null} />;
   // A visitor who wrote again in my chat while I was away from it (#230).
   else if (s.followUps?.[0]) body = <FollowUpCard s={s} f={s.followUps[0]} rest={s.followUps.slice(1)} now={now} />;
-  else {
-    body = (
-      <div className="drag flex min-h-[72px] items-center gap-3 bg-[#0F1B3D] px-4 py-4 text-[13px] text-[#E6ECFA]" role="status" aria-live="polite">
-        <Icon name="check-circle" size={18} className="shrink-0 text-[#3DD68C]" />
-        <span className="min-w-0 flex-1">{s.outcome?.text ?? 'Nothing is ringing.'}</span>
-      </div>
-    );
-  }
+  // How the ring ended (R-03, RING-UI-03).
+  else body = <OutcomeCard s={s} />;
   return <div ref={fit}>{body}</div>;
 }
 

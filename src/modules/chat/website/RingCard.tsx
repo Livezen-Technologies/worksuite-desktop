@@ -7,7 +7,7 @@ import { Icon } from '../../../components/Icon';
 import { write, writerProblem, useWriter } from '../../ai/writer';
 import { useCanned } from './api';
 import { text } from '../../../core/i18n';
-import { clock, handoverIn, ringsFor, stageLabel, stepLabel, visitLabel, waited } from './Ringing';
+import { clock, firstName, handoverIn, ringsFor, silencedFor, stageLabel, stepLabel, visitLabel, waited, youJoinedLine } from './Ringing';
 
 /**
  * The website chat ringing card (worksuite-desktop#225), in the call window over other apps:
@@ -287,14 +287,15 @@ export function RingCard({ s, c, now, after }: { s: WebchatRingState; c: Webchat
         {/* Silence in words, as the design has it (R-01): a personal mute on all my devices until at risk (RING-11). */}
         <button
           type="button"
-          aria-label={c.silenced ? 'Unmute ringing' : 'Silence ringing'}
+          aria-label={c.silenced ? 'Unsilence ringing' : 'Silence ringing'}
           aria-pressed={c.silenced}
-          title={c.silenced ? 'Unmute ringing' : 'Silence ringing'}
+          title={c.silenced ? 'Unsilence ringing' : 'Silence ringing'}
           onClick={() => silence(c.id, !c.silenced)}
           className={cx('flex h-11 shrink-0 items-center justify-center gap-1.5 rounded-[11px] border border-white/14 px-3 text-[13px] font-semibold hover:bg-white/7', c.silenced && 'bg-white/10')}
         >
           <Icon name="bell-off" size={16} />
-          {c.silenced ? text('Unmute') : text('Silence')}
+          {/* Taken back in R-04's word: Unsilence. */}
+          {c.silenced ? text('Unsilence') : text('Silence')}
         </button>
       </div>
       {handover !== null ? (
@@ -426,7 +427,7 @@ function StackRow({ s, c, now }: { s: WebchatRingState; c: WebchatRingChat; now:
             {text('Pass to next')}
           </button>
         ) : kind !== 'mine' ? (
-          <button type="button" aria-label={`${c.silenced ? 'Unmute' : 'Silence'} ${name}`} aria-pressed={c.silenced} onClick={() => silence(c.id, !c.silenced)} className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-white/14 hover:bg-white/7', c.silenced && 'bg-white/10')}>
+          <button type="button" aria-label={`${c.silenced ? 'Unsilence' : 'Silence'} ${name}`} aria-pressed={c.silenced} onClick={() => silence(c.id, !c.silenced)} className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] border border-white/14 hover:bg-white/7', c.silenced && 'bg-white/10')}>
             <Icon name="bell-off" size={15} />
           </button>
         ) : null}
@@ -466,8 +467,11 @@ export function RingStack({ s, chats, now, after }: { s: WebchatRingState; chats
   );
 }
 
-/** After joining from the card (#225): a mini chat until I open the full chat or minimise it. */
-export function JoinedCard({ j, now }: { j: WebchatJoined; now: number }) {
+/**
+ * After joining from the card (#225; R-03 "YOU JOIN"): a mini chat until I open the full chat or minimise it — Yours,
+ * what they asked, "You joined the chat · ringing stopped for 2 colleagues", and a reply box.
+ */
+export function JoinedCard({ j, now, colleagues = null }: { j: WebchatJoined; now: number; colleagues?: number | null }) {
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
   const send = async () => {
@@ -485,16 +489,16 @@ export function JoinedCard({ j, now }: { j: WebchatJoined; now: number }) {
     }
   };
   return (
-    <Frame dot="joined" status="Website chat · you joined" badge={<Badge tone="green">Your chat</Badge>} hint="The visitor sees you joined · Esc to minimise">
+    <Frame dot="joined" status="Website chat · you joined" badge={<Badge tone="green">{text('Yours')}</Badge>} hint="The visitor sees you joined · Esc to minimise">
       <Visitor c={j} now={now} hidden={false} joined />
       {j.page ? <Reading page={j.page} /> : null}
       <div className="flex flex-col gap-2 px-4 pt-3 pb-1">
         {j.preview ? <Theirs text={j.preview} /> : null}
-        <div className="self-center text-[11px] text-[#8C92B5]">You joined the chat</div>
+        <div role="status" className="self-center text-center text-[12px] text-[#8C92B5]">{youJoinedLine(colleagues)}</div>
         {j.sent.map((t, i) => <Mine key={i} text={t} last={i === j.sent.length - 1} />)}
       </div>
       <div className="px-4 pt-2.5">
-        <ReplyBox id="ring-joined-reply" label={`Reply to ${j.visitor}`} placeholder="Reply…" sendLabel="Send" draft={draft} setDraft={setDraft} onSend={() => void send()} busy={busy} visitorSaid={j.preview} />
+        <ReplyBox id="ring-joined-reply" label={`Reply to ${j.visitor}`} placeholder={text('Type a reply…')} sendLabel="Send" draft={draft} setDraft={setDraft} onSend={() => void send()} busy={busy} visitorSaid={j.preview} />
       </div>
       <div className="flex gap-2 px-4 pt-3">
         <button type="button" onClick={() => void call('ring:closeJoined', { open: true }).catch(() => undefined)} className="flex h-11 flex-1 items-center justify-center gap-2 rounded-[11px] bg-[#4F5FEF] text-[14px] font-bold text-white hover:brightness-110">
@@ -503,6 +507,125 @@ export function JoinedCard({ j, now }: { j: WebchatJoined; now: number }) {
         </button>
       </div>
     </Frame>
+  );
+}
+
+/**
+ * A chat silenced for me that is still waiting (R-04, RING-UI-04; RING-11, RING-24): the compact card — who, "Silenced
+ * for you · still ringing for 2 colleagues", how long, Join chat and Unsilence — that rings again at risk. Others
+ * silenced too are "+N waiting", as the full card says it.
+ */
+export function SilencedCard({ s, c, now }: { s: WebchatRingState; c: WebchatRingChat; now: number }) {
+  const [busy, setBusy] = useState(false);
+  const others = s.chats.length - 1;
+  const name = s.hidden ? text('A website visitor') : c.visitor;
+  const go = async () => {
+    if (busy) return;
+    setBusy(true);
+    await joinSend(c.id);
+    setBusy(false);
+  };
+  return (
+    <section aria-label={text('Silenced chat')} className="flex flex-col gap-2.5 bg-[#111B3B] px-4 py-3.5 text-[13px] text-[#F1F4FB]" onKeyDown={(e) => e.key === 'Escape' && (e.preventDefault(), minimise())}>
+      <div className="drag flex items-center gap-2.5">
+        <Avatar name={s.hidden ? '?' : c.visitor} size={38} />
+        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+          <b className="truncate text-[14px] text-white">{text('{name} is still waiting', { name })}</b>
+          <span className="truncate text-[12px] text-[#F3C77E]">{silencedFor(c)}</span>
+        </span>
+        <span role="timer" aria-label={text('waiting {time}', { time: waited(c.since, now) })} className="shrink-0 font-mono text-[13px] tabular-nums">{waited(c.since, now)}</span>
+      </div>
+      <div className="flex gap-2">
+        <button type="button" disabled={s.hidden || busy} onClick={() => void go()} className="h-10 flex-1 rounded-full bg-[#2F9E67] text-[14px] font-bold text-white hover:brightness-110 disabled:opacity-50">
+          {text('Join chat')}
+        </button>
+        <button type="button" onClick={() => silence(c.id, false)} className="h-10 w-[124px] shrink-0 rounded-full border border-[#3A4468] text-[13px] font-semibold hover:bg-white/5">
+          {text('Unsilence')}
+        </button>
+      </div>
+      <p className="drag flex items-center gap-3 text-[12px] text-[#9AA3C4]">
+        <span className="min-w-0 flex-1">{s.outcome ? s.outcome.text : text('It rings for you again if it becomes at risk.')}</span>
+        {others > 0 ? (
+          <button type="button" onClick={() => void call('ring:openInbox').catch(() => undefined)} className="no-drag shrink-0 font-bold text-[#B3C0FF] hover:text-white">
+            {text('+{n} waiting', { n: others })}
+          </button>
+        ) : null}
+      </p>
+    </section>
+  );
+}
+
+const outcomeAction = (action: 'view' | 'missed' | 'dismiss') => void call('ring:outcome', { action }).catch(() => undefined);
+
+/**
+ * How the ring ended (R-03, RING-UI-03; RING-02, RING-03, RING-28), when nothing else is ringing:
+ *
+ * - a colleague joined — the dark toast, "Nuwan joined the chat with Visitor 4F2A", View;
+ * - too late — amber, "You pressed Join a moment late — Dilini already has this chat.";
+ * - the visitor left — "Visitor 4F2A left the site before anyone joined", the ring stopped and, when the server put it
+ *   there, that the chat is in Missed chats with the email they left; Open in Missed and Dismiss;
+ * - the visitor ended the chat — "Visitor 4F2A ended the chat. Ringing stopped.";
+ * - anything else, and anything behind the lock, in plain words.
+ */
+export function OutcomeCard({ s }: { s: WebchatRingState }) {
+  const o = s.outcome;
+  const visitor = o?.visitor ?? text('The visitor');
+  if (o && !s.hidden && o.kind === 'joined' && o.by) {
+    return (
+      <section role="status" aria-label={text('How the ring ended')} className="drag flex items-center gap-3 bg-[#111B3B] px-3.5 py-3 text-[14px] text-[#F1F4FB]">
+        <Avatar name={o.by} size={34} />
+        <span className="min-w-0 flex-1">
+          <b>{firstName(o.by)}</b> {text('joined the chat with {visitor}', { visitor })}
+        </span>
+        <button type="button" onClick={() => outcomeAction('view')} className="no-drag shrink-0 text-[13px] font-bold text-[#B3C0FF] hover:text-white">
+          {text('View')}
+        </button>
+      </section>
+    );
+  }
+  if (o && !s.hidden && o.kind === 'late' && o.by) {
+    return (
+      <section role="status" aria-label={text('How the ring ended')} className="drag border border-[#F0D08F] bg-[#FDF4E3] px-3.5 py-3 text-[14px] text-[#6B4A10]">
+        {text('You pressed Join a moment late —')} <b>{firstName(o.by)}</b> {text('already has this chat.')}
+      </section>
+    );
+  }
+  if (o && !s.hidden && o.kind === 'visitor_left') {
+    const detail = !o.missed ? text('Ringing stopped.') : o.email ? text('Ringing stopped. The chat is in Missed chats with the email they left: {email}', { email: o.email }) : text('Ringing stopped. The chat is in Missed chats.');
+    return (
+      <section role="status" aria-label={text('How the ring ended')} className="flex flex-col gap-2 border border-[#E4E6ED] bg-white px-3.5 py-3 text-[#161A2C]">
+        <div className="drag flex items-center gap-2.5">
+          <Icon name="logout" size={20} className="shrink-0 text-[#B7791F]" />
+          <span className="min-w-0 flex-1 text-[14px]">
+            <b>{text('{visitor} left the site', { visitor })}</b> {text('before anyone joined')}
+          </span>
+        </div>
+        <p className="drag text-[13px] text-[#4E5469]">{detail}</p>
+        <div className="flex gap-2">
+          {o.missed ? (
+            <button type="button" onClick={() => outcomeAction('missed')} className="h-[34px] rounded-[8px] bg-[#273498] px-3.5 text-[13px] font-bold text-white hover:bg-[#1B2570]">
+              {text('Open in Missed')}
+            </button>
+          ) : null}
+          <button type="button" onClick={() => outcomeAction('dismiss')} className="h-[34px] rounded-[8px] border border-[#E4E6ED] bg-white px-3.5 text-[13px] font-semibold text-[#161A2C] hover:bg-[#F4F5F9]">
+            {text('Dismiss')}
+          </button>
+        </div>
+      </section>
+    );
+  }
+  if (o && !s.hidden && o.kind === 'visitor_ended') {
+    return (
+      <section role="status" aria-label={text('How the ring ended')} className="drag border border-[#E4E6ED] bg-white px-3.5 py-3 text-[14px] text-[#161A2C]">
+        <b>{text('{visitor} ended the chat.', { visitor })}</b> <span className="text-[#6B7083]">{text('Ringing stopped.')}</span>
+      </section>
+    );
+  }
+  return (
+    <div className="drag flex min-h-[72px] items-center gap-3 bg-[#0F1B3D] px-4 py-4 text-[13px] text-[#E6ECFA]" role="status" aria-live="polite">
+      <Icon name="check-circle" size={18} className="shrink-0 text-[#3DD68C]" />
+      <span className="min-w-0 flex-1">{o?.text ?? 'Nothing is ringing.'}</span>
+    </div>
   );
 }
 

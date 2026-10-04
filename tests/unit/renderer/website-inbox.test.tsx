@@ -8,7 +8,7 @@ import type * as CoreApi from '../../../src/core/api';
 
 /**
  * The Website Chats inbox as drawn in WS-WCHAT-SRS v1.5 (CHAT-UI-00): Open, Mine and Closed over the list, rows
- * with the on-site dot, waiting timer and chips, a chat silenced on this computer marked amber (RING-UI-04), the
+ * with the on-site dot, waiting timer and chips, a chat silenced for me marked amber (RING-UI-04, R-04), the
  * "Pick a conversation" empty state, and J / K through the list.
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({})) }));
@@ -108,7 +108,7 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=visitors');
   });
 
-  it('draws each row with its timer, chips and site, and marks a chat silenced here', async () => {
+  it('draws each row with its timer, chips and site, and marks a chat silenced for me (R-04)', async () => {
     wrap(<WebsiteWorkspace />);
     const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
     // Red throughout on a site that offers no callbacks.
@@ -118,7 +118,7 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     expect(within(hasitha).getByText('On the site now')).toBeTruthy();
 
     const ahmed = within(list()).getByText('Ahmed').closest('button')!;
-    expect(await within(ahmed).findByRole('img', { name: 'Silenced on this computer' })).toBeTruthy();
+    expect(await within(ahmed).findByRole('img', { name: 'Silenced for you' })).toBeTruthy();
     expect(ahmed.className).toContain('bg-warning-bg');
     expect(within(ahmed).getByText('“Is the Windows 7 ISO still available?”')).toBeTruthy();
     expect(within(ahmed).getByText('VIP')).toBeTruthy();

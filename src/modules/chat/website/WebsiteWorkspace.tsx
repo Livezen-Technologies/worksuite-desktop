@@ -18,7 +18,7 @@ import { ClosedDetail, ClosedRow } from './Closed';
 import { MissedDetail, MissedRow, useMissed, type MissedTab } from './Missed';
 import { OfflineDetail, OfflineRow, useOffline } from './Offline';
 import { clock, handoffAsk, handoffLeft, handoffTitle, useRingState } from './Ringing';
-import { CallLine, FilterPill as Pill, pathOf, PRIORITY_TAG, rowPreview, Tag, WaitClock } from './rowParts';
+import { CallLine, FilterPill as Pill, pathOf, PRIORITY_TAG, ROW_SILENCED, RingBell, rowPreview, Tag, WaitClock } from './rowParts';
 import { WebsiteTable } from './WebsiteTable';
 import { WebsiteLive, type LiveView, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
@@ -529,8 +529,8 @@ function InvitedRow({ h, hidden, active, onOpen }: { h: WebchatHandoff; hidden: 
 
 /**
  * A conversation in the list (CHAT-UI-00): the visitor with their on-site dot, how long they have waited, what is
- * happening, and on which site. A chat ringing here shows a bell; one silenced on this computer is amber with the
- * bell struck through (RING-UI-04).
+ * happening, and on which site. A chat ringing here shows a bell; one silenced for me (on all my devices) is amber,
+ * with the bell struck through (R-04, RING-UI-04).
  */
 function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { r: WebsiteRow; me: number | null; myName: string | null; ring?: WebchatRingChat; typing?: boolean; active: boolean; onOpen: () => void; onMenu: (e: ReactMouseEvent) => void }) {
   const name = r.visitor_name || r.label;
@@ -551,15 +551,15 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { 
       aria-current={active ? 'true' : undefined}
       onClick={onOpen}
       onContextMenu={onMenu}
-      className={cx('relative flex w-full items-start gap-2.5 border-b border-line py-2.5 pr-3 pl-3.5 text-left', active ? 'bg-selection' : ring?.silenced ? 'bg-warning-bg' : 'hover:bg-subtle')}
+      className={cx('relative flex w-full items-start gap-2.5 border-b border-line py-2.5 pr-3 pl-3.5 text-left', active ? 'bg-selection' : ring?.silenced ? ROW_SILENCED : 'hover:bg-subtle')}
     >
       {active ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
       <Avatar name={name} size={36} presence={presence} className="mt-px" />
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className="flex items-center gap-1.5">
           <b className={cx('flex-1 truncate text-ink', r.awaiting_reply ? 'font-bold' : 'font-semibold')}>{name}</b>
-          {ring ? <Icon name={ring.silenced ? 'bell-off' : 'bell'} size={12} className={ring.silenced ? 'shrink-0 text-warning' : 'shrink-0 text-danger'} label={ring.silenced ? text('Silenced on this computer') : text('Ringing')} /> : null}
-          {r.awaiting_reply && since && !closed ? <WaitClock since={since} amber={r.wait_amber} red={r.wait_red} /> : <span className="shrink-0 text-[11px] text-ink-3">{listStamp(r.last_message?.at ?? r.last_visitor_at ?? r.updated_at)}</span>}
+          {ring ? <RingBell ring={ring} /> : null}
+          {r.awaiting_reply && since && !closed ? <WaitClock since={since} amber={r.wait_amber} red={r.wait_red} silenced={!!ring?.silenced} /> : <span className="shrink-0 text-[11px] text-ink-3">{listStamp(r.last_message?.at ?? r.last_visitor_at ?? r.updated_at)}</span>}
         </span>
         <span className="flex min-w-0 items-center gap-1.5">
           {r.call && !closed ? (

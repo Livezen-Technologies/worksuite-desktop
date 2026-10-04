@@ -34,6 +34,7 @@ import { CallbackCard, isPending } from './Callbacks';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
 import { BlockDialog, ContactCard, SharedFilesCard, TagsCard } from './panelCards';
 import { ClosedNotice } from './Closed';
+import { useRingState, youJoinedLine } from './Ringing';
 
 // Kept importable from here, where the drawer first had it.
 export { visitorLocalTime } from './panelCards';
@@ -54,6 +55,8 @@ const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 tex
 export function WebsiteThread({ id, row, mini = false }: { id: string; row?: WebsiteRow; mini?: boolean }) {
   const qc = useQueryClient();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
+  // The chat I just joined from its ring, and how many colleagues that ring stopped for (R-03 "YOU JOIN").
+  const youJoined = useRingState().youJoined;
   const q = useWebsiteConversation(id);
   const data = q.data;
   const scroller = useRef<HTMLDivElement>(null);
@@ -120,8 +123,11 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const multi = !!t && (t.people.filter((p) => p.role !== 'observer').length > 1 || t.pending.length > 0);
   // Messages and the visitor's page visits in one timeline, through the kit's adapters (C-02; #229).
   const replyOpen = canReply && c.status !== 'closed';
+  // My own "joined the chat" line, told as R-03 tells it: "You joined the chat · ringing stopped for 2 colleagues".
+  const joinLine = youJoined && String(youJoined.id) === String(c.id) ? [...data.messages].reverse().find((m) => m.from === 'system' && me !== null && m.agent_id === me && /joined the chat$/.test(m.body ?? ''))?.id : undefined;
   const items = byTime([
     ...data.messages.map((m) => {
+      if (m.id === joinLine) return { ...fromWebsiteMessage(m, { me, visitor: name, canReply: replyOpen }), body: youJoinedLine(youJoined?.colleagues) };
       const k = fromWebsiteMessage(m, {
         me,
         visitor: name,

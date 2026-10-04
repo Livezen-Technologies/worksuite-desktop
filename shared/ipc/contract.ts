@@ -443,6 +443,8 @@ export const contract = {
   'ring:minimise': ch(none, { session: true, whileLocked: true, rate: 10 }),
   'ring:fit': ch(z.object({ height: z.number().int().min(80).max(1200) }), { session: true, whileLocked: true, rate: 30 }),
   'ring:openInbox': ch(none, { session: true, rate: 4 }),
+  // How the ring ended (R-03): View a chat a colleague joined, Open in Missed for a visitor who left, or Dismiss.
+  'ring:outcome': ch(z.object({ action: z.enum(['view', 'missed', 'dismiss']) }), { session: true, rate: 10 }),
   // A visitor who wrote again in my chat (worksuite-desktop#230): reply from the card, open the chat, snooze it for
   // five minutes, or take it over (the team step); and which conversation is in front in the main window.
   'ring:followUp': ch(z.object({ id: z.number().int().positive(), action: z.enum(['reply', 'open', 'snooze', 'takeOver']), message: z.string().min(1).max(4000).optional() }), { session: true, rate: 10 }),
@@ -1434,6 +1436,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:minimise': void;
   'ring:fit': void;
   'ring:openInbox': void;
+  'ring:outcome': void;
   'ring:followUp': { ok: boolean; why: string | null };
   'ring:viewing': void;
   'ring:handoff': boolean;

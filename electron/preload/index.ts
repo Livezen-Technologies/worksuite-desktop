@@ -138,6 +138,7 @@ const api = {
     minimise: call('ring:minimise'),
     fit: call('ring:fit'),
     openInbox: call('ring:openInbox'),
+    outcome: call('ring:outcome'),
     followUp: call('ring:followUp'),
     viewing: call('ring:viewing'),
     handoff: call('ring:handoff'),

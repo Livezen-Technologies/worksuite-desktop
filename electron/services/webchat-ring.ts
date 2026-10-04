@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { SubmitResult } from '@shared/ipc/contract';
-import { FOLLOW_UP_DEFAULTS, type WebchatCall, type WebchatFollowUp, type WebchatFollowUpPrefs, type WebchatHandoff, type WebchatJoined, type WebchatMic, type WebchatRingChat, type WebchatRingPrefs, type WebchatRingState } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, type WebchatCall, type WebchatFollowUp, type WebchatFollowUpPrefs, type WebchatHandoff, type WebchatJoined, type WebchatMic, type WebchatRingChat, type WebchatRingOutcome, type WebchatRingPrefs, type WebchatRingState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -142,14 +142,65 @@ export interface RingingEntry extends WaitingContext {
   others_ringing?: number | null;
 }
 
-/** Said when a ring stops for a reason other than me joining (RING-28). */
+/**
+ * Said when a ring stops for a reason other than me joining (RING-28), in R-03's words: the visitor by name where the
+ * design names them (`{visitor}`).
+ */
 export const STOP_WORDS: Record<string, string> = {
-  // Not "in Missed chats": a chat is marked missed only once the widget's missed time has passed.
-  visitor_left: 'The visitor left the site before anyone joined.',
-  visitor_ended: 'The visitor ended the chat.',
+  visitor_left: '{visitor} left the site before anyone joined',
+  visitor_ended: '{visitor} ended the chat.',
   closed: 'The chat was closed before anyone joined.',
   blocked: 'The visitor was blocked.',
 };
+
+/** "Nuwan" for "Nuwan Silva": a colleague named the way R-03 names them. */
+const firstName = (name: string): string => name.trim().split(/\s+/)[0] || name;
+
+/**
+ * What R-03 says under a visitor who left (RING-03, RING-UI-03): the ring stopped, and — only when the server says
+ * the chat is in Missed chats now — that it is there, with the email they left.
+ */
+export function leftDetail(o: Pick<WebchatRingOutcome, 'missed' | 'email'>): string {
+  if (!o.missed) return 'Ringing stopped.';
+  return o.email ? `Ringing stopped. The chat is in Missed chats with the email they left: ${o.email}` : 'Ringing stopped. The chat is in Missed chats.';
+}
+
+/**
+ * How a ring that stopped for everybody is told (R-03, RING-UI-03; RING-03, RING-28): the words, and what the card
+ * draws. Null for a reason it does not tell.
+ */
+export function stopOutcome(reason: unknown, visitor: string, ev: Record<string, unknown>): Omit<WebchatRingOutcome, 'id' | 'at'> | null {
+  if (typeof reason !== 'string' || !STOP_WORDS[reason]) return null;
+  const title = STOP_WORDS[reason]!.replace('{visitor}', visitor);
+  if (reason === 'visitor_left') {
+    const missed = ev.missed === true;
+    const email = missed ? text(ev.visitor_email, 160) : null;
+    return { kind: 'visitor_left', visitor, missed, email, text: `${title}. ${leftDetail({ missed, email })}` };
+  }
+  if (reason === 'visitor_ended') return { kind: 'visitor_ended', visitor, text: `${title} Ringing stopped.` };
+  return { kind: 'note', text: title };
+}
+
+/** "Nuwan joined the chat with Visitor 4F2A" (R-03 "SOMEONE ELSE JOINS"): a toast with View. */
+function joinedOutcome(byName: string | null, visitor: string): Omit<WebchatRingOutcome, 'id' | 'at'> {
+  const by = byName ?? 'A colleague';
+  return { kind: 'joined', by, visitor, text: `${firstName(by)} joined the chat with ${visitor}` };
+}
+
+/**
+ * A Join that lost the race (RING-02; R-03 "too late"): "You pressed Join a moment late — Dilini already has this
+ * chat." Who has it comes with the server's 409 (`by_name`); an older server only says it in words, which are kept.
+ */
+export function lateOutcome(e: { message: string; data?: unknown }): Omit<WebchatRingOutcome, 'id' | 'at'> {
+  const data = e.data && typeof e.data === 'object' ? (e.data as Record<string, unknown>) : {};
+  const by = text(data.by_name, 120) ?? /^(.+?) has already taken this chat\.?$/.exec(e.message.trim())?.[1]?.trim() ?? null;
+  if (!by) return { kind: 'note', text: e.message || 'Someone else has already taken this chat.' };
+  return { kind: 'late', by, text: `You pressed Join a moment late — ${firstName(by)} already has this chat.` };
+}
+
+/** How long an outcome is said; one with something to do — View, Open in Missed — stays until it is used or dismissed, or this. */
+const OUTCOME_MS = 5_000;
+const OUTCOME_ACTION_MS = 20_000;
 
 /** A waiting chat's context, as `IncomingChats::context` and `chat.incoming` carry it. */
 export interface WaitingContext {
@@ -273,6 +324,17 @@ export function mergeAnswer(answer: PendingAnswer, prev: Map<number, WebchatRing
   return orderChats([...out.values()]);
 }
 
+/** An outcome behind WorkSuite's lock: what happened, without the visitor, the colleague or the email. */
+export function hideOutcome(o: WebchatRingOutcome): WebchatRingOutcome {
+  const words: Record<string, string> = {
+    joined: 'A colleague joined the chat.',
+    late: 'Someone else already has this chat.',
+    visitor_left: 'A visitor left the site before anyone joined. Ringing stopped.',
+    visitor_ended: 'A visitor ended the chat. Ringing stopped.',
+  };
+  return { ...o, text: (o.kind && words[o.kind]) || o.text, visitor: o.visitor ? 'A visitor' : o.visitor, by: null, email: null };
+}
+
 /** Server stamps are true UTC without a zone. */
 export function stampMs(s: string): number {
   const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`);
@@ -313,6 +375,8 @@ export function ringerHeight(s: Pick<WebchatRingState, 'chats' | 'outcome' | 'ha
   // ringing as the full card with its reply box, several as compact cards.
   if (!s.calls?.length && !s.handoffs?.length) {
     if (!s.chats.length && s.joined) return 440;
+    // Every chat silenced for me: the compact "still waiting" card (R-04, RING-24).
+    if (s.chats.length && s.chats.every((c) => c.silenced)) return 150;
     if (s.chats.length === 1) return 430;
     if (s.chats.length > 1) return 44 + Math.min(3, s.chats.length) * 118 + (s.chats.length > 3 ? 26 : 0);
   }
@@ -334,6 +398,8 @@ export interface WebchatRingDeps {
   open: (conversationId: number, callId?: number, then?: 'transfer') => void;
   /** Bring the main window forward on the website chats inbox. */
   openInbox?: () => void;
+  /** Bring the main window forward on a chat in Missed chats (R-03 "Open in Missed"). */
+  openMissed?: (conversationId: number) => void;
   /** Send a reply into a chat I am in, as its composer would (kept and sent later when offline). */
   reply?: (conversationId: number, text: string) => Promise<SubmitResult>;
   onChanged: (state: WebchatRingState) => void;
@@ -382,6 +448,8 @@ export class WebchatRinger {
   private noHeartbeat = false;
   private beatTimer: NodeJS.Timeout | null = null;
   private outcome: WebchatRingState['outcome'] = null;
+  /** The chat I joined last and how many colleagues its ring stopped for (R-03 "YOU JOIN"). */
+  private youJoined: WebchatRingState['youJoined'] = null;
   private timer: NodeJS.Timeout | null = null;
   private soon: NodeJS.Timeout | null = null;
   private outcomeTimer: NodeJS.Timeout | null = null;
@@ -440,6 +508,7 @@ export class WebchatRinger {
     this.ringHere = null;
     this.sessions = false;
     this.outcome = null;
+    this.youJoined = null;
     this.emit();
   }
 
@@ -460,7 +529,9 @@ export class WebchatRinger {
       mic: this.mic(),
       tone: toneFor(chats, { ringSeconds: this.ringSeconds, quiet: this.deps.quiet(), duringDnd: prefs.duringDnd, now, ringHere: this.ringHere, handoffs: handoffs.length, calls: calls.length }),
       volume: Math.max(0, Math.min(100, prefs.volume)),
-      outcome: this.outcome,
+      // Behind the lock an outcome says what happened, never to whom or by whom.
+      outcome: hidden && this.outcome ? hideOutcome(this.outcome) : this.outcome,
+      youJoined: hidden ? null : this.youJoined,
       hidden,
       shortcut: this.shortcut,
       elsewhere: this.ringHere === false && chats.length + handoffs.length + calls.length > 0,
@@ -684,14 +755,16 @@ export class WebchatRinger {
         if (text) await this.deps.http.post(`${WEBSITE}/conversations/${conversationId}/reply`, { message: text }, key);
       }
     } catch (e) {
-      const why = isDesktopError(e) && e.status === 409 ? e.message || 'Someone else has already taken this chat.' : `Could not join: ${e instanceof Error ? e.message : 'the server did not answer'}`;
-      if (isDesktopError(e) && e.status === 409) this.chats.delete(conversationId);
-      this.say(conversationId, why);
+      // A moment late (R-03): who has it, in the design's words; anything else, why it did not work.
+      const late = isDesktopError(e) && e.status === 409 ? lateOutcome(e) : null;
+      const why = late ? late.text : `Could not join: ${e instanceof Error ? e.message : 'the server did not answer'}`;
+      if (late) this.chats.delete(conversationId);
+      this.say(conversationId, why, late ?? undefined);
       this.changed();
       return { ok: false, why };
     }
     this.chats.delete(conversationId);
-    this.outcome = null;
+    this.joinedNow(c);
     this.minimisedFor = null;
     if (opts.stay !== false) {
       this.joined = { conversationId, visitor: c.visitor, site: c.site, place: c.place, device: c.device, page: c.page, preview: c.preview, since: c.since, sent: text ? [text] : [] };
@@ -795,13 +868,23 @@ export class WebchatRinger {
         break;
       }
       case 'chat.ring.stopped': {
-        // The ring stopped for everybody, for a reason (RING-03, RING-28). A join is said with who.
-        if (!this.chats.has(cid)) return;
-        this.chats.delete(cid);
+        // The ring stopped for everybody, for a reason (RING-03, RING-28), told as R-03 tells it.
         const by = id(ev.by);
+        const me = by !== null && by === this.deps.me();
+        // My own join: the server counts who it stopped ringing for, more surely than the card did (R-03 "YOU JOIN").
+        if (ev.reason === 'joined' && me && this.youJoined?.id === cid && count(ev.stopped_for) !== null) {
+          this.youJoined = { id: cid, colleagues: count(ev.stopped_for) };
+          this.changed();
+        }
+        const c = this.chats.get(cid);
+        if (!c) return;
+        this.chats.delete(cid);
         if (ev.reason === 'joined') {
-          if (by !== null && by !== this.deps.me()) this.say(cid, `${text(ev.by_name, 120) ?? 'A colleague'} joined the chat.`);
-        } else if (typeof ev.reason === 'string' && STOP_WORDS[ev.reason]) this.say(cid, STOP_WORDS[ev.reason]!);
+          if (by !== null && !me) this.say(cid, '', joinedOutcome(text(ev.by_name, 120), c.visitor));
+        } else {
+          const o = stopOutcome(ev.reason, c.visitor, ev);
+          if (o) this.say(cid, o.text, o);
+        }
         this.changed();
         break;
       }
@@ -851,12 +934,12 @@ export class WebchatRinger {
         this.followUpStep(cid, ev);
         break;
       case 'chat.taken': {
-        if (!this.chats.has(cid)) return;
+        const c = this.chats.get(cid);
+        if (!c) return;
         this.chats.delete(cid);
         const by = id(ev.by);
-        const name = text(ev.by_name, 120);
-        if (ev.how === 'closed') this.say(cid, 'The chat was closed before anyone joined.');
-        else if (by !== null && by !== this.deps.me()) this.say(cid, `${name ?? 'A colleague'} joined the chat.`);
+        if (ev.how === 'closed') this.say(cid, STOP_WORDS.closed!);
+        else if (by !== null && by !== this.deps.me()) this.say(cid, '', joinedOutcome(text(ev.by_name, 120), c.visitor));
         this.changed();
         break;
       }
@@ -874,9 +957,10 @@ export class WebchatRinger {
         await this.deps.http.post(`${WEBSITE}/conversations/${conversationId}/accept`);
       } catch (e) {
         if (isDesktopError(e) && e.status === 409) {
-          // A moment too late: the server says who has it (RING-02, "too late").
+          // A moment too late: the server says who has it (RING-02; R-03 "You pressed Join a moment late").
           this.chats.delete(conversationId);
-          this.say(conversationId, e.message || 'Someone else has already taken this chat.');
+          const late = lateOutcome(e);
+          this.say(conversationId, late.text, late);
           this.changed();
           return false;
         }
@@ -886,7 +970,7 @@ export class WebchatRinger {
       }
     }
     this.chats.delete(conversationId);
-    this.outcome = null;
+    this.joinedNow(c);
     this.changed();
     this.deps.open(conversationId, undefined, then);
     this.reconcileSoon();
@@ -1124,15 +1208,44 @@ export class WebchatRinger {
     this.soon.unref?.();
   }
 
-  private say(conversationId: number, words: string): void {
-    this.outcome = { id: conversationId, text: words, at: Date.now() };
+  /**
+   * Say how something ended, for a few seconds (RING-28). `o` draws it as R-03 does — its words win over `words`; one
+   * with something to do (View, Open in Missed) is said for longer, until it is used or dismissed.
+   */
+  private say(conversationId: number, words: string, o?: Omit<WebchatRingOutcome, 'id' | 'at'>): void {
+    this.outcome = { kind: 'note', ...o, id: conversationId, text: o?.text || words, at: Date.now() };
+    const act = this.outcome.kind === 'joined' || (this.outcome.kind === 'visitor_left' && !!this.outcome.missed);
     if (this.outcomeTimer) clearTimeout(this.outcomeTimer);
     this.outcomeTimer = setTimeout(() => {
       this.outcome = null;
       this.outcomeTimer = null;
       this.emit();
-    }, 5_000);
+    }, act ? OUTCOME_ACTION_MS : OUTCOME_MS);
     this.outcomeTimer.unref?.();
+  }
+
+  /**
+   * I joined (RING-22; R-03 "YOU JOIN"): nothing more to say about the ring, and "ringing stopped for N colleagues" —
+   * as many as the card said it rang for besides me, until the server's count comes with its stop event.
+   */
+  private joinedNow(c: WebchatRingChat): void {
+    this.outcome = null;
+    this.youJoined = { id: c.id, colleagues: c.mine ? 0 : (c.othersRinging ?? null) };
+  }
+
+  /**
+   * The outcome card's buttons (R-03): View the chat a colleague joined, Open in Missed for a visitor who left before
+   * anyone joined — never the inbox, where opening it would join it — or Dismiss.
+   */
+  outcomeAction(action: 'view' | 'missed' | 'dismiss'): void {
+    const o = this.outcome;
+    if (this.outcomeTimer) clearTimeout(this.outcomeTimer);
+    this.outcomeTimer = null;
+    this.outcome = null;
+    this.changed();
+    if (!o || action === 'dismiss') return;
+    if (action === 'view' && o.kind === 'joined') this.deps.open(o.id);
+    else if (action === 'missed' && o.kind === 'visitor_left' && o.missed) (this.deps.openMissed ?? this.deps.open)(o.id);
   }
 
   private changed(): void {

@@ -1336,6 +1336,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // With a call just answered, the thread joins its audio (`call=`).
     open: (id, callId, then) => navigate({ route: `/chat?view=website&website=${id}${callId ? `&call=${callId}` : ''}${then === 'transfer' ? '&transfer=1' : ''}`, source: 'notification' }),
     openInbox: () => navigate({ route: '/chat?view=website&section=inbox', source: 'notification' }),
+    // A visitor who left before anyone joined (R-03): their chat in Missed chats, never opened in the inbox (which joins).
+    openMissed: (id) => navigate({ route: `/chat?view=website&section=missed&website=${id}`, source: 'notification' }),
     // The ringing card's mini chat replies as the conversation's composer does (#225).
     reply: (conversationId, text) => notifications.sendWebsiteReply?.(conversationId, text) ?? Promise.resolve({ delivered: false, queued: false, id: null, status: null, data: null, error: 'You are signed out.', code: 'NOT_SIGNED_IN' }),
     // This installation as a ringing device (RING-10): the registered device's id, stable across restarts.

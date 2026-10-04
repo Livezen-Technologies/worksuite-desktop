@@ -5,6 +5,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.171 — 2026-10-04
+
+- **How a ring ends (R-03).** The call window says what happened:
+  - "**Nuwan** joined the chat with Visitor 4F2A", with **View**;
+  - "You pressed Join a moment late — **Dilini** already has this chat";
+  - the visitor left before anyone joined, so the chat is in Missed chats, with their email and **Open in Missed**;
+  - "Visitor 4F2A ended the chat. Ringing stopped."
+
+  Joining from the card says "You joined the chat · ringing stopped for 2 colleagues", and the chat is marked
+  **Yours**.
+- **Silenced for you, still waiting (R-04).** When every chat ringing is silenced for you, the window shrinks to a
+  small card: "Visitor 4F2A is still waiting · Silenced for you · still ringing for 2 colleagues", with the wait,
+  **Join chat** and **Unsilence**. It rings for you again if the chat becomes at risk. In the lists, a silenced chat
+  has an amber edge, "Ringing · silenced", "Nobody yet" and an amber wait.
+- Needs the server update (Communication 1.38.0).
+
 ## 0.2.170 — 2026-10-04
 
 - **A chat ringing while you work elsewhere (R-01).** The title bar shows a red **Website chat ringing** pill with

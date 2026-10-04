@@ -645,8 +645,13 @@ export interface WebchatRingState {
   /** What the tone does now: off (none left unsilenced, Do not disturb, the organisation's cap), or which tone. */
   tone: 'off' | 'normal' | 'strong';
   volume: number;
-  /** How a ring ended, said for a few seconds (RING-28). */
-  outcome: { id: number; text: string; at: number } | null;
+  /** How a ring ended, said for a few seconds (RING-28); `kind` and the rest draw it as R-03 does. */
+  outcome: WebchatRingOutcome | null;
+  /**
+   * The chat I just joined, and how many colleagues its ring stopped for (R-03 "You joined the chat · ringing stopped
+   * for 2 colleagues"); null where the count is not known.
+   */
+  youJoined?: { id: number; colleagues: number | null } | null;
   /** Locked: the window says a chat is waiting, and nothing about who. */
   hidden: boolean;
   /** Ctrl/Cmd+Shift+J is registered now. */
@@ -667,6 +672,28 @@ export interface WebchatRingState {
   chime?: number;
   /** Whether the follow-up card shows over other apps (Settings › Website chats). */
   followUpCard?: boolean;
+}
+
+/**
+ * How a ring ended, as the call window tells it (R-03, RING-UI-03; RING-02, RING-03, RING-28). `text` is the whole
+ * thing in plain words (the tray, a screen reader, an older window); `kind` and the rest are what the card draws:
+ *
+ * - `joined`: a colleague (`by`) joined the chat with `visitor` — a toast with View;
+ * - `late`: I pressed Join a moment late — `by` already has it;
+ * - `visitor_left`: the visitor left the site before anyone joined — in Missed chats when `missed`, with the `email`
+ *   they left, Open in Missed and Dismiss;
+ * - `visitor_ended`: the visitor ended the chat;
+ * - `note`: anything else (closed, blocked, a pass, a call or an invitation resolving, an error).
+ */
+export interface WebchatRingOutcome {
+  id: number;
+  text: string;
+  at: number;
+  kind?: 'joined' | 'late' | 'visitor_left' | 'visitor_ended' | 'note';
+  visitor?: string | null;
+  by?: string | null;
+  email?: string | null;
+  missed?: boolean;
 }
 
 /** A chat joined from the ringing card, shown there as a mini chat (worksuite-desktop#225). */

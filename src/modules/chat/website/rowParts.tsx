@@ -41,6 +41,30 @@ export function FilterPill({ on, onClick, children }: { on: boolean; onClick: ()
   );
 }
 
+/**
+ * A chat silenced for me that is still waiting (R-04, RING-UI-04; RING-24): its row is amber, with an amber edge, in
+ * the table and the card list alike.
+ */
+export const ROW_SILENCED = 'bg-warning-bg shadow-[inset_3px_0_0_var(--color-warning)]';
+
+/**
+ * The bell on a ringing chat's row; struck through and amber once I silenced it — for me, on all my devices
+ * (RING-11, RING-24), so "Silenced for you", not "on this computer".
+ */
+export function RingBell({ ring }: { ring: WebchatRingChat }) {
+  return <Icon name={ring.silenced ? 'bell-off' : 'bell'} size={12} className={ring.silenced ? 'shrink-0 text-warning' : 'shrink-0 text-danger'} label={ring.silenced ? text('Silenced for you') : text('Ringing')} />;
+}
+
+/** "Ringing · silenced" in the table's Status column (R-04): it still rings for colleagues, not for me. */
+export function SilencedStatus() {
+  return (
+    <span className="flex items-center gap-1.5 text-[13px] font-semibold text-[#9A5B10] dark:text-warning">
+      <Icon name="bell-off" size={14} className="shrink-0" label={text('Silenced for you')} />
+      {text('Ringing · silenced')}
+    </span>
+  );
+}
+
 /** The priorities a card row marks; the table says every one. */
 export const PRIORITY_TAG: Record<string, string> = { vip: 'VIP', urgent: 'Urgent', high: 'High' };
 
@@ -112,14 +136,15 @@ export function rowPreview(r: WebsiteRow, { me, myName, ring, quote = false }: {
  * How long a visitor has waited, counting while it is under an hour (then when they wrote). Amber once they have
  * waited as long as it takes to be offered a callback, red after it (#223); red throughout on a site without offers.
  */
-export function WaitClock({ since, amber, red, size = 'sm' }: { since: string; amber?: number | null; red?: number | null; size?: 'sm' | 'md' }) {
+export function WaitClock({ since, amber, red, size = 'sm', silenced = false }: { since: string; amber?: number | null; red?: number | null; size?: 'sm' | 'md'; silenced?: boolean }) {
   const now = useNow(1_000);
   const at = parseTs(since).getTime();
   const big = size === 'md';
   if (Number.isNaN(at) || now - at >= 3_600_000) return <span className={cx('shrink-0 text-ink-3', big ? 'text-[12.5px]' : 'text-[11px]')}>{listStamp(since)}</span>;
-  const tone = waitTone((now - at) / 1000, amber, red);
+  // Silenced for me, the wait is amber whatever its length (R-04): the row says it waits, not that it rings.
+  const tone = silenced ? 'amber' : waitTone((now - at) / 1000, amber, red);
   return (
-    <span data-tone={tone} title={tone === 'amber' ? text('Offered a callback') : tone === 'red' && (amber || red) ? text('Waiting past the callback offers') : undefined}
+    <span data-tone={tone} title={silenced ? undefined : tone === 'amber' ? text('Offered a callback') : tone === 'red' && (amber || red) ? text('Waiting past the callback offers') : undefined}
       aria-label={text('waiting {time}', { time: waited(since, now) })}
       className={cx('shrink-0 font-mono tabular-nums', big ? 'text-[13px] font-semibold' : 'text-[11px] font-bold', tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
       {waited(since, now)}

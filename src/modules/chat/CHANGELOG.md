@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.44.0 — 2026-10-04
+
+- R-03/R-04 how a ring ends and silenced chats: a toast for each ending (a colleague joined with View, too late with who has it, visitor left with Missed and their email, visitor ended), You joined with how many it stopped ringing for, a compact card when every chat is silenced for you with Unsilence, and silenced rows in the lists (amber edge, Ringing · silenced, Nobody yet).
+
 ## 1.43.0 — 2026-10-04
 
 - R-01/R-02 ringing to the design: the title bar's ringing and silenced pills, Incoming website chat with step, visit and VIP chips, a pulsing avatar, Silence in words, who else it rings; several ringing as website chats ringing, most urgent on top, with at-risk, assigned (In turn, the handover bar, Pass to next) and waiting cards; only the top chat sounds.

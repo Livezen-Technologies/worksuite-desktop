@@ -162,7 +162,8 @@ describe('WebchatRinger', () => {
 
     r.handle({ type: 'chat.taken', conversation_id: 12, by: 8, by_name: 'Dilini', how: 'accepted' } as never);
     expect(r.state().chats).toHaveLength(0);
-    expect(r.state().outcome?.text).toBe('Dilini joined the chat.');
+    // R-03: "Nuwan joined the chat with Visitor 4F2A", with View.
+    expect(r.state().outcome).toMatchObject({ kind: 'joined', by: 'Dilini', visitor: 'Visitor 12', text: 'Dilini joined the chat with Visitor 12' });
     r.stop();
   });
 
@@ -197,7 +198,8 @@ describe('WebchatRinger', () => {
     await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
     expect(await r.join(3)).toBe(false);
     expect(opened).toEqual([]);
-    expect(r.state().outcome?.text).toBe('Kasun has already taken this chat.');
+    // R-03 "too late": who has it, in the design's words — from an older server's sentence too.
+    expect(r.state().outcome).toMatchObject({ kind: 'late', by: 'Kasun', text: 'You pressed Join a moment late — Kasun already has this chat.' });
     expect(r.state().chats).toHaveLength(0);
     r.stop();
   });
@@ -302,11 +304,12 @@ describe('WebchatRinger with ring sessions on the server', () => {
     r.start();
     await vi.waitFor(() => expect(r.state().chats).toHaveLength(3));
     r.handle({ type: 'chat.ring.stopped', conversation_id: 3, reason: 'visitor_left' } as never);
-    expect(r.state().outcome?.text).toBe('The visitor left the site before anyone joined.');
+    // R-03: the visitor by name; an older server does not say the chat is in Missed chats, so neither does this.
+    expect(r.state().outcome).toMatchObject({ kind: 'visitor_left', visitor: 'Nimali', missed: false, text: 'Nimali left the site before anyone joined. Ringing stopped.' });
     r.handle({ type: 'chat.ring.stopped', conversation_id: 4, reason: 'joined', by: 8, by_name: 'Kasun' } as never);
-    expect(r.state().outcome?.text).toBe('Kasun joined the chat.');
+    expect(r.state().outcome?.text).toBe('Kasun joined the chat with Nimali');
     r.handle({ type: 'chat.ring.stopped', conversation_id: 5, reason: 'visitor_ended' } as never);
-    expect(r.state().outcome?.text).toBe('The visitor ended the chat.');
+    expect(r.state().outcome).toMatchObject({ kind: 'visitor_ended', text: 'Nimali ended the chat. Ringing stopped.' });
     expect(r.state().chats).toHaveLength(0);
     r.stop();
   });
@@ -597,7 +600,7 @@ describe('WebchatRinger: Join & send and the mini chat (#225)', () => {
     });
     r.start();
     await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
-    expect(await r.joinAndSend(3, 'Hello')).toEqual({ ok: false, why: 'Kasun has already taken this chat.' });
+    expect(await r.joinAndSend(3, 'Hello')).toEqual({ ok: false, why: 'You pressed Join a moment late — Kasun already has this chat.' });
     expect(r.state().chats).toHaveLength(0);
     expect(r.state().joined).toBeNull();
     expect(post.mock.calls.some(([p]) => String(p).endsWith('/reply'))).toBe(false);

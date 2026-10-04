@@ -79,9 +79,12 @@ describe('the website-chat call window (RING-UI-06)', () => {
     await waitFor(() => expect((screen.getByRole('button', { name: 'Join chat' }) as HTMLButtonElement).disabled).toBe(false));
     fireEvent.click(screen.getByRole('button', { name: 'Silence ringing' }));
     expect(call).toHaveBeenCalledWith('ring:silence', { id: 7, on: true });
+    // Silenced, it is R-04's compact card (website-ring-r03r04.test.tsx); Unsilence brings the full card back.
     act(() => push?.(state({ chats: [chat({ silenced: true })] })));
-    expect(screen.getByText('Incoming website chat · silenced')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Unmute ringing' }).getAttribute('aria-pressed')).toBe('true');
+    expect(screen.getByRole('region', { name: 'Silenced chat' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Unsilence' }));
+    expect(call).toHaveBeenCalledWith('ring:silence', { id: 7, on: false });
+    act(() => push?.(state({ chats: [chat({})] })));
 
     fireEvent.click(screen.getByRole('button', { name: 'Minimise notification' }));
     expect(call).toHaveBeenCalledWith('ring:minimise');

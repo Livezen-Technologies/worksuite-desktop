@@ -10,7 +10,7 @@ import { BulkBar, BulkButton } from '../BulkBar';
 import { websiteBulkMenu } from '../menus';
 import { useMultiSelect } from '../selection';
 import { BULK_LIMIT, PRIORITIES, useAgents, useWebsiteBulk, waitingSince, type WebsiteBulkAction, type WebsiteBulkExtra, type WebsiteRow } from './api';
-import { CallLine, ROW_PICKED, rowPreview, Tag, TABLE_FRAME, TABLE_HEAD, WaitClock } from './rowParts';
+import { CallLine, ROW_PICKED, ROW_SILENCED, RingBell, rowPreview, SilencedStatus, Tag, TABLE_FRAME, TABLE_HEAD, WaitClock } from './rowParts';
 
 /**
  * The list views as one table (C-03, UX-LIST-01/02): Live chats, Unassigned, Assigned to me, Awaiting reply and
@@ -145,9 +145,10 @@ export function WebsiteTable({ title, subtitle, filters, rows, placeholder, foot
   );
 }
 
-/** The status chip (UX-LIST-01): at risk, then awaiting a reply, then chatting. */
-function Status({ r }: { r: WebsiteRow }) {
+/** The status chip (UX-LIST-01): at risk, then awaiting a reply, then chatting; silenced for me, "Ringing · silenced" (R-04). */
+function Status({ r, ring }: { r: WebsiteRow; ring?: WebchatRingChat }) {
   if (r.status === 'closed') return <Tag tone="muted" size="chip">{text('Closed')}</Tag>;
+  if (ring?.silenced) return <SilencedStatus />;
   if (r.at_risk) return <Tag tone="danger" size="chip">{text('At risk')}</Tag>;
   if (r.awaiting_reply) return <Tag tone="warning" size="chip">{text('Awaiting reply')}</Tag>;
   return <Tag tone="indigo" size="chip">{text('Chatting')}</Tag>;
@@ -171,7 +172,7 @@ function TableRow({ r, me, myName, ring, typing, picked, onPick, onClick, onMenu
       onClick={onClick}
       onContextMenu={onMenu}
       onKeyDown={onKeyDown}
-      className={cx(GRID, 'cursor-default border-b border-line px-4 py-3 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? ROW_PICKED : ring?.silenced ? 'bg-warning-bg' : 'hover:bg-subtle')}
+      className={cx(GRID, 'cursor-default border-b border-line px-4 py-3 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? ROW_PICKED : ring?.silenced ? ROW_SILENCED : 'hover:bg-subtle')}
     >
       <span role="gridcell" className="flex">
         <Checkbox aria-label={text('Select {name}', { name })} checked={picked} onChange={onPick} />
@@ -181,7 +182,7 @@ function TableRow({ r, me, myName, ring, typing, picked, onPick, onClick, onMenu
         <span className="flex min-w-0 flex-col">
           <span className="flex min-w-0 items-center gap-1.5 text-[13.5px]">
             <b className="truncate font-bold text-ink">{name}{r.email && r.visitor_name ? <span className="font-normal text-ink-3"> · {r.email}</span> : null}</b>
-            {ring ? <Icon name={ring.silenced ? 'bell-off' : 'bell'} size={12} className={ring.silenced ? 'shrink-0 text-warning' : 'shrink-0 text-danger'} label={ring.silenced ? text('Silenced on this computer') : text('Ringing')} /> : null}
+            {ring ? <RingBell ring={ring} /> : null}
             {r.is_starred ? <Icon name="star" size={11} className="shrink-0 text-warning" label={text('Starred')} /> : null}
           </span>
           {r.call && !closed ? <CallLine call={r.call} /> : typing && !closed ? (
@@ -192,11 +193,12 @@ function TableRow({ r, me, myName, ring, typing, picked, onPick, onClick, onMenu
         </span>
       </span>
       <span role="gridcell" className="truncate text-[13px] text-ink">{r.site ?? r.widget ?? text('Website')}</span>
-      <span role="gridcell"><Status r={r} /></span>
+      <span role="gridcell"><Status r={r} ring={ring} /></span>
       <span role="gridcell" className={cx('text-[13px]', r.priority === 'urgent' ? 'font-semibold text-danger' : r.priority === 'vip' ? 'font-semibold text-ink' : 'text-ink')}>{text(priority)}</span>
-      <span role="gridcell" className={cx('truncate text-[13px]', r.agent ? 'text-ink' : 'text-ink-3')}>{r.agent ?? text('Nobody')}</span>
+      {/* Still ringing, nobody has it — yet (R-04). */}
+      <span role="gridcell" className={cx('truncate text-[13px]', r.agent ? 'text-ink' : 'text-ink-3')}>{r.agent ?? (ring ? text('Nobody yet') : text('Nobody'))}</span>
       <span role="gridcell">
-        {r.awaiting_reply && since && !closed ? <WaitClock since={since} amber={r.wait_amber} red={r.wait_red} size="md" /> : <span className="text-[13px] text-ink-3" aria-label={text('Not waiting')}>—</span>}
+        {r.awaiting_reply && since && !closed ? <WaitClock since={since} amber={r.wait_amber} red={r.wait_red} size="md" silenced={!!ring?.silenced} /> : <span className="text-[13px] text-ink-3" aria-label={text('Not waiting')}>—</span>}
       </span>
     </div>
   );
