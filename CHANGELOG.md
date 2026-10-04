@@ -5,6 +5,30 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.156 — 2026-10-04
+
+- **When a visitor writes again in your chat, you hear about it (#230).** Before, if you answered a website chat and
+  then went to Mail, another app or away from the keyboard, a visitor's "Are u there?" got nobody's attention. Now,
+  if the chat is yours (or you are in it), the team has already answered, and you are not looking at it:
+  - **A card over other apps** shows the visitor, the site, their new message with the one or two before it, and
+    how long they have waited. You can reply from the card without leaving what you are doing, or use **Open
+    chat** or **Snooze 5 min**. More messages update the same card ("Visitor replied · 3 new messages").
+  - **A system notification** says "Visitor CC1B: Are u there", with Reply, while WorkSuite is not in front. One
+    notification stands for several messages, and it goes when the chat is answered.
+  - **A short chime**, unlike the new-chat ring. It is quiet during Do not disturb.
+  - The Dock or taskbar **badge** counts them, the tab says "(1) Website chats", and the chat moves to the top of
+    the list marked **Visitor replied** with its wait.
+- **"Not looking at it"** means: another tab or module is in front, WorkSuite is not the app in front or is
+  minimised, the computer is locked, or there has been no keyboard or mouse input for two minutes. Nothing shows
+  while you are reading the conversation.
+- **When the team is alerted** because nobody answered in time, colleagues get the card with **Take over**. A
+  reminder, the team alert, a takeover or a reassignment each clear or update the card.
+- **Settings › Website chats › When a visitor writes again in your chat:** the card, the desktop notification, the
+  chime (with Test), and how long without input counts as away (1, 2, 5 or 10 minutes).
+- In a meeting or on a call, WorkSuite tells the server you are busy, so a visitor's follow-up goes straight to the
+  team and no new chat is given to you.
+- Needs the server update (Communication 1.24.0). An older server sends none of this, and nothing changes.
+
 ## 0.2.155 — 2026-10-04
 
 - **Mail rows say which account by name (#227).** In All Accounts and the other combined views, each row used to

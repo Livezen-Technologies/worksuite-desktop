@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.18.0 — 2026-10-04
+
+- Settings › Website chats › When a visitor writes again in your chat (#230): card over other apps, desktop notification, chime (with Test), and how long without input counts as away.
+
 ## 1.17.0 — 2026-10-03
 
 - Preferences: Organisation filter, the same in every app or separate in each (#214).
