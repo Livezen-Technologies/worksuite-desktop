@@ -53,9 +53,11 @@ export function isTrustedShellUrl(raw: string): boolean {
  * signed pages may ask for anything. The microphone and camera are for voice
  * notes, calls and meetings, which the person starts themselves; screen
  * capture never goes through here (it has its own picker, FR-COM-05).
+ * The screen wake lock is for Website chats' wall mode, which keeps a TV in
+ * the support room awake while it shows (WS-WCHAT MAP-16).
  * Geolocation, notifications-from-web and every device API stay denied.
  */
-const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen', 'media']);
+const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen', 'media', 'screen-wake-lock']);
 
 /** `media` only for the microphone and camera — never `display` capture. */
 export function mediaTypesAllowed(types: readonly string[] | undefined): boolean {

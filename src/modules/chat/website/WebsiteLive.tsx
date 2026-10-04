@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { ApiError, apiGet, apiPost, request } from '../../../core/api';
 import { errorMessage } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
@@ -12,7 +12,7 @@ import { dwell } from '../kit/model';
 import { useNow } from '../../calls/parts';
 import { useCanned, visitorStatus, WEBSITE, type Section } from './api';
 import { Select } from '../../../components/Select';
-import { LiveDashboard } from './live/LiveDashboard';
+import { LiveDashboard, NO_LIVE_PARAMS, type LiveParams } from './live/LiveDashboard';
 import { clock, initialsOf, ordinal, pathOf, since, STATE, stateOf, whereOf, type Dashboard, type OnlineVisitor } from './live/liveMap';
 import { BlockDialog } from './panelCards';
 import { refuseForVisitor } from './profile';
@@ -83,27 +83,34 @@ function lastActive(v: OnlineVisitor, idle: number, now: number): { label: strin
  * dashboard; Enter or a double-click goes to their chat. The selection is in the address, so it survives Back, a
  * reopened tab and a refresh of the list.
  */
-export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection }: {
+export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection, live: held, onLive: hold }: {
   view: LiveView;
+  /** The dashboard's view as the address keeps it (MAP-15); held here when the caller keeps no address. */
+  live?: LiveParams;
+  onLive?: (patch: Partial<LiveParams>) => void;
   selected: number | null;
   onSelect: (id: number | null) => void;
   onOpenChat: (conversationId: number, then?: 'invite') => void;
   onSection: (s: 'visitors' | Section) => void;
 }) {
-  const [site, setSite] = useState(0);
+  const [own, setOwn] = useState<LiveParams>(NO_LIVE_PARAMS);
+  const live = held ?? own;
+  const onLive = useCallback((patch: Partial<LiveParams>) => (hold ? hold(patch) : setOwn((o) => ({ ...o, ...patch }))), [hold]);
+  // All sites, one, or several (MAP-14): every figure and the list narrow to them.
+  const sites = live.sites;
   const [status, setStatus] = useState<'' | Status>('');
   const [focusStart, setFocusStart] = useState(0);
   // Ten seconds, as the visitor list, so the two never disagree about how many people are on the site (C-00). One site
   // narrows every figure; changing it keeps the last figures on screen until the new ones land. Visitors online reads
   // only the sites' names from it.
   const dash = useQuery({
-    queryKey: ['website', 'dashboard', site],
-    queryFn: ({ signal }) => apiGet<Dashboard>(`${WEBSITE}/dashboard`, site ? { widget_id: site } : undefined, signal),
+    queryKey: ['website', 'dashboard', sites.length === 0 ? 0 : sites.length === 1 ? sites[0]! : sites.join(',')],
+    queryFn: ({ signal }) => apiGet<Dashboard>(`${WEBSITE}/dashboard`, sites.length === 1 ? { widget_id: sites[0] } : sites.length ? { widget_ids: sites.join(',') } : undefined, signal),
     refetchInterval: view === 'dashboard' ? 10_000 : false,
     placeholderData: keepPreviousData,
   });
   const visitors = useQuery({ queryKey: ['website', 'visitors'], queryFn: ({ signal }) => apiGet<{ visitors: OnlineVisitor[] }>(`${WEBSITE}/visitors`, undefined, signal), refetchInterval: 10_000 });
-  const all = (visitors.data?.visitors ?? []).filter((v) => !site || v.widget_id === site);
+  const all = (visitors.data?.visitors ?? []).filter((v) => !sites.length || sites.includes(v.widget_id));
   const list = view === 'visitors' && status ? all.filter((v) => visitorStatus(v)[0] === status) : all;
 
   // The selected visitor, and — once they have left the site — who they were and when they were last seen.
@@ -132,8 +139,8 @@ export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection }:
         loading={visitors.isLoading}
         error={visitors.error}
         onRetry={() => void visitors.refetch()}
-        site={site}
-        onSite={setSite}
+        live={live}
+        onLive={onLive}
         selected={selected}
         onSelect={onSelect}
         onStart={(v) => {
@@ -161,8 +168,9 @@ export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection }:
           <Select aria-label={text('Show')} value={status} onChange={(e) => setStatus(e.target.value as '' | Status)} className="h-8 rounded-[8px] border border-line bg-surface px-1.5 text-[12.5px] text-ink">
             {STATUSES.map((s) => <option key={s.id} value={s.id}>{text(s.label)}</option>)}
           </Select>
-          <Select aria-label={text('Site')} value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-8 rounded-[8px] border border-line bg-surface px-1.5 text-[12.5px] text-ink">
+          <Select aria-label={text('Site')} value={sites.length === 1 ? sites[0] : sites.length ? -1 : 0} onChange={(e) => onLive({ sites: Number(e.target.value) > 0 ? [Number(e.target.value)] : [] })} className="h-8 rounded-[8px] border border-line bg-surface px-1.5 text-[12.5px] text-ink">
             <option value={0}>{text('All sites')}</option>
+            {sites.length > 1 ? <option value={-1} disabled>{text('{n} sites', { n: sites.length })}</option> : null}
             {(d?.widgets ?? []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
           </Select>
         </div>

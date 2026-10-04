@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.46.0 — 2026-10-04
+
+- L-02/L-03: full map (zoom presets with home country, pan/zoom/pinch, edge chips per country, lazy 1:10m country outlines, state and multi-site filters, bookmarkable view, place panel with precision and today counts) and dark wall mode (names hidden, ticker, keep-awake, full screen)
+
 ## 1.45.0 — 2026-10-04
 
 - R-05/R-06: native incoming-chat window redrawn (Reply and join, saved replies, Send & join opens the thread, kept-draft question when a colleague joins first), tray ringing menu with reply and join, title bar pill and tab ringing count, badge counts unsilenced ringing chats

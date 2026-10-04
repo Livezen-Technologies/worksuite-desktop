@@ -21,6 +21,7 @@ import { clock, handoffAsk, handoffLeft, handoffTitle, useRingState } from './Ri
 import { CallLine, FilterPill as Pill, pathOf, PRIORITY_TAG, ROW_SILENCED, RingBell, rowPreview, Tag, WaitClock } from './rowParts';
 import { WebsiteTable } from './WebsiteTable';
 import { WebsiteLive, type LiveView, type OnlineVisitor } from './WebsiteLive';
+import { liveParamsOf, liveQuery, type LiveParams } from './live/LiveDashboard';
 import { WebsiteThread } from './WebsiteThread';
 import { VoiceCalls } from './VoiceCalls';
 import { WidgetSettings } from './widget/WidgetSettings';
@@ -93,6 +94,13 @@ export function WebsiteWorkspace() {
   const liveView: LiveView | null = query.get('section') === 'dashboard' ? 'dashboard' : query.get('section') === 'visitors' ? 'visitors' : null;
   const live = liveView !== null;
   const liveVisitor = Number(query.get('visitor')) || null;
+  // The dashboard's view, so it can be bookmarked and comes back with the tab (MAP-15): `map=lk` while the full map is
+  // open, its state chip, Now or Today, the place picked, the sites, and Wall mode.
+  const liveParams = liveParamsOf(query);
+  const goLive = (patch: Partial<LiveParams>, visitor: number | null) => {
+    if (!liveView) return;
+    go(`/chat?${liveQuery(liveView, { ...liveParams, ...patch }, visitor).toString()}`);
+  };
   const designing = query.get('section') === 'widget';
   // Voice calls (V-01): a LIVE view of its own, full width, with the picked call in the address.
   const calling = query.get('section') === 'calls';
@@ -335,7 +343,9 @@ export function WebsiteWorkspace() {
         <WebsiteLive
           view={liveView}
           selected={liveVisitor}
-          onSelect={(id) => go(`/chat?${new URLSearchParams({ view: 'website', section: liveView, ...(id ? { visitor: String(id) } : {}) }).toString()}`)}
+          live={liveParams}
+          onLive={(patch) => goLive(patch, liveVisitor)}
+          onSelect={(id) => goLive({}, id)}
           onOpenChat={(id, then) => go(`/chat?view=website&section=inbox&website=${id}${then === 'invite' ? '&invite=1' : ''}`)}
           onSection={(s) => go(`/chat?view=website&section=${s}`)}
         />

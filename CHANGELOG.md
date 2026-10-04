@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.173 — 2026-10-04
+
+- **Full map (L-02).** Live › Full map has the design's presets (World · Asia · South Asia · your home country), drag
+  to pan, scroll or pinch to zoom, and a ⤢ button to show everyone. Chips at the edge say where the visitors outside
+  the view are ("↖ India · 3 outside this view"). Zoomed in, countries get detailed outlines, loaded only when
+  needed. Filter by state (All · Needs you · In a chat · Browsing) and by one or several sites. The view is kept in
+  the address, so it can be bookmarked. The place panel says how precise a position is ("City · GeoIP",
+  "Country only · browser timezone") and gives today's visitors and chats there.
+- **Wall mode (L-03).** A dark full-screen view for a wall screen, with names hidden: tiles, the map, and a "Just now"
+  ticker ("Arrived from google.com · Mumbai"). It keeps the screen awake, and Esc closes it. It shows no names,
+  emails or agents.
+- Waiting places now get the amber halo too, and the Live pill turns amber after 30 s without data.
+
 ## 0.2.172 — 2026-10-04
 
 - **Reply and join from the alert (R-05).** The incoming-chat window is redrawn to the design: the visitor's message,

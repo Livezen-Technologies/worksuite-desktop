@@ -98,7 +98,7 @@ describe('the header and the six figures', () => {
     expect(screen.getByRole('heading', { name: 'Live dashboard' })).toBeTruthy();
     expect(screen.getByText(/^Live · updated \d+ s ago$/)).toBeTruthy();
     expect(screen.getByText('Who is on your sites right now, what they are doing, and where they are.')).toBeTruthy();
-    expect(screen.getByRole('combobox', { name: 'Site' }).textContent).toContain('All sites · 2');
+    expect(screen.getByRole('button', { name: 'Site' }).textContent).toContain('All sites · 2');
   });
 
   it('shows each figure with what is under it, and each opens the view it counts', async () => {
@@ -126,8 +126,8 @@ describe('the header and the six figures', () => {
   it('asks for one site when it is chosen', async () => {
     mount();
     await ready();
-    fireEvent.click(screen.getByRole('combobox', { name: 'Site' }));
-    fireEvent.click(screen.getByRole('option', { name: 'techhub.com.lk' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Site' }));
+    fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'techhub.com.lk' }));
     await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/chat/widget-admin/dashboard', { widget_id: 2 }, expect.anything()));
     // The list narrows to that site's visitors.
     await waitFor(() => expect(within(list()).getAllByRole('listitem').map((r) => r.getAttribute('aria-label'))).toEqual(['Visitor B210']));
@@ -224,7 +224,10 @@ describe('the map', () => {
     expect(within(within(map()).getByRole('group', { name: 'Zoom to' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['World', 'Asia', 'Sri Lanka']);
     fireEvent.click(within(map()).getByRole('button', { name: 'Sri Lanka' }));
     expect(within(map()).getByRole('button', { name: 'Sri Lanka' }).getAttribute('aria-pressed')).toBe('true');
-    expect(within(map()).getByText(/outside this view/)).toBeTruthy();
+    // Who is off the edge, by country, with an arrow towards them (MAP-08).
+    const away = within(within(map()).getByRole('list', { name: 'Outside this view' })).getAllByRole('listitem').map((i) => i.textContent);
+    expect(away).toContain('↖ India · 1 outside this view');
+    expect(away).toHaveLength(3);
     // Close in, they part: Colombo has somebody waiting, somebody in a chat and somebody browsing.
     expect(arcs(colombo)).toEqual(['waiting', 'chatting', 'browsing']);
     expect(within(map()).getByText('Colombo 3')).toBeTruthy();
@@ -279,7 +282,8 @@ describe('Full map and Wall mode', () => {
     const wall = screen.getByRole('dialog', { name: 'Website chats — live, wall mode' });
     expect(within(wall).getByText('Names hidden on this screen')).toBeTruthy();
     for (const name of ['Anne', 'Kasun P.', 'Ravi M.', 'Visitor 7A3D']) expect(within(wall).queryByText(new RegExp(name))).toBeNull();
-    expect(within(wall).getByText(/^At risk 3:1\d$/)).toBeTruthy();
+    // The wall's map has no callout (MAP-UI-03): the ticker says it, by place only.
+    expect(within(wall).queryByText(/^At risk 3:1\d$/)).toBeNull();
     expect(within(wall).getByText(/^A visitor in Kandy has waited 3:1\d — at risk$/)).toBeTruthy();
     expect(within(within(wall).getByRole('list', { name: 'Right now' })).getAllByRole('listitem').map((t) => t.querySelector('span')?.textContent)).toEqual([
       'On the site now', 'Waiting on us', 'At risk', 'In a chat', 'First reply', 'Missed today',

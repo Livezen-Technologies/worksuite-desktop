@@ -90,7 +90,15 @@ export interface Dashboard {
     on_call?: { count: number; since: string | null };
   };
   today: { visitors: number; returning: number; conversations: number; missed: number; missed_last_hour?: number; page_views: number; first_response_median: number | null };
-  activity?: Array<{ id: number; kind: string; visitor_id: number | null; who: string; site: string | null; title: string | null; url: string | null; country: string | null; city: string | null; at: string }>;
+  activity?: Array<{
+    id: number; kind: string; visitor_id: number | null; who: string; site: string | null; title: string | null; url: string | null; country: string | null; city: string | null; at: string;
+    /** A page view that opened a visit: "Arrived from google.com · Mumbai" on the wall (MAP-16). */
+    arrived?: boolean;
+    /** Where an arrival came from, the host only. */
+    referrer_host?: string | null;
+    /** Placed by timezone only: "Arrived · Sri Lanka ≈". */
+    approx?: boolean;
+  }>;
   summary: {
     pages: Array<{ url?: string; title?: string; name?: string; count: number }>;
     countries: Array<{ name: string | null; count: number }>;
@@ -100,6 +108,8 @@ export interface Dashboard {
     places?: TodayPlace[];
   };
   widgets: Array<{ id: number; name: string; online: number; status?: string; open_now?: boolean }>;
+  /** The organisation's own country, from the server's timezone: the map's home preset (MAP-08). */
+  home_country?: string | null;
   /** The server's clock when it answered, so waits are counted on its clock rather than this machine's. */
   server_time?: string;
 }
@@ -248,6 +258,135 @@ export function fitBox(b: Box, aspect: number): Box {
 
 export const sameBox = (a: Box, b: Box) => Math.abs(a.x - b.x) < 0.5 && Math.abs(a.w - b.w) < 0.5;
 
+/**
+ * The part of a region a country is in (MAP-08's "South Asia" between Asia and Sri Lanka), in degrees, checked in
+ * order. Only where a region is too large to read a country in; elsewhere the presets go from region to country.
+ */
+const SUBREGIONS: Array<{ name: string; lng: [number, number]; lat: [number, number] }> = [
+  { name: 'South Asia', lng: [60, 98], lat: [4, 38] },
+  { name: 'South-East Asia', lng: [92, 142], lat: [-11, 24] },
+  { name: 'East Asia', lng: [98, 146], lat: [18, 54] },
+  { name: 'Middle East', lng: [25, 63], lat: [12, 43] },
+  { name: 'Central Asia', lng: [46, 88], lat: [35, 56] },
+];
+
+/** The subregion a country sits in, by the middle of its largest piece. */
+export function subregionOf(country: string | null | undefined): { name: string; box: Box } | null {
+  const region = regionOf(country);
+  const c = countryCentre(country);
+  if (!c || region?.name !== 'Asia') return null;
+  const lng = (c.x / 1000) * 360 - 180;
+  const lat = 90 - (c.y / 500) * 180;
+  const r = SUBREGIONS.find((x) => lng >= x.lng[0] && lng <= x.lng[1] && lat >= x.lat[0] && lat <= x.lat[1]);
+  return r ? { name: r.name, box: degBox(r.lng, r.lat) } : null;
+}
+
+/** A preset's key in the address: `world`, `asia`, `south-asia`, or a country's code, lower case (`lk`). */
+export const slug = (name: string) => name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+
+export interface Preset { key: string; label: string; box: Box }
+
+/**
+ * The map's ready zooms (MAP-08): the world, the region and — on the full map — the part of it the home country is in,
+ * then the home country (the organisation's, else wherever most visitors are).
+ */
+export function presetsFor(home: string | null | undefined, sub = false): Preset[] {
+  const out: Preset[] = [{ key: 'world', label: 'World', box: WORLD_BOX }];
+  const country = home ? findCountry(home) : null;
+  const region = home ? regionOf(home) : null;
+  if (region) out.push({ key: slug(region.name), label: region.name, box: padded(region.box, 0.02) });
+  const part = sub && home ? subregionOf(home) : null;
+  if (part) out.push({ key: slug(part.name), label: part.name, box: padded(part.box, 0.02) });
+  const box = home ? countryBox(home) : null;
+  if (country && box) out.push({ key: country.code.toLowerCase(), label: country.name, box: padded(box, 0.3) });
+  return out;
+}
+
+/**
+ * The view as the address keeps it (MAP-15, `map=lk`): a preset's key when the view is one, else its centre and zoom
+ * (`79.9,7.6,24` — longitude, latitude, and how many times closer than the world).
+ */
+export function mapParam(b: Box, presets: Preset[]): string {
+  const p = presets.find((x) => sameBox(x.box, b));
+  if (p) return p.key;
+  const lng = ((b.x + b.w / 2) / 1000) * 360 - 180;
+  const lat = 90 - ((b.y + b.h / 2) / 500) * 180;
+  return `${lng.toFixed(2)},${lat.toFixed(2)},${(WORLD_BOX.w / b.w).toFixed(2)}`;
+}
+
+/** The view an address names: a preset, any country's code, or a centre and zoom; the world when it names none. */
+export function boxOfParam(v: string | null | undefined, presets: Preset[]): Box {
+  if (!v) return WORLD_BOX;
+  const p = presets.find((x) => x.key === v.toLowerCase());
+  if (p) return p.box;
+  const m = /^(-?\d+(?:\.\d+)?),(-?\d+(?:\.\d+)?),(\d+(?:\.\d+)?)$/.exec(v);
+  if (m) {
+    const w = Math.min(WORLD_BOX.w, Math.max(8, WORLD_BOX.w / Number(m[3])));
+    const h = w / 2.5;
+    return { x: px(Number(m[1])) - w / 2, y: py(Number(m[2])) - h / 2, w, h };
+  }
+  const box = countryBox(v);
+  return box ? padded(box, 0.3) : WORLD_BOX;
+}
+
+/**
+ * Zoomed about a point (a scroll or a pinch under the pointer): that point stays where it is on screen. Never closer
+ * than 8 units across nor wider than the world.
+ */
+export function zoomAt(b: Box, factor: number, at: { x: number; y: number }): Box {
+  const w = Math.min(WORLD_BOX.w, Math.max(8, b.w * factor));
+  const k = w / b.w;
+  const h = b.h * k;
+  return { x: at.x - (at.x - b.x) * k, y: at.y - (at.y - b.y) * k, w, h };
+}
+
+/** Moved by so many map units, its centre kept on the map. */
+export function panned(b: Box, dx: number, dy: number): Box {
+  const cx = Math.min(1000, Math.max(0, b.x + b.w / 2 + dx));
+  const cy = Math.min(500, Math.max(0, b.y + b.h / 2 + dy));
+  return { ...b, x: cx - b.w / 2, y: cy - b.h / 2 };
+}
+
+/**
+ * Who is off the edge of the view, by country, busiest first, with an arrow from the view's centre towards them
+ * (MAP-08's edge chip, "↖ India · 3 outside this view").
+ */
+export function outsideOf(places: Place[], b: Box): Array<{ country: string; count: number; arrow: string }> {
+  const by = new Map<string, { n: number; x: number; y: number }>();
+  for (const p of places) {
+    if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) continue;
+    const o = by.get(p.country) ?? { n: 0, x: 0, y: 0 };
+    o.x = (o.x * o.n + p.x * p.count) / (o.n + p.count);
+    o.y = (o.y * o.n + p.y * p.count) / (o.n + p.count);
+    o.n += p.count;
+    by.set(p.country, o);
+  }
+  const cx = b.x + b.w / 2, cy = b.y + b.h / 2;
+  const ARROWS = ['→', '↘', '↓', '↙', '←', '↖', '↑', '↗'];
+  return [...by.entries()]
+    .map(([country, o]) => {
+      const a = Math.atan2(o.y - cy, o.x - cx);
+      const i = ((Math.round(a / (Math.PI / 4)) % 8) + 8) % 8;
+      return { country, count: o.n, arrow: ARROWS[i]! };
+    })
+    .sort((a, c) => c.count - a.count);
+}
+
+/** Past this width (in map units, a region's zoom) the countries in view load their 1:10m outlines (MAP-09). */
+export const DETAIL_BELOW = 160;
+
+/** The countries whose largest piece is in a view: the ones worth a detailed outline. */
+export function countriesIn(b: Box, limit = 16): string[] {
+  const out: string[] = [];
+  for (const [code, c] of boxes()) {
+    if (c.x < b.x + b.w && c.x + c.w > b.x && c.y < b.y + b.h && c.y + c.h > b.y) out.push(code);
+  }
+  // A view of a small country takes its neighbours too; a wide one keeps to the largest few.
+  return out.sort((a, z) => area(boxes().get(z)!) - area(boxes().get(a)!)).slice(0, limit);
+}
+
+const area = (b: Box) => b.w * b.h;
+
 /* ---------------------------------------------------------------- places */
 
 export interface Place {
@@ -260,6 +399,8 @@ export interface Place {
   x: number;
   y: number;
   count: number;
+  /** Chats started there today, where the server says (the Today figures). */
+  chats?: number;
   /** Whoever there needs us most. */
   state: VisitorState;
   /** How many there are in each state, for the marker's ring (C-00: one arc per state). */
@@ -292,7 +433,11 @@ export function placesNow(visitors: OnlineVisitor[]): Place[] {
   return [...by.values()].sort((a, b) => b.count - a.count);
 }
 
-export interface TodayPlace { country: string; city: string | null; lat: number | null; lng: number | null; count: number }
+export interface TodayPlace {
+  country: string; city: string | null; lat: number | null; lng: number | null; count: number;
+  /** Chats started there today: the selected place's "Today: 14 visitors · 3 chats" (MAP-UI-02). */
+  chats?: number;
+}
 
 /** Today's visitors by place, from the dashboard: one browsing ring, sized by how many. */
 export function placesToday(rows: TodayPlace[]): Place[] {
@@ -306,8 +451,9 @@ export function placesToday(rows: TodayPlace[]): Place[] {
     if (p) {
       p.count += r.count;
       p.states.browsing = p.count;
+      if (r.chats !== undefined) p.chats = (p.chats ?? 0) + r.chats;
     } else {
-      by.set(key, { key, country: r.country, city: exact ? r.city : null, region: null, approx: !exact, x: at.x, y: at.y, count: r.count, state: 'browsing', states: { browsing: r.count }, visitors: [] });
+      by.set(key, { key, country: r.country, city: exact ? r.city : null, region: null, approx: !exact, x: at.x, y: at.y, count: r.count, chats: r.chats, state: 'browsing', states: { browsing: r.count }, visitors: [] });
     }
   }
   return [...by.values()].sort((a, b) => b.count - a.count);
@@ -333,6 +479,7 @@ export function mergePlaces(ps: Place[]): Place {
     city: null,
     region: null,
     count: ps.reduce((n, p) => n + p.count, 0),
+    chats: ps.some((p) => p.chats !== undefined) ? ps.reduce((n, p) => n + (p.chats ?? 0), 0) : undefined,
     state: STATES.find((s) => states[s]) ?? first.state,
     states,
     visitors: ps.flatMap((p) => p.visitors),
@@ -416,3 +563,24 @@ export function whereOf(v: Pick<OnlineVisitor, 'city' | 'country' | 'lat' | 'lng
   if (v.country) return exactOf(v.lat, v.lng) ? v.country : `${v.country} ≈`;
   return 'Somewhere';
 }
+
+/**
+ * What a country's people are called, for the full map's "8 of 9 Sri Lankan visitors have a city" (MAP-UI-02). Only the
+ * countries a support desk most often sees: elsewhere the sentence says "visitors in Peru" instead of guessing.
+ */
+const DEMONYMS: Record<string, string> = {
+  AE: 'Emirati', AF: 'Afghan', AR: 'Argentine', AT: 'Austrian', AU: 'Australian', BD: 'Bangladeshi', BE: 'Belgian', BH: 'Bahraini',
+  BR: 'Brazilian', BT: 'Bhutanese', CA: 'Canadian', CH: 'Swiss', CL: 'Chilean', CN: 'Chinese', CO: 'Colombian', CZ: 'Czech',
+  DE: 'German', DK: 'Danish', EG: 'Egyptian', ES: 'Spanish', FI: 'Finnish', FR: 'French', GB: 'British', GH: 'Ghanaian',
+  GR: 'Greek', HK: 'Hong Kong', HU: 'Hungarian', ID: 'Indonesian', IE: 'Irish', IL: 'Israeli', IN: 'Indian', IQ: 'Iraqi',
+  IR: 'Iranian', IT: 'Italian', JO: 'Jordanian', JP: 'Japanese', KE: 'Kenyan', KR: 'South Korean', KW: 'Kuwaiti', LB: 'Lebanese',
+  LK: 'Sri Lankan', MM: 'Myanmar', MV: 'Maldivian', MX: 'Mexican', MY: 'Malaysian', NG: 'Nigerian', NL: 'Dutch', NO: 'Norwegian',
+  NP: 'Nepali', NZ: 'New Zealand', OM: 'Omani', PH: 'Filipino', PK: 'Pakistani', PL: 'Polish', PT: 'Portuguese', QA: 'Qatari',
+  RO: 'Romanian', RU: 'Russian', SA: 'Saudi', SE: 'Swedish', SG: 'Singaporean', TH: 'Thai', TR: 'Turkish', TW: 'Taiwanese',
+  UA: 'Ukrainian', US: 'American', VN: 'Vietnamese', ZA: 'South African',
+};
+
+export const demonymOf = (country: string | null | undefined): string | null => {
+  const code = country ? findCountry(country)?.code : null;
+  return code ? (DEMONYMS[code] ?? null) : null;
+};
