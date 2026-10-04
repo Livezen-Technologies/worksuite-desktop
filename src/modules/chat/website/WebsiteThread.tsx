@@ -11,7 +11,7 @@ import { useTab, useTabTitle } from '../../../core/tab-context';
 import { bytes, dateLabel, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
-import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
+import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, TextField, cx } from '../../../components/ui';
 import { Composer, type ComposerHandle } from '../Composer';
 import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
@@ -421,6 +421,9 @@ const HEADING = 'text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase';
 
 function VisitorPanel({ v, data, online, onDone, children }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; onDone: () => void; children?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
+  // For how long, and why (GATE-08, SEC-10): a week unless somebody chooses otherwise; '' is until lifted.
+  const [blockFor, setBlockFor] = useState('7');
+  const [blockWhy, setBlockWhy] = useState('');
   const [busy, setBusy] = useState(false);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
   const support = useCanOpen('support');
@@ -533,7 +536,7 @@ function VisitorPanel({ v, data, online, onDone, children }: { v: WebsiteVisitor
                   variant="danger"
                   onClick={() => {
                     setBlocking(false);
-                    void websiteAction(data.conversation.id, 'block').then(
+                    void websiteAction(data.conversation.id, 'block', { reason: blockWhy.trim() || null, ...(blockFor ? { days: Number(blockFor) } : {}) }).then(
                       () => (toast('success', 'Visitor blocked.'), onDone()),
                       (e) => toast('error', errorMessage(e)),
                     );
@@ -544,7 +547,16 @@ function VisitorPanel({ v, data, online, onDone, children }: { v: WebsiteVisitor
               </>
             }
           >
-            <p className="text-[13px] text-ink-2">{v?.name || v?.label || 'This visitor'} will no longer be able to start chats on your websites. You can unblock them on the web.</p>
+            <p className="text-[13px] text-ink-2">{v?.name || v?.label || 'This visitor'} will no longer be able to start chats on your websites until the block ends. You can lift it sooner on the web, under Website chats › Blocked visitors.</p>
+            <div className="mt-3 grid gap-3">
+              <Select
+                label="For"
+                value={blockFor}
+                options={[{ value: '1', label: 'A day' }, { value: '7', label: 'A week' }, { value: '30', label: 'A month' }, { value: '', label: 'Until somebody lifts it' }]}
+                onValueChange={(v) => setBlockFor(String(v))}
+              />
+              <TextField label="Reason" placeholder="Spam, abuse…" maxLength={190} value={blockWhy} onChange={(e) => setBlockWhy(e.target.value)} />
+            </div>
           </Modal>
         ) : null}
       </aside>
