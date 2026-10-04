@@ -43,6 +43,12 @@ export interface SavedReply {
   shortcut: string | null;
   title: string;
   body: string;
+  /** Uses in all; the composer's chips are the most used (RDC-03). */
+  uses?: number;
+  /** The widget it is for; null for every widget (CAN-01). From S-09. */
+  widget_id?: number | null;
+  /** Uses this month: "Used 54 times this month" (S-09, UX-SET-10). */
+  month_uses?: number;
 }
 
 /** A "/" being typed at the start of a word, with what follows it (RDC-03). */

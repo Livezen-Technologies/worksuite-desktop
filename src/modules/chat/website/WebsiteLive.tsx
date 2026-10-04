@@ -546,7 +546,7 @@ function ThisVisit({ v, a, loading, left, idle, onSite, pageSeconds }: { v: Onli
  * chat opens here, to carry on.
  */
 function SpeakFirst({ v, composer, onOpenChat }: { v: OnlineVisitor; composer: Ref<ComposerHandle>; onOpenChat: (id: number) => void }) {
-  const canned = useCanned(true);
+  const canned = useCanned(true, v.widget_id);
   const conv = useRef<number | null>(null);
   const who = v.name || v.label;
   const channel: ComposerChannel = {

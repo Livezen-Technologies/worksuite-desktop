@@ -23,6 +23,9 @@ import { RADIUS_MAX, clampOffset, firstName, initialsOf, namesLine, palette, typ
 
 export type PreviewScreen = 'start' | 'home' | 'chat' | 'away' | 'launcher';
 
+/** What the away screen says without an offline message of the widget's own (and what Business hours shows then, S-10). */
+export const AWAY_MESSAGE = 'Leave a message and we will reply by email when we are back.';
+
 const TINTS: Array<[string, string]> = [['#F4B183', '#5A2A08'], ['#A7D3F5', '#0B3B63'], ['#C9E6B8', '#23431A'], ['#D9C8F2', '#3B1F6B'], ['#F7D27A', '#4A3500'], ['#F5B8C4', '#5C1426']];
 
 function tint(name: string): [string, string] {
@@ -136,7 +139,7 @@ function Hero({ design, name, people, replyTime, away, hours, accent, onAccent }
   const fg = away ? '#ffffff' : onAccent;
   const ctl = fg === '#ffffff' ? 'rgba(255,255,255,.16)' : 'rgba(18,22,51,.08)';
   const greeting = away ? 'We are away\nright now' : design.greeting || 'Hi there,\nhow can we help?';
-  const tag = away ? design.offline_message || 'Leave a message and we will reply by email when we are back.' : design.header_subtitle || 'Ask us anything, and someone from the team will reply here.';
+  const tag = away ? design.offline_message || AWAY_MESSAGE : design.header_subtitle || 'Ask us anything, and someone from the team will reply here.';
   const online = people.length ? `${namesLine(people.map((p) => firstName(p.name)))} ${people.length === 1 ? 'is' : 'are'} online` : 'We are online';
   // One status line while the team is here (#207): "Hasarinda is online · usually replies in a few minutes".
   const line1 = away ? (hours?.back_at ? `Back at ${hours.back_at}` : 'We will reply as soon as we are back') : replyTime ? `${online} · ${replyTime.charAt(0).toLowerCase()}${replyTime.slice(1)}` : online;
@@ -351,7 +354,7 @@ const radiusOf = (design: WidgetDesign) => Math.max(0, Math.min(RADIUS_MAX, Math
  * company's initials, the header title and subtitle; the welcome message and the conversation starters; the message box
  * with the send button in the accent colour — and under it the button, an icon or the icon and its words.
  */
-function StartScreen({ design, siteName, starters, dark }: { design: WidgetDesign; siteName: string | null; starters: string[]; dark: boolean }) {
+function StartScreen({ design, siteName, starters, dark, launcher = true }: { design: WidgetDesign; siteName: string | null; starters: string[]; dark: boolean; launcher?: boolean }) {
   const t = dark ? DARK : LIGHT;
   const p = palette(design.brand_color);
   const send = palette(design.accent_color);
@@ -387,23 +390,24 @@ function StartScreen({ design, siteName, starters, dark }: { design: WidgetDesig
           <span className="flex h-[30px] w-[30px] items-center justify-center rounded-full" style={{ background: send.accent, color: send.onAccent }} data-testid="preview-send"><Svg d={SEND} size={15} /></span>
         </div>
       </div>
-      <span
+      {launcher ? <span
         className={cx('flex h-[52px] items-center justify-center gap-2 rounded-full text-[14px] font-bold', round ? 'w-[52px]' : 'px-5')}
         style={{ background: p.accent, color: p.onAccent, boxShadow: '0 8px 20px rgba(17,27,59,0.25)' }}
         data-testid="preview-button"
       >
         <Icon name="message-circle" size={24} />
         {round ? null : <span>{design.header_title?.trim() || 'Chat with us'}</span>}
-      </span>
+      </span> : null}
     </div>
   );
 }
 
-export function WidgetPreview({ design, siteName, people, replyTime, hours, screen, dark, starters = [] }: { design: WidgetDesign; siteName: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; screen: PreviewScreen; dark: boolean; starters?: string[] }) {
+/** `launcher`: the button under the new chat; Conversation starters' preview (S-08) shows the chat alone. */
+export function WidgetPreview({ design, siteName, people, replyTime, hours, screen, dark, starters = [], launcher = true }: { design: WidgetDesign; siteName: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; screen: PreviewScreen; dark: boolean; starters?: string[]; launcher?: boolean }) {
   if (screen === 'start') {
     return (
       <div role="img" aria-label="Preview of a new chat" data-testid="widget-preview" className="flex w-full" style={{ fontFamily: '"Plus Jakarta Sans", -apple-system, "Segoe UI", system-ui, sans-serif' }}>
-        <StartScreen design={design} siteName={siteName} starters={starters} dark={dark} />
+        <StartScreen design={design} siteName={siteName} starters={starters} dark={dark} launcher={launcher} />
       </div>
     );
   }

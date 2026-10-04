@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.179 — 2026-10-04
+
+- **Conversation starters (S-08).** Setup › Conversation starters is now in the app: each widget's starters with
+  their instant answer, how often they were used, and an on/off switch. Drag to reorder (or use the arrow keys),
+  edit beside the list, and see the widget preview update as you type.
+- **Saved replies (S-09).** Setup › Saved replies: search, add, edit and delete replies, choose whether one is for
+  all widgets or one, and see how often it was used this month. In a chat, the "/" list now shows
+  "/education · Education discount" and offers only the replies for that chat's widget.
+- **Business hours (S-10).** Setup › Business hours: the timezone, whether the widget is open now, each day's hours,
+  a chart of the week, and what visitors see outside hours. A day that closes before it opens can't be saved, here
+  or in the widget's Hours tab.
+- Needs the server's Communication 1.45.0.
+
 ## 0.2.178 — 2026-10-04
 
 - **Chatbot (S-05).** The widget's Chatbot tab is now in the app: "Assistant answers first", its name and avatar,

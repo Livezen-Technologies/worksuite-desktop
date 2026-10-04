@@ -1,5 +1,8 @@
 import { useId, type ReactNode } from 'react';
+import { Select } from '../../../../components/Select';
 import { Button, Card, Switch, cx } from '../../../../components/ui';
+import type { WidgetRow } from './design';
+import { siteOf } from './Widgets';
 
 /**
  * The widget settings' building blocks (worksuite-desktop#199), shared by its tabs: Appearance and Hours
@@ -90,4 +93,15 @@ export function SaveBar({ can, busy, dirty, blocked, undoLabel = 'Undo changes',
       {note}
     </div>
   );
+}
+
+/**
+ * The widget a Setup screen is showing, as the design's "techubiz.com ▾" beside its title (S-08, S-10): each widget by
+ * its site. With one widget there is nothing to choose, and the site is shown as it is.
+ */
+export function WidgetPicker({ widgets, value, onChange, className }: { widgets: WidgetRow[]; value: number | null; onChange: (id: number) => void; className?: string }) {
+  if (widgets.length <= 1) {
+    return widgets[0] ? <span className={cx('flex h-8 items-center rounded-[8px] border border-line bg-surface px-3 text-[12.5px]', className)}>{siteOf(widgets[0])}</span> : null;
+  }
+  return <Select<number> aria-label="Widget" className={cx('h-8 w-[200px] text-[12.5px]', className)} value={value} onValueChange={onChange} options={widgets.map((w) => ({ value: w.id, label: siteOf(w) }))} />;
 }

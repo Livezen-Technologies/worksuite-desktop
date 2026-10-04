@@ -74,7 +74,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const live = useLiveStatus(Number(id), q.data, q.dataUpdatedAt, me, tabActive && pageVisible);
   // In front in the main window: a visitor writing again here raises no card (#230). The mini chat window does not count.
   useViewing(Number(id), !mini && tabActive && pageVisible);
-  const canned = useCanned(true);
+  // The replies for every widget and this chat's own (CAN-01, S-09), once the chat says which widget it is on.
+  const canned = useCanned(Boolean(q.data), q.data?.conversation.widget_id);
   const outbox = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const waiting = (outbox.data ?? []).filter((m: OfflineMutation) => m.module === 'website-chat' && m.entityId === id && m.state !== 'DONE');
   const count = data?.messages.length ?? 0;

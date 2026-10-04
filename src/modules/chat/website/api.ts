@@ -4,6 +4,7 @@ import { errorMessage } from '../../../core/bridge';
 import { toast } from '../../../core/toasts';
 import { text } from '../../../core/i18n';
 import { parseTs } from '../../../core/time';
+import type { SavedReply } from './profile';
 
 /**
  * Website chat (UI-08: "group, direct and website-chat conversations") — the
@@ -305,6 +306,8 @@ export interface WebsiteConversation {
     priority?: string;
     /** The largest file this website's visitors may be sent (RDC-04); absent on an older server, which means 5 MB. */
     max_upload_kb?: number;
+    /** Its widget: the composer offers the saved replies for every widget and this one's (CAN-01, S-09); absent on an older server. */
+    widget_id?: number;
   };
   visitor: WebsiteVisitor | null;
   messages: WebsiteMessage[];
@@ -630,10 +633,19 @@ export function useAgents(enabled: boolean, conversationId?: number) {
   });
 }
 
-export function useCanned(enabled: boolean) {
+export interface CannedPayload {
+  responses: SavedReply[];
+  can?: { view: boolean; reply: boolean; manage: boolean };
+}
+
+/**
+ * The saved replies (CAN-01, RDC-03). With a widget, only those for every widget and that widget's own, as its
+ * conversations' composer offers them (S-09); without one, all of them, as Website chats › Saved replies lists them.
+ */
+export function useCanned(enabled: boolean, widgetId?: number | null) {
   return useQuery({
-    queryKey: ['website', 'canned'],
-    queryFn: ({ signal }) => apiGet<{ responses: Array<{ id: number; shortcut: string | null; title: string; body: string }> }>(`${WEBSITE}/canned`, undefined, signal),
+    queryKey: ['website', 'canned', widgetId || 'all'],
+    queryFn: ({ signal }) => apiGet<CannedPayload>(`${WEBSITE}/canned`, widgetId ? { widget_id: String(widgetId) } : undefined, signal),
     enabled,
     staleTime: 5 * 60_000,
     retry: false,

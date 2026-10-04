@@ -17,7 +17,6 @@ import {
   ACCENT_SWATCHES,
   AUTO_OPEN_MAX,
   BRAND_SWATCHES,
-  DAYS,
   MAX_LINKS,
   OFFSET_MAX,
   RADIUS_MAX,
@@ -43,6 +42,8 @@ import {
   type WidgetRow,
 } from './design';
 import { WidgetPreview, type PreviewScreen } from './WidgetPreview';
+import { weekProblems, zoneLabel, zoneList } from './hours';
+import { OpenNow, WeekChart, WeekDays } from './HoursWeek';
 
 /**
  * Website chats › Widgets & embed › a widget (S-02; WS-WCHAT X-UI-15, UX-SET-02, UX-SET-03): one editor for every
@@ -97,8 +98,6 @@ export function tabOf(q: string | null): WidgetTab {
   if (q === 'design') return 'appearance';
   return WIDGET_TABS.find((t) => t.id === q)?.id ?? 'appearance';
 }
-
-const ZONES = ['Asia/Colombo', 'Asia/Kolkata', 'Asia/Dubai', 'Asia/Singapore', 'Australia/Sydney', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Los_Angeles', 'UTC'];
 
 export function WidgetSettings({ onList }: { onList?: () => void }) {
   const { query } = useTab();
@@ -183,7 +182,8 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
     setSeen((s) => ({ ...s, [t]: true }));
   };
   const can = Boolean(p?.can_manage);
-  const blocked = Object.keys(issues).length > 0;
+  // A day that closes before it opens holds Save back too (S-10).
+  const blocked = Object.keys(issues).length > 0 || (hoursOn && week ? Object.keys(weekProblems(week.days)).length > 0 : false);
   const dirty = Boolean(draft || weekDraft || hoursDraft !== null || Object.keys(shown).length);
   const undo = () => {
     setDesign(null);
@@ -533,41 +533,26 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
                 }}
               />
               {hoursOn && week ? (
-                <div className="flex flex-col gap-2">
-                  <Select
-                    aria-label="Timezone"
-                    value={week.timezone}
-                    onValueChange={(v) => {
-                      setHoursTouched(true);
-                      setWeek({ ...week, timezone: v });
-                    }}
-                    options={[...new Set([week.timezone, ...ZONES])].map((z) => ({ value: z, label: z.replace(/_/g, ' ') }))}
-                  />
-                  <table className="w-full text-[13px]">
-                    <tbody>
-                      {[1, 2, 3, 4, 5, 6, 0].map((d) => {
-                        const day = week.days.find((x) => x.weekday === d)!;
-                        return (
-                          <tr key={d}>
-                            <th scope="row" className="w-28 py-1 text-left font-semibold text-ink">{DAYS[d]}</th>
-                            <td className="py-1"><Switch label={text('Open on {day}', { day: DAYS[d]! })} checked={day.is_open} onChange={(v) => setDay(d, { is_open: v })} /></td>
-                            <td className="py-1">
-                              {day.is_open ? (
-                                <span className="flex items-center gap-1.5">
-                                  <input type="time" aria-label={text('{day} opens', { day: DAYS[d]! })} value={day.opens_at} onChange={(e) => setDay(d, { opens_at: e.target.value })} className="h-8 rounded-[7px] border border-line bg-surface px-2 text-ink" />
-                                  <span className="text-ink-3">–</span>
-                                  <input type="time" aria-label={text('{day} closes', { day: DAYS[d]! })} value={day.closes_at} onChange={(e) => setDay(d, { closes_at: e.target.value })} className="h-8 rounded-[7px] border border-line bg-surface px-2 text-ink" />
-                                </span>
-                              ) : (
-                                <span className="text-ink-3">Closed</span>
-                              )}
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
+                <div className="flex flex-col gap-3">
+                  {/* The same week as Website chats › Business hours (S-10): the zone, open now, a row a day, the chart. */}
+                  <div className="flex flex-wrap items-center gap-3">
+                    <span className="font-semibold">Timezone</span>
+                    <Select
+                      aria-label="Timezone"
+                      className="w-[280px]"
+                      value={week.timezone}
+                      onValueChange={(v) => {
+                        setHoursTouched(true);
+                        setWeek({ ...week, timezone: v });
+                      }}
+                      options={zoneList(week.timezone).map((z) => ({ value: z, label: zoneLabel(z) }))}
+                    />
+                    <span className="flex-1" />
+                    <OpenNow days={week.days} zone={week.timezone} />
+                  </div>
+                  <WeekDays days={week.days} onDay={setDay} problems={weekProblems(week.days)} />
                   <span className="text-[12px] text-ink-3">{hoursText(week.days)}</span>
+                  <WeekChart days={week.days} />
                 </div>
               ) : null}
             </div>

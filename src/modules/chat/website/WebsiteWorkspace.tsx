@@ -28,6 +28,9 @@ import { WidgetSettings } from './widget/WidgetSettings';
 import { WebsiteWidgets } from './widget/Widgets';
 import { WebsiteInsights, type InsightsPeriod } from './Insights';
 import { AutomatedMessages } from './Automated';
+import { BusinessHours } from './BusinessHours';
+import { SavedRepliesScreen } from './SavedReplies';
+import { ConversationStarters } from './Starters';
 import { ConversationMenu } from '../ConversationMenu';
 import { MyStatus } from '../MyStatus';
 import { Select } from '../../../components/Select';
@@ -37,8 +40,8 @@ import { SidePanel } from '../../../components/SidePanel';
  * Website chats as their own workspace (WebChatInbox): the sections down the
  * left, the conversations in the chosen one, then the visitor's thread and
  * dossier. Widgets & embed is this app's own (S-01, S-02): the widgets as cards, and each widget's editor with a live
- * preview; Insights is read here (L-07); Automated messages are edited here (S-07); the rest of setup stays on the web,
- * where it is edited.
+ * preview; Insights is read here (L-07); Automated messages are edited here (S-07), and so are Conversation starters
+ * (S-08), Saved replies (S-09) and Business hours (S-10): nothing under SETUP opens on the web any more.
  */
 const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
   // In the order of the design (C-01, DsWsNav): what comes in, then what is mine, then the rest.
@@ -74,17 +77,14 @@ const TABLE: Partial<Record<Section, { title: string; subtitle: string; footnote
   starred: { title: 'Starred', subtitle: 'Open conversations starred to come back to.' },
 };
 
-const ON_WEB: Array<{ head: string; items: Array<{ label: string; tab: string; icon: string }> }> = [
-  // Insights is this app's own now (L-07, X-UI-13): the heading keeps it, the web link goes.
-  { head: 'REPORTS', items: [] },
-  {
-    head: 'SETUP',
-    items: [
-      { label: 'Conversation starters', tab: 'starters', icon: 'message-circle' },
-      { label: 'Saved replies', tab: 'canned', icon: 'bookmark' },
-      { label: 'Business hours', tab: 'hours', icon: 'clock' },
-    ],
-  },
+/**
+ * SETUP after Widgets & embed and Automated messages (S-07), in the design's order (DsWsNav): Conversation starters
+ * (S-08, `active="starters"`), Saved replies (S-09, `saved`) and Business hours (S-10, `hours`), each this app's own.
+ */
+const SETUP: Array<{ id: 'starters' | 'saved' | 'hours'; label: string; icon: string }> = [
+  { id: 'starters', label: 'Conversation starters', icon: 'message-circle' },
+  { id: 'saved', label: 'Saved replies', icon: 'bookmark' },
+  { id: 'hours', label: 'Business hours', icon: 'clock' },
 ];
 
 export function WebsiteWorkspace() {
@@ -119,8 +119,10 @@ export function WebsiteWorkspace() {
   const insightsWidget = Number(query.get('widget')) || null;
   // Automated messages (S-07, X-UI-19): the rules and the one open, `rule` in the address (`new` for a new one).
   const automated = query.get('section') === 'automated';
+  // Conversation starters (S-08), Saved replies (S-09) and Business hours (S-10): `widget`, `starter` and `reply` in the address.
+  const setup = SETUP.find((x) => x.id === query.get('section'))?.id ?? null;
   // Everything that takes the whole width, hiding the list and the thread.
-  const wide = live || widgetList || designing || calling || insights || automated;
+  const wide = live || widgetList || designing || calling || insights || automated || setup !== null;
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
   const [site, setSite] = useState(0);
   // The Mine pill narrows whichever open section is showing; Closed is a section of its own.
@@ -335,21 +337,21 @@ export function WebsiteWorkspace() {
               <CountPill n={n} here={query.get('section') === id} tone={tone} />
             </MenuItem>
           ))}
-          {ON_WEB.map((g) => (
-            <div key={g.head} className="flex flex-col gap-px">
-              <MenuHead>{g.head}</MenuHead>
-              {/* The widgets and each one's editor, with a live preview, are this app's own (S-01, S-02). */}
-              {g.head === 'SETUP' ? <MenuItem icon="code" label="Widgets & embed" here={widgetList || designing} onClick={() => go('/chat?view=website&section=widgets')} /> : null}
-              {/* Automated messages are this app's own too (S-07), second under SETUP as the design has them. */}
-              {g.head === 'SETUP' ? <MenuItem icon="zap" label="Automated messages" here={automated} onClick={() => go('/chat?view=website&section=automated')} /> : null}
-              {g.head === 'REPORTS' ? <MenuItem icon="chart" label="Insights" here={insights} onClick={() => go('/chat?view=website&section=insights')} /> : null}
-              {g.items.map((i) => (
-                <MenuItem key={i.tab} icon={i.icon} label={i.label} here={false} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/website-chats?tab=${i.tab}` })}>
-                  <span className="text-[11px] text-ink-3" aria-hidden>↗</span>
-                </MenuItem>
-              ))}
-            </div>
-          ))}
+          <div className="flex flex-col gap-px">
+            <MenuHead>REPORTS</MenuHead>
+            {/* Insights is this app's own (L-07, X-UI-13). */}
+            <MenuItem icon="chart" label="Insights" here={insights} onClick={() => go('/chat?view=website&section=insights')} />
+          </div>
+          <div className="flex flex-col gap-px">
+            <MenuHead>SETUP</MenuHead>
+            {/* The widgets and each one's editor, with a live preview, are this app's own (S-01, S-02). */}
+            <MenuItem icon="code" label="Widgets & embed" here={widgetList || designing} onClick={() => go('/chat?view=website&section=widgets')} />
+            {/* Automated messages (S-07), second under SETUP as the design has them. */}
+            <MenuItem icon="zap" label="Automated messages" here={automated} onClick={() => go('/chat?view=website&section=automated')} />
+            {SETUP.map((x) => (
+              <MenuItem key={x.id} icon={x.icon} label={x.label} here={setup === x.id} onClick={() => go(`/chat?view=website&section=${x.id}`)} />
+            ))}
+          </div>
           <MyStatus variant="website" open={openRows.filter(isMine).length} />
         </nav>
       </SidePanel>
@@ -373,6 +375,23 @@ export function WebsiteWorkspace() {
       {designing ? <WidgetSettings key={query.get('widget') ?? ''} onList={() => go('/chat?view=website&section=widgets')} /> : null}
       {automated ? (
         <AutomatedMessages selected={query.get('rule')} onSelect={(rule) => go(`/chat?${new URLSearchParams({ view: 'website', section: 'automated', ...(rule ? { rule } : {}) }).toString()}`)} />
+      ) : null}
+      {setup === 'starters' ? (
+        <ConversationStarters
+          widget={Number(query.get('widget')) || null}
+          selected={query.get('starter')}
+          onSelect={(widget, starter) => go(`/chat?${new URLSearchParams({ view: 'website', section: 'starters', widget: String(widget), ...(starter ? { starter } : {}) }).toString()}`)}
+        />
+      ) : null}
+      {setup === 'saved' ? (
+        <SavedRepliesScreen selected={query.get('reply')} onSelect={(reply) => go(`/chat?${new URLSearchParams({ view: 'website', section: 'saved', ...(reply ? { reply } : {}) }).toString()}`)} />
+      ) : null}
+      {setup === 'hours' ? (
+        <BusinessHours
+          widget={Number(query.get('widget')) || null}
+          onWidget={(widget) => go(`/chat?view=website&section=hours&widget=${widget}`)}
+          onAppearance={(widget) => go(`/chat?view=website&section=widget&widget=${widget}&tab=appearance`)}
+        />
       ) : null}
       {insights ? (
         <WebsiteInsights

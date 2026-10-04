@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.52.0 — 2026-10-04
+
+- S-08/S-09/S-10: Conversation starters (table, reorder, instant answer, preview), Saved replies (search, per-widget, monthly use, composer preview), Business hours (timezone, open-now pill, week editor and chart, offline message)
+
 ## 1.51.0 — 2026-10-04
 
 - S-05/S-07: Chatbot tab (assistant settings, Answers from, hand-off, Try it) and Automated messages section (rule list with sent and replied, editor with when, widget, once per visit, posts as)
