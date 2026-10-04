@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
+import type * as AttachmentViewer from '../../../src/modules/chat/AttachmentViewer';
 
 /**
  * Several staff in one website chat on the desktop (WS-WCHAT ENH-WCHAT-03, TEAM-UI-01/02): who is in the chat, Invite
@@ -28,7 +29,7 @@ vi.mock('../../../src/core/bridge', () => ({
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 vi.mock('../../../src/modules/chat/Composer', () => ({ Composer: () => <div>The composer</div> }));
 vi.mock('../../../src/modules/chat/window', () => ({ openWebsiteChatWindow: vi.fn(async () => undefined) }));
-vi.mock('../../../src/modules/chat/AttachmentViewer', () => ({ openChatAttachment: vi.fn() }));
+vi.mock('../../../src/modules/chat/AttachmentViewer', async (orig) => ({ ...(await orig<typeof AttachmentViewer>()), openChatAttachment: vi.fn() }));
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ query: new URLSearchParams('view=website&website=41'), path: ['chat'], go: vi.fn(), active: true, openLink: vi.fn() }),
   useTabTitle: () => undefined,
@@ -130,8 +131,9 @@ describe('who is in the chat (TEAM-UI-01)', () => {
     // Samali signs her first reply once; her second runs on.
     expect(screen.getAllByText('Samali Perera').length).toBeGreaterThanOrEqual(1);
     const note = screen.getByText('Can we match last year\'s price?');
-    expect(note.className).toContain('border-dashed');
-    expect(note.parentElement!.parentElement!.textContent).toContain('Only staff see this');
+    // The shared kit's note bubble (C-02, #229): amber and dashed, labelled above.
+    expect(note.closest('[data-bubble-body]')!.className).toContain('border-dashed');
+    expect(note.closest('[data-bubble]')!.textContent).toContain('Internal note — only staff see this');
     expect(screen.getByText(/Samali Perera invited Kasun Jayasuriya/).getAttribute('title')).toBe('Only staff see this');
   });
 

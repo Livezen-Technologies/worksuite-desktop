@@ -15,7 +15,7 @@ import {
   byCountry, callClock, clock, CLUSTER, countryBox, groupOf, mergePlaces, padded, pathOf, placesNow, placesToday, regionOf, sameBox, since, stateOf, WORLD_BOX,
   type Box, type Dashboard, type OnlineVisitor, type Place,
 } from './liveMap';
-import { LiveMap, MapLegend } from './LiveMap';
+import { LiveMap, MapLegend } from './WorldMapView';
 import { OnSiteNow } from './OnSiteNow';
 
 /*

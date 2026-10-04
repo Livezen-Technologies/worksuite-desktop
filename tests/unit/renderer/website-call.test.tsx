@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
+import type * as AttachmentViewer from '../../../src/modules/chat/AttachmentViewer';
 
 /**
  * A visitor's voice call in their thread on the desktop (WS-WCHAT ENH-WCHAT-05, VOICE-10…15, VOICE-UI-03): Answer and
@@ -45,7 +46,7 @@ vi.mock('../../../src/core/bridge', () => ({
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 vi.mock('../../../src/modules/chat/Composer', () => ({ Composer: () => <div>The composer</div> }));
 vi.mock('../../../src/modules/chat/window', () => ({ openWebsiteChatWindow: vi.fn(async () => undefined) }));
-vi.mock('../../../src/modules/chat/AttachmentViewer', () => ({ openChatAttachment: vi.fn() }));
+vi.mock('../../../src/modules/chat/AttachmentViewer', async (orig) => ({ ...(await orig<typeof AttachmentViewer>()), openChatAttachment: vi.fn() }));
 const tab = { query: 'view=website&website=41' };
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ query: new URLSearchParams(tab.query), path: ['chat'], go: vi.fn(), active: true, openLink: vi.fn() }),

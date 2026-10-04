@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.30.0 — 2026-10-04
+
+- C-02 one chat kit (#229): Team Chat and website chats draw their messages with the same components (`kit/`): day dividers, runs of bubbles (avatar on the first, time on the last, corners by position), the reply quote inside the bubble, the bot's teal "Name · bot", amber dashed internal notes, ticks and "Read by", system lines, the visitor's page visits ("→ Opened /shop/x · 2 min"), typing and pending bubbles. Pictures are drawn by type (never extension) up to 280 px in their own shape, several in a 2–4 grid with "+N" in website chats; files show a readable name instead of a machine's ("Photo – Oct 4, 11:31.jpg"); long links read as site and path. Actions follow the channel: a website chat offers Reply and Copy. The visitor drawer to UX-DRW-01: profile with Email and Block, contact with copy and local time, Site/Device/Visits/Came from, this visit's journey with dwell and where the chat started, tags, and shared files as a grid.
+
 ## 1.29.0 — 2026-10-04
 
 - C-00 Live dashboard to the design: live pill, six KPI tiles, the world map (countries shaded by visitors, city markers with state rings, at-risk halo and callout, country-only rings, legend, country rows, Now/Today, zoom presets), the Needs you / In a chat / Browsing list with Join, Open and Start chat, the visitor drawer, Full map and Wall mode (names hidden).

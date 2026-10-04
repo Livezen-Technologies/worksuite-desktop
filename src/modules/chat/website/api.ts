@@ -199,6 +199,21 @@ export interface WebsiteMessage {
   reply?: WebsiteQuote | null;
 }
 
+/**
+ * One thing the visitor did on the site (`chat_widget_events`, WidgetAdminController::timeline): a page they opened,
+ * how long it held them (`seconds`, null for the page they are on or a gap too long to be reading), and whether it
+ * opened a new visit.
+ */
+export interface WebsiteEvent {
+  id?: number;
+  kind: 'page_view' | (string & {});
+  url: string | null;
+  title: string | null;
+  at: string;
+  seconds: number | null;
+  new_visit: boolean;
+}
+
 /** A quoted message: its first words, who wrote it, and its file's name. */
 export interface WebsiteQuote {
   id: number;
@@ -253,7 +268,8 @@ export interface WebsiteConversation {
     closed_at: string | null;
     rating: number | null;
     rating_comment: string | null;
-    tags: string[] | null;
+    /** The server stores them as one comma-separated line; a list from a newer one is read the same (see `tagList`). */
+    tags: string[] | string | null;
     is_starred: boolean;
     priority?: string;
     /** The largest file this website's visitors may be sent (RDC-04); absent on an older server, which means 5 MB. */
@@ -262,6 +278,8 @@ export interface WebsiteConversation {
   visitor: WebsiteVisitor | null;
   messages: WebsiteMessage[];
   journey?: Array<{ url: string | null; title: string | null; at: string }>;
+  /** The visitor's timeline, oldest first, with dwell times and visit breaks (C-02 ActivityEvent; #229); absent on an older server. */
+  events?: WebsiteEvent[];
   history?: Array<{ id: number; status: string; started_at: string | null; rating: number | null; other_device: boolean }>;
   /** Null or absent on a server without team chats. */
   team?: WebsiteTeam | null;
@@ -525,6 +543,12 @@ export function useCanned(enabled: boolean) {
     staleTime: 5 * 60_000,
     retry: false,
   });
+}
+
+/** A conversation's tags as a list, however the server sent them. */
+export function tagList(tags: string[] | string | null | undefined): string[] {
+  const all = Array.isArray(tags) ? tags : (tags ?? '').split(',');
+  return [...new Set(all.map((t) => t.trim()).filter(Boolean))];
 }
 
 export async function websiteAction(id: number | string, action: string, extra: Record<string, unknown> = {}): Promise<void> {

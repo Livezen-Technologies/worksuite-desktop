@@ -3,6 +3,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
+import type * as AttachmentViewer from '../../../src/modules/chat/AttachmentViewer';
 
 /**
  * Blocking a website visitor (WS-WCHAT GATE-08, SEC-10): for a day, a week, a month or until somebody lifts it, with a
@@ -20,7 +21,7 @@ vi.mock('../../../src/modules/chat/Composer', () => ({
   ),
 }));
 vi.mock('../../../src/modules/chat/window', () => ({ openWebsiteChatWindow: vi.fn(async () => undefined) }));
-vi.mock('../../../src/modules/chat/AttachmentViewer', () => ({ openChatAttachment: vi.fn() }));
+vi.mock('../../../src/modules/chat/AttachmentViewer', async (orig) => ({ ...(await orig<typeof AttachmentViewer>()), openChatAttachment: vi.fn() }));
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ query: new URLSearchParams('view=website&website=41'), path: ['chat'], go: vi.fn(), active: true, openLink: vi.fn() }),
   useTabTitle: () => undefined,

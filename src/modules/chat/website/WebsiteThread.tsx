@@ -10,18 +10,23 @@ import { app } from '../../../core/app-state';
 import { call, errorMessage, on, registerDropped } from '../../../core/bridge';
 import { useStore } from '../../../core/store';
 import { useTab, useTabTitle } from '../../../core/tab-context';
-import { bytes, dateLabel, parseTs, timeLabel } from '../../../core/time';
+import { dateLabel, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, TextField, cx } from '../../../components/ui';
 import { Composer, type ComposerHandle } from '../Composer';
-import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { callLive, PRIORITIES, quoteAuthor, readBy, tagList, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
 import { useViewing } from './viewing';
 import type { ReplyTarget } from '../Thread';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
-import { openChatAttachment } from '../AttachmentViewer';
+import { WEBSITE_CAPS } from '../kit/caps';
+import type { MessageHandlers } from '../kit/MessageActions';
+import { MessageList, PendingBubble, TypingLine } from '../kit/MessageList';
+import { byTime, dwell, eventsForThread, fromWebsiteMessage, fromWidgetEvent, pathOf } from '../kit/model';
+import { SharedFiles, sharedFilesOf, type SharedFile } from '../kit/SharedFiles';
+import { useNow } from '../../calls/parts';
 import { openWebsiteChatWindow } from '../window';
 import { InThisChat, InviteDialog, NoteBox, TeamFaces, TransferDialog, useDeclined } from './Team';
 import { CallBar } from './CallBar';
@@ -102,6 +107,30 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const page = v?.current_url ? pathOf(v.current_url) : null;
   const t = data.team ?? null;
   const noting = tab === 'note' && !!t?.can.note;
+  // Messages and the visitor's page visits in one timeline, through the kit's adapters (C-02; #229).
+  const replyOpen = canReply && c.status !== 'closed';
+  const items = byTime([
+    ...data.messages.map((m) =>
+      fromWebsiteMessage(m, {
+        me,
+        visitor: name,
+        canReply: replyOpen,
+        // Sent, delivered or read by the visitor, on the team's messages; who read the visitor's latest (LIVE-08).
+        status: data.marks && m.from === 'agent' && m.visibility !== 'internal' ? visitorHas(m.id, data.marks) : undefined,
+        footer: data.marks ? footerFor(m, data, me) : null,
+      }),
+    ),
+    ...eventsForThread(data.events, c.started_at).map((e, i) => fromWidgetEvent(e, i)),
+  ]);
+  const handlers: MessageHandlers = {
+    // Answering one message quotes it, for the visitor too (RDC-10).
+    onReply: (k) => {
+      const m = data.messages.find((x) => x.id === k.id);
+      if (!m) return;
+      setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: m.body ?? m.file?.filename ?? '' });
+      composer.current?.focus();
+    },
+  };
 
   return (
     <div className="flex h-full min-w-0 flex-1">
@@ -177,49 +206,24 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             ))}
           </div>
         ) : null}
-        <div ref={scroller} className={cx('flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto py-3 scroll-thin', mini ? 'px-3' : 'px-4')}>
-          {c.started_at ? <div className="self-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
+        <div ref={scroller} className={cx('min-h-0 flex-1 overflow-y-auto py-3 scroll-thin', mini ? 'px-3' : 'px-4')}>
+          {c.started_at ? <div className="mb-1 text-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
-          {data.messages.map((m, i) => (
-            <Message
-              key={m.id}
-              m={m}
-              // Sent, delivered or read by the visitor, on the team's messages; who read the visitor's latest (LIVE-08).
-              status={data.marks && m.from === 'agent' && m.visibility !== 'internal' ? visitorHas(m.id, data.marks) : undefined}
-              footer={data.marks ? footerFor(m, data, me) : null}
-              // Each person signs their first message in a run (TEAM-05).
-              signed={m.from === 'agent' && (i === 0 || data.messages[i - 1]!.from !== 'agent' || data.messages[i - 1]!.agent_id !== m.agent_id || (data.messages[i - 1]!.visibility ?? 'public') !== (m.visibility ?? 'public'))}
-              visitor={name}
-              // Answering one message quotes it, for the visitor too (RDC-10).
-              onReply={canReply && c.status !== 'closed' && m.from !== 'system' && m.visibility !== 'internal' ? () => {
-                setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: m.body ?? m.file?.filename ?? '' });
-                composer.current?.focus();
-              } : undefined}
+          {/* The shared chat kit (C-02, RDC-11, LIVE-12; #229): Team Chat's bubbles, meta, ticks and attachments, with what a visitor cannot receive turned off. */}
+          <MessageList items={items} caps={WEBSITE_CAPS} look="page" handlers={handlers} />
+          {waiting.map((p) => (
+            <PendingBubble
+              key={p.id}
+              label={p.label.startsWith(WEBSITE_REPLY_LABEL) ? p.label.slice(WEBSITE_REPLY_LABEL.length) : p.label}
+              failed={p.state === 'FAILED' || p.state === 'CONFLICT'}
+              error={p.error}
+              waiting="Pending — sends when WorkSuite is back online"
+              onRetry={() => void call('offline:retry', { id: p.id }).then(() => qc.invalidateQueries({ queryKey: ['offline'] }))}
+              onDiscard={() => void call('offline:discard', { id: p.id }).then(() => qc.invalidateQueries({ queryKey: ['offline'] }))}
             />
           ))}
-          {waiting.map((p) => (
-            <div key={p.id} className="flex flex-col items-end gap-1 self-end">
-              <div className="max-w-[min(360px,85%)] rounded-[12px_4px_12px_12px] border border-dashed border-[#8C9AD3] bg-[#DDE3F7] px-3 py-2 text-ink dark:bg-selection">{p.label.startsWith(WEBSITE_REPLY_LABEL) ? p.label.slice(WEBSITE_REPLY_LABEL.length) : p.label}</div>
-              <span className="text-[11.5px] font-semibold text-[#9A4A06] dark:text-warning">
-                {p.state === 'FAILED' || p.state === 'CONFLICT' ? (
-                  <>
-                    Not sent — {p.error ?? 'the server refused it'} ·{' '}
-                    <button type="button" className="underline" onClick={() => void call('offline:retry', { id: p.id }).then(() => qc.invalidateQueries({ queryKey: ['offline'] }))}>
-                      Retry
-                    </button>{' '}
-                    ·{' '}
-                    <button type="button" className="underline" onClick={() => void call('offline:discard', { id: p.id }).then(() => qc.invalidateQueries({ queryKey: ['offline'] }))}>
-                      Discard
-                    </button>
-                  </>
-                ) : (
-                  'Pending — sends when WorkSuite is back online'
-                )}
-              </span>
-            </div>
-          ))}
-          {live.visitorTyping ? <div className="self-start text-[12px] text-ink-3">{name.split(' ')[0]} is typing…</div> : null}
-          {live.staffTyping.length ? <div className="self-end text-[12px] text-ink-3">{typingWords(live.staffTyping)}</div> : null}
+          {live.visitorTyping ? <TypingLine>{text('{name} is typing…', { name })}</TypingLine> : null}
+          {live.staffTyping.length ? <TypingLine side="right">{typingWords(live.staffTyping)}</TypingLine> : null}
         </div>
         {declined ? (
           // An invitation or transfer this person sent came back (TEAM-24, WF-T2).
@@ -261,7 +265,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         )}
       </section>
       {!mini ? (
-        <VisitorPanel v={v} data={data} online={online} onDone={refresh}>
+        <VisitorPanel v={v} data={data} online={online} canReply={canReply} files={sharedFilesOf(items)} onDone={refresh}>
           {t ? <InThisChat data={data} me={me} onInvite={() => setDialog('invite')} onTransfer={() => setDialog('transfer')} onClose={() => void websiteAction(c.id, 'close').then(refresh, (e) => toast('error', errorMessage(e)))} onDone={refresh} /> : null}
         </VisitorPanel>
       ) : null}
@@ -289,14 +293,6 @@ function footerFor(m: WebsiteMessage, data: WebsiteConversation, me: number | nu
     return who.length ? `Read by ${who.join(', ')}` : null;
   }
   return null;
-}
-
-function pathOf(url: string): string {
-  try {
-    return new URL(url).pathname || '/';
-  } catch {
-    return url;
-  }
 }
 
 /** The header's actions. `compact`, in a small window (RDC-16): only taking the chat and closing it. */
@@ -369,110 +365,88 @@ function Controls({ data, row, me, canReply, onDone, compact = false }: { data: 
   );
 }
 
-/** A visitor's or agent's file opens in the attachment preview, through the app (#38). */
-function openWebsiteFile(f: NonNullable<WebsiteMessage['file']>, openLink: (url: string) => void): void {
-  const url = f.url.startsWith('/chat/') ? `/api${f.url}` : f.url;
-  openChatAttachment({ filename: f.filename, mime: f.mime, size: f.size, is_image: f.is_image, url, download_url: url }, openLink);
-}
-
-function Message({ m, visitor, onReply, signed = false, status, footer = null }: { m: WebsiteMessage; visitor: string; onReply?: () => void; signed?: boolean; status?: 'sent' | 'delivered' | 'read'; footer?: string | null }) {
-  const { openLink } = useTab();
-  const internal = m.visibility === 'internal';
-  // "Nuwan joined the chat": a notice, not something anybody said. One only staff see is the chat's event log (TEAM-63).
-  if (m.from === 'system') {
-    return internal ? (
-      <div className="flex items-center gap-1 self-center text-center text-[11px] text-[#7A4308] dark:text-warning" title="Only staff see this">
-        <Icon name="lock" size={10} /> {m.body} · {timeLabel(m.at)}
-      </div>
-    ) : (
-      <div className="self-center text-center text-[11px] text-ink-3">{m.body} · {timeLabel(m.at)}</div>
-    );
-  }
-  const ours = m.from === 'agent';
-  // A note only staff see (TEAM-60): amber and dashed, and never quoted to the visitor.
-  const shape = internal
-    ? 'self-end rounded-[12px_4px_12px_12px] border border-dashed border-[#E2B04A] bg-[#FFF6E0] text-ink dark:bg-warning-bg'
-    : ours ? 'self-end rounded-[12px_4px_12px_12px] bg-primary text-white' : m.from === 'bot' ? 'self-start rounded-[4px_12px_12px_12px] bg-subtle text-ink-2 text-[12.5px]' : 'self-start rounded-[4px_12px_12px_12px] border border-line bg-surface text-ink';
-  const q = m.reply;
-  return (
-    <div className={cx('group flex max-w-full flex-col gap-1', ours ? 'items-end self-end' : 'items-start self-start')}>
-      {signed || internal ? (
-        <span className="flex items-center gap-1.5 text-[11px] text-ink-3">
-          {internal ? <b className="flex items-center gap-1 text-[#7A4308] dark:text-warning"><Icon name="lock" size={10} /> Only staff see this</b> : null}
-          {signed || internal ? <span className="flex items-center gap-1">{m.avatar ? <Avatar name={m.agent} src={m.avatar} size={14} /> : null}{m.agent ?? 'A colleague'}</span> : null}
-        </span>
-      ) : null}
-      {q ? (
-        <div className="max-w-[min(320px,80%)] truncate border-l-[3px] border-primary/60 bg-subtle px-2 py-1 text-[11.5px] text-ink-2" title={q.body ?? q.file ?? ''}>
-          <b className="text-ink">{quoteAuthor(q, visitor)}</b> · {q.body ?? (q.file ? `📎 ${q.file}` : 'A removed message')}
-        </div>
-      ) : m.reply_to ? (
-        <div className="border-l-[3px] border-line px-2 py-1 text-[11.5px] text-ink-3 italic">A removed message</div>
-      ) : null}
-      <div className={cx('flex max-w-full items-center gap-1', ours && 'flex-row-reverse')}>
-      {m.body ? (
-        <div className={cx('max-w-[min(360px,85%)] whitespace-pre-wrap break-words px-3 py-2 leading-[1.5] selectable', shape)} title={`${m.from === 'agent' ? (m.agent ?? 'Agent') : m.from === 'bot' ? 'Automated message' : 'Visitor'} · ${timeLabel(m.at)}`}>
-          {m.from === 'bot' ? <b className="block">Automated message{m.agent ? ` · ${m.agent}` : ''}</b> : null}
-          {m.body}
-        </div>
-      ) : null}
-      {m.file ? (
-        <div className={cx('flex items-center gap-2 rounded-[10px] border border-line bg-surface px-2.5 py-2 text-[12px]', ours ? 'self-end' : 'self-start')}>
-          <b className="max-w-[220px] truncate text-ink">{m.file.filename}</b>
-          <span className="text-ink-3">{bytes(m.file.size)} ·</span>
-          <button type="button" className="font-semibold text-primary hover:underline" onClick={() => m.file && openWebsiteFile(m.file, openLink)}>Open</button>
-        </div>
-      ) : null}
-      {status ? (
-        <Icon name={status === 'sent' ? 'check' : 'check-check'} size={13} className={cx('shrink-0', status === 'read' ? 'text-primary' : 'text-ink-3')} label={status === 'read' ? 'Read by the visitor' : status === 'delivered' ? 'Delivered to the visitor' : 'Sent'} />
-      ) : null}
-      {onReply ? (
-        <button type="button" aria-label="Reply to this message" title="Reply" onClick={onReply} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 opacity-0 hover:bg-subtle hover:text-ink focus:opacity-100 group-hover:opacity-100">
-          <Icon name="reply" size={13} />
-        </button>
-      ) : null}
-      </div>
-      {footer ? <span className="text-[11px] text-ink-3">{footer}</span> : null}
-    </div>
-  );
-}
-
 const HEADING = 'text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase';
+const CARD = 'flex flex-col gap-[7px] rounded-[12px] border border-line bg-surface px-3 py-2.5';
 
-function VisitorPanel({ v, data, online, onDone, children }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; onDone: () => void; children?: ReactNode }) {
+/** The visitor's clock now, from their browser's time zone (UX-DRW-01); nothing for a zone this computer does not know. */
+export function visitorLocalTime(tz: string | null | undefined, now: number): string | null {
+  if (!tz) return null;
+  try {
+    return new Date(now).toLocaleTimeString(undefined, { hour: 'numeric', minute: '2-digit', timeZone: tz });
+  } catch {
+    return null;
+  }
+}
+
+const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+
+/** One page on the journey: where, when, and how long it held them. */
+interface Stop {
+  url: string | null;
+  title: string | null;
+  at: string;
+  seconds: number | null;
+}
+
+/**
+ * The visitor details drawer (UX-DRW-01, X-UI-05; #229): a card stack — who they are with presence and time on the
+ * site, Email and Block; how to reach them and their local time; Site, Device, Visits and Came from; this visit's
+ * journey with dwell times and where the chat started; the chat's tags; and the files shared, as a grid.
+ */
+function VisitorPanel({ v, data, online, canReply, files, onDone, children }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; children?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
   // For how long, and why (GATE-08, SEC-10): a week unless somebody chooses otherwise; '' is until lifted.
   const [blockFor, setBlockFor] = useState('7');
   const [blockWhy, setBlockWhy] = useState('');
   const [busy, setBusy] = useState(false);
+  const [tagging, setTagging] = useState<string | null>(null);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
   const support = useCanOpen('support');
-  const rows: Array<[string, string | null | undefined]> = v
+  const mail = useCanOpen('mail');
+  const now = useNow(30_000);
+  const c = data.conversation;
+  const name = v?.name || v?.label || 'Visitor';
+  const history = (data.history ?? []).filter((h) => h.id !== c.id);
+
+  // This visit's pages, with how long each held them; an older server sends only the journey, without dwell.
+  const visit = eventsForThread(data.events, c.started_at).filter((e) => e.kind === 'page_view');
+  const stops: Stop[] = visit.length ? visit : (data.journey ?? []).map((j) => ({ ...j, seconds: null }));
+  const recent = stops.slice(-8).reverse();
+  const startedAt = c.started_at ? parseTs(c.started_at).getTime() : Number.NaN;
+  const chatStop = Number.isNaN(startedAt) ? -1 : recent.findIndex((p) => parseTs(p.at).getTime() <= startedAt + 1000);
+  const arrived = stops.length ? parseTs(stops[0]!.at).getTime() : Number.NaN;
+  const onSite = online && !Number.isNaN(arrived) ? dwell(Math.max(0, (now - arrived) / 1000)) : null;
+  const local = visitorLocalTime(v?.timezone, now);
+  const cameFrom = v?.referrer ? hostOf(v.referrer) : (v?.utm_source ?? v?.utm_campaign ?? null);
+  const tags = tagList(c.tags);
+
+  const facts: Array<[string, string | null | undefined]> = v
     ? [
-        ['Phone', v.phone],
-        ['Company', v.company],
-        ['Location', [v.city, v.country].filter(Boolean).join(', ') || null],
-        ['Device', [v.device, v.os].filter(Boolean).join(' · ') || null],
-        ['Browser', v.browser],
+        ['Site', c.website ?? c.widget],
+        ['Device', [v.browser, v.os].filter(Boolean).join(' · ') || v.device],
+        ['Visits', v.visits ? `${v.visits}${visit.length ? ` · ${visit.length === 1 ? text('1 page') : text('{n} pages', { n: visit.length })}` : ''}${v.first_seen ? ` · first ${dateLabel(v.first_seen)}` : ''}` : null],
+        ['Came from', cameFrom],
         ['Language', v.language],
-        ['Current page', v.current_url ? pathOf(v.current_url) : null],
-        ['Landing page', v.landing_page ? pathOf(v.landing_page) : null],
-        ['Referrer', v.referrer ? v.referrer.replace(/^https?:\/\//, '').replace(/\/$/, '') : null],
-        ['Campaign', v.utm_campaign ?? v.utm_source],
-        ['Visits', v.visits ? `${v.visits}${v.first_seen ? ` · first ${dateLabel(v.first_seen)}` : ''}` : null],
+        ['Campaign', v.referrer ? (v.utm_campaign ?? v.utm_source) : null],
       ]
     : [];
-  const journey = (data.journey ?? []).slice(-8);
-  const history = (data.history ?? []).filter((h) => h.id !== data.conversation.id);
-  // Every file either side sent in this chat, newest first (CHAT-UI-01, SHARED FILES).
-  const files = data.messages.filter((m) => m.file).reverse();
-  const { openLink } = useTab();
-  const name = v?.name || v?.label || 'Visitor';
+
+  const saveTags = (next: string[]) =>
+    void websiteAction(c.id, 'tag', { tags: next.join(',') }).then(
+      () => onDone(),
+      (e) => toast('error', errorMessage(e)),
+    );
+
+  const email = () => {
+    if (!v?.email) return;
+    if (mail) navigate(`/mail?compose=1&to=${encodeURIComponent(v.email)}`);
+    else void call('app:openExternal', { url: `mailto:${v.email}` });
+  };
 
   const ticket = async () => {
     setBusy(true);
     try {
-      const r = await apiPost<{ id: number; reference: string }>('/api/tickets/from-conversation', { conversation_id: data.conversation.id });
+      const r = await apiPost<{ id: number; reference: string }>('/api/tickets/from-conversation', { conversation_id: c.id });
       toast('success', `Raised as ${r.reference}.`);
       void call('app:openInBrowser', { path: `/tickets?ticket=${r.id}` });
     } catch (e) {
@@ -486,51 +460,149 @@ function VisitorPanel({ v, data, online, onDone, children }: { v: WebsiteVisitor
     }
   };
 
+  const action = 'flex h-[30px] flex-1 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface text-[11.5px] font-semibold text-ink hover:bg-subtle';
   return (
     <SidePanel id="website-visitor" label="the visitor details" side="right">
-      <aside aria-label="Visitor details" className="flex w-[292px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-surface p-3.5 text-[12.5px] scroll-thin">
-        <div className="flex flex-col items-center gap-1 border-b border-line pb-3 text-center">
-          <Avatar name={name} size={48} presence={data.conversation.status === 'closed' ? null : online ? 'online' : 'away'} />
-          <b className="mt-1 flex items-center gap-1.5 text-[14px] text-ink">
+      <aside aria-label="Visitor details" className="flex w-[240px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-ground px-3 py-3.5 text-[12px] scroll-thin">
+        <h3 className={HEADING}>Visitor</h3>
+        <div className={cx(CARD, 'items-center pt-3.5 text-center')}>
+          <Avatar name={name} size={52} presence={c.status === 'closed' ? null : online ? 'online' : 'away'} />
+          <b className="flex items-center gap-1.5 text-[14px] text-ink">
             <span className="break-words">{name}</span>
             {v?.is_blocked ? <Chip tone="danger">Blocked</Chip> : null}
           </b>
-          {v?.email ? <span className="break-all text-[12px] text-ink-3 selectable">{v.email}</span> : null}
+          {v?.company ? <span className="-mt-1 text-[11.5px] text-ink-3">{v.company}</span> : null}
+          <span className={cx('-mt-1 flex items-center gap-1.5 text-[11.5px] font-semibold', online ? 'text-success' : 'text-ink-3')}>
+            <span className={cx('h-1.5 w-1.5 rounded-full', online ? 'bg-success' : 'bg-ink-3')} />
+            {online ? (onSite ? text('On the site · {time}', { time: onSite }) : text('On the site')) : text('Left the site')}
+          </span>
+          {v?.email || (data.can?.manage && v && !v.is_blocked) ? (
+            <div className="mt-0.5 flex gap-1.5 self-stretch">
+              {v?.email ? (
+                <button type="button" onClick={email} className={action} title={text('Write to {email}', { email: v.email })}>
+                  <Icon name="mail" size={13} className="text-ink-2" /> {text('Email')}
+                </button>
+              ) : null}
+              {data.can?.manage && v && !v.is_blocked ? (
+                <button type="button" aria-label="Block this visitor" onClick={() => setBlocking(true)} className={cx(action, 'text-danger hover:bg-danger-bg')}>
+                  <Icon name="user-x" size={13} /> {text('Block')}
+                </button>
+              ) : null}
+            </div>
+          ) : null}
         </div>
-        {children}
-        <h3 className={HEADING}>Visitor</h3>
-        {rows.filter(([, val]) => val).map(([k, val]) => (
-          <div key={k} className="flex gap-2">
-            <span className="w-24 shrink-0 text-ink-3">{k}</span>
-            <span className="min-w-0 break-words font-semibold text-ink selectable">{val}</span>
-          </div>
-        ))}
-        {journey.length ? (
-          <div className="flex flex-col gap-[5px] border-t border-line pt-2">
-            <h3 className={HEADING}>Journey</h3>
-            <ol className="flex flex-col gap-[3px] text-ink-2">
-              {journey.map((p, i) => (
-                <li key={`${p.at}-${i}`} className="flex gap-2">
-                  <span className="min-w-0 flex-1 break-words">{p.url ? pathOf(p.url) : (p.title ?? 'page')}</span>
-                  <span className="shrink-0 text-[11px] text-ink-3">{i === journey.length - 1 && online ? 'Reading now' : timeLabel(p.at)}</span>
-                </li>
-              ))}
-            </ol>
+        {v?.email || v?.phone || v?.city || v?.country ? (
+          <div className={CARD}>
+            {v.email ? (
+              <div className="flex items-center gap-2">
+                <Icon name="mail" size={14} className="shrink-0 text-ink-3" />
+                <span className="min-w-0 flex-1 truncate font-semibold text-ink selectable" title={v.email}>{v.email}</span>
+                <button type="button" aria-label={text('Copy email')} title={text('Copy email')} onClick={() => void navigator.clipboard.writeText(v.email!).then(() => toast('success', text('Copied.')))} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle hover:text-ink">
+                  <Icon name="copy" size={13} />
+                </button>
+              </div>
+            ) : null}
+            {v.phone ? (
+              <div className="flex items-center gap-2">
+                <Icon name="phone" size={14} className="shrink-0 text-ink-3" />
+                <span className="min-w-0 flex-1 truncate font-semibold text-ink selectable">{v.phone}</span>
+              </div>
+            ) : null}
+            {v.city || v.country ? (
+              <div className="flex items-center gap-2">
+                <Icon name="map-pin" size={14} className="shrink-0 text-ink-3" />
+                <span className="min-w-0 text-ink-2">
+                  <span>{[v.city, v.country].filter(Boolean).join(', ')}</span>
+                  {local ? <span className="text-ink-3"> · {text('{time} local', { time: local })}</span> : null}
+                </span>
+              </div>
+            ) : null}
           </div>
         ) : null}
-        {files.length ? (
-          <div className="flex flex-col gap-[5px] border-t border-line pt-2">
-            <h3 className={HEADING}>Shared files · {files.length}</h3>
-            {files.slice(0, 8).map((m) => (
-              <button key={m.id} type="button" onClick={() => m.file && openWebsiteFile(m.file, openLink)} title={m.from === 'visitor' ? 'Sent by the visitor' : 'Sent to the visitor'} className="flex items-center gap-2 rounded-[6px] text-left hover:text-primary">
-                <Icon name="file" size={13} className="shrink-0 text-ink-3" />
-                <span className="min-w-0 flex-1 truncate font-semibold text-ink">{m.file?.filename}</span>
-                <span className="shrink-0 text-[11px] text-ink-3">{m.file ? bytes(m.file.size) : ''}</span>
-              </button>
+        {facts.some(([, val]) => val) ? (
+          <div className={CARD}>
+            {facts.filter(([, val]) => val).map(([k, val]) => (
+              <div key={k} className="flex justify-between gap-2">
+                <span className="shrink-0 text-ink-3">{k}</span>
+                <span className="min-w-0 truncate text-right font-semibold text-ink-2 selectable" title={val ?? undefined}>{val}</span>
+              </div>
             ))}
           </div>
         ) : null}
-        <div className="flex flex-col gap-[5px] border-t border-line pt-2">
+        {children}
+        {recent.length ? (
+          <div className={CARD}>
+            <div className="flex items-center">
+              <h3 className={cx(HEADING, 'flex-1')}>Journey</h3>
+              <span className="text-[11px] text-ink-3">{text('this visit')}</span>
+            </div>
+            <ol className="ml-1 flex flex-col gap-2 border-l-2 border-line pl-3">
+              {recent.map((p, i) => {
+                const current = i === 0 && online;
+                const first = i === recent.length - 1;
+                const when = current ? text('Reading now') : p.seconds !== null ? dwell(p.seconds) : timeLabel(p.at);
+                const notes = [when, i === chatStop ? text('chat started here') : null, first && v?.referrer ? text('Arrived from {site}', { site: hostOf(v.referrer) }) : null].filter(Boolean).join(' · ');
+                return (
+                  <li key={`${p.at}-${i}`} className="relative">
+                    <div className={cx('truncate', current ? 'font-bold text-primary' : 'text-ink-2')} title={p.url ?? p.title ?? undefined}>
+                      {p.url ? pathOf(p.url) : (p.title ?? 'page')}
+                    </div>
+                    <div className="text-[11px] text-ink-3">{notes}</div>
+                    <span aria-hidden="true" className={cx('absolute top-[4px] -left-[17px] rounded-full', current ? 'h-2 w-2 bg-primary shadow-[0_0_0_3px_var(--color-selection)]' : 'h-1.5 w-1.5 -translate-x-px bg-[#C3CCF6] dark:bg-primary/50')} />
+                  </li>
+                );
+              })}
+            </ol>
+          </div>
+        ) : null}
+        <div className={CARD}>
+          <h3 className={HEADING}>Tags</h3>
+          <div className="flex flex-wrap gap-[5px]">
+            {tags.map((t) => (
+              <span key={t} className="flex items-center gap-1 rounded-[8px] bg-selection px-2 py-0.5 text-[11px] font-semibold text-primary">
+                {t}
+                {canReply ? (
+                  <button type="button" aria-label={text('Remove tag {tag}', { tag: t })} onClick={() => saveTags(tags.filter((x) => x !== t))} className="text-primary/70 hover:text-primary">
+                    <Icon name="x" size={10} />
+                  </button>
+                ) : null}
+              </span>
+            ))}
+            {canReply ? (
+              tagging === null ? (
+                <button type="button" onClick={() => setTagging('')} className="rounded-[8px] border border-dashed border-line px-2 py-0.5 text-[11px] text-ink-3 hover:text-ink">
+                  + {text('Tag')}
+                </button>
+              ) : (
+                <input
+                  autoFocus
+                  aria-label={text('New tag')}
+                  value={tagging}
+                  maxLength={40}
+                  onChange={(e) => setTagging(e.target.value)}
+                  onBlur={() => setTagging(null)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Escape') setTagging(null);
+                    if (e.key === 'Enter' && tagging.trim()) {
+                      saveTags([...tags, tagging.trim().replace(/,/g, ' ')]);
+                      setTagging(null);
+                    }
+                  }}
+                  className="h-6 w-24 rounded-[8px] border border-primary bg-surface px-1.5 text-[11px] outline-none"
+                />
+              )
+            ) : !tags.length ? (
+              <span className="text-[11px] text-ink-3">{text('No tags')}</span>
+            ) : null}
+          </div>
+        </div>
+        {files.length ? (
+          <div className={CARD}>
+            <h3 className={HEADING}>Shared files · {files.length}</h3>
+            <SharedFiles files={files} />
+          </div>
+        ) : null}
+        <div className={CARD}>
           <h3 className={HEADING}>Previous chats · {history.length}</h3>
           {history.slice(0, 5).map((h) => (
             <span key={h.id} className="text-ink-2">
@@ -540,9 +612,6 @@ function VisitorPanel({ v, data, online, onDone, children }: { v: WebsiteVisitor
         </div>
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
           {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
-          {data.can?.manage && v && !v.is_blocked ? (
-            <button type="button" onClick={() => setBlocking(true)} className="h-8 rounded-[8px] border border-[#F1B8A8] bg-surface font-bold text-danger hover:bg-danger-bg">Block this visitor</button>
-          ) : null}
         </div>
         {blocking ? (
           <Modal
