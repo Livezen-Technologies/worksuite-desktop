@@ -5,6 +5,18 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.169 — 2026-10-04
+
+- **Live status & calls (V-05).** Website Chats › Setup › Widget has a second tab beside Appearance. It covers:
+  - whether visitors see staff typing and "Read by Nuwan";
+  - whether visitors can call from the widget, and how the call button shows;
+  - when to offer a call-back;
+  - who can take calls, each marked when available now, with a warning when nobody can;
+  - recording, which shows as Off because it is not offered yet.
+
+  It saves only these settings, and edits survive switching tabs.
+- Needs the server update (Communication 1.36.0).
+
 ## 0.2.168 — 2026-10-04
 
 - **Incoming voice call (V-04).** The call window now follows the design:

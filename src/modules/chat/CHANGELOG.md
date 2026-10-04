@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.42.0 — 2026-10-04
+
+- V-05 Live status & calls: a second tab in the widget settings (Appearance / Live status & calls) for typing and read receipts shown to visitors, voice calls on or off, the call button, the call-back offer, who can take calls and whether they are available, and recording (not offered yet); its own save, shared section parts and save bar.
+
 ## 1.41.0 — 2026-10-04
 
 - V-04 Incoming voice call window to the design: phone in a green ring, Incoming voice call with its timer, who and where, the last message, Answer and Decline pills, the microphone or headset line with the answer shortcut; no answering without a microphone or while locked; a system notification when the call window is off.

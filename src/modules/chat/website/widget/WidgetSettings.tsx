@@ -1,11 +1,13 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useId, useMemo, useState, type ReactNode } from 'react';
-import { errorMessage } from '../../../../core/bridge';
+import { useMemo, useState } from 'react';
+import { call, errorMessage } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
-import { useTabTitle } from '../../../../core/tab-context';
+import { useTab, useTabTitle } from '../../../../core/tab-context';
 import { Select } from '../../../../components/Select';
 import { Button, Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
+import { Area, Choice, SaveBar, Section, Toggle } from './parts';
+import { LiveStatusCalls } from './LiveStatusCalls';
 import { DAYS, MAX_LINKS, OFFSET_MAX, clampOffset, designOf, hoursOf, hoursText, palette, previewPeople, problems, saveDesign, saveHours, siteNameOf, weekOf, widgetsList, withDefaults, type DesignPayload, type HoursDay, type HoursSummary, type QuickLink, type Theme, type WidgetDesign } from './design';
 import { WidgetPreview, type PreviewScreen } from './WidgetPreview';
 
@@ -33,14 +35,30 @@ const SCREENS: Array<{ id: PreviewScreen; label: string }> = [
   { id: 'launcher', label: 'Launcher' },
 ];
 
+type WidgetTab = 'design' | 'calls';
+
+/** The widget's settings in WorkSuite Desktop: its design (#199) and Live status & calls (V-05, VOICE-UI-04). */
+const TABS: Array<{ id: WidgetTab; label: string }> = [
+  { id: 'design', label: 'Appearance' },
+  { id: 'calls', label: 'Live status & calls' },
+];
+
 const ZONES = ['Asia/Colombo', 'Asia/Kolkata', 'Asia/Dubai', 'Asia/Singapore', 'Australia/Sydney', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Los_Angeles', 'UTC'];
 
 export function WidgetSettings() {
   useTabTitle('Widget');
+  const { query } = useTab();
   const list = useQuery({ queryKey: ['website', 'widgets'], queryFn: ({ signal }) => widgetsList(signal), retry: false });
   const widgets = list.data?.widgets ?? [];
   const [picked, setPicked] = useState<number | null>(null);
   const id = picked ?? widgets[0]?.id ?? null;
+  // The design and Live status & calls (V-05) are tabs of one page; `?tab=calls` opens on the second.
+  const [tab, setTab] = useState<WidgetTab>(() => (query.get('tab') === 'calls' ? 'calls' : 'design'));
+  const [seen, setSeen] = useState<Partial<Record<WidgetTab, boolean>>>(() => ({ [tab]: true }));
+  const open = (t: WidgetTab) => {
+    setTab(t);
+    setSeen((s) => ({ ...s, [t]: true }));
+  };
 
   if (list.isLoading) return <div className="flex flex-1 items-center justify-center"><Spinner /></div>;
   if (list.error) return <div className="flex-1 p-6"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div>;
@@ -56,59 +74,26 @@ export function WidgetSettings() {
           <span className="text-[12.5px] text-ink-3">{widgets[0]!.website_name || widgets[0]!.name}</span>
         )}
       </header>
-      <WidgetEditor key={id} id={id} />
-    </div>
-  );
-}
-
-function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {
-  return (
-    <section className="flex flex-col gap-3 border-b border-line py-5 first:pt-0 last:border-b-0">
-      <div>
-        <h3 className="text-[14px] font-bold text-ink">{title}</h3>
-        {hint ? <p className="mt-0.5 text-[12.5px] text-ink-3">{hint}</p> : null}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-function Area({ label, value, onChange, max, rows = 2, hint, placeholder }: { label: string; value: string; onChange: (v: string) => void; max: number; rows?: number; hint?: string; placeholder?: string }) {
-  const fid = useId();
-  return (
-    <span className="flex flex-col gap-1">
-      <label htmlFor={fid} className="text-[12.5px] font-semibold text-ink-2">{label}</label>
-      <textarea id={fid} rows={rows} maxLength={max} value={value} placeholder={placeholder} onChange={(e) => onChange(e.target.value)} className="resize-none rounded-[8px] border border-line bg-surface px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-primary" />
-      {hint ? <span className="text-[12px] text-ink-3">{hint}</span> : null}
-    </span>
-  );
-}
-
-function Choice<T extends string>({ label, value, options, onChange }: { label: string; value: T; options: Array<{ value: T; label: string }>; onChange: (v: T) => void }) {
-  return (
-    <div role="radiogroup" aria-label={label} className="flex flex-col gap-1">
-      <span className="text-[12.5px] font-semibold text-ink-2">{label}</span>
-      <span className="flex flex-wrap gap-1.5">
-        {options.map((o) => (
-          <button key={o.value} type="button" role="radio" aria-checked={value === o.value} onClick={() => onChange(o.value)} className={cx('h-8 rounded-[8px] border px-3 text-[12.5px] font-semibold', value === o.value ? 'border-primary bg-selection text-primary' : 'border-line text-ink hover:bg-subtle')}>
-            {o.label}
+      <div role="tablist" aria-label="Widget settings" className="flex items-center gap-1 border-b border-line bg-surface px-5">
+        {TABS.map((t) => (
+          <button key={t.id} type="button" role="tab" id={`widget-tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`widget-panel-${t.id}`} onClick={() => open(t.id)} className={cx('-mb-px border-b-2 px-3.5 py-2 text-[13px]', tab === t.id ? 'border-primary font-bold text-primary' : 'border-transparent text-ink-2 hover:text-ink')}>
+            {t.label}
           </button>
         ))}
-      </span>
+        <button type="button" title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: '/website-chats?tab=widgets' })} className="ml-auto px-1 py-2 text-[12.5px] font-semibold text-primary hover:underline">
+          Behaviour, staff and chatbot on the web
+        </button>
+      </div>
+      <div role="tabpanel" id="widget-panel-design" aria-labelledby="widget-tab-design" hidden={tab !== 'design'} className={cx('min-h-0 flex-1', tab === 'design' ? 'flex' : 'hidden')}>
+        <WidgetEditor key={id} id={id} />
+      </div>
+      {/* V-05: mounted on first visit and then kept, so switching tabs never loses what is being edited on either. */}
+      {seen.calls ? (
+        <div role="tabpanel" id="widget-panel-calls" aria-labelledby="widget-tab-calls" hidden={tab !== 'calls'} className={cx('min-h-0 flex-1', tab === 'calls' ? 'flex' : 'hidden')}>
+          <LiveStatusCalls key={id} id={id} />
+        </div>
+      ) : null}
     </div>
-  );
-}
-
-function Toggle({ label, hint, checked, onChange }: { label: string; hint?: string; checked: boolean; onChange: (v: boolean) => void }) {
-  const hid = useId();
-  return (
-    <span className="flex items-start justify-between gap-3">
-      <span className="flex flex-col">
-        <span className="text-[13px] font-semibold text-ink">{label}</span>
-        {hint ? <span id={hid} className="text-[12px] text-ink-3">{hint}</span> : null}
-      </span>
-      <Switch label={label} checked={checked} onChange={onChange} describedBy={hint ? hid : undefined} />
-    </span>
   );
 }
 
@@ -322,23 +307,20 @@ function WidgetEditor({ id }: { id: number }) {
             <Area label="Greeting card message" value={design.greeting_text ?? ''} max={300} onChange={(v) => set('greeting_text', v || null)} placeholder="Hi there. Looking for hosting, a website or WorkSuite? Ask us anything." hint="Its quick replies are the widget's conversation starters." />
           </Section>
         </fieldset>
-        <div className="sticky bottom-0 -mx-6 mt-2 flex items-center gap-3 border-t border-line bg-surface px-6 py-3">
-          <Button type="submit" variant="primary" loading={busy} disabled={!can || busy || blocked}>Save</Button>
-          <Button
-            type="button"
-            disabled={busy || (!draft && !weekDraft && hoursDraft === null && !Object.keys(shown).length)}
-            onClick={() => {
-              setDesign(null);
-              setShown({});
-              setWeek(null);
-              setHoursOn(null);
-              setHoursTouched(false);
-            }}
-          >
-            Undo changes
-          </Button>
-          {blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
-        </div>
+        <SaveBar
+          can={can}
+          busy={busy}
+          blocked={blocked}
+          dirty={Boolean(draft || weekDraft || hoursDraft !== null || Object.keys(shown).length)}
+          onUndo={() => {
+            setDesign(null);
+            setShown({});
+            setWeek(null);
+            setHoursOn(null);
+            setHoursTouched(false);
+          }}
+          note={blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
+        />
       </form>
       <aside aria-label="Preview" className="flex w-[468px] shrink-0 flex-col gap-3 overflow-y-auto border-l border-line bg-ground p-5 scroll-thin">
         <div role="tablist" aria-label="Preview screen" className="flex gap-1">
