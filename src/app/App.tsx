@@ -27,6 +27,7 @@ import { RemoteControlWindow } from './RemoteControlWindow';
 import { WebchatRingWindow } from '../modules/chat/website/Ringing';
 import { RingTrayWindow } from '../modules/chat/website/RingTray';
 import { LiveMapWindow, WallWindow } from '../modules/chat/website/live/LiveMapWindow';
+import { WallSheetWindow } from '../modules/chat/website/live/WallSheet';
 import { QuickAskWindow } from './QuickAskWindow';
 import { MailLinkGuard } from '../modules/mail/LinkGuard';
 import { MailReminders } from '../modules/mail/Reminders';
@@ -86,6 +87,8 @@ export function App() {
   else if (hash.startsWith('#/window/quick-ask')) body = <QuickAskWindow />;
   // The Live map window and wall mode on a display (L-04, L-05; MAP-21, MAP-24): Chat's, so only with Chat.
   else if (hash.startsWith('#/window/live-map')) body = canOpen('chat') ? <LiveMapWindow /> : null;
+  // The Wall mode sheet before the wall itself: both start with "wall" (L-06, MAP-UI-06).
+  else if (hash.startsWith('#/window/wall-sheet')) body = canOpen('chat') ? <WallSheetWindow /> : null;
   else if (hash.startsWith('#/window/wall')) body = canOpen('chat') ? <WallWindow /> : null;
   else if (hash.startsWith('#/window/')) body = <WindowRoot hash={hash} />;
   else if (auth.setupPending) body = <SetupWizard />;

@@ -41,9 +41,11 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'live-map': { width: 500, height: 680, minWidth: 380, minHeight: 440 },
   // Wall mode on a display (MAP-24): the whole screen it is on; this is only its size before it goes full screen.
   wall: { width: 1280, height: 720, minWidth: 640, minHeight: 360 },
+  // The Wall mode sheet (L-06, MAP-UI-06): the design's 430 wide, its display cards and four choices.
+  'wall-sheet': { width: 430, height: 384, minWidth: 430, minHeight: 384 },
 };
 /** Remote control's own windows: placed by remote control, never remembered. */
-const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall']);
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall', 'wall-sheet']);
 
 /**
  * The tray's ringing menu's place (R-06, RING-UI-07): under the menu-bar icon on macOS (or a tray at the top), over it
@@ -457,21 +459,29 @@ export class WindowManager {
   }
 
   private wall: BrowserWindow | null = null;
+  /** The screen the wall is on, and the keep-awake it holds there (MAP-24). */
+  private wallDisplay: number | null = null;
+  private wallAwake: number | null = null;
   /** The wall's display was unplugged and its window closed (MAP-24): the tray says so. */
   onWallGone: () => void = () => undefined;
 
   /**
-   * Wall mode on a display (MAP-24, MAP-UI-05 "Wall mode on Display 2"): the whole of that screen, kept awake while it
-   * is up, names hidden as the wall always hides them. Unplugging the display closes it.
+   * Wall mode on a display (L-06; MAP-24, MAP-UI-06): the whole of that screen, kept awake while it is up when the sheet
+   * says so, names hidden as the wall always hides them. Opened again on another screen, it moves there. Unplugging
+   * its display closes it.
    */
-  showWall(displayId: number | null): BrowserWindow {
+  showWall(displayId: number | null, opts: { keepAwake?: boolean } = {}): BrowserWindow {
     const display = screen.getAllDisplays().find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
+    this.wallDisplay = display.id;
+    this.keepWallAwake(opts.keepAwake !== false);
     const existing = this.wall && !this.wall.isDestroyed() ? this.wall : null;
     if (existing) {
       if (existing.isFullScreen()) existing.setFullScreen(false);
       existing.setBounds(display.bounds);
       existing.setFullScreen(true);
       existing.show();
+      // What the sheet chose (cycle, keep awake) is read again.
+      existing.webContents.send('live:wallChanged');
       return existing;
     }
     const win = new BrowserWindow({
@@ -486,23 +496,81 @@ export class WindowManager {
     this.kinds.set(win.id, 'wall');
     const wid = win.id;
     this.wall = win;
-    const awake = powerSaveBlocker.start('prevent-display-sleep');
     const unplugged = (_e: unknown, d: { id: number }) => {
-      if (d.id !== display.id || win.isDestroyed()) return;
+      if (d.id !== this.wallDisplay || win.isDestroyed()) return;
       win.close();
       this.onWallGone();
     };
     screen.on('display-removed', unplugged);
     win.on('closed', () => {
       this.kinds.delete(wid);
-      if (this.wall === win) this.wall = null;
+      if (this.wall === win) {
+        this.wall = null;
+        this.wallDisplay = null;
+        this.keepWallAwake(false);
+      }
       screen.removeListener('display-removed', unplugged);
-      if (powerSaveBlocker.isStarted(awake)) powerSaveBlocker.stop(awake);
     });
     win.once('ready-to-show', () => win.show());
     win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
     void win.loadURL(this.url('/window/wall'));
     return win;
+  }
+
+  /** The tray's item, or Esc, takes the wall down (MAP-24): whether one was up. */
+  closeWall(): boolean {
+    const win = this.wall && !this.wall.isDestroyed() ? this.wall : null;
+    if (!win) return false;
+    win.close();
+    return true;
+  }
+
+  /** Whether wall mode is up on a screen now. */
+  wallOpen(): boolean {
+    return !!this.wall && !this.wall.isDestroyed();
+  }
+
+  private keepWallAwake(on: boolean): void {
+    if (on && this.wallAwake !== null && powerSaveBlocker.isStarted(this.wallAwake)) return;
+    if (!on) {
+      if (this.wallAwake !== null && powerSaveBlocker.isStarted(this.wallAwake)) powerSaveBlocker.stop(this.wallAwake);
+      this.wallAwake = null;
+      return;
+    }
+    this.wallAwake = powerSaveBlocker.start('prevent-display-sleep');
+  }
+
+  /**
+   * The Wall mode sheet (L-06, MAP-UI-06): a small window of its own titled "Wall mode" — over whatever is in front, as
+   * it is opened from the tray with the main window closed as often as from the dashboard — that picks the screen and
+   * how, then opens the wall. One at a time.
+   */
+  showWallSheet(): BrowserWindow {
+    const existing = BrowserWindow.getAllWindows().find((w) => !w.isDestroyed() && this.kinds.get(w.id) === 'wall-sheet');
+    if (existing) {
+      existing.webContents.send('live:wallChanged');
+      existing.show();
+      existing.focus();
+      return existing;
+    }
+    const win = this.create('wall-sheet', { hash: '/window/wall-sheet', title: 'Wall mode' });
+    win.setResizable(false);
+    win.setMinimizable(false);
+    win.setMaximizable(false);
+    win.setFullScreenable(false);
+    return win;
+  }
+
+  /** The sheet goes once the wall opens, or on Cancel. */
+  closeWallSheet(): void {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && this.kinds.get(w.id) === 'wall-sheet') w.close();
+  }
+
+  /** The screen WorkSuite's main window is on ("this window" in the sheet), or null while it is closed. */
+  mainDisplayId(): number | null {
+    const main = this.getMain();
+    if (!main || main.isDestroyed() || !main.isVisible()) return null;
+    return screen.getDisplayMatching(main.getBounds()).id;
   }
 
   private quickAsk: BrowserWindow | null = null;
@@ -969,6 +1037,6 @@ export function windowRoute(url: string): string | null {
   const hash = url.split('#')[1] ?? '';
   if (!hash.startsWith('/window/')) return null;
   // The Live map window and wall mode are the Live dashboard's (L-04, MAP-24): they close with Chat, and at sign-out.
-  if (/^\/window\/(live-map|wall)(\?|$)/.test(hash)) return LIVE_ROUTE;
+  if (/^\/window\/(live-map|wall|wall-sheet)(\?|$)/.test(hash)) return LIVE_ROUTE;
   return new URLSearchParams(hash.split('?')[1] ?? '').get('route');
 }

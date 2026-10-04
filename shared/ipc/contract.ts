@@ -458,8 +458,11 @@ export const contract = {
   'ring:tray': ch(z.object({ action: z.enum(['inbox', 'settings', 'quit', 'close', 'dashboard', 'liveMap', 'wall', 'silence']) }), { session: true, rate: 10 }),
   // The Live map window and the Live dashboard on this computer (L-04, MAP-21, MAP-24): pop the map out (or show or
   // hide it, ⌘⇧M), open the dashboard, wall mode on a display, or a chat in the main window.
-  'live:open': ch(z.object({ to: z.enum(['map', 'toggleMap', 'dashboard', 'wall', 'chat']), id: z.number().int().positive().optional() }), { session: true, rate: 10 }),
+  // `wallSheet` asks first which screen and how (L-06, MAP-UI-06); `wallClose` takes the wall down.
+  'live:open': ch(z.object({ to: z.enum(['map', 'toggleMap', 'dashboard', 'wall', 'wallSheet', 'wallClose', 'chat']), id: z.number().int().positive().optional() }), { session: true, rate: 10 }),
   'live:info': ch(none, { session: true }),
+  // The Wall mode sheet's Open on Display 2 (L-06, MAP-24): saves its choices and opens the wall on that screen.
+  'live:wall': ch(z.object({ displayId: z.number().int(), keepAwake: z.boolean(), cycle: z.boolean(), openAtStart: z.boolean() }), { session: true, rate: 10 }),
   // A visitor who wrote again in my chat (worksuite-desktop#230): reply from the card, open the chat, snooze it for
   // five minutes, or take it over (the team step); and which conversation is in front in the main window.
   'ring:followUp': ch(z.object({ id: z.number().int().positive(), action: z.enum(['reply', 'open', 'snooze', 'takeOver']), message: z.string().min(1).max(4000).optional() }), { session: true, rate: 10 }),
@@ -717,6 +720,8 @@ export const contract = {
             mine: z.boolean().optional(),
           })
           .optional(),
+        /** Website chat Insights as a CSV (L-07, UX-INS-02 Export CSV): its period, and one widget or all. */
+        websiteInsights: z.object({ period: z.enum(['7d', '30d', 'all']), widget: z.number().int().positive().optional() }).optional(),
         /** An Orders report as a CSV, as the Reports screen set it. */
         omsReport: z
           .object({
@@ -1457,6 +1462,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:tray': void;
   'live:open': void;
   'live:info': LiveDeskInfo;
+  'live:wall': void;
   'ring:followUp': { ok: boolean; why: string | null };
   'ring:viewing': void;
   'ring:handoff': boolean;

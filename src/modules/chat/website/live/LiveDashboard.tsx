@@ -1,4 +1,4 @@
-import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '../../../../components/Icon';
 import { Menu } from '../../../../components/Menu';
@@ -75,7 +75,13 @@ export function liveQuery(section: string, p: LiveParams, visitor: number | null
   return q;
 }
 
-export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, onLive, selected, onSelect, onStart, onOpenChat, onSection, drawer }: {
+/** How the wall shows on a display of its own (L-06, MAP-24): the map cycling World → region → home, the screen kept awake. */
+export interface WallOptions {
+  cycle: boolean;
+  keepAwake: boolean;
+}
+
+export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, onLive, selected, onSelect, onStart, onOpenChat, onSection, drawer, wall }: {
   dash: UseQueryResult<Dashboard>;
   /** Everybody on the chosen site now. */
   visitors: OnlineVisitor[];
@@ -92,8 +98,14 @@ export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, o
   onSection: (s: 'visitors' | Section) => void;
   /** The selected visitor's details, shown over the list. */
   drawer: ReactNode;
+  /** The wall window's choices (L-06); in a tab, the wall keeps the screen awake and shows the world. */
+  wall?: WallOptions;
 }) {
   const qc = useQueryClient();
+  // On this computer, Wall mode asks first which screen and how (L-06, WF-M3 "the sheet confirms the display and
+  // keep-awake"); where the app cannot say what screens there are, the wall fills this window as before (L-03).
+  const desk = useQuery({ queryKey: ['live', 'desk'], queryFn: () => call('live:info'), retry: false });
+  const sheet = !!desk.data?.displays?.length;
   const mode = live.wall ? 'wall' : live.map !== null ? 'map' : 'dashboard';
   const now = useNow(1_000);
   const d = dash.data;
@@ -186,7 +198,7 @@ export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, o
           <button type="button" onClick={() => onLive({ map: 'world' })} disabled={!d} className={OUTLINE}>
             <Icon name="fullscreen" size={14} /> {text('Full map')}
           </button>
-          <button type="button" onClick={() => onLive({ wall: true })} disabled={!d} className={OUTLINE}>
+          <button type="button" onClick={() => (sheet ? void call('live:open', { to: 'wallSheet' }).catch(() => onLive({ wall: true })) : onLive({ wall: true }))} disabled={!d} className={OUTLINE}>
             <Icon name="monitor" size={14} /> {text('Wall mode')}
           </button>
           {/* The map in a native window of its own, over other apps or on another display (L-04, MAP-21). */}
@@ -220,7 +232,7 @@ export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, o
           </section>
         </div>
       ) : null}
-      {mode === 'wall' && d ? <WallMode d={d} visitors={visitors} sites={live.sites} now={now} skew={skew} updated={updated} onClose={() => onLive({ wall: false })} /> : null}
+      {mode === 'wall' && d ? <WallMode d={d} visitors={visitors} sites={live.sites} now={now} skew={skew} updated={updated} onClose={() => onLive({ wall: false })} cycle={wall?.cycle ?? false} awake={wall?.keepAwake ?? true} /> : null}
     </main>
   );
 }
@@ -336,15 +348,20 @@ const TILE: Record<Tone, { box: string; value: string }> = {
   green: { box: 'border-line bg-surface', value: 'text-[#2b7a4b] dark:text-success' },
 };
 
+/** The line under a figure: plain, better than before (green), or worse — and Missed's share (red) — as Insights draws them (L-07). */
+export type SubTone = 'plain' | 'good' | 'bad';
+const SUB: Record<SubTone, string> = { plain: 'text-ink-3', good: 'text-[#2b7a4b] dark:text-success', bad: 'text-[#a63224] dark:text-danger' };
+
 /** The wall's figures (MAP-UI-03): white on navy, amber and red values where somebody waits or is at risk. */
 const WALL: Record<Tone, string> = { plain: 'text-[#f1f4fb]', amber: 'text-[#f3c77e]', red: 'text-[#ff8a7a]', green: 'text-[#8fe0b5]' };
 
 /**
  * One figure (C-00's six, the wall's; V-01's call tiles): its name, the number, and a line under it when there is one.
  * `wall` draws it for the dark wall screen, readable across a room (MAP-UI-03); `compact`, the four small figures of the
- * Live map window and the tray's mini-dashboard (MAP-UI-04/05).
+ * Live map window and the tray's mini-dashboard (MAP-UI-04/05); `stack`, the line under the number rather than beside
+ * it, coloured by `subTone` — Insights' change against the previous period (L-07, UX-INS-01).
  */
-export function Tile({ label, value, sub, tone, live, big, wall, compact, action, onClick }: { label: string; value: string; sub?: string; tone: Tone; live?: boolean; big?: boolean; wall?: boolean; compact?: boolean; action?: string; onClick?: () => void }) {
+export function Tile({ label, value, sub, tone, live, big, wall, compact, stack, subTone, action, onClick }: { label: string; value: string; sub?: string; tone: Tone; live?: boolean; big?: boolean; wall?: boolean; compact?: boolean; stack?: boolean; subTone?: SubTone; action?: string; onClick?: () => void }) {
   if (compact) {
     return (
       <div role="listitem" aria-label={`${text(label)}: ${value}`} className={cx('flex min-w-0 flex-1 flex-col rounded-[10px] border px-2.5 py-[7px]', TILE[tone].box)}>
@@ -359,9 +376,9 @@ export function Tile({ label, value, sub, tone, live, big, wall, compact, action
         {live ? <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#2f9e67] shadow-[0_0_0_3px_#2f9e6733]" aria-hidden /> : null}
         {text(label)}
       </span>
-      <span className={cx('flex items-baseline whitespace-nowrap', wall ? 'gap-2.5' : 'gap-2')}>
+      <span className={cx('flex whitespace-nowrap', stack ? 'flex-col' : 'items-baseline', wall ? 'gap-2.5' : stack ? 'gap-0' : 'gap-2')}>
         <span className={cx('font-bold tabular-nums', wall ? 'text-[44px] leading-[1.1]' : big ? 'text-[44px] leading-[1.15]' : 'text-[26px] leading-[1.15]', wall ? WALL[tone] : TILE[tone].value)}>{value}</span>
-        {sub ? <span className={cx('truncate', wall ? 'text-[13px] text-[#9aa3c4]' : 'text-[11.5px] text-ink-3')}>{sub}</span> : null}
+        {sub ? <span className={cx('truncate', wall ? 'text-[13px] text-[#9aa3c4]' : cx('text-[11.5px]', SUB[subTone ?? 'plain']))}>{sub}</span> : null}
       </span>
     </>
   );
@@ -685,7 +702,7 @@ function SelectedPlace({ place, visitors, today, when, list, onClose }: { place:
  * While the wall is up: the whole screen, and the screen kept awake (MAP-16, WF-M3). Leaving full screen (Esc does) leaves
  * the wall; a screen hidden and shown again asks to stay awake again, as the browser drops the lock when it is hidden.
  */
-function useWallScreen(onExit: () => void) {
+function useWallScreen(onExit: () => void, keepAwake = true) {
   const exit = useRef(onExit);
   useEffect(() => {
     exit.current = onExit;
@@ -694,7 +711,8 @@ function useWallScreen(onExit: () => void) {
     let alive = true;
     let lock: WakeLockSentinel | null = null;
     const awake = async () => {
-      if (document.visibilityState !== 'visible' || !('wakeLock' in navigator)) return;
+      // Turned off in the Wall mode sheet (L-06, MAP-24): the screen may sleep as it usually does.
+      if (!keepAwake || document.visibilityState !== 'visible' || !('wakeLock' in navigator)) return;
       try {
         const l = await navigator.wakeLock.request('screen');
         if (alive) lock = l;
@@ -725,7 +743,22 @@ function useWallScreen(onExit: () => void) {
       void lock?.release().catch(() => undefined);
       if (full && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
     };
-  }, []);
+  }, [keepAwake]);
+}
+
+/** Every 60 s on the wall, when the sheet says to cycle (L-06, MAP-24): World → region → home country, then round. */
+export const WALL_CYCLE_MS = 60_000;
+
+/** The view the wall's map shows: the world, or — cycling — the next of World, region and home country each minute. */
+function useWallView(home: string | null, cycle: boolean): Box {
+  const presets = useMemo(() => presetsFor(home), [home]);
+  const [step, setStep] = useState(0);
+  useEffect(() => {
+    if (!cycle || presets.length < 2) return;
+    const t = setInterval(() => setStep((n) => n + 1), WALL_CYCLE_MS);
+    return () => clearInterval(t);
+  }, [cycle, presets.length]);
+  return cycle && presets.length ? presets[step % presets.length]!.box : WORLD_BOX;
 }
 
 /**
@@ -733,8 +766,9 @@ function useWallScreen(onExit: () => void) {
  * happened and the sites — with nobody named, since anybody walking past can read it (MNFR-04). It keeps the screen
  * awake and carries on through a dropped connection; Esc (or its button) comes back.
  */
-function WallMode({ d, visitors, sites, now, skew, updated, onClose }: { d: Dashboard; visitors: OnlineVisitor[]; sites: number[]; now: number; skew: number; updated: number | null; onClose: () => void }) {
-  useWallScreen(onClose);
+function WallMode({ d, visitors, sites, now, skew, updated, onClose, cycle, awake }: { d: Dashboard; visitors: OnlineVisitor[]; sites: number[]; now: number; skew: number; updated: number | null; onClose: () => void; cycle: boolean; awake: boolean }) {
+  useWallScreen(onClose, awake);
+  const box = useWallView(homeOf(d, visitors), cycle);
   const places = useMemo(() => placesNow(visitors), [visitors]);
   const waited = d.now.waiting_on_us ? since(d.now.longest_wait_since, now, skew) : null;
   // In a chat as the chips count it (MAP-UI-02): somebody waiting on us is under Waiting, not here.
@@ -770,7 +804,7 @@ function WallMode({ d, visitors, sites, now, skew, updated, onClose }: { d: Dash
       </div>
       <div className="grid min-h-0 flex-1 gap-[18px] [grid-template-columns:minmax(0,1fr)_minmax(320px,26%)]">
         <div className="relative min-h-[360px] overflow-hidden rounded-[16px] border border-[#1c2858]">
-          <LiveMap places={places} box={WORLD_BOX} theme="dark" labels="name" edges={false} label="Map of visitors on the site now" className="absolute inset-0" />
+          <LiveMap places={places} box={box} theme="dark" labels="name" edges={false} label="Map of visitors on the site now" className="absolute inset-0" />
           <div className="absolute bottom-3.5 left-3.5 rounded-[10px] border border-[#22306a] bg-[rgba(11,20,48,0.85)] px-3 py-2">
             <MapLegend theme="dark" />
           </div>

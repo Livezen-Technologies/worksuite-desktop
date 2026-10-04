@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
 import { call, isMac, on } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
@@ -166,11 +167,17 @@ export function LiveMapWindow() {
 }
 
 /**
- * Wall mode on a display (MAP-24, MAP-UI-05 "Wall mode on Display 2"): the dashboard's wall — names hidden, as it
- * always is — filling a window of its own on that screen, which the main process keeps awake. Esc closes it.
+ * Wall mode on a display (L-06; MAP-24, MAP-UI-05/06 "Wall mode on Display 2"): the dashboard's wall — names hidden, as it
+ * always is — filling a window of its own on the screen the Wall mode sheet picked, which the main process keeps awake
+ * when the sheet says so; the map cycles World → region → home country every 60 s when it says that. Esc closes it.
  */
 export function WallWindow() {
   const close = () => void call('windows:close').catch(() => undefined);
+  const info = useQuery({ queryKey: ['live', 'desk'], queryFn: () => call('live:info') });
+  // Opened again from the sheet with other choices: read them again.
+  const { refetch } = info;
+  useEffect(() => on('live:wallChanged', () => void refetch()), [refetch]);
+  const prefs = info.data?.wallPrefs;
   return (
     <WebsiteLive
       view="dashboard"
@@ -180,6 +187,7 @@ export function WallWindow() {
       onSelect={() => undefined}
       onOpenChat={(id) => void call('live:open', { to: 'chat', id }).catch(() => undefined)}
       onSection={() => undefined}
+      wall={{ cycle: prefs?.cycle ?? false, keepAwake: prefs?.keepAwake ?? true }}
     />
   );
 }

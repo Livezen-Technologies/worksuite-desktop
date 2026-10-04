@@ -234,10 +234,21 @@ function TrayDashboard({ s, desk }: { s: WebchatRingState; desk: ReturnType<type
         <div className="flex flex-col px-1.5 pb-2 text-ink-2">
           <TrayItem onClick={() => tray('dashboard')} keys={DASHBOARD_KEYS}>{text('Open Live dashboard')}</TrayItem>
           <TrayItem onClick={() => tray('liveMap')} keys={MAP_KEYS}>{text('Show Live map window')}</TrayItem>
-          {wall ? (
+          {/* Wall mode on Display 2 asks first in its sheet (L-06, WF-M3); while it is up, the tray closes it (MAP-24). */}
+          {info.data?.wallOpen ? (
+            <TrayItem onClick={() => tray('wall')} detail={wall?.display}>
+              {text('Close wall mode')}
+            </TrayItem>
+          ) : wall ? (
             <TrayItem onClick={() => tray('wall')} detail={wall.name ? `${wall.name} ›` : '›'}>
               {text('Wall mode on {display}', { display: wall.display })}
             </TrayItem>
+          ) : null}
+          {/* Its display was unplugged (MAP-24 "the tray says so"), until the wall opens again. */}
+          {info.data?.wallGone && !info.data.wallOpen ? (
+            <p role="status" className="px-2 pb-1 text-[11.5px] text-[#9A4A06] dark:text-warning">
+              {text('Wall mode closed — its display was disconnected.')}
+            </p>
           ) : null}
           <TrayItem onClick={() => tray('silence')} detail={silenced ? text('until {time}', { time: timeLabel(silenced) }) : undefined}>
             {text('Silence for 15 minutes')}

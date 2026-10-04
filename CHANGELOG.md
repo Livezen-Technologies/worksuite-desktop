@@ -5,6 +5,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.175 — 2026-10-04
+
+- **Wall mode on a second display (L-06).** Wall mode, from the tray or the Live dashboard, now asks first: which
+  display to show on, keep the display awake, cycle the map every 60 s (World → Asia → Sri Lanka), and open wall
+  mode when WorkSuite starts. Visitor names and messages are always hidden. The tray item reads "Close wall mode"
+  while it is up, and says so if its display was unplugged. The choices are remembered.
+- **Insights (L-07).** Website chats › Insights is now in the app, not a link to the web: 7 days, 30 days or All
+  time, for all widgets or one; conversations, first response, resolution, rating, missed and visitors, each
+  against the previous period; conversations per day (answered and missed); traffic sources; devices; and how each
+  agent did. **Export CSV** saves the report.
+
 ## 0.2.174 — 2026-10-04
 
 - **Live map in its own window (L-04).** **Pop out** on the Live dashboard (or ⌘⇧M from another app) opens a small

@@ -63,7 +63,7 @@ import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
 import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
-import { AtRiskAlerts, LivePulse, wallTarget } from '../services/live-desk';
+import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '../services/live-desk';
 import { QuickAsk } from '../services/quick-ask';
 import { AiService } from '../services/ai';
 import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
@@ -1429,7 +1429,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       else if (action === 'quit') quit();
       else if (action === 'dashboard') liveDesk.open('dashboard');
       else if (action === 'liveMap') liveDesk.open('map');
-      else if (action === 'wall') liveDesk.open('wall');
+      // Wall mode on Display 2 asks first which screen and how (WF-M3); while the wall is up, the item closes it (MAP-24).
+      else if (action === 'wall') liveDesk.open(windows.wallOpen() ? 'wallClose' : 'wallSheet');
       else if (action === 'silence') {
         liveSilencedUntil = Date.now() + 15 * 60_000;
         webchat.refresh();
@@ -1480,27 +1481,58 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   app.on('browser-window-focus', () => syncLiveKeys());
   app.on('browser-window-blur', () => setImmediate(syncLiveKeys));
+  // Open wall mode when WorkSuite starts (L-06, MAP-24): once a launch, as soon as the dashboard answers for somebody
+  // who staffs website chat.
+  let wallStarted = false;
   const syncLive = (): void => {
     const f = livePulse.get();
+    if (f && !wallStarted) {
+      wallStarted = true;
+      if (wallPrefsOf(settings.effective().wallMode).openAtStart && !lock.isLocked()) liveDesk.open('wall');
+    }
     tray.update({ live: f ? { online: f.online, atRisk: f.atRisk > 0 || webchat.state().chats.some((c) => c.atRisk) } : null });
     syncLiveKeys();
   };
+  // When the wall's screen was last unplugged (MAP-24 "the tray says so"), until the wall opens again.
+  let wallGoneAt: string | null = null;
+  const wallTo = () => wallTarget(screen.getAllDisplays(), screen.getPrimaryDisplay().id, wallPrefsOf(settings.effective().wallMode).displayId);
   const liveDesk = {
-    open: (to: 'map' | 'toggleMap' | 'dashboard' | 'wall' | 'chat', id?: number): void => {
+    open: (to: 'map' | 'toggleMap' | 'dashboard' | 'wall' | 'wallSheet' | 'wallClose' | 'chat', id?: number): void => {
       windows.hideRingTray();
       if (to === 'map') windows.showLiveMap(id ?? null);
       else if (to === 'toggleMap') windows.toggleLiveMap();
       else if (to === 'dashboard') navigate({ route: '/chat?view=website&section=dashboard', source: 'tray' });
-      else if (to === 'wall') windows.showWall(wallTarget(screen.getAllDisplays(), screen.getPrimaryDisplay().id)?.id ?? null);
+      else if (to === 'wall') {
+        wallGoneAt = null;
+        windows.showWall(wallTo()?.id ?? null, { keepAwake: wallPrefsOf(settings.effective().wallMode).keepAwake });
+      } else if (to === 'wallSheet') windows.showWallSheet();
+      else if (to === 'wallClose') windows.closeWall();
       else if (to === 'chat' && id) navigate({ route: `/chat?view=website&website=${id}`, source: 'tray' });
     },
     info: () => {
-      const t = wallTarget(screen.getAllDisplays(), screen.getPrimaryDisplay().id);
-      return { wall: t ? { display: t.display, name: t.name } : null, silencedUntil: liveSilenced() ? new Date(liveSilencedUntil).toISOString() : null, shortcuts: liveKeysHeld };
+      const t = wallTo();
+      const prefs = wallPrefsOf(settings.effective().wallMode);
+      return {
+        wall: t ? { display: t.display, name: t.name } : null,
+        displays: wallDisplays(screen.getAllDisplays(), windows.mainDisplayId()),
+        wallPrefs: { ...prefs, displayId: t?.id ?? prefs.displayId },
+        wallOpen: windows.wallOpen(),
+        wallGone: wallGoneAt,
+        silencedUntil: liveSilenced() ? new Date(liveSilencedUntil).toISOString() : null,
+        shortcuts: liveKeysHeld,
+      };
+    },
+    // The sheet's Open on Display 2 (MAP-24): its choices kept for next time, the wall opened there, the sheet gone.
+    wall: (choice: { displayId: number; keepAwake: boolean; cycle: boolean; openAtStart: boolean }): void => {
+      settings.update({ wallMode: wallPrefsOf(choice) });
+      windows.closeWallSheet();
+      liveDesk.open('wall');
     },
   };
-  // The wall's display was unplugged (MAP-24): its window has closed, and WorkSuite says so.
+  // The wall's display was unplugged (MAP-24): its window has closed, and WorkSuite says so — a notification now, and
+  // the tray's mini-dashboard until the wall opens again.
   windows.onWallGone = () => {
+    wallGoneAt = new Date().toISOString();
     if (Notification.isSupported()) new Notification({ title: 'Wall mode closed', body: 'Its display was disconnected.', silent: true }).show();
   };
   const webchatOnCall = (c: WebchatOnCall | null): void => {

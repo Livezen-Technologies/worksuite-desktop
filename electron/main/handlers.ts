@@ -374,6 +374,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:tray', (input) => ctx.ringTray.act(input.action));
   router.handle('live:open', (input) => ctx.liveDesk.open(input.to, input.id));
   router.handle('live:info', () => ctx.liveDesk.info());
+  router.handle('live:wall', (input) => ctx.liveDesk.wall(input));
   // A visitor who wrote again in my chat (#230): the card's actions, and which conversation the main window shows.
   router.handle('ring:followUp', (input) => ctx.webchat.followUp(input.id, input.action, input.message));
   router.handle('ring:viewing', (input) => ctx.webchat.setViewing(input.id));
@@ -621,6 +622,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/billing/payments/${input.paymentSlip.payment}/slips/${input.paymentSlip.slip}`
       : rep
       ? `/api/oms/reports/${rep.report}?${new URLSearchParams({ from: rep.from, to: rep.to, format: 'csv', ...(rep.org ? { org: rep.org } : {}), ...(rep.report === 'sales' && rep.group ? { group: rep.group } : {}) })}`
+      : input.websiteInsights
+      ? `/api/chat/widget-admin/insights/export?${new URLSearchParams({ period: input.websiteInsights.period, ...(input.websiteInsights.widget ? { widget_id: String(input.websiteInsights.widget) } : {}) })}`
       : oc
       ? `/api/oms/orders/export?${new URLSearchParams(Object.entries({ org: oc.org, status: oc.status, source: oc.source, priority: oc.priority, q: oc.q, mine: oc.mine ? '1' : undefined }).filter((e): e is [string, string] => !!e[1]))}`
       : input.picture

@@ -297,6 +297,8 @@ export interface Preferences {
   webchatRinging: WebchatRingPrefs;
   /** When a visitor writes again in a chat I have and I am away from it (worksuite-desktop#230). Unset: the defaults. */
   webchatFollowUps?: WebchatFollowUpPrefs;
+  /** Wall mode on a display (L-06, MAP-24): saved by its sheet. Unset: WALL_MODE_DEFAULTS. */
+  wallMode?: WallModePrefs;
   /** The AI Assistant on this computer (Settings › AI Assistant). */
   ai: AiPrefs;
   /** Meet › Recording (worksuite-desktop#68). */
@@ -493,6 +495,32 @@ export interface WebchatFollowUpPrefs {
   idleMinutes: 1 | 2 | 5 | 10;
 }
 
+/** One screen as the Wall mode sheet shows it (L-06, MAP-UI-06). */
+export interface WallDisplay {
+  id: number;
+  /** "Display 2": its place in the system's list. */
+  display: string;
+  /** "Built-in · this window", or the screen's own name ("LG UltraFine 27″"), or "External". */
+  detail: string;
+}
+
+/**
+ * Wall mode on a display (L-06; MAP-24, MAP-UI-06), as the sheet saves it on this computer. Names are always hidden on
+ * the wall, so there is no choice for it.
+ */
+export interface WallModePrefs {
+  /** The screen picked; null, or one no longer connected: the first that is not the main one. */
+  displayId: number | null;
+  /** Keep the display awake while the wall is up. */
+  keepAwake: boolean;
+  /** Cycle the map World → region → home country every 60 s. */
+  cycle: boolean;
+  /** Open wall mode when WorkSuite starts (a dedicated support-room screen). */
+  openAtStart: boolean;
+}
+
+export const WALL_MODE_DEFAULTS: WallModePrefs = { displayId: null, keepAwake: true, cycle: true, openAtStart: false };
+
 export const FOLLOW_UP_DEFAULTS: WebchatFollowUpPrefs = { card: true, desktop: true, sound: true, idleMinutes: 2 };
 
 /**
@@ -688,6 +716,17 @@ export interface LiveDeskInfo {
    * the system says it. The first screen that is not the main one; the main one when there is only one.
    */
   wall: { display: string; name: string | null } | null;
+  /**
+   * The screens the Wall mode sheet offers (L-06, MAP-UI-06 "SHOW ON"), in the system's order: "Display 1" and what it
+   * is — "Built-in · this window", or the screen's own name ("LG UltraFine 27″"). Optional for an older main process.
+   */
+  displays?: WallDisplay[];
+  /** The sheet's choices as last saved (MAP-24): the screen, keep awake, cycle the map, open when WorkSuite starts. */
+  wallPrefs?: WallModePrefs;
+  /** Wall mode is up on a screen now: the tray's item closes it (MAP-24 "Esc or the tray menu closes it"). */
+  wallOpen?: boolean;
+  /** When the wall's screen was unplugged and its window closed (MAP-24 "the tray says so"); null once opened again. */
+  wallGone?: string | null;
   /** "Silence for 15 minutes" from the tray: until this ISO time; null when not silenced. */
   silencedUntil: string | null;
   /** ⌘⇧M and ⌘⇧D answer from other apps (registered while WorkSuite is not in front). */
@@ -916,7 +955,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask' | 'live-map' | 'wall';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask' | 'live-map' | 'wall' | 'wall-sheet';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {

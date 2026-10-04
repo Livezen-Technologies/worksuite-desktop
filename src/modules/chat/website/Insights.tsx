@@ -1,0 +1,293 @@
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
+import { Select } from '../../../components/Select';
+import { Button, cx, ErrorNote, Spinner } from '../../../components/ui';
+import { apiGet } from '../../../core/api';
+import { call, errorMessage } from '../../../core/bridge';
+import { text } from '../../../core/i18n';
+import { toast } from '../../../core/toasts';
+import { WEBSITE } from './api';
+import { Segmented, Tile, type SubTone, type Tone } from './live/LiveDashboard';
+import { clock } from './live/liveMap';
+
+/**
+ * Insights (worksuite-desktop L-07; WS-WCHAT X-UI-13, UX-INS-01…03, closing RPT-04): how website chat is doing across
+ * all the widgets or one, over 7 days, 30 days or all time — six figures with their change against the period before,
+ * conversations per day (answered and missed), traffic sources and devices, and the agent table with missed while
+ * online — and Export CSV. From `GET widget-admin/insights` (WidgetInsights says what each figure counts).
+ */
+
+export type InsightsPeriod = '7d' | '30d' | 'all';
+
+export interface Insights {
+  period: InsightsPeriod;
+  since: string | null;
+  until: string;
+  widget_id: number | null;
+  widgets: Array<{ id: number; name: string }>;
+  conversations: { value: number; previous: number | null };
+  first_response: { value: number | null; previous: number | null };
+  resolution: { value: number | null; previous: number | null };
+  rating: { value: number | null; rated: number; previous: number | null };
+  missed: { value: number; share: number | null; previous: number | null };
+  visitors: { value: number; returning: number; returning_share: number | null };
+  days: Array<{ date: string; answered: number; missed: number }>;
+  sources: Array<{ name: string; count: number; share: number }>;
+  devices: Array<{ name: string; count: number; share: number }>;
+  agents: Array<{ id: number; name: string; handled: number; first_response_seconds: number | null; rating: number | null; missed_while_online: number }>;
+  join_median_seconds: number | null;
+  team?: { installed: boolean; multi_staff_chats?: number; agents?: Array<{ transfers_in: number; transfers_out: number }> };
+  calls?: { installed: boolean; requested?: number; answered?: number };
+}
+
+const PERIODS = [
+  ['7d', '7 days'],
+  ['30d', '30 days'],
+  ['all', 'All time'],
+] as const;
+
+const count = (n: number) => n.toLocaleString('en-US');
+
+/** "11 min", "45 s", "1 h 20 min": a resolution time. */
+export function minutes(seconds: number): string {
+  if (seconds < 60) return text('{n} s', { n: seconds });
+  const m = Math.round(seconds / 60);
+  if (m < 60) return text('{n} min', { n: m });
+  return m % 60 ? text('{h} h {m} min', { h: Math.floor(m / 60), m: m % 60 }) : text('{h} h', { h: Math.floor(m / 60) });
+}
+
+const MINUS = '−';
+
+/** "+18% vs previous": the change in conversations; green when there were more. Nothing for all time. */
+export function conversationsChange(value: number, previous: number | null): { sub?: string; tone: SubTone } {
+  if (previous === null || previous === 0) return { tone: 'plain' };
+  const pct = Math.round(((value - previous) * 100) / previous);
+  if (pct === 0) return { sub: text('same'), tone: 'plain' };
+  return { sub: text('{change} vs previous', { change: `${pct > 0 ? '+' : MINUS}${Math.abs(pct)}%` }), tone: pct > 0 ? 'good' : 'plain' };
+}
+
+/**
+ * "−12 s" or "same": the change in a time against the period before, in seconds under a minute and minutes above;
+ * quicker is green, slower red. Nothing when either is unknown.
+ */
+export function timeChange(value: number | null, previous: number | null, unit: 's' | 'min'): { sub?: string; tone: SubTone } {
+  if (value === null || previous === null) return { tone: 'plain' };
+  const d = value - previous;
+  const n = unit === 's' && Math.abs(d) < 60 ? Math.abs(d) : Math.round(Math.abs(d) / 60);
+  if (n === 0) return { sub: text('same'), tone: 'plain' };
+  const amount = unit === 's' && Math.abs(d) < 60 ? text('{n} s', { n }) : text('{n} min', { n });
+  return { sub: `${d < 0 ? MINUS : '+'}${amount}`, tone: d < 0 ? 'good' : 'bad' };
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "20 Sep", as the design writes it (a locale may say "Sept"). */
+export const dayLabel = (iso: string) => `${Number(iso.slice(8, 10))} ${text(MONTHS[Number(iso.slice(5, 7)) - 1] ?? '')}`;
+
+export function WebsiteInsights({ period, widget, onChange }: { period: InsightsPeriod; widget: number | null; onChange: (p: { period: InsightsPeriod; widget: number | null }) => void }) {
+  const q = useQuery({
+    queryKey: ['website', 'insights', period, widget ?? 0],
+    queryFn: ({ signal }) => apiGet<Insights>(`${WEBSITE}/insights`, { period, ...(widget ? { widget_id: widget } : {}) }, signal),
+    placeholderData: keepPreviousData,
+  });
+  const d = q.data;
+
+  const exportCsv = () =>
+    void call('transfers:download', {
+      websiteInsights: { period, ...(widget ? { widget } : {}) },
+      name: `website-chat-insights-${period}${widget ? `-widget-${widget}` : ''}-${new Date().toISOString().slice(0, 10)}.csv`,
+      open: false,
+    }).then(
+      () => toast('success', text('Exporting — see Transfers.')),
+      (e) => toast('error', errorMessage(e)),
+    );
+
+  return (
+    <main aria-label={text('Insights')} className="flex h-full min-w-0 flex-1 flex-col gap-3 overflow-y-auto border-l border-line bg-ground px-[22px] py-4 text-[13px] text-ink scroll-thin">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <div className="min-w-0 flex-1">
+          <h1 className="text-[21px] font-bold">{text('Insights')}</h1>
+          <p className="text-[12.5px] text-ink-3">{text('How website chat is doing across all your widgets.')}</p>
+        </div>
+        <Segmented label="Period" value={period} onChange={(p) => onChange({ period: p, widget })} options={PERIODS} />
+        <Select<string>
+          aria-label={text('Widget')}
+          value={widget ? String(widget) : ''}
+          onValueChange={(v) => onChange({ period, widget: Number(v) || null })}
+          options={[{ value: '', label: text('All widgets') }, ...(d?.widgets ?? []).map((w) => ({ value: String(w.id), label: w.name }))]}
+          className="h-8 rounded-[8px] border border-line bg-surface px-3 text-[12.5px] text-ink"
+        />
+        <Button variant="secondary" onClick={exportCsv} className="text-[12.5px]">
+          {text('Export CSV')}
+        </Button>
+      </div>
+      {q.error && !d ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
+      {!d && !q.error ? <Spinner /> : null}
+      {d ? <Report d={d} /> : null}
+    </main>
+  );
+}
+
+function Report({ d }: { d: Insights }) {
+  const conv = conversationsChange(d.conversations.value, d.conversations.previous);
+  const first = timeChange(d.first_response.value, d.first_response.previous, 's');
+  const res = timeChange(d.resolution.value, d.resolution.previous, 'min');
+  const tiles: Array<{ label: string; value: string; sub?: string; tone: Tone; subTone: SubTone }> = [
+    { label: 'Conversations', value: count(d.conversations.value), sub: conv.sub, tone: 'plain', subTone: conv.tone },
+    { label: 'Avg first response', value: d.first_response.value === null ? '—' : clock(d.first_response.value), sub: first.sub, tone: 'plain', subTone: first.tone },
+    { label: 'Avg resolution', value: d.resolution.value === null ? '—' : minutes(d.resolution.value), sub: res.sub, tone: 'plain', subTone: res.tone },
+    { label: 'Avg rating', value: d.rating.value === null ? '—' : d.rating.value.toFixed(1), sub: text('from {n} rated', { n: count(d.rating.rated) }), tone: 'plain', subTone: 'plain' },
+    {
+      label: 'Missed',
+      value: count(d.missed.value),
+      sub: d.missed.share === null ? undefined : text('{pct}% of chats', { pct: d.missed.share }),
+      tone: d.missed.value ? 'red' : 'plain',
+      subTone: d.missed.value ? 'bad' : 'plain',
+    },
+    { label: 'Visitors', value: count(d.visitors.value), sub: d.visitors.returning_share === null ? undefined : text('{pct}% returning', { pct: d.visitors.returning_share }), tone: 'plain', subTone: 'plain' },
+  ];
+  return (
+    <>
+      <div className="grid grid-cols-6 gap-2.5" role="list" aria-label={text('Figures')}>
+        {tiles.map((t) => (
+          <Tile key={t.label} stack {...t} />
+        ))}
+      </div>
+      <div className="grid gap-3 [grid-template-columns:minmax(0,2fr)_minmax(0,1fr)]">
+        <PerDay days={d.days} />
+        <section aria-label={text('Traffic sources')} className="flex flex-col gap-[9px] rounded-[12px] border border-line bg-surface px-4 py-3.5 text-[12.5px]">
+          <h2 className="text-[14px] font-bold">{text('Traffic sources')}</h2>
+          <Sources sources={d.sources} />
+          <h2 className="mt-1.5 text-[14px] font-bold">{text('Devices')}</h2>
+          <Devices devices={d.devices} />
+        </section>
+      </div>
+      <Agents agents={d.agents} />
+      <Also d={d} />
+    </>
+  );
+}
+
+/** Conversations per day, answered and missed stacked (UX-INS-03); each bar says its day and both counts on hover. */
+function PerDay({ days }: { days: Insights['days'] }) {
+  const top = Math.max(1, ...days.map((x) => x.answered + x.missed));
+  const marks = days.length ? [days[0]!, days[Math.floor((days.length - 1) / 2)]!, days[days.length - 1]!] : [];
+  return (
+    <section aria-label={text('Conversations per day')} className="flex min-w-0 flex-col gap-2.5 rounded-[12px] border border-line bg-surface px-4 py-3.5">
+      <div className="flex items-center">
+        <h2 className="flex-1 text-[14px] font-bold">{text('Conversations per day')}</h2>
+        <span className="flex gap-3 text-[11.5px] text-ink-2" role="list" aria-label={text('Legend')}>
+          <span role="listitem">
+            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#273498] align-[-1px] dark:bg-[#7c8fe8]" aria-hidden /> {text('Answered')}
+          </span>
+          <span role="listitem">
+            <span className="inline-block h-2.5 w-2.5 rounded-[2px] bg-[#e8a33d] align-[-1px]" aria-hidden /> {text('Missed')}
+          </span>
+        </span>
+      </div>
+      <ol className={cx('flex h-[190px] items-end border-b border-line pb-0.5', days.length > 45 ? 'gap-px' : 'gap-1.5')} aria-label={text('Conversations per day')}>
+        {days.map((x) => {
+          const said = text('{day}: {answered} answered, {missed} missed', { day: dayLabel(x.date), answered: x.answered, missed: x.missed });
+          return (
+            <li key={x.date} title={said} aria-label={said} className="flex h-full min-w-0 flex-1 flex-col justify-end gap-[2px] hover:opacity-80">
+              {x.missed ? <span className="block rounded-t-[2px] bg-[#e8a33d]" style={{ height: `${(x.missed / top) * 100}%` }} /> : null}
+              {x.answered ? <span className={cx('block bg-[#273498] dark:bg-[#7c8fe8]', !x.missed && 'rounded-t-[2px]')} style={{ height: `${(x.answered / top) * 100}%` }} /> : null}
+            </li>
+          );
+        })}
+      </ol>
+      <div className="flex justify-between text-[11px] text-ink-3">
+        {marks.map((m, i) => (
+          <span key={i}>{dayLabel(m.date)}</span>
+        ))}
+      </div>
+    </section>
+  );
+}
+
+/** google.com, Direct, facebook.com and Other: each with its share, the bar as long as the share against the largest. */
+function Sources({ sources }: { sources: Insights['sources'] }) {
+  if (!sources.length) return <p className="text-ink-3">{text('No visitors in this period.')}</p>;
+  const top = Math.max(1, ...sources.map((s) => s.share));
+  return (
+    <ul className="flex flex-col gap-[9px]" aria-label={text('Traffic sources')}>
+      {sources.map((s) => (
+        <li key={s.name} className="flex items-center gap-2">
+          <span className="w-[92px] truncate">{s.name}</span>
+          <span className="h-1.5 flex-1 rounded-[3px] bg-subtle" aria-hidden>
+            <span className="block h-1.5 rounded-[3px] bg-[#4a63e8]" style={{ width: `${(s.share / top) * 100}%` }} />
+          </span>
+          <b className="w-[34px] text-right tabular-nums">{s.share}%</b>
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+const DEVICE: Record<string, { label: string; colour: string }> = {
+  desktop: { label: 'Desktop', colour: '#273498' },
+  mobile: { label: 'Mobile', colour: '#7c8fe8' },
+  tablet: { label: 'Tablet', colour: '#c3ccf6' },
+};
+
+/** Desktop, mobile and tablet as one split bar, with their shares in words under it. */
+function Devices({ devices }: { devices: Insights['devices'] }) {
+  return (
+    <>
+      <div className="flex h-2.5 gap-[2px] overflow-hidden rounded-[5px]" aria-hidden>
+        {devices.filter((x) => x.share > 0).map((x) => (
+          <span key={x.name} style={{ width: `${x.share}%`, background: DEVICE[x.name]?.colour }} />
+        ))}
+      </div>
+      <ul className="flex gap-3 text-[11.5px] text-ink-2" aria-label={text('Devices')}>
+        {devices.map((x) => (
+          <li key={x.name}>{`${text(DEVICE[x.name]?.label ?? x.name)} ${x.share}%`}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+const COLS = 'grid [grid-template-columns:2fr_1fr_1fr_1fr_1fr] px-4 py-2.5';
+
+/** Each person who had chats, busiest first: handled, first response, rating, missed while online (UX-INS-03). */
+function Agents({ agents }: { agents: Insights['agents'] }) {
+  return (
+    <div role="table" aria-label={text('Agents')} className="overflow-hidden rounded-[12px] border border-line bg-surface">
+      <div role="row" className={cx(COLS, 'border-b border-line bg-subtle/60 text-[10.5px] font-bold tracking-[0.9px] text-ink-3 uppercase')}>
+        {['Agent', 'Handled', 'First response', 'Rating', 'Missed while online'].map((h) => (
+          <span key={h} role="columnheader">
+            {text(h)}
+          </span>
+        ))}
+      </div>
+      {agents.length ? (
+        agents.map((a, i) => (
+          <div key={a.id} role="row" className={cx(COLS, 'text-[13px] tabular-nums', i < agents.length - 1 && 'border-b border-line/60')}>
+            <b role="cell" className="truncate">{a.name}</b>
+            <span role="cell">{count(a.handled)}</span>
+            <span role="cell">{a.first_response_seconds === null ? '—' : clock(a.first_response_seconds)}</span>
+            <span role="cell">{a.rating === null ? '—' : a.rating.toFixed(1)}</span>
+            <span role="cell">{count(a.missed_while_online)}</span>
+          </div>
+        ))
+      ) : (
+        <p className="px-4 py-3 text-ink-3">{text('No chats in this period.')}</p>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The rest of the report in one line (RING-13, TEAM-81, VOICE-23): the median time to join, transfers, chats more than
+ * one of the team took part in, and calls answered — every one of them per agent in the CSV.
+ */
+function Also({ d }: { d: Insights }) {
+  const parts: string[] = [];
+  if (d.join_median_seconds !== null) parts.push(text('Median time to join {time}', { time: clock(d.join_median_seconds) }));
+  const transfers = (d.team?.agents ?? []).reduce((n, a) => n + a.transfers_in, 0);
+  if (d.team?.installed && transfers) parts.push(text('{n} transfers', { n: transfers }));
+  if (d.team?.installed && d.team.multi_staff_chats) parts.push(text('{n} chats with more than one of the team', { n: d.team.multi_staff_chats }));
+  if (d.calls?.installed && d.calls.requested) parts.push(text('{answered} of {requested} calls answered', { answered: d.calls.answered ?? 0, requested: d.calls.requested }));
+  if (!parts.length) return null;
+  return <p className="text-[11.5px] text-ink-3">{`${parts.join(' · ')} — ${text('per agent in the CSV.')}`}</p>;
+}

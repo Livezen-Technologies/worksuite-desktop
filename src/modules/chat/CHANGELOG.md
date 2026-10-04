@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.48.0 — 2026-10-04
+
+- L-06/L-07: Wall mode sheet (pick a display, keep awake, cycle map views, open at start, tray closes it) and native Insights (periods, widget filter, tiles with change, per-day chart, sources, devices, agents, Export CSV)
+
 ## 1.47.0 — 2026-10-04
 
 - L-04/L-05: pop-out Live map window, at-risk notification with Join and Show on map, menu-bar count, tray mini-dashboard with reply and join, wall mode on a second display, global shortcuts

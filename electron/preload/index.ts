@@ -152,6 +152,7 @@ const api = {
   live: {
     open: call('live:open'),
     info: call('live:info'),
+    wall: call('live:wall'),
   },
   tabs: {
     save: call('tabs:save'),

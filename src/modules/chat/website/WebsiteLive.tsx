@@ -12,7 +12,7 @@ import { dwell } from '../kit/model';
 import { useNow } from '../../calls/parts';
 import { useCanned, visitorStatus, WEBSITE, type Section } from './api';
 import { Select } from '../../../components/Select';
-import { LiveDashboard, NO_LIVE_PARAMS, type LiveParams } from './live/LiveDashboard';
+import { LiveDashboard, NO_LIVE_PARAMS, type LiveParams, type WallOptions } from './live/LiveDashboard';
 import { clock, initialsOf, ordinal, pathOf, since, STATE, stateOf, whereOf, type Dashboard, type OnlineVisitor } from './live/liveMap';
 import { BlockDialog } from './panelCards';
 import { refuseForVisitor } from './profile';
@@ -83,8 +83,10 @@ function lastActive(v: OnlineVisitor, idle: number, now: number): { label: strin
  * dashboard; Enter or a double-click goes to their chat. The selection is in the address, so it survives Back, a
  * reopened tab and a refresh of the list.
  */
-export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection, live: held, onLive: hold }: {
+export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection, live: held, onLive: hold, wall }: {
   view: LiveView;
+  /** The wall window's choices (L-06, MAP-24): cycle the map, keep the screen awake. */
+  wall?: WallOptions;
   /** The dashboard's view as the address keeps it (MAP-15); held here when the caller keeps no address. */
   live?: LiveParams;
   onLive?: (patch: Partial<LiveParams>) => void;
@@ -134,6 +136,7 @@ export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection, l
   if (view === 'dashboard') {
     return (
       <LiveDashboard
+        wall={wall}
         dash={dash}
         visitors={all}
         loading={visitors.isLoading}

@@ -91,6 +91,7 @@ export const INVOKE_CHANNELS = [
   'ring:tray',
   'live:open',
   'live:info',
+  'live:wall',
   'ring:followUp',
   'ring:viewing',
   'ring:handoff',
@@ -433,6 +434,8 @@ export const EVENT_CHANNELS = [
   'ring:changed',
   // "Show on map" on an at-risk notification (MAP-23): the Live map window goes to that visitor's place.
   'live:focus',
+  // The wall's choices changed (L-06, MAP-24): the wall window and the sheet read them again.
+  'live:wallChanged',
   'quickask:changed',
   'ai:open',
   'salon:changed',

@@ -1,5 +1,5 @@
 import { Notification } from 'electron';
-import type { WebchatRingChat, WebchatRingState } from '@shared/types';
+import { WALL_MODE_DEFAULTS, type WallDisplay, type WallModePrefs, type WebchatRingChat, type WebchatRingState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -189,14 +189,33 @@ export class AtRiskAlerts {
 }
 
 /**
- * Which screen "Wall mode on Display 2" opens on (MAP-UI-05, MAP-24): the first that is not the main one — named by
- * its place in the system's list and by the screen's own name when the system says it ("LG 27″") — or the main one
- * when there is only one.
+ * Which screen "Wall mode on Display 2" opens on (MAP-UI-05, MAP-24): the one the Wall mode sheet picked while it is
+ * connected; else the first that is not the main one — named by its place in the system's list and by the screen's own
+ * name when the system says it ("LG 27″") — or the main one when there is only one.
  */
-export function wallTarget(displays: Array<{ id: number; label?: string }>, primaryId: number): { id: number; display: string; name: string | null } | null {
+export function wallTarget(displays: Array<{ id: number; label?: string }>, primaryId: number, picked: number | null = null): { id: number; display: string; name: string | null } | null {
   if (!displays.length) return null;
-  const i = Math.max(0, displays.findIndex((d) => d.id !== primaryId));
-  const d = displays.length > 1 ? displays[i]! : displays[0]!;
+  const chosen = picked === null ? -1 : displays.findIndex((d) => d.id === picked);
+  const i = chosen >= 0 ? chosen : Math.max(0, displays.findIndex((d) => d.id !== primaryId));
+  const d = chosen >= 0 || displays.length > 1 ? displays[i]! : displays[0]!;
   const at = displays.indexOf(d);
   return { id: d.id, display: `Display ${at + 1}`, name: d.label?.trim() || null };
+}
+
+/**
+ * The screens the Wall mode sheet offers (L-06, MAP-UI-06 "SHOW ON"), in the system's order: "Display 1" and what it is
+ * — "Built-in" for a laptop's own screen, else the screen's own name ("LG UltraFine 27″") or "External" — with
+ * "· this window" on the one WorkSuite's window is on.
+ */
+export function wallDisplays(displays: Array<{ id: number; label?: string; internal?: boolean }>, hereId: number | null): WallDisplay[] {
+  return displays.map((d, i) => {
+    const what = d.internal ? 'Built-in' : d.label?.trim() || 'External';
+    return { id: d.id, display: `Display ${i + 1}`, detail: d.id === hereId ? `${what} · this window` : what };
+  });
+}
+
+/** The sheet's choices as saved, each unset one at its default (keep awake and cycle on, open at start off). */
+export function wallPrefsOf(saved: Partial<WallModePrefs> | null | undefined): WallModePrefs {
+  const p = { ...WALL_MODE_DEFAULTS, ...(saved ?? {}) };
+  return { displayId: typeof p.displayId === 'number' ? p.displayId : null, keepAwake: p.keepAwake !== false, cycle: p.cycle !== false, openAtStart: p.openAtStart === true };
 }

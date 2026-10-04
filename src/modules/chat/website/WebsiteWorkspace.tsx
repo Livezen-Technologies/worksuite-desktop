@@ -25,6 +25,7 @@ import { liveParamsOf, liveQuery, type LiveParams } from './live/LiveDashboard';
 import { WebsiteThread } from './WebsiteThread';
 import { VoiceCalls } from './VoiceCalls';
 import { WidgetSettings } from './widget/WidgetSettings';
+import { WebsiteInsights, type InsightsPeriod } from './Insights';
 import { ConversationMenu } from '../ConversationMenu';
 import { MyStatus } from '../MyStatus';
 import { Select } from '../../../components/Select';
@@ -33,8 +34,8 @@ import { SidePanel } from '../../../components/SidePanel';
 /**
  * Website chats as their own workspace (WebChatInbox): the sections down the
  * left, the conversations in the chosen one, then the visitor's thread and
- * dossier. The widget's design is edited here, beside a live preview (#199); the rest of setup and the reports stay
- * on the web, where they are edited.
+ * dossier. The widget's design is edited here, beside a live preview (#199), and Insights is read here (L-07); the
+ * rest of setup stays on the web, where it is edited.
  */
 const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
   // In the order of the design (C-01, DsWsNav): what comes in, then what is mine, then the rest.
@@ -71,7 +72,8 @@ const TABLE: Partial<Record<Section, { title: string; subtitle: string; footnote
 };
 
 const ON_WEB: Array<{ head: string; items: Array<{ label: string; tab: string; icon: string }> }> = [
-  { head: 'REPORTS', items: [{ label: 'Insights', tab: 'reports', icon: 'chart' }] },
+  // Insights is this app's own now (L-07, X-UI-13): the heading keeps it, the web link goes.
+  { head: 'REPORTS', items: [] },
   {
     head: 'SETUP',
     items: [
@@ -108,8 +110,12 @@ export function WebsiteWorkspace() {
   // Its Call-backs half (V-02), with the opened request in the address too.
   const callBacks = calling && query.get('show') === 'callbacks';
   const pickedCallback = Number(query.get('callback')) || null;
+  // Insights (L-07, X-UI-13): its period and widget in the address, so the view comes back with the tab.
+  const insights = query.get('section') === 'insights';
+  const insightsPeriod: InsightsPeriod = query.get('period') === '7d' ? '7d' : query.get('period') === 'all' ? 'all' : '30d';
+  const insightsWidget = Number(query.get('widget')) || null;
   // Everything that takes the whole width, hiding the list and the thread.
-  const wide = live || designing || calling;
+  const wide = live || designing || calling || insights;
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
   const [site, setSite] = useState(0);
   // The Mine pill narrows whichever open section is showing; Closed is a section of its own.
@@ -329,6 +335,7 @@ export function WebsiteWorkspace() {
               <MenuHead>{g.head}</MenuHead>
               {/* The widget's look and words are designed here, with a live preview (#199). */}
               {g.head === 'SETUP' ? <MenuItem icon="paintbrush" label="Widget" here={designing} onClick={() => go('/chat?view=website&section=widget')} /> : null}
+              {g.head === 'REPORTS' ? <MenuItem icon="chart" label="Insights" here={insights} onClick={() => go('/chat?view=website&section=insights')} /> : null}
               {g.items.map((i) => (
                 <MenuItem key={i.tab} icon={i.icon} label={i.label} here={false} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/website-chats?tab=${i.tab}` })}>
                   <span className="text-[11px] text-ink-3" aria-hidden>↗</span>
@@ -351,6 +358,13 @@ export function WebsiteWorkspace() {
         />
       ) : null}
       {designing ? <WidgetSettings /> : null}
+      {insights ? (
+        <WebsiteInsights
+          period={insightsPeriod}
+          widget={insightsWidget}
+          onChange={(p) => go(`/chat?${new URLSearchParams({ view: 'website', section: 'insights', ...(p.period !== '30d' ? { period: p.period } : {}), ...(p.widget ? { widget: String(p.widget) } : {}) }).toString()}`)}
+        />
+      ) : null}
       {calling ? (
         <VoiceCalls
           // Before the counts answer, a server with Call-backs is assumed: the half asked for shows without a flash of Calls.
