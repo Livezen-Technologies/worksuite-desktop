@@ -5,6 +5,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.150 — 2026-10-04
+
+- **On a Mac the window stays clear of the menu bar and the Dock (#221).** A WorkSuite window that had spread over
+  the whole display, with its top under the menu bar (hiding the red, yellow and green buttons) and its bottom behind
+  the Dock (hiding the composer and the status bar), is put back inside the area between them. This happens when it is
+  shown, zoomed, moved or resized, and whenever the Dock moves, grows or starts hiding, or a display is connected or
+  removed. A window zoomed last time is zoomed again once it is on screen, where macOS keeps it above the Dock. A
+  window you drag partly off a side or behind the Dock yourself is left where you put it.
+- **Full screen is the Mac's own.** The green button, ⌃⌘F or View › Enter Full Screen puts WorkSuite in its own
+  Space, where the Dock and menu bar hide until you touch the screen's edge. In full screen the top bar drops the
+  space it keeps for the window buttons.
+- **The Window menu** has Minimise (⌘M), Zoom, Enter Full Screen and Bring All to Front. ⌘W on the last tab closes the
+  window, and closing the window keeps WorkSuite in the Dock (it used to leave the Dock too); click its icon to bring
+  it back.
+- Not yet tried on a real Mac; the fitting rules are tested in code.
+
 ## 0.2.149 — 2026-10-04
 
 - **Blocking a website visitor asks for how long.** **Block this visitor** now offers a day, a week (the default), a
