@@ -5,6 +5,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.159 — 2026-10-04
+
+- **Missed chats (C-04).** The list has **To follow up** and **Handled** tabs with counts. Each row shows the visitor,
+  their first words, how long they waited before leaving, and whether they left an email; a handled row says who
+  handled it and how.
+- Opening a missed chat shows what was said and when the visitor left, with their contact and visit details. It no
+  longer joins or claims the chat, so a visitor who comes back still rings for everyone.
+- **Reply by email** writes to a visitor who left an address. The message goes into the chat too and counts as the
+  reply. **Mark handled** files the chat under Handled with your name.
+- Needs the server update (Communication 1.26.0). An older server shows the single list as before.
+
 ## 0.2.158 — 2026-10-04
 
 - **Website chat lists as a table, with bulk actions (C-03).** Live chats, Unassigned, Assigned to me, Awaiting reply

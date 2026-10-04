@@ -31,6 +31,7 @@ import { openWebsiteChatWindow } from '../window';
 import { InThisChat, InviteDialog, NoteBox, TeamFaces, TransferDialog, useDeclined } from './Team';
 import { CallBar } from './CallBar';
 import { CallbackCard, isPending } from './Callbacks';
+import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
 
 const control = 'h-[30px] rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-60';
 
@@ -375,8 +376,6 @@ function Controls({ data, row, me, canReply, onDone, compact = false }: { data: 
   );
 }
 
-const HEADING = 'text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase';
-const CARD = 'flex flex-col gap-[7px] rounded-[12px] border border-line bg-surface px-3 py-2.5';
 
 /** The visitor's clock now, from their browser's time zone (UX-DRW-01); nothing for a zone this computer does not know. */
 export function visitorLocalTime(tz: string | null | undefined, now: number): string | null {
@@ -388,7 +387,6 @@ export function visitorLocalTime(tz: string | null | undefined, now: number): st
   }
 }
 
-const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
 
 /** One page on the journey: where, when, and how long it held them. */
 interface Stop {

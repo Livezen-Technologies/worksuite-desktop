@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.32.0 — 2026-10-04
+
+- C-04 Missed chats: To follow up / Handled tabs with counts, rows with the visitor's first words, how long they waited and who handled them, a review detail that does not claim the chat, Reply by email and Mark handled.
+
 ## 1.31.0 — 2026-10-04
 
 - C-03 list views with bulk actions (UX-LIST-01/02, INB-08): Live chats, Unassigned, Assigned to me, Awaiting reply and Starred are one full-width table while nothing is open (visitor and last message, site, status chip, priority, owner, wait), with a priority filter and a sort (longest waiting first, newest activity, visitor name). Rows are picked with checkboxes, Ctrl/⌘-click, Shift-click or Space; the bulk bar assigns, sets a priority, stars and closes up to 200 at a time through `conversations/bulk`. Picking and the bar are shared with Chat's own list (`useMultiSelect`, `BulkBar`). A website chat's menu gains Star/Unstar and Priority, and Star now sends `on` (it used to take the star off).

@@ -557,10 +557,14 @@ export function useWebsiteAccess(): boolean {
   return q.isSuccess && q.data.can?.view !== false;
 }
 
-export function useWebsiteConversation(id: string) {
+/**
+ * `review` reads a chat back without arriving in it (C-04): the server neither joins, claims nor handles it, so a
+ * missed chat's detail can be looked at before anybody decides what to do, and a returning visitor still rings.
+ */
+export function useWebsiteConversation(id: string, { review = false }: { review?: boolean } = {}) {
   return useQuery({
-    queryKey: ['website', 'conversation', id],
-    queryFn: ({ signal }) => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, undefined, signal),
+    queryKey: review ? ['website', 'conversation', id, 'review'] : ['website', 'conversation', id],
+    queryFn: ({ signal }) => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, signal),
     // No realtime event for replies or visitor typing: poll, slower in the background.
     refetchInterval: () => (document.visibilityState === 'visible' ? 5_000 : 30_000),
   });

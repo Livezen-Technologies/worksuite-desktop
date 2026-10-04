@@ -10,6 +10,7 @@ import { useCanned, visitorStatus, WEBSITE, type Section } from './api';
 import { Select } from '../../../components/Select';
 import { LiveDashboard } from './live/LiveDashboard';
 import type { Dashboard, OnlineVisitor } from './live/liveMap';
+import { siteAndPath } from './rowParts';
 
 export type { OnlineVisitor } from './live/liveMap';
 
@@ -26,15 +27,6 @@ interface Activity {
 /** The Live section's two views (worksuite-desktop#231): the dashboard, and everybody on the sites. */
 export type LiveView = 'dashboard' | 'visitors';
 
-function short(url: string | null | undefined): string {
-  if (!url) return '—';
-  try {
-    const u = new URL(url);
-    return `${u.host.replace(/^www\./, '')}${u.pathname === '/' ? '/' : u.pathname}`;
-  } catch {
-    return url;
-  }
-}
 
 /** Whether there is a chat to go to: one open or waiting. */
 const hasChat = (v: OnlineVisitor) => !!v.conversation_id && (v.conversation_status === 'open' || v.conversation_status === 'pending');
@@ -215,7 +207,7 @@ function VisitorTable({ rows, selected, loading, error, onRetry, onSelect, onOpe
                 className={cx('grid cursor-pointer grid-cols-[1.4fr_1.6fr_1fr_0.6fr_0.9fr] items-center gap-2.5 rounded-[6px] border-b border-line px-1.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary', on ? 'bg-selection' : 'hover:bg-subtle')}
               >
                 <b className="truncate text-ink">{v.name || v.label}</b>
-                <span className="truncate text-ink-2">{short(v.current_url)}</span>
+                <span className="truncate text-ink-2">{siteAndPath(v.current_url)}</span>
                 <span className="truncate text-ink-2">{[v.city, v.device === 'mobile' ? v.os : (v.os ?? v.device)].filter(Boolean).join(' · ') || '—'}</span>
                 <span className="text-ink">{v.visits}</span>
                 <span>
@@ -333,11 +325,11 @@ function VisitorCard({ v, left, leftAt, focusStart, onOpenChat, onClose }: {
           </>
         ) : null}
         <dt className="text-ink-3">{text('Reading now')}</dt>
-        <dd className="truncate text-ink">{left ? '—' : (v.current_title || short(v.current_url))}</dd>
+        <dd className="truncate text-ink">{left ? '—' : (v.current_title || siteAndPath(v.current_url))}</dd>
         <dt className="text-ink-3">{text('Landed on')}</dt>
-        <dd className="truncate text-ink">{short(a?.landing_page ?? v.landing_page ?? null)}</dd>
+        <dd className="truncate text-ink">{siteAndPath(a?.landing_page ?? v.landing_page ?? null)}</dd>
         <dt className="text-ink-3">{text('Came from')}</dt>
-        <dd className="truncate text-ink">{v.referrer ? short(v.referrer) : text('Direct')}</dd>
+        <dd className="truncate text-ink">{v.referrer ? siteAndPath(v.referrer) : text('Direct')}</dd>
         <dt className="text-ink-3">{text('Visits')}</dt>
         <dd className="text-ink">{v.visits}</dd>
         {a?.contact ? (
@@ -354,7 +346,7 @@ function VisitorCard({ v, left, leftAt, focusStart, onOpenChat, onClose }: {
           <li key={e.id} className="flex gap-3">
             <span className="w-[68px] shrink-0 font-mono text-[12px] whitespace-nowrap text-ink-3">{timeLabel(e.at)}</span>
             <span className={cx('truncate', i === visit.length - 1 ? 'font-bold text-ink' : 'text-ink-2')}>
-              {short(e.url)}
+              {siteAndPath(e.url)}
               {i === visit.length - 1 && !left && st !== 'Inactive' ? ` · ${text('reading now')}` : ''}
             </span>
           </li>

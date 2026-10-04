@@ -28,6 +28,24 @@ export function Tag({ tone, size = 'sm', children }: { tone: keyof typeof TAG; s
 /** The priorities a card row marks; the table says every one. */
 export const PRIORITY_TAG: Record<string, string> = { vip: 'VIP', urgent: 'Urgent', high: 'High' };
 
+/** A site's name from a link, as "Came from" says it: no scheme, no www, no path. */
+export const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
+
+/** The visitor panels' card and its heading — the thread's dossier and the missed chat's (C-04) — drawn alike. */
+export const PANEL_HEADING = 'text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase';
+export const PANEL_CARD = 'flex flex-col gap-[7px] rounded-[12px] border border-line bg-surface px-3 py-2.5';
+
+/** "techubiz.com/shop/coreldraw": where a visitor was, site and page, as Visitors online and Missed chats say it. */
+export function siteAndPath(url: string | null | undefined): string {
+  if (!url) return '—';
+  try {
+    const u = new URL(url);
+    return `${u.host.replace(/^www\./, '')}${u.pathname === '/' ? '/' : u.pathname}`;
+  } catch {
+    return url;
+  }
+}
+
 export function pathOf(url: string): string {
   try {
     return new URL(url).pathname || '/';

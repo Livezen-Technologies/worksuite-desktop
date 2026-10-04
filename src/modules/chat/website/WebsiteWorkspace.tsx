@@ -14,6 +14,7 @@ import { Avatar, Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../com
 import { useNow } from '../../calls/parts';
 import { followUpsFirst, isMine as mineFor, longestWaiting, PRIORITIES, sectionRows, sortWebsiteRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSince, waitingSummary, WEBSITE, WEBSITE_SORTS, type CallbackOutcome, type Section, type WebsiteCallback, type WebsitePriority, type WebsiteRow, type WebsiteSort } from './api';
 import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
+import { MissedDetail, MissedRow, useMissed, type MissedTab } from './Missed';
 import { clock, handoffAsk, handoffTitle, useRingState } from './Ringing';
 import { CallLine, pathOf, PRIORITY_TAG, rowPreview, Tag, WaitClock } from './rowParts';
 import { WebsiteTable } from './WebsiteTable';
@@ -79,17 +80,6 @@ const ON_WEB: Array<{ head: string; items: Array<{ label: string; tab: string; i
   },
 ];
 
-interface Missed {
-  id: number;
-  widget: string;
-  visitor: string;
-  email: string | null;
-  phone: string | null;
-  place: string | null;
-  missed_at: string | null;
-  last_visitor_at: string | null;
-}
-
 export function WebsiteWorkspace() {
   const { query, go, active } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
@@ -129,12 +119,10 @@ export function WebsiteWorkspace() {
   });
   const visitorsOnline = online.data?.visitors.length ?? 0;
   const closed = useWebsiteInbox(true, section === 'closed');
-  const missed = useQuery({
-    queryKey: ['website', 'missed'],
-    queryFn: ({ signal }) => apiGet<{ missed: Missed[]; count: number }>(`${WEBSITE}/missed`, undefined, signal),
-    enabled: section === 'missed',
-    retry: false,
-  });
+  // To follow up / Handled (C-04, UX-MISS-01). A server without the tabs sends no Handled count, and shows the one list.
+  const [missedTab, setMissedTab] = useState<MissedTab>('todo');
+  const missed = useMissed(missedTab, section === 'missed');
+  const missedTabs = missed.data ? missed.data.handled !== undefined : true;
   const missedCount = useQuery({
     queryKey: ['website', 'missed', 'count'],
     queryFn: ({ signal }) => apiGet<{ count: number }>(`${WEBSITE}/missed/count`, undefined, signal),
@@ -219,10 +207,14 @@ export function WebsiteWorkspace() {
     to({ section: rows.some((r) => r.id === longest.id) ? section : 'inbox', website: String(longest.id) });
   };
 
-  // Opening a missed chat is dealing with it (the web does the same).
-  useEffect(() => {
-    if (section === 'missed' && selected) void apiPost(`${WEBSITE}/missed/${selected}/handle`).catch(() => undefined);
-  }, [section, selected]);
+  /*
+   * A missed chat is no longer handled by opening it (MIS-05 on the web): C-04 reads it back without arriving and has
+   * Mark handled for that, so looking first and deciding after is possible, and Handled says who did it.
+   */
+  const missedRows = (missed.data?.missed ?? []).filter((m) => !typed || [m.visitor, m.email, m.phone, m.preview, m.widget, m.place].some((v) => v?.toLowerCase().includes(typed)));
+  const missedOpen = section === 'missed' && selected ? missedRows.find((m) => String(m.id) === selected) ?? (missed.data?.missed ?? []).find((m) => String(m.id) === selected) : undefined;
+  // A legacy call back in Missed chats opens its conversation, as it always has.
+  const missedDetail = section === 'missed' && !!selected && (!!missedOpen || (!callbackList.some((b) => String(b.conversation_id) === selected) && missedTabs));
 
   // Ctrl/Cmd+[ goes back to Chat (C-01), while this tab is in front.
   useEffect(() => {
@@ -238,7 +230,7 @@ export function WebsiteWorkspace() {
   }, [active, go]);
 
   // J and K move through the list (CHAT-UI-00) while this tab is in front and nothing is being typed.
-  const ids = section === 'missed' ? (missed.data?.missed ?? []).map((m) => m.id) : section === 'invited' ? handoffs.map((h) => h.conversationId)
+  const ids = section === 'missed' ? missedRows.map((m) => m.id) : section === 'invited' ? handoffs.map((h) => h.conversationId)
     : section === 'callbacks' ? (cbList.data?.callbacks ?? []).map((b) => b.conversation_id) : rows.map((r) => r.id);
   const idsKey = ids.join(',');
   useEffect(() => {
@@ -350,12 +342,20 @@ export function WebsiteWorkspace() {
       {rowMenu ? <ConversationMenu x={rowMenu.x} y={rowMenu.y} target={{ kind: 'website', row: rowMenu.r }} onClose={() => setRowMenu(null)} /> : null}
       <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', (live || designing || tableView) && 'hidden')}>
         <div className="flex flex-col gap-2 border-b border-line p-3">
-          <div className="flex items-center">
+          <div className="flex items-center gap-2">
             <b className="flex-1 text-[18px] text-ink">{SECTIONS.find((s) => s.id === section)?.label}</b>
-            {siteSelect}
+            {/* C-04: how many are still owed a reply, in red beside the heading. */}
+            {section === 'missed' && missed.data?.count ? <span className="shrink-0 rounded-[8px] bg-danger-bg px-2 py-0.5 text-[11px] font-bold text-danger">{text('{n} to follow up', { n: missed.data.count })}</span> : null}
+            {section !== 'missed' ? siteSelect : null}
           </div>
+          {section === 'missed' ? <div className="-mt-1 text-[12px] text-ink-3">{text('Visitors who wrote and left before anyone replied.')}</div> : null}
           {searchBox(false)}
-          {section === 'callbacks' ? (
+          {section === 'missed' && missedTabs ? (
+            <div className="flex gap-1.5 text-[12px] font-semibold" role="group" aria-label="Show">
+              <Pill on={missedTab === 'todo'} onClick={() => setMissedTab('todo')}>{text('To follow up · {n}', { n: missed.data?.count ?? missedCount.data?.count ?? 0 })}</Pill>
+              <Pill on={missedTab === 'handled'} onClick={() => setMissedTab('handled')}>{missed.data?.handled !== undefined ? text('Handled · {n}', { n: missed.data.handled }) : text('Handled')}</Pill>
+            </div>
+          ) : section === 'callbacks' ? (
             <div className="flex gap-1.5 text-[12px] font-semibold" role="group" aria-label="Show">
               <Pill on={cbStatus === 'todo'} onClick={() => setCbStatus('todo')}>{text('To do · {n}', { n: callbackCounts.data?.todo ?? 0 })}</Pill>
               <Pill on={cbStatus === 'handled'} onClick={() => setCbStatus('handled')}>{text('Handled')}</Pill>
@@ -381,24 +381,21 @@ export function WebsiteWorkspace() {
               <InvitedRow key={h.id} h={h} hidden={ring.hidden} active={selected === String(h.conversationId)} onOpen={() => to({ website: String(h.conversationId) })} />
             ))
           ) : section === 'missed' ? (
-            missed.isLoading ? <Spinner /> : missed.error ? <div className="p-4"><ErrorNote error={missed.error} onRetry={() => void missed.refetch()} /></div> : !missed.data?.missed.length && !callbackList.length ? (
-              <Empty icon="globe" title="No missed chats" />
+            missed.isLoading ? <Spinner /> : missed.error ? <div className="p-4"><ErrorNote error={missed.error} onRetry={() => void missed.refetch()} /></div> : !missedRows.length && !(missedTab === 'todo' && callbackList.length) ? (
+              <Empty
+                icon="globe"
+                title={typed ? text('Nothing matches “{q}”', { q: q.trim() }) : missedTab === 'handled' ? text('Nothing handled in the last 30 days') : text('No missed chats')}
+                hint={typed ? undefined : missedTab === 'handled' ? undefined : text('When a visitor writes and leaves before anyone replies, they wait here to be followed up.')}
+              />
             ) : (
               <>
-              {callbackList.length ? (
+              {missedTab === 'todo' && callbackList.length ? (
                 <div role="group" aria-label="Call backs" className="border-b border-line">
                   <div className="px-3.5 pt-2 pb-1 text-[11px] font-bold tracking-[.06em] text-ink-3 uppercase">{text('Call backs · {n}', { n: callbackList.length })}</div>
                   {callbackList.map((b) => <CallbackRow key={b.id} b={b} active={selected === String(b.conversation_id)} onOpen={() => to({ website: String(b.conversation_id) })} />)}
                 </div>
               ) : null}
-              {(missed.data?.missed ?? []).map((m) => (
-                <button key={m.id} type="button" data-website-row={m.id} onClick={() => to({ website: String(m.id) })} className={cx('relative flex w-full flex-col gap-[3px] border-b border-line py-2.5 pr-3 pl-3.5 text-left', selected === String(m.id) ? 'bg-selection' : 'hover:bg-subtle')}>
-                  {selected === String(m.id) ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
-                  <span className="flex items-center gap-[7px]"><b className="flex-1 truncate text-ink">{m.visitor}</b><span className="text-[11px] text-ink-3">{listStamp(m.missed_at)}</span></span>
-                  <span className="truncate text-[12px] text-ink-2">{m.email ?? m.phone ?? 'No way to reach them'}{m.place ? ` · ${m.place}` : ''}</span>
-                  <span className="text-[11px] text-ink-3">{m.widget}</span>
-                </button>
-              ))}
+              {missedRows.map((m) => <MissedRow key={m.id} m={m} active={selected === String(m.id)} onOpen={() => to({ website: String(m.id) })} />)}
               </>
             )
           ) : listPlaceholder ?? (
@@ -407,7 +404,9 @@ export function WebsiteWorkspace() {
         </div>
       </section>
       <div className={cx('flex min-w-0 flex-1', (live || designing || tableView) && 'hidden')}>
-        {selected ? (
+        {selected && missedDetail ? (
+          <MissedDetail key={selected} id={selected} m={missedOpen} onOpenChat={() => to({ section: 'inbox', website: selected })} />
+        ) : selected ? (
           <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} />
         ) : (
           <PickConversation rows={openRows} longest={longest} visitors={online.isSuccess ? visitorsOnline : null} onLongest={openLongest} onVisitors={() => go('/chat?view=website&section=visitors')} />
