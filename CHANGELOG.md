@@ -19,7 +19,6 @@ person who has to live with the change — what it does, and where it bites.
 - **The Window menu** has Minimise (⌘M), Zoom, Enter Full Screen and Bring All to Front. ⌘W on the last tab closes the
   window, and closing the window keeps WorkSuite in the Dock (it used to leave the Dock too); click its icon to bring
   it back.
-- Not yet tried on a real Mac; the fitting rules are tested in code.
 
 ## 0.2.149 — 2026-10-04
 
