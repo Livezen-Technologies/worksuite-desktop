@@ -96,7 +96,7 @@ app.
 **Channels.** The updates card (Settings › Desktop and Settings › About) offers Stable, Beta and Dev / Nightly — only those the
 organisation's desktop policy allows (`auto_update: enforced` locks the channel to `update_channel`;
 `user_choice` offers `allowed_update_channels` — Stable always, default all three — and starts a computer on
-`update_channel_default` until its person picks one; a channel the organisation stops allowing is shown as
+`update_channel_default` (Beta by default) until its person picks one; a channel the organisation stops allowing is shown as
 "Not allowed by your organisation", and the computer falls back to Stable at the next check without a downgrade,
 saying so once). Each channel has its own release line:
 

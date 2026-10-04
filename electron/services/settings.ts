@@ -59,7 +59,7 @@ export function defaultPreferences(): Preferences {
     mailCacheDaysByMailbox: {},
     tabSuspendMinutes: 30,
     language: 'en',
-    updateChannel: 'stable',
+    updateChannel: 'beta',
     autoUpdate: true,
     updateNotifications: true,
     updateInstallOnQuit: true,

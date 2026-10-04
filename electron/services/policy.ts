@@ -21,10 +21,10 @@ export const DEFAULT_POLICY: DesktopPolicy = {
   signed: false,
   desktop_access: 'allowed',
   minimum_version: {},
-  update_channel: 'stable',
+  update_channel: 'beta',
   auto_update: 'enforced',
   allowed_update_channels: ['stable', 'beta', 'dev'],
-  update_channel_default: 'stable',
+  update_channel_default: 'beta',
   forced_update_deadline_hours: 24,
   file_sync: 'allowed',
   offline_files: 'allowed',
@@ -153,9 +153,10 @@ function updateChannels(v: unknown): DesktopPolicy['update_channel'][] {
   return listed.length ? all.filter((c) => c === 'stable' || listed.includes(c)) : [...all];
 }
 
-/** The organisation's default channel, when it is one of the allowed ones; else Stable. */
+/** The organisation's default channel, when it is one of the allowed ones; else Beta while it is allowed; else Stable. */
 function defaultChannel(v: unknown, allowed: DesktopPolicy['update_channel'][]): DesktopPolicy['update_channel'] {
-  return typeof v === 'string' && (allowed as string[]).includes(v) ? (v as DesktopPolicy['update_channel']) : 'stable';
+  if (typeof v === 'string' && (allowed as string[]).includes(v)) return v as DesktopPolicy['update_channel'];
+  return allowed.includes('beta') ? 'beta' : 'stable';
 }
 
 /** `ai.quick_ask` or `ai_quick_ask` — the policy file is written by people, in either shape. */
