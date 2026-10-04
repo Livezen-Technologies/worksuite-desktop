@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react';
 import { useCanOpen } from '../core/access';
 import { app } from '../core/app-state';
-import { isMac } from '../core/bridge';
+import { call, isMac, on } from '../core/bridge';
 import { t } from '../core/i18n';
 import { useStore } from '../core/store';
 import { minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui, useAiDisplay } from '../core/ui';
@@ -53,9 +54,11 @@ export function TitleBar() {
           : { text: t('shell.online'), dot: 'bg-[#43B581]', tone: 'bg-[#43B581]/12 text-[#7EE2B0]' };
 
   const unread = status?.unread.notifications ?? 0;
+  // In macOS full screen the traffic lights hide with the menu bar, so their room is given back (#221).
+  const fullScreen = useFullScreen();
 
   return (
-    <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac ? 84 : 14, paddingRight: isMac ? 12 : 150 }}>
+    <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac && !fullScreen ? 84 : 14, paddingRight: isMac ? 12 : 150 }}>
       <div className="flex w-[180px] shrink-0 items-center gap-2.5">
         <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-brand text-[15px] font-extrabold">W</span>
         <span className="text-[16px] font-bold tracking-tight">WorkSuite</span>
@@ -113,6 +116,21 @@ export function TitleBar() {
       </button>
     </header>
   );
+}
+
+/** Whether this window is in full screen: asked once, then told when it changes. */
+function useFullScreen(): boolean {
+  const [full, setFull] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void call('windows:state').then((s) => live && setFull(!!s.fullScreen), () => undefined);
+    const off = on<boolean>('window:fullscreen', (v) => setFull(!!v));
+    return () => {
+      live = false;
+      off();
+    };
+  }, []);
+  return full;
 }
 
 function TopButton({ icon, label, onClick, active, count, countTone = 'badge' }: { icon: string; label: string; onClick: () => void; active?: boolean; count?: number; countTone?: 'badge' | 'indigo' }) {

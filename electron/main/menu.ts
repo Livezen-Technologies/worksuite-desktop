@@ -87,7 +87,25 @@ export function menuTemplate(send: (command: string, arg?: number) => void, acti
       ...(app.isPackaged ? [] : [{ type: 'separator' as const }, { role: 'reload' as const }, { role: 'toggleDevTools' as const }]),
     ],
   });
-  template.push({ role: 'windowMenu' });
+  // macOS's Window menu as a Mac app has it (#221): Minimise ⌘M, Zoom, Enter Full Screen ⌃⌘F, Bring All to Front, and
+  // the list of open windows the system adds after them. Elsewhere the platform's own.
+  template.push(
+    mac
+      ? {
+          label: 'Window',
+          role: 'window',
+          submenu: [
+            { role: 'minimize' },
+            { role: 'zoom' },
+            { type: 'separator' },
+            // ⌃⌘F is View › Enter Full Screen's; shown here too, registered once.
+            { role: 'togglefullscreen', registerAccelerator: false },
+            { type: 'separator' },
+            { role: 'front' },
+          ],
+        }
+      : { role: 'windowMenu' },
+  );
   template.push({
     role: 'help',
     submenu: [

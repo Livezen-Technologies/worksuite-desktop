@@ -409,6 +409,7 @@ export const EVENT_CHANNELS = [
   'settings:changed',
   'organization:changed',
   'windows:changed',
+  'window:fullscreen',
   'calls:changed',
   'meetrec:changed',
   'speech:job',

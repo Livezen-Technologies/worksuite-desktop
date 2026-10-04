@@ -67,6 +67,22 @@ export function fitToDisplays(bounds: Rectangle, displays: Array<{ id: number; w
 }
 
 /**
+ * Where a window may sit on macOS (worksuite-desktop#221): never under the menu bar or the Dock. A window taller or
+ * wider than its display's usable area, or above its top — what a zoom before the window was shown, a "Fill", or a
+ * Dock that moved or grew leaves behind — is fitted to that area: the traffic lights come out from under the menu
+ * bar and the status bar out from behind the Dock. A window the person dragged partly off the bottom or a side is
+ * theirs to place and is left alone. Null when it already fits.
+ */
+export function keepInWorkArea(b: Rectangle, area: Rectangle): Rectangle | null {
+  if (b.height <= area.height && b.width <= area.width && b.y >= area.y) return null;
+  const width = Math.min(b.width, area.width);
+  const height = Math.min(b.height, area.height);
+  const x = Math.min(Math.max(b.x, area.x), area.x + area.width - width);
+  const y = Math.min(Math.max(b.y, area.y), area.y + area.height - height);
+  return { x, y, width, height };
+}
+
+/**
  * Where a torn-off tab's window goes (FR-NAV-05/07): under the pointer that
  * let go of the tab, its title bar where the tab was held; without a
  * pointer, a step down and right of the last one, so none hides another.
@@ -415,7 +431,13 @@ export class WindowManager {
       win.on('resize', () => this.scheduleSave(win, kind));
       win.on('move', () => this.scheduleSave(win, kind));
     }
-    if (saved?.maximized && kind === 'main') win.maximize();
+    // Zoomed last time: zoomed again. On macOS only once the window is on screen, where the system zooms it into
+    // the area above the Dock and below the menu bar; zoomed while hidden it could take the whole display (#221).
+    if (saved?.maximized && kind === 'main') {
+      if (mac) win.once('show', () => !win.isDestroyed() && win.maximize());
+      else win.maximize();
+    }
+    if (mac && !ring) this.guardWorkArea(win);
     win.once('ready-to-show', () => {
       if (opts.show === false) return;
       // A ring must not take the keyboard from whatever the person is typing in.
@@ -451,13 +473,16 @@ export class WindowManager {
     this.main = win;
     win.on('close', (e) => {
       this.saveLayout(win, 'main');
-      // FR-TRAY-02: closing minimizes to the tray unless the user chose Exit.
+      // FR-TRAY-02: closing minimizes to the tray unless the user chose Exit. On macOS the app stays in the Dock, as
+      // a Mac app does, and clicking its icon brings the window back (#221).
       if (!this.quitting && this.minimizeToTray()) {
         e.preventDefault();
         win.hide();
-        if (process.platform === 'darwin') app.dock?.hide();
       }
     });
+    // Full screen hides the traffic lights with the menu bar: the title bar gives their room back (#221).
+    win.on('enter-full-screen', () => !win.isDestroyed() && win.webContents.send('window:fullscreen', true));
+    win.on('leave-full-screen', () => !win.isDestroyed() && win.webContents.send('window:fullscreen', false));
     win.on('closed', () => {
       if (this.main === win) this.main = null;
     });
@@ -692,16 +717,49 @@ export class WindowManager {
     return n;
   }
 
-  /** Displays changed (monitor unplugged): pull every window back into view. */
+  /**
+   * Displays changed (a monitor unplugged, the Dock moved, grew or started hiding): pull every window back into view.
+   * On macOS a zoomed window keeps the frame it was zoomed to, so one the Dock now covers is fitted to the usable area
+   * too (#221); elsewhere the system keeps a maximised window in its work area itself.
+   */
   refit(): void {
     const displays = screen.getAllDisplays();
     const primary = screen.getPrimaryDisplay();
+    const mac = process.platform === 'darwin';
     for (const w of this.all()) {
-      if (w.isMaximized() || w.isFullScreen()) continue;
+      if (w.isFullScreen() || (w.isMaximized() && !mac)) continue;
       const b = w.getBounds();
-      const fitted = fitToDisplays(b, displays, primary);
+      const fitted = (mac ? keepInWorkArea(b, screen.getDisplayMatching(b).workArea) : null) ?? (w.isMaximized() ? b : fitToDisplays(b, displays, primary));
       if (fitted.x !== b.x || fitted.y !== b.y || fitted.width !== b.width || fitted.height !== b.height) w.setBounds(fitted);
     }
+  }
+
+  /**
+   * macOS (#221): after the window is shown, zoomed, moved or resized, one that has spread under the menu bar or the
+   * Dock comes back into its display's usable area. Never in full screen, where the system owns the frame (the Dock
+   * and menu bar hide there), nor while full screen is ending, nor for a call shrunk to float.
+   */
+  private guardWorkArea(win: BrowserWindow): void {
+    let timer: NodeJS.Timeout | null = null;
+    let settlingUntil = 0;
+    const check = () => {
+      timer = null;
+      if (win.isDestroyed() || Date.now() < settlingUntil || win.isFullScreen() || win.isSimpleFullScreen() || this.compactFrom.has(win.id)) return;
+      const b = win.getBounds();
+      const fixed = keepInWorkArea(b, screen.getDisplayMatching(b).workArea);
+      if (fixed) win.setBounds(fixed);
+    };
+    const later = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(check, 250);
+    };
+    for (const e of ['show', 'resize', 'move', 'maximize'] as const) win.on(e as 'show', later);
+    // Leaving full screen animates the frame back: let it land first.
+    win.on('leave-full-screen', () => {
+      settlingUntil = Date.now() + 1000;
+      setTimeout(later, 1000);
+    });
+    win.on('closed', () => timer && clearTimeout(timer));
   }
 
   /**
