@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.18.0 — 2026-10-04
+
+- Updates and License pages (Updates, Updates › Diagnostics, License), grouped navigation, update dialogs, mandatory update banner and locked screen, What's New after updating.
+
 ## 1.17.0 — 2026-10-03
 
 - Preferences: Organisation filter, the same in every app or separate in each (#214).
