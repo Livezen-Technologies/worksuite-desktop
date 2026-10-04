@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.35.0 — 2026-10-04
+
+- C-07 Visitors online: the design's table (status dot and city, reading now, time on site, pages, visit, last active), a reading-now viewer with time on page and scroll, this visit's timeline and chips, and Speak first through the shared composer with saved-reply chips.
+
 ## 1.34.0 — 2026-10-04
 
 - C-06 Closed chat: closed rows with outcome, closer and stars; a read-only closed detail with who closed it and when, the rating card, Star / Block / Reopen and a summary panel (first reply, duration, priority, rating, tags, contact with past chats, shared files); visitor panel cards shared with the live thread.

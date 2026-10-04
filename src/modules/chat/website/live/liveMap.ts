@@ -60,6 +60,14 @@ export interface OnlineVisitor {
   conversation_status: string | null;
   /** The visitor's chat as the dashboard reads it: waiting on us, and who has it. */
   chat?: LiveChat | null;
+  /** Reading now (C-07, UX-VIS-02): seconds on this page, how far down it (0–100), the section in view when reported. */
+  page_seconds?: number | null;
+  scroll?: number | null;
+  section?: string | null;
+  /** When their previous visit ended ("Last: 2 Oct"); none on a first visit. */
+  previous_visit_at?: string | null;
+  /** The address, for those who manage widgets. */
+  ip?: string | null;
 }
 
 /** GET /dashboard (WidgetAdminController::dashboard); the newer fields are optional for an older server. */

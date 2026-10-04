@@ -7,7 +7,8 @@ import { Select } from '../../../components/Select';
 import { Button, Modal, TextField } from '../../../components/ui';
 import { SharedFiles, type SharedFile } from '../kit/SharedFiles';
 import { useNow } from '../../calls/parts';
-import { tagList, websiteAction, type WebsiteVisitor } from './api';
+import { apiPost } from '../../../core/api';
+import { tagList, websiteAction, WEBSITE, type WebsiteVisitor } from './api';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING } from './rowParts';
 
 /**
@@ -134,7 +135,11 @@ export function SharedFilesCard({ files }: { files: SharedFile[] }) {
  * Block this visitor (GATE-08, SEC-10): for how long — a week unless somebody chooses otherwise; until lifted sends no
  * days — and why. From the drawer's Block (C-02) and the closed chat's Block visitor (C-06).
  */
-export function BlockDialog({ conversationId, name, onClose, onDone }: { conversationId: number; name: string; onClose: () => void; onDone: () => void }) {
+/**
+ * Block, for a day, a week, a month or until lifted, with a reason (GATE-08): on the visitor's chat when there is one,
+ * else on the visitor themselves — somebody browsing in Visitors online who has not written yet (C-07).
+ */
+export function BlockDialog({ conversationId, visitorId, name, onClose, onDone }: { conversationId: number | null; visitorId?: number; name: string; onClose: () => void; onDone: () => void }) {
   const [blockFor, setBlockFor] = useState('7');
   const [blockWhy, setBlockWhy] = useState('');
   return (
@@ -149,7 +154,11 @@ export function BlockDialog({ conversationId, name, onClose, onDone }: { convers
             variant="danger"
             onClick={() => {
               onClose();
-              void websiteAction(conversationId, 'block', { reason: blockWhy.trim() || null, ...(blockFor ? { days: Number(blockFor) } : {}) }).then(
+              const reason = blockWhy.trim() || null;
+              const done = conversationId !== null
+                ? websiteAction(conversationId, 'block', { reason, ...(blockFor ? { days: Number(blockFor) } : {}) })
+                : apiPost(`${WEBSITE}/visitors/${visitorId}/block`, { days: blockFor ? Number(blockFor) : null, reason });
+              void done.then(
                 () => (toast('success', 'Visitor blocked.'), onDone()),
                 (e) => toast('error', errorMessage(e)),
               );

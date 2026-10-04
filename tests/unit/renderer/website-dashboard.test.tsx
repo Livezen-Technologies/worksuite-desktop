@@ -11,7 +11,8 @@ import type * as CoreApi from '../../../src/core/api';
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn() }));
 vi.mock('../../../src/core/bridge', () => ({
-  call: vi.fn(),
+  // The visitor panel's composer asks for its draft (C-07).
+  call: vi.fn(async () => null),
   on: () => () => undefined,
   errorMessage: (e: unknown) => String(e),
   isMac: false,
@@ -186,7 +187,7 @@ describe('On the site now', () => {
     expect(props.onSelect).toHaveBeenLastCalledWith(6);
     view.rerender(ui(6));
     const card = await within(list()).findByRole('region', { name: 'Visitor details' });
-    await waitFor(() => expect(document.activeElement).toBe(within(card).getByRole('textbox', { name: 'Send a message' })));
+    await waitFor(() => expect(document.activeElement).toBe(within(card).getByRole('textbox', { name: 'Message to Visitor 7A3D' })));
     expect(row('Visitor 7A3D').getAttribute('aria-current')).toBe('true');
 
     fireEvent.click(within(card).getByRole('button', { name: 'Close the details' }));

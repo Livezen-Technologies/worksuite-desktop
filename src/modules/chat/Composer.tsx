@@ -56,7 +56,17 @@ export interface ComposerChannel {
   notice?: ReactNode;
   context: () => Turn[];
   refuseFile: (file: File) => string | null;
-  send: (text: string, files: File[]) => Promise<boolean>;
+  /** `canned`: the saved reply the words started from, counted as a use once sent (RDC-03). */
+  send: (text: string, files: File[], meta?: { canned: number | null }) => Promise<boolean>;
+  /**
+   * The channel's saved replies (C-07, UX-VIS-04): the chips above the box (by shortcut, "/m365"), the Saved replies
+   * button and the "/" menu, as a website conversation has them. Without, "/" offers Team Chat's.
+   */
+  replies?: SavedReply[];
+  /** Plain text: no WhatsApp formatting row and no character counter under the box (speaking first to a visitor). */
+  plain?: boolean;
+  /** Everything staged went: the words and every file (speaking first then opens the new chat, C-07). */
+  onSent?: () => void;
 }
 
 export interface WebsiteChannel {
@@ -132,6 +142,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const [ai, setAi] = useState<{ task: TextTask; title: string } | null>(null);
   const picked = useRef<Target[]>([]);
   const slashMenu = useRef<SlashMenuHandle>(null);
+  // The "/" the Saved replies button put in the box, rather than one typed (C-07).
+  const slashTyped = useRef(false);
   // The saved reply the website message being written started from, if any.
   const cannedUsed = useRef<number | null>(null);
   const root = useRef<HTMLDivElement>(null);
@@ -360,15 +372,18 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     try {
       if (channel) {
         const media = files.filter((f): f is BlobItem => f.kind === 'blob').map((f) => new File([f.blob], f.name, { type: f.blob.type }));
-        if (!media.length && !(await channel.send(words, []))) return;
+        // Only a message started from a saved reply says so; every other send is as it always was.
+        const send = (words: string, files: File[], first: boolean) => (first && cannedUsed.current ? channel.send(words, files, { canned: cannedUsed.current }) : channel.send(words, files));
+        if (!media.length && !(await send(words, [], true))) return;
         for (let i = 0; i < media.length; i++) {
-          if (!(await channel.send(i === 0 ? words : '', [media[i]!]))) return;
+          if (!(await send(i === 0 ? words : '', [media[i]!], i === 0))) return;
           const key = files[i]!.key;
           setStaged((all) => all.filter((s) => s.key !== key));
           // A delivered caption must not be repeated when retrying a later failed file.
           if (i === 0) await clearSentDraft();
         }
-        await clearSentDraft(); onClearReply(); return;
+        cannedUsed.current = null;
+        await clearSentDraft(); onClearReply(); channel.onSent?.(); return;
       }
       if (wordsAlone && !(await sendWords(words, urgent))) return;
       if (!site && files.length) {
@@ -495,8 +510,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   };
 
   // The "/" menu (worksuite-desktop#32): a website conversation's saved replies are the website chat's.
-  const chatReplies = useChatSavedReplies(!site && slash !== null);
-  const replies: RepliesState = site ? { state: 'ready', replies: site.replies } : chatReplies;
+  const chatReplies = useChatSavedReplies(!site && !channel?.replies && slash !== null);
+  // A website conversation's, or the channel's own (speaking first, C-07); Team Chat's otherwise.
+  const ownReplies = site?.replies ?? channel?.replies ?? null;
+  const replies: RepliesState = ownReplies ? { state: 'ready', replies: ownReplies } : chatReplies;
   const me = useStore(app, (s) => s.bootstrap?.user?.id ?? null);
   const myName = useStore(app, (s) => s.bootstrap?.user?.name ?? 'Me');
   /** The conversation as a suggestion reads it: what this composer's thread has loaded, oldest first. */
@@ -512,11 +529,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   /** What the menu picked takes the place of the "/word" typed for it, and stays in the box until sent. */
   const insertSlash = (body: string) => {
     // A website saved reply: counted as a use when the message is sent (RDC-03).
-    if (site) cannedUsed.current = site.replies.find((r) => r.body === body)?.id ?? cannedUsed.current;
+    if (ownReplies) cannedUsed.current = ownReplies.find((r) => r.body === body)?.id ?? cannedUsed.current;
     const start = slash ? slash.start : (input.current?.selectionStart ?? text.length);
     const end = slash ? slash.start + 1 + slash.word.length : start;
     setText(`${text.slice(0, start)}${body}${text.slice(end)}`);
     setSlash(null);
+    slashTyped.current = false;
     focus(start + body.length);
   };
   const insertReply = (r: SavedReply) => insertSlash(r.body);
@@ -681,6 +699,28 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           onClose={() => setAi(null)}
         />
       ) : null;
+  /**
+   * Saved replies (C-07, UX-VIS-04: attach, emoji, saved replies, writing assistant, Send): opens the "/" menu at the
+   * caret, as typing "/" would; the "/" it puts there is replaced by what is picked, or taken out again on Esc.
+   */
+  const openReplies = () => {
+    const at = input.current?.selectionStart ?? text.length;
+    setText(`${text.slice(0, at)}/${text.slice(at)}`);
+    slashTyped.current = true;
+    setSlash({ start: at, word: '' });
+    focus(at + 1);
+  };
+  const closeReplies = () => {
+    if (slashTyped.current && slash && !slash.word && text[slash.start] === '/') setText(text.slice(0, slash.start) + text.slice(slash.start + 1));
+    slashTyped.current = false;
+    setSlash(null);
+    focus();
+  };
+  const savedBtn = ownReplies && ownReplies.length && !editing ? (
+              <button type="button" aria-label="Saved replies" title="Saved replies (/)" aria-pressed={slash !== null} onClick={() => (slash ? closeReplies() : openReplies())} className={cx(tool, slash && '!bg-selection !text-primary')}>
+                <Icon name="bookmark" size={compact ? 15 : 17} />
+              </button>
+  ) : null;
   const emojiBtn = (
               <button type="button" aria-label="Emoji" title="Emoji" aria-pressed={menu === 'emoji'} onClick={() => setMenu(menu === 'emoji' ? null : 'emoji')} className={cx(tool, menu === 'emoji' && '!bg-selection !text-primary')}>
                 <Icon name="smile" size={compact ? 16 : 18} />
@@ -741,19 +781,19 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           replies={replies}
           context={conversation}
           onInsert={insertSlash}
-          onClose={() => (setSlash(null), focus())}
+          onClose={closeReplies}
           compact={compact}
         />
       ) : null;
-  // The first six saved replies as chips above the box (RDC-03).
-  const chipsEl = site && site.replies.length && !editing ? (
+  // The first six saved replies as chips above the box (RDC-03); speaking first names them by shortcut, "/m365" (C-07).
+  const chipsEl = ownReplies && ownReplies.length && !editing ? (
         <div className="flex flex-wrap items-center gap-[5px] text-[11.5px] font-semibold" aria-label="Saved replies">
-          {site.replies.slice(0, 6).map((r) => (
+          {ownReplies.slice(0, 6).map((r) => (
             <button key={r.id} type="button" title={r.body} onClick={() => insertReply(r)} className="rounded-[10px] border border-line px-2 py-0.5 text-ink hover:bg-subtle">
-              {r.title}
+              {!site && r.shortcut ? `/${r.shortcut}` : r.title}
             </button>
           ))}
-          {site.replies.length > 6 ? <span className="px-1 font-normal text-ink-3">Type / for all {site.replies.length}</span> : null}
+          {ownReplies.length > 6 ? <span className="px-1 font-normal text-ink-3">Type / for all {ownReplies.length}</span> : null}
         </div>
       ) : null;
   const detectedEl = detected.length ? (
@@ -915,7 +955,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       >
         {inside}
         {trayEl}
-        {channel ? <div className="flex gap-1" aria-label="Message formatting">{[{ label: 'Bold', mark: '*' }, { label: 'Italic', mark: '_' }, { label: 'Strikethrough', mark: '~' }, { label: 'Monospace', mark: '```' }].map(({ label, mark }) => <button key={label} type="button" className="rounded px-2 text-[11px] text-ink-2 hover:bg-subtle" onClick={() => { const el = input.current; const start = el?.selectionStart ?? text.length; const end = el?.selectionEnd ?? start; setText(`${text.slice(0, start)}${mark}${text.slice(start, end)}${mark}${text.slice(end)}`); focus(start + mark.length); }}>{label}</button>)}</div> : null}
+        {channel && !channel.plain ? <div className="flex gap-1" aria-label="Message formatting">{[{ label: 'Bold', mark: '*' }, { label: 'Italic', mark: '_' }, { label: 'Strikethrough', mark: '~' }, { label: 'Monospace', mark: '```' }].map(({ label, mark }) => <button key={label} type="button" className="rounded px-2 text-[11px] text-ink-2 hover:bg-subtle" onClick={() => { const el = input.current; const start = el?.selectionStart ?? text.length; const end = el?.selectionEnd ?? start; setText(`${text.slice(0, start)}${mark}${text.slice(start, end)}${mark}${text.slice(end)}`); focus(start + mark.length); }}>{label}</button>)}</div> : null}
         <div className="flex items-end gap-1">
           {recording ? (
             <VoiceRecorder compact={compact} onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
@@ -925,6 +965,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
               {attachBtn}
               {field}
               {urgentBtn}
+              {savedBtn}
               {aiBtn}
               {emojiBtn}
               {sendBtn}
@@ -933,7 +974,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         </div>
       </div>
       {!compact && !recording ? <div className={cx('px-1 text-[11px]', urgent && !editing ? 'font-semibold text-danger' : 'text-ink-3')}>{hint}</div> : null}
-      {channel ? <div className="text-right text-[11px] text-ink-3">{text.length}/{limit}</div> : null}
+      {channel && !channel.plain ? <div className="text-right text-[11px] text-ink-3">{text.length}/{limit}</div> : null}
       {modalsEl}
       {aiEl}
     </div>

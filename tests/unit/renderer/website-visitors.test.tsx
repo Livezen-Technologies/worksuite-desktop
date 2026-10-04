@@ -11,7 +11,7 @@ import type * as CoreApi from '../../../src/core/api';
  * the list with Start chat, Open chat, Invite a colleague and Block; Enter or a double-click goes to their chat; the
  * dashboard's figures open the views they count (C-00); and a visitor who leaves is said to have left.
  */
-vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({ conversation_id: 77 })) }));
+vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({ conversation_id: 77 })), request: vi.fn(async () => ({})) }));
 vi.mock('../../../src/core/bridge', () => ({
   call: vi.fn(),
   on: () => () => undefined,
@@ -32,7 +32,7 @@ vi.mock('../../../src/core/tab-context', () => ({
   useTabTitle: () => undefined,
 }));
 
-import { apiGet, apiPost } from '../../../src/core/api';
+import { apiGet, apiPost, request } from '../../../src/core/api';
 import { app } from '../../../src/core/app-state';
 import { call } from '../../../src/core/bridge';
 import { visitorStatus } from '../../../src/modules/chat/website/api';
@@ -110,6 +110,7 @@ beforeEach(() => {
   online = [...ONLINE];
   app.set({ auth: { stage: 'ready', user: { id: '7' } } as never });
   vi.mocked(apiPost).mockClear();
+  vi.mocked(request).mockClear();
   serve();
 });
 afterEach(() => cleanup());
@@ -148,8 +149,10 @@ describe('Visitors online', () => {
     expect(option(/Visitor 7A3D/).getAttribute('aria-selected')).toBe('true');
     await within(card).findByText('si-LK');
     expect(within(card).getByText('Ruwan Jayasuriya')).toBeTruthy();
-    expect(within(card).getByText('Landed on').nextElementSibling?.textContent).toBe('techubiz.com/');
-    expect(within(card).getByText(/techubiz\.com\/pricing · reading now/)).toBeTruthy();
+    // This visit, newest first: the page they are reading now, then where they landed.
+    const pages = within(within(card).getByRole('list', { name: 'Pages this visit' })).getAllByRole('listitem');
+    expect(pages.map((p) => p.textContent)).toEqual([expect.stringMatching(/^\/pricingNow/), '/Arrived directly']);
+    expect(pages[0]!.getAttribute('aria-current')).toBe('page');
     expect(within(card).getByRole('button', { name: /closed/ })).toBeTruthy();
 
     // Escape closes them.
@@ -174,16 +177,17 @@ describe('Visitors online', () => {
   it('says Waiting, Chatting or Browsing, filters by it, and the status goes to the chat or to Start chat', async () => {
     const view = mount();
     await waitFor(() => expect(within(rows()).getAllByRole('option')).toHaveLength(3));
-    expect(within(option(/Hasitha/)).getByRole('button', { name: 'Waiting' })).toBeTruthy();
+    expect(within(option(/Hasitha/)).getByRole('button', { name: /^Waiting 1:0\d$/ })).toBeTruthy();
     expect(within(option(/Kasun/)).getByRole('button', { name: 'Chatting' })).toBeTruthy();
 
     fireEvent.click(within(option(/Kasun/)).getByRole('button', { name: 'Chatting' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=inbox&website=42');
 
-    fireEvent.click(within(option(/Visitor 7A3D/)).getByRole('button', { name: 'Active' }));
+    // Somebody browsing: LAST ACTIVE says Now, and goes to Start chat (C-07).
+    fireEvent.click(within(option(/Visitor 7A3D/)).getByRole('button', { name: 'Now' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=visitors&visitor=3');
     follow(view);
-    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Send a message' })));
+    await waitFor(() => expect(document.activeElement).toBe(screen.getByRole('textbox', { name: 'Message to Visitor 7A3D' })));
 
     pick('Show', 'Waiting');
     expect(within(rows()).getAllByRole('option').map((o) => o.textContent)).toEqual([expect.stringContaining('Hasitha')]);
@@ -193,25 +197,31 @@ describe('Visitors online', () => {
     tab.route = '/chat?view=website&section=visitors&visitor=3';
     mount();
     const card = await screen.findByRole('region', { name: 'Visitor details' });
-    await within(card).findByRole('combobox', { name: 'Saved replies' });
-    pick('Saved replies', 'Greeting');
-    fireEvent.click(within(card).getByRole('button', { name: 'Start chat' }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/visitors/3/message', { message: 'Hi! Looking for pricing?' }));
+    // A saved-reply chip above the composer puts its words in the box; Send speaks first, counting the reply's use.
+    fireEvent.click(await within(card).findByRole('button', { name: 'Greeting' }));
+    expect(within(card).getByRole('textbox', { name: 'Message to Visitor 7A3D' })).toHaveProperty('value', 'Hi! Looking for pricing?');
+    fireEvent.click(within(card).getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/visitors/3/message', { message: 'Hi! Looking for pricing?', canned_id: 5 }));
     await waitFor(() => expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=inbox&website=77'));
 
-    fireEvent.click(within(card).getByRole('button', { name: 'Block' }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/visitors/3/block', { days: 7 }));
+    // Block, for as long as chosen: on the visitor, who has no chat.
+    fireEvent.click(within(card).getByRole('button', { name: 'Block visitor' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Block' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/visitors/3/block', { days: 7, reason: null }));
   });
 
   it('a visitor in a chat has Open the chat, Invite a colleague and Block on their chat', async () => {
     tab.route = '/chat?view=website&section=visitors&visitor=2';
     mount();
     const card = await screen.findByRole('region', { name: 'Visitor details' });
-    expect(within(card).getByText(/with Nimal Silva/)).toBeTruthy();
+    expect(within(card).getByText('In a chat with Nimal Silva')).toBeTruthy();
+    // Already in a chat: no composer to speak first.
+    expect(within(card).queryByRole('textbox')).toBeNull();
     fireEvent.click(within(card).getByRole('button', { name: 'Invite a colleague' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=inbox&website=42&invite=1');
-    fireEvent.click(within(card).getByRole('button', { name: 'Block' }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/42/action', { action: 'block', days: 7 }));
+    fireEvent.click(within(card).getByRole('button', { name: 'Block visitor' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'Block' }));
+    await waitFor(() => expect(request).toHaveBeenCalledWith('POST', '/api/chat/widget-admin/conversations/42/action', { body: { action: 'block', reason: null, days: 7 } }));
     fireEvent.click(within(card).getByRole('button', { name: 'Open the chat' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=inbox&website=42');
   });

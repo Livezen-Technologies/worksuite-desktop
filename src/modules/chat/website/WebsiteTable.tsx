@@ -10,7 +10,7 @@ import { BulkBar, BulkButton } from '../BulkBar';
 import { websiteBulkMenu } from '../menus';
 import { useMultiSelect } from '../selection';
 import { BULK_LIMIT, PRIORITIES, useAgents, useWebsiteBulk, waitingSince, type WebsiteBulkAction, type WebsiteBulkExtra, type WebsiteRow } from './api';
-import { CallLine, rowPreview, Tag, WaitClock } from './rowParts';
+import { CallLine, ROW_PICKED, rowPreview, Tag, TABLE_FRAME, TABLE_HEAD, WaitClock } from './rowParts';
 
 /**
  * The list views as one table (C-03, UX-LIST-01/02): Live chats, Unassigned, Assigned to me, Awaiting reply and
@@ -122,8 +122,8 @@ export function WebsiteTable({ title, subtitle, filters, rows, placeholder, foot
           {open === 'priority' ? <Menu label={text('Priority')} anchor={priorityBtn} avoid={bar} prefer="bottom" align="start" width={200} sections={submenu('priority')} onClose={() => setOpen(null)} /> : null}
         </div>
       ) : null}
-      <div role="grid" aria-label={text(title)} aria-rowcount={rows.length + 1} className="overflow-hidden rounded-[12px] border border-line bg-surface">
-        <div role="row" className={cx(GRID, 'border-b border-line bg-subtle px-4 py-2.5 text-[10.5px] font-bold tracking-[0.9px] text-ink-3 uppercase')}>
+      <div role="grid" aria-label={text(title)} aria-rowcount={rows.length + 1} className={TABLE_FRAME}>
+        <div role="row" className={cx(GRID, TABLE_HEAD)}>
           <span role="columnheader" className="flex">
             <Checkbox aria-label={text('Select all')} checked={sel.state === 'all'} indeterminate={sel.state === 'some'} disabled={!rows.length} onChange={sel.toggleAll} />
           </span>
@@ -171,7 +171,7 @@ function TableRow({ r, me, myName, ring, typing, picked, onPick, onClick, onMenu
       onClick={onClick}
       onContextMenu={onMenu}
       onKeyDown={onKeyDown}
-      className={cx(GRID, 'cursor-default border-b border-line px-4 py-3 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? 'bg-selection/60 shadow-[inset_3px_0_0_var(--color-primary)]' : ring?.silenced ? 'bg-warning-bg' : 'hover:bg-subtle')}
+      className={cx(GRID, 'cursor-default border-b border-line px-4 py-3 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? ROW_PICKED : ring?.silenced ? 'bg-warning-bg' : 'hover:bg-subtle')}
     >
       <span role="gridcell" className="flex">
         <Checkbox aria-label={text('Select {name}', { name })} checked={picked} onChange={onPick} />

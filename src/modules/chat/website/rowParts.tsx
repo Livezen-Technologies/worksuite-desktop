@@ -37,6 +37,14 @@ export const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/
 export const PANEL_HEADING = 'text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase';
 export const PANEL_CARD = 'flex flex-col gap-[7px] rounded-[12px] border border-line bg-surface px-3 py-2.5';
 
+/**
+ * The full-width tables' frame, header row and picked row — the conversation lists (C-03, WebsiteTable) and Visitors
+ * online (C-07) — drawn alike.
+ */
+export const TABLE_FRAME = 'overflow-hidden rounded-[12px] border border-line bg-surface';
+export const TABLE_HEAD = 'border-b border-line bg-subtle px-4 py-2.5 text-[10.5px] font-bold tracking-[0.9px] text-ink-3 uppercase';
+export const ROW_PICKED = 'bg-selection/60 shadow-[inset_3px_0_0_var(--color-primary)]';
+
 /** "techubiz.com/shop/coreldraw": where a visitor was, site and page, as Visitors online and Missed chats say it. */
 export function siteAndPath(url: string | null | undefined): string {
   if (!url) return '—';

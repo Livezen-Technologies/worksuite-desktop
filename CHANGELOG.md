@@ -5,6 +5,24 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.162 — 2026-10-04
+
+- **Visitors online (C-07).** The table now has the design's columns:
+  - **Visitor**, with a status dot and their city ("≈" when placed by timezone only).
+  - **Reading now**, **On the site**, **Pages** and **Visits** ("3rd visit").
+  - **Last active**: "Now", "Waiting 1:38", "40 s ago" or "Just arrived".
+
+  The site filter lists your sites here too.
+- **Selecting someone** opens a panel with what they are reading: how long they have been on the page, how far down
+  they have scrolled, and the section in view where the site marks one. It also shows this visit's pages, newest
+  first, with how long each held them and where they arrived from, plus chips for place, browser, visit number and
+  last visit.
+- **Speak first** uses the same composer as every chat, with saved-reply chips: "Start the conversation — it opens the
+  widget on their page". The new chat opens once the first message is sent. **Block** works for someone who has not
+  chatted yet.
+- The composer has a **Saved replies** button in website chats too.
+- Needs the server update (Communication 1.29.0). An older server shows the visitors without the reading details.
+
 ## 0.2.161 — 2026-10-04
 
 - **Closed chats (C-06).** Each row says how the chat ended: what it was about and who closed it ("Activation fixed ·
