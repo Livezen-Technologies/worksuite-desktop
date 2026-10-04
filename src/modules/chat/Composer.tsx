@@ -17,7 +17,7 @@ import { uploadBlob } from '../../core/upload';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
-import { AttachMenu, CameraCapture, DrivePicker, Tray, type AttachChoice, type Staged } from './attach';
+import { AttachMenu, CameraCapture, DrivePicker, RefusedNotes, Tray, type AttachChoice, type Staged } from './attach';
 import { KIND, type CardKind } from './cards/CardFrame';
 import { recordsIn } from './cards/recordLinks';
 import { SharePicker, ShareMenu, type ShareKind } from './cards/SharePicker';
@@ -36,6 +36,7 @@ import { AiMenuButton } from '../ai/AiMenuButton';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
 import { team, useAgents, type WebsiteConversation } from './website/api';
 import { NOTE_TONE } from './kit/MessageBubble';
+import { TEAM_COMPOSER, WEBSITE_COMPOSER } from './kit/caps';
 import { usePresence } from './presence';
 
 /**
@@ -106,11 +107,18 @@ export interface ComposerHandle {
   focus: () => void;
 }
 
+/** A pasted or clipboard picture's name when it came without one. */
+const screenshotName = () => `Screenshot ${new Date().toISOString().slice(0, 19).replace('T', ' ').replace(/:/g, '.')}.png`;
+
 /**
- * The message box (ChatComposer — polished): attach, urgent, emoji and send
- * around the text; @ to mention with who is in the conversation; a reply or
- * an edit shown above it; files wait in a tray until Send; a voice message
+ * The message box (ChatComposer — polished): attach, emoji, the text, then @
+ * to mention, a voice message, urgent and send (P-04 "One chat kit"); a reply
+ * or an edit shown above it; files wait in a tray until Send; a voice message
  * records in its place. `compact` is the drawer's and the call panel's size.
+ *
+ * One composer for Team Chat and website chats (RDC-01/02): `website` gives it
+ * the website channel profile (WEBSITE_COMPOSER), which hides what a visitor
+ * cannot receive and adds saved replies and the writing assistant.
  */
 export function Composer({ roomId, roomName, group, reply, onClearReply, typing = [], compact, look = 'box', extras, inside, website, channel, ref }: {
   roomId: string;
@@ -133,11 +141,13 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
 }) {
   const qc = useQueryClient();
   const site = website ?? null;
+  // The channel profile (P-04, RDC-02): what this composer offers, Team Chat's or a website visitor's.
+  const caps = site ? WEBSITE_COMPOSER : TEAM_COMPOSER;
   const note = !!site?.note;
   // A website draft keeps the key the website thread always used, so none is lost in the move (RDC-06); a note has its own.
   const siteKey = site ? (note ? websiteNoteDraftKey(site.conversationId) : websiteDraftKey(site.conversationId)) : null;
   const draft = useDraft<string>(channel?.draftModule ?? siteKey?.module ?? 'chat', channel?.draftContext ?? siteKey?.context ?? `room:${roomId}`, '');
-  const canUrgent = useStore(app, (s) => !site && !channel && !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
+  const canUrgent = useStore(app, (s) => caps.urgent && !channel && !!s.bootstrap?.permissions.some((p) => p === '*' || p === URGENT));
   const transfers = useStore(app, (s) => s.transfers);
   const [sending, setSending] = useState(false);
   const sendingGate = useRef(false);
@@ -150,6 +160,8 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const origin = useStore(app, (s) => s.auth?.server?.origin);
   const [recording, setRecording] = useState(false);
   const [staged, setStaged] = useState<Staged[]>([]);
+  // Files refused before any upload, each with why, under the tray (P-04 AttachmentTray; RDC-04).
+  const [refused, setRefused] = useState<Array<{ key: string; text: string }>>([]);
   const [originalQuality, setOriginalQuality] = useState(false);
   const [asking, setAsking] = useState<{ start: number; word: string; left: number } | null>(null);
   const [pick, setPick] = useState(0);
@@ -217,6 +229,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       return;
     }
     // What a visitor cannot receive is refused here, with the reason, before anything is uploaded (RDC-04).
+    const notes: Array<{ key: string; text: string }> = [];
     const items = channel ? all.filter((it) => {
       if (it.kind !== 'blob') { toast('error', 'Choose channel files using Attach.'); return false; }
       const why = channel.refuseFile(new File([it.blob], it.name, { type: it.blob.type }));
@@ -225,16 +238,36 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     }) : site
       ? all.filter((it) => {
           const why = it.kind === 'disk' ? refuseForVisitor(it.file.name, it.file.size, site.maxUploadKb) : refuseForVisitor(it.name, it.blob.size, site.maxUploadKb);
-          if (why) toast('error', why);
+          if (why) notes.push({ key: it.key, text: why });
           return !why;
         })
       : all;
+    // What this batch refused replaces what an earlier one did: the notes say why the files just chosen did not join.
+    if (site) setRefused(notes);
     if (!items.length) return;
     setStaged((list) => [...list.filter((s) => !done(s)), ...items]);
     focus();
   };
   const stageDisk = (files: PickedFile[]) => stage(files.map((file) => ({ key: file.handle, kind: 'disk' as const, file, transfer: null })));
   const stageBlob = (blob: Blob, name: string) => stage([{ key: crypto.randomUUID(), kind: 'blob', blob, name, state: 'ready', progress: 0, error: null, extra: null }]);
+  /**
+   * "Paste a screenshot" (P-04 AttachmentPicker · website): the picture on the clipboard joins the tray, as pasting it
+   * into the box would. Where the clipboard cannot be read without a paste, the box is focused and the key is named.
+   */
+  const pasteScreenshot = async () => {
+    try {
+      for (const item of await navigator.clipboard.read()) {
+        const type = item.types.find((t) => t.startsWith('image/'));
+        if (!type) continue;
+        stageBlob(await item.getType(type), screenshotName());
+        return;
+      }
+      toast('info', 'There is no screenshot on the clipboard. Copy one, then choose Paste a screenshot.');
+    } catch {
+      focus();
+      toast('info', `Press ${/Mac/i.test(navigator.platform) ? '⌘V' : 'Ctrl+V'} in the message box to paste the screenshot.`);
+    }
+  };
 
   useImperativeHandle(ref, () => ({
     stage: stageDisk,
@@ -413,6 +446,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     };
     const files = ready;
     const wordsAlone = words !== '' && (urgent || files.length === 0);
+    setRefused([]);
     sendingGate.current = true;
     setSending(true);
     try {
@@ -500,11 +534,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     }
     if (c === 'camera') return setModal(c);
     // A visitor cannot play a voice message (RDC-02); a Drive file goes to them as a copy, never a link (RDC-05).
-    if (site && c === 'voice') return;
+    if (c === 'voice' && !caps.voice) return;
     if (c === 'drive') return setModal(c);
     if (c === 'voice') return setRecording(true);
+    if (c === 'paste') return void pasteScreenshot();
     try {
-      const files = await call('files:pickFiles', { multiple: true, title: `Send to ${roomName}`, ...(c === 'any' ? {} : { only: c }) });
+      const files = await call('files:pickFiles', { multiple: true, title: `Send to ${roomName}`, ...(c === 'any' || c === 'upload' ? {} : { only: c }) });
       stageDisk(files);
     } catch (e) {
       toast('error', errorMessage(e));
@@ -619,15 +654,15 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       : `Enter to send · Shift + Enter for a new line${group ? ' · @ to mention' : ''} · / for replies`;
 
 
-  const attachBtn = !editing && !note ? (
+  const attachBtn = caps.attach && !editing && !note ? (
                 <span className="relative">
                   <button type="button" aria-label="Attach" title="Attach" aria-haspopup="menu" aria-expanded={menu === 'attach'} onClick={() => setMenu(menu === 'attach' ? null : 'attach')} className={cx(tool, menu === 'attach' && '!bg-selection !text-primary')}>
                     <Icon name="paperclip" size={compact ? 16 : 18} />
                   </button>
-                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} only={channel ? channel.attachChoices ?? ['document', 'image', 'video', 'audio', 'camera', 'drive', ...(channel.voice ? ['voice' as const] : [])] : site ? ['document', 'image', 'camera', 'drive'] : undefined} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
+                  {menu === 'attach' ? <AttachMenu compact={compact} align={look === 'pill' ? 'right' : 'left'} only={channel ? channel.attachChoices ?? ['document', 'image', 'video', 'audio', 'camera', 'drive', ...(channel.voice ? ['voice' as const] : [])] : caps.attachChoices} copy={channel ? undefined : caps.attachCopy} onPick={(c) => void attach(c)} onClose={() => setMenu(null)} /> : null}
                 </span>
               ) : null;
-  const shareBtn = !editing && !site && !channel ? (
+  const shareBtn = caps.shareRecords && !editing && !channel ? (
                 <span className="relative">
                   <button type="button" aria-label="Share from WorkSuite" title="Share from WorkSuite" aria-haspopup="menu" aria-expanded={menu === 'share'} onClick={() => setMenu(menu === 'share' ? null : 'share')} className={cx(tool, menu === 'share' && '!bg-selection !text-primary')}>
                     <Icon name="plus" size={compact ? 16 : 18} />
@@ -643,7 +678,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   setText(e.target.value);
                   if (!editing) onTyped(e.timeStamp);
                   if (!editing && !note) setSlash(savedReplyQuery(e.target.value, e.target.selectionStart ?? e.target.value.length));
-                  if (group || note) {
+                  if ((group && caps.mentions) || note) {
                     const q = mentionQuery(e.target.value, e.target.selectionStart ?? e.target.value.length);
                     setAsking(q ? { ...q, left: leftOf(e.target, q.start) } : null);
                     setPick(0);
@@ -690,7 +725,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   if (files.length === 0 || editing) return;
                   e.preventDefault();
                   for (const img of files.filter((f) => f.type.startsWith('image/'))) {
-                    stageBlob(img, img.name && img.name !== 'image.png' ? img.name : `Screenshot ${new Date().toISOString().slice(0, 19).replace('T', ' ').replace(/:/g, '.')}.png`);
+                    stageBlob(img, img.name && img.name !== 'image.png' ? img.name : screenshotName());
                   }
                   const onDisk = files.filter((f) => f.size > 0 && f.name && !f.type.startsWith('image/'));
                   if (channel) { for (const f of onDisk) stageBlob(f, f.name); }
@@ -724,7 +759,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     { sep: true as const },
     ...WRITING_TASKS.map((w) => ({ label: w.label, disabled: !text.trim(), run: () => setAi({ task: w.task, title: w.label }) })),
   ];
-  const aiBtn = !editing ? <AiMenuButton compact items={aiItems} className={cx(tool, '!font-normal')} /> : null;
+  const aiBtn = caps.assistant && !editing ? <AiMenuButton compact items={aiItems} ariaLabel={channel ? undefined : caps.assistantLabel} className={cx(tool, '!font-normal')} iconClassName={site ? 'text-[#0E7C86] dark:text-[#5CC6CF]' : undefined} /> : null;
   const aiEl = ai ? (
         <AiTextDialog
           title={ai.title}
@@ -764,16 +799,38 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     setSlash(null);
     focus();
   };
-  const savedBtn = ownReplies && ownReplies.length && !editing ? (
+  const savedBtn = caps.savedReplies && ownReplies && ownReplies.length && !editing ? (
               <button type="button" aria-label="Saved replies" title="Saved replies (/)" aria-pressed={slash !== null} onClick={() => (slash ? closeReplies() : openReplies())} className={cx(tool, slash && '!bg-selection !text-primary')}>
                 <Icon name="bookmark" size={compact ? 15 : 17} />
               </button>
   ) : null;
-  const emojiBtn = (
+  const emojiBtn = caps.emoji ? (
               <button type="button" aria-label="Emoji" title="Emoji" aria-pressed={menu === 'emoji'} onClick={() => setMenu(menu === 'emoji' ? null : 'emoji')} className={cx(tool, menu === 'emoji' && '!bg-selection !text-primary')}>
                 <Icon name="smile" size={compact ? 16 : 18} />
               </button>
-  );
+  ) : null;
+  /** "@" (P-04, Team Chat's set): puts an @ at the caret and opens the list of who can be mentioned, as typing one does. */
+  const mention = () => {
+    const el = input.current;
+    const at = el?.selectionStart ?? text.length;
+    const before = at > 0 && !/\s/.test(text[at - 1]!) ? ' @' : '@';
+    setText(`${text.slice(0, at)}${before}${text.slice(el?.selectionEnd ?? at)}`);
+    const start = at + before.length - 1;
+    setAsking({ start, word: '', left: el ? leftOf(el, start) : 8 });
+    setPick(0);
+    focus(start + 1);
+  };
+  const atBtn = caps.mentions && group && !editing && !channel ? (
+              <button type="button" aria-label="Mention someone" title="Mention someone (@)" onClick={mention} className={tool}>
+                <Icon name="at" size={compact ? 16 : 18} />
+              </button>
+  ) : null;
+  // A voice message from the box itself (P-04, Team Chat's set); the paperclip still offers it too.
+  const micBtn = caps.voice && !channel && !editing ? (
+              <button type="button" aria-label="Record a voice message" title="Record a voice message" onClick={() => { setMenu(null); setRecording(true); }} className={tool}>
+                <Icon name="mic" size={compact ? 16 : 18} />
+              </button>
+  ) : null;
   const sendBtn = channel?.refusal ? null : (
               <button
                 type="button"
@@ -808,12 +865,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           </span>
           <button type="button" onClick={cancelEdit} className="shrink-0 rounded-[6px] px-2 py-0.5 font-semibold text-[#7A3B05] hover:bg-[#FDEBC8] dark:text-warning dark:hover:bg-transparent">Cancel</button>
         </div>
-      ) : reply ? (
-        <div className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-primary bg-selection px-2.5 py-1.5 text-[12px]">
-          <Icon name="reply" size={13} className="shrink-0 text-primary" />
-          <span className="flex min-w-0 flex-1 flex-col">
-            <b className="text-ink">Replying to {reply.sender_name}</b>
-            <span className="truncate text-ink-2">{reply.snippet}</span>
+      ) : reply && caps.replyQuote ? (
+        // ReplyBar (P-04): "Replying to Visitor 4F2A · Can you send a quote…", on one line.
+        <div data-reply-bar className="flex items-center gap-2 rounded-[8px] border-l-[3px] border-primary bg-selection px-2.5 py-1.5 text-[12px]">
+          <span className="min-w-0 flex-1 truncate text-ink-2">
+            Replying to <b className="text-ink">{reply.sender_name}</b>
+            {reply.snippet ? ` · ${reply.snippet}` : ''}
           </span>
           <button type="button" aria-label="Cancel the reply" title="Cancel the reply (Esc)" onClick={onClearReply} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-surface hover:text-ink">
             <Icon name="x" size={13} />
@@ -821,7 +878,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         </div>
       ) : null;
   // A visitor's widget shows a WorkSuite link as a link, never as a card.
-  const detected = !editing && !site && !channel ? recordsIn(text, origin) : [];
+  const detected = caps.shareRecords && !editing && !channel ? recordsIn(text, origin) : [];
   const repliesEl = slash && !editing ? (
         <SlashMenu
           ref={slashMenu}
@@ -910,9 +967,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
             <Tray items={tray} transfers={transfers} onRemove={remove} onRetry={retry} compact={compact} />
           </div>
         ) : null;
+  const refusedEl = refused.length && !editing ? <RefusedNotes notes={refused} onDismiss={(key) => setRefused((list) => list.filter((n) => n.key !== key))} /> : null;
   const modalsEl = (
     <>
-      {modal === 'drive' && site ? (
+      {modal === 'drive' && site && caps.driveCopy ? (
         <DriveFilePicker title="Send a copy to the visitor" confirmLabel="Send a copy" busy={sending} onClose={() => setModal(null)} onChoose={(files) => void sendDriveCopies(files.map((f) => ({ id: Number(f.id), name: f.name })))} />
       ) : modal === 'drive' && channel ? <DriveFilePicker title="Attach from WorkSuite Files" confirmLabel="Attach" onClose={() => setModal(null)} onChoose={(files) => { void (async () => { try { for (const f of files) { const response = await fetch(apiUrl(`/api/files/${f.id}/download`)); if (!response.ok) throw new Error('This file could not be downloaded.'); stageBlob(await response.blob(), f.name); } setModal(null); } catch (e) { toast('error', errorMessage(e)); } })(); }} /> : modal === 'drive' ? <DrivePicker roomId={roomId} onClose={() => setModal(null)} onSent={refresh} /> : null}
       {modal === 'camera' ? <CameraCapture onTaken={stageBlob} onClose={() => setModal(null)} /> : null}
@@ -994,7 +1052,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           <Icon name="lock" size={12} /> Only staff see this · the visitor never does
         </span>
       ) : null}
-      {menu === 'emoji' ? <EmojiPicker className="absolute right-3 bottom-full mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
+      {menu === 'emoji' ? <EmojiPicker className="absolute left-3 bottom-full mb-2" onPick={insert} onClose={() => setMenu(null)} /> : null}
       <div
         className={cx(
           'relative flex flex-col gap-1.5 rounded-[12px] border transition-colors',
@@ -1011,19 +1069,24 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       >
         {inside}
         {trayEl}
+        {refusedEl}
         {channel && !channel.plain ? <div className="flex gap-1" aria-label="Message formatting">{[{ label: 'Bold', mark: '*' }, { label: 'Italic', mark: '_' }, { label: 'Strikethrough', mark: '~' }, { label: 'Monospace', mark: '```' }].map(({ label, mark }) => <button key={label} type="button" className="rounded px-2 text-[11px] text-ink-2 hover:bg-subtle" onClick={() => { const el = input.current; const start = el?.selectionStart ?? text.length; const end = el?.selectionEnd ?? start; setText(`${text.slice(0, start)}${mark}${text.slice(start, end)}${mark}${text.slice(end)}`); focus(start + mark.length); }}>{label}</button>)}</div> : null}
         <div className="flex items-end gap-1">
           {recording ? (
             <VoiceRecorder compact={compact} onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
           ) : (
+            // P-04: attach, emoji, the box, then @, a voice message and urgent (Team Chat), or saved replies and the
+            // writing assistant (website), and send.
             <>
               {shareBtn}
               {attachBtn}
+              {emojiBtn}
               {field}
+              {atBtn}
+              {micBtn}
               {urgentBtn}
               {savedBtn}
               {aiBtn}
-              {emojiBtn}
               {sendBtn}
             </>
           )}

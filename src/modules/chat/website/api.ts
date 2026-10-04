@@ -332,6 +332,12 @@ export interface WebsiteConversation {
   /** The WhatsApp chats this visitor continued on, matched by their reference (#224). */
   whatsapp?: Array<{ account: string; chat_id: number; ref: string; linked_at: string | null; link: string }>;
   can?: WebsiteCan;
+  /**
+   * The shared kit's message actions (P-04, RDC-12): minutes Delete for the visitor is offered (0: no limit), and whether
+   * Save to Drive has a Drive to save into. Absent on an older server: 15 minutes, and no Save to Drive.
+   */
+  delete_window_minutes?: number;
+  can_save_to_drive?: boolean;
 }
 
 /** A voice call in a website chat as the thread has it (WidgetCalls::forThread). */

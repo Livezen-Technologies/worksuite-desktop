@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.6 — 2026-10-04
+
+- AiMenuButton takes the composer's label (Writing assistant on website chats)
+
 ## 1.8.5 — 2026-10-03
 
 - Keep the AI launcher and answer notice accessible beside the native Office editor without hiding the document indefinitely (#184).

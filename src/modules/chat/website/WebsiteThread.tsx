@@ -136,6 +136,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         // Sent, delivered or read by the visitor, on the team's messages; who read the visitor's latest (LIVE-08).
         status: data.marks && m.from === 'agent' && m.visibility !== 'internal' ? visitorHas(m.id, data.marks) : undefined,
         footer: data.marks ? footerFor(m, data, me) : null,
+        // The server's own window for Delete for the visitor (RDC-12); 15 minutes from an older one.
+        deleteMinutes: data.delete_window_minutes ?? 15,
       });
       // A voice call's line, as staff read it (V-03): "Voice call started by the visitor · you answered after 0:12".
       const notice = m.from === 'system' ? callNotice(m.body, m.agent_id, me) : null;
@@ -152,6 +154,17 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       setTab('reply');
       setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: m.body ?? m.file?.filename ?? '' });
       composer.current?.focus();
+    },
+    // A copy of the visitor's file in my own Drive (RDC-12, P-04): never a link, and the chat keeps its own.
+    onSaveToDrive: (k) => {
+      for (const f of k.files ?? []) {
+        const token = /\/files\/([a-f0-9]{32})/.exec(f.download_url ?? f.url ?? '')?.[1];
+        if (!token) continue;
+        void apiPost<{ file_id: number }>(`${WEBSITE}/files/${token}/save`, {}).then(
+          () => toast('success', text('Saved {name} to your Drive.', { name: f.filename })),
+          (e) => toast('error', errorMessage(e)),
+        );
+      }
     },
     // Delete for the visitor too, within the window (#229).
     onDelete: (k) => {
@@ -243,7 +256,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           {c.started_at ? <div className="mb-1 text-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
           {/* The shared chat kit (C-02, RDC-11, LIVE-12; #229): Team Chat's bubbles, meta, ticks and attachments, with what a visitor cannot receive turned off. */}
-          <MessageList items={items} caps={{ ...WEBSITE_CAPS, deleteForVisitorMinutes: 15 }} look="page" handlers={handlers} />
+          <MessageList items={items} caps={{ ...WEBSITE_CAPS, deleteForVisitorMinutes: data.delete_window_minutes ?? 15, saveToDrive: data.can_save_to_drive === true }} look="page" handlers={handlers} />
           {waiting.map((p) => (
             <PendingBubble
               key={p.id}

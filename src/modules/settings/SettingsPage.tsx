@@ -41,6 +41,7 @@ import { setOrgSelectionShared, useOrgPrefs } from '../../core/org-prefs';
 import { DEFAULT_LAUNCHER_SHORTCUT } from '@shared/launcher';
 import { SyncButton } from '../../components/SyncButton';
 import { UpdatesCard } from './UpdatesCard';
+import { ADMIN_RINGING_ROUTE, AdminRinging } from './AdminRinging';
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -72,7 +73,19 @@ const SECTIONS = [
 const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'launcher', 'local-profile', 'local-data', 'about']);
 const LOCAL_SECTIONS: ReadonlySet<string> = new Set(['local-profile', 'local-data']);
 
-export default function SettingsPage(_props: ModuleProps) {
+/**
+ * Settings, and under it the Admin Center's Chat › Ringing (P-03: the Settings rail, an "Admin Center" tab), which this
+ * app draws itself; the Admin Center's other sections are the web app's.
+ */
+export default function SettingsPage(props: ModuleProps) {
+  const { path } = useTab();
+  return path[1] === 'admin' ? <AdminRinging /> : <SettingsSections {...props} />;
+}
+
+/** Whether this person may set the organisation's website chat ringing (the Chat module's `chat.widget.manage`). */
+export const useManagesRinging = () => useStore(app, (s) => !!s.bootstrap?.permissions?.some((p) => p === '*' || p === 'chat.widget.manage'));
+
+function SettingsSections(_props: ModuleProps) {
   useTabTitle('Settings');
   const { path, go, query } = useTab();
   const guest = useGuest();
@@ -81,6 +94,7 @@ export default function SettingsPage(_props: ModuleProps) {
   const prefs = useStore(app, (s) => s.prefs);
   const hasMail = useCanOpen('mail');
   const hasContacts = useCanOpen('contacts');
+  const managesRinging = useManagesRinging();
   if (!prefs) return null;
   return (
     <div className="flex h-full">
@@ -91,6 +105,12 @@ export default function SettingsPage(_props: ModuleProps) {
             <Icon name={s.icon} size={16} /> {s.label}
           </button>
         ))}
+        {/* The organisation's ringing rules, for whoever manages website chats (P-03). */}
+        {managesRinging && !guest ? (
+          <button type="button" onClick={() => go(ADMIN_RINGING_ROUTE)} className="mt-3 flex h-9 w-full items-center gap-2.5 rounded-[8px] border-t border-line px-3 pt-px text-left text-[13.5px] text-ink hover:bg-subtle">
+            <Icon name="shield-check" size={16} /> Admin Center
+          </button>
+        ) : null}
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto px-10 py-8 scroll-thin">
         <div className="max-w-[760px]">

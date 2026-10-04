@@ -7,6 +7,7 @@ import { toast } from '../../../core/toasts';
 import { app } from '../../../core/app-state';
 import { text } from '../../../core/i18n';
 import { useStore } from '../../../core/store';
+import { navigate } from '../../../core/tabs';
 import { useTab, useTabTitle } from '../../../core/tab-context';
 import { listStamp } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
@@ -91,6 +92,8 @@ export function WebsiteWorkspace() {
   const { query, go, active } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   const myName = useStore(app, (s) => s.bootstrap?.user?.name ?? null);
+  // The organisation's ringing rules (P-03, Admin Center › Chat › Ringing): for whoever manages website chats.
+  const managesRinging = useStore(app, (s) => !!s.bootstrap?.permissions?.some((p) => p === '*' || p === 'chat.widget.manage'));
   const selected = query.get('website');
   // The LIVE views (worksuite-desktop#231): each its own section — not `live`, which is the Live chats section and
   // lit up beside both — with the selected visitor in the address.
@@ -351,6 +354,8 @@ export function WebsiteWorkspace() {
             {SETUP.map((x) => (
               <MenuItem key={x.id} icon={x.icon} label={x.label} here={setup === x.id} onClick={() => go(`/chat?view=website&section=${x.id}`)} />
             ))}
+            {/* Who is rung, and when: the Admin Center's Chat › Ringing, in Settings (P-03). */}
+            {managesRinging ? <MenuItem icon="bell" label="Ringing" here={false} onClick={() => navigate('/settings/admin/chat/ringing')} /> : null}
           </div>
           <MyStatus variant="website" open={openRows.filter(isMine).length} />
         </nav>

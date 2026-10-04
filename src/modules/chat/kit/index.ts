@@ -3,7 +3,7 @@
  * components. Channel-specific pieces (Team Chat's call and record cards) are passed in as renderers, so a website
  * chat never loads them.
  */
-export { TEAM_CAPS, WEBSITE_CAPS, type ChannelCaps } from './caps';
+export { TEAM_CAPS, TEAM_COMPOSER, WEBSITE_CAPS, WEBSITE_COMPOSER, type ChannelCaps, type ComposerCaps } from './caps';
 export { byTime, eventsForThread, fromChatMessage, fromWebsiteMessage, fromWidgetEvent, websiteFileUrl, type KitFile, type KitMessage, type KitRole, type TeamChatMessage } from './model';
 export { groupMessages, positionIn, type KitItem, type KitRow, type KitSlot, type Position } from './grouping';
 export { ActivityEvent, DayDivider, MessageGroup, MessageList, PendingBubble, SystemLine, TypingLine, relativeDay } from './MessageList';

@@ -5,6 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.181 — 2026-10-04
+
+- **Admin Center › Chat › Ringing (P-03).** People who manage website chats get an Admin Center tab in Settings (and
+  a Ringing item under Website chats › Setup). It sets who is rung and when (the four timings) and what happens when
+  nobody joins (2, 5 or 10 minutes, and offline enquiries). The other Admin Center pages open on the web.
+- **One chat kit (P-04).** Team Chat and website chats share one composer that offers each channel only what it can
+  do.
+  - Team Chat gains **@** (mention someone) and a mic for voice messages, and Emoji moves left of the box.
+  - Website chats can attach a screenshot, a photo, or a copy of a Drive file ("visitors can't open Drive links").
+    AI tools is now **Writing assistant**.
+  - In both: the tray shows "uploading 60%", files that can't be sent show a red note under the tray instead of a
+    toast, the "/" list shows what you typed, and the reply bar is one line.
+  - **Save to Drive** now works on a visitor's files, and Delete for the visitor follows the server's time window.
+
 ## 0.2.180 — 2026-10-04
 
 - **Notifications & calls (P-02).** Settings › Notifications & calls follows the design: "Website chat ringing on this

@@ -95,7 +95,7 @@ export function SlashMenu({
       )}
     >
       {view === 'root' ? (
-        <Root items={items} pick={pick} setPick={setPick} choose={choose} />
+        <Root word={word} items={items} pick={pick} setPick={setPick} choose={choose} />
       ) : view === 'saved' ? (
         <Saved initial={word} replies={replies} onInsert={onInsert} onBack={() => setView('root')} onClose={onClose} />
       ) : (
@@ -108,10 +108,12 @@ export function SlashMenu({
 const optionCls = (on: boolean) => cx('flex w-full items-start gap-2.5 rounded-[8px] px-2 py-1.5 text-left', on ? 'bg-selection' : 'hover:bg-subtle');
 const footCls = 'border-t border-line px-2.5 py-1.5 text-[11px] text-ink-3';
 
-function Root({ items, pick, setPick, choose }: { items: Item[]; pick: number; setPick: (i: number) => void; choose: (it: Item) => void }) {
+function Root({ word, items, pick, setPick, choose }: { word: string; items: Item[]; pick: number; setPick: (i: number) => void; choose: (it: Item) => void }) {
   const firstReply = items.findIndex((it) => it.kind === 'reply');
   return (
     <>
+      {/* What was typed after the "/", over what it found (P-04 Saved replies · "/" picker: "/edu"). */}
+      {word ? <div data-slash-query className="border-b border-line px-3 py-2 text-[12px] text-ink-3">/{word}</div> : null}
       <div role="listbox" aria-label="Quick actions" className="min-h-0 flex-1 overflow-y-auto p-1 scroll-thin">
         {items.map((it, i) => (
           <div key={it.kind === 'action' ? it.key : `r${it.reply.id}`}>

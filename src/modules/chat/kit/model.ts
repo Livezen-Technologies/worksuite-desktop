@@ -134,7 +134,7 @@ export interface WebsiteContext {
   canReply: boolean;
   status?: 'sent' | 'delivered' | 'read';
   footer?: string | null;
-  /** How long after writing a message it can still be deleted for the visitor (#229). */
+  /** How long after writing a message it can still be deleted for the visitor (#229); 0 for no limit (the server's window). */
   deleteMinutes?: number;
 }
 
@@ -174,7 +174,7 @@ export function fromWebsiteMessage(m: WebsiteMessage, ctx: WebsiteContext): KitM
     timed: m.from === 'system',
     // Reactions are never added in a website chat (RDC-12); a quote goes to the visitor, so never of a note.
     // Deleting reaches the visitor too, for what I wrote, within the server's window (#229); the server has the last word.
-    can: { reply: ctx.canReply && m.from !== 'system' && !internal && !m.deleted, react: false, copy: !m.deleted, delete_everyone: m.from === 'agent' && !m.deleted && author.role === 'self' && Date.now() - ms(m.at) < (ctx.deleteMinutes ?? 15) * 60_000 },
+    can: { reply: ctx.canReply && m.from !== 'system' && !internal && !m.deleted, react: false, copy: !m.deleted, delete_everyone: m.from === 'agent' && !m.deleted && author.role === 'self' && (ctx.deleteMinutes === 0 || Date.now() - ms(m.at) < (ctx.deleteMinutes ?? 15) * 60_000) },
   };
 }
 
