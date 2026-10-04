@@ -19,7 +19,8 @@ import type { Preferences } from '@shared/types';
 import { copyWords } from './MailSettings';
 import { ALL_FOLDERS, allCount } from './allAccounts';
 import { SMART_VIEWS, folderName, mailboxLetter, type SmartViewId } from './model';
-import { AccountAvatar, Count, SectionHeading } from './parts';
+import { AccountAvatar, AccountTag, Count, SectionHeading } from './parts';
+import { useAccountTags } from './useAccountTags';
 import { accountName, accountState, syncAgo, syncAt, type SyncSummary } from './sync';
 import type { AllCounts, Folder, Mailbox, SyncAccount, ViewCounts } from './types';
 
@@ -361,6 +362,9 @@ function AccountRow({ box, account, running, offline, open, count, active, onTog
   const name = mailboxName(box);
   const status = account ? accountState(account) : null;
   const feedback = useSyncFeedback(running, account?.last_result === 'failed');
+  // The account's tag, as on the list's rows (#227).
+  const { tags, mode } = useAccountTags();
+  const tag = tags.get(box.id);
   return (
     <div className={cx('group relative flex h-[30px] items-center rounded-[8px]', active ? 'bg-selection' : 'hover:bg-subtle')}>
       <button type="button" onClick={onToggle} aria-expanded={open} aria-label={open ? text('Hide the folders of {name}', { name }) : text('Show the folders of {name}', { name })} className="inline-flex h-6 w-5 shrink-0 items-center justify-center text-ink-3 hover:text-ink">
@@ -375,6 +379,7 @@ function AccountRow({ box, account, running, offline, open, count, active, onTog
       >
         <AccountAvatar letter={mailboxLetter(box)} colour={box.colour} size={18} />
         <span className="min-w-0 flex-1 truncate">{name}</span>
+        {tag && tag.show !== 'never' && mode !== 'off' && tag.label.toLowerCase() !== name.toLowerCase() ? <AccountTag tag={tag} mode={mode} /> : null}
         <Count n={count} strong={!!count} active={active} />
       </button>
       {failed ? (

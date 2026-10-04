@@ -192,8 +192,9 @@ describe('the list', () => {
     await within(list).findByText('Welcome Team');
     expect(within(list).getByText('Today').parentElement!.textContent).toContain('2');
     expect(within(list).getByText('Yesterday')).toBeTruthy();
-    expect(within(list).getByText('WS')).toBeTruthy();
-    expect(within(list).getByText('SALES')).toBeTruthy();
+    // Each account's tag (#227): its first name, told apart from another "me", or the address of a role mailbox.
+    expect(within(list).getAllByText('Me').length).toBeGreaterThan(0);
+    expect(within(list).getAllByText('Sales').length).toBeGreaterThan(0);
     fireEvent.change(screen.getByRole('textbox', { name: 'Search mail' }), { target: { value: 'quotation' } });
     expect(within(list).queryByText('Welcome Team')).toBeNull();
     expect(within(list).getByText('Pat Lee')).toBeTruthy();
@@ -257,7 +258,7 @@ describe('the reading pane', () => {
     expect(within(pane).getByRole('tab', { name: /Welcome to your mailbox/ })).toBeTruthy();
     // The checks as a quiet shield after the sender's name, and the account as a dot in All Accounts (#212).
     expect(await within(pane).findByRole('img', { name: 'Verified · SPF, DKIM, DMARC passed' })).toBeTruthy();
-    expect(within(pane).getByRole('img', { name: 'me@example.test · WorkSuite Local' })).toBeTruthy();
+    expect(within(pane).getByTitle('me@example.test · WorkSuite Local').textContent).toBe('Me');
     // A colleague on the organisation's own domain, verified: trusted, so no "Images are hidden" bar (#163; it used to
     // say "1 remote image was blocked"). The picture still never goes into the frame by its own address.
     expect(within(pane).queryByText('Images are hidden to protect your privacy.')).toBeNull();

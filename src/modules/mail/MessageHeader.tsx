@@ -4,7 +4,9 @@ import { Icon } from '../../components/Icon';
 import { Menu, type MenuSection } from '../../components/Menu';
 import { Avatar, cx } from '../../components/ui';
 import { PersonButton, type PersonActions } from './PeopleCard';
-import { AccountAvatar } from './parts';
+import { AccountAvatar, AccountTag } from './parts';
+import { tagShows } from './accountTags';
+import { useAccountTags } from './useAccountTags';
 import { headerDate, mailboxLetter, recipientSummary, shieldTitle, splitAddress, type HeaderDensity, type SecurityVerdict } from './model';
 import type { Mailbox, MessageContext, MessageDetail } from './types';
 
@@ -61,6 +63,7 @@ export function accountTitle(a: Pick<Mailbox, 'email' | 'provider_label' | 'acco
 const BADGE = 'inline-flex h-[22px] shrink-0 items-center gap-1 rounded-[6px] px-1.5 text-[12px] font-semibold';
 
 export function MessageHeader(p: MessageHeaderProps) {
+  const accountTags = useAccountTags();
   const { m, density, narrow } = p;
   const [details, setDetails] = useState(false);
   const [menu, setMenu] = useState(false);
@@ -95,8 +98,14 @@ export function MessageHeader(p: MessageHeaderProps) {
   );
 
   const shield = p.security ? <Shield verdict={p.security} /> : null;
+  // Which account it came to: the account's tag where it shows, as on the list's rows (#227), else its letter.
+  const tag = p.account ? accountTags.tags.get(p.account.id) : undefined;
   const accountDot =
-    p.combined && p.account ? (
+    p.account && tag && tagShows(tag, accountTags.mode, p.combined) ? (
+      <span data-account-dot className="inline-flex shrink-0">
+        <AccountTag tag={tag} mode={accountTags.mode} />
+      </span>
+    ) : p.combined && p.account && !tag ? (
       <span role="img" data-account-dot aria-label={accountTitle(p.account)} title={accountTitle(p.account)} className="inline-flex shrink-0">
         <AccountAvatar letter={mailboxLetter(p.account)} colour={p.account.colour} size={16} />
       </span>

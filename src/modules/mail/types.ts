@@ -363,6 +363,10 @@ export interface AllCounts {
 
 /** The list's layout, kept on the server (GET/PUT /api/mail/prefs). */
 export interface MailPrefs {
+  /** How rows show which account a message came to: its name tag (default), its colour dot, or nothing (#227). */
+  accountTag?: 'name' | 'dot' | 'off';
+  /** Each account's tag label, colour and where it shows, by mailbox id (#227). */
+  accountTags?: Record<string, { label?: string; colour?: string; show?: 'combined' | 'all' | 'never' }>;
   /** My Day on the right of Mail (DMO-TSK-04). */
   todoPane?: boolean;
   view?: 'classic' | 'compact' | 'super' | 'table';

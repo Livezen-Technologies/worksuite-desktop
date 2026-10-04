@@ -5,6 +5,25 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.155 — 2026-10-04
+
+- **Mail rows say which account by name (#227).** In All Accounts and the other combined views, each row used to
+  carry two letters of the domain in a dark chip ("LI"), so hasarinda@ and acc@ on the same domain looked the same,
+  and the chip stood out more than the sender. Now it is a small soft pill: the account's first name ("Hasarinda"),
+  or the address before the @ when there is no name or the name is a role like "Accounts" ("Acc"). It is drawn in a
+  light tint of the account's colour with the name in a darker shade, readable in both themes, and sits before the
+  date. The address and kind of account are in its tooltip.
+- **No two accounts look alike.** When two would get the same name, the second gets the first letter of its domain
+  or a number ("Hasarinda G", "Hasarinda 2"), and each account gets its own colour.
+- **Set it per account** in Settings › Mail › Accounts › Manage: the tag label (up to 12 characters), one of eight
+  colours or your own, and where it shows (Combined views, All views or Never). The pill previews as you type, and
+  **Reset to default** brings back the automatic label and colour. The settings are kept with your account, so every
+  computer shows the same tags.
+- **Name tag, Dot only or Off** in Settings › Mail › Appearance & reading › Account tag. A list narrower than 340px
+  shows the dot alone.
+- The same tag is beside the account in the sidebar, in **From** when you write, and above the message you read.
+- Needs the server update (Mail 1.14.1) to keep the tags. An older server shows the automatic ones.
+
 ## 0.2.154 — 2026-10-04
 
 - **Visitors online and the Live dashboard are two views (#231).** Before, both menu items opened the same screen and

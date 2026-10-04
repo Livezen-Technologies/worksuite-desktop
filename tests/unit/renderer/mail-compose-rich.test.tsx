@@ -21,6 +21,9 @@ vi.mock('../../../src/modules/mail/api', () => ({
   useTemplates: () => ({ data: { templates: [] }, isLoading: false }),
   useSignatures: () => ({ data: { signatures: net.sigs, ...net.sigExtra } }),
   useQuickParts: () => ({ data: net.parts }),
+  // The account tags beside From (#227).
+  useMailboxes: () => ({ data: undefined }),
+  useMailPrefs: () => ({ prefs: {}, loaded: true, set: () => undefined }),
 }));
 // Pictures are decoded and made smaller with the browser's canvas, which jsdom does not have.
 vi.mock('../../../src/modules/mail/editor/images', async (orig) => ({

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.20.0 — 2026-10-04
+
+- Account tags (#227): rows of the combined views show the account's first name (or the address before the @) in a soft pill of the account's colour instead of two letters of the domain; accounts that would match are told apart; each account's label, colour and where it shows are edited in Settings › Mail › Accounts with a preview and Reset to default; Appearance & reading › Account tag switches between Name tag, Dot only and Off; the same tag shows in the sidebar, From and the reading pane.
+
 ## 1.19.0 — 2026-10-04
 
 - Fetching ahead gives way to what a person opens (background priority, backoff, no UID 0); the reader tells a busy server and a message without a server ID apart; the sync log's Fetch errors tab and the running pass's progress (#228)

@@ -289,8 +289,8 @@ describe('the folder pane and lists (DMO-ALL-01…11, DMO-SYN-01…04)', () => {
     expect(screen.getByTestId('route').textContent).toBe('/mail?folder=trash');
     const list = await screen.findByRole('listbox', { name: 'Messages' });
     await within(list).findByText('Old draft');
-    expect(within(list).getByText('WS')).toBeTruthy();
-    expect(within(list).getByText('CO')).toBeTruthy();
+    expect(within(list).getAllByText('Me').length).toBeGreaterThan(0);
+    expect(within(list).getAllByText('Me C').length).toBeGreaterThan(0);
     expect(screen.getByRole('heading', { name: 'All Accounts · Deleted Items' })).toBeTruthy();
   });
 
