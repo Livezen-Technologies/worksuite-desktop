@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.29.0 — 2026-10-04
+
+- C-00 Live dashboard to the design: live pill, six KPI tiles, the world map (countries shaded by visitors, city markers with state rings, at-risk halo and callout, country-only rings, legend, country rows, Now/Today, zoom presets), the Needs you / In a chat / Browsing list with Join, Open and Start chat, the visitor drawer, Full map and Wall mode (names hidden).
+
 ## 1.28.0 — 2026-10-04
 
 - C-01 Inbox to the design: the Website Chats menu in the design's order with icons, count pills (red for missed, green for visitors online) and a lit bar; Mine is 'Assigned to me'; Back to Chat as a tile with Ctrl/Cmd+[; the shared 'Set your status' control at its foot as 'Taking chats · N open'; 36px avatars, a plain mono wait clock, 13px previews and 'site · /path' on rows; the empty panel at the design's sizes.

@@ -9,7 +9,7 @@ import type * as CoreApi from '../../../src/core/api';
  * Visitors online and the Live dashboard (worksuite-desktop#231): two views, each lit alone in the menu and apart from
  * Live chats; a visitor is selected by a click or the arrow keys, kept in the address, and their details open beside
  * the list with Start chat, Open chat, Invite a colleague and Block; Enter or a double-click goes to their chat; the
- * dashboard's cards open the views they count; and a visitor who leaves is said to have left.
+ * dashboard's figures open the views they count (C-00); and a visitor who leaves is said to have left.
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({ conversation_id: 77 })) }));
 vi.mock('../../../src/core/bridge', () => ({
@@ -230,7 +230,9 @@ describe('Visitors online', () => {
 });
 
 describe('the Live dashboard', () => {
-  it('each card opens the view it counts, and See all goes to Visitors online', async () => {
+  // The dashboard's own design (worksuite-desktop C-00) is covered in website-dashboard.test.tsx; here, that it is
+  // reached from the menu and still opens the views it counts and selects into the address.
+  it('each figure opens the view it counts, and All visitors online goes to Visitors online', async () => {
     tab.route = '/chat?view=website&section=dashboard';
     online = [...ONLINE, ...Array.from({ length: 8 }, (_, i) => visitor({ id: 10 + i, label: `Visitor X${i}` }))];
     mount();
@@ -240,19 +242,17 @@ describe('the Live dashboard', () => {
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=awaiting');
     fireEvent.click(screen.getByRole('listitem', { name: /^Open chats: 2/ }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=inbox');
-    fireEvent.click(screen.getByRole('listitem', { name: /^Median first reply: 1:15/ }));
+    fireEvent.click(screen.getByRole('listitem', { name: /^First reply: 1:15/ }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=missed');
 
-    await waitFor(() => expect(within(rows()).getAllByRole('option')).toHaveLength(8));
-    fireEvent.click(screen.getByRole('button', { name: 'See all 11' }));
+    fireEvent.click(await screen.findByRole('button', { name: 'All 11 visitors online →' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=visitors');
   });
 
   it('selects a visitor on the dashboard too', async () => {
     tab.route = '/chat?view=website&section=dashboard';
     mount();
-    await waitFor(() => expect(within(rows()).getAllByRole('option')).toHaveLength(3));
-    fireEvent.click(option(/Hasitha/));
+    fireEvent.click(await screen.findByRole('listitem', { name: 'Hasitha' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=dashboard&visitor=1');
   });
 });

@@ -1,4 +1,4 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type KeyboardEvent } from 'react';
 import { ApiError, apiGet, apiPost } from '../../../core/api';
 import { errorMessage } from '../../../core/bridge';
@@ -8,40 +8,10 @@ import { toast } from '../../../core/toasts';
 import { Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { useCanned, visitorStatus, WEBSITE, type Section } from './api';
 import { Select } from '../../../components/Select';
+import { LiveDashboard } from './live/LiveDashboard';
+import type { Dashboard, OnlineVisitor } from './live/liveMap';
 
-interface Dashboard {
-  now: { visitors_online: number; open: number; pending: number; waiting_on_us: number; at_risk: number; window_seconds: number };
-  today: { visitors: number; returning: number; conversations: number; missed: number; page_views: number; first_response_median: number | null };
-  summary: { pages: Array<{ url?: string; title?: string; name?: string; count: number }>; countries: Array<{ name: string | null; count: number }>; devices: Array<{ name: string | null; count: number }>; referrers: Array<{ name: string; count: number }> };
-  widgets: Array<{ id: number; name: string; online: number }>;
-}
-
-export interface OnlineVisitor {
-  id: number;
-  label: string;
-  name: string | null;
-  email: string | null;
-  widget_id: number;
-  website_name: string | null;
-  browser: string | null;
-  os: string | null;
-  device: string | null;
-  country: string | null;
-  city: string | null;
-  current_url: string | null;
-  current_title: string | null;
-  landing_page?: string | null;
-  referrer: string | null;
-  utm_campaign: string | null;
-  pages: number;
-  visits: number;
-  on_site_seconds: number;
-  idle_seconds: number;
-  conversation_id: number | null;
-  conversation_status: string | null;
-  /** The visitor's chat as the dashboard reads it: waiting on us, and who has it. */
-  chat?: { awaiting: boolean; waiting_since: string | null; at_risk: boolean; agent: string | null } | null;
-}
+export type { OnlineVisitor } from './live/liveMap';
 
 interface Activity {
   events: Array<{ id: number; kind: string; url: string | null; title: string | null; at: string; new_visit: boolean }>;
@@ -66,11 +36,6 @@ function short(url: string | null | undefined): string {
   }
 }
 
-function median(s: number | null): string {
-  if (s === null) return '—';
-  return `${Math.floor(s / 60)}:${String(Math.round(s % 60)).padStart(2, '0')}`;
-}
-
 /** Whether there is a chat to go to: one open or waiting. */
 const hasChat = (v: OnlineVisitor) => !!v.conversation_id && (v.conversation_status === 'open' || v.conversation_status === 'pending');
 
@@ -85,10 +50,11 @@ const STATUSES: Array<{ id: '' | Status; label: string }> = [
 ];
 
 /**
- * The Live section of Website chats (WebChatLive; worksuite-desktop#231): the dashboard — its cards each opening the
- * view they count, and the visitors on the sites now — and Visitors online, everybody, with filters. In both, a
- * visitor is selected by a click (or the arrow keys) and their details open beside the list; Enter or a double-click
- * goes to their chat. The selection is in the address, so it survives Back, a reopened tab and a refresh of the list.
+ * The Live section of Website chats (WebChatLive; worksuite-desktop#231): the Live dashboard (worksuite-desktop C-00;
+ * live/LiveDashboard) — six figures each opening the view they count, the map, and everybody on the site in the order
+ * they need us — and Visitors online, everybody, with filters. In both, a visitor is selected (a click, the arrow keys,
+ * or Start chat) and their details open: beside the list here, over it on the dashboard; Enter or a double-click goes
+ * to their chat. The selection is in the address, so it survives Back, a reopened tab and a refresh of the list.
  */
 export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection }: {
   view: LiveView;
@@ -100,11 +66,18 @@ export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection }:
   const [site, setSite] = useState(0);
   const [status, setStatus] = useState<'' | Status>('');
   const [focusStart, setFocusStart] = useState(0);
-  const dash = useQuery({ queryKey: ['website', 'dashboard'], queryFn: ({ signal }) => apiGet<Dashboard>(`${WEBSITE}/dashboard`, undefined, signal), refetchInterval: 15_000, enabled: view === 'dashboard' });
+  // Ten seconds, as the visitor list, so the two never disagree about how many people are on the site (C-00). One site
+  // narrows every figure; changing it keeps the last figures on screen until the new ones land.
+  const dash = useQuery({
+    queryKey: ['website', 'dashboard', site],
+    queryFn: ({ signal }) => apiGet<Dashboard>(`${WEBSITE}/dashboard`, site ? { widget_id: site } : undefined, signal),
+    refetchInterval: 10_000,
+    enabled: view === 'dashboard',
+    placeholderData: keepPreviousData,
+  });
   const visitors = useQuery({ queryKey: ['website', 'visitors'], queryFn: ({ signal }) => apiGet<{ visitors: OnlineVisitor[] }>(`${WEBSITE}/visitors`, undefined, signal), refetchInterval: 10_000 });
   const all = (visitors.data?.visitors ?? []).filter((v) => !site || v.widget_id === site);
   const list = view === 'visitors' && status ? all.filter((v) => visitorStatus(v)[0] === status) : all;
-  const shown = view === 'dashboard' ? list.slice(0, 8) : list;
 
   // The selected visitor, and — once they have left the site — who they were and when they were last seen.
   const [last, setLast] = useState<{ v: OnlineVisitor; at: number } | null>(null);
@@ -114,23 +87,6 @@ export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection }:
   const left = !here && !!picked && visitors.isSuccess;
 
   const d = dash.data;
-  const sites = (d?.widgets ?? []).filter((w) => w.online > 0).length;
-  const cards: Array<{ label: string; value: string; hint: string; tone: string; go: 'visitors' | Section; action: string }> = d
-    ? [
-        { label: 'On the site now', value: String(d.now.visitors_online), hint: sites ? `across ${sites} site${sites === 1 ? '' : 's'}` : '', tone: 'text-ink', go: 'visitors', action: 'see who' },
-        { label: 'Visitors today', value: String(d.today.visitors), hint: d.today.visitors ? `${Math.round((d.today.returning / Math.max(1, d.today.visitors)) * 100)}% returning` : '', tone: 'text-ink', go: 'visitors', action: 'see who is on now' },
-        { label: 'Chats started', value: String(d.today.conversations), hint: '', tone: 'text-ink', go: 'inbox', action: 'open the inbox' },
-        { label: 'Open chats', value: String(d.now.open + d.now.pending), hint: '', tone: 'text-ink', go: 'inbox', action: 'open the inbox' },
-        { label: 'Waiting on us', value: String(d.now.waiting_on_us), hint: 'visitor spoke last', tone: 'text-[#9A4A06] dark:text-warning', go: 'awaiting', action: 'open those chats' },
-        { label: 'At risk', value: String(d.now.at_risk), hint: 'nobody answered in time', tone: 'text-danger', go: 'awaiting', action: 'open those chats' },
-        { label: 'Median first reply', value: median(d.today.first_response_median), hint: `missed today: ${d.today.missed}`, tone: 'text-success', go: 'missed', action: 'open missed chats' },
-      ]
-    : [];
-  const refs = d?.summary.referrers ?? [];
-  const refTotal = refs.reduce((n, r) => n + r.count, 0) || 1;
-  const devs = d?.summary.devices ?? [];
-  const devTotal = devs.reduce((n, r) => n + r.count, 0) || 1;
-
   const open = (v: OnlineVisitor) => {
     if (hasChat(v)) onOpenChat(v.conversation_id!);
     else {
@@ -139,76 +95,54 @@ export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection }:
     }
   };
 
+  const card = picked ? <VisitorCard key={picked.id} v={picked} left={left} leftAt={left ? (last?.at ?? null) : null} focusStart={focusStart} onOpenChat={onOpenChat} onClose={() => onSelect(null)} /> : null;
+
+  if (view === 'dashboard') {
+    return (
+      <LiveDashboard
+        dash={dash}
+        visitors={all}
+        loading={visitors.isLoading}
+        error={visitors.error}
+        onRetry={() => void visitors.refetch()}
+        site={site}
+        onSite={setSite}
+        selected={selected}
+        onSelect={onSelect}
+        onStart={(v) => {
+          onSelect(v.id);
+          setFocusStart((n) => n + 1);
+        }}
+        onOpenChat={onOpenChat}
+        onSection={onSection}
+        drawer={card}
+      />
+    );
+  }
+
   return (
     <main className="flex h-full min-w-0 flex-1 flex-col gap-4 overflow-y-auto bg-ground px-6 py-5 text-[13px] scroll-thin">
       <div className="flex items-baseline gap-3">
-        <h1 className="text-[20px] font-bold text-ink">{view === 'dashboard' ? text('Live dashboard') : text('Visitors online')}</h1>
-        <span className="flex-1 text-[12px] text-ink-3">{view === 'dashboard' ? text('Today. Median, not mean.') : text('Everybody on your sites now.')}</span>
-        {view === 'visitors' ? (
-          <Select aria-label={text('Show')} value={status} onChange={(e) => setStatus(e.target.value as '' | Status)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
-            {STATUSES.map((s) => <option key={s.id} value={s.id}>{text(s.label)}</option>)}
-          </Select>
-        ) : null}
+        <h1 className="text-[20px] font-bold text-ink">{text('Visitors online')}</h1>
+        <span className="flex-1 text-[12px] text-ink-3">{text('Everybody on your sites now.')}</span>
+        <Select aria-label={text('Show')} value={status} onChange={(e) => setStatus(e.target.value as '' | Status)} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
+          {STATUSES.map((s) => <option key={s.id} value={s.id}>{text(s.label)}</option>)}
+        </Select>
         <Select aria-label={text('Site')} value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
           <option value={0}>{text('All sites')}</option>
           {(d?.widgets ?? []).map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
         </Select>
       </div>
-      {view === 'dashboard' && dash.error ? <ErrorNote error={dash.error} onRetry={() => void dash.refetch()} /> : null}
-      {view === 'dashboard' ? (
-        <div className="grid grid-cols-7 gap-2" role="list" aria-label={text('Today')}>
-          {cards.map((c) => (
-            <button
-              key={c.label}
-              type="button"
-              role="listitem"
-              aria-label={`${text(c.label)}: ${c.value} — ${text(c.action)}`}
-              onClick={() => onSection(c.go)}
-              className={cx('flex flex-col gap-0.5 rounded-[12px] border bg-surface px-3 py-2.5 text-left hover:bg-subtle focus-visible:outline-2 focus-visible:outline-primary', c.label === 'At risk' && c.value !== '0' ? 'border-[#F1B8A8]' : 'border-line')}
-            >
-              <span className="text-[11.5px] text-ink-3">{text(c.label)}</span>
-              <span className={cx('text-[22px] font-bold', c.tone)}>{c.value}</span>
-              <span className="truncate text-[11px] text-ink-3">{c.hint}</span>
-            </button>
-          ))}
-        </div>
-      ) : null}
       <div className="grid min-h-0 gap-4 [grid-template-columns:1.5fr_1fr]">
         <section className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface p-4">
           <div className="flex items-baseline gap-2">
             <h2 className="flex-1 text-[15px] font-bold text-ink">{text('Visitors online · {n}', { n: list.length })}</h2>
-            {view === 'dashboard' && list.length > shown.length ? (
-              <button type="button" onClick={() => onSection('visitors')} className="text-[12px] font-semibold text-primary hover:underline">
-                {text('See all {n}', { n: list.length })}
-              </button>
-            ) : (
-              <span className="text-[12px] text-ink-3">{text('Select someone to see what they are looking at')}</span>
-            )}
+            <span className="text-[12px] text-ink-3">{text('Select someone to see what they are looking at')}</span>
           </div>
-          <VisitorTable rows={shown} selected={selected} loading={visitors.isLoading} error={visitors.error} onRetry={() => void visitors.refetch()} onSelect={onSelect} onOpen={open} />
+          <VisitorTable rows={list} selected={selected} loading={visitors.isLoading} error={visitors.error} onRetry={() => void visitors.refetch()} onSelect={onSelect} onOpen={open} />
         </section>
         <div className="flex flex-col gap-4">
-          {picked ? (
-            <VisitorCard key={picked.id} v={picked} left={left} leftAt={left ? (last?.at ?? null) : null} focusStart={focusStart} onOpenChat={onOpenChat} onClose={() => onSelect(null)} />
-          ) : (
-            <section className="rounded-[12px] border border-dashed border-line p-4 text-ink-3">{text('Select a visitor to see their pages and start a conversation.')}</section>
-          )}
-          {view === 'dashboard' ? (
-            <section className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface p-4">
-              <h2 className="text-[15px] font-bold text-ink">{text('How they got here · devices')}</h2>
-              {!refs.length ? <p className="text-ink-3">{devs.length ? text('Nobody came from another site today.') : text('No visits today yet.')}</p> : null}
-              {refs.map((r) => (
-                <div key={r.name} className="grid grid-cols-[90px_1fr_40px] items-center gap-2">
-                  <span className="truncate text-ink">{r.name}</span>
-                  <span className="h-2 rounded-full bg-subtle">
-                    <span className="block h-2 rounded-full bg-teal" style={{ width: `${Math.round((r.count / refs[0]!.count) * 100)}%` }} />
-                  </span>
-                  <b className="text-right text-ink">{Math.round((r.count / refTotal) * 100)}%</b>
-                </div>
-              ))}
-              {devs.length ? <span className="text-[12px] text-ink-3">{devs.map((x) => `${x.name ? x.name[0]!.toUpperCase() + x.name.slice(1) : 'Unknown'} ${Math.round((x.count / devTotal) * 100)}%`).join(' · ')}</span> : null}
-            </section>
-          ) : null}
+          {card ?? <section className="rounded-[12px] border border-dashed border-line p-4 text-ink-3">{text('Select a visitor to see their pages and start a conversation.')}</section>}
         </div>
       </div>
     </main>
