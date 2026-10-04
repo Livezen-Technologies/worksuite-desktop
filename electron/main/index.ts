@@ -1098,6 +1098,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   notifications.sendWebsiteReply = async (conversationId, text) => {
     const me = sessionCtl.userId();
     if (!me) return { delivered: false, queued: false, id: null, status: null, data: null, error: 'You are signed out.', code: 'NOT_SIGNED_IN' };
+    // A chat still ringing: the reply joins it and is sent in one step, first come (#225). Too late, it is refused.
+    if (webchat.isRinging(conversationId)) {
+      const r = await webchat.joinAndSend(conversationId, text, { stay: false });
+      return { delivered: r.ok, queued: false, id: null, status: r.ok ? 200 : 409, data: null, error: r.why, code: r.ok ? null : 'TAKEN' };
+    }
     return queue.submit(me, websiteReplyMutation(conversationId, text));
   };
   notifications.websiteReplyRefused = (w, text, error) => {
@@ -1324,7 +1329,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null;
     },
     // With a call just answered, the thread joins its audio (`call=`).
-    open: (id, callId) => navigate({ route: `/chat?view=website&website=${id}${callId ? `&call=${callId}` : ''}`, source: 'notification' }),
+    open: (id, callId, then) => navigate({ route: `/chat?view=website&website=${id}${callId ? `&call=${callId}` : ''}${then === 'transfer' ? '&transfer=1' : ''}`, source: 'notification' }),
+    openInbox: () => navigate({ route: '/chat?view=website&section=inbox', source: 'notification' }),
+    // The ringing card's mini chat replies as the conversation's composer does (#225).
+    reply: (conversationId, text) => notifications.sendWebsiteReply?.(conversationId, text) ?? Promise.resolve({ delivered: false, queued: false, id: null, status: null, data: null, error: 'You are signed out.', code: 'NOT_SIGNED_IN' }),
     // This installation as a ringing device (RING-10): the registered device's id, stable across restarts.
     deviceId: () => {
       const d = Number(device.current()?.id);
@@ -1334,7 +1342,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
-      if ((s.chats.length || s.handoffs?.length || s.calls?.length || s.outcome) && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(ringerHeight(s));
+      // The card, or the mini chat on a chat just joined from it (#225), unless minimised; as tall as it measured itself.
+      if ((s.chats.length || s.handoffs?.length || s.calls?.length || s.outcome || s.joined) && !s.minimised && prefs.window && (!lock.isLocked() || settings.effective().lockedChatNotifications !== false)) windows.showRinger(s.fit ?? ringerHeight(s));
       else windows.hideRinger();
       tray.update(trayCalls(s));
       const live = s.chats.some((c) => !c.silenced) || !!s.handoffs?.length;

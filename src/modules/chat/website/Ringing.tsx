@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { WebchatCall, WebchatHandoff, WebchatRingChat, WebchatRingState } from '@shared/types';
 import { call, errorMessage, isMac, on } from '../../../core/bridge';
 import { parseTs } from '../../../core/time';
@@ -7,6 +7,7 @@ import { Avatar, cx } from '../../../components/ui';
 import { Icon } from '../../../components/Icon';
 import { useNow } from '../../calls/parts';
 import { playTone } from '../../calls/tones';
+import { JoinedCard, RingCard, RingStack, useFit } from './RingCard';
 
 /**
  * Website chats ringing like calls (WS-WCHAT ENH-01): the native call window
@@ -72,7 +73,6 @@ export function stageLabel(c: Pick<WebchatRingChat, 'atRisk' | 'mine' | 'stage' 
 const join = (id: number) =>
   void call('ring:join', { id }).catch((e) => toast('error', errorMessage(e)));
 const silence = (id: number, onOff: boolean) => void call('ring:silence', { id, on: onOff }).catch(() => undefined);
-const pass = (id: number) => void call('ring:pass', { id }).catch((e) => toast('error', errorMessage(e)));
 const answer = (id: number, accept: boolean) => void call('ring:handoff', { id, accept }).catch((e) => toast('error', errorMessage(e)));
 const answerCall = (id: number, accept: boolean) => void call('ring:call', { id, accept }).catch((e) => toast('error', errorMessage(e)));
 
@@ -89,9 +89,6 @@ export function handoffAsk(h: Pick<WebchatHandoff, 'kind' | 'mode' | 'from' | 'd
   if (h.toAny && !h.from) return 'Nobody took this chat — it needs someone';
   return h.mode === 'cold' ? `${who} handed this chat over${to}` : `${who} asks you to take over${to}`;
 }
-
-/** The server's accept time by default: how long a chat given to me rings before it passes on (RING-05). */
-const ACCEPT_SECONDS = 60;
 
 /** m:ss for a count of seconds. */
 export function clock(seconds: number): string {
@@ -115,97 +112,31 @@ export function WebchatRingWindow() {
   const s = useRingState();
   const now = useNow();
   useRingTone(s);
-  const [top, ...rest] = s.chats;
+  // The window is as tall as what it shows (#225): measured here, once, whichever card that is.
+  const fit = useFit();
+  const top = s.chats[0];
   const handoffs = s.handoffs ?? [];
-  const joinKey = isMac ? '⌘⇧J' : 'Ctrl+Shift+J';
-  const handover = top ? handoverIn(top.handoverAt, now) : null;
   const [firstCall, ...otherCalls] = s.calls ?? [];
+  // Invitations and transfers ringing beside chats, under the chat card.
+  const asks = handoffs.length && top ? <HandoffRows s={s} list={handoffs.slice(0, 2)} more={handoffs.length - 2} first /> : null;
 
+  let body: ReactNode;
   // A visitor on the line comes before everything else (VOICE-10).
-  if (firstCall) return <CallCard s={s} c={firstCall} rest={otherCalls} more={s.chats.length + handoffs.length} now={now} />;
-  if (!top && handoffs[0]) return <HandoffCard s={s} h={handoffs[0]} rest={handoffs.slice(1)} now={now} />;
-  if (!top) {
-    return (
-      <div className="drag flex h-full items-center gap-3 bg-[#0F1B3D] px-4 text-[13px] text-[#E6ECFA]" role="status" aria-live="polite">
+  if (firstCall) body = <CallCard s={s} c={firstCall} rest={otherCalls} more={s.chats.length + handoffs.length} now={now} />;
+  // One chat: the full card with its reply box; several: a compact card each (#225).
+  else if (top) body = s.chats.length > 1 ? <RingStack s={s} chats={s.chats} now={now} after={asks} /> : <RingCard s={s} c={top} now={now} after={asks} />;
+  else if (handoffs[0]) body = <HandoffCard s={s} h={handoffs[0]} rest={handoffs.slice(1)} now={now} />;
+  // A chat just joined from the card: a mini chat until the full chat is opened or the card minimised (#225).
+  else if (s.joined) body = <JoinedCard j={s.joined} now={now} />;
+  else {
+    body = (
+      <div className="drag flex min-h-[72px] items-center gap-3 bg-[#0F1B3D] px-4 py-4 text-[13px] text-[#E6ECFA]" role="status" aria-live="polite">
         <Icon name="check-circle" size={18} className="shrink-0 text-[#3DD68C]" />
         <span className="min-w-0 flex-1">{s.outcome?.text ?? 'Nothing is ringing.'}</span>
       </div>
     );
   }
-  return (
-    <div className="flex h-full flex-col bg-[#0F1B3D] text-[13px] text-[#E6ECFA]">
-      <div className="sr-only" role="alert" aria-live="assertive">
-        {s.hidden ? 'A website chat is waiting.' : `Website chat: ${top.visitor}${top.site ? ` on ${top.site}` : ''} is waiting.`}
-      </div>
-      <div className={cx('drag flex items-center gap-2 px-4 pt-3 text-[11.5px] font-bold tracking-[.06em] uppercase', top.atRisk ? 'text-[#FF8A73]' : 'text-[#AFC0E8]')}>
-        <span className={cx('h-2 w-2 rounded-full', top.silenced ? 'bg-[#F5B94A]' : 'bg-[#F0503A] motion-safe:animate-pulse')} />
-        <span className="flex-1">{top.silenced ? 'Silenced for you' : 'Website chat ringing'}</span>
-        <span className={cx('rounded-full px-2 py-0.5 text-[10.5px] tracking-normal normal-case', top.atRisk ? 'bg-[#5A1F17] text-[#FFB4A4]' : top.mine ? 'bg-[#1C3A2E] text-[#8FE3B7]' : 'bg-[#22305C] text-[#C9D5F5]')}>{stageLabel(top)}</span>
-      </div>
-      <div className="flex gap-3 px-4 pt-3">
-        <span className={cx('relative shrink-0 rounded-full', !top.silenced && 'motion-safe:[animation:ws-ring-pulse_1.6s_ease-out_infinite]')}>
-          <Avatar name={s.hidden ? '?' : top.visitor} size={46} />
-        </span>
-        <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-          <b className="truncate text-[15px] text-white">{s.hidden ? 'A website visitor' : top.visitor}</b>
-          <span className="truncate text-[12px] text-[#AFC0E8]">
-            {s.hidden ? 'Unlock WorkSuite to see who.' : [top.site, top.place, top.device, top.returning ? 'Returning' : null].filter(Boolean).join(' · ') || 'Website chat'}
-          </span>
-          {!s.hidden && top.page ? <span className="truncate text-[12px] text-[#C9D5F5]">Reading {top.page}</span> : null}
-        </span>
-        <span className="shrink-0 font-mono text-[12px] text-[#AFC0E8]" aria-label={`Waiting ${waited(top.since, now)}`}>
-          {waited(top.since, now)}
-        </span>
-      </div>
-      {!s.hidden && top.preview ? <p className="mx-4 mt-2 line-clamp-2 rounded-[8px] bg-[#16254F] px-2.5 py-1.5 text-[12.5px] text-[#E6ECFA]">“{top.preview}”</p> : null}
-      {top.mine && top.by ? <p className="mx-4 mt-1.5 text-[11.5px] text-[#AFC0E8]">Assigned to you by {top.by}</p> : null}
-      {top.mine && handover !== null ? (
-        // A chat given to me passes on if I do not join it in time (RING-UI-02).
-        <div className="mx-4 mt-2" role="timer" aria-label={`Passes on in ${clock(handover)}`}>
-          <div className="h-1 overflow-hidden rounded-full bg-[#22305C]">
-            <div className="h-full rounded-full bg-[#8FA6E0] transition-[width] duration-1000 ease-linear" style={{ width: `${Math.min(100, (handover / ACCEPT_SECONDS) * 100)}%` }} />
-          </div>
-          <p className="mt-1 text-[11.5px] text-[#AFC0E8]">Passes to the next available agent in {clock(handover)} if you don't join</p>
-        </div>
-      ) : null}
-      <div className="flex gap-2 px-4 pt-3">
-        <button type="button" disabled={s.hidden} onClick={() => join(top.id)} className="h-11 flex-1 rounded-[9px] bg-[#3DD68C] text-[14px] font-bold text-[#0B2A1D] hover:brightness-105 disabled:opacity-50">
-          Join chat
-        </button>
-        {top.mine && handover !== null ? (
-          <button type="button" onClick={() => pass(top.id)} className="h-11 flex-1 rounded-[9px] border border-[#33477E] text-[14px] font-semibold hover:bg-white/5">
-            Pass to next
-          </button>
-        ) : (
-          <button type="button" onClick={() => silence(top.id, !top.silenced)} className="h-11 flex-1 rounded-[9px] border border-[#33477E] text-[14px] font-semibold hover:bg-white/5">
-            {top.silenced ? 'Unsilence' : 'Silence'}
-          </button>
-        )}
-      </div>
-      {rest.length ? (
-        <ul className="mt-3 flex flex-col border-t border-[#22305C]" aria-label="Other chats waiting">
-          {rest.slice(0, 3).map((c) => (
-            <li key={c.id} className="flex h-[46px] items-center gap-2 border-b border-[#22305C] px-4">
-              <span className={cx('h-1.5 w-1.5 shrink-0 rounded-full', c.atRisk ? 'bg-[#F0503A]' : c.silenced ? 'bg-[#F5B94A]' : 'bg-[#8FA6E0]')} />
-              <span className="min-w-0 flex-1 truncate">
-                <b className="text-white">{s.hidden ? 'A visitor' : c.visitor}</b>
-                <span className="text-[#AFC0E8]"> · {stageLabel(c)}{c.site && !s.hidden ? ` · ${c.site}` : ''}</span>
-              </span>
-              <span className="font-mono text-[11.5px] text-[#AFC0E8]">{waited(c.since, now)}</span>
-              <button type="button" disabled={s.hidden} onClick={() => join(c.id)} className="h-8 rounded-[7px] bg-[#22305C] px-2.5 text-[12px] font-bold text-white hover:bg-[#2B3C70] disabled:opacity-50">
-                Join
-              </button>
-            </li>
-          ))}
-          {rest.length > 3 ? <li className="px-4 py-1 text-[11.5px] text-[#AFC0E8]">+{rest.length - 3} more waiting</li> : null}
-        </ul>
-      ) : null}
-      {handoffs.length ? <HandoffRows s={s} list={handoffs.slice(0, Math.max(1, 3 - rest.length))} more={handoffs.length - Math.max(1, 3 - rest.length)} first={!rest.length} /> : null}
-      <p className="drag mt-auto px-4 pt-2 pb-2.5 text-[11px] text-[#8FA6E0]">
-        {s.outcome ? s.outcome.text : s.elsewhere ? 'Ringing on your other device — shown here without sound' : `Rings until someone joins${s.shortcut ? ` · ${joinKey} to join` : ''}`}
-      </p>
-    </div>
-  );
+  return <div ref={fit}>{body}</div>;
 }
 
 /**

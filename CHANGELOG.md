@@ -5,6 +5,23 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.151 — 2026-10-04
+
+- **The website chat ringing card is redesigned so you can answer from it (#225).** It shows who is waiting, their
+  site, place and device, what they are reading (on its own line, so it is never cut off) and what they asked, as a
+  chat bubble. Type a reply — or pick one of your team's top three saved replies, or **Write with AI** — and **Join &
+  send** (or Enter) joins the chat and sends it in one step. **Join chat** joins without sending. Either way the chat
+  is yours only if nobody got there first; a moment too late, the card says who has it and nothing is sent.
+- **After joining, the card is a mini chat** with what you sent and a box for the next reply; **Open full chat** brings
+  WorkSuite forward on the conversation. A chat assigned to you has **Transfer**, which opens it with the transfer
+  dialog up.
+- **Minimise (or Esc) puts the card away** while the same chats ring; the ring goes on, and a new chat brings the card
+  back. **Silence** is now an icon with a tooltip, and a silenced chat says so in the header.
+- **Several chats ringing** show as a compact card each — name, last message, its own reply box, Join or Join & send,
+  and Silence — under "N chats waiting", with **Open inbox**. The card window grows to fit what it shows.
+- Needs the server update (Communication 1.21.0) for Join & send in one request; an older server is sent the join and
+  the reply one after the other.
+
 ## 0.2.150 — 2026-10-04
 
 - **On a Mac the window stays clear of the menu bar and the Dock (#221).** A WorkSuite window that had spread over

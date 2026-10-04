@@ -100,9 +100,10 @@ describe('the tone (RING-21, RING-47, RING-08)', () => {
 describe('the call window place (RING-40)', () => {
   it('sits bottom right of the work area and grows with the list, never past it', () => {
     const area = { x: 0, y: 25, width: 1440, height: 875 };
-    expect(ringerBounds(area, 272)).toEqual({ x: 1044, y: 612, width: 380, height: 272 });
+    expect(ringerBounds(area, 272)).toEqual({ x: 1004, y: 612, width: 420, height: 272 });
     expect(ringerBounds(area, 5000).height).toBe(843);
-    expect(ringerHeight({ chats: [chat({}), chat({ id: 2 })], outcome: null })).toBe(318);
+    expect(ringerHeight({ chats: [chat({}), chat({ id: 2 })], outcome: null })).toBe(280);
+    expect(ringerHeight({ chats: [chat({})], outcome: null })).toBe(430);
     expect(ringerHeight({ chats: [], outcome: { id: 1, text: 'x', at: 0 } })).toBe(120);
   });
 });
@@ -113,13 +114,16 @@ function ringer(answers: Array<PendingAnswer | Error>, over: Partial<{ locked: b
     if (a instanceof Error) throw a;
     return a;
   });
-  const post = vi.fn(async (_path: string, _body?: unknown): Promise<unknown> => ({}));
+  const post = vi.fn(async (_path: string, _body?: unknown, _opts?: unknown): Promise<unknown> => ({}));
   const request = vi.fn(async (_method: string, _path: string): Promise<unknown> => ({}));
   const states: WebchatRingState[] = [];
   const opened: number[] = [];
   // Chats opened on a call just answered: [conversation, call].
   const onCalls: Array<[number, number]> = [];
   const prefs: WebchatRingPrefs = { window: true, duringDnd: 'card', shortcut: true, volume: 80 };
+  // A reply from the mini chat (#225), as the conversation's composer sends one.
+  const reply = vi.fn(async (_id: number, _text: string) => ({ delivered: true, queued: false, error: null }) as never);
+  const inbox = vi.fn();
   const r = new WebchatRinger({
     http: { get, post, request } as unknown as HttpClient,
     signedIn: () => true,
@@ -134,8 +138,10 @@ function ringer(answers: Array<PendingAnswer | Error>, over: Partial<{ locked: b
     onChanged: (s) => states.push(s),
     deviceId: () => 'desktop-12',
     focused: () => false,
+    reply,
+    openInbox: inbox,
   });
-  return { r, get, post, request, states, opened, onCalls, prefs };
+  return { r, get, post, request, states, opened, onCalls, prefs, reply, inbox };
 }
 
 describe('WebchatRinger', () => {
@@ -474,5 +480,128 @@ describe('WebchatRinger: visitors\' voice calls (ENH-WCHAT-05)', () => {
     const c = fromCall(card())!;
     expect(ringerHeight({ chats: [], outcome: null, calls: [c] })).toBe(272);
     expect(ringerHeight({ chats: [chat({})], outcome: null, calls: [c] })).toBe(318);
+  });
+});
+
+/*
+ * The card itself (worksuite-desktop#225): Join & send claims and replies in one step, the card becomes a mini chat,
+ * and it can be put away without stopping the ring.
+ */
+describe('WebchatRinger: Join & send and the mini chat (#225)', () => {
+  it('claims the chat and posts the reply in one request, then the card is a mini chat on it', async () => {
+    const { r, post, opened } = ringer([{ waiting: [{ conversation_id: 3, visitor: 'Nimali', preview: 'Do you ship to Galle?' }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect(r.isRinging(3)).toBe(true);
+    expect(await r.joinAndSend(3, '  Yes, island-wide.  ')).toEqual({ ok: true, why: null });
+    const [path, body, opts] = post.mock.calls.find(([p]) => String(p).endsWith('/join-reply'))!;
+    expect(path).toBe('/api/chat/widget-admin/conversations/3/join-reply');
+    expect(body).toEqual({ message: 'Yes, island-wide.' });
+    expect((opts as { headers: Record<string, string> }).headers['Idempotency-Key']).toMatch(/^ring-join-3-/);
+    expect(r.state().chats).toHaveLength(0);
+    expect(r.state().joined).toMatchObject({ conversationId: 3, visitor: 'Nimali', preview: 'Do you ship to Galle?', sent: ['Yes, island-wide.'] });
+    expect(opened).toEqual([]);
+    r.stop();
+  });
+
+  it('Join chat without a message sends nothing but the claim', async () => {
+    const { r, post } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect((await r.joinAndSend(3, null)).ok).toBe(true);
+    expect(post.mock.calls.find(([p]) => String(p).endsWith('/join-reply'))?.[1]).toEqual({});
+    expect(r.state().joined?.sent).toEqual([]);
+    r.stop();
+  });
+
+  it('a moment too late: told who has it, nothing sent, no mini chat', async () => {
+    const { r, post } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/join-reply')) throw new DesktopError('CONFLICT', 'Kasun has already taken this chat.', 409);
+      return {};
+    });
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect(await r.joinAndSend(3, 'Hello')).toEqual({ ok: false, why: 'Kasun has already taken this chat.' });
+    expect(r.state().chats).toHaveLength(0);
+    expect(r.state().joined).toBeNull();
+    expect(post.mock.calls.some(([p]) => String(p).endsWith('/reply'))).toBe(false);
+    r.stop();
+  });
+
+  it('an older server without Join & send: accept, then the reply', async () => {
+    const { r, post } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    post.mockImplementation(async (path: string) => {
+      if (path.endsWith('/join-reply')) throw new DesktopError('NOT_FOUND', 'Not found', 404);
+      return {};
+    });
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect((await r.joinAndSend(3, 'Hello')).ok).toBe(true);
+    expect(post.mock.calls.map(([p]) => p)).toEqual(expect.arrayContaining([
+      '/api/chat/widget-admin/conversations/3/accept',
+      '/api/chat/widget-admin/conversations/3/reply',
+    ]));
+    r.stop();
+  });
+
+  it('a reply typed in a notification joins without a mini chat', async () => {
+    const { r } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    expect((await r.joinAndSend(3, 'Hi', { stay: false })).ok).toBe(true);
+    expect(r.state().joined).toBeNull();
+    r.stop();
+  });
+
+  it('the mini chat replies, opens the full chat, or is put away', async () => {
+    const { r, reply, opened } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    await r.joinAndSend(3, 'Hi');
+    expect(await r.replyJoined('Delivery takes two days.')).toEqual({ ok: true, why: null });
+    expect(reply).toHaveBeenCalledWith(3, 'Delivery takes two days.');
+    expect(r.state().joined?.sent).toEqual(['Hi', 'Delivery takes two days.']);
+
+    reply.mockResolvedValueOnce({ delivered: false, queued: false, error: 'Offline' } as never);
+    expect(await r.replyJoined('Lost')).toEqual({ ok: false, why: 'Offline' });
+    expect(r.state().joined?.sent).toHaveLength(2);
+
+    r.closeJoined(true);
+    expect(r.state().joined).toBeNull();
+    expect(opened).toEqual([3]);
+    expect(await r.replyJoined('Too late')).toMatchObject({ ok: false });
+    r.stop();
+  });
+
+  it('minimise puts the card away while the same chats ring; a new one brings it back', async () => {
+    const { r, inbox } = ringer([{ waiting: [{ conversation_id: 3 }] }]);
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    r.minimise();
+    expect(r.state()).toMatchObject({ minimised: true, tone: 'normal' });
+    r.handle({ type: 'chat.incoming', conversation_id: 12, visitor: 'Visitor 12', waiting_since: stamp(1000) } as never);
+    expect(r.state().minimised).toBe(false);
+
+    r.openInbox();
+    expect(inbox).toHaveBeenCalledTimes(1);
+    expect(r.state().minimised).toBe(true);
+    r.stop();
+  });
+
+  it('takes the height the card measured, and keeps the mini chat out of sight while locked', async () => {
+    let locked = false;
+    const { r } = ringer([{ waiting: [{ conversation_id: 3, visitor: 'Nimali' }] }]);
+    (r as unknown as { deps: { locked: () => boolean } }).deps.locked = () => locked;
+    r.start();
+    await vi.waitFor(() => expect(r.state().chats).toHaveLength(1));
+    r.fit(312);
+    expect(r.state().fit).toBe(312);
+    await r.joinAndSend(3, 'Hi');
+    locked = true;
+    expect(r.state().joined).toBeNull();
+    locked = false;
+    expect(r.state().joined?.visitor).toBe('Nimali');
+    r.stop();
   });
 });

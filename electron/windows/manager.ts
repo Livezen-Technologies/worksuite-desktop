@@ -33,7 +33,7 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'rc-consent': { width: 460, height: 560, minWidth: 460, minHeight: 560 },
   'rc-indicator': { width: 560, height: 52, minWidth: 560, minHeight: 52 },
   'rc-pointer': { width: 220, height: 30, minWidth: 220, minHeight: 30 },
-  'webchat-ring': { width: 380, height: 250, minWidth: 380, minHeight: 120 },
+  'webchat-ring': { width: 420, height: 250, minWidth: 420, minHeight: 72 },
   'quick-ask': { width: 600, height: 480, minWidth: 600, minHeight: 480 },
 };
 /** Remote control's own windows: placed by remote control, never remembered. */

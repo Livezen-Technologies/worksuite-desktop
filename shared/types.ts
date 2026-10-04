@@ -587,6 +587,27 @@ export interface WebchatRingState {
   elsewhere?: boolean;
   /** Whether the server has this computer play my ring (RING-10, RING-49); null where it does not choose. */
   ringHere?: boolean | null;
+  /** The chat I just joined from the card (worksuite-desktop#225): the card is a mini chat on it until I open the full chat or minimise it. */
+  joined?: WebchatJoined | null;
+  /** The card is minimised while these chats ring; a new one brings it back. The tone goes on. */
+  minimised?: boolean;
+  /** The card's own height, as it measured itself: the window fits it, so there is no empty space under it. */
+  fit?: number | null;
+}
+
+/** A chat joined from the ringing card, shown there as a mini chat (worksuite-desktop#225). */
+export interface WebchatJoined {
+  conversationId: number;
+  visitor: string;
+  site: string | null;
+  place: string | null;
+  device: string | null;
+  page: string | null;
+  /** What the visitor wrote, as the card showed it. */
+  preview: string | null;
+  since: string;
+  /** What I have sent from the card, oldest first. */
+  sent: string[];
 }
 
 export interface PreferenceLock {

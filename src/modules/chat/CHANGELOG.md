@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.24.0 — 2026-10-04
+
+- Ringing card redesign: Join & send, quick and AI replies, a mini chat after joining, minimise, a compact card per chat when several ring (#225)
+
 ## 1.23.0 — 2026-10-04
 
 - Website chats: Block this visitor asks for how long — a day, a week (the default), a month or until somebody lifts it — and why, and says where to lift it on the web (WS-WCHAT GATE-08, SEC-10). Needs the server's Communication 1.20.0 for the length; an older server blocks until lifted, as before.

@@ -357,9 +357,15 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
 
   // ── website chats ringing (ENH-WCHAT-01, RING-49) ───────────────────────
   router.handle('ring:state', () => ctx.webchat.state());
-  router.handle('ring:join', (input) => ctx.webchat.join(input.id));
+  router.handle('ring:join', (input) => ctx.webchat.join(input.id, input.then));
   router.handle('ring:silence', (input) => ctx.webchat.silence(input.id, input.on));
   router.handle('ring:pass', (input) => ctx.webchat.pass(input.id));
+  router.handle('ring:joinSend', (input) => ctx.webchat.joinAndSend(input.id, input.message ?? null));
+  router.handle('ring:reply', (input) => ctx.webchat.replyJoined(input.message));
+  router.handle('ring:closeJoined', (input) => ctx.webchat.closeJoined(input.open));
+  router.handle('ring:minimise', () => ctx.webchat.minimise());
+  router.handle('ring:fit', (input) => ctx.webchat.fit(input.height));
+  router.handle('ring:openInbox', () => ctx.webchat.openInbox());
   router.handle('ring:handoff', (input) => ctx.webchat.answer(input.id, input.accept));
   router.handle('ring:call', (input) => ctx.webchat.answerCall(input.id, input.accept));
   router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has));

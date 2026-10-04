@@ -1,4 +1,6 @@
-import type { WebchatCall, WebchatHandoff, WebchatRingChat, WebchatRingPrefs, WebchatRingState } from '@shared/types';
+import { randomUUID } from 'node:crypto';
+import type { SubmitResult } from '@shared/ipc/contract';
+import type { WebchatCall, WebchatHandoff, WebchatJoined, WebchatRingChat, WebchatRingPrefs, WebchatRingState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -261,8 +263,15 @@ export function toneFor(chats: WebchatRingChat[], opts: { ringSeconds: number; q
  * How tall the call window is for what it shows: one card — a chat, or an invitation or transfer — then a row for
  * each of the others (up to three), or just an outcome.
  */
-export function ringerHeight(s: Pick<WebchatRingState, 'chats' | 'outcome' | 'handoffs' | 'calls'>): number {
+export function ringerHeight(s: Pick<WebchatRingState, 'chats' | 'outcome' | 'handoffs' | 'calls' | 'joined'>): number {
   const all = s.chats.length + (s.handoffs?.length ?? 0) + (s.calls?.length ?? 0);
+  // The card measures itself (`fit`); these are its first guesses (#225): a chat just joined as a mini chat, one chat
+  // ringing as the full card with its reply box, several as compact cards.
+  if (!s.calls?.length && !s.handoffs?.length) {
+    if (!s.chats.length && s.joined) return 440;
+    if (s.chats.length === 1) return 430;
+    if (s.chats.length > 1) return 44 + Math.min(3, s.chats.length) * 118 + (s.chats.length > 3 ? 26 : 0);
+  }
   if (!all) return 120;
   const rows = Math.min(3, all - 1);
   return 272 + rows * 46 + (all > 4 ? 26 : 0) + (!s.calls?.length && !s.chats.length && s.handoffs?.[0]?.note ? 40 : 0);
@@ -277,8 +286,12 @@ export interface WebchatRingDeps {
   prefs: () => WebchatRingPrefs;
   /** Do not disturb, or notifications paused. */
   quiet: () => boolean;
-  /** Bring the main window forward on a website chat; with a call, its thread joins the call's audio. */
-  open: (conversationId: number, callId?: number) => void;
+  /** Bring the main window forward on a website chat; with a call, its thread joins the call's audio; `transfer`, with the transfer dialog open. */
+  open: (conversationId: number, callId?: number, then?: 'transfer') => void;
+  /** Bring the main window forward on the website chats inbox. */
+  openInbox?: () => void;
+  /** Send a reply into a chat I am in, as its composer would (kept and sent later when offline). */
+  reply?: (conversationId: number, text: string) => Promise<SubmitResult>;
   onChanged: (state: WebchatRingState) => void;
   /** This installation as a ringing device (RING-10, RING-49): stable across restarts. */
   deviceId: () => string;
@@ -326,6 +339,12 @@ export class WebchatRinger {
   private refused = false;
   private running = false;
   private last = '';
+  /** The chat I just joined from the card: a mini chat there until I open the full chat or minimise it (#225). */
+  private joined: WebchatJoined | null = null;
+  /** The card was minimised while exactly these were ringing; anything new brings it back. */
+  private minimisedFor: string | null = null;
+  /** The card's measured height. */
+  private fitHeight: number | null = null;
   shortcut = false;
   answerShortcut = false;
 
@@ -379,7 +398,96 @@ export class WebchatRinger {
       shortcut: this.shortcut,
       elsewhere: this.ringHere === false && chats.length + handoffs.length + calls.length > 0,
       ringHere: this.ringHere,
+      // Behind the lock, nothing of the chat I joined is shown.
+      joined: hidden ? null : this.joined,
+      minimised: this.minimisedFor !== null && this.minimisedFor === this.ringingKey(),
+      fit: this.fitHeight,
     };
+  }
+
+  /** Whether this chat is ringing for me now. */
+  isRinging(conversationId: number): boolean {
+    return this.chats.has(conversationId);
+  }
+
+  /** What is ringing, as one string: minimising holds while it stays the same. */
+  private ringingKey(): string {
+    return [...[...this.chats.keys()].map((k) => `c${k}`), ...[...this.handoffs.keys()].map((k) => `h${k}`), ...[...this.calls.keys()].map((k) => `v${k}`)].sort().join(',');
+  }
+
+  /**
+   * Join chat and Join & send on the card (worksuite-desktop#225). One request claims the chat for me — first come,
+   * so two people never both get it — posts what I wrote, and stops the ring for everybody; the card then becomes a
+   * mini chat on it. A moment too late, it says who has it and nothing is sent. With `stay: false` (a reply typed in
+   * a system notification) there is no mini chat.
+   */
+  async joinAndSend(conversationId: number, message: string | null, opts: { stay?: boolean } = {}): Promise<{ ok: boolean; why: string | null }> {
+    const c = this.chats.get(conversationId);
+    if (!c) return { ok: false, why: 'This chat is no longer ringing.' };
+    const text = message?.trim() || null;
+    const key = { headers: { 'Idempotency-Key': `ring-join-${conversationId}-${randomUUID()}` } };
+    try {
+      try {
+        await this.deps.http.post(`${WEBSITE}/conversations/${conversationId}/join-reply`, text ? { message: text } : {}, key);
+      } catch (e) {
+        // A server from before Join & send: Accept, then the reply, as two requests.
+        if (!(isDesktopError(e) && e.status === 404 && !/conversation/i.test(e.message))) throw e;
+        if (!c.mine) await this.deps.http.post(`${WEBSITE}/conversations/${conversationId}/accept`);
+        if (text) await this.deps.http.post(`${WEBSITE}/conversations/${conversationId}/reply`, { message: text }, key);
+      }
+    } catch (e) {
+      const why = isDesktopError(e) && e.status === 409 ? e.message || 'Someone else has already taken this chat.' : `Could not join: ${e instanceof Error ? e.message : 'the server did not answer'}`;
+      if (isDesktopError(e) && e.status === 409) this.chats.delete(conversationId);
+      this.say(conversationId, why);
+      this.changed();
+      return { ok: false, why };
+    }
+    this.chats.delete(conversationId);
+    this.outcome = null;
+    this.minimisedFor = null;
+    if (opts.stay !== false) {
+      this.joined = { conversationId, visitor: c.visitor, site: c.site, place: c.place, device: c.device, page: c.page, preview: c.preview, since: c.since, sent: text ? [text] : [] };
+    }
+    this.changed();
+    this.reconcileSoon();
+    return { ok: true, why: null };
+  }
+
+  /** A reply from the mini chat (#225): sent as the conversation's composer sends one, and shown under the last. */
+  async replyJoined(message: string): Promise<{ ok: boolean; why: string | null }> {
+    const j = this.joined;
+    const text = message.trim();
+    if (!j || !text) return { ok: false, why: 'There is no chat to reply to.' };
+    if (!this.deps.reply) return { ok: false, why: 'Open the full chat to reply.' };
+    const r = await this.deps.reply(j.conversationId, text);
+    if (!r.delivered && !r.queued) return { ok: false, why: r.error ?? 'The reply was not sent.' };
+    if (this.joined?.conversationId === j.conversationId) {
+      this.joined = { ...this.joined, sent: [...this.joined.sent, text] };
+      this.changed();
+    }
+    return { ok: true, why: null };
+  }
+
+  /** The mini chat closes: Open full chat brings WorkSuite forward on it; minimising just puts the card away. */
+  closeJoined(open: boolean): void {
+    const j = this.joined;
+    this.joined = null;
+    this.changed();
+    if (open && j) this.deps.open(j.conversationId);
+  }
+
+  /** Minimise (#225): the mini chat closes, or the card goes away while these chats ring — the tone goes on. */
+  minimise(): void {
+    if (this.joined) return this.closeJoined(false);
+    this.minimisedFor = this.ringingKey();
+    this.changed();
+  }
+
+  /** The card measured itself: the window takes its height. */
+  fit(height: number): void {
+    if (this.fitHeight === height) return;
+    this.fitHeight = height;
+    this.changed();
   }
 
   /** Realtime frames that start, change or end a ring. */
@@ -506,7 +614,7 @@ export class WebchatRinger {
   }
 
   /** Join (RING-02/22): accept a waiting chat — or open one assigned to me, which joins it — and bring WorkSuite forward on it. */
-  async join(conversationId: number): Promise<boolean> {
+  async join(conversationId: number, then?: 'transfer'): Promise<boolean> {
     const c = this.chats.get(conversationId);
     if (!c) return false;
     if (!c.mine) {
@@ -528,9 +636,16 @@ export class WebchatRinger {
     this.chats.delete(conversationId);
     this.outcome = null;
     this.changed();
-    this.deps.open(conversationId);
+    this.deps.open(conversationId, undefined, then);
     this.reconcileSoon();
     return true;
+  }
+
+  /** "Open inbox" on the card of several chats (#225): the card is put away and WorkSuite comes forward on them. */
+  openInbox(): void {
+    this.minimisedFor = this.ringingKey();
+    this.changed();
+    this.deps.openInbox?.();
   }
 
   /**

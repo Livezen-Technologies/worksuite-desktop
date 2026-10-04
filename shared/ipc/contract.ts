@@ -431,9 +431,17 @@ export const contract = {
   'ai:answerReady': ch(z.strictObject({ kind: z.enum(['ready', 'input', 'failed']), preview: z.string().max(300) }), { session: true, rate: 20 }),
   // Website chats ringing like calls (WS-WCHAT ENH-01, RING-49): the call window, the main window's bar.
   'ring:state': ch(none, { session: true, whileLocked: true }),
-  'ring:join': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
+  // `then: 'transfer'`: the ringing card's Transfer opens the chat with the transfer dialog (#225).
+  'ring:join': ch(z.object({ id: z.number().int().positive(), then: z.enum(['transfer']).optional() }), { session: true, rate: 4 }),
   'ring:silence': ch(z.object({ id: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 10 }),
   'ring:pass': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
+  // The card's Join chat and Join & send, then the mini chat's replies, Open full chat or minimise, and its height (#225).
+  'ring:joinSend': ch(z.object({ id: z.number().int().positive(), message: z.string().max(4000).optional() }), { session: true, rate: 4 }),
+  'ring:reply': ch(z.object({ message: z.string().min(1).max(4000) }), { session: true, rate: 10 }),
+  'ring:closeJoined': ch(z.object({ open: z.boolean() }), { session: true, rate: 10 }),
+  'ring:minimise': ch(none, { session: true, whileLocked: true, rate: 10 }),
+  'ring:fit': ch(z.object({ height: z.number().int().min(80).max(1200) }), { session: true, whileLocked: true, rate: 30 }),
+  'ring:openInbox': ch(none, { session: true, rate: 4 }),
   // An invitation or transfer into a website chat (ENH-WCHAT-03): Join chat / Accept, or Decline.
   'ring:handoff': ch(z.object({ id: z.number().int().positive(), accept: z.boolean() }), { session: true, rate: 6 }),
   // A visitor's voice call (ENH-WCHAT-05): Answer or Decline; whether this computer has a microphone; the call it is on.
@@ -1414,6 +1422,12 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:join': boolean;
   'ring:silence': void;
   'ring:pass': boolean;
+  'ring:joinSend': { ok: boolean; why: string | null };
+  'ring:reply': { ok: boolean; why: string | null };
+  'ring:closeJoined': void;
+  'ring:minimise': void;
+  'ring:fit': void;
+  'ring:openInbox': void;
   'ring:handoff': boolean;
   'ring:call': boolean;
   'ring:mic': void;
