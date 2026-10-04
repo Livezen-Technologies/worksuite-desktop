@@ -2,9 +2,10 @@ import { useId, type ReactNode } from 'react';
 import { Button, Switch, cx } from '../../../../components/ui';
 
 /**
- * The widget settings' building blocks (worksuite-desktop#199), shared by its tabs: the design (WidgetSettings) and
- * Live status & calls (V-05, LiveStatusCalls) — a titled section, a text area, a row of choices, a switch with its
- * line, and the sticky Save bar every tab ends with.
+ * The widget settings' building blocks (worksuite-desktop#199), shared by its tabs: Appearance, Staff and Hours
+ * (WidgetSettings) and Live status & calls (V-05, LiveStatusCalls) — a titled section, a text area, a row of choices,
+ * a switch with its line, and the sticky Save bar Live status & calls ends with (the design's tabs save from the
+ * editor's header since S-02).
  */
 
 export function Section({ title, hint, children }: { title: string; hint?: string; children: ReactNode }) {

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.49.0 — 2026-10-04
+
+- S-01/S-02: Website widgets list with cards and weekly analytics, New widget, seven-tab widget editor with the Appearance design and a New chat live preview
+
 ## 1.48.0 — 2026-10-04
 
 - L-06/L-07: Wall mode sheet (pick a display, keep awake, cycle map views, open at start, tray closes it) and native Insights (periods, widget filter, tiles with change, per-day chart, sources, devices, agents, Export CSV)

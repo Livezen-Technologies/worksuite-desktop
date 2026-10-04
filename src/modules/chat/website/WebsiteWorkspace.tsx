@@ -25,6 +25,7 @@ import { liveParamsOf, liveQuery, type LiveParams } from './live/LiveDashboard';
 import { WebsiteThread } from './WebsiteThread';
 import { VoiceCalls } from './VoiceCalls';
 import { WidgetSettings } from './widget/WidgetSettings';
+import { WebsiteWidgets } from './widget/Widgets';
 import { WebsiteInsights, type InsightsPeriod } from './Insights';
 import { ConversationMenu } from '../ConversationMenu';
 import { MyStatus } from '../MyStatus';
@@ -34,8 +35,8 @@ import { SidePanel } from '../../../components/SidePanel';
 /**
  * Website chats as their own workspace (WebChatInbox): the sections down the
  * left, the conversations in the chosen one, then the visitor's thread and
- * dossier. The widget's design is edited here, beside a live preview (#199), and Insights is read here (L-07); the
- * rest of setup stays on the web, where it is edited.
+ * dossier. Widgets & embed is this app's own (S-01, S-02): the widgets as cards, and each widget's editor with a live
+ * preview; Insights is read here (L-07); the rest of setup stays on the web, where it is edited.
  */
 const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
   // In the order of the design (C-01, DsWsNav): what comes in, then what is mine, then the rest.
@@ -77,7 +78,6 @@ const ON_WEB: Array<{ head: string; items: Array<{ label: string; tab: string; i
   {
     head: 'SETUP',
     items: [
-      { label: 'Widgets & embed', tab: 'widgets', icon: 'code' },
       { label: 'Automated messages', tab: 'triggers', icon: 'zap' },
       { label: 'Conversation starters', tab: 'starters', icon: 'message-circle' },
       { label: 'Saved replies', tab: 'canned', icon: 'bookmark' },
@@ -103,6 +103,8 @@ export function WebsiteWorkspace() {
     if (!liveView) return;
     go(`/chat?${liveQuery(liveView, { ...liveParams, ...patch }, visitor).toString()}`);
   };
+  // Widgets & embed (S-01) and one widget's editor (S-02), with the widget and its tab in the address.
+  const widgetList = query.get('section') === 'widgets';
   const designing = query.get('section') === 'widget';
   // Voice calls (V-01): a LIVE view of its own, full width, with the picked call in the address.
   const calling = query.get('section') === 'calls';
@@ -115,7 +117,7 @@ export function WebsiteWorkspace() {
   const insightsPeriod: InsightsPeriod = query.get('period') === '7d' ? '7d' : query.get('period') === 'all' ? 'all' : '30d';
   const insightsWidget = Number(query.get('widget')) || null;
   // Everything that takes the whole width, hiding the list and the thread.
-  const wide = live || designing || calling || insights;
+  const wide = live || widgetList || designing || calling || insights;
   const section = (SECTIONS.find((s) => s.id === query.get('section'))?.id ?? 'inbox') as Section;
   const [site, setSite] = useState(0);
   // The Mine pill narrows whichever open section is showing; Closed is a section of its own.
@@ -333,8 +335,8 @@ export function WebsiteWorkspace() {
           {ON_WEB.map((g) => (
             <div key={g.head} className="flex flex-col gap-px">
               <MenuHead>{g.head}</MenuHead>
-              {/* The widget's look and words are designed here, with a live preview (#199). */}
-              {g.head === 'SETUP' ? <MenuItem icon="paintbrush" label="Widget" here={designing} onClick={() => go('/chat?view=website&section=widget')} /> : null}
+              {/* The widgets and each one's editor, with a live preview, are this app's own (S-01, S-02). */}
+              {g.head === 'SETUP' ? <MenuItem icon="code" label="Widgets & embed" here={widgetList || designing} onClick={() => go('/chat?view=website&section=widgets')} /> : null}
               {g.head === 'REPORTS' ? <MenuItem icon="chart" label="Insights" here={insights} onClick={() => go('/chat?view=website&section=insights')} /> : null}
               {g.items.map((i) => (
                 <MenuItem key={i.tab} icon={i.icon} label={i.label} here={false} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/website-chats?tab=${i.tab}` })}>
@@ -357,7 +359,13 @@ export function WebsiteWorkspace() {
           onSection={(s) => go(`/chat?view=website&section=${s}`)}
         />
       ) : null}
-      {designing ? <WidgetSettings /> : null}
+      {widgetList ? (
+        <WebsiteWidgets
+          onOpen={(id, tab) => go(`/chat?${new URLSearchParams({ view: 'website', section: 'widget', widget: String(id), ...(tab ? { tab } : {}) }).toString()}`)}
+          onInsights={() => go('/chat?view=website&section=insights&period=7d')}
+        />
+      ) : null}
+      {designing ? <WidgetSettings key={query.get('widget') ?? ''} onList={() => go('/chat?view=website&section=widgets')} /> : null}
       {insights ? (
         <WebsiteInsights
           period={insightsPeriod}

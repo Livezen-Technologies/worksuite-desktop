@@ -83,12 +83,14 @@ const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', '
 /** "20 Sep", as the design writes it (a locale may say "Sept"). */
 export const dayLabel = (iso: string) => `${Number(iso.slice(8, 10))} ${text(MONTHS[Number(iso.slice(5, 7)) - 1] ?? '')}`;
 
+/** The report for a period and a widget (or all), one query shared by Insights and the widgets list's week (S-01). */
+export const insightsQuery = (period: InsightsPeriod, widget: number | null) => ({
+  queryKey: ['website', 'insights', period, widget ?? 0],
+  queryFn: ({ signal }: { signal?: AbortSignal }) => apiGet<Insights>(`${WEBSITE}/insights`, { period, ...(widget ? { widget_id: widget } : {}) }, signal),
+});
+
 export function WebsiteInsights({ period, widget, onChange }: { period: InsightsPeriod; widget: number | null; onChange: (p: { period: InsightsPeriod; widget: number | null }) => void }) {
-  const q = useQuery({
-    queryKey: ['website', 'insights', period, widget ?? 0],
-    queryFn: ({ signal }) => apiGet<Insights>(`${WEBSITE}/insights`, { period, ...(widget ? { widget_id: widget } : {}) }, signal),
-    placeholderData: keepPreviousData,
-  });
+  const q = useQuery({ ...insightsQuery(period, widget), placeholderData: keepPreviousData });
   const d = q.data;
 
   const exportCsv = () =>

@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.176 — 2026-10-04
+
+- **Website widgets (S-01).** Widgets & embed now opens in the app: one card per widget with its colour, site,
+  "Open now" or "Closed · opens 08:30", who is online, open chats, staff, and what is on (chatbot, voice calls,
+  starters, rules, offline enquiries), with **Customise** and **Embed code**. **New widget** creates one. Below,
+  "Widget analytics · this week" with **Open Insights →**.
+- **Widget appearance (S-02).** Each widget opens in an editor with seven tabs (Appearance, Behaviour, Live status &
+  calls, Staff, Hours, Chatbot, Embed code) and one Save. Appearance has the widget and website names, header title
+  and subtitle, welcome and offline messages, brand and accent colours, position, corner radius, button style and
+  auto-open, with a live preview of a new chat. Hours and team photos moved to their own tabs. Behaviour and Chatbot
+  still open on the web for now.
+- **Changed wording:** Company name is now Website name, Away message is Offline message, Round button is Icon.
+
 ## 0.2.175 — 2026-10-04
 
 - **Wall mode on a second display (L-06).** Wall mode, from the tray or the Live dashboard, now asks first: which

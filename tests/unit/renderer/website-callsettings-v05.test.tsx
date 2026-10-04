@@ -212,11 +212,11 @@ describe('Widget settings › Live status & calls (V-05)', () => {
 
   it('keeps an unsaved design when switching tabs and back', async () => {
     mount();
-    const name = await screen.findByRole('textbox', { name: /Company name/ });
+    const name = await screen.findByRole('textbox', { name: /Website name/ });
     fireEvent.change(name, { target: { value: 'Techubiz' } });
     fireEvent.click(screen.getByRole('tab', { name: 'Live status & calls' }));
     await screen.findByRole('form', { name: 'Live status and calls' });
     fireEvent.click(screen.getByRole('tab', { name: 'Appearance' }));
-    expect((screen.getByRole('textbox', { name: /Company name/ }) as HTMLInputElement).value).toBe('Techubiz');
+    expect((screen.getByRole('textbox', { name: /Website name/ }) as HTMLInputElement).value).toBe('Techubiz');
   });
 });

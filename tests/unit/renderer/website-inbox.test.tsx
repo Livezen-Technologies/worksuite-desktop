@@ -27,6 +27,7 @@ vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 vi.mock('../../../src/modules/calls/tones', () => ({ playTone: vi.fn(() => ({ stop: vi.fn(), setVolume: vi.fn() })) }));
 vi.mock('../../../src/modules/chat/website/WebsiteThread', () => ({ WebsiteThread: ({ id }: { id: string }) => <div>Thread {id}</div> }));
 vi.mock('../../../src/modules/chat/website/widget/WidgetSettings', () => ({ WidgetSettings: () => <div>The widget settings</div> }));
+vi.mock('../../../src/modules/chat/website/widget/Widgets', () => ({ WebsiteWidgets: () => <div>The widgets list</div> }));
 const tab = { route: '/chat?view=website', go: vi.fn(), active: true };
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => {
@@ -348,19 +349,27 @@ describe('Callbacks (worksuite-desktop#223)', () => {
   });
 });
 
-describe('Website chats → Widget (#199)', () => {
-  it('is in Setup, in the app rather than on the web, and takes the place of the list and the thread', async () => {
+describe('Website chats → Widgets & embed (S-01, S-02)', () => {
+  it('is in Setup, in the app rather than on the web, lit for the list and for a widget\'s editor, and takes the place of the list and the thread', async () => {
     wrap(<WebsiteWorkspace />);
-    const item = await screen.findByRole('button', { name: 'Widget' });
+    const item = await screen.findByRole('button', { name: 'Widgets & embed' });
     expect(item.getAttribute('title')).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Widget' })).toBeNull();
     fireEvent.click(item);
-    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=widget');
+    expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=widgets');
 
     cleanup();
-    tab.route = '/chat?view=website&section=widget';
+    tab.route = '/chat?view=website&section=widgets';
+    wrap(<WebsiteWorkspace />);
+    expect(await screen.findByText('The widgets list')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Widgets & embed' }).getAttribute('aria-current')).toBe('page');
+    expect(list().className).toContain('hidden');
+
+    cleanup();
+    tab.route = '/chat?view=website&section=widget&widget=2';
     wrap(<WebsiteWorkspace />);
     expect(await screen.findByText('The widget settings')).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Widget' }).getAttribute('aria-current')).toBe('page');
+    expect(screen.getByRole('button', { name: 'Widgets & embed' }).getAttribute('aria-current')).toBe('page');
     expect(list().className).toContain('hidden');
   });
 });
