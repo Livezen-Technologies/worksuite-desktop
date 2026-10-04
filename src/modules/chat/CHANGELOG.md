@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.28.0 — 2026-10-04
+
+- C-01 Inbox to the design: the Website Chats menu in the design's order with icons, count pills (red for missed, green for visitors online) and a lit bar; Mine is 'Assigned to me'; Back to Chat as a tile with Ctrl/Cmd+[; the shared 'Set your status' control at its foot as 'Taking chats · N open'; 36px avatars, a plain mono wait clock, 13px previews and 'site · /path' on rows; the empty panel at the design's sizes.
+
 ## 1.27.0 — 2026-10-04
 
 - A visitor writing again in my chat while I am away from it (#230): a card over other apps with their last messages, a reply box, Open chat, Snooze 5 min and Take over for the team step; a system notification with Reply while WorkSuite is not in front, one per conversation; a chime; the Dock/taskbar badge and '(1) Website chats'; the row goes to the top marked Visitor replied; nothing while I am reading it.

@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type MouseEvent as ReactMouseEvent, type ReactNode } from 'react';
 import type { WebchatHandoff, WebchatRingChat } from '@shared/types';
 import { apiGet, apiPost } from '../../../core/api';
-import { call, errorMessage, on } from '../../../core/bridge';
+import { call, errorMessage, isMac, on } from '../../../core/bridge';
 import { toast } from '../../../core/toasts';
 import { app } from '../../../core/app-state';
 import { text } from '../../../core/i18n';
@@ -19,6 +19,7 @@ import { WebsiteLive, type LiveView, type OnlineVisitor } from './WebsiteLive';
 import { WebsiteThread } from './WebsiteThread';
 import { WidgetSettings } from './widget/WidgetSettings';
 import { ConversationMenu } from '../ConversationMenu';
+import { MyStatus } from '../MyStatus';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
 
@@ -28,33 +29,34 @@ import { SidePanel } from '../../../components/SidePanel';
  * dossier. The widget's design is edited here, beside a live preview (#199); the rest of setup and the reports stay
  * on the web, where they are edited.
  */
-const SECTIONS: Array<{ id: Section; label: string }> = [
-  { id: 'inbox', label: 'Inbox' },
-  { id: 'live', label: 'Live chats' },
-  { id: 'offline', label: 'Offline enquiries' },
-  { id: 'missed', label: 'Missed chats' },
+const SECTIONS: Array<{ id: Section; label: string; icon: string }> = [
+  // In the order of the design (C-01, DsWsNav): what comes in, then what is mine, then the rest.
+  { id: 'inbox', label: 'Inbox', icon: 'inbox' },
+  { id: 'live', label: 'Live chats', icon: 'chat' },
+  { id: 'offline', label: 'Offline enquiries', icon: 'mail' },
+  { id: 'missed', label: 'Missed chats', icon: 'alert' },
   // Visitors who asked to be contacted, with a reference and a due time (worksuite-desktop#223).
-  { id: 'callbacks', label: 'Callbacks' },
+  { id: 'callbacks', label: 'Callbacks', icon: 'phone' },
   // Chats I own or take part in (ENH-WCHAT-03, TEAM-09).
-  { id: 'mine', label: 'Mine' },
+  { id: 'mine', label: 'Assigned to me', icon: 'user' },
+  { id: 'unassigned', label: 'Unassigned', icon: 'user-x' },
+  { id: 'awaiting', label: 'Awaiting reply', icon: 'clock' },
   // Invitations and transfers waiting for me.
-  { id: 'invited', label: 'Invited' },
-  { id: 'unassigned', label: 'Unassigned' },
-  { id: 'awaiting', label: 'Awaiting reply' },
-  { id: 'starred', label: 'Starred' },
-  { id: 'closed', label: 'Closed' },
+  { id: 'invited', label: 'Invited', icon: 'user-plus' },
+  { id: 'starred', label: 'Starred', icon: 'star' },
+  { id: 'closed', label: 'Closed', icon: 'archive' },
 ];
 
-const ON_WEB: Array<{ head: string; items: Array<{ label: string; tab: string }> }> = [
-  { head: 'REPORTS', items: [{ label: 'Insights', tab: 'reports' }] },
+const ON_WEB: Array<{ head: string; items: Array<{ label: string; tab: string; icon: string }> }> = [
+  { head: 'REPORTS', items: [{ label: 'Insights', tab: 'reports', icon: 'chart' }] },
   {
     head: 'SETUP',
     items: [
-      { label: 'Widgets & embed', tab: 'widgets' },
-      { label: 'Automated messages', tab: 'triggers' },
-      { label: 'Conversation starters', tab: 'starters' },
-      { label: 'Saved replies', tab: 'canned' },
-      { label: 'Business hours', tab: 'hours' },
+      { label: 'Widgets & embed', tab: 'widgets', icon: 'code' },
+      { label: 'Automated messages', tab: 'triggers', icon: 'zap' },
+      { label: 'Conversation starters', tab: 'starters', icon: 'message-circle' },
+      { label: 'Saved replies', tab: 'canned', icon: 'bookmark' },
+      { label: 'Business hours', tab: 'hours', icon: 'clock' },
     ],
   },
 ];
@@ -179,6 +181,19 @@ export function WebsiteWorkspace() {
     if (section === 'missed' && selected) void apiPost(`${WEBSITE}/missed/${selected}/handle`).catch(() => undefined);
   }, [section, selected]);
 
+  // Ctrl/Cmd+[ goes back to Chat (C-01), while this tab is in front.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === '[' && (isMac ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey) {
+        e.preventDefault();
+        go('/chat');
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, go]);
+
   // J and K move through the list (CHAT-UI-00) while this tab is in front and nothing is being typed.
   const ids = section === 'missed' ? (missed.data?.missed ?? []).map((m) => m.id) : section === 'invited' ? handoffs.map((h) => h.conversationId)
     : section === 'callbacks' ? (cbList.data?.callbacks ?? []).map((b) => b.conversation_id) : rows.map((r) => r.id);
@@ -204,50 +219,53 @@ export function WebsiteWorkspace() {
   return (
     <div className="flex h-full min-w-0 flex-1 text-[13px]">
       <SidePanel id="website-chats" label="the website chat menu">
-        <nav aria-label="Website chats" className="flex w-[212px] shrink-0 flex-col gap-px overflow-y-auto border-r border-line bg-surface px-2.5 py-3.5 scroll-thin">
-          <button type="button" onClick={() => go('/chat')} className="px-2 pb-2 text-left font-semibold text-primary hover:underline">‹ Back to Chat</button>
-          <b className="px-2 pb-1.5 text-[15px] text-ink">Website Chats</b>
-          <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">CONVERSATIONS</div>
+        <nav aria-label="Website chats" className="flex w-[212px] shrink-0 flex-col gap-px overflow-y-auto border-r border-line bg-surface px-2 pt-3 pb-2.5 scroll-thin">
+          {/* Back to Chat as a tile, with its shortcut (C-01). */}
+          <button type="button" onClick={() => go('/chat')} title={`${text('Back to Chat')} (${isMac ? '⌘[' : 'Ctrl+['})`} className="mb-2 flex h-8 items-center gap-2 rounded-[8px] border border-line bg-subtle px-2 text-left text-[12.5px] font-semibold text-primary hover:bg-selection">
+            <Icon name="chevron-left" size={14} />
+            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-selection"><Icon name="chat" size={13} /></span>
+            <span className="flex-1">{text('Back to Chat')}</span>
+            <Kbd tone="key">{isMac ? '⌘[' : 'Ctrl+['}</Kbd>
+          </button>
+          <div className="flex items-center gap-2 px-1.5 pb-1.5">
+            <span className="flex h-[26px] w-[26px] items-center justify-center rounded-[7px] bg-primary text-white"><Icon name="globe" size={15} /></span>
+            <b className="text-[15.5px] text-ink">Website Chats</b>
+          </div>
+          <MenuHead>CONVERSATIONS</MenuHead>
           {SECTIONS.filter((s) => s.id !== 'callbacks' || structured).map((s) => {
             const n = count(s.id);
             // Lit only while it is what shows: not under a LIVE view or the Widget (#231).
             const here = !live && !designing && section === s.id;
             return (
-              <button key={s.id} type="button" aria-current={here ? 'page' : undefined} onClick={() => to({ section: s.id, website: null, visitor: null })} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', here ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-                <span className="flex-1">{s.label}</span>
+              <MenuItem key={s.id} icon={s.icon} label={s.label} here={here} onClick={() => to({ section: s.id, website: null, visitor: null })}>
                 {/* Overdue callbacks: a red dot beside the count, and said (#223). */}
                 {s.id === 'callbacks' && overdue ? <span className="mr-1 h-1.5 w-1.5 rounded-full bg-danger" role="img" aria-label={text('{n} overdue', { n: overdue })} title={text('{n} overdue', { n: overdue })} /> : null}
-                {n ? <span className={cx('text-[11.5px] font-bold', s.id === 'missed' || (s.id === 'callbacks' && overdue) ? 'text-danger' : s.id === 'invited' ? 'text-primary' : 'text-ink-2')}>{n}</span> : null}
-              </button>
+                <CountPill n={n} here={here} tone={s.id === 'missed' || (s.id === 'callbacks' && overdue) ? 'danger' : 'plain'} />
+              </MenuItem>
             );
           })}
-          <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">LIVE</div>
+          <MenuHead>LIVE</MenuHead>
           {([
-            ['visitors', 'Visitors online', visitorsOnline],
-            ['dashboard', 'Live dashboard', null],
-          ] as const).map(([id, label, n]) => (
-            <button key={id} type="button" aria-current={liveView === id ? 'page' : undefined} onClick={() => go(`/chat?view=website&section=${id}`)} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', liveView === id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-              <span className="flex-1">{label}</span>
-              {n ? <span className="text-[11.5px] font-bold text-ink-2">{n}</span> : null}
-            </button>
+            ['dashboard', 'Live dashboard', 'activity', null],
+            ['visitors', 'Visitors online', 'eye', visitorsOnline],
+          ] as const).map(([id, label, icon, n]) => (
+            <MenuItem key={id} icon={icon} label={label} here={liveView === id} onClick={() => go(`/chat?view=website&section=${id}`)}>
+              <CountPill n={n} here={liveView === id} tone="green" />
+            </MenuItem>
           ))}
           {ON_WEB.map((g) => (
             <div key={g.head} className="flex flex-col gap-px">
-              <div className="mx-2 mt-2 mb-0.5 text-[10.5px] font-bold tracking-[0.6px] text-ink-3">{g.head}</div>
+              <MenuHead>{g.head}</MenuHead>
               {/* The widget's look and words are designed here, with a live preview (#199). */}
-              {g.head === 'SETUP' ? (
-                <button type="button" aria-current={designing ? 'page' : undefined} onClick={() => go('/chat?view=website&section=widget')} className={cx('flex h-[27px] items-center rounded-[7px] px-2 text-left', designing ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-                  <span className="flex-1">Widget</span>
-                </button>
-              ) : null}
+              {g.head === 'SETUP' ? <MenuItem icon="paintbrush" label="Widget" here={designing} onClick={() => go('/chat?view=website&section=widget')} /> : null}
               {g.items.map((i) => (
-                <button key={i.tab} type="button" title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/website-chats?tab=${i.tab}` })} className="flex h-[27px] items-center rounded-[7px] px-2 text-left text-ink hover:bg-subtle">
-                  <span className="flex-1">{i.label}</span>
+                <MenuItem key={i.tab} icon={i.icon} label={i.label} here={false} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/website-chats?tab=${i.tab}` })}>
                   <span className="text-[11px] text-ink-3" aria-hidden>↗</span>
-                </button>
+                </MenuItem>
               ))}
             </div>
           ))}
+          <MyStatus variant="website" open={openRows.filter(isMine).length} />
         </nav>
       </SidePanel>
       {liveView ? (
@@ -263,24 +281,24 @@ export function WebsiteWorkspace() {
       <section aria-label="Conversations" className={cx('flex w-[320px] shrink-0 flex-col border-r border-line bg-surface', (live || designing) && 'hidden')}>
         <div className="flex flex-col gap-2 border-b border-line p-3">
           <div className="flex items-center">
-            <b className="flex-1 text-[15px] text-ink">{SECTIONS.find((s) => s.id === section)?.label}</b>
-            <Select aria-label="Site" value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
+            <b className="flex-1 text-[18px] text-ink">{SECTIONS.find((s) => s.id === section)?.label}</b>
+            <Select aria-label="Site" value={site} onChange={(e) => setSite(Number(e.target.value))} className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink">
               <option value={0}>All sites</option>
               {sites.map((s) => <option key={s.widget_id} value={s.widget_id}>{s.site}</option>)}
             </Select>
           </div>
           <span className="relative flex items-center">
             <Icon name="search" size={14} className="pointer-events-none absolute left-2.5 text-ink-3" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, messages, email…" className="h-8 w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 text-[13px] outline-none focus:border-primary" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search visitors" placeholder="Search visitors, messages, email…" className="h-[34px] w-full rounded-[8px] border border-line bg-surface pr-2.5 pl-8 text-[13px] outline-none focus:border-primary" />
           </span>
           {section === 'callbacks' ? (
-            <div className="flex gap-1 text-[11.5px] font-semibold" role="group" aria-label="Show">
+            <div className="flex gap-1.5 text-[12px] font-semibold" role="group" aria-label="Show">
               <Pill on={cbStatus === 'todo'} onClick={() => setCbStatus('todo')}>{text('To do · {n}', { n: callbackCounts.data?.todo ?? 0 })}</Pill>
               <Pill on={cbStatus === 'handled'} onClick={() => setCbStatus('handled')}>{text('Handled')}</Pill>
               <Pill on={mineOnly} onClick={() => setMineOnly((m) => !m)}>{text('Mine')}</Pill>
             </div>
           ) : section !== 'missed' && section !== 'invited' ? (
-            <div className="flex gap-1 text-[11.5px] font-semibold" role="group" aria-label="Show">
+            <div className="flex gap-1.5 text-[12px] font-semibold" role="group" aria-label="Show">
               <Pill on={pill === 'open'} onClick={() => showOpen(false)}>Open · {openHere.length}</Pill>
               <Pill on={pill === 'mine'} onClick={() => showOpen(true)}>Mine · {openHere.filter(isMine).length}</Pill>
               <Pill on={pill === 'closed'} onClick={() => to({ section: 'closed', website: null })}>Closed</Pill>
@@ -340,7 +358,7 @@ export function WebsiteWorkspace() {
 
 function Pill({ on, onClick, children }: { on: boolean; onClick: () => void; children: ReactNode }) {
   return (
-    <button type="button" aria-pressed={on} onClick={onClick} className={cx('rounded-[10px] px-2.5 py-[3px]', on ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
+    <button type="button" aria-pressed={on} onClick={onClick} className={cx('h-7 rounded-[14px] px-3', on ? 'bg-ink text-surface' : 'border border-line text-ink hover:bg-subtle')}>
       {children}
     </button>
   );
@@ -448,7 +466,7 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { 
       className={cx('relative flex w-full items-start gap-2.5 border-b border-line py-2.5 pr-3 pl-3.5 text-left', active ? 'bg-selection' : ring?.silenced ? 'bg-warning-bg' : 'hover:bg-subtle')}
     >
       {active ? <span aria-hidden className="absolute top-0 bottom-0 left-0 w-[3px] bg-primary" /> : null}
-      <Avatar name={name} size={32} presence={presence} className="mt-px" />
+      <Avatar name={name} size={36} presence={presence} className="mt-px" />
       <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
         <span className="flex items-center gap-1.5">
           <b className={cx('flex-1 truncate text-ink', r.awaiting_reply ? 'font-bold' : 'font-semibold')}>{name}</b>
@@ -461,7 +479,7 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { 
           ) : typing && !closed ? (
             <span className="min-w-0 flex-1 truncate text-[12px] font-semibold text-primary">{text('Typing…')}</span>
           ) : (
-            <span className={cx('min-w-0 flex-1 truncate text-[12px]', unread ? 'font-semibold text-ink' : 'text-ink-2')}>{line}</span>
+            <span className={cx('min-w-0 flex-1 truncate text-[13px]', unread ? 'font-semibold text-ink' : r.last_message?.from === 'agent' ? 'text-ink-3' : 'text-ink-2')}>{line}</span>
           )}
           {unread ? (
             <span className="min-w-[18px] shrink-0 rounded-full bg-primary px-1.5 text-center text-[10.5px] leading-[18px] font-bold text-white tabular-nums" aria-label={text('{n} unread', { n: unread })}>
@@ -477,7 +495,8 @@ function Row({ r, me, myName, ring, typing = false, active, onOpen, onMenu }: { 
           {PRIORITY_TAG[r.priority] ? <Tag tone="warning">{PRIORITY_TAG[r.priority]}</Tag> : null}
           <span className="min-w-0 truncate text-ink-3">
             {r.site ?? r.widget ?? 'Website'}
-            {presence === 'away' ? ` · ${text('away')}` : ''}
+            {/* Where they are on the site (C-01): its path while they are there. */}
+            {presence === 'away' ? ` · ${text('away')}` : presence === 'online' && page ? ` · ${page}` : ''}
           </span>
           {presence === 'online' ? <span className="sr-only">On the site now</span> : null}
           {r.is_starred ? <Icon name="star" size={11} className="shrink-0 text-warning" label={text('Starred')} /> : null}
@@ -570,8 +589,9 @@ function WaitClock({ since, amber, red }: { since: string; amber?: number | null
   const tone = waitTone((now - at) / 1000, amber, red);
   return (
     <span data-tone={tone} title={tone === 'amber' ? text('Offered a callback') : tone === 'red' && (amber || red) ? text('Waiting past the callback offers') : undefined}
-      className={cx('shrink-0 text-[11.5px] font-bold tabular-nums', tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
-      {text('waiting {time}', { time: waited(since, now) })}
+      aria-label={text('waiting {time}', { time: waited(since, now) })}
+      className={cx('shrink-0 font-mono text-[11px] font-bold tabular-nums', tone === 'red' ? 'text-danger' : tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-2')}>
+      {waited(since, now)}
     </span>
   );
 }
@@ -584,24 +604,49 @@ function PickConversation({ rows, longest, visitors, onLongest, onVisitors }: { 
   const now = useNow(30_000);
   return (
     <div className="flex h-full min-h-[160px] flex-1 flex-col items-center justify-center gap-2 p-8 text-center">
-      <span className="flex h-11 w-11 items-center justify-center rounded-full border border-line bg-surface text-ink-3">
-        <Icon name="globe" size={20} />
+      <span className="flex h-14 w-14 items-center justify-center rounded-full bg-subtle text-ink-3">
+        <Icon name="globe" size={24} />
       </span>
-      <div className="text-[14px] font-semibold text-ink">Pick a conversation</div>
-      <div className="max-w-sm text-[12.5px] text-ink-3">{waitingSummary(rows, now)}</div>
-      <div className="mt-1.5 flex flex-wrap justify-center gap-2">
+      <div className="mt-1 text-[18px] font-bold text-ink">Pick a conversation</div>
+      <div className="max-w-[420px] text-[14px] text-ink-2">{waitingSummary(rows, now)}</div>
+      <div className="mt-2 flex flex-wrap justify-center gap-2">
         {longest ? (
-          <Button variant="primary" size="sm" onClick={onLongest}>
+          <Button variant="primary" onClick={onLongest}>
             Open the longest waiting
           </Button>
         ) : null}
-        <Button size="sm" onClick={onVisitors}>
+        <Button onClick={onVisitors}>
           {visitors === null ? 'Visitors online' : `${text('Visitors online')} · ${visitors}`}
         </Button>
       </div>
-      <div className="mt-2 flex items-center gap-1 text-[11.5px] text-ink-3">
+      <div className="mt-2 flex items-center gap-1 text-[12px] text-ink-3">
         Press <Kbd tone="key">J</Kbd> / <Kbd tone="key">K</Kbd> to move through the list
       </div>
     </div>
+  );
+}
+
+function MenuHead({ children }: { children: ReactNode }) {
+  return <div className="mx-2 mt-2.5 mb-0.5 text-[10.5px] font-bold tracking-[0.9px] text-ink-3">{children}</div>;
+}
+
+/** A menu entry (C-01): its icon, its words and what it counts; the one showing is lit with a bar on its left. */
+function MenuItem({ icon, label, here, onClick, title, children }: { icon: string; label: string; here: boolean; onClick: () => void; title?: string; children?: ReactNode }) {
+  return (
+    <button type="button" aria-current={here ? 'page' : undefined} title={title} onClick={onClick} className={cx('relative flex h-[27px] shrink-0 items-center gap-[9px] rounded-[7px] px-2 text-left', here ? 'bg-selection font-bold text-primary shadow-[inset_3px_0_0_var(--color-primary)]' : 'text-ink hover:bg-subtle')}>
+      <Icon name={icon} size={16} className={cx('shrink-0', here ? 'text-primary' : 'text-ink-2')} />
+      <span className="min-w-0 flex-1 truncate">{text(label)}</span>
+      {children}
+    </button>
+  );
+}
+
+/** A count as a small pill: plain, ringed on the lit entry, red for missed, green for visitors online. */
+function CountPill({ n, here, tone }: { n: number | null; here: boolean; tone: 'plain' | 'danger' | 'green' }) {
+  if (!n) return null;
+  return (
+    <span className={cx('inline-flex h-[18px] min-w-[20px] shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold', tone === 'danger' ? 'bg-danger text-white' : tone === 'green' ? 'bg-success-bg text-success' : here ? 'bg-surface text-primary ring-1 ring-primary/40' : 'bg-subtle text-ink-2')}>
+      {n}
+    </span>
   );
 }

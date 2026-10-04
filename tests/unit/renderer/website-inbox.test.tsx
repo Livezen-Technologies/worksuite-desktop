@@ -112,7 +112,7 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     wrap(<WebsiteWorkspace />);
     const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
     // Red throughout on a site that offers no callbacks.
-    expect(within(hasitha).getByText(/^waiting 3:0\d$/).className).toContain('text-danger');
+    expect(within(hasitha).getByLabelText(/^waiting 3:0\d$/).className).toContain('text-danger');
     expect(within(hasitha).getByText('Awaiting reply')).toBeTruthy();
     expect(within(hasitha).getByText('Reading /pricing')).toBeTruthy();
     expect(within(hasitha).getByText('On the site now')).toBeTruthy();
@@ -267,6 +267,25 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
   });
 });
 
+describe('the Website Chats menu (C-01)', () => {
+  it('lists the sections in order with icons and count pills, lights only the one showing, and goes back to Chat with Ctrl+[', async () => {
+    wrap(<WebsiteWorkspace />);
+    const menu = screen.getByRole('navigation', { name: 'Website chats' });
+    await within(menu).findByText('Assigned to me');
+    const labels = within(menu).getAllByRole('button').map((b) => b.textContent ?? '');
+    const order = ['Inbox', 'Live chats', 'Offline enquiries', 'Missed chats', 'Assigned to me', 'Unassigned', 'Awaiting reply', 'Invited', 'Starred', 'Closed', 'Live dashboard', 'Visitors online'];
+    const at = order.map((l) => labels.findIndex((t) => t.startsWith(l)));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+    expect(within(menu).getAllByRole('button').filter((b) => b.getAttribute('aria-current') === 'page').map((b) => b.textContent)).toEqual([expect.stringMatching(/^Inbox/)]);
+    // Missed is a red pill; Visitors online a green one.
+    expect(within(within(menu).getByRole('button', { name: /^Missed chats/ })).getByText('1').className).toContain('bg-danger');
+    expect(within(within(menu).getByRole('button', { name: /^Visitors online/ })).getByText('2').className).toContain('bg-success-bg');
+    fireEvent.keyDown(window, { key: '[', ctrlKey: true });
+    expect(tab.go).toHaveBeenLastCalledWith('/chat');
+  });
+});
+
 describe('a visitor who wrote again in my chat (#230)', () => {
   it('goes to the top of the list, marked Visitor replied with its wait', async () => {
     serve([...ROWS.slice(0, 2), row({ id: 3, visitor_name: 'Kasun P.', assigned_to: 7, agent: 'Me', awaiting_reply: true, reply_waiting_since: ago(45_000), waiting_since: ago(45_000), reply_stage: null })]);
@@ -276,7 +295,7 @@ describe('a visitor who wrote again in my chat (#230)', () => {
     expect(rows[0]).toBe('3');
     const kasun = within(list()).getByText('Kasun P.').closest('button')!;
     expect(within(kasun).getByText('Visitor replied')).toBeTruthy();
-    expect(within(kasun).getByText(/^waiting 0:4\d$/)).toBeTruthy();
+    expect(within(kasun).getByLabelText(/^waiting 0:4\d$/)).toBeTruthy();
   });
 });
 
@@ -323,7 +342,7 @@ describe('Callbacks (worksuite-desktop#223)', () => {
     wrap(<WebsiteWorkspace />);
     const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
     expect(within(hasitha).getByText('Callback requested')).toBeTruthy();
-    const clock = within(hasitha).getByText(/^waiting 3:0\d$/);
+    const clock = within(hasitha).getByLabelText(/^waiting 3:0\d$/);
     expect(clock.getAttribute('data-tone')).toBe('amber');
     expect(clock.getAttribute('title')).toBe('Offered a callback');
   });

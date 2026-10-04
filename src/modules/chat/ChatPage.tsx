@@ -1,8 +1,8 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseEvent as ReactMouseEvent } from 'react';
 import { app } from '../../core/app-state';
-import { apiGet, apiGetMeta, apiPost } from '../../core/api';
-import { errorMessage, isMac } from '../../core/bridge';
+import { apiGet, apiGetMeta } from '../../core/api';
+import { isMac } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { listStamp, parseTs } from '../../core/time';
@@ -25,6 +25,7 @@ import { useRoomActions, useWebsiteActions } from './RoomActions';
 import { useAgents, useWebsiteAccess, useWebsiteInbox, type WebsiteRow } from './website/api';
 import { WebsiteThread } from './website/WebsiteThread';
 import { WebsiteWorkspace } from './website/WebsiteWorkspace';
+import { MyStatus } from './MyStatus';
 import { SidePanel } from '../../components/SidePanel';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import { canOpenWeb, useCanOpen } from '../../core/access';
@@ -54,13 +55,6 @@ import { useWaAccounts, waNumber } from './channels/whatsapp';
  */
 type Filter = 'all' | 'unread' | 'mentions' | 'archived' | 'calls';
 
-const STATUS_CHOICES: Array<{ id: string; label: string; dot: string }> = [
-  { id: 'available', label: 'Available', dot: 'bg-success' },
-  { id: 'busy', label: 'Busy', dot: 'bg-danger' },
-  { id: 'dnd', label: 'Do not disturb', dot: 'bg-danger' },
-  { id: 'away', label: 'Away', dot: 'bg-warning' },
-  { id: 'offline', label: 'Appear offline', dot: 'bg-line' },
-];
 
 export default function ChatPage({ tabId }: ModuleProps) {
   const { query, go, path } = useTab();
@@ -635,48 +629,3 @@ function VisitorRow({ c, active, onOpen, onMenu }: { c: WebsiteRow; active: bool
   );
 }
 
-/** "Set your status": the choice everybody sees on your avatar (presence heartbeats keep it live). */
-function MyStatus() {
-  const qc = useQueryClient();
-  const user = useStore(app, (s) => s.auth?.user);
-  const [open, setOpen] = useState(false);
-  const ref = useRef<HTMLDivElement>(null);
-  const me = useQuery({ queryKey: ['chat', 'presence', 'me'], queryFn: ({ signal }) => apiGet<{ status: string; choice: string }>('/api/chat/presence/me', undefined, signal), refetchInterval: 60_000 });
-  const choice = STATUS_CHOICES.find((c) => c.id === (me.data?.choice ?? 'available')) ?? STATUS_CHOICES[0]!;
-  useEffect(() => {
-    if (!open) return;
-    const off = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setOpen(false);
-    window.addEventListener('mousedown', off);
-    return () => window.removeEventListener('mousedown', off);
-  }, [open]);
-  const pick = async (id: string) => {
-    setOpen(false);
-    try {
-      await apiPost('/api/chat/presence', { status: id, active: true });
-      void qc.invalidateQueries({ queryKey: ['chat', 'presence'] });
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
-  };
-  return (
-    <div ref={ref} className="relative flex flex-1 items-center gap-2">
-      <span className="relative shrink-0">
-        <UserAvatar userId={user?.id} name={user?.name} size={32} />
-        <span className={cx('absolute -right-px -bottom-px h-[10px] w-[10px] rounded-full border-2 border-surface', choice.dot)} />
-      </span>
-      <button type="button" aria-haspopup="menu" aria-expanded={open} onClick={() => setOpen(!open)} className="h-[30px] flex-1 truncate rounded-[7px] border border-line px-2 text-left text-[12px] text-ink-2 hover:bg-subtle">
-        Set your status · {choice.label}
-      </button>
-      {open ? (
-        <div role="menu" className="absolute top-9 left-0 z-30 w-52 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
-          {STATUS_CHOICES.map((c) => (
-            <button key={c.id} type="button" role="menuitemradio" aria-checked={c.id === choice.id} onClick={() => void pick(c.id)} className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] text-ink hover:bg-subtle">
-              <span className={cx('h-2.5 w-2.5 rounded-full', c.dot)} /> {c.label}
-              {c.id === choice.id ? <Icon name="check" size={14} className="ml-auto text-primary" /> : null}
-            </button>
-          ))}
-        </div>
-      ) : null}
-    </div>
-  );
-}
