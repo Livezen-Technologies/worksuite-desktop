@@ -68,6 +68,14 @@ const PUNCT: Record<string, string> = {
 // eslint-disable-next-line no-control-regex
 const CONTROL = /[\u0000-\u0008\u000a-\u001f\u007f]/g;
 
+/** Half a surrogate pair (a name cut in the middle of an emoji): `encodeURIComponent` throws URIError on one (#253). */
+const LONE_SURROGATE = /[\ud800-\udbff](?![\udc00-\udfff])|(?<![\ud800-\udbff])[\udc00-\udfff]/g;
+
+/** The text with any half surrogate pair replaced by U+FFFD, so nothing below can throw on it. */
+export function wellFormed(value: string): string {
+  return value.replace(LONE_SURROGATE, '\ufffd');
+}
+
 /** True when `value` is already safe to send: no control characters, nothing above `max`. */
 export function isSafeHeaderValue(value: string, max = 0xff): boolean {
   for (let i = 0; i < value.length; i++) {
@@ -85,7 +93,7 @@ export function sanitizeHeaderValue(value: unknown, opts: { ascii?: boolean } = 
   const max = opts.ascii ? 0x7e : 0xff;
   let v = String(value ?? '');
   if (isSafeHeaderValue(v, max) && !/^[\t ]|[\t ]$/.test(v)) return v;
-  v = v
+  v = wellFormed(v)
     .replace(/[\r\n]+/g, ' ')
     .replace(/\t/g, ' ')
     .replace(CONTROL, '')
@@ -169,23 +177,28 @@ export function headerTime(at: Date | number | string = Date.now()): string {
  * read, and the real name in UTF-8 for those that can. Sinhala, Tamil, emoji and U+202F all survive in `filename*`.
  */
 export function contentDisposition(fileName: string, type: 'attachment' | 'inline' = 'attachment', maxFallback = 150): string {
-  const name = String(fileName ?? '').normalize('NFC').replace(CONTROL, '').replace(/[\r\n\t]/g, ' ').trim() || 'download';
+  const name = wellFormed(String(fileName ?? '')).normalize('NFC').replace(/[\r\n\t]/g, ' ').replace(CONTROL, '').trim() || 'download';
   const dot = name.lastIndexOf('.');
   const ext = dot > 0 && name.length - dot <= 16 ? name.slice(dot) : '';
   const base = ext ? name.slice(0, dot) : name;
+  // The fallback reads as the name does: "—" is "-", curly quotes are straight ("FORM TECH-10 - Bid Security.pdf", #253).
   const toAscii = (s: string) =>
     s
+      .replace(ZERO_WIDTH, '')
+      .replace(/[\u2010-\u2015\u2018-\u201f\u2026\u2022\u2032\u2033\u2212\u00b7]/g, (c) => PUNCT[c] ?? c)
       .normalize('NFKD')
       .replace(/[\u0300-\u036f]/g, '')
       .replace(SPACES, ' ')
       .replace(/[^\x20-\x7e]/g, '_')
-      .replace(/["\\]/g, '_')
+      .replace(/"/g, "'")
+      .replace(/\\/g, '_')
       .replace(/%/g, '_')
       .replace(/_+/g, '_')
+      .replace(/ {2,}/g, ' ')
       .trim();
   const asciiExt = toAscii(ext).replace(/\s/g, '');
   let fallbackBase = toAscii(base).slice(0, Math.max(1, maxFallback - asciiExt.length)).trim();
-  if (!fallbackBase || /^_+$/.test(fallbackBase)) fallbackBase = 'download';
+  if (!fallbackBase || /^[_\s.]+$/.test(fallbackBase)) fallbackBase = 'download';
   const fallback = `${fallbackBase}${asciiExt}`;
   const encoded = encodeURIComponent(name).replace(/['()*]/g, (c) => `%${c.charCodeAt(0).toString(16).toUpperCase()}`);
   if (fallback === name) return `${type}; filename="${fallback}"`;
@@ -197,17 +210,73 @@ export function contentDisposition(fileName: string, type: 'attachment' | 'inlin
  * as the name it meant, and written again as `contentDisposition` would. A value already in ASCII is returned as is.
  */
 export function normalizeContentDisposition(value: string): string {
-  if (isSafeHeaderValue(value, 0x7e)) return value;
-  const type = /^\s*inline\b/i.test(value) ? 'inline' : 'attachment';
-  const m = /filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]*))/i.exec(value);
-  const raw = (m?.[1] ?? m?.[2] ?? '').trim();
-  let name = raw;
-  if (isSafeHeaderValue(raw, 0xff) && typeof TextDecoder !== 'undefined') {
+  try {
+    if (isSafeHeaderValue(value, 0x7e)) return value;
+    const type = /^\s*inline\b/i.test(value) ? 'inline' : 'attachment';
+    // A real `filename*` (RFC 5987) wins over the plain one beside it.
+    const star = /filename\*\s*=\s*([^']*)'[^']*'([^;\s]*)/i.exec(value);
+    if (star && /^utf-8$/i.test(star[1]!.trim())) {
+      try {
+        return contentDisposition(decodeURIComponent(star[2]!), type);
+      } catch {
+        /* a broken encoding: read the plain name instead */
+      }
+    }
+    const m = /filename\s*=\s*(?:"((?:[^"\\]|\\.)*)"|([^;]*))/i.exec(value);
+    const raw = (m?.[1] ?? m?.[2] ?? '').trim();
+    return contentDisposition(utf8FromWire(raw) || 'download', type);
+  } catch {
+    return 'attachment; filename="download"';
+  }
+}
+
+/**
+ * Text that came over the wire one byte per character (how undici, and a browser, read a header): read as the UTF-8 it
+ * was written in. Anything that is not UTF-8 after all is Latin-1, and stays as it is.
+ */
+export function utf8FromWire(raw: string): string {
+  if (!isSafeHeaderValue(raw, 0xff) || isSafeHeaderValue(raw, 0x7e) || typeof TextDecoder === 'undefined') return raw;
+  try {
+    return new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(raw, (c) => c.charCodeAt(0)));
+  } catch {
+    return raw;
+  }
+}
+
+/**
+ * A response header's value as the bytes it came in, one character per byte (worksuite-desktop#253). Electron's
+ * `net` reads a response's header bytes as UTF-8, so a server's raw UTF-8 file name ("FORM TECH-10 — Bid
+ * Security.pdf") reaches JavaScript as U+2014 — which `Headers.set` refuses ("Cannot convert argument to a
+ * ByteString… value of 8212"). Written back as its UTF-8 bytes it is what undici and a browser would have read.
+ */
+export function wireHeaderValue(value: string): string {
+  const v = String(value ?? '');
+  if (isSafeHeaderValue(v, 0xff)) return v;
+  let out = '';
+  for (const b of new TextEncoder().encode(wellFormed(v))) out += String.fromCharCode(b);
+  return out.replace(CONTROL, '').trim();
+}
+
+/**
+ * A response's headers, as received, made into a `Headers` that can never throw: values above 255 become their bytes,
+ * `Content-Disposition` is written again as RFC 5987 (`filename*`), and a header that still will not go is left out.
+ */
+export function responseHeaders(raw: Record<string, string | string[] | undefined> | Array<[string, string]>, onDropped?: (name: string) => void): Headers {
+  const out = new Headers();
+  const list: Array<[string, string | string[] | undefined]> = Array.isArray(raw) ? raw : Object.entries(raw);
+  for (const [name, value] of list) {
+    if (value === undefined) continue;
     try {
-      name = new TextDecoder('utf-8', { fatal: true }).decode(Uint8Array.from(raw, (c) => c.charCodeAt(0)));
+      const joined = Array.isArray(value) ? value.join(', ') : String(value);
+      const wire = wireHeaderValue(joined);
+      out.append(name, name.toLowerCase() === 'content-disposition' ? normalizeContentDisposition(wire) : wire);
     } catch {
-      name = raw; // Latin-1 after all.
+      try {
+        onDropped?.(String(name).replace(/[^\x20-\x7e]/g, '?'));
+      } catch {
+        /* reporting never breaks a response */
+      }
     }
   }
-  return contentDisposition(name || 'download', type);
+  return out;
 }

@@ -1,6 +1,7 @@
 import { app, protocol } from 'electron';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
+import { isSafeHeaderValue, normalizeContentDisposition, sanitizeHeaderValue } from '@shared/http-headers';
 import { APP_HOST, contentSecurityPolicy, devOrigin, type CspSources } from '../security/hardening';
 import { logger } from '../main/log';
 
@@ -66,6 +67,33 @@ function corsHeaders(request: Request): Record<string, string> {
   return {};
 }
 
+/** What a request that failed inside the handler answers: a plain 500, its headers fixed ASCII (#253). */
+export function failedResponse(): Response {
+  return new Response(JSON.stringify({ status: 'error', message: "Couldn't open this. Try again.", code: 'INTERNAL' }), {
+    status: 500,
+    headers: { 'Content-Type': 'application/json', 'Cache-Control': 'no-store' },
+  });
+}
+
+/**
+ * A response as the protocol hands it to Chromium (worksuite-desktop#253): every header value in plain ASCII.
+ * `Content-Disposition` carries a file name only as RFC 5987 (`filename*=UTF-8''…`, with an ASCII fallback); any
+ * other value outside ASCII is cleaned. A response that is already plain goes as it is, body untouched.
+ */
+export function protocolSafeResponse(res: Response): Response {
+  let plain = true;
+  res.headers.forEach((v) => {
+    if (!isSafeHeaderValue(v, 0x7e)) plain = false;
+  });
+  if (plain) return res;
+  const headers = new Headers();
+  res.headers.forEach((v, k) => {
+    headers.append(k, k === 'content-disposition' ? normalizeContentDisposition(v) : sanitizeHeaderValue(v, { ascii: true }));
+  });
+  const nullBody = [101, 204, 205, 304].includes(res.status);
+  return new Response(nullBody ? null : res.body, { status: res.status, statusText: sanitizeHeaderValue(res.statusText, { ascii: true }), headers });
+}
+
 /**
  * app://bundle/…          → the signed renderer bundle (inside the asar).
  * app://bundle/__api/…    → the WorkSuite API, through the main process, which
@@ -73,11 +101,12 @@ function corsHeaders(request: Request): Record<string, string> {
  *                           holds a token and never talks to the network itself.
  * app://bundle/__local/…  → what the app keeps for its own pages (a course's
  *                           offline lessons, decrypted as they are read).
+ *
+ * The handler never throws (#253): whatever goes wrong building an answer — a header no header may carry, a proxy
+ * that failed — is that request's 500, logged by path, and the page shows its own error with Retry.
  */
-export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () => CspSources = () => ({}), local?: LocalHandler): void {
-  const root = rendererRoot();
-  protocol.handle('app', async (request) => {
-    const url = new URL(request.url);
+export function createAppHandler(root: string, apiProxy: ApiProxyHandler, cspSources: () => CspSources = () => ({}), local?: LocalHandler): (request: Request) => Promise<Response> {
+  const serve = async (request: Request, url: URL): Promise<Response> => {
     if (url.host !== APP_HOST) return new Response('Not found', { status: 404 });
 
     if (url.pathname.startsWith('/__api/')) {
@@ -125,5 +154,28 @@ export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () =>
       if (!app.isPackaged) log.debug('bundle file missing', { path: url.pathname, error: String(e) });
       return new Response('Not found', { status: 404 });
     }
-  });
+  };
+
+  return async (request) => {
+    let path = '';
+    try {
+      const url = new URL(request.url);
+      path = url.pathname.split('/').slice(0, 4).join('/');
+      const res = await serve(request, url);
+      if (!(res instanceof Response)) throw new TypeError('the handler gave no response');
+      return protocolSafeResponse(res);
+    } catch (e) {
+      // The path's first segments only: never a file name, a query or a token.
+      log.error('app protocol request failed', { path, error: e instanceof Error ? `${e.name}: ${e.message.slice(0, 200)}` : String(e).slice(0, 200) });
+      try {
+        return failedResponse();
+      } catch {
+        return new Response(null, { status: 500 });
+      }
+    }
+  };
+}
+
+export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () => CspSources = () => ({}), local?: LocalHandler): void {
+  protocol.handle('app', createAppHandler(rendererRoot(), apiProxy, cspSources, local));
 }

@@ -61,6 +61,7 @@ import { SalonSync } from '../services/salon-sync';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { HttpClient, withSafeHeaders, type FetchLike } from '../services/http';
+import { createNetFetch } from '../services/net-fetch';
 import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
@@ -242,7 +243,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void session.defaultSession.setProxy(proxyConfig);
   }
   // Every main-process request's headers go through the header-safety helper (#238): nothing above 255 reaches undici.
-  const fetchImpl: FetchLike = withSafeHeaders((url, init) => net.fetch(url, init as RequestInit));
+  // And every response's (#253): not `net.fetch`, whose own listener throws on a raw UTF-8 file name and never settles.
+  const netFetch = createNetFetch((o) => electronNet.request(o), net);
+  const fetchImpl: FetchLike = withSafeHeaders((url, init) => netFetch(url, init as RequestInit));
 
   const local = new LocalWorkspace(join(p.profile, 'guest-workspace.sqlite'));
   // Guest mode runs in the main window (#149): which window is in it and past its PIN, and where a move may go.
@@ -2137,7 +2140,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Text read from images on this computer (worksuite-desktop#59): Tesseract, its language data fetched once when first needed.
   const ocr = new OcrService({
     dir: join(p.userData, 'LocalAI', 'ocr'),
-    fetch: withSafeHeaders((url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit)),
+    fetch: withSafeHeaders((url, init) => netFetch(url, { ...init, cache: 'no-store' } as RequestInit)),
     progress: (sender, ev) => {
       const wc = webContents.fromId(sender);
       if (wc && !wc.isDestroyed()) wc.send('ai:ocrProgress', ev);

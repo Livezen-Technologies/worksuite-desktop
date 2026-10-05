@@ -42,17 +42,24 @@ interface Loaded {
  * `url`: an address of the app's own to read instead (a copy kept on this computer); `onPage`: told
  * each PDF page as it comes into view (a lesson counting the pages read).
  */
+/** How long the viewer waits for the file to start arriving before it says it couldn't open it (#253). */
+export const OPEN_TIMEOUT_MS = 60_000;
+
 export function FileViewer({ path, name, onOpen, onSave, url: source, onPage }: { path: string; name: string; onOpen?: () => void; onSave?: () => void; url?: string; onPage?: (page: number) => void }) {
   const [file, setFile] = useState<Loaded | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [attempt, setAttempt] = useState(0);
 
   useEffect(() => {
     let gone = false;
     let url: string | null = null;
-    // A new file is a new viewer (callers key it by path), so there is no earlier state to clear.
+    const ctl = new AbortController();
+    // A file that never starts arriving is an error with Retry, never "Opening the file…" for ever (#253).
+    const timer = setTimeout(() => ctl.abort(new DOMException('timeout', 'TimeoutError')), OPEN_TIMEOUT_MS);
     void (async () => {
       try {
-        const res = await fetch(source ?? apiUrl(path), { cache: 'no-store' });
+        const res = await fetch(source ?? apiUrl(path), { cache: 'no-store', signal: ctl.signal });
+        clearTimeout(timer);
         if (!res.ok) {
           let message = res.status === 403 ? 'You may not see this file.' : res.status === 404 ? 'The file is not there any more.' : `The server answered ${res.status}.`;
           try {
@@ -67,16 +74,29 @@ export function FileViewer({ path, name, onOpen, onSave, url: source, onPage }: 
         url = URL.createObjectURL(blob);
         setFile({ kind: viewKind(name, res.headers.get('content-type') ?? blob.type), blob, url });
       } catch (e) {
-        if (!gone) setError(e instanceof Error ? e.message : 'The file could not be read.');
+        clearTimeout(timer);
+        if (gone) return;
+        const timedOut = ctl.signal.aborted;
+        // To Diagnostics (the window's errors are logged): where it was read from, never the file's name.
+        console.error('[file-viewer] could not open a file', { path: (source ?? path).split('?')[0], timedOut, error: e instanceof Error ? e.message.slice(0, 200) : String(e) });
+        setError(timedOut ? 'The file took too long to arrive.' : e instanceof Error && e.message && !/^(Failed to fetch|NetworkError|Load failed)/i.test(e.message) ? e.message : 'The file could not be read.');
       }
     })();
     return () => {
       gone = true;
+      clearTimeout(timer);
+      ctl.abort();
       if (url) URL.revokeObjectURL(url);
     };
-  }, [path, name, source]);
+  }, [path, name, source, attempt]);
 
-  if (error) return <Unshown icon="alert" title="This file could not be shown" hint={error} onOpen={onOpen} onSave={onSave} />;
+  const retry = () => {
+    setError(null);
+    setFile(null);
+    setAttempt((n) => n + 1);
+  };
+
+  if (error) return <Unshown icon="alert" title="Couldn't open this file" hint={error} onRetry={retry} onOpen={onOpen} onSave={onSave} />;
   if (!file) return <Spinner label="Opening the file…" className="h-full" />;
   if (file.kind === 'pdf') return <PdfView blob={file.blob} name={name} onPage={onPage} />;
   if (file.kind === 'image') return <ImageView url={file.url} name={name} />;
@@ -84,15 +104,24 @@ export function FileViewer({ path, name, onOpen, onSave, url: source, onPage }: 
   return <Unshown icon="file" title={`${name} can't be shown inside WorkSuite`} hint="Word, Excel and other files open in the app they belong to." onOpen={onOpen} onSave={onSave} />;
 }
 
-function Unshown({ icon, title, hint, onOpen, onSave }: { icon: string; title: string; hint: string; onOpen?: () => void; onSave?: () => void }) {
+function Unshown({ icon, title, hint, onRetry, onOpen, onSave }: { icon: string; title: string; hint: string; onRetry?: () => void; onOpen?: () => void; onSave?: () => void }) {
   return (
-    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center">
+    <div className="flex h-full flex-col items-center justify-center gap-3 p-8 text-center" role={onRetry ? 'alert' : undefined}>
       <Icon name={icon} size={34} className="text-ink-3" />
       <b className="text-[15px] text-ink">{title}</b>
       <p className="m-0 max-w-[420px] text-[13px] text-ink-2">{hint}</p>
       <div className="flex gap-2">
+        {onRetry ? (
+          <button type="button" onClick={onRetry} className="h-9 rounded-[8px] bg-primary px-4 text-[13px] font-bold text-white hover:bg-primary-hover">
+            Retry
+          </button>
+        ) : null}
         {onOpen ? (
-          <button type="button" onClick={onOpen} className="h-9 rounded-[8px] bg-primary px-4 text-[13px] font-bold text-white hover:bg-primary-hover">
+          <button
+            type="button"
+            onClick={onOpen}
+            className={onRetry ? 'h-9 rounded-[8px] border border-line px-4 text-[13px] font-semibold text-ink hover:bg-subtle' : 'h-9 rounded-[8px] bg-primary px-4 text-[13px] font-bold text-white hover:bg-primary-hover'}
+          >
             Open in its app
           </button>
         ) : null}

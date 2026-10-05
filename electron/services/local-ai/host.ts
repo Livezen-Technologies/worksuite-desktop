@@ -2,6 +2,7 @@ import { app, net, utilityProcess, webContents } from 'electron';
 import { join } from 'node:path';
 import type { LocalAIEvent } from '@shared/local-ai';
 import { logger } from '../../main/log';
+import { createNetFetch } from '../net-fetch';
 import type { IpcRouter } from '../../ipc/router';
 import { LocalAIModelManager } from './models';
 import type { FromWorker } from './protocol';
@@ -70,6 +71,7 @@ export function createLocalAI(deps: LocalAIHostDeps): LocalAIHost {
     }, 250);
   };
   const keys = { ...LOCAL_AI_CATALOG_KEYS, ...dev.keys };
+  const safeFetch = createNetFetch((o) => net.request(o));
   const models = new LocalAIModelManager({
     root,
     serverCatalog: deps.serverCatalog
@@ -79,7 +81,8 @@ export function createLocalAI(deps: LocalAIHostDeps): LocalAIHost {
     // models are not set up, and the assistant answers through WorkSuite (AI Studio) instead.
     catalogUrl: () => dev.url ?? (Object.keys(keys).length ? LOCAL_AI_CATALOG_URL : null),
     keys,
-    fetch: (url, init) => net.fetch(url, { ...init, cache: 'no-store' }),
+    // Not `net.fetch`: a response header in UTF-8 must fail this download, never the main process (#253).
+    fetch: (url, init) => safeFetch(url, { ...init, cache: 'no-store' }),
     onChange: changed,
   });
   const ready = models.init().catch((e) => log.warn('local ai models not read', { error: String(e) }));
