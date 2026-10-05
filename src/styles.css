@@ -67,8 +67,10 @@
   --ws-glass-line: rgba(15, 27, 61, 0.14);
   /* What dims the app under a popover (the app launcher). */
   --ws-scrim: rgba(0, 0, 0, 0.45);
-  /* The app launcher in full screen: the app's own dark, nearly solid, over a blur. */
-  --ws-launcher-full: rgba(15, 27, 61, 0.94);
+  /* The app launcher's one background, for its grid, its section headings, its scroll fades and its footer; solid,
+     so a fade to it is never darker than what is under it (worksuite-desktop#233). Its one soft hairline. */
+  --launcher-bg: #ffffff;
+  --launcher-line: rgba(18, 22, 51, 0.06);
 }
 
 [data-theme='dark'] {
@@ -110,7 +112,8 @@
   --ws-glass: rgba(255, 255, 255, 0.045);
   --ws-glass-hover: rgba(255, 255, 255, 0.09);
   --ws-glass-line: rgba(255, 255, 255, 0.14);
-  --ws-launcher-full: rgba(11, 17, 36, 0.94);
+  --launcher-bg: #0b1124;
+  --launcher-line: rgba(255, 255, 255, 0.06);
 }
 
 [data-density='compact'] {
@@ -151,7 +154,8 @@
   --color-glass-hover: var(--ws-glass-hover);
   --color-glass-line: var(--ws-glass-line);
   --color-scrim: var(--ws-scrim);
-  --color-launcher-full: var(--ws-launcher-full);
+  --color-launcher: var(--launcher-bg);
+  --color-launcher-line: var(--launcher-line);
   --font-sans: 'Plus Jakarta Sans Variable', 'Noto Sans Sinhala', 'Noto Sans Tamil', system-ui, -apple-system, 'Segoe UI', sans-serif;
   --font-mono: 'JetBrains Mono', ui-monospace, 'SF Mono', Menlo, Consolas, monospace;
   --radius-control: 8px;
