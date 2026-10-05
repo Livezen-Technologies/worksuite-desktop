@@ -3,6 +3,7 @@ import { useEffect, useState, type KeyboardEvent as ReactKeyboardEvent, type Mou
 import { app } from '../../core/app-state';
 import { apiGet, apiGetMeta } from '../../core/api';
 import { isMac } from '../../core/bridge';
+import { text } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { listStamp, parseTs } from '../../core/time';
@@ -29,6 +30,7 @@ import { MyStatus } from './MyStatus';
 import { BulkBar, BulkIconButton } from './BulkBar';
 import { useMultiSelect } from './selection';
 import { SidePanel } from '../../components/SidePanel';
+import { refreshWords, useListRefresh } from '../../components/PullToRefresh';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import { canOpenWeb, useCanOpen } from '../../core/access';
 import { AddChannel, type AddStep } from './channels/AddChannel';
@@ -123,6 +125,12 @@ export default function ChatPage({ tabId }: ModuleProps) {
     if (reopen) go(`/chat?room=${reopen}`);
   }, [reopen, go]);
 
+  // Pull to check for new messages, ⌘R/F5 and "Checked…" (worksuite-desktop#236): the conversations asked again.
+  const checkRooms = async () => {
+    const r = await rooms.refetch({ throwOnError: true });
+    if (r.data?.offline) throw new Error(text('You’re offline: showing the conversations saved on this computer'));
+  };
+
   const channels = buildChannels({ active: channel, chat: chatAccess, rooms: all, website: { access: websiteAccess, rows: websiteOpen.data?.conversations ?? [] }, whatsapp: { access: whatsappAccess, accounts: waAccounts, canConnect }, meta: { access: metaAccess, accounts: metaAccounts } });
   const connect = whatsappAccess && canConnect ? () => setAdding({ at: 'whatsapp' }) : null;
   const connectMeta = (platform: MetaPlatform) => (metaAccess && metaCanConnect && meta.data?.ready ? () => setConnecting({ platform }) : null);
@@ -137,6 +145,8 @@ export default function ChatPage({ tabId }: ModuleProps) {
             error={rooms.error}
             offline={rooms.data?.offline ? rooms.data.cachedAt : null}
             retry={() => void rooms.refetch()}
+            check={checkRooms}
+            checkedAt={rooms.dataUpdatedAt || null}
             selected={room}
             q={q}
             setQ={setQ}
@@ -297,6 +307,10 @@ interface RailProps {
   error: unknown;
   offline: string | null;
   retry: () => void;
+  /** Check for new messages now (#236). */
+  check: () => Promise<unknown>;
+  /** When the list last came from the server (ms). */
+  checkedAt: number | null;
   selected: string | null;
   q: string;
   setQ: (q: string) => void;
@@ -309,7 +323,7 @@ interface RailProps {
   onInfo: (r: Room) => void;
 }
 
-function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter, setFilter, websiteAccess, onNew, onStarred, onInfo }: RailProps) {
+function Rail({ rooms, loading, error, offline, retry, check, checkedAt, selected, q, setQ, filter, setFilter, websiteAccess, onNew, onStarred, onInfo }: RailProps) {
   const { go } = useTab();
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   // The list's presence is everybody's presence: the header and the details read the same store (worksuite-desktop#183).
@@ -398,6 +412,17 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
     e.preventDefault();
     actions.run(focused, a);
   };
+  // Pull to check for new messages and "↑ 3 new conversations" (#236): a conversation is new again when a message comes.
+  const { attach: listRef, ...refresh } = useListRefresh({
+    list: 'chat',
+    check,
+    items: order.map((r) => ({ key: String(r.id), stamp: r.last_message?.created_at ?? r.updated_at })),
+    view: `${filter}:${needle}`,
+    ready: !loading && !error,
+    words: refreshWords('messages'),
+    errorText: () => text('Couldn’t check for new messages'),
+    lastChecked: checkedAt,
+  });
   const visitors = websiteAccess && filter === 'all' ? (web.data?.conversations ?? []).filter((c) => !needle || (c.visitor_name ?? c.label).toLowerCase().includes(needle)).slice(0, 6) : [];
 
   return (
@@ -449,6 +474,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
             ))}
           </div>
         ) : null}
+        {filter !== 'calls' ? <div className="-mt-1 flex min-w-0">{refresh.checked}</div> : null}
         {offline ? <OfflineNote cachedAt={offline} /> : null}
         {picked.length || selecting ? (
           <BulkBar tone="rail" label="Selected conversations" count={picked.length} onClear={endSelect}>
@@ -470,49 +496,60 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
           <CallLogList log={calls} rooms={rooms} filter={callFilter} needle={needle} />
         </div>
       ) : (
-        <div className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin" onKeyDown={keys}>
-          {filter === 'archived' ? (
-            <button type="button" onClick={() => setFilter('all')} className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] font-bold text-ink hover:bg-subtle">
-              <Icon name="chevron-left" size={15} className="text-ink-3" /> Archived conversations
-            </button>
-          ) : archived && !needle ? (
-            <button type="button" onClick={() => setFilter('archived')} className="flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left hover:bg-subtle">
-              <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-subtle text-ink-2"><Icon name="archive" size={16} /></span>
-              <b className="flex-1 text-[13px] font-semibold text-ink">Archived</b>
-              <span className="text-[11.5px] font-semibold text-ink-3">{archived}</span>
-            </button>
-          ) : null}
-          {loading ? <Spinner /> : error ? <div className="p-4"><ErrorNote error={error} onRetry={retry} /></div> : null}
-          {!loading && !error && visible.length === 0 && visitors.length === 0 ? <Empty icon="chat" title={filter === 'archived' ? 'No archived conversations' : 'No conversations'} /> : null}
-          {sections.map(([title, list]) =>
-            list.length ? (
-              <div key={title}>
-                <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">{title}</div>
-                {list.map((r) => (
-                  <RoomRow key={r.id} r={r} active={String(r.id) === selected} picked={picked.includes(r.id)} selecting={selecting} status={r.other_user_id ? presenceOf(r.other_user_id) : undefined} onClick={(e) => click(r, e)} onMenu={(e) => contextMenu(r, e)} />
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          {refresh.indicator}
+          {refresh.pill}
+          <div
+            ref={listRef}
+            className="min-h-0 flex-1 overflow-y-auto pb-2 scroll-thin"
+            onKeyDown={(e) => {
+              keys(e);
+              refresh.onKeyDown(e);
+            }}
+          >
+            {filter === 'archived' ? (
+              <button type="button" onClick={() => setFilter('all')} className="flex w-full items-center gap-2 px-3.5 py-2 text-left text-[12.5px] font-bold text-ink hover:bg-subtle">
+                <Icon name="chevron-left" size={15} className="text-ink-3" /> Archived conversations
+              </button>
+            ) : archived && !needle ? (
+              <button type="button" onClick={() => setFilter('archived')} className="flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left hover:bg-subtle">
+                <span className="flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[9px] bg-subtle text-ink-2"><Icon name="archive" size={16} /></span>
+                <b className="flex-1 text-[13px] font-semibold text-ink">Archived</b>
+                <span className="text-[11.5px] font-semibold text-ink-3">{archived}</span>
+              </button>
+            ) : null}
+            {loading ? <Spinner /> : error ? <div className="p-4"><ErrorNote error={error} onRetry={retry} /></div> : null}
+            {!loading && !error && visible.length === 0 && visitors.length === 0 ? <Empty icon="chat" title={filter === 'archived' ? 'No archived conversations' : 'No conversations'} /> : null}
+            {sections.map(([title, list]) =>
+              list.length ? (
+                <div key={title}>
+                  <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">{title}</div>
+                  {list.map((r) => (
+                    <RoomRow key={r.id} r={r} mark={refresh.rowProps(String(r.id))} markClass={refresh.freshClass(String(r.id))} active={String(r.id) === selected} picked={picked.includes(r.id)} selecting={selecting} status={r.other_user_id ? presenceOf(r.other_user_id) : undefined} onClick={(e) => click(r, e)} onMenu={(e) => contextMenu(r, e)} />
+                  ))}
+                </div>
+              ) : null,
+            )}
+            {visitors.length ? (
+              <div>
+                <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Website</div>
+                {visitors.map((c) => (
+                  <VisitorRow key={c.id} c={c} active={selected === `w${c.id}`} onOpen={() => go(`/chat?view=website&website=${c.id}`)} onMenu={(e) => (e.preventDefault(), setVisitorMenu({ x: e.clientX, y: e.clientY, c }))} />
                 ))}
               </div>
-            ) : null,
-          )}
-          {visitors.length ? (
-            <div>
-              <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Website</div>
-              {visitors.map((c) => (
-                <VisitorRow key={c.id} c={c} active={selected === `w${c.id}`} onOpen={() => go(`/chat?view=website&website=${c.id}`)} onMenu={(e) => (e.preventDefault(), setVisitorMenu({ x: e.clientX, y: e.clientY, c }))} />
-              ))}
-            </div>
-          ) : null}
-          {needle.length >= 3 && search.data?.results.length ? (
-            <div>
-              <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Messages</div>
-              {search.data.results.slice(0, 20).map((h) => (
-                <button key={h.message_id} type="button" onClick={() => go(`/chat?room=${h.room_id}`)} className="flex w-full flex-col px-3.5 py-2 text-left hover:bg-subtle">
-                  <span className="flex gap-2 text-[12px]"><b className="flex-1 truncate text-ink">{h.room_name}</b><span className="text-ink-3">{listStamp(h.created_at)}</span></span>
-                  <span className="truncate text-[12px] text-ink-3">{h.sender_name}: {h.snippet}</span>
-                </button>
-              ))}
-            </div>
-          ) : null}
+            ) : null}
+            {needle.length >= 3 && search.data?.results.length ? (
+              <div>
+                <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">Messages</div>
+                {search.data.results.slice(0, 20).map((h) => (
+                  <button key={h.message_id} type="button" onClick={() => go(`/chat?room=${h.room_id}`)} className="flex w-full flex-col px-3.5 py-2 text-left hover:bg-subtle">
+                    <span className="flex gap-2 text-[12px]"><b className="flex-1 truncate text-ink">{h.room_name}</b><span className="text-ink-3">{listStamp(h.created_at)}</span></span>
+                    <span className="truncate text-[12px] text-ink-3">{h.sender_name}: {h.snippet}</span>
+                  </button>
+                ))}
+              </div>
+            ) : null}
+          </div>
         </div>
       )}
       {menu ? (
@@ -542,7 +579,7 @@ function Rail({ rooms, loading, error, offline, retry, selected, q, setQ, filter
  * A conversation in the list: pinned ones carry a pin, muted ones a struck bell and a grey count (they are not in
  * the total either), and one marked unread by hand a dot with nothing new in it (worksuite-desktop#183).
  */
-function RoomRow({ r, active, picked, selecting, status, onClick, onMenu }: { r: Room; active: boolean; picked: boolean; selecting: boolean; status: string | undefined; onClick: (e: ReactMouseEvent) => void; onMenu: (e: ReactMouseEvent) => void }) {
+function RoomRow({ r, active, picked, selecting, status, onClick, onMenu, mark, markClass }: { r: Room; active: boolean; picked: boolean; selecting: boolean; status: string | undefined; onClick: (e: ReactMouseEvent) => void; onMenu: (e: ReactMouseEvent) => void; mark?: { 'data-refresh-key': string; 'data-fresh'?: '' }; markClass?: string }) {
   const st = status ? PRESENCE[status] : undefined;
   const group = r.type !== 'direct';
   const last = r.last_message?.type === 'voice' ? 'Voice message' : r.last_message?.type === 'file' ? 'Attachment' : (r.last_message?.text ?? '');
@@ -552,11 +589,12 @@ function RoomRow({ r, active, picked, selecting, status, onClick, onMenu }: { r:
     <button
       type="button"
       data-room-row={r.id}
+      {...mark}
       aria-current={active ? 'true' : undefined}
       aria-pressed={selecting || picked ? picked : undefined}
       onClick={onClick}
       onContextMenu={onMenu}
-      className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? 'bg-selection ring-1 ring-primary ring-inset' : active ? 'bg-selection' : 'hover:bg-subtle')}
+      className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? 'bg-selection ring-1 ring-primary ring-inset' : active ? 'bg-selection' : 'hover:bg-subtle', markClass)}
     >
       {selecting ? <span aria-hidden className={cx('flex h-4 w-4 shrink-0 items-center justify-center rounded-full border', picked ? 'border-primary bg-primary text-white' : 'border-line')}>{picked ? <Icon name="check" size={11} /> : null}</span> : null}
       <span className="relative shrink-0">

@@ -37,6 +37,7 @@ import { ConversationMenu } from '../ConversationMenu';
 import { MyStatus } from '../MyStatus';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
+import { refreshWords, useListRefresh } from '../../../components/PullToRefresh';
 
 /**
  * Website chats as their own workspace (WebChatInbox): the sections down the
@@ -216,6 +217,19 @@ export function WebsiteWorkspace() {
   // Full width while nothing is open; beside an open chat, the card list.
   const tableView = !!table && !selected && !wide;
   const list = searching && found.data ? found : source;
+  // Pull to check for new messages, ⌘R/F5, "Checked…" and "↑ 3 new conversations" (worksuite-desktop#236), on the
+  // conversation list: the same list behaviour as Chat's other channels.
+  const plainList = !ownList && section !== 'invited' && section !== 'callbacks' && section !== 'closed';
+  const refresh = useListRefresh({
+    list: 'website',
+    check: () => source.refetch({ throwOnError: true }),
+    items: plainList ? rows.map((r) => ({ key: String(r.id), stamp: r.last_message?.at ?? r.last_visitor_at ?? r.updated_at })) : [],
+    view: `${section}:${pill}:${typed}:${site ?? ''}:${priority ?? ''}:${sort}`,
+    ready: plainList && list.isSuccess,
+    words: refreshWords('messages'),
+    errorText: () => text('Couldn’t check for new messages'),
+    lastChecked: source.dataUpdatedAt || null,
+  });
   const to = (params: Record<string, string | null>) => {
     const next = new URLSearchParams({ view: 'website', section });
     if (selected) next.set('website', selected);
@@ -477,8 +491,12 @@ export function WebsiteWorkspace() {
               <Pill on={pill === 'closed'} onClick={() => to({ section: 'closed', website: null })}>Closed</Pill>
             </div>
           ) : null}
+          {plainList ? <div className="-mt-1 flex min-w-0">{refresh.checked}</div> : null}
         </div>
-        <div className="min-h-0 flex-1 overflow-y-auto scroll-thin">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+        {plainList ? refresh.indicator : null}
+        {plainList ? refresh.pill : null}
+        <div ref={plainList ? refresh.attach : undefined} onKeyDown={plainList ? refresh.onKeyDown : undefined} className="min-h-0 flex-1 overflow-y-auto scroll-thin">
           {section === 'callbacks' ? (
             cbList.isLoading ? <Spinner /> : cbList.error ? <div className="p-4"><ErrorNote error={cbList.error} onRetry={() => void cbList.refetch()} /></div> : !(cbList.data?.callbacks.length) ? (
               <Empty icon="phone" title={cbStatus === 'todo' ? 'Nobody is waiting to be contacted' : 'No callbacks handled yet'} hint={cbStatus === 'todo' ? 'When a visitor asks for a callback on the website, it waits here with its reference and when it is due.' : undefined} />
@@ -525,8 +543,13 @@ export function WebsiteWorkspace() {
               rows.map((r) => <ClosedRow key={r.id} r={r} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)
             )
           ) : listPlaceholder ?? (
-            rows.map((r) => <ConversationRow key={r.id} r={r} me={me} myName={myName} ring={ringing.get(r.id)} typing={typingRows.has(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} onMenu={(e) => (e.preventDefault(), setRowMenu({ x: e.clientX, y: e.clientY, r }))} />)
+            rows.map((r) => (
+              <div key={r.id} {...refresh.rowProps(String(r.id))} className={refresh.freshClass(String(r.id))}>
+                <ConversationRow r={r} me={me} myName={myName} ring={ringing.get(r.id)} typing={typingRows.has(r.id)} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} onMenu={(e) => (e.preventDefault(), setRowMenu({ x: e.clientX, y: e.clientY, r }))} />
+              </div>
+            ))
           )}
+        </div>
         </div>
       </section>
       <div className={cx('flex min-w-0 flex-1', (wide || tableView) && 'hidden')}>

@@ -161,10 +161,12 @@ export const syncRunner = createStore<Runner>({ running: new Set(), all: false, 
 /** How many accounts sync at once from this computer. */
 export const SYNC_PARALLEL = 3;
 
-type SyncOne = (id: number, by: 'manual' | 'all') => Promise<void>;
+/** Sync one account now; with `folder`, that folder first (Check for new mail, #236 — the folder on screen). */
+type SyncOne = (id: number, by: 'manual' | 'all', folder?: string) => Promise<void>;
 
-const postSync: SyncOne = async (id, by) => {
-  await apiPost(`/api/mail/mailboxes/${id}/sync`, { by });
+const postSync: SyncOne = async (id, by, folder) => {
+  if (folder) await apiPost('/api/mail/folder-ops/sync', { mailbox: id, folder });
+  else await apiPost(`/api/mail/mailboxes/${id}/sync`, { by });
 };
 let syncOne: SyncOne = postSync;
 
@@ -176,9 +178,11 @@ export function setSyncOne(fn: SyncOne | null): void {
 /**
  * Sync these accounts, at most three at a time. An account already syncing
  * is not started again; with `all`, a second Sync all while one runs does
- * nothing. Returns when every account has been attempted.
+ * nothing. With `folders`, each account's folder on screen is synced first,
+ * on the server's slot kept for what a person asks for (#228, #236). Returns
+ * when every account has been attempted.
  */
-export async function runSync(ids: number[], opts: { all?: boolean; offline?: boolean; onDone?: () => void } = {}): Promise<{ started: number[]; failed: number[] }> {
+export async function runSync(ids: number[], opts: { all?: boolean; offline?: boolean; onDone?: () => void; folders?: Readonly<Record<number, string>> } = {}): Promise<{ started: number[]; failed: number[] }> {
   const s = syncRunner.get();
   if (opts.offline) return { started: [], failed: [] };
   if (opts.all && s.all) return { started: [], failed: [] };
@@ -190,7 +194,7 @@ export async function runSync(ids: number[], opts: { all?: boolean; offline?: bo
   const worker = async () => {
     for (let id = queue.shift(); id !== undefined; id = queue.shift()) {
       try {
-        await syncOne(id, opts.all ? 'all' : 'manual');
+        await syncOne(id, opts.all ? 'all' : 'manual', opts.folders?.[id]);
         syncRunner.set((x) => {
           const errors = { ...x.errors };
           delete errors[id];
