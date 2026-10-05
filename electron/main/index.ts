@@ -239,15 +239,23 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // A dedicated network session for API traffic: its own cookie jar and proxy.
   const net = session.fromPartition('persist:ws-net');
+  // Bulk traffic (uploads, downloads, mail pictures and bodies fetched ahead) has its own connection pool
+  // (worksuite-desktop#252): Chromium allows 6 connections per host per session, and an upload's parts used to take
+  // all of them, so every chat list, thread and reply waited behind an 8 MB part. Auth is a header, not a cookie, so
+  // the second session needs no shared cookie jar.
+  const bulkNet = session.fromPartition('persist:ws-bulk');
   const proxyConfig = enterprise.proxy && enterprise.proxy.mode !== 'system' ? (enterprise.proxy.mode === 'pac' ? { pacScript: enterprise.proxy.url ?? '' } : { proxyRules: enterprise.proxy.rules ?? enterprise.proxy.url ?? '', proxyBypassRules: enterprise.proxy.bypass ?? '' }) : null;
   if (proxyConfig) {
     void net.setProxy(proxyConfig);
+    void bulkNet.setProxy(proxyConfig);
     void session.defaultSession.setProxy(proxyConfig);
   }
   // Every main-process request's headers go through the header-safety helper (#238): nothing above 255 reaches undici.
   // And every response's (#253): not `net.fetch`, whose own listener throws on a raw UTF-8 file name and never settles.
   const netFetch = createNetFetch((o) => electronNet.request(o), net);
   const fetchImpl: FetchLike = withSafeHeaders((url, init) => netFetch(url, init as RequestInit));
+  const bulkNetFetch = createNetFetch((o) => electronNet.request(o), bulkNet);
+  const bulkFetchImpl: FetchLike = withSafeHeaders((url, init) => bulkNetFetch(url, init as RequestInit));
 
   const local = new LocalWorkspace(join(p.profile, 'guest-workspace.sqlite'));
   // Guest mode runs in the main window (#149): which window is in it and past its PIN, and where a move may go.
@@ -300,8 +308,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   let sessionCtl: SessionController;
   // The API's last 20 requests, for connection strength's median (worksuite-desktop#254).
   const apiTimings = new ApiTimings();
-  const http = new HttpClient({
-    fetch: timeFetch(fetchImpl, apiTimings),
+  const httpDeps = (fetch: FetchLike): ConstructorParameters<typeof HttpClient>[0] => ({
+    fetch,
     origin: () => auth.getServer()?.origin ?? null,
     tokens: { accessToken: () => auth.accessToken(), refresh: () => auth.refresh() },
     clientHeaders,
@@ -313,6 +321,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       else if (code === 'VERSION_UNSUPPORTED' || code === 'UPDATE_REQUIRED') updater.serverRejected();
     },
   });
+  const http = new HttpClient(httpDeps(timeFetch(fetchImpl, apiTimings)));
+  // The same client on the bulk pool (#252): uploads, downloads and mail's pictures and bodies fetched ahead.
+  const bulkHttp = new HttpClient(httpDeps(bulkFetchImpl));
 
   const device: DeviceService = new DeviceService(db, secrets, http);
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
@@ -326,7 +337,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   // Mail's pictures and attachments kept on this computer (#163): pictures through WorkSuite's proxy, attachments ahead.
   const mailMedia = new MailMedia({
-    http,
+    http: bulkHttp,
     cache,
     userId: () => sessionCtl?.userId() ?? null,
     prefs: () => settings.effective(),
@@ -336,7 +347,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // "Download message bodies" (#190): Mail's bodies within the keep period, fetched ahead into the offline cache.
   const mailBodies = new MailBodies({
     afterBody: (user, path, body) => mailMedia.afterBody(user, path, body),
-    http,
+    http: bulkHttp,
     cache,
     userId: () => sessionCtl?.userId() ?? null,
     prefs: () => settings.effective(),
@@ -469,7 +480,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const transfers: TransferManager = new TransferManager({
     db,
     vault: getVault,
-    http,
+    http: bulkHttp,
     userId: () => sessionCtl.userId(),
     downloadFolder: () => settings.effective().downloadFolder,
     hash,
