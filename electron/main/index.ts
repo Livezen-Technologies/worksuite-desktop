@@ -8,7 +8,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { localize } from '@shared/localization';
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
-import { app, net as electronNet, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
+import { app, net as electronNet, Notification, clipboard, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -508,6 +508,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     prefs: () => settings.effective().meetRecording,
     userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
     // The server tells the owner about cloud recordings; one made here is told from here (worksuite-desktop#89).
+    // A recording without macOS Screen Recording permission is empty (worksuite-desktop#240). Never asked yet: listing
+    // the screens once has macOS ask, and puts WorkSuite in System Settings' list to turn on.
+    screenAccess: async () => {
+      if (process.platform !== 'darwin' || (!app.isPackaged && process.env.WS_E2E_FAKE_MEDIA)) return 'not_required';
+      let status = systemPreferences.getMediaAccessStatus('screen');
+      if (status === 'not-determined') {
+        await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } }).catch(() => undefined);
+        status = systemPreferences.getMediaAccessStatus('screen');
+      }
+      return status === 'granted' ? 'granted' : 'missing';
+    },
     notify: (r, how) =>
       notifications.notify({
         id: `meetrec:${r.id}:${how}`,

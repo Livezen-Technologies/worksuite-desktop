@@ -243,6 +243,7 @@ export function MeetRoom() {
           <>
             <LivestreamBadge status={meet.livestream} />
             <RecordingFeedback active={!!rec} since={rec?.since ?? null} now={now} phase={meet.recordingCommand !== 'idle' ? meet.recordingCommand : meet.rec?.pending?.some((r) => r.phase === 'stopping') ? 'stopping' : meet.rec?.pending?.some((r) => r.phase === 'starting') ? 'starting' : 'idle'} error={meet.recordingError} stopped={meet.recordingStopped}
+              size={meet.localRec?.bytes ?? null} fix={meet.recordingFix} openSettings={() => void call('media:privacySettings', { pane: 'screen' }).catch(() => undefined)}
               retry={() => void (meet.recordingRetry === 'start' ? meet.startRecording() : meet.stopRecording())}
               stopPending={meet.rec?.pending?.some((r) => r.phase === 'starting') ? () => void meet.stopRecording() : undefined} />
             {meet.transcribing ? (

@@ -1,5 +1,5 @@
 import { Track, type Participant, type Room } from 'livekit-client';
-import { call } from '../../core/bridge';
+import { call, isMac } from '../../core/bridge';
 
 /**
  * Recording a meeting on this computer (worksuite-desktop#68).
@@ -9,15 +9,81 @@ import { call } from '../../core/bridge';
  * speaker beside it — and everybody's sound, this computer's microphone included, is mixed straight from the call.
  * So nothing else on the screen is recorded, and no system-audio permission is needed.
  *
- * The pieces go to the main process every two seconds and are on disk at once; stopping hands it over to be finished
- * and uploaded there, so the meeting's window can close straight after.
+ * The pieces go to the main process every second and are on disk at once; stopping waits for the last piece and the
+ * recorder's own stop, then hands it over to be finished and uploaded there, so the window can close straight after.
+ *
+ * A recording that would be empty does not start, and one that is not capturing is caught at once
+ * (worksuite-desktop#240): no recording starts without Screen Recording permission on a Mac or without a live
+ * video track, and if no video has arrived 5 seconds in, it is stopped with a warning that says what to check.
  */
 
 export type RecordingLayout = 'grid' | 'speaker' | 'screen';
 
-const MIMES = ['video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/mp4', 'video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm'];
+/** VP9, then VP8, then H.264 (#240): WebM first, since Chromium's MP4 writer can leave a file with no frames in it. */
+const MIMES = ['video/webm;codecs=vp9,opus', 'video/webm;codecs=vp8,opus', 'video/webm;codecs=h264,opus', 'video/mp4;codecs=avc1.42E01E,mp4a.40.2', 'video/webm', 'video/mp4'];
 
-/** The best format this computer can record in; mp4 where Chromium can write it, else WebM. */
+/** How often the recorder hands over a piece. */
+export const TIMESLICE_MS = 1_000;
+/** How long a recording may go without video before it is stopped (#240). */
+export const NO_VIDEO_MS = 5_000;
+/** Below this, nothing but a container header has arrived: no video is being captured. */
+export const MIN_CAPTURED_BYTES = 4 * 1024;
+
+/** Said when no video has arrived 5 seconds in; on a Mac the usual cause is Screen Recording permission. */
+export function noVideoWarning(mac: boolean = isMac): string {
+  return mac ? "Recording isn't capturing video. Check Screen Recording permission." : "Recording isn't capturing video. Keep the meeting window open, then record again.";
+}
+
+/** A recording that cannot start or go on, with what fixes it when that is a permission (#240). */
+export class RecordingError extends Error {
+  constructor(message: string, readonly fix: 'screen-permission' | null = null) {
+    super(message);
+    this.name = 'RecordingError';
+  }
+}
+
+/** Whether a stream has a video track that is live: without one a recording has no pictures. */
+export function hasLiveVideo(stream: Pick<MediaStream, 'getVideoTracks'>): boolean {
+  return stream.getVideoTracks().some((t) => t.readyState === 'live' && t.enabled);
+}
+
+/** Whether what has arrived so far is more than a header: video is being captured. */
+export function capturing(bytes: number): boolean {
+  return bytes >= MIN_CAPTURED_BYTES;
+}
+
+/**
+ * Stop a recorder and wait until it has handed over its last piece and said it has stopped — only then is the file
+ * whole. Never waits for ever: a recorder that says nothing is given up on after `timeoutMs`.
+ */
+export function stopAndFlush(rec: MediaRecorder, timeoutMs = 10_000): Promise<void> {
+  return new Promise<void>((resolve) => {
+    let data = false;
+    let stopped = false;
+    let done = false;
+    const finish = () => {
+      if (done) return;
+      done = true;
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(finish, timeoutMs);
+    rec.addEventListener('dataavailable', () => {
+      data = true;
+      if (stopped) finish();
+    }, { once: true });
+    rec.addEventListener('stop', () => {
+      stopped = true;
+      // The last piece comes before stop; if it has not, it is given a moment.
+      if (data) finish();
+      else setTimeout(finish, 500);
+    }, { once: true });
+    if (rec.state === 'inactive') finish();
+    else rec.stop();
+  });
+}
+
+/** The best format this computer can record in: VP9, VP8, then H.264. */
 export function recordingMime(supported: (t: string) => boolean = (t) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported(t)): string | null {
   return MIMES.find(supported) ?? null;
 }
@@ -64,8 +130,13 @@ interface Person {
 export class LocalRecorder {
   id: string | null = null;
   startedAt = 0;
+  /** Handed over so far, for the indicator. */
+  bytes = 0;
   /** A problem writing it, in a sentence. */
   error: string | null = null;
+  private stream: MediaStream | null = null;
+  private watchdog: ReturnType<typeof setTimeout> | null = null;
+  private stopping: Promise<void> | null = null;
   private canvas: HTMLCanvasElement | null = null;
   private audio: AudioContext | null = null;
   private dest: MediaStreamAudioDestinationNode | null = null;
@@ -78,21 +149,27 @@ export class LocalRecorder {
 
   constructor(
     private readonly room: Room,
-    private readonly opts: { layout: RecordingLayout; quality: '720p' | '1080p'; speaker: () => string | null; onError: (message: string) => void },
+    private readonly opts: {
+      layout: RecordingLayout;
+      quality: '720p' | '1080p';
+      speaker: () => string | null;
+      /** A problem while recording; `stopped` when the recording was stopped because of it. */
+      onError: (message: string, info?: { stopped?: boolean; fix?: 'screen-permission' | null }) => void;
+    },
   ) {}
 
-  /** Checks first — the microphone, the disk — then the server says whether this person may record; then it starts. */
+  /**
+   * Checks first — the format, the microphone, Screen Recording permission, the disk, a live video track — then the
+   * server says whether this person may record; then it starts. Nothing is written for a recording that would be empty.
+   */
   async start(meeting: string, title: string): Promise<void> {
     const mime = recordingMime();
-    if (!mime) throw new Error('This computer cannot record video. Record on the server instead (Settings › Meet › Recording).');
+    if (!mime) throw new RecordingError('This computer cannot record video. Record on the server instead (Settings › Meet › Recording).');
     if (this.room.localParticipant.isMicrophoneEnabled && !(await call('media:access', { kind: 'microphone' })).granted) {
-      throw new Error('WorkSuite needs microphone access in your system privacy settings to record your voice.');
+      throw new RecordingError('WorkSuite needs microphone access in your system privacy settings to record your voice.');
     }
     const pre = await call('meetrec:preflight');
-    if (!pre.ok) throw new Error(pre.why ?? 'A recording cannot start now.');
-    const { id } = await call('meetrec:start', { meeting, title, layout: this.opts.layout, mime });
-    this.id = id;
-    if (this.cancelled) { await call('meetrec:abort', { id }); throw new Error('Recording startup was cancelled.'); }
+    if (!pre.ok) throw new RecordingError(pre.why ?? 'A recording cannot start now.', pre.fix ?? null);
 
     const [w, h] = this.opts.quality === '1080p' ? [1920, 1080] : [1280, 720];
     const canvas = document.createElement('canvas');
@@ -112,9 +189,17 @@ export class LocalRecorder {
     this.timers.push(setInterval(() => this.draw(), 1000 / 30), setInterval(() => this.syncAudio(), 500));
 
     const stream = new MediaStream([...canvas.captureStream(30).getVideoTracks(), ...this.dest.stream.getAudioTracks()]);
+    this.stream = stream;
+    if (!hasLiveVideo(stream)) throw new RecordingError('The meeting picture could not be captured, so the recording would be empty. Restart WorkSuite and try again.');
+
+    const { id } = await call('meetrec:start', { meeting, title, layout: this.opts.layout, mime });
+    this.id = id;
+    if (this.cancelled) { await call('meetrec:abort', { id }); throw new RecordingError('Recording startup was cancelled.'); }
+
     const rec = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: this.opts.quality === '1080p' ? 5_000_000 : 2_500_000, audioBitsPerSecond: 128_000 });
     rec.ondataavailable = (e) => {
       if (!e.data.size || !this.id) return;
+      this.bytes += e.data.size;
       const recId = this.id;
       this.writing = this.writing
         .then(async () => call('meetrec:chunk', { id: recId, data: new Uint8Array(await e.data.arrayBuffer()) }))
@@ -127,13 +212,25 @@ export class LocalRecorder {
     await new Promise<void>((resolve, reject) => {
       const timer = setTimeout(() => reject(new Error('The recorder did not start. Check microphone permissions and retry.')), 10_000);
       rec.onstart = () => { clearTimeout(timer); resolve(); };
-      rec.onerror = () => { clearTimeout(timer); reject(new Error('The recorder could not capture this meeting. Check permissions and retry.')); };
-      rec.start(2_000);
+      rec.onerror = () => { clearTimeout(timer); reject(new RecordingError('The recorder could not capture this meeting. Check permissions and retry.')); };
+      // In one-second pieces, each written to disk as it arrives.
+      rec.start(TIMESLICE_MS);
     });
-    if (this.cancelled) { await this.abort(); throw new Error('Recording startup was cancelled.'); }
+    if (this.cancelled) { await this.abort(); throw new RecordingError('Recording startup was cancelled.'); }
     this.startedAt = Date.now();
     await call('meetrec:active', { id });
     rec.onerror = () => { this.error = 'Recording capture failed. Check device permissions and retry.'; this.opts.onError(this.error); void this.abort(); };
+    // Nothing but a header after 5 seconds: no video is being captured. Stop now rather than record nothing.
+    this.watchdog = setTimeout(() => this.checkCapturing(), NO_VIDEO_MS);
+  }
+
+  private checkCapturing(): void {
+    this.watchdog = null;
+    if (this.cancelled || this.stopping || !this.rec || capturing(this.bytes)) return;
+    const mac = isMac;
+    this.error = noVideoWarning(mac);
+    this.opts.onError(this.error, { stopped: true, fix: mac ? 'screen-permission' : null });
+    void this.stop().catch(() => undefined);
   }
 
   async abort(): Promise<void> {
@@ -144,23 +241,33 @@ export class LocalRecorder {
     if (id) await call('meetrec:abort', { id }).catch(() => undefined);
   }
 
-  /** Stop, hand the last piece over, and let the main process finish and upload it. */
-  async stop(): Promise<void> {
+  /**
+   * Stop, wait for the last piece and the recorder's stop, wait until every piece is on disk, then let the main
+   * process finish and upload it. Stopping twice waits for the same stop.
+   */
+  stop(): Promise<void> {
+    this.stopping ??= this.finish();
+    return this.stopping;
+  }
+
+  private async finish(): Promise<void> {
+    if (this.watchdog) clearTimeout(this.watchdog);
+    this.watchdog = null;
     const rec = this.rec;
     const id = this.id;
     if (!rec || !id) return this.cleanup();
-    if (rec.state !== 'inactive') {
-      await new Promise<void>((resolve) => {
-        rec.onstop = () => resolve();
-        rec.stop();
-      });
+    try {
+      await stopAndFlush(rec);
+      await this.writing.catch(() => undefined);
+      await call('meetrec:stop', { id, durationMs: this.startedAt ? Date.now() - this.startedAt : 0 });
+    } finally {
+      this.cleanup();
     }
-    await this.writing.catch(() => undefined);
-    await call('meetrec:stop', { id, durationMs: Date.now() - this.startedAt });
-    this.cleanup();
   }
 
   private cleanup(): void {
+    if (this.watchdog) clearTimeout(this.watchdog);
+    this.watchdog = null;
     for (const t of this.timers) clearInterval(t);
     this.timers = [];
     for (const s of this.sources.values()) s.disconnect();
@@ -170,6 +277,8 @@ export class LocalRecorder {
     void this.audio?.close().catch(() => undefined);
     this.audio = null;
     this.rec?.stream.getTracks().forEach((track) => track.stop());
+    this.stream?.getTracks().forEach((track) => track.stop());
+    this.stream = null;
     this.canvas = null;
     this.rec = null;
     this.id = null;

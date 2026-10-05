@@ -1545,7 +1545,19 @@ export interface LocalRecording {
   stepAt?: string | null;
   /** Its upload in the transfer queue, while there is one: its progress, Pause, Resume and Cancel are the queue's. */
   transferId?: string | null;
+  /**
+   * Why its file cannot be used (worksuite-desktop#240): nothing was recorded because Screen Recording permission
+   * was off, no video reached the file, or the file is not a whole video. Trying again cannot fix any of these, so it
+   * is never offered Try again — only Delete, and Fix permission when that is the cause.
+   */
+  problem?: LocalRecordingProblem | null;
 }
+
+/** Why a recording made here cannot be used, when trying again would not help (worksuite-desktop#240). */
+export type LocalRecordingProblem = 'screen-permission' | 'no-video' | 'unplayable';
+
+/** Whether this computer lets WorkSuite record the screen (macOS Screen Recording); elsewhere there is no such gate. */
+export type ScreenRecordingAccess = 'granted' | 'missing' | 'not_required';
 
 /** What a piece of speech said, when, and whether it was unclear (worksuite-desktop#81). */
 export interface SpeechSegment {

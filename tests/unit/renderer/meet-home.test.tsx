@@ -228,7 +228,8 @@ describe('Meet Home', () => {
     expect(within(card).queryByText('Recording 4')).toBeNull();
     fireEvent.click(within(card).getByRole('button', { name: /See all/ }));
     expect(within(card).getByText('Recording 4')).toBeTruthy();
-    expect(within(card).getByText('Processing')).toBeTruthy();
+    // One status pill per card (#240): not ready yet is Finishing.
+    expect(within(card).getByText('Finishing')).toBeTruthy();
     fireEvent.click(within(card).getByRole('button', { name: 'More for Recording 1' }));
     const menu = screen.getByRole('menu', { name: 'More for Recording 1' });
     expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent)).toEqual(['Download', 'Rename', 'Delete']);
@@ -253,17 +254,20 @@ describe('Meet Home', () => {
     });
     home();
     const card = await screen.findByRole('region', { name: 'Recordings' });
-    // Recorded here: uploading, measured, with the queue's own Pause and Cancel transfer.
-    await within(card).findByText('Uploading to Drive');
-    expect(within(card).getByRole('progressbar', { name: 'Uploading to Drive' }).getAttribute('aria-valuenow')).toBe('50');
-    fireEvent.click(within(card).getByRole('button', { name: 'Pause' }));
+    // Recorded here: uploading, measured, with the queue's own Pause and Cancel in its ⋯ menu (#240).
+    await within(card).findByText('Uploading 100 B of 200 B · 50%');
+    expect(within(card).getByRole('progressbar', { name: 'Uploading' }).getAttribute('aria-valuenow')).toBe('50');
+    fireEvent.click(within(card).getByRole('button', { name: 'More for Here' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Pause upload' }));
     expect(call).toHaveBeenCalledWith('transfers:pause', { id: 'up1' });
-    fireEvent.click(within(card).getByRole('button', { name: 'Cancel transfer' }));
+    fireEvent.click(within(card).getByRole('button', { name: 'More for Here' }));
+    fireEvent.click(screen.getByRole('menuitem', { name: 'Cancel upload' }));
     expect(call).toHaveBeenCalledWith('transfers:cancel', { id: 'up1' });
     // Ready to play, in Drive, and separately downloaded here, with Open and Show in folder.
     await within(card).findByText('Board');
-    expect(within(card).getByText('Ready to play')).toBeTruthy();
-    expect(within(card).getByText('Saved to Drive')).toBeTruthy();
+    const board = within(card).getByText('Board').closest('[data-recording]') as HTMLElement;
+    expect(within(board).getByTestId('recording-pill').textContent).toBe('Ready');
+    expect(within(board).getByText(/· Uploaded$/)).toBeTruthy();
     expect(within(card).getByText('Downloaded')).toBeTruthy();
     fireEvent.click(within(card).getByRole('button', { name: 'Show in folder' }));
     expect(call).toHaveBeenCalledWith('transfers:reveal', { id: 'dl1' });

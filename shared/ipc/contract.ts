@@ -67,6 +67,7 @@ import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
   LocalRecording,
+  ScreenRecordingAccess,
   SpeechSegment,
   SpeechStatus,
   AiRules,
@@ -1377,7 +1378,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'media:privacySettings': void;
   'calls:active': void;
   'calls:list': ActiveCall[];
-  'meetrec:preflight': { folder: string; free: number | null; ok: boolean; why: string | null };
+  'meetrec:preflight': { folder: string; free: number | null; ok: boolean; why: string | null; screen?: ScreenRecordingAccess; fix?: 'screen-permission' | null };
   'meetrec:start': { id: string };
   'meetrec:active': void;
   'meetrec:abort': void;

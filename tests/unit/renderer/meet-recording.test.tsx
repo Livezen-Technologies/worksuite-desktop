@@ -39,9 +39,11 @@ describe('the picture a local recording draws', () => {
     expect(fit(640, 480, { x: 0, y: 0, w: 160, h: 90 }, 'cover').w).toBe(160);
   });
 
-  it('records in mp4 where it can, else WebM, else not at all', () => {
+  it('records in VP9, then VP8, then H.264, else not at all (#240)', () => {
+    expect(recordingMime(() => true)).toBe('video/webm;codecs=vp9,opus');
+    expect(recordingMime((t) => t !== 'video/webm;codecs=vp9,opus')).toBe('video/webm;codecs=vp8,opus');
+    expect(recordingMime((t) => t.includes('h264') || t.startsWith('video/mp4'))).toBe('video/webm;codecs=h264,opus');
     expect(recordingMime((t) => t.startsWith('video/mp4'))).toBe('video/mp4;codecs=avc1.42E01E,mp4a.40.2');
-    expect(recordingMime((t) => t === 'video/webm;codecs=vp8,opus')).toBe('video/webm;codecs=vp8,opus');
     expect(recordingMime(() => false)).toBeNull();
   });
 });
