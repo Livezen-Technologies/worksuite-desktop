@@ -657,7 +657,7 @@ function FollowUpPrefs({ prefs }: { prefs: Preferences }) {
 /** Where a person's website-chat ring plays, kept on the server for all their devices (RING-10). */
 type RingWhere = 'desktop_first' | 'browser' | 'all';
 
-const WEBSITE = 'https://worksuiteone.com/';
+const WEBSITE = 'https://worksuitecloud.com/';
 
 const DISPLAY_HINT: Record<AiDisplay, string> = {
   drawer: 'The AI button in the header opens the assistant beside your tabs.',
@@ -1775,7 +1775,7 @@ export function About() {
             }}
             className="font-semibold text-primary hover:underline"
           >
-            worksuiteone.com
+            worksuitecloud.com
           </a>
         </p>
       </div>

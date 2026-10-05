@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.20.1 — 2026-10-05
+
+- About: website is worksuitecloud.com (was worksuiteone.com), matching WorkSuite Office
+
 ## 1.20.0 — 2026-10-04
 
 - P-03: Admin Center tab with Chat › Ringing (who is rung and when, when it stops without a join)

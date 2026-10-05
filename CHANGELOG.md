@@ -5,6 +5,11 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.183 — 2026-10-05
+
+- **About links to worksuitecloud.com.** Settings › About now names worksuitecloud.com as the website (it said
+  worksuiteone.com), the same site as WorkSuite Office's About window, so both apps match.
+
 ## 0.2.182 — 2026-10-04
 
 - **Widget preview matches the visitor widget (W-02).** The preview's home screen shows the status in two lines
