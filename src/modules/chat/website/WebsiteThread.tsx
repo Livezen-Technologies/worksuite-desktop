@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { OfflineMutation } from '@shared/types';
 import { WEBSITE_REPLY_LABEL, websiteDraftKey } from '@shared/website-reply';
 import { useCanOpen } from '../../../core/access';
@@ -13,9 +13,9 @@ import { useTab, useTabTitle } from '../../../core/tab-context';
 import { dateLabel, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
-import { Avatar, Button, Chip, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
+import { Avatar, Button, Chip, Empty, cx } from '../../../components/ui';
 import { Composer, websiteNoteDraftKey, type ComposerHandle } from '../Composer';
-import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useOpenConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
 import { useViewing } from './viewing';
 import type { ReplyTarget } from '../Thread';
@@ -34,7 +34,9 @@ import { CallbackCard, isPending } from './Callbacks';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
 import { BlockDialog, ContactCard, SharedFilesCard, TagsCard } from './panelCards';
 import { ClosedNotice } from './Closed';
+import { ThreadFailed, ThreadPlaceholder } from './ThreadPlaceholder';
 import { useRingState, youJoinedLine } from './Ringing';
+import { MergeDialog, ProfileCards } from './IdentityCard';
 
 // Kept importable from here, where the drawer first had it.
 export { visitorLocalTime } from './panelCards';
@@ -57,7 +59,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   // The chat I just joined from its ring, and how many colleagues that ring stopped for (R-03 "YOU JOIN").
   const youJoined = useRingState().youJoined;
-  const q = useWebsiteConversation(id);
+  // From memory or the copy saved here at once, then from the server (worksuite-desktop#239).
+  const q = useOpenConversation(id);
   const data = q.data;
   const scroller = useRef<HTMLDivElement>(null);
   const composer = useRef<ComposerHandle>(null);
@@ -67,11 +70,16 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const [tab, setTab] = useState<'reply' | 'note' | null>(null);
   const { active: tabActive, query: tabQuery } = useTab();
   // From the ringing card's Transfer (#225), or a visitor's Invite a colleague (#231): the chat opens with that dialog up.
+  // Merge this visitor with another (#222), from the header.
+  const [merging, setMerging] = useState(false);
   const [dialog, setDialog] = useState<'invite' | 'transfer' | null>(() => (tabQuery?.get('transfer') === '1' ? 'transfer' : tabQuery?.get('invite') === '1' ? 'invite' : null));
   const declined = useDeclined(Number(id), me, q.data?.team);
   // Typing and receipts, live (ENH-WCHAT-04): reading counts while this tab is in front and the window can be seen.
   const pageVisible = usePageVisible();
-  const live = useLiveStatus(Number(id), q.data, q.dataUpdatedAt, me, tabActive && pageVisible);
+  // A copy saved on this computer (stamped 0) says nothing about now: nobody is typing in it until the server answers.
+  const saved = q.data !== undefined && q.dataUpdatedAt === 0;
+  const liveData = useMemo(() => (saved && q.data ? { ...q.data, conversation: { ...q.data.conversation, visitor_typing: false }, agents_typing: [] } : q.data), [saved, q.data]);
+  const live = useLiveStatus(Number(id), liveData, q.dataUpdatedAt, me, tabActive && pageVisible);
   // In front in the main window: a visitor writing again here raises no card (#230). The mini chat window does not count.
   useViewing(Number(id), !mini && tabActive && pageVisible);
   // The replies for every widget and this chat's own (CAN-01, S-09), once the chat says which widget it is on.
@@ -103,18 +111,17 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
     void qc.invalidateQueries({ queryKey: ['website'] });
   };
 
-  if (q.isLoading) return <Spinner />;
-  if (q.error) {
-    const gone = q.error instanceof ApiError && (q.error.status === 404 || q.error.forbidden);
-    return gone ? <Empty icon="globe" title="This website chat is not available" hint="It may have been removed, or you no longer staff this website." /> : <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
-  }
-  if (!data) return null;
+  const gone = q.error instanceof ApiError && (q.error.status === 404 || q.error.forbidden);
+  if (gone) return <Empty icon="globe" title="This website chat is not available" hint="It may have been removed, or you no longer staff this website." />;
+  // A copy in hand is shown while the server is asked again, or could not be reached; without one, the thread's own
+  // layout in grey, then a centred Retry (#239).
+  if (!data) return q.error ? <ThreadFailed onRetry={() => void q.refetch()} /> : <ThreadPlaceholder mini={mini} onRetry={() => void qc.cancelQueries({ queryKey: ['website', 'conversation', id] }).then(() => q.refetch())} />;
   const c = data.conversation;
   const v = data.visitor;
   const canReply = data.can?.reply !== false;
   const name = v?.name || v?.label || 'Visitor';
   // On the site: seen in the two minutes before this copy was fetched, as the list decides.
-  const online = row?.online ?? (v?.last_seen ? q.dataUpdatedAt - parseTs(v.last_seen).getTime() < 120_000 : false);
+  const online = row?.online ?? (v?.last_seen && !saved ? q.dataUpdatedAt - parseTs(v.last_seen).getTime() < 120_000 : false);
   const page = v?.current_url ? pathOf(v.current_url) : null;
   const t = data.team ?? null;
   // Somebody monitoring reads along unseen and writes notes: their box opens on Internal note (C-08, TEAM-62).
@@ -223,6 +230,13 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
                 <Icon name="transfers" size={13} /> Transfer
               </button>
             ) : null}
+            {/* Merge with another visitor (#222): the same person under two names, after a preview, undoable. */}
+            {!mini && canReply && data.profile ? (
+              <button type="button" onClick={() => setMerging(true)} title={data.profile.suggestions ? 'Possibly the same person as another visitor' : 'Merge with another visitor'} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
+                <Icon name="users" size={13} /> Merge{data.profile.suggestions ? <span className="ml-0.5 rounded-full bg-warning-bg px-1.5 text-[10.5px] text-[#9A4A06] dark:text-warning">{data.profile.suggestions}</span> : null}
+              </button>
+            ) : null}
+            {merging && data.profile ? <MergeDialog keepId={data.profile.visitor_id} keepName={name} onClose={() => setMerging(false)} /> : null}
             {/* Offer the visitor a call that rings only me (VOICE-15). */}
             {!mini && data.can_call && c.status !== 'closed' && !callLive(data.call) ? (
               <button type="button" title="The visitor sees a call button; starting the call rings only you" onClick={() => void apiPost(`${WEBSITE}/conversations/${c.id}/offer-call`, {}).then(() => { toast('success', 'Call offered'); refresh(); }, (e) => toast('error', errorMessage(e)))} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
@@ -552,14 +566,22 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
         ) : null}
         <TagsCard conversationId={c.id} tags={c.tags} canEdit={canReply} onDone={onDone} />
         <SharedFilesCard files={files} />
-        <div className={CARD}>
-          <h3 className={HEADING}>Previous chats · {history.length}</h3>
-          {history.slice(0, 5).map((h) => (
-            <span key={h.id} className="text-ink-2">
-              {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
-            </span>
-          ))}
-        </div>
+        {/* The profile (#222): how we know them, visits, devices, Previous chats with links, possible duplicates and
+            merges; on a server without it, the list it had before. */}
+        <ProfileCards
+          visitorId={data.profile?.visitor_id}
+          conversationId={c.id}
+          legacy={
+            <div className={CARD}>
+              <h3 className={HEADING}>Previous chats · {history.length}</h3>
+              {history.slice(0, 5).map((h) => (
+                <span key={h.id} className="text-ink-2">
+                  {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
+                </span>
+              ))}
+            </div>
+          }
+        />
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
           {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
           {/* Leave chat, with the owner's warning, at the panel's foot (C-08, TEAM-06). */}

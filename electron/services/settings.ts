@@ -1,5 +1,5 @@
 import { normalizeLanguage } from '@shared/localization';
-import { DEFAULT_DARK_PROFILE, normalizeDarkProfile } from '@shared/theme-profiles';
+import { DEFAULT_DARK_PROFILE, isBuiltinProfile, normalizeAppearance, normalizeDarkProfile, normalizeSpec, storedAppearance, withOrganisation, type AppearancePrefs, type OrgProfile } from '@shared/theme-profiles';
 import { app } from 'electron';
 import { join } from 'node:path';
 import { FOLLOW_UP_DEFAULTS, type DesktopPolicy, type Preferences, type PreferenceLock } from '@shared/types';
@@ -30,6 +30,7 @@ export function defaultPreferences(): Preferences {
     restoreTabs: true,
     theme: 'system',
     darkColorProfile: DEFAULT_DARK_PROFILE,
+    appearance: normalizeAppearance(null),
     density: 'comfortable',
     hardwareAcceleration: true,
     notificationSounds: true,
@@ -98,6 +99,48 @@ export class SettingsService {
     this.defaultLanguage = normalizeLanguage(typeof savedLanguage === 'string' ? savedLanguage : stored.language);
     // The AI settings are one object: one saved before a field was added takes that field's default.
     this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? (stored.appLockMinutes !== undefined && stored.appLockMinutes > 0), appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive), ...migrateUpdatePrefs(stored) };
+    this.setAppearance(normalizeAppearance(stored.appearance, { theme: stored.theme, darkColorProfile: stored.darkColorProfile }), stored.theme);
+  }
+
+  /**
+   * The colour profiles (worksuite-desktop#234), and `theme` and `darkColorProfile` — the mode and the dark profile
+   * as preferences saved before them, and the rest of the app, read them — kept the same as them. `theme`: the mode
+   * when it was saved without it.
+   */
+  private setAppearance(a: AppearancePrefs, theme?: unknown): void {
+    const mode = theme === 'system' || theme === 'light' || theme === 'dark' ? theme : a.mode;
+    const appearance = { ...storedAppearance(a), mode };
+    this.prefs = { ...this.prefs, appearance, theme: mode, darkColorProfile: isBuiltinProfile(appearance.darkProfile) ? appearance.darkProfile : normalizeDarkProfile(this.prefs.darkColorProfile) };
+  }
+
+  /** The person's own colour profiles, as saved and synced. */
+  appearance(): AppearancePrefs {
+    return { ...this.prefs.appearance!, custom: [...this.prefs.appearance!.custom] };
+  }
+
+  /** The organisation's colour profile, from its desktop policy. */
+  private orgProfile(): OrgProfile | null {
+    const p = this.policy;
+    const spec = p?.appearance_accent ? normalizeSpec({ accent: p.appearance_accent, tint: p.appearance_tint, tintColor: p.appearance_tint_color }) : null;
+    return spec ? { ...spec, name: 'Organisation' } : null;
+  }
+
+  /**
+   * Another device's copy (synced through the server), when it is newer than this one: taken as it is, its time
+   * kept, so it is not sent back. Returns whether it was taken.
+   */
+  applyRemoteAppearance(remote: unknown): boolean {
+    const next = normalizeAppearance(remote);
+    if (!next.updatedAt || next.updatedAt <= (this.prefs.appearance?.updatedAt ?? 0)) return false;
+    this.setAppearance(next);
+    this.persistAppearance();
+    this.db.setConfig('preferences', this.prefs);
+    this.emit();
+    return true;
+  }
+
+  private persistAppearance(): void {
+    if (this.languageScope) this.db.setConfig(`appearance_preferences:${this.languageScope}`, this.prefs.appearance);
   }
 
   /** Interface language is isolated by server and user, while device policy stays computer-wide. */
@@ -117,6 +160,16 @@ export class SettingsService {
       }
     }
     for (const key of SECURITY_KEYS) Object.assign(this.prefs, { [key]: scoped?.[key] ?? defaults[key] });
+    // Colour profiles are each person's (#234): theirs when they have saved some here, else what this computer shows
+    // now becomes theirs.
+    if (next) {
+      const look = this.db.getConfig<unknown>(`appearance_preferences:${next}`);
+      if (look && typeof look === 'object' && typeof (look as AppearancePrefs).lightProfile === 'string') {
+        this.setAppearance(normalizeAppearance(look));
+        // The next start, before anyone signs in, paints this person's colours.
+        this.db.setConfig('preferences', this.prefs);
+      } else this.db.setConfig(`appearance_preferences:${next}`, this.prefs.appearance);
+    }
     this.languageScope = next;
     const saved = this.db.getConfig<Record<string, string>>('interface_languages') ?? {};
     this.prefs = { ...this.prefs, language: normalizeLanguage(next ? saved[next] ?? this.defaultLanguage : this.defaultLanguage) };
@@ -148,6 +201,10 @@ export class SettingsService {
     if (p.required_background_services.includes('notifications')) {
       out.push({ key: 'backgroundServices', reason: 'Your organization requires background notifications.' });
     }
+    if (p.appearance_locked && this.orgProfile()) {
+      out.push({ key: 'appearance', reason: 'Your organization sets the colour profile.' });
+      out.push({ key: 'darkColorProfile', reason: 'Your organization sets the colour profile.' });
+    }
     for (const [flag, key] of [['locked_answer_calls', 'lockedAnswerCalls'], ['locked_show_caller_details', 'lockedShowCallerDetails'], ['locked_allow_chat', 'lockedAllowChat']] as const) {
       if (p[flag] === false) out.push({ key, reason: 'Your organization disables this access while WorkSuite is locked.' });
     }
@@ -158,6 +215,8 @@ export class SettingsService {
   effective(): Preferences {
     const p = { ...this.prefs, backgroundServices: { ...this.prefs.backgroundServices } };
     const pol = this.policy;
+    // The organisation's colour profile stands in for the person's until they pick one, or always when locked.
+    p.appearance = withOrganisation(this.prefs.appearance!, this.orgProfile(), pol?.appearance_locked === true);
     if (!pol) return p;
     if (pol.locked_answer_calls === false) p.lockedAnswerCalls = false;
     if (pol.locked_show_caller_details === false) p.lockedShowCallerDetails = false;
@@ -192,7 +251,22 @@ export class SettingsService {
     const drive = patch.drive ? normalizeDrivePrefs({ ...this.prefs.drive, ...patch.drive }) : this.prefs.drive;
     // And the link settings (#170).
     const links = patch.links ? { ...this.prefs.links, ...patch.links } : this.prefs.links;
-    this.prefs = { ...this.prefs, ...patch, meetRecording, drive, ...(links ? { links } : {}) };
+    const before = this.prefs.appearance!;
+    this.prefs = { ...this.prefs, ...patch, meetRecording, drive, ...(links ? { links } : {}), appearance: before };
+    if (patch.appearance !== undefined || patch.theme !== undefined || patch.darkColorProfile !== undefined) {
+      const next: Partial<AppearancePrefs> = { ...before, ...patch.appearance };
+      if (patch.darkColorProfile !== undefined && patch.appearance?.darkProfile === undefined) {
+        next.darkProfile = patch.darkColorProfile;
+        next.chosen = true;
+      }
+      if (patch.theme !== undefined) next.mode = patch.theme;
+      const after = normalizeAppearance(next);
+      const changed = JSON.stringify({ ...after, updatedAt: 0 }) !== JSON.stringify({ ...normalizeAppearance(before), updatedAt: 0 });
+      after.updatedAt = changed ? Math.max(Date.now(), (before.updatedAt ?? 0) + 1) : before.updatedAt;
+      if (!after.updatedAt) delete after.updatedAt;
+      this.setAppearance(after);
+      if (changed) this.persistAppearance();
+    }
     if (patch.language !== undefined) {
       this.prefs.language = normalizeLanguage(patch.language);
       if (this.languageScope) {

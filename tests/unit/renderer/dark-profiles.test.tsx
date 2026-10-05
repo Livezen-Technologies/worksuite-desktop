@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Preferences } from '../../../shared/types';
-import { applyDarkProfile, DARK_PROFILES } from '../../../shared/theme-profiles';
+import { appearanceOf, applyAppearance, DARK_PROFILES } from '../../../shared/theme-profiles';
 
 const net = vi.hoisted(() => ({ call: vi.fn(), events: new Map<string, (value: unknown) => void>(), media: { matches: false, changed: () => {} } }));
 vi.mock('../../../src/core/bridge', () => ({ call: net.call, hasDesktop: () => true, on: (name: string, cb: (value: unknown) => void) => { net.events.set(name, cb); return () => {}; }, errorMessage: (e: Error) => e.message }));
@@ -16,12 +16,17 @@ beforeEach(() => {
   net.call.mockImplementation(async (channel: string, patch?: Partial<Preferences>) => {
     if (channel === 'app:info') return { platform: 'linux' };
     if (channel === 'auth:state') return { stage: 'signed-out' };
-    if (channel === 'settings:set') prefs = { ...prefs, ...patch };
+    // As the settings service: a partial appearance is merged into the one saved.
+    if (channel === 'settings:set') prefs = { ...prefs, ...patch, appearance: patch?.appearance ? { ...appearanceOf(prefs), ...patch.appearance } : prefs.appearance };
     if (channel === 'settings:get' || channel === 'settings:set') return { preferences: prefs, locks: [] };
     return null;
   });
   document.documentElement.removeAttribute('style');
+  document.getElementById('ws-appearance')?.remove();
 });
+/** The profile stylesheet each window writes (worksuite-desktop#234), and one token's value in a block of it. */
+const sheet = () => document.getElementById('ws-appearance')?.textContent ?? '';
+const token = (css: string, theme: 'light' | 'dark', name: string) => new RegExp(`:root\\[data-theme='${theme}'\\][^{]*\\{[^}]*${name}: ([^;]+);`).exec(css)?.[1] ?? '';
 afterEach(cleanup);
 
 function luminance(hex: string) {
@@ -49,24 +54,27 @@ describe('Dark color profiles across renderer windows (#73)', () => {
     prefs.darkColorProfile = 'purple';
     await initAppState();
     expect(document.documentElement.dataset.darkProfile).toBe('purple');
-    const purple = document.documentElement.style.getPropertyValue('--ws-surface');
+    const purple = token(sheet(), 'dark', '--ws-surface');
+    expect(purple).toMatch(/^#/);
     await updatePrefs({ darkColorProfile: 'green' });
     expect(document.documentElement.dataset.darkProfile).toBe('green');
-    expect(document.documentElement.style.getPropertyValue('--ws-surface')).not.toBe(purple);
-    net.events.get('settings:changed')!({ ...prefs, darkColorProfile: 'teal' });
+    expect(token(sheet(), 'dark', '--ws-surface')).not.toBe(purple);
+    net.events.get('settings:changed')!({ ...prefs, darkColorProfile: 'teal', appearance: undefined });
     expect(app.get().prefs?.darkColorProfile).toBe('teal');
     expect(document.documentElement.dataset.darkProfile).toBe('teal');
   });
-  it('applies a remembered profile when System switches dark and removes overrides on light', async () => {
+  it('applies a remembered profile when System switches dark and leaves Light Blue on light', async () => {
     prefs = { ...prefs, theme: 'system', darkColorProfile: 'orange' };
     await initAppState();
     expect(document.documentElement.dataset.theme).toBe('light');
-    expect(document.documentElement.style.getPropertyValue('--ws-surface')).toBe('');
+    expect(document.documentElement.dataset.profile).toBe('blue');
+    expect(sheet()).not.toContain(":root[data-theme='light']");
     net.media.matches = true; net.media.changed();
     expect(document.documentElement.dataset.theme).toBe('dark');
     expect(document.documentElement.dataset.darkProfile).toBe('orange');
-    expect(document.documentElement.style.getPropertyValue('--ws-surface')).not.toBe('');
+    expect(token(sheet(), 'dark', '--ws-surface')).toBe(DARK_PROFILES.find((p) => p.id === 'orange')!.tokens['--ws-surface']);
     net.media.matches = false; net.media.changed();
+    expect(document.documentElement.dataset.theme).toBe('light');
     expect(document.documentElement.style.length).toBe(0);
     expect(app.get().prefs?.darkColorProfile).toBe('orange');
   });
@@ -79,34 +87,34 @@ describe('Dark color profiles across renderer windows (#73)', () => {
     expect(document.documentElement.dataset.contrast).toBeUndefined();
   });
   it('uses identical palettes in detached windows and restores every Blue token on reset', () => {
-    const main = document.documentElement;
-    const detached = document.implementation.createHTMLDocument().documentElement;
-    applyDarkProfile(main, 'red', true); applyDarkProfile(detached, 'red', true);
-    expect(main.style.cssText).toBe(detached.style.cssText);
-    applyDarkProfile(main, 'blue', true);
-    expect(main.style.getPropertyValue('--ws-surface')).toBe('#121a34');
-    expect(main.style.getPropertyValue('--ws-ground')).toBe('#0b1124');
-    expect(main.style.getPropertyValue('--ws-indigo')).toBe('#5c7cfa');
-    applyDarkProfile(main, 'invalid', true);
-    expect(main.dataset.darkProfile).toBe('blue');
+    const detached = document.implementation.createHTMLDocument();
+    const red = appearanceOf({ theme: 'dark', darkColorProfile: 'red' });
+    applyAppearance(document, red, false); applyAppearance(detached, red, false);
+    expect(sheet()).toBe(detached.getElementById('ws-appearance')!.textContent);
+    applyAppearance(document, appearanceOf({ theme: 'dark', darkColorProfile: 'blue' }), false);
+    expect(token(sheet(), 'dark', '--ws-surface')).toBe('#121a34');
+    expect(token(sheet(), 'dark', '--ws-ground')).toBe('#0b1124');
+    expect(token(sheet(), 'dark', '--ws-indigo')).toBe('#5c7cfa');
+    applyAppearance(document, appearanceOf({ theme: 'dark', darkColorProfile: 'invalid' }), false);
+    expect(document.documentElement.dataset.darkProfile).toBe('blue');
   });
   it('offers seven accessible previews and resets the stored preference without changing theme mode', async () => {
     prefs = { ...prefs, theme: 'system', darkColorProfile: 'purple' };
     render(<DarkProfilePicker prefs={prefs} />);
-    for (const p of DARK_PROFILES) expect(screen.getByRole('button', { name: p.name })).toBeTruthy();
-    expect(screen.getByRole('button', { name: 'Dark Purple' }).getAttribute('aria-pressed')).toBe('true');
-    fireEvent.click(screen.getByRole('button', { name: 'Dark Red' }));
-    await waitFor(() => expect(net.call).toHaveBeenCalledWith('settings:set', { darkColorProfile: 'red' }));
+    for (const p of DARK_PROFILES) expect(screen.getByRole('radio', { name: p.id === 'blue' ? 'Dark Blue (default)' : p.name })).toBeTruthy();
+    expect(screen.getByRole('radio', { name: 'Dark Purple' }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(screen.getByRole('radio', { name: 'Dark Red' }));
+    await waitFor(() => expect(net.call).toHaveBeenCalledWith('settings:set', { appearance: { darkProfile: 'red', chosen: true } }));
     await waitFor(() => expect(screen.getByRole('button', { name: 'Reset to Default' })).not.toHaveProperty('disabled', true));
     fireEvent.click(screen.getByRole('button', { name: 'Reset to Default' }));
-    await waitFor(() => expect(net.call).toHaveBeenCalledWith('settings:set', { darkColorProfile: 'blue' }));
+    await waitFor(() => expect(net.call).toHaveBeenCalledWith('settings:set', { appearance: { lightProfile: 'blue', darkProfile: 'blue', chosen: false } }));
     expect(prefs.theme).toBe('system');
   });
   it('shows save failures without changing the active profile', async () => {
     await initAppState();
     net.call.mockRejectedValueOnce(new Error('Could not save appearance.'));
     render(<DarkProfilePicker prefs={prefs} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Dark Gray' }));
+    fireEvent.click(screen.getByRole('radio', { name: 'Dark Gray' }));
     expect(await screen.findByRole('alert')).toHaveProperty('textContent', 'Could not save appearance.');
     expect(document.documentElement.dataset.darkProfile).toBe('blue');
     expect(app.get().prefs?.darkColorProfile).toBe('blue');

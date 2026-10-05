@@ -1,4 +1,4 @@
-import type { DarkColorProfile } from './theme-profiles';
+import type { AppearancePrefs, DarkColorProfile, Tint } from './theme-profiles';
 import type { ItemLink, ItemSource } from './item-links';
 import type { LinkPrefs } from './link-prefs';
 import type { MailMediaPrefs } from './mail-media';
@@ -143,6 +143,15 @@ export interface DesktopPolicy {
    */
   launcher_pinned?: string[];
   launcher_order?: string[];
+  /**
+   * The organisation's colour profile (worksuite-desktop#234): its accent ('' or absent: none), how tinted the
+   * backgrounds are, the background colour for `custom`, and whether everyone must use it. Unlocked, it is the
+   * profile of everyone who has not picked their own.
+   */
+  appearance_accent?: string;
+  appearance_tint?: Tint;
+  appearance_tint_color?: string;
+  appearance_locked?: boolean;
 }
 
 export interface MonitoringPolicySummary {
@@ -230,6 +239,11 @@ export interface Preferences {
   theme: Theme;
   /** Optional for compatibility with preferences saved before dark profiles existed. */
   darkColorProfile?: DarkColorProfile;
+  /**
+   * Colour profiles (worksuite-desktop#234): the mode (the same as `theme`), the Light and Dark profiles and up to
+   * five custom ones. Absent in preferences saved before; read with `appearanceOf`.
+   */
+  appearance?: AppearancePrefs;
   density: Density;
   hardwareAcceleration: boolean;
   notificationSounds: boolean;
@@ -1545,7 +1559,19 @@ export interface LocalRecording {
   stepAt?: string | null;
   /** Its upload in the transfer queue, while there is one: its progress, Pause, Resume and Cancel are the queue's. */
   transferId?: string | null;
+  /**
+   * Why its file cannot be used (worksuite-desktop#240): nothing was recorded because Screen Recording permission
+   * was off, no video reached the file, or the file is not a whole video. Trying again cannot fix any of these, so it
+   * is never offered Try again — only Delete, and Fix permission when that is the cause.
+   */
+  problem?: LocalRecordingProblem | null;
 }
+
+/** Why a recording made here cannot be used, when trying again would not help (worksuite-desktop#240). */
+export type LocalRecordingProblem = 'screen-permission' | 'no-video' | 'unplayable';
+
+/** Whether this computer lets WorkSuite record the screen (macOS Screen Recording); elsewhere there is no such gate. */
+export type ScreenRecordingAccess = 'granted' | 'missing' | 'not_required';
 
 /** What a piece of speech said, when, and whether it was unclear (worksuite-desktop#81). */
 export interface SpeechSegment {

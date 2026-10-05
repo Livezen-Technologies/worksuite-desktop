@@ -1,5 +1,7 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useEffect } from 'react';
 import { ApiError, apiGet, request } from '../../../core/api';
+import { useLocalFirstQuery } from '../../../core/local-first-query';
 import { errorMessage } from '../../../core/bridge';
 import { toast } from '../../../core/toasts';
 import { text } from '../../../core/i18n';
@@ -78,6 +80,10 @@ export interface WebsiteRow {
   reply_waiting_since?: string | null;
   /** How far that has gone: a reminder sent, the team alerted, or the chat reassigned. */
   reply_stage?: 'reminded' | 'team' | 'reassigned' | null;
+  /** Returning visitors (#222): the visitor's profile, which visit this is ("Returning · 3rd visit"), how we know them. */
+  visitor_id?: number;
+  visits?: number;
+  identity?: 'signed' | 'verified' | 'returning' | 'new';
 }
 
 /**
@@ -338,6 +344,8 @@ export interface WebsiteConversation {
    */
   delete_window_minutes?: number;
   can_save_to_drive?: boolean;
+  /** Returning visitors (#222): the profile behind this chat; absent or null on a server without them. */
+  profile?: { visitor_id: number; identity: 'signed' | 'verified' | 'returning' | 'new'; visits: number; suggestions: number } | null;
 }
 
 /** A voice call in a website chat as the thread has it (WidgetCalls::forThread). */
@@ -626,6 +634,61 @@ export function useWebsiteConversation(id: string, { review = false }: { review?
     // No realtime event for replies or visitor typing: poll, slower in the background.
     refetchInterval: () => (document.visibilityState === 'visible' ? 5_000 : 30_000),
   });
+}
+
+/**
+ * The conversations opened last, kept in memory so going back to one is instant (worksuite-desktop#239). Older ones
+ * are let go once nothing shows them; the saved copy on disk still opens them at once.
+ */
+export const RECENT_CONVERSATIONS = 8;
+const recentlyOpened: string[] = [];
+
+/** Remembers `id` as opened now, and lets go of the one opened longest ago beyond the limit. */
+export function rememberOpened(qc: QueryClient, id: string, limit = RECENT_CONVERSATIONS): void {
+  const at = recentlyOpened.indexOf(id);
+  if (at >= 0) recentlyOpened.splice(at, 1);
+  recentlyOpened.unshift(id);
+  while (recentlyOpened.length > limit) {
+    const old = recentlyOpened.pop()!;
+    const key = ['website', 'conversation', old];
+    // Still on screen somewhere (a second pane): kept; it goes the next time the list moves on.
+    if (qc.getQueryCache().findAll({ queryKey: key }).some((q) => q.getObserversCount() > 0)) continue;
+    qc.removeQueries({ queryKey: key });
+  }
+}
+
+/** For tests: forget which conversations were opened. */
+export function resetRecentlyOpened(): void {
+  recentlyOpened.length = 0;
+}
+
+/** A saved copy is a conversation only when it has one: anything else waits for the server. */
+const isConversation = (hit: unknown): boolean => {
+  const c = hit as Partial<WebsiteConversation> | null;
+  return !!c && typeof c === 'object' && !!c.conversation && typeof c.conversation === 'object' && Array.isArray(c.messages);
+};
+
+/**
+ * The open thread (worksuite-desktop#239): from memory when it was opened lately, else from the copy saved on this
+ * computer, while the server is asked in the background; polled as before. Held in memory for as long as it is among
+ * the last {@link RECENT_CONVERSATIONS} opened.
+ */
+export function useOpenConversation(id: string) {
+  const qc = useQueryClient();
+  useEffect(() => rememberOpened(qc, id), [qc, id]);
+  return useLocalFirstQuery<WebsiteConversation>({
+    queryKey: ['website', 'conversation', id],
+    path: `${WEBSITE}/conversations/${id}`,
+    // No realtime event for replies or visitor typing: poll, slower in the background.
+    interval: 5_000,
+    gcTime: Infinity,
+    accept: isConversation,
+  });
+}
+
+/** What the open thread has loaded, wherever it came from: the composer's suggestions read it. */
+export function openConversationData(qc: QueryClient, id: string): WebsiteConversation | undefined {
+  return qc.getQueriesData<WebsiteConversation>({ queryKey: ['website', 'conversation', id] }).find(([key, data]) => key[3] !== 'review' && data)?.[1];
 }
 
 export function useAgents(enabled: boolean, conversationId?: number) {

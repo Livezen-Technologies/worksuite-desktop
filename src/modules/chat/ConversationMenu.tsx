@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { useTab } from '../../core/tab-context';
@@ -8,6 +8,7 @@ import type { MenuItem } from '../../components/Menu';
 import { websiteMenu, whatsappMenu } from './menus';
 import { useWebsiteActions, useWhatsappActions } from './RoomActions';
 import { useAgents, type WebsiteRow } from './website/api';
+import { MergeDialog } from './website/IdentityCard';
 
 /**
  * The conversation menu at the mouse for the WhatsApp and Website channels
@@ -45,5 +46,16 @@ function WebsiteMenu({ x, y, row, onClose }: { x: number; y: number; row: Websit
   const me = useMe();
   const agents = useAgents(true);
   const run = useWebsiteActions(me, (c) => go(`/chat?view=website&website=${c.id}`));
-  return <ContextMenu x={x} y={y} label={`Actions — ${row.visitor_name || row.label}`} sections={websiteMenu(row, me, agents.data?.agents ?? [], (a, userId, priority) => run(row, a, userId, priority))} onClose={onClose} />;
+  // "Merge with another visitor…" (worksuite-desktop#222) asks whom after the menu has gone.
+  const [merging, setMerging] = useState(false);
+  // The menu closes as the item is chosen, before the state above has changed: a ref says the dialog is coming.
+  const mergeNext = useRef(false);
+  const sections = websiteMenu(row, me, agents.data?.agents ?? [], (a, userId, priority) => run(row, a, userId, priority));
+  const pick = () => {
+    mergeNext.current = true;
+    setMerging(true);
+  };
+  const all = row.visitor_id ? [...sections, { id: 'identity', items: [{ id: 'merge', label: 'Merge with another visitor…', icon: 'users', onSelect: pick }] }] : sections;
+  if (merging && row.visitor_id) return <MergeDialog keepId={row.visitor_id} keepName={row.visitor_name || row.label} onClose={onClose} />;
+  return <ContextMenu x={x} y={y} label={`Actions — ${row.visitor_name || row.label}`} sections={all} onClose={() => { if (!mergeNext.current) onClose(); }} />;
 }

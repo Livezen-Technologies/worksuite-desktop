@@ -7,7 +7,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import type { ModuleSettings } from '../../components/ModuleSettingsForm';
 import { Select } from '../../components/Select';
-import { ErrorNote, Spinner, cx } from '../../components/ui';
+import { ErrorNote, NumberField, Spinner, cx } from '../../components/ui';
 
 /**
  * Admin Center › Chat › Ringing (WS-WCHAT design P-03, RING-UI-09; RING-01…08, RING-60, ESC-07): the organisation's
@@ -113,7 +113,6 @@ export function AdminRinging() {
 
   const open = (path: string) => void call('app:openInBrowser', { path }).catch((e: unknown) => toast('error', errorMessage(e)));
   const row = 'flex items-center gap-3 px-[18px] py-3';
-  const control = 'h-[34px] rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink outline-none focus:border-primary disabled:opacity-60';
 
   return (
     <div className="flex h-full min-h-0">
@@ -160,15 +159,17 @@ export function AdminRinging() {
                   <div key={l.key} className={cx('flex flex-col', i < LADDER.length - 1 && 'border-b border-line')}>
                     <div className={row}>
                       <label htmlFor={l.key} className="flex-1 text-[14px] text-ink">{l.label}</label>
-                      <input
+                      <NumberField
                         id={l.key}
-                        inputMode="numeric"
+                        size="sm"
+                        width={70}
+                        min={0}
+                        max={3600}
                         value={value(l.key)}
                         disabled={!editable}
-                        aria-invalid={problems[l.key] ? true : undefined}
+                        invalid={!!problems[l.key]}
                         aria-describedby={problems[l.key] || notes[l.key] ? `${l.key}-why` : undefined}
-                        onChange={(e) => set(l.key, e.target.value)}
-                        className={cx(control, 'w-[70px]', problems[l.key] && '!border-danger')}
+                        onValueChange={(v) => set(l.key, v)}
                       />
                       <span className="w-14 text-[13px] text-ink-3">seconds</span>
                     </div>

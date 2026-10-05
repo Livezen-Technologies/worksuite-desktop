@@ -5,6 +5,62 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.183 — 2026-10-05
+
+- **No more crash from a time in a header (#238).**
+  - **Cause:** a request header holding the narrow space macOS puts in formatted times (U+202F), or other text
+    above character 255, made the app's request code throw, and Electron showed its raw crash dialog.
+  - **Fix:** every request's headers are now cleaned in one place. A header that can't be sent gives a normal
+    "Couldn't send this request. Try again." on that screen.
+  - **Other uncaught errors** are logged to Diagnostics and the crash reporter, with a friendly message instead of
+    the dialog.
+- **Meet recordings are never empty (#240).**
+  - **Before recording:** on a Mac, recording checks for Screen Recording permission first, with Open System
+    Settings and Check again. It also needs a live video track.
+  - **While recording:** it records WebM before MP4 and saves in 1-second pieces. The meeting window keeps drawing,
+    and if only a header has arrived after 5 seconds it stops and says so.
+  - **Empty recordings** say why and offer Delete (and Fix permission), never Try again.
+  - **One card per recording**, with one status pill, progress on the card and the rest in a ⋯ menu.
+- **Website chats open at once (#239).**
+  - **Opening a chat:** conversations are kept on this computer and the last 8 in memory, so a chat opened before
+    shows straight away. A new one shows a placeholder of the conversation instead of a spinner at the edge.
+    "Still loading… Retry" and the error state are centred.
+  - **List rows:**
+    - one pill ("Waiting 4m", amber then red, or "Unread");
+    - online shown only by the avatar dot;
+    - assignee photos instead of "You".
+  - **No chat open:** the pane says "Select a conversation" with today's Waiting · Open · Missed.
+- **Returning visitors (#222).**
+  - **The visitor panel** shows how sure we are who it is, visits, devices, Previous chats, possible same-person
+    matches with Merge or Dismiss, merge history with Unmerge, the linked contact with company and deals, and
+    Delete visitor data.
+  - **Inbox rows** show "Returning · 3rd visit", and Merge is in the conversation header and right-click menu.
+  - **The widget's Embed code tab** sets the reopen window, continuing on another device, contact linking, cookie
+    lifetime, retention and the identify() secret.
+  - Needs the server's Communication 1.50.0.
+- **Mail delete works (#235).**
+  - **Deleting:** the row disappears at once with one "Deleted · Undo" toast, and several deletes join it ("3
+    messages deleted"). Messages already gone are removed quietly.
+  - **Failures:** a real failure brings the row back with one error and Retry.
+  - Needs the server's Mail 1.15.0.
+- **Toasts everywhere (#235):** at most 3, repeats merged as ×N, errors stay until closed, and they sit bottom-left
+  above the status bar instead of over the reading pane.
+- **Pull to refresh (#236).**
+  - **Mail, Team Chat, WhatsApp and Website chats:** scroll or pull a little past the top to check for new items.
+    New items arriving while you're scrolled down show "↑ 3 new emails", and the list keeps its place.
+  - **In Mail,** F5 and ⌘R also check (F5 only in the Outlook keys), "Checked 2 min ago" sits under the list header,
+    and Mail › Appearance & reading › Pull to refresh turns it off.
+- **Colour profiles work (#234).**
+  - **Applying:** choosing a profile changes every window at once, in light and dark, with no flash at startup.
+    System follows your computer.
+  - **Custom profiles:** up to five, from your own colour, checked for readability, with export and import.
+  - **Admins** can set the organisation's colour as the default and lock it.
+- **App launcher (#233):** no dark band above the footer. The fades show only when there's more to scroll, and the
+  footer sits at the bottom with one soft line.
+- **Settings › Security (#232):** the custom timeout is one row with "min" inside the field and the time in hours.
+  Admin Center › Ringing and Drive's speed limits use the same field.
+- **Business hours:** a zone with no offset reads "UTC (UTC+00:00)".
+
 ## 0.2.182 — 2026-10-04
 
 - **Widget preview matches the visitor widget (W-02).** The preview's home screen shows the status in two lines

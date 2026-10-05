@@ -1,4 +1,5 @@
 import type { DesktopErrorCode } from '@shared/ipc/contract';
+import { safeHeaders, UnsafeHeaderError } from '@shared/http-headers';
 import { DesktopError, UNREACHABLE_MESSAGE } from '../main/errors';
 import { logger } from '../main/log';
 
@@ -65,8 +66,41 @@ const KNOWN_CODES = new Set<DesktopErrorCode>([
   'RATE_LIMITED',
 ]);
 
+/** What a screen shows when a request could not even be put together (worksuite-desktop#238): it offers Retry. */
+export const NOT_SENT_MESSAGE = "Couldn't send this request. Try again.";
+
+/**
+ * A request that could not be built — a header value no HTTP header may carry, most often (#238) — as the
+ * ordinary error its screen shows with Retry. Never thrown past the caller, never a main-process crash.
+ */
+export function requestBuildError(e: unknown): DesktopError {
+  if (e instanceof DesktopError) return e;
+  const which = e instanceof UnsafeHeaderError ? e.header : null;
+  log.error('request could not be built', { header: which, error: e instanceof Error ? `${e.name}: ${e.message.slice(0, 160)}` : String(e) });
+  return new DesktopError('INTERNAL', NOT_SENT_MESSAGE);
+}
+
+/**
+ * A fetch whose every request goes through the header-safety helper, and that never throws synchronously: a request
+ * that cannot be built is a rejected promise with a `DesktopError`, which the caller handles like any other failure.
+ * The main process wraps `net.fetch` in this once, so no header with characters above 255 reaches undici (#238).
+ */
+export function withSafeHeaders<I extends object>(fetch: (url: string, init: I) => Promise<Response>): (url: string, init?: I) => Promise<Response> {
+  return (url, init) => {
+    try {
+      const safe = { ...(init ?? {}) } as I & { headers?: unknown };
+      if (safe.headers !== undefined) safe.headers = safeHeaders(safe.headers as Record<string, string>);
+      return fetch(url, safe);
+    } catch (e) {
+      return Promise.reject(requestBuildError(e));
+    }
+  };
+}
+
 export function classifyNetworkError(e: unknown): DesktopError {
   const text = `${(e as Error)?.message ?? e} ${String((e as { cause?: unknown })?.cause ?? '')}`;
+  // Not the network: a request that could not be built (a header no HTTP header may carry, #238).
+  if (e instanceof DesktopError || e instanceof UnsafeHeaderError || /ByteString|Invalid value for header|Invalid header name/i.test(text)) return requestBuildError(e);
   if ((e as Error)?.name === 'AbortError' || /aborted/i.test(text)) {
     return new DesktopError('CANCELLED', 'The request was cancelled.');
   }
@@ -145,12 +179,18 @@ export class HttpClient {
   async raw(method: string, url: string, init: RequestInit & { auth?: boolean; timeoutMs?: number } = {}): Promise<Response> {
     const auth = init.auth !== false;
     const attempt = async (): Promise<Response> => {
-      const headers = new Headers(init.headers);
-      for (const [k, v] of Object.entries(this.deps.clientHeaders())) headers.set(k, v);
-      if (!headers.has('Accept')) headers.set('Accept', 'application/json');
-      if (auth) {
-        const token = this.deps.tokens.accessToken();
-        if (token) headers.set('Authorization', `Bearer ${token}`);
+      // Every header through the safety helper (#238); a request that cannot be built is this screen's error, not a crash.
+      let headers: Headers;
+      try {
+        headers = new Headers(safeHeaders(init.headers as Record<string, string> | Headers | undefined));
+        for (const [k, v] of Object.entries(safeHeaders(this.deps.clientHeaders()))) headers.set(k, v);
+        if (!headers.has('Accept')) headers.set('Accept', 'application/json');
+        if (auth) {
+          const token = this.deps.tokens.accessToken();
+          if (token) headers.set('Authorization', `Bearer ${token}`);
+        }
+      } catch (e) {
+        throw requestBuildError(e);
       }
       const signals: AbortSignal[] = [AbortSignal.timeout(init.timeoutMs ?? 30_000)];
       if (init.signal) signals.push(init.signal);

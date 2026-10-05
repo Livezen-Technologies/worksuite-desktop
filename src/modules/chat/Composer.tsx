@@ -34,7 +34,7 @@ import { transcript, useChatSavedReplies, type RepliesState, type Turn } from '.
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
-import { team, useAgents, type WebsiteConversation } from './website/api';
+import { openConversationData, team, useAgents } from './website/api';
 import { NOTE_TONE } from './kit/MessageBubble';
 import { TEAM_COMPOSER, WEBSITE_COMPOSER } from './kit/caps';
 import { usePresence } from './presence';
@@ -601,7 +601,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const conversation = (): Turn[] => {
     if (channel) return channel.context();
     if (site) {
-      const c = qc.getQueryData<WebsiteConversation>(['website', 'conversation', String(site.conversationId)]);
+      const c = openConversationData(qc, String(site.conversationId));
       return (c?.messages ?? []).filter((m) => m.from === 'visitor' || m.from === 'agent').map((m) => ({ mine: m.from === 'agent', name: m.from === 'agent' ? (m.agent ?? myName) : (c?.visitor?.name ?? 'Visitor'), text: m.body ?? '' }));
     }
     const pages = qc.getQueryData<InfiniteData<{ messages: ChatMessage[] }>>(['chat', 'messages', roomId])?.pages ?? [];

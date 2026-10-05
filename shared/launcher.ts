@@ -49,8 +49,11 @@ export const EDGE_MARGIN = 24;
 export const POPOVER_TOP_FRACTION = 0.12;
 /** The shell's top bar (layouts/TitleBar), which holds the window controls: the traffic lights on macOS. */
 export const TOP_BAR_PX = 52;
-/** Full screen's column: `max-width: 1080px; margin: 0 auto`, 48px above, 32px each side. */
-export const FULL_COLUMN = { maxWidth: 1080, padTop: 48, padSide: 32, padBottom: 24 } as const;
+/**
+ * Full screen's column: `max-width: 1080px; margin: 0 auto`, 48px above, 32px each side, and nothing below: the
+ * footer is attached to the bottom of the window (worksuite-desktop#233).
+ */
+export const FULL_COLUMN = { maxWidth: 1080, padTop: 48, padSide: 32, padBottom: 0 } as const;
 export const FULL_SEARCH = { maxWidth: 640, height: 52 } as const;
 /** Never more of the window than this (the bottom sheet). */
 export const MAX_FRACTION = 0.9;
@@ -77,7 +80,16 @@ export const LAUNCHER_PARTS = {
 } as const;
 /** The grid's padding inside its scroller; the bottom fade sits over the bottom padding. */
 export const GRID_PAD = { top: 8, bottom: 12, x: 10 } as const;
-export const FADE_PX = 20;
+/** The scroll fades, top and bottom: `linear-gradient(transparent, var(--launcher-bg))`, 32px (worksuite-desktop#233). */
+export const FADE_PX = 32;
+/**
+ * The grid in sections (worksuite-desktop#233): each category heading 24px above its name (16px of margin, then 8px
+ * of the heading's own padding) and 8px below it, sticky while its section scrolls by; when it sticks, it is
+ * `LAUNCHER_PARTS.heading` tall (8 + a 16px line + 8). In full screen, 24px under the last section, before the footer.
+ */
+export const FULL_GRID = { bottom: 24, headingMargin: 16, headingPad: 8 } as const;
+/** Narrower than this (the footer's own width), the footer says only the count and Esc to close. */
+export const FOOTER_NARROW_BELOW = 640;
 
 export const DEFAULT_LAUNCHER_SHORTCUT = 'Mod+Shift+K';
 
@@ -712,6 +724,22 @@ export function sectionBlocks(
 /** Whether a scroller has more below what shows: when the bottom fade is drawn. */
 export function hasMoreBelow(el: { scrollTop: number; clientHeight: number; scrollHeight: number }): boolean {
   return el.scrollHeight - el.scrollTop - el.clientHeight > 1;
+}
+
+/** Whether a scroller has been scrolled down from its top: when the top fade is drawn. */
+export function hasMoreAbove(el: { scrollTop: number }): boolean {
+  return el.scrollTop > 1;
+}
+
+/** Which of the scroll fades to draw (worksuite-desktop#233): each only while there is more past that edge. */
+export function scrollFades(el: { scrollTop: number; clientHeight: number; scrollHeight: number } | null | undefined): { top: boolean; bottom: boolean } {
+  if (!el) return { top: false, bottom: false };
+  return { top: hasMoreAbove(el), bottom: hasMoreBelow(el) };
+}
+
+/** Whether the footer is too narrow for the keys, and says only the count and Esc to close. */
+export function footerNarrow(width: number, sheet = false): boolean {
+  return sheet || width < FOOTER_NARROW_BELOW;
 }
 
 /** How many columns `repeat(auto-fill, minmax(88px, 1fr))` makes in a grid this wide. */

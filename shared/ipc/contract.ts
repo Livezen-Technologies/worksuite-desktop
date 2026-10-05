@@ -1,5 +1,5 @@
 import { MAX_CONCURRENT } from '../transfers';
-import { DARK_PROFILE_IDS } from '../theme-profiles';
+import { DARK_PROFILE_IDS, MAX_CUSTOM_PROFILES } from '../theme-profiles';
 import { localProfileInput, type LocalOverview, type LocalProfile, type LocalStatus, type MoveOffer, type MoveResult, type RestorePreview } from '../local-workspace';
 import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
 import type { DataFolder, ImportProgress, MailFileHandle, MailFileView } from '../mail-files';
@@ -67,6 +67,7 @@ import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
   LocalRecording,
+  ScreenRecordingAccess,
   SpeechSegment,
   SpeechStatus,
   AiRules,
@@ -127,6 +128,16 @@ export const tabRecordSchema = z.object({
 });
 export type TabRecord = z.infer<typeof tabRecordSchema>;
 
+const hexColour = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const appearanceProfileId = z.string().regex(/^(purple|red|green|blue|orange|teal|gray|org|c-[a-z0-9]{4,16})$/);
+const customProfileSchema = z.object({
+  id: z.string().regex(/^c-[a-z0-9]{4,16}$/),
+  name: z.string().max(40),
+  accent: hexColour,
+  tint: z.enum(['neutral', 'accent', 'custom']),
+  tintColor: hexColour.nullable().optional(),
+});
+
 const bandwidthLimitSchema = z.object({ on: z.boolean(), value: z.number().positive().max(1_000_000), unit: z.enum(['KB', 'MB']) });
 
 export const preferencesPatchSchema = z
@@ -137,6 +148,17 @@ export const preferencesPatchSchema = z
     restoreTabs: z.boolean(),
     theme: z.enum(['system', 'light', 'dark']),
     darkColorProfile: z.enum(DARK_PROFILE_IDS),
+    // Colour profiles (worksuite-desktop#234). The mode is `theme`; a profile id is a built-in one, `org`, or one of
+    // the custom ones (`c-…`), which the settings service checks against the list.
+    appearance: z
+      .object({
+        mode: z.enum(['system', 'light', 'dark']),
+        lightProfile: appearanceProfileId,
+        darkProfile: appearanceProfileId,
+        custom: z.array(customProfileSchema).max(MAX_CUSTOM_PROFILES),
+        chosen: z.boolean(),
+      })
+      .partial(),
     density: z.enum(['comfortable', 'compact']),
     hardwareAcceleration: z.boolean(),
     notificationSounds: z.boolean(),
@@ -1248,6 +1270,18 @@ export const contract = {
     { permission: 'desktop.policies.manage', session: true, sensitive: true, rate: 5 },
   ),
 
+  // The organization's colour profile (#234): four keys of its desktop policy, for whoever may set that policy.
+  'settings:appearanceDefaults': ch(
+    z.object({
+      organizationId: z.string().regex(/^\d{1,12}$/),
+      accent: hexColour.nullable(),
+      tint: z.enum(['neutral', 'accent', 'custom']),
+      tintColor: hexColour.nullable(),
+      locked: z.boolean(),
+    }),
+    { permission: 'desktop.policies.manage', session: true, sensitive: true, rate: 5 },
+  ),
+
   'status:snapshot': ch(none, { whileLocked: true }),
 
   'diagnostics:run': ch(none, { whileLocked: true, rate: 1 }),
@@ -1377,7 +1411,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'media:privacySettings': void;
   'calls:active': void;
   'calls:list': ActiveCall[];
-  'meetrec:preflight': { folder: string; free: number | null; ok: boolean; why: string | null };
+  'meetrec:preflight': { folder: string; free: number | null; ok: boolean; why: string | null; screen?: ScreenRecordingAccess; fix?: 'screen-permission' | null };
   'meetrec:start': { id: string };
   'meetrec:active': void;
   'meetrec:abort': void;
@@ -1700,6 +1734,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'settings:get': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:set': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:launcherDefaults': { pinned: string[]; order: string[] };
+  'settings:appearanceDefaults': { accent: string | null; tint: 'neutral' | 'accent' | 'custom'; tintColor: string | null; locked: boolean };
   'status:snapshot': StatusSnapshot;
   'diagnostics:run': DiagnosticCheck[];
   'diagnostics:previewBundle': BundlePreview;

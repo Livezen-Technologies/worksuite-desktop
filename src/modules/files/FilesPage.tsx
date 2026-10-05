@@ -441,6 +441,8 @@ export default function FilesPage(_props: ModuleProps) {
   // with &play=1 opened as well, in the player for a video (worksuite-desktop#89).
   const fileParam = query.get('file');
   const playParam = query.get('play') === '1';
+  // &share=1: Share… from a meeting recording's ⋯ menu (worksuite-desktop#240) opens the file's sharing dialog.
+  const shareParam = query.get('share') === '1';
   const openedFile = useRef<string | null>(null);
   useEffect(() => {
     if (!fileParam || !/^\d+$/.test(fileParam) || openedFile.current === fileParam) return;
@@ -455,6 +457,7 @@ export default function FilesPage(_props: ModuleProps) {
       .then((f) => {
         onPlace(f.folder_id ? { view: 'folder', folder: f.folder_id } : { view: 'home', folder: null });
         if (playParam) d.open({ type: 'file', f });
+        else if (shareParam) d.share({ type: 'file', f });
       })
       .catch((e) => toast('error', errorMessage(e)));
     // eslint-disable-next-line react-hooks/exhaustive-deps

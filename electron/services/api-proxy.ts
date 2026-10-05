@@ -1,4 +1,5 @@
 import { createHash } from 'node:crypto';
+import { normalizeContentDisposition, safeHeaderValue } from '@shared/http-headers';
 import { restaurantMainOnly } from '@shared/restaurant';
 import { UNREACHABLE_MESSAGE, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
@@ -154,12 +155,18 @@ export function createApiProxy(deps: ProxyDeps) {
     if (!['GET', 'POST', 'PUT', 'PATCH', 'DELETE', 'HEAD'].includes(method)) return envelope(405, 'Method not allowed.', 'INTERNAL');
     if (isMediaPath(apiPath) && method !== 'GET' && method !== 'HEAD') return envelope(405, 'Media is read only.', 'INTERNAL');
 
+    // Through the header-safety helper (#238): one bad value is this request's error, never the main process's.
     const headers = new Headers();
-    for (const h of FORWARD_HEADERS) {
-      const v = request.headers.get(h);
-      if (v) headers.set(h, v);
+    try {
+      for (const h of FORWARD_HEADERS) {
+        const v = request.headers.get(h);
+        if (v) headers.set(h, safeHeaderValue(h, v));
+      }
+      for (const [h, v] of Object.entries(deps.extraHeaders?.(apiPath) ?? {})) headers.set(h, safeHeaderValue(h, v));
+    } catch (e) {
+      log.warn('proxy request could not be built', { path: apiPath.split('?')[0], error: e instanceof Error ? e.message.slice(0, 160) : String(e) });
+      return envelope(400, "Couldn't send this request. Try again.", 'INTERNAL');
     }
-    for (const [h, v] of Object.entries(deps.extraHeaders?.(apiPath) ?? {})) headers.set(h, v);
     let body: ArrayBuffer | undefined;
     if (method !== 'GET' && method !== 'HEAD') {
       body = await request.arrayBuffer();
@@ -198,7 +205,7 @@ export function createApiProxy(deps: ProxyDeps) {
       }
       const code = isDesktopError(e) ? e.code : 'NETWORK_UNREACHABLE';
       const message = isDesktopError(e) ? e.message : UNREACHABLE_MESSAGE;
-      return envelope(code === 'CANCELLED' ? 499 : 503, message, code);
+      return envelope(code === 'CANCELLED' ? 499 : code === 'INTERNAL' ? 500 : 503, message, code);
     }
 
     if (whatsapp && (deps.userId() !== userId || (deps.cacheScope?.() ?? deps.http.url('/')) !== scope)) return envelope(401, 'The account changed.', 'NOT_SIGNED_IN');
@@ -207,7 +214,8 @@ export function createApiProxy(deps: ProxyDeps) {
     const out = new Headers();
     for (const h of RETURN_HEADERS) {
       const v = upstream.headers.get(h);
-      if (v) out.set(h, v);
+      // A file name the server wrote as raw UTF-8 goes back as RFC 5987 (#238); nothing above 255 is ever set.
+      if (v) out.set(h, h === 'content-disposition' ? normalizeContentDisposition(v) : safeHeaderValue(h, v));
     }
 
     const type = upstream.headers.get('content-type') ?? '';

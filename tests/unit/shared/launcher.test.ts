@@ -171,9 +171,10 @@ describe('launcher size and place (worksuite-desktop#206)', () => {
       expect(l.column!.gridRoom).toBe(h - TOP_BAR_PX - fullscreenChrome(parts));
     }
     expect(TOP_BAR_PX).toBeGreaterThanOrEqual(52);
-    expect(FULL_COLUMN).toEqual({ maxWidth: 1080, padTop: 48, padSide: 32, padBottom: 24 });
+    // Nothing under the footer: it is attached to the bottom (worksuite-desktop#233).
+    expect(FULL_COLUMN).toEqual({ maxWidth: 1080, padTop: 48, padSide: 32, padBottom: 0 });
     expect(FULL_SEARCH).toEqual({ maxWidth: 640, height: 52 });
-    expect(fullscreenChrome(parts)).toBe(48 + 68 + 40 + 1 + 40 + 24);
+    expect(fullscreenChrome(parts)).toBe(48 + 68 + 40 + 1 + 40);
     // Under a menu bar or a work area that starts lower: lower too.
     expect(fullscreenRect(win(1280, 800), { left: 0, top: 70, width: 1280, height: 730 }).top).toBe(70);
   });

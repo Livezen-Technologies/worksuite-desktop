@@ -12,7 +12,7 @@ import { playOnce } from '../calls/tones';
 import type { RemoteControlView } from '@shared/types';
 import { pointers } from './remote/pointers';
 import { app } from '../../core/app-state';
-import { LocalRecorder } from './recorder';
+import { LocalRecorder, RecordingError } from './recorder';
 import { LiveTranscriber } from './transcribe/live';
 import type { SpeechLanguage } from './transcribe/engine';
 import type { AutoEmail, Transcript } from '../meetings/transcripts/api';
@@ -159,6 +159,8 @@ export class MeetSession {
   localRec: LocalRecorder | null = null;
   recordingCommand: 'idle' | 'starting' | 'stopping' | 'error' = 'idle';
   recordingError: string | null = null;
+  /** What fixes the recording problem, when it is a permission (worksuite-desktop#240): shown as Open System Settings and Check again. */
+  recordingFix: 'screen-permission' | null = null;
   recordingRetry: 'start' | 'stop' = 'start';
   recordingStopped = false;
   livestream: LivestreamStatus | null = null;
@@ -778,7 +780,7 @@ export class MeetSession {
       // Keep the last confirmed state during a transient failure; an older server initially uses the room flag.
     }
     const active = !!this.recording;
-    if (this.recordingCommand === 'error' && (this.recordingRetry === 'start' ? active : !active)) { this.recordingCommand = 'idle'; this.recordingError = null; }
+    if (this.recordingCommand === 'error' && (this.recordingRetry === 'start' ? active : !active)) { this.recordingCommand = 'idle'; this.recordingError = null; this.recordingFix = null; }
     if (active !== this.recordedNotice) {
       this.recordedNotice = active; this.recordingStopped = !active;
       announceRecording(active);
@@ -815,7 +817,7 @@ export class MeetSession {
     if (this.recordRequest) return;
     this.recordRequest = true; this.recordingRetry = kind;
     this.recordingCommand = kind === 'start' ? 'starting' : 'stopping';
-    this.recordingError = null; this.recordingStopped = false; this.changed();
+    this.recordingError = null; this.recordingFix = null; this.recordingStopped = false; this.changed();
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([run(), new Promise<never>((_, reject) => { timer = setTimeout(() => reject(new Error('Recording request timed out. Check your connection and recording service, then retry.')), 45_000); })]);
@@ -823,7 +825,9 @@ export class MeetSession {
     } catch (e) {
       if (kind === 'start' && this.localRec) { void this.localRec.abort(); this.localRec = null; }
       this.recordingCommand = 'error'; this.recordingError = errorMessage(e);
-      this.note(`The recording did not ${kind}: ${this.recordingError}`);
+      this.recordingFix = e instanceof RecordingError ? e.fix : null;
+      // A missing permission has its own explanation, with Open System Settings and Check again (#240).
+      if (!this.recordingFix) this.note(`The recording did not ${kind}: ${this.recordingError}`);
     } finally {
       clearTimeout(timer); this.recordRequest = false; this.changed();
     }
@@ -835,7 +839,20 @@ export class MeetSession {
     const prefs = app.get().prefs?.meetRecording ?? { method: 'cloud', quality: '720p', layout: 'grid', folder: 'Meeting Recordings' };
     await this.recordingOperation('start', async () => {
       if (prefs.method === 'local' && this.room) {
-        const rec = new LocalRecorder(this.room, { layout: prefs.layout, quality: prefs.quality, speaker: () => this.lastSpeaker, onError: (m) => this.note(m) });
+        const rec: LocalRecorder = new LocalRecorder(this.room, {
+          layout: prefs.layout,
+          quality: prefs.quality,
+          speaker: () => this.lastSpeaker,
+          onError: (m, info) => {
+            if (!info?.stopped) return this.note(m);
+            // Not capturing video (#240): it was stopped; say so where the recording controls are, with the fix.
+            if (this.localRec === rec) this.localRec = null;
+            this.recordingCommand = 'error'; this.recordingRetry = 'start';
+            this.recordingError = m; this.recordingFix = info.fix ?? null;
+            this.changed();
+            void this.refreshRecording();
+          },
+        });
         this.localRec = rec;
         await rec.start(this.uuid, this.info?.title || 'Meeting');
       } else {
@@ -1089,7 +1106,7 @@ export class MeetSession {
     if (this.recTimer) clearInterval(this.recTimer);
     this.recTimer = null;
     this.livestream = null;
-    this.rec = null; this.recordedNotice = false; this.recordingCommand = 'idle'; this.recordingError = null; this.recordingStopped = false;
+    this.rec = null; this.recordedNotice = false; this.recordingCommand = 'idle'; this.recordingError = null; this.recordingFix = null; this.recordingStopped = false;
     void call('calls:active', { uuid: null, kind: 'meet' }).catch(() => undefined);
     pointers.reset();
     void this.shareEnded();

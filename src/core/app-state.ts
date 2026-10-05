@@ -1,4 +1,4 @@
-import { applyDarkProfile } from '@shared/theme-profiles';
+import { appearanceOf, applyAppearance, type AppearancePrefs } from '@shared/theme-profiles';
 import type { InputOf, LockState } from '@shared/ipc/contract';
 import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, StatusSnapshot, SyncStatus, Transfer, UpdateStatus } from '@shared/types';
 import { grantOf } from '@shared/access';
@@ -66,16 +66,22 @@ export function isGuest(): boolean {
 
 const media = typeof window !== 'undefined' && typeof window.matchMedia === 'function' ? window.matchMedia('(prefers-color-scheme: dark)') : null;
 
+/** The first apply is the page's own start (the preload drew the profile already); later ones ease in. */
+let themed = false;
+
+/**
+ * The mode and colour profile (worksuite-desktop#234), density and contrast, onto this page at once. Every window
+ * runs this for each change — its own, `settings:changed`, `appearance:changed` — and for the computer's
+ * appearance changing under System.
+ */
 function applyTheme(prefs: Preferences | null): void {
-  const theme = prefs?.theme ?? 'system';
-  const dark = theme === 'dark' || (theme === 'system' && !!media?.matches);
+  const r = applyAppearance(document, appearanceOf(prefs), !!media?.matches, { transition: themed });
+  themed = true;
   const root = document.documentElement;
-  root.dataset.theme = dark ? 'dark' : 'light';
-  applyDarkProfile(root, prefs?.darkColorProfile, dark);
   root.dataset.density = prefs?.density ?? 'comfortable';
   if (prefs?.highContrast) root.dataset.contrast = 'more';
   else delete root.dataset.contrast;
-  app.set({ resolvedTheme: dark ? 'dark' : 'light' });
+  app.set({ resolvedTheme: r.theme });
 }
 
 /**
@@ -145,6 +151,14 @@ export async function initAppState(): Promise<void> {
     app.set({ prefs: p });
     applyTheme(p);
     setLanguage(p.language);
+  });
+  // The colour profile from the window manager, to every page of the app at once (#234).
+  on<AppearancePrefs>('appearance:changed', (a) => {
+    const p = app.get().prefs;
+    if (!p || !a || typeof a !== 'object') return;
+    const prefs = { ...p, appearance: a, theme: a.mode };
+    app.set({ prefs });
+    applyTheme(prefs);
   });
   on<LockState>('lock:changed', (l) => app.set({ lock: l }));
   on<UpdateStatus>('update:changed', (u) => app.set({ update: u }));

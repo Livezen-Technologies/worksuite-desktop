@@ -8,7 +8,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { localize } from '@shared/localization';
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
-import { app, net as electronNet, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
+import { app, net as electronNet, Notification, clipboard, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, nativeTheme, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -30,6 +30,8 @@ import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
 import type { AppContext, ClockExtra } from './context';
 import { broadcast, guestWindowIds } from './events';
+import { installAppearance } from '../windows/appearance';
+import { AppearanceSync } from '../services/appearance-sync';
 import { registerHandlers } from './handlers';
 import { initLog, logger } from './log';
 import { DesktopError, isDesktopError } from './errors';
@@ -58,7 +60,8 @@ import { SalonPrint } from '../services/salon-print';
 import { SalonSync } from '../services/salon-sync';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
-import { HttpClient, type FetchLike } from '../services/http';
+import { HttpClient, withSafeHeaders, type FetchLike } from '../services/http';
+import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
@@ -155,6 +158,8 @@ function main(): void {
   const p = paths();
   initLog(p.logs);
   const log = logger('main');
+  // #238: an error nothing caught is logged for Diagnostics and told to the person in the app — never the raw dialog.
+  installProcessGuards({ notify: (text) => broadcast('toast', { kind: 'error', text }), report: (summary) => crashReporter.addExtraParameter('last-js-error', summary.slice(0, 120)) });
   const boot = evaluateBoot(p, process.argv);
   if (!boot.hardwareAcceleration) app.disableHardwareAcceleration();
   markRunning(p.runningMarker);
@@ -236,7 +241,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void net.setProxy(proxyConfig);
     void session.defaultSession.setProxy(proxyConfig);
   }
-  const fetchImpl: FetchLike = (url, init) => net.fetch(url, init as RequestInit);
+  // Every main-process request's headers go through the header-safety helper (#238): nothing above 255 reaches undici.
+  const fetchImpl: FetchLike = withSafeHeaders((url, init) => net.fetch(url, init as RequestInit));
 
   const local = new LocalWorkspace(join(p.profile, 'guest-workspace.sqlite'));
   // Guest mode runs in the main window (#149): which window is in it and past its PIN, and where a move may go.
@@ -336,6 +342,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const lockPin = new LockPin(db, getVault);
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
+  // Colour profiles (worksuite-desktop#234): on every page before its first paint, to every page on a change, and
+  // between the person's devices.
+  installAppearance({ settings, windows, ipc: ipcMain, nativeTheme });
+  const appearanceSync = new AppearanceSync({ http, settings, online: () => sessionCtl.isReady() });
   // A call rings only for whoever may open Chat (calls are part of it).
   const calls = new CallService(
     windows,
@@ -508,6 +518,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     prefs: () => settings.effective().meetRecording,
     userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
     // The server tells the owner about cloud recordings; one made here is told from here (worksuite-desktop#89).
+    // A recording without macOS Screen Recording permission is empty (worksuite-desktop#240). Never asked yet: listing
+    // the screens once has macOS ask, and puts WorkSuite in System Settings' list to turn on.
+    screenAccess: async () => {
+      if (process.platform !== 'darwin' || (!app.isPackaged && process.env.WS_E2E_FAKE_MEDIA)) return 'not_required';
+      let status = systemPreferences.getMediaAccessStatus('screen');
+      if (status === 'not-determined') {
+        await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } }).catch(() => undefined);
+        status = systemPreferences.getMediaAccessStatus('screen');
+      }
+      return status === 'granted' ? 'granted' : 'missing';
+    },
     notify: (r, how) =>
       notifications.notify({
         id: `meetrec:${r.id}:${how}`,
@@ -1725,6 +1746,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/whatsapp/chats', 'chat'],
     ['/api/chat/rooms', 'chat'],
     ['/api/chat/messages', 'chat'],
+    // Website chats: the list and each conversation opened, so a thread opens at once from its last copy (#239).
+    ['/api/chat/widget-admin/conversations', 'chat'],
     ['/api/calendar/events', 'calendar'],
     ['/api/tasks', 'tasks'],
     ['/api/task-lists', 'tasks'],
@@ -1964,6 +1987,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     bootstrapChanged: (b) => {
       if (b) settings.setPolicy(b.policy);
+      if (b) void appearanceSync.pull();
       // Policy or trust may have turned sync on or off.
       sync.kick('policy');
       applyAccess(b);
@@ -2092,7 +2116,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Text read from images on this computer (worksuite-desktop#59): Tesseract, its language data fetched once when first needed.
   const ocr = new OcrService({
     dir: join(p.userData, 'LocalAI', 'ocr'),
-    fetch: (url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit),
+    fetch: withSafeHeaders((url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit)),
     progress: (sender, ev) => {
       const wc = webContents.fromId(sender);
       if (wc && !wc.isDestroyed()) wc.send('ai:ocrProgress', ev);

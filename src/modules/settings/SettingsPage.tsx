@@ -1,5 +1,5 @@
 import { LivestreamDestinations } from '../meet/Livestreaming';
-import { DarkProfilePicker } from './Appearance';
+import { ColorProfiles } from './Appearance';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
@@ -35,6 +35,7 @@ import { AccountsSettings } from '../contacts/sync/AccountsSettings';
 import { LocalDataSection, LocalProfileSection } from '../guest/LocalSettings';
 import { useGuest } from '../../core/session';
 import { LinksSettings } from './LinksSettings';
+import { CustomTimeoutRow, MAX_LOCK_MINUTES } from './CustomTimeout';
 import { LauncherSettings, ShortcutRecorder } from './LauncherSettings';
 import { updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
 import { setOrgSelectionShared, useOrgPrefs } from '../../core/org-prefs';
@@ -261,7 +262,7 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
         <Select label="Theme" value={prefs.theme} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} onValueChange={(v) => void updatePrefs({ theme: v })} />
       </Row>
       <Toggle k="highContrast" prefs={prefs} label="High contrast" />
-      <DarkProfilePicker prefs={prefs} />
+      <ColorProfiles prefs={prefs} />
       <Row label="Density">
         <Select label="Density" value={prefs.density} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} onValueChange={(v) => void updatePrefs({ density: v })} />
       </Row>
@@ -761,7 +762,6 @@ export function SecuritySection({ prefs }: { prefs: Preferences }) {
   const max = useStore(app, (s) => s.bootstrap?.policy.app_lock_max_minutes ?? 0);
   const [verify, setVerify] = useState<'disable' | null>(null);
   const [custom, setCustom] = useState(![0, 1, 5, 15, 30].includes(prefs.appLockMinutes));
-  const [minutes, setMinutes] = useState(String(prefs.appLockMinutes || 15));
   const options = [0, 1, 5, 15, 30].filter((m) => !max || m <= max).map((m) => ({ value: String(m), label: m === 0 ? 'Immediately' : `${m} minute${m === 1 ? '' : 's'}` }));
   options.push({ value: 'custom', label: 'Custom' });
   return (
@@ -801,21 +801,7 @@ export function SecuritySection({ prefs }: { prefs: Preferences }) {
             }}
           />
         </Row>
-        {custom ? (
-          <Row label="Custom timeout" hint={`Whole minutes from 1 to ${max || 1440}.`}>
-            <form
-              className="flex gap-2"
-              onSubmit={(e) => {
-                e.preventDefault();
-                const n = Number(minutes);
-                if (Number.isInteger(n) && n >= 1 && n <= (max || 1440)) void updatePrefs({ appLockMinutes: n });
-              }}
-            >
-              <TextField label="Minutes" type="number" min={1} max={max || 1440} value={minutes} onChange={(e) => setMinutes(e.target.value)} />
-              <Button type="submit">Save</Button>
-            </form>
-          </Row>
-        ) : null}
+        {custom ? <CustomTimeoutRow minutes={prefs.appLockMinutes} max={max || MAX_LOCK_MINUTES} /> : null}
         <Toggle k="lockOnSystemLock" prefs={prefs} label="Lock after operating-system lock" disabled={!enabled} />
         <Toggle k="lockOnSleep" prefs={prefs} label="Lock after computer sleep" disabled={!enabled} />
       </fieldset>

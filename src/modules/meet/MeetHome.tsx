@@ -4,24 +4,23 @@ import qrcode from 'qrcode-generator';
 import { useCanOpen } from '../../core/access';
 import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { app } from '../../core/app-state';
-import { call, errorMessage } from '../../core/bridge';
+import { call, errorMessage, isMac } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { bytes, dateLabel, listStamp, timeLabel } from '../../core/time';
+import { listStamp, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
-import { mediaUrl } from '../files/api';
-import { localRecordingStatus, serverRecordingStatus } from '@shared/recording-status';
+import { downloadStatus, localRecordingStatus, serverRecordingStatus } from '@shared/recording-status';
 import type { Room } from '../chat/types';
 import { useNow } from '../calls/parts';
-import { PopMenu, below, type MenuItem } from '../files/Menu';
+import { PopMenu, below, type MenuAt, type MenuItem } from '../files/Menu';
 import { ScheduleDialog } from '../meetings/ScheduleDialog';
 import { createMeeting, formatCode, invitation, openMeeting, resolveCode, type Created, type HistoryRow, type Recording, type UpcomingRow } from './api';
 import { DeviceSettings, Preview, useMeetDevices } from './devices';
-import { transferAct, useLocalRecordings, useTransfers } from './recordings';
-import { RecordingStatusView } from './RecordingStatus';
-import { RecordingProgress } from './RecordingProgress';
+import { transferAct, useLocalRecordings, useRecordingDownloads, useTransfers } from './recordings';
+import { DownloadStatusView } from './RecordingStatus';
+import { InfoTip, RecordingCard, recordingItems, type MainAction, type RecordingItem } from './RecordingCard';
 import { byDay, checkMeetingInput, dayHeading, historyJoinable, lengthLabel, meetingMinutes, scheduledMinutes, upcomingJoinable } from './home';
 import { useMeetT, type MKey } from './i18n';
 
@@ -193,11 +192,14 @@ export function MeetHome() {
   );
 }
 
-function Card({ title, action, children }: { title: string; action?: { label: string; run: () => void }; children: ReactNode }) {
+function Card({ title, action, info, note, children }: { title: string; action?: { label: string; run: () => void }; info?: ReactNode; note?: string; children: ReactNode }) {
   return (
     <section aria-label={title} className="flex min-w-0 flex-col gap-1 rounded-[14px] border border-line bg-surface px-4 py-3.5 sm:px-5">
       <div className="flex items-center gap-2 pb-1">
-        <h2 className="flex-1 text-[15.5px] font-bold text-ink">{title}</h2>
+        <h2 className="flex min-w-0 flex-1 flex-col">
+          <span className="flex items-center gap-1 text-[15.5px] font-bold text-ink">{title}{info}</span>
+          {note ? <span className="flex items-center gap-1 text-[11.5px] font-normal text-ink-3"><Icon name="lock" size={11} />{note}</span> : null}
+        </h2>
         {action ? (
           <button type="button" onClick={action.run} className="flex items-center gap-0.5 rounded-[6px] px-1 text-[12.5px] font-semibold text-primary hover:underline">
             {action.label} <Icon name="chevron-right" size={14} />
@@ -347,14 +349,23 @@ function Recordings() {
   // Recordings made on this computer, step by step (worksuite-desktop#68), with their uploads and downloads (#89).
   const local = useLocalRecordings();
   const transfers = useTransfers();
+  const downloads = useRecordingDownloads();
   const [all, setAll] = useState(false);
-  const [menu, setMenu] = useState<{ at: { x: number; y: number }; r: Recording } | null>(null);
+  const [menu, setMenu] = useState<{ at: MenuAt; item: RecordingItem } | null>(null);
   const [renaming, setRenaming] = useState<Recording | null>(null);
-  const [deleting, setDeleting] = useState<Recording | null>(null);
+  const [deleting, setDeleting] = useState<RecordingItem | null>(null);
   const [title, setTitle] = useState('');
   const refresh = () => void qc.invalidateQueries({ queryKey: ['meet', 'recordings'] });
   const rename = useMutation({ mutationFn: (r: Recording) => apiPut(`/api/meet/recordings/${r.id}`, { title }), onSuccess: () => (setRenaming(null), refresh()), onError: (e) => toast('error', errorMessage(e)) });
-  const remove = useMutation({ mutationFn: (r: Recording) => apiDelete(`/api/meet/recordings/${r.id}`), onSuccess: () => (setDeleting(null), refresh(), toast('success', 'Recording removed.')), onError: (e) => toast('error', errorMessage(e)) });
+  // Deleting removes it from the list, and a copy kept on this computer that never reached Drive with it (#240).
+  const remove = useMutation({
+    mutationFn: async (item: RecordingItem) => {
+      if (item.local && !['starting', 'recording', 'processing', 'uploading'].includes(item.local.state)) await call('meetrec:discard', { id: item.local.id });
+      if (item.server) await apiDelete(`/api/meet/recordings/${item.server.id}`);
+    },
+    onSuccess: () => (setDeleting(null), refresh(), toast('success', 'Recording removed.')),
+    onError: (e) => toast('error', errorMessage(e)),
+  });
   // A cloud recording that did not reach Drive is filed again while the server still has its whole file (#89).
   const retryCloud = (r: Recording) => void apiPost(`/api/meet/recordings/${r.id}/retry`).then(refresh, (e) => toast('error', errorMessage(e)));
   const fileName = (r: Recording) => `${(r.title || 'Meeting recording').replace(/[\\/:*?"<>|]/g, '-').slice(0, 200)}.mp4`;
@@ -362,110 +373,110 @@ function Recordings() {
     void (r.drive_file_id ? call('transfers:download', { fileId: String(r.drive_file_id), forRecording: r.id, name: fileName(r), open }) : call('transfers:download', { recording: r.id, name: fileName(r), open }))
       .then(() => qc.invalidateQueries({ queryKey: ['meet', 'recording-downloads'] }))
       .catch((e) => toast('error', errorMessage(e)));
-  // Play: a recording in Drive opens in Drive's player; one from before plays from a copy downloaded here.
-  const play = (r: Recording) => (r.drive_file_id ? navigate(`/files?file=${r.drive_file_id}&play=1`) : download(r, true));
   const localAct = (fn: () => Promise<unknown>) => () => void fn().catch((e) => toast('error', errorMessage(e)));
   const transferOf = (id: string | null | undefined) => (id ? (transfers.find((x) => x.id === id) ?? null) : null);
   const rows = q.data?.recordings ?? [];
-  const working = local.filter((r) => r.state !== 'ready');
-  const shown = all ? rows : rows.slice(0, 3);
+  // Each recording once (#240): this computer's entry and the server's row are the same recording, on one card.
+  const items = recordingItems(rows, local);
+  const shown = all ? items : items.slice(0, 3);
+  const statusOf = (item: RecordingItem) => {
+    const l = item.local;
+    if (l && (l.state !== 'ready' || !item.server)) return localRecordingStatus(l, transferOf(l.transferId), now);
+    const base = serverRecordingStatus(item.server ?? {});
+    return l?.fileName ? { ...base, savedLocally: true, actions: [...base.actions, 'reveal' as const] } : base;
+  };
+  const driveId = (item: RecordingItem) => item.server?.drive_file_id ?? item.local?.driveFileId ?? null;
+  // Play: a recording in Drive opens in Drive's player; one only here plays here; one from before plays from a download.
+  const play = (item: RecordingItem) => {
+    const id = driveId(item);
+    if (id) navigate(`/files?file=${id}&play=1`);
+    else if (item.local?.fileName) localAct(() => call('meetrec:open', { id: item.local!.id }))();
+    else if (item.server) download(item.server, true);
+  };
+  const runMain = (item: RecordingItem, a: MainAction) => {
+    const l = item.local;
+    if (a === 'fixPermission') return localAct(() => call('media:privacySettings', { pane: 'screen' }))();
+    if (a === 'delete') return setDeleting(item);
+    if (a === 'resume' && l?.transferId) return transferAct('transfers:resume', l.transferId)();
+    if ((a === 'retry' || a === 'retryUpload') && l) return localAct(() => call('meetrec:retry', { id: l.id }))();
+    if (a === 'retryUpload' && item.server) return retryCloud(item.server);
+  };
+  const nameOf = (item: RecordingItem) => item.server?.title || item.local?.title || 'Meeting recording';
+  const menuItems = (item: RecordingItem): MenuItem[] => {
+    const r = item.server;
+    const l = item.local;
+    const status = statusOf(item);
+    const id = driveId(item);
+    const tr = l?.transferId ?? null;
+    const busy = !!l && ['starting', 'recording', 'processing', 'uploading'].includes(l.state);
+    return [
+      ...(tr && status.actions.includes('pause') ? [{ label: 'Pause upload', icon: 'pause', run: transferAct('transfers:pause', tr) }] : []),
+      ...(tr && status.actions.includes('cancel') ? [{ label: 'Cancel upload', icon: 'x', run: transferAct('transfers:cancel', tr) }] : []),
+      ...(l?.fileName ? [{ label: isMac ? 'Show in Finder' : 'Show in folder', icon: 'folder-open', run: localAct(() => call('meetrec:reveal', { id: l.id })) }] : []),
+      ...(r ? [{ label: t('home.download'), icon: 'download', disabled: !serverRecordingStatus(r).playable, run: () => download(r) }] : []),
+      ...(id ? [{ label: 'Open in Drive', icon: 'folder', run: () => navigate(`/files?file=${id}`) }] : []),
+      // Its transcripts (worksuite-desktop#81) are in the meeting's details: made from here, read and emailed there.
+      ...(r?.meeting_uuid && r.ready
+        ? [
+            {
+              label: 'Transcripts…',
+              icon: 'file-text',
+              run: () =>
+                void apiPost<{ id: number }>('/api/meetings/for-meet', { uuid: r.meeting_uuid })
+                  .then((m) => navigate(`/meetings?meeting=${m.id}&tab=Transcripts`))
+                  .catch((e) => toast('error', errorMessage(e))),
+            },
+          ]
+        : []),
+      ...(r ? [{ label: t('home.rename'), icon: 'compose', run: () => (setTitle(r.title), setRenaming(r)) }] : []),
+      ...(id ? [{ label: 'Share…', icon: 'users', run: () => navigate(`/files?file=${id}&share=1`) }] : []),
+      ...(busy && !r ? [] : [{ sep: true } as const, { label: t('home.delete'), icon: 'trash', danger: true, disabled: busy, run: () => setDeleting(item) }]),
+    ];
+  };
   return (
-    <Card title={t('home.recordings')} action={rows.length > 3 ? { label: all ? t('home.showFewer') : t('home.seeAll'), run: () => setAll(!all) } : undefined}>
-      {working.length ? (
-        <div className="flex flex-col gap-2 pb-2">
-          {working.map((r) => {
-            const tr = r.transferId ?? null;
-            const status = localRecordingStatus(r, transferOf(tr), now);
+    <Card
+      title={t('home.recordings')}
+      info={
+        <InfoTip label="About recordings">
+          Finishing and uploading go on in the background while you work. Quitting WorkSuite pauses them until you open it again. Cancelling an upload never deletes the recording from this computer.
+        </InfoTip>
+      }
+      note={t('home.onlyYou')}
+      action={items.length > 3 ? { label: all ? t('home.showFewer') : t('home.seeAll'), run: () => setAll(!all) } : undefined}
+    >
+      {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
+      {q.isSuccess && !items.length ? <EmptyState icon="video" title={t('home.noRecordings')} hint={t('home.noRecordingsHint')} /> : null}
+      {items.length ? (
+        <div className="grid gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3">
+          {shown.map((item) => {
+            const r = item.server;
+            const name = nameOf(item);
+            // A download of it to this computer, told apart from whether it is ready to play (#89).
+            const dlId = r ? (downloads[String(r.id)] ?? transfers.find((x) => x.direction === 'download' && x.state !== 'cancelled' && !!r.drive_file_id && x.fileId === String(r.drive_file_id))?.id) : undefined;
+            const dl = dlId ? downloadStatus(transfers.find((x) => x.id === dlId), now) : null;
             return (
-              <div key={r.id} className="flex flex-col gap-1.5 rounded-[12px] border border-line p-2.5">
-                <div className="flex items-center gap-2">
-                  <Icon name={status.phase === 'failed' ? 'alert' : 'laptop'} size={16} className={status.phase === 'failed' ? 'text-danger' : 'text-ink-3'} />
-                  <b className="min-w-0 flex-1 truncate text-[13.5px] text-ink">{r.title}</b>
-                  <span className="text-[12px] text-ink-3">On this computer{r.bytes ? ` · ${bytes(r.bytes)}` : ''}</span>
-                </div>
-                <RecordingStatusView
-                  status={status}
-                  on={{
-                    retry: localAct(() => call('meetrec:retry', { id: r.id })),
-                    reveal: localAct(() => call('meetrec:reveal', { id: r.id })),
-                    play: localAct(() => call('meetrec:open', { id: r.id })),
-                    ...(tr ? { pause: transferAct('transfers:pause', tr), resume: transferAct('transfers:resume', tr), cancel: transferAct('transfers:cancel', tr) } : {}),
-                  }}
-                />
-              </div>
+              <RecordingCard
+                key={item.key}
+                item={item}
+                status={statusOf(item)}
+                onPlay={() => play(item)}
+                onMain={(a) => runMain(item, a)}
+                onMore={(button) => setMenu({ at: below(button, 'right', 200), item })}
+                moreLabel={t('home.moreFor', { title: name })}
+                download={
+                  dl && dlId ? (
+                    <DownloadStatusView
+                      status={dl}
+                      on={{ pause: transferAct('transfers:pause', dlId), resume: transferAct('transfers:resume', dlId), cancel: transferAct('transfers:cancel', dlId), retry: transferAct('transfers:retry', dlId), open: transferAct('transfers:open', dlId), reveal: transferAct('transfers:reveal', dlId) }}
+                    />
+                  ) : null
+                }
+              />
             );
           })}
-          <span className="text-[11.5px] text-ink-3">Finishing and uploading go on in the background while you work. Quitting WorkSuite pauses them until you open it again. Cancelling an upload never deletes the recording from this computer.</span>
         </div>
       ) : null}
-      {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
-      {q.isSuccess && !rows.length && !working.length ? <EmptyState icon="video" title={t('home.noRecordings')} hint={t('home.noRecordingsHint')} /> : null}
-      {rows.length ? (
-        <>
-          <div className="grid gap-3 pt-1 sm:grid-cols-2 xl:grid-cols-3">
-            {shown.map((r) => {
-              const name = r.title || 'Meeting recording';
-              // The copy kept on this computer, when this computer recorded it.
-              const mine = r.drive_file_id ? local.find((x) => x.driveFileId === r.drive_file_id && x.fileName) : undefined;
-              const base = serverRecordingStatus(r);
-              const status = mine ? { ...base, savedLocally: true, actions: [...base.actions, 'reveal' as const] } : base;
-              return (
-                <div key={r.id} className="flex min-w-0 items-start gap-3 rounded-[12px] border border-line p-2.5">
-                  <button
-                    type="button"
-                    disabled={!status.playable}
-                    aria-label={`Play ${name}`}
-                    title={status.playable ? 'Play' : status.label}
-                    onClick={() => play(r)}
-                    className="relative flex h-[60px] w-[96px] shrink-0 items-center justify-center overflow-hidden rounded-[9px] bg-[#D8E4F6] text-[#24365F] disabled:cursor-default dark:bg-selection dark:text-ink"
-                  >
-                    {r.thumbnail_url && status.playable ? <img src={mediaUrl(r.thumbnail_url) ?? undefined} alt="" className="absolute inset-0 h-full w-full object-cover" onError={(e) => { e.currentTarget.style.display = 'none'; }} /> : null}
-                    <Icon name={status.playable ? 'play' : status.phase === 'failed' ? 'alert' : 'clock'} size={20} className="relative" />
-                  </button>
-                  <span className="flex min-w-0 flex-1 flex-col gap-1">
-                    <b className="truncate text-[13.5px] text-ink">{name}</b>
-                    <span className="truncate text-[12px] text-ink-3">{[dateLabel(r.created_at).replace(/, \d{4}$/, ''), r.size ? bytes(r.size) : null, r.duration ? `${Math.floor(r.duration / 60)}:${String(r.duration % 60).padStart(2, '0')}` : null, r.method === 'local' ? 'Recorded on a computer' : null].filter(Boolean).join(' · ')}</span>
-                    <RecordingProgress recording={r} />
-                  </span>
-                  <button type="button" aria-label={t('home.moreFor', { title: name })} title={t('home.moreFor', { title: name })} aria-haspopup="menu" onClick={(e) => setMenu({ at: below(e.currentTarget, 'right', 200), r })} className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-ink">
-                    <Icon name="more-vertical" size={16} />
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-          <span className="pt-1.5 text-[11.5px] text-ink-3">{t('home.onlyYou')}</span>
-        </>
-      ) : null}
-      {menu ? (
-        <PopMenu
-          at={menu.at}
-          width={200}
-          label={t('home.moreFor', { title: menu.r.title || 'Meeting recording' })}
-          onClose={() => setMenu(null)}
-          items={[
-            { label: t('home.download'), icon: 'download', disabled: !serverRecordingStatus(menu.r).playable, run: () => download(menu.r) },
-            ...(menu.r.status === 'failed' && menu.r.method !== 'local' ? [{ label: 'Try again', icon: 'refresh', run: () => retryCloud(menu.r) }] : []),
-            ...(menu.r.drive_file_id ? [{ label: 'Open in Drive', icon: 'folder', run: () => navigate(`/files?file=${menu.r.drive_file_id}`) }] : []),
-            // Its transcripts (worksuite-desktop#81) are in the meeting's details: made from here, read and emailed there.
-            ...(menu.r.meeting_uuid && menu.r.ready
-              ? [
-                  {
-                    label: 'Transcripts…',
-                    icon: 'file-text',
-                    run: () =>
-                      void apiPost<{ id: number }>('/api/meetings/for-meet', { uuid: menu.r.meeting_uuid })
-                        .then((r) => navigate(`/meetings?meeting=${r.id}&tab=Transcripts`))
-                        .catch((e) => toast('error', errorMessage(e))),
-                  },
-                ]
-              : []),
-            { label: t('home.rename'), icon: 'compose', run: () => (setTitle(menu.r.title), setRenaming(menu.r)) },
-            { sep: true },
-            { label: t('home.delete'), icon: 'trash', danger: true, run: () => setDeleting(menu.r) },
-          ]}
-        />
-      ) : null}
+      {menu ? <PopMenu at={menu.at} width={200} label={t('home.moreFor', { title: nameOf(menu.item) })} onClose={() => setMenu(null)} items={menuItems(menu.item)} /> : null}
       {renaming ? (
         <Modal title="Rename recording" onClose={() => setRenaming(null)} width={420} footer={<><Button onClick={() => setRenaming(null)}>Cancel</Button><Button variant="primary" loading={rename.isPending} disabled={!title.trim()} onClick={() => rename.mutate(renaming)}>Save</Button></>}>
           <input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} aria-label="Recording name" maxLength={190} className="h-9 w-full rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink outline-none focus:border-primary" />
@@ -474,7 +485,7 @@ function Recordings() {
       {deleting ? (
         <Modal title="Remove this recording?" onClose={() => setDeleting(null)} width={420} footer={<><Button onClick={() => setDeleting(null)}>Cancel</Button><Button variant="danger" loading={remove.isPending} onClick={() => remove.mutate(deleting)}>Remove</Button></>}>
           <p className="text-[13px] text-ink-2">
-            {deleting.drive_file_id ? `“${deleting.title}” is removed from this list. The copy in your Drive stays — delete it there if you no longer need it.` : `“${deleting.title}” is deleted for good. It cannot be recovered.`}
+            {driveId(deleting) ? `“${nameOf(deleting)}” is removed from this list. The copy in your Drive stays — delete it there if you no longer need it.` : `“${nameOf(deleting)}” is deleted for good. It cannot be recovered.`}
           </p>
         </Modal>
       ) : null}

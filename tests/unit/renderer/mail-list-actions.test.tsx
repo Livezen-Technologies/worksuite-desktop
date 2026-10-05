@@ -206,7 +206,10 @@ describe('hover buttons, Undo and Retry', () => {
     timers();
     fireEvent.click(within(actions).getByRole('button', { name: 'Delete' }));
     expect(within(list).queryByText('Budget')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Undo' }));
+    // One "Deleted · Undo" toast (worksuite-desktop#235).
+    const deleted = vi.mocked(toast).mock.calls.find((c) => c[1] === 'Deleted')!;
+    expect(deleted[2]).toEqual(expect.objectContaining({ label: 'Undo' }));
+    act(() => deleted[2]!.run());
     expect(within(list).getByText('Budget')).toBeTruthy();
     later(10_000);
     expect(submitted()).toEqual([]);
@@ -313,7 +316,8 @@ describe('several selected', () => {
     fireEvent.keyDown(within(list).getByRole('checkbox', { name: 'Select “Transaction alert 2”' }), { key: 'Backspace', code: 'Backspace' });
     expect(within(list).queryByText('Transaction alert 2')).toBeNull();
     later();
-    await waitFor(() => expect(submitted()).toEqual([expect.objectContaining({ entity: 'message.trash', body: { action: 'trash', folder: 'inbox', mailbox: '2' } })]));
+    // One request for the folder, with the message's identity (worksuite-desktop#235).
+    await waitFor(() => expect(submitted()).toEqual([expect.objectContaining({ entity: 'message.trash', path: '/api/mail/messages/remove', body: { folder: 'inbox', mailbox: '2', items: [{ uid: 702 }] } })]));
   });
 });
 
@@ -329,7 +333,7 @@ describe('folder-aware actions', () => {
     fireEvent.click(within(menu).getByRole('menuitem', { name: /^Delete permanently/ }));
     const ask = await screen.findByRole('dialog', { name: 'Delete this message permanently?' });
     fireEvent.click(within(ask).getByRole('button', { name: 'Delete permanently' }));
-    await waitFor(() => expect(submitted()).toEqual([expect.objectContaining({ entity: 'message.trash', body: { action: 'trash', folder: 'trash', mailbox: '1' } })]));
+    await waitFor(() => expect(submitted()).toEqual([expect.objectContaining({ entity: 'message.trash', path: '/api/mail/messages/remove', body: { folder: 'trash', mailbox: '1', permanent: true, items: [{ uid: 801 }] } })]));
   });
 
   it('says Not junk in Junk Email, which moves it back to the Inbox', async () => {

@@ -6,8 +6,9 @@ import { useStore } from '../../../core/store';
 import { conversationStamp, listStamp, parseTs, timeLabel } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
+import { UserAvatar } from '../../../components/UserAvatar';
 import { useNow } from '../../calls/parts';
-import { lastSaid, waitTone, type WebsiteRow } from './api';
+import { lastSaid, waitingSince, waitTone, type WebsiteRow } from './api';
 import { clock, waited } from './Ringing';
 
 /**
@@ -162,6 +163,61 @@ export function CallLine({ call }: { call: NonNullable<WebsiteRow['call']> }) {
     <span className="flex min-w-0 flex-1 items-center gap-1 truncate text-[12px] font-semibold text-success">
       <Icon name={call.status === 'ringing' ? 'phone-incoming' : 'phone'} size={12} className={cx('shrink-0', call.status === 'ringing' && 'motion-safe:animate-pulse')} />
       <span className="truncate tabular-nums">{words}{time}</span>
+    </span>
+  );
+}
+
+/** "4m", "1h 5m", "2d": a wait as short as a pill can carry it (worksuite-desktop#239). */
+export function shortWait(seconds: number): string {
+  const m = Math.max(1, Math.floor(seconds / 60));
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return m % 60 ? `${h}h ${m % 60}m` : `${h}h`;
+  return `${Math.floor(h / 24)}d`;
+}
+
+/**
+ * "Waiting 4m" on a list row (worksuite-desktop#239): amber while the visitor waits, red once past the response target —
+ * the chat at risk, or past the site's red mark (#223).
+ */
+export function WaitPill({ r, since }: { r: Pick<WebsiteRow, 'at_risk' | 'wait_red' | 'reply_waiting_since' | 'reply_stage'>; since: string }) {
+  const now = useNow(15_000);
+  const at = parseTs(since).getTime();
+  const seconds = Number.isNaN(at) ? 0 : Math.max(0, (now - at) / 1000);
+  const red = r.at_risk || (!!r.wait_red && seconds >= r.wait_red);
+  const why = r.at_risk ? text('At risk') : r.reply_waiting_since ? (r.reply_stage === 'team' ? text('Visitor replied · team alerted') : text('Visitor replied')) : undefined;
+  return (
+    <span data-tone={red ? 'red' : 'amber'} title={why} className={cx('shrink-0 rounded-[5px] px-1.5 py-px text-[10.5px] font-bold tabular-nums', red ? TAG.danger : TAG.warning)}>
+      {text('Waiting {time}', { time: shortWait(seconds) })}
+    </span>
+  );
+}
+
+/** A list row's one status pill (worksuite-desktop#239): waiting, else unread, else none — or Closed on a closed chat. */
+export function StatusPill({ r, unread }: { r: WebsiteRow; unread: number }) {
+  if (r.status === 'closed') return <Tag tone="muted">{text('Closed')}</Tag>;
+  const since = waitingSince(r);
+  if (r.awaiting_reply && since) return <WaitPill r={r} since={since} />;
+  if (unread > 0) return <Tag tone="indigo">{text('Unread')}</Tag>;
+  return null;
+}
+
+/**
+ * Who has a chat, on the right of its row (worksuite-desktop#239): the owner's photo — mine when it is mine — and anyone
+ * helping, at most two and "+N"; nothing while nobody has it. Observers are not shown.
+ */
+export function AssigneeFaces({ r, me }: { r: Pick<WebsiteRow, 'team' | 'assigned_to' | 'agent'>; me: number | null }) {
+  const team = (r.team ?? []).filter((p) => p.role !== 'observer');
+  const people = team.length ? team : r.assigned_to !== null ? [{ user_id: r.assigned_to, name: r.agent ?? text('Agent'), avatar: null }] : [];
+  if (!people.length) return null;
+  const label = people.length > 1
+    ? text('In this chat: {names}', { names: people.map((p) => p.name).join(', ') })
+    : people[0]!.user_id === me ? text('Assigned to you') : text('Assigned to {name}', { name: people[0]!.name });
+  const more = people.length - 2;
+  return (
+    <span role="img" aria-label={label} title={label} className="flex shrink-0 items-center">
+      {people.slice(0, 2).map((p, i) => <UserAvatar key={p.user_id} userId={p.user_id} name={p.name} src={p.avatar} size={16} className={cx('ring-2 ring-surface', i > 0 && '-ml-1')} />)}
+      {more > 0 ? <span className="ml-0.5 text-[10px] font-semibold text-ink-3">+{more}</span> : null}
     </span>
   );
 }

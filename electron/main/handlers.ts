@@ -15,6 +15,7 @@ import { windowRoute } from '../windows/manager';
 import { attachmentRisk } from '@shared/attachments';
 import { DesktopError, isDesktopError } from './errors';
 import { saveLauncherDefaults } from '../services/launcher-defaults';
+import { saveAppearanceDefaults } from '../services/appearance-defaults';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
 import { applyAutostart } from './autostart';
@@ -498,9 +499,20 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('meetrec:preflight', () => ctx.meetRecorder.preflight());
   router.handle('meetrec:start', (input) => ctx.meetRecorder.start(input));
   router.handle('meetrec:chunk', (input) => ctx.meetRecorder.chunk(input.id, input.data));
-  router.handle('meetrec:active', (input) => ctx.meetRecorder.active(input.id));
-  router.handle('meetrec:abort', (input) => ctx.meetRecorder.abort(input.id));
-  router.handle('meetrec:stop', (input) => ctx.meetRecorder.stop(input.id, input.durationMs));
+  // While it records, the meeting's window keeps drawing when hidden or minimised: a throttled page draws no
+  // pictures, and the recording would be empty (worksuite-desktop#240).
+  router.handle('meetrec:active', async (input, c) => {
+    await ctx.meetRecorder.active(input.id);
+    if (!c.sender.isDestroyed()) c.sender.setBackgroundThrottling(false);
+  });
+  router.handle('meetrec:abort', async (input, c) => {
+    if (!c.sender.isDestroyed()) c.sender.setBackgroundThrottling(true);
+    await ctx.meetRecorder.abort(input.id);
+  });
+  router.handle('meetrec:stop', async (input, c) => {
+    if (!c.sender.isDestroyed()) c.sender.setBackgroundThrottling(true);
+    await ctx.meetRecorder.stop(input.id, input.durationMs);
+  });
   router.handle('meetrec:list', () => ctx.meetRecorder.list());
   router.handle('meetrec:retry', (input) => ctx.meetRecorder.retry(input.id));
   router.handle('meetrec:discard', (input) => ctx.meetRecorder.discard(input.id));
@@ -1137,6 +1149,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (ctx.session.get().server?.api !== 'desktop-v1') throw new DesktopError('UNSUPPORTED', 'This WorkSuite server does not take launcher defaults.');
     const saved = await saveLauncherDefaults(ctx.http, input.organizationId, input);
     // Everyone's next bootstrap carries them; this window's at once.
+    void ctx.session.refreshBootstrap().catch(() => undefined);
+    return saved;
+  });
+
+  // The organization's colour profile (worksuite-desktop#234), as the launcher's defaults above.
+  router.handle('settings:appearanceDefaults', async (input) => {
+    if (ctx.session.get().server?.api !== 'desktop-v1') throw new DesktopError('UNSUPPORTED', 'This WorkSuite server does not take an organisation colour profile.');
+    const saved = await saveAppearanceDefaults(ctx.http, input.organizationId, input);
     void ctx.session.refreshBootstrap().catch(() => undefined);
     return saved;
   });

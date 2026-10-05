@@ -17,6 +17,8 @@ const ACTION_LABEL: Record<RecordingAction, string> = {
   play: 'Play',
   openInDrive: 'Open in Drive',
   reveal: 'Show the file',
+  fixPermission: 'Fix permission',
+  delete: 'Delete',
 };
 
 const DOWNLOAD_LABEL: Record<DownloadAction, string> = {
@@ -89,7 +91,7 @@ export function RecordingStatusView({ status, on, compact }: { status: Recording
       {actions.length ? (
         <div className="flex flex-wrap gap-1.5">
           {actions.map((a) => (
-            <Button key={a} size="sm" variant={a === 'retry' || a === 'play' ? 'primary' : 'secondary'} onClick={on[a]}>
+            <Button key={a} size="sm" variant={a === 'retry' || a === 'play' || a === 'fixPermission' ? 'primary' : 'secondary'} onClick={on[a]}>
               {ACTION_LABEL[a]}
             </Button>
           ))}

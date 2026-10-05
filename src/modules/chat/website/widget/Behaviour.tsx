@@ -26,6 +26,7 @@ import {
   type Seen,
 } from './behaviourSettings';
 import { Group } from './parts';
+import { IdentitySection } from './IdentitySettings';
 
 /**
  * Widget settings › Behaviour and Embed code (S-03; WS-WCHAT X-UI-16, UX-SET-04, UX-SET-05).
@@ -317,11 +318,13 @@ function InstallGuides() {
 }
 
 /** Embed code (S-03): the design's column, from the Behaviour page when the server has it, else the widgets list's snippet. */
-export function EmbedTab({ b, site, fallbackCode }: { b: BehaviourState; site: string; fallbackCode: string | null }) {
+export function EmbedTab({ b, site, fallbackCode, widgetId }: { b: BehaviourState; site: string; fallbackCode: string | null; widgetId?: number }) {
   if (b.q.isLoading) return <div className="flex flex-1 items-center justify-center"><Spinner /></div>;
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto scroll-thin">
       <EmbedColumn code={b.q.data?.embed_code ?? fallbackCode} seen={b.q.data ? b.q.data.seen : undefined} site={site} wide />
+      {/* Returning visitors (#222): their settings and the developer guide for identify(), beside the snippet. */}
+      {widgetId ? <div className="w-[420px] shrink-0 pb-4"><IdentitySection widgetId={widgetId} /></div> : null}
     </div>
   );
 }

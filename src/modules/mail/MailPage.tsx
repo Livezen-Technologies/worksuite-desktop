@@ -2,7 +2,7 @@ import { useInfiniteQuery, useQueryClient, type QueryKey } from '@tanstack/react
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiGetMeta, apiPost, apiPut, setDefaultMailbox, withMailbox } from '../../core/api';
 import { canOpen } from '../../core/access';
-import { dayWords, todayInZone } from '../../core/time';
+import { dayWords, parseTs, todayInZone } from '../../core/time';
 import { app } from '../../core/app-state';
 import { errorMessage, isMac } from '../../core/bridge';
 import { text } from '../../core/i18n';
@@ -14,6 +14,7 @@ import { searchFold } from '@shared/localization';
 import { Icon } from '../../components/Icon';
 import { SidePanel } from '../../components/SidePanel';
 import { Button, Empty, cx } from '../../components/ui';
+import { refreshWords, useListRefresh } from '../../components/PullToRefresh';
 import { useVips } from './PeopleCard';
 import { TodoPane, nextSlot } from './TodoPane';
 import type { ModuleProps } from '../registry';
@@ -23,7 +24,7 @@ import { messageAction, moveMessage, useTemplates, useLocalStore, useMailPrefs, 
 import { registerCommand, runCommand } from '../../core/commands';
 import { MAIL_COMMANDS, bindings, commandFor, isPlain, keyLabel, keyOf, type MailCommandId } from './keymap';
 import { GoToFolder, ShortcutSheet } from './Shortcuts';
-import { allAccountsPage, allFolderLabel, isAllRole, queuedSends, useAllCounts, useLocalDrafts } from './allAccounts';
+import { allAccountsPage, allFolderLabel, isAllRole, queuedSends, roleSlug, useAllCounts, useLocalDrafts } from './allAccounts';
 import { ArchivePicker } from './ArchivePicker';
 import { Compose } from './Compose';
 import { LocalDraftRows, OutboxView } from './Outbox';
@@ -281,6 +282,39 @@ function MailWorkspace({ active }: ModuleProps) {
     if (fill) void fetchNext({ cancelRefetch: false });
   }, [fill, pagesLoaded, fetchNext]);
   // Focused Inbox: how the loaded mail divides, for the hint when Focused holds almost nothing (#208).
+  // Check for new mail (worksuite-desktop#236): pull down at the top, ⌘R/F5, or "Checked…". The folder on screen —
+  // or, in All Accounts, each account's own folder for the role — is synced first, on the slot kept for what a person
+  // asks for (#228); then the list and the counts are asked again.
+  const checkTargets = (): Array<{ id: number; folder: string }> => {
+    if (effectiveBox && !unified && place.label === null) return [{ id: Number(effectiveBox), folder }];
+    const known = allRole ? (allCounts.data?.roles[allRole]?.mailboxes ?? []) : [];
+    return includedIds(shared.status, boxes).map((id) => ({ id, folder: known.find((m) => m.id === id)?.folder ?? (allRole ? roleSlug(allRole) : folder) }));
+  };
+  const checkMail = async () => {
+    if (networkOffline) throw new Error(text("You're offline: mail is checked when you reconnect"));
+    const targets = checkTargets();
+    const r = await runSync(
+      targets.map((t) => t.id),
+      { folders: Object.fromEntries(targets.map((t) => [t.id, t.folder])), onDone: () => void shared.refetch() },
+    );
+    await qc.invalidateQueries({ queryKey: listKey });
+    void qc.invalidateQueries({ queryKey: ['mail'], predicate: (q) => q.queryKey[1] !== 'messages' });
+    if (r.failed.length) throw new MailCheckError(r.failed.map((id) => boxes.find((b) => b.id === id)?.email ?? String(id)));
+  };
+  // When the accounts on screen last synced, by anyone: "Checked 2 min ago".
+  const shownIds = new Set(checkTargets().map((t) => t.id));
+  const syncedAt = (shared.status?.accounts ?? []).filter((a) => shownIds.has(a.mailbox) && a.last_ok_at).map((a) => parseTs(a.last_ok_at!).getTime()).filter((t) => Number.isFinite(t));
+  const lastSynced = syncedAt.length ? Math.max(...syncedAt) : null;
+  const refresh = useListRefresh({
+    list: 'mail',
+    check: checkMail,
+    items: flat,
+    view: JSON.stringify([listKey, search.trim(), chips, focusOn && focusTab, isTeam && `${team}:${teamWho}`]),
+    ready: list.isSuccess && !list.isPlaceholderData,
+    words: refreshWords('mail'),
+    errorText: (e) => (e instanceof MailCheckError ? (e.who.length === 1 ? text('Couldn’t check {who}', { who: e.who[0]! }) : text('Couldn’t check {n} accounts', { n: e.who.length })) : errorMessage(e)),
+    lastChecked: lastSynced,
+  });
   const focusSplit = focusOn ? decorated.reduce((n, m) => (classifyFocus(m, focusCtx.data).focus === 'focused' ? { ...n, focused: n.focused + 1 } : { ...n, other: n.other + 1 }), { focused: 0, other: 0 }) : null;
 
   // Several selected (Ctrl/Shift-click, Ctrl+A): every action applies to each, in its own account (DMO-INB-15).
@@ -555,6 +589,11 @@ function MailWorkspace({ active }: ModuleProps) {
         if (effectiveBox) syncAccount(Number(effectiveBox));
         else syncAll();
         return true;
+      case 'checkMail':
+        // Only where the list is: the Outbox, a search and an empty Mail have nothing to check this way.
+        if (virtualOutbox || folder === 'outbox' || searching !== null || !boxes.length) return false;
+        refresh.checkNow();
+        return true;
       case 'shortcuts':
         setSheet(true);
         return true;
@@ -722,6 +761,7 @@ function MailWorkspace({ active }: ModuleProps) {
       <ScheduledList active={active} />
     ) : (
       <MessageList
+        refresh={refresh}
         title={title}
         aside={aside}
         groups={groups}
@@ -983,6 +1023,7 @@ function MailWorkspace({ active }: ModuleProps) {
           onBack={closeMessage}
           onReply={openCompose}
           onGone={gone}
+          onDelete={currentRow ? () => void listActs.run(placeOf([targetOf(currentRow)]) === 'trash' ? 'deleteForever' : 'delete', [targetOf(currentRow)]) : undefined}
           onPrev={at > 0 ? () => move(-1) : null}
           onNext={at >= 0 && at < flat.length - 1 ? () => move(1) : null}
           prefs={prefs}
@@ -1375,4 +1416,13 @@ function SendingLabel({ subject, at, label }: { subject: string; at: number; lab
   }, []);
   const n = Math.max(0, Math.ceil((at - now) / 1000));
   return <span>{label ? text('{what} in {n} s', { what: label, n }) : text('Sending “{subject}” in {n} s', { subject, n })}</span>;
+}
+
+/** Some accounts on screen could not be checked: their addresses, for "Couldn't check hasarinda@…". */
+class MailCheckError extends Error {
+  readonly who: string[];
+  constructor(who: string[]) {
+    super(`Could not check ${who.join(', ')}`);
+    this.who = who;
+  }
 }
