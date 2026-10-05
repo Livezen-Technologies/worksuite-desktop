@@ -1,7 +1,8 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { Select } from '../../../components/Select';
-import { Button, cx, ErrorNote, Spinner } from '../../../components/ui';
-import { apiGet } from '../../../core/api';
+import { Icon } from '../../../components/Icon';
+import { Button, cx, Empty, Spinner } from '../../../components/ui';
+import { ApiError, apiGet } from '../../../core/api';
 import { call, errorMessage } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
 import { toast } from '../../../core/toasts';
@@ -14,6 +15,11 @@ import { clock } from './live/liveMap';
  * all the widgets or one, over 7 days, 30 days or all time — six figures with their change against the period before,
  * conversations per day (answered and missed), traffic sources and devices, and the agent table with missed while
  * online — and Export CSV. From `GET widget-admin/insights` (WidgetInsights says what each figure counts).
+ *
+ * worksuite-desktop#247: a server older than Communication 1.41 has no such route and answers 404 ("Not found"), which
+ * is said as "needs a newer server"; a 403 as no access; any other failure with its cause and the request's id. A
+ * period without chats says so above empty charts. Each site, the pages chats start on and the busiest hours come from
+ * a newer server still, and are drawn only when it sends them.
  */
 
 export type InsightsPeriod = '7d' | '30d' | 'all';
@@ -37,6 +43,13 @@ export interface Insights {
   join_median_seconds: number | null;
   team?: { installed: boolean; multi_staff_chats?: number; agents?: Array<{ transfers_in: number; transfers_out: number }> };
   calls?: { installed: boolean; requested?: number; answered?: number };
+  /** Each site's chats, missed, median first reply and rating (#247); absent from an older server. */
+  by_widget?: Array<{ id: number; name: string; conversations: number; missed: number; first_response_seconds: number | null; rating: number | null }>;
+  /** The pages chats start on, most first (#247). */
+  start_pages?: Array<{ page: string; count: number; share: number }>;
+  /** Chats started per weekday (Monday first) and hour, on `timezone`'s clock (#247). */
+  hours?: number[][];
+  timezone?: string;
 }
 
 const PERIODS = [
@@ -89,9 +102,42 @@ export const insightsQuery = (period: InsightsPeriod, widget: number | null) => 
   queryFn: ({ signal }: { signal?: AbortSignal }) => apiGet<Insights>(`${WEBSITE}/insights`, { period, ...(widget ? { widget_id: widget } : {}) }, signal),
 });
 
+/** Why Insights could not be shown (#247): the server is too old, the person may not see it, or something failed. */
+export type InsightsFailure =
+  | { kind: 'old' }
+  | { kind: 'denied' }
+  | { kind: 'error'; cause: string; status: number; message: string; requestId: string | null };
+
+/**
+ * A 404 here is the route missing — the report itself answers a period without chats with zeros — so it means a server
+ * from before Communication 1.41, as Voice calls and Call history read theirs.
+ */
+export function insightsFailure(e: unknown): InsightsFailure {
+  if (e instanceof ApiError && e.status === 404) return { kind: 'old' };
+  if (e instanceof ApiError && e.status === 403) return { kind: 'denied' };
+  const status = e instanceof ApiError ? e.status : 0;
+  const cause =
+    e instanceof ApiError && e.offline ? text('no connection') : status >= 500 ? text('server error') : status === 401 ? text('signed out') : status ? text('error {n}', { n: status }) : text('request failed');
+  return { kind: 'error', cause, status, message: e instanceof Error ? e.message : String(e), requestId: e instanceof ApiError ? e.requestId : null };
+}
+
+/** What "Copy details" puts on the clipboard: enough for whoever looks at the server's log. */
+export function failureDetails(f: Extract<InsightsFailure, { kind: 'error' }>, period: InsightsPeriod, widget: number | null): string {
+  const query = new URLSearchParams({ period, ...(widget ? { widget_id: String(widget) } : {}) }).toString();
+  return [
+    `Couldn't load Insights (${f.cause})`,
+    `Request: GET ${WEBSITE}/insights?${query}`,
+    `Status: ${f.status || 'no answer'}`,
+    `Message: ${f.message}`,
+    `Request ID: ${f.requestId ?? 'none sent by the server'}`,
+    `Time: ${new Date().toISOString()}`,
+  ].join('\n');
+}
+
 export function WebsiteInsights({ period, widget, onChange }: { period: InsightsPeriod; widget: number | null; onChange: (p: { period: InsightsPeriod; widget: number | null }) => void }) {
   const q = useQuery({ ...insightsQuery(period, widget), placeholderData: keepPreviousData });
   const d = q.data;
+  const failure = q.error && !d ? insightsFailure(q.error) : null;
 
   const exportCsv = () =>
     void call('transfers:download', {
@@ -118,18 +164,59 @@ export function WebsiteInsights({ period, widget, onChange }: { period: Insights
           options={[{ value: '', label: text('All widgets') }, ...(d?.widgets ?? []).map((w) => ({ value: String(w.id), label: w.name }))]}
           className="h-8 rounded-[8px] border border-line bg-surface px-3 text-[12.5px] text-ink"
         />
-        <Button variant="secondary" onClick={exportCsv} className="text-[12.5px]">
+        {/* Nothing to export from a server without the report, or for somebody who may not see it (#247). */}
+        <Button variant="secondary" onClick={exportCsv} disabled={failure?.kind === 'old' || failure?.kind === 'denied'} className="text-[12.5px]">
           {text('Export CSV')}
         </Button>
       </div>
-      {q.error && !d ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
+      {failure ? <Failure f={failure} period={period} widget={widget} onRetry={() => void q.refetch()} retrying={q.isFetching} /> : null}
       {!d && !q.error ? <Spinner /> : null}
-      {d ? <Report d={d} /> : null}
+      {d ? <Report d={d} all={!widget} /> : null}
     </main>
   );
 }
 
-function Report({ d }: { d: Insights }) {
+function Failure({ f, period, widget, onRetry, retrying }: { f: InsightsFailure; period: InsightsPeriod; widget: number | null; onRetry: () => void; retrying: boolean }) {
+  if (f.kind === 'old') {
+    return (
+      <Empty
+        icon="chart"
+        title={text('Insights needs a newer WorkSuite server (Communication 1.41 or later).')}
+        hint={text('Ask your administrator to update.')}
+        action={
+          // The web's Website chats › Insights › Reports is there on an older server too: the all-time figures.
+          <Button variant="secondary" icon="external" onClick={() => void call('app:openInBrowser', { path: '/website-chats' }).catch((e) => toast('error', errorMessage(e)))}>
+            {text('Open Reports on the web')}
+          </Button>
+        }
+      />
+    );
+  }
+  if (f.kind === 'denied') return <Empty icon="lock" title={text("You don't have access to Website chat reports")} hint={text('Ask an admin.')} />;
+  const copy = () =>
+    void navigator.clipboard.writeText(failureDetails(f, period, widget)).then(
+      () => toast('success', text('Details copied.')),
+      () => toast('error', text("Couldn't copy the details.")),
+    );
+  return (
+    <div role="alert" className="flex items-start gap-2 rounded-[8px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger">
+      <Icon name="alert" size={15} className="mt-px shrink-0" />
+      <div className="min-w-0 flex-1">
+        <b className="font-semibold">{text("Couldn't load Insights ({cause})", { cause: f.cause })}</b>
+        <div className="break-words opacity-90">{f.message}</div>
+        {f.requestId ? <div className="font-mono text-[11.5px] opacity-90">{text('Request ID: {id}', { id: f.requestId })}</div> : null}
+      </div>
+      <button type="button" className="font-semibold underline disabled:opacity-60" onClick={onRetry} disabled={retrying}>
+        {text('Retry')}
+      </button>
+      <button type="button" className="font-semibold underline" onClick={copy}>
+        {text('Copy details')}
+      </button>
+    </div>
+  );
+}
+
+function Report({ d, all }: { d: Insights; all: boolean }) {
   const conv = conversationsChange(d.conversations.value, d.conversations.previous);
   const first = timeChange(d.first_response.value, d.first_response.previous, 's');
   const res = timeChange(d.resolution.value, d.resolution.previous, 'min');
@@ -149,6 +236,14 @@ function Report({ d }: { d: Insights }) {
   ];
   return (
     <>
+      {/* A period without chats is no error (#247): it says so, and the charts below stay, empty. */}
+      {d.conversations.value === 0 ? (
+        <div role="status" className="flex items-center gap-2 rounded-[10px] border border-line bg-surface px-4 py-3 text-[12.5px] text-ink-2">
+          <Icon name="chart" size={16} className="text-ink-3" />
+          <b className="text-ink">{text('No chats in this period')}</b>
+          <span className="text-ink-3">{text('Try a longer period or another widget.')}</span>
+        </div>
+      ) : null}
       <div className="grid grid-cols-6 gap-2.5" role="list" aria-label={text('Figures')}>
         {tiles.map((t) => (
           <Tile key={t.label} stack {...t} />
@@ -164,6 +259,13 @@ function Report({ d }: { d: Insights }) {
         </section>
       </div>
       <Agents agents={d.agents} />
+      {all && d.by_widget ? <ByWidget rows={d.by_widget} /> : null}
+      {d.hours || d.start_pages ? (
+        <div className="grid gap-3 [grid-template-columns:minmax(0,2fr)_minmax(0,1fr)]">
+          {d.hours ? <Hours hours={d.hours} zone={d.timezone ?? null} /> : <span />}
+          {d.start_pages ? <StartPages pages={d.start_pages} /> : null}
+        </div>
+      ) : null}
       <Also d={d} />
     </>
   );
@@ -276,6 +378,106 @@ function Agents({ agents }: { agents: Insights['agents'] }) {
         <p className="px-4 py-3 text-ink-3">{text('No chats in this period.')}</p>
       )}
     </div>
+  );
+}
+
+/** Each site, busiest first: chats, missed, the median first reply and the rating (#247). Only for All widgets. */
+function ByWidget({ rows }: { rows: NonNullable<Insights['by_widget']> }) {
+  return (
+    <div role="table" aria-label={text('By widget')} className="overflow-hidden rounded-[12px] border border-line bg-surface">
+      <div role="row" className={cx(COLS, 'border-b border-line bg-subtle/60 text-[10.5px] font-bold tracking-[0.9px] text-ink-3 uppercase')}>
+        {['Widget', 'Chats', 'Missed', 'First reply', 'Rating'].map((h) => (
+          <span key={h} role="columnheader">
+            {text(h)}
+          </span>
+        ))}
+      </div>
+      {rows.length ? (
+        rows.map((w, i) => (
+          <div key={w.id} role="row" className={cx(COLS, 'text-[13px] tabular-nums', i < rows.length - 1 && 'border-b border-line/60')}>
+            <b role="cell" className="truncate">{w.name}</b>
+            <span role="cell">{count(w.conversations)}</span>
+            <span role="cell">{count(w.missed)}</span>
+            <span role="cell">{w.first_response_seconds === null ? '—' : clock(w.first_response_seconds)}</span>
+            <span role="cell">{w.rating === null ? '—' : w.rating.toFixed(1)}</span>
+          </div>
+        ))
+      ) : (
+        <p className="px-4 py-3 text-ink-3">{text('No widget had chats in this period.')}</p>
+      )}
+    </div>
+  );
+}
+
+const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+const hh = (h: number) => `${String(h).padStart(2, '0')}:00`;
+
+/** Chats started per weekday and hour as a grid, darker when busier, and the busiest hour in words (#247). */
+function Hours({ hours, zone }: { hours: number[][]; zone: string | null }) {
+  const top = Math.max(0, ...hours.flat());
+  const peakDay = top > 0 ? hours.findIndex((row) => row.includes(top)) : -1;
+  const peak = peakDay >= 0 ? ([peakDay, hours[peakDay]!.indexOf(top)] as const) : null;
+  return (
+    <section aria-label={text('Busiest hours')} className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-line bg-surface px-4 py-3.5">
+      <div className="flex items-baseline gap-2">
+        <h2 className="flex-1 text-[14px] font-bold">{text('Busiest hours')}</h2>
+        <span className="text-[11.5px] text-ink-3">
+          {peak ? text('Busiest: {day} {hour}', { day: text(WEEKDAYS[peak[0]]!), hour: hh(peak[1]) }) : text('No chats in this period.')}
+        </span>
+      </div>
+      <div role="table" aria-label={text('Chats by weekday and hour')} className="flex flex-col gap-[2px]">
+        {hours.map((row, day) => (
+          <div key={day} role="row" className="grid items-center gap-[2px] [grid-template-columns:30px_repeat(24,minmax(0,1fr))]">
+            <span role="rowheader" className="text-[10.5px] text-ink-3">{text(WEEKDAYS[day]!)}</span>
+            {row.map((n, h) => {
+              const said = text('{day} {hour}: {n} chats', { day: text(WEEKDAYS[day]!), hour: hh(h), n });
+              return (
+                <span
+                  key={h}
+                  role="cell"
+                  aria-label={said}
+                  title={said}
+                  className={cx('block h-3.5 rounded-[2px]', n ? 'bg-[#273498] dark:bg-[#7c8fe8]' : 'bg-subtle')}
+                  style={n ? { opacity: 0.2 + (0.8 * n) / top } : undefined}
+                />
+              );
+            })}
+          </div>
+        ))}
+      </div>
+      <div className="grid text-[10.5px] text-ink-3 [grid-template-columns:30px_repeat(4,minmax(0,1fr))]" aria-hidden>
+        <span />
+        {[0, 6, 12, 18].map((h) => (
+          <span key={h}>{hh(h)}</span>
+        ))}
+      </div>
+      {zone ? <p className="text-[11px] text-ink-3">{text('Times in {zone}.', { zone })}</p> : null}
+    </section>
+  );
+}
+
+/** The pages chats start on, most first, each with its share (#247). */
+function StartPages({ pages }: { pages: NonNullable<Insights['start_pages']> }) {
+  const top = Math.max(1, ...pages.map((p) => p.share));
+  return (
+    <section aria-label={text('Top start pages')} className="flex min-w-0 flex-col gap-[9px] rounded-[12px] border border-line bg-surface px-4 py-3.5 text-[12.5px]">
+      <h2 className="text-[14px] font-bold">{text('Top start pages')}</h2>
+      {pages.length ? (
+        <ul className="flex flex-col gap-[9px]" aria-label={text('Top start pages')}>
+          {pages.map((p) => (
+            <li key={p.page} className="flex items-center gap-2" title={p.page}>
+              <span className="min-w-0 flex-1 truncate">{p.page}</span>
+              <span className="h-1.5 w-[64px] shrink-0 rounded-[3px] bg-subtle" aria-hidden>
+                <span className="block h-1.5 rounded-[3px] bg-[#4a63e8]" style={{ width: `${(p.share / top) * 100}%` }} />
+              </span>
+              <b className="w-[34px] text-right tabular-nums">{p.share}%</b>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="text-ink-3">{text('No pages recorded in this period.')}</p>
+      )}
+    </section>
   );
 }
 

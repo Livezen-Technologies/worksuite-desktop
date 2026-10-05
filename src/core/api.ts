@@ -19,6 +19,8 @@ export class ApiError extends Error {
     message: string,
     readonly code: string | null,
     readonly data: unknown = null,
+    /** The server's `X-Request-Id` (or `request_id` in the answer), for "Copy details" (worksuite-desktop#247). */
+    readonly requestId: string | null = null,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -112,7 +114,8 @@ export async function request<T = unknown>(method: string, path: string, opts: {
   const { body: json } = await parse(res);
   if (!res.ok || json?.status === 'error') {
     const message = typeof json?.message === 'string' ? json.message : `The server answered ${res.status}.`;
-    throw new ApiError(res.status, message, typeof json?.code === 'string' ? json.code : null, json?.errors ?? json?.data ?? null);
+    const requestId = res.headers.get('x-request-id') || (typeof json?.request_id === 'string' ? json.request_id : null);
+    throw new ApiError(res.status, message, typeof json?.code === 'string' ? json.code : null, json?.errors ?? json?.data ?? null, requestId);
   }
   return {
     data: (json && 'data' in json ? json.data : json) as T,
