@@ -58,7 +58,8 @@ import { SalonPrint } from '../services/salon-print';
 import { SalonSync } from '../services/salon-sync';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
-import { HttpClient, type FetchLike } from '../services/http';
+import { HttpClient, withSafeHeaders, type FetchLike } from '../services/http';
+import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
@@ -155,6 +156,8 @@ function main(): void {
   const p = paths();
   initLog(p.logs);
   const log = logger('main');
+  // #238: an error nothing caught is logged for Diagnostics and told to the person in the app — never the raw dialog.
+  installProcessGuards({ notify: (text) => broadcast('toast', { kind: 'error', text }), report: (summary) => crashReporter.addExtraParameter('last-js-error', summary.slice(0, 120)) });
   const boot = evaluateBoot(p, process.argv);
   if (!boot.hardwareAcceleration) app.disableHardwareAcceleration();
   markRunning(p.runningMarker);
@@ -236,7 +239,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void net.setProxy(proxyConfig);
     void session.defaultSession.setProxy(proxyConfig);
   }
-  const fetchImpl: FetchLike = (url, init) => net.fetch(url, init as RequestInit);
+  // Every main-process request's headers go through the header-safety helper (#238): nothing above 255 reaches undici.
+  const fetchImpl: FetchLike = withSafeHeaders((url, init) => net.fetch(url, init as RequestInit));
 
   const local = new LocalWorkspace(join(p.profile, 'guest-workspace.sqlite'));
   // Guest mode runs in the main window (#149): which window is in it and past its PIN, and where a move may go.
@@ -2105,7 +2109,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Text read from images on this computer (worksuite-desktop#59): Tesseract, its language data fetched once when first needed.
   const ocr = new OcrService({
     dir: join(p.userData, 'LocalAI', 'ocr'),
-    fetch: (url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit),
+    fetch: withSafeHeaders((url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit)),
     progress: (sender, ev) => {
       const wc = webContents.fromId(sender);
       if (wc && !wc.isDestroyed()) wc.send('ai:ocrProgress', ev);
