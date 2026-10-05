@@ -44,7 +44,8 @@ export function IdentitySection({ widgetId }: { widgetId: number }) {
   const fid = useId();
 
   if (q.error instanceof ApiError && (q.error.status === 404 || q.error.forbidden)) return null;
-  if (!q.data) return null;
+  // No settings in the answer (a server before returning visitors, or another shape): nothing to show.
+  if (!q.data?.settings) return null;
   const p = q.data;
   const form = edit ?? pick(p.settings);
   const can = p.can_manage;
