@@ -401,6 +401,9 @@ export const INVOKE_CHANNELS = [
   'diagnostics:restartSafeMode',
   'diagnostics:services',
   'diagnostics:timings',
+  'connection:details',
+  'connection:speedTest',
+  'connection:reconnect',
   // POS: the till on this computer (pos-channels.ts).
   ...POS_INVOKE_CHANNELS,
   // Hotel PMS door locks: the on-site lock server this desk talks to (pms-locks-channels.ts).

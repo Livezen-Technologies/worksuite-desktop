@@ -4,6 +4,7 @@ import { localProfileInput, type LocalOverview, type LocalProfile, type LocalSta
 import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
 import type { DataFolder, ImportProgress, MailFileHandle, MailFileView } from '../mail-files';
 import type { SmimeVerdict } from '../smime';
+import type { ConnectionDetails, SpeedTestResult } from '../connection';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -166,6 +167,8 @@ export const preferencesPatchSchema = z
     notificationPrivacy: z.enum(['FULL', 'SENDER_ONLY', 'GENERIC']),
     notificationsEnabled: z.boolean(),
     badgeCount: z.boolean(),
+    statusConnectionStrength: z.boolean(),
+    statusResponseTime: z.boolean(),
     moduleNotifications: z.record(z.string().max(64), z.boolean()),
     dndEnabled: z.boolean(),
     dndFrom: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
@@ -1316,6 +1319,11 @@ export const contract = {
     { whileLocked: true, rate: 2 },
   ),
 
+  // Connection strength's popover (worksuite-desktop#254): the server's clock, a light speed test, Reconnect now.
+  'connection:details': ch(none, { session: true, rate: 2 }),
+  'connection:speedTest': ch(none, { session: true, rate: 1 }),
+  'connection:reconnect': ch(none, { session: true, rate: 1 }),
+
   // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
   ...posContract,
   ...pmsLocksContract,
@@ -1770,6 +1778,9 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'diagnostics:restartSafeMode': void;
   'diagnostics:services': Record<string, ServiceHealth>;
   'diagnostics:timings': void;
+  'connection:details': ConnectionDetails;
+  'connection:speedTest': SpeedTestResult;
+  'connection:reconnect': void;
 }
 
 /** Typed error codes returned across IPC (§8.3 plus IPC-specific ones). */

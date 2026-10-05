@@ -573,6 +573,11 @@ const api = {
     services: call('diagnostics:services'),
     timings: call('diagnostics:timings'),
   },
+  connection: {
+    details: call('connection:details'),
+    speedTest: call('connection:speedTest'),
+    reconnect: call('connection:reconnect'),
+  },
   events: { on },
 };
 

@@ -2,6 +2,7 @@ import type { AppearancePrefs, DarkColorProfile, Tint } from './theme-profiles';
 import type { ItemLink, ItemSource } from './item-links';
 import type { LinkPrefs } from './link-prefs';
 import type { MailMediaPrefs } from './mail-media';
+import type { ConnectionStats } from './connection';
 /**
  * Types shared by the main process and the renderer. Everything crossing the
  * IPC boundary is described here and validated by the zod schemas in
@@ -251,6 +252,10 @@ export interface Preferences {
   notificationsEnabled: boolean;
   /** The count of what needs you (chat + notifications) on the app's icon: the Dock, the taskbar. */
   badgeCount: boolean;
+  /** The status bar's connection strength (worksuite-desktop#254); unset: shown. */
+  statusConnectionStrength?: boolean;
+  /** The response time in ms beside it; unset: shown. */
+  statusResponseTime?: boolean;
   /** Per-module notification toggles; a missing key means enabled. */
   moduleNotifications: Record<string, boolean>;
   dndEnabled: boolean;
@@ -835,6 +840,8 @@ export interface StatusSnapshot {
   services: Record<string, ServiceHealth>;
   locked: boolean;
   safeMode: boolean;
+  /** Connection strength's measurements (worksuite-desktop#254): pings, reconnects and the API's median. */
+  connection?: ConnectionStats;
 }
 
 export type TransferDirection = 'upload' | 'download';

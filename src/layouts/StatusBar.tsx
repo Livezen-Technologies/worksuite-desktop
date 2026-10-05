@@ -8,6 +8,7 @@ import { cx } from '../components/ui';
 import type { SyncStatus } from '@shared/types';
 import { useGuest } from '../core/session';
 import { text } from '../core/i18n';
+import { ConnectionStatus } from './ConnectionStrength';
 
 /** Status bar, 26 px (§4.12, FR-RT-01, FR-UPD-02): realtime, files, pending changes, version and channel. */
 export function StatusBar() {
@@ -37,10 +38,8 @@ export function StatusBar() {
     );
   return (
     <footer className="flex h-[26px] shrink-0 items-center gap-5 border-t border-line bg-subtle px-4 text-[12px] text-ink-2">
-      <span className="flex items-center gap-1.5">
-        <span className={cx('h-2 w-2 rounded-full', rtDot)} />
-        {rtText}
-      </span>
+      {/* Connection strength (worksuite-desktop#254): bars, a word and the response time; the old dot when turned off. */}
+      <ConnectionStatus plain={{ text: rtText, dot: rtDot }} />
       {files.syncing ? (
         <button type="button" className="flex items-center gap-1.5 hover:text-ink hover:underline" onClick={() => navigate('/files?view=devices')}>
           {files.dot ? <span className={cx('h-2 w-2 rounded-full', files.dot)} /> : null}

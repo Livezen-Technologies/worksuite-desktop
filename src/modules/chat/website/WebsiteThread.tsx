@@ -37,6 +37,7 @@ import { ClosedNotice } from './Closed';
 import { ThreadFailed, ThreadPlaceholder } from './ThreadPlaceholder';
 import { useRingState, youJoinedLine } from './Ringing';
 import { MergeDialog, ProfileCards } from './IdentityCard';
+import { ConnectionWarning } from '../../../components/ConnectionWarning';
 
 // Kept importable from here, where the drawer first had it.
 export { visitorLocalTime } from './panelCards';
@@ -302,18 +303,22 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         ) : canReply ? (
           // One shared composer for both tabs (C-08): its note mode is the amber Internal note; remounted per tab, so
           // each keeps its own draft and nothing typed for the visitor slips into a note.
-          <Composer
-            key={noting ? 'note' : 'reply'}
-            ref={composer}
-            roomId={`website-${c.id}`}
-            roomName={name}
-            compact={mini}
-            group={false}
-            reply={noting ? null : reply}
-            onClearReply={() => setReply(null)}
-            extras={t?.can.note ? <MessageTypeTabs value={noting ? 'note' : 'reply'} onChange={setTab} /> : undefined}
-            website={{ conversationId: c.id, replies: canned.data?.responses ?? [], maxUploadKb: c.max_upload_kb, note: noting }}
-          />
+          // Above it, while connection strength is Poor or Offline (#254), a small warning.
+          <>
+            <ConnectionWarning />
+            <Composer
+              key={noting ? 'note' : 'reply'}
+              ref={composer}
+              roomId={`website-${c.id}`}
+              roomName={name}
+              compact={mini}
+              group={false}
+              reply={noting ? null : reply}
+              onClearReply={() => setReply(null)}
+              extras={t?.can.note ? <MessageTypeTabs value={noting ? 'note' : 'reply'} onChange={setTab} /> : undefined}
+              website={{ conversationId: c.id, replies: canned.data?.responses ?? [], maxUploadKb: c.max_upload_kb, note: noting }}
+            />
+          </>
         ) : (
           <div className="border-t border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-3">You can read this chat but not reply to it.</div>
         )}

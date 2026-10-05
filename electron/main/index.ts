@@ -81,6 +81,8 @@ import { attachmentStorePathOf } from '@shared/mail-media';
 import { mimeFor } from '@shared/mime';
 import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
+import { ConnectionMonitor, timeFetch } from '../services/connection-quality';
+import { ApiTimings } from '@shared/connection';
 import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
 import { DriveSync } from '../services/sync/engine';
@@ -296,8 +298,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Forward-declared so the HTTP client's callbacks can reach the session.
   // eslint-disable-next-line prefer-const
   let sessionCtl: SessionController;
+  // The API's last 20 requests, for connection strength's median (worksuite-desktop#254).
+  const apiTimings = new ApiTimings();
   const http = new HttpClient({
-    fetch: fetchImpl,
+    fetch: timeFetch(fetchImpl, apiTimings),
     origin: () => auth.getServer()?.origin ?? null,
     tokens: { accessToken: () => auth.accessToken(), refresh: () => auth.refresh() },
     clientHeaders,
@@ -398,6 +402,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const realtime = new RealtimeService(http, () => auth.getServer()?.origin ?? null, allowInsecure);
   let realtimeDownSince: number | null = null;
+  // Connection strength (worksuite-desktop#254): pings over the realtime socket, or /api/health without one.
+  const connection = new ConnectionMonitor({
+    realtime,
+    http,
+    origin: () => auth.getServer()?.origin ?? null,
+    active: () => !!sessionCtl?.isReady() && !!auth.getServer(),
+    onChange: () => emitStatus(),
+    api: apiTimings,
+  });
+  connection.start();
 
   const notifications = new NotificationService(db, getVault, http, () => settings.effective());
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
@@ -1137,6 +1151,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       realtimeDiagnostics: realtime.diagnostics(),
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
+      connection: connection.stats(),
       pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
@@ -1172,6 +1187,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   realtime.onState = (s: RealtimeState) => {
     notifications.realtimeState(s);
+    connection.realtimeState(s);
     realtimeDownSince = s === 'down' || s === 'connecting' ? (realtimeDownSince ?? Date.now()) : null;
     emitStatus();
   };
@@ -2357,6 +2373,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     attendanceBreak,
   };
   registerHandlers(router, ctx);
+  router.handle('connection:details', () => connection.details());
+  router.handle('connection:speedTest', () => connection.speedTest());
+  router.handle('connection:reconnect', () => connection.reconnect());
   pdfStudio.register(router);
   mailFiles.register(router);
   pos.register(router);
