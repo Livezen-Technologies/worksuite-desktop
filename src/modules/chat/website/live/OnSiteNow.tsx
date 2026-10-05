@@ -117,6 +117,7 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
                       ) : null}
                     </span>
                     <span className="block truncate text-[11.5px] text-ink-2">
+                      {v.chat?.not_reaching_staff ? <NotReachingBadge /> : null}
                       {call !== null ? (
                         <>
                           <span className="font-semibold text-[#2b7a4b] dark:text-success">{text('On a call {time}', { time: callClock(call) })}</span>
@@ -145,6 +146,18 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
         </div>
       ))}
     </div>
+  );
+}
+
+/**
+ * A visitor message no staff device has received for a minute (WS-WCHAT DLV-09, AC-D09): said on the row, for whoever
+ * supervises to act on. It goes when a device of whoever holds the chat acknowledges it, or somebody answers.
+ */
+export function NotReachingBadge() {
+  return (
+    <span className="mr-1.5 inline-flex items-center rounded-full bg-[#fdecea] px-1.5 text-[10px] font-bold tracking-[0.4px] text-[#c2392d] uppercase dark:bg-danger-bg dark:text-danger" title={text('A message from this visitor has not reached any staff device')}>
+      {text('Not reaching staff')}
+    </span>
   );
 }
 

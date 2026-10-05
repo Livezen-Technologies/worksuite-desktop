@@ -511,6 +511,23 @@ export interface JoinSendOptions {
 }
 
 /**
+ * The realtime event a chat found by reading the list is announced as (worksuite-desktop#251; TRN-34: the system
+ * notification while no realtime connection is up). Its `event_id` names the ring by its start, so a chat that stops
+ * ringing and rings again later is announced again: the notification service shows one banner per id, for good.
+ */
+export function announceEvent(c: WebchatRingChat): RealtimeEvent {
+  return {
+    type: c.mine ? 'chat.assigned' : 'chat.incoming',
+    event_id: `list-${c.id}-${c.since}`,
+    conversation_id: c.id,
+    visitor: c.visitor,
+    site: c.site,
+    preview: c.preview,
+    at: c.since,
+  };
+}
+
+/**
  * A chat waiting on us that is not ringing for me, as a Needs you row names it (L-04, L-05; UX-ALR-03): joined and
  * answered by the same requests, and told the same way when a colleague was first.
  */
@@ -1409,14 +1426,15 @@ export class WebchatRinger {
       const tone = answer?.ring_prefs?.ringtone;
       if (typeof tone === 'string' && /^[a-z0-9_-]{1,20}$/.test(tone)) this.ringtone = tone;
       const next = mergeAnswer(answer ?? {}, this.chats);
-      this.chats = new Map(next.map((c) => [c.id, c]));
       // A chat this computer had heard nothing about — the socket was down, or the frame was lost — is announced as
       // the event would have announced it (#251); one that stopped ringing may be announced again if it rings again.
-      for (const c of next) {
-        if (this.announced.has(c.id)) continue;
-        this.announced.add(c.id);
-        if (!c.silenced) this.deps.announce?.(c);
-      }
+      // Announced BEFORE the list changes, as its event is (the notification service hears an event before this does):
+      // otherwise the card this very read is about to show counts as already showing, and on the built-in service —
+      // no realtime connection — no new chat ever raised the system notification (TRN-34).
+      const fresh = next.filter((c) => !this.announced.has(c.id));
+      for (const c of fresh) this.announced.add(c.id);
+      for (const c of fresh) if (!c.silenced) this.deps.announce?.(c);
+      this.chats = new Map(next.map((c) => [c.id, c]));
       for (const cid of this.announced) if (!this.chats.has(cid)) this.announced.delete(cid);
       for (const cid of this.drafts.keys()) if (!this.chats.has(cid)) this.drafts.delete(cid);
       // The server's list of invitations and transfers is the truth, where it has one (ENH-WCHAT-03).

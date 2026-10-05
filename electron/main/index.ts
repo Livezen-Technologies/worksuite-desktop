@@ -66,7 +66,7 @@ import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
-import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
+import { WebchatRinger, announceEvent, ringerHeight } from '../services/webchat-ring';
 import { SystemFocus } from '../services/system-focus';
 import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '../services/live-desk';
 import { QuickAsk } from '../services/quick-ask';
@@ -1527,16 +1527,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     realtimeUp: () => realtime.getState() === 'connected',
     // A chat found by reading the list is announced as its event would have been: the system notification with Join
     // and Reply when the card is not showing (#251).
-    announce: (c) =>
-      notifications.handleRealtime({
-        type: c.mine ? 'chat.assigned' : 'chat.incoming',
-        event_id: `list-${c.id}`,
-        conversation_id: c.id,
-        visitor: c.visitor,
-        site: c.site,
-        preview: c.preview,
-        at: c.since,
-      }),
+    // Named by the ring's start, so a chat that rings again later is announced again (TRN-34).
+    announce: (c) => notifications.handleRealtime(announceEvent(c)),
     testNotify: () => notifications.testChat(),
     onChanged: (s) => {
       broadcast('ring:changed', s);

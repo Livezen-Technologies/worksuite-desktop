@@ -24,6 +24,8 @@ export interface LiveChat {
   call?: { status: 'ringing' | 'active' | 'on_hold'; since: string | null } | null;
   /** Assigned to me: "· You" on the dashboard, and the tray's and the Live map window's "Yours" (MAP-22); absent on an older server. */
   mine?: boolean;
+  /** Since when a visitor message has reached no staff device (WS-WCHAT DLV-09); null or absent when it has. */
+  not_reaching_staff?: string | null;
 }
 
 /** Somebody on the sites now, as GET /visitors sends them. */
