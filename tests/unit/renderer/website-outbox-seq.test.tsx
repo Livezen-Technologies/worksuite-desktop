@@ -147,6 +147,18 @@ describe('the thread kept whole by seq', () => {
     expect(watchedBySeq('website:41')).toBe(false);
   });
 
+  it('merges into the thread under its real key, which carries the account scope after the id', async () => {
+    const qc = client();
+    const scoped = [...KEY, { scope: 'https://example.com:3:1' }];
+    qc.setQueryData(scoped, thread());
+    renderHook(() => useWebsiteSync('41', qc.getQueryData(scoped), true), { wrapper: wrapper(qc) });
+    const invalidate = vi.spyOn(qc, 'invalidateQueries');
+    vi.mocked(request).mockResolvedValueOnce({ data: { conversation_id: 41, status: 'open', last_seq: 3, has_more: false, cursor: '41.3.x', deleted: [], messages: [{ id: 3, seq: 3, body: 'Any news?', from: 'visitor' }] }, offline: false, cachedAt: null } as never);
+    emit('realtime:event', { type: 'message.new', conversation_id: 41, seq: 3, id: 3, from: 'visitor' });
+    await waitFor(() => expect(qc.getQueryData<WebsiteConversation>(scoped)!.messages).toHaveLength(3));
+    expect(invalidate).not.toHaveBeenCalled();
+  });
+
   it('on a server without sync, reads the thread again instead', async () => {
     const { qc } = mount();
     const invalidate = vi.spyOn(qc, 'invalidateQueries');

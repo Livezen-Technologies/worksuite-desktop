@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.58.0 — 2026-10-05
+
+- Website chats over the WebSocket chat service: v2 transport with SSE and built-in fallback, resume without loss, delivered/read by seq, live switching
+
 ## 1.57.0 — 2026-10-05
 
 - Website chat replies through an outbox with client_id (Not sent · Retry · Discard), threads rendered by seq with sync on gap, focus and reconnect

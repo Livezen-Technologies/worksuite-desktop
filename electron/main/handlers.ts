@@ -386,6 +386,24 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:call', (input) => ctx.webchat.answerCall(input.id, input.accept));
   router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has, input.label ?? null, input.headset ?? false));
   router.handle('ring:onCall', (input) => ctx.webchatOnCall(input));
+  // A website thread a window shows (plan 2.7): heard on its channels while any window shows it; let go with the window.
+  const watching = new Set<number>();
+  router.handle('realtime:watch', (input, c) => {
+    const sender = c.sender;
+    if (input.on && !watching.has(sender.id)) {
+      watching.add(sender.id);
+      const id = sender.id;
+      sender.once('destroyed', () => {
+        watching.delete(id);
+        ctx.realtime.forget(id);
+      });
+    }
+    ctx.realtime.watch(sender.id, input.conversationId, input.on);
+  });
+  // Delivered and read by seq, batched (plan 2.9).
+  router.handle('realtime:receipt', (input) => {
+    ctx.realtime.receipts.mark({ conversation_id: input.conversationId, delivered_seq: input.deliveredSeq, read_seq: input.readSeq, delivered: input.delivered, read: input.read });
+  });
 
   // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────
   const fromMain = (sender: WebContents) => {

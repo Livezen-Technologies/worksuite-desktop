@@ -1,4 +1,4 @@
-import type { NetworkStatus, RealtimeState } from './types';
+import type { NetworkStatus, RealtimeState, RealtimeTransport } from './types';
 
 /**
  * Connection strength (worksuite-desktop#254): how the link to the WorkSuite server is doing, measured in the main
@@ -43,7 +43,17 @@ export interface ConnectionStats {
   missed: number;
   /** The API's own requests: the median of the last 20. */
   api: { medianMs: number | null; count: number; failed: number };
+  /** How realtime reaches this computer (plan 2.7); absent from a main process before it. */
+  transport?: RealtimeTransport | null;
 }
+
+/** The transport in words, for the status bar's popover. */
+export const TRANSPORT_WORD: Record<RealtimeTransport, string> = {
+  websocket: 'WebSocket',
+  sse: 'SSE (WebSocket unavailable)',
+  legacy: 'Built-in service · live events',
+  polling: 'Built-in service · polling',
+};
 
 export interface ConnectionSummary {
   level: ConnectionLevel;

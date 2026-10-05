@@ -1,6 +1,6 @@
 import { randomBytes } from 'node:crypto';
 import { ConnectionLedger, PING_INTERVAL_MS, PING_TIMEOUT_MS, type ApiTimings, type ConnectionDetails, type ConnectionStats, type SpeedTestResult } from '@shared/connection';
-import type { RealtimeState } from '@shared/types';
+import type { RealtimeState, RealtimeTransport } from '@shared/types';
 import { logger } from '../main/log';
 import type { FetchLike, HttpClient } from './http';
 
@@ -10,7 +10,8 @@ const log = logger('connection');
  * Connection strength (worksuite-desktop#254), measured here and shown by the status bar.
  *
  * HOW IT IS MEASURED. Every PING_INTERVAL_MS, while signed in:
- *  - realtime connected: `ping:<id>` over the realtime socket, which the gateway answers with `{"type":"pong"}`
+ *  - realtime connected: `ping:<id>` over the realtime socket (`{"type":"ping","id"}` on protocol v2), which the
+ *    gateway answers with `{"type":"pong"}`
  *    (worksuite realtime/server.js). The browser-style WebSocket the main process has cannot send a protocol ping
  *    frame, so this is an application-level echo. A gateway from before the echo never answers: after two
  *    unanswered pings on a socket that is otherwise alive, this falls back to HTTP for good (until sign-out);
@@ -29,6 +30,9 @@ export interface RealtimeLike {
   reconnectNow(): void;
   onPong: (id: string) => void;
   onReconnect: () => void;
+  /** How realtime reaches this computer (plan 2.7): WebSocket v2, SSE, the v1 socket, or polling. */
+  getTransport?(): RealtimeTransport | null;
+  onTransport?: (t: RealtimeTransport | null) => void;
 }
 
 export interface ConnectionMonitorDeps {
@@ -83,6 +87,13 @@ export class ConnectionMonitor {
       this.ledger.reconnected(this.now());
       this.deps.onChange();
     };
+    // Another transport answers the echo its own way (v2 `{"type":"ping"}`, none on SSE): learnt again.
+    deps.realtime.onTransport = () => {
+      this.clearPending();
+      this.echo = null;
+      this.unanswered = 0;
+      this.deps.onChange();
+    };
   }
 
   start(): void {
@@ -115,7 +126,7 @@ export class ConnectionMonitor {
   }
 
   stats(): ConnectionStats {
-    return this.ledger.stats(this.deps.api.summary(), this.now());
+    return { ...this.ledger.stats(this.deps.api.summary(), this.now()), transport: this.deps.realtime.getTransport?.() ?? null };
   }
 
   /** One round of measuring (on the timer; tests call it directly). */

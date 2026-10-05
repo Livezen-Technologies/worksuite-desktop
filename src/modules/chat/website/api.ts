@@ -112,24 +112,62 @@ export function waitTone(seconds: number, amber: number | null | undefined, red:
   return 'plain';
 }
 
-/** Message-id marks that only move forward (LIVE-05): how far the visitor has the team's messages, and each person the visitor's. */
+/**
+ * Marks that only move forward (LIVE-05): how far the visitor has the team's messages, and each person the visitor's.
+ * By message id, and (DLV-08, a server from Phase 2) the same marks as seqs.
+ */
 export interface WebsiteMarks {
-  visitor: { delivered: number | null; read: number | null; delivered_at: string | null; read_at: string | null };
-  staff: Array<{ user_id: number; name: string; delivered: number | null; read: number | null; read_at: string | null }>;
+  visitor: { delivered: number | null; read: number | null; delivered_at: string | null; read_at: string | null; delivered_seq?: number | null; read_seq?: number | null };
+  staff: Array<{ user_id: number; name: string; delivered: number | null; read: number | null; read_at: string | null; delivered_seq?: number | null; read_seq?: number | null }>;
 }
 
-/** A team message's state for the visitor (LIVE-08): sent, delivered to their widget, or read with its panel open. */
-export function visitorHas(id: number, marks: WebsiteMarks | null | undefined): 'sent' | 'delivered' | 'read' {
+/** A message by id, or by its seq where both it and the mark have one (DLV-08). */
+type Marked = number | { id: number; seq?: number | null };
+
+function reached(m: Marked, id: number | null | undefined, seq: number | null | undefined): boolean {
+  const mine = typeof m === 'number' ? { id: m, seq: null } : m;
+  if (typeof mine.seq === 'number' && mine.seq > 0 && typeof seq === 'number' && seq > 0) return seq >= mine.seq;
+  return !!id && id >= mine.id;
+}
+
+/**
+ * A team message's state for the visitor (LIVE-08): sent, delivered to their widget, or read with its panel open. Only
+ * the visitor's own acknowledgement moves it (DLV-08): never on send.
+ */
+export function visitorHas(m: Marked, marks: WebsiteMarks | null | undefined): 'sent' | 'delivered' | 'read' {
   const v = marks?.visitor;
-  if (v?.read && v.read >= id) return 'read';
-  if (v?.delivered && v.delivered >= id) return 'delivered';
+  if (!v) return 'sent';
+  if (reached(m, v.read, v.read_seq)) return 'read';
+  if (reached(m, v.delivered, v.delivered_seq)) return 'delivered';
   return 'sent';
 }
 
 /** Who of the team has read the visitor's message (LIVE-08): "you" first. */
-export function readBy(id: number, marks: WebsiteMarks | null | undefined, me: number | null): string[] {
-  const who = (marks?.staff ?? []).filter((s) => s.read !== null && s.read >= id);
+export function readBy(m: Marked, marks: WebsiteMarks | null | undefined, me: number | null): string[] {
+  const who = (marks?.staff ?? []).filter((s) => reached(m, s.read, s.read_seq));
   return [...who.filter((s) => s.user_id === me).map(() => 'you'), ...who.filter((s) => s.user_id !== me).map((s) => s.name)];
+}
+
+/**
+ * A `chat.widget.delivered` / `read` event (DLV-08) over the marks a thread holds: the visitor's acknowledgement moves
+ * the ticks now, without asking for the thread again. Null when it cannot be applied (no marks yet, a colleague's
+ * mark, an older server's event without ids): the caller refetches.
+ */
+export function marksWith(marks: WebsiteMarks | null | undefined, e: { type: string; by?: string; message_id?: number; seq?: number | null; at?: string }): WebsiteMarks | null {
+  if (!marks || e.by !== 'visitor' || typeof e.message_id !== 'number') return null;
+  const kind = e.type === 'chat.widget.read' ? 'read' : e.type === 'chat.widget.delivered' ? 'delivered' : null;
+  if (!kind) return null;
+  const v = { ...marks.visitor };
+  const up = (a: number | null | undefined, b: number | null | undefined) => (typeof b === 'number' && b > 0 ? Math.max(a ?? 0, b) : (a ?? null));
+  // Read is delivered too.
+  for (const k of kind === 'read' ? (['read', 'delivered'] as const) : (['delivered'] as const)) {
+    const sk = k === 'read' ? 'read_seq' : 'delivered_seq';
+    v[k] = up(v[k], e.message_id);
+    v[sk] = up(v[sk], e.seq);
+  }
+  if (kind === 'read' && e.at) v.read_at = e.at;
+  if (e.at && !v.delivered_at) v.delivered_at = e.at;
+  return { ...marks, visitor: v };
 }
 
 /** "Nimal is typing", "Nimal and Dilini are typing". */
@@ -919,6 +957,20 @@ export function discardWebsiteReply(key: string): void {
 /** What the open thread has loaded, wherever it came from: the composer's suggestions read it. */
 export function openConversationData(qc: QueryClient, id: string): WebsiteConversation | undefined {
   return qc.getQueriesData<WebsiteConversation>({ queryKey: ['website', 'conversation', id] }).find(([key, data]) => key[3] !== 'review' && data)?.[1];
+}
+
+/**
+ * Change the open thread's loaded copy in place, under whatever key holds it (the key carries the account's scope after
+ * the id, so an exact key misses it). @returns whether there was a copy to change
+ */
+export function updateOpenConversation(qc: QueryClient, id: string, fn: (d: WebsiteConversation) => WebsiteConversation): boolean {
+  let hit = false;
+  qc.setQueriesData<WebsiteConversation>({ queryKey: ['website', 'conversation', id], predicate: (q) => q.queryKey[3] !== 'review' }, (d) => {
+    if (!d) return d;
+    hit = true;
+    return fn(d);
+  });
+  return hit;
 }
 
 export function useAgents(enabled: boolean, conversationId?: number) {

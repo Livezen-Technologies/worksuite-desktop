@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { LEVEL_WORD, PING_INTERVAL_MS, connectionLabel, type ConnectionDetails, type ConnectionLevel, type ConnectionStats, type ConnectionSummary, type SpeedTestResult } from '@shared/connection';
+import { LEVEL_WORD, PING_INTERVAL_MS, TRANSPORT_WORD, connectionLabel, type ConnectionDetails, type ConnectionLevel, type ConnectionStats, type ConnectionSummary, type SpeedTestResult } from '@shared/connection';
 import type { StatusSnapshot, SyncStatus } from '@shared/types';
 import { app, updatePrefs } from '../core/app-state';
 import { call, errorMessage } from '../core/bridge';
@@ -125,15 +125,18 @@ export function serviceRows(input: { status: StatusSnapshot | null; sync: SyncSt
   const rows: ServiceRow[] = [];
   const offline = status?.network === 'OFFLINE';
   const rt = status?.realtime ?? 'idle';
+  // How it is connected (plan 2.7): WebSocket, its SSE fallback, or the built-in service.
+  const transport = status?.connection?.transport;
+  const via = transport ? ` · ${TRANSPORT_WORD[transport]}` : '';
   rows.push({
     id: 'realtime',
     name: 'Realtime',
     mark: rt === 'connected' ? 'ok' : rt === 'disabled' || rt === 'idle' ? 'off' : 'warn',
     detail:
       rt === 'connected'
-        ? `Connected${input.realtimeHost ? ` · ${input.realtimeHost}` : ''}`
+        ? `Connected${input.realtimeHost ? ` · ${input.realtimeHost}` : ''}${via}`
         : rt === 'disabled'
-          ? 'Not on this server — checking for news on a schedule'
+          ? `Not on this server — checking for news on a schedule${via}`
           : rt === 'idle'
             ? 'Turned off'
             : 'Reconnecting',
