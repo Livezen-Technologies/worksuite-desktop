@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.185 — 2026-10-05
+
+- **Website chat replies are never lost or sent twice (delivery Phase 1).**
+  - **Sending:** each reply carries a message id. It shows Sending…, then appears in the thread; if the server refuses
+    it, it stays as **Not sent** with the reason, **Retry** and **Discard**, and the text box is cleared. Retry and the
+    offline queue reuse the same id, so the visitor gets it once.
+  - **Order:** threads are ordered by the server's message number. A missed message is fetched on a gap, when the
+    window comes to the front, and after a reconnect; a repeated live event is dropped once in the main process, so
+    rings and notifications fire once.
+  - **Header:** a Live / Updating every few seconds pill.
+  - A refused reply is kept until the app restarts; replies waiting for a connection survive restarts as before.
+  - Needs the server's Communication 1.52.0.
+
 ## 0.2.184 — 2026-10-05
 
 - **New website chats reach everyone again (#251).**

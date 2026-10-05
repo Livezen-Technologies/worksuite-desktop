@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.57.0 — 2026-10-05
+
+- Website chat replies through an outbox with client_id (Not sent · Retry · Discard), threads rendered by seq with sync on gap, focus and reconnect
+
 ## 1.56.0 — 2026-10-05
 
 - Ringing reaches everyone, retries, test tool (#251); Live dashboard instant with lazy map (#248); paged lists, saved copies, instant replies, timings (#252); Insights states and new sections (#247); widget settings collapsibles (#244); connection warning in the composer (#254)
