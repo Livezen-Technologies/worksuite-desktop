@@ -1,6 +1,6 @@
 {
     "module": "chat",
-    "version": "1.57.0",
+    "version": "1.58.0",
     "paths": [
         "electron/services/webchat-ring.ts"
     ]

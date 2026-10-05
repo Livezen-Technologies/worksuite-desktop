@@ -5,6 +5,21 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.186 — 2026-10-05
+
+- **Website chats over the WebSocket chat service (delivery Phase 2).**
+  - **Connection:** when the server's chat service is WebSocket, the app connects with the new protocol, falls back to
+    SSE and then to the built-in service, and tries to move back up every 5 minutes. The status bar's Realtime row
+    names the connection, e.g. "Connected · WebSocket".
+  - **No loss:** after a gateway restart or waking from sleep it resumes where it left off; when it can't, the open
+    threads fetch what they missed. Repeated events are dropped, so rings and notifications fire once.
+  - **Delivered and Read:** receipts go to the server in batches about once a second; ticks move only when the visitor
+    has the message.
+  - **Switching:** a switch to Built-in takes effect at once. On the older connection, a switch to WebSocket is picked
+    up within 5 minutes.
+  - **Fixed:** syncing an open website thread re-read the whole thread instead of merging the missing messages.
+  - Needs the server's Communication 1.53.0 and Notifications 1.11.0.
+
 ## 0.2.185 — 2026-10-05
 
 - **Website chat replies are never lost or sent twice (delivery Phase 1).**
