@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { ApiError } from './api';
 import { touchesInvitations } from '@shared/meeting-invitations';
 import { on } from './bridge';
+import { watchedBySeq } from '@shared/chat-seq';
 
 /**
  * Server state. REST is authoritative (FR-RT-03): realtime events and a
@@ -44,10 +45,12 @@ export function touchesExpenses(e: { type: string; event?: string }): boolean {
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
-  on<{ type: string; room_id?: number; conversation_id?: number; event?: string }>('realtime:event', (e) => {
+  on<{ type: string; room_id?: number; conversation_id?: number; event?: string; seq?: number }>('realtime:event', (e) => {
     if (WEBSITE_EVENTS.has(e.type)) {
       void queryClient.invalidateQueries({ queryKey: ['website', 'inbox'] });
-      if (e.conversation_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', String(e.conversation_id)] });
+      // A message in a thread open on screen is fetched by its seq there (plan 1.9), not by reading the whole thread again.
+      const bySeq = e.type === 'chat.widget.message' && Number(e.seq) > 0 && watchedBySeq(`website:${String(e.conversation_id)}`);
+      if (e.conversation_id !== undefined && !bySeq) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', String(e.conversation_id)] });
       if (e.type === 'chat.widget.callback' || e.type === 'chat.widget.call') void queryClient.invalidateQueries({ queryKey: ['website', 'callbacks'] });
     } else if (e.type === 'chat.presence') {
       void queryClient.invalidateQueries({ queryKey: ['chat', 'presence'] });

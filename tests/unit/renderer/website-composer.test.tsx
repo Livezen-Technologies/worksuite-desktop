@@ -112,7 +112,7 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
-    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ module: 'website-chat', entityId: '41', path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'We can help with that.' }, queueIfOffline: true }));
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ module: 'website-chat', entityId: '41', path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'We can help with that.', client_id: expect.any(String) }, queueIfOffline: true }));
     // Sending stops it at once (LIVE-04).
     expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/typing', { state: 'stop' });
     // Never Team Chat's message endpoint.
@@ -129,7 +129,7 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
-    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'Students get 50% off.', reply_to: 7 } }));
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'Students get 50% off.', reply_to: 7, client_id: expect.any(String) } }));
     expect(clear).toHaveBeenCalled();
   });
 
@@ -158,13 +158,15 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
-    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ body: { message: 'Schools get 20% off the first year.', canned_id: 1 } }));
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ body: { message: 'Schools get 20% off the first year.', canned_id: 1, client_id: expect.any(String) } }));
     fireEvent.change(box, { target: { value: 'Anything else?' } });
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
     const sent = calls.mock.calls.filter(([c]) => c === 'offline:submit').map(([, x]) => (x as { body: unknown }).body);
-    expect(sent).toEqual([{ message: 'Schools get 20% off the first year.', canned_id: 1 }, { message: 'Anything else?' }]);
+    expect(sent).toEqual([{ message: 'Schools get 20% off the first year.', canned_id: 1, client_id: expect.any(String) }, { message: 'Anything else?', client_id: expect.any(String) }]);
+    // Each reply its own client id (DLV-01, plan 1.9).
+    expect(new Set(sent.map((b) => (b as { client_id: string }).client_id)).size).toBe(2);
   });
 
   it('holds files to the website\'s own size limit, not a fixed 5 MB (RDC-04)', () => {

@@ -22,7 +22,7 @@ vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 import { ApiError, apiGet, request } from '../../../src/core/api';
 import { app } from '../../../src/core/app-state';
 import { call } from '../../../src/core/bridge';
-import { CLOSED_PAGE, longestWaiting, sendingReplies, startWebsiteReply, useSendingReplies, useWebsiteClosed, useWebsiteInbox, waitingSummary, type WebsiteConversation, type WebsiteRow } from '../../../src/modules/chat/website/api';
+import { CLOSED_PAGE, discardWebsiteReply, longestWaiting, sendingReplies, startWebsiteReply, useSendingReplies, useWebsiteClosed, useWebsiteInbox, waitingSummary, type WebsiteConversation, type WebsiteRow } from '../../../src/modules/chat/website/api';
 import { recentTimings, renderedAfter, resetTimings, timed } from '../../../src/modules/chat/website/timings';
 
 const LIST = '/api/chat/widget-admin/conversations';
@@ -168,7 +168,7 @@ describe('a reply shows at once and is confirmed in place (#252)', () => {
     expect(qc.getQueryData<WebsiteConversation>(['website', 'conversation', '41'])!.messages.filter((m) => m.id === 77)).toHaveLength(1);
   });
 
-  it('one refused, or gone to the outbox, leaves the "sending" list and adds nothing', () => {
+  it('one gone to the outbox, or with no answer, leaves the "sending" list; one refused stays Not sent; neither adds anything', () => {
     const qc = client();
     qc.setQueryData(['website', 'conversation', '41'], thread());
     const { result } = renderHook(() => useSendingReplies(41), { wrapper: wrapper(qc) });
@@ -179,8 +179,17 @@ describe('a reply shows at once and is confirmed in place (#252)', () => {
       b = startWebsiteReply(qc, 41, 'two');
     });
     expect(result.current).toHaveLength(2);
-    act(() => a({ delivered: false, queued: false }));
+    act(() => a({ delivered: false, queued: false, error: 'This chat is closed.' }));
     act(() => b(null));
+    // Refused (plan 1.9): kept with the reason, for Retry under the same client id, or Discard.
+    expect(result.current).toEqual([expect.objectContaining({ body: 'one', state: 'failed', error: 'This chat is closed.' })]);
+    act(() => discardWebsiteReply(result.current[0]!.key));
+    expect(result.current).toEqual([]);
+    let c!: ReturnType<typeof startWebsiteReply>;
+    act(() => {
+      c = startWebsiteReply(qc, 41, 'three');
+    });
+    act(() => c({ delivered: false, queued: true }));
     expect(result.current).toEqual([]);
     expect(qc.getQueryData<WebsiteConversation>(['website', 'conversation', '41'])!.messages).toHaveLength(1);
   });

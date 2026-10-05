@@ -1,4 +1,5 @@
 import { backoffDelay } from '@shared/backoff';
+import { SeqSeen } from '@shared/chat-seq';
 import type { RealtimeState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
@@ -70,6 +71,15 @@ export class RealtimeService {
   /** The socket came back after a drop (worksuite-desktop#254: reconnects are counted for connection strength). */
   onReconnect: () => void = () => undefined;
   private host: string | null = null;
+  private readonly seen = new SeqSeen();
+
+  /** False for a website message whose conversation and seq were announced already; true for anything without them. */
+  private firstSighting(e: RealtimeEvent): boolean {
+    const conversation = Number(e.conversation_id);
+    const seq = Number(e.seq);
+    if (!Number.isSafeInteger(conversation) || conversation <= 0 || !Number.isSafeInteger(seq) || seq <= 0) return true;
+    return this.seen.first(conversation, seq);
+  }
 
   constructor(
     private readonly http: HttpClient,
@@ -255,6 +265,9 @@ export class RealtimeService {
         return;
       }
       if (data.type === 'ping') return;
+      // A website message announced twice (the server's outbox re-sending it, or a replay after a reconnect) reaches
+      // the thread, the ring and the banner once: dropped by its conversation and seq (DLV-05, plan 1.9).
+      if (data.type === 'chat.widget.message' && !this.firstSighting(data)) return;
       if (this.state === 'connected') this.onEvent(data);
     };
     const disconnect = (reason: string, code?: number) => {

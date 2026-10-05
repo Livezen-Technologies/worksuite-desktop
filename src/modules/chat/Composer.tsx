@@ -5,7 +5,7 @@ import { queueMedia } from './outgoing';
 import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref, type ReactNode } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
-import { websiteDraftKey, websiteReplyMutation } from '@shared/website-reply';
+import { websiteDraftKey } from '@shared/website-reply';
 import { app } from '../../core/app-state';
 import { apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
@@ -34,7 +34,7 @@ import { transcript, useChatSavedReplies, type RepliesState, type Turn } from '.
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
-import { openConversationData, startWebsiteReply, team, useAgents } from './website/api';
+import { openConversationData, sendWebsiteReply, team, useAgents } from './website/api';
 import { NOTE_TONE } from './kit/MessageBubble';
 import { TEAM_COMPOSER, WEBSITE_COMPOSER } from './kit/caps';
 import { usePresence } from './presence';
@@ -390,20 +390,11 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     }
     if (site) {
       // Drawn at once, "Sending…", and as the stored message the moment the server has it (worksuite-desktop#252).
-      const finish = startWebsiteReply(qc, site.conversationId, words, reply?.id ?? null);
-      // A reply to a visitor goes through the outbox too: pending while offline, sent once on reconnecting (RDC-07).
-      const r = await call('offline:submit', websiteReplyMutation(site.conversationId, words, reply?.id ?? null, cannedUsed.current)).catch((e: unknown) => {
-        finish(null);
-        throw e;
-      });
-      finish(r);
+      // Through the outbox with its client id (RDC-07, plan 1.9): pending while offline and sent once on reconnecting;
+      // refused, it stays in the thread as Not sent with the reason and Retry, so the box is free for the next one.
+      const cannedId = cannedUsed.current;
       cannedUsed.current = null;
-      if (!r.delivered && !r.queued) {
-        toast('error', r.error ?? 'Not sent.');
-        return false;
-      }
-      // Delivered: only this thread and the open list are asked again (finish); queued: the outbox shows it.
-      if (r.queued) void qc.invalidateQueries({ queryKey: ['offline'] });
+      await sendWebsiteReply(qc, site.conversationId, words, reply?.id ?? null, cannedId);
       return true;
     }
     const mentions = mentionsIn(words);

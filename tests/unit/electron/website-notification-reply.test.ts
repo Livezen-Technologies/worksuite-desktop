@@ -121,12 +121,15 @@ describe('replying to a website visitor from the banner (RDC-15)', () => {
       label: `${WEBSITE_REPLY_LABEL}Hello`,
       method: 'POST',
       path: '/api/chat/widget-admin/conversations/41/reply',
-      body: { message: 'Hello' },
+      body: { message: 'Hello', client_id: expect.any(String) },
       queueIfOffline: true,
     });
     expect((websiteReplyMutation(41, 'x'.repeat(5000)).body as { message: string }).message).toHaveLength(4000);
     // Answering one message quotes it (RDC-10).
-    expect(websiteReplyMutation(41, 'Yes', 7).body).toEqual({ message: 'Yes', reply_to: 7 });
+    expect(websiteReplyMutation(41, 'Yes', 7).body).toEqual({ message: 'Yes', reply_to: 7, client_id: expect.any(String) });
+    // The client id given is the one sent (DLV-01): a retry carries the same one, and the server stores it once.
+    expect(websiteReplyMutation(41, 'Yes', null, 3, 'c-0e8f2a7b').body).toEqual({ message: 'Yes', canned_id: 3, client_id: 'c-0e8f2a7b' });
+    expect((websiteReplyMutation(41, 'a').body as { client_id: string }).client_id).not.toBe((websiteReplyMutation(41, 'a').body as { client_id: string }).client_id);
     expect(websiteDraftKey(41)).toEqual({ module: 'website-chat', context: 'conversation:41' });
   });
 });

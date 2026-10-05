@@ -15,8 +15,10 @@ import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Chip, Empty, cx } from '../../../components/ui';
 import { Composer, websiteNoteDraftKey, type ComposerHandle } from '../Composer';
-import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useOpenConversation, useSendingReplies, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { callLive, discardWebsiteReply, PRIORITIES, quoteAuthor, readBy, retryWebsiteReply, typingWords, useAgents, useCanned, useOpenConversation, useSendingReplies, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
+import { useRealtimeLive, useWebsiteSync } from './sync';
+import { bySeq, weave } from '@shared/chat-seq';
 import { useViewing } from './viewing';
 import type { ReplyTarget } from '../Thread';
 import { Select } from '../../../components/Select';
@@ -87,7 +89,13 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const canned = useCanned(Boolean(q.data), q.data?.conversation.widget_id);
   const outbox = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const waiting = (outbox.data ?? []).filter((m: OfflineMutation) => m.module === 'website-chat' && m.entityId === id && m.state !== 'DONE');
-  const sending = useSendingReplies(Number(id));
+  // Render by seq (DLV-05): a reply on its way gives way to the server's copy carrying its client id.
+  const held = useMemo(() => new Set((data?.messages ?? []).map((m) => m.client_id).filter((x): x is string => !!x)), [data?.messages]);
+  const allSending = useSendingReplies(Number(id));
+  const sending = useMemo(() => allSending.filter((p) => !held.has(p.clientId)), [allSending, held]);
+  // Sync by seq on a gap, on focus and after a reconnect (DLV-06, plan 1.9); Live, or updating every few seconds.
+  useWebsiteSync(id, saved ? undefined : q.data, tabActive && pageVisible);
+  const realtimeLive = useRealtimeLive();
   const count = data?.messages.length ?? 0;
   useTabTitle(data ? `Website · ${data.visitor?.name || data.visitor?.label || 'Visitor'}` : 'Website chats');
 
@@ -135,8 +143,10 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const replyOpen = canReply && c.status !== 'closed';
   // My own "joined the chat" line, told as R-03 tells it: "You joined the chat · ringing stopped for 2 colleagues".
   const joinLine = youJoined && String(youJoined.id) === String(c.id) ? [...data.messages].reverse().find((m) => m.from === 'system' && me !== null && m.agent_id === me && /joined the chat$/.test(m.body ?? ''))?.id : undefined;
-  const items = byTime([
-    ...data.messages.map((m) => {
+  // Messages in seq order, the visitor's page visits woven in by time (plan 1.9).
+  const ordered = [...data.messages].sort(bySeq);
+  const items = weave(
+    ordered.map((m) => {
       if (m.id === joinLine) return { ...fromWebsiteMessage(m, { me, visitor: name, canReply: replyOpen }), body: youJoinedLine(youJoined?.colleagues) };
       const k = fromWebsiteMessage(m, {
         me,
@@ -152,8 +162,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       const notice = m.from === 'system' ? callNotice(m.body, m.agent_id, me) : null;
       return notice ? { ...k, body: notice.body, tone: notice.tone } : k;
     }),
-    ...eventsForThread(data.events, c.started_at).map((e, i) => fromWidgetEvent(e, i)),
-  ]);
+    byTime(eventsForThread(data.events, c.started_at).map((e, i) => fromWidgetEvent(e, i))),
+  );
   const handlers: MessageHandlers = {
     // Answering one message quotes it, for the visitor too (RDC-10).
     onReply: (k) => {
@@ -220,6 +230,17 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             </span>
           </span>
           <span className="flex flex-wrap items-center gap-2">
+            {/* How this thread is kept current (plan 1.9): the live connection, or a fetch every few seconds. */}
+            {!mini && c.status !== 'closed' ? (
+              <span
+                data-testid="thread-live"
+                title={realtimeLive ? 'New messages arrive as they are sent' : 'The live connection is off; this chat updates every few seconds'}
+                className={cx('flex h-[22px] items-center gap-1 rounded-full px-2 text-[11px] font-semibold', realtimeLive ? 'bg-success-bg text-success' : 'bg-subtle text-ink-3')}
+              >
+                <span className={cx('h-1.5 w-1.5 rounded-full', realtimeLive ? 'bg-success' : 'bg-ink-3')} />
+                {realtimeLive ? 'Live' : 'Updating every few seconds'}
+              </span>
+            ) : null}
             {t ? <TeamFaces people={t.people} /> : null}
             {/* Invite and Transfer, beside Close (TEAM-UI-01). */}
             {!mini && t?.can.invite && c.status !== 'closed' ? (
@@ -274,8 +295,17 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           {/* The shared chat kit (C-02, RDC-11, LIVE-12; #229): Team Chat's bubbles, meta, ticks and attachments, with what a visitor cannot receive turned off. */}
           <MessageList items={items} caps={{ ...WEBSITE_CAPS, deleteForVisitorMinutes: data.delete_window_minutes ?? 15, saveToDrive: data.can_save_to_drive === true }} look="page" handlers={handlers} />
           {/* Sent a moment ago, not yet stored (#252): at once, then the stored message with its tick. */}
+          {/* Sending…, or Not sent with the reason, Retry (the same client id) and Discard (plan 1.9). */}
           {sending.map((p) => (
-            <PendingBubble key={p.key} label={p.body} failed={false} waiting={text('Sending…')} onRetry={() => undefined} />
+            <PendingBubble
+              key={p.key}
+              label={p.body}
+              failed={p.state === 'failed'}
+              error={p.error}
+              waiting={text('Sending…')}
+              onRetry={() => void retryWebsiteReply(qc, p.key)}
+              onDiscard={() => discardWebsiteReply(p.key)}
+            />
           ))}
           {waiting.map((p) => (
             <PendingBubble
