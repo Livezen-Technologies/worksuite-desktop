@@ -99,6 +99,8 @@ export const INVOKE_CHANNELS = [
   'ring:call',
   'ring:mic',
   'ring:onCall',
+  'realtime:watch',
+  'realtime:receipt',
   'windows:detach',
   'windows:dock',
   'windows:toMain',

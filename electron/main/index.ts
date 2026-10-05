@@ -2636,6 +2636,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (process.platform === 'darwin') void accessibility.refresh().then(() => broadcast('rc:changed', remoteControl.view()));
     device.poke();
     sync.kick('resume');
+    // A socket or SSE stream silent through the sleep is replaced, resuming from its last sid (plan 2.12): the
+    // gateway replays what came meanwhile, or says reset and every view syncs.
     realtime.kick();
     const uid = sessionCtl.userId();
     if (uid) void queue.replay(uid);

@@ -181,6 +181,10 @@ const api = {
     mic: call('ring:mic'),
     onCall: call('ring:onCall'),
   },
+  realtime: {
+    watch: call('realtime:watch'),
+    receipt: call('realtime:receipt'),
+  },
   live: {
     open: call('live:open'),
     info: call('live:info'),

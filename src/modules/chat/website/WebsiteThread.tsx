@@ -153,7 +153,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         visitor: name,
         canReply: replyOpen,
         // Sent, delivered or read by the visitor, on the team's messages; who read the visitor's latest (LIVE-08).
-        status: data.marks && m.from === 'agent' && m.visibility !== 'internal' ? visitorHas(m.id, data.marks) : undefined,
+        status: data.marks && m.from === 'agent' && m.visibility !== 'internal' ? visitorHas(m, data.marks) : undefined,
         footer: data.marks ? footerFor(m, data, me) : null,
         // The server's own window for Delete for the visitor (RDC-12); 15 minutes from an older one.
         deleteMinutes: data.delete_window_minutes ?? 15,
@@ -384,11 +384,11 @@ function footerFor(m: WebsiteMessage, data: WebsiteConversation, me: number | nu
   const team = data.messages.filter((x) => (x.from === 'agent' || x.from === 'bot') && x.visibility !== 'internal').at(-1);
   const visitor = data.messages.filter((x) => x.from === 'visitor').at(-1);
   if (team && m.id === team.id) {
-    const s = visitorHas(m.id, marks);
+    const s = visitorHas(m, marks);
     return s === 'read' ? `Read${marks.visitor.read_at ? ` ${timeLabel(marks.visitor.read_at)}` : ''}` : s === 'delivered' ? 'Delivered' : 'Sent';
   }
   if (visitor && m.id === visitor.id) {
-    const who = readBy(m.id, marks, me);
+    const who = readBy(m, marks, me);
     return who.length ? `Read by ${who.join(', ')}` : null;
   }
   return null;

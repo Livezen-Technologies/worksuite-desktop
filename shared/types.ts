@@ -15,6 +15,12 @@ export type Arch = 'x64' | 'arm64';
 export type NetworkStatus = 'ONLINE' | 'LIMITED' | 'RECONNECTING' | 'OFFLINE';
 export type RealtimeState = 'connected' | 'connecting' | 'disabled' | 'down' | 'idle';
 
+/**
+ * How realtime reaches this computer (plan 2.7): the chat service's WebSocket (protocol v2), its SSE fallback, the
+ * built-in service with the older gateway's socket (protocol v1) for live events, or the built-in service alone, polling.
+ */
+export type RealtimeTransport = 'websocket' | 'sse' | 'legacy' | 'polling';
+
 export type ServiceHealth = 'STARTING' | 'HEALTHY' | 'DEGRADED' | 'RESTARTING' | 'FAILED' | 'STOPPED';
 
 export type DeviceTrust = 'TRUSTED' | 'STANDARD' | 'RESTRICTED' | 'REVOKED';

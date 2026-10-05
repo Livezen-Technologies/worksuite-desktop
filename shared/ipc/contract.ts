@@ -510,6 +510,13 @@ export const contract = {
     z.object({ conversationId: z.number().int().positive(), visitor: z.string().max(120), since: z.number().int().nonnegative(), held: z.boolean() }).nullable(),
     { session: true, rate: 20 },
   ),
+  // Website chats over realtime (plan 2.7, 2.9): a thread a window shows is heard on its own channels; what it has and
+  // shows is acknowledged by seq, in batches.
+  'realtime:watch': ch(z.strictObject({ conversationId: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 60 }),
+  'realtime:receipt': ch(
+    z.strictObject({ conversationId: z.number().int().positive(), deliveredSeq: z.number().int().positive().optional(), readSeq: z.number().int().positive().optional(), delivered: z.number().int().positive().optional(), read: z.number().int().positive().optional() }),
+    { session: true, rate: 60 },
+  ),
   // Multi-window docking (FR-NAV-05/07): tear a tab off into its own window, and dock it back.
   'windows:detach': ch(
     z.object({ route, title: z.string().max(200).optional(), at: z.object({ x: z.number().int(), y: z.number().int() }).optional() }),
@@ -1550,6 +1557,8 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:call': boolean;
   'ring:mic': void;
   'ring:onCall': void;
+  'realtime:watch': void;
+  'realtime:receipt': void;
   'windows:detach': { id: number };
   'windows:dock': void;
   'windows:toMain': void;
