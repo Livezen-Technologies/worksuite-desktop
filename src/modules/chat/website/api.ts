@@ -2,12 +2,15 @@ import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type Quer
 import { useEffect, useMemo } from 'react';
 import { ApiError, apiGet, request } from '../../../core/api';
 import { useLocalFirstQuery } from '../../../core/local-first-query';
-import { errorMessage } from '../../../core/bridge';
+import { call, errorMessage } from '../../../core/bridge';
 import { app } from '../../../core/app-state';
 import { createStore, useStore } from '../../../core/store';
 import { toast } from '../../../core/toasts';
 import { text } from '../../../core/i18n';
 import { parseTs } from '../../../core/time';
+import { mergeBySeq, newClientId } from '@shared/chat-seq';
+import { websiteReplyMutation } from '@shared/website-reply';
+import type { SubmitResult } from '@shared/ipc/contract';
 import type { SavedReply } from './profile';
 import { recordTiming, timed, type ServerTiming } from './timings';
 
@@ -231,6 +234,10 @@ export interface WebsiteMessage {
   /** The message this one answers (RDC-10): an excerpt both the agent and the visitor see above it. */
   reply_to?: number | null;
   reply?: WebsiteQuote | null;
+  /** Its place in the conversation (DLV-05): the thread is drawn in this order. Absent from an older server. */
+  seq?: number | null;
+  /** The id the sending device gave it (DLV-01): my reply on its way gives way to the copy carrying this. */
+  client_id?: string | null;
 }
 
 /**
@@ -351,6 +358,8 @@ export interface WebsiteConversation {
   can_save_to_drive?: boolean;
   /** Returning visitors (#222): the profile behind this chat; absent or null on a server without them. */
   profile?: { visitor_id: number; identity: 'signed' | 'verified' | 'returning' | 'new'; visits: number; suggestions: number } | null;
+  /** The conversation's highest seq, counting what I cannot see (DLV-05); absent from an older server. */
+  last_seq?: number | null;
 }
 
 /** A voice call in a website chat as the thread has it (WidgetCalls::forThread). */
@@ -790,16 +799,23 @@ export function useOpenConversation(id: string) {
 }
 
 /**
- * A reply on its way (worksuite-desktop#252): drawn in the thread the moment Send is pressed, marked "Sending…", and
- * replaced by the message the server stored — with its "Sent" tick — as soon as the server says so, without waiting
- * for the thread to be read again. One the server refused, or that went to the outbox, leaves this list at once (the
- * outbox shows its own).
+ * A reply on its way (worksuite-desktop#252; plan 1.9): drawn in the thread the moment Send is pressed, marked
+ * "Sending…", and replaced by the message the server stored — with its "Sent" tick — as soon as the server says so,
+ * without waiting for the thread to be read again. One that went to the outbox leaves this list at once (the outbox
+ * shows its own, Pending, kept on this computer). One the server refused stays, "Not sent", with the reason, Retry
+ * (under the same client id, so the server never stores it twice) and Discard.
  */
 export interface SendingReply {
   key: string;
   conversationId: number;
   body: string;
   at: string;
+  /** Made before the first try, sent on every one (DLV-01). */
+  clientId: string;
+  state: 'sending' | 'failed';
+  error: string | null;
+  replyTo: number | null;
+  cannedId: number | null;
 }
 
 export const sendingReplies = createStore<{ list: SendingReply[] }>({ list: [] });
@@ -814,31 +830,48 @@ export function useSendingReplies(conversationId: number): SendingReply[] {
 /** The server's stamp, as the thread's messages carry it: UTC without a zone. */
 const serverStamp = (d: Date): string => d.toISOString().slice(0, 19).replace('T', ' ');
 
+const patchSending = (key: string, changes: Partial<SendingReply>) => sendingReplies.set((s) => ({ list: s.list.map((x) => (x.key === key ? { ...x, ...changes } : x)) }));
+
 /**
  * Show a reply at once; call what this returns with the outbox's answer. Delivered: the stored message goes into the
- * thread (as the server will list it) and only that thread and the open list are asked again — not every website
- * query, as a reply used to (the closed list, missed chats and the rest, all at once behind the reply).
+ * thread by seq (as the server will list it, merged by id and client id) and only that thread and the open list are
+ * asked again — not every website query, as a reply used to (the closed list, missed chats and the rest, all at once
+ * behind the reply). Refused: kept, Not sent. Queued, or no answer at all: let go.
  */
-export function startWebsiteReply(qc: QueryClient, conversationId: number, body: string, replyTo: number | null = null): (r: { delivered: boolean; queued: boolean; data?: unknown } | null) => void {
-  const key = `sending-${++sendingSeq}`;
+export function startWebsiteReply(
+  qc: QueryClient,
+  conversationId: number,
+  body: string,
+  replyTo: number | null = null,
+  opts: { clientId?: string; cannedId?: number | null; key?: string } = {},
+): (r: { delivered: boolean; queued: boolean; data?: unknown; error?: string | null } | null) => void {
+  const clientId = opts.clientId ?? newClientId();
+  const key = opts.key ?? `sending-${++sendingSeq}`;
   const started = Date.now();
-  sendingReplies.set((s) => ({ list: [...s.list, { key, conversationId, body, at: new Date().toISOString() }] }));
+  if (opts.key && sendingReplies.get().list.some((x) => x.key === key)) patchSending(key, { state: 'sending', error: null });
+  else sendingReplies.set((s) => ({ list: [...s.list, { key, conversationId, body, at: new Date().toISOString(), clientId, state: 'sending', error: null, replyTo, cannedId: opts.cannedId ?? null }] }));
   let done = false;
   return (r) => {
     if (done) return;
     done = true;
-    const posted = r?.delivered ? ((r.data ?? null) as { id?: number; at?: string; timing?: ServerTiming } | null) : null;
+    const posted = r?.delivered ? ((r.data ?? null) as { id?: number; at?: string; seq?: number | null; client_id?: string | null; timing?: ServerTiming } | null) : null;
     if (posted && typeof posted.id === 'number') {
       const s = app.get();
       const me = s.auth?.user?.id ? Number(s.auth.user.id) : null;
       const message: WebsiteMessage = {
         id: posted.id, body, from: 'agent', agent: s.bootstrap?.user?.name ?? null, agent_id: me, at: posted.at ?? serverStamp(new Date()),
         file: null, visibility: 'public', reply_to: replyTo, reply: null,
+        ...(typeof posted.seq === 'number' ? { seq: posted.seq } : {}), client_id: posted.client_id ?? clientId,
       };
       qc.setQueriesData<WebsiteConversation>({ queryKey: ['website', 'conversation', String(conversationId)] }, (d) =>
-        d && Array.isArray(d.messages) && !d.messages.some((m) => m.id === message.id) ? { ...d, messages: [...d.messages, message] } : d,
+        d && Array.isArray(d.messages) && !d.messages.some((m) => m.id === message.id) ? { ...d, messages: mergeBySeq(d.messages, [message]) } : d,
       );
       recordTimingOf('reply', Date.now() - started, posted.timing ?? null);
+    }
+    if (r && !r.delivered && !r.queued) {
+      // Refused: the words stay, Not sent, with the server's reason and Retry.
+      patchSending(key, { state: 'failed', error: r.error ?? text('The server refused it.') });
+      return;
     }
     sendingReplies.set((st) => ({ list: st.list.filter((x) => x.key !== key) }));
     if (r?.delivered) {
@@ -846,6 +879,41 @@ export function startWebsiteReply(qc: QueryClient, conversationId: number, body:
       void qc.invalidateQueries({ queryKey: ['website', 'inbox', 'open'] });
     }
   };
+}
+
+/**
+ * Send a reply to a visitor through the outbox (RDC-07, plan 1.9): drawn at once, sent with its client id, pending on
+ * this computer while offline and sent once on reconnecting. Resolves with the outbox's answer.
+ */
+export async function sendWebsiteReply(qc: QueryClient, conversationId: number, words: string, replyTo: number | null = null, cannedId: number | null = null): Promise<SubmitResult> {
+  const clientId = newClientId();
+  const finish = startWebsiteReply(qc, conversationId, words, replyTo, { clientId, cannedId });
+  const r = await call('offline:submit', websiteReplyMutation(conversationId, words, replyTo, cannedId, clientId)).catch((e: unknown) => {
+    finish(null);
+    throw e;
+  });
+  finish(r);
+  if (r.queued) void qc.invalidateQueries({ queryKey: ['offline'] });
+  return r;
+}
+
+/** Send a Not sent reply again, under the same client id: the server answers a repeat with the copy it has. */
+export async function retryWebsiteReply(qc: QueryClient, key: string): Promise<void> {
+  const p = sendingReplies.get().list.find((x) => x.key === key);
+  if (!p || p.state !== 'failed') return;
+  const finish = startWebsiteReply(qc, p.conversationId, p.body, p.replyTo, { clientId: p.clientId, cannedId: p.cannedId, key });
+  try {
+    const r = await call('offline:submit', websiteReplyMutation(p.conversationId, p.body, p.replyTo, p.cannedId, p.clientId));
+    finish(r);
+    if (r.queued) void qc.invalidateQueries({ queryKey: ['offline'] });
+  } catch (e) {
+    finish({ delivered: false, queued: false, error: errorMessage(e) });
+  }
+}
+
+/** Let go of a Not sent reply. */
+export function discardWebsiteReply(key: string): void {
+  sendingReplies.set((s) => ({ list: s.list.filter((x) => x.key !== key) }));
 }
 
 /** What the open thread has loaded, wherever it came from: the composer's suggestions read it. */
