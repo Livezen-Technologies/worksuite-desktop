@@ -159,6 +159,9 @@ export class RealtimeService {
     const conversation = Number(e.conversation_id);
     const seq = Number(e.seq);
     if (!Number.isSafeInteger(conversation) || conversation <= 0 || !Number.isSafeInteger(seq) || seq <= 0) return true;
+    // The server's re-publish of a message no device acknowledged (DLV-09) is let through even when this seq was seen:
+    // the acknowledgement goes again, and the person is told it is not reaching them.
+    if (e.not_reaching_staff === true) return true;
     return (e.type === 'message.new' ? this.seenNew : this.seen).first(conversation, seq);
   }
 

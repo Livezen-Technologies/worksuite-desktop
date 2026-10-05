@@ -94,6 +94,31 @@ export function inlineReply(platform: NodeJS.Platform, privacy: NotificationPriv
 }
 
 /** What to do with an inline reply: nothing typed opens the conversation, anything else is sent as it is. */
+/**
+ * The native notification for a visitor message the server re-published because no device of the team acknowledged it
+ * for a minute (WS-WCHAT DLV-09, AC-D09): for whoever holds the chat (assigned to me, or I am in it), critical, one per
+ * message, answerable like any visitor's banner. Null for anybody else, or an event that cannot be read.
+ */
+export function notReachingNotice(e: Record<string, unknown>, me: number): Incoming | null {
+  const id = Number(e.conversation_id);
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  const participants = Array.isArray(e.participants) ? e.participants.map((p) => Number(typeof p === 'object' && p ? (p as { user_id?: unknown }).user_id : p)) : [];
+  if (!Number.isFinite(me) || me <= 0 || (Number(e.assigned_to) !== me && !participants.includes(me))) return null;
+  const visitor = String(e.visitor ?? 'A visitor');
+  const preview = typeof e.preview === 'string' ? e.preview : '';
+  const site = typeof e.site === 'string' && e.site ? e.site : null;
+  return {
+    id: `webchat-nrs:${id}:${String(e.message_id ?? e.seq ?? e.event_id ?? '')}`,
+    module: 'chat',
+    title: `${visitor}'s message is not reaching you`,
+    body: [preview ? `“${preview}”` : null, site, 'Open the chat to receive it'].filter(Boolean).join(' · '),
+    sender: visitor,
+    link: `/chat?website=${id}`,
+    critical: true,
+    website: { conversationId: id, visitor },
+  };
+}
+
 export function replyText(details: { reply?: unknown } | null | undefined, legacy?: unknown): string | null {
   // Electron passes the words twice: in the event's details, and in an older second argument some versions still fill.
   for (const raw of [details?.reply, legacy]) {
@@ -629,6 +654,12 @@ export class NotificationService {
         break;
       }
       case 'chat.widget.message': {
+        // The server's re-publish of a visitor message no device of the team acknowledged for a minute (DLV-09, AC-D09).
+        if (e.not_reaching_staff === true) {
+          const note = notReachingNotice(e, Number(this.userId));
+          if (note && !this.websiteAttending(note.website!.conversationId)) this.notify(note);
+          break;
+        }
         const conv = String(e.conversation_id ?? '');
         const visitor = String(e.visitor ?? 'Visitor');
         const id = Number(conv);
@@ -657,6 +688,17 @@ export class NotificationService {
           website: valid ? { conversationId: id, visitor } : null,
           websiteCount: count,
         });
+        break;
+      }
+      case 'chat.widget.reaching': {
+        // A device has the message now (DLV-09): the "not reaching you" banner goes.
+        const prefix = `webchat-nrs:${String(e.conversation_id ?? '')}:`;
+        for (const [key, note] of this.live) {
+          if (key.startsWith(prefix)) {
+            note.close();
+            this.live.delete(key);
+          }
+        }
         break;
       }
       case 'chat.widget.followup': {

@@ -66,6 +66,13 @@ const KNOWN_CODES = new Set<DesktopErrorCode>([
   'RATE_LIMITED',
 ]);
 
+/**
+ * The client type every request to the WorkSuite server names: the server picks the chat service's scope (poll
+ * intervals, realtime transport) per client type from it, so desktop is told apart from the web app and the widget.
+ */
+export const CLIENT_TYPE_HEADER = 'X-WorkSuite-Client';
+export const CLIENT_TYPE = 'desktop';
+
 /** What a screen shows when a request could not even be put together (worksuite-desktop#238): it offers Retry. */
 export const NOT_SENT_MESSAGE = "Couldn't send this request. Try again.";
 
@@ -201,6 +208,7 @@ export class HttpClient {
       try {
         headers = new Headers(safeHeaders(init.headers as Record<string, string> | Headers | undefined));
         for (const [k, v] of Object.entries(safeHeaders(this.deps.clientHeaders()))) headers.set(k, v);
+        headers.set(CLIENT_TYPE_HEADER, CLIENT_TYPE);
         if (!headers.has('Accept')) headers.set('Accept', 'application/json');
         if (auth) {
           const token = this.deps.tokens.accessToken();
