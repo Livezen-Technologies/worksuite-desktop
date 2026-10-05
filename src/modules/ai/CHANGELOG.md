@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.7 — 2026-10-05
+
+- Local AI downloads use the safe main-process fetch (#253)
+
 ## 1.8.6 — 2026-10-04
 
 - AiMenuButton takes the composer's label (Writing assistant on website chats)

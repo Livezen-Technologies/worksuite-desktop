@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.22.0 — 2026-10-05
+
+- Admin Center footer and scrolling nav (#246); notifications-off banner and test chat notification (#251); Remote control disclosures use the shared collapsible (#244)
+
 ## 1.21.0 — 2026-10-05
 
 - Custom timeout on one row with a shared NumberField (#232); colour profiles apply everywhere, light and dark, custom profiles, organisation default and lock (#234)

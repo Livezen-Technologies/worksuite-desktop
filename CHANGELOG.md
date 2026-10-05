@@ -5,6 +5,54 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.184 — 2026-10-05
+
+- **New website chats reach everyone again (#251).**
+  - **Why they didn't:** round robin gave each new chat to one person straight away, and the server stopped ringing
+    for any chat that already had someone assigned. Everyone else heard nothing, and chats drifted to Missed.
+  - **Now:** a chat the system assigned rings everyone available until someone joins.
+  - **In the app:** it keeps trying after a refusal instead of going quiet until the next sign-in, and when the live
+    connection is down it reads the waiting list every 10 seconds.
+  - **Settings › Notifications & calls:** a new **Send a test chat notification** shows each step. A banner says when
+    the system has turned WorkSuite's notifications off.
+  - "Taking chats" now uses the same status as the top bar.
+  - Needs the server's Communication 1.51.0.
+- **Files with "—" in their names open (#253).** Opening "FORM TECH-10 — Bid Security (Bank Guarantee).pdf" crashed
+  the app: Electron's own fetch throws on a file name it can't hold. The app now fetches in a way that never throws.
+  The viewer says "Couldn't open this file", with Retry, Open in its app and Save a copy. Saved files keep their exact
+  names.
+- **Website chats are fast (#252, #248).**
+  - **Saved copies:** lists, the Closed pages and the Live dashboard show their saved copy first, then update.
+  - **Paging:** Closed loads 50 at a time.
+  - **Replies:** a reply appears at once as "Sending…".
+  - **Live dashboard:** it never shows a full-page spinner. Each card fills in on its own with its own Retry, the map
+    loads last, and the header's count matches the sidebar.
+  - **Separate pool for transfers:** uploads and downloads now use their own connections, so they never hold up chats.
+  - **Diagnostics:** the report includes the timings.
+- **Large uploads finish (#249).**
+  - A 50 MB tender document failed with "The request was cancelled": the final step hit a 30-second limit.
+  - **Stall limit:** only 60 seconds without progress now stops an upload, and uploads resume after a drop or a restart.
+  - **Size check:** files over 2 GB are refused before they start.
+  - **Mail attachments** upload in parts too.
+  - **Progress:** Transfers shows speed and time left, with a Retry that continues where it stopped. A tender's
+    Documents tab shows "Uploading 42%".
+- **Insights explains itself (#247).**
+  - **Older server:** it says when the server needs updating, instead of "Not found".
+  - **Errors:** it says when you lack access. Other errors show their cause, a request ID, and Copy details.
+  - **Empty periods** show "No chats in this period".
+  - **New sections:** by widget, busiest hours, and top start pages.
+- **Connection strength in the status bar (#254).**
+  - **The indicator:** four bars with "Excellent · 42 ms" (or Good, Fair, Poor, Offline, Reconnecting), smoothed over
+    30 seconds.
+  - **Details:** hover for the server, network and services, plus a small speed test, Reconnect now and Copy details.
+  - **Warnings:** a weak connection gets a notice after 30 seconds, and a warning by the chat composer and in the Meet
+    call bar.
+  - Right-click the status bar to hide it or the milliseconds.
+- **Smaller fixes:**
+  - **Settings sidebar (#246):** Admin Center is a footer above the status bar, and the list above it scrolls.
+  - **Widget settings (#244):** the sections no longer overlap. Each is a collapsible section with a summary, and
+    remembers whether it's open.
+
 ## 0.2.183 — 2026-10-05
 
 - **No more crash from a time in a header (#238).**

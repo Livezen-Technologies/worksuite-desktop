@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.3 — 2026-10-05
+
+- File viewer: Couldn't open this file with Retry and Open in its app, 60 s limit (#253)
+
 ## 1.8.2 — 2026-10-05
 
 - Drive speed limits use the shared NumberField (#232); Share opens the sharing dialog from ?share=1 (#240)

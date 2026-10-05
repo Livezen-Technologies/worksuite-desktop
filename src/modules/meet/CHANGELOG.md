@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.1 — 2026-10-05
+
+- Connection warning in the call bar (#254)
+
 ## 1.11.0 — 2026-10-05
 
 - Recordings: Screen Recording check, live-track check, WebM first, 1 s pieces, 5 s empty check, frame check before upload, one card per recording (#240)

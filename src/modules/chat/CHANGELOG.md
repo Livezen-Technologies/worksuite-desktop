@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.56.0 — 2026-10-05
+
+- Ringing reaches everyone, retries, test tool (#251); Live dashboard instant with lazy map (#248); paged lists, saved copies, instant replies, timings (#252); Insights states and new sections (#247); widget settings collapsibles (#244); connection warning in the composer (#254)
+
 ## 1.55.0 — 2026-10-05
 
 - Website chats instant loading, placeholder and lighter rows (#239); returning visitors in the agent view (#222); pull to refresh in Team Chat, WhatsApp and Website chats (#236); zero-offset zone label fix
