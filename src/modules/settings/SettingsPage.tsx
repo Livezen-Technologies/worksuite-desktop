@@ -1,5 +1,5 @@
 import { LivestreamDestinations } from '../meet/Livestreaming';
-import { DarkProfilePicker } from './Appearance';
+import { ColorProfiles } from './Appearance';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
@@ -262,7 +262,7 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
         <Select label="Theme" value={prefs.theme} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} onValueChange={(v) => void updatePrefs({ theme: v })} />
       </Row>
       <Toggle k="highContrast" prefs={prefs} label="High contrast" />
-      <DarkProfilePicker prefs={prefs} />
+      <ColorProfiles prefs={prefs} />
       <Row label="Density">
         <Select label="Density" value={prefs.density} options={[{ value: 'comfortable', label: 'Comfortable' }, { value: 'compact', label: 'Compact' }]} onValueChange={(v) => void updatePrefs({ density: v })} />
       </Row>

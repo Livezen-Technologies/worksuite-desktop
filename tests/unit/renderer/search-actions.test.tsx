@@ -3,7 +3,7 @@ import { act, cleanup, fireEvent, render, screen, within } from '@testing-librar
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { visibleApps } from '@shared/apps';
-import { DARK_PROFILES } from '@shared/theme-profiles';
+import { DARK_PROFILES, generatePalette, LIGHT_PROFILES } from '@shared/theme-profiles';
 import type * as CoreApi from '../../../src/core/api';
 
 /**
@@ -178,7 +178,9 @@ const luminance = (c: number[]) => {
   return 0.2126 * r! + 0.7152 * g! + 0.0722 * b!;
 };
 
-it.each([['Light', '#3b5bdb'], ...DARK_PROFILES.map((p) => [p.name, p.tokens['--ws-brand']!])])(
+// Light and custom profiles too (worksuite-desktop#234): whatever accent a person picks, its brand keeps white text.
+const CUSTOM_BRANDS = ['#ffd400', '#00ff00', '#ff69b4', '#7fffd4', '#e0e0e0'].flatMap((accent) => (['light', 'dark'] as const).map((mode) => [`Custom ${accent} ${mode}`, generatePalette({ accent, tint: 'accent' }, mode).tokens['--ws-brand']!]));
+it.each([['Light', '#3b5bdb'], ...DARK_PROFILES.map((p) => [p.name, p.tokens['--ws-brand']!]), ...LIGHT_PROFILES.map((p) => [p.name, p.tokens['--ws-brand']!]), ...CUSTOM_BRANDS])(
   '%s: white text on the accent button stays AA across its gradient, hovered too',
   (_, brand) => {
     const base = rgb(brand);

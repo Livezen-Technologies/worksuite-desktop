@@ -3,6 +3,7 @@ import type { DesktopPolicy, DeviceTrust, NotificationPrivacy } from '@shared/ty
 import { canonicalJson } from '@shared/canonical-json';
 import { canonicalChord, parseChord } from '@shared/remote-control/channel';
 import { cleanIds, PIN_MAX } from '@shared/launcher';
+import { normalizeHex } from '@shared/color';
 
 /**
  * Desktop policy (§11.2, FR-SEC-09).
@@ -143,6 +144,11 @@ export function normalizePolicy(input: Record<string, unknown> | null | undefine
     ai_local_files: aiKey(p, 'local_files') !== false,
     launcher_pinned: cleanIds(p.launcher_pinned, PIN_MAX),
     launcher_order: cleanIds(p.launcher_order, 300),
+    // The organisation's colour profile (worksuite-desktop#234): none unless the accent is a colour.
+    appearance_accent: normalizeHex(p.appearance_accent) ?? '',
+    appearance_tint: pick(p.appearance_tint, ['neutral', 'accent', 'custom'] as const, 'neutral'),
+    appearance_tint_color: normalizeHex(p.appearance_tint_color) ?? '',
+    appearance_locked: p.appearance_locked === true,
   };
 }
 

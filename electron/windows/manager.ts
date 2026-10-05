@@ -1,9 +1,10 @@
-import { app, BrowserWindow, powerSaveBlocker, screen, type Rectangle } from 'electron';
+import { app, BrowserWindow, powerSaveBlocker, screen, webContents, type Rectangle, type WebContents } from 'electron';
 import { join } from 'node:path';
 import type { DetachedWindow, WindowKind } from '@shared/types';
 import type { Database } from '../services/db';
 import { APP_ORIGIN, devOrigin } from '../security/hardening';
 import { logger } from '../main/log';
+import { guestWindowIds } from '../main/events';
 
 const log = logger('windows');
 
@@ -155,6 +156,59 @@ export class WindowManager {
     private readonly preload: string,
   ) {}
 
+  /**
+   * The colour profile's window colours (worksuite-desktop#234): what a window is filled with before its page paints
+   * (the profile's background, so nothing flashes on the way to it) and its title bar's, where the system draws the
+   * window controls over ours (Windows, Linux). The defaults are Dark Blue's, as before profiles.
+   */
+  private look = { ground: '#0F1B3D', surface: '#FFFFFF', chrome: '#0F1B3D' };
+  /** Windows whose title bar the system draws the controls over. */
+  private overlays = new Set<number>();
+
+  private backgroundFor(kind: WindowKind): string {
+    if (kind === 'main' || kind === 'record' || kind === 'live-map' || kind === 'wall-sheet') return this.look.ground;
+    if (kind === 'ring-tray' || kind === 'quick-ask' || kind === 'rc-consent') return this.look.surface;
+    return this.look.chrome;
+  }
+
+  /** A new profile, or the computer's appearance changed under System: every open window takes its colours. */
+  setLook(look: { ground: string; surface: string; chrome: string }): void {
+    this.look = { ...look };
+    for (const [id, kind] of this.kinds) {
+      const win = BrowserWindow.fromId(id);
+      if (!win || win.isDestroyed() || kind === 'rc-pointer' || kind === 'wall') continue;
+      try {
+        win.setBackgroundColor(this.backgroundFor(kind));
+        if (this.overlays.has(id)) win.setTitleBarOverlay({ color: look.chrome, symbolColor: '#FFFFFF' });
+      } catch {
+        // A window on its way out, or a system without overlays: its colours are a nicety.
+      }
+    }
+  }
+
+  /** Whether web contents show the app's own pages: windows, and views laid into them. */
+  isAppContents(wc: WebContents): boolean {
+    if (wc.isDestroyed() || guestWindowIds.has(wc.id)) return false;
+    const url = wc.getURL();
+    const dev = devOrigin();
+    return url.startsWith(`${APP_ORIGIN}/`) || (!!dev && url.startsWith(dev));
+  }
+
+  /**
+   * The colour profile to every page of the app at once (#234) — every window, and every view laid into one — not
+   * only the windows `broadcast` reaches; each applies it as it arrives.
+   */
+  broadcastAppearance(payload: unknown): void {
+    for (const wc of webContents.getAllWebContents()) {
+      if (!this.isAppContents(wc) || wc.isCrashed()) continue;
+      try {
+        wc.send('appearance:changed', payload);
+      } catch {
+        // Gone between the list and the send.
+      }
+    }
+  }
+
   isOurs(id: number): boolean {
     return this.kinds.has(id);
   }
@@ -275,7 +329,7 @@ export class WindowManager {
       skipTaskbar: !consent,
       alwaysOnTop: true,
       title: consent ? 'Remote control request' : 'Remote control',
-      ...(tag ? { transparent: true, focusable: false, hasShadow: false, backgroundColor: '#00000000' } : { backgroundColor: consent ? '#FFFFFF' : '#0F1B3D' }),
+      ...(tag ? { transparent: true, focusable: false, hasShadow: false, backgroundColor: '#00000000' } : { backgroundColor: consent ? this.look.surface : this.look.chrome }),
       webPreferences: this.webPreferences(),
     });
     // On X11 this does not survive the window being shown or moved (tried under Xvfb), so remote control
@@ -327,7 +381,7 @@ export class WindowManager {
       skipTaskbar: true,
       alwaysOnTop: true,
       title: 'Website chat ringing',
-      backgroundColor: '#0F1B3D',
+      backgroundColor: this.look.chrome,
       webPreferences: this.webPreferences(),
     });
     win.setAlwaysOnTop(true, 'screen-saver');
@@ -379,7 +433,7 @@ export class WindowManager {
       skipTaskbar: true,
       alwaysOnTop: true,
       title: 'Website chats ringing',
-      backgroundColor: '#FFFFFF',
+      backgroundColor: this.look.surface,
       webPreferences: this.webPreferences(),
     });
     win.setAlwaysOnTop(true, 'pop-up-menu');
@@ -605,7 +659,7 @@ export class WindowManager {
       skipTaskbar: true,
       alwaysOnTop: true,
       title: 'Quick Ask',
-      backgroundColor: '#FFFFFF',
+      backgroundColor: this.look.surface,
       webPreferences: this.webPreferences(),
     });
     win.setAlwaysOnTop(true, 'floating');
@@ -658,12 +712,12 @@ export class WindowManager {
       minHeight: size.minHeight,
       show: false,
       title: opts.title ?? 'WorkSuite',
-      backgroundColor: '#0F1B3D',
+      backgroundColor: this.backgroundFor(kind),
       // FR-SHL-05: native traffic lights on macOS; our own title bar elsewhere,
       // with the OS window controls drawn over it (snap layouts keep working).
       titleBarStyle: 'hidden',
       // A ring has no window controls at all: it is answered or declined.
-      ...(mac ? { trafficLightPosition: { x: 18, y: 18 } } : { titleBarOverlay: ring ? false : { color: '#0F1B3D', symbolColor: '#FFFFFF', height: kind === 'main' ? 52 : 40 } }),
+      ...(mac ? { trafficLightPosition: { x: 18, y: 18 } } : { titleBarOverlay: ring ? false : { color: this.look.chrome, symbolColor: '#FFFFFF', height: kind === 'main' ? 52 : 40 } }),
       alwaysOnTop: !!opts.alwaysOnTop && ALWAYS_ON_TOP_ALLOWED.has(kind),
       ...(ring ? { resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true } : {}),
       icon: mac ? undefined : join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '256x256.png'),
@@ -672,6 +726,7 @@ export class WindowManager {
     if (ring && mac) win.setWindowButtonVisibility(false);
     this.kinds.set(win.id, kind);
     const id = win.id;
+    if (!mac && !ring) this.overlays.add(id);
     // A chat window holds its close while a draft is saved or a picture finishes
     // going up (#103); quitting, signing out and losing access close it anyway.
     win.webContents.on('will-prevent-unload', (e) => {
@@ -679,6 +734,7 @@ export class WindowManager {
     });
     win.on('closed', () => {
       this.kinds.delete(id);
+      this.overlays.delete(id);
       this.forced.delete(id);
       this.compactFrom.delete(id);
       const t = this.saveTimers.get(id);

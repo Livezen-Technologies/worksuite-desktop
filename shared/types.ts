@@ -1,4 +1,4 @@
-import type { DarkColorProfile } from './theme-profiles';
+import type { AppearancePrefs, DarkColorProfile, Tint } from './theme-profiles';
 import type { ItemLink, ItemSource } from './item-links';
 import type { LinkPrefs } from './link-prefs';
 import type { MailMediaPrefs } from './mail-media';
@@ -143,6 +143,15 @@ export interface DesktopPolicy {
    */
   launcher_pinned?: string[];
   launcher_order?: string[];
+  /**
+   * The organisation's colour profile (worksuite-desktop#234): its accent ('' or absent: none), how tinted the
+   * backgrounds are, the background colour for `custom`, and whether everyone must use it. Unlocked, it is the
+   * profile of everyone who has not picked their own.
+   */
+  appearance_accent?: string;
+  appearance_tint?: Tint;
+  appearance_tint_color?: string;
+  appearance_locked?: boolean;
 }
 
 export interface MonitoringPolicySummary {
@@ -230,6 +239,11 @@ export interface Preferences {
   theme: Theme;
   /** Optional for compatibility with preferences saved before dark profiles existed. */
   darkColorProfile?: DarkColorProfile;
+  /**
+   * Colour profiles (worksuite-desktop#234): the mode (the same as `theme`), the Light and Dark profiles and up to
+   * five custom ones. Absent in preferences saved before; read with `appearanceOf`.
+   */
+  appearance?: AppearancePrefs;
   density: Density;
   hardwareAcceleration: boolean;
   notificationSounds: boolean;

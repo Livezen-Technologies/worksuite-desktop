@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { EVENT_CHANNELS, INVOKE_CHANNELS, type EventChannel, type InvokeChannel } from '@shared/ipc/channels';
+import { applyAppearance, type AppearancePrefs } from '@shared/theme-profiles';
 
 /**
  * The only bridge between the sandboxed renderer and the desktop (§3.3, §8.4).
@@ -44,6 +45,36 @@ function activity(): void {
 for (const type of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) {
   window.addEventListener(type, activity, { capture: true, passive: true });
 }
+
+/**
+ * The colour profile before the first paint (worksuite-desktop#234): asked for once, synchronously, and written onto
+ * the page as soon as it has a root element — before its stylesheet, its scripts or anything is drawn — so no window
+ * flashes the default colours on its way to the person's. Changes after this arrive as `appearance:changed`.
+ */
+function appearanceFirst(): void {
+  let look: AppearancePrefs | null = null;
+  try {
+    look = ipcRenderer.sendSync('appearance:initial') as AppearancePrefs | null;
+  } catch {
+    return;
+  }
+  if (!look || typeof look !== 'object') return;
+  const apply = () => {
+    try {
+      applyAppearance(document, look, typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    } catch {
+      // The page's own start applies it a moment later.
+    }
+  };
+  if (document.documentElement) return apply();
+  const watch = new MutationObserver(() => {
+    if (!document.documentElement) return;
+    watch.disconnect();
+    apply();
+  });
+  watch.observe(document, { childList: true });
+}
+appearanceFirst();
 
 const api = {
   platform: process.platform,
@@ -527,6 +558,7 @@ const api = {
     get: call('settings:get'),
     set: call('settings:set'),
     launcherDefaults: call('settings:launcherDefaults'),
+    appearanceDefaults: call('settings:appearanceDefaults'),
   },
   status: {
     snapshot: call('status:snapshot'),

@@ -8,7 +8,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { localize } from '@shared/localization';
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
-import { app, net as electronNet, Notification, clipboard, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
+import { app, net as electronNet, Notification, clipboard, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, nativeTheme, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
@@ -30,6 +30,8 @@ import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
 import type { AppContext, ClockExtra } from './context';
 import { broadcast, guestWindowIds } from './events';
+import { installAppearance } from '../windows/appearance';
+import { AppearanceSync } from '../services/appearance-sync';
 import { registerHandlers } from './handlers';
 import { initLog, logger } from './log';
 import { DesktopError, isDesktopError } from './errors';
@@ -340,6 +342,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const lockPin = new LockPin(db, getVault);
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
+  // Colour profiles (worksuite-desktop#234): on every page before its first paint, to every page on a change, and
+  // between the person's devices.
+  installAppearance({ settings, windows, ipc: ipcMain, nativeTheme });
+  const appearanceSync = new AppearanceSync({ http, settings, online: () => sessionCtl.isReady() });
   // A call rings only for whoever may open Chat (calls are part of it).
   const calls = new CallService(
     windows,
@@ -1981,6 +1987,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     bootstrapChanged: (b) => {
       if (b) settings.setPolicy(b.policy);
+      if (b) void appearanceSync.pull();
       // Policy or trust may have turned sync on or off.
       sync.kick('policy');
       applyAccess(b);

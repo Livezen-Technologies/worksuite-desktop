@@ -15,6 +15,7 @@ import { windowRoute } from '../windows/manager';
 import { attachmentRisk } from '@shared/attachments';
 import { DesktopError, isDesktopError } from './errors';
 import { saveLauncherDefaults } from '../services/launcher-defaults';
+import { saveAppearanceDefaults } from '../services/appearance-defaults';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
 import { applyAutostart } from './autostart';
@@ -1148,6 +1149,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (ctx.session.get().server?.api !== 'desktop-v1') throw new DesktopError('UNSUPPORTED', 'This WorkSuite server does not take launcher defaults.');
     const saved = await saveLauncherDefaults(ctx.http, input.organizationId, input);
     // Everyone's next bootstrap carries them; this window's at once.
+    void ctx.session.refreshBootstrap().catch(() => undefined);
+    return saved;
+  });
+
+  // The organization's colour profile (worksuite-desktop#234), as the launcher's defaults above.
+  router.handle('settings:appearanceDefaults', async (input) => {
+    if (ctx.session.get().server?.api !== 'desktop-v1') throw new DesktopError('UNSUPPORTED', 'This WorkSuite server does not take an organisation colour profile.');
+    const saved = await saveAppearanceDefaults(ctx.http, input.organizationId, input);
     void ctx.session.refreshBootstrap().catch(() => undefined);
     return saved;
   });

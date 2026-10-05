@@ -389,6 +389,7 @@ export const INVOKE_CHANNELS = [
   'settings:get',
   'settings:set',
   'settings:launcherDefaults',
+  'settings:appearanceDefaults',
 
   'status:snapshot',
 
@@ -428,6 +429,7 @@ export const EVENT_CHANNELS = [
   'update:changed',
   'update:prepare',
   'settings:changed',
+  'appearance:changed',
   'organization:changed',
   'windows:changed',
   'window:fullscreen',
