@@ -14,7 +14,8 @@ import { siteOf } from './Widgets';
 /** A card with the design's small capitals heading over its rows: "WHAT THE VISITOR SEES", "NEW CHATS". */
 export function Group({ title, children }: { title: string; children: ReactNode }) {
   return (
-    <Card title={<span className="text-[11px] font-bold tracking-[1px] text-ink-3 uppercase">{title}</span>} bodyClassName="pb-1">
+    // Never squeezed by a scrolling column it sits in (#244): Card may shrink, a Group keeps its rows' height.
+    <Card className="shrink-0" title={<span className="text-[11px] font-bold tracking-[1px] text-ink-3 uppercase">{title}</span>} bodyClassName="pb-1">
       {children}
     </Card>
   );

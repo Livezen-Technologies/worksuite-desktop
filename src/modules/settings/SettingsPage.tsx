@@ -18,6 +18,7 @@ import { SpeechModelSettings } from '../meet/SpeechModel';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, currentZone, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { CollapsibleSection } from '../../components/Collapsible';
 import { Icon } from '../../components/Icon';
 import { Button, Chip, Modal, Switch, TextField, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
@@ -1651,8 +1652,7 @@ export function RemoteControlSection() {
         ) : null}
         {waiting ? <p className="mt-2 text-[12px] text-ink-3" data-testid="rc-auto-check">WorkSuite checks again every few seconds while this message is shown, and when you come back to it.</p> : null}
         {d ? (
-          <details className="mt-2 text-[12px] text-ink-3" data-testid="rc-details">
-            <summary className="cursor-pointer">Running app and input-helper checks</summary>
+          <CollapsibleSection variant="row" level={4} defaultOpen={false} persist="settings.remote-control.checks" className="mt-2" bodyClassName="text-[12px] text-ink-3" title="Running app and input-helper checks" summary={text('App Accessibility: {state}', { state: yesNo(d.appTrusted) })} data-testid="rc-details">
             <p className="break-all selectable">{text('Running copy: {path}', { path: id?.bundle ?? d.runningApp })}</p>
             {id ? (
               <p className="selectable">
@@ -1664,11 +1664,10 @@ export function RemoteControlSection() {
             </p>
             <p className="break-all">{text('Input helper: {path}, started by WorkSuite, so WorkSuite’s entry in Accessibility covers it. It is not listed separately.', { path: d.helperPath ?? '/usr/bin/osascript' })}</p>
             <p>Compare this running copy with the entry in macOS settings if more than one WorkSuite installation exists. Diagnostics include signing identity and app translocation checks.</p>
-          </details>
+          </CollapsibleSection>
         ) : null}
         {s.accessibility !== 'not_required' && s.accessibility !== 'granted' ? (
-          <details className="mt-2 text-[12px] text-ink-3" data-testid="rc-still-denied">
-            <summary className="cursor-pointer">Still shows Denied after turning WorkSuite on?</summary>
+          <CollapsibleSection variant="row" level={4} defaultOpen={false} persist="settings.remote-control.still-denied" className="mt-2" bodyClassName="text-[12px] text-ink-3" title="Still shows Denied after turning WorkSuite on?" summary={text('4 steps')} data-testid="rc-still-denied">
             <ol className="mt-1.5 list-decimal space-y-1 pl-5">
               <li>Check that the running copy above is the WorkSuite in Applications, and open WorkSuite from there.</li>
               <li>Quit WorkSuite. In System Settings › Privacy &amp; Security › Accessibility, select WorkSuite and click − to remove it, then click + and choose WorkSuite in Applications. Turn it on.</li>
@@ -1677,7 +1676,7 @@ export function RemoteControlSection() {
                 If it still does not change, reset WorkSuite’s entry in Terminal with <code className="selectable font-mono">tccutil reset Accessibility {id?.bundleId ?? 'lk.worksuite.desktop'}</code>, then open WorkSuite and allow it again.
               </li>
             </ol>
-          </details>
+          </CollapsibleSection>
         ) : null}
         {s.accessibility !== 'not_required' ? (
           <p className="mt-2 text-[12px] text-ink-3">Accessibility only lets WorkSuite take input. Nobody controls this computer until you approve their request, each time.</p>
