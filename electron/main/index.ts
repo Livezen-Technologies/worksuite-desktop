@@ -1725,6 +1725,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/whatsapp/chats', 'chat'],
     ['/api/chat/rooms', 'chat'],
     ['/api/chat/messages', 'chat'],
+    // Website chats: the list and each conversation opened, so a thread opens at once from its last copy (#239).
+    ['/api/chat/widget-admin/conversations', 'chat'],
     ['/api/calendar/events', 'calendar'],
     ['/api/tasks', 'tasks'],
     ['/api/task-lists', 'tasks'],

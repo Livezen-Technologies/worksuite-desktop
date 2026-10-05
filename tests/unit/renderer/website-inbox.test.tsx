@@ -8,8 +8,8 @@ import type * as CoreApi from '../../../src/core/api';
 
 /**
  * The Website Chats inbox as drawn in WS-WCHAT-SRS v1.5 (CHAT-UI-00): Open, Mine and Closed over the list, rows
- * with the on-site dot, waiting timer and chips, a chat silenced for me marked amber (RING-UI-04, R-04), the
- * "Pick a conversation" empty state, and J / K through the list.
+ * with the on-site dot, one status pill and who has the chat (#239), a chat silenced for me marked amber (RING-UI-04,
+ * R-04), the "Select a conversation" empty state, and J / K through the list.
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({})) }));
 const realtime: Array<(e: unknown) => void> = [];
@@ -101,7 +101,10 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
   it('with nothing open, says who is waiting and goes straight to the longest wait or the visitors online', async () => {
     wrap(<WebsiteWorkspace />);
     expect(await screen.findByText('2 visitors are waiting for a reply. The longest has waited 9 minutes.')).toBeTruthy();
-    expect(screen.getByText('Pick a conversation')).toBeTruthy();
+    const heading = screen.getByRole('heading', { name: 'Select a conversation' });
+    expect(heading.parentElement!.className).toMatch(/items-center justify-center/);
+    const today = screen.getByLabelText('Today');
+    await waitFor(() => expect(today.textContent).toBe('Waiting2·Open3·Missed1'));
     expect(screen.getByText(/to move through the list/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Open the longest waiting' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=inbox&website=2');
@@ -109,12 +112,12 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=visitors');
   });
 
-  it('draws each row with its timer, chips and site, and marks a chat silenced for me (R-04)', async () => {
+  it('draws each row with its wait, site and owner, and marks a chat silenced for me (R-04)', async () => {
     wrap(<WebsiteWorkspace />);
     const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
-    // Red throughout on a site that offers no callbacks.
-    expect(within(hasitha).getByLabelText(/^waiting 3:0\d$/).className).toContain('text-danger');
-    expect(within(hasitha).getByText('Awaiting reply')).toBeTruthy();
+    // One pill: amber while they wait, not yet past the response target (#239).
+    expect(within(hasitha).getByText('Waiting 3m').getAttribute('data-tone')).toBe('amber');
+    expect(within(hasitha).queryByText('Awaiting reply')).toBeNull();
     expect(within(hasitha).getByText('Reading /pricing')).toBeTruthy();
     expect(within(hasitha).getByText('On the site now')).toBeTruthy();
 
@@ -122,11 +125,15 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     expect(await within(ahmed).findByRole('img', { name: 'Silenced for you' })).toBeTruthy();
     expect(ahmed.className).toContain('bg-warning-bg');
     expect(within(ahmed).getByText('“Is the Windows 7 ISO still available?”')).toBeTruthy();
-    expect(within(ahmed).getByText('VIP')).toBeTruthy();
-    expect(within(ahmed).getByText('techubiz.com · away')).toBeTruthy();
+    expect(within(ahmed).getByRole('img', { name: 'VIP' })).toBeTruthy();
+    // Gone from the site: the grey dot says it, not "away" (#239).
+    expect(within(ahmed).getByText('techubiz.com')).toBeTruthy();
+    expect(within(ahmed).queryByText(/away/)).toBeNull();
+    expect(within(ahmed).getByText('Left the site')).toBeTruthy();
 
     const kasun = within(list()).getByText('Kasun P.').closest('button')!;
-    expect(within(kasun).getByText('You')).toBeTruthy();
+    expect(within(kasun).queryByText('You')).toBeNull();
+    expect(within(kasun).getByRole('img', { name: 'Assigned to you' })).toBeTruthy();
     expect(within(kasun).getByText('With you')).toBeTruthy();
   });
 
@@ -169,8 +176,8 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     ], []);
     wrap(<WebsiteWorkspace />);
     const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
-    expect(within(hasitha).getByText('Participant')).toBeTruthy();
-    expect(within(hasitha).getByLabelText('In this chat: Nuwan Perera, Me Myself')).toBeTruthy();
+    expect(within(hasitha).queryByText('Participant')).toBeNull();
+    expect(within(hasitha).getByRole('img', { name: 'In this chat: Nuwan Perera, Me Myself' })).toBeTruthy();
     fireEvent.click(within(list()).getByRole('button', { name: 'Mine · 1' }));
     expect(within(list()).getByText('Hasitha')).toBeTruthy();
     expect(within(list()).queryByText('Ahmed')).toBeNull();
@@ -288,15 +295,14 @@ describe('the Website Chats menu (C-01)', () => {
 });
 
 describe('a visitor who wrote again in my chat (#230)', () => {
-  it('goes to the top of the list, marked Visitor replied with its wait', async () => {
+  it('goes to the top of the list, its wait saying the visitor replied', async () => {
     serve([...ROWS.slice(0, 2), row({ id: 3, visitor_name: 'Kasun P.', assigned_to: 7, agent: 'Me', awaiting_reply: true, reply_waiting_since: ago(45_000), waiting_since: ago(45_000), reply_stage: null })]);
     wrap(<WebsiteWorkspace />);
     await within(list()).findByText('Kasun P.');
     const rows = [...list().querySelectorAll('[data-website-row]')].map((el) => el.getAttribute('data-website-row'));
     expect(rows[0]).toBe('3');
     const kasun = within(list()).getByText('Kasun P.').closest('button')!;
-    expect(within(kasun).getByText('Visitor replied')).toBeTruthy();
-    expect(within(kasun).getByLabelText(/^waiting 0:4\d$/)).toBeTruthy();
+    expect(within(kasun).getByText('Waiting 1m').getAttribute('title')).toBe('Visitor replied');
   });
 });
 
@@ -336,16 +342,15 @@ describe('Callbacks (worksuite-desktop#223)', () => {
     expect(await screen.findByText('No callbacks handled yet')).toBeTruthy();
   });
 
-  it('a row says a callback was requested, and its wait turns amber at the offer and red after it', async () => {
+  it('a row says a callback was requested, and its wait stays amber until the red mark', async () => {
     structured = { counts: { todo: 1, overdue: 0, mine: 0 }, todo: [], handled: [] };
     const rows = ROWS.map((r) => (r.visitor_name === 'Hasitha' ? { ...r, wait_amber: 120, wait_red: 600, callback: { id: 5, reference: 'CB-1042', status: 'open', due_at: null, overdue: false } } : r));
     serve(rows, []);
     wrap(<WebsiteWorkspace />);
     const hasitha = (await within(list()).findByText('Hasitha')).closest('button')!;
-    expect(within(hasitha).getByText('Callback requested')).toBeTruthy();
-    const clock = within(hasitha).getByLabelText(/^waiting 3:0\d$/);
-    expect(clock.getAttribute('data-tone')).toBe('amber');
-    expect(clock.getAttribute('title')).toBe('Offered a callback');
+    expect(within(hasitha).getByRole('img', { name: 'Callback requested' })).toBeTruthy();
+    // Past the offer at 2 minutes, not yet past the red mark at 10: still amber (#239).
+    expect(within(hasitha).getByText('Waiting 3m').getAttribute('data-tone')).toBe('amber');
   });
 });
 

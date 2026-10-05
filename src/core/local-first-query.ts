@@ -11,6 +11,10 @@ export function useLocalFirstQuery<T>(options: {
   params?: Record<string, string>;
   enabled?: boolean;
   interval: number;
+  /** How long an unwatched result stays in memory; ten minutes unless the caller keeps its own (worksuite-desktop#239). */
+  gcTime?: number;
+  /** A saved copy is used only when it has this shape; a stale or foreign one is left for the live request. */
+  accept?: (hit: unknown) => boolean;
 }) {
   const qc = useQueryClient();
   const scope = useStore(app, (s) => `${s.auth?.server?.origin ?? ''}:${s.bootstrap?.user?.id ?? ''}:${s.bootstrap?.user?.organizationId ?? ''}`);
@@ -18,12 +22,13 @@ export function useLocalFirstQuery<T>(options: {
   const key = useMemo(() => [...JSON.parse(keyJson) as QueryKey, { scope }], [keyJson, scope]);
   const path = options.path;
   const paramsKey = JSON.stringify(options.params ?? {});
+  const accept = options.accept;
   const query = useQuery<T>({
     queryKey: key,
     queryFn: ({ signal }) => apiGet<T>(path, options.params, signal),
     enabled: options.enabled,
     staleTime: 30_000,
-    gcTime: 10 * 60_000,
+    gcTime: options.gcTime ?? 10 * 60_000,
     refetchInterval: (q) => q.state.error instanceof ApiError && (q.state.error.forbidden || q.state.error.status === 404) ? false : document.visibilityState === 'visible' ? options.interval : Math.max(options.interval, 60_000),
     retry: (n, e) => !(e instanceof ApiError && (e.forbidden || e.status === 404)) && n < 2,
   });
@@ -33,9 +38,10 @@ export function useLocalFirstQuery<T>(options: {
     void request<T>('GET', path, { query: JSON.parse(paramsKey) as Record<string, string>, signal: controller.signal, headers: { 'X-WS-Local-Read': '1' } }).then((hit) => {
       // Never replace a live result, resurrect a refused request, or populate a retired account.
       const state = qc.getQueryState(key);
-      if (!controller.signal.aborted && state && state.data === undefined && state.error === null) qc.setQueryData(key, hit.data, { updatedAt: 0 });
+      if (!controller.signal.aborted && state && state.data === undefined && state.error === null && (!accept || accept(hit.data))) qc.setQueryData(key, hit.data, { updatedAt: 0 });
     }, () => undefined);
     return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `accept` is a shape check, read when the copy arrives
   }, [qc, key, path, paramsKey, options.enabled]);
   useEffect(() => app.subscribe(() => {
     const s = app.get();
