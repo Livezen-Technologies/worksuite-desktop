@@ -6,12 +6,12 @@ import { reminderAction } from '@shared/task-reminders';
 import { Notification, app, nativeImage } from 'electron';
 import { join } from 'node:path';
 import type { SubmitResult } from '@shared/ipc/contract';
-import type { NotificationItem, NotificationPermission, NotificationPrivacy, Preferences, RealtimeState } from '@shared/types';
+import type { NotificationItem, NotificationPermission, NotificationPrivacy, Preferences, RealtimeState, RingTestNotice } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import type { HttpClient } from './http';
-import { notificationPermission, presentLocked } from './locked-notifications';
+import { notificationPermission, presentLocked, testNoticeFor } from './locked-notifications';
 import type { RealtimeEvent } from './realtime';
 import type { Vault } from './vault';
 
@@ -935,6 +935,44 @@ export class NotificationService {
   test(): boolean {
     this.notify({ id: `test:${Date.now()}`, module: 'system', title: 'Notifications are working', body: 'This is how WorkSuite notifications will look.', sender: 'WorkSuite', link: null, critical: false });
     return Notification.isSupported();
+  }
+
+  /**
+   * The test chat notification (Settings › Ringing, worksuite-desktop#251): shown as a ringing chat's is, and whether
+   * the system said it showed it. Electron cannot read the operating system's per-app permission, so this is the
+   * attempt and its failure: macOS and Windows report a refusal; a banner that never says either way is "unknown".
+   * A refusal is remembered, so Settings › Notifications says notifications are off for WorkSuite.
+   */
+  testChat(waitMs = 4_000): Promise<RingTestNotice> {
+    const p = this.prefs();
+    const off = p.notificationsEnabled === false ? 'Show notifications is off in Settings › Notifications & calls.' : p.moduleNotifications?.chat === false ? 'Chat notifications are off in Settings › Notifications & calls › By app.' : null;
+    if (off) return Promise.resolve({ state: 'off', detail: off });
+    if (!Notification.isSupported()) return Promise.resolve(testNoticeFor(process.platform, 'unsupported', null));
+    return new Promise((resolve) => {
+      let settled = false;
+      const note = new Notification({ title: 'Test chat notification', body: 'Test visitor: this is how a new website chat shows on this computer.', silent: true, urgency: 'critical' });
+      const done = (r: RingTestNotice) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(r);
+      };
+      const timer = setTimeout(() => done(testNoticeFor(process.platform, 'unknown', null)), waitMs);
+      timer.unref?.();
+      note.on('show', () => {
+        this.lastFailure = null;
+        done(testNoticeFor(process.platform, 'shown', null));
+      });
+      note.on('failed', (_event, error) => {
+        this.lastFailure = String(error);
+        log.info('the system refused the test chat notification', { error: this.lastFailure.slice(0, 200) });
+        done(testNoticeFor(process.platform, 'failed', this.lastFailure));
+      });
+      note.on('click', () => note.close());
+      note.show();
+      const closer = setTimeout(() => note.close(), 10_000);
+      closer.unref?.();
+    });
   }
 
   /** Whether this computer shows banners, as far as can be told, and what to check (#114). */

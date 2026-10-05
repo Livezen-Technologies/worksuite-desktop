@@ -1,4 +1,4 @@
-import type { NotificationPermission, Preferences } from '@shared/types';
+import type { NotificationPermission, Preferences, RingTestNotice } from '@shared/types';
 
 /**
  * Notifications while WorkSuite's app lock is on (worksuite-desktop#114).
@@ -75,4 +75,24 @@ export function notificationPermission(platform: NodeJS.Platform, supported: boo
   if (!supported) return { state: 'unsupported', detail: `This computer cannot show notifications. Check ${where}`, failure: null };
   if (lastFailure) return { state: 'blocked', detail: `The system refused WorkSuite’s last notification. Check ${where}`, failure: lastFailure.slice(0, 200) };
   return { state: 'unknown', detail: `WorkSuite cannot read whether the system allows its notifications. If none appear, check ${where}`, failure: null };
+}
+
+/**
+ * What the test chat notification's step says (worksuite-desktop#251), from what the system did with it: shown,
+ * refused (macOS and Windows say so), unsupported, or nothing said either way.
+ */
+export function testNoticeFor(platform: NodeJS.Platform, state: 'shown' | 'failed' | 'unknown' | 'unsupported', failure: string | null): RingTestNotice {
+  const where = platform === 'darwin' ? 'System Settings › Notifications › WorkSuite' : platform === 'win32' ? 'Settings › System › Notifications' : 'your desktop’s notification settings';
+  const focus = platform === 'darwin' ? 'If it did not appear, a Focus may be holding it.' : platform === 'win32' ? 'If it did not appear, Do not disturb may be holding it.' : null;
+  if (state === 'shown') return { state, detail: focus };
+  if (state === 'failed') return { state, detail: `Desktop notifications are off for WorkSuite. Turn them on in ${where}.${failure ? ` (${failure.slice(0, 160)})` : ''}` };
+  if (state === 'unsupported') return { state, detail: `This computer cannot show notifications. Check ${where}.` };
+  return { state, detail: `The system did not say whether it showed it. If you did not see it, check ${where}.` };
+}
+
+/** The operating system's own notification settings for WorkSuite (#251), or null where there is no such page. */
+export function notificationSettingsUrl(platform: NodeJS.Platform): string | null {
+  if (platform === 'darwin') return 'x-apple.systempreferences:com.apple.preference.notifications';
+  if (platform === 'win32') return 'ms-settings:notifications';
+  return null;
 }

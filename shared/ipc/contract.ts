@@ -81,6 +81,7 @@ import type {
   Draft,
   NotificationItem,
   NotificationPermission,
+  RingTestStep,
   OfflineMutation,
   Preferences,
   PreferenceLock,
@@ -464,6 +465,8 @@ export const contract = {
   'ring:join': ch(z.object({ id: z.number().int().positive(), then: z.enum(['transfer']).optional(), visitor: z.string().max(200).optional() }), { session: true, rate: 4 }),
   'ring:silence': ch(z.object({ id: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 10 }),
   'ring:pass': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
+  /** Settings › Ringing › Send a test chat notification (#251): routed, received, notification shown. */
+  'ring:test': ch(none, { session: true, rate: 2 }),
   // The card's Join chat and Join & send, then the mini chat's replies, Open full chat or minimise, and its height (#225).
   // `open`: the native call window's Send & join and Join chat open the thread (R-05, UX-ALR-01; RING-41); `cannedId`: the
   // saved reply it was written from, counted once it is sent (RDC-03).
@@ -880,6 +883,8 @@ export const contract = {
     { session: true, rate: 5 },
   ),
   'notifications:permission': ch(none, { session: true }),
+  /** The operating system's notification settings for WorkSuite (#251): the banner's Open System Settings. */
+  'notifications:openSettings': ch(none, { session: true, rate: 4 }),
   /** The bell's count again, now: after the notification centre read, snoozed or archived something. */
   'notifications:refresh': ch(none, { session: true, rate: 10 }),
 
@@ -1498,6 +1503,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:join': boolean;
   'ring:silence': void;
   'ring:pass': boolean;
+  'ring:test': RingTestStep[];
   'ring:joinSend': { ok: boolean; why: string | null };
   'ring:reply': { ok: boolean; why: string | null };
   'ring:closeJoined': void;
@@ -1565,6 +1571,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'notifications:test': boolean;
   'notifications:reminder': void;
   'notifications:permission': NotificationPermission;
+  'notifications:openSettings': boolean;
   'notifications:refresh': void;
   'clipboard:readForPaste': { text: string | null; image: string | null; files: PickedFile[] };
   'print:print': boolean;

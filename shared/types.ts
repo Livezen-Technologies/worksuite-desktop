@@ -1620,3 +1620,17 @@ export interface MailBodiesProgress {
   doneAt: string | null;
   error: string | null;
 }
+
+/** What the system did with the test chat notification (Settings › Ringing, worksuite-desktop#251). */
+export interface RingTestNotice {
+  state: 'shown' | 'failed' | 'unknown' | 'unsupported' | 'off';
+  detail: string | null;
+}
+
+/** One step of "Send a test chat notification" (worksuite-desktop#251): routed · received · notification shown · sound. */
+export interface RingTestStep {
+  id: 'routed' | 'received' | 'notification' | 'sound';
+  label: string;
+  state: 'ok' | 'warn' | 'fail' | 'pending';
+  detail: string | null;
+}

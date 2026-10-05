@@ -26,6 +26,7 @@ import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
 import { playOnce, playTone, ringtoneId, RINGTONES, type RingOn } from '../calls/tones';
 import { useRingState } from '../chat/website/Ringing';
+import { NotificationsOffBanner, TestChatNotification } from './RingCheck';
 import { apiGet, request } from '../../core/api';
 import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
 import { ModuleAccess } from '../ai/ModuleAccess';
@@ -441,6 +442,7 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
   return (
     <>
       <H title="Notifications & calls" hint="How this computer shows notifications — even when WorkSuite's window is closed, from the tray." />
+      <NotificationsOffBanner />
       <Row label="What reaches you, and when" hint="Each app by channel, quiet hours, and how this computer shows them.">
         <Button icon="bell" onClick={() => navigate('/notifications/settings')}>
           Open notification settings
@@ -627,6 +629,7 @@ export function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
           <Switch label="Live map and dashboard shortcuts" checked={r.liveShortcuts !== false} onChange={(v) => set({ liveShortcuts: v })} />
         </div>
       </Row>
+      <TestChatNotification volume={r.volume} muted={!prefs.notificationSounds} ringtone={ringtone} ringOn={ringOn} />
       <FollowUpPrefs prefs={prefs} />
     </>
   );

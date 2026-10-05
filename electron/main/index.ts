@@ -1493,6 +1493,21 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     followUpPrefs: () => ({ ...FOLLOW_UP_DEFAULTS, ...settings.effective().webchatFollowUps }),
     idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    // While the live connection is down the list is read every 10 s (worksuite-desktop#251).
+    realtimeUp: () => realtime.getState() === 'connected',
+    // A chat found by reading the list is announced as its event would have been: the system notification with Join
+    // and Reply when the card is not showing (#251).
+    announce: (c) =>
+      notifications.handleRealtime({
+        type: c.mine ? 'chat.assigned' : 'chat.incoming',
+        event_id: `list-${c.id}`,
+        conversation_id: c.id,
+        visitor: c.visitor,
+        site: c.site,
+        preview: c.preview,
+        at: c.since,
+      }),
+    testNotify: () => notifications.testChat(),
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
