@@ -212,6 +212,88 @@ export function TextField({ label, hint, error, className, ...rest }: InputHTMLA
   );
 }
 
+const NUMBER_SIZES = { md: 'h-10 text-[14px]', sm: 'h-9 text-[13px]' } as const;
+
+/** Decimal places in a number as written, so stepping 0.1 + 0.2 shows 0.3. */
+function places(n: number): number {
+  const s = String(n);
+  return s.includes('.') ? s.split('.')[1]!.length : 0;
+}
+
+/**
+ * A number typed in a settings row, without a label above it (#232): the row's own words name it, `aria-label` reads
+ * it out. Right-aligned tabular figures, an optional muted unit inside the field ("min"), and ↑/↓ that step the value
+ * within `min`–`max`. The text is the caller's (a half-typed value is kept as typed); `invalid` draws the red outline,
+ * and the caller says why next to the row's words. `md` is 40px tall, as a settings row's Save button; `sm` 36px.
+ */
+export function NumberField({
+  value,
+  onValueChange,
+  min,
+  max,
+  step = 1,
+  unit,
+  invalid,
+  size = 'md',
+  width = 112,
+  className,
+  onKeyDown,
+  inputMode,
+  ...rest
+}: Omit<InputHTMLAttributes<HTMLInputElement>, 'value' | 'onChange' | 'type' | 'min' | 'max' | 'step' | 'size' | 'width'> & {
+  value: string;
+  onValueChange: (v: string) => void;
+  min?: number;
+  max?: number;
+  step?: number;
+  unit?: string;
+  invalid?: boolean;
+  size?: keyof typeof NUMBER_SIZES;
+  width?: number;
+}) {
+  const n = value.trim() === '' ? NaN : Number(value);
+  const nudge = (dir: 1 | -1) => {
+    const base = Number.isFinite(n) ? n : (min ?? 0) - dir * step;
+    let next = Number((base + dir * step).toFixed(Math.max(places(step), places(base))));
+    if (min !== undefined) next = Math.max(min, next);
+    if (max !== undefined) next = Math.min(max, next);
+    onValueChange(String(next));
+  };
+  return (
+    <span className={cx('relative inline-flex shrink-0', NUMBER_SIZES[size], className)} style={{ width }}>
+      <input
+        type="text"
+        role="spinbutton"
+        inputMode={inputMode ?? (Number.isInteger(step) ? 'numeric' : 'decimal')}
+        autoComplete="off"
+        aria-valuemin={min}
+        aria-valuemax={max}
+        aria-valuenow={Number.isFinite(n) ? n : undefined}
+        aria-invalid={invalid ? true : undefined}
+        {...rest}
+        value={value}
+        onChange={(e) => onValueChange(e.target.value)}
+        onKeyDown={(e) => {
+          onKeyDown?.(e);
+          if (e.defaultPrevented || (e.key !== 'ArrowUp' && e.key !== 'ArrowDown')) return;
+          e.preventDefault();
+          nudge(e.key === 'ArrowUp' ? 1 : -1);
+        }}
+        className={cx(
+          'h-full w-full min-w-0 rounded-[8px] border bg-surface pl-2.5 text-right text-ink tabular-nums outline-none transition-colors placeholder:text-ink-3 disabled:opacity-60',
+          unit ? 'pr-9' : 'pr-2.5',
+          invalid ? 'border-danger focus:border-danger' : 'border-line focus:border-primary',
+        )}
+      />
+      {unit ? (
+        <span aria-hidden="true" className="pointer-events-none absolute inset-y-0 right-2.5 flex items-center text-ink-3">
+          {unit}
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
 /** `describedBy`: the id of the line that says what the switch does, read out with its name. */
 export function Switch({ checked, onChange, disabled, label, id, describedBy }: { checked: boolean; onChange: (v: boolean) => void; disabled?: boolean; label: string; id?: string; describedBy?: string }) {
   return (
