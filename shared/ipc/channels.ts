@@ -79,6 +79,7 @@ export const INVOKE_CHANNELS = [
   'ring:join',
   'ring:silence',
   'ring:pass',
+  'ring:test',
   'ring:joinSend',
   'ring:reply',
   'ring:closeJoined',
@@ -195,6 +196,7 @@ export const INVOKE_CHANNELS = [
   'notifications:pause',
   'notifications:test',
   'notifications:permission',
+  'notifications:openSettings',
   'notifications:refresh',
   // A reminder this computer worked out by itself, while WorkSuite could not send it (ENH-MAIL-03 DMO-TSK-02).
   'notifications:reminder',
@@ -398,6 +400,10 @@ export const INVOKE_CHANNELS = [
   'diagnostics:saveBundle',
   'diagnostics:restartSafeMode',
   'diagnostics:services',
+  'diagnostics:timings',
+  'connection:details',
+  'connection:speedTest',
+  'connection:reconnect',
   // POS: the till on this computer (pos-channels.ts).
   ...POS_INVOKE_CHANNELS,
   // Hotel PMS door locks: the on-site lock server this desk talks to (pms-locks-channels.ts).

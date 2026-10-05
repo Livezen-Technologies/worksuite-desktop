@@ -1,12 +1,17 @@
-import { keepPreviousData, useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
-import { useEffect } from 'react';
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
 import { ApiError, apiGet, request } from '../../../core/api';
 import { useLocalFirstQuery } from '../../../core/local-first-query';
 import { errorMessage } from '../../../core/bridge';
+import { app } from '../../../core/app-state';
+import { createStore, useStore } from '../../../core/store';
 import { toast } from '../../../core/toasts';
 import { text } from '../../../core/i18n';
 import { parseTs } from '../../../core/time';
 import type { SavedReply } from './profile';
+import { recordTiming, timed, type ServerTiming } from './timings';
+
+const recordTimingOf = (what: string, ms: number, server: ServerTiming | null) => recordTiming({ what, at: new Date().toISOString(), ms: Math.round(ms), rows: 1, server, ok: true });
 
 /**
  * Website chat (UI-08: "group, direct and website-chat conversations") — the
@@ -536,12 +541,18 @@ export function waitingSince(r: Pick<WebsiteRow, 'waiting_since' | 'last_visitor
   return r.waiting_since ?? r.last_visitor_at ?? null;
 }
 
+/**
+ * Waiting for a reply in a live chat: not an offline enquiry still in its queue, which waits for an answer by email
+ * under Offline enquiries — counted there — and once made "1 visitor is waiting… waited 20 days" here (#252).
+ */
+export const waitsLive = (r: WebsiteRow): boolean => r.awaiting_reply && !(r.is_offline && r.status === 'pending');
+
 /** The visitor who has waited longest for a reply, the one "Open the longest waiting" opens. */
 export function longestWaiting(rows: WebsiteRow[]): WebsiteRow | null {
   let best: WebsiteRow | null = null;
   let bestAt = Number.NaN;
   for (const r of rows) {
-    if (!r.awaiting_reply) continue;
+    if (!waitsLive(r)) continue;
     const since = waitingSince(r);
     const at = since ? parseTs(since).getTime() : Number.NaN;
     // A row without a stamp still counts, but any stamped one has waited longer as far as anybody can tell.
@@ -567,7 +578,7 @@ function minutesText(m: number): string {
 
 /** The "Pick a conversation" line (CHAT-UI-00): how many are waiting, and for how long the longest has. */
 export function waitingSummary(rows: WebsiteRow[], now: number): string {
-  const n = rows.filter((r) => r.awaiting_reply).length;
+  const n = rows.filter(waitsLive).length;
   if (!n) return text('Nobody is waiting for a reply.');
   const head = n === 1 ? text('1 visitor is waiting for a reply.') : text('{n} visitors are waiting for a reply.', { n });
   const since = waitingSince(longestWaiting(rows) ?? { waiting_since: null, last_visitor_at: null });
@@ -588,15 +599,105 @@ export function stepRow(ids: number[], current: number | null, step: 1 | -1): nu
   return ids[Math.min(ids.length - 1, Math.max(0, at + step))]!;
 }
 
+/** A page of a website list as the server answers it; paging and `timing` from a server with #252. */
+export interface WebsiteListPage {
+  conversations: WebsiteRow[];
+  can: WebsiteCan;
+  sites?: Array<{ widget_id: number; site: string; widget?: string | null }>;
+  has_more?: boolean;
+  next_cursor?: string | null;
+  timing?: ServerTiming;
+}
+
+/** A saved copy is a list only when it has one: anything else waits for the server. */
+export const isWebsiteList = (hit: unknown): boolean => !!hit && typeof hit === 'object' && Array.isArray((hit as { conversations?: unknown }).conversations);
+
+const deniedOrGone = (e: unknown): boolean => e instanceof ApiError && (e.forbidden || e.status === 404);
+
+/**
+ * This computer's saved copy of a GET (the main process keeps the website lists' answers, #239, #252), shown while the
+ * first answer is on its way, so a list opens at once with what it showed last. Never over a live answer or an error,
+ * and stamped 0, so the server is still asked at once. `wrap` shapes it for the query (a first page, for paging).
+ */
+export function useSavedCopy(key: QueryKey, path: string, params: Record<string, string> | undefined, accept: (hit: unknown) => boolean, enabled: boolean, wrap: (hit: unknown) => unknown = (hit) => hit): void {
+  const qc = useQueryClient();
+  const keyJson = JSON.stringify(key);
+  const paramsJson = JSON.stringify(params ?? null);
+  useEffect(() => {
+    const k = JSON.parse(keyJson) as QueryKey;
+    if (!enabled || qc.getQueryData(k) !== undefined) return;
+    const controller = new AbortController();
+    const query = JSON.parse(paramsJson) as Record<string, string> | null;
+    void Promise.resolve()
+      .then(() => request<unknown>('GET', path, { query: query ?? undefined, signal: controller.signal, headers: { 'X-WS-Local-Read': '1' } }))
+      .then((hit) => {
+        const state = qc.getQueryState(k);
+        if (!controller.signal.aborted && hit && accept(hit.data) && (!state || (state.data === undefined && state.error === null))) qc.setQueryData(k, wrap(hit.data), { updatedAt: 0 });
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `accept` and `wrap` are shape helpers, read when the copy arrives
+  }, [qc, keyJson, path, paramsJson, enabled]);
+}
+
+/**
+ * The open conversations: every section's rows and counts are drawn from this one list, so it is read whole (the
+ * server keeps it to the ongoing chats). From the copy saved here at once, then from the server every 15 s, and at once
+ * on a realtime event; a new answer keeps the rows that did not change, so the list updates in place.
+ */
 export function useWebsiteInbox(closed: boolean, enabled = true) {
+  useSavedCopy(['website', 'inbox', closed ? 'closed' : 'open'], `${WEBSITE}/conversations`, closed ? { status: 'closed' } : undefined, isWebsiteList, enabled);
   return useQuery({
     queryKey: ['website', 'inbox', closed ? 'closed' : 'open'],
-    queryFn: ({ signal }) => apiGet<{ conversations: WebsiteRow[]; can: WebsiteCan }>(`${WEBSITE}/conversations`, closed ? { status: 'closed' } : undefined, signal),
+    queryFn: ({ signal }) => timed('conversations', () => apiGet<WebsiteListPage>(`${WEBSITE}/conversations`, closed ? { status: 'closed' } : undefined, signal), (d) => d?.conversations?.length ?? null),
     enabled,
     // Somebody who does not staff website chat is told once, not every 15 s.
-    refetchInterval: (query) => (query.state.error instanceof ApiError && (query.state.error.forbidden || query.state.error.status === 404) ? false : 15_000),
-    retry: (n, e) => !(e instanceof ApiError && (e.forbidden || e.status === 404)) && n < 2,
+    refetchInterval: (query) => (deniedOrGone(query.state.error) ? false : 15_000),
+    retry: (n, e) => !deniedOrGone(e) && n < 2,
   });
+}
+
+/** How many closed chats a page of the Closed list holds (#252). */
+export const CLOSED_PAGE = 50;
+const CLOSED_QUERY = { status: 'closed', fields: 'list', limit: String(CLOSED_PAGE) };
+
+/**
+ * Closed chats, a page at a time (worksuite-desktop#252): Closed only grows, and reading two hundred whole rows every
+ * 15 s — 2 KB each, with devices, pages and teams nobody reads in a list of finished chats — was a large part of what
+ * made the lists slow. Fifty rows of list fields at a time, the next page as the list is scrolled to its end, the first
+ * from the copy saved on this computer at once; asked again once a minute (a closed chat changes rarely).
+ */
+export function useWebsiteClosed(enabled = true) {
+  const key = ['website', 'inbox', 'closed', 'pages'];
+  const path = `${WEBSITE}/conversations`;
+  useSavedCopy(key, path, CLOSED_QUERY, isWebsiteList, enabled, (hit) => ({ pages: [hit], pageParams: [null] }));
+  const q = useInfiniteQuery({
+    queryKey: key,
+    queryFn: ({ pageParam, signal }) => timed('conversations:closed', () => apiGet<WebsiteListPage>(path, pageParam ? { ...CLOSED_QUERY, cursor: pageParam } : CLOSED_QUERY, signal), (d) => d?.conversations?.length ?? null),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last?.has_more && last.next_cursor ? last.next_cursor : undefined),
+    enabled,
+    refetchInterval: (query) => (deniedOrGone(query.state.error) ? false : 60_000),
+    retry: (n, e) => !deniedOrGone(e) && n < 2,
+  });
+  const pages = q.data?.pages;
+  const data = useMemo(() => {
+    if (!pages) return undefined;
+    // A chat closed while paging moves to the top: each id once, where it is newest.
+    const seen = new Set<number>();
+    const conversations = pages.flatMap((p) => p?.conversations ?? []).filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+    return { conversations, can: pages[0]?.can ?? ({} as WebsiteCan) };
+  }, [pages]);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
+  return {
+    ...q,
+    data,
+    hasMore: !!hasNextPage,
+    loadingMore: isFetchingNextPage,
+    loadMore: () => {
+      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+    },
+  };
 }
 
 /**
@@ -606,7 +707,7 @@ export function useWebsiteInbox(closed: boolean, enabled = true) {
 export function useWebsiteSearch(needle: string, closed: boolean) {
   return useQuery({
     queryKey: ['website', 'inbox', 'search', closed ? 'closed' : 'all', needle],
-    queryFn: ({ signal }) => apiGet<{ conversations: WebsiteRow[]; can: WebsiteCan }>(`${WEBSITE}/conversations`, closed ? { q: needle, status: 'closed' } : { q: needle }, signal),
+    queryFn: ({ signal }) => timed('conversations:search', () => apiGet<{ conversations: WebsiteRow[]; can: WebsiteCan }>(`${WEBSITE}/conversations`, closed ? { q: needle, status: 'closed' } : { q: needle }, signal), (d) => d?.conversations?.length ?? null),
     enabled: needle.length >= 2,
     placeholderData: keepPreviousData,
     staleTime: 10_000,
@@ -630,7 +731,7 @@ export function useWebsiteAccess(): boolean {
 export function useWebsiteConversation(id: string, { review = false }: { review?: boolean } = {}) {
   return useQuery({
     queryKey: review ? ['website', 'conversation', id, 'review'] : ['website', 'conversation', id],
-    queryFn: ({ signal }) => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, signal),
+    queryFn: ({ signal }) => timed('conversation', () => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, signal), (d) => d?.messages?.length ?? null),
     // No realtime event for replies or visitor typing: poll, slower in the background.
     refetchInterval: () => (document.visibilityState === 'visible' ? 5_000 : 30_000),
   });
@@ -683,7 +784,68 @@ export function useOpenConversation(id: string) {
     interval: 5_000,
     gcTime: Infinity,
     accept: isConversation,
+    // Timed for Help › Diagnostics (#252).
+    wrapFetch: (fetch) => timed('conversation', fetch, (d) => d?.messages?.length ?? null),
   });
+}
+
+/**
+ * A reply on its way (worksuite-desktop#252): drawn in the thread the moment Send is pressed, marked "Sending…", and
+ * replaced by the message the server stored — with its "Sent" tick — as soon as the server says so, without waiting
+ * for the thread to be read again. One the server refused, or that went to the outbox, leaves this list at once (the
+ * outbox shows its own).
+ */
+export interface SendingReply {
+  key: string;
+  conversationId: number;
+  body: string;
+  at: string;
+}
+
+export const sendingReplies = createStore<{ list: SendingReply[] }>({ list: [] });
+let sendingSeq = 0;
+
+/** The replies still on their way in this conversation. */
+export function useSendingReplies(conversationId: number): SendingReply[] {
+  const list = useStore(sendingReplies, (s) => s.list);
+  return useMemo(() => list.filter((r) => r.conversationId === conversationId), [list, conversationId]);
+}
+
+/** The server's stamp, as the thread's messages carry it: UTC without a zone. */
+const serverStamp = (d: Date): string => d.toISOString().slice(0, 19).replace('T', ' ');
+
+/**
+ * Show a reply at once; call what this returns with the outbox's answer. Delivered: the stored message goes into the
+ * thread (as the server will list it) and only that thread and the open list are asked again — not every website
+ * query, as a reply used to (the closed list, missed chats and the rest, all at once behind the reply).
+ */
+export function startWebsiteReply(qc: QueryClient, conversationId: number, body: string, replyTo: number | null = null): (r: { delivered: boolean; queued: boolean; data?: unknown } | null) => void {
+  const key = `sending-${++sendingSeq}`;
+  const started = Date.now();
+  sendingReplies.set((s) => ({ list: [...s.list, { key, conversationId, body, at: new Date().toISOString() }] }));
+  let done = false;
+  return (r) => {
+    if (done) return;
+    done = true;
+    const posted = r?.delivered ? ((r.data ?? null) as { id?: number; at?: string; timing?: ServerTiming } | null) : null;
+    if (posted && typeof posted.id === 'number') {
+      const s = app.get();
+      const me = s.auth?.user?.id ? Number(s.auth.user.id) : null;
+      const message: WebsiteMessage = {
+        id: posted.id, body, from: 'agent', agent: s.bootstrap?.user?.name ?? null, agent_id: me, at: posted.at ?? serverStamp(new Date()),
+        file: null, visibility: 'public', reply_to: replyTo, reply: null,
+      };
+      qc.setQueriesData<WebsiteConversation>({ queryKey: ['website', 'conversation', String(conversationId)] }, (d) =>
+        d && Array.isArray(d.messages) && !d.messages.some((m) => m.id === message.id) ? { ...d, messages: [...d.messages, message] } : d,
+      );
+      recordTimingOf('reply', Date.now() - started, posted.timing ?? null);
+    }
+    sendingReplies.set((st) => ({ list: st.list.filter((x) => x.key !== key) }));
+    if (r?.delivered) {
+      void qc.invalidateQueries({ queryKey: ['website', 'conversation', String(conversationId)] });
+      void qc.invalidateQueries({ queryKey: ['website', 'inbox', 'open'] });
+    }
+  };
 }
 
 /** What the open thread has loaded, wherever it came from: the composer's suggestions read it. */

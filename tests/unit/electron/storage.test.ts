@@ -242,7 +242,9 @@ describe('upload part size', () => {
     const { chunkSizeFor } = await import('../../../electron/services/transfers');
     expect(chunkSizeFor(0)).toBe(256 * 1024);
     expect(chunkSizeFor(2 * 1024 * 1024)).toBe(256 * 1024);
-    expect(chunkSizeFor(20 * 1024 * 1024)).toBe(1024 * 1024);
+    // Over 8 MB: full 8 MB parts, several at a time (worksuite-desktop#249).
+    expect(chunkSizeFor(20 * 1024 * 1024)).toBe(8 * 1024 * 1024);
+    expect(chunkSizeFor(5 * 1024 * 1024)).toBe(256 * 1024);
     expect(chunkSizeFor(2 * 1024 * 1024 * 1024)).toBe(8 * 1024 * 1024);
     expect(Math.ceil((5 * 1024 * 1024) / chunkSizeFor(5 * 1024 * 1024))).toBe(20);
   });

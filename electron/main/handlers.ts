@@ -30,8 +30,10 @@ import { restartForAccessibility } from '../services/remote-control/accessibilit
 import { createZip } from '../services/zip';
 import { openExternalSafely } from '../security/hardening';
 import { answerNotice } from '../services/ai-pending';
+import { notificationSettingsUrl } from '../services/locked-notifications';
 import { broadcast } from './events';
 import { logger } from './log';
+import { screenTimings } from '../services/screen-timings';
 
 /** The web app's pages `auth:openPage` may open, signed out. */
 const AUTH_PAGES = { 'forgot-password': '/forgot-password', account: '/account/settings' } as const;
@@ -362,6 +364,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:join', (input) => ctx.webchat.join(input.id, input.then, input.visitor));
   router.handle('ring:silence', (input) => ctx.webchat.silence(input.id, input.on));
   router.handle('ring:pass', (input) => ctx.webchat.pass(input.id));
+  router.handle('ring:test', () => ctx.webchat.testRing());
   router.handle('ring:joinSend', (input) => ctx.webchat.joinAndSend(input.id, input.message ?? null, { ...(input.open ? { open: true } : {}), ...(input.cannedId ? { cannedId: input.cannedId } : {}), ...(input.visitor ? { visitor: input.visitor } : {}) }));
   router.handle('ring:draft', (input) => ctx.webchat.setDraft(input.id, input.text));
   router.handle('ring:reply', (input) => ctx.webchat.replyJoined(input.message));
@@ -850,6 +853,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('notifications:pause', (input) => ({ pausedUntil: ctx.notifications.pause(input.minutes) }));
   router.handle('notifications:test', () => ctx.notifications.test());
   router.handle('notifications:permission', () => ctx.notifications.permission());
+  router.handle('notifications:openSettings', async () => {
+    // A fixed address of the system's own page; nothing from the page that asked (#251).
+    const url = notificationSettingsUrl(process.platform);
+    if (!url) return false;
+    await shell.openExternal(url);
+    return true;
+  });
   router.handle('notifications:refresh', () => ctx.notifications.refreshCounts());
   router.handle('notifications:reminder', (input) =>
     ctx.notifications.notify({ id: `reminder:${input.id}`, module: 'mail', title: input.title, body: input.body, sender: null, link: input.route, critical: false, flag: input.flag ?? null }),
@@ -1179,4 +1189,6 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('diagnostics:restartSafeMode', (input) => ctx.relaunch(input.safe));
   router.handle('diagnostics:services', () => ctx.supervisor.health());
+  // Website chats' request, server and render times (worksuite-desktop#252), for the report's timings.json.
+  router.handle('diagnostics:timings', (input) => screenTimings.add(input.entries));
 }

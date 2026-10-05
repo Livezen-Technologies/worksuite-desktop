@@ -11,7 +11,8 @@ import { Avatar, Button, Chip, ErrorNote, Spinner, cx } from '../../../component
 import { WEBSITE_CAPS } from '../kit/caps';
 import { MessageList } from '../kit/MessageList';
 import { byTime, fromWebsiteMessage } from '../kit/model';
-import { team, useAgents, useWebsiteConversation, websiteAction, WEBSITE } from './api';
+import { team, useAgents, useSavedCopy, useWebsiteConversation, websiteAction, WEBSITE } from './api';
+import { timed } from './timings';
 import { firstName, FollowUpRow, ReplyByEmail, visitFacts } from './Missed';
 import { PANEL_CARD, PANEL_HEADING, pathOf, Tag } from './rowParts';
 
@@ -58,9 +59,11 @@ export interface OfflineList {
 
 /** The enquiries, polled like Missed chats; an older server answers 404 and the section keeps its rows from the inbox. */
 export function useOffline() {
+  // From the copy saved on this computer at once, then from the server (worksuite-desktop#252).
+  useSavedCopy(['website', 'offline'], `${WEBSITE}/offline`, undefined, (hit) => Array.isArray((hit as OfflineList | null)?.offline), true);
   return useQuery({
     queryKey: ['website', 'offline'],
-    queryFn: ({ signal }) => apiGet<OfflineList>(`${WEBSITE}/offline`, undefined, signal),
+    queryFn: ({ signal }) => timed('offline', () => apiGet<OfflineList>(`${WEBSITE}/offline`, undefined, signal), (d) => d?.offline?.length ?? null),
     refetchInterval: 60_000,
     retry: false,
   });

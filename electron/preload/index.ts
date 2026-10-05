@@ -163,6 +163,7 @@ const api = {
     join: call('ring:join'),
     silence: call('ring:silence'),
     pass: call('ring:pass'),
+    test: call('ring:test'),
     joinSend: call('ring:joinSend'),
     reply: call('ring:reply'),
     closeJoined: call('ring:closeJoined'),
@@ -300,6 +301,7 @@ const api = {
     pause: call('notifications:pause'),
     test: call('notifications:test'),
     permission: call('notifications:permission'),
+    openSettings: call('notifications:openSettings'),
     refresh: call('notifications:refresh'),
     reminder: call('notifications:reminder'),
   },
@@ -569,6 +571,12 @@ const api = {
     saveBundle: call('diagnostics:saveBundle'),
     restartSafeMode: call('diagnostics:restartSafeMode'),
     services: call('diagnostics:services'),
+    timings: call('diagnostics:timings'),
+  },
+  connection: {
+    details: call('connection:details'),
+    speedTest: call('connection:speedTest'),
+    reconnect: call('connection:reconnect'),
   },
   events: { on },
 };

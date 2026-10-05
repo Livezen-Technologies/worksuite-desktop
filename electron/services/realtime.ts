@@ -65,6 +65,11 @@ export class RealtimeService {
   onState: (s: RealtimeState) => void = () => undefined;
   /** Called after a reconnect: views must refetch what they show. */
   onResync: () => void = () => undefined;
+  /** The gateway's answer to `sendPing` (worksuite-desktop#254), with the id sent. */
+  onPong: (id: string) => void = () => undefined;
+  /** The socket came back after a drop (worksuite-desktop#254: reconnects are counted for connection strength). */
+  onReconnect: () => void = () => undefined;
+  private host: string | null = null;
 
   constructor(
     private readonly http: HttpClient,
@@ -77,6 +82,35 @@ export class RealtimeService {
 
   getState(): RealtimeState {
     return this.state;
+  }
+
+  /** The gateway's host, once a ticket named it. */
+  gatewayHost(): string | null {
+    return this.host;
+  }
+
+  /**
+   * An echo request over the socket (worksuite-desktop#254): the gateway answers `ping:<id>` with
+   * `{"type":"pong","id":"<id>"}`. A gateway from before that ignores it, and the caller falls back to HTTP.
+   * False when there is no connected socket to send it on.
+   */
+  sendPing(id: string): boolean {
+    const ws = this.ws;
+    if (this.state !== 'connected' || !ws || !/^[0-9a-z]{1,16}$/.test(id)) return false;
+    try {
+      ws.send(`ping:${id}`);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** "Reconnect now" (worksuite-desktop#254): replace the socket even when it looks healthy. */
+  reconnectNow(): void {
+    if (!this.running) return;
+    this.lastFrameAt = 0;
+    this.attempt = 0;
+    this.kick();
   }
 
   private setState(s: RealtimeState): void {
@@ -177,6 +211,11 @@ export class RealtimeService {
       this.setState('disabled');
       return;
     }
+    try {
+      this.host = new URL(ticket.url).host;
+    } catch {
+      this.host = null;
+    }
     const url = `${ticket.url}${ticket.url.includes('?') ? '&' : '?'}ticket=${encodeURIComponent(ticket.ticket)}`;
     let ws: WebSocket;
     try {
@@ -205,10 +244,17 @@ export class RealtimeService {
         this.everConnected = true;
         this.attempt = 0;
         this.setState('connected');
-        if (wasReconnect) this.onResync();
+        if (wasReconnect) {
+          this.onReconnect();
+          this.onResync();
+        }
         return;
       }
-      if (data.type === 'ping' || data.type === 'pong') return;
+      if (data.type === 'pong') {
+        this.onPong(typeof data.id === 'string' ? data.id : '');
+        return;
+      }
+      if (data.type === 'ping') return;
       if (this.state === 'connected') this.onEvent(data);
     };
     const disconnect = (reason: string, code?: number) => {

@@ -13,7 +13,9 @@ import { listStamp } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
-import { followUpsFirst, isMine as mineFor, longestWaiting, PRIORITIES, sectionRows, sortWebsiteRows, stepRow, useCallbacks, useWebsiteInbox, useWebsiteSearch, waitingSummary, WEBSITE, WEBSITE_SORTS, type CallbackOutcome, type Section, type WebsiteCallback, type WebsitePriority, type WebsiteRow, type WebsiteSort } from './api';
+import { followUpsFirst, isMine as mineFor, longestWaiting, PRIORITIES, sectionRows, sortWebsiteRows, stepRow, useCallbacks, CLOSED_PAGE, useWebsiteClosed, useWebsiteInbox, useWebsiteSearch, waitingSummary, waitsLive, WEBSITE, WEBSITE_SORTS, type CallbackOutcome, type Section, type WebsiteCallback, type WebsitePriority, type WebsiteRow, type WebsiteSort } from './api';
+import { renderedAfter } from './timings';
+import { VirtualList } from '../../../components/VirtualList';
 import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
 import { ClosedDetail, ClosedRow } from './Closed';
 import { MissedDetail, MissedRow, useMissed, type MissedTab } from './Missed';
@@ -22,7 +24,8 @@ import { clock, handoffAsk, handoffLeft, handoffTitle, useRingState } from './Ri
 import { FilterPill as Pill, Tag } from './rowParts';
 import { WebsiteTable } from './WebsiteTable';
 import { ConversationRow } from './ConversationRow';
-import { WebsiteLive, type LiveView, type OnlineVisitor } from './WebsiteLive';
+import { WebsiteLive, type LiveView } from './WebsiteLive';
+import { useLiveVisitors } from './live/liveData';
 import { liveParamsOf, liveQuery, type LiveParams } from './live/LiveDashboard';
 import { WebsiteThread } from './WebsiteThread';
 import { VoiceCalls } from './VoiceCalls';
@@ -148,14 +151,14 @@ export function WebsiteWorkspace() {
     return () => clearTimeout(t);
   }, [q]);
   const open = useWebsiteInbox(false);
-  const online = useQuery({
-    queryKey: ['website', 'visitors'],
-    queryFn: ({ signal }) => apiGet<{ visitors: OnlineVisitor[] }>(`${WEBSITE}/visitors`, undefined, signal),
-    refetchInterval: 30_000,
-    retry: false,
-  });
+  // The same answer the Live dashboard reads, from its saved copy at first (#248), so the two counts always agree.
+  const online = useLiveVisitors(30_000);
   const visitorsOnline = online.data?.visitors.length ?? 0;
-  const closed = useWebsiteInbox(true, section === 'closed');
+  // Closed a page at a time, list fields only, the next page as the list reaches its end (worksuite-desktop#252).
+  const closed = useWebsiteClosed(section === 'closed');
+  // How long the rows took to draw after their answer arrived, for Help › Diagnostics (#252).
+  useEffect(() => renderedAfter('conversations'), [open.dataUpdatedAt]);
+  useEffect(() => renderedAfter('conversations:closed'), [closed.dataUpdatedAt]);
   // To follow up / Handled (C-04, UX-MISS-01). A server without the tabs sends no Handled count, and shows the one list.
   const [missedTab, setMissedTab] = useState<MissedTab>('todo');
   const missed = useMissed(missedTab, section === 'missed');
@@ -540,7 +543,26 @@ export function WebsiteWorkspace() {
             list.isLoading || list.error ? listPlaceholder : rows.length === 0 ? (
               <Empty icon="archive" title={typed ? text('Nothing matches “{q}”', { q: q.trim() }) : text('No closed chats')} hint={typed ? undefined : text('Chats closed by the team, ended by the visitor or closed as inactive are kept here.')} />
             ) : (
-              rows.map((r) => <ClosedRow key={r.id} r={r} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)
+              // A page of them as they are; past one page only the rows on screen are drawn, and the next page is asked
+              // for as the end comes into view (#252).
+              rows.length > CLOSED_PAGE ? (
+                <VirtualList
+                  items={rows}
+                  estimate={66}
+                  getKey={(r) => r.id}
+                  render={(r) => <ClosedRow r={r} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />}
+                  onEndReached={searching ? undefined : closed.loadMore}
+                />
+              ) : (
+                <>
+                  {rows.map((r) => <ClosedRow key={r.id} r={r} active={selected === String(r.id)} onOpen={() => to({ website: String(r.id) })} />)}
+                  {!searching && closed.hasMore ? (
+                    <button type="button" onClick={closed.loadMore} disabled={closed.loadingMore} className="w-full py-3 text-[12.5px] font-semibold text-primary hover:bg-subtle disabled:opacity-60">
+                      {closed.loadingMore ? text('Loading…') : text('Show older chats')}
+                    </button>
+                  ) : null}
+                </>
+              )
             )
           ) : listPlaceholder ?? (
             rows.map((r) => (
@@ -675,7 +697,7 @@ function CallbackRow({ b, active, onOpen }: { b: WebsiteCallback; active: boolea
 function PickConversation({ rows, missed, longest, visitors, onLongest, onVisitors }: { rows: WebsiteRow[]; missed: number | null; longest: WebsiteRow | null; visitors: number | null; onLongest: () => void; onVisitors: () => void }) {
   const now = useNow(30_000);
   const stats: Array<{ label: string; n: number | null; tone?: string }> = [
-    { label: 'Waiting', n: rows.filter((r) => r.awaiting_reply).length, tone: 'text-[#9A4A06] dark:text-warning' },
+    { label: 'Waiting', n: rows.filter(waitsLive).length, tone: 'text-[#9A4A06] dark:text-warning' },
     { label: 'Open', n: rows.length },
     { label: 'Missed', n: missed, tone: 'text-danger' },
   ];

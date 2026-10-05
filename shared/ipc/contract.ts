@@ -4,6 +4,7 @@ import { localProfileInput, type LocalOverview, type LocalProfile, type LocalSta
 import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
 import type { DataFolder, ImportProgress, MailFileHandle, MailFileView } from '../mail-files';
 import type { SmimeVerdict } from '../smime';
+import type { ConnectionDetails, SpeedTestResult } from '../connection';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -81,6 +82,7 @@ import type {
   Draft,
   NotificationItem,
   NotificationPermission,
+  RingTestStep,
   OfflineMutation,
   Preferences,
   PreferenceLock,
@@ -165,6 +167,8 @@ export const preferencesPatchSchema = z
     notificationPrivacy: z.enum(['FULL', 'SENDER_ONLY', 'GENERIC']),
     notificationsEnabled: z.boolean(),
     badgeCount: z.boolean(),
+    statusConnectionStrength: z.boolean(),
+    statusResponseTime: z.boolean(),
     moduleNotifications: z.record(z.string().max(64), z.boolean()),
     dndEnabled: z.boolean(),
     dndFrom: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
@@ -298,6 +302,8 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
     id: z.number().int().positive().optional(),
     docKind: z.string().regex(/^[a-z_]{1,60}$/).optional(),
   }),
+  /** A mail attachment (worksuite-desktop#249): sent in parts like any upload, then staged for the message — not kept in Drive. */
+  z.object({ kind: z.literal('mail') }),
   /** Offered to the other end of a remote-control session (RC06): they accept or decline it there. */
   z.object({ kind: z.literal('remote'), sessionId: z.number().int().positive() }),
   // To a website visitor (ENH-WCHAT-02, RDC-04/14): one request to the conversation's attach, the widget's own store.
@@ -462,6 +468,8 @@ export const contract = {
   'ring:join': ch(z.object({ id: z.number().int().positive(), then: z.enum(['transfer']).optional(), visitor: z.string().max(200).optional() }), { session: true, rate: 4 }),
   'ring:silence': ch(z.object({ id: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 10 }),
   'ring:pass': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
+  /** Settings › Ringing › Send a test chat notification (#251): routed, received, notification shown. */
+  'ring:test': ch(none, { session: true, rate: 2 }),
   // The card's Join chat and Join & send, then the mini chat's replies, Open full chat or minimise, and its height (#225).
   // `open`: the native call window's Send & join and Join chat open the thread (R-05, UX-ALR-01; RING-41); `cannedId`: the
   // saved reply it was written from, counted once it is sent (RDC-03).
@@ -878,6 +886,8 @@ export const contract = {
     { session: true, rate: 5 },
   ),
   'notifications:permission': ch(none, { session: true }),
+  /** The operating system's notification settings for WorkSuite (#251): the banner's Open System Settings. */
+  'notifications:openSettings': ch(none, { session: true, rate: 4 }),
   /** The bell's count again, now: after the notification centre read, snoozed or archived something. */
   'notifications:refresh': ch(none, { session: true, rate: 10 }),
 
@@ -1289,6 +1299,30 @@ export const contract = {
   'diagnostics:saveBundle': ch(none, { permission: 'desktop.diagnostics.export', whileLocked: true, sensitive: true, rate: 1 }),
   'diagnostics:restartSafeMode': ch(z.object({ safe: z.boolean() }), { whileLocked: true }),
   'diagnostics:services': ch(none, { whileLocked: true }),
+  // Request, server and render times from the screens (worksuite-desktop#252), kept for the report's timings.json.
+  'diagnostics:timings': ch(
+    z.object({
+      entries: z
+        .array(
+          z.object({
+            what: z.string().regex(/^[a-z][a-z0-9:_-]{0,39}$/),
+            at: z.string().max(40),
+            ms: z.number().min(0).max(3_600_000),
+            rows: z.number().int().min(0).max(1_000_000).nullable(),
+            server: z.object({ ms: z.number(), db_ms: z.number(), queries: z.number().int(), rows: z.number().int() }).nullable(),
+            render_ms: z.number().min(0).max(3_600_000).nullable().optional(),
+            ok: z.boolean(),
+          }),
+        )
+        .max(50),
+    }),
+    { whileLocked: true, rate: 2 },
+  ),
+
+  // Connection strength's popover (worksuite-desktop#254): the server's clock, a light speed test, Reconnect now.
+  'connection:details': ch(none, { session: true, rate: 2 }),
+  'connection:speedTest': ch(none, { session: true, rate: 1 }),
+  'connection:reconnect': ch(none, { session: true, rate: 1 }),
 
   // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
   ...posContract,
@@ -1496,6 +1530,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:join': boolean;
   'ring:silence': void;
   'ring:pass': boolean;
+  'ring:test': RingTestStep[];
   'ring:joinSend': { ok: boolean; why: string | null };
   'ring:reply': { ok: boolean; why: string | null };
   'ring:closeJoined': void;
@@ -1563,6 +1598,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'notifications:test': boolean;
   'notifications:reminder': void;
   'notifications:permission': NotificationPermission;
+  'notifications:openSettings': boolean;
   'notifications:refresh': void;
   'clipboard:readForPaste': { text: string | null; image: string | null; files: PickedFile[] };
   'print:print': boolean;
@@ -1741,6 +1777,10 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'diagnostics:saveBundle': string | null;
   'diagnostics:restartSafeMode': void;
   'diagnostics:services': Record<string, ServiceHealth>;
+  'diagnostics:timings': void;
+  'connection:details': ConnectionDetails;
+  'connection:speedTest': SpeedTestResult;
+  'connection:reconnect': void;
 }
 
 /** Typed error codes returned across IPC (§8.3 plus IPC-specific ones). */

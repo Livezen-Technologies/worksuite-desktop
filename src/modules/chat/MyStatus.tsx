@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { app } from '../../core/app-state';
 import { apiGet, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
+import { shownPresence, type ShownPresence } from '../../core/presence';
 import { text } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
@@ -19,6 +20,13 @@ export const STATUS_CHOICES: Array<{ id: string; label: string; dot: string; tak
   { id: 'offline', label: 'Appear offline', dot: 'bg-line', taking: 'Not taking chats' },
 ];
 
+/** The choice that says a shown status (`shownPresence`): Online is Available — Taking chats. */
+export function statusChoice(shown: ShownPresence | null): (typeof STATUS_CHOICES)[number] | null {
+  if (!shown) return null;
+  const id = shown === 'online' ? 'available' : shown;
+  return STATUS_CHOICES.find((c) => c.id === id) ?? null;
+}
+
 /**
  * "Set your status", one control for every chat surface: under Chat's list, and at the foot of the Website Chats menu
  * (C-01), where it says whether I am taking chats and how many I have open. The presence heartbeat keeps it live.
@@ -29,9 +37,11 @@ export function MyStatus({ variant = 'chat', open = 0 }: { variant?: 'chat' | 'w
   const [menu, setMenu] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const me = useQuery({ queryKey: ['chat', 'presence', 'me'], queryFn: ({ signal }) => apiGet<{ status: string; choice: string }>('/api/chat/presence/me', undefined, signal), refetchInterval: 60_000, retry: false });
+  const network = useStore(app, (s) => s.status?.network ?? 'ONLINE');
   const choice = STATUS_CHOICES.find((c) => c.id === (me.data?.choice ?? 'available')) ?? STATUS_CHOICES[0]!;
-  // Away by itself (no input for a while) shows as away, whatever was chosen.
-  const shown = me.data?.status === 'away' && choice.id === 'available' ? STATUS_CHOICES.find((c) => c.id === 'away')! : choice;
+  // One status everywhere (worksuite-desktop#251): what the top bar shows, which is what website chats are routed by —
+  // "Taking chats" only while the server counts me online, never while a meeting or being idle makes me busy or away.
+  const shown = statusChoice(shownPresence(me.data, network)) ?? choice;
   useEffect(() => {
     if (!menu) return;
     const off = (e: MouseEvent) => ref.current && !ref.current.contains(e.target as Node) && setMenu(false);

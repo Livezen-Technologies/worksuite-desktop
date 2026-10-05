@@ -1,6 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { apiPost, request } from '../../core/api';
-import { call, errorMessage } from '../../core/bridge';
+import { call, errorMessage, registerDropped } from '../../core/bridge';
+import { app } from '../../core/app-state';
+import { useStore } from '../../core/store';
+import { MAX_MAIL_ATTACHMENT_BYTES, uploadPercent } from '@shared/uploads';
 import { flushDrafts, useDraft } from '../../core/drafts';
 import { text } from '../../core/i18n';
 import { addDays, bytes, timeLabel, todayInZone, wallToUtc } from '../../core/time';
@@ -122,7 +125,11 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
   const [showCc, setShowCc] = useState<boolean | 'opened'>(!!seed.cc);
   const [showBcc, setShowBcc] = useState<boolean | 'opened'>(!!seed.bcc);
   const [edited, setEdited] = useState(false);
-  const [uploading, setUploading] = useState<Array<{ id: string; name: string; size: number }>>([]);
+  // What is on its way. A file from this computer goes through the transfer manager (#249): in parts, resumable,
+  // shown in Transfers, and attached here once the server has staged it; the transfer is followed by its id.
+  const [uploading, setUploading] = useState<Array<{ id: string; name: string; size: number; transferId?: string }>>([]);
+  const transfers = useStore(app, (s) => s.transfers);
+  const attachedFrom = useRef(new Set<string>());
   const [later, setLater] = useState<string | null>(null);
   const [pick, setPick] = useState('');
   const [busy, setBusy] = useState(false);
@@ -241,24 +248,63 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
       return;
     }
     for (const file of files) {
-      if (file.size > 25 * 1024 * 1024) {
+      if (file.size > MAX_MAIL_ATTACHMENT_BYTES) {
         toast('error', text('{name} is over the 25 MB limit.', { name: file.name }));
         continue;
       }
       const id = `${file.name}-${Math.random().toString(36).slice(2)}`;
       setUploading((u) => [...u, { id, name: file.name, size: file.size }]);
       try {
+        // A file on disk: in parts through the transfer manager, like every other upload (#249).
+        let picked: Awaited<ReturnType<typeof registerDropped>>[number] | undefined;
+        try {
+          [picked] = await registerDropped([file]);
+        } catch {
+          picked = undefined; // Not a file on disk: sent the small way below.
+        }
+        if (picked) {
+          const [t] = await call('transfers:upload', { handles: [picked.handle], target: { kind: 'mail' } });
+          if (t) {
+            setUploading((u) => u.map((x) => (x.id === id ? { ...x, transferId: t.id } : x)));
+            continue;
+          }
+        }
+        // Only made in memory (a picture taken out of the message): small, one request.
         const form = new FormData();
         form.set('file', file, file.name);
         form.set('kind', 'attach');
         const r = await request<Attached>('POST', '/api/mail/upload', { body: form });
         set({ attachments: [...(latest.current.attachments ?? []), { token: r.data.token, name: r.data.name, size: r.data.size }] });
+        setUploading((u) => u.filter((n) => n.id !== id));
       } catch (e) {
         toast('error', errorMessage(e));
-      } finally {
         setUploading((u) => u.filter((n) => n.id !== id));
       }
     }
+  };
+
+  // An upload that has finished is attached once; one that was cancelled (here or in Transfers) is let go.
+  useEffect(() => {
+    for (const u of uploading) {
+      const t = u.transferId ? transfers.find((x) => x.id === u.transferId) : undefined;
+      if (!t || attachedFrom.current.has(t.id)) continue;
+      if (t.state === 'done' && t.attachment) {
+        attachedFrom.current.add(t.id);
+        set({ attachments: [...(latest.current.attachments ?? []), { token: t.attachment.token, name: t.attachment.name, size: t.attachment.size }] });
+        setUploading((list) => list.filter((x) => x.id !== u.id));
+      } else if (t.state === 'cancelled' || (t.state === 'done' && !t.attachment)) {
+        attachedFrom.current.add(t.id);
+        if (t.state === 'done') toast('error', text('“{name}” was uploaded but not staged for this message. Attach it again.', { name: t.name }));
+        setUploading((list) => list.filter((x) => x.id !== u.id));
+      }
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `set` and `latest` are the draft's own, stable for this window.
+  }, [transfers, uploading]);
+  /** Uploads still moving or waiting hold the message back; a failed one is shown with its reason and Retry, and does not. */
+  const stillUploading = uploading.filter((u) => transfers.find((x) => x.id === u.transferId)?.state !== 'failed').length;
+  const dropUpload = (u: { id: string; transferId?: string }) => {
+    if (u.transferId) void call('transfers:cancel', { id: u.transferId }).catch(() => undefined);
+    setUploading((list) => list.filter((x) => x.id !== u.id));
   };
 
   /** Files from the Drive go as copies, staged on the server like an upload (the Drive's download permission decides). */
@@ -562,7 +608,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
     onPick: setPick,
     onSchedule: () => void sendLater(laterAt),
     scheduling: busy,
-    canSchedule: !!later && uploading.length === 0,
+    canSchedule: !!later && stillUploading === 0,
     offline,
   };
 
@@ -742,22 +788,41 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
                 </button>
               </li>
             ))}
-            {uploading.map((u) => (
-              <li key={u.id} data-uploading className="relative flex h-9 max-w-[280px] min-w-0 items-center gap-2 overflow-hidden rounded-[8px] border border-dashed border-line pr-2 pl-2 text-[12.5px] text-ink-2">
-                <FileBadge name={u.name} size={22} />
-                <span className="min-w-0 truncate" title={u.name}>{u.name}</span>
-                {u.size ? <span className="shrink-0 text-[11.5px] text-ink-3">{bytes(u.size)}</span> : null}
-                <span className="sr-only">{text('Uploading {name}…', { name: u.name })}</span>
-                <span role="progressbar" aria-label={text('Uploading {name}', { name: u.name })} className="absolute inset-x-0 bottom-0 h-[2px] overflow-hidden bg-subtle">
-                  <span className="block h-full w-1/3 animate-pulse bg-primary" />
-                </span>
-              </li>
-            ))}
+            {uploading.map((u) => {
+              const t = u.transferId ? transfers.find((x) => x.id === u.transferId) : undefined;
+              const pct = t ? uploadPercent(t.bytes, t.total) : null;
+              const failed = t?.state === 'failed';
+              return (
+                <li key={u.id} data-uploading={t?.state ?? 'sending'} className={cx('relative flex h-9 max-w-[320px] min-w-0 items-center gap-2 overflow-hidden rounded-[8px] border border-dashed pr-1 pl-2 text-[12.5px] text-ink-2', failed ? 'border-danger/60' : 'border-line')} title={t?.error ?? undefined}>
+                  <FileBadge name={u.name} size={22} />
+                  <span className="min-w-0 truncate" title={u.name}>{u.name}</span>
+                  <span className={cx('shrink-0 text-[11.5px] tabular-nums', failed ? 'text-danger' : 'text-ink-3')}>
+                    {failed ? text('Failed') : t?.state === 'paused' || t?.retryAt ? text('Paused {pct}%', { pct: pct ?? 0 }) : pct !== null && t && t.bytes > 0 ? text('Uploading {pct}%', { pct }) : u.size ? bytes(u.size) : null}
+                  </span>
+                  {failed ? (
+                    <button type="button" onClick={() => void call('transfers:retry', { id: t.id }).catch((e) => toast('error', errorMessage(e)))} aria-label={text('Retry uploading {name}', { name: u.name })} title={text('Retry — continues from where it stopped')} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
+                      <Icon name="refresh" size={13} />
+                    </button>
+                  ) : null}
+                  {u.transferId ? (
+                    <button type="button" onClick={() => dropUpload(u)} aria-label={text('Remove {name}', { name: u.name })} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-danger">
+                      <Icon name="x" size={13} />
+                    </button>
+                  ) : null}
+                  <span className="sr-only">{failed ? (t?.error ?? '') : text('Uploading {name}…', { name: u.name })}</span>
+                  {failed ? null : (
+                    <span role="progressbar" aria-label={text('Uploading {name}', { name: u.name })} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct ?? undefined} className="absolute inset-x-0 bottom-0 h-[2px] overflow-hidden bg-subtle">
+                      {pct !== null && t && t.bytes > 0 ? <span className="block h-full bg-primary transition-[width] duration-300" style={{ width: `${pct}%` }} /> : <span className="block h-full w-1/3 animate-pulse bg-primary" />}
+                    </span>
+                  )}
+                </li>
+              );
+            })}
           </ul>
         ) : null}
         <div data-compose-footer className="flex h-14 shrink-0 items-center gap-3 border-t border-line px-4">
           <div ref={sendWrap} role="group" aria-label={text('Send options')} data-testid="send-split" className="shrink-0">
-            <PrimaryActionButton label={text('Send')} icon="send" shortcut={`${MOD}Enter`} hint={text('Send — you have {n} seconds to undo', { n: 8 })} onClick={() => sendNow()} menu={sendSections} menuLabel={text('Send options')} disabled={uploading.length > 0} />
+            <PrimaryActionButton label={text('Send')} icon="send" shortcut={`${MOD}Enter`} hint={text('Send — you have {n} seconds to undo', { n: 8 })} onClick={() => sendNow()} menu={sendSections} menuLabel={text('Send options')} disabled={stillUploading > 0} />
           </div>
           <span role="status" aria-live="polite" data-draft-status className="min-w-0 flex-1 truncate text-[12px] text-ink-3">
             {status}

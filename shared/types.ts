@@ -2,6 +2,7 @@ import type { AppearancePrefs, DarkColorProfile, Tint } from './theme-profiles';
 import type { ItemLink, ItemSource } from './item-links';
 import type { LinkPrefs } from './link-prefs';
 import type { MailMediaPrefs } from './mail-media';
+import type { ConnectionStats } from './connection';
 /**
  * Types shared by the main process and the renderer. Everything crossing the
  * IPC boundary is described here and validated by the zod schemas in
@@ -251,6 +252,10 @@ export interface Preferences {
   notificationsEnabled: boolean;
   /** The count of what needs you (chat + notifications) on the app's icon: the Dock, the taskbar. */
   badgeCount: boolean;
+  /** The status bar's connection strength (worksuite-desktop#254); unset: shown. */
+  statusConnectionStrength?: boolean;
+  /** The response time in ms beside it; unset: shown. */
+  statusResponseTime?: boolean;
   /** Per-module notification toggles; a missing key means enabled. */
   moduleNotifications: Record<string, boolean>;
   dndEnabled: boolean;
@@ -835,6 +840,8 @@ export interface StatusSnapshot {
   services: Record<string, ServiceHealth>;
   locked: boolean;
   safeMode: boolean;
+  /** Connection strength's measurements (worksuite-desktop#254): pings, reconnects and the API's median. */
+  connection?: ConnectionStats;
 }
 
 export type TransferDirection = 'upload' | 'download';
@@ -867,6 +874,10 @@ export interface Transfer {
   movedAt?: string | null;
   /** Waiting in the queue because the connection is lost, or a metered connection is set to wait. */
   held?: 'connection' | 'metered' | null;
+  /** A mail attachment's staged copy once its parts are in (worksuite-desktop#249): what Compose attaches. */
+  attachment?: { token: string; name: string; size: number } | null;
+  /** Where a tender's upload goes, so the tender's tabs show it as it moves — also after a restart (#249). */
+  tender?: { tenderId: number; into: 'document' | 'line' | 'replace' | 'security'; id?: number; docKind?: string } | null;
 }
 
 export interface OfflineMutation {
@@ -1615,4 +1626,18 @@ export interface MailBodiesProgress {
   /** ISO time of the last pass that finished. */
   doneAt: string | null;
   error: string | null;
+}
+
+/** What the system did with the test chat notification (Settings › Ringing, worksuite-desktop#251). */
+export interface RingTestNotice {
+  state: 'shown' | 'failed' | 'unknown' | 'unsupported' | 'off';
+  detail: string | null;
+}
+
+/** One step of "Send a test chat notification" (worksuite-desktop#251): routed · received · notification shown · sound. */
+export interface RingTestStep {
+  id: 'routed' | 'received' | 'notification' | 'sound';
+  label: string;
+  state: 'ok' | 'warn' | 'fail' | 'pending';
+  detail: string | null;
 }

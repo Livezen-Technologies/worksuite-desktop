@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from 'react';
-import { useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { ApiError, apiGet, request } from './api';
 import { app } from './app-state';
 import { useStore } from './store';
@@ -15,6 +15,10 @@ export function useLocalFirstQuery<T>(options: {
   gcTime?: number;
   /** A saved copy is used only when it has this shape; a stale or foreign one is left for the live request. */
   accept?: (hit: unknown) => boolean;
+  /** Keep the last answer on screen while a changed key (a filter) loads (worksuite-desktop#248). */
+  keepPrevious?: boolean;
+  /** Wraps the live request, to time it (worksuite-desktop#252); it must still call `fetch`. */
+  wrapFetch?: (fetch: () => Promise<T>) => Promise<T>;
 }) {
   const qc = useQueryClient();
   const scope = useStore(app, (s) => `${s.auth?.server?.origin ?? ''}:${s.bootstrap?.user?.id ?? ''}:${s.bootstrap?.user?.organizationId ?? ''}`);
@@ -25,12 +29,13 @@ export function useLocalFirstQuery<T>(options: {
   const accept = options.accept;
   const query = useQuery<T>({
     queryKey: key,
-    queryFn: ({ signal }) => apiGet<T>(path, options.params, signal),
+    queryFn: ({ signal }) => (options.wrapFetch ? options.wrapFetch(() => apiGet<T>(path, options.params, signal)) : apiGet<T>(path, options.params, signal)),
     enabled: options.enabled,
     staleTime: 30_000,
     gcTime: options.gcTime ?? 10 * 60_000,
     refetchInterval: (q) => q.state.error instanceof ApiError && (q.state.error.forbidden || q.state.error.status === 404) ? false : document.visibilityState === 'visible' ? options.interval : Math.max(options.interval, 60_000),
     retry: (n, e) => !(e instanceof ApiError && (e.forbidden || e.status === 404)) && n < 2,
+    placeholderData: options.keepPrevious ? keepPreviousData : undefined,
   });
   useEffect(() => {
     if (options.enabled === false || qc.getQueryData(key) !== undefined) return;

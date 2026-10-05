@@ -83,7 +83,7 @@ export function ThreadFailed({ onRetry }: { onRetry: () => void }) {
 }
 
 /** A note centred on the pane, over whatever is drawn beneath it. */
-function PaneNotice({ role = 'status', children }: { role?: 'status' | 'alert'; children: ReactNode }) {
+export function PaneNotice({ role = 'status', children }: { role?: 'status' | 'alert'; children: ReactNode }) {
   return (
     <div className="pointer-events-none absolute inset-0 flex items-center justify-center p-6">
       <div role={role} className="pointer-events-auto flex items-center gap-1.5 rounded-[10px] border border-line bg-surface px-4 py-2.5 text-[13px] text-ink-2 shadow-sm">
@@ -93,7 +93,7 @@ function PaneNotice({ role = 'status', children }: { role?: 'status' | 'alert'; 
   );
 }
 
-function RetryButton({ onRetry }: { onRetry: () => void }) {
+export function RetryButton({ onRetry }: { onRetry: () => void }) {
   return (
     <button type="button" onClick={onRetry} className="font-semibold text-primary hover:underline focus-visible:underline focus-visible:outline-none">
       {text('Retry')}
@@ -102,7 +102,7 @@ function RetryButton({ onRetry }: { onRetry: () => void }) {
 }
 
 /** True once loading has gone on for {@link SLOW_AFTER_MS}; Retry starts the count again. */
-function useSlow(): [boolean, () => void] {
+export function useSlow(): [boolean, () => void] {
   const [round, setRound] = useState(0);
   const [slowRound, setSlowRound] = useState(-1);
   useEffect(() => {

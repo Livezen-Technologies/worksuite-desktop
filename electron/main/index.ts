@@ -61,6 +61,7 @@ import { SalonSync } from '../services/salon-sync';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { HttpClient, withSafeHeaders, type FetchLike } from '../services/http';
+import { createNetFetch } from '../services/net-fetch';
 import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
@@ -80,6 +81,8 @@ import { attachmentStorePathOf } from '@shared/mail-media';
 import { mimeFor } from '@shared/mime';
 import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
+import { ConnectionMonitor, timeFetch } from '../services/connection-quality';
+import { ApiTimings } from '@shared/connection';
 import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
 import { DriveSync } from '../services/sync/engine';
@@ -236,13 +239,23 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // A dedicated network session for API traffic: its own cookie jar and proxy.
   const net = session.fromPartition('persist:ws-net');
+  // Bulk traffic (uploads, downloads, mail pictures and bodies fetched ahead) has its own connection pool
+  // (worksuite-desktop#252): Chromium allows 6 connections per host per session, and an upload's parts used to take
+  // all of them, so every chat list, thread and reply waited behind an 8 MB part. Auth is a header, not a cookie, so
+  // the second session needs no shared cookie jar.
+  const bulkNet = session.fromPartition('persist:ws-bulk');
   const proxyConfig = enterprise.proxy && enterprise.proxy.mode !== 'system' ? (enterprise.proxy.mode === 'pac' ? { pacScript: enterprise.proxy.url ?? '' } : { proxyRules: enterprise.proxy.rules ?? enterprise.proxy.url ?? '', proxyBypassRules: enterprise.proxy.bypass ?? '' }) : null;
   if (proxyConfig) {
     void net.setProxy(proxyConfig);
+    void bulkNet.setProxy(proxyConfig);
     void session.defaultSession.setProxy(proxyConfig);
   }
   // Every main-process request's headers go through the header-safety helper (#238): nothing above 255 reaches undici.
-  const fetchImpl: FetchLike = withSafeHeaders((url, init) => net.fetch(url, init as RequestInit));
+  // And every response's (#253): not `net.fetch`, whose own listener throws on a raw UTF-8 file name and never settles.
+  const netFetch = createNetFetch((o) => electronNet.request(o), net);
+  const fetchImpl: FetchLike = withSafeHeaders((url, init) => netFetch(url, init as RequestInit));
+  const bulkNetFetch = createNetFetch((o) => electronNet.request(o), bulkNet);
+  const bulkFetchImpl: FetchLike = withSafeHeaders((url, init) => bulkNetFetch(url, init as RequestInit));
 
   const local = new LocalWorkspace(join(p.profile, 'guest-workspace.sqlite'));
   // Guest mode runs in the main window (#149): which window is in it and past its PIN, and where a move may go.
@@ -293,8 +306,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Forward-declared so the HTTP client's callbacks can reach the session.
   // eslint-disable-next-line prefer-const
   let sessionCtl: SessionController;
-  const http = new HttpClient({
-    fetch: fetchImpl,
+  // The API's last 20 requests, for connection strength's median (worksuite-desktop#254).
+  const apiTimings = new ApiTimings();
+  const httpDeps = (fetch: FetchLike): ConstructorParameters<typeof HttpClient>[0] => ({
+    fetch,
     origin: () => auth.getServer()?.origin ?? null,
     tokens: { accessToken: () => auth.accessToken(), refresh: () => auth.refresh() },
     clientHeaders,
@@ -306,6 +321,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       else if (code === 'VERSION_UNSUPPORTED' || code === 'UPDATE_REQUIRED') updater.serverRejected();
     },
   });
+  const http = new HttpClient(httpDeps(timeFetch(fetchImpl, apiTimings)));
+  // The same client on the bulk pool (#252): uploads, downloads and mail's pictures and bodies fetched ahead.
+  const bulkHttp = new HttpClient(httpDeps(bulkFetchImpl));
 
   const device: DeviceService = new DeviceService(db, secrets, http);
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
@@ -319,7 +337,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   // Mail's pictures and attachments kept on this computer (#163): pictures through WorkSuite's proxy, attachments ahead.
   const mailMedia = new MailMedia({
-    http,
+    http: bulkHttp,
     cache,
     userId: () => sessionCtl?.userId() ?? null,
     prefs: () => settings.effective(),
@@ -329,7 +347,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // "Download message bodies" (#190): Mail's bodies within the keep period, fetched ahead into the offline cache.
   const mailBodies = new MailBodies({
     afterBody: (user, path, body) => mailMedia.afterBody(user, path, body),
-    http,
+    http: bulkHttp,
     cache,
     userId: () => sessionCtl?.userId() ?? null,
     prefs: () => settings.effective(),
@@ -395,6 +413,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const realtime = new RealtimeService(http, () => auth.getServer()?.origin ?? null, allowInsecure);
   let realtimeDownSince: number | null = null;
+  // Connection strength (worksuite-desktop#254): pings over the realtime socket, or /api/health without one.
+  const connection = new ConnectionMonitor({
+    realtime,
+    http,
+    origin: () => auth.getServer()?.origin ?? null,
+    active: () => !!sessionCtl?.isReady() && !!auth.getServer(),
+    onChange: () => emitStatus(),
+    api: apiTimings,
+  });
+  connection.start();
 
   const notifications = new NotificationService(db, getVault, http, () => settings.effective());
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
@@ -452,7 +480,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const transfers: TransferManager = new TransferManager({
     db,
     vault: getVault,
-    http,
+    http: bulkHttp,
     userId: () => sessionCtl.userId(),
     downloadFolder: () => settings.effective().downloadFolder,
     hash,
@@ -1134,6 +1162,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       realtimeDiagnostics: realtime.diagnostics(),
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
+      connection: connection.stats(),
       pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
@@ -1169,6 +1198,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   realtime.onState = (s: RealtimeState) => {
     notifications.realtimeState(s);
+    connection.realtimeState(s);
     realtimeDownSince = s === 'down' || s === 'connecting' ? (realtimeDownSince ?? Date.now()) : null;
     emitStatus();
   };
@@ -1493,6 +1523,21 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     followUpPrefs: () => ({ ...FOLLOW_UP_DEFAULTS, ...settings.effective().webchatFollowUps }),
     idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    // While the live connection is down the list is read every 10 s (worksuite-desktop#251).
+    realtimeUp: () => realtime.getState() === 'connected',
+    // A chat found by reading the list is announced as its event would have been: the system notification with Join
+    // and Reply when the card is not showing (#251).
+    announce: (c) =>
+      notifications.handleRealtime({
+        type: c.mine ? 'chat.assigned' : 'chat.incoming',
+        event_id: `list-${c.id}`,
+        conversation_id: c.id,
+        visitor: c.visitor,
+        site: c.site,
+        preview: c.preview,
+        at: c.since,
+      }),
+    testNotify: () => notifications.testChat(),
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
@@ -1748,6 +1793,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/chat/messages', 'chat'],
     // Website chats: the list and each conversation opened, so a thread opens at once from its last copy (#239).
     ['/api/chat/widget-admin/conversations', 'chat'],
+    // Missed chats and Offline enquiries too, so every website list opens at once from its last copy (#252).
+    ['/api/chat/widget-admin/missed', 'chat'],
+    ['/api/chat/widget-admin/offline', 'chat'],
+    // The Live dashboard (its summary, the full answer) and who is on the sites, so it opens at once from its last copy (#248).
+    ['/api/chat/widget-admin/dashboard', 'chat'],
+    ['/api/chat/widget-admin/visitors', 'chat'],
     ['/api/calendar/events', 'calendar'],
     ['/api/tasks', 'tasks'],
     ['/api/task-lists', 'tasks'],
@@ -2116,7 +2167,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Text read from images on this computer (worksuite-desktop#59): Tesseract, its language data fetched once when first needed.
   const ocr = new OcrService({
     dir: join(p.userData, 'LocalAI', 'ocr'),
-    fetch: withSafeHeaders((url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit)),
+    fetch: withSafeHeaders((url, init) => netFetch(url, { ...init, cache: 'no-store' } as RequestInit)),
     progress: (sender, ev) => {
       const wc = webContents.fromId(sender);
       if (wc && !wc.isDestroyed()) wc.send('ai:ocrProgress', ev);
@@ -2333,6 +2384,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     attendanceBreak,
   };
   registerHandlers(router, ctx);
+  router.handle('connection:details', () => connection.details());
+  router.handle('connection:speedTest', () => connection.speedTest());
+  router.handle('connection:reconnect', () => connection.reconnect());
   pdfStudio.register(router);
   mailFiles.register(router);
   pos.register(router);

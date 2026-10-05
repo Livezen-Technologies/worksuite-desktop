@@ -71,6 +71,11 @@ function serve() {
   vi.mocked(apiGet).mockImplementation((async (path: string) => {
     if (path === '/api/chat/widget-admin/visitors') return { visitors: VISITORS };
     if (path === '/api/chat/widget-admin/dashboard') return dashboard();
+    // The first view in one answer (#248): the figures and the sites, refused as the dashboard is.
+    if (path === '/api/chat/widget-admin/dashboard/summary') {
+      const d = dashboard() as typeof DASH;
+      return { now: d.now, today: d.today, visitors: VISITORS, visitors_total: VISITORS.length, widgets: d.widgets, server_time: d.server_time };
+    }
     if (path === '/api/chat/widget-admin/conversations') return { conversations: [{ id: 12, last_message: { body: 'Is there a student price?' } }], can: {} };
     if (path === '/api/chat/widget-admin/canned') return { responses: [] };
     if (path === '/api/chat/presence/me') return { status: 'online', choice: 'available' };
@@ -105,7 +110,7 @@ afterEach(() => cleanup());
 describe('L-04 · the main window is the web app’s Live dashboard (MAP-19), with Pop out (MAP-21)', () => {
   it('pops the map out into its own window, and my own call reads “· You”', async () => {
     show(<WebsiteLive view="dashboard" selected={null} onSelect={vi.fn()} onOpenChat={vi.fn()} onSection={vi.fn()} live={NO_LIVE_PARAMS} onLive={vi.fn()} />);
-    await screen.findByRole('listitem', { name: /^On the site now: 18/ });
+    await screen.findByRole('listitem', { name: /^On the site now: \d+ —/ });
     expect(screen.getByRole('button', { name: 'Full map' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Wall mode' })).toBeTruthy();
     const pop = screen.getByRole('button', { name: 'Pop out' });

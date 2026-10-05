@@ -9,7 +9,8 @@ import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../.
 import { WEBSITE_CAPS } from '../kit/caps';
 import { MessageList } from '../kit/MessageList';
 import { byTime, eventsForThread, fromWebsiteMessage, fromWidgetEvent } from '../kit/model';
-import { useWebsiteConversation, WEBSITE, type WebsiteConversation } from './api';
+import { useSavedCopy, useWebsiteConversation, WEBSITE, type WebsiteConversation } from './api';
+import { timed } from './timings';
 import { ordinal } from './live/liveMap';
 import { clock } from './Ringing';
 import { hostOf, PANEL_CARD, PANEL_HEADING, pathOf, siteAndPath, Tag } from './rowParts';
@@ -52,9 +53,11 @@ export interface MissedList {
 }
 
 export function useMissed(tab: MissedTab, enabled: boolean) {
+  // From the copy saved on this computer at once, then from the server (worksuite-desktop#252).
+  useSavedCopy(['website', 'missed', 'list', tab], `${WEBSITE}/missed`, tab === 'handled' ? { status: 'handled' } : undefined, (hit) => Array.isArray((hit as MissedList | null)?.missed), enabled);
   return useQuery({
     queryKey: ['website', 'missed', 'list', tab],
-    queryFn: ({ signal }) => apiGet<MissedList>(`${WEBSITE}/missed`, tab === 'handled' ? { status: 'handled' } : undefined, signal),
+    queryFn: ({ signal }) => timed('missed', () => apiGet<MissedList>(`${WEBSITE}/missed`, tab === 'handled' ? { status: 'handled' } : undefined, signal), (d) => d?.missed?.length ?? null),
     enabled,
     refetchInterval: 60_000,
     retry: false,

@@ -4,6 +4,7 @@ import { ApiError } from '../../../../core/api';
 import { errorMessage } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
+import { CollapsibleSection } from '../../../../components/Collapsible';
 import { Select } from '../../../../components/Select';
 import { Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
 import { Note, SettingRow } from '../../../account/parts';
@@ -294,24 +295,20 @@ export function EmbedColumn({ code, seen, site, wide }: { code: string | null; s
   );
 }
 
-/** WordPress, Shopify and Tag Manager (UX-SET-05): each opens to its steps. */
+/** WordPress, Shopify and Tag Manager (UX-SET-05): each opens to its steps, as many at once as wanted (#244). */
 function InstallGuides() {
-  const [open, setOpen] = useState<string | null>(null);
   return (
-    <section aria-labelledby="widget-guides-title" className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface px-4 py-3.5 text-[12.5px]">
+    <section aria-labelledby="widget-guides-title" className="flex shrink-0 flex-col gap-1 rounded-[12px] border border-line bg-surface px-4 py-3.5 text-[12.5px]">
       <h2 id="widget-guides-title" className="text-[14px] font-bold text-ink">Install guides</h2>
-      {GUIDES.map((g) => (
-        <div key={g.id} className="flex flex-col gap-1">
-          <button type="button" aria-expanded={open === g.id} aria-controls={`guide-${g.id}`} onClick={() => setOpen(open === g.id ? null : g.id)} className="self-start text-left font-semibold text-primary hover:underline">
-            {g.title}
-          </button>
-          {open === g.id ? (
-            <ol id={`guide-${g.id}`} className="ml-4 list-decimal text-ink-2">
+      <div className="flex flex-col">
+        {GUIDES.map((g) => (
+          <CollapsibleSection key={g.id} variant="row" defaultOpen={false} title={g.title} summary={text('{n} steps', { n: g.steps.length })} data-testid={`guide-${g.id}`}>
+            <ol className="ml-4 list-decimal text-ink-2">
               {g.steps.map((x) => <li key={x}>{x}</li>)}
             </ol>
-          ) : null}
-        </div>
-      ))}
+          </CollapsibleSection>
+        ))}
+      </div>
       <p className="text-ink-3">The script is small, loads after the page, and fails silently if WorkSuite cannot be reached.</p>
     </section>
   );

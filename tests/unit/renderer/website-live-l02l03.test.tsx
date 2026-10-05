@@ -109,9 +109,12 @@ const mount = (start: LiveParams = NO_LIVE_PARAMS) =>
 const ready = async () => {
   await screen.findByRole('listitem', { name: /^On the site now: 9/ });
 };
+/** The map's code is loaded on demand, last (#248): its frame holds a placeholder until then. */
+const mapLoaded = () => waitFor(() => expect(screen.queryAllByTestId('map-placeholder')).toHaveLength(0));
 /** The full map once both answers are in: the busiest place picked. */
 const readyMap = async () => {
   await screen.findByRole('region', { name: 'Selected place' });
+  await mapLoaded();
   await waitFor(() => expect(within(screen.getByRole('region', { name: 'Selected place' })).getAllByRole('group').length).toBeGreaterThan(0));
 };
 const full = () => screen.getByRole('main');
@@ -141,6 +144,7 @@ describe('L-02 · the full map zoomed to a country', () => {
     expect(within(screen.getByRole('list', { name: 'Map legend' })).getAllByRole('listitem').map((i) => i.textContent)).toEqual([
       'Browsing', 'Chatting', 'Waiting on us', 'At risk', 'On a call', 'City', 'Country only ≈',
     ]);
+    await mapLoaded();
     expect(within(mapCard()).getByText('Detailed outlines load when you zoom past a region · drag to pan · scroll or pinch to zoom')).toBeTruthy();
     expect(within(mapCard()).getByRole('button', { name: 'Show everyone' }).textContent).toBe('⤢');
     // The view is in the address once it settles: the world.

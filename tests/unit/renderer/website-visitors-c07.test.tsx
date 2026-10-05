@@ -89,7 +89,8 @@ describe('the Visitors online table (UX-VIS-01)', () => {
     expect(screen.getByRole('heading', { name: 'Visitors online' }).parentElement?.textContent).toBe('Visitors online· 4');
     expect(screen.getByText('Everyone on your sites right now. Select someone to see what they are reading.')).toBeTruthy();
     expect(screen.getByRole('combobox', { name: 'Site' }).textContent).toContain('All sites');
-    await waitFor(() => expect(client.getQueryData(['website', 'dashboard', 0])).toBeTruthy());
+    // The sites' names come from the summary, or — from a server without it — the full answer (#248).
+    await waitFor(() => expect(client.getQueryCache().findAll({ queryKey: ['website', 'dashboard', 0] }).some((q) => q.state.data !== undefined)).toBe(true));
     fireEvent.click(screen.getByRole('combobox', { name: 'Site' }));
     expect(screen.getByRole('option', { name: 'Techubiz' })).toBeTruthy();
     expect(screen.getByText('Select a visitor to see their pages and start a conversation.')).toBeTruthy();

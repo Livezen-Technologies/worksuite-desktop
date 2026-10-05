@@ -4,6 +4,7 @@ import { errorMessage } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
 import { useTab, useTabTitle } from '../../../../core/tab-context';
+import { CollapsibleSection } from '../../../../components/Collapsible';
 import { Select } from '../../../../components/Select';
 import { Button, Card, Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
 import { Segmented } from '../live/LiveDashboard';
@@ -76,6 +77,36 @@ const SCREENS: Array<{ id: PreviewScreen; label: string }> = [
   { id: 'away', label: 'Away' },
   { id: 'launcher', label: 'Launcher' },
 ];
+
+const THEME_NAMES: Record<Theme, string> = { auto: 'Matches the visitor', light: 'Light', dark: 'Dark' };
+
+/** The first line of a greeting, short enough for a section's header. */
+function firstLine(v: string | null | undefined, max = 32): string | null {
+  const line = (v ?? '').split('\n').map((l) => l.trim()).find(Boolean);
+  if (!line) return null;
+  return line.length > max ? `${line.slice(0, max - 1).trimEnd()}…` : line;
+}
+
+/**
+ * What each folded Appearance section holds, for its header (#244): "Own logo · Light", "“Hi there,” · 2 links",
+ * "20 px up · 20 px right · No greeting card".
+ */
+export function appearanceSummaries(design: WidgetDesign) {
+  const links = design.quick_links.length;
+  const greeting = firstLine(design.greeting);
+  const left = design.position === 'bottom_left';
+  return {
+    logoTheme: [design.logo_url ? text('Own logo') : text('No logo'), text(THEME_NAMES[design.theme] ?? THEME_NAMES.auto)].join(' · '),
+    home: [greeting ? `“${greeting}”` : text('Standard greeting'), links === 0 ? text('No links') : links === 1 ? text('1 link') : text('{n} links', { n: links })].join(' · '),
+    away: design.whatsapp_number ? text('WhatsApp {number}', { number: design.whatsapp_number }) : text('No WhatsApp number'),
+    launcher: [
+      text('{n} px up', { n: design.launcher_offset_bottom }),
+      left ? text('{n} px from the left', { n: design.launcher_offset_left }) : text('{n} px from the right', { n: design.launcher_offset_right }),
+      design.greeting_delay ? text('Greeting card after {n} s', { n: design.greeting_delay }) : text('No greeting card'),
+    ].join(' · '),
+    team: design.show_agents ? [text('Photos shown'), design.staff_display === 'first_name' ? text('First name only') : text('Name and role')].join(' · ') : text('Photos hidden'),
+  };
+}
 
 export type WidgetTab = 'appearance' | 'behaviour' | 'calls' | 'staff' | 'hours' | 'chatbot' | 'embed';
 
@@ -369,14 +400,17 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
     </div>
   );
   const offsetField = design.position === 'bottom_left' ? 'launcher_offset_left' : 'launcher_offset_right';
+  const sum = appearanceSummaries(design);
 
   return (
     <>
       {panel(
         'appearance',
-        <div className="flex min-h-0 flex-1 gap-4">
-          <div className="flex min-w-0 flex-1 flex-col gap-3 overflow-y-auto pb-4 scroll-thin">
-            <div className="grid grid-cols-2 gap-3.5 rounded-[12px] border border-line bg-surface p-4">
+        // Narrow: the form, then the preview under it, in one scroll. Wide: the form scrolls beside the preview.
+        <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">
+          <div data-testid="appearance-layout" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-thin @4xl:flex-row @4xl:overflow-visible">
+          <div data-testid="appearance-sections" className="@container flex min-w-0 shrink-0 flex-col gap-3 pb-4 @4xl:min-h-0 @4xl:flex-1 @4xl:shrink @4xl:overflow-y-auto scroll-thin">
+            <div className="grid shrink-0 grid-cols-1 gap-3.5 rounded-[12px] border border-line bg-surface p-4 @lg:grid-cols-2">
               <TextField label="Widget name" value={design.name} maxLength={120} onChange={(e) => set('name', e.target.value)} error={issues.name ?? null} />
               <TextField
                 label="Website name"
@@ -388,12 +422,12 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
               />
               <TextField label="Header title" value={design.header_title ?? ''} maxLength={120} onChange={(e) => set('header_title', e.target.value || null)} placeholder="Chat with us" />
               <TextField label="Header subtitle" value={design.header_subtitle ?? ''} maxLength={190} onChange={(e) => set('header_subtitle', e.target.value || null)} />
-              <TextField label="Welcome message" className="col-span-2" value={design.welcome_message ?? ''} maxLength={500} onChange={(e) => set('welcome_message', e.target.value || null)} />
-              <div className="col-span-2">
+              <TextField label="Welcome message" className="@lg:col-span-2" value={design.welcome_message ?? ''} maxLength={500} onChange={(e) => set('welcome_message', e.target.value || null)} />
+              <div className="@lg:col-span-2">
                 <Area label="Offline message" value={design.offline_message ?? ''} max={500} onChange={(v) => set('offline_message', v || null)} />
               </div>
             </div>
-            <div className="grid grid-cols-2 gap-3.5 rounded-[12px] border border-line bg-surface p-4">
+            <div className="grid shrink-0 grid-cols-1 gap-3.5 rounded-[12px] border border-line bg-surface p-4 @lg:grid-cols-2">
               <div className="flex flex-col gap-1">
                 <Swatches label="Brand colour" value={design.brand_color} swatches={BRAND_SWATCHES} onChange={(v) => set('brand_color', v.toUpperCase())} error={issues.brand_color ?? null} />
                 {brand.lightBrand && !issues.brand_color ? <span className="text-[12px] text-ink-3">A light colour: text on it will be dark, so it stays readable.</span> : null}
@@ -425,15 +459,16 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
               />
             </div>
 
-            {/* The rest of the widget's look (#199, #207): kept with Appearance until their own screens come. */}
-            <Card title="Logo and theme">
+            {/* The rest of the widget's look (#199, #207): kept with Appearance until their own screens come, each a
+                section that folds away (#244) with what it holds summed up in its header. */}
+            <CollapsibleSection title="Logo and theme" persist="website.widget.logo-theme" summary={sum.logoTheme} forceOpen={Boolean(issues.logo_url)} data-testid="widget-section-logo-theme">
               <div className="flex flex-col gap-3">
                 <TextField label="Logo" value={design.logo_url ?? ''} maxLength={500} onChange={(e) => set('logo_url', e.target.value || null)} placeholder="https://example.com/logo.png" hint="A square image at a web address. Without one, the company's initial is shown." error={issues.logo_url ?? null} />
                 <Choice label="Theme" value={design.theme} onChange={(v) => set('theme', v)} options={[{ value: 'auto', label: 'Match the visitor' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} />
                 <span className="text-[12px] text-ink-3">The header and the body follow it: white under the brand colour, or dark under a darker one.</span>
               </div>
-            </Card>
-            <Card title="Home screen">
+            </CollapsibleSection>
+            <CollapsibleSection title="Home screen" persist="website.widget.home" summary={sum.home} forceOpen={Boolean(issues.quick_links)} data-testid="widget-section-home">
               <div className="flex flex-col gap-3">
                 <Area label="Greeting" value={design.greeting ?? ''} max={120} onChange={(v) => set('greeting', v || null)} placeholder={'Hi there,\nhow can we help?'} />
                 <div className="flex flex-col gap-2" role="group" aria-label="Quick help links">
@@ -451,13 +486,13 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
                   ) : null}
                 </div>
               </div>
-            </Card>
-            <Card title="Away screen">
+            </CollapsibleSection>
+            <CollapsibleSection title="Away screen" persist="website.widget.away" summary={sum.away} forceOpen={Boolean(issues.whatsapp_number)} data-testid="widget-section-away">
               <TextField label="WhatsApp number" value={design.whatsapp_number ?? ''} maxLength={32} onChange={(e) => set('whatsapp_number', e.target.value || null)} placeholder="+94 77 123 4567" hint="Optional. Offered on the away screen for anything urgent." error={issues.whatsapp_number ?? null} />
-            </Card>
-            <Card title="Launcher">
+            </CollapsibleSection>
+            <CollapsibleSection title="Launcher" persist="website.widget.launcher" summary={sum.launcher} forceOpen={Boolean(issues.launcher_offset_bottom || issues[offsetField])} data-testid="widget-section-launcher">
               <div className="flex flex-col gap-3">
-                <span className="flex gap-3">
+                <span className="flex flex-wrap gap-3">
                   <TextField label="From the bottom (px)" type="number" min={0} max={OFFSET_MAX} value={String(design.launcher_offset_bottom)} onChange={(e) => set('launcher_offset_bottom', clampOffset(Number(e.target.value) || 0))} error={issues.launcher_offset_bottom ?? null} className="flex-1" />
                   <TextField
                     label={design.position === 'bottom_left' ? 'From the left (px)' : 'From the right (px)'}
@@ -474,9 +509,9 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
                 <TextField label="Greeting card after (seconds)" type="number" min={0} max={300} value={String(design.greeting_delay)} onChange={(e) => set('greeting_delay', Math.max(0, Math.min(300, Number(e.target.value) || 0)))} hint="0 is off. Shown once a visit, while the team is online; the visitor can dismiss it." />
                 <Area label="Greeting card message" value={design.greeting_text ?? ''} max={300} onChange={(v) => set('greeting_text', v || null)} placeholder="Hi there. Looking for hosting, a website or WorkSuite? Ask us anything." hint="Its quick replies are the widget's conversation starters." />
               </div>
-            </Card>
+            </CollapsibleSection>
             {/* Whose photos visitors see and how they are named (#199): what the widget shows, so with its look. */}
-            <Card title="Team photos">
+            <CollapsibleSection title="Team photos" persist="website.widget.team-photos" summary={sum.team} data-testid="widget-section-team-photos">
               <Section title="Team" hint="Visitors see up to three photos of the people online, and how many more are. Real profile photos, initials where there is none.">
                 <Toggle label="Show the team's photos" checked={design.show_agents} onChange={(v) => set('show_agents', v)} />
                 <Choice label="Name staff as" value={design.staff_display} onChange={(v) => set('staff_display', v)} options={[{ value: 'name_role', label: 'Name and role' }, { value: 'first_name', label: 'First name only' }]} />
@@ -498,10 +533,11 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
                 {sample && design.show_agents ? <span className="text-[12px] text-ink-3">The preview uses stand-in people until somebody is here.</span> : null}
                 <Button type="button" className="self-start" onClick={onStaff}>Manage staff</Button>
               </Section>
-            </Card>
+            </CollapsibleSection>
           </div>
-          <aside aria-label="Preview" className="relative flex w-[380px] shrink-0 flex-col items-end justify-end gap-3 overflow-hidden rounded-[12px] border border-line bg-subtle p-[18px]">
-            <div className="absolute top-3 right-3.5 left-3.5 flex flex-wrap items-center gap-1">
+          {/* The preview's own column: its bar on top, in the flow, so it never covers the widget drawn under it. */}
+          <aside aria-label="Preview" data-testid="appearance-preview" className="flex min-h-[560px] w-full shrink-0 flex-col gap-3 overflow-hidden rounded-[12px] border border-line bg-subtle px-3.5 pt-3 pb-[18px] @4xl:min-h-0 @4xl:w-[380px]">
+            <div className="flex shrink-0 flex-wrap items-center gap-1">
               <span className="mr-auto text-[10.5px] font-bold tracking-[0.9px] text-ink-3">LIVE PREVIEW</span>
               <div role="tablist" aria-label="Preview screen" className="flex gap-0.5">
                 {SCREENS.map((s) => (
@@ -512,16 +548,17 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
               </div>
             </div>
             {/* The full screens are drawn at the widget's own size, 420px, and shown at four fifths to fit. */}
-            <div className={cx('flex w-full', screen === 'start' ? '' : 'mt-12 justify-center overflow-y-auto')} style={screen === 'start' ? undefined : { zoom: 0.8 }}>
+            <div className={cx('flex min-h-0 w-full flex-1', screen === 'start' ? 'items-end justify-end' : 'justify-center overflow-y-auto')} style={screen === 'start' ? undefined : { zoom: 0.8 }}>
               <WidgetPreview design={design} siteName={siteNameOf(design, p?.fallback_name)} people={people} replyTime={p?.reply_time ?? 'Usually replies in a few minutes'} hours={hoursPreview} screen={screen} dark={darkFor(design.theme)} starters={p?.starters ?? []} />
             </div>
           </aside>
+          </div>
         </div>,
       )}
       {panel(
         'hours',
         <div className="flex max-w-[860px] flex-1 flex-col gap-3 overflow-y-auto pb-4 scroll-thin">
-          <Card>
+          <Card className="shrink-0">
             <div className="flex flex-col gap-3 pt-4">
               <Toggle
                 label="Business hours"

@@ -13,17 +13,20 @@ import { LOCAL_AI_KEY, useLocalAIStatus, useLocalModels } from '../../core/local
 import { secondsLeft, timeLeftLabel } from '../ai/setup';
 import { queryClient } from '../../core/query';
 import { useStore } from '../../core/store';
+import { useScrollFades } from '../../core/use-scroll-fades';
 import { RecordingSettings } from '../meet/RecordingSettings';
 import { SpeechModelSettings } from '../meet/SpeechModel';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, currentZone, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { CollapsibleSection } from '../../components/Collapsible';
 import { Icon } from '../../components/Icon';
 import { Button, Chip, Modal, Switch, TextField, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
 import { playOnce, playTone, ringtoneId, RINGTONES, type RingOn } from '../calls/tones';
 import { useRingState } from '../chat/website/Ringing';
+import { NotificationsOffBanner, TestChatNotification } from './RingCheck';
 import { apiGet, request } from '../../core/api';
 import { shortcutLabel, useWriter, writerProblem } from '../ai/writer';
 import { ModuleAccess } from '../ai/ModuleAccess';
@@ -105,24 +108,39 @@ function SettingsSections(_props: ModuleProps) {
   const hasMail = useCanOpen('mail');
   const hasContacts = useCanOpen('contacts');
   const managesRinging = useManagesRinging();
+  const { ref: listRef, fades, onScroll: onListScroll } = useScrollFades<HTMLDivElement>();
   if (!prefs) return null;
   return (
     <div className="flex h-full">
-      <nav className="w-[230px] shrink-0 border-r border-line bg-surface p-3" aria-label="Settings sections">
-        <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
-        {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts)).map((s, i, list) => (
-          <div key={s.id}>
-            {s.group !== list[i - 1]?.group ? <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{s.group}</div> : null}
-            <button type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-              <Icon name={s.icon} size={16} /> {s.label}
+      {/*
+        The sidebar fills the tab's height (never 100vh) and only its list scrolls, 16px clear of the bottom; Admin Center
+        is a footer under it, so it is always whole above the status bar (worksuite-desktop#246).
+      */}
+      <nav className="flex h-full min-h-0 w-[230px] shrink-0 flex-col border-r border-line bg-surface" aria-label="Settings sections">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div ref={listRef} onScroll={onListScroll} data-settings-scroller className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-4 scroll-thin">
+            <div>
+              <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
+              {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts)).map((s, i, list) => (
+                <div key={s.id}>
+                  {s.group !== list[i - 1]?.group ? <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{s.group}</div> : null}
+                  <button type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
+                    <Icon name={s.icon} size={16} /> {s.label}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* More below: the list fades into the sidebar's own background, never a dark band. */}
+          {fades.bottom ? <div aria-hidden data-fade="bottom" className="pointer-events-none absolute inset-x-0 bottom-0 h-8" style={{ background: 'linear-gradient(to bottom, transparent, var(--ws-surface))' }} /> : null}
+        </div>
+        {/* The organisation's ringing rules, for whoever manages website chats (P-03); it opens here, in the app. */}
+        {managesRinging && !guest ? (
+          <div data-settings-footer className="shrink-0 border-t border-line px-3 py-2">
+            <button type="button" onClick={() => go(ADMIN_RINGING_ROUTE)} className="flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px] text-ink hover:bg-subtle">
+              <Icon name="shield-check" size={16} /> Admin Center
             </button>
           </div>
-        ))}
-        {/* The organisation's ringing rules, for whoever manages website chats (P-03). */}
-        {managesRinging && !guest ? (
-          <button type="button" onClick={() => go(ADMIN_RINGING_ROUTE)} className="mt-3 flex h-9 w-full items-center gap-2.5 rounded-[8px] border-t border-line px-3 pt-px text-left text-[13.5px] text-ink hover:bg-subtle">
-            <Icon name="shield-check" size={16} /> Admin Center
-          </button>
         ) : null}
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto px-10 py-8 scroll-thin">
@@ -424,6 +442,7 @@ function NotificationsSection({ prefs }: { prefs: Preferences }) {
   return (
     <>
       <H title="Notifications & calls" hint="How this computer shows notifications — even when WorkSuite's window is closed, from the tray." />
+      <NotificationsOffBanner />
       <Row label="What reaches you, and when" hint="Each app by channel, quiet hours, and how this computer shows them.">
         <Button icon="bell" onClick={() => navigate('/notifications/settings')}>
           Open notification settings
@@ -610,6 +629,7 @@ export function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
           <Switch label="Live map and dashboard shortcuts" checked={r.liveShortcuts !== false} onChange={(v) => set({ liveShortcuts: v })} />
         </div>
       </Row>
+      <TestChatNotification volume={r.volume} muted={!prefs.notificationSounds} ringtone={ringtone} ringOn={ringOn} />
       <FollowUpPrefs prefs={prefs} />
     </>
   );
@@ -1651,8 +1671,7 @@ export function RemoteControlSection() {
         ) : null}
         {waiting ? <p className="mt-2 text-[12px] text-ink-3" data-testid="rc-auto-check">WorkSuite checks again every few seconds while this message is shown, and when you come back to it.</p> : null}
         {d ? (
-          <details className="mt-2 text-[12px] text-ink-3" data-testid="rc-details">
-            <summary className="cursor-pointer">Running app and input-helper checks</summary>
+          <CollapsibleSection variant="row" level={4} defaultOpen={false} persist="settings.remote-control.checks" className="mt-2" bodyClassName="text-[12px] text-ink-3" title="Running app and input-helper checks" summary={text('App Accessibility: {state}', { state: yesNo(d.appTrusted) })} data-testid="rc-details">
             <p className="break-all selectable">{text('Running copy: {path}', { path: id?.bundle ?? d.runningApp })}</p>
             {id ? (
               <p className="selectable">
@@ -1664,11 +1683,10 @@ export function RemoteControlSection() {
             </p>
             <p className="break-all">{text('Input helper: {path}, started by WorkSuite, so WorkSuite’s entry in Accessibility covers it. It is not listed separately.', { path: d.helperPath ?? '/usr/bin/osascript' })}</p>
             <p>Compare this running copy with the entry in macOS settings if more than one WorkSuite installation exists. Diagnostics include signing identity and app translocation checks.</p>
-          </details>
+          </CollapsibleSection>
         ) : null}
         {s.accessibility !== 'not_required' && s.accessibility !== 'granted' ? (
-          <details className="mt-2 text-[12px] text-ink-3" data-testid="rc-still-denied">
-            <summary className="cursor-pointer">Still shows Denied after turning WorkSuite on?</summary>
+          <CollapsibleSection variant="row" level={4} defaultOpen={false} persist="settings.remote-control.still-denied" className="mt-2" bodyClassName="text-[12px] text-ink-3" title="Still shows Denied after turning WorkSuite on?" summary={text('4 steps')} data-testid="rc-still-denied">
             <ol className="mt-1.5 list-decimal space-y-1 pl-5">
               <li>Check that the running copy above is the WorkSuite in Applications, and open WorkSuite from there.</li>
               <li>Quit WorkSuite. In System Settings › Privacy &amp; Security › Accessibility, select WorkSuite and click − to remove it, then click + and choose WorkSuite in Applications. Turn it on.</li>
@@ -1677,7 +1695,7 @@ export function RemoteControlSection() {
                 If it still does not change, reset WorkSuite’s entry in Terminal with <code className="selectable font-mono">tccutil reset Accessibility {id?.bundleId ?? 'lk.worksuite.desktop'}</code>, then open WorkSuite and allow it again.
               </li>
             </ol>
-          </details>
+          </CollapsibleSection>
         ) : null}
         {s.accessibility !== 'not_required' ? (
           <p className="mt-2 text-[12px] text-ink-3">Accessibility only lets WorkSuite take input. Nobody controls this computer until you approve their request, each time.</p>

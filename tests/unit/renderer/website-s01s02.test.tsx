@@ -294,6 +294,10 @@ describe('S-02 · a widget\'s editor and Appearance with live preview', () => {
     expect(screen.getByRole('img', { name: 'Preview of the home screen' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Logo and theme' })).toBeTruthy();
     expect(screen.getByRole('heading', { name: 'Launcher' })).toBeTruthy();
+    // Each is a section that folds under its header (#244), open until the person folds it.
+    for (const name of ['Logo and theme', 'Home screen', 'Away screen', 'Launcher', 'Team photos']) {
+      expect(screen.getByRole('button', { name }).getAttribute('aria-expanded')).toBe('true');
+    }
   });
 
   it('opens a widget and a tab from the address: Embed code with Copy', async () => {
