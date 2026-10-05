@@ -15,7 +15,7 @@ import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Button, Chip, Empty, cx } from '../../../components/ui';
 import { Composer, websiteNoteDraftKey, type ComposerHandle } from '../Composer';
-import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useOpenConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useOpenConversation, useSendingReplies, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
 import { useViewing } from './viewing';
 import type { ReplyTarget } from '../Thread';
@@ -86,12 +86,13 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const canned = useCanned(Boolean(q.data), q.data?.conversation.widget_id);
   const outbox = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const waiting = (outbox.data ?? []).filter((m: OfflineMutation) => m.module === 'website-chat' && m.entityId === id && m.state !== 'DONE');
+  const sending = useSendingReplies(Number(id));
   const count = data?.messages.length ?? 0;
   useTabTitle(data ? `Website · ${data.visitor?.name || data.visitor?.label || 'Visitor'}` : 'Website chats');
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [count, live.visitorTyping, waiting.length]);
+  }, [count, live.visitorTyping, waiting.length, sending.length]);
 
   // Removed from the chat by its owner or a supervisor (TEAM-07): what I was writing to the visitor goes too.
   useEffect(
@@ -271,6 +272,10 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
           {/* The shared chat kit (C-02, RDC-11, LIVE-12; #229): Team Chat's bubbles, meta, ticks and attachments, with what a visitor cannot receive turned off. */}
           <MessageList items={items} caps={{ ...WEBSITE_CAPS, deleteForVisitorMinutes: data.delete_window_minutes ?? 15, saveToDrive: data.can_save_to_drive === true }} look="page" handlers={handlers} />
+          {/* Sent a moment ago, not yet stored (#252): at once, then the stored message with its tick. */}
+          {sending.map((p) => (
+            <PendingBubble key={p.key} label={p.body} failed={false} waiting={text('Sending…')} onRetry={() => undefined} />
+          ))}
           {waiting.map((p) => (
             <PendingBubble
               key={p.id}

@@ -246,7 +246,8 @@ describe('the Live dashboard', () => {
     tab.route = '/chat?view=website&section=dashboard';
     online = [...ONLINE, ...Array.from({ length: 8 }, (_, i) => visitor({ id: 10 + i, label: `Visitor X${i}` }))];
     mount();
-    fireEvent.click(await screen.findByRole('listitem', { name: 'On the site now: 3 — see who' }));
+    // Counted as the visitor list counts them, so the figure, All 11 visitors online and the sidebar agree (#248).
+    fireEvent.click(await screen.findByRole('listitem', { name: 'On the site now: 11 — see who' }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=visitors');
     fireEvent.click(screen.getByRole('listitem', { name: /^Waiting on us: 1/ }));
     expect(tab.go).toHaveBeenLastCalledWith('/chat?view=website&section=awaiting');

@@ -1,8 +1,8 @@
-import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Icon } from '../../../../components/Icon';
 import { Menu } from '../../../../components/Menu';
-import { cx, ErrorNote, Spinner } from '../../../../components/ui';
+import { cx } from '../../../../components/ui';
 import { ApiError, apiPost } from '../../../../core/api';
 import { call, errorMessage, isMac } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
@@ -10,12 +10,15 @@ import { parseTs, timeLabel } from '../../../../core/time';
 import { toast } from '../../../../core/toasts';
 import { useNow } from '../../../calls/parts';
 import { useWebsiteInbox, WEBSITE, type Section } from '../api';
+import { PaneNotice, RetryButton, useSlow } from '../ThreadPlaceholder';
 import { findCountry, flagOf } from './countries';
 import {
   boxOfParam, byCountry, callClock, clock, CLUSTER, demonymOf, groupOf, mapParam, mergePlaces, pathOf, placesNow, placesToday, presetsFor, sameBox, since, STATE, stateOf, WORLD_BOX,
   type Box, type Dashboard, type Group, type OnlineVisitor, type Place, type Preset,
 } from './liveMap';
-import { LiveMap, MapLegend } from './WorldMapView';
+import { LiveMap, loadMap, MapPlaceholder } from './LazyMap';
+import { agoWords, type LiveData } from './liveData';
+import { MapLegend } from './MapLegend';
 import { OnSiteNow } from './OnSiteNow';
 
 /*
@@ -26,6 +29,11 @@ import { OnSiteNow } from './OnSiteNow';
  *
  * IT IS NOT THE REPORTS SCREEN: it answers "what is happening this minute", from its own endpoint, polled every ten
  * seconds like the visitor list so the two never disagree about how many people are on the site.
+ *
+ * IT NEVER WAITS AS A WHOLE (worksuite-desktop#248). The layout is drawn at once, from the last copy this computer
+ * kept when there is one ("Updated 2 min ago · refreshing"), else with a placeholder in each card and the list; each
+ * fills in as its own answer lands (live/liveData), and a card that cannot be read says so with its own Retry. The
+ * map comes last: its code loads only when its card is on screen (live/LazyMap).
  */
 
 type When = 'now' | 'today';
@@ -81,13 +89,9 @@ export interface WallOptions {
   keepAwake: boolean;
 }
 
-export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, onLive, selected, onSelect, onStart, onOpenChat, onSection, drawer, wall }: {
-  dash: UseQueryResult<Dashboard>;
-  /** Everybody on the chosen site now. */
-  visitors: OnlineVisitor[];
-  loading: boolean;
-  error: unknown;
-  onRetry: () => void;
+export function LiveDashboard({ data, live, onLive, selected, onSelect, onStart, onOpenChat, onSection, drawer, wall }: {
+  /** The figures, everybody on the chosen sites, and how each answer is doing (live/liveData). */
+  data: LiveData;
   live: LiveParams;
   onLive: (patch: Partial<LiveParams>) => void;
   selected: number | null;
@@ -108,10 +112,14 @@ export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, o
   const sheet = !!desk.data?.displays?.length;
   const mode = live.wall ? 'wall' : live.map !== null ? 'map' : 'dashboard';
   const now = useNow(1_000);
-  const d = dash.data;
+  const { d, visitors, total } = data;
   // How far the server's clock is ahead of this one: every wait and call is counted on its clock.
-  const skew = d?.server_time ? parseTs(d.server_time).getTime() - dash.dataUpdatedAt : 0;
-  const updated = dash.dataUpdatedAt ? Math.max(0, Math.round((now - dash.dataUpdatedAt) / 1000)) : null;
+  const skew = data.skew;
+  const updated = data.updatedAt ? Math.max(0, Math.round((now - data.updatedAt) / 1000)) : null;
+  // The saved copy on screen while the live answer is asked for: "Updated 2 min ago · refreshing".
+  const snapshot = data.snapshotAt !== null ? Math.max(0, Math.round((now - data.snapshotAt) / 1000)) : null;
+  // Nothing at all after five seconds: "Still loading… · Retry", centred.
+  const [slow, restartSlow] = useSlow();
 
   // What was said last in each chat, from the inbox the workspace keeps fresh; nothing is fetched for it here.
   const inbox = useWebsiteInbox(false, false);
@@ -146,14 +154,14 @@ export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, o
   const act = { join: (v: OnlineVisitor) => void join(v), open: (v: OnlineVisitor) => v.conversation_id && onOpenChat(v.conversation_id), start: onStart };
   const list = { now, skew, selected, lastOf, onJoin: act.join, onOpen: act.open, onStart: act.start, onSelect: (v: OnlineVisitor) => onSelect(v.id) };
 
-  const sitePicker = <SitePicker widgets={d?.widgets ?? []} sites={live.sites} onSites={(sites) => onLive({ sites })} />;
+  const sitePicker = <SitePicker widgets={d?.widgets ?? null} sites={live.sites} onSites={(sites) => onLive({ sites })} />;
   const header = (title: string, subtitle: string | null, back: ReactNode, children: ReactNode) => (
     <div className="flex flex-wrap items-center gap-2.5">
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2.5">
           {back}
           <h1 className={cx('font-bold text-ink', back ? 'text-[20px]' : 'text-[22px]')}>{text(title)}</h1>
-          <LivePill updated={updated} />
+          <LivePill updated={updated} snapshot={snapshot} />
         </div>
         {subtitle ? <p className="text-[12.5px] text-ink-3">{text(subtitle)}</p> : null}
       </div>
@@ -165,6 +173,7 @@ export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, o
     return (
       <FullMap
         d={d}
+        full={data.full}
         visitors={visitors}
         list={list}
         drawer={drawer}
@@ -188,17 +197,17 @@ export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, o
   }
 
   return (
-    <main className="flex h-full min-w-0 flex-1 flex-col gap-3 overflow-y-auto bg-ground px-5 py-4 text-[13px] scroll-thin">
+    <main className="relative flex h-full min-w-0 flex-1 flex-col gap-3 overflow-y-auto bg-ground px-5 py-4 text-[13px] scroll-thin" aria-busy={data.pending || undefined}>
       {header(
         'Live dashboard',
         'Who is on your sites right now, what they are doing, and where they are.',
         null,
         <>
           {sitePicker}
-          <button type="button" onClick={() => onLive({ map: 'world' })} disabled={!d} className={OUTLINE}>
+          <button type="button" onClick={() => onLive({ map: 'world' })} onPointerEnter={() => void loadMap()} disabled={!d} className={OUTLINE}>
             <Icon name="fullscreen" size={14} /> {text('Full map')}
           </button>
-          <button type="button" onClick={() => (sheet ? void call('live:open', { to: 'wallSheet' }).catch(() => onLive({ wall: true })) : onLive({ wall: true }))} disabled={!d} className={OUTLINE}>
+          <button type="button" onClick={() => (sheet ? void call('live:open', { to: 'wallSheet' }).catch(() => onLive({ wall: true })) : onLive({ wall: true }))} onPointerEnter={() => void loadMap()} disabled={!d} className={OUTLINE}>
             <Icon name="monitor" size={14} /> {text('Wall mode')}
           </button>
           {/* The map in a native window of its own, over other apps or on another display (L-04, MAP-21). */}
@@ -207,33 +216,107 @@ export function LiveDashboard({ dash, visitors, loading, error, onRetry, live, o
           </button>
         </>,
       )}
-      {dash.error && !d ? <ErrorNote error={dash.error} onRetry={() => void dash.refetch()} /> : null}
-      {dash.isLoading ? <Spinner /> : null}
-      {d ? <Tiles d={d} now={now} skew={skew} onSection={onSection} /> : null}
-      {d ? (
-        <div className="grid min-h-0 items-start gap-3.5 [grid-template-columns:minmax(0,65fr)_minmax(0,35fr)]">
-          <WhereTheyAre d={d} visitors={visitors} now={now} skew={skew} home={homeOf(d, visitors)} />
-          <section aria-label={text('On the site now')} className="relative flex min-h-[420px] min-w-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
-            <div className="flex h-[46px] shrink-0 items-center border-b border-line px-3.5">
-              <h2 className="min-w-0 flex-1 truncate text-[14px] font-bold text-ink">
-                {text('On the site now')} <span className="font-normal text-ink-3">· {visitors.length}</span>
-              </h2>
-              <span className="text-[11.5px] text-ink-3">{text('Needs you first')}</span>
+      {d ? <Tiles d={d} online={total} now={now} skew={skew} onSection={onSection} /> : <TilesPlaceholder failed={data.cardsFailed} onRetry={data.retryCards} />}
+      <div className="grid min-h-0 items-start gap-3.5 [grid-template-columns:minmax(0,65fr)_minmax(0,35fr)]">
+        {d ? (
+          <WhereTheyAre d={d} full={data.full} visitors={visitors} now={now} skew={skew} home={homeOf(d, visitors)} />
+        ) : (
+          <MapCardPlaceholder failed={data.mapFailed} onRetry={data.retryMap} />
+        )}
+        <section aria-label={text('On the site now')} aria-busy={!data.hasVisitors || undefined} className="relative flex min-h-[420px] min-w-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
+          <div className="flex h-[46px] shrink-0 items-center border-b border-line px-3.5">
+            <h2 className="min-w-0 flex-1 truncate text-[14px] font-bold text-ink">
+              {text('On the site now')}
+              {total !== null ? <span className="font-normal text-ink-3"> · {total}</span> : null}
+            </h2>
+            <span className="text-[11.5px] text-ink-3">{text('Needs you first')}</span>
+          </div>
+          {data.hasVisitors ? <OnSiteNow visitors={visitors} {...list} /> : data.listFailed ? <CardFailed onRetry={data.retryList} /> : <RowsPlaceholder />}
+          {visitors.length ? (
+            <div className="px-3.5 pt-2 pb-3">
+              <button type="button" onClick={() => onSection('visitors')} className="text-[12.5px] font-bold text-primary hover:underline">
+                {text('All {n} visitors online →', { n: total ?? visitors.length })}
+              </button>
             </div>
-            {loading ? <Spinner /> : error ? <ErrorNote error={error} onRetry={onRetry} /> : <OnSiteNow visitors={visitors} {...list} />}
-            {visitors.length ? (
-              <div className="px-3.5 pt-2 pb-3">
-                <button type="button" onClick={() => onSection('visitors')} className="text-[12.5px] font-bold text-primary hover:underline">
-                  {text('All {n} visitors online →', { n: visitors.length })}
-                </button>
-              </div>
-            ) : null}
-            {drawer ? <Drawer>{drawer}</Drawer> : null}
-          </section>
-        </div>
+          ) : null}
+          {drawer ? <Drawer>{drawer}</Drawer> : null}
+        </section>
+      </div>
+      {data.pending && slow ? (
+        <PaneNotice>
+          {text('Still loading…')}
+          <span aria-hidden className="text-ink-3">·</span>
+          <RetryButton onRetry={() => (restartSlow(), data.retryAll())} />
+        </PaneNotice>
       ) : null}
-      {mode === 'wall' && d ? <WallMode d={d} visitors={visitors} sites={live.sites} now={now} skew={skew} updated={updated} onClose={() => onLive({ wall: false })} cycle={wall?.cycle ?? false} awake={wall?.keepAwake ?? true} /> : null}
+      {mode === 'wall' && d ? <WallMode d={d} online={total} visitors={visitors} sites={live.sites} now={now} skew={skew} updated={updated} onClose={() => onLive({ wall: false })} cycle={wall?.cycle ?? false} awake={wall?.keepAwake ?? true} /> : null}
     </main>
+  );
+}
+
+/* ---------------------------------------------------------------- while it loads (#248) */
+
+const shimmer = 'rounded-full bg-subtle motion-safe:animate-pulse';
+
+/** "Couldn't load · Retry", in the card that could not be read. */
+function CardFailed({ onRetry, className }: { onRetry: () => void; className?: string }) {
+  return (
+    <div role="alert" className={cx('flex items-center justify-center gap-1.5 px-4 py-6 text-[13px] text-ink-2', className)}>
+      <Icon name="alert" size={15} className="shrink-0 text-danger" />
+      {text("Couldn't load")}
+      <span aria-hidden className="text-ink-3">·</span>
+      <RetryButton onRetry={onRetry} />
+    </div>
+  );
+}
+
+/** The six figures' boxes, grey until their answer lands; or, when it could not be read, one row saying so. */
+function TilesPlaceholder({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  if (failed) return <CardFailed onRetry={onRetry} className="rounded-[12px] border border-line bg-surface" />;
+  return (
+    <div className="grid grid-cols-6 gap-2.5" role="list" aria-label={text('Right now')} aria-busy="true">
+      {['On the site now', 'Waiting on us', 'At risk', 'Open chats', 'On a call', 'First reply'].map((label) => (
+        <div key={label} role="listitem" aria-label={`${text(label)}: ${text('loading')}`} className="flex min-w-0 flex-col gap-1.5 rounded-[12px] border border-line bg-surface px-3.5 py-2.5">
+          <span className="text-[10.5px] font-bold tracking-[0.8px] whitespace-nowrap text-ink-3 uppercase">{text(label)}</span>
+          <span className="flex items-baseline gap-2" aria-hidden>
+            <span className="h-[26px] w-9 rounded-[6px] bg-subtle motion-safe:animate-pulse" />
+            <span className={cx(shimmer, 'h-2.5 w-16')} />
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/** The map card's frame before the figures land: its title, the map's place, and the country rows in grey. */
+function MapCardPlaceholder({ failed, onRetry }: { failed: boolean; onRetry: () => void }) {
+  return (
+    <section aria-label={text('Where they are')} aria-busy={!failed || undefined} className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
+      <div className="flex min-h-[46px] shrink-0 items-center gap-2.5 px-3.5 py-1.5">
+        <h2 className="min-w-0 flex-1 truncate text-[14px] font-bold text-ink">{text('Where they are')}</h2>
+      </div>
+      {failed ? <CardFailed onRetry={onRetry} className="h-[400px] border-y border-line" /> : <MapPlaceholder className="h-[400px] shrink-0 border-y border-line" />}
+      <div className="grid grid-cols-2 gap-x-[26px] gap-y-3 px-3.5 py-3" aria-hidden>
+        {[0, 1, 2, 3].map((i) => <span key={i} className={cx(shimmer, 'h-2.5')} />)}
+      </div>
+    </section>
+  );
+}
+
+/** "On the site now" before anybody is known: rows in grey, the circle and two lines each. */
+function RowsPlaceholder() {
+  return (
+    <ul aria-hidden className="flex flex-col" data-testid="rows-placeholder">
+      {[0, 1, 2, 3, 4].map((i) => (
+        <li key={i} className="flex items-center gap-2.5 border-b border-line px-3.5 py-3 last:border-b-0">
+          <span className="h-8 w-8 shrink-0 rounded-full bg-subtle motion-safe:animate-pulse" />
+          <span className="flex flex-1 flex-col gap-1.5">
+            <span className={cx(shimmer, 'h-3 w-2/5')} />
+            <span className={cx(shimmer, 'h-2.5 w-3/4')} />
+          </span>
+        </li>
+      ))}
+    </ul>
   );
 }
 
@@ -244,8 +327,19 @@ function Drawer({ children }: { children: ReactNode }) {
   return <div className="absolute inset-y-0 right-0 z-10 w-[min(380px,100%)] overflow-y-auto border-l border-line bg-surface shadow-[-8px_0_24px_rgba(17,27,59,0.12)] scroll-thin">{children}</div>;
 }
 
-/** "Live · updated 3 s ago", counting up each second from the last answer. */
-function LivePill({ updated }: { updated: number | null }) {
+/**
+ * "Live · updated 3 s ago", counting up each second from the last answer; "Updated 2 min ago · refreshing" while the
+ * last copy kept on this computer is shown and the live answer is asked for (#248); "Refreshing…" before either.
+ */
+function LivePill({ updated, snapshot = null }: { updated: number | null; snapshot?: number | null }) {
+  if (updated === null) {
+    return (
+      <span role="status" className="flex h-[22px] items-center gap-1.5 rounded-full bg-subtle px-[9px] text-[11.5px] font-bold whitespace-nowrap text-ink-2">
+        <span className="h-[7px] w-[7px] rounded-full bg-[#c9ccd8] motion-safe:animate-pulse" aria-hidden />
+        {snapshot !== null ? text('Updated {ago} ago · refreshing', { ago: agoWords(snapshot) }) : text('Refreshing…')}
+      </span>
+    );
+  }
   // Amber after thirty seconds without an answer (MAP-03): the figures may be stale.
   const stale = updated !== null && updated > STALE_AFTER;
   return (
@@ -263,11 +357,13 @@ const STALE_AFTER = 30;
  * The sites to show (MAP-14): all of them, one, or several — "All sites · 3 ▾" on the dashboard (C-00), "All sites ▾"
  * on the full map (MAP-UI-02). A click on a site shows only it; its box adds it to, or takes it from, those shown.
  */
-function SitePicker({ widgets, sites, onSites, count = true }: { widgets: Dashboard['widgets']; sites: number[]; onSites: (ids: number[]) => void; count?: boolean }) {
+function SitePicker({ widgets: known, sites, onSites, count = true }: { widgets: Dashboard['widgets'] | null; sites: number[]; onSites: (ids: number[]) => void; count?: boolean }) {
   const anchor = useRef<HTMLButtonElement>(null);
   const [open, setOpen] = useState(false);
+  // The sites from the answer (or its saved copy); "All sites" alone until they are known — never "All sites · 0" (#248).
+  const widgets = known ?? [];
   const one = sites.length === 1 ? widgets.find((w) => w.id === sites[0]) : undefined;
-  const label = !sites.length ? (count ? text('All sites · {n}', { n: widgets.length }) : text('All sites')) : one ? one.name : text('{n} sites', { n: sites.length });
+  const label = !sites.length ? (count && widgets.length ? text('All sites · {n}', { n: widgets.length }) : text('All sites')) : one ? one.name : text('{n} sites', { n: sites.length });
   const toggle = (id: number) => {
     const from = sites.length ? sites : widgets.map((w) => w.id);
     const next = from.includes(id) ? from.filter((x) => x !== id) : [...from, id].sort((a, b) => a - b);
@@ -320,12 +416,13 @@ export function homeOf(d: Dashboard, visitors: OnlineVisitor[]): string | null {
 
 export type Tone = 'plain' | 'amber' | 'red' | 'green';
 
-function Tiles({ d, now, skew, onSection }: { d: Dashboard; now: number; skew: number; onSection: (s: 'visitors' | Section) => void }) {
+function Tiles({ d, online, now, skew, onSection }: { d: Dashboard; online: number | null; now: number; skew: number; onSection: (s: 'visitors' | Section) => void }) {
   const waited = d.now.waiting_on_us ? since(d.now.longest_wait_since, now, skew) : null;
   const calls = d.now.on_call?.count ?? 0;
   const call = calls ? since(d.now.on_call?.since, now, skew) : null;
   const tiles: Array<{ label: string; value: string; sub: string; tone: Tone; live?: boolean; go: 'visitors' | Section; action: string }> = [
-    { label: 'On the site now', value: String(d.now.visitors_online), sub: d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) }), tone: 'plain', live: true, go: 'visitors', action: 'see who' },
+    // Counted as the visitor list counts them once it is in, so this, the list's header and the sidebar agree (#248).
+    { label: 'On the site now', value: String(online ?? d.now.visitors_online), sub: d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) }), tone: 'plain', live: true, go: 'visitors', action: 'see who' },
     { label: 'Waiting on us', value: String(d.now.waiting_on_us), sub: waited !== null ? text('longest {time}', { time: clock(waited) }) : text('visitor spoke last'), tone: d.now.waiting_on_us ? 'amber' : 'plain', go: 'awaiting', action: 'open those chats' },
     { label: 'At risk', value: String(d.now.at_risk), sub: d.now.at_risk_after ? text('past {time}', { time: clock(d.now.at_risk_after) }) : text('nobody answered in time'), tone: d.now.at_risk ? 'red' : 'plain', go: 'awaiting', action: 'open those chats' },
     { label: 'Open chats', value: String(d.now.open + d.now.pending), sub: text('{n} staff', { n: d.now.staff_in_chats ?? 0 }), tone: 'plain', go: 'inbox', action: 'open the inbox' },
@@ -411,7 +508,7 @@ function callout(now: number, skew: number, named: boolean) {
   };
 }
 
-function WhereTheyAre({ d, visitors, now, skew, home }: { d: Dashboard; visitors: OnlineVisitor[]; now: number; skew: number; home: string | null }) {
+function WhereTheyAre({ d, full, visitors, now, skew, home }: { d: Dashboard; full: boolean; visitors: OnlineVisitor[]; now: number; skew: number; home: string | null }) {
   const [when, setWhen] = useState<When>('now');
   const [box, setBox] = useState<Box>(WORLD_BOX);
   const places = useMemo(() => placesOf(d, visitors, when), [d, visitors, when]);
@@ -431,6 +528,7 @@ function WhereTheyAre({ d, visitors, now, skew, home }: { d: Dashboard; visitors
         <Zooms presets={presetsFor(home)} box={box} onBox={setBox} />
       </div>
       <LiveMap
+        whenVisible
         places={places}
         box={box}
         onBox={setBox}
@@ -442,7 +540,7 @@ function WhereTheyAre({ d, visitors, now, skew, home }: { d: Dashboard; visitors
       <div className="border-b border-line px-3.5 py-[9px]">
         <MapLegend />
       </div>
-      <CountryRows rows={countries.slice(0, 6)} />
+      {when === 'today' && !full ? <p className="px-3.5 py-3 text-center text-[12px] text-ink-3">{text('Loading today…')}</p> : <CountryRows rows={countries.slice(0, 6)} />}
       <p className="mt-auto border-t border-line bg-subtle px-3.5 py-[9px] text-[11px] text-ink-3">
         {text("City dots come from your CDN or the server's GeoIP database. Visitors located only by browser timezone show as a dashed ring on their country (≈) and are never pinned to a city.")}
       </p>
@@ -524,8 +622,10 @@ const CHIPS: Array<{ id: Filter; label: string; dot: string | null }> = [
  * chips and the legend above it, and the selected place's panel beside it. Drag to pan, scroll or pinch to zoom; past a
  * region the countries in view take their detailed outlines. The view is kept in the address as it settles.
  */
-function FullMap({ d, visitors, list, drawer, header, live, onLive }: {
+function FullMap({ d, full, visitors, list, drawer, header, live, onLive }: {
   d: Dashboard;
+  /** Whether today's places are in yet (the full answer, #248). */
+  full: boolean;
   visitors: OnlineVisitor[];
   list: ListProps;
   drawer: ReactNode;
@@ -603,7 +703,7 @@ function FullMap({ d, visitors, list, drawer, header, live, onLive }: {
           {place ? (
             <SelectedPlace place={place} visitors={visitors} today={today} when={when} list={list} onClose={() => onLive({ place: null })} />
           ) : (
-            <p className="px-4 py-8 text-center text-ink-3">{text('Nobody to show here yet.')}</p>
+            <p className="px-4 py-8 text-center text-ink-3">{when === 'today' && !full ? text('Loading today…') : text('Nobody to show here yet.')}</p>
           )}
           {drawer ? <Drawer>{drawer}</Drawer> : null}
         </section>
@@ -766,7 +866,7 @@ function useWallView(home: string | null, cycle: boolean): Box {
  * happened and the sites — with nobody named, since anybody walking past can read it (MNFR-04). It keeps the screen
  * awake and carries on through a dropped connection; Esc (or its button) comes back.
  */
-function WallMode({ d, visitors, sites, now, skew, updated, onClose, cycle, awake }: { d: Dashboard; visitors: OnlineVisitor[]; sites: number[]; now: number; skew: number; updated: number | null; onClose: () => void; cycle: boolean; awake: boolean }) {
+function WallMode({ d, online, visitors, sites, now, skew, updated, onClose, cycle, awake }: { d: Dashboard; online: number | null; visitors: OnlineVisitor[]; sites: number[]; now: number; skew: number; updated: number | null; onClose: () => void; cycle: boolean; awake: boolean }) {
   useWallScreen(onClose, awake);
   const box = useWallView(homeOf(d, visitors), cycle);
   const places = useMemo(() => placesNow(visitors), [visitors]);
@@ -795,7 +895,7 @@ function WallMode({ d, visitors, sites, now, skew, updated, onClose, cycle, awak
         </button>
       </div>
       <div className="grid grid-cols-6 gap-3.5" role="list" aria-label={text('Right now')}>
-        <Tile wall label="On the site now" value={String(d.now.visitors_online)} sub={d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) })} tone="plain" />
+        <Tile wall label="On the site now" value={String(online ?? d.now.visitors_online)} sub={d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) })} tone="plain" />
         <Tile wall label="Waiting on us" value={String(d.now.waiting_on_us)} sub={waited !== null ? text('longest {time}', { time: clock(waited) }) : text('Nobody waiting')} tone={d.now.waiting_on_us ? 'amber' : 'plain'} />
         <Tile wall label="At risk" value={String(d.now.at_risk)} sub={d.now.at_risk_after ? text('past {time}', { time: clock(d.now.at_risk_after) }) : text('nobody answered in time')} tone={d.now.at_risk ? 'red' : 'plain'} />
         <Tile wall label="In a chat" value={String(inChat)} sub={calls ? text('{n} on a call', { n: calls }) : text('{n} staff', { n: d.now.staff_in_chats ?? 0 })} tone="plain" />

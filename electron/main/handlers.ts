@@ -33,6 +33,7 @@ import { answerNotice } from '../services/ai-pending';
 import { notificationSettingsUrl } from '../services/locked-notifications';
 import { broadcast } from './events';
 import { logger } from './log';
+import { screenTimings } from '../services/screen-timings';
 
 /** The web app's pages `auth:openPage` may open, signed out. */
 const AUTH_PAGES = { 'forgot-password': '/forgot-password', account: '/account/settings' } as const;
@@ -1188,4 +1189,6 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('diagnostics:restartSafeMode', (input) => ctx.relaunch(input.safe));
   router.handle('diagnostics:services', () => ctx.supervisor.health());
+  // Website chats' request, server and render times (worksuite-desktop#252), for the report's timings.json.
+  router.handle('diagnostics:timings', (input) => screenTimings.add(input.entries));
 }

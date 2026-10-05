@@ -1763,6 +1763,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/chat/messages', 'chat'],
     // Website chats: the list and each conversation opened, so a thread opens at once from its last copy (#239).
     ['/api/chat/widget-admin/conversations', 'chat'],
+    // Missed chats and Offline enquiries too, so every website list opens at once from its last copy (#252).
+    ['/api/chat/widget-admin/missed', 'chat'],
+    ['/api/chat/widget-admin/offline', 'chat'],
+    // The Live dashboard (its summary, the full answer) and who is on the sites, so it opens at once from its last copy (#248).
+    ['/api/chat/widget-admin/dashboard', 'chat'],
+    ['/api/chat/widget-admin/visitors', 'chat'],
     ['/api/calendar/events', 'calendar'],
     ['/api/tasks', 'tasks'],
     ['/api/task-lists', 'tasks'],

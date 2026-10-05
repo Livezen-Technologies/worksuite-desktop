@@ -17,7 +17,7 @@ import { useRingState, waited } from './Ringing';
 import { DASHBOARD_KEYS, homeOf, MAP_KEYS } from './live/LiveDashboard';
 import { DeskHeading, DeskTiles, NeedsYou, needsRows, useLiveDesk, Yours, yoursRows } from './live/LiveDesk';
 import { placesNow, presetsFor } from './live/liveMap';
-import { LiveMap } from './live/WorldMapView';
+import { LiveMap } from './live/LazyMap';
 
 /**
  * The tray's ringing menu (R-06, RING-UI-07, X-UI-11; RING-43, UX-ALR-02): opened from the menu-bar or tray icon

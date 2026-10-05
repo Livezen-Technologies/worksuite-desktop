@@ -1,4 +1,4 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useRef, useState, type KeyboardEvent, type Ref } from 'react';
 import { ApiError, apiGet, apiPost, request } from '../../../core/api';
 import { errorMessage } from '../../../core/bridge';
@@ -13,7 +13,8 @@ import { useNow } from '../../calls/parts';
 import { useCanned, visitorStatus, WEBSITE, type Section } from './api';
 import { Select } from '../../../components/Select';
 import { LiveDashboard, NO_LIVE_PARAMS, type LiveParams, type WallOptions } from './live/LiveDashboard';
-import { clock, initialsOf, ordinal, pathOf, since, STATE, stateOf, whereOf, type Dashboard, type OnlineVisitor } from './live/liveMap';
+import { useLiveData, useLiveVisitors } from './live/liveData';
+import { clock, initialsOf, ordinal, pathOf, since, STATE, stateOf, whereOf, type OnlineVisitor } from './live/liveMap';
 import { BlockDialog } from './panelCards';
 import { refuseForVisitor } from './profile';
 import { hostOf, PANEL_CARD as CARD, PANEL_HEADING as HEADING, ROW_PICKED, siteAndPath, TABLE_FRAME, TABLE_HEAD } from './rowParts';
@@ -102,16 +103,11 @@ export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection, l
   const sites = live.sites;
   const [status, setStatus] = useState<'' | Status>('');
   const [focusStart, setFocusStart] = useState(0);
-  // Ten seconds, as the visitor list, so the two never disagree about how many people are on the site (C-00). One site
-  // narrows every figure; changing it keeps the last figures on screen until the new ones land. Visitors online reads
-  // only the sites' names from it.
-  const dash = useQuery({
-    queryKey: ['website', 'dashboard', sites.length === 0 ? 0 : sites.length === 1 ? sites[0]! : sites.join(',')],
-    queryFn: ({ signal }) => apiGet<Dashboard>(`${WEBSITE}/dashboard`, sites.length === 1 ? { widget_id: sites[0] } : sites.length ? { widget_ids: sites.join(',') } : undefined, signal),
-    refetchInterval: view === 'dashboard' ? 10_000 : false,
-    placeholderData: keepPreviousData,
-  });
-  const visitors = useQuery({ queryKey: ['website', 'visitors'], queryFn: ({ signal }) => apiGet<{ visitors: OnlineVisitor[] }>(`${WEBSITE}/visitors`, undefined, signal), refetchInterval: 10_000 });
+  // The cards, the list and the map from one place (worksuite-desktop#248): the summary first, the visitor list and the
+  // map's answer beside it, each from this computer's last copy while it is asked for. One site narrows every figure;
+  // changing it keeps the last figures on screen until the new ones land. Visitors online reads only the sites' names.
+  const data = useLiveData(sites, { full: view === 'dashboard', fullInterval: live.wall ? 10_000 : 30_000 });
+  const visitors = useLiveVisitors();
   const all = (visitors.data?.visitors ?? []).filter((v) => !sites.length || sites.includes(v.widget_id));
   const list = view === 'visitors' && status ? all.filter((v) => visitorStatus(v)[0] === status) : all;
 
@@ -122,7 +118,7 @@ export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection, l
   const picked = here ?? (selected !== null && last?.v.id === selected ? last.v : null);
   const left = !here && !!picked && visitors.isSuccess;
 
-  const d = dash.data;
+  const d = data.d;
   const open = (v: OnlineVisitor) => {
     if (hasChat(v)) onOpenChat(v.conversation_id!);
     else {
@@ -137,11 +133,7 @@ export function WebsiteLive({ view, selected, onSelect, onOpenChat, onSection, l
     return (
       <LiveDashboard
         wall={wall}
-        dash={dash}
-        visitors={all}
-        loading={visitors.isLoading}
-        error={visitors.error}
-        onRetry={() => void visitors.refetch()}
+        data={data}
         live={live}
         onLive={onLive}
         selected={selected}

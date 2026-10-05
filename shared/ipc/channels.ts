@@ -400,6 +400,7 @@ export const INVOKE_CHANNELS = [
   'diagnostics:saveBundle',
   'diagnostics:restartSafeMode',
   'diagnostics:services',
+  'diagnostics:timings',
   // POS: the till on this computer (pos-channels.ts).
   ...POS_INVOKE_CHANNELS,
   // Hotel PMS door locks: the on-site lock server this desk talks to (pms-locks-channels.ts).

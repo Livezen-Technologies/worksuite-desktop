@@ -571,6 +571,7 @@ const api = {
     saveBundle: call('diagnostics:saveBundle'),
     restartSafeMode: call('diagnostics:restartSafeMode'),
     services: call('diagnostics:services'),
+    timings: call('diagnostics:timings'),
   },
   events: { on },
 };

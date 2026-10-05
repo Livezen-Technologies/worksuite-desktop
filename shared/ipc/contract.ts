@@ -1296,6 +1296,25 @@ export const contract = {
   'diagnostics:saveBundle': ch(none, { permission: 'desktop.diagnostics.export', whileLocked: true, sensitive: true, rate: 1 }),
   'diagnostics:restartSafeMode': ch(z.object({ safe: z.boolean() }), { whileLocked: true }),
   'diagnostics:services': ch(none, { whileLocked: true }),
+  // Request, server and render times from the screens (worksuite-desktop#252), kept for the report's timings.json.
+  'diagnostics:timings': ch(
+    z.object({
+      entries: z
+        .array(
+          z.object({
+            what: z.string().regex(/^[a-z][a-z0-9:_-]{0,39}$/),
+            at: z.string().max(40),
+            ms: z.number().min(0).max(3_600_000),
+            rows: z.number().int().min(0).max(1_000_000).nullable(),
+            server: z.object({ ms: z.number(), db_ms: z.number(), queries: z.number().int(), rows: z.number().int() }).nullable(),
+            render_ms: z.number().min(0).max(3_600_000).nullable().optional(),
+            ok: z.boolean(),
+          }),
+        )
+        .max(50),
+    }),
+    { whileLocked: true, rate: 2 },
+  ),
 
   // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
   ...posContract,
@@ -1750,6 +1769,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'diagnostics:saveBundle': string | null;
   'diagnostics:restartSafeMode': void;
   'diagnostics:services': Record<string, ServiceHealth>;
+  'diagnostics:timings': void;
 }
 
 /** Typed error codes returned across IPC (§8.3 plus IPC-specific ones). */
