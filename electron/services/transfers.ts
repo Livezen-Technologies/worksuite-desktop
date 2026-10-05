@@ -17,6 +17,7 @@ import type { Database } from './db';
 import type { HttpClient } from './http';
 import type { Vault } from './vault';
 import { TokenBucket } from './throttle';
+import { CHUNK_BYTES, CHUNKED_FROM, CONNECTION_LOST, MAX_MAIL_ATTACHMENT_BYTES, MAX_UPLOAD_BYTES, PARALLEL_PARTS, PART_ATTEMPTS, STALL_MS, STALLED, refusalMessage, uploadRefusal } from '@shared/uploads';
 
 const log = logger('transfers');
 
@@ -81,6 +82,8 @@ interface Meta {
   completed?: boolean;
   ownedSource?: boolean;
   phase?: Transfer['phase'];
+  /** A mail attachment, staged on the server once its parts are in (#249): what Compose attaches. */
+  attachment?: { token: string; name: string; size: number } | null;
 }
 
 /**
@@ -138,6 +141,12 @@ export interface TransferDeps {
   downloaded?: (path: string, source: string) => void | Promise<void>;
   /** How long before the n-th automatic retry (0 first); tests make it short. */
   retryDelay?: (attempt: number) => number;
+  /** How long a request may go without moving a byte or answering before it counts as stalled (#249); tests make it short. */
+  stallMs?: number;
+  /** Between two questions about an upload the server is still putting together (#249); tests make it short. */
+  pollMs?: number;
+  /** Before the n-th new try of one part (0 first); tests make it short. */
+  partDelay?: (attempt: number) => number;
   /**
    * A copy already on this computer, by the download's address: a mail
    * attachment kept in the local mail store (worksuite-desktop#163) opens
@@ -202,7 +211,78 @@ function messageOf(e: unknown): string {
   return isDesktopError(e) ? e.message : String((e as Error)?.message ?? e);
 }
 
-const MAX_UPLOAD = 5 * 1024 * 1024 * 1024;
+/** A failure that only means the connection went (or stalled): waited out however long it takes (#249). */
+export function isConnectionFailure(e: unknown): boolean {
+  if (e instanceof Stalled) return true;
+  if (isDesktopError(e)) return e.code === 'NETWORK_UNREACHABLE' || e.code === 'CANCELLED';
+  if (e instanceof Temporary) return false;
+  return isTemporaryFailure(e);
+}
+
+class Stalled extends Error {}
+
+/** A refusal from the upload API in words a person can act on: the size limit, the file's type (#249). */
+function refusal(e: unknown): unknown {
+  if (!isDesktopError(e) || e.status === null || isTemporaryStatus(e.status)) return e;
+  if (e.status !== 413 && e.status !== 415 && e.status !== 422 && e.status !== 403) return e;
+  const said = refusalMessage(e.status, e.message);
+  return said === e.message ? e : new DesktopError(e.code, said, e.status);
+}
+
+/** What the renderer may know of an upload's destination: a mail attachment's staged copy, a tender's place (#249). */
+function uploadExtras(m: Meta): Pick<Transfer, 'attachment' | 'tender'> {
+  const t = m.target;
+  if (t?.kind === 'mail') return { attachment: m.attachment ?? null };
+  if (t?.kind === 'tender') return { tender: { tenderId: t.tenderId, into: t.into, ...(t.id ? { id: t.id } : {}), ...(t.docKind ? { docKind: t.docKind } : {}) } };
+  return {};
+}
+
+/** Waits `ms`, or less when the signal aborts. */
+function sleep(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve) => {
+    if (signal.aborted) return resolve();
+    const done = () => (clearTimeout(timer), signal.removeEventListener('abort', done), resolve());
+    const timer = setTimeout(done, ms);
+    signal.addEventListener('abort', done, { once: true });
+  });
+}
+
+/**
+ * One part as `multipart/form-data`, streamed (#249): the bytes go out a slice
+ * at a time as the connection takes them, so the caller sees them move — a
+ * part that is slow is told from one that has stalled. Built afresh for every
+ * try (a stream is read once).
+ */
+export function multipartPart(fields: Record<string, string>, fileField: string, fileName: string, data: Uint8Array, onSent: (bytes: number) => void, slice = 64 * 1024): { body: ReadableStream<Uint8Array>; contentType: string; length: number } {
+  const boundary = `----WorkSuitePart${randomUUID().replace(/-/g, '')}`;
+  const safe = (v: string) => v.replace(/["\r\n]/g, '_');
+  let head = '';
+  for (const [k, v] of Object.entries(fields)) head += `--${boundary}\r\nContent-Disposition: form-data; name="${safe(k)}"\r\n\r\n${v}\r\n`;
+  head += `--${boundary}\r\nContent-Disposition: form-data; name="${safe(fileField)}"; filename="${safe(fileName)}"\r\nContent-Type: application/octet-stream\r\n\r\n`;
+  const start = Buffer.from(head, 'utf8');
+  const end = Buffer.from(`\r\n--${boundary}--\r\n`, 'utf8');
+  let at = -1;
+  const body = new ReadableStream<Uint8Array>({
+    pull(c) {
+      if (at < 0) {
+        at = 0;
+        c.enqueue(new Uint8Array(start));
+        return;
+      }
+      // What was handed over before this pull has gone out (the connection asked for more).
+      onSent(at);
+      if (at < data.byteLength) {
+        const next = Math.min(data.byteLength, at + slice);
+        c.enqueue(data.subarray(at, next));
+        at = next;
+        return;
+      }
+      c.enqueue(new Uint8Array(end));
+      c.close();
+    },
+  });
+  return { body, contentType: `multipart/form-data; boundary=${boundary}`, length: start.byteLength + data.byteLength + end.byteLength };
+}
 
 /** An Office export's signed download (`/office/exports/{token}`, ten minutes, web-api §8): fetched from our own server. */
 export function isOfficeExportPath(apiPath: string): boolean {
@@ -236,16 +316,18 @@ export async function walkFolder(root: string): Promise<Array<{ path: string; si
   await visit(root, top, 0);
   return out;
 }
-const CHUNK = 8 * 1024 * 1024;
+const CHUNK = CHUNK_BYTES;
 const MIN_CHUNK = 256 * 1024;
 
 /**
- * The size of each part an upload is sent in. Progress moves when a part is
- * in, so a file smaller than one part sat at 0% until it was done: parts are
- * about a twentieth of the file (at least 256 KB, at most 8 MB), and a
- * document shows its way up instead of jumping from nothing to finished.
+ * The size of each part an upload is sent in. A small file goes in parts of
+ * about a twentieth of it (at least 256 KB), so a document shows its way up
+ * instead of jumping from nothing to finished. A large one (over 8 MB, #249)
+ * goes in full 8 MB parts, several at a time: fewer requests, each one short
+ * enough to try again cheaply.
  */
 export function chunkSizeFor(size: number): number {
+  if (size > CHUNKED_FROM) return CHUNK;
   const twentieth = Math.ceil(Math.max(0, size) / 20);
   return Math.min(CHUNK, Math.max(MIN_CHUNK, Math.ceil(twentieth / MIN_CHUNK) * MIN_CHUNK));
 }
@@ -383,7 +465,9 @@ export class TransferManager {
   async register(paths: string[]): Promise<PickedFile[]> {
     const out: PickedFile[] = [];
     const add = (real: string, size: number, relativePath?: string) => {
-      if (size > MAX_UPLOAD) throw new DesktopError('IPC_VALIDATION_FAILED', `${basename(real)} is larger than 5 GB.`);
+      // One limit for every module, said before anything is sent (#249).
+      const refused = uploadRefusal(size);
+      if (refused) throw new DesktopError('IPC_VALIDATION_FAILED', `${basename(real)}: ${refused}.`);
       const handle = randomUUID();
       this.handles.set(handle, { path: real, name: basename(real), size, ...(relativePath ? { relativePath } : {}) });
       out.push({ handle, name: basename(real), size, ...(relativePath ? { relativePath } : {}) });
@@ -498,6 +582,7 @@ export class TransferManager {
       held,
       phase: l.meta.phase,
       ...(l.meta.target?.kind === 'chat' ? { chat: this.chatInfo(l.t.id, l.meta.target) } : {}),
+      ...uploadExtras(l.meta),
     };
   }
 
@@ -539,6 +624,7 @@ export class TransferManager {
         attempts: m?.attempts ?? 0,
         phase: m?.phase,
         ...(m?.target?.kind === 'chat' ? { chat: this.chatInfo(r.id, m.target) } : {}),
+        ...(m ? uploadExtras(m) : {}),
       };
     });
   }
@@ -637,14 +723,15 @@ export class TransferManager {
    * tried again — at most a few times, each later than the last — without
    * keeping its slot from the files behind it.
    */
-  private settle(l: Live, abort: AbortController, state: 'done' | 'failed', error: string | null = null, temporary = false): void {
+  private settle(l: Live, abort: AbortController, state: 'done' | 'failed', error: string | null = null, temporary = false, patient = false): void {
     if (abort.signal.aborted || l.abort !== abort) return;
     if (state === 'failed') l.meta.temporary = temporary;
     if (state === 'done') {
       l.meta.attempts = 0;
       l.meta.temporary = false;
     }
-    if (state === 'failed' && temporary && this.cfg.autoRetry && (l.meta.attempts ?? 0) < MAX_AUTO_RETRIES) return this.retryLater(l, error);
+    // An upload the connection interrupted waits for it however long it is gone (#249): a minute apart at most.
+    if (state === 'failed' && temporary && this.cfg.autoRetry && (patient || (l.meta.attempts ?? 0) < MAX_AUTO_RETRIES)) return this.retryLater(l, error);
     this.finish(l, state, error);
   }
 
@@ -984,6 +1071,13 @@ export class TransferManager {
 
   async upload(handles: string[], target: UploadTarget): Promise<Transfer[]> {
     const out: Transfer[] = [];
+    // Every file is measured against the limit before any of them is queued (#249): nothing starts to be refused later.
+    const max = target.kind === 'mail' ? MAX_MAIL_ATTACHMENT_BYTES : MAX_UPLOAD_BYTES;
+    for (const h of handles) {
+      const file = this.handles.get(h);
+      const refused = file ? uploadRefusal(file.size, max) : null;
+      if (file && refused) throw new DesktopError('IPC_VALIDATION_FAILED', `${file.name}: ${refused}`.replace(/([^.])$/, '$1.'));
+    }
     for (const h of handles) {
       if (target.kind === 'chat' && target.clientMessageId) {
         const existing = this.list().find((t) => t.chat?.clientMessageId === target.clientMessageId && t.chat?.roomId === target.roomId);
@@ -998,7 +1092,7 @@ export class TransferManager {
         direction: 'upload',
         name: (target.kind === 'files' && target.name) || (file.relativePath ?? file.name),
         source: file.path,
-        destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : target.kind === 'tender' ? 'Tender' : target.kind === 'remote' ? 'Remote session' : target.kind === 'website' ? 'Website chat' : 'WorkSuite Files',
+        destination: target.kind === 'chat' ? 'Chat' : target.kind === 'task' ? 'Task' : target.kind === 'tender' ? 'Tender' : target.kind === 'mail' ? 'Mail' : target.kind === 'remote' ? 'Remote session' : target.kind === 'website' ? 'Website chat' : 'WorkSuite Files',
         bytes: 0,
         total: file.size,
         state: 'queued',
@@ -1112,7 +1206,18 @@ export class TransferManager {
       this.settle(l, abort, 'done');
     } catch (e) {
       if (abort.signal.aborted) return;
-      this.settle(l, abort, 'failed', messageOf(e), e instanceof Temporary || isTemporaryFailure(e));
+      // Never a bare "The request was cancelled." (#249): a dropped or stalled connection is said as what it is,
+      // and the upload waits for the connection, then carries on from the last part the server has.
+      const connection = isConnectionFailure(e);
+      const temporary = e instanceof Temporary || connection || isTemporaryFailure(e);
+      const message = connection
+        ? this.cfg.autoRetry
+          ? e instanceof Stalled
+            ? STALLED
+            : CONNECTION_LOST
+          : 'Connection lost. Retry to continue from where it stopped.'
+        : messageOf(e);
+      this.settle(l, abort, 'failed', message, temporary, connection);
     }
   }
 
@@ -1120,6 +1225,11 @@ export class TransferManager {
    * The upload's bytes: init → parts → complete, going on from the parts the
    * server already has. An upload the server already completed (the answer
    * lost on the way back) is taken as done, never sent again.
+   *
+   * A large file's parts go several at a time (#249), each watched for
+   * stalling rather than timed: a part is given up only when nothing has moved
+   * for a minute, and tried again with backoff. The server checks the whole
+   * file against the SHA-256 sent at the start before it keeps it.
    */
   private async sendParts(l: Live, abort: AbortController, path: string, size: number): Promise<void> {
     const { meta } = l;
@@ -1128,7 +1238,7 @@ export class TransferManager {
     let received = new Set<number>();
     if (meta.uploadId) {
       try {
-        const s = await this.deps.http.get<{ received_chunks?: number[]; status?: string; file_id?: number | string | null }>(`/api/uploads/${meta.uploadId}/status`);
+        const s = await this.deps.http.get<{ received_chunks?: number[]; status?: string; file_id?: number | string | null }>(`/api/uploads/${meta.uploadId}/status`, { timeoutMs: this.stallMs });
         if ((s.status === 'completed' || s.status === 'complete') && s.file_id !== undefined && s.file_id !== null) {
           meta.fileId = String(s.file_id);
           meta.completed = true;
@@ -1136,27 +1246,36 @@ export class TransferManager {
           this.progress(l, size);
           return;
         }
-        received = new Set((s.received_chunks ?? []).map(Number));
+        // Thrown away by the server (aborted, or failed its checksum): start again.
+        if (s.status === 'aborted' || s.status === 'failed') meta.uploadId = null;
+        else received = new Set((s.received_chunks ?? []).map(Number));
       } catch (e) {
         // Out of reach: try again later with the same session. Anything else: the session expired, start over.
-        if (isTemporaryFailure(e)) throw e;
+        if (isTemporaryFailure(e) || isConnectionFailure(e)) throw e;
         meta.uploadId = null;
       }
     }
     if (!meta.uploadId) {
+      received = new Set();
       const filename = (target.kind === 'files' && target.name) || basename(path);
       const replacing = target.kind === 'files' && target.replaceFileId ? Number(target.replaceFileId) : null;
-      const init = await this.deps.http.post<{ upload_id: string; chunk_size: number; total_chunks: number; replaces?: number | string }>('/api/uploads/init', {
-        filename,
-        total_size: size,
-        chunk_size: chunkSizeFor(size),
-        sha256: meta.sha256,
-        mime_type: mimeFor(filename) ?? undefined,
-        ...(replacing ? { replace_file_id: replacing } : {}),
-        ...(meta.relativePath ? { relative_path: meta.relativePath } : {}),
-        // A task's files are Drive files (in the top folder, as the web's are), linked to the task once they are in.
-        ...(target.kind === 'files' ? { purpose: 'drive', folder_id: target.folderId } : target.kind === 'task' || target.kind === 'tender' ? { purpose: 'drive', folder_id: null } : { purpose: 'chat', room_id: target.kind === 'chat' ? target.roomId : undefined }),
-      });
+      let init: { upload_id: string; chunk_size: number; total_chunks: number; replaces?: number | string };
+      try {
+        init = await this.deps.http.post<typeof init>('/api/uploads/init', {
+          filename,
+          total_size: size,
+          chunk_size: chunkSizeFor(size),
+          sha256: meta.sha256,
+          mime_type: mimeFor(filename) ?? undefined,
+          ...(replacing ? { replace_file_id: replacing } : {}),
+          ...(meta.relativePath ? { relative_path: meta.relativePath } : {}),
+          // A task's files are Drive files (in the top folder, as the web's are), linked to the task once they are in.
+          // A mail attachment is staged for the message, never kept in Drive (#249).
+          ...(target.kind === 'files' ? { purpose: 'drive', folder_id: target.folderId } : target.kind === 'task' || target.kind === 'tender' ? { purpose: 'drive', folder_id: null } : target.kind === 'mail' ? { purpose: 'mail' } : { purpose: 'chat', room_id: target.kind === 'chat' ? target.roomId : undefined }),
+        });
+      } catch (e) {
+        throw refusal(e);
+      }
       // A server that does not know `replace_file_id` ignores it and would add a second file of the same
       // name: it says which file it will replace, and without that the upload stops before any bytes go.
       if (replacing && Number(init.replaces) !== replacing) {
@@ -1173,55 +1292,193 @@ export class TransferManager {
     this.phase(l, 'uploading');
     const fh = await open(path, 'r');
     try {
-      let sent = [...received].reduce((a, i) => a + Math.min(part, size - i * part), 0);
-      this.progress(l, sent);
-      for (let i = 0; i < total; i++) {
-        if (received.has(i)) continue;
-        if (abort.signal.aborted) return;
-        const len = Math.min(part, size - i * part);
-        const buf = Buffer.alloc(len);
-        await fh.read(buf, 0, len, i * part);
-        await this.buckets.upload.take(len, abort.signal);
-        await this.sendChunk(meta.uploadId!, i, buf, l.t.name, abort.signal);
-        received.add(i);
-        sent += len;
-        this.progress(l, sent);
-      }
+      let sent = [...received].reduce((a, i) => a + Math.max(0, Math.min(part, size - i * part)), 0);
+      const moving = new Map<number, number>();
+      const report = () => this.progress(l, Math.min(size, sent + [...moving.values()].reduce((a, b) => a + b, 0)));
+      report();
+      const todo: number[] = [];
+      for (let i = 0; i < total; i++) if (!received.has(i)) todo.push(i);
+      // One part going wrong stops the others: they are tried again from the server's list.
+      const stop = new AbortController();
+      const signal = AbortSignal.any([abort.signal, stop.signal]);
+      let failure: unknown = null;
+      const worker = async () => {
+        while (!signal.aborted) {
+          const i = todo.shift();
+          if (i === undefined) return;
+          const len = Math.max(0, Math.min(part, size - i * part));
+          const buf = Buffer.alloc(len);
+          await fh.read(buf, 0, len, i * part);
+          await this.buckets.upload.take(len, signal);
+          if (signal.aborted) return;
+          try {
+            await this.sendChunk(meta.uploadId!, i, buf, signal, (n) => {
+              moving.set(i, n);
+              report();
+            });
+          } finally {
+            moving.delete(i);
+          }
+          received.add(i);
+          sent += len;
+          report();
+        }
+      };
+      const lanes = size > CHUNKED_FROM ? Math.min(PARALLEL_PARTS, todo.length) : 1;
+      await Promise.all(
+        Array.from({ length: Math.max(1, lanes) }, () =>
+          worker().catch((e) => {
+            if (failure === null) failure = e;
+            stop.abort();
+          }),
+        ),
+      );
+      if (abort.signal.aborted) return;
+      if (failure !== null) throw failure;
     } finally {
       await fh.close();
     }
     this.phase(l, 'processing');
-    const done = await this.deps.http.post<{ file_id?: number | string }>(`/api/uploads/${meta.uploadId}/complete`, {});
-    meta.fileId = done.file_id !== undefined ? String(done.file_id) : null;
-    meta.completed = true;
-    this.persist(l);
+    if (target.kind === 'mail') return this.stageMail(l, abort);
+    await this.finishUpload(l, abort);
   }
 
-  private async sendChunk(uploadId: string, index: number, buf: Buffer, name: string, signal: AbortSignal): Promise<void> {
-    for (let attempt = 0; ; attempt++) {
-      const form = new FormData();
-      form.set('chunk_index', String(index));
-      form.set('chunk', new Blob([new Uint8Array(buf)]), name);
+  private get stallMs(): number {
+    return this.deps.stallMs ?? STALL_MS;
+  }
+
+  /**
+   * The server puts the parts together, checks them against the file's
+   * SHA-256, scans and stores the file. That can take longer than any one
+   * request should wait for a large file (#249: a 50 MB PDF's `complete`
+   * outlived the 30-second limit every request had, and its "aborted due to
+   * timeout" read as "The request was cancelled."). So `complete` is asked
+   * with the stall limit, and when the answer is slow — or the server says it
+   * is still at it — the upload asks where it got to until it is done.
+   */
+  private async finishUpload(l: Live, abort: AbortController): Promise<void> {
+    const { meta } = l;
+    const id = meta.uploadId!;
+    const began = Date.now();
+    const poll = this.deps.pollMs ?? 3000;
+    for (;;) {
+      if (abort.signal.aborted) return;
+      let answer: { file_id?: number | string | null; status?: string } | null = null;
       try {
-        // A part sent again replaces the one the server has under the same index: never a second copy.
-        const res = await this.deps.http.raw('POST', this.deps.http.url(`/api/uploads/${uploadId}/chunk`), { body: form, signal, timeoutMs: 10 * 60_000 });
-        if (res.ok) return;
-        if (!isTemporaryStatus(res.status)) {
-          let message = `The server refused part ${index + 1} (${res.status}).`;
-          try {
-            message = ((await res.json()) as { message?: string }).message ?? message;
-          } catch {
-            /* keep default */
+        answer = await this.deps.http.post<{ file_id?: number | string | null; status?: string }>(`/api/uploads/${id}/complete`, {}, { timeoutMs: this.stallMs, signal: abort.signal });
+      } catch (e) {
+        if (abort.signal.aborted) return;
+        if (!(isTemporaryFailure(e) || isConnectionFailure(e))) {
+          // The parts did not add up to the file: they are thrown away and the next try starts afresh.
+          if (isDesktopError(e) && e.status === 422 && /checksum/i.test(e.message)) {
+            meta.uploadId = null;
+            this.persist(l);
+            throw new DesktopError('SERVER_ERROR', 'The file arrived damaged (its checksum did not match). It will be sent again from the start when you retry.', 422);
           }
-          throw new DesktopError('SERVER_ERROR', message, res.status);
+          throw refusal(e);
         }
-        if (attempt >= 4) throw new Temporary(`The server answered ${res.status} for part ${index + 1}.`);
+      }
+      if (answer && answer.status !== 'assembling') {
+        meta.fileId = answer.file_id !== undefined && answer.file_id !== null ? String(answer.file_id) : null;
+        meta.completed = true;
+        this.persist(l);
+        return;
+      }
+      // Still being put together (or the answer was slow): ask where it got to — at once after a lost answer.
+      let wait = answer ? poll : 0;
+      for (;;) {
+        await sleep(wait, abort.signal);
+        wait = poll;
+        if (abort.signal.aborted) return;
+        if (Date.now() - began > 30 * 60_000) throw new Temporary('The server is still processing this file. It will be checked again shortly.');
+        const s = await this.deps.http.get<{ status?: string; file_id?: number | string | null }>(`/api/uploads/${id}/status`, { timeoutMs: this.stallMs, signal: abort.signal });
+        if ((s.status === 'completed' || s.status === 'complete') && s.file_id !== undefined && s.file_id !== null) {
+          meta.fileId = String(s.file_id);
+          meta.completed = true;
+          this.persist(l);
+          return;
+        }
+        if (s.status === 'failed' || s.status === 'aborted') {
+          meta.uploadId = null;
+          this.persist(l);
+          throw new DesktopError('SERVER_ERROR', 'The server could not finish this file. It will be sent again from the start when you retry.');
+        }
+        // Done but not saying which file (an older server), or not started: ask `complete` again, which answers at once.
+        if (s.status !== 'assembling') break;
+      }
+    }
+  }
+
+  /**
+   * A mail attachment's parts, staged for the message on the server (#249):
+   * not kept in Drive. Asking again for the same upload gives the same staged
+   * copy, so a lost answer never stages it twice.
+   */
+  private async stageMail(l: Live, abort: AbortController): Promise<void> {
+    const { meta } = l;
+    try {
+      const r = await this.deps.http.post<{ token: string; name: string; size: number }>('/api/mail/upload/from-upload', { upload_id: meta.uploadId }, { timeoutMs: this.stallMs, signal: abort.signal });
+      if (abort.signal.aborted) return;
+      meta.attachment = { token: String(r.token), name: String(r.name ?? l.t.name), size: Number(r.size ?? l.t.total) };
+      meta.completed = true;
+      this.persist(l);
+    } catch (e) {
+      if (isDesktopError(e) && e.status === 422 && /checksum/i.test(e.message)) {
+        meta.uploadId = null;
+        this.persist(l);
+      }
+      if (isTemporaryFailure(e) || isConnectionFailure(e)) throw e;
+      throw refusal(e);
+    }
+  }
+
+  /**
+   * One part, tried up to five times with backoff. No time limit: it is given
+   * up only when no bytes have moved and no answer has come for a minute
+   * (#249) — 8 MB on a slow line takes as long as it takes.
+   */
+  private async sendChunk(uploadId: string, index: number, buf: Buffer, signal: AbortSignal, onSent: (bytes: number) => void = () => undefined): Promise<void> {
+    for (let attempt = 0; ; attempt++) {
+      const last = attempt >= PART_ATTEMPTS - 1;
+      const stall = new AbortController();
+      let timer: NodeJS.Timeout | null = null;
+      const poke = () => {
+        if (timer) clearTimeout(timer);
+        timer = setTimeout(() => stall.abort(), this.stallMs);
+        timer.unref?.();
+      };
+      const both = AbortSignal.any([signal, stall.signal]);
+      try {
+        poke();
+        // A part sent again replaces the one the server has under the same index: never a second copy.
+        const res = await this.deps.http.raw('POST', this.deps.http.url(`/api/uploads/${uploadId}/chunk`), {
+          // Built again for each send (the session's 401 refresh sends it twice).
+          bodyFactory: () => {
+            const m = multipartPart({ chunk_index: String(index) }, 'chunk', `part-${index}`, buf, (n) => (poke(), onSent(n)));
+            return { body: m.body, contentType: m.contentType };
+          },
+          duplex: 'half',
+          signal: both,
+          timeoutMs: 0,
+        } as RequestInit & { timeoutMs: number });
+        if (res.ok) return;
+        let said: string | undefined;
+        try {
+          said = ((await res.json()) as { message?: string }).message;
+        } catch {
+          /* no message */
+        }
+        if (!isTemporaryStatus(res.status)) throw new DesktopError('SERVER_ERROR', refusalMessage(res.status, said ?? `The server refused part ${index + 1} (${res.status}).`, res.status === 413 ? 'part' : 'file'), res.status);
+        if (last) throw new Temporary(`The server answered ${res.status} for part ${index + 1}.`);
       } catch (e) {
         if (signal.aborted) throw e;
         if (isDesktopError(e) && e.code === 'SERVER_ERROR' && e.status !== null && !isTemporaryStatus(e.status)) throw e;
-        if (attempt >= 4) throw e;
+        if (last) throw stall.signal.aborted ? new Stalled(STALLED) : e;
+      } finally {
+        if (timer) clearTimeout(timer);
+        onSent(0);
       }
-      await new Promise((r) => setTimeout(r, backoffDelay(attempt, { baseMs: 1000, maxMs: 30_000 })));
+      await sleep(this.deps.partDelay ? this.deps.partDelay(attempt) : backoffDelay(attempt, { baseMs: 1000, maxMs: 30_000 }), signal);
     }
   }
 

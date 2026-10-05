@@ -867,6 +867,10 @@ export interface Transfer {
   movedAt?: string | null;
   /** Waiting in the queue because the connection is lost, or a metered connection is set to wait. */
   held?: 'connection' | 'metered' | null;
+  /** A mail attachment's staged copy once its parts are in (worksuite-desktop#249): what Compose attaches. */
+  attachment?: { token: string; name: string; size: number } | null;
+  /** Where a tender's upload goes, so the tender's tabs show it as it moves — also after a restart (#249). */
+  tender?: { tenderId: number; into: 'document' | 'line' | 'replace' | 'security'; id?: number; docKind?: string } | null;
 }
 
 export interface OfflineMutation {

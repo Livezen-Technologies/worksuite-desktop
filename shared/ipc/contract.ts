@@ -298,6 +298,8 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
     id: z.number().int().positive().optional(),
     docKind: z.string().regex(/^[a-z_]{1,60}$/).optional(),
   }),
+  /** A mail attachment (worksuite-desktop#249): sent in parts like any upload, then staged for the message — not kept in Drive. */
+  z.object({ kind: z.literal('mail') }),
   /** Offered to the other end of a remote-control session (RC06): they accept or decline it there. */
   z.object({ kind: z.literal('remote'), sessionId: z.number().int().positive() }),
   // To a website visitor (ENH-WCHAT-02, RDC-04/14): one request to the conversation's attach, the widget's own store.

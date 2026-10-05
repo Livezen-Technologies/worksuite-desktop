@@ -97,10 +97,21 @@ export function withSafeHeaders<I extends object>(fetch: (url: string, init: I) 
   };
 }
 
+/**
+ * A request that ran out of time (worksuite-desktop#249). Told apart from one somebody cancelled: a timeout's
+ * DOMException reads "The operation was aborted due to timeout", and that word "aborted" once made every slow
+ * request — a large upload's last step among them — say "The request was cancelled.", which nobody had done.
+ */
+export const TIMEOUT_MESSAGE = 'The server took too long to answer. Check your connection and try again.';
+
 export function classifyNetworkError(e: unknown): DesktopError {
   const text = `${(e as Error)?.message ?? e} ${String((e as { cause?: unknown })?.cause ?? '')}`;
   // Not the network: a request that could not be built (a header no HTTP header may carry, #238).
   if (e instanceof DesktopError || e instanceof UnsafeHeaderError || /ByteString|Invalid value for header|Invalid header name/i.test(text)) return requestBuildError(e);
+  // Before "aborted": a timeout's own message says it was aborted.
+  if ((e as Error)?.name === 'TimeoutError' || /due to timeout|signal timed out/i.test(text)) {
+    return new DesktopError('NETWORK_UNREACHABLE', TIMEOUT_MESSAGE);
+  }
   if ((e as Error)?.name === 'AbortError' || /aborted/i.test(text)) {
     return new DesktopError('CANCELLED', 'The request was cancelled.');
   }
@@ -175,9 +186,15 @@ export class HttpClient {
    * refresh refused means the session is gone. A 401 that comes back after a
    * refresh that worked is this request's own answer — a locked folder's
    * wrong password answers 401 — so it is returned, not taken as a sign-out.
+   *
+   * `timeoutMs` 0 sets no time limit at all: the caller watches the request
+   * itself (an upload's part, stopped only when it stalls — #249).
    */
-  async raw(method: string, url: string, init: RequestInit & { auth?: boolean; timeoutMs?: number } = {}): Promise<Response> {
+  async raw(method: string, url: string, init: RequestInit & { auth?: boolean; timeoutMs?: number; bodyFactory?: () => { body: BodyInit; contentType: string } } = {}): Promise<Response> {
     const auth = init.auth !== false;
+    // A streamed body is read once: built afresh for every send, the one after a token refresh included (#249).
+    const { bodyFactory, ...rest } = init;
+    init = rest;
     const attempt = async (): Promise<Response> => {
       // Every header through the safety helper (#238); a request that cannot be built is this screen's error, not a crash.
       let headers: Headers;
@@ -192,13 +209,22 @@ export class HttpClient {
       } catch (e) {
         throw requestBuildError(e);
       }
-      const signals: AbortSignal[] = [AbortSignal.timeout(init.timeoutMs ?? 30_000)];
+      let body = init.body;
+      if (bodyFactory) {
+        const built = bodyFactory();
+        body = built.body;
+        headers.set('Content-Type', built.contentType);
+      }
+      const limit = init.timeoutMs === 0 ? null : AbortSignal.timeout(init.timeoutMs ?? 30_000);
+      const signals: AbortSignal[] = limit ? [limit] : [];
       if (init.signal) signals.push(init.signal);
       try {
-        const res = await this.deps.fetch(url, { ...init, method, headers, signal: AbortSignal.any(signals), redirect: 'manual' });
+        const res = await this.deps.fetch(url, { ...init, body, method, headers, signal: signals.length ? AbortSignal.any(signals) : undefined, redirect: 'manual' });
         this.deps.onReachability(true);
         return res;
       } catch (e) {
+        // Out of time, not cancelled by anybody: said so (#249). A slow answer is no sign the server is gone.
+        if (limit?.aborted && !init.signal?.aborted) throw new DesktopError('NETWORK_UNREACHABLE', TIMEOUT_MESSAGE);
         const err = classifyNetworkError(e);
         if (err.code === 'NETWORK_UNREACHABLE') this.deps.onReachability(false);
         throw err;
