@@ -50,6 +50,23 @@ export interface Insights {
   /** Chats started per weekday (Monday first) and hour, on `timezone`'s clock (#247). */
   hours?: number[][];
   timezone?: string;
+  /**
+   * Message delivery per day (WS-WCHAT OPS-04, from ChatMetrics) for the whole installation, not per widget; all time
+   * is the last 90 days. Absent from an older server, and `installed` false before its migration.
+   */
+  delivery?: InsightsDelivery;
+}
+
+export const DELIVERY_METRICS = ['sent', 'retried', 'deduplicated', 'resynced', 'emailed', 'not_reaching_staff'] as const;
+export type DeliveryMetric = (typeof DELIVERY_METRICS)[number];
+export type DeliveryDay = { date: string } & Record<DeliveryMetric, number>;
+
+export interface InsightsDelivery {
+  installed: boolean;
+  from: string;
+  to: string;
+  totals: Record<DeliveryMetric, number>;
+  days: DeliveryDay[];
 }
 
 const PERIODS = [
@@ -266,6 +283,7 @@ function Report({ d, all }: { d: Insights; all: boolean }) {
           {d.start_pages ? <StartPages pages={d.start_pages} /> : null}
         </div>
       ) : null}
+      {d.delivery?.installed ? <Delivery delivery={d.delivery} all={all} /> : null}
       <Also d={d} />
     </>
   );
@@ -406,6 +424,61 @@ function ByWidget({ rows }: { rows: NonNullable<Insights['by_widget']> }) {
         <p className="px-4 py-3 text-ink-3">{text('No widget had chats in this period.')}</p>
       )}
     </div>
+  );
+}
+
+const DELIVERY_COLS = 'grid [grid-template-columns:1.4fr_repeat(6,minmax(0,1fr))] px-4 py-2.5';
+const DELIVERY_HEADS: Record<DeliveryMetric, string> = {
+  sent: 'Sent',
+  retried: 'Retried',
+  deduplicated: 'Deduplicated',
+  resynced: 'Re-synced',
+  emailed: 'Emailed',
+  not_reaching_staff: 'Not reaching staff',
+};
+
+/**
+ * Message delivery per day (OPS-04): sent, retried, deduplicated, re-synced, emailed and not reaching staff, the
+ * period's totals first and then each day that had any, newest first. Counted for the whole installation, so a single
+ * widget's report says so.
+ */
+function Delivery({ delivery, all }: { delivery: InsightsDelivery; all: boolean }) {
+  const days = delivery.days.filter((x) => DELIVERY_METRICS.some((m) => Number(x[m]) > 0)).reverse();
+  const cell = (n: number | undefined, m: DeliveryMetric) => (
+    <span key={m} role="cell" className={cx(m === 'not_reaching_staff' && n ? 'font-semibold text-danger' : undefined)}>
+      {count(Number(n ?? 0))}
+    </span>
+  );
+  return (
+    <section aria-label={text('Delivery')} className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
+      <div className="flex items-baseline gap-2 px-4 pt-3.5 pb-2.5">
+        <h2 className="flex-1 text-[14px] font-bold">{text('Delivery')}</h2>
+        <span className="text-[11.5px] text-ink-3">
+          {all ? text('{from} – {to}', { from: dayLabel(delivery.from), to: dayLabel(delivery.to) }) : text('All widgets, {from} – {to}', { from: dayLabel(delivery.from), to: dayLabel(delivery.to) })}
+        </span>
+      </div>
+      <div role="table" aria-label={text('Delivery per day')} className="max-h-[320px] overflow-y-auto border-t border-line scroll-thin">
+        <div role="row" className={cx(DELIVERY_COLS, 'sticky top-0 border-b border-line bg-subtle text-[10.5px] font-bold tracking-[0.9px] text-ink-3 uppercase')}>
+          <span role="columnheader">{text('Day')}</span>
+          {DELIVERY_METRICS.map((m) => (
+            <span key={m} role="columnheader">
+              {text(DELIVERY_HEADS[m])}
+            </span>
+          ))}
+        </div>
+        <div role="row" className={cx(DELIVERY_COLS, 'text-[13px] tabular-nums', days.length > 0 && 'border-b border-line/60')}>
+          <b role="rowheader">{text('Total')}</b>
+          {DELIVERY_METRICS.map((m) => cell(delivery.totals[m], m))}
+        </div>
+        {days.map((x, i) => (
+          <div key={x.date} role="row" className={cx(DELIVERY_COLS, 'text-[13px] tabular-nums', i < days.length - 1 && 'border-b border-line/60')}>
+            <span role="rowheader">{dayLabel(x.date)}</span>
+            {DELIVERY_METRICS.map((m) => cell(x[m], m))}
+          </div>
+        ))}
+      </div>
+      {days.length ? null : <p className="border-t border-line/60 px-4 py-3 text-ink-3">{text('No messages counted in this period.')}</p>}
+    </section>
   );
 }
 

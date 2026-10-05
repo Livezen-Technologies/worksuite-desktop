@@ -60,7 +60,7 @@ import { SalonPrint } from '../services/salon-print';
 import { SalonSync } from '../services/salon-sync';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
-import { HttpClient, withSafeHeaders, type FetchLike } from '../services/http';
+import { CLIENT_TYPE, CLIENT_TYPE_HEADER, HttpClient, withSafeHeaders, type FetchLike } from '../services/http';
 import { createNetFetch } from '../services/net-fetch';
 import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
@@ -268,7 +268,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const guests = new GuestMeetService({ fetch: fetchImpl, server: () => auth.getServer()?.origin ?? null });
   const mediaServers = (): string[] => db.getConfig<string[]>('media_servers') ?? [];
   const clientHeaders = (): Record<string, string> => {
-    const h: Record<string, string> = { 'X-WS-Client': `worksuite-desktop/${app.getVersion()} (${platformName()}; ${archName()})` };
+    const h: Record<string, string> = {
+      'X-WS-Client': `worksuite-desktop/${app.getVersion()} (${platformName()}; ${archName()})`,
+      // The client type, for the server's per-client chat service scope; HttpClient sets it too.
+      [CLIENT_TYPE_HEADER]: CLIENT_TYPE,
+    };
     const dev = device?.current();
     if (dev) h['X-WS-Device'] = dev.id;
     return h;
@@ -295,7 +299,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       reachabilityProbe = setInterval(() => {
         const origin = auth.getServer()?.origin;
         if (!origin) return;
-        fetchImpl(`${origin}/api/auth/config`, { method: 'GET', signal: AbortSignal.timeout(10_000) })
+        fetchImpl(`${origin}/api/auth/config`, { method: 'GET', headers: { [CLIENT_TYPE_HEADER]: CLIENT_TYPE }, signal: AbortSignal.timeout(10_000) })
           .then(() => onReachability(true))
           .catch(() => undefined);
       }, 15_000);
@@ -2194,7 +2198,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     timedFetch: async (path) => {
       const origin = auth.getServer()?.origin;
       const t0 = Date.now();
-      const res = await fetchImpl(`${origin}${path}`, { method: 'GET', signal: AbortSignal.timeout(15_000) });
+      const res = await fetchImpl(`${origin}${path}`, { method: 'GET', headers: { [CLIENT_TYPE_HEADER]: CLIENT_TYPE }, signal: AbortSignal.timeout(15_000) });
       return { ok: res.ok, status: res.status, ms: Date.now() - t0 };
     },
     signedIn: () => sessionCtl.isReady(),
