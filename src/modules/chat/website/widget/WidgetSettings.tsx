@@ -323,7 +323,7 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
       ) : null}
       {tab === 'embed' ? (
         <div role="tabpanel" id="widget-panel-embed" aria-labelledby="widget-tab-embed" className="flex min-h-0 flex-1">
-          <EmbedTab b={b} site={site} fallbackCode={row.embed_code ?? null} />
+          <EmbedTab b={b} site={site} fallbackCode={row.embed_code ?? null} widgetId={id} />
         </div>
       ) : null}
     </main>

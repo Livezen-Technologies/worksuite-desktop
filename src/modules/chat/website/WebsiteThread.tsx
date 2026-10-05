@@ -36,6 +36,7 @@ import { BlockDialog, ContactCard, SharedFilesCard, TagsCard } from './panelCard
 import { ClosedNotice } from './Closed';
 import { ThreadFailed, ThreadPlaceholder } from './ThreadPlaceholder';
 import { useRingState, youJoinedLine } from './Ringing';
+import { MergeDialog, ProfileCards } from './IdentityCard';
 
 // Kept importable from here, where the drawer first had it.
 export { visitorLocalTime } from './panelCards';
@@ -69,6 +70,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const [tab, setTab] = useState<'reply' | 'note' | null>(null);
   const { active: tabActive, query: tabQuery } = useTab();
   // From the ringing card's Transfer (#225), or a visitor's Invite a colleague (#231): the chat opens with that dialog up.
+  // Merge this visitor with another (#222), from the header.
+  const [merging, setMerging] = useState(false);
   const [dialog, setDialog] = useState<'invite' | 'transfer' | null>(() => (tabQuery?.get('transfer') === '1' ? 'transfer' : tabQuery?.get('invite') === '1' ? 'invite' : null));
   const declined = useDeclined(Number(id), me, q.data?.team);
   // Typing and receipts, live (ENH-WCHAT-04): reading counts while this tab is in front and the window can be seen.
@@ -227,6 +230,13 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
                 <Icon name="transfers" size={13} /> Transfer
               </button>
             ) : null}
+            {/* Merge with another visitor (#222): the same person under two names, after a preview, undoable. */}
+            {!mini && canReply && data.profile ? (
+              <button type="button" onClick={() => setMerging(true)} title={data.profile.suggestions ? 'Possibly the same person as another visitor' : 'Merge with another visitor'} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
+                <Icon name="users" size={13} /> Merge{data.profile.suggestions ? <span className="ml-0.5 rounded-full bg-warning-bg px-1.5 text-[10.5px] text-[#9A4A06] dark:text-warning">{data.profile.suggestions}</span> : null}
+              </button>
+            ) : null}
+            {merging && data.profile ? <MergeDialog keepId={data.profile.visitor_id} keepName={name} onClose={() => setMerging(false)} /> : null}
             {/* Offer the visitor a call that rings only me (VOICE-15). */}
             {!mini && data.can_call && c.status !== 'closed' && !callLive(data.call) ? (
               <button type="button" title="The visitor sees a call button; starting the call rings only you" onClick={() => void apiPost(`${WEBSITE}/conversations/${c.id}/offer-call`, {}).then(() => { toast('success', 'Call offered'); refresh(); }, (e) => toast('error', errorMessage(e)))} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
@@ -556,14 +566,22 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
         ) : null}
         <TagsCard conversationId={c.id} tags={c.tags} canEdit={canReply} onDone={onDone} />
         <SharedFilesCard files={files} />
-        <div className={CARD}>
-          <h3 className={HEADING}>Previous chats · {history.length}</h3>
-          {history.slice(0, 5).map((h) => (
-            <span key={h.id} className="text-ink-2">
-              {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
-            </span>
-          ))}
-        </div>
+        {/* The profile (#222): how we know them, visits, devices, Previous chats with links, possible duplicates and
+            merges; on a server without it, the list it had before. */}
+        <ProfileCards
+          visitorId={data.profile?.visitor_id}
+          conversationId={c.id}
+          legacy={
+            <div className={CARD}>
+              <h3 className={HEADING}>Previous chats · {history.length}</h3>
+              {history.slice(0, 5).map((h) => (
+                <span key={h.id} className="text-ink-2">
+                  {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
+                </span>
+              ))}
+            </div>
+          }
+        />
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
           {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
           {/* Leave chat, with the owner's warning, at the panel's foot (C-08, TEAM-06). */}

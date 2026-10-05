@@ -80,6 +80,10 @@ export interface WebsiteRow {
   reply_waiting_since?: string | null;
   /** How far that has gone: a reminder sent, the team alerted, or the chat reassigned. */
   reply_stage?: 'reminded' | 'team' | 'reassigned' | null;
+  /** Returning visitors (#222): the visitor's profile, which visit this is ("Returning · 3rd visit"), how we know them. */
+  visitor_id?: number;
+  visits?: number;
+  identity?: 'signed' | 'verified' | 'returning' | 'new';
 }
 
 /**
@@ -340,6 +344,8 @@ export interface WebsiteConversation {
    */
   delete_window_minutes?: number;
   can_save_to_drive?: boolean;
+  /** Returning visitors (#222): the profile behind this chat; absent or null on a server without them. */
+  profile?: { visitor_id: number; identity: 'signed' | 'verified' | 'returning' | 'new'; visits: number; suggestions: number } | null;
 }
 
 /** A voice call in a website chat as the thread has it (WidgetCalls::forThread). */
