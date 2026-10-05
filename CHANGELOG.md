@@ -5,6 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.187 — 2026-10-05
+
+- **Visitor messages that aren't reaching staff (delivery Phase 3).** When no staff device has received a visitor's
+  message in a chat you hold for 60 seconds, the server sends it again and the app shows an urgent native
+  notification, closed once it arrives. The Live dashboard row is flagged **Not reaching staff**.
+- **Ring notifications without a live connection.** With the ringing window on and no realtime connection, the
+  fallback check found new chats but never showed a notification, and a chat that rang a second time was dropped as a
+  repeat. Both are fixed.
+- **Insights › Delivery.** Daily counts of messages sent, retried, deduplicated, re-synced, emailed and not reaching
+  staff, for the whole installation. Hidden on older servers.
+- The app now tells the server it is WorkSuite Desktop (`X-WorkSuite-Client: desktop`), so an administrator can keep
+  Desktop on the built-in chat service separately.
+- Needs the server's Communication 1.54.0 and Notifications 1.12.0.
+
 ## 0.2.186 — 2026-10-05
 
 - **Website chats over the WebSocket chat service (delivery Phase 2).**
