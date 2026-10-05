@@ -13,6 +13,7 @@ import { LOCAL_AI_KEY, useLocalAIStatus, useLocalModels } from '../../core/local
 import { secondsLeft, timeLeftLabel } from '../ai/setup';
 import { queryClient } from '../../core/query';
 import { useStore } from '../../core/store';
+import { useScrollFades } from '../../core/use-scroll-fades';
 import { RecordingSettings } from '../meet/RecordingSettings';
 import { SpeechModelSettings } from '../meet/SpeechModel';
 import { useTab, useTabTitle } from '../../core/tab-context';
@@ -106,24 +107,39 @@ function SettingsSections(_props: ModuleProps) {
   const hasMail = useCanOpen('mail');
   const hasContacts = useCanOpen('contacts');
   const managesRinging = useManagesRinging();
+  const { ref: listRef, fades, onScroll: onListScroll } = useScrollFades<HTMLDivElement>();
   if (!prefs) return null;
   return (
     <div className="flex h-full">
-      <nav className="w-[230px] shrink-0 border-r border-line bg-surface p-3" aria-label="Settings sections">
-        <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
-        {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts)).map((s, i, list) => (
-          <div key={s.id}>
-            {s.group !== list[i - 1]?.group ? <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{s.group}</div> : null}
-            <button type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-              <Icon name={s.icon} size={16} /> {s.label}
+      {/*
+        The sidebar fills the tab's height (never 100vh) and only its list scrolls, 16px clear of the bottom; Admin Center
+        is a footer under it, so it is always whole above the status bar (worksuite-desktop#246).
+      */}
+      <nav className="flex h-full min-h-0 w-[230px] shrink-0 flex-col border-r border-line bg-surface" aria-label="Settings sections">
+        <div className="relative flex min-h-0 flex-1 flex-col">
+          <div ref={listRef} onScroll={onListScroll} data-settings-scroller className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-4 scroll-thin">
+            <div>
+              <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
+              {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts)).map((s, i, list) => (
+                <div key={s.id}>
+                  {s.group !== list[i - 1]?.group ? <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{s.group}</div> : null}
+                  <button type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
+                    <Icon name={s.icon} size={16} /> {s.label}
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+          {/* More below: the list fades into the sidebar's own background, never a dark band. */}
+          {fades.bottom ? <div aria-hidden data-fade="bottom" className="pointer-events-none absolute inset-x-0 bottom-0 h-8" style={{ background: 'linear-gradient(to bottom, transparent, var(--ws-surface))' }} /> : null}
+        </div>
+        {/* The organisation's ringing rules, for whoever manages website chats (P-03); it opens here, in the app. */}
+        {managesRinging && !guest ? (
+          <div data-settings-footer className="shrink-0 border-t border-line px-3 py-2">
+            <button type="button" onClick={() => go(ADMIN_RINGING_ROUTE)} className="flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px] text-ink hover:bg-subtle">
+              <Icon name="shield-check" size={16} /> Admin Center
             </button>
           </div>
-        ))}
-        {/* The organisation's ringing rules, for whoever manages website chats (P-03). */}
-        {managesRinging && !guest ? (
-          <button type="button" onClick={() => go(ADMIN_RINGING_ROUTE)} className="mt-3 flex h-9 w-full items-center gap-2.5 rounded-[8px] border-t border-line px-3 pt-px text-left text-[13.5px] text-ink hover:bg-subtle">
-            <Icon name="shield-check" size={16} /> Admin Center
-          </button>
         ) : null}
       </nav>
       <div className="min-w-0 flex-1 overflow-y-auto px-10 py-8 scroll-thin">
