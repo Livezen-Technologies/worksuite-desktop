@@ -94,6 +94,8 @@ export interface MessageViewProps {
   combined?: boolean;
   /** The header's folder badge: open the folder the message is in (#212). */
   onOpenFolder?: (ref: MessageRef) => void;
+  /** Delete as the list does (worksuite-desktop#235): gone at once, one "Deleted · Undo", batched, the full lookup. */
+  onDelete?: () => void;
 }
 
 export interface ViewControls {
@@ -276,6 +278,7 @@ export function MessageView(p: MessageViewProps) {
   const zoom = p.prefs.zoom ?? 100;
   const act = async (action: MessageActionName) => {
     if (!m) return;
+    if (action === 'trash' && p.onDelete) return p.onDelete();
     if (action === 'archive' && p.archiveTo) {
       // A combined view archives into the message's own account (WF-DO14); an account with no Archive folder asks once.
       const asked = p.archiveTo(ref);

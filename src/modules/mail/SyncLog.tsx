@@ -164,6 +164,8 @@ export function SyncLog({ box, account, onClose, onRepair }: { box: Mailbox; acc
                   {g.items.map((i) => (
                     <li key={`${i.folder}:${i.uid}`} className="break-words">
                       {i.folder} · UID {i.uid} · UIDVALIDITY {i.uidvalidity ?? '-'} · Message-ID {i.message_id ?? '-'}{i.hits > 1 ? ` · ×${i.hits}` : ''}
+                      {/* A failed action (Delete, Undo — worksuite-desktop#235): what the server answered. */}
+                      {g.kind.startsWith('act_') && i.response ? ` · ${text('Server')}: ${i.response}` : ''}
                     </li>
                   ))}
                 </ul>

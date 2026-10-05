@@ -983,6 +983,7 @@ function MailWorkspace({ active }: ModuleProps) {
           onBack={closeMessage}
           onReply={openCompose}
           onGone={gone}
+          onDelete={currentRow ? () => void listActs.run(placeOf([targetOf(currentRow)]) === 'trash' ? 'deleteForever' : 'delete', [targetOf(currentRow)]) : undefined}
           onPrev={at > 0 ? () => move(-1) : null}
           onNext={at >= 0 && at < flat.length - 1 ? () => move(1) : null}
           prefs={prefs}

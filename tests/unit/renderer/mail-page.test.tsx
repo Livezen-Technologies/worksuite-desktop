@@ -325,8 +325,16 @@ describe('offline', () => {
     const pane = await screen.findByRole('region', { name: 'Reading pane' });
     await within(pane).findByRole('heading', { name: 'Welcome to your mailbox' });
     expect(within(pane).getByText('Saved on this computer')).toBeTruthy();
+    // Delete is the list's (worksuite-desktop#235): "Deleted · Undo" at once, then queued after the Undo window.
+    vi.useRealTimers();
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
     fireEvent.click(within(pane).getByRole('button', { name: 'Delete (#)' }));
     const { toast } = await import('../../../src/core/toasts');
+    expect(toast).toHaveBeenCalledWith('info', 'Deleted', expect.objectContaining({ label: 'Undo' }), 5000, expect.objectContaining({ key: 'mail-deleted' }));
+    act(() => {
+      vi.advanceTimersByTime(5_000);
+    });
+    vi.useRealTimers();
     await waitFor(() => expect(toast).toHaveBeenCalledWith('info', expect.stringContaining('Offline')));
   });
 });

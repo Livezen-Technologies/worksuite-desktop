@@ -190,17 +190,50 @@ export type Outcome = 'done' | 'queued';
  * no desktop shell (tests, a plain browser). A refusal throws.
  */
 async function submit(input: { entity: string; entityId: string | null; label: string; path: string; body: Record<string, unknown> }): Promise<Outcome> {
+  return (await submitFull(input)).outcome;
+}
+
+/** Why a change was refused, as the server says (worksuite-desktop#235): permission, connection, quota or the server's. */
+export type FailReason = 'permission' | 'connection' | 'quota' | 'server';
+
+/** A refused change, with the reason a person can act on. */
+export class MailActionError extends Error {
+  constructor(
+    message: string,
+    readonly reason: FailReason,
+    readonly status: number | null,
+  ) {
+    super(message);
+    this.name = 'MailActionError';
+  }
+}
+
+function reasonOf(status: number | null, data: unknown, code: string | null): FailReason {
+  const d = (data ?? {}) as { errors?: { reason?: unknown } | null; reason?: unknown };
+  const r = d.errors?.reason ?? d.reason;
+  if (r === 'permission' || r === 'connection' || r === 'quota' || r === 'server') return r;
+  if (status === 403 || code === 'PERMISSION_DENIED') return 'permission';
+  if (status === null || status === 502 || status === 503 || status === 504 || code === 'NETWORK_UNREACHABLE') return 'connection';
+  return 'server';
+}
+
+/** As `submit`, with the server's answer and the queue's id for a change that waits. */
+async function submitFull(input: { entity: string; entityId: string | null; label: string; path: string; body: Record<string, unknown> }): Promise<{ outcome: Outcome; data: unknown; queueId: string | null }> {
   let r: Awaited<ReturnType<typeof call<'offline:submit'>>>;
   try {
     r = await call('offline:submit', { module: 'mail', method: 'POST', queueIfOffline: true, ...input, label: input.label.slice(0, 200) });
   } catch (e) {
     if ((e as { code?: string }).code !== 'UNSUPPORTED') throw e;
-    await apiPost(input.path, input.body);
-    return 'done';
+    try {
+      return { outcome: 'done', data: await apiPost(input.path, input.body), queueId: null };
+    } catch (err) {
+      if (err instanceof ApiError) throw new MailActionError(err.message, reasonOf(err.status, err.data, err.code), err.status);
+      throw err;
+    }
   }
-  if (r.queued) return 'queued';
-  if (!r.delivered) throw new Error(r.error ?? text('The mail server did not make that change.'));
-  return 'done';
+  if (r.queued) return { outcome: 'queued', data: null, queueId: r.id };
+  if (!r.delivered) throw new MailActionError(r.error ?? text('The mail server did not make that change.'), reasonOf(r.status, r.data, r.code), r.status);
+  return { outcome: 'done', data: r.data, queueId: null };
 }
 
 const ACTION_LABELS: Record<string, string> = {
@@ -226,6 +259,73 @@ export function messageAction(ref: MessageRef, action: MessageActionName, subjec
     path: `/api/mail/messages/${ref.uid}/action`,
     body: { action, folder: ref.folder, ...(ref.mailbox ? { mailbox: ref.mailbox } : {}) },
   });
+}
+
+/** A message to delete or bring back, by its whole identity (worksuite-desktop#209, #235). */
+export interface RemoveItem {
+  uid: number;
+  uidvalidity?: number;
+  message_id?: string;
+  mid_hash?: string;
+  /** Undo: the UID the delete answered with in the Trash. */
+  trash_uid?: number;
+}
+
+/** What became of one: trashed, deleted (for good), gone (not on the server — already deleted), restored, or failed. */
+export interface RemoveResult {
+  folder: string;
+  uid: number;
+  status: 'trashed' | 'deleted' | 'gone' | 'restored' | 'failed';
+  reason?: FailReason;
+  response?: string;
+  at?: { folder: string; uid: number };
+}
+
+export interface RemoveAnswer {
+  outcome: Outcome;
+  results: RemoveResult[];
+  /** The queue's id while it waits offline (Undo withdraws it). */
+  queueId: string | null;
+}
+
+/** The identity of a listed message, for a delete or its Undo. */
+export function removeItem(row: { id: number | string; uidvalidity?: number | null; message_id?: string | null; message_id_hash?: string | null }): RemoveItem {
+  return {
+    uid: Number(row.id),
+    ...(row.uidvalidity ? { uidvalidity: row.uidvalidity } : {}),
+    ...(row.message_id ? { message_id: row.message_id } : row.message_id_hash ? { mid_hash: row.message_id_hash } : {}),
+  };
+}
+
+/**
+ * Delete messages of ONE folder in one account, in one request (a UID set at the server): to the account's Trash,
+ * or for good in the Trash itself. Through the change queue, so offline it waits. Each message is answered on its
+ * own; a refusal of the whole request throws a MailActionError with its reason.
+ */
+export async function removeMessages(group: { mailbox: string | null; folder: string; items: RemoveItem[] }, permanent: boolean, label: string): Promise<RemoveAnswer> {
+  const one = group.items.length === 1 ? group.items[0]! : null;
+  const r = await submitFull({
+    entity: 'message.trash' satisfies `message.${QueuedAction}`,
+    entityId: one ? queueKey(group.mailbox, group.folder, one.uid) : null,
+    label,
+    path: '/api/mail/messages/remove',
+    body: { folder: group.folder, items: group.items, ...(permanent ? { permanent: true } : {}), ...(group.mailbox ? { mailbox: group.mailbox } : {}) },
+  });
+  const results = ((r.data as { results?: RemoveResult[] } | null)?.results ?? []).filter((x) => x && typeof x === 'object');
+  return { outcome: r.outcome, results, queueId: r.queueId };
+}
+
+/** Undo a delete: the messages back from the Trash into `folder`. */
+export async function restoreMessages(group: { mailbox: string | null; folder: string; items: RemoveItem[] }, label: string): Promise<RemoveAnswer> {
+  const r = await submitFull({
+    entity: 'message.move' satisfies `message.${QueuedAction}`,
+    entityId: null,
+    label,
+    path: '/api/mail/messages/restore',
+    body: { items: group.items.map((i) => ({ ...i, folder: group.folder })), ...(group.mailbox ? { mailbox: group.mailbox } : {}) },
+  });
+  const results = ((r.data as { results?: RemoveResult[] } | null)?.results ?? []).filter((x) => x && typeof x === 'object');
+  return { outcome: r.outcome, results, queueId: r.queueId };
 }
 
 /** Move to a folder by its slug or path. */
