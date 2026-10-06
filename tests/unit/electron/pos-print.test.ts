@@ -2,8 +2,9 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('electron', () => ({ BrowserWindow: class {} }));
 
-import type { PosSale, PosServerReceipt } from '@shared/pos';
-import { COLUMNS, escpos, pairLine, plain, PosPrint, receiptHtml, receiptRows, reportRows, serverReceiptRows, type ReceiptRow } from '../../../electron/services/pos-print';
+import { vatRows, type PosSale, type PosServerReceipt } from '@shared/pos';
+import { code128, code128Encodable, code128Values, CODE128_PATTERNS } from '@shared/code128';
+import { barcodeBytes, COLUMNS, escpos, pairLine, plain, PosPrint, receiptHtml, receiptRows, reportRows, serverReceiptRows, type ReceiptRow } from '../../../electron/services/pos-print';
 import { drawerPulse, type PrintJob } from '../../../electron/services/salon-print';
 
 const sale: PosSale = {
@@ -179,6 +180,45 @@ describe('the receipt', () => {
     expect(html).toContain('Nimal &lt;Perera&gt;');
     expect(html).not.toContain('<script');
     expect(html).toContain('width:219px');
+  });
+
+  it('labels the tax by rate, and ends with the receipt number as a barcode', () => {
+    const rows = receiptRows(
+      { ...sale, lines: [{ ...sale.lines[0]!, tax_rate: 18, tax: 145.8 }, { ...sale.lines[0]!, product_id: 4, tax_rate: 8, tax: 10.2 }], totals: { ...sale.totals, tax: 156 } },
+      { header: '', footer: 'Thank you' },
+      { till: null },
+    );
+    const pairs = rows.filter((r): r is Extract<ReceiptRow, { kind: 'pair' }> => r.kind === 'pair').map((r) => `${r.left}|${r.right}`);
+    expect(pairs).toContain('VAT 18%|145.80');
+    expect(pairs).toContain('VAT 8%|10.20');
+    expect(pairs.some((p) => p.startsWith('Tax|'))).toBe(false);
+    expect(rows.at(-1)).toEqual({ kind: 'barcode', text: sale.ref });
+    expect(vatRows([{ tax_rate: 0, tax: 0 }], 12)).toEqual([{ label: 'VAT', amount: 12 }]);
+    expect(vatRows([{ tax_rate: 18, tax: 10 }], 10.01)).toEqual([{ label: 'VAT 18%', amount: 10.01 }]);
+
+    const bytes = [...escpos([{ kind: 'barcode', text: 'T1-AAAAAA-000042' }], 48)];
+    const k = bytes.indexOf(0x6b);
+    expect(bytes.slice(k - 1, k + 4)).toEqual([0x1d, 0x6b, 73, 18, ...Buffer.from('{')]);
+    expect(Buffer.from(bytes.slice(k + 3, k + 21)).toString('latin1')).toBe('{BT1-AAAAAA-000042');
+    expect(barcodeBytes('T1', 32)).toContain(1);
+    expect(barcodeBytes('ශ', 48)).toEqual([]);
+    const html = receiptHtml([{ kind: 'barcode', text: 'T1-AAAAAA-000042' }], '80mm');
+    expect(html).toContain('<svg');
+    expect(html).toContain('>T1-AAAAAA-000042<');
+  });
+
+  it('draws Code 128 as the standard says', () => {
+    expect(CODE128_PATTERNS).toHaveLength(107);
+    expect(new Set(CODE128_PATTERNS).size).toBe(107);
+    for (const [i, p] of CODE128_PATTERNS.entries()) {
+      const w = [...p].map(Number);
+      expect(w.reduce((a, b) => a + b, 0)).toBe(i === 106 ? 13 : 11);
+      // Bars take an even number of modules in every symbol: the code's own parity check.
+      expect((w[0]! + w[2]! + w[4]! + (w[6] ?? 0)) % 2).toBe(0);
+    }
+    expect(code128Values('A')).toEqual([104, 33, (104 + 33) % 103, 106]);
+    expect(code128('A').reduce((a, b) => a + b, 0)).toBe(11 * 3 + 13);
+    expect(code128Encodable('')).toBe(false);
   });
 
   it('prints a report from the screens’ rows', () => {

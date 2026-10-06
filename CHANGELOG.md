@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.191 — 2026-10-06
+## 0.2.193 — 2026-10-06
 
 - **Marketing opens in the app (WS-MKT-SRS-001 v1.1).** Marketing is now a native module in a tab of its own
   instead of the browser, with the same four sections as the web: Audience, Email, Calls and Insights.
@@ -21,6 +21,71 @@ person who has to live with the change — what it does, and where it bites.
   by the bounce guard raises one too. Both can be switched off under Settings › Notifications › Marketing.
 - `worksuite://marketing/…` links open the queue, a contact or a campaign.
 - Needs the server's Marketing 2.0.0.
+
+## 0.2.192 — 2026-10-06
+
+- **Point of Sale's counter, redrawn for touch (pos 1.1.0, settings 1.24.0).** The till now looks and works as in
+  the POS design (D01–D18).
+  - **The till bar:** a navy bar across the top shows the till and register, whether the till is online, the clock,
+    the cashier, Lock and the till's menu. The side rail is gone; its screens, the customer display, Change cashier,
+    the web's screens and Forget this till are in that menu. The counter can go full screen.
+  - **Selling:** products in pages of five by three (or a list), with dots, arrows and swipe. The category button
+    opens a picker with each category's count and what sold most today on this till, and recent categories sit beside
+    it. A quick-action bar holds Hold, Recall, Return, Discount, Customer, Cash in/out, Open drawer and More. **Cash
+    exact** sells for the total in cash. F2 searches, F12 pays.
+  - **Several sales at once:** up to five open sales per till as tabs (Ctrl+N for a new one, Ctrl+1…5 to switch).
+    The customer display follows the sale on screen. **Hold** parks a sale with an optional note for 24 hours. Open
+    and held sales hold customer details, so the main process keeps them encrypted for this server and till, and
+    forgetting the till removes them.
+  - **Paying:** two panes, with tender tiles, what has been paid so far, a keypad, quick cash amounts and one button
+    that says the change to give. Sale complete shows the change, Print, Email and Open drawer, and the receipt on
+    screen.
+  - **Receipts** print the tax by rate ("VAT 18%") and end with the receipt number as a barcode, so a return can
+    start by scanning it.
+  - **Returns from the counter:** scan or type the receipt number, then choose quantities, each line's condition and
+    a reason. Damaged lines are refunded without going back into stock.
+  - **The drawer:** cash in and out from the counter, with the company's reasons and a reference. Opening and closing
+    the register use two panes and the keypad, note by note or as one figure. **Where it bites:** the register will
+    not close while a sale is open or held on the till, and when card was taken, "Card batch settled" must be ticked
+    first.
+  - **Pairing, till settings and the customer display** are redrawn. Pairing shows each till as free or in use and
+    takes one over only from a button that says so. Till settings have a device card each for the receipt printer,
+    cash drawer, scanner (with a test scan) and customer display. The customer display shows the sale, the tax,
+    what the discount saved and the change.
+  - Stock levels, promotions, loyalty, LankaQR, vouchers and store credit, and manager approval are not in this
+    release: the server does not offer them yet.
+  - Works with today's server; nothing new is needed on WorkSuite.
+- **PDF Studio: every tool in one place (pdf 1.1.0).** **All tools** lists every Acrobat-class tool in a searchable
+  panel beside the document, each with its own panel. A tool that cannot run yet says why. PDF Studio has a home
+  with its own rail (Recent, Starred, Shared, Agreements, Scans, Offline copies, Jobs, Recover, Settings and more),
+  an 18-tool grid and Open from Drive. New: sign by drawing or typing a signature and placing it on the page; find
+  NIC, phone, e-mail, card and bank numbers to redact; preview Bates numbering; copy the diagnostics report.
+
+## 0.2.191 — 2026-10-06
+
+- **Social Media Manager (WS-SMM-SRS-001).** A new **Social Media** app under Business: manage every social account
+  in one place — Facebook, Instagram, Threads, LinkedIn, X, YouTube, TikTok, Google Business Profile and Pinterest.
+  - **Publish:** Overview; Create post — write once, adjust each network, live checks with one-click fixes (split a
+    long X post into a thread, crop, alt text), previews, media from Drive or dragged in from the computer, AI
+    suggestions you choose to use; Calendar (month, week, list, drag to reschedule); Queue & posting slots; Approvals
+    with steps, comments and client review links.
+  - **Engage and measure:** a unified Inbox for comments, messages, mentions and reviews (saved replies, internal
+    notes, AI reply drafts, CRM lead and Support ticket, J/K); Analytics with a heat map of when your audience engages;
+    Content library; Campaigns with UTM tracking.
+  - **Administer:** Accounts (connect in your browser — WorkSuite never sees your social password), Module settings with
+    provider apps and "Pause all publishing", and the Publishing log.
+  - Native notifications for published, failed, approval and inbox events carry View post, Approve, Reply and Copy
+    caption; Ctrl/⌘+N starts a post, Ctrl/⌘+Enter schedules it; the calendar and drafts open offline.
+- **Where it bites:** needs the server's new Social Media module (app `worksuite.social-media`). Until a server has it,
+  the app shows only to super-admins and every screen says the server doesn't offer it yet — see
+  `docs/SOCIAL_MEDIA.md` for what the server needs. Publishing always runs on the server, so posts go out with the
+  computer off. (social-media 1.0.0, notifications 1.10.0)
+- **Not in this release:** screens for bulk scheduling from a spreadsheet and for recurring posts (the server calls are
+  ready), campaign-level review links (no server route yet), Listening and competitor benchmarks (a later phase), and
+  the mobile screens, which are WorkSuite Mobile's.
+- **How it was checked:** GitHub Actions was not starting jobs for the repository when this merged (#275), so CI did
+  not run. It was verified locally on the merged head instead: typecheck, lint, the module-version check, all 5,312
+  unit tests and the production build.
 
 ## 0.2.190 — 2026-10-06
 

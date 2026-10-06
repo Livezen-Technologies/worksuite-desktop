@@ -77,6 +77,19 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./phone/PhonePage'),
   },
   {
+    // Social Media Manager (WS-SMM-SRS-001, design "WorkSuite Social Media Manager — UI"): compose once for many
+    // accounts, approve, schedule on a calendar or queue, answer the unified inbox and measure — over /api/social-media.
+    // Publishing runs on the WorkSuite server (C3); the desktop keeps drafts and the last calendar for offline (DSK-004).
+    input: defineDesktopManifest({
+      id: 'social-media', name: 'Social Media', icon: 'send', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'DRAFTS', entities: ['post'], cache: ['/api/social-media/posts', '/api/social-media/accounts', '/api/social-media/brands'] },
+      native: ['notifications', 'file-drop'],
+      quickActions: [{ id: 'new-post', label: 'New social post', route: '/social-media/compose' }],
+      deepLinks: ['social-media', 'social-media/posts/:id', 'social-media/inbox/:id', 'social-media/approvals/:id'],
+    }),
+    load: () => import('./social-media/SocialMediaPage'),
+  },
+  {
     // Chat calls: the ring and the call each open in a window of their own.
     input: defineDesktopManifest({
       id: 'calls', name: 'Calls', icon: 'phone', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },

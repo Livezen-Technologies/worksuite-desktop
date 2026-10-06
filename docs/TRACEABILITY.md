@@ -594,6 +594,31 @@ Tests: `tests/unit/renderer/phone-lib.test.ts`, `phone-engine.test.ts`, `phone-s
 | VOIP-DEP-03/04 | Partial | Gateway status/SMS when served |
 | VOIP-DEP-05 | Done | Cloud FreePBX wizard (`admin/SetupWizard.tsx`), Sri Lankan routes (`lib/lkroutes.ts`) |
 
+## Social Media Manager (WS-SMM-SRS-001 v1.1, desktop)
+
+`src/modules/social-media`, `shared/social-notices.ts`, over the server's `/api/social-media`. Gap analysis and server
+work: [SOCIAL_MEDIA.md](SOCIAL_MEDIA.md). Tests: `tests/unit/renderer/social-*.test.ts(x)`, `tests/unit/shared/social-media-app.test.ts`,
+`tests/unit/electron/social-notifications.test.ts`. **Server** = works once the server module of SOCIAL_MEDIA.md §2 exists.
+
+| Area | Status | Where / note |
+|---|---|---|
+| ACC-001…013 | Done · Server | `admin/Accounts.tsx`, `admin/accounts/` — OAuth in the browser, assets, reconnect, access, pause, disconnect, quota |
+| CMP-001…015, MED-001…004 | Done · Server | `composer/`, `lib/text.ts`, `lib/validate.ts`; AC-04, AC-18 in `social-lib.test.ts` |
+| SCH-001…008, SCH-010/011 | Done · Server | `screens/Calendar.tsx`, `screens/Queue.tsx`, `screens/plan/`; SCH-009 recurrence and SCH-012 bulk CSV: client only (`bulkPreview/Commit` in `api.ts`), no screen yet |
+| APR-001…008 | Done · Server | `screens/Approvals.tsx`, `screens/engage/`; AC-05 (role-shaped composer), AC-06 (held notice), AC-14 (review links) |
+| PUB-003, PUB-011 | Done · Server | `admin/PublishLog.tsx`; publishing itself is the server's (C3) |
+| INB-001…012, AI-002 | Done · Server | `screens/Inbox.tsx`, `screens/engage/`; AC-13 (AI never sends) |
+| ANL-001…009 | Done · Server | `screens/Analytics.tsx`, `screens/measure/`; ANL-010 later phase |
+| MED-005…007, CPG-001…003 | Done · Server | `screens/Library.tsx`, `screens/Campaigns.tsx`; CPG-004 needs a campaign review-link route |
+| AI-001/004 | Done · Server | suggestions only, applied on a click, `ai_used` recorded |
+| NTF-001/002, DSK-002 | Done | `shared/social-notices.ts`, `electron/services/notifications.ts` (AC-16) |
+| DSK-001 | Done | catalogue, registry, `Nav.tsx` |
+| DSK-003 | Done | composer drag-drop → `transfers:upload` into the brand's Drive folder |
+| DSK-004 | Done | READ_CACHE of posts/accounts/brands; local draft copy |
+| DSK-005 | Done | Mod+N (`?new=1`), Ctrl/Cmd+Enter in the composer, J/K in the inbox |
+| ADM-001…007 | Done · Server | `admin/Settings.tsx`, `admin/settings/` |
+| MOB-001…004, LST-001/002 | Not here | WorkSuite Mobile; Listening is P5 |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

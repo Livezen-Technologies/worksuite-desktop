@@ -4,11 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.24.0 — 2026-10-06
+## 1.25.0 — 2026-10-06
 
 **Added**
 
 - Marketing's Next contact shortcut under Keyboard shortcuts and a Marketing switch under Notifications, both for whoever has Marketing
+
+## 1.24.0 — 2026-10-06
+
+**Added**
+
+- the POS counter's design tokens in styles.css — tile tints, promo, stock and tier badges, radii 14/16/24 and touch sizes 44–72 — resolved only inside .pos-scope, with dark values
 
 ## 1.23.0 — 2026-10-06
 

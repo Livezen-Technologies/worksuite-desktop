@@ -119,6 +119,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'messenger', label: 'Messenger', group: 'communication', icon: 'message-circle', app: 'meta', webPath: '/messenger', surface: 'native', channelOf: 'chat', route: '/chat?channel=messenger', order: 48, keywords: 'facebook page fb messages customers' },
   { id: 'instagram', label: 'Instagram', group: 'communication', icon: 'camera', app: 'meta', webPath: '/instagram', surface: 'native', channelOf: 'chat', route: '/chat?channel=instagram', order: 49, keywords: 'ig direct dm messages customers' },
 
+  // Social Media Manager (WS-SMM-SRS-001): the optional app `worksuite.social-media` — accounts on external networks,
+  // the composer, calendar, queue, approvals, unified inbox and analytics. Not the internal Social stream below (Q-01).
+  { id: 'social-media', label: 'Social Media', group: 'business', icon: 'send', app: 'social-media', perm: 'social.view', webPath: '/social-media', surface: 'native', sidebar: 'business', order: 167, keywords: 'social media facebook instagram linkedin x twitter youtube tiktok threads pinterest google business post schedule publish queue calendar inbox comments approvals campaigns analytics' },
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
   { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170, guest: 'locked', guestLabel: 'Shared workspaces' },
@@ -133,7 +136,7 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'expenses', label: 'Expenses', group: 'business', icon: 'wallet', app: 'expenses', webPath: '/expenses', surface: 'native', sidebar: 'business', order: 135, keywords: 'expense claims receipts reimbursement advances petty cash corporate cards mileage per diem budgets policies subscriptions' },
   { id: 'purchasing', label: 'Purchasing', group: 'business', icon: 'cart', app: 'inventory', webPath: '/purchase', surface: 'browser', order: 161 },
   { id: 'subscriptions', label: 'Subscriptions', group: 'business', icon: 'repeat', app: 'subscriptions', webPath: '/subscriptions', surface: 'browser', order: 165 },
-  // Native since 0.2.191 (WS-MKT-SRS-001 v1.1, MKT-DSK-01): the web's fourteen screens, the call queue and its Next contact shortcut.
+  // Native since 0.2.193 (WS-MKT-SRS-001 v1.1, MKT-DSK-01): the web's fourteen screens, the call queue and its Next contact shortcut.
   { id: 'marketing', label: 'Marketing', group: 'business', icon: 'megaphone', app: 'marketing', webPath: '/marketing', surface: 'native', sidebar: 'business', order: 166, keywords: 'marketing campaigns email newsletter audience contacts segments lists consent suppression unsubscribe call queue call campaigns telemarketing' },
   { id: 'payroll', label: 'Payroll', group: 'people', icon: 'banknote', app: 'payroll', perm: 'payroll.view', webPath: '/payroll', surface: 'browser', order: 150 },
   { id: 'appointments', label: 'Appointments', group: 'people', icon: 'calendar-clock', app: 'appointments', webPath: '/appointments', surface: 'browser', order: 155 },
