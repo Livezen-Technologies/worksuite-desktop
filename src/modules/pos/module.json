@@ -1,7 +1,8 @@
 {
     "module": "pos",
-    "version": "1.0.3",
+    "version": "1.1.0",
     "paths": [
+        "electron/services/pos-carts.ts",
         "electron/services/pos-desk.ts",
         "electron/services/pos-display.ts",
         "electron/services/pos-ipc.ts",
