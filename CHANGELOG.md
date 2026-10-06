@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.195 — 2026-10-06
+
+- **About links to worksuitecloud.com.** Settings › About now names worksuitecloud.com as the website (it said
+  worksuiteone.com), the same site as WorkSuite Office's About window, so both apps match.
+- Modules: settings 1.26.1.
+
 ## 0.2.194 — 2026-10-06
 
 - **Support opens in the app (WS-SUPPORT-SRS-001).** The support desk is now a native module instead of the

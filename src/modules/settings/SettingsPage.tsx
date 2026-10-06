@@ -689,7 +689,7 @@ function FollowUpPrefs({ prefs }: { prefs: Preferences }) {
 /** Where a person's website-chat ring plays, kept on the server for all their devices (RING-10). */
 type RingWhere = 'desktop_first' | 'browser' | 'all';
 
-const WEBSITE = 'https://worksuiteone.com/';
+const WEBSITE = 'https://worksuitecloud.com/';
 
 const DRAWER_HINT: Record<ChatDrawerMode, string> = {
   docked: 'Beside the page, under the tabs. The page makes room for it, so nothing is hidden underneath.',
@@ -1819,7 +1819,7 @@ export function About() {
             }}
             className="font-semibold text-primary hover:underline"
           >
-            worksuiteone.com
+            worksuitecloud.com
           </a>
         </p>
       </div>
