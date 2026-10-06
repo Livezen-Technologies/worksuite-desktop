@@ -15,6 +15,9 @@ import {
   type AssignInput,
   type Badges,
   type Canned,
+  type ConversionPreview,
+  type ConvertAnswer,
+  type ConvertInput,
   type ListParams,
   type Message,
   type MessageAnswer,
@@ -362,6 +365,38 @@ export function here(ticketId: number, state: 'viewing' | 'typing' | 'left', mod
   return v1OrElse(async () => (await send<{ present: Present[] }>('POST', `${BASE}/tickets/${ticketId}/presence`, mode ? { state, mode } : { state })).present ?? [], () => []);
 }
 
+/* ── website chat → ticket (D-06, FR-LCH-01…08, FR-DSK-08) ──────────────── */
+
+/** What the conversion sheet opens with; its `ticket` is the chat's back-link once converted. */
+export function conversionPreview(conversationId: number, signal?: AbortSignal): Promise<ConversionPreview> {
+  return v1Only(() => get<ConversionPreview>(`${BASE}/conversions/${conversationId}`, undefined, signal));
+}
+
+/**
+ * Convert the chat: a new ticket or appended to one of the visitor's. `key` (Idempotency-Key) is kept by the sheet
+ * until it is done, so pressing Raise again after a failure raises one ticket. On a server without v1, the as-built
+ * route, which always creates and answers `{id, reference}`.
+ */
+export function convertChat(input: ConvertInput, key: string): Promise<{ id: number; reference: string; appended: boolean; answer: ConvertAnswer | null }> {
+  return v1OrLegacy<{ id: number; reference: string; appended: boolean; answer: ConvertAnswer | null }>(
+    async () => {
+      const a = await send<ConvertAnswer>('POST', `${BASE}/conversions`, input, { 'Idempotency-Key': key });
+      return { id: a.ticket.id, reference: a.ticket.reference, appended: a.appended, answer: a };
+    },
+    async () => {
+      const r = await send<{ id: number; reference: string }>('POST', `${LEGACY}/from-conversation`, { conversation_id: input.conversation_id });
+      return { id: r.id, reference: r.reference, appended: false, answer: null };
+    },
+  );
+}
+
+/** A chat that is a ticket already (`ALREADY_CONVERTED`): that ticket. */
+export function alreadyConverted(e: unknown): { id: number; reference: string; status: string | null } | null {
+  if (!(e instanceof ApiError) || e.code !== 'ALREADY_CONVERTED') return null;
+  const t = (e.data as { ticket?: { id?: unknown; reference?: unknown; status?: unknown } } | null)?.ticket;
+  return t && typeof t.id === 'number' ? { id: t.id, reference: String(t.reference ?? ''), status: typeof t.status === 'string' ? t.status : null } : null;
+}
+
 /* ── windows ───────────────────────────────────────────────────────────── */
 
 /** A ticket's quick-reply window (D-04): floating, always on top, one at a time; its draft is the ticket's. */
@@ -411,5 +446,6 @@ export const K = {
   presence: (id: number) => ['support', 'presence', id] as const,
   links: (id: number) => ['support', 'links', id] as const,
   requester: (email: string) => ['support', 'requester', email.toLowerCase()] as const,
+  conversion: (conversationId: number) => ['support', 'conversion', conversationId] as const,
   myPresence: ['chat', 'presence', 'me'] as const,
 };

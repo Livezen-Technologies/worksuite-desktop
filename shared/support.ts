@@ -529,6 +529,49 @@ export interface ListParams {
   extra?: Record<string, string>;
 }
 
+/* ── website chat → ticket (FR-LCH-01…08, D-06) ─────────────────────────── */
+
+/** `GET conversions/{conversation_id}`: what the conversion sheet opens with, and the chat's back-link to its ticket. */
+export interface ConversionPreview {
+  conversation: { id: number; status: string | null; website: string | null; widget: string | null; offline: boolean; started_at: string | null };
+  visitor: { id: number | null; name: string | null; email: string | null; phone: string | null; company: string | null };
+  /** The ticket the chat already became (FR-LCH-03), or null. */
+  ticket: { id: number; reference: string; status: SupportStatus } | null;
+  /** The visitor's live tickets at that desk, to append to instead (FR-LCH-06). */
+  candidates: Ticket[];
+  prefill: { subject: string; organization_id: number | null; priority: SupportPriority; source: string };
+  /** The visitor's page, location and browser, as the ticket's first internal line (FR-LCH-04). */
+  details: string;
+  transcript: Array<{ id: number; from: 'visitor' | 'agent' | 'assistant' | 'website'; name: string; body: string; at: string | null; files: Array<{ name: string; mime: string | null; size: number }> }>;
+}
+
+/** `POST conversions`. */
+export interface ConvertInput {
+  conversation_id: number;
+  target: 'new' | number;
+  subject?: string;
+  priority?: SupportPriority;
+  type?: SupportType;
+  category_id?: number | null;
+  department_id?: number | null;
+  team_id?: number | null;
+  assigned_to?: number | null;
+  tags?: string[];
+  organization_id?: number | null;
+  /** Transcript messages copied as public replies; the rest are internal (FR-LCH-02). */
+  public_message_ids?: number[];
+  notify_visitor?: boolean;
+}
+
+export interface ConvertAnswer {
+  ticket: TicketFull;
+  appended: boolean;
+  copied: number;
+  files: number;
+  files_refused: number;
+  notified: boolean;
+}
+
 /* ── routes ─────────────────────────────────────────────────────────────── */
 
 export const SUPPORT_ROUTE = '/support';
