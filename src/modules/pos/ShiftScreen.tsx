@@ -1,16 +1,18 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState } from 'react';
+import type { PosReport } from '@shared/pos';
 import { Checkbox } from '../../components/Checkbox';
 import { Card, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { closeSession, fetchSession, openDrawer, openSession, PK, printReport, usePrintSettings, useSales, type PosSession } from './api';
 import { openWithLines, useCarts } from './cart';
 import CashMove from './CashMove';
+import { drawerReport, sessionReportOf } from './desk';
 import { useT, type PosKey } from './i18n';
 import { BigAmount, Keypad } from './Keypad';
 import { press } from './numpad';
 import { BADGE } from './look';
-import { Failed, Note, PosButton, timeOf, useTillContext } from './parts';
+import { Failed, Note, PosButton, PosDialog, timeOf, useTillContext } from './parts';
 import { countBody, countTotal, formatMoney, parseAmount, variance } from './pricing';
 import { closeBody, needsReason, salesSummary, xReport, zReport } from './shift';
 
@@ -21,8 +23,48 @@ import { closeBody, needsReason, salesSummary, xReport, zReport } from './shift'
  * WorkSuite — note by note or one figure (not where the company counts note by note), the shift so far, cash in and
  * out, the X report, the other tenders to check against the card terminal, and Close — which waits until no sale is
  * open or held on this till. Then the Z report. Money in the drawer is counted once, in one place: these need
- * WorkSuite, and wait for it.
+ * WorkSuite, and wait for it. The X and Z reports are WorkSuite's own where it gives them (Phase 2,
+ * `capabilities.session_report`: the till's door's `session/report`, every tender and the drawer's figures, a blind
+ * drawer's money hidden); otherwise the till's own from its record of the shift.
  */
+
+/** The report shown on the shift screen, and printed as it is. */
+function ReportDialog({ report, onClose }: { report: PosReport; onClose: () => void }) {
+  const t = useT();
+  return (
+    <PosDialog label={report.title} onClose={onClose} width={560} className="gap-3 p-7">
+      <h2 className="text-[20px] font-extrabold">{report.title}</h2>
+      {report.subtitle ? <p className="text-[13px] text-ink-3">{report.subtitle}</p> : null}
+      <div className="flex max-h-[60vh] flex-col gap-1 overflow-y-auto scroll-thin">
+        {report.rows.map((r, i) =>
+          'rule' in r ? (
+            <hr key={i} className="my-1 border-pos-line" />
+          ) : (
+            <div key={i} className={cx('flex justify-between gap-3 text-[14px]', r.strong ? 'font-extrabold text-ink' : 'text-ink-2')}>
+              <span>{r.label}</span>
+              <span className="font-mono tabular-nums">{r.value}</span>
+            </div>
+          ),
+        )}
+      </div>
+      <div className="flex gap-2.5">
+        <PosButton className="h-touch-lg w-40" onClick={onClose}>
+          {t('pos.close')}
+        </PosButton>
+        <PosButton tone="primary" className="h-touch-lg flex-1" onClick={() => void printReport(report).then((o) => toast(o.ok ? 'success' : 'warning', o.message))}>
+          {t('pos.print')}
+        </PosButton>
+      </div>
+    </PosDialog>
+  );
+}
+
+/** WorkSuite's report of a drawer (the till's door), as rows; null where the server has none (an older one). */
+async function serverReport(sessionId: number | undefined, currency: string, when: string): Promise<PosReport | null> {
+  const r = await drawerReport(sessionId);
+  const shaped = r ? sessionReportOf(r.raw, currency) : null;
+  return shaped ? { title: shaped.title, subtitle: when, rows: shaped.rows } : null;
+}
 const toCounts = (c: Record<string, string>) => Object.entries(c).map(([v, n]) => ({ value: Number(v), count: Math.floor(Number(n) || 0) })).sort((a, b) => b.value - a.value);
 
 export default function Shift() {
@@ -218,6 +260,7 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [cash, setCash] = useState(false);
+  const [report, setReport] = useState<PosReport | null>(null);
 
   const counted = byNotes ? (c.counted > 0 ? c.counted : NaN) : c.typed ? parseAmount(c.typed) : NaN;
   const expected = blind ? null : (s.takings?.expected ?? null);
@@ -250,9 +293,24 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
     }
   }
 
-  async function printX() {
-    const o = await printReport(xReport(s, sum, movements, new Date().toLocaleString()));
-    toast(o.ok ? 'success' : 'warning', o.message);
+  /** The X report: WorkSuite's (the till's door) where it gives one, the till's own otherwise. */
+  async function showX() {
+    const when = new Date().toLocaleString();
+    if (till.caps.session_report && !till.offline) {
+      setBusy('x');
+      try {
+        const r = await serverReport(undefined, s.currency, when);
+        if (r) {
+          setReport(r);
+          return;
+        }
+      } catch (e) {
+        toast('warning', e instanceof Error ? e.message : 'WorkSuite’s X report could not be read; the till’s own is shown.');
+      } finally {
+        setBusy(null);
+      }
+    }
+    setReport(xReport(s, sum, movements, when));
   }
 
   const today = new Date().toLocaleDateString(undefined, { weekday: 'long', day: 'numeric', month: 'short' });
@@ -312,7 +370,7 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
             </div>
           ))}
           <div className="mt-2 grid grid-cols-3 gap-2">
-            <PosButton className="h-touch text-[13px]" onClick={() => void printX()}>
+            <PosButton className="h-touch text-[13px]" disabled={busy === 'x'} onClick={() => void showX()}>
               {t('pos.xReport')}
             </PosButton>
             <PosButton className="h-touch text-[13px]" disabled={till.offline || !(can?.cash_in || can?.cash_out)} onClick={() => setCash(true)}>
@@ -373,6 +431,7 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
         </PosButton>
       </aside>
       {cash ? <CashMove session={session} onClose={() => setCash(false)} /> : null}
+      {report ? <ReportDialog report={report} onClose={() => setReport(null)} /> : null}
     </div>
   );
 }
@@ -380,13 +439,21 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
 /** After the close: WorkSuite's figures for the shift, and the Z report. */
 function ZView({ sessionId, onNew }: { sessionId: number; onNew: () => void }) {
   const t = useT();
+  const till = useTillContext();
   const q = useQuery({ queryKey: PK.session(sessionId), queryFn: ({ signal }) => fetchSession(sessionId, signal) });
   const sales = useSales({ session_id: sessionId });
+  // WorkSuite's Z report where it gives one (`capabilities.session_report`); the till's own otherwise.
+  const server = useQuery({
+    queryKey: ['pos', 'z', sessionId],
+    queryFn: () => serverReport(sessionId, q.data?.session.currency ?? till.currency, new Date().toLocaleString()),
+    enabled: !!till.caps.session_report && !till.offline && !!q.data,
+    retry: false,
+  });
   if (q.isError) return <div className="p-6"><Failed text="The closed shift could not be read." onRetry={() => void q.refetch()} /></div>;
   if (!q.data) return <Spinner />;
   const s = q.data.session;
   const sum = salesSummary(sales.data ?? []);
-  const report = zReport(s, sum);
+  const report = server.data ?? zReport(s, sum);
   return (
     <div className="flex max-w-[640px] flex-col gap-4 p-6">
       <h1 className="text-[22px] font-extrabold text-ink">{t('pos.zReport')}</h1>

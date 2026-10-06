@@ -1,19 +1,22 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import type { PosCustomer, PosPrintOutcome, PosSale, PosTenderMethod } from '@shared/pos';
+import type { PosApprovalNeed, PosCustomer, PosPrintOutcome, PosSale, PosTenderMethod, PosTenderOption } from '@shared/pos';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { emailReceipt, openDrawer, PK, printReceipt, sell, type PosSession } from './api';
+import { approvalActions } from './approval';
+import { lookupVoucher, storeCredit, type Approval } from './desk';
 import { publish } from './display';
 import { useT, type PosKey } from './i18n';
 import { BigAmount, Keypad } from './Keypad';
 import { press, typedOf } from './numpad';
 import { ON, OFF } from './look';
+import Override from './Override';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';
 import { allowedTenders, formatMoney, quickCash, settle, type PricedCart } from './pricing';
 import ReceiptPreview from './ReceiptPreview';
-import { buildSale, remaining, tendersOf, type TenderRow } from './tender';
+import { buildSale, remaining, tenderProblem, tendersOf, type Balances, type TenderRow } from './tender';
 
 /**
  * Taking the money, in two panes: on the navy side the total, what has been paid so far (each tender, the one being
@@ -23,9 +26,41 @@ import { buildSale, remaining, tendersOf, type TenderRow } from './tender';
  * Change is cash only, as WorkSuite reckons it. Complete hands the sale to the till (numbered, kept, sent), which
  * prints the receipt and opens the drawer when cash was taken; the sale-complete screen follows, with the change, the
  * receipt's options and the receipt itself. Cash exact (`exact`) completes the total in cash at once.
+ *
+ * Phase 2: the tiles are the company's configured tenders (`capabilities.tenders`, in its order and with its names —
+ * LankaQR, a gift voucher, store credit, the customer's account), else the four every server takes. A voucher's code
+ * is checked for its balance first; store credit is read for the named customer; neither, nor an account, is offered
+ * offline. A sale WorkSuite would take only with a manager's approval opens the override, and is sent again with it.
+ * The sale-complete screen shows the points the customer earned and their balance.
  */
-const HINT: Record<PosTenderMethod, PosKey> = { cash: 'pos.pay.cashHint', card: 'pos.pay.cardHint', bank_transfer: 'pos.pay.transferHint', wallet: 'pos.pay.walletHint' };
-const ICON: Record<PosTenderMethod, string> = { cash: 'banknote', card: 'credit-card', bank_transfer: 'landmark', wallet: 'wallet' };
+const HINT: Record<PosTenderMethod, PosKey> = {
+  cash: 'pos.pay.cashHint',
+  card: 'pos.pay.cardHint',
+  bank_transfer: 'pos.pay.transferHint',
+  wallet: 'pos.pay.walletHint',
+  qr: 'pos.pay.qrHint',
+  voucher: 'pos.pay.voucherHint',
+  store_credit: 'pos.pay.creditHint',
+  account: 'pos.pay.accountHint',
+};
+const ICON: Record<PosTenderMethod, string> = { cash: 'banknote', card: 'credit-card', bank_transfer: 'landmark', wallet: 'wallet', qr: 'qr-code', voucher: 'ticket', store_credit: 'receipt', account: 'building' };
+
+/** The configured name of a tender, else the till's word for its kind. */
+export function tenderLabel(t: (k: PosKey) => string, kind: PosTenderMethod, offered?: PosTenderOption[] | null): string {
+  const name = offered?.find((o) => o.kind === kind)?.name;
+  return name && name !== kind ? name : t(`pos.${kind}` as PosKey);
+}
+
+/** Phase 2's parts of the sale, as the counter decided them (each only where the server announced it). */
+export interface SaleExtras {
+  /** Ask WorkSuite for its promotions (online), or say none were applied (offline). */
+  promotions?: boolean;
+  coupon?: string | null;
+  redeem?: number;
+  /** The open sale's id on this till (its approvals are kept by it, in memory). */
+  saleId?: string;
+  approval?: Approval | null;
+}
 
 export default function Tender({
   cart,
@@ -35,6 +70,8 @@ export default function Tender({
   customer,
   catalogueVersion,
   exact = false,
+  offered = null,
+  extras = {},
   onClose,
   onDone,
 }: {
@@ -46,6 +83,9 @@ export default function Tender({
   catalogueVersion: string | null;
   /** Cash exact: the total taken in cash at once. */
   exact?: boolean;
+  /** The company's configured tenders (`capabilities.tenders`); null: the four every server takes. */
+  offered?: PosTenderOption[] | null;
+  extras?: SaleExtras;
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -59,17 +99,71 @@ export default function Tender({
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<{ sale: PosSale; queued: boolean; printed: PosPrintOutcome | null } | null>(null);
-  const methods = allowedTenders(!till.offline);
+  const [need, setNeed] = useState<PosApprovalNeed | null>(null);
+  const [approval, setApproval] = useState<Approval | null>(extras.approval ?? null);
+  const [balances, setBalances] = useState<Balances>({ vouchers: {}, credit: null });
+  const [checking, setChecking] = useState(false);
+  const tenders = useMemo(() => allowedTenders(!till.offline, offered), [till.offline, offered]);
+  const methods = useMemo(() => tenders.map((x) => x.kind), [tenders]);
   const denominations = useMemo(() => till.options?.denominations?.[currency] ?? session.denominations ?? [], [till.options, currency, session.denominations]);
   const s = settle(total, tendersOf(rows));
   const shop = till.company?.name ?? null;
   const row = rows[cur] ?? rows[0]!;
 
   useEffect(() => {
-    if (done) publish({ kind: 'paid', shop, currency, total: done.sale.totals.total, paid: s.paid + s.change, change: done.sale.change_given });
+    if (done) {
+      const l = done.sale.loyalty;
+      publish({
+        kind: 'paid',
+        shop,
+        currency,
+        total: done.sale.totals.total,
+        paid: s.paid + s.change,
+        change: done.sale.change_given,
+        ...(done.sale.customer?.name ? { customer: done.sale.customer.name } : {}),
+        ...(l ? { points: { earned: l.earned, balance: l.balance ?? null } } : {}),
+      });
+    }
   }, [done, shop, currency, s.paid, s.change]);
 
   const quick = useMemo(() => (row.method === 'cash' ? quickCash(remaining(total, rows, cur), denominations) : []), [total, rows, cur, row.method, denominations]);
+  const label = (m: PosTenderMethod) => tenderLabel(t, m, offered);
+  const problem = tenderProblem(rows, { offered: tenders, customer, balances, online: !till.offline });
+
+  /** A voucher's balance, before it is taken: the amount becomes what it covers. */
+  async function checkVoucher(i: number) {
+    const code = (rows[i]?.reference ?? '').trim().toUpperCase();
+    if (!code) return;
+    setChecking(true);
+    setError(null);
+    try {
+      const v = await lookupVoucher(code);
+      setBalances((b) => ({ ...b, vouchers: { ...b.vouchers, [code]: v ? { balance: v.balance, usable: v.usable } : null } }));
+      if (v?.usable) set(i, { reference: code, amount: typedOf(Math.min(v.balance, remaining(total, rows, i))) });
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('pos.pay.voucherFailed'));
+    } finally {
+      setChecking(false);
+    }
+  }
+
+  /** The named customer's store credit, read when the tile is chosen. */
+  useEffect(() => {
+    if (!methods.includes('store_credit') || !customer?.id || till.offline || !rows.some((r) => r.method === 'store_credit')) return;
+    if (balances.credit !== null) return;
+    let live = true;
+    storeCredit(customer.id).then(
+      (c) => {
+        if (!live) return;
+        setBalances((b) => ({ ...b, credit: c.balance }));
+        setRows((rs) => rs.map((r, k) => (r.method === 'store_credit' && (Number(r.amount.replace(/,/g, '')) || 0) > c.balance ? { ...r, amount: typedOf(Math.min(c.balance, remaining(total, rs, k))) } : r)));
+      },
+      () => undefined,
+    );
+    return () => {
+      live = false;
+    };
+  }, [rows, methods, customer?.id, till.offline, balances.credit, total]);
 
   const set = (i: number, patch: Partial<TenderRow>) => {
     setTouched(true);
@@ -93,8 +187,28 @@ export default function Tender({
     setCur(rows.length);
   }
 
-  async function complete(using = rows) {
-    const input = buildSale({ session_id: session.id, register_id: session.register_id, currency, customer, cart, source, catalogue_version: catalogueVersion }, using);
+  async function complete(using = rows, approved: Approval | null = approval) {
+    const why = tenderProblem(using, { offered: tenders, customer, balances, online: !till.offline });
+    if (why) {
+      setError(why);
+      return;
+    }
+    const input = buildSale(
+      {
+        session_id: session.id,
+        register_id: session.register_id,
+        currency,
+        customer,
+        cart,
+        source,
+        catalogue_version: catalogueVersion,
+        promotions: extras.promotions,
+        coupon: extras.coupon,
+        redeem: extras.redeem,
+        approval_id: approved && approved.action === 'discount' ? approved.id : null,
+      },
+      using,
+    );
     if ('error' in input) {
       setError(input.error);
       return;
@@ -103,6 +217,12 @@ export default function Tender({
     setError(null);
     try {
       const r = await sell(input);
+      if ('needs' in r) {
+        // Nothing was sold: a manager approves, and the sale is sent again with it.
+        setNeed(r.needs);
+        return;
+      }
+      if (extras.saleId) approvalActions.drop(extras.saleId);
       setDone(r);
       void qc.invalidateQueries({ queryKey: PK.till });
       void qc.invalidateQueries({ queryKey: ['pos', 'sales'] });
@@ -129,6 +249,24 @@ export default function Tender({
   }, [exact]);
 
   if (done) return <Complete done={done} currency={currency} onDone={onDone} />;
+  if (need) {
+    return (
+      <Override
+        need={need}
+        currency={currency}
+        onClose={() => {
+          setNeed(null);
+          setError(need.message);
+        }}
+        onApproved={(a) => {
+          setNeed(null);
+          setApproval(a);
+          if (extras.saleId) approvalActions.set(extras.saleId, a);
+          void complete(rows, a);
+        }}
+      />
+    );
+  }
 
   const who = customer?.name || customer?.email || customer?.phone || t('pos.walkIn');
   const cta = s.overCharged ? t('pos.pay.overCharged') : s.due > 0 ? t('pos.pay.stillDue', { n: formatMoney(s.due) }) : s.change > 0 ? t('pos.pay.completeChange', { n: formatMoney(s.change) }) : t('pos.complete');
@@ -141,6 +279,22 @@ export default function Tender({
           <div className="text-[13px] text-[#cbd5e1]">{t('pos.total')}</div>
           <div className="font-mono text-[34px] font-bold tabular-nums">{formatMoney(total, currency)}</div>
         </div>
+        {cart.promotions?.length || cart.points_discount ? (
+          <div className="flex flex-col gap-0.5 text-[12px] text-pos-bar-ink">
+            {cart.promotions?.map((p) => (
+              <div key={p.id} className="flex justify-between gap-2">
+                <span className="truncate">{p.label}</span>
+                <span className="font-mono">−{formatMoney(p.amount)}</span>
+              </div>
+            ))}
+            {cart.points_discount ? (
+              <div className="flex justify-between gap-2">
+                <span>{t('pos.pay.points', { n: cart.points_redeemed ?? 0 })}</span>
+                <span className="font-mono">−{formatMoney(cart.points_discount)}</span>
+              </div>
+            ) : null}
+          </div>
+        ) : null}
         <div className="h-px bg-white/[.14]" />
         <div className="text-[12px] font-bold tracking-[.06em] text-pos-bar-ink uppercase">{t('pos.pay.paidSoFar')}</div>
         {rows.map((r, i) => {
@@ -148,12 +302,12 @@ export default function Tender({
           const v = Number(r.amount.replace(/,/g, '')) || 0;
           return (
             <div key={i} className={cx('flex items-center gap-3 rounded-pos bg-white/[.08] p-3.5', on && 'shadow-[inset_0_0_0_2px_#7FD8DF]')}>
-              <button type="button" onClick={() => setCur(i)} aria-label={`${t(`pos.${r.method}` as PosKey)} ${i + 1}`} className="flex min-w-0 flex-1 items-center gap-3 text-left">
+              <button type="button" onClick={() => setCur(i)} aria-label={`${label(r.method)} ${i + 1}`} className="flex min-w-0 flex-1 items-center gap-3 text-left">
                 <span className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]', r.method === 'cash' ? 'bg-teal' : 'bg-primary')}>
                   <Icon name={ICON[r.method]} size={18} />
                 </span>
                 <span className="min-w-0 flex-1">
-                  <span className="block text-[14px] font-bold">{t(`pos.${r.method}` as PosKey)}</span>
+                  <span className="block text-[14px] font-bold">{label(r.method)}</span>
                   <span className="block truncate text-[12px] text-pos-bar-ink">{r.method === 'cash' ? t('pos.pay.tendered', { n: formatMoney(v) }) : r.reference.trim() ? t('pos.pay.ref', { ref: r.reference.trim() }) : t('pos.pay.noRef')}</span>
                 </span>
                 <span className="font-mono text-[16px] font-bold tabular-nums">{formatMoney(r.method === 'cash' ? Math.max(0, v - s.change) : v)}</span>
@@ -200,19 +354,19 @@ export default function Tender({
               type="button"
               role="radio"
               aria-checked={row.method === m}
-              aria-label={t(`pos.${m}` as PosKey)}
+              aria-label={label(m)}
               onClick={() => choose(m)}
               className={cx('flex h-touch-2xl flex-col items-start justify-center gap-0.5 rounded-pos px-4 text-left text-ink', row.method === m ? ON : OFF)}
             >
-              <span className="text-[15px] font-bold">{t(`pos.${m}` as PosKey)}</span>
-              <span className="text-[12px] text-ink-3">{t(HINT[m])}</span>
+              <span className="text-[15px] font-bold">{label(m)}</span>
+              <span className="text-[12px] text-ink-3">{tenders.find((x) => x.kind === m)?.needs_customer && !customer?.id ? t('pos.pay.needsCustomer') : t(HINT[m])}</span>
             </button>
           ))}
         </div>
         {till.offline ? <p className="-mt-2 text-[12px] text-ink-3">{t('pos.pay.offlineTenders')}</p> : null}
         <div className="flex min-h-0 flex-1 gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-2.5">
-            <div className="text-[13px] font-bold text-ink-2">{row.method === 'cash' ? t('pos.pay.cashReceived') : t('pos.pay.amountOf', { method: t(`pos.${row.method}` as PosKey) })}</div>
+            <div className="text-[13px] font-bold text-ink-2">{row.method === 'cash' ? t('pos.pay.cashReceived') : t('pos.pay.amountOf', { method: label(row.method) })}</div>
             <BigAmount value={row.amount} onChange={(v) => set(cur, { amount: v })} onFocus={(e) => e.target.select()} aria-label={`${t('pos.amount')} ${cur + 1}`} />
             {row.method === 'cash' ? (
               <div className="grid grid-cols-2 gap-2">
@@ -228,6 +382,41 @@ export default function Tender({
                   </button>
                 ))}
               </div>
+            ) : row.method === 'voucher' ? (
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2">
+                  <input
+                    aria-label={`${t('pos.pay.voucherCode')} ${cur + 1}`}
+                    placeholder={t('pos.pay.voucherCode')}
+                    value={row.reference}
+                    maxLength={40}
+                    onChange={(e) => set(cur, { reference: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 40) })}
+                    onKeyDown={(e) => e.key === 'Enter' && void checkVoucher(cur)}
+                    className="h-touch-md min-w-0 flex-1 rounded-[12px] bg-pos-panel px-3.5 font-mono text-[15px] text-ink shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+                  />
+                  <PosButton className="h-touch-md px-4 text-[14px]" disabled={checking || row.reference.trim().length < 4 || till.offline} onClick={() => void checkVoucher(cur)}>
+                    {checking ? <Icon name="spinner" size={16} className="animate-spin" /> : null}
+                    {t('pos.pay.voucherCheck')}
+                  </PosButton>
+                </div>
+                {row.reference.trim().toUpperCase() in balances.vouchers ? (
+                  <p className="text-[13px] text-ink-2">
+                    {balances.vouchers[row.reference.trim().toUpperCase()]
+                      ? t('pos.pay.voucherBalance', { n: formatMoney(balances.vouchers[row.reference.trim().toUpperCase()]!.balance, currency) })
+                      : t('pos.pay.voucherNone')}
+                  </p>
+                ) : null}
+              </div>
+            ) : row.method === 'store_credit' || row.method === 'account' ? (
+              <p className="rounded-[12px] bg-pos-key px-3.5 py-3 text-[13px] text-ink-2">
+                {!customer?.id
+                  ? t('pos.pay.needsCustomer')
+                  : row.method === 'store_credit'
+                    ? balances.credit === null
+                      ? t('pos.pay.creditReading')
+                      : t('pos.pay.creditBalance', { name: customer.name ?? '', n: formatMoney(balances.credit, currency) })
+                    : t('pos.pay.accountNote', { name: customer.name ?? '' })}
+              </p>
             ) : (
               <input
                 aria-label={`${t('pos.reference')} ${cur + 1}`}
@@ -239,7 +428,8 @@ export default function Tender({
               />
             )}
             {source === 'estimate' ? <Note tone="warning">{t('pos.provisional')}</Note> : null}
-            {error ? <Note tone="danger">{error}</Note> : null}
+            {error ? <Note tone="danger">{error}</Note> : problem && touched && s.due <= 0 ? <Note tone="warning">{problem}</Note> : null}
+            {approval?.action === 'discount' ? <p className="text-[12px] text-success">{t('pos.ovr.approvedBy', { name: approval.approver ?? '' })}</p> : null}
             <p className="mt-auto text-[12px] text-ink-3">{t('pos.pay.cardNote')}</p>
           </div>
           <Keypad className="w-[300px] shrink-0 content-start max-lg:w-[240px]" keys={['7', '8', '9', '4', '5', '6', '1', '2', '3', '00', '0', 'back']} onKey={(k) => set(cur, { amount: press(row.amount, k) })} />
@@ -296,6 +486,19 @@ function Complete({ done, currency, onDone }: { done: { sale: PosSale; queued: b
         <div>
           <h2 className="text-[26px] font-extrabold">{t('pos.done.title')}</h2>
           <p className="mt-1 text-[14px] text-ink-3">{[sale.ref, formatMoney(sale.totals.total, currency), sale.customer?.name].filter(Boolean).join(' · ')}</p>
+          {sale.loyalty && (sale.loyalty.earned || sale.loyalty.balance != null) ? (
+            <p className="mt-1 text-[14px] font-semibold text-primary">
+              {[
+                sale.loyalty.earned ? t('pos.done.earned', { name: sale.customer?.name ?? t('pos.customer'), n: sale.loyalty.earned }) : null,
+                sale.loyalty.balance != null ? t('pos.done.balance', { n: sale.loyalty.balance }) : null,
+                sale.loyalty.tier ?? sale.customer?.tier ?? null,
+              ]
+                .filter(Boolean)
+                .join(' · ')}
+            </p>
+          ) : sale.customer?.id && done.queued ? (
+            <p className="mt-1 text-[13px] text-ink-3">{t('pos.done.pointsLater')}</p>
+          ) : null}
         </div>
         <div className="flex items-baseline justify-between rounded-[18px] bg-pos-change px-6 py-5 text-pos-change-ink">
           <span className="text-[20px] font-extrabold">{sale.change_given ? t('pos.done.giveChange') : t('pos.done.noChange')}</span>

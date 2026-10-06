@@ -1,8 +1,9 @@
-import { useRef, type ReactNode, type RefObject } from 'react';
+import { useRef, useState, type ReactNode, type RefObject } from 'react';
 import type { PosProduct } from '@shared/pos';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { useT } from './i18n';
+import { imageUrl } from './catalog';
 import { BADGE, OFF, tintOf } from './look';
 import { dots, GRID_PAGE, LIST_PAGE, pageCount, pageOf, shown } from './paging';
 import { formatMoney } from './pricing';
@@ -11,8 +12,25 @@ import { formatMoney } from './pricing';
  * The counter's left side: the search (a scanner types into it too), the category, grid or list, where the grid
  * stands (the category's trail, how many, the categories used lately), fifteen products a page — five by three —
  * paged by the arrows, the dots or a swipe, and the quick actions under them. A product shows its category's tint,
- * its price-list discount (`discount_pct`) and its unit; the catalogue carries no stock or images, so neither is shown.
+ * its price-list discount (`discount_pct`) and its unit — and, where the catalogue carries them (Phase 2), its picture
+ * (`capabilities.product_images`), a promotion's badge ("3 for 1,200") and its stock at the till's warehouse: low or
+ * out (a badge, never a refusal — WorkSuite decides). An older catalogue carries none, and none is shown.
  */
+
+/** A product's stock as a badge: low or out; nothing for in stock or untracked. */
+export function stockBadge(p: Pick<PosProduct, 'stock_state' | 'stock_available'>): { tone: 'low' | 'out'; n: number | null } | null {
+  if (p.stock_state === 'out') return { tone: 'out', n: null };
+  if (p.stock_state === 'low') return { tone: 'low', n: typeof p.stock_available === 'number' ? Math.max(0, Math.round(p.stock_available * 1000) / 1000) : null };
+  return null;
+}
+
+/** The product's picture, or the category's tint and a box when it has none (or it does not load). */
+function Picture({ p, org, size }: { p: PosProduct; org: number | null; size: number }) {
+  const [failed, setFailed] = useState(false);
+  const src = failed ? null : imageUrl(p, org);
+  if (!src) return <Icon name="package" size={size} strokeWidth={1.4} />;
+  return <img src={src} alt="" loading="lazy" draggable={false} onError={() => setFailed(true)} className="h-full w-full object-cover" />;
+}
 export type GridView = 'grid' | 'list';
 
 export interface QuickAction {
@@ -30,6 +48,9 @@ export default function ProductGrid({
   onQ,
   onSearchKey,
   category,
+  categoryName,
+  recentName,
+  org = null,
   onCategory,
   onPickCategory,
   recent,
@@ -49,6 +70,11 @@ export default function ProductGrid({
   onQ: (q: string) => void;
   onSearchKey: (e: React.KeyboardEvent<HTMLInputElement>) => void;
   category: string | null;
+  /** What `category` is called (a group of the tree, the favourites): the key itself for a plain category. */
+  categoryName?: string | null;
+  recentName?: (c: string) => string;
+  /** The till's company, for its products' pictures. */
+  org?: number | null;
   onCategory: (c: string | null) => void;
   onPickCategory: () => void;
   recent: string[];
@@ -71,6 +97,7 @@ export default function ProductGrid({
   const items = pageOf(products, page, size);
   const at = shown(products.length, page, size);
   const swipe = useRef<number | null>(null);
+  const shownName = category ? (categoryName ?? category) : null;
 
   return (
     <section aria-label={t('pos.products')} className="flex min-w-0 flex-1 flex-col gap-3 py-4 pr-4 pl-5">
@@ -97,7 +124,7 @@ export default function ProductGrid({
           <Icon name="grid" size={20} />
           <span className="flex min-w-0 flex-col items-start leading-[1.15]">
             <span className="text-[11px] font-semibold opacity-75">{t('pos.category')}</span>
-            <span className="max-w-[150px] truncate text-[14px] font-extrabold">{category ?? t('pos.allProducts')}</span>
+            <span className="max-w-[150px] truncate text-[14px] font-extrabold">{shownName ?? t('pos.allProducts')}</span>
           </span>
           <Icon name="chevron-down" size={16} />
         </button>
@@ -125,7 +152,7 @@ export default function ProductGrid({
               <button type="button" className="hover:underline" onClick={() => onCategory(null)}>
                 {t('pos.allProducts')}
               </button>
-              {` › ${category}`}
+              {` › ${shownName}`}
             </>
           ) : (
             t('pos.allProducts')
@@ -143,7 +170,7 @@ export default function ProductGrid({
               onClick={() => onCategory(category === c ? null : c)}
               className={cx('h-9 max-w-[140px] shrink-0 truncate rounded-full px-3.5 text-[12px] font-bold', category === c ? 'bg-pos-bar text-white' : `${OFF} text-ink`)}
             >
-              {c}
+              {recentName ? recentName(c) : c}
             </button>
           ))}
         </div>
@@ -163,18 +190,25 @@ export default function ProductGrid({
             if (Math.abs(dx) > 80) onPage(Math.min(pages - 1, Math.max(0, page + (dx < 0 ? 1 : -1))));
           }}
         >
-          {items.map((p) =>
-            view === 'grid' ? (
+          {items.map((p) => {
+            const stock = stockBadge(p);
+            const promo = p.promo_label ?? (p.discount_pct > 0 ? `−${p.discount_pct}%` : null);
+            return view === 'grid' ? (
               <button
                 key={p.id}
                 type="button"
                 onClick={() => onAdd(p)}
                 aria-disabled={disabled || undefined}
-                className={cx('flex min-h-0 flex-col items-stretch overflow-hidden rounded-pos text-left transition-transform active:scale-[.98]', OFF)}
+                className={cx('flex min-h-0 flex-col items-stretch overflow-hidden rounded-pos text-left transition-transform active:scale-[.98]', OFF, stock?.tone === 'out' && 'opacity-70')}
               >
-                <span className={cx('relative flex h-[78px] max-h-[45%] w-full shrink-0 items-center justify-center rounded-t-pos', tintOf(p.category))}>
-                  <Icon name="package" size={34} strokeWidth={1.4} />
-                  {p.discount_pct > 0 ? <span className={cx('absolute top-2 left-2 rounded-[6px] px-[7px] py-0.5 text-[10px] font-extrabold', BADGE.promo)}>−{p.discount_pct}%</span> : null}
+                <span className={cx('relative flex h-[78px] max-h-[45%] w-full shrink-0 items-center justify-center overflow-hidden rounded-t-pos', tintOf(p.category))}>
+                  <Picture p={p} org={org} size={34} />
+                  {promo ? <span className={cx('absolute top-2 left-2 max-w-[70%] truncate rounded-[6px] px-[7px] py-0.5 text-[10px] font-extrabold', BADGE.promo)}>{promo}</span> : null}
+                  {stock ? (
+                    <span className={cx('absolute top-2 right-2 rounded-[6px] px-[7px] py-0.5 text-[10px] font-extrabold', stock.tone === 'out' ? BADGE.stockOut : BADGE.stockLow)}>
+                      {stock.tone === 'out' ? t('pos.stock.out') : stock.n !== null ? t('pos.stock.left', { n: stock.n }) : t('pos.stock.low')}
+                    </span>
+                  ) : null}
                 </span>
                 <span className="flex min-h-0 w-full flex-1 flex-col gap-1 px-2.5 pt-2 pb-2.5">
                   <span className="line-clamp-2 text-[13px] leading-tight font-bold text-ink">{p.name}</span>
@@ -186,19 +220,20 @@ export default function ProductGrid({
               </button>
             ) : (
               <button key={p.id} type="button" onClick={() => onAdd(p)} aria-disabled={disabled || undefined} className={cx('flex min-h-0 items-center gap-3 rounded-[12px] px-3 text-left', OFF)}>
-                <span className={cx('flex h-9 w-9 shrink-0 items-center justify-center rounded-[10px]', tintOf(p.category))}>
-                  <Icon name="package" size={18} />
+                <span className={cx('flex h-9 w-9 shrink-0 items-center justify-center overflow-hidden rounded-[10px]', tintOf(p.category))}>
+                  <Picture p={p} org={org} size={18} />
                 </span>
                 <span className="min-w-0 flex-1">
                   <span className="block truncate text-[14px] font-bold text-ink">{p.name}</span>
                   <span className="block truncate text-[12px] text-ink-3">{[p.code, p.category].filter(Boolean).join(' · ')}</span>
                 </span>
-                {p.discount_pct > 0 ? <span className={cx('rounded-[6px] px-[7px] py-0.5 text-[10px] font-extrabold', BADGE.promo)}>−{p.discount_pct}%</span> : null}
+                {promo ? <span className={cx('max-w-[140px] truncate rounded-[6px] px-[7px] py-0.5 text-[10px] font-extrabold', BADGE.promo)}>{promo}</span> : null}
+                {stock ? <span className={cx('rounded-[6px] px-[7px] py-0.5 text-[10px] font-extrabold', stock.tone === 'out' ? BADGE.stockOut : BADGE.stockLow)}>{stock.tone === 'out' ? t('pos.stock.out') : stock.n !== null ? t('pos.stock.left', { n: stock.n }) : t('pos.stock.low')}</span> : null}
                 <span className="text-[11px] text-ink-3">{p.unit ?? ''}</span>
                 <span className="w-24 text-right font-mono text-[14px] font-bold text-primary">{formatMoney(p.price)}</span>
               </button>
-            ),
-          )}
+            );
+          })}
         </div>
       )}
 

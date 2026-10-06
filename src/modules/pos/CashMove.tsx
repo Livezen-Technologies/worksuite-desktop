@@ -1,8 +1,13 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
+import type { PosApprovalNeed } from '@shared/pos';
 import { cx } from '../../components/ui';
+import { ApiError } from '../../core/api';
 import { toast } from '../../core/toasts';
 import { cashMove, openDrawer, PK, type PosSession } from './api';
+import { moneyNeedsApproval } from './approval';
+import { needFromStaff, type Approval } from './desk';
+import Override from './Override';
 import { useT } from './i18n';
 import { BigAmount, Keypad } from './Keypad';
 import { press } from './numpad';
@@ -14,7 +19,8 @@ import { formatMoney, parseAmount } from './pricing';
  * Cash put into the drawer or taken out of it, from the counter: in or out (as the person may), the amount on the
  * keypad, why — the company's reasons (`options.cash_reasons`) or one typed — and a reference. WorkSuite records it
  * in the register's shift (`POST sessions/{id}/cash`), so it waits for WorkSuite; the drawer opens once it is
- * recorded.
+ * recorded. Cash out past the company's figure needs a manager's approval (Phase 2, `capabilities.approvals`): asked
+ * first where the till knows the figure, else when WorkSuite answers `approval_required`, and sent again with it.
  */
 export default function CashMove({ session, onClose }: { session: PosSession; onClose: () => void }) {
   const t = useT();
@@ -27,27 +33,54 @@ export default function CashMove({ session, onClose }: { session: PosSession; on
   const [reference, setReference] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [need, setNeed] = useState<PosApprovalNeed | null>(null);
   const reasons = till.options?.cash_reasons?.[direction] ?? [];
   const value = parseAmount(amount);
   const allowed = direction === 'in' ? !!can?.cash_in : !!can?.cash_out;
   const ready = allowed && !till.offline && value > 0 && !!reason.trim();
 
-  async function record() {
+  async function record(approval: Approval | null = null) {
     if (!ready) return;
+    const amount = Math.round(value * 100) / 100;
+    const rules = till.company?.approvals;
+    if (!approval && direction === 'out' && till.caps.approvals && moneyNeedsApproval(amount, rules?.manager_above_amount, rules?.may_approve)) {
+      setNeed({ code: 'approval_required', message: t('pos.ovr.cashAsk', { n: formatMoney(amount, session.currency), max: formatMoney(rules?.manager_above_amount ?? 0, session.currency) }), ask: { action: 'cash_out', amount, threshold: rules?.manager_above_amount ?? null, subject: null } });
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const m = await cashMove(session.id, { direction, amount: Math.round(value * 100) / 100, reason: reason.trim().slice(0, 120), ...(reference.trim() ? { reference: reference.trim().slice(0, 120) } : {}) });
+      const m = await cashMove(session.id, { direction, amount, reason: reason.trim().slice(0, 120), ...(reference.trim() ? { reference: reference.trim().slice(0, 120) } : {}), ...(approval ? { approval_id: approval.id } : {}) });
       toast('success', m ?? t('pos.cash.done'));
       void qc.invalidateQueries({ queryKey: PK.session(session.id) });
       void qc.invalidateQueries({ queryKey: PK.registers });
       void openDrawer().catch(() => undefined);
       onClose();
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'The money could not be recorded.');
+      const asked = e instanceof ApiError && direction === 'out' ? needFromStaff({ code: e.code ?? codeOf(e.data), message: e.message, details: e.data }, 'cash_out', amount) : null;
+      if (asked) setNeed(asked);
+      else setError(e instanceof Error ? e.message : 'The money could not be recorded.');
     } finally {
       setBusy(false);
     }
+  }
+
+  if (need) {
+    return (
+      <Override
+        need={need}
+        currency={session.currency}
+        reason={reason}
+        onClose={() => {
+          setError(need.code === 'approval_required' ? null : need.message);
+          setNeed(null);
+        }}
+        onApproved={(a) => {
+          setNeed(null);
+          void record(a);
+        }}
+      />
+    );
   }
 
   const tab = (d: 'in' | 'out') => (
@@ -120,4 +153,9 @@ export default function CashMove({ session, onClose }: { session: PosSession; on
       </div>
     </PosDialog>
   );
+}
+
+/** A staff-API refusal's own code (`errors.code`). */
+function codeOf(data: unknown): string | null {
+  return data && typeof data === 'object' && typeof (data as { code?: unknown }).code === 'string' ? (data as { code: string }).code : null;
 }

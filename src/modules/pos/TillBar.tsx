@@ -44,7 +44,8 @@ export default function TillBar({ till, view, full, onFull, onSync }: { till: Ti
 
   async function forget(discard: boolean) {
     try {
-      await forgetTill(discard);
+      // Phase 2 (`capabilities.device_unpair`): handed back on WorkSuite too, so the till is free to pair at once.
+      await forgetTill(discard, !!till.caps.device_unpair && !till.offline);
       setConfirming(false);
       void qc.invalidateQueries({ queryKey: PK.all });
     } catch (e) {
@@ -138,6 +139,7 @@ export default function TillBar({ till, view, full, onFull, onSync }: { till: Ti
           }
         >
           <p className="text-[13.5px] text-ink">This computer stops being {terminal.name}: its credential, its catalogue copy and its record of sales are removed. To sell here again it is paired anew.</p>
+          {till.caps.device_unpair && !till.offline ? <p className="mt-2 text-[13.5px] text-ink-2">{t('pos.dev.unpairNote', { code: terminal.code })}</p> : null}
           {pending > 0 ? <p className="mt-2 text-[13.5px] font-semibold text-danger">{pending} sale(s) have not reached WorkSuite, and will be lost.</p> : null}
         </Modal>
       ) : null}

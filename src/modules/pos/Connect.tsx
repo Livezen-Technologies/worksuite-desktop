@@ -16,7 +16,8 @@ import { Failed, Mark, Note, PosButton } from './parts';
  * credential of its own for the till, kept in its secure storage, that a manager can revoke) and where they are in
  * it; then the tills the signed-in person may pair with (`GET api/pos/setup`, their companies'), each free or in use
  * on another device. A till in use is taken over only when the person says so, on the button. Tills are added, and
- * named, on the web.
+ * named, on the web; this computer's own name on the till (its device name) may be given here — left empty, it is the
+ * computer's own.
  */
 export default function Connect({ status, onChange }: { status: PosTillStatus; onChange: () => void }) {
   const t = useT();
@@ -27,6 +28,7 @@ export default function Connect({ status, onChange }: { status: PosTillStatus; o
   const [chosen, setChosen] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
   const [conflict, setConflict] = useState<{ id: number; message: string } | null>(null);
+  const [deviceName, setDeviceName] = useState('');
   const revoked = status.till?.state === 'revoked' ? status.till.terminal : null;
   const list = setup.data?.terminals ?? [];
   const till = list.find((x) => x.id === (chosen ?? revoked?.id ?? (list.length === 1 ? list[0]!.id : null))) ?? null;
@@ -35,7 +37,7 @@ export default function Connect({ status, onChange }: { status: PosTillStatus; o
   async function pair(x: PosBindable, over: boolean) {
     setBusy(true);
     try {
-      const r = await pairTill(x.id, over);
+      const r = await pairTill(x.id, over, deviceName);
       toast('success', r.message);
       setConflict(null);
       onChange();
@@ -127,6 +129,18 @@ export default function Connect({ status, onChange }: { status: PosTillStatus; o
             {conflict?.id === till.id ? `${conflict.message} ` : ''}
             {t('pos.pairing.takeOverNote', { code: till.code, device: till.device_name ?? t('pos.pairing.anotherDevice') })}
           </div>
+        ) : null}
+        {till ? (
+          <label className="flex flex-col gap-1.5">
+            <span className="text-[13px] font-bold text-ink-2">{t('pos.pairing.deviceName')}</span>
+            <input
+              value={deviceName}
+              maxLength={120}
+              onChange={(e) => setDeviceName(e.target.value.slice(0, 120))}
+              placeholder={t('pos.pairing.deviceNameHint')}
+              className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
+            />
+          </label>
         ) : null}
         <div className="mt-auto flex gap-2.5 pt-4">
           <PosButton tone="primary" className="h-touch-lg flex-1 text-[17px] font-extrabold" disabled={!till || busy} onClick={() => till && void pair(till, takeOver)}>

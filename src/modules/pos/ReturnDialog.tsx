@@ -1,15 +1,18 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import type { PosReturn, PosSale } from '@shared/pos';
+import { POS_LINE_CONDITIONS, type PosApprovalNeed, type PosGiveBack, type PosLineCondition, type PosRefundTo, type PosReturn, type PosSale } from '@shared/pos';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { giveBack, mayGiveBack, openDrawer, PK, readSale } from './api';
 import { useBarcodeScanner } from './barcode';
 import { useT, type PosKey } from './i18n';
+import { moneyNeedsApproval } from './approval';
+import type { Approval } from './desk';
 import { ON } from './look';
+import Override from './Override';
 import { Note, PosButton, PosDialog, timeOf, useTillContext } from './parts';
 import { formatMoney } from './pricing';
-import { canStillRefund, refundable, refundLines } from './returns';
+import { canStillRefund, refundable, refundCalls, refundToOptions } from './returns';
 
 /**
  * A return at the counter, against one of this till's sales: the receipt number scanned (the barcode under the
@@ -17,11 +20,16 @@ import { canStillRefund, refundable, refundLines } from './returns';
  * through the till's door (`pos:giveBack`) — on the tenders the sale was paid with, cash out of this drawer — and
  * works out the exact figure; what is shown here is the sale's own line totals, as an estimate. Goods in a
  * condition to sell again go back into stock; damaged ones do not (two refunds, one each way, when both come back).
- * Exchanges, returns without a receipt and a manager's approval are not offered: WorkSuite does not take them from a
- * till.
+ *
+ * Phase 2, where the server takes them: each line's condition — resaleable, opened, damaged, faulty — in one refund
+ * (`capabilities.line_condition`), where the money goes — as paid, cash from this drawer, or the customer's store
+ * credit (`refund_to`) — and a manager's approval for a refund past the company's figure (asked first where the till
+ * knows the figure, else when WorkSuite answers `approval_required`; sent again under the same refund number).
+ * Exchanges and returns without a receipt are not offered: WorkSuite does not take them from a till.
  */
 const REASONS: PosKey[] = ['pos.ret.reason.faulty', 'pos.ret.reason.wrong', 'pos.ret.reason.mind', 'pos.ret.reason.damaged'];
-type Condition = 'resell' | 'damaged';
+type Condition = 'resell' | 'damaged' | PosLineCondition;
+const COND_KEY: Record<Condition, PosKey> = { resell: 'pos.ret.resell', damaged: 'pos.ret.damagedGoods', resaleable: 'pos.ret.cond.resaleable', opened: 'pos.ret.cond.opened', faulty: 'pos.ret.cond.faulty' };
 
 export default function ReturnDialog({ onClose }: { onClose: () => void }) {
   const t = useT();
@@ -37,6 +45,10 @@ export default function ReturnDialog({ onClose }: { onClose: () => void }) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [done, setDone] = useState<PosReturn[] | null>(null);
+  const [to, setTo] = useState<PosRefundTo>('original');
+  const [need, setNeed] = useState<{ need: PosApprovalNeed; rest: PosGiveBack[]; back: PosReturn[] } | null>(null);
+  const conditions: Condition[] = till.caps.line_condition ? [...POS_LINE_CONDITIONS] : ['resell', 'damaged'];
+  const fallback: Condition = conditions[0]!;
 
   async function find(ref: string) {
     const r = ref.trim();
@@ -48,6 +60,7 @@ export default function ReturnDialog({ onClose }: { onClose: () => void }) {
       setMissing(s ? null : r);
       setQty({});
       setCond({});
+      setTo('original');
       setCode(r);
     } catch (e) {
       setError(e instanceof Error ? e.message : 'The sale could not be read.');
@@ -67,22 +80,25 @@ export default function ReturnDialog({ onClose }: { onClose: () => void }) {
   };
   const total = Math.round(picked.reduce((a, l) => a + estimate(l.product_id, qty[l.product_id] ?? 0), 0) * 100) / 100;
   const ready = !!sale && !why && picked.length > 0 && reason.trim().length >= 3;
+  const toOptions = sale ? refundToOptions(sale, !!till.caps.refund_to) : [];
+  const rules = till.company?.approvals;
 
-  async function refund() {
-    if (!sale || !ready) return;
+  /**
+   * The refunds asked, one after the other; a manager's approval asked for stops them there, and they go on with it
+   * (the same refund number, so a lost answer is never a second refund).
+   */
+  async function run(calls: PosGiveBack[], back: PosReturn[], approval: Approval | null) {
+    if (!sale) return;
     setBusy(true);
     setError(null);
-    const groups: Array<{ restock: boolean; picks: Record<number, number> }> = [];
-    for (const c of ['resell', 'damaged'] as const) {
-      const picks = Object.fromEntries(picked.filter((l) => (cond[l.product_id] ?? 'resell') === c).map((l) => [l.product_id, qty[l.product_id] ?? 0]));
-      if (Object.keys(picks).length) groups.push({ restock: c === 'resell', picks });
-    }
-    const back: PosReturn[] = [];
     try {
-      for (const g of groups) {
-        const lines = refundLines(sale, g.picks);
-        if (!lines) continue;
-        const r = await giveBack({ ref: sale.ref, kind: 'refund', reason: reason.trim().slice(0, 200), lines, ...(g.restock ? {} : { restock: false }) });
+      for (let i = 0; i < calls.length; i++) {
+        const call = i === 0 && approval ? { ...calls[i]!, approval_id: approval.id } : calls[i]!;
+        const r = await giveBack(call);
+        if ('needs' in r) {
+          setNeed({ need: r.needs, rest: calls.slice(i), back });
+          return;
+        }
         back.push(r.refund);
         setSale(r.sale);
       }
@@ -97,6 +113,42 @@ export default function ReturnDialog({ onClose }: { onClose: () => void }) {
     }
   }
 
+  async function refund() {
+    if (!sale || !ready) return;
+    const picks = Object.fromEntries(picked.map((l) => [l.product_id, { quantity: qty[l.product_id] ?? 0, condition: cond[l.product_id] ?? fallback }]));
+    const calls = refundCalls(sale, picks, { reason: reason.trim().slice(0, 200), conditions: !!till.caps.line_condition, refund_to: to });
+    // Past the company's figure a manager approves first, where the till knows the figure (`approvals.manager_above_amount`).
+    if (till.caps.approvals && moneyNeedsApproval(total, rules?.manager_above_amount, rules?.may_approve)) {
+      setNeed({
+        need: { code: 'approval_required', message: t('pos.ovr.refundAsk', { n: formatMoney(total, sale.currency), max: formatMoney(rules?.manager_above_amount ?? 0, sale.currency) }), ask: { action: 'refund', amount: total, threshold: rules?.manager_above_amount ?? null, subject: sale.ref } },
+        rest: calls,
+        back: [],
+      });
+      return;
+    }
+    await run(calls, [], null);
+  }
+
+  if (need && sale) {
+    return (
+      <Override
+        need={need.need}
+        currency={sale.currency}
+        reason={reason}
+        onClose={() => {
+          if (need.back.length) setDone(need.back);
+          setError(need.need.code === 'approval_required' ? null : need.need.message);
+          setNeed(null);
+        }}
+        onApproved={(a) => {
+          const n = need;
+          setNeed(null);
+          void run(n.rest, n.back, a);
+        }}
+      />
+    );
+  }
+
   if (done && sale) {
     const amount = done.reduce((a, r) => a + r.amount, 0);
     const cash = done.reduce((a, r) => a + r.cash_out, 0);
@@ -108,7 +160,7 @@ export default function ReturnDialog({ onClose }: { onClose: () => void }) {
         <h2 className="text-[24px] font-extrabold">{t('pos.refundDone', { amount: formatMoney(amount, sale.currency) })}</h2>
         {done.map((r) => (
           <p key={r.ref} className="text-[13px] text-ink-2">
-            {r.ref} · {r.tenders.map((x) => `${t(`pos.${x.method}` as PosKey)} ${formatMoney(x.amount)}`).join(' · ')}
+            {r.ref} · {r.tenders.map((x) => `${x.to === 'credit' ? t('pos.ret.toCredit') : x.to === 'voucher' ? t('pos.voucher') : t(`pos.${x.to === 'cash' ? 'cash' : x.method}` as PosKey)} ${formatMoney(x.amount)}`).join(' · ')}
             {r.credit_note ? ` · ${r.credit_note}` : ''}
           </p>
         ))}
@@ -179,19 +231,36 @@ export default function ReturnDialog({ onClose }: { onClose: () => void }) {
                     </button>
                   </div>
                   <div className="flex gap-1.5">
-                    {q > 0
-                      ? (['resell', 'damaged'] as const).map((c) => (
+                    {q > 0 ? (
+                      conditions.length > 2 ? (
+                        <select
+                          aria-label={`${t('pos.ret.condition')} ${l.name}`}
+                          value={cond[l.product_id] ?? fallback}
+                          onChange={(e) => setCond((m) => ({ ...m, [l.product_id]: e.target.value as Condition }))}
+                          className="h-9 w-full rounded-[10px] bg-pos-panel px-2 text-[13px] font-semibold text-ink outline-none"
+                        >
+                          {conditions.map((c) => (
+                            <option key={c} value={c}>
+                              {t(COND_KEY[c])}
+                            </option>
+                          ))}
+                        </select>
+                      ) : (
+                        conditions.map((c) => (
                           <button
                             key={c}
                             type="button"
-                            aria-pressed={(cond[l.product_id] ?? 'resell') === c}
+                            aria-pressed={(cond[l.product_id] ?? fallback) === c}
                             onClick={() => setCond((m) => ({ ...m, [l.product_id]: c }))}
-                            className={cx('h-9 rounded-[10px] px-3 text-[12px] font-semibold', (cond[l.product_id] ?? 'resell') === c ? 'bg-pos-bar text-white' : 'bg-pos-panel text-ink')}
+                            className={cx('h-9 rounded-[10px] px-3 text-[12px] font-semibold', (cond[l.product_id] ?? fallback) === c ? 'bg-pos-bar text-white' : 'bg-pos-panel text-ink')}
                           >
-                            {t(c === 'resell' ? 'pos.ret.resell' : 'pos.ret.damagedGoods')}
+                            {t(COND_KEY[c])}
                           </button>
                         ))
-                      : <span className="text-[13px] text-ink-3">—</span>}
+                      )
+                    ) : (
+                      <span className="text-[13px] text-ink-3">—</span>
+                    )}
                   </div>
                   <span className="text-right font-mono text-[15px] font-bold">{q > 0 ? formatMoney(estimate(l.product_id, q)) : '—'}</span>
                 </div>
@@ -241,16 +310,27 @@ export default function ReturnDialog({ onClose }: { onClose: () => void }) {
         </div>
         {other ? <input autoFocus value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} aria-label={t('pos.reason')} placeholder={t('pos.reason')} className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none" /> : null}
         <div className="text-[13px] font-bold text-ink-2">{t('pos.ret.to')}</div>
-        <div className="rounded-[12px] bg-pos-key px-4 py-3 text-[14px]">
-          <div className="font-bold">{t('pos.ret.asPaid')}</div>
-          <div className="text-[12px] text-ink-3">{t('pos.ret.asPaidHint')}</div>
-        </div>
+        {toOptions.length > 1 ? (
+          <div role="radiogroup" aria-label={t('pos.ret.to')} className="flex flex-col gap-2">
+            {toOptions.map((o) => (
+              <button key={o} type="button" role="radio" aria-checked={to === o} onClick={() => setTo(o)} className={cx('rounded-[12px] px-4 py-3 text-left text-[14px]', to === o ? ON : 'bg-pos-key')}>
+                <div className="font-bold">{t(o === 'original' ? 'pos.ret.asPaid' : o === 'cash' ? 'pos.ret.toCash' : 'pos.ret.toCredit')}</div>
+                <div className="text-[12px] text-ink-3">{t(o === 'original' ? 'pos.ret.asPaidHint' : o === 'cash' ? 'pos.ret.toCashHint' : 'pos.ret.toCreditHint')}</div>
+              </button>
+            ))}
+          </div>
+        ) : (
+          <div className="rounded-[12px] bg-pos-key px-4 py-3 text-[14px]">
+            <div className="font-bold">{t('pos.ret.asPaid')}</div>
+            <div className="text-[12px] text-ink-3">{t('pos.ret.asPaidHint')}</div>
+          </div>
+        )}
         <div className="flex flex-col gap-1 rounded-pos bg-pos-key px-4 py-3.5">
           {picked.map((l) => (
             <div key={l.product_id} className="flex justify-between gap-2 text-[13px] text-ink-2">
               <span className="truncate">
                 {qty[l.product_id]} × {l.name}
-                {(cond[l.product_id] ?? 'resell') === 'damaged' ? ` · ${t('pos.ret.damagedGoods')}` : ''}
+                {(cond[l.product_id] ?? fallback) !== fallback ? ` · ${t(COND_KEY[cond[l.product_id]!])}` : ''}
               </span>
               <span className="font-mono">{formatMoney(estimate(l.product_id, qty[l.product_id] ?? 0))}</span>
             </div>

@@ -16,6 +16,9 @@ export interface CartState {
   customer: PosCustomer | null;
   /** The cashier's percentage off, as typed. */
   discount: string;
+  /** Phase 2: points the named customer spends on it, as typed (`capabilities.loyalty`), and a coupon code. */
+  redeem?: string;
+  coupon?: string;
 }
 
 export const EMPTY_CART: CartState = { lines: [], customer: null, discount: '' };
@@ -43,8 +46,44 @@ export function removeLine(s: CartState, productId: number): CartState {
 }
 
 export function setCustomer(s: CartState, c: PosCustomer | null): CartState {
-  const clean = c ? (Object.fromEntries(Object.entries(c).map(([k, v]) => [k, String(v ?? '').trim()]).filter(([, v]) => v)) as PosCustomer) : null;
-  return { ...s, customer: clean && Object.keys(clean).length ? clean : null };
+  const clean = c
+    ? (Object.fromEntries(
+        Object.entries(c)
+          // The CRM id and the points stay numbers; the rest is text, trimmed.
+          .map(([k, v]) => [k, k === 'id' || k === 'points' ? (typeof v === 'number' && Number.isFinite(v) ? v : undefined) : String(v ?? '').trim()])
+          .filter(([, v]) => v !== undefined && v !== ''),
+      ) as PosCustomer)
+    : null;
+  const customer = clean && (clean.name || clean.email || clean.phone || clean.id) ? clean : null;
+  // Points are the customer's: another customer (or none) spends none of them.
+  const same = customer?.id !== undefined && customer.id === s.customer?.id;
+  const { redeem: _r, ...rest } = s;
+  return same ? { ...s, customer } : { ...rest, customer };
+}
+
+/** The points to spend, as typed: digits only, never more than the customer has. */
+export function setRedeem(s: CartState, typed: string): CartState {
+  const d = typed.replace(/\D+/g, '').slice(0, 9);
+  if (!d || !s.customer?.id) {
+    const { redeem: _r, ...rest } = s;
+    return rest;
+  }
+  const most = typeof s.customer.points === 'number' ? Math.max(0, s.customer.points) : Number(d);
+  return { ...s, redeem: String(Math.min(Number(d), most)) };
+}
+
+/** The points this sale spends: none without a named customer. */
+export function redeemOf(s: CartState): number {
+  return s.customer?.id ? Math.max(0, Math.floor(Number(s.redeem) || 0)) : 0;
+}
+
+export function setCoupon(s: CartState, code: string): CartState {
+  const c = code.trim().toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 40);
+  if (!c) {
+    const { coupon: _c, ...rest } = s;
+    return rest;
+  }
+  return { ...s, coupon: c };
 }
 
 /** The discount as typed, digits and one point, at most 100 — or the cashier's ceiling (`max_discount_pct`). */
@@ -193,6 +232,19 @@ export const cartActions = {
   qty: (id: number, qty: number) => onActive((c) => setQty(c, id, qty)),
   remove: (id: number) => onActive((c) => removeLine(c, id)),
   customer: (c: PosCustomer | null) => onActive((x) => setCustomer(x, c)),
+  redeem: (typed: string) => onActive((x) => setRedeem(x, typed)),
+  coupon: (code: string) => onActive((x) => setCoupon(x, code)),
+  /** A sale recalled from WorkSuite (held on the server): its lines, customer and discount, on screen. */
+  load: (c: CartState): boolean => {
+    const before = carts.get();
+    const a = activeSale(before);
+    if (a.cart.lines.length || a.cart.customer) {
+      if (before.sales.length >= MAX_OPEN) return false;
+      carts.set((s) => newSale(s, Date.now()));
+    }
+    carts.set((s) => updateActive(s, () => c));
+    return true;
+  },
   discount: (d: string, ceiling: number | null = null) => onActive((c) => setDiscount(c, d, ceiling)),
   /** Empty the sale on screen (it stays open). */
   clear: () => onActive(() => EMPTY_CART),

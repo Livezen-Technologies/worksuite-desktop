@@ -487,6 +487,9 @@ const api = {
     displayClose: call('pos:displayClose'),
     carts: call('pos:carts'),
     cartsSave: call('pos:cartsSave'),
+    desk: call('pos:desk'),
+    approve: call('pos:approve'),
+    rename: call('pos:rename'),
   },
   // The Phone (phone-channels.ts): its switch in the page policy, global shortcuts, call notifications.
   phone: {

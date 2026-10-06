@@ -1,13 +1,16 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { POS_DRAWER_REFUSALS, saleFlags, type PosReturn, type PosSale, type PosSaleFlag } from '@shared/pos';
+import { POS_DRAWER_REFUSALS, saleFlags, type PosApprovalNeed, type PosRefundTo, type PosReturn, type PosSale, type PosSaleFlag } from '@shared/pos';
 import { Button, Card, Empty, Modal, TextField, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { emailReceipt, giveBack, mayGiveBack, openDrawer, PK, printReceipt, resolveSale, useSales } from './api';
+import { moneyNeedsApproval } from './approval';
+import type { Approval } from './desk';
 import { useT, type PosKey } from './i18n';
+import Override from './Override';
 import { Choice, Note, SyncChip, timeOf, useTillContext } from './parts';
 import { formatMoney, parseAmount } from './pricing';
-import { canStillRefund, refundable, refundLines, returned } from './returns';
+import { canStillRefund, estimateLine, refundable, refundLines, refundToOptions, returned } from './returns';
 import { filterSales, salesSummary, type ReviewFilter } from './shift';
 import { Checkbox } from '../../components/Checkbox';
 
@@ -290,6 +293,10 @@ function Row({ label, value, strong }: { label: string; value: string; strong?: 
 export function Reverse({ sale, action, onClose }: { sale: PosSale; action: 'refund' | 'void'; onClose: () => void }) {
   const t = useT();
   const qc = useQueryClient();
+  const till = useTillContext();
+  const [need, setNeed] = useState<PosApprovalNeed | null>(null);
+  const [to, setTo] = useState<PosRefundTo>('original');
+  const toOptions = action === 'refund' ? refundToOptions(sale, !!till.caps.refund_to) : ['original' as const];
   const [reason, setReason] = useState('');
   const [mode, setMode] = useState<'all' | 'lines'>('all');
   const [picks, setPicks] = useState<Record<number, string>>({});
@@ -300,12 +307,31 @@ export function Reverse({ sale, action, onClose }: { sale: PosSale; action: 'ref
   const left = refundable(sale);
   const lines = action === 'void' || mode === 'all' ? undefined : refundLines(sale, Object.fromEntries(Object.entries(picks).map(([k, v]) => [Number(k), parseAmount(v)])));
 
-  async function go() {
+  async function go(approval: Approval | null = null) {
     if (lines === null) return;
+    // A void, or a refund of everything left, past the company's figure: a manager approves first (Phase 2).
+    const rules = till.company?.approvals;
+    const amount = action === 'void' ? sale.totals.total : lines ? lines.reduce((a, l) => a + estimateLine(sale, l.product_id, l.quantity), 0) : refundable(sale).reduce((a, l) => a + estimateLine(sale, l.product_id, l.left), 0);
+    if (!approval && till.caps.approvals && moneyNeedsApproval(amount, rules?.manager_above_amount, rules?.may_approve)) {
+      setNeed({ code: 'approval_required', message: t(action === 'void' ? 'pos.ovr.voidAsk' : 'pos.ovr.refundAsk', { n: formatMoney(amount, sale.currency), max: formatMoney(rules?.manager_above_amount ?? 0, sale.currency) }), ask: { action, amount: Math.round(amount * 100) / 100, threshold: rules?.manager_above_amount ?? null, subject: sale.ref } });
+      return;
+    }
     setBusy(true);
     setError(null);
     try {
-      const r = await giveBack({ ref: sale.ref, kind: action, reason: reason.trim(), ...(lines ? { lines } : {}), ...(action === 'refund' && !restock ? { restock: false } : {}) });
+      const r = await giveBack({
+        ref: sale.ref,
+        kind: action,
+        reason: reason.trim(),
+        ...(lines ? { lines } : {}),
+        ...(action === 'refund' && !restock ? { restock: false } : {}),
+        ...(action === 'refund' && to !== 'original' ? { refund_to: to } : {}),
+        ...(approval ? { approval_id: approval.id } : {}),
+      });
+      if ('needs' in r) {
+        setNeed(r.needs);
+        return;
+      }
       setDone(r.refund);
       toast('success', r.message);
       if (r.refund.cash_out > 0) void openDrawer().catch(() => undefined);
@@ -318,6 +344,23 @@ export function Reverse({ sale, action, onClose }: { sale: PosSale; action: 'ref
   }
 
   const title = `${t(action === 'refund' ? 'pos.refund' : 'pos.void')} ${sale.ref}`;
+  if (need) {
+    return (
+      <Override
+        need={need}
+        currency={sale.currency}
+        reason={reason}
+        onClose={() => {
+          setError(need.code === 'approval_required' ? null : need.message);
+          setNeed(null);
+        }}
+        onApproved={(a) => {
+          setNeed(null);
+          void go(a);
+        }}
+      />
+    );
+  }
   if (done) {
     return (
       <Modal title={title} onClose={onClose} footer={<Button variant="primary" onClick={onClose}>OK</Button>}>
@@ -383,6 +426,14 @@ export function Reverse({ sale, action, onClose }: { sale: PosSale; action: 'ref
             <label className="flex items-center gap-2 text-[13px] text-ink-2">
               <Checkbox checked={restock} onChange={(e) => setRestock(e.target.checked)} /> {t('pos.restock')}
             </label>
+            {toOptions.length > 1 ? (
+              <Choice
+                label={t('pos.ret.to')}
+                value={to}
+                onChange={setTo}
+                options={toOptions.map((o) => ({ value: o, label: t(o === 'original' ? 'pos.ret.asPaid' : o === 'cash' ? 'pos.ret.toCash' : 'pos.ret.toCredit') }))}
+              />
+            ) : null}
           </>
         ) : null}
         <TextField label={t('pos.reason')} value={reason} onChange={(e) => setReason(e.target.value.slice(0, 200))} autoFocus />

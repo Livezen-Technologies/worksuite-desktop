@@ -27,6 +27,9 @@ export const POS_INVOKE_CHANNELS = [
   'pos:displayClose',
   'pos:carts',
   'pos:cartsSave',
+  'pos:desk',
+  'pos:approve',
+  'pos:rename',
 ] as const;
 
 export const POS_EVENT_CHANNELS = ['pos:changed'] as const;

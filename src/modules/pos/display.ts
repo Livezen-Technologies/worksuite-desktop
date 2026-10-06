@@ -14,10 +14,26 @@ export interface DisplayLine {
   total: number;
 }
 
+/**
+ * Phase 2 adds, where the sale names a CRM customer: their name (a greeting), their tier and points — never their
+ * contact details — and what promotions saved.
+ */
 export type DisplayState =
   | { kind: 'idle'; shop: string | null }
-  | { kind: 'cart'; shop: string | null; currency: string; lines: DisplayLine[]; discount: number; tax: number; total: number; provisional: boolean }
-  | { kind: 'paid'; shop: string | null; currency: string; total: number; paid: number; change: number };
+  | {
+      kind: 'cart';
+      shop: string | null;
+      currency: string;
+      lines: DisplayLine[];
+      discount: number;
+      tax: number;
+      total: number;
+      provisional: boolean;
+      customer?: string;
+      tier?: string;
+      points?: number;
+    }
+  | { kind: 'paid'; shop: string | null; currency: string; total: number; paid: number; change: number; customer?: string; points?: { earned: number; balance: number | null } };
 
 const NAME = 'worksuite-pos-display';
 

@@ -3,7 +3,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp', getVersion: () => '0.1.0' }, safeStorage: {} }));
 
 import { isProxyPathAllowed } from '../../../electron/services/api-proxy';
-import { PosDesk, terminalOf, tillPrefix } from '../../../electron/services/pos-desk';
+import { PosDesk, terminalOf, tillPrefix, platformOf } from '../../../electron/services/pos-desk';
 
 const TOKEN = `wsp_7_${'a1'.repeat(32)}`;
 const TERMINAL = { id: 7, code: 'front-01', name: 'Front till', org_id: 3, org_name: 'Acme', branch_name: 'Colombo', warehouse_id: 4, warehouse_name: 'Shop floor', in_use: false, device_name: null };
@@ -54,7 +54,7 @@ describe('POS till: the credential stays in the main process', () => {
     const r = await d.pair(7, false);
 
     expect(request).toHaveBeenCalledWith('POST', '/api/pos/terminals/7/pair', {
-      body: { device_name: 'COUNTER-PC', device_info: 'WorkSuite Desktop on windows', app_version: 'desktop 0.2.64', take_over: false },
+      body: { device_name: 'COUNTER-PC', device_info: 'WorkSuite Desktop on windows', app_version: 'desktop 0.2.64', take_over: false, ...(platformOf(process.platform) ? { platform: platformOf(process.platform) } : {}) },
     });
     expect(r.message).toBe('This computer is now Front till.');
     expect(JSON.stringify(r)).not.toContain(TOKEN);

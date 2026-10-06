@@ -28,8 +28,47 @@ import type { SecureStore } from './secure-store';
  */
 const PREFIX = 'pos-till:';
 const TOKEN = /^wsp_[1-9][0-9]{0,9}_[a-f0-9]{64}$/;
-/** The door's calls: its own, and one of its sales by its (URL-encoded) receipt number. */
-const DOOR = /^(heartbeat|sales|catalogue|products\/lookup|price|sales\/[A-Za-z0-9%._:-]{1,120}\/(receipt|refund|void|email))$/;
+/**
+ * The door's calls: its own, one of its sales by its (URL-encoded) receipt number, and Phase 2's — held sales, tenders
+ * and balances, approvals, customers and loyalty, stock and top sellers, the X report, the receipt template, the
+ * device's name and unpairing.
+ */
+const DOOR = new RegExp(
+  '^(' +
+    [
+      'heartbeat',
+      'sales',
+      'catalogue',
+      'products\\/lookup',
+      'price',
+      'sales\\/[A-Za-z0-9%._:-]{1,120}\\/(receipt|refund|void|email)',
+      'tenders',
+      'held',
+      'held\\/\\d{1,12}\\/(recall|discard)',
+      'vouchers\\/[A-Za-z0-9-]{4,40}',
+      'store-credit\\/\\d{1,12}',
+      'approvers',
+      'approvals',
+      'approval-requests',
+      'approval-requests\\/\\d{1,12}(\\/cancel)?',
+      'customers',
+      'customers\\/\\d{1,12}',
+      'loyalty',
+      'top-sellers',
+      'stock',
+      'session\\/report',
+      'sessions\\/\\d{1,12}\\/report',
+      'receipt-template',
+      'name',
+      'unpair',
+    ].join('|') +
+    ')$',
+);
+
+/** The platform this computer says it is, in the server's words (`Terminals::PLATFORMS`). */
+export function platformOf(p: string): 'windows' | 'macos' | 'linux' | null {
+  return p === 'win32' ? 'windows' : p === 'darwin' ? 'macos' : p === 'linux' ? 'linux' : null;
+}
 
 type Secrets = Pick<SecureStore, 'get' | 'set' | 'delete' | 'deletePrefix'>;
 
@@ -136,12 +175,14 @@ export class PosDesk {
    * Pair this computer with a till. A till another device holds is taken over only when the person said so
    * (`take_over`); the server answers 409 otherwise, and that goes back as CONFLICT for the screen to ask.
    */
-  async pair(terminalId: number, takeOver: boolean): Promise<{ pairing: PosPairing; message: string }> {
+  async pair(terminalId: number, takeOver: boolean, deviceName?: string): Promise<{ pairing: PosPairing; message: string }> {
     const origin = this.d.origin();
     if (!origin) throw new DesktopError('NOT_SIGNED_IN', 'No WorkSuite server is configured.');
     const dev = this.d.device();
+    const platform = platformOf(process.platform);
     const data = await this.d.http.request<{ token?: unknown; expires_at?: unknown; terminal?: unknown }>('POST', `/api/pos/terminals/${terminalId}/pair`, {
-      body: { device_name: dev.name.slice(0, 120), device_info: dev.info.slice(0, 255), app_version: `desktop ${this.d.appVersion}`.slice(0, 32), take_over: takeOver },
+      // `platform` is Phase 2's (an older server ignores it); the name is the person's, or this computer's.
+      body: { device_name: (deviceName?.trim() || dev.name).slice(0, 120), device_info: dev.info.slice(0, 255), app_version: `desktop ${this.d.appVersion}`.slice(0, 32), take_over: takeOver, ...(platform ? { platform } : {}) },
     });
     const token = typeof data?.token === 'string' ? data.token : '';
     const terminal = terminalOf(data?.terminal);
@@ -183,7 +224,8 @@ export class PosDesk {
   /**
    * Any of the door's calls (`Pos\Controllers\DeviceController`): the heartbeat and the sales, what the till sells
    * (`catalogue`, `products/lookup`, `price`) so it refreshes with nobody signed in, and one of its own sales by its
-   * receipt number (`sales/{ref}/receipt|refund|void|email`). Nothing else is sent the credential.
+   * receipt number (`sales/{ref}/receipt|refund|void|email`), and Phase 2's counter (held sales, approvals, customers,
+   * the X report, the template, the device's name, unpairing). Nothing else is sent the credential.
    */
   async door(method: 'GET' | 'POST', path: string, o: { body?: unknown; query?: Record<string, string | number | undefined> } = {}): Promise<DeviceAnswer> {
     if (!DOOR.test(path)) throw new DesktopError('INTERNAL', 'Not a call of the till’s door.');

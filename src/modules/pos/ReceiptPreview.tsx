@@ -68,7 +68,11 @@ export default function ReceiptPreview({ sale, till }: { sale: PosSale; till: st
       ))}
       <Rule />
       <Pair l={t('pos.subtotal')} r={formatMoney(sale.totals.subtotal)} />
-      {sale.totals.discount ? <Pair l={t('pos.discounts')} r={`-${formatMoney(sale.totals.discount)}`} /> : null}
+      {sale.promotions?.map((p, i) => <Pair key={`p${i}`} l={p.label} r={`-${formatMoney(p.amount)}`} />)}
+      {sale.points?.discount ? <Pair l={t('pos.pay.points', { n: sale.points.redeemed })} r={`-${formatMoney(sale.points.discount)}`} /> : null}
+      {sale.totals.discount - (sale.promotions ?? []).reduce((a, p) => a + p.amount, 0) - (sale.points?.discount ?? 0) > 0.004 ? (
+        <Pair l={t('pos.discounts')} r={`-${formatMoney(Math.round((sale.totals.discount - (sale.promotions ?? []).reduce((a, p) => a + p.amount, 0) - (sale.points?.discount ?? 0)) * 100) / 100)}`} />
+      ) : null}
       {vatRows(sale.lines, sale.totals.tax).map((v) => (
         <Pair key={v.label} l={v.label} r={formatMoney(v.amount)} />
       ))}
@@ -81,6 +85,7 @@ export default function ReceiptPreview({ sale, till }: { sale: PosSale; till: st
         <Pair key={i} l={`${t(`pos.${x.method}` as PosKey)}${x.reference ? ` (${x.reference})` : ''}`} r={formatMoney(x.amount)} />
       ))}
       {sale.change_given ? <Pair l={t('pos.change')} r={formatMoney(sale.change_given)} b /> : null}
+      {sale.loyalty?.earned ? <Pair l={t('pos.cust.pointsLabel')} r={`+${sale.loyalty.earned}${sale.loyalty.balance != null ? ` = ${sale.loyalty.balance}` : ''}`} /> : null}
       {sale.priced_by === 'estimate' ? (
         <>
           <Rule />
