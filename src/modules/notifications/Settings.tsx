@@ -19,6 +19,7 @@ import { computerZone, useZones } from '../account/regional';
 import { appOf } from './api';
 import { Checkbox } from '../../components/Checkbox';
 import { FilesNotifications, type EventChoices } from './FilesPrefs';
+import { SupportNotifications } from './SupportPrefs';
 
 /**
  * Notification settings (NotifSettings): which kinds of notification reach
@@ -177,6 +178,7 @@ export default function NotificationSettings() {
         </Card>
 
         {categoryVisible('files', visible) ? <FilesNotifications categories={cats as Record<string, EventChoices>} commit={commit} /> : null}
+        {categoryVisible('support', visible) ? <SupportNotifications categories={cats as Record<string, EventChoices>} commit={commit} prefs={prefs} local={local} /> : null}
 
         <div className="grid items-start gap-4 lg:grid-cols-2">
           <QuietHours p={p} commit={commit} prefs={prefs} local={local} />

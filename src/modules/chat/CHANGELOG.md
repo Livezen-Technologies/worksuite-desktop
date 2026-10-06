@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.61.0 — 2026-10-06
+
+**Changed**
+
+- Raise ticket in a website chat opens Support's native sheet (subject, priority, department, team, category, assignee, append to the visitor's open ticket, the transcript with chosen messages public) and the ticket's desktop tab, instead of the browser; a chat that is a ticket shows its reference and status (WS-SUPPORT-SRS-001 D-06, FR-DSK-08)
+
 ## 1.60.0 — 2026-10-06
 
 **Added**

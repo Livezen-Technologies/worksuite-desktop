@@ -388,6 +388,28 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./hr/HrShell'),
   },
   {
+    // Support (WS-SUPPORT-SRS-001 D-01…D-12): the inbox — views with live counts, the list, the reading pane — and a
+    // tab per ticket, over /api/support/v1, or the as-built /api/tickets on a server from before it (api.ts). Offline,
+    // the rail, the lists and the tickets already opened are the last copy; replies, notes, status and property changes
+    // go to the outbox and are sent in order when WorkSuite is back (PARTIAL_WRITE, D-09).
+    input: defineDesktopManifest({
+      id: 'support', name: 'Support', icon: 'life-buoy', contractVersion: 1, desktop: { enabled: true },
+      offline: {
+        mode: 'PARTIAL_WRITE',
+        entities: ['ticket'],
+        cache: ['/api/support/v1/meta', '/api/support/v1/views', '/api/support/v1/badges', '/api/support/v1/tickets', '/api/support/v1/agents', '/api/support/v1/canned'],
+      },
+      native: ['notifications', 'file-drop'],
+      quickActions: [
+        { id: 'support-inbox', label: 'Support inbox', route: '/support' },
+        { id: 'support-mine', label: 'My tickets', route: '/support?view=mine' },
+        { id: 'support-unassigned', label: 'Unassigned tickets', route: '/support?view=unassigned' },
+      ],
+      deepLinks: ['support', 'support/ticket/:id'],
+    }),
+    load: () => import('./support/SupportPage'),
+  },
+  {
     input: defineDesktopManifest({ id: 'notifications', name: 'Notifications', icon: 'bell', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', cache: ['/api/notifications'] } }),
     load: () => import('./notifications/NotificationsPage'),
   },

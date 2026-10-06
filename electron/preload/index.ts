@@ -517,6 +517,15 @@ const api = {
   smime: {
     verify: call('smime:verify'),
   },
+  support: {
+    displays: call('support:displays'),
+    wall: call('support:wall'),
+    wallClose: call('support:wallClose'),
+  },
+  help: {
+    capture: call('help:capture'),
+    logs: call('help:logs'),
+  },
   offline: {
     status: call('offline:status'),
     pending: call('offline:pending'),
@@ -530,6 +539,9 @@ const api = {
     submit: call('offline:submit'),
     retry: call('offline:retry'),
     discard: call('offline:discard'),
+    detail: call('offline:detail'),
+    edit: call('offline:edit'),
+    replay: call('offline:replay'),
     saveDraft: call('offline:saveDraft'),
     getDraft: call('offline:getDraft'),
     listDrafts: call('offline:listDrafts'),

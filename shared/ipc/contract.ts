@@ -106,6 +106,7 @@ import type {
   SyncStatus,
   WebchatRingState,
   LiveDeskInfo,
+  WallDisplay,
   QuickAskContext,
   Transfer,
   UpdateStatus,
@@ -140,6 +141,8 @@ const customProfileSchema = z.object({
   tint: z.enum(['neutral', 'accent', 'custom']),
   tintColor: hexColour.nullable().optional(),
 });
+
+const supportNoticeChoice = z.object({ banner: z.boolean(), sound: z.boolean() });
 
 const bandwidthLimitSchema = z.object({ on: z.boolean(), value: z.number().positive().max(1_000_000), unit: z.enum(['KB', 'MB']) });
 
@@ -218,6 +221,19 @@ export const preferencesPatchSchema = z
     shortcuts: z.record(z.string().max(64), z.string().max(64)),
     backgroundServices: z.object({ notifications: z.boolean(), realtime: z.boolean() }),
     webchatRinging: z.object({ window: z.boolean(), duringDnd: z.enum(['card', 'at_risk', 'ring']), shortcut: z.boolean(), volume: z.number().int().min(0).max(100), ringOn: z.enum(['both', 'default']).optional(), liveShortcuts: z.boolean().optional() }),
+    // Notification settings › Support (WS-SUPPORT-SRS-001 D-03): each kind's banner and sound here.
+    supportNotices: z
+      .object({
+        assigned: supportNoticeChoice,
+        reply: supportNoticeChoice,
+        mention: supportNoticeChoice,
+        sla: supportNoticeChoice,
+        slaPersistent: z.boolean(),
+        lowPriority: z.enum(['banner', 'digest']),
+        quickShortcut: z.boolean(),
+        urgentPopup: z.boolean(),
+      })
+      .partial(),
     webchatFollowUps: z.object({ card: z.boolean(), desktop: z.boolean(), sound: z.boolean(), idleMinutes: z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]) }),
     // Settings › Chat: the chat drawer docked beside the page or floating over it (worksuite-desktop#264).
     chatDrawer: z.enum(['docked', 'floating']),
@@ -420,7 +436,7 @@ export const contract = {
 
   'windows:open': ch(
     z.object({
-      kind: z.enum(['chat-mini', 'timer', 'record', 'call', 'video-call', 'ring', 'meet', 'phone']),
+      kind: z.enum(['chat-mini', 'timer', 'record', 'call', 'video-call', 'ring', 'meet', 'phone', 'support-quick']),
       route,
       title: z.string().max(200).optional(),
       alwaysOnTop: z.boolean().optional(),
@@ -1247,9 +1263,20 @@ export const contract = {
   'mail:setSpellLanguages': ch(z.strictObject({ languages: z.array(z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/)).max(4) }), { session: true, rate: 5 }),
   // S/MIME (DMO-SEC-05): a signed message checked against its own bytes, in the main process.
   'smime:verify': ch(z.strictObject({ uid: z.string().regex(/^\d{1,20}$/), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), mailbox: z.string().regex(/^\d{1,20}$/).nullable() }), { session: true, rate: 5 }),
+  // Contact Support (D-11): a picture of the asking window, and the last day's redacted log — shown before they go.
+  'support:displays': ch(none, { session: true }),
+  'support:wall': ch(z.object({ displayId: z.number().int().nullable() }), { session: true, rate: 10 }),
+  'support:wallClose': ch(none, { session: true }),
+  'help:capture': ch(none, { session: true, rate: 5 }),
+  'help:logs': ch(none, { session: true, rate: 10 }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
   'offline:retry': ch(z.object({ id: idString }), { session: true }),
   'offline:discard': ch(z.object({ id: idString }), { session: true }),
+  // A module's outbox (Support's D-09): a queued change's words and the server's answer, edited before it goes, and
+  // the queue sent now.
+  'offline:detail': ch(z.object({ id: idString }), { session: true }),
+  'offline:edit': ch(z.object({ id: idString, body: z.unknown() }), { session: true, rate: 10 }),
+  'offline:replay': ch(none, { session: true, rate: 2 }),
   'offline:saveDraft': ch(
     z.object({ module: z.string().max(64), context: z.string().max(256), content: z.unknown() }),
     { session: true, rate: 20 },
@@ -1758,9 +1785,17 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'mail:images': { enabled: boolean; images: Record<string, string> };
   'mail:keptAttachments': string[];
   'smime:verify': SmimeVerdict;
+  'support:displays': { displays: WallDisplay[]; open: boolean };
+  'support:wall': void;
+  'support:wallClose': void;
+  'help:capture': { name: string; data: string; width: number; height: number };
+  'help:logs': { text: string; lines: number; bytes: number };
   'offline:submit': SubmitResult;
   'offline:retry': void;
   'offline:discard': void;
+  'offline:detail': { body: unknown; response: unknown } | null;
+  'offline:edit': void;
+  'offline:replay': { done: number; conflicts: number; failed: number; remaining: number };
   'offline:saveDraft': Draft;
   'offline:getDraft': Draft | null;
   'offline:listDrafts': Draft[];

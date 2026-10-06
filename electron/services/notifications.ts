@@ -77,10 +77,43 @@ export interface Incoming {
   websiteCount?: number;
   /** A flagged message's reminder (ENH-MAIL-03 DMO-TSK-02): Snooze 1 hour and Mark complete on the banner. */
   flag?: FlagNotice | null;
+  /** A banner a module shows its own way (Support's, D-03): its buttons, its reply box, and what they do. */
+  custom?: CustomNotice | null;
+  /** The bell's notification this banner stands for, when its id is not that one's: read when it is clicked. */
+  readId?: string | null;
   /** Social Media Manager's post, approval or inbox thread (SMM-DSK-002): View post, Approve, Reply, Copy caption. */
   social?: SocialNotice | null;
   /** A call the agent promised, due now (WS-MKT-SRS-001 MKT-CAL-12): Call now and Snooze 15 min on the banner. */
   callback?: CallbackNotice | null;
+}
+
+/**
+ * A banner a module words and answers itself (WS-SUPPORT-SRS-001 D-03): its buttons (macOS, Windows), whether it takes
+ * a typed reply and what the box says, whether it stays until acted on, whether it makes a sound — and what each does,
+ * which the module handles. Locked, or without the module's app any more, a button opens the app instead, as every
+ * banner's does; and with content hidden it has no buttons at all.
+ */
+export interface CustomNotice {
+  actions: string[];
+  /** The reply box's placeholder: a banner that takes a typed reply, where the system has one. */
+  reply?: string | null;
+  /** Stays on screen until it is acted on (and is urgent where the system says so). */
+  persistent?: boolean;
+  /** False: no sound, whatever the app's sounds are. */
+  sound?: boolean;
+  onAction: (index: number) => Promise<void> | void;
+  onReply?: (text: string | null) => Promise<void> | void;
+}
+
+/** A server notification as a module may claim it, to show it its own way (`NotificationService.claim`). */
+export interface ClaimedNotice {
+  id: string;
+  event: string | null;
+  title: string;
+  body: string;
+  link: string | null;
+  category: string | null;
+  priority: string | null;
 }
 
 /** The callback a Marketing reminder is about: its queue row and the time promised (the server's UTC stamp). */
@@ -312,6 +345,18 @@ export class NotificationService {
   snoozeCallback: ((c: CallbackNotice) => void) | null = null;
   /** The last banner shown for each website conversation, and how many messages it stands for: a new one replaces it (#230). */
   private websiteShown = new Map<number, { note: Notification; count: number; at: number }>();
+  /**
+   * A server notification a module shows its own way — Support's, with their buttons (D-03): true when it took it,
+   * so it is not shown plainly as well. Asked for each one pushed, and for each the list finds the push missed.
+   */
+  claim: (n: ClaimedNotice) => boolean = () => false;
+  /** Asked with the counts (every minute, and `notifications:refresh`): a module's own count, Support's. */
+  onRefresh: () => void = () => undefined;
+  /**
+   * The unread notifications about support tickets: the Dock and the tray count those tickets by the desk's own
+   * measure (`GET badges`), so these are not counted twice (FR-DSK-04).
+   */
+  private supportUnread = new Set<string>();
 
   constructor(
     private readonly db: Database,
@@ -354,11 +399,12 @@ export class NotificationService {
     this.userId = null;
     this.lastMailCount = null;
     this.unread = { mail: 0, chat: 0, notifications: 0, tasks: 0 };
+    this.supportUnread.clear();
     this.gapSince = null;
   }
 
   counts() {
-    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length };
+    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length, supportNotices: this.supportUnread.size };
   }
 
   /**
@@ -401,6 +447,7 @@ export class NotificationService {
   }
 
   async refreshCounts(): Promise<void> {
+    this.onRefresh();
     try {
       const [chat, notif, badges] = await Promise.allSettled([
         this.http.get<{ count?: number }>('/api/chat/unread'),
@@ -494,13 +541,16 @@ export class NotificationService {
       const raw = data.items ?? [];
       const items = raw.map(mapServerNotification);
       this.unread.notifications = Number(data.unread ?? items.filter((i) => !i.read).length);
+      this.supportUnread = new Set(items.filter((i) => !i.read && i.module === 'support').map((i) => i.id));
       this.cache(items);
       if (announce && this.listed) {
         const since = Date.now() - MISSED_WINDOW_MS;
         raw.forEach((n, k) => {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
-          if (n.desktop_allowed !== false) this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), social: socialNoticeActions(n.event_key ?? n.type, n.link, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+          if (n.desktop_allowed === false) return;
+          if (this.claim({ id: i.id, event: n.event_key ?? n.type ?? null, title: i.title, body: i.body, link: i.link, category: n.category ?? null, priority: n.priority ?? null })) return;
+          this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), social: socialNoticeActions(n.event_key ?? n.type, n.link, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
       this.listed = true;
@@ -555,6 +605,7 @@ export class NotificationService {
   async markRead(allIds: string[]): Promise<void> {
     this.markLocalRead(allIds.filter((id) => id.startsWith('local:')));
     const ids = allIds.filter((id) => !id.startsWith('local:'));
+    for (const id of ids) this.supportUnread.delete(id);
     await Promise.allSettled(ids.map((id) => this.http.post(`/api/notifications/${encodeURIComponent(id)}/read`)));
     if (this.userId) for (const id of ids) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ? AND id = ?', this.userId, id);
     for (const id of ids) this.live.get(id)?.close();
@@ -563,6 +614,7 @@ export class NotificationService {
 
   async markAllRead(): Promise<void> {
     this.markLocalRead('all');
+    this.supportUnread.clear();
     await this.http.post('/api/notifications/read-all');
     if (this.userId) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ?', this.userId);
     for (const n of this.live.values()) n.close();
@@ -585,6 +637,15 @@ export class NotificationService {
         if (!id) return;
         this.unread.notifications += 1;
         const link = typeof e.link === 'string' ? e.link : null;
+        const category = typeof e.category === 'string' ? e.category : null;
+        if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
+        // Shown its module's way (Support's banners): remembered, so the list does not show it again.
+        if (!this.shown.includes(id) && this.claim({ id, event: typeof e.event === 'string' ? e.event : null, title: String(e.title ?? 'Notification'), body: String(e.body ?? ''), link, category, priority: typeof e.priority === 'string' ? e.priority : null })) {
+          this.remember(id);
+          this.onChanged();
+          void this.refreshList(true);
+          break;
+        }
         this.notify({
           id,
           reminder: e.event === 'task.reminder' ? reminderAction(link, e.actions) : null,
@@ -833,20 +894,24 @@ export class NotificationService {
     const locked = this.isLocked();
     const privacy: NotificationPrivacy = locked ? 'GENERIC' : this.prefs().notificationPrivacy;
     const shown = locked ? presentLocked(n, this.prefs()) : present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1), this.prefs().language);
-    const replyable = !!n.website && !!this.sendWebsiteReply && inlineReply(process.platform, privacy, locked);
+    const custom = n.custom ?? null;
+    const replyable = ((!!n.website && !!this.sendWebsiteReply) || (!!custom?.reply && !!custom.onReply)) && inlineReply(process.platform, privacy, locked);
+    const lasting = n.critical || !!custom?.persistent;
     const icon = process.platform === 'darwin' ? undefined : nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '128x128.png'));
     const note = new Notification({
       title: shown.title,
       body: shown.body,
-      silent: !this.prefs().notificationSounds || locked && this.prefs().lockedNotificationSounds === false,
+      silent: !this.prefs().notificationSounds || custom?.sound === false || (locked && this.prefs().lockedNotificationSounds === false),
       icon,
-      urgency: n.critical ? 'critical' : 'normal',
+      urgency: lasting ? 'critical' : 'normal',
       hasReply: replyable,
-      replyPlaceholder: replyable && n.website ? localize('Reply to {visitor}', this.prefs().language, { visitor: n.website.visitor }) : undefined,
+      replyPlaceholder: replyable && n.website ? localize('Reply to {visitor}', this.prefs().language, { visitor: n.website.visitor }) : replyable && custom?.reply ? custom.reply : undefined,
       actions:
         privacy !== 'FULL'
           ? undefined
-          : n.reminder
+          : custom
+            ? custom.actions.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
+            : n.reminder
             ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }]
             : n.flag
               ? FLAG_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
@@ -859,7 +924,7 @@ export class NotificationService {
                   : n.callback
                     ? CALLBACK_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
                     : undefined,
-      timeoutType: n.critical ? 'never' : 'default',
+      timeoutType: lasting ? 'never' : 'default',
     });
     // One banner per website conversation: a new message replaces the last (worksuite-desktop#230).
     if (n.website) {
@@ -868,10 +933,22 @@ export class NotificationService {
     }
     note.on('click', () => {
       this.onClick(n.link, n.module);
-      if (/^\d+$/.test(n.id)) void this.markRead([n.id]).catch(() => undefined);
+      const readId = n.readId ?? (/^\d+$/.test(n.id) ? n.id : null);
+      if (readId) void this.markRead([readId]).catch(() => undefined);
     });
     const recipient = this.userId;
     note.on('action', (_event, index) => {
+      if (custom && recipient === this.userId) {
+        if (this.isLocked() || !this.moduleEnabled(n)) {
+          this.onClick(n.link, n.module);
+          return;
+        }
+        void Promise.resolve()
+          .then(() => custom.onAction(index))
+          .catch((error: unknown) => log.debug('a banner button failed', { module: n.module, error: String(error) }))
+          .finally(() => note.close());
+        return;
+      }
       if (n.flag && recipient === this.userId) {
         void this.flagAction(n, n.flag, index).then(() => note.close());
         return;
@@ -918,6 +995,18 @@ export class NotificationService {
       });
     });
     note.on('reply', (details, legacy) => {
+      if (custom?.onReply && recipient === this.userId) {
+        const text = replyText(details, legacy);
+        if (this.isLocked() || !this.moduleEnabled(n)) {
+          this.onClick(n.link, n.module);
+          return;
+        }
+        void Promise.resolve()
+          .then(() => custom.onReply!(text))
+          .catch((error: unknown) => log.debug('a banner reply failed', { module: n.module, error: String(error) }))
+          .finally(() => note.close());
+        return;
+      }
       if (!n.website || recipient !== this.userId) return;
       void this.websiteReply(n, n.website, replyText(details, legacy)).then(() => note.close());
     });

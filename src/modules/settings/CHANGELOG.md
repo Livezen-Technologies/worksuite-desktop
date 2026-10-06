@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.26.0 — 2026-10-06
+
+**Added**
+
+- Next tab and Previous tab (⌘⇧] and ⌘⇧[, Ctrl+Shift+] and Ctrl+Shift+[ elsewhere) among the keyboard shortcuts, to remap like the others
+- Support: copy the ticket's link (⌘⇧C / Ctrl+Shift+C) among the keyboard shortcuts
+- ⌘K search lists Support tickets (status, priority, requester, whose) with the ticket in front's actions beside it, and ⌘⇧C / Ctrl+Shift+C copies a result's link (WS-SUPPORT-SRS-001 D-08)
+
 ## 1.25.0 — 2026-10-06
 
 **Added**

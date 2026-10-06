@@ -26,6 +26,8 @@ export function useDraft<T>(module: string, context: string, initial: T): {
   value: T;
   setValue: (v: T) => void;
   restored: boolean;
+  /** This computer has been asked for a saved draft (found or not): what is shown is what was kept here. */
+  loaded: boolean;
   clear: () => Promise<void>;
   /** A change is waiting to be written, or being written. */
   saving: boolean;
@@ -34,6 +36,7 @@ export function useDraft<T>(module: string, context: string, initial: T): {
 } {
   const [value, setValueState] = useState<T>(initial);
   const [restored, setRestored] = useState(false);
+  const [loaded, setLoaded] = useState(false);
   const [saving, setSaving] = useState(false);
   const [savedAt, setSavedAt] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -49,7 +52,10 @@ export function useDraft<T>(module: string, context: string, initial: T): {
           setRestored(true);
         }
       })
-      .catch(() => undefined);
+      .catch(() => undefined)
+      .finally(() => {
+        if (alive) setLoaded(true);
+      });
     return () => {
       alive = false;
     };
@@ -100,5 +106,5 @@ export function useDraft<T>(module: string, context: string, initial: T): {
     setSaving(false);
   }, [module, context]);
 
-  return { value, setValue, restored, clear, saving, savedAt };
+  return { value, setValue, restored, loaded, clear, saving, savedAt };
 }

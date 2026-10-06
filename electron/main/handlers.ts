@@ -1,5 +1,6 @@
 import { verifyLockChange } from '../services/lock-verification';
-import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, nativeImage, screen, shell, systemPreferences, type WebContents } from 'electron';
+import { wallDisplays } from '../services/live-desk';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { writeAtomically } from '../services/pdf/host';
@@ -32,7 +33,8 @@ import { openExternalSafely } from '../security/hardening';
 import { answerNotice } from '../services/ai-pending';
 import { notificationSettingsUrl } from '../services/locked-notifications';
 import { broadcast } from './events';
-import { logger } from './log';
+import { logger, recentLog } from './log';
+import { captureName, helpLogText } from '../services/ai-help';
 import { screenTimings } from '../services/screen-timings';
 
 /** The web app's pages `auth:openPage` may open, signed out. */
@@ -993,7 +995,23 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     ctx.queue.retry(uid(), input.id);
     void ctx.queue.replay(uid());
   });
+  // The support wallboard (D-12): which screens there are, and the wallboard on one of them.
+  router.handle('support:displays', () => ({ displays: wallDisplays(screen.getAllDisplays(), ctx.windows.mainDisplayId()), open: ctx.windows.supportWallOpen() }));
+  router.handle('support:wall', (input) => void ctx.windows.showSupportWall(input.displayId));
+  router.handle('support:wallClose', () => void ctx.windows.closeSupportWall());
+  // Contact Support (D-11): the asking window's own pixels, and the last day's log (redacted as it was written).
+  router.handle('help:capture', async (_i, c) => {
+    const w = winOf(c.sender);
+    if (!w || w.isDestroyed()) throw new DesktopError('NOT_FOUND', 'There is no window to capture.');
+    const img = await w.webContents.capturePage();
+    const size = img.getSize();
+    return { name: captureName(new Date()), data: img.toPNG().toString('base64'), width: size.width, height: size.height };
+  });
+  router.handle('help:logs', () => helpLogText(recentLog(), Date.now()));
   router.handle('offline:discard', (input) => ctx.queue.discard(uid(), input.id));
+  router.handle('offline:detail', (input) => ctx.queue.detail(uid(), input.id));
+  router.handle('offline:edit', (input) => ctx.queue.edit(uid(), input.id, input.body));
+  router.handle('offline:replay', () => ctx.queue.replay(uid()));
   router.handle('offline:saveDraft', (input) => ctx.queue.saveDraft(uid(), input.module, input.context, input.content));
   router.handle('offline:getDraft', (input) => ctx.queue.getDraft(uid(), input.module, input.context));
   router.handle('offline:listDrafts', (input) => ctx.queue.listDrafts(uid(), input?.module));
