@@ -1,10 +1,10 @@
 import { useQuery } from '@tanstack/react-query';
-import { useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
+import { useDeferredValue, useMemo, useState, type CSSProperties, type MouseEvent } from 'react';
 import { Icon } from '../../components/Icon';
 import { Empty, Modal, Spinner, cx } from '../../components/ui';
-import { addDays, amount, clockAt, fetchCalendar, K, longDay, minutesOf, owing, todayAt, type CalendarDay, type Visit, type VisitItem } from './api';
-import { calendarFromCopy, copyAge, copyHolds, unreachable } from './offline';
-import { AllergyChip, Failed, Note, servicesOf, stylistsOf, Tag, TouchButton, useDesk, useNow, Who } from './parts';
+import { addDays, amount, clockAt, dayMonth, fetchCalendar, fetchVisitRange, K, longDay, minutesOf, owing, todayAt, weekOf, type CalendarDay, type Visit, type VisitFilter, type VisitItem } from './api';
+import { calendarFromCopy, copyAge, copyHolds, unreachable, visitsOf } from './offline';
+import { AllergyChip, Failed, firstName, Note, Segmented, servicesOf, stylistsOf, Tag, TouchButton, useDesk, useNow, Who } from './parts';
 
 /**
  * The day by stylist (D03): each stylist's working hours, and every booking
@@ -74,13 +74,79 @@ export function toneOf(item: Pick<VisitItem, 'status' | 'starts_at'>, now: numbe
   return item.status === 'pending' ? 'pending' : 'confirmed';
 }
 
+type Mode = 'day' | 'week' | 'list';
+
 export default function Calendar() {
   const desk = useDesk();
   const tz = desk.location.timezone;
   const clock = useNow(60_000);
   const today = todayAt(tz, new Date(clock));
   const date = desk.params.get('date') ?? today;
+  const raw = desk.params.get('mode');
+  const mode: Mode = raw === 'week' || raw === 'list' ? raw : 'day';
   const [open, setOpen] = useState<Visit | null>(null);
+  const book = desk.may('salon.visit.book');
+  const step = mode === 'day' ? 1 : 7;
+  const from = weekOf(date);
+  const go = (d: string | null, m: Mode = mode) => desk.go('calendar', { date: d, mode: m === 'day' ? null : m });
+
+  return (
+    <div className="flex h-full min-h-0 flex-col gap-3.5 px-5 py-4">
+      <div className="flex flex-wrap items-center gap-2.5">
+        <TouchButton className="w-12 px-0" aria-label={mode === 'day' ? 'The day before' : 'The week before'} onClick={() => go(addDays(date, -step))}>
+          <Icon name="chevron-left" size={20} />
+        </TouchButton>
+        <TouchButton onClick={() => go(null)}>Today</TouchButton>
+        <TouchButton className="w-12 px-0" aria-label={mode === 'day' ? 'The day after' : 'The week after'} onClick={() => go(addDays(date, step))}>
+          <Icon name="chevron-right" size={20} />
+        </TouchButton>
+        <h1 className="ml-1.5 text-[20px] font-extrabold text-ink">{mode === 'day' ? longDay(date).replace(/ \d{4}$/, '') : weekTitle(from)}</h1>
+        <div className="w-[264px]">
+          <Segmented
+            label="Calendar view"
+            value={mode}
+            onChange={(m) => go(date, m)}
+            options={[
+              { value: 'day', label: 'Day' },
+              { value: 'week', label: 'Week' },
+              { value: 'list', label: 'List' },
+            ]}
+          />
+        </div>
+        <div className="flex-1" />
+        {book ? (
+          <>
+            <TouchButton icon="door" onClick={() => desk.walkIn({})}>
+              Walk-in
+            </TouchButton>
+            <TouchButton variant="primary" icon="plus" onClick={() => desk.walkIn({ date }, true)}>
+              New booking
+            </TouchButton>
+          </>
+        ) : null}
+      </div>
+
+      {mode === 'day' ? (
+        <DayView date={date} today={today} clock={clock} onOpen={setOpen} />
+      ) : mode === 'week' ? (
+        <WeekView from={from} today={today} clock={clock} onOpen={setOpen} onDay={(d) => go(d, 'day')} />
+      ) : (
+        <ListView from={from} today={today} clock={clock} onOpen={setOpen} />
+      )}
+
+      {open ? <VisitActions visit={open} onClose={() => setOpen(null)} /> : null}
+    </div>
+  );
+}
+
+/** "28 Sep – 04 Oct": a week, Monday to Sunday. */
+export function weekTitle(from: string): string {
+  return `${dayMonth(from, false)} – ${dayMonth(addDays(from, 6), false)}`;
+}
+
+function DayView({ date, today, clock, onOpen }: { date: string; today: string; clock: number; onOpen: (v: Visit) => void }) {
+  const desk = useDesk();
+  const tz = desk.location.timezone;
   const live0 = useQuery({ queryKey: K.calendar(desk.location.id, date), queryFn: ({ signal }) => fetchCalendar(desk.location.id, date, signal), refetchInterval: 60_000, retry: desk.offline ? false : undefined });
   const offline = desk.offline || unreachable(live0);
   const copied = offline && desk.copy && copyHolds(desk.copy, date, clock) ? calendarFromCopy(desk.copy, date) : null;
@@ -95,29 +161,7 @@ export default function Calendar() {
   const book = desk.may('salon.visit.book');
 
   return (
-    <div className="flex h-full min-h-0 flex-col gap-3.5 px-5 py-4">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <TouchButton className="w-12 px-0" aria-label="The day before" onClick={() => desk.go('calendar', { date: addDays(date, -1) })}>
-          <Icon name="chevron-left" size={20} />
-        </TouchButton>
-        <TouchButton onClick={() => desk.go('calendar')}>Today</TouchButton>
-        <TouchButton className="w-12 px-0" aria-label="The day after" onClick={() => desk.go('calendar', { date: addDays(date, 1) })}>
-          <Icon name="chevron-right" size={20} />
-        </TouchButton>
-        <h1 className="ml-1.5 text-[20px] font-extrabold text-ink">{longDay(date).replace(/ \d{4}$/, '')}</h1>
-        <div className="flex-1" />
-        {book ? (
-          <>
-            <TouchButton icon="door" onClick={() => desk.walkIn({})}>
-              Walk-in
-            </TouchButton>
-            <TouchButton variant="primary" icon="plus" onClick={() => desk.walkIn({ date }, true)}>
-              New booking
-            </TouchButton>
-          </>
-        ) : null}
-      </div>
-
+    <>
       {copied ? <Note tone="muted">From this desk’s copy, taken at {copyAge(desk.copy, tz)} — stylists’ own hours and time off show when WorkSuite answers.</Note> : null}
       {offline && !copied ? (
         <Note tone="warning">WorkSuite cannot be reached, and this desk’s copy does not hold {longDay(date)}.</Note>
@@ -203,7 +247,7 @@ export default function Calendar() {
                       );
                     })}
                     {items.map(({ v, i }) => (
-                      <Block key={`${v.id}-${i.appointment_id}`} visit={v} item={i} top={y(minutesOf(i.start))} height={((minutesOf(i.end) || minutesOf(i.start) + i.duration_min) - minutesOf(i.start)) * PX_PER_MIN} tone={toneOf(i, clock, isToday)} onOpen={() => setOpen(v)} />
+                      <Block key={`${v.id}-${i.appointment_id}`} visit={v} item={i} top={y(minutesOf(i.start))} height={((minutesOf(i.end) || minutesOf(i.start) + i.duration_min) - minutesOf(i.start)) * PX_PER_MIN} tone={toneOf(i, clock, isToday)} onOpen={() => onOpen(v)} />
                     ))}
                   </div>
                 );
@@ -218,9 +262,231 @@ export default function Calendar() {
           </div>
         </div>
       )}
+    </>
+  );
+}
 
-      {open ? <VisitActions visit={open} onClose={() => setOpen(null)} /> : null}
-    </div>
+/** Whether a visit is one a filter keeps — the server's rules, for the desk's copy. */
+export function visitMatches(v: Visit, f: VisitFilter): boolean {
+  if (f.stylist && !v.items.some((i) => i.provider_id === f.stylist)) return false;
+  if (f.status && !f.status.split(',').includes(v.status)) return false;
+  if (f.allergy && !v.client.allergy) return false;
+  const term = f.q?.trim().toLowerCase();
+  if (term && ![v.number, v.client.name, v.client.phone ?? ''].some((s) => s.toLowerCase().includes(term))) return false;
+  return true;
+}
+
+/** A week of the book from WorkSuite, or from the desk's copy for the days it holds. */
+function useRange(from: string, to: string, f: VisitFilter, clock: number) {
+  const desk = useDesk();
+  const live = useQuery({
+    queryKey: K.range(desk.location.id, from, to, JSON.stringify(f)),
+    queryFn: ({ signal }) => fetchVisitRange(desk.location.id, from, to, f, signal),
+    refetchInterval: 60_000,
+    retry: desk.offline ? false : undefined,
+  });
+  const days = Array.from({ length: 7 }, (_, i) => addDays(from, i));
+  if ((desk.offline || unreachable(live)) && desk.copy) {
+    const copy = desk.copy;
+    return {
+      days,
+      visits: visitsOf(copy).filter((v) => v.date >= from && v.date <= to && visitMatches(v, f)),
+      held: new Set(days.filter((d) => copyHolds(copy, d, clock))),
+      copied: true,
+      live,
+    };
+  }
+  return { days, visits: live.data, held: null, copied: false, live };
+}
+
+const ACTIVE = (v: Visit) => v.status !== 'cancelled' && v.status !== 'no_show';
+
+function RangeState({ r, label }: { r: ReturnType<typeof useRange>; label: string }) {
+  const desk = useDesk();
+  if (r.copied) return <Note tone="muted">From this desk’s copy, taken at {copyAge(desk.copy, desk.location.timezone) ?? '—'}. Days it does not hold are marked.</Note>;
+  if (desk.offline || unreachable(r.live)) return <Note tone="warning">WorkSuite cannot be reached, and this desk has no copy of the book.</Note>;
+  if (r.live.isError) return <Failed text={`The ${label} could not be loaded.`} onRetry={() => void r.live.refetch()} />;
+  if (!r.visits) return <Spinner label={`Loading the ${label}…`} />;
+  return null;
+}
+
+/** Monday to Sunday, a column a day: every booking in time order. A day's heading opens it by stylist. */
+function WeekView({ from, today, clock, onOpen, onDay }: { from: string; today: string; clock: number; onOpen: (v: Visit) => void; onDay: (d: string) => void }) {
+  const r = useRange(from, addDays(from, 6), {}, clock);
+  const byDay = new Map<string, Visit[]>();
+  for (const v of r.visits ?? []) byDay.set(v.date, [...(byDay.get(v.date) ?? []), v]);
+
+  return (
+    <>
+      <RangeState r={r} label="week" />
+      {r.visits ? (
+        <div className="min-h-0 flex-1 overflow-auto rounded-[14px] border border-line bg-surface scroll-thin">
+          <div className="grid min-h-full min-w-[1050px] grid-cols-7">
+            {r.days.map((d) => {
+              const list = (byDay.get(d) ?? []).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+              const isToday = d === today;
+              const n = list.filter(ACTIVE).length;
+              return (
+                <div key={d} className="flex min-w-0 flex-col border-l border-line first:border-l-0">
+                  <button
+                    type="button"
+                    onClick={() => onDay(d)}
+                    title="Open this day by stylist"
+                    className={cx('sticky top-0 z-10 flex min-h-12 items-center justify-between gap-2 border-b border-line px-3 text-left', isToday ? 'bg-selection' : 'bg-[#F8FAFC] hover:bg-subtle dark:bg-subtle')}
+                  >
+                    <span className={cx('text-[14px] font-bold', isToday ? 'text-primary' : 'text-ink')}>{weekdayLabel(d)}</span>
+                    <span className="text-[12px] font-semibold text-ink-3 tabular-nums">{n === 0 ? '' : `${n} booked`}</span>
+                  </button>
+                  <div className="flex flex-col gap-1.5 p-1.5">
+                    {r.held && !r.held.has(d) ? (
+                      <div className="px-1.5 py-3 text-[12px] text-ink-3">Not in this desk’s copy</div>
+                    ) : list.length === 0 ? (
+                      <div className="px-1.5 py-3 text-[12px] text-ink-3">Nothing booked</div>
+                    ) : (
+                      list.map((v) => <WeekCard key={v.id} visit={v} tone={toneOf(v, clock, isToday)} onOpen={() => onOpen(v)} />)
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+/** "Mon 28". */
+function weekdayLabel(ymd: string): string {
+  return `${new Date(`${ymd}T12:00:00Z`).toLocaleDateString('en-GB', { weekday: 'short', timeZone: 'UTC' })} ${Number(ymd.slice(8, 10))}`;
+}
+
+function WeekCard({ visit, tone, onOpen }: { visit: Visit; tone: Tone; onOpen: () => void }) {
+  const t = TONES[tone];
+  const first = visit.items[0];
+  return (
+    <button
+      type="button"
+      onClick={onOpen}
+      className={cx('rounded-[8px] border border-l-4 px-2 py-1.5 text-left text-[12.5px] leading-snug hover:shadow-sm hover:brightness-[.98]', t.cls)}
+      style={{ borderColor: `${t.line}33`, borderLeftColor: t.line }}
+      title={`${visit.start}–${visit.end} · ${visit.client.name} · ${servicesOf(visit)} · ${visit.status_label}`}
+    >
+      <div className="flex min-w-0 items-center gap-1.5">
+        <b className="tabular-nums">{visit.start}</b>
+        {first ? <Who name={first.provider} color={first.provider_color} size={18} /> : null}
+        <span className="min-w-0 flex-1 truncate opacity-85">{first ? firstName(first.provider) : ''}</span>
+        {visit.client.allergy ? <Icon name="warning" size={13} className="shrink-0 text-[#BE123C] dark:text-[#FDA4AF]" label="Allergy on file" /> : null}
+        {visit.money.deposit_owed > 0 ? <Icon name="wallet" size={13} className="shrink-0 text-[#B45309] dark:text-warning" label="Deposit owed" /> : null}
+      </div>
+      <div className={cx('truncate font-bold', tone === 'off' && 'line-through')}>{visit.client.name}</div>
+      <div className="truncate opacity-85">{servicesOf(visit)}</div>
+    </button>
+  );
+}
+
+const STATUS_FILTERS = {
+  all: '',
+  waiting: 'pending,confirmed',
+  in: 'checked_in,in_service',
+  done: 'completed',
+  off: 'cancelled,no_show',
+} as const;
+
+/** The week as a list, day by day, narrowed by stylist, state, allergy or a name (CAL-02). */
+function ListView({ from, today, clock, onOpen }: { from: string; today: string; clock: number; onOpen: (v: Visit) => void }) {
+  const desk = useDesk();
+  const [stylist, setStylist] = useState<number | null>(null);
+  const [status, setStatus] = useState<keyof typeof STATUS_FILTERS>('all');
+  const [allergy, setAllergy] = useState(false);
+  const [q, setQ] = useState('');
+  const term = useDeferredValue(q);
+  const r = useRange(from, addDays(from, 6), { stylist, status: STATUS_FILTERS[status], allergy, q: term }, clock);
+  const stylists = desk.options.stylists.filter((s) => s.active !== false && s.locations.includes(desk.location.id));
+  const list = [...(r.visits ?? [])].sort((a, b) => a.starts_at.localeCompare(b.starts_at));
+  const byDay = r.days.map((d) => ({ d, visits: list.filter((v) => v.date === d) })).filter((g) => g.visits.length > 0);
+
+  return (
+    <>
+      <div className="flex flex-wrap items-center gap-2.5">
+        <label className="flex h-12 min-w-[240px] flex-1 items-center gap-2 rounded-[12px] border border-line bg-surface px-3.5 focus-within:border-primary">
+          <Icon name="search" size={18} className="text-ink-3" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Client, mobile or visit number" aria-label="Search the week" className="bare-focus min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3" />
+        </label>
+        <select
+          aria-label="Stylist"
+          value={stylist ?? ''}
+          onChange={(e) => setStylist(e.target.value ? Number(e.target.value) : null)}
+          className="h-12 rounded-[12px] border border-line bg-surface px-3 text-[15px] text-ink"
+        >
+          <option value="">Every stylist</option>
+          {stylists.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.name}
+            </option>
+          ))}
+        </select>
+        <select aria-label="State" value={status} onChange={(e) => setStatus(e.target.value as keyof typeof STATUS_FILTERS)} className="h-12 rounded-[12px] border border-line bg-surface px-3 text-[15px] text-ink">
+          <option value="all">Every state</option>
+          <option value="waiting">Still to come</option>
+          <option value="in">In the salon</option>
+          <option value="done">Done</option>
+          <option value="off">Cancelled or no-show</option>
+        </select>
+        <TouchButton variant={allergy ? 'primary' : 'secondary'} icon="warning" aria-pressed={allergy} onClick={() => setAllergy(!allergy)}>
+          Allergy on file
+        </TouchButton>
+      </div>
+
+      <RangeState r={r} label="week" />
+      {r.visits ? (
+        <div className="min-h-0 flex-1 overflow-auto rounded-[14px] border border-line bg-surface scroll-thin">
+          {byDay.length === 0 ? (
+            <Empty icon="calendar" title="Nothing booked that matches." hint="Change the filters, or move to another week." />
+          ) : (
+            byDay.map(({ d, visits }) => (
+              <section key={d}>
+                <h2 className={cx('sticky top-0 z-10 flex items-baseline justify-between border-b border-line px-4 py-2 text-[13px] font-bold', d === today ? 'bg-selection text-primary' : 'bg-[#F8FAFC] text-ink dark:bg-subtle')}>
+                  <span>{longDay(d).replace(/ \d{4}$/, '')}</span>
+                  <span className="font-semibold text-ink-3">{visits.filter(ACTIVE).length} booked</span>
+                </h2>
+                <ul>
+                  {visits.map((v) => (
+                    <ListRow key={v.id} visit={v} tone={toneOf(v, clock, d === today)} held={!r.held || r.held.has(d)} onOpen={() => onOpen(v)} />
+                  ))}
+                </ul>
+              </section>
+            ))
+          )}
+        </div>
+      ) : null}
+    </>
+  );
+}
+
+function ListRow({ visit, tone, held, onOpen }: { visit: Visit; tone: Tone; held: boolean; onOpen: () => void }) {
+  const first = visit.items[0];
+  return (
+    <li className="border-t border-line first:border-t-0">
+      <button type="button" onClick={onOpen} disabled={!held} className="flex w-full items-center gap-3.5 px-4 py-2.5 text-left hover:bg-subtle disabled:opacity-60">
+        <span className="h-9 w-1 shrink-0 rounded-full" style={{ background: TONES[tone].line }} aria-hidden />
+        <span className="w-[118px] shrink-0 whitespace-nowrap text-[15px] font-bold text-ink tabular-nums">
+          {visit.start}–{visit.end}
+        </span>
+        {first ? <Who name={first.provider} color={first.provider_color} size={32} /> : null}
+        <span className="min-w-0 flex-1">
+          <span className="flex flex-wrap items-center gap-2">
+            <b className={cx('truncate text-[15px] text-ink', tone === 'off' && 'line-through')}>{visit.client.name}</b>
+            {visit.client.allergy ? <AllergyChip allergy={visit.client.allergy} /> : null}
+            {visit.money.deposit_owed > 0 ? <Tag tone="warning">Deposit owed</Tag> : visit.money.advance > 0 ? <Tag tone="violet">Advance</Tag> : null}
+          </span>
+          <span className="block truncate text-[13px] text-ink-2">
+            {servicesOf(visit)} · {stylistsOf(visit)} · {visit.number}
+          </span>
+        </span>
+        <Tag tone={tone === 'late' ? 'danger' : tone === 'service' ? 'success' : tone === 'pending' ? 'warning' : tone === 'off' || tone === 'done' ? 'muted' : 'blue'}>{tone === 'late' ? 'Late' : visit.status_label}</Tag>
+      </button>
+    </li>
   );
 }
 

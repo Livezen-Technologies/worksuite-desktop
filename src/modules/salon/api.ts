@@ -330,6 +330,7 @@ export const K = {
   options: (org: number | null) => ['salon', 'options', org] as const,
   today: (loc: number) => ['salon', 'today', loc] as const,
   calendar: (loc: number, date: string) => ['salon', 'calendar', loc, date] as const,
+  range: (loc: number, from: string, to: string, f: string) => ['salon', 'range', loc, from, to, f] as const,
   visit: (id: number) => ['salon', 'visit', id] as const,
   clients: (org: number, q: string) => ['salon', 'clients', org, q] as const,
   client: (id: number) => ['salon', 'client', id] as const,
@@ -362,6 +363,40 @@ export const fetchClient = (id: number, signal?: AbortSignal) => apiGet<ClientCa
 export const fetchAvailability = (loc: number, date: string, items: string, signal?: AbortSignal) => apiGet<AvailabilityDay>(`${BASE}/availability`, { location: loc, date, items }, signal);
 export const fetchQuote = (loc: number, client: number | null, items: string, signal?: AbortSignal) =>
   apiGet<VisitQuote>(`${BASE}/quote-visit`, { location: loc, client: client ?? undefined, items }, signal);
+
+/** What the week and list views narrow the book to; the server filters by the same rules. */
+export interface VisitFilter {
+  stylist?: number | null;
+  /** Comma-separated statuses. */
+  status?: string;
+  allergy?: boolean;
+  q?: string;
+}
+
+/**
+ * Every visit at a location from one salon day to another, both included —
+ * page by page, as the server answers 200 at a time (CAL-02's week and list).
+ */
+export async function fetchVisitRange(loc: number, from: string, to: string, f: VisitFilter = {}, signal?: AbortSignal): Promise<Visit[]> {
+  const out: Visit[] = [];
+  let cursor: string | null = null;
+  for (let page = 0; page < 10; page++) {
+    const r: { items: Visit[]; next: string | null } = await apiGet(
+      `${BASE}/visits`,
+      { location: loc, from, to, limit: 200, cursor: cursor ?? undefined, stylist: f.stylist ?? undefined, status: f.status || undefined, allergy: f.allergy ? 1 : undefined, q: f.q?.trim() || undefined },
+      signal,
+    );
+    out.push(...r.items);
+    cursor = r.next;
+    if (!cursor) break;
+  }
+  return out;
+}
+
+/** The Monday of the week a day falls in. */
+export function weekOf(ymd: string): string {
+  return addDays(ymd, 1 - (new Date(`${ymd}T12:00:00Z`).getUTCDay() || 7));
+}
 
 // ── writes ──────────────────────────────────────────────────────────────
 

@@ -3,7 +3,7 @@ import { APP_CATALOGUE, isAppVisible } from '@shared/apps';
 import { tabRecordSchema } from '@shared/ipc/contract';
 import { ApiError } from '../../../src/core/api';
 import * as s from '../../../src/modules/salon/api';
-import { dayWindow, gaps, toneOf } from '../../../src/modules/salon/Calendar';
+import { dayWindow, gaps, toneOf, visitMatches, weekTitle } from '../../../src/modules/salon/Calendar';
 import { hours } from '../../../src/modules/salon/NewBooking';
 import { greetingFor, safeColor, salonRoute, seedOf, seedParam } from '../../../src/modules/salon/parts';
 
@@ -282,5 +282,51 @@ describe('a time tapped on the calendar', () => {
   it('travels with the stylist and day into New booking', () => {
     const seed = seedParam({ provider_id: 2, date: '2026-09-29', time: '10:30' });
     expect(seedOf(new URLSearchParams(salonRoute('book', { seed }).split('?')[1]))).toEqual({ provider_id: 2, date: '2026-09-29', time: '10:30' });
+  });
+});
+
+describe('the week and the list (CAL-02)', () => {
+  it('starts a week on its Monday, and names it by its first and last days', () => {
+    expect(s.weekOf('2026-09-28')).toBe('2026-09-28');
+    expect(s.weekOf('2026-10-04')).toBe('2026-09-28');
+    expect(s.weekOf('2026-10-01')).toBe('2026-09-28');
+    expect(weekTitle('2026-09-28')).toBe('28 Sep – 04 Oct');
+    expect(weekTitle('2026-12-28')).toBe('28 Dec – 03 Jan');
+  });
+
+  it('narrows the desk’s copy by the same rules as the server', () => {
+    const item = { appointment_id: 1, service_id: 1, service: 'Cut', provider_id: 2, provider: 'Kasun', provider_color: null, status: 'confirmed' as const, status_label: 'Confirmed', starts_at: '', ends_at: '', start: '10:00', end: '11:00', duration_min: 60, price: 3500 };
+    const v = visit({ items: [item], client: { id: 9, name: 'Amaya Senanayake', phone: '+94771234567', tier: null, reliability: 'reliable', allergy: { severity: 'severe', substance: 'PPD' } as never } });
+    expect(visitMatches(v, {})).toBe(true);
+    expect(visitMatches(v, { stylist: 2 })).toBe(true);
+    expect(visitMatches(v, { stylist: 3 })).toBe(false);
+    expect(visitMatches(v, { status: 'pending,confirmed' })).toBe(true);
+    expect(visitMatches(v, { status: 'completed' })).toBe(false);
+    expect(visitMatches(v, { allergy: true })).toBe(true);
+    expect(visitMatches(visit(), { allergy: true })).toBe(false);
+    expect(visitMatches(v, { q: 'amaya' })).toBe(true);
+    expect(visitMatches(v, { q: '077123' })).toBe(false);
+    expect(visitMatches(v, { q: '+9477' })).toBe(true);
+    expect(visitMatches(v, { q: 'apt-000001' })).toBe(true);
+  });
+
+  it('reads every page of a week from the server', async () => {
+    const calls: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        calls.push(url);
+        const next = calls.length === 1 ? 'c2' : null;
+        return new Response(JSON.stringify({ status: 'success', data: { items: [visit({ id: calls.length })], next } }), { status: 200, headers: { 'content-type': 'application/json' } });
+      }),
+    );
+    const got = await s.fetchVisitRange(1, '2026-09-28', '2026-10-04', { status: 'confirmed', allergy: true, q: ' ama ' });
+    expect(got.map((v) => v.id)).toEqual([1, 2]);
+    expect(calls[0]).toContain('from=2026-09-28');
+    expect(calls[0]).toContain('to=2026-10-04');
+    expect(calls[0]).toContain('allergy=1');
+    expect(calls[0]).toContain('q=ama');
+    expect(calls[0]).not.toContain('cursor=');
+    expect(calls[1]).toContain('cursor=c2');
   });
 });
