@@ -1,4 +1,5 @@
-import { saleFlags, type PosPrintOutcome, type PosPrintPatch, type PosPrintSettings, type PosReport, type PosSale, type PosServerReceipt } from '@shared/pos';
+import { code128Encodable, code128Svg } from '@shared/code128';
+import { saleFlags, vatRows, type PosPrintOutcome, type PosPrintPatch, type PosPrintSettings, type PosReport, type PosSale, type PosServerReceipt } from '@shared/pos';
 import { DesktopError } from '../main/errors';
 import { drawerPulse, printInWindow, sendRaw, type PrintJob, type PrintResult } from './salon-print';
 
@@ -49,7 +50,9 @@ export const COLUMNS: Record<PosPrintSettings['paper'], number> = { '80mm': 48, 
 export type ReceiptRow =
   | { kind: 'text'; text: string; align?: 'left' | 'center'; bold?: boolean; big?: boolean }
   | { kind: 'pair'; left: string; right: string; bold?: boolean }
-  | { kind: 'rule' };
+  | { kind: 'rule' }
+  /** The receipt number as a Code 128 barcode (scanned back for a return), its digits printed under it. */
+  | { kind: 'barcode'; text: string };
 
 const METHOD: Record<string, string> = { cash: 'Cash', card: 'Card', bank_transfer: 'Bank transfer', wallet: 'Wallet' };
 
@@ -93,7 +96,8 @@ export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 
   rows.push({ kind: 'rule' });
   rows.push({ kind: 'pair', left: 'Subtotal', right: money(sale.totals.subtotal) });
   if (sale.totals.discount) rows.push({ kind: 'pair', left: `Discount${sale.discount_pct ? ` ${sale.discount_pct}%` : ''}`, right: `-${money(sale.totals.discount)}` });
-  rows.push({ kind: 'pair', left: 'Tax', right: money(sale.totals.tax) });
+  // The tax by rate ("VAT 18%"), from the lines WorkSuite (or the preview) priced.
+  for (const v of vatRows(sale.lines, sale.totals.tax)) rows.push({ kind: 'pair', left: v.label, right: money(v.amount) });
   rows.push({ kind: 'pair', left: 'TOTAL', right: money(sale.totals.total, sale.currency), bold: true });
   rows.push({ kind: 'rule' });
   for (const t of sale.tenders) rows.push({ kind: 'pair', left: `${METHOD[t.method] ?? t.method}${t.reference ? ` (${t.reference})` : ''}`, right: money(t.amount) });
@@ -106,6 +110,7 @@ export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 
   const foot = lines(s.footer);
   if (foot.length) rows.push({ kind: 'rule' });
   for (const l of foot) rows.push({ kind: 'text', text: l, align: 'center' });
+  if (code128Encodable(sale.ref)) rows.push({ kind: 'barcode', text: sale.ref });
   return rows;
 }
 
@@ -153,6 +158,7 @@ export function serverReceiptRows(r: PosServerReceipt, s: Pick<PosPrintSettings,
   const foot = lines(s.footer || r.footer);
   if (foot.length) rows.push({ kind: 'rule' });
   for (const l of foot) rows.push({ kind: 'text', text: l, align: 'center' });
+  if (code128Encodable(r.receipt_no)) rows.push({ kind: 'barcode', text: r.receipt_no });
   return rows;
 }
 
@@ -227,6 +233,8 @@ export function escpos(rows: ReceiptRow[], width: number, o: { pulse?: Buffer | 
       if (r.bold) push(ESC, 0x45, 1);
       text(pairLine(plain(r.left), plain(r.right), width));
       if (r.bold) push(ESC, 0x45, 0);
+    } else if (r.kind === 'barcode') {
+      one.push(...barcodeBytes(r.text, width));
     } else {
       push(ESC, 0x61, r.align === 'center' ? 1 : 0);
       if (r.bold) push(ESC, 0x45, 1);
@@ -245,6 +253,16 @@ export function escpos(rows: ReceiptRow[], width: number, o: { pulse?: Buffer | 
   return Buffer.concat(parts);
 }
 
+/**
+ * A Code 128 barcode in the printer's own command (`GS k`, function B, set B): centred, 60 dots tall, two dots a
+ * module on an 80 mm roll (one on 58 mm, so it fits), the number printed under it (HRI).
+ */
+export function barcodeBytes(data: string, width: number): number[] {
+  if (!code128Encodable(data)) return [];
+  const body = [...Buffer.from(`{B${data}`, 'latin1')];
+  return [ESC, 0x61, 1, GS, 0x68, 60, GS, 0x77, width >= 48 ? 2 : 1, GS, 0x48, 2, GS, 0x66, 0, GS, 0x6b, 73, body.length, ...body, LF, ESC, 0x61, 0];
+}
+
 /* ── The same receipt as a page (the driver) ────────────────────────── */
 
 const esc = (t: string) => t.replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]!);
@@ -254,11 +272,12 @@ export function receiptHtml(rows: ReceiptRow[], paper: PosPrintSettings['paper']
   const body = rows
     .map((r) => {
       if (r.kind === 'rule') return '<hr>';
+      if (r.kind === 'barcode') return `<div class="c k">${code128Svg(r.text, { height: 44, module: 1 })}</div><div class="c">${esc(r.text)}</div>`;
       if (r.kind === 'pair') return `<div class="p${r.bold ? ' b' : ''}"><span>${esc(r.left)}</span><span>${esc(r.right)}</span></div>`;
       return `<div class="${[r.align === 'center' ? 'c' : '', r.bold ? 'b' : '', r.big ? 'g' : ''].join(' ').trim()}">${esc(r.text)}</div>`;
     })
     .join('');
-  return `<style>body{margin:0;width:${w}px;font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;color:#000}div{padding:0 6px;overflow-wrap:anywhere}.p{display:flex;justify-content:space-between;gap:8px}.p span:last-child{white-space:nowrap}.c{text-align:center}.b{font-weight:700}.g{font-size:16px}hr{border:0;border-top:1px dashed #000;margin:4px 6px}</style></head><body>${body}</body></html>`;
+  return `<style>body{margin:0;width:${w}px;font:12px/1.35 ui-monospace,Menlo,Consolas,monospace;color:#000}div{padding:0 6px;overflow-wrap:anywhere}.p{display:flex;justify-content:space-between;gap:8px}.p span:last-child{white-space:nowrap}.c{text-align:center}.b{font-weight:700}.g{font-size:16px}hr{border:0;border-top:1px dashed #000;margin:4px 6px}.k{margin-top:8px}.k svg{max-width:100%;height:auto}</style></head><body>${body}</body></html>`;
 }
 
 /* ── The service ─────────────────────────────────────────────────────── */
