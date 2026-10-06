@@ -18,12 +18,14 @@ gateway `/api/mobile/v1/support/*` (T08).
 |---|---|---|
 | T01 Data model v2 | Done | Livezen-Technologies/worksuite#108 |
 | T02 TicketService, `support.*` permissions, data scopes, references | Done | Livezen-Technologies/worksuite#108 |
-| T03 onward | Not started | — |
+| T03 Staff API v1, part 1 (`/api/support/v1`, contract in the server's `docs/SUPPORT_API.md`), read markers, mentions, realtime desks | Done | Livezen-Technologies/worksuite#108 |
+| T04 onward | Not started | — |
 
 ## Ground rules
 
-- **Server first, clients follow.** Every client screen calls `/api/v1/support/*`. The as-built `api/tickets*` and
-  `api/kb*` routes stay as aliases for two releases (§16.3).
+- **Server first, clients follow.** Every client screen calls `/api/support/v1/*`: the SRS writes `/api/v1/support`,
+  and the server keeps its house path `api/<module>/v1` for the same API. The contract is the server's
+  `docs/SUPPORT_API.md`. The as-built `api/tickets*` and `api/kb*` routes stay as aliases for two releases (§16.3).
 - **One write path** (§4.1). Every change to a ticket goes through `TicketService`. That service validates the
   state machine (§6.2), bumps `version`, writes a field-level `ticket_events` row and raises realtime and
   notifications.
@@ -50,8 +52,8 @@ gateway `/api/mobile/v1/support/*` (T08).
 |---|---|---|
 | **T01** | Data model v2 migration: extend `tickets` / `ticket_messages` / `ticket_events`; add `support_sequences`, `support_departments`, `support_teams(+members)`, `support_categories`, `support_tags` + `ticket_tags`, `ticket_watchers`, `ticket_links`, `ticket_attachments`, `support_saved_views`, `support_canned_responses`. Back-fill `organization_id` from the author's company and map `pending` → `pending_customer`. | §16.1, G-03, G-09, G-24 |
 | **T02** | `TicketService`: status state machine (8 statuses), `version` optimistic lock (409 with current state), field-level events, per-org reference prefix and sequence, `support.*` permission catalogue with legacy-slug aliases, data scopes (own / team / department / org). | §5, §6, FR-STS, FR-TKT-10, G-07, G-08, G-27 |
-| **T03** | API v1 (staff), part 1: list with views, filters, sort, cursor pagination and live counts; show; create; PATCH with `version`; messages (reply/note, mentions, attachments via Core Storage); assign / self-take; transition; agents; saved views; canned responses; trash/restore. Realtime `support.{orgId}`. | §16.2, FR-WSP, FR-ASN, FR-COM, G-05, G-12, G-13, G-26 |
-| **T04** | API v1, part 2: merge/split + duplicate detection, bulk actions, links (CRM, invoice, asset, chat), watchers, collision presence ("is viewing / typing"). Chat conversion v2: append to open ticket, transcript with page/browser, `POST /api/v1/support/conversions`. `POST /api/desktop/support`. | FR-TKT-06/07, FR-LCH, G-14, G-19, G-21 |
+| **T03** | API v1 (staff), part 1: list with views, filters, sort, cursor pagination and live counts; show; create; PATCH with `version`; messages (reply/note, mentions, attachments via Core Storage); assign / self-take; transition; agents; saved views; canned responses; trash/restore. Realtime `support:<orgId>` (as built: a desk hint with no ticket id, plus `user:<id>` hints by id for the people on a ticket). | §16.2, FR-WSP, FR-ASN, FR-COM, G-05, G-12, G-13, G-26 |
+| **T04** | API v1, part 2: merge/split + duplicate detection, bulk actions, links (CRM, invoice, asset, chat), watchers, collision presence ("is viewing / typing"). Chat conversion v2: append to open ticket, transcript with page/browser, `POST /api/support/v1/conversions`. `POST /api/desktop/support`. | FR-TKT-06/07, FR-LCH, G-14, G-19, G-21 |
 
 ### Phase B — Web agent workspace (worksuite · W-01…W-09)
 
