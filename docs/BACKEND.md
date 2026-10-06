@@ -83,6 +83,27 @@ The code is good for two minutes and one attempt. Without the verifier,
 which never leaves the app, it is worth nothing to another program that
 registered `worksuite://`.
 
+### WorkSuite Office "Continue as" (worksuite-office#6)
+
+WorkSuite Office, the desktop editor, signs in with the person's WorkSuite account. When this app is signed in on
+the same computer, WorkSuite Office offers **Continue as <name>** without a browser:
+
+1. This app keeps `<app data>/WorkSuite/desktop-accounts.json` (its own data folder, mode 600):
+   `{version: 1, app, accounts: [{server, user: {id, name, email, organization}}]}` — names and addresses only,
+   rewritten on sign-in and profile changes, emptied at sign-out (`electron/services/office-signin.ts`).
+2. WorkSuite Office opens `worksuite://office/signin?client=worksuite-office&server=…&uid=…&challenge=S256(verifier)&state=…`.
+3. This app checks the link names its own server and user, waits for the person to unlock it if it is locked, and
+   asks **Sign in to WorkSuite Office as <name>?** (Cancel is the default).
+4. On **Continue**, `POST /api/auth/apps/handoff {client: "worksuite-office", code_challenge, code_challenge_method: "S256"}`
+   with this app's session returns a one-time code (two minutes, one attempt), and the app opens
+   `worksuiteoffice://auth/callback?code=…&state=…` — a fixed address, never one the link named.
+5. WorkSuite Office exchanges `{client, code, code_verifier}` at `POST /api/auth/apps/exchange` for a session of its
+   own, which the person can end like any other.
+
+The verifier never leaves WorkSuite Office, so a program that opened the link without being it gets a code it
+cannot use. `/api/auth/apps/*` is refused by the renderer's API proxy: only the main process mints these codes.
+Needs the server's Auth 1.2.0.
+
 ### Revocation
 
 Revoking a laptop ends its session and queues a wipe. The server answers

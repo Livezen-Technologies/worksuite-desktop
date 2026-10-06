@@ -5,6 +5,18 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.189 — 2026-10-06
+
+- **"Continue as" in WorkSuite Office.** WorkSuite Office, the desktop editor, can sign in with your WorkSuite
+  account straight from this app: choose **Continue as <your name>** there and confirm here. No browser, no
+  password. WorkSuite Office gets a sign-in of its own, which you can end like any other session.
+  - The app asks every time, never while it is locked (it asks once you unlock), and only for the account and server
+    it is signed in to.
+  - WorkSuite Office learns who is signed in from `desktop-accounts.json` in the app's data folder: name, email,
+    organisation and server, never a token. It is emptied when you sign out.
+- **Security:** pages in the app can no longer call `/api/auth/apps/*` through the API proxy (files 1.8.4).
+- Needs the server's Auth 1.2.0.
+
 ## 0.2.188 — 2026-10-06
 
 - **Phone (WS-VOIP-SRS-001).** A new **Phone** app under Work: a softphone built into the app that registers your
