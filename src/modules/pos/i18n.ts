@@ -125,6 +125,17 @@ const en = {
   'pos.showAll': 'All',
   'pos.showReview': 'To review',
   'pos.noneToReview': 'No sales to review.',
+  'pos.settings': 'Till settings',
+  'pos.bar.label': 'The till',
+  'pos.bar.brand': 'WorkSuite POS',
+  'pos.bar.cashier': 'Cashier',
+  'pos.bar.menu': 'Till menu',
+  'pos.bar.noRegister': 'No register open',
+  'pos.bar.online': 'Online · synced',
+  'pos.bar.sending': 'Online · {n} sending',
+  'pos.bar.offline': 'Offline · {n} sales queued',
+  'pos.bar.full': 'Full screen',
+  'pos.bar.leaveFull': 'Leave full screen',
 } as const;
 
 export type PosKey = keyof typeof en;
