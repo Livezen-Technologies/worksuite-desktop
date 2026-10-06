@@ -12,6 +12,14 @@ design file (46 screens: W-01…W-19 web, D-01…D-12 desktop, M-01…M-15 mobil
 Mobile (M-01…M-15) lives in `worksuite-mobile`; that repo isn't in this session, so mobile is limited to the server
 gateway `/api/mobile/v1/support/*` (T08).
 
+## Progress
+
+| Task | State | Where |
+|---|---|---|
+| T01 Data model v2 | Done | Livezen-Technologies/worksuite#108 |
+| T02 TicketService, `support.*` permissions, data scopes, references | Done | Livezen-Technologies/worksuite#108 |
+| T03 onward | Not started | — |
+
 ## Ground rules
 
 - **Server first, clients follow.** Every client screen calls `/api/v1/support/*`. The as-built `api/tickets*` and
