@@ -22,7 +22,6 @@ vi.mock('electron', () => ({
 }));
 import { mapServerNotification, NotificationService } from '../../../electron/services/notifications';
 import { socialNoticeActions } from '../../../shared/social-notices';
-import { touchesSocialMedia } from '../../../src/core/query';
 import type { Preferences } from '../../../shared/types';
 import type { HttpClient } from '../../../electron/services/http';
 import type { Database } from '../../../electron/services/db';
@@ -91,11 +90,5 @@ describe('Social Media notification buttons', () => {
     s.handleRealtime({ type: 'notification', id: 78, event: 'social.post.reminder_due', category: 'social_media', title: 'Time to post on Instagram', body: 'Story: studio countdown', link: '/social-media/posts/121', actions: [{ copy: 'Story: studio countdown #CreativeFX' }] });
     notes[1]!.events.action!({}, 0);
     expect(clip.writeText).toHaveBeenCalledWith('Story: studio countdown #CreativeFX');
-  });
-
-  it('refreshes its screens on its own realtime events and notifications', () => {
-    expect(touchesSocialMedia({ type: 'social.post.published' })).toBe(true);
-    expect(touchesSocialMedia({ type: 'notification', event: 'social.inbox.assigned' })).toBe(true);
-    expect(touchesSocialMedia({ type: 'notification', event: 'mail.new' })).toBe(false);
   });
 });

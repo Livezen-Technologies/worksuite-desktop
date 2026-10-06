@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { touchesSocialMedia } from '../../../src/core/query';
 import { canPublishOn, hasLevel, socialAccess, usableAccounts } from '../../../src/modules/social-media/access';
 import { capabilitiesOf, DEFAULT_CAPABILITIES, networkInfo } from '../../../src/modules/social-media/lib/networks';
 import { accountStatusLabel, calendarBucket, canReschedule } from '../../../src/modules/social-media/lib/status';
@@ -212,5 +213,13 @@ describe('access (§14, SMM-ACC-011, AC-05)', () => {
 
   it('a super-admin has it all', () => {
     expect(Object.entries(socialAccess(['*'])).every(([, v]) => v)).toBe(true);
+  });
+});
+
+describe('live refresh', () => {
+  it('refreshes its screens on its own realtime events and notifications', () => {
+    expect(touchesSocialMedia({ type: 'social.post.published' })).toBe(true);
+    expect(touchesSocialMedia({ type: 'notification', event: 'social.inbox.assigned' })).toBe(true);
+    expect(touchesSocialMedia({ type: 'notification', event: 'mail.new' })).toBe(false);
   });
 });
