@@ -17,7 +17,7 @@ const log = logger('windows');
  * fully visible on the primary display.
  */
 // The Live map window can be pinned on top of other apps (MAP-21, "📌 On top").
-const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map', 'support-quick']);
+const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map', 'phone', 'support-quick']);
 /** Windows that can shrink to float over other apps while a call or meeting goes on. */
 const COMPACTABLE = new Set<WindowKind>(['call', 'video-call', 'meet']);
 /** One call at a time: a second "call" window focuses the one already open. */
@@ -32,6 +32,8 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'video-call': { width: 1180, height: 760, minWidth: 720, minHeight: 480 },
   ring: { width: 360, height: 292, minWidth: 360, minHeight: 292 },
   meet: { width: 1280, height: 800, minWidth: 960, minHeight: 600 },
+  // The compact phone (WS-VOIP-SRS-001 D01): the design's 360 × 640, always on top unless unpinned.
+  phone: { width: 360, height: 640, minWidth: 320, minHeight: 480 },
   'rc-consent': { width: 460, height: 560, minWidth: 460, minHeight: 560 },
   'rc-indicator': { width: 560, height: 52, minWidth: 560, minHeight: 52 },
   'rc-pointer': { width: 220, height: 30, minWidth: 220, minHeight: 30 },

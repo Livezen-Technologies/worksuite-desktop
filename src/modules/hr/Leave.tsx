@@ -6,11 +6,14 @@ import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
+import { stampDayLabel } from '../../core/time';
+import { useNow } from '../../core/use-now';
 import { openDocument } from '../../core/open-document';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { pickable, type Balance, type LeaveReq, type LeaveReview, type LeaveTypes, type Profile } from './api';
+import { pickable, type Balance, type LeaveDecided, type LeaveReq, type LeaveReview, type LeaveTypes, type Profile } from './api';
+import { coverOf, leaveReview, useApproveLeave, useCoverFirst, WaitingForCover } from './coverRule';
 import { addDays, dayShort, monthGrid, monthLabel, parseYmd, rangeLabel, shiftMonth, ymd } from './dates';
-import { btn, btnBad, btnGood, btnPrimary, btnSmall, Empty, Field, humanise, Initials, input, PageHead, Seg, Sheet, StatusChip } from './parts';
+import { btn, btnBad, btnGhost, btnGood, btnPrimary, btnSmall, Empty, Field, humanise, Initials, input, PageHead, Seg, Sheet, StatusChip } from './parts';
 import { can } from './Rail';
 import { Select } from '../../components/Select';
 
@@ -81,6 +84,8 @@ export default function Leave() {
   const linkedOwn = !!linkedRow && linkedRow.employee_id === myEmp && !linkedRow.can_decide;
   const reviewId = reviewing ?? (linked !== null && !linkSeen && list.isSuccess && linkedRow && !linkedOwn ? linked : null);
   const refresh = () => void qc.invalidateQueries({ queryKey: ['hr'] });
+  // Approve asks first while the cover has not accepted (#262): the same rule as the review panel.
+  const approval = useApproveLeave({ onOpen: (id) => setReviewing(id) });
 
   const act = async (path: string, done: string, body: Record<string, unknown> = {}) => {
     try {
@@ -142,9 +147,7 @@ export default function Leave() {
                       <button type="button" className={btnSmall} onClick={() => setReviewing(r.id)}>
                         Review
                       </button>
-                      <button type="button" className={btnGood} onClick={() => void act(`/api/hr/leave/requests/${r.id}/decide`, 'Approved.', { decision: 'approved' })}>
-                        Approve
-                      </button>
+                      <LeaveApprove r={r} busy={approval.busy === r.id} onApprove={() => void approval.approve(r.id, { cover: r.responsible_person_id ? (r.responsible_status ?? 'pending') : 'none' })} />
                       <button type="button" className={btnBad} onClick={() => void act(`/api/hr/leave/requests/${r.id}/decide`, 'Rejected.', { decision: 'rejected' })}>
                         Reject
                       </button>
@@ -176,9 +179,21 @@ export default function Leave() {
       ) : null}
       {list.data && mode === 'calendar' ? <LeaveCalendar month={month} setMonth={setMonth} requests={all.filter((r) => r.status === 'approved' || r.status === 'pending')} holidays={holidays.data?.holidays ?? []} onOpen={(r) => (r.can_decide ? setReviewing(r.id) : undefined)} /> : null}
       {asking ? <RequestLeave onClose={closeAsk} onDone={() => (closeAsk(), refresh())} /> : null}
-      {reviewId ? <ReviewLeave id={reviewId} onClose={() => (setReviewing(null), setLinkSeen(true), query.get('leave') ? go('/hr?tab=leave') : undefined)} onDone={() => (setReviewing(null), setLinkSeen(true), refresh())} /> : null}
+      {reviewId ? <ReviewLeave id={reviewId} canDecide={all.find((r) => r.id === reviewId)?.can_decide} onClose={() => (setReviewing(null), setLinkSeen(true), query.get('leave') ? go('/hr?tab=leave') : undefined)} onDone={refresh} /> : null}
+      {approval.dialog}
       {sendBack ? <SendBack r={sendBack} onClose={() => setSendBack(null)} onDone={() => (setSendBack(null), refresh())} /> : null}
     </div>
+  );
+}
+
+/** A row's Approve, or "Waiting for cover" once the server has said the cover must accept first (#262). */
+function LeaveApprove({ r, busy, onApprove }: { r: LeaveReq; busy: boolean; onApprove: () => void }) {
+  const first = useCoverFirst(r.id);
+  if (first && r.responsible_person_id && r.responsible_status !== 'accepted') return <WaitingForCover className="!h-[30px] !rounded-[7px] !px-2.5 !text-[12.5px]" />;
+  return (
+    <button type="button" disabled={busy} className={btnGood} onClick={onApprove}>
+      Approve
+    </button>
   );
 }
 
@@ -440,136 +455,302 @@ function SendBack({ r, onClose, onDone }: { r: LeaveReq; onClose: () => void; on
   );
 }
 
-export function ReviewLeave({ id, onClose, onDone }: { id: number; onClose: () => void; onDone: () => void }) {
+/** The balances worth showing beside a request: a type with nothing given and nothing left (0 of 0) says nothing. */
+export function balanceChips(balances: LeaveReview['balances']): LeaveReview['balances'] {
+  return balances.filter((b) => Number(b.entitled) !== 0 || Number(b.remaining) !== 0);
+}
+
+const num = (v: number | string) => String(Math.round(Number(v) * 100) / 100);
+
+/**
+ * Review leave (#262): what the request is, what else is going on, the cover in its own card — answered there by the
+ * person asked to cover, and only followed (or, where the server allows, nudged or changed) by the approver — and a
+ * footer for the approval alone: Close on the left, Reject and Approve on the right, wrapping rather than cutting
+ * off. The body scrolls; the note sits with the footer. After a decision the panel says what was decided, with
+ * Undo while the server allows it. Somebody who may only answer the cover gets Close alone.
+ */
+export function ReviewLeave({ id, canDecide, onClose, onDone }: { id: number; canDecide?: boolean; onClose: () => void; onDone: () => void }) {
   const me = useStore(app, (s) => s.auth?.user?.id);
-  const q = useQuery({ queryKey: ['hr', 'leave-review', id], queryFn: ({ signal }) => apiGet<LeaveReview>(`/api/hr/leave/requests/${id}/review`, undefined, signal) });
+  const q = useQuery(leaveReview(id));
   const [note, setNote] = useState('');
   const [busy, setBusy] = useState(false);
-  const decide = async (decision: 'approved' | 'rejected') => {
-    setBusy(true);
-    try {
-      await apiPost(`/api/hr/leave/requests/${id}/decide`, { decision, ...(note.trim() ? { note: note.trim() } : {}) });
-      toast('success', decision === 'approved' ? 'Approved.' : 'Rejected.');
-      onDone();
-    } catch (e) {
-      toast('error', errorMessage(e));
-      setBusy(false);
-    }
-  };
-  const cover = async (answer: 'accepted' | 'declined') => {
-    setBusy(true);
-    try {
-      await apiPost(`/api/hr/leave/requests/${id}/cover`, { answer, ...(note.trim() ? { note: note.trim() } : {}) });
-      toast('success', answer === 'accepted' ? 'You are covering it.' : 'You declined to cover it.');
-      onDone();
-    } catch (e) {
-      toast('error', errorMessage(e));
-      setBusy(false);
-    }
-  };
+  const [declining, setDeclining] = useState(false);
+  const [coverNote, setCoverNote] = useState('');
+  const [changing, setChanging] = useState(false);
+  const [result, setResult] = useState<{ decision: 'approved' | 'rejected'; at: string; undoUntil: string | null } | null>(null);
+  const now = useNow(15_000);
   const v = q.data;
-  const askedMe = !!v?.responsible && String(v.responsible.user_id) === String(me) && v.responsible.status === 'pending' && v.request.status === 'pending';
+  const cover = coverOf(v, me);
+  const pending = v?.request.status === 'pending';
+  // Whoever opened it says whether they decide it; a newer server says so itself. Asked only to cover: no.
+  const mayDecide = canDecide ?? v?.can_decide ?? !cover?.mine;
+  const askedMe = !!cover?.mine && cover.status === 'pending' && pending;
+  const coverFirst = useCoverFirst(id, v);
+  const blocked = !!cover && cover.status !== 'accepted' && coverFirst;
+  const decided = (r: LeaveDecided, decision: 'approved' | 'rejected') => {
+    setResult({ decision, at: r.decided_at ?? new Date().toISOString(), undoUntil: r.undo_until ?? null });
+    onDone();
+  };
+  const approval = useApproveLeave({ onApproved: (_id, r) => decided(r, 'approved') });
+
+  const reject = async () => {
+    setBusy(true);
+    try {
+      const r = await apiPost<LeaveDecided | null>(`/api/hr/leave/requests/${id}/decide`, { decision: 'rejected', ...(note.trim() ? { note: note.trim() } : {}) });
+      toast('success', 'Rejected.');
+      decided(r ?? {}, 'rejected');
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const undo = async () => {
+    setBusy(true);
+    try {
+      await apiPost(`/api/hr/leave/requests/${id}/undo`, {});
+      toast('success', 'Decision undone.');
+      setResult(null);
+      onDone();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const answerCover = async (answer: 'accepted' | 'declined') => {
+    setBusy(true);
+    try {
+      await apiPost(`/api/hr/leave/requests/${id}/cover`, { answer, ...(answer === 'declined' && coverNote.trim() ? { note: coverNote.trim() } : {}) });
+      toast('success', answer === 'accepted' ? 'You are covering it.' : 'You declined to cover it.');
+      setDeclining(false);
+      onDone();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  const remind = async () => {
+    setBusy(true);
+    try {
+      await apiPost(`/api/hr/leave/requests/${id}/cover/remind`, {});
+      toast('success', `Reminded ${cover?.name ?? 'the cover'}.`);
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  // What was decided: just now from this panel, or before (as a newer server says who and when).
+  const earlier = v && !pending && (v.request.status === 'approved' || v.request.status === 'rejected') ? { decision: v.request.status, at: v.request.decided_at ?? null, undoUntil: v.request.undo_until ?? null, by: v.request.decided_by ?? null } : null;
+  const outcome = result ? { ...result, by: 'you' } : earlier;
+  const undoLeft = outcome?.undoUntil ? Date.parse(outcome.undoUntil) - now.getTime() : 0;
+  const coverTone = cover?.status === 'accepted' ? 'success' : cover?.status === 'declined' ? 'danger' : 'warning';
+
   return (
-    <div className="no-drag fixed inset-0 z-50 bg-[rgba(15,27,61,.32)]" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <aside aria-label="Review leave" className="animate-in absolute top-0 right-0 bottom-0 flex w-[460px] flex-col bg-surface shadow-[-10px_0_30px_rgb(var(--ws-shadow-rgb)/.18)]">
-        <div className="flex items-center border-b border-line px-4 py-3.5">
-          <b className="flex-1 truncate text-[15px] text-ink">Review leave{v?.employee.name ? ` · ${v.employee.name}` : ''}</b>
-          <button type="button" aria-label="Close" onClick={onClose} className="h-7 w-7 rounded-full text-[16px] text-ink-3 hover:bg-subtle">
-            ×
-          </button>
-        </div>
-        <div className="flex min-h-0 flex-1 flex-col gap-[11px] overflow-y-auto px-4 py-3 scroll-thin">
-          {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
-          {v ? (
-            <>
-              <span className="text-ink-2">
-                {v.request.type_name} · {rangeLabel(v.request.starts_on, v.request.ends_on)} · {v.request.days} {Number(v.request.days) === 1 ? 'day' : 'days'}
-                {v.request.reason ? ` · “${v.request.reason}”` : ''}
-              </span>
-              <div className="grid grid-cols-3 gap-2">
-                <Stat label="Pending requests" value={String(v.pending.count)} sub={`${v.pending.days} day(s) total`} />
-                <Stat label="Notice" value={v.request.notice_days != null ? `${v.request.notice_days} days` : '—'} sub={v.request.requested_on ? `asked on ${dayShort(v.request.requested_on)}` : undefined} />
-                <Stat label={`Taken in ${v.history.year}`} value={String(v.history.approved_days)} sub={`${v.history.approved_count} approved · ${v.history.rejected_count} refused`} />
-              </div>
-              <div>
-                <b className="text-ink">Who else is off then</b>
-                <div className="mt-0.5 text-[12.5px] text-ink-2">
-                  {v.overlap.items.length ? v.overlap.items.map((o, i) => <div key={i}>{`${o.employee_name ?? 'Someone'} · ${o.type_name ?? 'Leave'} · ${rangeLabel(o.starts_on, o.ends_on)}`}</div>) : v.overlap.department_known ? 'Nobody else in the department.' : 'Nobody else that you can see.'}
+    <>
+      <div className="no-drag fixed inset-0 z-50 bg-[rgba(15,27,61,.32)]" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+        <aside aria-label="Review leave" className="animate-in absolute top-0 right-0 bottom-0 flex w-[460px] max-w-full flex-col bg-surface shadow-[-10px_0_30px_rgb(var(--ws-shadow-rgb)/.18)]">
+          <div className="flex shrink-0 items-center border-b border-line px-4 py-3.5">
+            <b className="flex-1 truncate text-[15px] text-ink">Review leave{v?.employee.name ? ` · ${v.employee.name}` : ''}</b>
+            <button type="button" aria-label="Close" onClick={onClose} className="h-7 w-7 rounded-full text-[16px] text-ink-3 hover:bg-subtle">
+              ×
+            </button>
+          </div>
+          <div className="flex min-h-0 flex-1 flex-col gap-[11px] overflow-y-auto px-4 py-3 scroll-thin">
+            {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
+            {v ? (
+              <>
+                <span className="text-ink-2">
+                  {v.request.type_name} · {rangeLabel(v.request.starts_on, v.request.ends_on)} · {v.request.days} {Number(v.request.days) === 1 ? 'day' : 'days'}
+                  {v.request.reason ? ` · “${v.request.reason}”` : ''}
+                </span>
+                <div className="grid grid-cols-3 gap-2">
+                  <Stat label="Pending requests" value={String(v.pending.count)} sub={`${v.pending.days} day(s) total`} />
+                  <Stat label="Notice" value={v.request.notice_days != null ? `${v.request.notice_days} days` : '—'} sub={v.request.requested_on ? `asked on ${dayShort(v.request.requested_on)}` : undefined} />
+                  <Stat label={`Taken in ${v.history.year}`} value={String(v.history.approved_days)} sub={`${v.history.approved_count} approved · ${v.history.rejected_count} refused`} />
                 </div>
-              </div>
-              {v.responsible ? (
-                <div className={cx('rounded-[9px] px-3 py-2.5', v.responsible.status === 'accepted' ? 'bg-success-bg' : v.responsible.status === 'declined' ? 'bg-danger-bg' : 'bg-warning-bg')}>
-                  <b className={v.responsible.status === 'accepted' ? 'text-success' : v.responsible.status === 'declined' ? 'text-danger' : 'text-warning'}>Cover</b>
-                  <div className="text-[12.5px] text-ink-2">
-                    {v.responsible.name} — {v.responsible.status === 'accepted' ? 'Accepted the cover' : v.responsible.status === 'declined' ? `Declined the cover${v.responsible.note ? `: ${v.responsible.note}` : ''}` : 'Waiting for their answer'}
+                <div>
+                  <b className="text-ink">Who else is off then</b>
+                  <div className="mt-0.5 text-[12.5px] text-ink-2">
+                    {v.overlap.items.length ? v.overlap.items.map((o, i) => <div key={i}>{`${o.employee_name ?? 'Someone'} · ${o.type_name ?? 'Leave'} · ${rangeLabel(o.starts_on, o.ends_on)}`}</div>) : v.overlap.department_known ? 'Nobody else in the department.' : 'Nobody else that you can see.'}
                   </div>
                 </div>
-              ) : null}
-              <div>
-                <b className="text-ink">Attachment</b>
-                <div className="mt-0.5 text-[12.5px] text-ink-3">
-                  {v.evidence.length
-                    ? v.evidence.map((x) => (
-                        <button key={x.id} type="button" className="block font-semibold text-primary hover:underline" onClick={() => openEvidence(x)}>
-                          {x.title || x.filename}
+                {cover ? (
+                  <section aria-label="Cover" className={cx('flex flex-col gap-2 rounded-[9px] px-3 py-2.5', coverTone === 'success' ? 'bg-success-bg' : coverTone === 'danger' ? 'bg-danger-bg' : 'bg-warning-bg')}>
+                    <div className="text-[12.5px] text-ink-2">
+                      <b className={cx('mr-1', coverTone === 'success' ? 'text-success' : coverTone === 'danger' ? 'text-danger' : 'text-warning')}>Cover</b>
+                      {cover.mine ? 'You are' : `${cover.name} is`} asked to cover ·{' '}
+                      {cover.status === 'accepted' ? 'Accepted' : cover.status === 'declined' ? `Declined${cover.note ? `: “${cover.note}”` : ''}` : cover.mine ? 'Waiting for your answer' : 'Waiting for their answer'}
+                    </div>
+                    {askedMe && !declining ? (
+                      <div className="flex flex-wrap gap-2">
+                        <button type="button" disabled={busy} className={btnGood} onClick={() => void answerCover('accepted')}>
+                          Accept cover
                         </button>
-                      ))
-                    : 'Nothing was attached to this request.'}
+                        <button type="button" disabled={busy} className={btnBad} onClick={() => setDeclining(true)}>
+                          Decline cover
+                        </button>
+                      </div>
+                    ) : null}
+                    {askedMe && declining ? (
+                      <div className="flex flex-col gap-2">
+                        <input aria-label="Why you can’t cover it" value={coverNote} onChange={(e) => setCoverNote(e.target.value)} placeholder="Reason (optional)" className={input} />
+                        <div className="flex flex-wrap gap-2">
+                          <button type="button" disabled={busy} className={btnBad} onClick={() => void answerCover('declined')}>
+                            Decline cover
+                          </button>
+                          <button type="button" className={btnSmall} onClick={() => setDeclining(false)}>
+                            Back
+                          </button>
+                        </div>
+                      </div>
+                    ) : null}
+                    {!cover.mine && mayDecide && pending && cover.status !== 'accepted' && ((cover.canRemind && cover.status === 'pending') || cover.canChange) ? (
+                      <div className="flex flex-wrap gap-2">
+                        {cover.canRemind && cover.status === 'pending' ? (
+                          <button type="button" disabled={busy} className={btnSmall} onClick={() => void remind()}>
+                            Remind {cover.name}
+                          </button>
+                        ) : null}
+                        {cover.canChange ? (
+                          <button type="button" disabled={busy} className={btnSmall} aria-expanded={changing} onClick={() => setChanging((c) => !c)}>
+                            Change cover…
+                          </button>
+                        ) : null}
+                      </div>
+                    ) : null}
+                    {changing && cover.canChange && !cover.mine && mayDecide && pending ? <ChangeCover id={id} employeeId={v.employee.id} current={cover.userId} onDone={() => (setChanging(false), onDone())} /> : null}
+                  </section>
+                ) : null}
+                <div>
+                  <b className="text-ink">Attachment</b>
+                  <div className="mt-0.5 text-[12.5px] text-ink-3">
+                    {v.evidence.length
+                      ? v.evidence.map((x) => (
+                          <button key={x.id} type="button" className="block font-semibold text-primary hover:underline" onClick={() => openEvidence(x)}>
+                            {x.title || x.filename}
+                          </button>
+                        ))
+                      : 'Nothing was attached to this request.'}
+                  </div>
                 </div>
-              </div>
-              <div>
-                <b className="text-ink">Leave balances</b>
-                <div className="mt-0.5 text-[12.5px] text-ink-2">{v.balances.map((b) => `${b.type_name} ${b.remaining} of ${b.entitled}`).join(' · ') || '—'}</div>
-              </div>
-              {v.attendance ? (
-                <div className="grid grid-cols-3 gap-2">
-                  <Stat label="Days present" value={String(v.attendance.days_present)} />
-                  <Stat label="Days late" value={String(v.attendance.days_late)} tone={v.attendance.days_late ? 'text-[#9A4A06] dark:text-warning' : undefined} />
-                  <Stat label="Missing check-outs" value={String(v.attendance.missing_check_outs)} tone={v.attendance.missing_check_outs ? 'text-danger' : undefined} />
+                <div>
+                  <b className="text-ink">Leave balances</b>
+                  <ul aria-label="Leave balances" className="m-0 mt-1 flex list-none flex-wrap gap-1.5 p-0">
+                    {balanceChips(v.balances).map((b) => (
+                      <li
+                        key={b.type_id}
+                        title={`${b.type_name}: ${num(b.remaining)} left of ${num(b.entitled)} · ${num(b.taken)} taken${b.requested ? ' · the type asked for' : ''}`}
+                        className={cx('rounded-full px-2 py-0.5 text-[12px] whitespace-nowrap', b.requested ? 'bg-selection font-semibold text-primary' : 'bg-subtle text-ink-2')}
+                      >
+                        {b.type_name} <b className="tabular-nums">{`${num(b.remaining)}/${num(b.entitled)}`}</b>
+                      </li>
+                    ))}
+                    {!balanceChips(v.balances).length ? <li className="text-[12.5px] text-ink-3">—</li> : null}
+                  </ul>
                 </div>
+                {v.attendance ? (
+                  <div className="grid grid-cols-3 gap-2">
+                    <Stat label="Days present" value={String(v.attendance.days_present)} hint={`In the last ${v.attendance.window_days} days`} />
+                    <Stat label="Days late" value={String(v.attendance.days_late)} hint={`Late on ${v.attendance.days_late} ${v.attendance.days_late === 1 ? 'day' : 'days'} in the last ${v.attendance.window_days} days`} tone={v.attendance.days_late ? 'amber' : undefined} />
+                    <Stat label="Missing check-outs" value={String(v.attendance.missing_check_outs)} hint={`In the last ${v.attendance.window_days} days`} tone={v.attendance.missing_check_outs ? 'red' : undefined} />
+                  </div>
+                ) : null}
+              </>
+            ) : null}
+          </div>
+          <div className="shrink-0 border-t border-line">
+            {v && pending && mayDecide && !result ? (
+              <div className="px-4 pt-3">
+                <Field label="Note (optional)">
+                  <input aria-label="Decision note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Recorded with the decision" className={input} />
+                </Field>
+              </div>
+            ) : null}
+            <div className="flex flex-wrap items-center gap-2 px-4 py-3">
+              <button type="button" className={btnGhost} onClick={onClose}>
+                Close
+              </button>
+              {outcome ? (
+                <span className="ml-auto flex flex-wrap items-center justify-end gap-2">
+                  <span role="status" className={cx('text-[13px] font-semibold whitespace-nowrap', outcome.decision === 'approved' ? 'text-success' : 'text-danger')}>
+                    {outcome.decision === 'approved' ? 'Approved' : 'Rejected'}
+                    {outcome.by ? ` by ${outcome.by}` : ''}
+                    {outcome.at ? ` · ${stampDayLabel(outcome.at, 'short')}` : ''}
+                  </span>
+                  {undoLeft > 0 ? (
+                    <button type="button" disabled={busy} className={btnSmall} onClick={() => void undo()}>
+                      Undo
+                    </button>
+                  ) : null}
+                </span>
+              ) : v && pending && mayDecide ? (
+                <span className="ml-auto flex flex-wrap justify-end gap-2">
+                  <button type="button" disabled={busy || approval.busy === id} className={btn + ' !border-[#F1B8A8] !text-danger dark:!border-danger/40'} onClick={() => void reject()}>
+                    Reject
+                  </button>
+                  {blocked ? (
+                    <WaitingForCover name={cover?.mine ? 'You' : cover?.name} />
+                  ) : (
+                    <button type="button" disabled={busy || approval.busy === id} className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} onClick={() => void approval.approve(id, { note, review: v })}>
+                      Approve
+                    </button>
+                  )}
+                </span>
               ) : null}
-              <Field label="Note (optional)">
-                <input aria-label="Decision note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Recorded with the decision" className={input} />
-              </Field>
-            </>
-          ) : null}
-        </div>
-        <div className="flex gap-2 border-t border-line px-4 py-3">
-          <button type="button" className={btn} onClick={onClose}>
-            Close
-          </button>
-          <span className="flex-1" />
-          {askedMe ? (
-            <>
-              <button type="button" disabled={busy} className={btn + ' !text-danger'} onClick={() => void cover('declined')}>
-                Decline cover
-              </button>
-              <button type="button" disabled={busy} className={btn + ' !border-[#1F7A4D] !text-[#1F7A4D] dark:!border-success/50 dark:!text-success'} onClick={() => void cover('accepted')}>
-                Accept cover
-              </button>
-            </>
-          ) : null}
-          {v?.request.status === 'pending' ? (
-            <>
-              <button type="button" disabled={busy} className={btn + ' !border-[#F1B8A8] !text-danger dark:!border-danger/40'} onClick={() => void decide('rejected')}>
-                Reject
-              </button>
-              <button type="button" disabled={busy} className={btnPrimary + ' !bg-[#1F7A4D] hover:!bg-[#1A6841]'} onClick={() => void decide('approved')}>
-                Approve
-              </button>
-            </>
-          ) : null}
-        </div>
-      </aside>
+            </div>
+          </div>
+        </aside>
+      </div>
+      {/* Beside the panel, not in it: Escape in the question closes the question only. */}
+      {approval.dialog}
+    </>
+  );
+}
+
+/** Somebody else to cover it, when the server lets the approver change it (`…/cover/change`). */
+function ChangeCover({ id, employeeId, current, onDone }: { id: number; employeeId: number; current: number; onDone: () => void }) {
+  const people = useQuery({ queryKey: ['hr', 'colleagues', employeeId], queryFn: ({ signal }) => apiGet<{ people: Array<{ id: number; name: string }> }>('/api/hr/leave/colleagues', { employee_id: employeeId }, signal) });
+  const [pick, setPick] = useState('');
+  const [busy, setBusy] = useState(false);
+  const save = async () => {
+    setBusy(true);
+    try {
+      await apiPost(`/api/hr/leave/requests/${id}/cover/change`, { responsible_person_id: Number(pick) });
+      toast('success', 'Cover changed. They have been asked.');
+      onDone();
+    } catch (e) {
+      toast('error', errorMessage(e));
+      setBusy(false);
+    }
+  };
+  return (
+    <div className="flex flex-wrap items-center gap-2">
+      <Select aria-label="New cover" value={pick} onChange={(e) => setPick(e.target.value)} className={input + ' !w-auto min-w-0 flex-1'}>
+        <option value="">Choose someone…</option>
+        {(people.data?.people ?? [])
+          .filter((p) => p.id !== current)
+          .map((p) => (
+            <option key={p.id} value={p.id}>
+              {p.name}
+            </option>
+          ))}
+      </Select>
+      <button type="button" disabled={busy || !pick} className={btnSmall} onClick={() => void save()}>
+        Ask them
+      </button>
     </div>
   );
 }
 
-function Stat({ label, value, sub, tone }: { label: string; value: string; sub?: string; tone?: string }) {
+function Stat({ label, value, sub, tone, hint }: { label: string; value: string; sub?: string; tone?: 'amber' | 'red'; hint?: string }) {
   return (
-    <div className="rounded-[9px] bg-ground px-2.5 py-2">
+    <div title={hint} className={cx('rounded-[9px] px-2.5 py-2', tone === 'amber' ? 'bg-[#FFF4E0] dark:bg-warning-bg' : 'bg-ground')}>
       <div className="text-[11px] font-semibold text-ink-3">{label}</div>
-      <b className={cx('text-[16px] text-ink', tone)}>{value}</b>
+      <b className={cx('text-[16px] text-ink', tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : tone === 'red' ? 'text-danger' : undefined)}>{value}</b>
       {sub ? <div className="text-[11px] text-ink-3">{sub}</div> : null}
     </div>
   );

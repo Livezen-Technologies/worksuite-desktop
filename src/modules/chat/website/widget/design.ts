@@ -1,4 +1,5 @@
 import { apiGet, apiPut } from '../../../../core/api';
+import { toE164 } from '../../../../core/phone';
 import { WEBSITE } from '../api';
 
 /**
@@ -192,6 +193,48 @@ export function siteNameOf(design: Pick<WidgetDesign, 'website_name'>, fallback:
   const own = (design.website_name ?? '').trim();
   return (own && !looksLikeAddress(own) ? own : (fallback ?? '').trim()) || null;
 }
+
+/**
+ * A bare domain in lower case, "techubiz.com": typed as an address, though "Booking.com" may be a company's name — so
+ * the company name field suggests a name for it (#259) without refusing it.
+ */
+export const looksLikeDomain = (s: string | null | undefined) => /^[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}$/.test((s ?? '').trim());
+
+/** The second level of a country's domains: tender-hub.co.uk and techubiz.com.lk are named by the label before it. */
+const SECOND_LEVEL = new Set(['co', 'com', 'org', 'net', 'gov', 'edu', 'ac', 'ltd', 'plc', 'sch', 'web']);
+
+/**
+ * The name a web address suggests (#259): "techubiz.com" is "Techubiz", "https://www.tender-hub.co.uk/x" is
+ * "Tender Hub" — what the company name field offers with "Use it" when an address is typed there.
+ */
+export function nameFromAddress(s: string | null | undefined): string | null {
+  const host = (s ?? '').trim().toLowerCase().replace(/^[a-z][a-z0-9+.-]*:\/\//, '').replace(/^www\./, '').split(/[/?#:\s]/)[0] ?? '';
+  const labels = host.split('.').filter(Boolean);
+  if (labels.length > 1) labels.pop();
+  if (labels.length > 1 && SECOND_LEVEL.has(labels[labels.length - 1]!)) labels.pop();
+  const word = labels[labels.length - 1] ?? '';
+  return word.split(/[-_]+/).filter(Boolean).map((w) => w[0]!.toUpperCase() + w.slice(1)).join(' ') || null;
+}
+
+/**
+ * The editor's title (#259): the widget's own name, unless that is only its site's — "techubiz" or "techubiz.com", as
+ * a widget made from its domain is called — and then the company's name once it is set, else the site's, capitalised.
+ */
+export function widgetTitle(name: string, websiteName: string | null | undefined): string {
+  const n = name.trim();
+  if (n && !/^[a-z0-9][a-z0-9.-]*$/.test(n) && !looksLikeAddress(n)) return n;
+  const own = (websiteName ?? '').trim();
+  if (own && !looksLikeAddress(own)) return own;
+  return nameFromAddress(n) ?? n;
+}
+
+/** The design's fields, by the name the server's refusals use for them (`quick_links.1.url` is `quick_links`). */
+export const DESIGN_FIELDS: ReadonlySet<string> = new Set<keyof WidgetDesign | 'quick_links'>([
+  'name', 'header_title', 'welcome_message', 'accent_color', 'border_radius', 'auto_open_delay', 'website_name', 'brand_color', 'logo_url', 'greeting',
+  'header_subtitle', 'quick_links', 'staff_display', 'show_agents', 'offline_message', 'whatsapp_number', 'launcher_style', 'position', 'greeting_delay',
+  'greeting_text', 'theme', 'launcher_offset_bottom', 'launcher_offset_right', 'launcher_offset_left',
+]);
+
 export const DEFAULT_TIMEZONE = 'Asia/Colombo';
 export const DAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
 const SHORT = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -207,6 +250,8 @@ export function saveDesign(id: number, design: WidgetDesign, shown: Record<numbe
   void _older;
   return apiPut<DesignPayload>(`${WEBSITE}/widgets/${id}/design`, {
     ...fields,
+    // "0769 136 424" is kept as +94769136424 (#260): the widget's wa.me link needs the country code.
+    whatsapp_number: design.whatsapp_number ? (toE164(design.whatsapp_number) ?? design.whatsapp_number.trim()) : null,
     quick_links: design.quick_links.filter((l) => l.label.trim() || l.url.trim()),
     agents: Object.entries(shown).map(([user_id, on]) => ({ user_id: Number(user_id), shown: on })),
   });
@@ -274,10 +319,8 @@ export function problems(d: WidgetDesign): Partial<Record<keyof WidgetDesign | '
   if (links.length > MAX_LINKS) out.quick_links = `Up to ${MAX_LINKS} quick links`;
   else if (links.some((l) => !l.label.trim() || !l.url.trim())) out.quick_links = 'Give every quick link a label and an address';
   else if (links.some((l) => !/^(https?:\/\/[^\s<>"']+|mailto:[^\s<>"']+|tel:\+?[\d\s().-]+)$/i.test(l.url.trim()))) out.quick_links = 'Quick links must start with https://, mailto: or tel:';
-  if (d.whatsapp_number) {
-    const digits = d.whatsapp_number.replace(/\D/g, '');
-    if (digits.length < 7 || digits.length > 15 || !/^\+?[\d\s().-]+$/.test(d.whatsapp_number.trim())) out.whatsapp_number = 'Enter the number with its country code, like +94 77 123 4567';
-  }
+  // Read as every number is (core/phone): a local "0769 136 424" is Sri Lanka's and is converted, not refused (#260).
+  if (d.whatsapp_number?.trim() && !toE164(d.whatsapp_number)) out.whatsapp_number = 'Enter a valid number, like 077 123 4567 or +94 77 123 4567';
   return out;
 }
 

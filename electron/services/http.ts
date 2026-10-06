@@ -132,6 +132,16 @@ export function classifyNetworkError(e: unknown): DesktopError {
   return new DesktopError('NETWORK_UNREACHABLE', UNREACHABLE_MESSAGE);
 }
 
+/**
+ * A failure that says nothing about the session, the account or this computer, and may well be gone on the next try:
+ * the server out of reach or too slow, the server — or the proxy in front of it — failing with a 5xx, a rate limit.
+ */
+export function isPassingFailure(e: unknown): boolean {
+  if (!(e instanceof DesktopError)) return false;
+  if (e.code === 'NETWORK_UNREACHABLE' || e.code === 'RATE_LIMITED') return true;
+  return e.code === 'SERVER_ERROR' && e.status !== null && e.status >= 500;
+}
+
 export function errorFromResponse(status: number, body: Envelope | null, retryAfter: string | null): DesktopError {
   const message = (body?.message && String(body.message)) || `The server answered ${status}.`;
   const serverCode = body?.code && KNOWN_CODES.has(body.code as DesktopErrorCode) ? (body.code as DesktopErrorCode) : null;
@@ -194,6 +204,16 @@ export class HttpClient {
    * refresh that worked is this request's own answer — a locked folder's
    * wrong password answers 401 — so it is returned, not taken as a sign-out.
    *
+   * A 401 to a request sent with a token that is no longer the session's —
+   * sent with none while signed out and answered after a new sign-in, or with
+   * the one a refresh by another request has since replaced — is about that
+   * old token. The request is sent again with the current one, and nothing is
+   * refreshed: a refresh spends the new session's refresh token (it rotates)
+   * and ends the access token every other request is carrying, so stale 401s
+   * landing just after a sign-in refreshed it away from under the sign-in's
+   * own requests, whose refusals then sent the person back to the sign-in
+   * screen (LOGIN-001).
+   *
    * `timeoutMs` 0 sets no time limit at all: the caller watches the request
    * itself (an upload's part, stopped only when it stalls — #249).
    */
@@ -202,6 +222,8 @@ export class HttpClient {
     // A streamed body is read once: built afresh for every send, the one after a token refresh included (#249).
     const { bodyFactory, ...rest } = init;
     init = rest;
+    // The bearer the last send carried (null: none), to tell a 401 about an old token from one about the current.
+    let sent: string | null = null;
     const attempt = async (): Promise<Response> => {
       // Every header through the safety helper (#238); a request that cannot be built is this screen's error, not a crash.
       let headers: Headers;
@@ -212,6 +234,7 @@ export class HttpClient {
         if (!headers.has('Accept')) headers.set('Accept', 'application/json');
         if (auth) {
           const token = this.deps.tokens.accessToken();
+          sent = token;
           if (token) headers.set('Authorization', `Bearer ${token}`);
         }
       } catch (e) {
@@ -240,19 +263,30 @@ export class HttpClient {
     };
 
     let res = await attempt();
-    if (res.status === 401 && auth) {
+    let refreshed = false;
+    let resent = 0;
+    while (res.status === 401 && auth) {
       const body = await readEnvelope(res.clone());
       const code = body?.code;
       if (code === 'DEVICE_REVOKED' || code === 'DEVICE_NOT_REGISTERED') {
         this.deps.onDeviceDirective?.(code, body?.message ?? code);
         return res;
       }
-      const refreshed = await this.deps.tokens.refresh();
-      if (refreshed === 'offline') throw new DesktopError('NETWORK_UNREACHABLE', UNREACHABLE_MESSAGE);
-      if (refreshed === 'lost') {
+      // Answered for a token the session has since replaced: sent again with the current one, no refresh (LOGIN-001).
+      const current = this.deps.tokens.accessToken();
+      if (current && current !== sent && resent < 2) {
+        resent++;
+        res = await attempt();
+        continue;
+      }
+      if (refreshed) break;
+      const outcome = await this.deps.tokens.refresh();
+      if (outcome === 'offline') throw new DesktopError('NETWORK_UNREACHABLE', UNREACHABLE_MESSAGE);
+      if (outcome === 'lost') {
         this.deps.onAuthLost(body?.message ?? 'Session ended');
         return res;
       }
+      refreshed = true;
       res = await attempt();
     }
     // A version the server no longer accepts may be refused with 426 or with any error carrying UPDATE_REQUIRED.

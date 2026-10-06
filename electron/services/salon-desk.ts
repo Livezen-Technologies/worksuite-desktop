@@ -86,6 +86,8 @@ export class SalonDesk {
         name: input.name,
         device_id: deviceId,
         pos_register_id: input.pos_register_id ?? null,
+        warehouse_id: input.warehouse_id ?? null,
+        receipt_template: input.receipt_template ?? null,
         app_version: `desktop ${appVersion}`,
       },
     });

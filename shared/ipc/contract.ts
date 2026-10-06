@@ -63,6 +63,7 @@ import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, offi
 import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
 import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
+import { phoneContract, type PhoneOutputs } from '../phone';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
@@ -113,7 +114,7 @@ import type {
 } from '../types';
 
 const none = z.undefined().or(z.null()).optional();
-const salonPaper = z.enum(['80mm', '58mm', 'a4']);
+const salonPaper = z.enum(['80mm', '58mm', 'a4', 'letter']);
 const idString = z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/);
 const route = z
   .string()
@@ -231,6 +232,8 @@ export const preferencesPatchSchema = z
       })
       .partial(),
     webchatFollowUps: z.object({ card: z.boolean(), desktop: z.boolean(), sound: z.boolean(), idleMinutes: z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]) }),
+    // Settings › Chat: the chat drawer docked beside the page or floating over it (worksuite-desktop#264).
+    chatDrawer: z.enum(['docked', 'floating']),
     ai: z.object({
       quickAsk: z.boolean(),
       shortcut: z.enum(['Alt+Space', 'Control+Alt+Space', 'CommandOrControl+Shift+Space']),
@@ -430,7 +433,7 @@ export const contract = {
 
   'windows:open': ch(
     z.object({
-      kind: z.enum(['chat-mini', 'timer', 'record', 'call', 'video-call', 'ring', 'meet', 'support-quick']),
+      kind: z.enum(['chat-mini', 'timer', 'record', 'call', 'video-call', 'ring', 'meet', 'phone', 'support-quick']),
       route,
       title: z.string().max(200).optional(),
       alwaysOnTop: z.boolean().optional(),
@@ -551,8 +554,15 @@ export const contract = {
   'files:pickFiles': ch(z.object({ multiple: z.boolean(), title: z.string().max(100).optional(), only: z.enum(['gif', 'document', 'image', 'video', 'audio']).optional() }), { session: true, rate: 2 }),
   // The dialog runs in the main process, which stores the chosen folder itself.
   'files:chooseDownloadFolder': ch(none, { rate: 2 }),
-  /** A short text the page made (backup codes), saved where the person chooses in a save dialog. */
-  'files:saveText': ch(z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.txt$/), text: z.string().max(64_000) }), { session: true, rate: 2 }),
+  /** A text the page made (backup codes, a CSV export), saved where the person chooses in a save dialog. */
+  'files:saveText': ch(
+    z.union([
+      z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.txt$/), text: z.string().max(64_000) }),
+      // An export the page built (the Phone's call history, extensions): larger, and saved as CSV.
+      z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.csv$/), text: z.string().max(8_000_000) }),
+    ]),
+    { session: true, rate: 2 },
+  ),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
   /** A folder, with everything in it: each file carries its path inside the folder. */
   'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
@@ -983,7 +993,13 @@ export const contract = {
   // SalonMate's front desk: the key it is paired with stays in the main process.
   'salon:deskPairing': ch(none, { session: true }),
   'salon:deskPair': ch(
-    z.object({ location_id: z.number().int().positive(), name: z.string().trim().min(1).max(80), pos_register_id: z.number().int().positive().nullable().optional() }),
+    z.object({
+      location_id: z.number().int().positive(),
+      name: z.string().trim().min(1).max(80),
+      pos_register_id: z.number().int().positive().nullable().optional(),
+      warehouse_id: z.number().int().positive().nullable().optional(),
+      receipt_template: z.string().regex(/^[a-z0-9_]{1,40}$/).nullable().optional(),
+    }),
     { session: true, rate: 3, sensitive: true },
   ),
   'salon:deskForget': ch(none, { session: true, rate: 3, sensitive: true }),
@@ -994,7 +1010,7 @@ export const contract = {
       .object({
         receipt_printer: z.string().trim().min(1).max(200).nullable(),
         a4_printer: z.string().trim().min(1).max(200).nullable(),
-        paper: z.enum(['80mm', '58mm']),
+        paper: salonPaper,
         copies: z.number().int().min(1).max(3),
         auto_print: z.boolean(),
         silent: z.boolean(),
@@ -1016,7 +1032,7 @@ export const contract = {
   'salon:outbox': ch(none, { session: true }),
   'salon:outboxAdd': ch(
     z.object({
-      kind: z.enum(['client.create', 'visit.book', 'visit.check_in']),
+      kind: z.enum(['client.create', 'visit.book', 'visit.check_in', 'visit.checkout']),
       local_id: z.string().max(40).nullable().optional(),
       payload: z.record(z.string(), z.unknown()),
       label: z.string().trim().min(1).max(200),
@@ -1346,6 +1362,8 @@ export const contract = {
 
   // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
   ...posContract,
+  // The Phone: what its page cannot do for itself (shared/phone.ts, electron/services/phone.ts).
+  ...phoneContract,
   ...pmsLocksContract,
   ...contactSyncContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
@@ -1419,7 +1437,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;

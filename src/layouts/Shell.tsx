@@ -31,7 +31,7 @@ import { UpdateBanner, UpdatePopover } from '../app/screens/UpdateScreens';
 import { UpdateNotices } from '../app/overlays/UpdateControls';
 import { MandatoryBanner } from '../app/screens/MandatoryUpdate';
 import { UpdateDialogs } from '../app/screens/UpdateDialogs';
-import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
+import { ChatDrawer, MinimisedChats, useDrawerShown } from '../modules/chat/ChatDrawer';
 import { RingingBar } from '../modules/chat/website/Ringing';
 import { watchMicrophone } from '../modules/chat/website/mic';
 import { Sidebar } from './Sidebar';
@@ -48,6 +48,8 @@ export function Shell() {
   const visible = useVisibleIds();
   const hasChat = useCanOpen('chat');
   const hasAi = useCanOpen('ai');
+  const chatOpen = dock === 'chat' && hasChat;
+  const chatShown = useDrawerShown(chatOpen);
   // With the call window off, the bar under the tabs plays the tone instead.
   const ringWindow = useStore(app, (s) => s.prefs?.webchatRinging?.window ?? true);
   const info = useStore(app, (s) => s.info);
@@ -312,9 +314,14 @@ export function Shell() {
                 <AiDock />
               </PanelBoundary>
             ) : null}
-            {dock === 'chat' && hasChat ? (
+            {/*
+              The chat drawer (worksuite-desktop#264): docked, a column beside the workspace, which gives up its width —
+              the title bar and the tab strip above keep the window's; floating, over the workspace. It stays a moment
+              after it is put away, to leave as it came.
+            */}
+            {chatShown ? (
               <PanelBoundary name="Chat" onClose={() => minimiseChatDrawer()}>
-                <ChatDrawer />
+                <ChatDrawer closing={!chatOpen} />
               </PanelBoundary>
             ) : null}
             {hasChat ? (

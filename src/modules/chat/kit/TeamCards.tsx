@@ -9,8 +9,8 @@ import type { TeamChatMessage } from './model';
  * A Team Chat message's record or share card (worksuite-desktop#164), drawn inside the kit's RecordMessage. Team Chat
  * hands it to the list as a renderer; a website chat has none. Moved here from Thread with the kit (#229).
  */
-export function MessageRecords({ m, named, openLink, visible }: { m: TeamChatMessage; named: boolean; openLink: (link: string) => void; visible: ReadonlySet<string> }) {
-  if (named) return <RecordCards text={m.message} />;
+export function MessageRecords({ m, own = false, named, openLink, visible }: { m: TeamChatMessage; own?: boolean; named: boolean; openLink: (link: string) => void; visible: ReadonlySet<string> }) {
+  if (named) return <RecordCards text={m.message} from={{ roomId: m.room_id, messageId: m.id, sender: m.sender_name, own }} />;
   const card = m.card;
   if (!card) return null;
   if (card.kind === 'drive.share') return <FileShareCard card={card as unknown as FileShareCardData} onOpen={openLink} />;

@@ -4,11 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.23.0 — 2026-10-06
+## 1.24.0 — 2026-10-06
 
 **Added**
 
 - Next tab and Previous tab (⌘⇧] and ⌘⇧[, Ctrl+Shift+] and Ctrl+Shift+[ elsewhere) among the keyboard shortcuts, to remap like the others
+
+## 1.23.0 — 2026-10-06
+
+**Added**
+
+- Settings › Chat — 'Chat drawer opens as: Docked (default) / Floating' (#264)
 
 ## 1.22.0 — 2026-10-05
 

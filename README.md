@@ -106,9 +106,11 @@ permission needed). What it uses on the server is in [docs/BACKEND.md](docs/BACK
 
 ## What is deliberately not here yet
 
-Phases 2–4 of the SRS, apart from Drive folder sync (Files → Sync devices)
-and multi-window docking (tabs torn off into their own windows, and one
-docked beside another; see [the changelog](CHANGELOG.md)): calls and Meet,
+Phases 2–4 of the SRS, apart from Drive folder sync (Files → Sync devices),
+multi-window docking (tabs torn off into their own windows, and one
+docked beside another; see [the changelog](CHANGELOG.md)) and the **Phone**
+(a SIP softphone with the full agent, supervisor and admin screens of
+WS-VOIP-SRS-001 — see [docs/PHONE.md](docs/PHONE.md)): calls and Meet,
 the full desktop AI assistant (the dock and Quick Ask use the writing
 assistant today), the workforce-monitoring agent, POS hardware beyond a receipt printer and its drawer (card terminals, scales), the
 Admin Center fleet screens, kiosk mode, file-manager extensions and cloud

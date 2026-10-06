@@ -38,7 +38,8 @@ const ACCOUNT: Array<[RegExp, string[]]> = [
 ];
 
 const DENY: RegExp[] = [
-  /^\/api\/auth\/(login|refresh|mfa|logout|register|passkeys|password|sessions)(\/|\?|$)/,
+  // apps: a sign-in handed to another app (WorkSuite Office) is the main process's alone (office-signin.ts).
+  /^\/api\/auth\/(login|refresh|mfa|logout|register|passkeys|password|sessions|apps)(\/|\?|$)/,
   /^\/api\/notifications\/realtime-ticket/,
   /^\/api\/sync\//,
   /^\/api\/api-keys/,

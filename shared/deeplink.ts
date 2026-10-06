@@ -54,6 +54,8 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'mail/:id', module: 'mail', route: (p) => `/mail/${p.id}` },
   { pattern: 'chat', module: 'chat', route: () => '/chat' },
   { pattern: 'chat/:id', module: 'chat', route: (p) => `/chat/${p.id}` },
+  { pattern: 'phone', module: 'phone', route: () => '/phone' },
+  { pattern: 'phone/calls/:id', module: 'phone', route: (p) => `/phone/calls/${p.id}` },
   // WhatsApp is a channel of Chat (worksuite-desktop#35): its links open there, on the same conversation.
   { pattern: 'whatsapp', module: 'whatsapp', route: () => whatsappRoute() },
   { pattern: 'whatsapp/:id', module: 'whatsapp', route: (p) => whatsappRoute({ chat: p.id }) },

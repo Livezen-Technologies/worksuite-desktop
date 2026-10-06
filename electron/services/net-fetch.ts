@@ -8,7 +8,18 @@ const log = logger('net-fetch');
 /** `net.request` (or a test's stand-in). */
 export type NetRequest = (options: ClientRequestConstructorOptions) => ClientRequest;
 
-export type NetFetchInit = RequestInit & { bypassCustomProtocolHandlers?: boolean };
+export type NetFetchInit = RequestInit & {
+  bypassCustomProtocolHandlers?: boolean;
+  /**
+   * How many bytes of the body the network has taken so far, from Chromium's own count (`getUploadProgress`), every
+   * UPLOAD_PROGRESS_MS while it goes and once more when the answer comes (worksuite-desktop#265: the speed test's
+   * upload). What is written to the request is buffered at once, whatever the line's speed, so only this says how fast
+   * the body actually goes out.
+   */
+  onUploadProgress?: (bytes: number) => void;
+};
+
+const UPLOAD_PROGRESS_MS = 50;
 
 const NULL_BODY = [101, 204, 205, 304];
 
@@ -70,11 +81,36 @@ export function createNetFetch(request: NetRequest, session?: Session): (input: 
         return;
       }
 
+      let progress: NodeJS.Timeout | null = null;
+      let uploaded = -1;
+      const reportUpload = () => {
+        try {
+          const p = cr.getUploadProgress();
+          if (p.current > uploaded) {
+            uploaded = p.current;
+            init!.onUploadProgress!(p.current);
+          }
+        } catch {
+          /* the count is a nicety */
+        }
+      };
+      const stopProgress = (last: boolean) => {
+        if (!progress) return;
+        clearInterval(progress);
+        progress = null;
+        if (last) reportUpload();
+      };
+      if (init?.onUploadProgress && req.body && typeof cr.getUploadProgress === 'function') {
+        progress = setInterval(reportUpload, UPLOAD_PROGRESS_MS);
+        progress.unref?.();
+      }
+
       let aborted = false;
       req.signal.addEventListener(
         'abort',
         () => {
           aborted = true;
+          stopProgress(false);
           reject(reason());
           cancelBody(reason());
           try {
@@ -87,6 +123,7 @@ export function createNetFetch(request: NetRequest, session?: Session): (input: 
       );
 
       cr.on('response', (resp: IncomingMessage) => {
+        stopProgress(true);
         if (aborted) return;
         try {
           const headers = responseHeaders(resp.headers, (name) => log.warn('response header left out', { header: name }));
@@ -103,12 +140,18 @@ export function createNetFetch(request: NetRequest, session?: Session): (input: 
           reject(e);
         }
       });
-      cr.on('error', (e: Error) => reject(e));
+      cr.on('error', (e: Error) => {
+        stopProgress(false);
+        reject(e);
+      });
 
       if (req.body) {
         req.body.pipeTo(Writable.toWeb(cr as unknown as Writable) as unknown as WritableStream<Uint8Array>).then(
           () => cr.end(),
-          (e: unknown) => reject(e),
+          (e: unknown) => {
+            stopProgress(false);
+            reject(e);
+          },
         );
       } else {
         cr.end();

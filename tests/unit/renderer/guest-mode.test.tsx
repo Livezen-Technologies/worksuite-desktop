@@ -59,7 +59,7 @@ beforeEach(() => {
     if (channel === 'local:overview') return { notes: 2, tasks: 1, contacts: 3, events: 0, meetingInput: '', meetingServer: '' };
     if (channel === 'guest:pending') return null;
     if (channel === 'calls:list') return [];
-    // As the main process answers it: the title bar asks whether the window is in full screen.
+    // The shell's title bar asks once whether the window is in full screen.
     if (channel === 'windows:state') return { id: 1, kind: 'main', maximized: false, alwaysOnTop: false, platform: 'linux', fullScreen: false };
     return undefined;
   });

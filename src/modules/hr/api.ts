@@ -428,15 +428,49 @@ export interface CoverAsk {
 }
 
 export interface LeaveReview {
-  request: { id: number; type_name: string | null; paid: boolean | null; starts_on: string; ends_on: string; days: number; portion: string; minutes: number | null; starts_at: string | null; reason: string | null; status: string; requested_on: string | null; notice_days: number | null };
+  request: {
+    id: number;
+    type_name: string | null;
+    paid: boolean | null;
+    starts_on: string;
+    ends_on: string;
+    days: number;
+    portion: string;
+    minutes: number | null;
+    starts_at: string | null;
+    reason: string | null;
+    status: string;
+    requested_on: string | null;
+    notice_days: number | null;
+    /** Newer servers: who decided it and when, and until when that decision can still be undone. */
+    decided_by?: string | null;
+    decided_at?: string | null;
+    undo_until?: string | null;
+  };
   employee: { id: number; name?: string | null; department?: string | null; job_title?: string | null };
   balances: Array<{ type_id: number; type_name: string; requested: boolean; entitled: number; taken: number; remaining: number }>;
   pending: { count: number; days: number };
   history: { year: number; approved_days: number; approved_count: number; rejected_count: number; cancelled_count: number };
   overlap: { department_known: boolean; items: Array<{ employee_name: string | null; type_name: string | null; starts_on: string; ends_on: string; days: number }> };
+  /** Counted over the last `window_days` days before the review. */
   attendance: { window_days: number; days_present: number; days_late: number; missing_check_outs: number } | null;
-  responsible: { user_id: number; name: string; status: string | null; note: string | null } | null;
+  /**
+   * The colleague asked to cover. Newer servers also say whether the approver may remind them or name somebody
+   * else (`…/cover/remind`, `…/cover/change`); without those flags neither is offered.
+   */
+  responsible: { user_id: number; name: string; status: string | null; note: string | null; can_remind?: boolean; can_change?: boolean } | null;
   evidence: Array<{ id: number; title: string; filename: string; url: string }>;
+  /** Newer servers: whether the person reading may approve or reject it (a cover-only reader may not). */
+  can_decide?: boolean;
+  /** Newer servers: the organisation's "the cover must accept before approval" setting. */
+  cover_first?: boolean;
+}
+
+/** What `POST …/decide` answers; newer servers add when, and until when Undo (`POST …/undo`) is allowed. */
+export interface LeaveDecided {
+  status?: string;
+  decided_at?: string | null;
+  undo_until?: string | null;
 }
 
 // ── requests ─────────────────────────────────────────────────────────────

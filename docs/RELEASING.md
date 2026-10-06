@@ -6,6 +6,20 @@ Bump `version` in `package.json`, add a CHANGELOG entry, commit, tag `vX.Y.Z`
 and push the tag. The **Build** workflow checks, packages every platform, and
 — for tags — signs a release manifest.
 
+**Minimum server version (worksuite-desktop#259).** A release that uses new
+server endpoints lists the minimum WorkSuite module versions it needs in its
+CHANGELOG entry and release notes, for example "Needs Communication 2.4.0 or
+later".
+
+- Record each new feature's version in `MIN_COMMUNICATION`
+  (`src/modules/chat/website/widget/serverSupport.ts`). The admin notice can
+  then name it.
+- Add the feature's key to the server's `GET /api/capabilities` list (see
+  [BACKEND.md](BACKEND.md)).
+- Beta may ship ahead of the server: unsupported screens stay hidden, and
+  admins see the notice. **Stable is not published until the matching server
+  version is live** on app.worksuite.lk and the demo server.
+
 ## 2. Signing secrets (GitHub → Settings → Secrets)
 
 | Secret | For |

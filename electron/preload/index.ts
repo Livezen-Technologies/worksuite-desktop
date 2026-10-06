@@ -486,6 +486,12 @@ const api = {
     displayOpen: call('pos:displayOpen'),
     displayClose: call('pos:displayClose'),
   },
+  // The Phone (phone-channels.ts): its switch in the page policy, global shortcuts, call notifications.
+  phone: {
+    prepare: call('phone:prepare'),
+    shortcuts: call('phone:shortcuts'),
+    notify: call('phone:notify'),
+  },
   // Mail data files, export, safe links and S/MIME (ENH-MAIL-03 P4).
   mailfile: {
     pick: call('mailfile:pick'),

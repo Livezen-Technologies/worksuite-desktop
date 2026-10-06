@@ -145,6 +145,8 @@ describe('API proxy (renderer never sees credentials)', () => {
       ['POST', '/api/auth/mfa'], ['POST', '/api/auth/login'], ['POST', '/api/auth/refresh'], ['POST', '/api/auth/password'],
       ['POST', '/api/auth/passkeys/desktop/exchange'], ['POST', '/api/auth/passkeys/revoke-all'], ['POST', '/api/auth/passkeys/4'],
       ['DELETE', '/api/auth/sessions'], ['GET', '/api/auth/sessions/645'], ['POST', '/api/auth/mfa/setup/../../login'], ['POST', '/media/abcdefgh12'],
+      // A sign-in handed to WorkSuite Office is the main process's alone (office-signin.ts): no page may mint one.
+      ['POST', '/api/auth/apps/handoff'], ['POST', '/api/auth/apps/exchange'], ['GET', '/api/auth/apps'],
     ];
     for (const [m, p] of refused) expect(isProxyPathAllowed(p, m), `${m} ${p}`).toBe(false);
   });

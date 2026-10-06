@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { PdfDiagnosticCheck, PdfFailureReport, PdfLocalPick } from '@shared/pdf';
 import { call, errorMessage } from '../../core/bridge';
 import { registerCommand } from '../../core/commands';
@@ -7,7 +7,9 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
-import { registerDroppedPdfs, sourceFromQuery } from './client';
+import { sourceFromQuery } from './client';
+import { HOME_SECTIONS, PdfHome, type HomeSection } from './Home';
+import { toolById, type ToolId } from './tools';
 import { openPdf } from './open';
 import { Workspace } from './Workspace';
 
@@ -28,10 +30,10 @@ export default function PdfStudio({ active }: ModuleProps) {
   const view = query.get('view');
 
   const openRef = useRef<() => Promise<void>>(async () => undefined);
-  const openLocal = async () => {
+  const openLocal = async (tool?: ToolId) => {
     try {
       const picked = await call('pdf:pickLocal');
-      openPicked(picked, (r) => go(r));
+      openPicked(picked, (r) => go(r), tool);
     } catch (e) {
       toast('error', errorMessage(e));
     }
@@ -47,52 +49,26 @@ export default function PdfStudio({ active }: ModuleProps) {
     return off;
   }, [active]);
 
-  if (view === 'diagnostics') return <PdfDiagnostics />;
-  if (!source) return <Home onOpen={() => void openLocal()} onPicked={(p) => openPicked(p, (r) => go(r))} missing={query.has('local')} />;
+  if (!source) {
+    const section = (HOME_SECTIONS as string[]).includes(view ?? '') ? (view as HomeSection) : 'home';
+    const tool = toolById(query.get('tool'))?.id ?? null;
+    return (
+      <PdfHome
+        section={section === 'tool' && !tool ? 'tools' : section}
+        tool={tool}
+        missing={query.has('local')}
+        onOpenLocal={(t) => void openLocal(t)}
+        onPicked={(p) => openPicked(p, (r) => go(r))}
+        diagnostics={<PdfDiagnostics />}
+      />
+    );
+  }
   return <Workspace key={query.toString()} source={source} />;
 }
 
-/** The first PDF chosen opens here; any others in tabs of their own. */
-function openPicked(files: PdfLocalPick[], here: (route: string) => void): void {
-  files.forEach((f, i) => (i === 0 ? here(`/pdf?local=${f.handle}`) : openPdf({ kind: 'local', handle: f.handle }, f.name)));
-}
-
-function Home({ onOpen, onPicked, missing }: { onOpen: () => void; onPicked: (p: PdfLocalPick[]) => void; missing: boolean }) {
-  useTabTitle('PDF Studio');
-  const { navigate } = useTab();
-  const [over, setOver] = useState(false);
-  const onDrop = async (e: DragEvent) => {
-    e.preventDefault();
-    setOver(false);
-    try {
-      const { files, rejected } = await registerDroppedPdfs(Array.from(e.dataTransfer.files));
-      if (rejected.length) toast('warning', rejected.map((r) => r.reason).join(' '));
-      if (files.length) onPicked(files);
-    } catch (err) {
-      toast('error', errorMessage(err));
-    }
-  };
-  return (
-    <div className="flex h-full items-center justify-center overflow-auto bg-ground p-8">
-      <div
-        onDragOver={(e) => {
-          e.preventDefault();
-          setOver(true);
-        }}
-        onDragLeave={() => setOver(false)}
-        onDrop={(e) => void onDrop(e)}
-        className={cx('flex w-[560px] max-w-full flex-col items-center gap-4 rounded-[18px] border-2 border-dashed bg-surface px-8 py-10 text-center', over ? 'border-primary bg-selection' : 'border-line')}
-      >
-        <span className="flex h-16 w-16 items-center justify-center rounded-[16px] bg-danger-bg text-danger"><Icon name="file-text" size={30} /></span>
-        <h1 className="text-[20px] font-bold text-ink">PDF Studio</h1>
-        {missing ? <p className="rounded-[8px] bg-warning-bg px-3 py-1.5 text-[12.5px] text-warning">That file from this computer needs to be opened again: WorkSuite forgets local files when it restarts or you sign out.</p> : null}
-        <p className="text-[13px] leading-[1.5] text-ink-2">Open a PDF from this computer, or drop one here. PDFs you open in Files and Mail open in PDF Studio too, each in a tab of its own.</p>
-        <Button variant="primary" icon="folder-open" onClick={onOpen}>Open a PDF…</Button>
-        <p className="text-[12px] text-ink-3">PDFs from this computer are read where they are and are never uploaded unless you choose to.</p>
-        <button type="button" onClick={() => navigate('/pdf?view=diagnostics')} className="text-[12px] font-semibold text-primary hover:underline">PDF Diagnostics</button>
-      </div>
-    </div>
-  );
+/** The first PDF chosen opens here (with the tool asked for, if any); any others in tabs of their own. */
+function openPicked(files: PdfLocalPick[], here: (route: string) => void, tool?: ToolId): void {
+  files.forEach((f, i) => (i === 0 ? here(`/pdf?local=${f.handle}${tool ? `&tool=${tool}` : ''}`) : openPdf({ kind: 'local', handle: f.handle }, f.name)));
 }
 
 const STATUS: Record<PdfDiagnosticCheck['status'], { icon: string; tone: string; label: string }> = {
@@ -110,6 +86,17 @@ function rendererCheck(): PdfDiagnosticCheck {
     return { id: 'renderer', label: 'Page drawing', status: ok ? 'pass' : 'fail', detail: ok ? `This window draws pages at ${window.devicePixelRatio || 1}× (the screen's pixel density).` : 'This window cannot draw pages: the canvas is not available.' };
   } catch {
     return { id: 'renderer', label: 'Page drawing', status: 'fail', detail: 'This window cannot draw pages.' };
+  }
+}
+
+/** The report to paste into a support request: states only, never a document, its name or a password. */
+async function copyReport(checks: PdfDiagnosticCheck[]): Promise<void> {
+  const text = ['PDF Diagnostics', ...checks.map((c) => `${STATUS[c.status].label.padEnd(11)} ${c.label} — ${c.detail}`)].join('\n');
+  try {
+    await navigator.clipboard.writeText(text);
+    toast('success', 'The report is on the clipboard.');
+  } catch {
+    toast('error', 'The report could not be copied.');
   }
 }
 
@@ -140,11 +127,12 @@ export function PdfDiagnostics() {
     };
   }, [n]);
   return (
-    <div className="h-full overflow-y-auto bg-ground p-6 scroll-thin">
-      <div className="mx-auto flex max-w-[720px] flex-col gap-4">
+    <div>
+      <div className="flex flex-col gap-4">
         <div className="flex items-center gap-3">
           <h1 className="flex-1 text-[20px] font-bold text-ink">PDF Diagnostics</h1>
           <Button icon="refresh" onClick={() => (setChecks(null), setN(n + 1))}>Check again</Button>
+          <Button icon="copy" disabled={!checks} onClick={() => void copyReport(checks ?? [])}>Copy report</Button>
           <Button icon="stethoscope" onClick={() => navigate('/diagnostics')}>Diagnostic report…</Button>
         </div>
         {error ? <p className="text-[13px] text-danger">{error}</p> : null}
@@ -177,6 +165,10 @@ export function PdfDiagnostics() {
             <p className="text-[12.5px] text-ink-3">None since WorkSuite started.</p>
           )}
           <p className="mt-2 text-[12px] text-ink-3">Problems are written to WorkSuite's log with the file's format, size and page count and the engine's error — never the document, its name or a password. A diagnostic report carries that log; you see it before it is saved.</p>
+        </section>
+        <section>
+          <h2 className="mb-2 text-[14px] font-bold text-ink">Server checks and file activity</h2>
+          <p className="text-[12.5px] text-ink-3">The server half of these checks (API, database, Drive, temporary storage, live updates, server tools) comes from GET api/files/pdf/diagnostics once the desktop asks for it. A PDF’s own activity — edited, printed, lock released, conflict kept both — is in its Review › Activity panel.</p>
         </section>
       </div>
     </div>

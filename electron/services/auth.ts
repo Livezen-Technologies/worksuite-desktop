@@ -336,11 +336,20 @@ export class AuthService {
     const tokens = data.tokens as Tokens | undefined;
     if (!tokens?.access_token || !tokens.refresh_token) throw new DesktopError('SERVER_ERROR', 'The server did not return a session.');
     this.storeTokens(tokens);
+    // A refresh still under way belongs to the session this one replaces: what asks next refreshes this one, not waits on that.
+    if (!this.held) this.refreshing = null;
     return data as unknown as SignInPayload;
   }
 
   private storeTokens(tokens: Tokens): void {
-    this.secrets.set(REFRESH_KEY, tokens.refresh_token);
+    try {
+      this.secrets.set(REFRESH_KEY, tokens.refresh_token);
+    } catch (e) {
+      // The OS store refused the write (a keychain prompt denied, a file another program holds): the token is still
+      // kept in memory, so this session carries on; only staying signed in across a restart is lost. Failing here
+      // used to fail a sign-in whose password was right with "Something went wrong" (LOGIN-001).
+      log.warn('refresh token not saved to secure storage; kept for this run only', { error: String((e as Error)?.message ?? e) });
+    }
     const ttl = Math.max(60, Number(tokens.expires_in) || 3600) * 1000;
     this.access = { token: tokens.access_token, expiresAt: Date.now() + ttl };
     this.scheduleRefresh(ttl);
@@ -354,14 +363,31 @@ export class AuthService {
     this.refreshTimer.unref?.();
   }
 
-  /** Single-flight refresh. 'lost' clears the stored refresh token. */
+  /**
+   * Single-flight refresh. 'lost' clears the stored refresh token.
+   *
+   * The answer is applied only to the session it was asked for. A sign-in
+   * (or a sign-out) while the request was under way — two seconds and more
+   * on a busy server — replaced that session, and the answer is about the old
+   * one: refused, it used to delete the NEW refresh token and access token,
+   * so the sign-in that had just succeeded failed on its next request and the
+   * person was back at the sign-in screen; accepted, it put the old session's
+   * tokens over the new ones (LOGIN-001). Such an answer is now dropped, and
+   * the outcome is whether a session is there now.
+   */
   refresh(): Promise<'ok' | 'offline' | 'lost'> {
     if (this.refreshing) return this.refreshing;
-    this.refreshing = (async () => {
+    const flight: Promise<'ok' | 'offline' | 'lost'> = (async () => {
       const token = this.secrets.get(REFRESH_KEY);
       if (!token || !this.server) return 'lost' as const;
+      const replaced = () => this.secrets.get(REFRESH_KEY) !== token;
+      const now = () => (this.secrets.get(REFRESH_KEY) ? ('ok' as const) : ('lost' as const));
       try {
         const { res, json } = await this.post('/api/auth/refresh', { refresh_token: token });
+        if (replaced()) {
+          log.info('refresh answered for a session already replaced; ignored', { status: res.status });
+          return now();
+        }
         if (res.status === 401 || res.status === 403) {
           if (json?.code === 'DEVICE_REVOKED') {
             this.secrets.delete(REFRESH_KEY);
@@ -380,13 +406,16 @@ export class AuthService {
         this.storeTokens(data.tokens);
         return 'ok' as const;
       } catch (e) {
+        if (replaced()) return now();
         log.info('refresh could not reach server', { error: String((e as Error).message) });
         return 'offline' as const;
       }
     })().finally(() => {
-      this.refreshing = null;
+      // Only its own slot: a sign-in may have let go of this one and a newer refresh taken its place.
+      if (this.refreshing === flight) this.refreshing = null;
     });
-    return this.refreshing;
+    this.refreshing = flight;
+    return flight;
   }
 
   /**

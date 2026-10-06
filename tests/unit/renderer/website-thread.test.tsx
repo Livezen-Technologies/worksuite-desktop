@@ -104,7 +104,7 @@ describe('reply quotes in the website thread (RDC-10)', () => {
     expect(quote.textContent).toBe('Visitor 4F2A · Hi, is the Adobe licence lifetime or yearly?');
     // Reply is in the message's actions, the same menu as Team Chat's (RDC-12).
     const replyTo = (el: HTMLElement) => {
-      fireEvent.click(within(el.closest('[data-bubble]') as HTMLElement).getByRole('button', { name: 'Message actions' }));
+      fireEvent.click(within(el.closest('[data-bubble]') as HTMLElement).getByRole('button', { name: 'More actions' }));
       fireEvent.click(screen.getByRole('menuitem', { name: 'Reply' }));
     };
     replyTo(screen.getByText('Hi, is the Adobe licence lifetime or yearly?', { selector: '[data-bubble-body] span' }));
