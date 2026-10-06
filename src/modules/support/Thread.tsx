@@ -75,6 +75,8 @@ export function Thread({
         const files = filesOf.get(m.id) ?? [];
         const who = m.author?.name ?? m.author_name ?? (m.from === 'requester' ? text('Requester') : text('Staff'));
         const sent = delivery(m);
+        // A server that sends no copy list sends no copies.
+        const cc = m.cc ?? [];
         return (
           <Fragment key={m.id}>
             {newDay ? (
@@ -109,7 +111,7 @@ export function Thread({
                 ) : (
                   <span className="truncate text-ink-3">{messageKind(m)}</span>
                 )}
-                {m.cc.length && !m.internal ? <span className="truncate text-ink-3">· {text('CC {list}', { list: m.cc.join(', ') })}</span> : null}
+                {cc.length && !m.internal ? <span className="truncate text-ink-3">· {text('CC {list}', { list: cc.join(', ') })}</span> : null}
                 <span className="ml-auto shrink-0 text-ink-3" title={m.created_at ? stampDayLabel(m.created_at, 'long') : undefined}>
                   {timeLabel(m.created_at)}
                   {sent ? ` · ${sent}` : ''}

@@ -136,7 +136,7 @@ export function ReadingPane({
         <Thread compact messages={show.messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} onOpenAttachment={(a) => void openAttachment(a)} />
         {show.legacy ? <p className="pt-3 text-center text-[11.5px] text-ink-3">{text('Your WorkSuite server is older: read markers, files and who else is here show once it is updated.')}</p> : null}
       </div>
-      {!t.merged_into ? <Composer compact ticket={t} can={show.can} focusRequest={focusRequest} onTyping={setTyping} /> : null}
+      {!t.merged_into && !t.deleted_at ? <Composer compact ticket={t} can={show.can} transitions={show.transitions} legacy={show.legacy === true} focusRequest={focusRequest} onTyping={setTyping} /> : null}
     </article>
   );
 }

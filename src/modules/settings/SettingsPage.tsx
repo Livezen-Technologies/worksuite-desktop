@@ -333,6 +333,8 @@ const SHORTCUT_LABELS: Record<string, string> = {
   'new-tab': 'New tab',
   'close-tab': 'Close tab',
   'restore-tab': 'Reopen closed tab',
+  'next-tab': 'Next tab',
+  'prev-tab': 'Previous tab',
   settings: 'Settings',
   ai: 'AI Assistant',
   'switch-org': 'Switch organization',

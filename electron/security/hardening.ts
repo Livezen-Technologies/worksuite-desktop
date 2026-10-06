@@ -94,10 +94,23 @@ function hostAllowed(host: string): boolean {
 }
 
 /**
+ * A RustDesk ID (RustDesk's `is_valid_custom_id()`, and the six to fifteen digits its servers assign), from its
+ * connect link `rustdesk://connect/<id>` — or null for anything else: the `config/…` form that rewrites the client's
+ * server settings, a link carrying a password, a path or a query.
+ */
+export function rustDeskId(raw: string): string | null {
+  const m = /^rustdesk:\/\/connect\/([A-Za-z0-9_-]{6,16})$/.exec(raw);
+  if (!m) return null;
+  const id = m[1]!;
+  return /^\d{6,15}$/.test(id) || /^[A-Za-z][\w-]{5,15}$/.test(id) ? id : null;
+}
+
+/**
  * shell.openExternal is only ever called here (§13.2): https, mailto, or a
  * phone number to call (tel: with nothing but digits and a leading +, which
- * macOS hands to FaceTime to confirm); a host outside the allow-list is
- * opened only after the user confirms it.
+ * macOS hands to FaceTime to confirm), or a RustDesk connect link (Support's
+ * remote session, FR-WSP-08: an ID and nothing else); a host outside the
+ * allow-list is opened only after the user confirms it.
  */
 export async function openExternalSafely(raw: string, parent?: Electron.BrowserWindow | null): Promise<boolean> {
   let u: URL;
@@ -105,6 +118,20 @@ export async function openExternalSafely(raw: string, parent?: Electron.BrowserW
     u = new URL(raw);
   } catch {
     return false;
+  }
+  if (u.protocol === 'rustdesk:') {
+    const id = rustDeskId(raw);
+    if (!id) {
+      log.warn('blocked external open', { protocol: u.protocol });
+      return false;
+    }
+    try {
+      await shell.openExternal(`rustdesk://connect/${id}`);
+      return true;
+    } catch {
+      // No RustDesk client on this computer to take it: the screen says so.
+      return false;
+    }
   }
   if (u.protocol === 'mailto:') {
     await shell.openExternal(u.toString());

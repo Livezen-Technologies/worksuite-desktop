@@ -101,7 +101,8 @@ export const SOURCE_LABEL: Record<SupportSource, string> = {
   desktop: 'WorkSuite Desktop',
 };
 
-export type SlaState = 'ok' | 'at_risk' | 'breached' | 'met' | 'paused';
+/** `none`: no SLA policy applies to the ticket. */
+export type SlaState = 'ok' | 'at_risk' | 'breached' | 'met' | 'paused' | 'none';
 export type SlaTarget = 'first_response' | 'next_response' | 'resolution';
 export const SLA_TARGET_LABEL: Record<SlaTarget, string> = { first_response: 'First response', next_response: 'Next response', resolution: 'Resolution' };
 
@@ -220,6 +221,37 @@ export interface TicketFull extends Ticket {
   merged_into?: { id: number; reference: string } | null;
   watchers?: IdName[];
   created_by?: number | null;
+  /** Each SLA target's clock as the server keeps it (`GET tickets/{id}`); none for a ticket no policy applies to. */
+  sla_timers?: SlaTimer[];
+}
+
+/** One SLA target's clock: when it is due, and whether it runs, stands still, was missed or was met (`at`: when it settled). */
+export interface SlaTimer {
+  target: SlaTarget;
+  due_at: string | null;
+  state: 'running' | 'paused' | 'breached' | 'met';
+  at: string | null;
+}
+
+/**
+ * What a ticket is linked to (FR-TKT-05, `GET tickets/{id}/links`): another ticket, a website chat or a record of
+ * another module. Something the viewer may not open is `visible: false`, with no label and no link.
+ */
+export interface TicketLink {
+  id: number;
+  module: string;
+  entity: string;
+  entity_id: number;
+  relation: 'related' | 'duplicate' | 'follow_up' | 'merged' | string;
+  created_at: string | null;
+  visible: boolean;
+  label: string | null;
+  /** A linked ticket's status. */
+  status?: string | null;
+  /** A record's second line ("LKR 486,000 · Paid"). */
+  detail?: string | null;
+  /** Where it opens on the web (`/tickets?ticket=12`), or null. */
+  link: string | null;
 }
 
 export interface Message {

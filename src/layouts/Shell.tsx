@@ -10,7 +10,7 @@ import { initLauncherPrefs, shellShortcuts } from '../core/launcher-prefs';
 import { initOrgPrefs } from '../core/org-prefs';
 import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
-import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, newRoute, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
+import { activateIndex, activateRelative, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, newRoute, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
 import { toast } from '../core/toasts';
 import { aiWidget, closeOverlay, closeTopPanel, minimiseChatDrawer, openAssistant, openChatDrawer, openOverlay, toggleAssistant, toggleDock, ui, useAiDisplay } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
@@ -125,6 +125,8 @@ export function Shell() {
         },
       }),
       registerCommand({ id: 'restore-tab', label: 'Reopen closed tab', group: 'Shell', run: restoreClosed }),
+      registerCommand({ id: 'next-tab', label: 'Next tab', group: 'Shell', keywords: 'switch tab right', run: () => activateRelative(1) }),
+      registerCommand({ id: 'prev-tab', label: 'Previous tab', group: 'Shell', keywords: 'switch tab left back', run: () => activateRelative(-1) }),
       registerCommand({ id: 'move-tab-to-window', label: 'Move tab to new window', group: 'Shell', keywords: 'tear off detach undock window', run: () => { const t = activeTab(); if (t) void detachTab(t.id); } }),
       registerCommand({
         id: 'dock-tab-beside',

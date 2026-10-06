@@ -448,6 +448,15 @@ export function activateIndex(n: number): void {
   if (t) activate(t.id);
 }
 
+/** The next tab (`step` 1) or the previous one (-1), round from the last to the first and back (⌘⇧] and ⌘⇧[). */
+export function activateRelative(step: 1 | -1): void {
+  const s = tabsStore.get();
+  if (s.tabs.length < 2) return;
+  const at = s.tabs.findIndex((t) => t.id === s.activeId);
+  const next = s.tabs[(Math.max(at, 0) + step + s.tabs.length) % s.tabs.length];
+  if (next) activate(next.id);
+}
+
 /** FR-NAV-08: unmount tabs idle longer than the suspension time. */
 export function suspendIdle(minutes: number): void {
   const now = Date.now();

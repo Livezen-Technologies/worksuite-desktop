@@ -22,6 +22,7 @@ import {
   type TicketChanges,
   type TicketEvent,
   type TicketFull,
+  type TicketLink,
   type TicketPage,
   type TicketShow,
   type TransitionInput,
@@ -327,6 +328,23 @@ export async function renderCanned(id: number, ticketId: number): Promise<string
   return (await v1Only(() => send<{ body: string }>('POST', `${BASE}/canned/${id}/render`, { ticket_id: ticketId }))).body;
 }
 
+/* ── links and watchers ─────────────────────────────────────────────────── */
+
+/** What the ticket is linked to, as I may see it (FR-TKT-05). Nothing from an as-built server, which has no links. */
+export function links(ticketId: number, signal?: AbortSignal): Promise<TicketLink[]> {
+  return v1OrElse(async () => (await get<{ links: TicketLink[] }>(`${BASE}/tickets/${ticketId}/links`, undefined, signal)).links ?? [], () => []);
+}
+
+/** Follow a ticket: told whenever it changes (FR-ASN-07). Watchers do not change the version. */
+export function watch(ticketId: number): Promise<unknown> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/watchers`, {}));
+}
+
+/** Stop following it: myself always (anybody else needs assign). */
+export function unwatch(ticketId: number, userId: number): Promise<unknown> {
+  return v1Only(() => send('DELETE', `${BASE}/tickets/${ticketId}/watchers/${userId}`));
+}
+
 /* ── presence (FR-COM-11) ───────────────────────────────────────────────── */
 
 /** Who else is on a ticket now. Nobody, for a server without presence — and for an answer from the saved copy. */
@@ -382,5 +400,7 @@ export const K = {
   agents: (key: string) => ['support', 'agents', key] as const,
   canned: (q: string) => ['support', 'canned', q] as const,
   presence: (id: number) => ['support', 'presence', id] as const,
+  links: (id: number) => ['support', 'links', id] as const,
+  requester: (email: string) => ['support', 'requester', email.toLowerCase()] as const,
   myPresence: ['chat', 'presence', 'me'] as const,
 };

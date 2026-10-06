@@ -4,7 +4,8 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => undefined), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false }));
 
 import { call } from '../../../src/core/bridge';
-import { activate, navigate, openTab, resetTabs, restoreTabs, tabsStore } from '../../../src/core/tabs';
+import { activate, activateRelative, navigate, openTab, resetTabs, restoreTabs, tabsStore } from '../../../src/core/tabs';
+import { DEFAULT_SHORTCUTS, accelerator, commandForAccelerator } from '../../../src/core/commands';
 import { app } from '../../../src/core/app-state';
 import { visibleApps } from '@shared/apps';
 
@@ -84,5 +85,41 @@ describe('support ticket tabs', () => {
     app.set({ apps: visibleApps({ apps: ['mail'], permissions: [] }) });
     navigate('/support/ticket/1284');
     expect(routes().some((r) => r.startsWith('/support'))).toBe(false);
+  });
+});
+
+describe('the next and the previous tab (D-02: ⌘⇧] next tab)', () => {
+  it('goes to the next tab and the previous one, round from the last to the first', () => {
+    navigate('/support');
+    navigate('/support/ticket/1');
+    navigate('/support/ticket/2');
+    const order = routes();
+    expect(order.slice(-3)).toEqual(['/support', '/support/ticket/1', '/support/ticket/2']);
+    expect(active().route).toBe('/support/ticket/2');
+    activateRelative(1);
+    expect(active().route).toBe(order[0]);
+    activateRelative(-1);
+    expect(active().route).toBe('/support/ticket/2');
+    activateRelative(-1);
+    expect(active().route).toBe('/support/ticket/1');
+  });
+
+  it('stays put with one tab', () => {
+    expect(state().tabs.length).toBeLessThanOrEqual(1);
+    const before = state().activeId;
+    activateRelative(1);
+    activateRelative(-1);
+    expect(state().activeId).toBe(before);
+  });
+
+  it('reads ⌘⇧] and ⌘⇧[ as the bracket keys, whatever Shift makes of them', () => {
+    const press = (key: string, code: string) => ({ key, code, metaKey: true, ctrlKey: false, shiftKey: true, altKey: false });
+    expect(accelerator(press('}', 'BracketRight'), true)).toBe('Mod+Shift+]');
+    expect(accelerator(press('{', 'BracketLeft'), true)).toBe('Mod+Shift+[');
+    expect(accelerator({ ...press('}', 'BracketRight'), metaKey: false, ctrlKey: true }, false)).toBe('Mod+Shift+]');
+    // Without Shift a bracket key is what it types (Ctrl+[ is Website chat's way back to Chat).
+    expect(accelerator({ key: '[', code: 'BracketLeft', metaKey: false, ctrlKey: true, shiftKey: false, altKey: false }, false)).toBe('Mod+[');
+    expect(commandForAccelerator(DEFAULT_SHORTCUTS, 'Mod+Shift+]')).toBe('next-tab');
+    expect(commandForAccelerator(DEFAULT_SHORTCUTS, 'Mod+Shift+[')).toBe('prev-tab');
   });
 });

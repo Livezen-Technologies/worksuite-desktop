@@ -16,6 +16,10 @@ the root CHANGELOG.md.
 - the keyboard of FR-WSP-06: j/k move, Enter or O opens the ticket's tab, R reply, N note, E resolve (with what fixed it, sent with the version shown), / search
 - availability: Online or Away (Chat's presence, the one routing reads) and my open tickets against my capacity, ⌥⌘A / Ctrl+Alt+A to switch
 - live: desk hints ask the lists, counts and badges again (once for a burst), ticket hints that ticket, presence hints show who is on it; without the realtime gateway the inbox polls every 30 s; a ticket read in the pane is marked read once it has been shown for a moment (fetched with peek), and says I am here (viewing, typing, left)
+- the ticket tab, D-02: the conversation with "New since you last viewed" and earlier messages on request, the journal (Activity), what it is linked to and its files; Take it, Follow, Remote, Escalate, Resolve, and the web for the rest; merged and trashed tickets read-only; who else is on it (viewing every 30 s, typing, left when the tab closes or goes behind another)
+- the properties: status through the moves allowed, priority, assignee with presence and load, team, category, department, due date and tags, each sent with the version shown — a ticket somebody changed first opens the conflict review (keep theirs, or set mine on top)
+- the side panels: the SLA's first, next and resolution timers as the server keeps them, the requester with their other tickets and CRM contact, the files (opened with the system's application), related records, and remote support — RustDesk's Connect and the server settings to import
+- the full composer: To and CC, "/" canned responses filled in by the server, @mentions in notes, the status after sending, files dropped on it (a drop target naming the ticket), pasted (a screenshot becomes a named PNG with its picture) or chosen — uploaded and scanned at once, ten of 25 MB at most — and the draft with all of it kept per ticket; the reading pane's inline reply is the same composer
 
 ## 1.0.0 — 2026-10-06
 

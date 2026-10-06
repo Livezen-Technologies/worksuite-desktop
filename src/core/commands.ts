@@ -32,6 +32,9 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   'restore-tab': 'Mod+Shift+T',
   'move-tab-to-window': 'Mod+Shift+N',
   'dock-tab-beside': 'Mod+Shift+D',
+  // The next and the previous tab, as browsers have them on a Mac (WS-SUPPORT-SRS-001 D-02: ⌘⇧] next tab).
+  'next-tab': 'Mod+Shift+]',
+  'prev-tab': 'Mod+Shift+[',
   settings: 'Mod+,',
   ai: 'Mod+Shift+A',
   // ⌘J / Ctrl+J opens or minimises the assistant too (worksuite-desktop#153); inside the mail editor it is Write with AI.
@@ -113,6 +116,8 @@ export function accelerator(e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey'
   if (['Meta', 'Control', 'Shift', 'Alt'].includes(key)) return null;
   // Shift+digit gives "!" etc.; use the physical digit.
   if (/^Digit\d$/.test(e.code)) key = e.code.slice(5);
+  // Shift+] gives "}" (and Shift+[ "{"): the bracket keys, as the shortcuts name them.
+  else if (e.shiftKey && (e.code === 'BracketLeft' || e.code === 'BracketRight')) key = e.code === 'BracketLeft' ? '[' : ']';
   if (key.length === 1) key = key.toUpperCase();
   parts.push(key);
   return parts.join('+');

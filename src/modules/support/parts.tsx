@@ -64,9 +64,9 @@ export function shortSpan(ms: number): string {
 
 const SLA_SHORT: Record<SlaTarget, string> = { first_response: 'FRT', next_response: 'Next', resolution: 'Res' };
 
-/** The SLA chip's tone and words, or null when the server has not computed a state (no chip rather than a guess). */
+/** The SLA chip's tone and words, or null when the server has not computed a state or no policy applies (no chip rather than a guess). */
 export function slaLook(sla: Sla | null | undefined, now: number, long = false): { tone: string; label: string; title: string } | null {
-  if (!sla?.state) return null;
+  if (!sla?.state || sla.state === 'none') return null;
   const target = sla.target ? (long ? text(SLA_TARGET_LABEL[sla.target]) : text(SLA_SHORT[sla.target])) : text('SLA');
   const due = sla.due_at ? parseTs(sla.due_at).getTime() : NaN;
   const left = Number.isFinite(due) ? due - now : null;
@@ -122,6 +122,13 @@ export function ChannelIcon({ source, size = 13, className }: { source: SupportS
       <Icon name={SOURCE_ICON[s] ?? 'life-buoy'} size={size} />
     </span>
   );
+}
+
+const PRESENCE: Record<string, string> = { available: 'Online', busy: 'Busy', away: 'Away', dnd: 'Do not disturb', offline: 'Offline' };
+
+/** An agent's presence, in words ("Online", "Away"…). */
+export function presenceLabel(presence: string): string {
+  return text(PRESENCE[presence] ?? presence);
 }
 
 /** A ticket's reference, in monospace (§19.2). */

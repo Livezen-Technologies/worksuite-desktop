@@ -1,27 +1,57 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
-import type { Caps, MessageAnswer, Ticket } from '@shared/support';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { statusLabel, type Caps, type MessageAnswer, type SupportStatus, type Ticket } from '@shared/support';
 import { isMac } from '../../core/bridge';
 import { useDraft } from '../../core/drafts';
 import { text } from '../../core/i18n';
-import { timeLabel } from '../../core/time';
+import { bytes, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { Button, Kbd, cx } from '../../components/ui';
-import { K, addMessage, errorText, newClientId } from './api';
+import { Icon } from '../../components/Icon';
+import { Select } from '../../components/Select';
+import { Avatar, Button, FileBadge, IconButton, Kbd, cx } from '../../components/ui';
+import { K, MAX_FILES, MAX_FILE_BYTES, addMessage, agents, canned, errorText, newClientId, removeAttachment, renderCanned, uploadAttachment } from './api';
+import { mentionQuery, mentionedIds, parseCc, pasteIsFiles, pastedName, slashQuery, spliceText } from './compose';
 
 /**
- * The composer (FR-COM-01): a reply to the requester or an internal note, as two explicit buttons, a note unless
- * the agent chooses otherwise (§19.2 — what costs nothing when it goes wrong is the default). ⌘↵ (Ctrl+Enter) sends.
+ * The composer (FR-COM-01, D-01's inline reply and D-02's): a reply to the requester or an internal note, as two
+ * explicit buttons, a note unless the agent chooses otherwise (§19.2 — what costs nothing when it goes wrong is the
+ * default). ⌘↵ (Ctrl+Enter) sends.
  *
- * What is typed is kept on this computer per ticket (`useDraft`, encrypted, within a second), so a reply started in
- * the inbox's reading pane carries on in the ticket's tab, and survives a restart (FR-CRT-10). A message is sent with
- * a `client_id` kept until it is in, so pressing Send again after a failure is the same message, never two.
+ *  - "/" at the start of a line offers the canned responses (FR-COM-05), filled in for this ticket by the server
+ *    (`POST canned/{id}/render`) before they are put in.
+ *  - "@" in a note offers the people who can work the ticket; whoever is still named when it is sent is mentioned
+ *    (FR-COM-08), and the server tells them.
+ *  - Files (FR-DSK-06, FR-COM-04): dropped on the composer, pasted (a screenshot becomes a named PNG with its
+ *    picture) or chosen. Each goes up at once — the server checks its type and size and scans it (FR-SEC-06) — and
+ *    waits there for the message that carries it; × takes it back. At most ten, 25 MB each.
+ *  - A reply may copy others (CC), and a message may move the status once it is in ("Then: Pending customer"); a
+ *    move the state machine refuses is reported beside the sent message (`status_refused`).
+ *
+ * What is typed — with its files, CC, status and mentions — is kept on this computer per ticket (`useDraft`,
+ * encrypted, within a second), so a reply started in the inbox's reading pane carries on in the ticket's tab and
+ * survives a restart (FR-CRT-10). A message goes with a `client_id` kept until it is in: Send pressed again after a
+ * failure is the same message, never two. An as-built server takes neither files, CC nor mentions: they are not
+ * offered there.
  */
 export type ComposerMode = 'reply' | 'note';
+
+/** A file uploaded for the message and not sent yet: the server keeps it waiting, so the draft keeps its id. */
+export interface DraftFile {
+  id: number;
+  name: string;
+  size: number;
+  mime: string | null;
+}
 
 export interface SupportDraft {
   body: string;
   mode: ComposerMode;
+  /** The status the ticket moves to once the message is in; null keeps it. */
+  status?: SupportStatus | null;
+  cc?: string[];
+  files?: DraftFile[];
+  /** The people picked with "@": mentioned if their name is still in the text when it is sent. */
+  mentions?: Array<{ id: number; name: string }>;
 }
 
 export const EMPTY_DRAFT: SupportDraft = { body: '', mode: 'note' };
@@ -31,18 +61,39 @@ export function composerModes(can: Caps): { reply: boolean; note: boolean } {
   return { reply: can.reply === true, note: can.reply === true && can.notes === true };
 }
 
+/** A file on its way up: kept here (not in the draft) until the server has it. */
+interface Upload {
+  key: string;
+  file: File;
+  name: string;
+  preview: string | null;
+  error: string | null;
+}
+
+let uploadSeq = 0;
+
 export function Composer({
   ticket,
   can,
   compact = false,
+  transitions = [],
+  legacy = false,
+  hidden = false,
   focusRequest,
   onSent,
   onTyping,
   className,
 }: {
-  ticket: Pick<Ticket, 'id' | 'reference' | 'requester' | 'version'>;
+  ticket: Pick<Ticket, 'id' | 'reference' | 'requester' | 'version' | 'status'>;
   can: Caps;
+  /** The reading pane's denser form. */
   compact?: boolean;
+  /** The moves the ticket allows (`transitions`): what "Then:" offers. */
+  transitions?: SupportStatus[];
+  /** An as-built server: no files, CC or mentions. */
+  legacy?: boolean;
+  /** Out of sight while the tab shows another view, and kept: the draft and the files going up stay. */
+  hidden?: boolean;
   /** The R and N keys: focus the composer in that mode. A new `n` asks again. */
   focusRequest?: { mode: ComposerMode; n: number } | null;
   onSent?: (answer: MessageAnswer) => void;
@@ -53,17 +104,57 @@ export function Composer({
   const qc = useQueryClient();
   const draft = useDraft<SupportDraft>('support', `ticket:${ticket.id}`, EMPTY_DRAFT);
   const modes = composerModes(can);
-  const mode: ComposerMode = draft.value.mode === 'reply' && modes.reply ? 'reply' : modes.note ? 'note' : 'reply';
+  const d = draft.value;
+  const mode: ComposerMode = d.mode === 'reply' && modes.reply ? 'reply' : modes.note ? 'note' : 'reply';
+  const extras = !legacy;
   const [sending, setSending] = useState(false);
+  const [caret, setCaret] = useState(0);
+  const [pick, setPick] = useState(0);
+  const [dismissed, setDismissed] = useState<string | null>(null);
+  const [dragging, setDragging] = useState(false);
+  const [uploads, setUploads] = useState<Upload[]>([]);
+  const [previews, setPreviews] = useState<Record<number, string>>({});
+  const [ccOpen, setCcOpen] = useState(false);
+  const [ccText, setCcText] = useState('');
   const box = useRef<HTMLTextAreaElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
   const clientId = useRef<string | null>(null);
   const typingSaid = useRef<ComposerMode | null>(null);
-  const typed = draft.value.body.trim() !== '';
+  // The draft as last set, read by what finishes later (an upload, a canned response): two at once both count.
+  const latest = useRef(d);
+  useEffect(() => {
+    latest.current = draft.value;
+  });
+  const update = (patch: Partial<SupportDraft>) => {
+    const next = { ...latest.current, ...patch };
+    latest.current = next;
+    draft.setValue(next);
+  };
 
-  // R / N from the list: focus here, in that mode.
+  const files = extras ? (d.files ?? []) : [];
+  const ccSaved = extras ? (d.cc ?? []) : [];
+  const typed = d.body.trim() !== '';
+  const slash = slashQuery(d.body, caret);
+  const mention = mode === 'note' && extras ? mentionQuery(d.body, caret) : null;
+  const picking = slash && dismissed !== `/${slash.start}` ? 'canned' : mention && dismissed !== `@${mention.start}` ? 'mention' : null;
+  const cannedQ = useQuery({ queryKey: K.canned(slash?.word ?? ''), queryFn: () => canned(slash?.word ?? ''), enabled: picking === 'canned', staleTime: 60_000 });
+  const people = useQuery({ queryKey: K.agents(`ticket:${ticket.id}`), queryFn: () => agents({ ticket_id: ticket.id }), enabled: picking === 'mention', staleTime: 60_000 });
+  const choices =
+    picking === 'canned'
+      ? (cannedQ.data ?? []).slice(0, 8).map((c) => ({ key: `c${c.id}`, label: c.title, hint: c.shortcut ? `/${c.shortcut}` : c.body.slice(0, 80), canned: c, person: null }))
+      : picking === 'mention' && mention
+        ? (people.data ?? [])
+            .filter((p) => !mention.word || p.name.toLowerCase().includes(mention.word.toLowerCase()))
+            .slice(0, 8)
+            .map((p) => ({ key: `p${p.id}`, label: p.name, hint: p.presence === 'available' ? text('Online') : text(p.presence.charAt(0).toUpperCase() + p.presence.slice(1)), canned: null, person: p }))
+        : [];
+  const highlighted = Math.min(pick, Math.max(0, choices.length - 1));
+  const pickerId = `support-pick-${ticket.id}`;
+
+  // R / N: focus here, in that mode.
   useEffect(() => {
     if (!focusRequest) return;
-    draft.setValue({ ...draft.value, mode: focusRequest.mode });
+    update({ mode: focusRequest.mode });
     box.current?.focus();
     // Only a new request moves the focus: the draft changing must not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -77,30 +168,156 @@ export function Composer({
     onTyping?.(now);
   }, [typed, mode, onTyping]);
 
+  // The pictures of files not sent go with the composer.
+  const pictures = useRef(new Set<string>());
+  useEffect(() => {
+    const all = pictures.current;
+    return () => all.forEach((p) => URL.revokeObjectURL(p));
+  }, []);
+  const forget = (p: string | null | undefined) => {
+    if (!p) return;
+    URL.revokeObjectURL(p);
+    pictures.current.delete(p);
+  };
+
   if (!modes.reply && !modes.note) {
-    return <p className={cx('border-t border-line bg-surface px-4 py-3 text-[12.5px] text-ink-3', className)}>{text('You can read this ticket but not reply to it.')}</p>;
+    return (
+      <p hidden={hidden} className={cx('border-t border-line bg-surface px-4 py-3 text-[12.5px] text-ink-3', className)}>
+        {text('You can read this ticket but not reply to it.')}
+      </p>
+    );
   }
 
-  const setBody = (body: string) => {
+  const setBody = (body: string, at?: number) => {
     clientId.current = null;
-    draft.setValue({ ...draft.value, body });
+    update({ body });
+    if (at !== undefined) setCaret(at);
   };
-  const setMode = (m: ComposerMode) => draft.setValue({ ...draft.value, mode: m });
+
+  /** Focus back in the text, the caret after what was put in (once React has drawn the new text). */
+  const placeCaret = (at: number) =>
+    setTimeout(() => {
+      const el = box.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(at, at);
+    }, 0);
+
+  const choose = async (i: number) => {
+    const c = choices[i];
+    const q = picking === 'canned' ? slash : mention;
+    if (!c || !q) return;
+    // What is replaced: the "/word" or "@word" as it was when it was chosen — wherever it now is not, the end.
+    const token = `${picking === 'canned' ? '/' : '@'}${q.word}`;
+    let insert = '';
+    if (c.canned) {
+      insert = c.canned.body;
+      try {
+        insert = await renderCanned(c.canned.id, ticket.id);
+      } catch {
+        // Put in as written: the placeholders show, and the agent sees what to fill in.
+      }
+    } else if (c.person) {
+      insert = `@${c.person.name} `;
+      update({ mentions: [...(latest.current.mentions ?? []).filter((m) => m.id !== c.person!.id), { id: c.person.id, name: c.person.name }] });
+    }
+    const now = latest.current.body;
+    const there = now.slice(q.start, q.start + token.length) === token;
+    const r = there ? spliceText(now, q.start, q.start + token.length, insert) : spliceText(now, now.length, now.length, insert);
+    setBody(r.text, r.caret);
+    placeCaret(r.caret);
+    setPick(0);
+  };
+
+  const upload = async (key: string, f: File, name: string, preview: string | null) => {
+    try {
+      const a = await uploadAttachment(ticket.id, f, name);
+      setUploads((u) => u.filter((x) => x.key !== key));
+      if (preview) setPreviews((p) => ({ ...p, [a.id]: preview }));
+      update({ files: [...(latest.current.files ?? []), { id: a.id, name: a.name, size: a.size, mime: a.mime }] });
+    } catch (e) {
+      setUploads((u) => u.map((x) => (x.key === key ? { ...x, error: errorText(e, text('It could not be attached.')) } : x)));
+    }
+  };
+  const addFiles = (list: File[], pasted = false) => {
+    if (!extras || !list.length) return;
+    let room = MAX_FILES - files.length - uploads.length;
+    for (const f of list) {
+      const name = pasted ? pastedName(f, new Date()) : f.name || text('file');
+      if (room <= 0) {
+        toast('warning', text('At most {n} files a message.', { n: MAX_FILES }));
+        break;
+      }
+      if (f.size > MAX_FILE_BYTES) {
+        toast('error', text('{name} is larger than 25 MB.', { name }));
+        continue;
+      }
+      room -= 1;
+      const key = `u${++uploadSeq}`;
+      const preview = f.type.startsWith('image/') && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(f) : null;
+      if (preview) pictures.current.add(preview);
+      setUploads((u) => [...u, { key, file: f, name, preview, error: null }]);
+      void upload(key, f, name, preview);
+    }
+  };
+  const retry = (u: Upload) => {
+    setUploads((list) => list.map((x) => (x.key === u.key ? { ...x, error: null } : x)));
+    void upload(u.key, u.file, u.name, u.preview);
+  };
+  const dropUpload = (u: Upload) => {
+    forget(u.preview);
+    setUploads((list) => list.filter((x) => x.key !== u.key));
+  };
+  const dropFile = (f: DraftFile) => {
+    update({ files: (latest.current.files ?? []).filter((x) => x.id !== f.id) });
+    forget(previews[f.id]);
+    // Taken back at the server too. One never sent is its uploader's alone either way.
+    void removeAttachment(f.id).catch(() => undefined);
+  };
+
+  const ccTyped = parseCc(ccText);
+  const cc = [...ccSaved, ...ccTyped.emails.filter((e) => !ccSaved.some((x) => x.toLowerCase() === e.toLowerCase()))];
+  const keepCc = () => {
+    if (ccTyped.emails.length) update({ cc });
+    setCcText(ccTyped.bad.join(' '));
+  };
+  const moves = transitions.filter((s) => s !== ticket.status);
+  // A move chosen earlier that the ticket no longer allows (somebody changed its status) is not made.
+  const then = d.status && moves.includes(d.status) ? d.status : null;
+  const uploading = uploads.some((u) => !u.error);
+  const canSend = typed && !uploading && !sending && (mode === 'note' || ccTyped.bad.length === 0);
 
   const send = async () => {
-    const body = draft.value.body.trim();
-    if (!body || sending) return;
+    const body = latest.current.body.trim();
+    if (!canSend || !body) return;
     setSending(true);
     clientId.current ??= newClientId();
+    const internal = mode === 'note';
+    const mentions = internal && extras ? mentionedIds(body, latest.current.mentions ?? []) : [];
     try {
-      const r = await addMessage(ticket.id, { body, internal: mode === 'note', client_id: clientId.current });
+      const r = await addMessage(ticket.id, {
+        body,
+        internal,
+        client_id: clientId.current,
+        ...(files.length ? { attachments: files.map((f) => f.id) } : {}),
+        ...(!internal && cc.length ? { cc } : {}),
+        ...(mentions.length ? { mentions } : {}),
+        ...(then ? { status: then } : {}),
+      });
       clientId.current = null;
-      await draft.clear();
+      Object.values(previews).forEach(forget);
+      setPreviews({});
+      setCcText('');
+      setCcOpen(false);
+      // Emptied, then cleared: nothing of it is kept on this computer.
+      latest.current = { body: '', mode };
       draft.setValue({ body: '', mode });
+      await draft.clear();
       if (r.status_refused) toast('warning', text('Sent, but the status did not change: {why}', { why: r.status_refused.message }));
-      else toast('success', mode === 'note' ? text('Note added to {ref}.', { ref: ticket.reference }) : text('Reply sent on {ref}.', { ref: ticket.reference }));
+      else toast('success', internal ? text('Note added to {ref}.', { ref: ticket.reference }) : text('Reply sent on {ref}.', { ref: ticket.reference }));
       void qc.invalidateQueries({ queryKey: K.ticket(ticket.id) });
       void qc.invalidateQueries({ queryKey: K.lists });
+      void qc.invalidateQueries({ queryKey: ['support', 'views'] });
       onSent?.(r);
     } catch (e) {
       toast('error', errorText(e, text('The message was not sent. It is still here; try again.')));
@@ -109,49 +326,266 @@ export function Composer({
     }
   };
 
+  const onDrag = (e: DragEvent) => {
+    if (!extras || !e.dataTransfer.types.includes('Files')) return;
+    e.preventDefault();
+    if (!dragging) setDragging(true);
+  };
   const to = ticket.requester.name || ticket.requester.email || text('the requester');
   const sendKeys = isMac ? '⌘↵' : 'Ctrl+Enter';
+  const total = files.reduce((n, f) => n + f.size, 0) + uploads.reduce((n, u) => n + u.file.size, 0);
+
   return (
-    <div data-support-composer className={cx('flex shrink-0 flex-col border-t border-line bg-surface', compact ? 'gap-1.5 px-3 py-2' : 'gap-2 px-4 py-3', className)}>
-      <div className="flex items-center gap-2">
-        <div role="radiogroup" aria-label={text('Write a')} className="inline-flex rounded-[8px] bg-subtle p-0.5">
+    <div
+      data-support-composer
+      hidden={hidden}
+      onDragEnter={onDrag}
+      onDragOver={onDrag}
+      onDragLeave={(e) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node | null)) setDragging(false);
+      }}
+      onDrop={(e) => {
+        if (!extras || !e.dataTransfer.types.includes('Files')) return;
+        e.preventDefault();
+        setDragging(false);
+        addFiles(Array.from(e.dataTransfer.files));
+      }}
+      className={cx('relative flex shrink-0 flex-col border-t border-line bg-surface', compact ? 'gap-1.5 px-3 py-2' : 'gap-2 px-4 py-3', className)}
+    >
+      {dragging ? (
+        <div role="status" className="pointer-events-none absolute inset-1 z-20 flex flex-col items-center justify-center gap-1 rounded-[10px] border-2 border-dashed border-primary bg-selection/90 text-[13px] font-semibold text-primary">
+          <Icon name="upload" size={22} />
+          {text('Drop files to attach to {ref}', { ref: ticket.reference })}
+        </div>
+      ) : null}
+      <div className="flex min-w-0 items-center gap-2">
+        <div role="radiogroup" aria-label={text('Write a')} className="inline-flex shrink-0 rounded-[8px] bg-subtle p-0.5">
           {modes.reply ? (
-            <button type="button" role="radio" aria-checked={mode === 'reply'} onClick={() => setMode('reply')} className={cx('h-6 rounded-[6px] px-2.5 text-[12px] font-semibold', mode === 'reply' ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
+            <button type="button" role="radio" aria-checked={mode === 'reply'} onClick={() => update({ mode: 'reply' })} className={cx('h-6 rounded-[6px] px-2.5 text-[12px] font-semibold', mode === 'reply' ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
               {text('Reply to requester')}
             </button>
           ) : null}
           {modes.note ? (
-            <button type="button" role="radio" aria-checked={mode === 'note'} onClick={() => setMode('note')} className={cx('h-6 rounded-[6px] px-2.5 text-[12px] font-semibold', mode === 'note' ? 'bg-warning-bg text-warning-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
+            <button type="button" role="radio" aria-checked={mode === 'note'} onClick={() => update({ mode: 'note' })} className={cx('h-6 rounded-[6px] px-2.5 text-[12px] font-semibold', mode === 'note' ? 'bg-warning-bg text-warning-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
               {text('Internal note')}
             </button>
           ) : null}
         </div>
         <span className="min-w-0 truncate text-[11.5px] text-ink-3">
-          {mode === 'reply' ? (ticket.requester.email ? text('To {who} <{email}>', { who: to, email: ticket.requester.email }) : text('To {who}', { who: to })) : text('Only staff see notes')}
+          {mode === 'reply'
+            ? [ticket.requester.email ? text('To {who} <{email}>', { who: to, email: ticket.requester.email }) : text('To {who}', { who: to }), cc.length ? text('CC {list}', { list: cc.join(', ') }) : null].filter(Boolean).join(' · ')
+            : text('Only staff see notes')}
         </span>
-        {draft.savedAt && typed ? <span className="ml-auto shrink-0 text-[11px] text-ink-3">{text('Draft saved {time}', { time: timeLabel(draft.savedAt) })}</span> : null}
+        {extras && mode === 'reply' && !ccOpen ? (
+          <button type="button" onClick={() => setCcOpen(true)} className="shrink-0 text-[11.5px] font-semibold text-primary hover:underline">
+            {text('CC')}
+          </button>
+        ) : null}
+        {draft.savedAt && (typed || files.length) ? <span className="ml-auto shrink-0 text-[11px] text-ink-3">{text('Draft saved {time}', { time: timeLabel(draft.savedAt) })}</span> : null}
       </div>
-      <textarea
-        ref={box}
-        value={draft.value.body}
-        onChange={(e) => setBody(e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Enter' && (isMac ? e.metaKey : e.ctrlKey)) {
+      {extras && mode === 'reply' && (ccOpen || ccSaved.length > 0) ? (
+        <div className="flex flex-wrap items-center gap-1.5 text-[12px]">
+          <span className="font-semibold text-ink-3">{text('CC')}</span>
+          {ccSaved.map((e) => (
+            <span key={e} className="inline-flex items-center gap-1 rounded-full bg-subtle py-0.5 pr-1 pl-2 text-ink-2">
+              {e}
+              <button type="button" aria-label={text('Remove {email}', { email: e })} onClick={() => update({ cc: (latest.current.cc ?? []).filter((x) => x !== e) })} className="rounded-full p-0.5 hover:bg-line">
+                <Icon name="x" size={11} />
+              </button>
+            </span>
+          ))}
+          <input
+            value={ccText}
+            onChange={(e) => setCcText(e.target.value)}
+            onBlur={keepCc}
+            onKeyDown={(e) => {
+              if ((e.key === 'Enter' || e.key === ',') && ccTyped.emails.length) {
+                e.preventDefault();
+                keepCc();
+              }
+            }}
+            aria-label={text('CC addresses')}
+            aria-invalid={ccTyped.bad.length ? true : undefined}
+            placeholder={text('name@company.com')}
+            className={cx('h-6 min-w-[160px] flex-1 rounded-[6px] border bg-surface px-2 text-[12px] text-ink outline-none', ccTyped.bad.length ? 'border-danger' : 'border-line focus:border-primary')}
+          />
+          {ccTyped.bad.length ? <span className="text-danger">{text('Not an address: {list}', { list: ccTyped.bad.join(', ') })}</span> : null}
+        </div>
+      ) : null}
+      <div className="relative">
+        <textarea
+          ref={box}
+          value={d.body}
+          onChange={(e) => setBody(e.target.value, e.target.selectionStart)}
+          onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
+          onPaste={(e) => {
+            const list = Array.from(e.clipboardData?.files ?? []);
+            if (!extras || !pasteIsFiles(list, e.clipboardData?.getData('text/plain') ?? '')) return;
             e.preventDefault();
-            void send();
-          }
-        }}
-        rows={compact ? 2 : 4}
-        aria-label={mode === 'reply' ? text('Reply to {who}', { who: to }) : text('Internal note')}
-        placeholder={mode === 'reply' ? text('Reply to {who}…', { who: to }) : text('Write a note only staff will see…')}
-        className={cx(
-          'w-full resize-y rounded-[8px] border px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-primary',
-          mode === 'note' ? 'border-[#F6D7B0] bg-[#FFFBF3] dark:border-[#5A3B14] dark:bg-[#21180B]' : 'border-line bg-surface',
-        )}
-      />
-      <div className="flex items-center gap-2">
-        <span className="text-[11px] text-ink-3">{compact ? text('R reply · N note · {keys} send', { keys: sendKeys }) : null}</span>
-        <Button variant={mode === 'note' ? 'secondary' : 'primary'} size="sm" icon="send" className="ml-auto" loading={sending} disabled={!typed} onClick={() => void send()} aria-keyshortcuts={isMac ? 'Meta+Enter' : 'Control+Enter'}>
+            addFiles(list, true);
+          }}
+          onKeyDown={(e) => {
+            if (picking && choices.length) {
+              if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                e.preventDefault();
+                setPick((p) => (e.key === 'ArrowDown' ? (p + 1) % choices.length : (p - 1 + choices.length) % choices.length));
+                return;
+              }
+              if (e.key === 'Enter' || e.key === 'Tab') {
+                e.preventDefault();
+                void choose(highlighted);
+                return;
+              }
+            }
+            if (picking && e.key === 'Escape') {
+              e.preventDefault();
+              e.stopPropagation();
+              setDismissed(picking === 'canned' ? `/${slash!.start}` : `@${mention!.start}`);
+              return;
+            }
+            if (e.key === 'Enter' && (isMac ? e.metaKey : e.ctrlKey)) {
+              e.preventDefault();
+              void send();
+            }
+          }}
+          rows={compact ? 2 : 4}
+          aria-label={mode === 'reply' ? text('Reply to {who}', { who: to }) : text('Internal note')}
+          aria-autocomplete="list"
+          aria-controls={picking ? pickerId : undefined}
+          aria-activedescendant={picking && choices.length ? `${pickerId}-${highlighted}` : undefined}
+          placeholder={mode === 'reply' ? text('Reply to {who}… (/ for canned responses)', { who: to }) : extras ? text('Write a note only staff will see… (@ to mention)') : text('Write a note only staff will see…')}
+          className={cx(
+            'w-full resize-y rounded-[8px] border px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-primary',
+            mode === 'note' ? 'border-[#F6D7B0] bg-[#FFFBF3] dark:border-[#5A3B14] dark:bg-[#21180B]' : 'border-line bg-surface',
+          )}
+        />
+        {picking ? (
+          <div id={pickerId} role="listbox" aria-label={picking === 'canned' ? text('Canned responses') : text('People to mention')} className="absolute bottom-full left-0 z-30 mb-1 max-h-[260px] w-[340px] max-w-full overflow-y-auto rounded-[10px] border border-line bg-surface py-1 shadow-xl scroll-thin">
+            {choices.length ? (
+              choices.map((c, i) => (
+                <div
+                  key={c.key}
+                  id={`${pickerId}-${i}`}
+                  role="option"
+                  aria-selected={i === highlighted}
+                  tabIndex={-1}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => void choose(i)}
+                  className={cx('flex w-full cursor-pointer items-center gap-2 px-3 py-1.5 text-left text-[12.5px]', i === highlighted ? 'bg-selection' : 'hover:bg-subtle')}
+                >
+                  {c.person ? <Avatar name={c.person.name} size={20} /> : <Icon name="file-text" size={14} className="text-ink-3" />}
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate font-semibold text-ink">{c.label}</span>
+                    <span className="block truncate text-[11px] text-ink-3">{c.hint}</span>
+                  </span>
+                </div>
+              ))
+            ) : (
+              <p className="px-3 py-2 text-[12px] text-ink-3">
+                {picking === 'canned' ? (cannedQ.isLoading ? text('Looking…') : text('No canned response matches.')) : people.isLoading ? text('Looking…') : text('Nobody by that name works this ticket.')}
+              </p>
+            )}
+          </div>
+        ) : null}
+      </div>
+      {files.length || uploads.length ? (
+        <div className="flex flex-col gap-1">
+          <ul aria-label={text('Files to send')} className="flex flex-wrap gap-1.5">
+            {files.map((f) => (
+              <li key={f.id} className="flex max-w-[260px] items-center gap-2 rounded-[8px] border border-line bg-surface py-1 pr-1 pl-1.5 text-[12px]">
+                {previews[f.id] ? <img src={previews[f.id]} alt="" className="h-7 w-7 rounded-[5px] object-cover" /> : <FileBadge name={f.name} size={28} />}
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold text-ink">{f.name}</span>
+                  <span className="block text-[11px] text-ink-3">{bytes(f.size)}</span>
+                </span>
+                <button type="button" aria-label={text('Remove {name}', { name: f.name })} onClick={() => dropFile(f)} className="rounded-[6px] p-1 text-ink-3 hover:bg-subtle hover:text-ink">
+                  <Icon name="x" size={13} />
+                </button>
+              </li>
+            ))}
+            {uploads.map((u) => (
+              <li key={u.key} className={cx('flex max-w-[280px] items-center gap-2 rounded-[8px] border py-1 pr-1 pl-1.5 text-[12px]', u.error ? 'border-danger/50 bg-danger-bg' : 'border-line bg-surface')}>
+                {u.preview ? <img src={u.preview} alt="" className="h-7 w-7 rounded-[5px] object-cover" /> : <FileBadge name={u.name} size={28} />}
+                <span className="min-w-0">
+                  <span className="block truncate font-semibold text-ink">{u.name}</span>
+                  <span className={cx('block truncate text-[11px]', u.error ? 'text-danger' : 'text-ink-3')}>{u.error ?? text('Uploading and scanning…')}</span>
+                </span>
+                {u.error ? (
+                  <button type="button" aria-label={text('Try {name} again', { name: u.name })} onClick={() => retry(u)} className="rounded-[6px] p-1 text-ink-3 hover:bg-subtle hover:text-ink">
+                    <Icon name="refresh" size={13} />
+                  </button>
+                ) : (
+                  <Icon name="spinner" size={13} className="animate-spin-slow text-ink-3" />
+                )}
+                <button type="button" aria-label={text('Remove {name}', { name: u.name })} onClick={() => dropUpload(u)} className="rounded-[6px] p-1 text-ink-3 hover:bg-subtle hover:text-ink">
+                  <Icon name="x" size={13} />
+                </button>
+              </li>
+            ))}
+          </ul>
+          <span className="text-[11px] text-ink-3">{text('{n} files · {size} · max 25 MB each · scanned before sending', { n: files.length + uploads.length, size: bytes(total) })}</span>
+        </div>
+      ) : null}
+      <div className="flex min-w-0 items-center gap-1.5">
+        {extras ? (
+          <>
+            <input
+              ref={fileInput}
+              type="file"
+              multiple
+              hidden
+              aria-label={text('Files to attach')}
+              onChange={(e) => {
+                addFiles(Array.from(e.target.files ?? []));
+                e.target.value = '';
+              }}
+            />
+            {compact ? (
+              <IconButton icon="paperclip" size={15} label={text('Attach files')} onClick={() => fileInput.current?.click()} className="h-7 w-7" />
+            ) : (
+              <Button size="sm" variant="ghost" icon="paperclip" onClick={() => fileInput.current?.click()}>
+                {text('Attach')}
+              </Button>
+            )}
+          </>
+        ) : null}
+        <Button
+          size="sm"
+          variant="ghost"
+          title={text('Canned responses: type / at the start of a line')}
+          onClick={() => {
+            const el = box.current;
+            const at = el?.selectionStart ?? d.body.length;
+            const prefix = at === 0 || d.body[at - 1] === '\n' ? '/' : '\n/';
+            const r = spliceText(d.body, at, el?.selectionEnd ?? at, prefix);
+            setBody(r.text, r.caret);
+            setDismissed(null);
+            placeCaret(r.caret);
+          }}
+        >
+          <span className="font-mono">/</span> {text('canned')}
+        </Button>
+        {compact ? <span className="min-w-0 truncate text-[11px] text-ink-3">{text('R reply · N note · {keys} send', { keys: sendKeys })}</span> : null}
+        <span className="ml-auto" />
+        {moves.length ? (
+          <Select<string>
+            className={cx('h-7 text-[12px]', compact ? 'max-w-[150px] min-w-[120px]' : 'min-w-[170px]')}
+            aria-label={text('Status after sending')}
+            value={then ?? ''}
+            onValueChange={(v) => update({ status: (v || null) as SupportStatus | null })}
+            options={[{ value: '', label: text('Keep {status}', { status: text(statusLabel(ticket.status)) }) }, ...moves.map((s) => ({ value: s, label: text('Then: {status}', { status: text(statusLabel(s)) }) }))]}
+          />
+        ) : null}
+        <Button
+          variant={mode === 'note' ? 'secondary' : 'primary'}
+          size="sm"
+          icon="send"
+          loading={sending}
+          disabled={!canSend}
+          title={uploading ? text('Waiting for the files to finish uploading') : undefined}
+          onClick={() => void send()}
+          aria-keyshortcuts={isMac ? 'Meta+Enter' : 'Control+Enter'}
+        >
           {mode === 'note' ? text('Add note') : text('Send')}
           <Kbd tone={mode === 'note' ? 'key' : 'accent'} aria-hidden>
             {sendKeys}
