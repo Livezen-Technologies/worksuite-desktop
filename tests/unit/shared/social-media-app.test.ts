@@ -14,18 +14,19 @@ import { MODULES } from '../../../src/modules/registry';
 describe('Social Media Manager in the catalogue', () => {
   it('is its own native app, not the internal Social stream', () => {
     const sm = findApp('social-media')!;
-    expect(sm).toMatchObject({ label: 'Social Media', app: 'social-media', perm: 'social.view', webPath: '/social-media', surface: 'native' });
+    expect(sm).toMatchObject({ label: 'Social Media', webPath: '/social-media', surface: 'native', group: 'business' });
     expect(findApp('social')).toMatchObject({ webPath: '/social', surface: 'browser' });
     expect(APP_CATALOGUE.filter((a) => a.webPath === '/social-media')).toHaveLength(1);
   });
 
-  it('shows only to someone the server gives the app and social.view', () => {
+  it('shows to everyone signed in, like the Phone, while no server has the module (its app row or social.view)', () => {
     const ids = (apps: string[] | '*', permissions: string[], serverApps: string[] | null = null) => visibleApps({ apps, permissions, serverApps }).map((a) => a.id);
-    expect(ids(['mail', 'social-media'], ['social.view'])).toContain('social-media');
-    expect(ids(['mail'], ['social.view'])).not.toContain('social-media');
-    expect(ids(['social-media'], [])).not.toContain('social-media');
+    // A person whose server lists only the apps it has today, and no social.* permission: they still find it.
+    expect(ids(['mail', 'chat', 'marketing'], [])).toContain('social-media');
     expect(ids('*', ['*'])).toContain('social-media');
-    expect(ids('*', ['*'], ['mail'])).not.toContain('social-media');
+    expect(ids(['mail'], ['social.view'], ['mail'])).toContain('social-media');
+    expect(findApp('social-media')).not.toHaveProperty('app');
+    expect(findApp('social-media')).not.toHaveProperty('perm');
   });
 
   it('opens from its deep links, and only those', () => {

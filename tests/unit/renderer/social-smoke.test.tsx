@@ -49,6 +49,21 @@ function mount() {
   );
 }
 
+describe('on today’s server, without any social.* permission', () => {
+  afterEach(() => cleanup());
+  it('still opens every screen to look at, saying the server lacks the module', async () => {
+    app.set({ bootstrap: { permissions: [] } as never });
+    vi.mocked(apiGet).mockImplementation(socialAnswer(false) as never);
+    for (const [route, heading] of ROUTES) {
+      tab.route = route;
+      const { unmount } = mount();
+      expect(await screen.findByRole('heading', { level: 1, name: heading })).toBeTruthy();
+      expect(screen.queryByText(/You don’t have access to this part of Social Media/)).toBeNull();
+      unmount();
+    }
+  });
+});
+
 describe('Social Media screens', () => {
   beforeEach(() => {
     app.set({ bootstrap: { permissions: ['*'] } as never });

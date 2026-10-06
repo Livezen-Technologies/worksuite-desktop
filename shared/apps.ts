@@ -127,7 +127,10 @@ export const APP_CATALOGUE: AppDefinition[] = [
 
   // Social Media Manager (WS-SMM-SRS-001): the optional app `worksuite.social-media` — accounts on external networks,
   // the composer, calendar, queue, approvals, unified inbox and analytics. Not the internal Social stream below (Q-01).
-  { id: 'social-media', label: 'Social Media', group: 'business', icon: 'send', app: 'social-media', perm: 'social.view', webPath: '/social-media', surface: 'native', sidebar: 'business', order: 167, keywords: 'social media facebook instagram linkedin x twitter youtube tiktok threads pinterest google business post schedule publish queue calendar inbox comments approvals campaigns analytics' },
+  // Open to everyone signed in, like the Phone: no server has the module or its `social-media` app row yet, so a gate
+  // on them would hide the app from all. The screens ask the server what the person may do, and say plainly when it
+  // has no Social Media module.
+  { id: 'social-media', label: 'Social Media', group: 'business', icon: 'send', webPath: '/social-media', surface: 'native', sidebar: 'business', order: 167, keywords: 'social media manager facebook instagram linkedin x twitter youtube tiktok threads pinterest google business post schedule publish queue calendar inbox comments approvals campaigns analytics' },
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
   { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170, guest: 'locked', guestLabel: 'Shared workspaces' },

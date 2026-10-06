@@ -6,7 +6,7 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import type { ModuleProps } from '../registry';
 import { dataOf, NOT_OFFERED, SK, socialApi, useInvalidate, useModuleStatus } from './api';
-import { useSocialAccess } from './access';
+import { socialAccess, useSocialAccess } from './access';
 import { SECTION_TITLE, SECTIONS, SocialNav, visibleSections, type Section } from './Nav';
 import { Notice } from './parts';
 
@@ -27,6 +27,9 @@ import { Notice } from './parts';
  * Mod+N in this tab (the shell's "New (in this app)") lands on `?new=1`: a new post. The web's `/social-media/…`
  * links land here too (shared/links, by the catalogue's webPath).
  */
+/** Every screen, for a server with no Social Media module; their writes say the server doesn't offer them. */
+const PREVIEW = socialAccess(['social.settings.manage']);
+
 const Overview = lazy(() => import('./screens/Overview'));
 const Composer = lazy(() => import('./composer/Composer'));
 const Calendar = lazy(() => import('./screens/Calendar'));
@@ -59,7 +62,11 @@ export default function SocialMediaPage(_props: ModuleProps) {
   const { path, query, go } = useTab();
   const statusQ = useModuleStatus();
   const status = dataOf(statusQ.data);
-  const access = useSocialAccess(status?.permissions);
+  // A server without the module grants no social.* permission to anyone, so nothing could be opened: there, every
+  // screen opens to show where accounts, posts and the inbox will be, and each says the server doesn't offer it yet.
+  const missing = !!statusQ.data && !statusQ.data.offered;
+  const granted = useSocialAccess(status?.permissions);
+  const access = missing ? PREVIEW : granted;
   const section = sectionOf(path, query);
   const visible = visibleSections(access);
   const allowed = visible.includes(section);
@@ -77,7 +84,7 @@ export default function SocialMediaPage(_props: ModuleProps) {
     <div className="flex h-full min-h-0">
       <SocialNav section={section} onPick={pick} access={access} />
       <main className="relative flex min-w-0 flex-1 flex-col overflow-hidden bg-ground">
-        {statusQ.data && !statusQ.data.offered ? <ModuleMissing /> : null}
+        {missing ? <ModuleMissing /> : null}
         {status?.paused_all ? <PausedBanner canResume={access.settings} pausedBy={status.paused_by?.name ?? null} /> : null}
         <Suspense fallback={<Spinner />}>
           {!allowed ? (
