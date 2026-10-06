@@ -5,6 +5,34 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.195 — 2026-10-06
+
+- **Point of Sale, phase 2 at the counter (pos 1.2.0).** The till uses the new POS features of WorkSuite. **It needs
+  the server's Pos 1.2.0.** Each part turns on only when the server says it offers it, and only online. Against an
+  older server the counter works exactly as in 0.2.192.
+  - **Customers and loyalty:** search CRM from the counter or add a customer, with possible duplicates offered first.
+    The customer card shows 12-month spend, visits, tier, points, store credit and last purchases. Points can be
+    spent on the sale. Points earned show on Sale complete, the receipt and the customer display, which also greets
+    the customer by name.
+  - **Manager override:** a discount past the cashier's rights, or a refund, void or cash-out past the company's
+    figure, asks for a manager. A manager either types their PIN on the till, or the request goes to the managers'
+    phones and the till waits for the answer. The PIN is sent once and never kept. **Where it bites:** once the
+    server enforces its approval figure, tills ask for a manager above it.
+  - **Tenders:** the company's own list. That can include LankaQR, gift vouchers (code with a balance check), and
+    store credit or account for a named customer. Without a configured list, the old four stay. Offline, only cash
+    and card are offered.
+  - **The grid:** stock badges (low and out, refreshed every five minutes), promotion badges and pictures. The
+    category picker shows the category tree, favourites and today's top sellers from WorkSuite. Promotions and points
+    appear as lines in the totals, and there is a coupon field. **Where it bites:** promotions are worked out by
+    WorkSuite, so a sale made offline gets none, and the till's price stands.
+  - **Held sales are kept on WorkSuite,** so another till can recall them. Offline, they stay on this till as
+    before.
+  - **Returns** choose where the money goes (as paid, cash, or store credit) and each line's condition.
+  - **Receipts** print the company's published receipt template (blocks, 58 or 80 mm, a multilingual footer, a
+    barcode or QR). Without one they print exactly as before. A template's logo is not printed yet.
+  - **The drawer's X and Z reports** come from WorkSuite. This till can be renamed. Forget this till hands the till
+    back to WorkSuite first.
+
 ## 0.2.194 — 2026-10-06
 
 - **Support opens in the app (WS-SUPPORT-SRS-001).** The support desk is now a native module instead of the
