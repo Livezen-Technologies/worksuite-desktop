@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.188 — 2026-10-06
+## 0.2.190 — 2026-10-06
 
 - **SalonMate's front desk, redrawn to the SalonMate desktop design (salon 2.0.0).** Every screen of the desk now
   looks and works as in the design (D01–D17), with buttons sized for touch.
@@ -69,6 +69,39 @@ person who has to live with the change — what it does, and where it bites.
   GHSA-858h-whjf-mvg5, GHSA-v5rq-49vh-5v5c). An npm override now pins it to 4.0.2, so the build's `npm audit` step is
   clean again. `node-llama-cpp` only uses git to fetch llama.cpp when it builds from source, and the calls it makes
   are unchanged in 4.x.
+
+## 0.2.189 — 2026-10-06
+
+- **"Continue as" in WorkSuite Office.** WorkSuite Office, the desktop editor, can sign in with your WorkSuite
+  account straight from this app: choose **Continue as <your name>** there and confirm here. No browser, no
+  password. WorkSuite Office gets a sign-in of its own, which you can end like any other session.
+  - The app asks every time, never while it is locked (it asks once you unlock), and only for the account and server
+    it is signed in to.
+  - WorkSuite Office learns who is signed in from `desktop-accounts.json` in the app's data folder: name, email,
+    organisation and server, never a token. It is emptied when you sign out.
+- **Security:** pages in the app can no longer call `/api/auth/apps/*` through the API proxy (files 1.8.4).
+- Needs the server's Auth 1.2.0.
+
+## 0.2.188 — 2026-10-06
+
+- **Phone (WS-VOIP-SRS-001).** A new **Phone** app under Work: a softphone built into the app that registers your
+  WorkSuite extension over secure WebSocket and stays registered while the app is locked, so a call is never cut.
+  - **My phone:** dialer with live match, recents, speed dials and caller-ID choice; in-call controls (hold, mute,
+    keypad, blind and attended transfer, conference, park, record, call quality); notes, a follow-up task and wrap-up
+    after the call; Calls history with filters and CSV export; call detail with the recording; Voicemail;
+    Forwarding, Do Not Disturb and hot desk.
+  - **Incoming calls** ring in a toast on any page and as a native notification; missed calls are counted on the Phone.
+  - **Compact phone:** a small always-on-top window (Phone › Compact phone) with Alt+Ctrl/⌘+A, H and M to answer,
+    hang up and mute from any app.
+  - **Supervise** (voip.reports / voip.supervise): Live board with listen, whisper and barge; Reports; Recordings.
+  - **Administer** (voip.manage): extensions (with the SIP secret shown once and a QR code), PBX servers and
+    mappings, trunks, gateways, SIM cards and outbound routes with a route tester, inbound numbers and IVR, queues and
+    ring groups, the dial plan with a config diff, and settings with sync runs.
+  - Contacts: a phone number's menu now offers **Call on my WorkSuite phone**.
+- **Where it bites:** needs the server's Voip module and an extension mapped to you. The first time the Phone connects,
+  the main window restarts once so it may reach the phone system. Screens that need server features WorkSuite doesn't
+  offer yet (trunk and queue editors, voicemail actions, the supervisor board, among others) say so instead of
+  pretending — see `docs/PHONE.md`.
 
 ## 0.2.187 — 2026-10-05
 

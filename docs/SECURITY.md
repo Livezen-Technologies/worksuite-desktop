@@ -266,6 +266,11 @@ Being controlled is the main process's business, never a page's:
   session lives in memory, and the app says so.
 - Refresh tokens rotate on use; refresh is single-flight so two refreshes never
   revoke each other.
+- WorkSuite Office's "Continue as" (worksuite-office#6, docs/BACKEND.md) never gives it a token of this app's: the
+  main process asks the person in its own dialog every time (never over the lock screen), for the server and user
+  the link names only if they are this app's, and sends a one-time, PKCE-bound code to `worksuiteoffice://auth/callback`
+  only. `desktop-accounts.json`, which tells WorkSuite Office who is signed in, holds names and addresses, mode 600.
+  The renderer's API proxy refuses `/api/auth/apps/*`.
 
 ## WorkSuite Events desk (Events SRS §9.4, §9.8, EV-CHK-031..033, EV-OFF-002/003)
 

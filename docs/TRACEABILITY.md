@@ -492,6 +492,62 @@ design, staff, settings, reports, the day close, a booking's deposit) is the web
 | RM-DSK-007 | Done | Heartbeat every 30 s: queue size, version, online, last sync, the hosted printers' state |
 | §5.7 reservations (host stand) | Done | `Reservations.tsx`: the day's bookings with the server's `choices` (confirm, arrived, seat at a free table with guests and the table's version, cancel with a reason, no-show), the tables' timeline (`reservations/timeline`), a booking after `reservations/availability` (free tables, or the server's other times). `reservation.view` to see, `reservation.manage` to move; online only. Deposits and changing a booking stay on the web |
 
+## Phone (WS-VOIP-SRS-001 v1.1, desktop)
+
+`src/modules/phone` (renderer), `electron/services/phone.ts`, `shared/phone.ts`, `shared/ipc/phone-channels.ts`, over
+the server's `/api/voip`. Gap analysis and server work: [PHONE.md](PHONE.md); contract: [BACKEND.md § Phone](BACKEND.md#phone-ws-voip-srs-001).
+Tests: `tests/unit/renderer/phone-lib.test.ts`, `phone-engine.test.ts`, `phone-screens.test.tsx`, `phone-smoke.test.tsx`,
+`tests/unit/electron/phone-service.test.ts`. **Server** = works fully once the server side named in PHONE.md §3 lands.
+
+| ID | Status | Where / note |
+|---|---|---|
+| VOIP-SP-01/02/03 | Done | `softphone/engine.ts` + `PhoneHost.tsx`: one UA from sign-in, own credentials only, rings anywhere |
+| VOIP-SP-04 | Done | `POST /call` with ring-back answered here (WF-05); direct SIP fallback, said |
+| VOIP-SP-05 | Done | `PbxBanner`, grey Call (W01) |
+| VOIP-SP-06/07 | Partial | Uses the server's `ice`/`ws_uri` as sent — Server (G-02, G-06) |
+| VOIP-SP-08 | Done | `CallButton`, `placeCall`; Contacts' phone menu |
+| VOIP-SP-09 | Partial | Caller-ID choice when `GET me` is served |
+| VOIP-SP-10 | Done | `AudioDevices` (mic, speaker, echo test `*43`), MOS from `getStats` (`lib/mos.ts`) |
+| VOIP-CTL-01…04 | Done | Hold/mute/DTMF in SIP; transfer, consult/complete (REFER/Replaces); park/record via `calls/control` (ARI on the switch) |
+| VOIP-CTL-05 | Done | Call waiting: Hold & answer, dock on every page |
+| VOIP-CTL-06 | Partial | Wrap-up saved as the call's outcome; as a note until `calls/{id}/wrapup` |
+| VOIP-POP-01 | Done | Screen pop in W02/W03/W05 |
+| VOIP-POP-03/04 | Server | S-2, G-01 |
+| VOIP-POP-05 | Done | Create contact (`/contacts?new=1&mobile=`) / lead |
+| VOIP-HIS-01/02/03/05 | Done | W04, W05 (HIS-05 values as the server fills them, G-01) |
+| VOIP-HIS-07 | Done | Call path from events, else from the record |
+| VOIP-HIS-08 | Done | CSV export (`files:saveText` .csv) |
+| VOIP-FWD-01…04 | Done | W07 rules, pending apply, own vs department |
+| VOIP-FWD-05 | Partial | DND on this computer; on the switch when `me/dnd` is served |
+| VOIP-FWD-06 | Done | Holiday rules; IVR reads HR holidays |
+| VOIP-EXT-01…07 | Done | A02/A03 |
+| VOIP-EXT-08 | Server | G-08 (`provision-hr` called) |
+| VOIP-EXT-09 | Partial | QR when `provisioning` is served |
+| VOIP-EXT-10 | Done | CSV import/export (import one by one until `extensions/import`) |
+| VOIP-SRV-01…08 | Done | A04/A05 |
+| VOIP-SYN-01…03 | Done | A12 sync runs and detail |
+| VOIP-DP-01…05 | Done | A09; DP-05 refused by the server today (G-09) and said |
+| VOIP-DP-06 | Partial | Diff when the server sends `applied` |
+| VOIP-REC-01…05 | Done | A11, W05 player with pinned notes |
+| VOIP-REC-06 | Partial | W06; heard/forward/delete when served |
+| VOIP-REC-07 | Partial | Pause recording in W02; consent setting in A12 |
+| VOIP-AI-01/02 | Done | "Unavailable" with reasons; requests when an engine exists |
+| VOIP-RPT-01…03 | Done | A10 with coverage |
+| VOIP-RPT-04 | Partial | Live board under Supervise; Server (S-1) |
+| VOIP-RPT-05/06 | Partial | A01 built; derived board until `supervisor/board`; listen/whisper/barge/pause when served |
+| VOIP-TRK-01…05 | Partial | A06 built incl. local route tester; Server (G-03) |
+| VOIP-IVR-01…04 | Partial | A07/A08 built; Server (G-03, G-05) |
+| VOIP-NOT-01 | Done | Missed and incoming as native notifications from this computer |
+| VOIP-NOT-02/03 | Server | G-10 (listed in A12) |
+| VOIP-ADM-01/02 | Done | Permission-shaped navigation (`access.ts`) |
+| VOIP-ADM-03/04/05 | Server | G-09, G-13, G-14 |
+| VOIP-DEV-01 | Done | `CompactPhone.tsx`, window kind `phone`, global shortcuts |
+| VOIP-DEV-02 | Later | worksuite-mobile |
+| VOIP-DEP-01 | Done | ARI as a URL, private/public, WSS, TURN in A05 |
+| VOIP-DEP-02/06 | Server | G-17, G-01 |
+| VOIP-DEP-03/04 | Partial | Gateway status/SMS when served |
+| VOIP-DEP-05 | Done | Cloud FreePBX wizard (`admin/SetupWizard.tsx`), Sri Lankan routes (`lib/lkroutes.ts`) |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |
