@@ -19,7 +19,7 @@ import { cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import { AttachMenu, CameraCapture, DrivePicker, RefusedNotes, Tray, type AttachChoice, type Staged } from './attach';
 import { KIND, type CardKind } from './cards/CardFrame';
-import { recordsIn } from './cards/recordLinks';
+import { pageTitle, recordsIn, shareLink } from './cards/recordLinks';
 import { SharePicker, ShareMenu, type ShareKind } from './cards/SharePicker';
 import { caretPoint } from './caret';
 import { PRESENCE } from './Details';
@@ -158,6 +158,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const [modal, setModal] = useState<'drive' | 'camera' | null>(null);
   const [sharing, setSharing] = useState<Exclude<ShareKind, 'drive'> | null>(null);
   const origin = useStore(app, (s) => s.auth?.server?.origin);
+  const org = useStore(app, (s) => s.organizationId);
   const [recording, setRecording] = useState(false);
   const [staged, setStaged] = useState<Staged[]>([]);
   // Files refused before any upload, each with why, under the tray (P-04 AttachmentTray; RDC-04).
@@ -567,9 +568,9 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   };
 
   /** A record from Share from WorkSuite goes as its address; each reader's app shows it as a card. */
+  // A full link that names the organisation and the record (worksuite-desktop#266), never a bare path.
   const shareRecord = async (path: string): Promise<boolean> => {
-    const base = (origin ?? 'https://app.worksuite.lk').replace(/\/+$/, '');
-    const ok = await sendWords(`${base}${path}`, false);
+    const ok = await sendWords(shareLink(path, { org, origin }), false);
     if (ok) onClearReply();
     return ok;
   };
@@ -904,7 +905,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           <Icon name="link" size={13} className="shrink-0 text-primary" />
           <span className="flex min-w-0 flex-1 flex-col">
             <b className="text-ink">{detected.length === 1 ? 'Link detected · will show as a card' : `${detected.length} links detected · each will show as a card`}</b>
-            <span className="truncate text-ink-2">{detected.map((r) => KIND[r.kind as CardKind].label).join(' · ')}</span>
+            <span className="truncate text-ink-2">{detected.map((r) => (r.kind === 'page' ? pageTitle(r) : KIND[r.kind as CardKind].label)).join(' · ')}</span>
           </span>
         </div>
       ) : null;

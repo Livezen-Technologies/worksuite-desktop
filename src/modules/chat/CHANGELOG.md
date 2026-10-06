@@ -4,6 +4,20 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.60.0 — 2026-10-06
+
+**Added**
+
+- a shared WorkSuite page is a card — the app's icon, its title, what the reader may see of it and Open in a new tab; without the app, 'You don't have access to this page' with Request access (#266)
+
+**Changed**
+
+- sharing a page or record (the drawer's Attach, Share from WorkSuite) sends a full item link with its organisation, type and id, never a relative path; older relative paths show as cards too (#266)
+
+**Fixed**
+
+- a message's actions show on hover in its top-right corner (react, reply, star, more), not as a round ⌄ floating beside the bubble (#266)
+
 ## 1.59.0 — 2026-10-05
 
 - Not-reaching-staff flag on the Live dashboard, delivery figures on Insights, native ring notifications on the built-in service fixed

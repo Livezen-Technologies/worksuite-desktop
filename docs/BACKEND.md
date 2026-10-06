@@ -39,6 +39,7 @@ sign-in) and, once the laptop is registered, `X-WS-Device: <device id>`.
 | Open a `worksuite://` link | `GET /desktop/v1/links/resolve?url=` → `{valid, module, route, window, allowed, organization_id}` |
 | An item link's item (#170) | `GET /api/links/items/{org}/{type}/{id}` → `{allowed, state, state_label?, title?, kind_label?, size?, sharer?, task_id?, can_request_access}`; `POST …/request-access` |
 | Item link in a browser (#170) | `GET /o/{org}/{type}/{id}?action=` (public): hands `worksuite://{org}/{type}/{id}` to the app, "Open in browser instead" |
+| A page of an app as an item link (#266) | `/o/{org}/{app}/{page}`, e.g. `/o/7/hr/announcements` (open only; the apps and the query parameter each reads its page from are `PAGE_APPS` in `shared/item-links.ts`). Chat's shares send these; the server's `ItemLinks.php` and its `/o/` page should accept the same list, and `GET /api/links/items/…` is not asked for a page (its app's access decides) |
 | Device-side audit | `POST /desktop/v1/audit` `{events:[{id, action, at, details}]}` (idempotent on `id`); item links log `desktop.link.opened` |
 | Drive change feed | `GET /desktop/v1/sync/changes?cursor=&limit=`, `POST /desktop/v1/sync/events` |
 | File locks | `POST` / `DELETE /desktop/v1/files/{id}/lock` |

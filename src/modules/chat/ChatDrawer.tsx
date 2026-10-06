@@ -13,7 +13,6 @@ import { minimiseChatDrawer, openChatDrawer, ui } from '../../core/ui';
 import { Icon } from '../../components/Icon';
 import { Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
-import { resolveWebLink } from '@shared/links';
 import { APP_CATALOGUE } from '@shared/apps';
 import { appColour } from '../../core/app-look';
 import { AppTile } from '../../components/AppTile';
@@ -27,18 +26,8 @@ import { openChatWindow } from './window';
 import { canCall, roomPerson, type Room } from './types';
 import { usePresence } from './presence';
 import { roomMenu } from './menus';
+import { refOf, shareLink, webPathOfRoute } from './cards/recordLinks';
 import { useRoomActions } from './RoomActions';
-
-/** The web address of what the active tab shows, when it is a record. */
-function recordLink(route: string): string | null {
-  const [path] = route.split('?');
-  const seg = path!.replace(/^\/+/, '').split('/');
-  if (seg.length < 2 && !route.includes('?')) return null;
-  const app = APP_CATALOGUE.find((a) => a.id === seg[0]);
-  if (!app || app.id === 'chat' || app.id === 'home') return null;
-  const web = `${app.webPath}${route.slice(app.id.length + 1)}`;
-  return resolveWebLink(web).kind === 'none' ? null : web;
-}
 
 /**
  * The chat drawer (ChatDrawer, ChatDrawerCalls): chat over whatever you are
@@ -290,12 +279,17 @@ function Conversation({ roomId }: { roomId: string }) {
   const presenceOf = usePresence([room?.other_user_id]);
   const st = room?.other_user_id ? PRESENCE[presenceOf(room.other_user_id) ?? ''] : undefined;
   const tab = useStore(tabsStore, (s) => s.tabs.find((t) => t.id === s.activeId) ?? null);
-  const link = tab ? recordLink(tab.route) : null;
+  const link = tab ? webPathOfRoute(tab.route) : null;
+  const page = link ? refOf(link)?.kind === 'page' : false;
   const attach = async () => {
     if (!tab || !link) return;
+    // The tab's title, then a full link that names its organisation, what it is and which (worksuite-desktop#266):
+    // every reader's app draws it as a card, and none gets a bare path.
+    const s = app.get();
+    const full = shareLink(link, { org: tab.organizationId ?? s.organizationId, origin: s.auth?.server?.origin });
     try {
-      await apiPost('/api/chat/messages', { room_id: Number(roomId), message: `${tab.title}\n${link}`, client_message_id: `desktop-${crypto.randomUUID()}` });
-      toast('success', 'Record attached.');
+      await apiPost('/api/chat/messages', { room_id: Number(roomId), message: `${tab.title}\n${full}`, client_message_id: `desktop-${crypto.randomUUID()}` });
+      toast('success', page ? 'Page attached.' : 'Record attached.');
     } catch (e) {
       toast('error', errorMessage(e));
     }
@@ -311,7 +305,7 @@ function Conversation({ roomId }: { roomId: string }) {
         </span>
         <button type="button" onClick={() => void attach()} title="Attach a link to it to the conversation" className="flex h-5 shrink-0 items-center gap-1 rounded-full bg-selection px-2 text-[11px] font-bold text-primary hover:brightness-95">
           <Icon name="link" size={11} />
-          Attach record
+          {page ? 'Attach page' : 'Attach record'}
         </button>
         <button type="button" aria-label="Hide" title="Hide" onClick={() => setHiddenFor(tab.id)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-surface hover:text-ink">
           <Icon name="x" size={11} />
