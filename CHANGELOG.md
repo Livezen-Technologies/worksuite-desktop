@@ -49,6 +49,11 @@ person who has to live with the change — what it does, and where it bites.
   Without it, a cash deposit is not counted in the register. Product usage on the service record, emailing or
   WhatsApping the invoice from Paid, and choosing the till's stock location and receipt template at pairing are not
   in the server's API yet, so the desk does not offer them.
+- **Security: `simple-git` 4.0.2 under Local AI.** `node-llama-cpp` (the Local AI engine) pulls in `simple-git` 3.x,
+  which has four advisories that let a crafted git option run a command (GHSA-x6jw-m9v5-85vh, GHSA-g4wm-2vf7-vfgr,
+  GHSA-858h-whjf-mvg5, GHSA-v5rq-49vh-5v5c). An npm override now pins it to 4.0.2, so the build's `npm audit` step is
+  clean again. `node-llama-cpp` only uses git to fetch llama.cpp when it builds from source, and the calls it makes
+  are unchanged in 4.x.
 
 ## 0.2.187 — 2026-10-05
 
