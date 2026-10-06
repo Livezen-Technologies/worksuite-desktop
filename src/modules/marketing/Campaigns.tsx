@@ -97,7 +97,7 @@ export default function Campaigns({ org, options, onOpen, creating, onCreating }
       ) : (
         <div className="overflow-x-auto rounded-[12px] border border-line bg-surface scroll-thin">
           <div className="min-w-[880px]">
-            <THead cols={[['Campaign', null], ['Status', 180], ['Audience', 190], ['Send', 210], ['Delivered', 110], ['Human opens', 100]]} />
+            <THead cols={[['Campaign', null], ['Status', 160], ['Audience', 160], ['Send', 170], ['Delivered', 90], ['Human opens', 100]]} />
             {items.map((c) => (
               <button key={c.id} type="button" onClick={() => onOpen(c.id)} className={cx(row, 'w-full text-left hover:bg-subtle focus-visible:bg-subtle')}>
                 <Cell w={null}>
@@ -109,12 +109,12 @@ export default function Campaigns({ org, options, onOpen, creating, onCreating }
                     {[c.type_label, c.topic?.name, ...(c.tags ?? []).map((t) => `#${t}`)].filter(Boolean).join(' · ') || c.subject || 'No subject yet'}
                   </span>
                 </Cell>
-                <Cell w={180} className="!overflow-visible">
+                <Cell w={160} className="!overflow-visible">
                   <Pill tone={CAMPAIGN_PILL[c.status] ?? 'slate'} title={c.status_note ?? undefined}>{statusWords(c)}</Pill>
                 </Cell>
-                <Cell w={190} className="text-ink-2">{audienceWords(c.audience, lists.data?.items, segments.data?.items)}</Cell>
-                <Cell w={210} className="text-ink-2">{sendWords(c, options)}</Cell>
-                <Cell w={110} className="text-right tabular-nums">{deliveredWords(c)}</Cell>
+                <Cell w={160} className="text-ink-2">{audienceWords(c.audience, lists.data?.items, segments.data?.items)}</Cell>
+                <Cell w={170} className="text-ink-2">{sendWords(c, options)}</Cell>
+                <Cell w={90} className="text-right tabular-nums">{deliveredWords(c)}</Cell>
                 <Cell w={100} className="text-right tabular-nums text-ink-2">{rateWords(human.get(c.id), delivered(c))}</Cell>
               </button>
             ))}

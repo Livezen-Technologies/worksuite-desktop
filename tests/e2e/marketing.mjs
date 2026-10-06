@@ -20,7 +20,12 @@ if (!server || !email || !password) {
 const js = (v) => JSON.stringify(v);
 /** A rail item, whose text may end in its count ("Contacts200") or carry "Planned". */
 const rail = (label) => `(() => { const b = [...document.querySelectorAll('nav[aria-label="Marketing"] button')].find(b => b.textContent.trim().replace(/(\\d[\\d,]*|Planned)$/, '').trim() === ${js(label)}); if (!b) return false; b.click(); return true; })()`;
-const heading = `(document.querySelector('main h1')?.textContent ?? '').trim()`;
+/**
+ * Marketing's own tab: the nearest box around its rail that holds a heading on show. Other tabs (Home) stay in the
+ * page with headings and buttons of their own, so nothing is looked for outside it.
+ */
+const MAIN = `(() => { let e = document.querySelector('nav[aria-label="Marketing"]'); while (e && ![...e.querySelectorAll('h1')].some((h) => h.getClientRects().length > 0)) e = e.parentElement; return e ?? document.body; })()`;
+const heading = `(([...(${MAIN}).querySelectorAll('h1')].find((h) => h.getClientRects().length > 0))?.textContent ?? '').trim()`;
 const headingIs = (t) => `${heading} === ${js(t)}`;
 
 /** Every rail item, and the heading its screen draws (the SRS's design, §19). */
@@ -52,6 +57,9 @@ try {
   t.check('Marketing is in the sidebar', opened);
   await t.waitFor(`!!document.querySelector('nav[aria-label="Marketing"]')`, 'the Marketing rail', 30_000);
   t.check('it opens in a tab of its own, with its rail', true);
+  // The rail grows once the person's permissions arrive, and its footer once the sending route does.
+  await t.waitFor(`/Sending via relay|No mail route yet/.test(document.querySelector('nav[aria-label="Marketing"]')?.textContent ?? '')`, 'the rail with its permissions', 30_000);
+  await sleep(1000);
 
   const items = await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Marketing"] button')].map(b => b.textContent.trim())`);
   const sections = await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Marketing"] div')].map(d => d.textContent.trim()).filter(s => /^(Audience|Email|Calls|Insights)$/.test(s))`);
@@ -68,7 +76,7 @@ try {
     }
     await t.waitFor(title ? headingIs(title) : `${heading} !== ''`, `the ${label} screen`, 20_000);
     await sleep(800);
-    t.check(`${label}: the screen draws its page`, !(await t.evaluate(`document.querySelector('main').textContent.trim() === ${js(label)}`)));
+    t.check(`${label}: the screen draws its page`, !(await t.evaluate(`(${MAIN}).textContent.trim() === ${js(label)}`)));
     await t.shot(file);
   }
 
@@ -77,14 +85,14 @@ try {
   await t.waitFor(headingIs('Dashboard'), 'the dashboard');
   await sleep(1500);
   t.check('the dashboard shows go-live readiness, open or passed',
-    await t.evaluate(`/Go-live readiness|Ready to send/.test(document.querySelector('main').textContent)`));
+    await t.evaluate(`/Go-live readiness|Ready to send/.test((${MAIN}).textContent)`));
 
   // ── one contact, one campaign, one call campaign ──────────────────────
   for (const [label, file] of [['Contacts', 'DK03-contact'], ['Campaigns', 'DK09-campaign'], ['Call campaigns', 'DK10-call-campaign']]) {
     await t.evaluate(rail(label));
     await sleep(2500);
     const before = await t.evaluate(heading);
-    const row = await t.evaluate(`(() => { const r = document.querySelector('main table tbody tr, main [role="row"] button, main li button'); if (!r) return false; (r.querySelector('button') ?? r).click(); return true; })()`);
+    const row = await t.evaluate(`(() => { const r = ['table tbody tr', '[role="row"] button', 'li button', 'button.w-full.text-left'].map((q) => [...(${MAIN}).querySelectorAll(q)].find((e) => !e.closest('nav') && e.getClientRects().length > 0)).find(Boolean); if (!r) return false; (r.querySelector('button:not([role="checkbox"]):not([aria-checked])') ?? r).click(); return true; })()`);
     if (!row) {
       t.skip(`a ${label} record`, 'none to open on this server');
       continue;

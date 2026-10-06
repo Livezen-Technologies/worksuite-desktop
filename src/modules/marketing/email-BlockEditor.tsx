@@ -197,9 +197,10 @@ export function BlockEditor({ initial, onChange, orgId, mergeTags, readOnly = fa
               if ((e.target as HTMLElement).closest('a')) e.preventDefault();
             }}
           >
-            <ol aria-label="Blocks" className="m-0 list-none p-0" style={{ padding: view === 'mobile' ? '20px 16px' : '32px' }}>
+            {/* A list for screen readers, not an <ol>: the email's own list styles (PAPER) would number the blocks. */}
+            <div role="list" aria-label="Blocks" style={{ padding: view === 'mobile' ? '20px 16px' : '32px' }}>
               {blocks.map((b, i) => (
-                <li key={b.id} className="m-0 p-0">
+                <div role="listitem" key={b.id}>
                   <Shell
                     block={b}
                     at={i}
@@ -213,9 +214,9 @@ export function BlockEditor({ initial, onChange, orgId, mergeTags, readOnly = fa
                   >
                     <BlockView block={b} readOnly={readOnly} onChange={put} onCaret={(el, range) => (caret.current = { el, range })} />
                   </Shell>
-                </li>
+                </div>
               ))}
-            </ol>
+            </div>
             {blocks.length === 0 ? <p className="m-0 px-8 pb-6 text-center text-[14px]" style={{ color: '#6b7280' }}>Nothing here yet. Add a block from the left.</p> : null}
             <FooterView on={picked === 'footer'} onPick={() => setPicked('footer')} company={companyName} topic={topicName} />
           </div>
