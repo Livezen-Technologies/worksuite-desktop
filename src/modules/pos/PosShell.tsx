@@ -23,8 +23,7 @@ import TillBar from './TillBar';
 const Register = lazy(() => import('./Register'));
 const Shift = lazy(() => import('./ShiftScreen'));
 const Sales = lazy(() => import('./Sales'));
-const Printers = lazy(() => import('./Printers'));
-const TillScreen = lazy(() => import('./TillScreen'));
+const TillSettings = lazy(() => import('./TillSettings'));
 const CustomerDisplay = lazy(() => import('./CustomerDisplay'));
 
 const VIEWS: Record<PosView, { label: PosKey; icon: string }> = {
@@ -121,7 +120,7 @@ function Counter({ active }: { active: boolean }) {
           <SyncBar till={ctx} />
           <div className={cx('min-h-0 flex-1', view === 'register' ? 'overflow-hidden' : 'overflow-y-auto scroll-thin')}>
             <Suspense fallback={<Spinner />}>
-              {view === 'shift' ? <Shift /> : view === 'sales' ? <Sales /> : view === 'printers' ? <Printers /> : view === 'till' ? <TillScreen /> : <Register active={active} />}
+              {view === 'shift' ? <Shift /> : view === 'sales' ? <Sales /> : view === 'printers' || view === 'till' ? <TillSettings initial={view === 'till' ? 'till' : 'devices'} /> : <Register active={active} />}
             </Suspense>
           </div>
         </main>

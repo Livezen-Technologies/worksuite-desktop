@@ -12,6 +12,7 @@ import ReturnDialog from '../../../src/modules/pos/ReturnDialog';
 import { TillContext, type Till } from '../../../src/modules/pos/parts';
 import Shift from '../../../src/modules/pos/ShiftScreen';
 import SyncDrawer from '../../../src/modules/pos/SyncDrawer';
+import TillSettings from '../../../src/modules/pos/TillSettings';
 
 afterEach(() => {
   cleanup();
@@ -94,6 +95,7 @@ function mount(node: ReactNode, t: Till, pos: Record<string, unknown> = {}) {
       openDrawer: async () => ({ ok: true, printer: 'Thermal', message: 'Drawer opened.' }),
       ...pos,
     },
+    print: { printers: async () => [{ name: 'Thermal', displayName: 'Thermal' }] },
     events: { on: () => () => undefined },
   };
   render(
@@ -270,5 +272,24 @@ describe('pairing this computer', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Take over POS-01 and pair' }));
     await waitFor(() => expect(onChange).toHaveBeenCalled());
     expect(pair).toHaveBeenCalledWith({ terminal_id: 1, take_over: true });
+  });
+});
+
+describe('the till’s devices', () => {
+  it('shows each device and where it stands, and tests the scanner by scanning', async () => {
+    const printTest = vi.fn(async () => ({ ok: true, printer: 'Thermal', message: 'Sent to Thermal.' }));
+    mount(<TillSettings initial="devices" />, till(), {
+      printSettings: async () => ({ receipt_printer: 'Thermal', paper: '80mm', mode: 'escpos', copies: 1, auto_print: true, drawer: 'printer', drawer_pin: 2, header: '', footer: '' }),
+      printTest,
+    });
+    expect(await screen.findByText(/Thermal · ESC\/POS · 80 mm/)).toBeTruthy();
+    expect(screen.getByText(/Opened by the receipt printer \(pin 2\)/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Print test' }));
+    await waitFor(() => expect(printTest).toHaveBeenCalled());
+    fireEvent.click(screen.getByRole('button', { name: 'Test scan' }));
+    expect(screen.getByText('Scan any barcode now…')).toBeTruthy();
+    let at = 1000;
+    for (const key of [...'4790001000011', 'Enter']) fireEvent.keyDown(window, { key, timeStamp: (at += 5) });
+    expect(await screen.findByText('Read 4790001000011')).toBeTruthy();
   });
 });
