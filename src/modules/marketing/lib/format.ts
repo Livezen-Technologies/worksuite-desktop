@@ -105,12 +105,20 @@ export function isoDay(d: Date): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-/** `ops@ ****.lk` style keys are the server's; this masks a phone for display: `+94 77 *** 4521`. */
+/**
+ * A phone number as someone without contact-edit permission sees it (MKT-AUD-07): `+94 77 123 4521` → `+94 77 *** 4521`,
+ * `077 123 4521` → `077 *** 4521`. Written as groups, the group before the last is hidden; written as one run of
+ * digits, everything between the prefix and the last four.
+ */
 export function maskPhone(phone: string | null | undefined): string {
   if (!phone) return '—';
-  const digits = phone.replace(/\D/g, '');
-  if (digits.length < 7) return phone;
-  return `${phone.slice(0, Math.max(0, phone.length - 7))}*** ${digits.slice(-4)}`.replace(/\s+/g, ' ').trim();
+  const p = phone.trim();
+  const digits = p.replace(/\D/g, '');
+  if (digits.length < 7) return p;
+  const groups = p.split(/\s+/);
+  if (groups.length >= 3) return [...groups.slice(0, -2), '***', groups[groups.length - 1]].join(' ');
+  const compact = p.replace(/\s+/g, '');
+  return `${compact.slice(0, Math.max(0, compact.length - 7))} *** ${digits.slice(-4)}`.trim();
 }
 
 /** `1 contact`, `3 contacts`. */
