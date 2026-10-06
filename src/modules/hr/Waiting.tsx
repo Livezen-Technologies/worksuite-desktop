@@ -6,6 +6,7 @@ import { useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import type { ApprovalsResponse } from './api';
+import { useApproveLeave, useCoverFirst, WaitingForCover } from './coverRule';
 import { dayLong, rangeLabel } from './dates';
 import { ReviewLeave } from './Leave';
 import { Cell, Empty, humanise, PageHead, Panel, row, StatusChip, THead } from './parts';
@@ -37,6 +38,8 @@ export default function Waiting({ onPick }: { onPick: (v: HrView) => void }) {
   const [reviewing, setReviewing] = useState<number | null>(null);
   const q = useQuery({ queryKey: ['hr', 'leave-approvals'], queryFn: ({ signal }) => apiGet<ApprovalsResponse>('/api/hr/leave/approvals', undefined, signal) });
   const refresh = () => void qc.invalidateQueries({ queryKey: ['hr'] });
+  // Approve asks first while the cover has not accepted (#262, #263), with Open request beside it.
+  const approval = useApproveLeave({ onOpen: setReviewing });
   const act = async (path: string, done: string, body: Record<string, unknown> = {}) => {
     try {
       await apiPost(path, body);
@@ -97,9 +100,7 @@ export default function Waiting({ onPick }: { onPick: (v: HrView) => void }) {
                 </button>
                 {l.status === 'pending' ? (
                   <>
-                    <button type="button" className="text-success hover:underline" onClick={() => void act(`/api/hr/leave/requests/${l.id}/decide`, 'Approved.', { decision: 'approved' })}>
-                      Approve
-                    </button>
+                    <LinkApprove id={l.id} busy={approval.busy === l.id} onApprove={() => void approval.approve(l.id)} />
                     <button type="button" className="text-danger hover:underline" onClick={() => void act(`/api/hr/leave/requests/${l.id}/decide`, 'Declined.', { decision: 'rejected' })}>
                       Decline
                     </button>
@@ -165,7 +166,18 @@ export default function Waiting({ onPick }: { onPick: (v: HrView) => void }) {
           </Panel>
         ) : null}
       </div>
-      {reviewing ? <ReviewLeave id={reviewing} onClose={() => setReviewing(null)} onDone={() => (setReviewing(null), refresh())} /> : null}
+      {reviewing ? <ReviewLeave id={reviewing} canDecide={a.leave.find((l) => l.id === reviewing)?.as === 'responsible' ? undefined : true} onClose={() => setReviewing(null)} onDone={refresh} /> : null}
+      {approval.dialog}
     </div>
+  );
+}
+
+/** Approve as a link, or "Waiting for cover" once the server has said the cover must accept first. */
+function LinkApprove({ id, busy, onApprove }: { id: number; busy: boolean; onApprove: () => void }) {
+  if (useCoverFirst(id)) return <WaitingForCover className="!h-6 !px-2 !text-[12px]" />;
+  return (
+    <button type="button" disabled={busy} className="text-success hover:underline disabled:opacity-50" onClick={onApprove}>
+      Approve
+    </button>
   );
 }
