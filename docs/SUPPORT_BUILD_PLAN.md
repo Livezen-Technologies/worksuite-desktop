@@ -19,7 +19,22 @@ gateway `/api/mobile/v1/support/*` (T08).
 | T01 Data model v2 | Done | Livezen-Technologies/worksuite#108 |
 | T02 TicketService, `support.*` permissions, data scopes, references | Done | Livezen-Technologies/worksuite#108 |
 | T03 Staff API v1, part 1 (`/api/support/v1`, contract in the server's `docs/SUPPORT_API.md`), read markers, mentions, realtime desks | Done | Livezen-Technologies/worksuite#108 |
-| T04 onward | Not started | — |
+| T04 Staff API v1, part 2: merge/split, duplicates, bulk, links, watchers, presence, chat conversion v2, desktop help | Done | Livezen-Technologies/worksuite#108 |
+| T05–T07 Web workspace: inbox, ticket detail, new ticket, chat → ticket, merge, escalate, resolve (W-02…W-09) | Done | Livezen-Technologies/worksuite#108 |
+| T08 Mobile gateway | Done | Livezen-Technologies/worksuite#108 |
+| T09 Email in and out, W-15 channels | Done | Livezen-Technologies/worksuite#108 |
+| T10 SLA engine, W-13 | Done | Livezen-Technologies/worksuite#108 |
+| T11 Routing and automation, W-14 | Done | Livezen-Technologies/worksuite#108 |
+| T12 Desk settings and roles, W-16 | Done | Livezen-Technologies/worksuite#108 |
+| T13 Public form, status page, guest reply, W-17/W-18 | Done | Livezen-Technologies/worksuite#108 |
+| T14 Customer portal API and CSAT, W-19 | Done | Livezen-Technologies/worksuite#108 |
+| T15 Knowledge base v1, W-10/W-11, help centre | Done | Livezen-Technologies/worksuite#108 |
+| T16 Dashboard and reports, W-01/W-12 | Done | Livezen-Technologies/worksuite#108 |
+| T17 AI assistance | Done | Livezen-Technologies/worksuite#108 |
+| T18–T21 Desktop scaffold, D-01 inbox, D-02 ticket tab, D-03 notifications | Done | Livezen-Technologies/worksuite-desktop#267 |
+| T22–T27 Desktop D-04 quick reply, D-05 tray, D-06 chat → ticket, D-07 urgent pop-up, D-08 palette, D-09 offline outbox | Done | Livezen-Technologies/worksuite-desktop#267 |
+| T28–T30 Desktop D-10 KB & AI panel, D-11 Contact Support, D-12 wallboard | Done | Livezen-Technologies/worksuite-desktop#267 |
+| T31 As-built Tickets page retired, acceptance tests (`docs/SUPPORT_ACCEPTANCE.md`), client API gaps, release notes | Done | Livezen-Technologies/worksuite#108 |
 
 ## Ground rules
 
