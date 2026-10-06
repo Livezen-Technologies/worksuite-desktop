@@ -171,8 +171,9 @@ export function splitIntoThread(text: string, limit: number, rule: CountingRule,
   return [t];
 }
 
+/** Hashtags, Sinhala and Tamil ones too: their conjuncts are joined with ZWJ/ZWNJ, which belong to the tag. */
 export function findHashtags(text: string): string[] {
-  return Array.from(text.matchAll(/(?:^|\s)#([\p{L}\p{M}\p{N}_]+)/gu), (m) => `#${m[1]}`);
+  return Array.from(text.matchAll(/(?:^|\s)#([\p{L}\p{M}\p{N}_\u200c\u200d]+)/gu), (m) => `#${m[1]}`);
 }
 
 export function findMentions(text: string): string[] {
