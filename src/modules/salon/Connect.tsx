@@ -16,7 +16,8 @@ import { Failed, Note, TouchButton } from './parts';
  * SalonMate is an app inside WorkSuite Desktop: the person is already signed
  * in and the computer is already a WorkSuite device. What is left is the
  * front desk — its name, its location — and, where the salon uses Point of
- * Sale, the register its money goes into. Somebody who may manage desks is
+ * Sale, the register its money goes into, the stock location its products
+ * come out of and the receipt template it prints with. Somebody who may manage desks is
  * approved at once; anybody else's request waits for an owner, and this
  * screen waits with it. The key the server hands over is kept by the main
  * process; this screen only ever sees the desk.
@@ -42,7 +43,7 @@ export default function Connect({ pairing, desk, state, desks, me, onChange }: {
           <ol className="flex w-full shrink-0 flex-col gap-4 lg:w-[330px] lg:border-r lg:border-line lg:pr-6">
             <Step n={1} state="done" title="Signed in to WorkSuite" sub={`${email ?? me ?? 'You'} · this computer is already a WorkSuite Desktop device`} />
             <Step n={2} state={paired ? 'done' : 'now'} title="SalonMate on this computer" sub={desk?.location ? `Front desk for ${desk.location}` : 'Name the front desk and choose its location'} />
-            <Step n={3} state={paired ? 'done' : 'now'} title="Use it as a POS till" sub="Pair with POS so payments go into a register" />
+            <Step n={3} state={paired ? 'done' : 'now'} title="Use it as a POS till" sub="A register for payments, a stock location and a receipt template" />
             <Step n={4} state="later" title="Receipt printer" sub="Set up in Settings once the desk is approved" />
           </ol>
           <div className="min-w-0 flex-1">
@@ -81,18 +82,29 @@ function PairForm({ desks, onChange }: { desks: Desks; onChange: () => void }) {
   const [name, setName] = useState('Front desk');
   const [locationId, setLocationId] = useState<number | null>(null);
   const [registerId, setRegisterId] = useState<number | null>(null);
+  const [store, setStore] = useState<number | null>(null);
+  const [template, setTemplate] = useState<string | null>(null);
   const [busy, setBusy] = useState<'pos' | 'plain' | null>(null);
 
   const locations = options.data?.locations ?? [];
   const location = locations.find((l) => l.id === locationId) ?? locations[0] ?? null;
   const registers = (desks.data?.registers ?? []).filter((r) => !location || r.org_id === location.org_id);
   const register = registers.find((r) => r.id === registerId) ?? registers[0] ?? null;
+  const stores = (desks.data?.warehouses ?? []).filter((w) => w.org_id === null || !location || w.org_id === location.org_id);
+  const templates = desks.data?.templates ?? [];
+  const chosen = templates.find((t) => t.id === template) ?? templates[0] ?? null;
 
   async function pair(withRegister: boolean) {
     if (!location) return;
     setBusy(withRegister ? 'pos' : 'plain');
     try {
-      const r = await pairDesk({ location_id: location.id, name: name.trim(), pos_register_id: withRegister && register ? register.id : null });
+      const r = await pairDesk({
+        location_id: location.id,
+        name: name.trim(),
+        pos_register_id: withRegister && register ? register.id : null,
+        warehouse_id: stores.some((w) => w.id === store) ? store : null,
+        receipt_template: chosen?.id ?? null,
+      });
       toast('success', r.message ?? `${r.desk.name} is paired.`);
       void qc.invalidateQueries({ queryKey: K.pairing });
       void qc.invalidateQueries({ queryKey: K.desks });
@@ -126,6 +138,7 @@ function PairForm({ desks, onChange }: { desks: Desks; onChange: () => void }) {
             onValueChange={(v) => {
               setLocationId(Number(v));
               setRegisterId(null);
+              setStore(null);
             }}
           />
         </div>
@@ -143,6 +156,29 @@ function PairForm({ desks, onChange }: { desks: Desks; onChange: () => void }) {
           <span className="text-[12px] text-ink-2">Salon checkouts, deposits and retail sales land in this register’s session and drawer.</span>
         </div>
       )}
+      {stores.length > 0 || templates.length > 0 ? (
+        <div className="grid gap-3.5 md:grid-cols-2">
+          {stores.length > 0 ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-[13px] font-semibold text-ink">Stock location</span>
+              <Select
+                label="Stock location"
+                value={stores.some((w) => w.id === store) ? String(store) : 'location'}
+                options={[{ value: 'location', label: `${location?.name ?? 'The location'}’s own store` }, ...stores.map((w) => ({ value: String(w.id), label: w.code ? `${w.code} · ${w.name}` : w.name }))]}
+                onValueChange={(v) => setStore(v === 'location' ? null : Number(v))}
+              />
+              <span className="text-[12px] text-ink-2">Products used on clients and retail sold at this desk come out of this stock.</span>
+            </div>
+          ) : null}
+          {chosen ? (
+            <div className="flex flex-col gap-1">
+              <span className="text-[13px] font-semibold text-ink">Receipt template</span>
+              <Select label="Receipt template" value={chosen.id} options={templates.map((t) => ({ value: t.id, label: t.name }))} onValueChange={(v) => setTemplate(v)} />
+              <span className="text-[12px] text-ink-2">{chosen.about}</span>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
       <div className="flex items-start gap-2.5 rounded-[12px] bg-selection px-3.5 py-3 text-[13.5px] text-primary">
         <Icon name="shield" size={18} className="mt-0.5 shrink-0" />
         <span>An owner approves the pairing. The desk’s key is kept in this computer’s credential store, and can be revoked from SalonMate → Front desk PCs at any time; the desk stops at once.</span>
@@ -204,6 +240,8 @@ function Waiting({ pairing, desk, state, loading, failed, onRetry, onChange }: {
               <p className="mt-1.5 text-[14px] text-ink">
                 <b>{desk.location ?? 'Location'}</b>
                 {desk.register ? ` · register ${desk.register.code}` : ' · no POS register'}
+                {desk.warehouse ? ` · stock from ${desk.warehouse.name}` : ''}
+                {desk.receipt_template_name ? ` · ${desk.receipt_template_name}` : ''}
               </p>
             ) : null}
           </div>

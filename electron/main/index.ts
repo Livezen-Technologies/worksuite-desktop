@@ -331,7 +331,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const device: DeviceService = new DeviceService(db, secrets, http);
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
-  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
+  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null, desk: () => salonDesk.pairing()?.desk_id ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
   const mailLimits = () => {

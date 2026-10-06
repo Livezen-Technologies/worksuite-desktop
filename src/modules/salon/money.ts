@@ -197,6 +197,10 @@ export interface ReceiptData {
   store_credit: number;
   next_visit: { date: string; weeks: number } | null;
   footer: string;
+  /** A POS offline sale's till receipt, as the client was given it (POS-11). */
+  offline?: { receipt: string; at: string } | null;
+  /** The layout the desk prints with: `salon_short` leaves out the sale and what comes after (DSK-02). */
+  template?: string;
 }
 
 /** An advance taken for a visit still to come (PAY-05): the deposit, into the desk's register. */
@@ -212,7 +216,7 @@ export interface AdvanceBody {
 export const fetchCheckout = (visitId: number, signal?: AbortSignal) => apiGet<CheckoutQuote>(`${BASE}/visits/${visitId}/checkout`, undefined, signal);
 export const fetchRegister = (deskId: number, signal?: AbortSignal) => apiGet<RegisterState>(`${BASE}/desk/register`, { desk: deskId }, signal);
 export const fetchDay = (deskId: number, signal?: AbortSignal) => apiGet<DeskDay>(`${BASE}/desk/day`, { desk: deskId }, signal);
-export const fetchReceipt = (visitId: number, signal?: AbortSignal) => apiGet<ReceiptData>(`${BASE}/visits/${visitId}/receipt`, { format: 'json' }, signal);
+export const fetchReceipt = (visitId: number, deskId: number, signal?: AbortSignal) => apiGet<ReceiptData>(`${BASE}/visits/${visitId}/receipt`, { format: 'json', desk: deskId }, signal);
 export const fetchRetail = (deskId: number, q: string, signal?: AbortSignal) => apiGet<{ items: RetailItem[]; categories: string[] }>(`${BASE}/desk/retail`, { desk: deskId, q }, signal);
 
 export const MK = {
@@ -378,6 +382,11 @@ export async function saveDeskSettings(deskId: number, s: SalonPrintSettings): P
   await request('PUT', `${BASE}/desks/${deskId}/settings`, {
     body: { receipt_printer: s.receipt_printer, a4_printer: s.a4_printer, paper: s.paper, silent: s.silent, auto_print: s.auto_print, copies: s.copies },
   });
+}
+
+/** Where a desk takes stock from and the receipt it prints — changed by somebody who manages desks (DSK-02). */
+export async function saveDeskTill(deskId: number, till: { warehouse_id: number | null; receipt_template: string }): Promise<void> {
+  await request('PUT', `${BASE}/desks/${deskId}/settings`, { body: till });
 }
 
 /* ── Pages printed from the server's figures ────────────────────────── */

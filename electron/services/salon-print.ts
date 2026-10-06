@@ -216,6 +216,8 @@ export interface SalonPrintDeps {
   config: { getConfig<T>(key: string): T | undefined; setConfig(key: string, value: unknown): void; deleteConfig(key: string): void };
   http: Pick<HttpClient, 'raw' | 'url'>;
   origin: () => string | null;
+  /** The desk this computer is paired as: its receipts print with that desk's template (DSK-02). */
+  desk?: () => number | null;
   print?: (job: PrintJob) => Promise<PrintResult>;
   raw?: (printer: string, bytes: Buffer) => Promise<PrintResult>;
 }
@@ -291,7 +293,8 @@ export class SalonPrint {
   /** A visit's receipt, as WorkSuite renders it (PRN-02). */
   async receipt(visitId: number, paper: SalonPaper | undefined, installed: string[]): Promise<SalonPrintOutcome> {
     const p = paper ?? this.settings().paper;
-    return this.run(await this.fetchHtml(`/api/salon/v1/visits/${visitId}/receipt`, { paper: p }), p, installed);
+    const desk = this.deps.desk?.() ?? null;
+    return this.run(await this.fetchHtml(`/api/salon/v1/visits/${visitId}/receipt`, desk ? { paper: p, desk } : { paper: p }), p, installed);
   }
 
   /** WorkSuite's test receipt — English, Sinhala and Tamil (PRN-05). */

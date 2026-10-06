@@ -1407,6 +1407,13 @@ export interface SalonDeskInfo {
   status: 'requested' | 'active' | 'revoked';
   device_id: string | null;
   register: { id: number; code: string; name: string; open: boolean; session_id: number | null; opened_at: string | null } | null;
+  /** The POS till it is paired as, when it is one (POS-01). */
+  till?: { id: number; code: string; name: string; revoked: boolean } | null;
+  /** Where its checkouts and retail take stock from (DSK-02). */
+  warehouse?: { id: number; code: string | null; name: string } | null;
+  /** The receipt layout it prints with — `salon_80` or `salon_short` (POS-08). */
+  receipt_template?: string;
+  receipt_template_name?: string;
   approved_at: string | null;
   revoked_at: string | null;
   [field: string]: unknown;
@@ -1423,6 +1430,10 @@ export interface SalonDeskPairInput {
   location_id: number;
   name: string;
   pos_register_id?: number | null;
+  /** The stock location it takes from; none for the location's own. */
+  warehouse_id?: number | null;
+  /** The receipt layout it prints with; none for the salon receipt. */
+  receipt_template?: string | null;
 }
 
 /** What a SalonMate receipt is printed on: an 80 mm or 58 mm roll, or a full page (A4, Letter). */

@@ -6,8 +6,8 @@ import { Spinner, Switch, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
-import { clockAt, forgetDesk, K, todayAt } from './api';
-import { listPrinters, MK, openDrawer, printTest, saveDeskSettings, setPrintSettings } from './money';
+import { clockAt, fetchDesks, forgetDesk, K, todayAt, type DeskList } from './api';
+import { listPrinters, MK, openDrawer, printTest, saveDeskSettings, saveDeskTill, setPrintSettings } from './money';
 import { DeskDialog, Failed, Label, Note, Page, Panel, Segmented, Stepper, TouchButton, useDesk, useNow, usePrintSettings } from './parts';
 
 /**
@@ -249,6 +249,9 @@ function ThisDesk() {
   const desk = useDesk();
   const qc = useQueryClient();
   const [confirming, setConfirming] = useState(false);
+  const [changing, setChanging] = useState(false);
+  const desks = useQuery({ queryKey: K.desks, queryFn: ({ signal }) => fetchDesks(signal), enabled: !desk.offline });
+  const manage = !!desks.data?.may.manage && (desks.data.warehouses?.length ?? 0) + (desks.data.templates?.length ?? 0) > 0;
   const unsent = (desk.sync?.waiting ?? 0) + (desk.sync?.refused ?? 0) + (desk.sync?.others ?? 0);
 
   async function forget() {
@@ -276,8 +279,21 @@ function ThisDesk() {
           <dt className="text-ink-2">POS register</dt>
           <dd className="m-0 font-semibold text-ink">{desk.desk.register ? `${desk.desk.register.code} · ${desk.desk.register.name}` : 'None — payments are Billing receipts'}</dd>
         </div>
+        <div className="flex justify-between gap-3 py-[3px]">
+          <dt className="text-ink-2">Stock location</dt>
+          <dd className="m-0 font-semibold text-ink">{desk.desk.warehouse?.name ?? `${desk.location.name}’s own store`}</dd>
+        </div>
+        <div className="flex justify-between gap-3 py-[3px]">
+          <dt className="text-ink-2">Receipt template</dt>
+          <dd className="m-0 font-semibold text-ink">{desk.desk.receipt_template_name ?? 'Salon receipt'}</dd>
+        </div>
       </dl>
       <div className="mt-3 flex flex-wrap gap-2.5">
+        {manage ? (
+          <TouchButton icon="pen" onClick={() => setChanging(true)}>
+            Stock and receipt…
+          </TouchButton>
+        ) : null}
         <TouchButton icon="external" onClick={() => void call('app:openInBrowser', { path: '/salon' })}>
           Owners’ screens on the web
         </TouchButton>
@@ -285,6 +301,7 @@ function ThisDesk() {
           Pair this computer again…
         </TouchButton>
       </div>
+      {changing && desks.data ? <TillDialog list={desks.data} onClose={() => setChanging(false)} /> : null}
       {confirming ? (
         <DeskDialog
           tone="danger"
@@ -312,5 +329,71 @@ function ThisDesk() {
         </DeskDialog>
       ) : null}
     </Panel>
+  );
+}
+
+/** Where this desk takes stock from, and the receipt it prints (DSK-02) — for somebody who manages desks. */
+function TillDialog({ list, onClose }: { list: DeskList; onClose: () => void }) {
+  const desk = useDesk();
+  const qc = useQueryClient();
+  const stores = (list.warehouses ?? []).filter((w) => w.org_id === null || w.org_id === desk.org);
+  const templates = list.templates ?? [];
+  const [store, setStore] = useState<number | null>(desk.desk.warehouse?.id ?? null);
+  const [template, setTemplate] = useState(desk.desk.receipt_template ?? templates[0]?.id ?? 'salon_80');
+  const [busy, setBusy] = useState(false);
+  const about = templates.find((t) => t.id === template)?.about;
+
+  async function save() {
+    setBusy(true);
+    try {
+      await saveDeskTill(desk.desk.id, { warehouse_id: store, receipt_template: template });
+      toast('success', 'Saved for this desk.');
+      void qc.invalidateQueries({ queryKey: K.desks });
+      onClose();
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : 'The desk could not be changed.');
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <DeskDialog
+      tone="indigo"
+      icon="settings"
+      title="Stock and receipt"
+      sub={`What ${desk.desk.name} takes stock from, and the receipt it prints.`}
+      labelledBy="salon-till"
+      width={560}
+      onClose={onClose}
+      footer={
+        <>
+          <TouchButton onClick={onClose}>Cancel</TouchButton>
+          <TouchButton variant="primary" loading={busy} onClick={() => void save()}>
+            Save
+          </TouchButton>
+        </>
+      }
+    >
+      {stores.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <Label>Stock location</Label>
+          <Select
+            label="Stock location"
+            value={store !== null && stores.some((w) => w.id === store) ? String(store) : 'location'}
+            options={[{ value: 'location', label: `${desk.location.name}’s own store` }, ...stores.map((w) => ({ value: String(w.id), label: w.code ? `${w.code} · ${w.name}` : w.name }))]}
+            onValueChange={(v) => setStore(v === 'location' ? null : Number(v))}
+          />
+          <span className="text-[12.5px] text-ink-2">Products used on clients and retail sold here come out of this stock from the next checkout.</span>
+        </div>
+      ) : null}
+      {templates.length > 0 ? (
+        <div className="flex flex-col gap-1">
+          <Label>Receipt template</Label>
+          <Segmented label="Receipt template" value={template} onChange={setTemplate} options={templates.map((t) => ({ value: t.id, label: t.name }))} />
+          {about ? <span className="text-[12.5px] text-ink-2">{about}</span> : null}
+        </div>
+      ) : null}
+    </DeskDialog>
   );
 }

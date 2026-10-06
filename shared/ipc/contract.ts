@@ -970,7 +970,13 @@ export const contract = {
   // SalonMate's front desk: the key it is paired with stays in the main process.
   'salon:deskPairing': ch(none, { session: true }),
   'salon:deskPair': ch(
-    z.object({ location_id: z.number().int().positive(), name: z.string().trim().min(1).max(80), pos_register_id: z.number().int().positive().nullable().optional() }),
+    z.object({
+      location_id: z.number().int().positive(),
+      name: z.string().trim().min(1).max(80),
+      pos_register_id: z.number().int().positive().nullable().optional(),
+      warehouse_id: z.number().int().positive().nullable().optional(),
+      receipt_template: z.string().regex(/^[a-z0-9_]{1,40}$/).nullable().optional(),
+    }),
     { session: true, rate: 3, sensitive: true },
   ),
   'salon:deskForget': ch(none, { session: true, rate: 3, sensitive: true }),

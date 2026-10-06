@@ -319,6 +319,24 @@ export interface DeskList {
   items: SalonDeskInfo[];
   may: { manage: boolean };
   registers: { id: number; org_id: number; code: string; name: string; terminal_id: number | null }[];
+  /** The stock locations a desk may take stock from (DSK-02); older servers send none. */
+  warehouses?: StockLocation[];
+  /** The receipt layouts a desk prints with (POS-08); older servers send none. */
+  templates?: ReceiptTemplate[];
+}
+
+export interface StockLocation {
+  id: number;
+  org_id: number | null;
+  code: string | null;
+  name: string;
+  kind: string | null;
+}
+
+export interface ReceiptTemplate {
+  id: string;
+  name: string;
+  about: string;
 }
 
 // ── query keys ──────────────────────────────────────────────────────────

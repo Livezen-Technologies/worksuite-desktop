@@ -796,7 +796,7 @@ export function Paid() {
   const result = desk.paid.get(id);
   const detail = useQuery({ queryKey: K.visit(id), queryFn: ({ signal }) => fetchVisit(id, signal), enabled: id > 0 && !result });
   const visit = result?.visit ?? detail.data?.visit;
-  const receipt = useQuery({ queryKey: MK.receipt(id), queryFn: ({ signal }) => fetchReceipt(id, signal), enabled: id > 0 && !!visit && (visit.checked_out || !!result?.invoice), retry: false });
+  const receipt = useQuery({ queryKey: MK.receipt(id), queryFn: ({ signal }) => fetchReceipt(id, desk.desk.id, signal), enabled: id > 0 && !!visit && (visit.checked_out || !!result?.invoice), retry: false });
   const [printing, setPrinting] = useState(false);
   const [opening, setOpening] = useState(false);
 
@@ -955,6 +955,7 @@ export function ReceiptPreview({ r }: { r: ReceiptData }) {
   const m = (n: number) => n.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const Row = ReceiptRow;
   const Rule = ReceiptRule;
+  const short = r.template === 'salon_short';
   return (
     <aside aria-label="Receipt" className="w-full shrink-0 bg-white px-[18px] py-5 font-mono text-[11.5px] leading-[1.55] text-[#151A2D] shadow-[0_10px_30px_rgba(15,27,61,.18)] xl:w-[320px]">
       <div className="text-center text-[14px] font-bold tracking-[.04em] uppercase">{r.company.name}</div>
@@ -964,8 +965,10 @@ export function ReceiptPreview({ r }: { r: ReceiptData }) {
       <Row l="Invoice" v={r.invoice.number} />
       <Row l="Visit" v={r.visit.number} />
       <Row l="Date" v={r.visit.at} />
-      {r.pos?.sale ? <Row l="POS sale" v={r.pos.sale} /> : null}
-      {r.pos?.register ? <Row l="Register" v={[r.pos.register, r.pos.till].filter(Boolean).join(' · ')} /> : null}
+      {r.offline ? <Row l="Till receipt" v={r.offline.receipt} /> : null}
+      {r.offline ? <Row l="Taken offline" v={r.offline.at} /> : null}
+      {r.pos?.sale && !short ? <Row l="POS sale" v={r.pos.sale} /> : null}
+      {r.pos?.register && !short ? <Row l="Register" v={[r.pos.register, r.pos.till].filter(Boolean).join(' · ')} /> : null}
       {r.client ? <Row l="Client" v={r.client} /> : null}
       <Rule />
       {r.lines.map((l, i) => (
@@ -983,12 +986,12 @@ export function ReceiptPreview({ r }: { r: ReceiptData }) {
       {r.credit_kept > 0 ? <Row l="To store credit" v={m(r.credit_kept)} /> : null}
       <Row l="Change" v={m(r.change)} />
       {r.owed > 0 ? <Row l="Still owed" v={m(r.owed)} b /> : null}
-      {r.loyalty || r.store_credit > 0 ? <Rule /> : null}
-      {r.loyalty ? <Row l="Points earned" v={`+${r.loyalty.earned}`} /> : null}
-      {r.loyalty ? <Row l="Points balance" v={`${r.loyalty.balance.toLocaleString()}${r.loyalty.tier ? ` (${r.loyalty.tier})` : ''}`} /> : null}
-      {r.store_credit > 0 ? <Row l="Store credit" v={`${r.currency} ${m(r.store_credit)}`} /> : null}
+      {!short && (r.loyalty || r.store_credit > 0) ? <Rule /> : null}
+      {!short && r.loyalty ? <Row l="Points earned" v={`+${r.loyalty.earned}`} /> : null}
+      {!short && r.loyalty ? <Row l="Points balance" v={`${r.loyalty.balance.toLocaleString()}${r.loyalty.tier ? ` (${r.loyalty.tier})` : ''}`} /> : null}
+      {!short && r.store_credit > 0 ? <Row l="Store credit" v={`${r.currency} ${m(r.store_credit)}`} /> : null}
       <Rule />
-      {r.next_visit ? <div className="text-center">Next: {shortDay(r.next_visit.date)}</div> : null}
+      {!short && r.next_visit ? <div className="text-center">Next: {shortDay(r.next_visit.date)}</div> : null}
       <div className="text-center">ස්තූතියි · நன்றி · Thank you</div>
       {r.footer ? <div className="text-center text-[10.5px]">{r.footer}</div> : null}
     </aside>
