@@ -4,11 +4,12 @@ import { Toasts } from '../../app/overlays/Toasts';
 import { Button, Spinner, cx } from '../../components/ui';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import type { ModuleProps } from '../registry';
-import { discountRights, fetchOptions, fetchRegisters, PK, syncNow, unreachable, useTill, usePosChanged } from './api';
+import { discountRights, fetchOptions, fetchRegisters, PK, unreachable, useTill, usePosChanged } from './api';
 import { useKeptCarts } from './cart';
 import Connect from './Connect';
 import { useT, type PosKey } from './i18n';
 import { Failed, Note, posRoute, TillContext, type PosView, type Till } from './parts';
+import SyncDrawer from './SyncDrawer';
 import TillBar from './TillBar';
 
 /**
@@ -63,6 +64,7 @@ function Counter({ active }: { active: boolean }) {
   // Full-screen counter mode: the till alone on the screen (the element, not the window: Esc leaves it).
   const root = useRef<HTMLDivElement>(null);
   const [full, setFull] = useState(false);
+  const [syncOpen, setSyncOpen] = useState(false);
   useEffect(() => {
     const sync = () => setFull(!!root.current && document.fullscreenElement === root.current);
     document.addEventListener('fullscreenchange', sync);
@@ -114,7 +116,7 @@ function Counter({ active }: { active: boolean }) {
   return (
     <TillContext.Provider value={ctx}>
       <div ref={root} className="pos-scope relative flex h-full min-h-0 flex-col bg-pos-ground text-ink">
-        <TillBar till={ctx} view={view} full={full} onFull={() => void toggleFull()} onSync={() => goRoute(posRoute('till'))} />
+        <TillBar till={ctx} view={view} full={full} onFull={() => void toggleFull()} onSync={() => setSyncOpen(true)} />
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label={`POS · ${t(VIEWS[view].label)}`}>
           <SyncBar till={ctx} />
           <div className={cx('min-h-0 flex-1', view === 'register' ? 'overflow-hidden' : 'overflow-y-auto scroll-thin')}>
@@ -123,6 +125,7 @@ function Counter({ active }: { active: boolean }) {
             </Suspense>
           </div>
         </main>
+        {syncOpen ? <SyncDrawer till={ctx} onClose={() => setSyncOpen(false)} /> : null}
         {/* In full screen only this element is drawn: the app's toasts are shown from inside it. */}
         {full ? <Toasts /> : null}
       </div>
@@ -130,28 +133,13 @@ function Counter({ active }: { active: boolean }) {
   );
 }
 
-/** Where the till stands with WorkSuite: offline, sales on their way, a refusal, a till no longer accepted. */
+/** What needs a person, under the till bar: a problem WorkSuite reported, sales it refused. (Online, offline and what
+ * waits to be sent are the till bar's pill and its drawer.) */
 function SyncBar({ till }: { till: Till }) {
   const t = useT();
-  const [busy, setBusy] = useState(false);
   const s = till.status;
-  const send = async () => {
-    setBusy(true);
-    try {
-      await syncNow();
-    } finally {
-      setBusy(false);
-    }
-  };
-  const action = (
-    <Button size="sm" icon="upload" loading={busy} onClick={() => void send()}>
-      {t('pos.sendNow')}
-    </Button>
-  );
   const notes: React.ReactNode[] = [];
   if (s.problem) notes.push(<Note key="p" tone="danger">{s.problem}</Note>);
-  if (till.offline || !s.reachable) notes.push(<Note key="o" tone="warning" action={s.waiting ? action : undefined}>{t('pos.offline')}{s.waiting ? ` ${t('pos.waiting', { n: s.waiting })}.` : ''}</Note>);
-  else if (s.waiting) notes.push(<Note key="w" tone="indigo" action={action}>{t('pos.waiting', { n: s.waiting })}</Note>);
   if (s.refused) notes.push(<Note key="r" tone="danger" action={<Button size="sm" onClick={() => till.go('sales')}>{t('pos.sales')}</Button>}>{t('pos.refused', { n: s.refused })}</Note>);
   if (!notes.length) return null;
   return <div className="flex flex-col gap-2 px-5 pt-3">{notes}</div>;

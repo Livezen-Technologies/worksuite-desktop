@@ -3,12 +3,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PosTillStatus } from '@shared/pos';
+import type { PosSale, PosTillStatus } from '@shared/pos';
 import type { PosRegister, PosSession } from '../../../src/modules/pos/api';
 import { cartActions } from '../../../src/modules/pos/cart';
 import CashMove from '../../../src/modules/pos/CashMove';
 import { TillContext, type Till } from '../../../src/modules/pos/parts';
 import Shift from '../../../src/modules/pos/ShiftScreen';
+import SyncDrawer from '../../../src/modules/pos/SyncDrawer';
 
 afterEach(() => {
   cleanup();
@@ -82,10 +83,15 @@ function api() {
   return seen;
 }
 
-function mount(node: ReactNode, t: Till) {
+function mount(node: ReactNode, t: Till, pos: Record<string, unknown> = {}) {
   (window as { worksuite?: unknown }).worksuite = {
     platform: 'linux',
-    pos: { sales: async () => [], printSettings: async () => ({ receipt_printer: 'Thermal', header: '', footer: '' }), openDrawer: async () => ({ ok: true, printer: 'Thermal', message: 'Drawer opened.' }) },
+    pos: {
+      sales: async () => [],
+      printSettings: async () => ({ receipt_printer: 'Thermal', header: '', footer: '' }),
+      openDrawer: async () => ({ ok: true, printer: 'Thermal', message: 'Drawer opened.' }),
+      ...pos,
+    },
     events: { on: () => () => undefined },
   };
   render(
@@ -147,5 +153,26 @@ describe('cash in and out', () => {
     fireEvent.click(go);
     await waitFor(() => expect(onClose).toHaveBeenCalled());
     expect(seen[0]).toMatchObject({ url: expect.stringContaining('/api/pos/sessions/41/cash'), method: 'POST', body: { direction: 'out', amount: 30000, reason: 'To the safe', reference: 'SAFE-2' } });
+  });
+});
+
+describe('the sync drawer', () => {
+  const sale = (ref: string, state: PosSale['state'], at: string) => ({ ref, state, created_at: at, tenders: [{ method: 'cash', amount: 450 }], totals: { subtotal: 450, discount: 0, tax: 0, total: 450 } }) as unknown as PosSale;
+
+  it('lists what waits to be sent, in order, and tries again now', async () => {
+    const syncNow = vi.fn(async () => status);
+    mount(<SyncDrawer till={till({ offline: true, status: { ...status, reachable: false, waiting: 2, refused: 0, last_contact: '2026-10-06T08:27:00Z' } })} onClose={() => undefined} />, till(), {
+      sales: async () => [sale('T1-AAAAAA-000052', 'waiting', '2026-10-06T08:31:00Z'), sale('T1-AAAAAA-000050', 'sent', '2026-10-06T08:20:00Z'), sale('T1-AAAAAA-000051', 'refused', '2026-10-06T08:30:00Z')],
+      syncNow,
+    });
+    expect(screen.getByRole('heading', { name: 'Selling offline' })).toBeTruthy();
+    expect(screen.getByText('Waits for the connection')).toBeTruthy();
+    await screen.findByText('T1-AAAAAA-000052');
+    expect(screen.getByText('Waiting to send · 2')).toBeTruthy();
+    expect(screen.queryByText('T1-AAAAAA-000050')).toBeNull();
+    const refs = screen.getAllByText(/^T1-AAAAAA-00005/).map((e) => e.textContent);
+    expect(refs).toEqual(['T1-AAAAAA-000051', 'T1-AAAAAA-000052']);
+    fireEvent.click(screen.getByRole('button', { name: 'Try now' }));
+    await waitFor(() => expect(syncNow).toHaveBeenCalled());
   });
 });
