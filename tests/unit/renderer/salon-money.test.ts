@@ -1,5 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import * as m from '../../../src/modules/salon/money';
+import { offlineAsked, offlineDue, offlinePayable, offlineTaken } from '../../../src/modules/salon/OfflinePay';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -141,5 +142,64 @@ describe('printing goes through the main process', () => {
     expect((await m.printReceipt(7)).message).toBe('Sent to TM-T20.');
     expect(printReceipt).toHaveBeenCalledWith({ visit_id: 7, paper: undefined });
     expect((await m.openDrawer()).ok).toBe(true);
+  });
+});
+
+describe('a payment taken offline (POS-11)', () => {
+  const v = (over: Record<string, unknown> = {}) =>
+    ({
+      id: 62,
+      number: 'GBL-APT-011562',
+      status: 'in_service',
+      checked_out: false,
+      invoice: null,
+      money: { currency: 'LKR', total: 15375, deposit_due: 0, advance: 3000, deposit_owed: 0, balance: 12375 },
+      ...over,
+    }) as unknown as Parameters<typeof offlineDue>[0];
+
+  it('may be taken for a visit in the chair or done, or checked out and still owing', () => {
+    expect(offlinePayable(v())).toBe(true);
+    expect(offlinePayable(v({ status: 'completed' }))).toBe(true);
+    expect(offlinePayable(v({ status: 'checked_in' }))).toBe(false);
+    expect(offlinePayable(v({ status: 'completed', checked_out: true, invoice: { id: 1, number: 'INV-1', status: 'paid', total: 15375, paid: 15375, owed: 0 } }))).toBe(false);
+    expect(offlinePayable(v({ status: 'completed', checked_out: true, invoice: { id: 1, number: 'INV-1', status: 'partial', total: 15375, paid: 10000, owed: 5375 } }))).toBe(true);
+  });
+
+  it('is the price less the advance, or what the invoice still owes; and asks for the whole', () => {
+    expect(offlineDue(v())).toBe(12375);
+    expect(offlineAsked(v())).toBe(15375);
+    const owing = v({ checked_out: true, invoice: { id: 1, number: 'INV-1', status: 'partial', total: 13737.5, paid: 10000, owed: 3737.5 } });
+    expect(offlineDue(owing)).toBe(3737.5);
+    expect(offlineAsked(owing)).toBe(13737.5);
+  });
+
+  it('keeps cash net of the change, and never more than is due', () => {
+    expect(offlineTaken('cash', 12375, 15000)).toEqual({ taken: 12375, change: 2625 });
+    expect(offlineTaken('cash', 12375, 10000)).toEqual({ taken: 10000, change: 0 });
+    expect(offlineTaken('card', 12375, 0)).toEqual({ taken: 12375, change: 0 });
+  });
+
+  it('prints a till receipt that says the tax invoice follows', () => {
+    const html = m.offlineReceipt(
+      {
+        receipt: 'FRONT-1-OFF-000012',
+        at: '2026-09-28 11:41',
+        register: 'FRONT-1',
+        visit: 'GBL-APT-011562',
+        client: 'Amaya <Senanayake>',
+        lines: [{ label: 'Root colour', amount: 11875 }],
+        currency: 'LKR',
+        total: 15375,
+        advance: 3000,
+        tenders: [{ method: 'cash', amount: 12375, reference: null }],
+        change: 2625,
+      },
+      { company: 'Glow', location: 'Colombo 05', paper: '80mm' },
+    );
+    expect(html).toContain('FRONT-1-OFF-000012');
+    expect(html).toContain('Amaya &lt;Senanayake&gt;');
+    expect(html).toContain('15,000.00');
+    expect(html).toContain('2,625.00');
+    expect(html).toContain('Your tax invoice follows');
   });
 });

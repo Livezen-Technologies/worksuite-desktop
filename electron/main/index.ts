@@ -14,6 +14,7 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
+import { isOfficeSignInLink, OFFICE_CLIENT } from '@shared/office-signin';
 import { itemApp, itemRoute, looksLikeItemLink, parseItemLink } from '@shared/item-links';
 import { linkPrefs } from '@shared/link-prefs';
 import { findMailtoInArgv, mailBodiesKept, mailKeptForever, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
@@ -44,6 +45,7 @@ import { devOrigin, hardenSession, isTrustedShellUrl, openExternalSafely, regist
 import { createApiProxy } from '../services/api-proxy';
 import { AuditService } from '../services/audit';
 import { AuthService } from '../services/auth';
+import { DesktopAccountsFile, OfficeSignIn } from '../services/office-signin';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
@@ -55,6 +57,7 @@ import { archName, DeviceService, platformName } from '../services/device';
 import { PmsLocks } from '../services/pms-locks';
 import { ContactSync } from '../services/contact-sync';
 import { createPos } from '../services/pos-ipc';
+import { PhoneService } from '../services/phone';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
 import { SalonSync } from '../services/salon-sync';
@@ -331,7 +334,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const device: DeviceService = new DeviceService(db, secrets, http);
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
-  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
+  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null, desk: () => salonDesk.pairing()?.desk_id ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
   const mailLimits = () => {
@@ -640,6 +643,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('pos:changed');
       emitStatus();
     },
+  });
+
+  // The Phone (WS-VOIP-SRS-001): its switch's WebSocket in the page policy, the compact phone's global shortcuts and
+  // calls as native notifications. The SIP phone itself runs in the main window's page.
+  const phone = new PhoneService({
+    config: db,
+    http,
+    allowed: () => sessionCtl.isReady() && canOpenApp('phone', sessionCtl.visibleApps()),
+    notify: (n) => notifications.notify(n),
+    mainWindow: () => windows.getMain(),
   });
 
   // Hotel PMS door locks: the on-site lock server this front desk talks to (its secret only in the OS keystore).
@@ -1052,6 +1065,34 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (origin) void openExternalSafely(`${origin}${target.path}`);
     } else windows.showMain();
   };
+  // WorkSuite Office on this computer: who this app is signed in as, and its "Continue as" (worksuite-office#6).
+  const desktopAccounts = new DesktopAccountsFile(join(p.userData, 'desktop-accounts.json'), log);
+  const officeSignIn = new OfficeSignIn({
+    account: () => {
+      const origin = auth.getServer()?.origin;
+      const uid = sessionCtl.userId();
+      const user = sessionCtl.current()?.user ?? sessionCtl.get().user;
+      if (!origin || !uid || !user || !sessionCtl.isReady()) return null;
+      return { origin, userId: String(uid), name: user.name, organization: user.organizationName ?? null };
+    },
+    isLocked: () => lock.isLocked(),
+    confirm: async ({ message, detail }) => {
+      const parent = windows.getMain();
+      const opts = { type: 'question' as const, buttons: ['Continue', 'Cancel'], defaultId: 1, cancelId: 1, message, detail };
+      const { response } = parent ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
+      return response === 0;
+    },
+    handoff: (challenge) => http.post('/api/auth/apps/handoff', { client: OFFICE_CLIENT, code_challenge: challenge, code_challenge_method: 'S256' }),
+    // A fixed address with this app's code: nothing from the link that asked (hardening.ts allows https only).
+    open: async (url) => {
+      if (!app.isPackaged && process.env.WS_E2E_EXTERNAL_LOG) await fsp.writeFile(process.env.WS_E2E_EXTERNAL_LOG, `${url}\n`, { flag: 'a' });
+      else await shell.openExternal(url);
+    },
+    showMain: () => void windows.showMain(),
+    toast: (kind, text) => broadcast('toast', { kind, text }),
+    isNotFound: (e) => isDesktopError(e) && e.code === 'NOT_FOUND',
+    log,
+  });
   const handleDeepLink = (url: string): void => {
     // A mailto: link from another app (WorkSuite is the default mail app): a new message, prefilled, for the person to send.
     if (/^mailto:/i.test(url)) {
@@ -1081,6 +1122,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         return;
       }
       void sessionCtl.completePasskey(code, state);
+      return;
+    }
+    // WorkSuite Office asking to use this sign-in (worksuite-office#6). Before the link grammar, where
+    // office/:id would take it for a document, and never logged: it carries a PKCE challenge and state.
+    if (isOfficeSignInLink(url)) {
+      void officeSignIn.handle(url);
       return;
     }
     const meeting = /^worksuite:\/\/meet\/([0-9a-f-]{36})(?:[?#]|$)/i.exec(url);
@@ -1872,6 +1919,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       // So do an event desk's copies of the gates' tickets (scans still unsent wait, should the app come back).
       if (!canOpenApp('events', visible)) eventDesk.signedOut(b.user.id);
       if (!canOpenApp('restaurant', visible)) restaurant.signedOut(b.user.id);
+      // The Phone's global shortcuts go with it.
+      if (!canOpenApp('phone', visible)) phone.reset();
     }
     emitStatus();
   };
@@ -1952,6 +2001,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void pdfStudio.closeAll();
     // Local AI's model stops; the models on this computer stay.
     void localAI.signedOut();
+    // The compact phone's global shortcuts are released.
+    phone.reset();
     realtime.stop();
     notifications.stop();
     device.stop();
@@ -1970,6 +2021,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     pendingNav.length = 0;
     lock.reset();
     emitStatus();
+  };
+
+  /** Who WorkSuite Office may offer to continue as: the signed-in person, or nobody. */
+  const desktopAccountOf = (ready: boolean) => {
+    const origin = auth.getServer()?.origin;
+    const user = sessionCtl.current()?.user ?? sessionCtl.get().user;
+    if (!ready || !origin || !user) return null;
+    return { server: origin, user: { id: String(user.id), name: user.name, email: user.email ?? '', organization: user.organizationName ?? '' } };
   };
 
   sessionCtl = new SessionController(db, auth, device, bootstrap, fetchImpl, enterprise, {
@@ -2023,6 +2082,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       log.info('local data removed', { scope });
     },
     changed: (s) => {
+      desktopAccounts.update(desktopAccountOf(s.stage === 'ready'));
       // Signing in ends guest mode (the window may then offer to move its data here); signing out closes the Local Profile.
       if (s.stage === 'ready' && !wasSignedIn) localSession.signedIn(localAccountKey());
       else if (s.stage !== 'ready' && wasSignedIn) localSession.signedOut();
@@ -2037,6 +2097,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       }
     },
     bootstrapChanged: (b) => {
+      // A new name, picture or organisation for WorkSuite Office's "Continue as".
+      desktopAccounts.update(desktopAccountOf(sessionCtl.isReady()));
       if (b) settings.setPolicy(b.policy);
       if (b) void appearanceSync.pull();
       // Policy or trust may have turned sync on or off.
@@ -2111,6 +2173,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('realtime:resync');
       // What a notification clicked while locked pointed at, now that the workspace is back (#114).
       if (pendingNav.length) setTimeout(() => flushNavigation(), 300);
+      // And WorkSuite Office's "Continue as", if it asked while the app was locked.
+      officeSignIn.unlocked();
     }
   };
 
@@ -2258,7 +2322,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       },
     }),
     // Read on each page load: the server chosen, and the media servers it announced.
-    () => ({ server: auth.getServer()?.origin ?? null, media: [...mediaServers(), ...guests.media] }),
+    () => ({ server: auth.getServer()?.origin ?? null, media: [...mediaServers(), ...guests.media, ...phone.origins()] }),
     // A course's lessons kept offline, played by the app's own pages.
     (request, path) =>
       path.startsWith('/chat-media/')
@@ -2392,6 +2456,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   pdfStudio.register(router);
   mailFiles.register(router);
   pos.register(router);
+  phone.register(router);
   pmsLocks.register(router);
   contactSync.register(router);
   restaurant.register(router);

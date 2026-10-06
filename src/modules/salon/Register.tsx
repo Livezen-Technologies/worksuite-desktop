@@ -1,11 +1,11 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Icon } from '../../components/Icon';
-import { Button, Card, Modal, Spinner, TextField } from '../../components/ui';
+import { Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { amount, answered, clockAt, shortDay } from './api';
+import { amount, answered, clockAt, dayMonth, K, longDay, todayAt } from './api';
 import { countLines, countTotal, fetchRegister, METHOD_LABEL, MK, moneyTyped, moveCash, openRegister, tenderMap, type RegisterState } from './money';
-import { Choice, CountSheet, Failed, Note, Tile, useDesk } from './parts';
+import { CountSheet, DeskDialog, Failed, Figure, greetingFor, Note, Page, Panel, TouchButton, useDesk, useNow } from './parts';
 
 /**
  * The register this desk takes money into (D13, POS-01, POS-02, POS-07).
@@ -20,21 +20,25 @@ export default function Register() {
   const desk = useDesk();
   const q = useQuery({ queryKey: MK.register(desk.desk.id), queryFn: ({ signal }) => fetchRegister(desk.desk.id, signal) });
 
-  if (q.isError) return <div className="p-6"><Failed text={q.error instanceof Error ? q.error.message : 'The register could not be loaded.'} onRetry={() => void q.refetch()} /></div>;
+  if (q.isError)
+    return (
+      <div className="px-5 py-4">
+        <Failed text={q.error instanceof Error ? q.error.message : 'The register could not be loaded.'} onRetry={() => void q.refetch()} />
+      </div>
+    );
   if (!q.data) return <Spinner label="Loading the register…" />;
 
   const r = q.data;
   if (!r.register) {
     return (
-      <div className="flex flex-col gap-4 p-6">
-        <h1 className="text-[22px] font-extrabold text-ink">Register</h1>
-        <Note>{r.message ?? 'This desk takes payments as plain Billing receipts: no POS register is paired.'}</Note>
+      <Page title="Register" sub="This desk takes payments as plain Billing receipts.">
+        <Note>{r.message ?? 'No POS register is paired with this desk.'}</Note>
         <div>
-          <Button icon="moon" onClick={() => desk.go('close')}>
+          <TouchButton icon="moon" onClick={() => desk.go('close')}>
             Close the day
-          </Button>
+          </TouchButton>
         </div>
-      </div>
+      </Page>
     );
   }
   return r.session ? <OpenSession state={r} /> : <OpenForm state={r} />;
@@ -43,20 +47,24 @@ export default function Register() {
 function OpenForm({ state }: { state: RegisterState }) {
   const desk = useDesk();
   const qc = useQueryClient();
+  const clock = useNow(60_000);
   const reg = state.register!;
   const [how, setHow] = useState<'count' | 'figure'>('count');
   const [counts, setCounts] = useState<Record<string, string>>({});
   const [figure, setFigure] = useState('');
-  const [note, setNote] = useState('');
+  const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const float = how === 'count' ? countTotal(counts) : Number(figure || 0);
   const tz = desk.location.timezone;
+  const last = state.last_close;
+  const may = desk.may('pos.register.open');
 
   async function open() {
     setBusy(true);
     try {
-      const next = await openRegister(desk.desk.id, float, how === 'count' ? countLines(counts) : null, note.trim() || null);
+      const next = await openRegister(desk.desk.id, float, how === 'count' ? countLines(counts) : null, note?.trim() || null);
       qc.setQueryData(MK.register(desk.desk.id), next);
+      void qc.invalidateQueries({ queryKey: K.desks });
       toast('success', `Register ${reg.code} is open.`);
     } catch (e) {
       toast('error', e instanceof Error ? e.message : 'The register did not open.');
@@ -68,46 +76,63 @@ function OpenForm({ state }: { state: RegisterState }) {
   }
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <div>
-        <h1 className="text-[22px] font-extrabold text-ink">Open the register</h1>
-        <p className="mt-0.5 text-[13px] text-ink-2">
-          {reg.name} · {reg.code}
-          {state.last_close?.closed_at ? ` · last closed ${shortDay(state.last_close.closed_at.slice(0, 10))} ${clockAt(state.last_close.closed_at, tz)} with ${amount(state.last_close.counted)} counted` : ''}
-        </p>
-      </div>
-      <Note tone="warning">Until the register is open you can book, check in and serve — taking payment waits.</Note>
-      <Card title={`Count the opening float · ${reg.code}`}>
-        <div className="flex flex-col gap-3">
-          <Choice
-            label="How to give the float"
-            value={how}
-            onChange={setHow}
-            options={[
-              { value: 'count', label: 'Note by note' },
-              { value: 'figure', label: 'One figure' },
-            ]}
-          />
+    <Page title="Open the register" sub={[greetingFor(desk, clock), longDay(todayAt(tz, new Date(clock))).replace(/ \d{4}$/, ''), clockAt(new Date(clock).toISOString(), tz)].join(' · ')}>
+      <div className="flex flex-col gap-3.5 xl:flex-row xl:items-start">
+        <Panel title="Which register?" className="flex w-full flex-col gap-3 xl:w-[480px] xl:shrink-0">
+          <div className="flex items-center gap-3 rounded-[14px] border-2 border-primary bg-selection px-4 py-3.5">
+            <Icon name="store" size={22} className="shrink-0 text-primary" />
+            <div className="min-w-0">
+              <div className="truncate text-[17px] font-bold text-ink">
+                {reg.name} <span className="font-mono text-[12px] font-semibold text-ink-2">{reg.code}</span>
+              </div>
+              <div className="truncate text-[12.5px] text-ink-2">
+                Closed{last?.closed_at ? ` · last closed ${dayMonth(todayAt(tz, new Date(last.closed_at)), false)} ${clockAt(last.closed_at, tz)} · ${amount(last.counted)} counted` : ''}
+              </div>
+            </div>
+          </div>
+          <p className="text-[12.5px] text-ink-2">The register this desk was paired with. Another is chosen by pairing the desk again.</p>
+          <div className="rounded-[14px] border border-[var(--ws-note-line)] bg-warning-bg px-3.5 py-3 text-[13px] text-warning-ink">
+            Until a register is open you can book, check in and serve — but <b>Take payment</b> and deposits wait. Card, LankaQR and bank payments also need an open session.
+          </div>
+        </Panel>
+
+        <Panel title={`Count the opening float · ${reg.code}`} className="flex min-w-0 flex-1 flex-col gap-2">
+          <p className="-mt-1 text-[12.5px] text-ink-2">Point of Sale keeps the session; SalonMate takes payments into it.</p>
           {how === 'count' ? (
             <CountSheet values={state.denominations ?? []} counts={counts} onChange={setCounts} label="Opening float" />
           ) : (
-            <TextField label="Cash in the drawer" inputMode="decimal" value={figure} onChange={(e) => setFigure(moneyTyped(e.target.value))} />
+            <input aria-label="Cash in the drawer" inputMode="decimal" value={figure} onChange={(e) => setFigure(moneyTyped(e.target.value))} className="h-12 rounded-[12px] border border-line bg-surface px-3.5 text-right text-[18px] text-ink outline-none tabular-nums focus:border-primary" />
           )}
-          <TextField label="Note" maxLength={300} value={note} onChange={(e) => setNote(e.target.value)} />
-          <div className="flex items-baseline justify-between rounded-[10px] bg-selection px-4 py-3">
-            <span className="text-[14px] font-bold text-primary">Float</span>
-            <output className="text-[22px] font-extrabold text-primary tabular-nums">{amount(float)}</output>
+          <div className="flex items-baseline justify-between border-t-2 border-ink pt-2">
+            <span className="text-[20px] font-extrabold text-ink">Float</span>
+            <output className="text-[20px] font-extrabold text-ink tabular-nums">{amount(float, desk.currency)}</output>
           </div>
-        </div>
-      </Card>
-      <div className="flex flex-wrap items-center justify-end gap-2.5">
-        {!desk.may('pos.register.open') ? <span className="text-[12.5px] text-warning">Opening a register needs Point of Sale’s permission to open one.</span> : null}
-        <Button onClick={() => desk.go('today')}>Not now</Button>
-        <Button variant="primary" icon="unlock" loading={busy} disabled={!desk.may('pos.register.open')} onClick={() => void open()}>
-          Open register {reg.code}
-        </Button>
+          {last && float > 0 && Math.round(float * 100) === Math.round(last.counted * 100) ? (
+            <p className="flex items-center gap-1 text-[12.5px] text-success">
+              <Icon name="check" size={14} /> The same as last night’s count
+            </p>
+          ) : null}
+          <div className="flex flex-wrap gap-x-4 text-[12.5px]">
+            <button type="button" onClick={() => setHow(how === 'count' ? 'figure' : 'count')} className="font-semibold text-primary hover:underline">
+              {how === 'count' ? 'Give it as one figure instead' : 'Count it note by note instead'}
+            </button>
+            {note === null ? (
+              <button type="button" onClick={() => setNote('')} className="font-semibold text-primary hover:underline">
+                Add a note
+              </button>
+            ) : null}
+          </div>
+          {note !== null ? <input aria-label="Note" maxLength={300} value={note} placeholder="A note for the session" onChange={(e) => setNote(e.target.value)} className="h-11 rounded-[12px] border border-line bg-surface px-3.5 text-[14px] text-ink outline-none focus:border-primary" /> : null}
+          {!may ? <p className="text-[12.5px] text-warning">Opening a register needs Point of Sale’s permission to open one.</p> : null}
+          <div className="mt-2 flex gap-2.5">
+            <TouchButton onClick={() => desk.go('today')}>Not now</TouchButton>
+            <TouchButton variant="primary" icon="store" className="flex-1" loading={busy} disabled={!may} onClick={() => void open()}>
+              Open register {reg.code}
+            </TouchButton>
+          </div>
+        </Panel>
       </div>
-    </div>
+    </Page>
   );
 }
 
@@ -119,58 +144,53 @@ function OpenSession({ state }: { state: RegisterState }) {
   const tenders = tenderMap(s.tenders);
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <div className="flex flex-wrap items-center gap-2.5">
-        <div className="min-w-0 flex-1">
-          <h1 className="text-[22px] font-extrabold text-ink">Register {reg.code} is open</h1>
-          <p className="mt-0.5 text-[13px] text-ink-2">
-            {reg.name} · session #{s.id}
-            {s.opened_at ? ` opened ${clockAt(s.opened_at, desk.location.timezone)}` : ''}
-            {s.mine ? ' by you' : ''}
-          </p>
-        </div>
-        <Button icon="arrow-down" onClick={() => setMoving('in')}>
-          Pay in
-        </Button>
-        <Button icon="arrow-up" onClick={() => setMoving('out')}>
-          Take cash out
-        </Button>
-        <Button variant="primary" icon="moon" onClick={() => desk.go('close')}>
-          Close the day
-        </Button>
-      </div>
-
+    <Page
+      title={`Register ${reg.code} is open`}
+      sub={`${reg.name} · session #${s.id}${s.opened_at ? ` opened ${clockAt(s.opened_at, desk.location.timezone)}` : ''}${s.mine ? ' by you' : ''}`}
+      actions={
+        <>
+          <TouchButton icon="arrow-down" onClick={() => setMoving('in')}>
+            Pay in
+          </TouchButton>
+          <TouchButton icon="arrow-up" onClick={() => setMoving('out')}>
+            Take cash out
+          </TouchButton>
+          <TouchButton variant="primary" icon="moon" onClick={() => desk.go('close')}>
+            Close the day
+          </TouchButton>
+        </>
+      }
+    >
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile label="Opening float" value={amount(s.opening_float)} />
-        <Tile label="Sales" value={String(s.sales.count)} sub={`${amount(s.sales.total)} in all`} />
-        <Tile label="Cash in" value={amount(s.sales.cash_in)} sub={`change given ${amount(s.sales.cash_change)}`} />
-        <Tile label="Drawer should hold" value={s.expected === null ? 'Hidden' : amount(s.expected)} sub={s.expected === null ? 'blind close: shown once counted' : 'float, cash sales and movements'} />
+        <Figure label="Opening float" value={amount(s.opening_float)} />
+        <Figure label="Sales" value={String(s.sales.count)} sub={`${amount(s.sales.total)} in all`} />
+        <Figure label="Cash in" value={amount(s.sales.cash_in)} sub={`change given ${amount(s.sales.cash_change)}`} />
+        <Figure label="Drawer should hold" value={s.expected === null ? 'Hidden' : amount(s.expected)} sub={s.expected === null ? 'blind close: shown once counted' : 'float, cash sales and movements'} />
       </div>
 
-      <Card title="Taken by tender">
+      <Panel title="Taken by tender">
         {Object.keys(tenders).length === 0 ? (
-          <p className="text-[13px] text-ink-2">No sales in this session yet.</p>
+          <p className="py-2 text-[14px] text-ink-2">No sales in this session yet.</p>
         ) : (
-          <dl className="grid grid-cols-2 gap-x-6 gap-y-1 text-[14px] md:grid-cols-3">
+          <dl className="grid grid-cols-1 gap-x-8 md:grid-cols-2">
             {Object.entries(tenders).map(([m, v]) => (
-              <div key={m} className="flex justify-between gap-3 border-b border-line py-1.5">
+              <div key={m} className="flex justify-between gap-3 border-b border-line py-2.5 text-[15px]">
                 <dt className="text-ink-2">{METHOD_LABEL[m] ?? m}</dt>
                 <dd className="m-0 font-bold text-ink tabular-nums">{amount(v)}</dd>
               </div>
             ))}
           </dl>
         )}
-      </Card>
+      </Panel>
 
       {moving ? <MoveCash direction={moving} code={reg.code} onClose={() => setMoving(null)} /> : null}
-    </div>
+    </Page>
   );
 }
 
 /**
- * Cash in or out of the open drawer, with its reason (POS-07). WorkSuite does
- * not keep these under a key, so a press that got no answer is never sent
- * again by itself: the register is looked at first.
+ * Cash in or out of the open drawer, with its reason (POS-07). A press that
+ * got no answer is never sent again by itself: the register is looked at first.
  */
 export function MoveCash({ direction, code, onClose }: { direction: 'in' | 'out'; code: string; onClose: () => void }) {
   const desk = useDesk();
@@ -200,30 +220,38 @@ export function MoveCash({ direction, code, onClose }: { direction: 'in' | 'out'
     }
   }
 
+  const field = 'h-12 rounded-[12px] border border-line bg-surface px-3.5 text-[15px] text-ink outline-none focus:border-primary';
   return (
-    <Modal
+    <DeskDialog
+      tone="teal"
+      icon={direction === 'in' ? 'arrow-down' : 'arrow-up'}
       title={direction === 'in' ? `Put cash into ${code}` : `Take cash out of ${code}`}
+      sub="Recorded in the register’s session, with its reason."
+      labelledBy="salon-move-cash"
+      width={540}
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={busy} disabled={!(n > 0) || reason.trim() === '' || unsure} onClick={() => void send()}>
+          <TouchButton onClick={onClose}>Cancel</TouchButton>
+          <TouchButton variant="primary" icon="check" loading={busy} disabled={!(n > 0) || reason.trim() === '' || unsure} onClick={() => void send()}>
             {direction === 'in' ? 'Put in' : 'Take out'} {n > 0 ? amount(n) : ''}
-          </Button>
+          </TouchButton>
         </>
       }
     >
-      <div className="flex flex-col gap-3">
-        <TextField label="Amount" inputMode="decimal" autoFocus value={value} onChange={(e) => setValue(moneyTyped(e.target.value))} />
-        <TextField label="What it is for" maxLength={120} value={reason} onChange={(e) => setReason(e.target.value)} />
-        {unsure ? (
-          <Note tone="warning">
-            <span className="inline-flex items-center gap-1.5">
-              <Icon name="warning" size={14} /> WorkSuite did not answer, so it may have been recorded. Look at the register’s figures before doing it again.
-            </span>
-          </Note>
-        ) : null}
-      </div>
-    </Modal>
+      <label className="flex flex-col gap-1">
+        <span className="text-[12.5px] font-semibold text-ink-2">Amount</span>
+        <input className={cx(field, 'text-right text-[18px] tabular-nums')} inputMode="decimal" autoFocus value={value} onChange={(e) => setValue(moneyTyped(e.target.value))} />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[12.5px] font-semibold text-ink-2">What it is for</span>
+        <input className={field} maxLength={120} value={reason} onChange={(e) => setReason(e.target.value)} />
+      </label>
+      {unsure ? (
+        <Note tone="warning" icon="warning">
+          WorkSuite did not answer, so it may have been recorded. Look at the register’s figures before doing it again.
+        </Note>
+      ) : null}
+    </DeskDialog>
   );
 }

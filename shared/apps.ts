@@ -103,6 +103,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
   { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in', guest: 'locked', guestLabel: 'HR & People' },
 
+  // Phone (WS-VOIP-SRS-001): the web's `/phone`, open to everyone signed in like the web's catalogue — the server has
+  // no `voip` row in `applications` yet (G-13); the screens ask the server what the person may do.
+  { id: 'phone', label: 'Phone', group: 'communication', icon: 'phone', webPath: '/phone', surface: 'native', sidebar: 'work', order: 43, keywords: 'voip sip call extension pbx dial softphone voicemail' },
   { id: 'meet', label: 'Meet', group: 'communication', icon: 'video', app: 'meet', webPath: '/meet', surface: 'native', sidebar: 'work', order: 45, keywords: 'video call meeting join code', guest: 'local' },
   // Agendas, attendance and minutes. Not an application on the server — the
   // `meeting.view` permission is its only gate (AppGate::CORE notes).
