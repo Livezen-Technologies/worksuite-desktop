@@ -425,6 +425,7 @@ function Conversation({ roomId }: { roomId: string }) {
             </div>
           ) : null}
         </span>
+        <DrawerModeButton className={hbtn} />
         <span className="mx-1 h-5 w-px bg-line" aria-hidden />
         <button type="button" aria-label="Close" title="Close" onClick={() => ui.set({ dock: null, chatRoom: null })} className={hbtn}>
           <Icon name="x" size={16} />

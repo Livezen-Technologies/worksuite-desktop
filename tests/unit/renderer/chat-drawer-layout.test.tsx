@@ -233,6 +233,13 @@ describe('Docked ⇄ Floating from the header (#264)', () => {
     expect(slot().dataset.chatDrawer).toBe('docked');
   });
 
+  it('offers the same switch in an open conversation’s header, beside Close', async () => {
+    show();
+    await screen.findByText(room.name);
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Float over the page' })));
+    expect(call).toHaveBeenCalledWith('settings:set', { chatDrawer: 'floating' });
+  });
+
   it('cannot dock in a window too narrow for it, and says why', () => {
     windowWidth(1100);
     ui.set({ chatRoom: null });

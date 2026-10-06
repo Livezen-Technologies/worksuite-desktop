@@ -8,6 +8,7 @@ the root CHANGELOG.md.
 
 **Added**
 
+- the chat drawer docks beside the page by default, which reflows; it floats over it from the header's Docked ⇄ Floating button, Settings › Chat or a window under 1200px, and resizes from its edge (360–640px, 400 by default, kept per person) (#264)
 - a shared WorkSuite page is a card — the app's icon, its title, what the reader may see of it and Open in a new tab; without the app, 'You don't have access to this page' with Request access (#266)
 
 **Changed**

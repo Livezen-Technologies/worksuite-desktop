@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.23.0 — 2026-10-06
+
+**Added**
+
+- Settings › Chat — 'Chat drawer opens as: Docked (default) / Floating' (#264)
+
 ## 1.22.0 — 2026-10-05
 
 - Admin Center footer and scrolling nav (#246); notifications-off banner and test chat notification (#251); Remote control disclosures use the shared collapsible (#244)
