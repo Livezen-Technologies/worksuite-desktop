@@ -9,6 +9,7 @@
  */
 
 import { metaRoute, whatsappRoute } from './channels';
+import { ticketRoute } from './support';
 
 export const MAX_LINK_LENGTH = 2048;
 
@@ -96,6 +97,10 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'elearning', module: 'elearning', route: () => '/elearning' },
   { pattern: 'elearning/courses/:id', module: 'elearning', route: (p) => `/elearning/my/courses/${p.id}` },
   { pattern: 'elearning/catalog/:id', module: 'elearning', route: (p) => `/elearning/catalog/${p.id}` },
+  // The support desk (FR-DSK-05): the inbox, and a ticket by its id or reference — its tab brought forward when it is
+  // open, opened when not (WF-12).
+  { pattern: 'support', module: 'support', route: () => '/support' },
+  { pattern: 'support/ticket/:id', module: 'support', route: (p) => ticketRoute(p.id!) },
   { pattern: 'tenders/:id', module: 'tender', route: (p) => `/tenders/${p.id}` },
   { pattern: 'projects/:id', module: 'projects', route: (p) => `/projects/${p.id}` },
 ];

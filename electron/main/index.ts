@@ -1830,6 +1830,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/elearning/v1/me/lessons', 'elearning'],
     ['/api/elearning/v1/catalog', 'elearning'],
     ['/api/elearning/v1/categories', 'elearning'],
+    // Support: the rail and its counts, the lists, every ticket opened and the desk's vocabulary, so the desk opens
+    // offline as it was left; who else is on a ticket is never taken from this copy (modules/support/api.ts).
+    ['/api/support/v1/meta', 'support'],
+    ['/api/support/v1/views', 'support'],
+    ['/api/support/v1/badges', 'support'],
+    ['/api/support/v1/tickets', 'support'],
+    ['/api/support/v1/agents', 'support'],
+    ['/api/support/v1/canned', 'support'],
     // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
     // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];
