@@ -1009,7 +1009,7 @@ export const contract = {
   'salon:outbox': ch(none, { session: true }),
   'salon:outboxAdd': ch(
     z.object({
-      kind: z.enum(['client.create', 'visit.book', 'visit.check_in']),
+      kind: z.enum(['client.create', 'visit.book', 'visit.check_in', 'visit.checkout']),
       local_id: z.string().max(40).nullable().optional(),
       payload: z.record(z.string(), z.unknown()),
       label: z.string().trim().min(1).max(200),

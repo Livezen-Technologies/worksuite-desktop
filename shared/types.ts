@@ -1458,7 +1458,7 @@ export interface SalonPrintSettings {
 export type SalonPrintPatch = Partial<SalonPrintSettings>;
 
 /** What the front desk does while WorkSuite is out of reach (salon-outbox.ts). */
-export type SalonOutboxKind = 'client.create' | 'visit.book' | 'visit.check_in';
+export type SalonOutboxKind = 'client.create' | 'visit.book' | 'visit.check_in' | 'visit.checkout';
 
 export interface SalonOutboxCandidate {
   id: number;

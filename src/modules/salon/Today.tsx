@@ -41,7 +41,7 @@ export default function Today() {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <QuickAction icon="door" label="Walk-in" onClick={() => desk.walkIn({})} disabled={!book} />
         <QuickAction icon="plus" tone="teal" label="New booking" onClick={() => desk.walkIn({}, true)} disabled={!book} />
-        <QuickAction icon="banknote" tone="amber" label="Take payment" onClick={() => desk.go('pay')} disabled={!desk.may('salon.checkout') || desk.offline} />
+        <QuickAction icon="banknote" tone="amber" label="Take payment" onClick={() => desk.go('pay')} disabled={!desk.may('salon.checkout') || (desk.offline && !desk.desk.register)} />
         <QuickAction icon="search" tone="pink" label="Find a client" onClick={() => desk.go('clients')} />
       </div>
 

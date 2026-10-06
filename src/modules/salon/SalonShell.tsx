@@ -28,7 +28,8 @@ import { SidePanel } from '../../components/SidePanel';
  * WorkSuite on the web, from Settings.
  *
  * When WorkSuite does not answer, the desk opens from its copy of the day and
- * says so (offline.ts); taking money waits for WorkSuite.
+ * says so (offline.ts); taking money waits for WorkSuite, except on a desk
+ * paired as a POS till, which takes cash or card as a POS offline sale (OfflinePay.tsx).
  */
 const Today = lazy(() => import('./Today'));
 const Calendar = lazy(() => import('./Calendar'));
@@ -37,6 +38,7 @@ const NewBooking = lazy(() => import('./NewBooking'));
 const Clients = lazy(() => import('./Clients'));
 const ServiceRecord = lazy(() => import('./ServiceRecord'));
 const Pay = lazy(() => import('./Pay'));
+const OfflinePay = lazy(() => import('./OfflinePay'));
 const Paid = lazy(() => import('./Pay').then((m) => ({ default: m.Paid })));
 const Register = lazy(() => import('./Register'));
 const DayClose = lazy(() => import('./DayClose'));
@@ -186,7 +188,9 @@ export default function SalonShell(_props: ModuleProps) {
         <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`SalonMate · ${TITLES[view]}`}>
           <SyncBar desk={desk} view={view} />
           <Suspense fallback={<Spinner />}>
-            {offline && MONEY.includes(view) ? (
+            {offline && view === 'pay' ? (
+              <OfflinePay />
+            ) : offline && MONEY.includes(view) ? (
               <NeedsWorkSuite view={view} />
             ) : view === 'outbox' ? (
               <Outbox />
@@ -247,7 +251,7 @@ function SyncBar({ desk, view }: { desk: Desk; view: DeskView }) {
             <div className="text-[13px]">
               {age ? `Showing the calendar, clients and services as of ${age}. ` : 'This computer has no copy of the day yet. '}
               {s?.can_write ? 'New clients, bookings and check-ins are kept here and sent in order when the line is back. ' : s?.why_not ? `${s.why_not} ` : ''}
-              Payments, deposits and the register need WorkSuite.
+              {s?.can_write && desk.desk.register ? 'Payments are taken in cash or by card as POS offline sales on this till; deposits and the register need WorkSuite.' : 'Payments, deposits and the register need WorkSuite.'}
             </div>
           </div>
           <TouchButton icon="refresh" loading={busy} onClick={() => void tryNow()}>

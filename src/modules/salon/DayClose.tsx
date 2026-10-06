@@ -21,6 +21,7 @@ import {
   type PageHeading,
   type RegisterState,
 } from './money';
+import { useOutbox } from './offline';
 import { CountSheet, Failed, MoneyLine, Note, Page, Panel, Tag, TouchButton, useDesk, useNow, usePrintSettings } from './parts';
 import { MoveCash } from './Register';
 
@@ -153,6 +154,8 @@ function CloseRegister({ state, date, onClosed }: { state: RegisterState; date: 
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState(false);
   const counted = how === 'count' ? countTotal(counts) : Number(figure || 0);
+  /* Cash taken offline is in the drawer but not yet in WorkSuite's figure: the count would be over by it. */
+  const offlineSales = (useOutbox().data ?? []).filter((i) => i.kind === 'visit.checkout').length;
 
   async function close() {
     setBusy(true);
@@ -201,11 +204,16 @@ function CloseRegister({ state, date, onClosed }: { state: RegisterState; date: 
         </label>
       ) : null}
       {!desk.may('pos.register.close') ? <p className="mt-2 text-[12.5px] text-warning">Closing a register needs Point of Sale’s permission to close one.</p> : null}
+      {offlineSales > 0 ? (
+        <Note tone="warning">
+          {offlineSales} payment{offlineSales === 1 ? '' : 's'} taken offline {offlineSales === 1 ? 'has' : 'have'} not reached WorkSuite yet, so the drawer holds money its figure does not. Close once {offlineSales === 1 ? 'it has' : 'they have'} gone — see Sync.
+        </Note>
+      ) : null}
       <div className="mt-3 flex flex-wrap gap-2.5">
         <TouchButton icon="banknote" onClick={() => setOut(true)}>
           Take cash out to safe
         </TouchButton>
-        <TouchButton variant="primary" icon="lock" className="flex-1" loading={busy} disabled={!desk.may('pos.register.close')} onClick={() => void close()}>
+        <TouchButton variant="primary" icon="lock" className="flex-1" loading={busy} disabled={!desk.may('pos.register.close') || offlineSales > 0} onClick={() => void close()}>
           Close register &amp; print Z-report
         </TouchButton>
       </div>

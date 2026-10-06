@@ -521,7 +521,7 @@ function VisitActions({ visit, onClose }: { visit: Visit; onClose: () => void })
   const waiting = visit.status === 'pending' || visit.status === 'confirmed';
   const canCheckIn = waiting && desk.may('salon.visit.checkin');
   const canDeposit = waiting && visit.money.deposit_owed > 0 && desk.may('salon.checkout') && !desk.offline;
-  const canPay = ((['checked_in', 'in_service', 'completed'].includes(visit.status) && !visit.checked_out) || owing(visit)) && desk.may('salon.checkout') && !desk.offline;
+  const canPay = ((['checked_in', 'in_service', 'completed'].includes(visit.status) && !visit.checked_out) || owing(visit)) && desk.may('salon.checkout') && (!desk.offline || !!desk.desk.register);
   const canRecord = ['checked_in', 'in_service', 'completed'].includes(visit.status) && desk.may('salon.visit.service') && !desk.offline;
   const then = (f: () => void) => () => {
     onClose();

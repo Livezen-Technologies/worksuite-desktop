@@ -443,6 +443,45 @@ export function zReport(r: CloseResult, code: string, h: PageHeading, currency: 
   );
 }
 
+/** What a POS offline sale's till receipt says (POS-11): laid out here, as WorkSuite is out of reach. */
+export interface OfflineReceipt {
+  receipt: string;
+  at: string;
+  register: string | null;
+  visit: string;
+  client: string;
+  lines: Array<{ label: string; amount: number }>;
+  currency: string;
+  total: number;
+  advance: number;
+  tenders: Array<{ method: TenderMethod; amount: number; reference: string | null }>;
+  change: number;
+}
+
+/**
+ * The till receipt for a payment taken while WorkSuite was out of reach. Only
+ * what the desk knows: the visit's services as its copy priced them, what was
+ * handed over and the change. The tax invoice, with any member discount and
+ * tax, is WorkSuite's, issued when the sale arrives — the receipt says so.
+ */
+export function offlineReceipt(r: OfflineReceipt, h: Omit<PageHeading, 'date'>): string {
+  const paid = r.tenders.reduce((n, t) => n + t.amount, 0);
+  return page(
+    `Till receipt ${r.receipt}`,
+    `<h1>${esc(h.company)}</h1><div class="c">${esc(h.location)}</div><div class="c"><b>TILL RECEIPT</b></div><hr>` +
+      rows([['Till receipt', r.receipt], ['Taken', r.at], ...(r.register ? ([['Register', r.register]] as Array<[string, string]>) : []), ['Visit', r.visit], ['Client', r.client]]) +
+      '<hr>' +
+      rows(r.lines.map((l): [string, string] => [l.label, amount(l.amount)])) +
+      '<hr>' +
+      rows([[`Total ${r.currency}`, amount(r.total)], ...(r.advance > 0 ? ([['Advance', `- ${amount(r.advance)}`]] as Array<[string, string]>) : [])]) +
+      rows(r.tenders.map((t): [string, string] => [`${METHOD_LABEL[t.method] ?? t.method}${t.reference ? ` ${t.reference}` : ''}`, amount(t.method === 'cash' ? t.amount + r.change : t.amount)])) +
+      rows([['Change', amount(r.change)], ['Paid', amount(paid)]]) +
+      '<hr><div class="c">Taken while WorkSuite was out of reach. Your tax invoice follows when it is back; any member discount or tax is shown on it.</div>' +
+      '<div class="c">ස්තූතියි · நன்றி · Thank you</div>',
+    WIDTH[h.paper],
+  );
+}
+
 /** The salon's side of the day, as the server gave it. */
 export function daySummary(d: DeskDay, h: PageHeading): string {
   const t = d.figures.taken;

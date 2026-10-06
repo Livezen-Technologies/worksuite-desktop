@@ -263,6 +263,11 @@ function Refused({ item, dependents }: { item: SalonOutboxItem; dependents: numb
             “{item.label}” is not sent to WorkSuite.
             {dependents > 0 ? ` ${dependents} ${dependents === 1 ? 'change that needs' : 'changes that need'} it ${dependents === 1 ? 'goes' : 'go'} with it.` : ''}
           </p>
+          {item.kind === 'visit.checkout' ? (
+            <p className="mt-2 text-[14px] font-semibold text-danger">
+              The client paid this at the desk{typeof item.payload.receipt === 'string' ? ` on till receipt ${item.payload.receipt}` : ''}. Dropping it refunds nobody and leaves the money out of WorkSuite — settle it with the client, or take the payment again online, first.
+            </p>
+          ) : null}
         </Modal>
       ) : null}
     </Panel>
@@ -356,7 +361,7 @@ function Edit({ item, busy, onClose, onSave }: { item: SalonOutboxItem; busy: bo
   } else {
     changes = {};
     ok = false;
-    body = <p className="text-[14px] text-ink-2">A booking is changed by choosing another time.</p>;
+    body = <p className="text-[14px] text-ink-2">{item.kind === 'visit.checkout' ? 'Money already taken is not changed here. Send it again, or settle it with the client before dropping it.' : 'A booking is changed by choosing another time.'}</p>;
   }
 
   return (
