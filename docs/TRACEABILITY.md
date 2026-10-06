@@ -492,6 +492,25 @@ design, staff, settings, reports, the day close, a booking's deposit) is the web
 | RM-DSK-007 | Done | Heartbeat every 30 s: queue size, version, online, last sync, the hosted printers' state |
 | §5.7 reservations (host stand) | Done | `Reservations.tsx`: the day's bookings with the server's `choices` (confirm, arrived, seat at a free table with guests and the table's version, cancel with a reason, no-show), the tables' timeline (`reservations/timeline`), a booking after `reservations/availability` (free tables, or the server's other times). `reservation.view` to see, `reservation.manage` to move; online only. Deposits and changing a booking stay on the web |
 
+## Support desk (WS-SUPPORT-SRS-001 v1.0, desktop D-01…D-12)
+
+`src/modules/support`, over the server's `/api/support/v1` (contract: the server's `docs/SUPPORT_API.md`), falling back
+to the as-built `/api/tickets` (list, show, reply, status, assign, take, agents) on a server without v1
+(`api.ts`). The shapes, vocabulary, routes and realtime hints are `shared/support.ts`. Build plan:
+`docs/SUPPORT_BUILD_PLAN.md`. Tests: `tests/unit/shared/support.test.ts`, `tests/unit/renderer/support-*.test.ts*`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| FR-DSK-01 | Done | A native module (`registry.ts` manifest, `shared/apps.ts` native, opened by `support.view` or an as-built `ticket.*` permission): the inbox, a tab per ticket and the composer, no browser hand-off |
+| FR-DSK-05 | Done | `worksuite://support` and `worksuite://support/ticket/{id or reference}` (`shared/deeplink.ts`); a ticket's tab is brought forward when open, opened when not (`core/tabs.ts`, WF-12); the web's `/tickets?ticket=` links open the same tab |
+| D-01 views & counts (FR-WSP-02/03) | Done | `Rail.tsx`: system views with live counts (`GET views`), saved views with theirs, the organisation filter |
+| D-01 compact rows, paging (FR-WSP-05, FR-SLA-07) | Done | `TicketList.tsx`: status dot, channel icon, monospace reference, Urgent/High chip, requester, SLA chip (none until the server computes a state), unread bold with a blue edge; keyset pages (`next_cursor`), virtualized |
+| D-01 search & filters (FR-SRC-01/02) | Partial | Search, status, priority and sort; a saved view's other filters (team, category, tag, SLA, dates…) are applied as saved. No editor for those filters here |
+| D-01 reading pane (FR-COM-10, FR-COM-11) | Partial | `ReadingPane.tsx`: header, collision ("Nimal is viewing"), the conversation with notes marked Internal and "New since you last viewed", Take it, Resolve, Open in tab, inline reply or note. No AI summary: the server's AI endpoints are T17 |
+| D-01 keyboard (FR-WSP-06) | Done | j/k, Enter/O, R, N, E (resolve dialog, sent with the version), /, ⌘↵ in the composer |
+| D-01 availability (FR-ASN-06) | Partial | `Availability.tsx`: Online/Away through Chat's presence (what routing reads) and open tickets against capacity (`GET agents`), ⌥⌘A. No auto-assign switch or working hours: the server has no API for them yet |
+| D-01 live list (FR-NTF-04) | Done | `live.ts`: desk hints refetch lists, counts and badges (debounced), ticket hints that ticket, presence hints the collision bar; a 30 s poll without the gateway |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

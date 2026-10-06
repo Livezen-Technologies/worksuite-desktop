@@ -151,7 +151,7 @@ export function listTickets(p: ListParams, signal?: AbortSignal): Promise<Ticket
     async () => {
       const r = await getMeta<TicketPage>(
         `${BASE}/tickets`,
-        { view: p.view, sort: p.sort, q: p.q?.trim() || undefined, status: list(p.status), priority: list(p.priority), organization: list(p.organization), assignee: p.assignee, limit: p.limit, cursor: p.cursor ?? undefined },
+        { ...(p.extra ?? {}), view: p.view, sort: p.sort, q: p.q?.trim() || undefined, status: list(p.status), priority: list(p.priority), organization: list(p.organization) ?? p.extra?.organization, assignee: p.assignee, limit: p.limit, cursor: p.cursor ?? undefined },
         signal,
       );
       return { ...r.data, offline: r.offline };

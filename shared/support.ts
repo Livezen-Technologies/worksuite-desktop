@@ -467,6 +467,8 @@ export interface ListParams {
   assignee?: string;
   limit?: number;
   cursor?: string | null;
+  /** A saved view's other filters (team, department, category, tag, sla, dates…), as the server keeps them. */
+  extra?: Record<string, string>;
 }
 
 /* ── routes ─────────────────────────────────────────────────────────────── */

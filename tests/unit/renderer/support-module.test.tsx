@@ -67,6 +67,9 @@ describe('the Support module', () => {
   });
 
   it('shows the views with their counts and the view’s tickets; a ticket opens in its own tab', async () => {
+    // The list is drawn only where it shows: give it a size.
+    vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(720);
+    vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue({ width: 600, height: 720, top: 0, left: 0, right: 600, bottom: 720, x: 0, y: 0, toJSON: () => ({}) } as DOMRect);
     serve({
       'GET /api/support/v1/views': { views: [{ key: 'mine', label: 'My tickets', count: 12 }, { key: 'unassigned', label: 'Unassigned', count: 7 }], saved: [], badges: null },
       'GET /api/support/v1/tickets': { items: [ticket(1284), ticket(1292, { priority: 'normal', unread: 0 })], next_cursor: null, has_more: false, sort: 'updated', view: 'mine' },
@@ -83,7 +86,8 @@ describe('the Support module', () => {
     expect(row.className).toContain('font-bold');
     expect(screen.getAllByText('Urgent')).toHaveLength(1);
     expect(screen.getAllByText('Saman Kumara · Guest').length).toBe(2);
-    fireEvent.click(row);
+    // A click reads it in the pane (D-01); a double-click gives it a tab of its own (D-02).
+    fireEvent.doubleClick(row);
     expect(nav.navigate).toHaveBeenCalledWith('/support/ticket/1284');
   });
 
