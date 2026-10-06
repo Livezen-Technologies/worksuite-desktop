@@ -6,7 +6,7 @@ import type { Arch, DeviceClassification, DeviceInfo, DeviceTrust, Platform, Ser
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
-import type { HttpClient } from './http';
+import { isPassingFailure, type HttpClient } from './http';
 import type { SecureStore } from './secure-store';
 
 const log = logger('device');
@@ -179,7 +179,14 @@ export class DeviceService {
     return this.record;
   }
 
-  /** Registers this installation for the user, or confirms the existing registration. */
+  /**
+   * Registers this installation for the user, or confirms the existing registration.
+   *
+   * The confirmation is only a heartbeat: when it cannot be had for now — out of reach, too slow, the server or the
+   * proxy in front of it answering 5xx, a rate limit — the registration we have stands and the five-minute heartbeat
+   * confirms it later. Only the network used to count, so a passing 502 or 429 here failed a sign-in whose password
+   * was right and sent the person back to the sign-in screen (LOGIN-001).
+   */
   async ensureRegistered(userId: string, api: ServerApi): Promise<DeviceRecord> {
     this.api = api;
     this.load(userId);
@@ -190,7 +197,7 @@ export class DeviceService {
       } catch (e) {
         if (!(isDesktopError(e) && (e.code === 'NOT_FOUND' || e.code === 'DEVICE_NOT_REGISTERED'))) {
           // Offline or a transient error: keep the registration we have.
-          if (isDesktopError(e) && e.code === 'NETWORK_UNREACHABLE') return this.record;
+          if (this.record && isPassingFailure(e)) return this.record;
           throw e;
         }
         log.info('stored device no longer exists on the server; registering again');
@@ -218,7 +225,12 @@ export class DeviceService {
       const id = data.device?.id ?? data.device_id;
       if (id === undefined || id === null) throw new DesktopError('SERVER_ERROR', 'The server did not return a device id.');
       this.record = { id: String(id), token: typeof data.token === 'string' ? data.token : null, registeredAt: new Date().toISOString() };
-      this.secrets.set(this.key(userId), JSON.stringify(this.record));
+      try {
+        this.secrets.set(this.key(userId), JSON.stringify(this.record));
+      } catch (e) {
+        // Registered all the same, and kept for this run: the OS store refusing a write must not fail the sign-in.
+        log.warn('device registration not saved to secure storage; kept for this run only', { error: String((e as Error)?.message ?? e) });
+      }
       if (typeof data.trust === 'string') this.setTrust(data.trust as DeviceTrust);
       log.info('device registered', { id: this.record.id });
       return this.record;

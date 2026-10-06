@@ -1,6 +1,6 @@
 import { app } from 'electron';
 import { visibleAppIds } from '@shared/access';
-import type { AuthState, Bootstrap, DeviceClassification, DeviceTrust, ServerInfo } from '@shared/types';
+import type { AuthState, Bootstrap, DeviceClassification, DeviceTrust, ServerApi, ServerInfo } from '@shared/types';
 import { DesktopError, isDesktopError, UNREACHABLE_MESSAGE } from './errors';
 import { logger } from './log';
 import type { AuthService, SignInPayload } from '../services/auth';
@@ -9,7 +9,7 @@ import type { BootstrapService } from '../services/bootstrap';
 import type { Database } from '../services/db';
 import type { CommandOutcome, DeviceCommand, DeviceService, Directive } from '../services/device';
 import type { EnterpriseConfig } from '../services/enterprise';
-import type { FetchLike } from '../services/http';
+import { isPassingFailure, type FetchLike } from '../services/http';
 import { capabilitiesFor, type DeviceCapabilities } from '../services/policy';
 
 const log = logger('session');
@@ -62,6 +62,11 @@ export interface SessionHooks {
   requireUpdate: (version: string | null, reason: string) => void;
   toast: (kind: 'info' | 'success' | 'warning' | 'error', text: string) => void;
   audit: (userId: string | null, action: string, details: Record<string, unknown>) => void;
+  /**
+   * The session ended without a sign-out (expired). The app lock guards a signed-in session; from here the sign-in
+   * screen is the way back in, and a lock left on refused every sign-in from it with "WorkSuite is locked." (LOGIN-001).
+   */
+  unlock?: () => void;
 }
 
 export class SessionController {
@@ -70,6 +75,19 @@ export class SessionController {
   private orgScope: string | null = null;
   private pendingSignIn: SignInPayload | null = null;
   private revalidating = false;
+  /** The sign-in under way: a second submit (Enter and a click, a callback twice) joins it rather than signing in again. */
+  private signingIn: Promise<AuthState> | null = null;
+  /**
+   * Which sign-in is the current one (LOGIN-001). Each attempt takes the next number, and so does everything that
+   * ends a session: signing out, a wipe, a block, expiry. An attempt whose number has moved on stops where it is —
+   * the stage and the tokens belong to whatever replaced it — and may neither carry on to `ready` nor, failing,
+   * forget tokens that are no longer its own.
+   */
+  private attempt = 0;
+  /** Who is signing in, before the session says so: a wipe or block that registration brings is about their computer. */
+  private signingInUser: string | null = null;
+  /** The pauses before a sign-in step is asked again after a passing failure (tests shorten them). */
+  retryDelaysMs: number[] = [1_000, 3_000];
 
   constructor(
     private readonly db: Database,
@@ -95,7 +113,8 @@ export class SessionController {
         return { ok: true, result: { scope }, after: () => this.wipe(reason ?? 'Your administrator removed WorkSuite from this computer.') };
       }
       case 'SIGN_OUT':
-        return { ok: true, result: {}, after: async () => void (await this.signOut(false)) };
+        // Said on the sign-in screen: delivered by a sign-in's own heartbeat, it used to look like a sign-in that failed for nothing.
+        return { ok: true, result: {}, after: async () => void (await this.signOut(false, reason ?? 'Your administrator signed you out of WorkSuite on this computer.')) };
       case 'REQUIRE_UPDATE':
         this.hooks.requireUpdate(typeof c.payload.version === 'string' ? c.payload.version : null, reason ?? 'An update is required.');
         return { ok: true, result: {} };
@@ -251,21 +270,42 @@ export class SessionController {
     return this.get();
   }
 
-  async signIn(email: string, password: string): Promise<AuthState> {
-    if (!this.state.server) throw new DesktopError('NOT_WORKSUITE', 'Choose a WorkSuite server first.');
-    const outcome = await this.auth.signIn(email.trim(), password);
-    if (outcome.kind === 'mfa') {
-      this.set({ stage: 'mfa', message: null });
-      return this.get();
-    }
-    await this.afterSignIn(outcome.payload);
-    return this.get();
+  /**
+   * One sign-in at a time. A second one while the first is under way — Enter
+   * and a click, a retry while a two-second server is still answering — gets
+   * the first one's outcome. Each used to sign in on its own: two sessions,
+   * two registrations racing, and whichever failed forgot the tokens the
+   * other had just stored, so a right password could end at the sign-in
+   * screen (LOGIN-001).
+   */
+  private once(run: () => Promise<AuthState>): Promise<AuthState> {
+    if (this.signingIn) return this.signingIn;
+    const flight = run().finally(() => {
+      if (this.signingIn === flight) this.signingIn = null;
+    });
+    this.signingIn = flight;
+    return flight;
   }
 
-  async verifyMfa(code: string): Promise<AuthState> {
-    const payload = await this.auth.verifyMfa(code);
-    await this.afterSignIn(payload);
-    return this.get();
+  signIn(email: string, password: string): Promise<AuthState> {
+    return this.once(async () => {
+      if (!this.state.server) throw new DesktopError('NOT_WORKSUITE', 'Choose a WorkSuite server first.');
+      const outcome = await this.auth.signIn(email.trim(), password);
+      if (outcome.kind === 'mfa') {
+        this.set({ stage: 'mfa', message: null });
+        return this.get();
+      }
+      await this.afterSignIn(outcome.payload);
+      return this.get();
+    });
+  }
+
+  verifyMfa(code: string): Promise<AuthState> {
+    return this.once(async () => {
+      const payload = await this.auth.verifyMfa(code);
+      await this.afterSignIn(payload);
+      return this.get();
+    });
   }
 
   cancelMfa(): AuthState {
@@ -295,8 +335,11 @@ export class SessionController {
   /** The browser sent the code back. Anything wrong returns to the sign-in screen, saying what. */
   async completePasskey(code: string, state: string): Promise<void> {
     try {
-      const payload = await this.auth.completePasskey(code, state);
-      await this.afterSignIn(payload);
+      await this.once(async () => {
+        const payload = await this.auth.completePasskey(code, state);
+        await this.afterSignIn(payload);
+        return this.get();
+      });
     } catch (e) {
       if (this.state.stage === 'passkey' || this.state.stage === 'signed-out') {
         this.set({ stage: 'signed-out', message: e instanceof Error ? e.message : 'Passkey sign-in did not finish. Try again.' });
@@ -305,6 +348,8 @@ export class SessionController {
   }
 
   private async afterSignIn(payload: SignInPayload | null): Promise<void> {
+    const attempt = ++this.attempt;
+    const current = () => attempt === this.attempt;
     this.pendingSignIn = payload;
     const api = this.state.server?.api ?? 'core';
     try {
@@ -312,10 +357,15 @@ export class SessionController {
       this.set({ stage: 'registering', message: null });
       const me = payload?.user ? String(payload.user.id) : this.bootstrap.lastUserId();
       if (!me) throw new DesktopError('SERVER_ERROR', 'The server did not identify the user.');
-      await this.device.ensureRegistered(me, api);
+      this.signingInUser = me;
+      await this.patiently(() => this.device.ensureRegistered(me, api), current);
+      // Ended while registering — a wipe, block or sign-out the heartbeat brought, or a newer sign-in. That one has
+      // said what happened; carrying on used to put "Loading your workspace…" over it, then fail without tokens.
+      if (!current()) return;
 
       this.set({ stage: 'bootstrapping' });
-      const b = await this.bootstrap.fetch(api, this.orgScope);
+      const b = await this.patiently(() => this.bootstrapFor(me, api), current);
+      if (!current()) return;
       if (b.policy.desktop_access === 'disabled') {
         throw new DesktopError('DESKTOP_ACCESS_DISABLED', 'Desktop access is disabled by your organization.');
       }
@@ -334,6 +384,11 @@ export class SessionController {
       if (payload) this.hooks.audit(b.user.id, 'desktop.login', { method: payload.tokens ? 'password' : 'refresh' });
     } catch (e) {
       const err = isDesktopError(e) ? e : new DesktopError('INTERNAL', String((e as Error).message ?? e));
+      // Not this attempt's to end any more: the tokens and the stage are whatever replaced it.
+      if (!current()) {
+        log.info('a sign-in that was ended or replaced failed; left as it is', { code: err.code });
+        return;
+      }
       log.warn('sign-in could not complete', { code: err.code });
       if (err.code === 'DEVICE_LIMIT' || err.code === 'DESKTOP_ACCESS_DISABLED') {
         await this.auth.signOut();
@@ -355,8 +410,58 @@ export class SessionController {
       this.set({ stage: 'signed-out', message: err.message });
       throw err;
     } finally {
-      this.pendingSignIn = null;
+      if (current()) {
+        this.pendingSignIn = null;
+        this.signingInUser = null;
+      }
     }
+  }
+
+  /**
+   * One step of signing in, asked again after a failure that is only passing
+   * (`isPassingFailure`): a blip in the network, a slow or busy server's 5xx —
+   * or its proxy's — a rate limit. Such a failure used to end the sign-in at
+   * once, the new tokens forgotten and the person back at the sign-in screen
+   * with a password that was right (LOGIN-001). What fails every time still
+   * fails, and says why on the sign-in screen.
+   */
+  private async patiently<T>(step: () => Promise<T>, current: () => boolean): Promise<T> {
+    for (let i = 0; ; i++) {
+      try {
+        return await step();
+      } catch (e) {
+        const pause = this.retryDelaysMs[i];
+        if (pause === undefined || !current() || !isPassingFailure(e)) throw e;
+        log.info('sign-in step failed for now; asking again', { code: (e as DesktopError).code, status: (e as DesktopError).status, next: i + 2 });
+        await new Promise((r) => setTimeout(r, pause));
+        if (!current()) throw e;
+      }
+    }
+  }
+
+  /**
+   * The bootstrap for a sign-in. DEVICE_NOT_REGISTERED means the server does
+   * not know this computer (any more) — a registration kept because its
+   * heartbeat could not be had just then, or one removed meanwhile — so the
+   * computer registers again and asks once more, rather than ending a sign-in
+   * whose password was right.
+   */
+  private async bootstrapFor(userId: string, api: ServerApi): Promise<Bootstrap> {
+    try {
+      return await this.bootstrap.fetch(api, this.orgScope);
+    } catch (e) {
+      if (!(isDesktopError(e) && e.code === 'DEVICE_NOT_REGISTERED')) throw e;
+      log.info('the server does not know this computer; registering it again');
+      await this.device.reenrol(userId, api);
+      return this.bootstrap.fetch(api, this.orgScope);
+    }
+  }
+
+  /** Whatever sign-in is under way is over: it stops at its next step and leaves the stage and tokens alone. */
+  private endAttempt(): void {
+    this.attempt++;
+    this.pendingSignIn = null;
+    this.signingInUser = null;
   }
 
   completeSetup(): AuthState {
@@ -401,8 +506,11 @@ export class SessionController {
   /** FR-AUTH-08: the refresh token was refused. Drafts and queued changes stay. */
   expired(message: string): void {
     if (this.state.stage !== 'ready') return;
+    this.endAttempt();
     this.auth.forget();
     this.set({ stage: 'expired', message });
+    // After the stage: every window shows the sign-in panel before the lock lets go, so nothing behind it shows meanwhile.
+    this.hooks.unlock?.();
   }
 
   // ── organizations (WF-03) ──────────────────────────────────────────────
@@ -488,7 +596,8 @@ export class SessionController {
   }
 
   private async block(reason: string): Promise<void> {
-    const uid = this.state.user?.id ?? null;
+    const uid = this.state.user?.id ?? this.signingInUser;
+    this.endAttempt();
     this.hooks.stopped();
     this.auth.forget();
     this.boot = null;
@@ -498,8 +607,12 @@ export class SessionController {
 
   /** WF-24: stop services, clear credentials, remove restricted data. Unrelated files are never touched. */
   async wipe(reason: string): Promise<void> {
-    const uid = this.state.user?.id ?? this.bootstrap.lastUserId();
+    // Signing in, the computer the server says was removed is the one registered for the person signing in. Without
+    // their id the stale registration stayed, and every sign-in after it heartbeated it, was wiped and was back at the
+    // sign-in screen (LOGIN-001); with it, it goes, and the next sign-in registers this computer anew (BACKEND.md).
+    const uid = this.signingInUser ?? this.state.user?.id ?? this.bootstrap.lastUserId();
     const scope = this.boot?.policy.wipe_on_revoke ?? 'cache+offline_files';
+    this.endAttempt();
     log.warn('remote wipe', { scope });
     this.hooks.stopped();
     const deviceId = this.device.current()?.id ?? null;
@@ -515,8 +628,10 @@ export class SessionController {
     this.hooks.audit(uid, 'desktop.local_wipe', { scope, device_id: deviceId });
   }
 
-  async signOut(wipe: boolean): Promise<AuthState> {
+  /** `message` says why on the sign-in screen when it was not the person's own choice. */
+  async signOut(wipe: boolean, message: string | null = null): Promise<AuthState> {
     const uid = this.state.user?.id ?? null;
+    this.endAttempt();
     this.hooks.stopped();
     await this.auth.signOut();
     if (uid) {
@@ -528,7 +643,7 @@ export class SessionController {
     this.bootstrap.setLastUser(null);
     this.boot = null;
     this.orgScope = null;
-    this.set({ stage: this.state.server ? 'signed-out' : 'no-server', user: null, message: null, setupPending: false });
+    this.set({ stage: this.state.server ? 'signed-out' : 'no-server', user: null, message, setupPending: false });
     return this.get();
   }
 

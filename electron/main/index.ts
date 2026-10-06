@@ -2058,6 +2058,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     requireUpdate: (v) => updater.requireUpdate(v),
     toast: (kind, text) => broadcast('toast', { kind, text }),
     audit: (uid, action, details) => audit.record(uid, action, details),
+    // The session expired: nothing signed in is left behind the lock, and signing in again must not be refused (LOGIN-001).
+    unlock: () => lock.reset(),
   });
 
   auth.onDeviceRevoked = (message) => void sessionCtl.wipe(message);
