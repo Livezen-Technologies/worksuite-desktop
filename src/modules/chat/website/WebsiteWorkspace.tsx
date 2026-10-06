@@ -583,7 +583,8 @@ export function WebsiteWorkspace() {
         ) : selected && missedDetail ? (
           <MissedDetail key={selected} id={selected} m={missedOpen} onOpenChat={() => to({ section: 'inbox', website: selected })} />
         ) : selected ? (
-          <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} />
+          // The row it was opened from — a search finds closed chats too — gives the header while it loads (#261).
+          <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected) ?? rows.find((r) => String(r.id) === selected)} />
         ) : (
           <PickConversation rows={openRows} missed={missedCount.isSuccess ? missedCount.data.count : null} longest={longest} visitors={online.isSuccess ? visitorsOnline : null} onLongest={openLongest} onVisitors={() => go('/chat?view=website&section=visitors')} />
         )}

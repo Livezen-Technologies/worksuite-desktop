@@ -16,6 +16,7 @@ import { MessageLinkPreview, shortUrl } from './LinkPreview';
 import { DeleteDialog, MessageToolbar, canReact, messageActionItems, type MessageHandlers } from './MessageActions';
 import { MessageAttachments, type Look } from './MessageAttachment';
 import { MessageMeta } from './MessageMeta';
+import { MessageText } from './MessageText';
 import type { KitMessage, KitRole } from './model';
 
 /**
@@ -220,9 +221,7 @@ function PageBubble({ m, position, caps, handlers: h, renderers, cardContinuatio
           <div data-bubble-body style={colleague ? { ['--c' as string]: nameColour(m.author.name) } : undefined} className={cx('whitespace-pre-wrap break-words px-[13px] py-[9px] text-[13.5px] leading-[1.55] selectable', bubbleTone(m, 'page'), CORNERS[own ? 'right' : 'left'][position])}>
             {m.author.role === 'bot' ? <BotLabel name={m.author.name} /> : null}
             <ReplyQuote m={m} look="page" inside />
-            <span>
-              <LinkedText text={shown!} className={accent} display={shortUrl} />
-            </span>
+            <MessageText text={shown!} accent={accent} markdown={caps.markdown} />
           </div>
         ) : m.deleted ? (
           <div className="rounded-[12px] border border-line px-3 py-2 text-[12.5px] text-ink-3 italic">Message deleted</div>

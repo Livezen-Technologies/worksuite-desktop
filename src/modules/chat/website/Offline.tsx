@@ -3,11 +3,12 @@ import { useState } from 'react';
 import { apiGet } from '../../../core/api';
 import { errorMessage } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
+import { markdownLine } from '../../../core/markdown';
 import { conversationStamp, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
-import { Avatar, Button, Chip, ErrorNote, Spinner, cx } from '../../../components/ui';
+import { Avatar, Button, Chip, cx } from '../../../components/ui';
 import { WEBSITE_CAPS } from '../kit/caps';
 import { MessageList } from '../kit/MessageList';
 import { byTime, fromWebsiteMessage } from '../kit/model';
@@ -15,6 +16,7 @@ import { team, useAgents, useSavedCopy, useWebsiteConversation, websiteAction, W
 import { timed } from './timings';
 import { firstName, FollowUpRow, ReplyByEmail, visitFacts } from './Missed';
 import { PANEL_CARD, PANEL_HEADING, pathOf, Tag } from './rowParts';
+import { ThreadFailed, ThreadPlaceholder, type PaneHead } from './ThreadPlaceholder';
 
 /**
  * Offline enquiries (C-05, X-UI-03): messages left while nobody was available or outside business hours. Each row has
@@ -99,7 +101,9 @@ export function repliedLine(r: OfflineEnquiry['replied']): string | null {
 /** An enquiry in the list (C-05): who, when, their first words, why it was left and whether it was answered. */
 export function OfflineRow({ e, active, onOpen }: { e: OfflineEnquiry; active: boolean; onOpen: () => void }) {
   const replied = repliedLine(e.replied);
-  const line = e.preview ? `“${e.preview}”` : (e.email ?? e.phone ?? '');
+  // Their words on one line, without Markdown's marks; never a blank line (#261).
+  const said = e.preview ? markdownLine(e.preview) : '';
+  const line = said ? `“${said}”` : (e.email ?? e.phone ?? text('No message'));
   return (
     <FollowUpRow id={e.id} name={e.visitor} online={e.online} stamp={enquiryStamp(e.received_at)} line={line} active={active} onOpen={onOpen}>
       <span className="mt-0.5 flex flex-wrap items-center gap-1.5">
@@ -127,10 +131,13 @@ export function OfflineDetail({ id, e, me, onOpenChat, onClosed }: { id: string;
   const [noting, setNoting] = useState(false);
   const refresh = () => void qc.invalidateQueries({ queryKey: ['website'] });
 
-  if (q.isLoading) return <Spinner />;
-  if (q.error) return <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
   const data = q.data;
-  if (!data) return null;
+  // Not read here before (#261): the enquiry's place in grey under the header the list row gives it, filling the pane,
+  // with "Still loading… · Retry" and "Couldn't load · Retry" in the middle; a copy in hand stays on a failure.
+  if (!data) {
+    const head: PaneHead | undefined = e ? { name: e.company ? `${e.visitor} · ${e.company}` : e.visitor, line: e.online ? text('Back on the site now') : e.received_at ? text('Left a message on {when}', { when: enquiryStamp(e.received_at) }) : text('Left a message'), presence: e.online ? 'online' : null } : undefined;
+    return q.error ? <ThreadFailed head={head} look="detail" onRetry={() => void q.refetch()} /> : <ThreadPlaceholder head={head} look="detail" onRetry={() => void qc.cancelQueries({ queryKey: ['website', 'conversation', id, 'review'] }).then(() => q.refetch())} />;
+  }
   const c = data.conversation;
   const v = data.visitor;
   const name = v?.name || e?.visitor || v?.label || text('Visitor');

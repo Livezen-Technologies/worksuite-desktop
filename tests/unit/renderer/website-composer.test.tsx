@@ -169,6 +169,34 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     expect(new Set(sent.map((b) => (b as { client_id: string }).client_id)).size).toBe(2);
   });
 
+  it('a saved reply written in Markdown goes to the visitor as plain text, still counted as that reply (#261)', async () => {
+    const win = { id: 9, shortcut: 'win', title: 'Windows settings', body: 'Press **Windows + I**, then open [Windows Update](https://support.microsoft.com/update):\n- Check for updates\n- Restart' };
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Composer roomId="website-41" roomName="Visitor 4F2A" group={false} reply={null} onClearReply={() => undefined} website={{ conversationId: 41, replies: [win] }} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Windows settings' }));
+    const box = screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
+    // The widget shows a reply as it is written: no **, a link's address after its words, the list as lines.
+    const plain = 'Press Windows + I, then open Windows Update (https://support.microsoft.com/update):\n• Check for updates\n• Restart';
+    expect(box.value).toBe(plain);
+    await act(async () => {
+      fireEvent.keyDown(box, { key: 'Enter' });
+    });
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ body: { message: plain, canned_id: 9, client_id: expect.any(String) } }));
+  });
+
+  it('what is typed is sent exactly as typed, Markdown or not (#261)', async () => {
+    mount();
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'It is **free** for schools' } });
+    await act(async () => {
+      fireEvent.keyDown(box, { key: 'Enter' });
+    });
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ body: { message: 'It is **free** for schools', client_id: expect.any(String) } }));
+  });
+
   it('holds files to the website\'s own size limit, not a fixed 5 MB (RDC-04)', () => {
     const big = { handle: 'h3', name: 'brochure.pdf', size: 8 * 1024 * 1024 };
     const ref = mount(null, () => undefined, 10_240);

@@ -7,6 +7,7 @@ import { app } from '../../../core/app-state';
 import { createStore, useStore } from '../../../core/store';
 import { toast } from '../../../core/toasts';
 import { text } from '../../../core/i18n';
+import { markdownLine } from '../../../core/markdown';
 import { parseTs } from '../../../core/time';
 import { mergeBySeq, newClientId } from '@shared/chat-seq';
 import { websiteReplyMutation } from '@shared/website-reply';
@@ -238,9 +239,28 @@ export function isMine(r: Pick<WebsiteRow, 'assigned_to' | 'my_role'>, me: numbe
   return me !== null && (r.assigned_to === me || r.my_role === 'owner' || r.my_role === 'participant');
 }
 
-/** A row's preview: who said it last, unless it was the visitor, then the words or the file. */
+/** A file's name that says it is a picture. */
+const PICTURE = /\.(?:jpe?g|png|gif|webp|heic|heif|bmp|avif|svg)$/i;
+
+/** A file on a row (worksuite-desktop#261): "📷 Photo" for a picture, "📎 File: invoice.pdf" for anything else. */
+export function fileLine(name: string): string {
+  return PICTURE.test(name.trim()) ? `📷 ${text('Photo')}` : `📎 ${text('File: {name}', { name })}`;
+}
+
+/** "★★★★☆ Rated 4": the visitor's rating, on a row whose chat has nothing later to show (#261). */
+export function ratedLine(n: number): string {
+  const r = Math.max(0, Math.min(5, Math.round(n)));
+  return `${'★'.repeat(r)}${'☆'.repeat(5 - r)} ${text('Rated {n}', { n: r })}`;
+}
+
+/**
+ * A row's preview: who said it last, unless it was the visitor, then the words — plain and on one line, never
+ * Markdown's marks (worksuite-desktop#261) — or what was sent instead: "📷 Photo", "📎 File: invoice.pdf". Empty only
+ * when the message has neither words nor a file: the row then says what happened (rowPreview).
+ */
 export function lastSaid(m: NonNullable<WebsiteRow['last_message']>, myName: string | null): string {
-  const what = m.body ?? (m.file ? `📎 ${m.file}` : '');
+  const what = markdownLine(m.body ?? '') || (m.file ? fileLine(m.file) : '');
+  if (!what) return '';
   const who = m.from === 'visitor' ? null : m.from === 'bot' ? text('Bot') : m.agent && m.agent === myName ? text('You') : (m.agent ?? text('Agent'));
   return who ? `${who}: ${what}` : what;
 }
@@ -771,13 +791,22 @@ export function useWebsiteAccess(): boolean {
   return q.isSuccess && q.data.can?.view !== false;
 }
 
+/** A saved copy is a conversation only when it has one: anything else waits for the server. */
+const isConversation = (hit: unknown): boolean => {
+  const c = hit as Partial<WebsiteConversation> | null;
+  return !!c && typeof c === 'object' && !!c.conversation && typeof c.conversation === 'object' && Array.isArray(c.messages);
+};
+
 /**
  * `review` reads a chat back without arriving in it (C-04): the server neither joins, claims nor handles it, so a
- * missed chat's detail can be looked at before anybody decides what to do, and a returning visitor still rings.
+ * missed chat's detail can be looked at before anybody decides what to do, and a returning visitor still rings. From
+ * the copy saved on this computer at once when it was read before (worksuite-desktop#261), then from the server.
  */
 export function useWebsiteConversation(id: string, { review = false }: { review?: boolean } = {}) {
+  const key = review ? ['website', 'conversation', id, 'review'] : ['website', 'conversation', id];
+  useSavedCopy(key, `${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, isConversation, true);
   return useQuery({
-    queryKey: review ? ['website', 'conversation', id, 'review'] : ['website', 'conversation', id],
+    queryKey: key,
     queryFn: ({ signal }) => timed('conversation', () => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, signal), (d) => d?.messages?.length ?? null),
     // No realtime event for replies or visitor typing: poll, slower in the background.
     refetchInterval: () => (document.visibilityState === 'visible' ? 5_000 : 30_000),
@@ -809,12 +838,6 @@ export function rememberOpened(qc: QueryClient, id: string, limit = RECENT_CONVE
 export function resetRecentlyOpened(): void {
   recentlyOpened.length = 0;
 }
-
-/** A saved copy is a conversation only when it has one: anything else waits for the server. */
-const isConversation = (hit: unknown): boolean => {
-  const c = hit as Partial<WebsiteConversation> | null;
-  return !!c && typeof c === 'object' && !!c.conversation && typeof c.conversation === 'object' && Array.isArray(c.messages);
-};
 
 /**
  * The open thread (worksuite-desktop#239): from memory when it was opened lately, else from the copy saved on this
