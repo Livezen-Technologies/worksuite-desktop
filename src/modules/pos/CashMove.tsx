@@ -5,7 +5,7 @@ import { toast } from '../../core/toasts';
 import { cashMove, openDrawer, PK, type PosSession } from './api';
 import { useT } from './i18n';
 import { BigAmount, Keypad } from './Keypad';
-import { press } from './keypad';
+import { press } from './numpad';
 import { ON } from './look';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';
 import { formatMoney, parseAmount } from './pricing';

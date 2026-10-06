@@ -13,7 +13,7 @@ import CategoryPicker from './CategoryPicker';
 import { publish } from './display';
 import { useT } from './i18n';
 import { BigAmount, Keypad } from './Keypad';
-import { press } from './keypad';
+import { press } from './numpad';
 import { HeldDialog, HoldDialog, OpenSalesDialog } from './OpenSales';
 import { clampPage, GRID_PAGE, LIST_PAGE, pushRecent } from './paging';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';

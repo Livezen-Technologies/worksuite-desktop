@@ -1,7 +1,7 @@
 import type { InputHTMLAttributes, ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
-import { clean, grouped, type PadRules } from './keypad';
+import { clean, grouped, type PadRules } from './numpad';
 
 /**
  * The till's number pad and the big amount it types into, shared by payment, cash in and out, and counting the

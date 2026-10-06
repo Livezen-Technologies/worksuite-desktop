@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { heldWithin, POS_HOLD_TTL_MS, posCartsSchema, type PosSale } from '@shared/pos';
 import { activeSale, addLine, discardHeld, dropSale, EMPTY_CART, expireHeld, holdSale, initialCarts, MAX_OPEN, newSale, openWithLines, recallSale, switchIndex, switchSale, updateActive, type TillCarts } from '../../../src/modules/pos/cart';
-import { clean, grouped, press, typedOf } from '../../../src/modules/pos/keypad';
+import { clean, grouped, press, typedOf } from '../../../src/modules/pos/numpad';
 import { tintOf, TINTS } from '../../../src/modules/pos/look';
 import { categoryCounts, clampPage, dots, GRID_PAGE, pageCount, pageOf, pushRecent, shown, topSellers } from '../../../src/modules/pos/paging';
 

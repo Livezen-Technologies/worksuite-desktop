@@ -8,7 +8,7 @@ import { openWithLines, useCarts } from './cart';
 import CashMove from './CashMove';
 import { useT, type PosKey } from './i18n';
 import { BigAmount, Keypad } from './Keypad';
-import { press } from './keypad';
+import { press } from './numpad';
 import { BADGE } from './look';
 import { Failed, Note, PosButton, timeOf, useTillContext } from './parts';
 import { countBody, countTotal, formatMoney, parseAmount, variance } from './pricing';

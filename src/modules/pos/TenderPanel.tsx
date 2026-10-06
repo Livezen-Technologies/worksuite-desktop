@@ -8,7 +8,7 @@ import { emailReceipt, openDrawer, PK, printReceipt, sell, type PosSession } fro
 import { publish } from './display';
 import { useT, type PosKey } from './i18n';
 import { BigAmount, Keypad } from './Keypad';
-import { press, typedOf } from './keypad';
+import { press, typedOf } from './numpad';
 import { ON, OFF } from './look';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';
 import { allowedTenders, formatMoney, quickCash, settle, type PricedCart } from './pricing';
