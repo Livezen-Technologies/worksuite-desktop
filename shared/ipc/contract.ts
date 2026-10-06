@@ -114,7 +114,7 @@ import type {
 } from '../types';
 
 const none = z.undefined().or(z.null()).optional();
-const salonPaper = z.enum(['80mm', '58mm', 'a4']);
+const salonPaper = z.enum(['80mm', '58mm', 'a4', 'letter']);
 const idString = z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/);
 const route = z
   .string()
@@ -978,7 +978,13 @@ export const contract = {
   // SalonMate's front desk: the key it is paired with stays in the main process.
   'salon:deskPairing': ch(none, { session: true }),
   'salon:deskPair': ch(
-    z.object({ location_id: z.number().int().positive(), name: z.string().trim().min(1).max(80), pos_register_id: z.number().int().positive().nullable().optional() }),
+    z.object({
+      location_id: z.number().int().positive(),
+      name: z.string().trim().min(1).max(80),
+      pos_register_id: z.number().int().positive().nullable().optional(),
+      warehouse_id: z.number().int().positive().nullable().optional(),
+      receipt_template: z.string().regex(/^[a-z0-9_]{1,40}$/).nullable().optional(),
+    }),
     { session: true, rate: 3, sensitive: true },
   ),
   'salon:deskForget': ch(none, { session: true, rate: 3, sensitive: true }),
@@ -989,7 +995,7 @@ export const contract = {
       .object({
         receipt_printer: z.string().trim().min(1).max(200).nullable(),
         a4_printer: z.string().trim().min(1).max(200).nullable(),
-        paper: z.enum(['80mm', '58mm']),
+        paper: salonPaper,
         copies: z.number().int().min(1).max(3),
         auto_print: z.boolean(),
         silent: z.boolean(),
@@ -1011,7 +1017,7 @@ export const contract = {
   'salon:outbox': ch(none, { session: true }),
   'salon:outboxAdd': ch(
     z.object({
-      kind: z.enum(['client.create', 'visit.book', 'visit.check_in']),
+      kind: z.enum(['client.create', 'visit.book', 'visit.check_in', 'visit.checkout']),
       local_id: z.string().max(40).nullable().optional(),
       payload: z.record(z.string(), z.unknown()),
       label: z.string().trim().min(1).max(200),

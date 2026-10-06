@@ -5,6 +5,71 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.190 — 2026-10-06
+
+- **SalonMate's front desk, redrawn to the SalonMate desktop design (salon 2.0.0).** Every screen of the desk now
+  looks and works as in the design (D01–D17), with buttons sized for touch.
+  - **The rail:** Today, Calendar, Walk-in, Clients, Checkout, Register, Sync and Settings, icons over their names.
+    Its foot says whether the desk is online and when it last synced, whether the register is open, the receipt
+    printer, and the location, desk and register.
+  - **Today:** a greeting by name; Walk-in, New booking, Take payment and Find a client; who arrives next, with the
+    stylist's initials in their colour; who is on the floor and how far through. It also shows what is owed, how
+    much chair time is booked, the 30-day no-show rate and **Needs attention** (online bookings to confirm, time off,
+    reviews, deposits owed, items waiting to sync).
+  - **Deposits are taken at the desk:** **Take deposit** on Today and the calendar, and **Book · take deposit** on a
+    new booking, by cash, card, LankaQR or bank transfer. The deposit goes into the desk's open POS register as a sale
+    of its own, and is refused while the register is closed.
+  - **New booking by touch:** services back to back, each with its stylist or whoever is free. A strip of days, every
+    start with taken times struck through, and the chain WorkSuite offers ("Kasun, then Nadeesha"). A watch-list
+    client's deposit is shown before booking.
+  - **The calendar:** bookings are coloured by status (confirmed, waiting, late, in the chair, done, cancelled) and
+    marked for an allergy, an advance or a deposit owed. Leave and block-outs are hatched and labelled. The time now
+    is labelled, and a tap on free time books it with that stylist.
+  - **Check-in:** the allergy read-out in a red-banded dialog, the patch test that covers today, and
+    **Update allergies** beside **Check in**.
+  - **Take payment:** the bill on the left with the amount to pay in large type. On the right, the register the money
+    goes into, Cash, Card, LankaQR, Bank transfer, Store credit or Split, the cash received on a calculator keypad,
+    and over-payment as store credit or change.
+  - **Add retail** opens Point of Sale's catalogue as a sheet: categories, stock (in stock, a few left, out),
+    barcode scan, quantities and who sold it.
+  - **Paid:** the drawer, store credit, points and advance; the POS sale and the receipt printed; **Print again**,
+    **Book next visit**, **Done — next client**; and the receipt beside it, as it printed.
+  - **Clients:** the client's tier and reliability, what they asked for, every allergy in one red line, points,
+    store credit and what they owe, recent visits, the last formula, and **WhatsApp** beside **Book again**.
+  - **Service record (new):** the formula, technique and timings for a visit's service, **Same as last time**, and
+    before and after photos from the desk's webcam or a file. Photos are kept in WorkSuite Files, staff-only, and used
+    on the website only with the client's consent on file.
+  - **Register, Close the day, Sync, Settings, pairing:** the float and the closing count note by note, the salon's
+    day by tender, Sync's numbered queue with the stylist's free times nearest a refused booking, and Printers &
+    receipts with a preview of the test receipt. The desk's details, the owners' screens and **Pair this computer
+    again** move to Settings.
+  - **Receipts on A4 or Letter** as well as 80 mm and 58 mm rolls. A full page goes to the A4 printer when one is
+    chosen.
+  - **Calendar Week and List:** the week a column a day, each booking in time order, and the same week as a list
+    narrowed by stylist, state, allergy on file or a name.
+  - **Products used on the service record:** start from the service's recipe and change it to what was really used,
+    or add from the desk's stock. Checkout takes exactly that from the desk's stock. A product whose name carries
+    one of the client's allergies is kept only when the stylist says it was used.
+  - **The desk's stock location and receipt template:** chosen when the computer is paired, and changed later in
+    Settings by somebody who manages desks. Receipts print in the desk's template: the full salon receipt, or a
+    short one.
+  - **WhatsApp receipt and Email receipt** on Paid, to the mobile or address on file or one typed for this receipt.
+    A client who asked for no messages is sent it only when they ask for it.
+  - **Taking payment offline:** a desk paired as a POS till takes cash or card while WorkSuite is out of reach. It
+    prints a till receipt numbered in the desk's own series, keeps the sale encrypted, and sends it first thing when
+    WorkSuite answers. WorkSuite issues the invoice then, into the register session the sale was made in. Closing
+    the register waits until those sales have gone.
+- **Where it bites:** deposits need the server's SalonMate with the register fix for desk deposits (2026-09-28).
+  Without it, a cash deposit is not counted in the register. Products used, the stock location and template,
+  offline payments and sending the receipt need the server's Salon 1.1.0; on an older server the desk does not
+  offer the choices, and an offline payment is refused when it is sent, and waits in Sync. A WhatsApp receipt
+  needs a shared WhatsApp number connected to WorkSuite.
+- **Security: `simple-git` 4.0.2 under Local AI.** `node-llama-cpp` (the Local AI engine) pulls in `simple-git` 3.x,
+  which has four advisories that let a crafted git option run a command (GHSA-x6jw-m9v5-85vh, GHSA-g4wm-2vf7-vfgr,
+  GHSA-858h-whjf-mvg5, GHSA-v5rq-49vh-5v5c). An npm override now pins it to 4.0.2, so the build's `npm audit` step is
+  clean again. `node-llama-cpp` only uses git to fetch llama.cpp when it builds from source, and the calls it makes
+  are unchanged in 4.x.
+
 ## 0.2.189 — 2026-10-06
 
 - **"Continue as" in WorkSuite Office.** WorkSuite Office, the desktop editor, can sign in with your WorkSuite

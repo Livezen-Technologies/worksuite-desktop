@@ -114,6 +114,9 @@ export interface CheckoutResult {
   next_visit?: { date: string; weeks: number } | null;
   message?: string;
   visit: Visit;
+  /** What this desk did with it, for Paid to say: the receipt printed, the drawer opened (not the server's). */
+  printed?: SalonPrintOutcome | null;
+  drawer?: SalonPrintOutcome | null;
 }
 
 export interface RegisterSession {
@@ -163,6 +166,7 @@ export interface RetailItem {
   id: number;
   code: string | null;
   name: string;
+  unit?: string | null;
   price: number;
   currency: string;
   category: string | null;
@@ -170,11 +174,50 @@ export interface RetailItem {
   badge: 'untracked' | 'out' | 'low' | 'in';
 }
 
+/** GET /visits/{id}/receipt?format=json — what the printed receipt says, for showing it beside Paid (D07, D12). */
+export interface ReceiptData {
+  company: { name: string; address: string | null; phone: string | null; registration: string | null; location: string | null };
+  invoice: { number: string; status: string; date: string | null };
+  visit: { number: string; at: string };
+  pos: { sale: string | null; register: string | null; till: string | null } | null;
+  client: string | null;
+  lines: Array<{ description: string; quantity: number; amount: number }>;
+  currency: string;
+  subtotal: number;
+  tier_discount: number;
+  points_value: number;
+  points: number;
+  tax: number;
+  total: number;
+  paid: number;
+  owed: number;
+  tenders: Array<{ method: string; amount: number; reference: string | null; change: number }>;
+  change: number;
+  credit_kept: number;
+  loyalty: { earned: number; balance: number; tier: string | null } | null;
+  store_credit: number;
+  next_visit: { date: string; weeks: number } | null;
+  footer: string;
+  /** A POS offline sale's till receipt, as the client was given it (POS-11). */
+  offline?: { receipt: string; at: string } | null;
+  /** The layout the desk prints with: `salon_short` leaves out the sale and what comes after (DSK-02). */
+  template?: string;
+}
+
+/** An advance taken for a visit still to come (PAY-05): the deposit, into the desk's register. */
+export interface AdvanceBody {
+  amount: number;
+  method: Exclude<TenderMethod, 'online'>;
+  reference: string | null;
+  desk_id: number;
+}
+
 /* ── Reading ────────────────────────────────────────────────────────── */
 
 export const fetchCheckout = (visitId: number, signal?: AbortSignal) => apiGet<CheckoutQuote>(`${BASE}/visits/${visitId}/checkout`, undefined, signal);
 export const fetchRegister = (deskId: number, signal?: AbortSignal) => apiGet<RegisterState>(`${BASE}/desk/register`, { desk: deskId }, signal);
 export const fetchDay = (deskId: number, signal?: AbortSignal) => apiGet<DeskDay>(`${BASE}/desk/day`, { desk: deskId }, signal);
+export const fetchReceipt = (visitId: number, deskId: number, signal?: AbortSignal) => apiGet<ReceiptData>(`${BASE}/visits/${visitId}/receipt`, { format: 'json', desk: deskId }, signal);
 export const fetchRetail = (deskId: number, q: string, signal?: AbortSignal) => apiGet<{ items: RetailItem[]; categories: string[] }>(`${BASE}/desk/retail`, { desk: deskId, q }, signal);
 
 export const MK = {
@@ -182,6 +225,7 @@ export const MK = {
   register: (deskId: number) => ['salon', 'register', deskId] as const,
   day: (deskId: number) => ['salon', 'day', deskId] as const,
   retail: (deskId: number, q: string) => ['salon', 'retail', deskId, q] as const,
+  receipt: (visitId: number) => ['salon', 'receipt', visitId] as const,
   print: ['salon', 'print'] as const,
 };
 
@@ -212,6 +256,15 @@ export async function checkout(visitId: number, inputs: PriceInputs, pay: PayBod
 export async function payRest(visitId: number, pay: PayBody & { use_credit: boolean }, key: string): Promise<{ data: CheckoutResult; message: string | null }> {
   const r = await write<PayResult & { visit: Visit }>(`/visits/${visitId}/payments`, pay, key);
   return { data: { paid: r.data, visit: r.data.visit, message: r.message ?? undefined }, message: r.message };
+}
+
+/**
+ * Take a deposit for a visit (PAY-05). Under one key per attempt, as a
+ * payment is; WorkSuite records it in the desk's open register, and refuses
+ * with `register_closed` before anything is recorded while the register is shut.
+ */
+export async function takeAdvance(visitId: number, body: AdvanceBody, key: string): Promise<{ data: { visit: Visit }; message: string | null }> {
+  return write<{ visit: Visit }>(`/visits/${visitId}/advances`, body, key);
 }
 
 /**
@@ -332,6 +385,11 @@ export async function saveDeskSettings(deskId: number, s: SalonPrintSettings): P
   });
 }
 
+/** Where a desk takes stock from and the receipt it prints — changed by somebody who manages desks (DSK-02). */
+export async function saveDeskTill(deskId: number, till: { warehouse_id: number | null; receipt_template: string }): Promise<void> {
+  await request('PUT', `${BASE}/desks/${deskId}/settings`, { body: till });
+}
+
 /* ── Pages printed from the server's figures ────────────────────────── */
 
 function esc(v: unknown): string {
@@ -352,13 +410,13 @@ function rows(pairs: Array<[string, string]>): string {
   return `<table>${pairs.map(([l, r]) => `<tr><td>${esc(l)}</td><td class="r">${esc(r)}</td></tr>`).join('')}</table>`;
 }
 
-const WIDTH = { '80mm': 302, '58mm': 219 } as const;
+const WIDTH: Record<SalonPaper, number> = { '80mm': 302, '58mm': 219, a4: 794, letter: 816 };
 
 export interface PageHeading {
   company: string;
   location: string;
   date: string;
-  paper: '80mm' | '58mm';
+  paper: SalonPaper;
 }
 
 /** The Z-report, from what the close answered: nothing is added up here. */
@@ -381,6 +439,45 @@ export function zReport(r: CloseResult, code: string, h: PageHeading, currency: 
         ['Drawer should hold', amount(z.expected)],
         ['Difference', r.variance === 0 ? 'None' : amount(r.variance)],
       ]),
+    WIDTH[h.paper],
+  );
+}
+
+/** What a POS offline sale's till receipt says (POS-11): laid out here, as WorkSuite is out of reach. */
+export interface OfflineReceipt {
+  receipt: string;
+  at: string;
+  register: string | null;
+  visit: string;
+  client: string;
+  lines: Array<{ label: string; amount: number }>;
+  currency: string;
+  total: number;
+  advance: number;
+  tenders: Array<{ method: TenderMethod; amount: number; reference: string | null }>;
+  change: number;
+}
+
+/**
+ * The till receipt for a payment taken while WorkSuite was out of reach. Only
+ * what the desk knows: the visit's services as its copy priced them, what was
+ * handed over and the change. The tax invoice, with any member discount and
+ * tax, is WorkSuite's, issued when the sale arrives — the receipt says so.
+ */
+export function offlineReceipt(r: OfflineReceipt, h: Omit<PageHeading, 'date'>): string {
+  const paid = r.tenders.reduce((n, t) => n + t.amount, 0);
+  return page(
+    `Till receipt ${r.receipt}`,
+    `<h1>${esc(h.company)}</h1><div class="c">${esc(h.location)}</div><div class="c"><b>TILL RECEIPT</b></div><hr>` +
+      rows([['Till receipt', r.receipt], ['Taken', r.at], ...(r.register ? ([['Register', r.register]] as Array<[string, string]>) : []), ['Visit', r.visit], ['Client', r.client]]) +
+      '<hr>' +
+      rows(r.lines.map((l): [string, string] => [l.label, amount(l.amount)])) +
+      '<hr>' +
+      rows([[`Total ${r.currency}`, amount(r.total)], ...(r.advance > 0 ? ([['Advance', `- ${amount(r.advance)}`]] as Array<[string, string]>) : [])]) +
+      rows(r.tenders.map((t): [string, string] => [`${METHOD_LABEL[t.method] ?? t.method}${t.reference ? ` ${t.reference}` : ''}`, amount(t.method === 'cash' ? t.amount + r.change : t.amount)])) +
+      rows([['Change', amount(r.change)], ['Paid', amount(paid)]]) +
+      '<hr><div class="c">Taken while WorkSuite was out of reach. Your tax invoice follows when it is back; any member discount or tax is shown on it.</div>' +
+      '<div class="c">ස්තූතියි · நன்றி · Thank you</div>',
     WIDTH[h.paper],
   );
 }

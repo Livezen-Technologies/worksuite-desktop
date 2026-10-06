@@ -4,7 +4,7 @@ import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import type { HttpClient } from './http';
-import { adoptClient, apply, batch, depth, dropWithDependents, KINDS, LOCAL_ID, needsOf, newKeyFor, type ReplayResult } from './salon-outbox';
+import { adoptClient, apply, batch, depth, dropWithDependents, KINDS, LOCAL_ID, needsOf, newKeyFor, offlineSaleProblem, tillReceipt, type ReplayResult } from './salon-outbox';
 import type { Vault } from './vault';
 
 const log = logger('salon-sync');
@@ -266,13 +266,15 @@ export class SalonSync {
     if (why) throw new DesktopError('POLICY_DENIED', why);
     if (!KINDS.includes(input.kind)) throw new DesktopError('IPC_VALIDATION_FAILED', 'That is not something a desk does offline.');
     const local = input.local_id ?? null;
-    if (local !== null && (!LOCAL_ID.test(local) || (input.kind === 'client.create') !== local.startsWith('C-') || input.kind === 'visit.check_in')) {
+    if (local !== null && (!LOCAL_ID.test(local) || (input.kind === 'client.create') !== local.startsWith('C-') || input.kind === 'visit.check_in' || input.kind === 'visit.checkout')) {
       throw new DesktopError('IPC_VALIDATION_FAILED', 'That local id is not one this desk makes.');
     }
     if (JSON.stringify(input.payload).length > MAX_PAYLOAD) throw new DesktopError('IPC_VALIDATION_FAILED', 'That is too large to keep.');
+    let payload = input.payload;
+    if (input.kind === 'visit.checkout') payload = this.offlineSale(s, payload);
 
     const items = this.load(s);
-    const needs = needsOf(input.payload);
+    const needs = needsOf(payload);
     const known = new Set(items.map((i) => i.local_id).filter(Boolean));
     if (needs.some((n) => !known.has(n))) throw new DesktopError('IPC_VALIDATION_FAILED', 'That names a client or booking this desk does not have waiting.');
 
@@ -284,7 +286,7 @@ export class SalonSync {
       key: `desk${s.desk}-${randomUUID()}`,
       kind: input.kind,
       local_id: local,
-      payload: input.payload,
+      payload,
       needs,
       label: input.label.slice(0, 200),
       detail: input.detail?.slice(0, 300) ?? null,
@@ -300,6 +302,23 @@ export class SalonSync {
     this.d.changed();
     void this.sync();
     return item;
+  }
+
+  /**
+   * A POS offline sale (POS-11), on a desk paired as a till: what it carries
+   * checked, and the till receipt number the client is given — this desk's
+   * own count, kept on this computer and never handed out twice, even for a
+   * sale later dropped. WorkSuite issues the invoice when the sale arrives.
+   */
+  private offlineSale(s: { origin: string; user: string; desk: number }, payload: Record<string, unknown>): Record<string, unknown> {
+    const register = this.readCopy(s)?.desk?.register ?? null;
+    if (!register) throw new DesktopError('POLICY_DENIED', 'Offline, a desk takes payment only when it is paired as a POS till.');
+    const why = offlineSaleProblem(payload);
+    if (why) throw new DesktopError('IPC_VALIDATION_FAILED', why);
+    const counter = `salon.tillReceipt:${s.origin}:${s.desk}`;
+    const n = (this.d.db.getConfig<number>(counter) ?? 0) + 1;
+    this.d.db.setConfig(counter, n);
+    return { ...payload, receipt: tillReceipt(register.code, n) };
   }
 
   /** A person's answer to a refusal (OFF-08): drop it, send it again, take the next time, pick a time, it is this client, or edit it. */
@@ -346,6 +365,8 @@ export class SalonSync {
           'client.create': ['name', 'mobile', 'email'],
           'visit.book': ['starts_at', 'note'],
           'visit.check_in': ['ack', 'statement', 'patch_override'],
+          /* Money already taken: what it was cannot be changed, only sent again or settled with the client. */
+          'visit.checkout': [],
         };
         const changes = Object.fromEntries(Object.entries(a.changes).filter(([k]) => allowed[item.kind]!.includes(k)));
         items = items.map((i) => (i.id === item.id ? again(i, { ...i.payload, ...changes }) : i));
