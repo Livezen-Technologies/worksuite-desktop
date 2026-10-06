@@ -1,11 +1,32 @@
 import { createHash } from 'node:crypto';
-import { formatReceipt, POS_DRAWER_REFUSALS, type PosCatalogue, type PosGiveBack, type PosProduct, type PosReturn, type PosSale, type PosSellInput, type PosServerReceipt, type PosTillStatus } from '@shared/pos';
+import {
+  approvalAskOf,
+  formatReceipt,
+  POS_APPROVAL_CODES,
+  POS_DRAWER_REFUSALS,
+  receiptTemplateOf,
+  tenderOptionsOf,
+  type PosApprovalNeed,
+  type PosCatalogue,
+  type PosCategoryNode,
+  type PosDeskAnswer,
+  type PosDeskOp,
+  type PosGiveBack,
+  type PosProduct,
+  type PosReceiptTemplate,
+  type PosReturn,
+  type PosSale,
+  type PosSellInput,
+  type PosServerReceipt,
+  type PosStockState,
+  type PosTillStatus,
+} from '@shared/pos';
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import type { HttpClient } from './http';
 import type { DeviceAnswer, PosDesk } from './pos-desk';
-import { apply, batch, flagsOf, nextSequence, POS_OFF, readAnswer, saleBody, sequenceOf, type Queued } from './pos-outbox';
+import { apply, batch, flagsOf, loyaltyOf, nextSequence, POS_OFF, readAnswer, saleBody, sequenceOf, type Queued } from './pos-outbox';
 import type { Vault } from './vault';
 
 const log = logger('pos-till');
@@ -52,6 +73,8 @@ const CATALOGUE_LIMIT = 2000;
 /** How often the till's door is asked for the catalogue in the background (an unchanged one costs one short answer). */
 const CATALOGUE_MS = 30 * 60_000;
 const INVENTORY_PAGE = 100;
+/** The company's receipt template, asked for with the catalogue (and kept, as the printer's layout, per till). */
+const TEMPLATE_KEY = 'pos-receipt-template';
 
 export interface PosTillDeps {
   db: Database;
@@ -59,6 +82,8 @@ export interface PosTillDeps {
   /** The signed-in person's calls (the catalogue). */
   http: Pick<HttpClient, 'request'>;
   desk: Pick<PosDesk, 'pairing' | 'device' | 'heartbeat' | 'door'>;
+  /** Where the receipt template is kept (the config table; it is layout, not a secret). */
+  config?: { getConfig<T>(key: string): T | undefined; setConfig(key: string, value: unknown): void; deleteConfig(key: string): void };
   origin: () => string | null;
   /** What the company's desktop policy allows this computer. */
   caps: () => { offlineCache: boolean; offlineQueue: 'allowed' | 'drafts_only' | 'disabled' };
@@ -79,12 +104,39 @@ const num = (v: unknown, d = 0): number => {
 };
 const str = (v: unknown): string | null => (typeof v === 'string' && v.trim() !== '' ? v.trim() : typeof v === 'number' ? String(v) : null);
 
-/** A product from WorkSuite's till catalogue (the mobile API's shape, ids as strings or numbers). */
-export function productFromPos(p: Record<string, unknown>, categories: Map<string, string>): PosProduct | null {
+const STOCK: ReadonlySet<string> = new Set(['in_stock', 'low', 'out', 'untracked']);
+
+/** A product from WorkSuite's till catalogue (the mobile API's shape, ids as strings or numbers), with Phase 2's fields where sent. */
+export function productFromPos(p: Record<string, unknown>, categories: Map<string, string>, tree = false): PosProduct | null {
   const id = num(p.id);
   if (!Number.isInteger(id) || id <= 0) return null;
   const cat = str(p.category) ?? (str(p.category_id) ? (categories.get(str(p.category_id)!) ?? null) : null);
-  return { id, code: str(p.code), barcode: str(p.barcode), name: str(p.name) ?? `#${id}`, unit: str(p.unit), category: cat, price: num(p.price), discount_pct: num(p.discount_pct), tax_rate: num(p.tax_rate) };
+  const out: PosProduct = { id, code: str(p.code), barcode: str(p.barcode), name: str(p.name) ?? `#${id}`, unit: str(p.unit), category: cat, price: num(p.price), discount_pct: num(p.discount_pct), tax_rate: num(p.tax_rate) };
+  // Phase 2 — each only when the server sent it, so an older catalogue reads exactly as before.
+  if (tree && str(p.category_id)) out.category_id = str(p.category_id);
+  if (typeof p.stock_state === 'string' && STOCK.has(p.stock_state)) out.stock_state = p.stock_state as PosStockState;
+  else if (p.out_of_stock === true) out.stock_state = 'out';
+  else if (p.low_stock === true) out.stock_state = 'low';
+  if ('stock_available' in p) out.stock_available = p.stock_available === null ? null : num(p.stock_available);
+  if (str(p.image_url)) out.image = true;
+  if (str(p.promo_label)) out.promo_label = str(p.promo_label)!.slice(0, 40);
+  if (p.favourite === true) out.favourite = true;
+  return out;
+}
+
+/** The catalogue's tree of categories (`category_tree`), checked: ids and names, children within reason. */
+export function categoryTreeOf(v: unknown, depth = 0): PosCategoryNode[] {
+  if (!Array.isArray(v) || depth > 6) return [];
+  const out: PosCategoryNode[] = [];
+  for (const x of v.slice(0, 500)) {
+    if (!x || typeof x !== 'object') continue;
+    const c = x as Record<string, unknown>;
+    const id = str(c.id);
+    const name = str(c.name);
+    if (!id || !name) continue;
+    out.push({ id, name: name.slice(0, 80), parent_id: str(c.parent_id), product_count: Math.max(0, Math.floor(num(c.product_count))), children: categoryTreeOf(c.children, depth + 1) });
+  }
+  return out;
 }
 
 /** A product from Inventory's list (`GET api/inventory/products`): its own price, no list discount. */
@@ -121,6 +173,8 @@ export class PosTill {
   private memory = new Map<string, PosCatalogue>();
   /** When the door was last asked for the catalogue (0: not yet since start-up). */
   private lastCatalogue = 0;
+  /** The receipt template, when the policy does not let it be kept (or no config is given). */
+  private templates = new Map<string, PosReceiptTemplate | null>();
 
   constructor(private readonly d: PosTillDeps) {}
 
@@ -218,16 +272,72 @@ export class PosTill {
     const s = this.scope();
     if (!s) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
     const have = this.catalogue();
+    void this.refreshTemplate();
     const c = await this.fetchCatalogue(have, capable);
     this.keepCatalogue(s, c);
     this.d.changed();
     return c;
   }
 
+  /** The tenders a heartbeat (or the door's `tenders`) named, onto the catalogue copy: they go with it, offline too. */
+  private keepTenders(s: Scope, v: unknown): void {
+    const tenders = tenderOptionsOf(v);
+    const have = this.catalogue();
+    if (!tenders || !have || JSON.stringify(have.tenders ?? null) === JSON.stringify(tenders)) return;
+    this.keepCatalogue(s, { ...have, tenders });
+    this.d.changed();
+  }
+
+  /* ── The receipt template (Phase 2 S3) ────────────────────────────── */
+
+  private templateKey(s: Scope): string {
+    return `${s.origin}|${s.terminal}`;
+  }
+
+  /** The company's published receipt template as last read, or null: the till prints today's receipt. */
+  template(): PosReceiptTemplate | null {
+    const s = this.scope();
+    if (!s) return null;
+    const key = this.templateKey(s);
+    if (this.templates.has(key)) return this.templates.get(key) ?? null;
+    const kept = this.d.config?.getConfig<Record<string, unknown>>(TEMPLATE_KEY)?.[key];
+    return receiptTemplateOf(kept);
+  }
+
+  private keepTemplate(s: Scope, t: PosReceiptTemplate | null): void {
+    const key = this.templateKey(s);
+    if (!this.d.config || !this.caps().keep) {
+      this.templates.set(key, t);
+      return;
+    }
+    this.templates.delete(key);
+    const all = { ...(this.d.config.getConfig<Record<string, unknown>>(TEMPLATE_KEY) ?? {}) };
+    if (t) all[key] = t;
+    else delete all[key];
+    this.d.config.setConfig(TEMPLATE_KEY, all);
+  }
+
+  /** Ask the door for the template (`GET receipt-template`); an older server (404) prints today's receipt. */
+  async refreshTemplate(): Promise<PosReceiptTemplate | null> {
+    const s = this.scope();
+    if (!s || !s.usable) return this.template();
+    let a: DeviceAnswer;
+    try {
+      a = await this.d.desk.door('GET', 'receipt-template');
+    } catch (e) {
+      log.info('pos receipt template not read', { error: String((e as Error)?.message ?? e) });
+      return this.template();
+    }
+    if (a.status === 200) this.keepTemplate(s, receiptTemplateOf(a.body?.template));
+    else if (a.status === 404) this.keepTemplate(s, null);
+    return this.template();
+  }
+
   /** The door's catalogue, in the background: nobody need be signed in. An older server without it is left alone. */
   private async catalogueInBackground(s: Scope): Promise<void> {
     if (this.now() - this.lastCatalogue < CATALOGUE_MS) return;
     this.lastCatalogue = this.now();
+    void this.refreshTemplate();
     const have = this.catalogue();
     let a: DeviceAnswer;
     try {
@@ -239,7 +349,7 @@ export class PosTill {
     if (a.status !== 200 || !a.body) return;
     const c = catalogueOf(a.body, have, this.stamp());
     if (!c) return;
-    this.keepCatalogue(s, c);
+    this.keepCatalogue(s, withTenders(c, a.body));
     this.d.changed();
   }
 
@@ -250,7 +360,7 @@ export class PosTill {
       try {
         const data = await this.d.http.request<Record<string, unknown>>('GET', '/api/pos/catalogue', { query: { org, since_version: have?.source === 'pos' ? have.version : undefined } });
         const c = catalogueOf(data ?? {}, have, fetched_at);
-        if (c) return c;
+        if (c) return withTenders(c, data ?? {});
         throw new DesktopError('SERVER_ERROR', 'WorkSuite answered, but not with a till catalogue this app can read.');
       } catch (e) {
         // No till catalogue on this (older) server: Inventory's list stands in, for people who may read it.
@@ -345,7 +455,7 @@ export class PosTill {
    * Ring up a sale: number it, keep it, and send it now. Answers the sale as it then stands — sent, or waiting for
    * WorkSuite (`queued`). A refusal while WorkSuite answered is thrown: nothing was sold.
    */
-  async sell(input: PosSellInput, cashier: { id: number; name: string | null }): Promise<{ sale: PosSale; queued: boolean }> {
+  async sell(input: PosSellInput, cashier: { id: number; name: string | null }): Promise<{ sale: PosSale; queued: boolean } | { needs: PosApprovalNeed }> {
     const s = this.scope();
     if (!s) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
     if (!s.usable) throw new DesktopError('PERMISSION_DENIED', 'WorkSuite no longer accepts this till. Pair this computer again before selling.');
@@ -362,6 +472,10 @@ export class PosTill {
       // WorkSuite answered, and said no, while the customer is still here: it was never sold.
       this.d.db.run('DELETE FROM pos_sales WHERE origin = ? AND ref = ?', s.origin, sale.ref);
       this.d.changed();
+      // A discount past the cashier's rights (or an approval that no longer fits): a manager can approve it, and the
+      // sale is made again with the approval. Not bound to this number — the next try is numbered afresh.
+      const need = needOf(now.code ?? null, now.message, now.approval ?? null, 'discount', input.discount_pct);
+      if (need) return { needs: { ...need, ask: { ...need.ask, subject: null } } };
       throw new DesktopError('CONFLICT', now.message ?? 'WorkSuite would not record this sale.');
     }
     return { sale: now, queued: now.state !== 'sent' };
@@ -455,15 +569,23 @@ export class PosTill {
    * refund. A refund's cash leaves the drawer open at this till; a void is recorded in the sale's own session, while it
    * is open. What WorkSuite answers — the amount, the tenders it went back on, the cash out — is kept on the sale.
    */
-  async giveBack(input: PosGiveBack, cashier: { id: number }): Promise<{ sale: PosSale; refund: PosReturn; message: string }> {
+  async giveBack(input: PosGiveBack, cashier: { id: number }): Promise<{ sale: PosSale; refund: PosReturn; message: string } | { needs: PosApprovalNeed }> {
     const { s, q } = this.sent(input.ref);
     if (q.sale.voided) throw new DesktopError('CONFLICT', 'That sale was voided.');
+    // The same number for a refund asked again with a manager's approval: a lost answer is never a second refund.
     const own = returnRef(q.sale, input.kind);
     const body: Record<string, unknown> = { ref: own, cashier_id: cashier.id, reason: input.reason };
-    if (input.kind === 'refund' && input.lines?.length) body.lines = input.lines;
+    if (input.kind === 'refund' && input.lines?.length) body.lines = input.lines.map((l) => ({ product_id: l.product_id, quantity: l.quantity, ...(l.condition ? { condition: l.condition } : {}) }));
     if (input.kind === 'refund' && input.restock === false) body.restock = false;
+    // Phase 2 (`capabilities.refund_to`): where the money goes; only sent when the person chose other than "as paid".
+    if (input.kind === 'refund' && input.refund_to && input.refund_to !== 'original') body.refund_to = input.refund_to;
+    if (input.approval_id) body.approval_id = input.approval_id;
     const a = await this.d.desk.door('POST', `sales/${encodeURIComponent(q.sale.ref)}/${input.kind}`, { body });
     this.reached();
+    if (a.status === 403) {
+      const need = needOf(str(a.body?.code), str(a.body?.message), approvalAskOf(a.body?.approval, input.kind), input.kind, null, q.sale.ref);
+      if (need) return { needs: need };
+    }
     if (a.status !== 200 && a.status !== 201) throw doorError(a, input.kind === 'void' ? 'WorkSuite did not void the sale.' : 'WorkSuite did not refund the sale.');
     const refund = returnOf(a.body?.refund, input.kind, own, this.stamp());
     const shape = (a.body?.sale ?? null) as Record<string, unknown> | null;
@@ -478,6 +600,75 @@ export class PosTill {
     this.save(s, { ...q, sale });
     this.d.changed();
     return { sale, refund, message: str(a.body?.message) ?? (input.kind === 'void' ? 'The sale was voided.' : 'The refund was recorded.') };
+  }
+
+  /* ── Phase 2's counter, through the till's door ──────────────────── */
+
+  /**
+   * One of the counter's calls (shared/pos.ts `posDeskSchema`) through the till's door, the cashier the signed-in
+   * person (named here, never by the screen). The answer is WorkSuite's as it came — the screens read it — except that
+   * the template is also kept for the printer.
+   */
+  async desk(op: PosDeskOp, cashier: { id: number } | null): Promise<PosDeskAnswer> {
+    const s = this.scope();
+    if (!s) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
+    if (!s.usable) throw new DesktopError('PERMISSION_DENIED', 'WorkSuite no longer accepts this till. Pair this computer again.');
+    const who = (): number => {
+      if (!cashier || !Number.isInteger(cashier.id) || cashier.id <= 0) throw new DesktopError('NOT_SIGNED_IN', 'Sign in to do that at the till.');
+      return cashier.id;
+    };
+    const call = deskCall(op, who);
+    let a: DeviceAnswer;
+    try {
+      a = await this.d.desk.door(call.method, call.path, { ...(call.body ? { body: call.body } : {}), ...(call.query ? { query: call.query } : {}) });
+    } catch (e) {
+      this.unreachable(e);
+      throw e;
+    }
+    this.reached();
+    if (op.op === 'template' && (a.status === 200 || a.status === 404)) this.keepTemplate(s, a.status === 200 ? receiptTemplateOf(a.body?.template) : null);
+    if (op.op === 'tenders' && a.status === 200) this.keepTenders(s, a.body?.tenders);
+    if (a.status === 503) throw doorError(a, POS_OFF);
+    if (a.status === 401) throw doorError(a, 'WorkSuite no longer accepts this till.');
+    return { status: a.status, body: a.body };
+  }
+
+  /** A manager's PIN, passed straight to the door (`POST approvals`) and forgotten: never logged, never kept. */
+  async approve(input: { approver_id: number; pin: string; action: string; amount: number; subject?: string; reason?: string }, cashier: { id: number }): Promise<PosDeskAnswer> {
+    const s = this.scope();
+    if (!s || !s.usable) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
+    const body = { cashier_id: cashier.id, approver_id: input.approver_id, pin: input.pin, action: input.action, amount: input.amount, ...(input.subject ? { subject: input.subject } : {}), ...(input.reason ? { reason: input.reason } : {}) };
+    const a = await this.d.desk.door('POST', 'approvals', { body });
+    this.reached();
+    if (a.status === 503 || a.status === 401) throw doorError(a, POS_OFF);
+    return { status: a.status, body: a.body };
+  }
+
+  /** Name this device on the server (`POST name`, `capabilities.device_rename`). */
+  async rename(name: string): Promise<{ device_name: string; message: string }> {
+    const s = this.scope();
+    if (!s || !s.usable) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
+    const a = await this.d.desk.door('POST', 'name', { body: { device_name: name.trim().slice(0, 120) } });
+    this.reached();
+    if (a.status !== 200) throw doorError(a, 'WorkSuite did not rename this device.');
+    return { device_name: str(a.body?.device_name) ?? name.trim(), message: str(a.body?.message) ?? 'Device renamed.' };
+  }
+
+  /**
+   * Hand the till back on the server (`POST unpair`, `capabilities.device_unpair`) before it is forgotten here: the
+   * credential stops working at once and the till is free to pair again. False when WorkSuite did not (an older server,
+   * out of reach): the till is forgotten here all the same, and a manager can revoke it from WorkSuite.
+   */
+  async unpair(): Promise<boolean> {
+    const s = this.scope();
+    if (!s || !s.usable) return false;
+    try {
+      const a = await this.d.desk.door('POST', 'unpair', { body: {} });
+      return a.status === 200 || a.status === 401;
+    } catch (e) {
+      log.info('pos till not unpaired on the server', { error: String((e as Error)?.message ?? e) });
+      return false;
+    }
   }
 
   /* ── Sending ──────────────────────────────────────────────────────── */
@@ -534,6 +725,8 @@ export class PosTill {
           this.d.changed();
           return;
         }
+        // Phase 2: the tenders the till may offer, so a change on the settings screen reaches it on its next beat.
+        if (a.status === 200) this.keepTenders(s, a.body?.tenders);
       } catch (e) {
         this.unreachable(e);
         if (before) this.d.changed();
@@ -582,6 +775,13 @@ export class PosTill {
     this.d.db.run('DELETE FROM pos_sales WHERE origin = ? AND terminal_id = ?', origin, terminalId);
     this.d.db.run('DELETE FROM pos_catalogue WHERE origin = ? AND terminal_id = ?', origin, terminalId);
     this.memory.delete(`${origin}|${terminalId}`);
+    const key = `${origin}|${terminalId}`;
+    this.templates.delete(key);
+    const kept = this.d.config?.getConfig<Record<string, unknown>>(TEMPLATE_KEY);
+    if (kept && key in kept) {
+      const { [key]: _gone, ...rest } = kept;
+      this.d.config!.setConfig(TEMPLATE_KEY, rest);
+    }
     this.d.changed();
   }
 
@@ -591,6 +791,8 @@ export class PosTill {
     this.d.db.run('DELETE FROM pos_catalogue');
     this.d.db.run('DELETE FROM pos_counters');
     this.memory.clear();
+    this.templates.clear();
+    this.d.config?.deleteConfig(TEMPLATE_KEY);
   }
 }
 
@@ -604,8 +806,9 @@ export function catalogueOf(data: Record<string, unknown>, have: PosCatalogue | 
   if (!Array.isArray(data.products)) return null;
   const cats = Array.isArray(data.categories) ? (data.categories as Array<Record<string, unknown>>) : [];
   const names = new Map(cats.map((c) => [str(c.id) ?? '', str(c.name) ?? ''] as const));
-  const products = (data.products as Array<Record<string, unknown>>).map((p) => productFromPos(p, names)).filter((p): p is PosProduct => !!p);
-  return {
+  const tree = categoryTreeOf(data.category_tree);
+  const products = (data.products as Array<Record<string, unknown>>).map((p) => productFromPos(p, names, tree.length > 0)).filter((p): p is PosProduct => !!p);
+  const out: PosCatalogue = {
     version: str(data.version) ?? hashOf(products),
     fetched_at,
     currency: str(data.currency),
@@ -614,6 +817,76 @@ export function catalogueOf(data: Record<string, unknown>, have: PosCatalogue | 
     products,
     truncated: data.truncated === true,
   };
+  // Phase 2, where the server sent them: the groups, the favourites and the tenders the till may offer.
+  if (tree.length) out.category_tree = tree;
+  if (Array.isArray(data.favourites)) out.favourites = (data.favourites as unknown[]).map((x) => num(x)).filter((x) => Number.isInteger(x) && x > 0).slice(0, 200);
+  const tenders = tenderOptionsOf(data.tenders);
+  if (tenders) out.tenders = tenders;
+  return out;
+}
+
+/** Tenders sent beside an unchanged catalogue still apply: they are the company's now. */
+export function withTenders(c: PosCatalogue, data: Record<string, unknown>): PosCatalogue {
+  const tenders = tenderOptionsOf(data.tenders);
+  return tenders ? { ...c, tenders } : c;
+}
+
+/** Codes that mean a manager's approval would lift the refusal. */
+export function needOf(code: string | null, message: string | null, ask: ReturnType<typeof approvalAskOf>, action: 'discount' | 'refund' | 'void', amount: number | null, subject: string | null = null): PosApprovalNeed | null {
+  if (!code || !POS_APPROVAL_CODES.has(code)) return null;
+  const a = ask ?? (amount !== null ? { action, amount, threshold: null, subject } : null);
+  if (!a) return null;
+  return { code, message: message ?? 'This needs a manager’s approval.', ask: { ...a, subject: a.subject ?? subject } };
+}
+
+/** What one of the counter's operations asks of the door. */
+export function deskCall(op: PosDeskOp, cashier: () => number): { method: 'GET' | 'POST'; path: string; body?: Record<string, unknown>; query?: Record<string, string | number | undefined> } {
+  switch (op.op) {
+    case 'tenders':
+      return { method: 'GET', path: 'tenders' };
+    case 'held':
+      return { method: 'GET', path: 'held' };
+    case 'park': {
+      const { op: _op, ...rest } = op;
+      return { method: 'POST', path: 'held', body: { cashier_id: cashier(), ...rest } };
+    }
+    case 'recall':
+      return { method: 'POST', path: `held/${op.id}/recall`, body: { cashier_id: cashier() } };
+    case 'discard':
+      return { method: 'POST', path: `held/${op.id}/discard`, body: { cashier_id: cashier() } };
+    case 'voucher':
+      return { method: 'GET', path: `vouchers/${op.code.toUpperCase()}` };
+    case 'credit':
+      return { method: 'GET', path: `store-credit/${op.client_id}` };
+    case 'approvers':
+      return { method: 'GET', path: 'approvers' };
+    case 'ask': {
+      const { op: _op, ...rest } = op;
+      return { method: 'POST', path: 'approval-requests', body: { cashier_id: cashier(), ...rest } };
+    }
+    case 'request':
+      return { method: 'GET', path: `approval-requests/${op.id}`, query: { cashier_id: cashier() } };
+    case 'cancel':
+      return { method: 'POST', path: `approval-requests/${op.id}/cancel`, body: { cashier_id: cashier() } };
+    case 'customers':
+      return { method: 'GET', path: 'customers', query: { q: op.q } };
+    case 'customer':
+      return { method: 'GET', path: `customers/${op.id}` };
+    case 'customerCreate': {
+      const { op: _op, ...rest } = op;
+      return { method: 'POST', path: 'customers', body: { cashier_id: cashier(), ...rest } };
+    }
+    case 'loyalty':
+      return { method: 'GET', path: 'loyalty' };
+    case 'topSellers':
+      return { method: 'GET', path: 'top-sellers', query: { limit: op.limit ?? 10 } };
+    case 'stock':
+      return { method: 'GET', path: 'stock', query: { ids: op.ids?.length ? op.ids.join(',') : undefined } };
+    case 'report':
+      return { method: 'GET', path: op.session_id ? `sessions/${op.session_id}/report` : 'session/report' };
+    case 'template':
+      return { method: 'GET', path: 'receipt-template' };
+  }
 }
 
 /** The till's own number for a refund or void of a sale: the next refund's, or the sale's one void. */
@@ -633,7 +906,8 @@ export function returnOf(v: unknown, kind: 'refund' | 'void', ref: string, at: s
     status: str(r.status) ?? 'done',
     amount: num(r.amount),
     cash_out: num(r.cash_out),
-    tenders: list(r.tenders).map((t) => ({ method: str(t.method) ?? 'other', amount: num(t.amount) })),
+    tenders: list(r.tenders).map((t) => ({ method: str(t.method) ?? 'other', amount: num(t.amount), ...(str(t.to) ? { to: str(t.to)! } : {}) })),
+    ...(str(r.refund_to) ? { refund_to: str(r.refund_to) } : {}),
     lines: list(r.lines).map((l) => ({ product_id: num(l.product_id) || null, quantity: num(l.quantity) })),
     reason: str(r.reason),
     credit_note: note,
@@ -653,7 +927,7 @@ export function receiptOf(v: unknown): PosServerReceipt | null {
   const t = obj(r.totals);
   const cust = r.customer && typeof r.customer === 'object' ? obj(r.customer) : null;
   return {
-    company: { name: str(co.name) ?? '', address: str(co.address), phone: str(co.phone), tax_number: str(co.tax_number) },
+    company: { name: str(co.name) ?? '', address: str(co.address), phone: str(co.phone), tax_number: str(co.tax_number), ...(str(co.email) ? { email: str(co.email) } : {}), ...(str(co.registration) ? { registration: str(co.registration) } : {}) },
     receipt_no,
     order_number: str(r.order_number),
     invoice_number: str(r.invoice_number),
@@ -673,7 +947,18 @@ export function receiptOf(v: unknown): PosServerReceipt | null {
     status: str(r.status) ?? 'paid',
     void_reason: str(r.void_reason),
     footer: str(r.footer) ?? '',
+    // Phase 2, additive: each only when sent.
+    ...(r.till && typeof r.till === 'object' && str(obj(r.till).code) ? { till: { code: str(obj(r.till).code)!, name: str(obj(r.till).name) ?? '' } } : {}),
+    ...(typeof r.tendered === 'number' ? { tendered: r.tendered } : {}),
+    ...(Array.isArray(r.promotions) ? { promotions: list(r.promotions).map((p) => ({ label: str(p.label) ?? '', amount: num(p.amount) })).filter((p) => p.label && p.amount) } : {}),
+    ...('loyalty' in r ? { loyalty: receiptLoyalty(r.loyalty) } : {}),
+    ...('template' in r ? { template: receiptTemplateOf(r.template) } : {}),
   };
+}
+
+function receiptLoyalty(v: unknown): PosServerReceipt['loyalty'] {
+  const l = loyaltyOf(v);
+  return l ? { tier: l.tier ?? null, earned: l.earned, redeemed: l.redeemed, balance: l.balance ?? null } : null;
 }
 
 /** The door's refusal as an error the screens show: WorkSuite's sentence, with a code that says what it was. */

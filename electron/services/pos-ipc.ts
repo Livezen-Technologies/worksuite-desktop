@@ -42,8 +42,9 @@ export interface PosDeps {
 
 export function createPos(d: PosDeps) {
   const desk = new PosDesk({ secrets: d.secrets, http: d.http, origin: d.origin, installId: d.installId, device: d.device, appVersion: d.appVersion });
-  const till = new PosTill({ db: d.db, vault: d.vault, http: d.http, desk, origin: d.origin, caps: d.caps, changed: d.changed });
-  const print = new PosPrint({ config: d.db, origin: d.origin });
+  const till = new PosTill({ db: d.db, vault: d.vault, http: d.http, desk, origin: d.origin, caps: d.caps, changed: d.changed, config: d.db });
+  // The company's receipt template (the till's door), when one is published: ESC/POS follows it.
+  const print = new PosPrint({ config: d.db, origin: d.origin, template: () => till.template() });
   const scopeOf = (origin: string | null, terminal: number | null | undefined) => (origin && terminal ? `${origin}|${terminal}` : null);
   const carts = new PosCartsStore({ config: d.db, vault: d.vault, scope: () => scopeOf(d.origin(), desk.pairing()?.terminal.id), keep: () => {
       try {
@@ -59,6 +60,8 @@ export function createPos(d: PosDeps) {
   };
   const installed = async (sender: WebContents) => (await listPrinters(BrowserWindow.fromWebContents(sender))).map((p) => p.name);
   const tillName = () => desk.pairing()?.terminal.name ?? null;
+  /** What a receipt by the company's template says of the till: its company and code. */
+  const tillOf = () => ({ till: tillName(), company: desk.pairing()?.terminal.org_name ?? null, code: desk.pairing()?.terminal.code ?? null });
 
   function register(router: IpcRouter): void {
     router.handle('pos:till', () => till.status());
@@ -70,7 +73,7 @@ export function createPos(d: PosDeps) {
       if (before && before.terminal.id !== input.terminal_id && till.pending() > 0) {
         throw new DesktopError('CONFLICT', `${till.pending()} sale(s) from ${before.terminal.name} have not reached WorkSuite yet. Send them, or forget this till, before pairing another.`);
       }
-      const r = await desk.pair(input.terminal_id, input.take_over === true);
+      const r = await desk.pair(input.terminal_id, input.take_over === true, input.device_name);
       if (before && origin && before.terminal.id !== input.terminal_id) {
         till.forgetTill(origin, before.terminal.id);
         carts.forget(scopeOf(origin, before.terminal.id)!);
@@ -79,7 +82,7 @@ export function createPos(d: PosDeps) {
       void till.sync();
       return { status: till.status(), message: r.message };
     });
-    router.handle('pos:forget', (input) => {
+    router.handle('pos:forget', async (input) => {
       const p = desk.pairing();
       const origin = d.origin();
       if (!p || !origin) return till.status();
@@ -87,6 +90,8 @@ export function createPos(d: PosDeps) {
       if (pending > 0 && input?.discard !== true) {
         throw new DesktopError('CONFLICT', `${pending} sale(s) have not reached WorkSuite yet. Forgetting the till drops them.`);
       }
+      // Phase 2 (`capabilities.device_unpair`): the till handed back on the server too, so it is free to pair again.
+      if (input?.unpair) await till.unpair();
       till.forgetTill(origin, p.terminal.id);
       carts.forget(scopeOf(origin, p.terminal.id)!);
       desk.forget();
@@ -106,10 +111,12 @@ export function createPos(d: PosDeps) {
       const cashier = d.cashier();
       if (!cashier) throw new DesktopError('NOT_SIGNED_IN', 'Sign in to sell.');
       const r = await till.sell(input, cashier);
+      // A manager's approval is needed first: nothing was sold, nothing is printed.
+      if ('needs' in r) return r;
       const cash = r.sale.tenders.some((t) => t.method === 'cash');
       let printed: PosPrintOutcome | null = null;
       try {
-        if (print.settings().auto_print) printed = await print.receipt(r.sale, await installed(c.sender), { till: tillName(), kick: cash });
+        if (print.settings().auto_print) printed = await print.receipt(r.sale, await installed(c.sender), { ...tillOf(), kick: cash });
         else if (cash && print.settings().drawer === 'printer') printed = await print.drawer(await installed(c.sender));
       } catch (e) {
         // The sale stands whatever the printer does; the screen offers a reprint.
@@ -140,7 +147,7 @@ export function createPos(d: PosDeps) {
         });
         if (r) return print.serverReceipt(r, printers, { till: tillName(), reprint });
       }
-      return print.receipt(sale, printers, { till: tillName(), reprint });
+      return print.receipt(sale, printers, { ...tillOf(), reprint });
     });
     router.handle('pos:receipt', async (input) => {
       guard();
@@ -176,6 +183,20 @@ export function createPos(d: PosDeps) {
     router.handle('pos:cartsSave', (input) => {
       guard();
       return carts.save(input);
+    });
+    router.handle('pos:desk', (input) => {
+      guard();
+      return till.desk(input, d.cashier());
+    });
+    router.handle('pos:approve', (input) => {
+      guard();
+      const cashier = d.cashier();
+      if (!cashier) throw new DesktopError('NOT_SIGNED_IN', 'Sign in to ask for a manager’s approval.');
+      return till.approve(input, cashier);
+    });
+    router.handle('pos:rename', (input) => {
+      guard();
+      return till.rename(input.device_name);
     });
   }
 

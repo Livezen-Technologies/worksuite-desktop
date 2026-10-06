@@ -26,6 +26,12 @@ const input = (over: Partial<PosSellInput> = {}): PosSellInput => ({
   ...over,
 });
 
+/** A sale WorkSuite took (not one waiting for a manager's approval). */
+function made<T extends object>(r: T): Exclude<T, { needs: unknown }> {
+  if ('needs' in r) throw new Error('A manager’s approval was asked for.');
+  return r as Exclude<T, { needs: unknown }>;
+}
+
 let n = 0;
 const queued = (over: Partial<PosSale> = {}): Queued => {
   n++;
@@ -157,8 +163,8 @@ const offline: Door = async () => {
 describe('POS till: selling, keeping and sending', () => {
   it('numbers each sale, seals it, and sends it at once', async () => {
     const { till, db, sent } = service();
-    const a = await till.sell(input(), cashier);
-    const b = await till.sell(input(), cashier);
+    const a = made(await till.sell(input(), cashier));
+    const b = made(await till.sell(input(), cashier));
 
     expect(a.sale.ref).toBe('T1-AAAAAA-000001');
     expect(b.sale.ref).toBe('T1-AAAAAA-000002');
@@ -174,8 +180,8 @@ describe('POS till: selling, keeping and sending', () => {
   it('keeps selling with WorkSuite out of reach, and sends in order, once, when it is back', async () => {
     let door: Door = offline;
     const s = service({ door: (p, b) => door(p, b) });
-    const first = await s.till.sell(input(), cashier);
-    const second = await s.till.sell(input({ priced_by: 'estimate' }), cashier);
+    const first = made(await s.till.sell(input(), cashier));
+    const second = made(await s.till.sell(input({ priced_by: 'estimate' }), cashier));
     expect(first).toMatchObject({ queued: true, sale: { state: 'waiting' } });
     expect(second.queued).toBe(true);
     expect(s.till.status()).toMatchObject({ waiting: 2, reachable: false });
@@ -209,7 +215,7 @@ describe('POS till: selling, keeping and sending', () => {
   it('keeps a sale refused later with the reason, to send again or drop', async () => {
     let door: Door = offline;
     const s = service({ door: (p, b) => door(p, b) });
-    const { sale } = await s.till.sell(input(), cashier);
+    const { sale } = made(await s.till.sell(input(), cashier));
     door = async (p, b) => (p === 'heartbeat' ? { status: 200, body: {} } : { status: 422, body: { results: (b as { sales: Array<{ ref: string }> }).sales.map((x) => ({ ref: x.ref, status: 'rejected', message: 'That register was closed.' })) } });
     await s.till.sync();
     expect(s.till.sale(sale.ref)).toMatchObject({ state: 'refused', message: 'That register was closed.' });
@@ -224,7 +230,7 @@ describe('POS till: selling, keeping and sending', () => {
   it('keeps a sale refused for its drawer with the code, and sends it again only into the register open now', async () => {
     let door: Door = offline;
     const s = service({ door: (p, b) => door(p, b) });
-    const { sale } = await s.till.sell(input(), cashier);
+    const { sale } = made(await s.till.sell(input(), cashier));
     const closed = 'That register was closed before this sale was made. Open a register and send the sale again, or record it on the web.';
     door = async (p, b) => (p === 'heartbeat' ? { status: 200, body: {} } : { status: 422, body: { results: (b as { sales: Array<{ ref: string }> }).sales.map((x) => ({ ref: x.ref, status: 'rejected', code: 'drawer_closed', message: closed })) } });
     await s.till.sync();
@@ -244,7 +250,7 @@ describe('POS till: selling, keeping and sending', () => {
   it('drops a sale refused because its session is another till’s', async () => {
     let door: Door = offline;
     const s = service({ door: (p, b) => door(p, b) });
-    const { sale } = await s.till.sell(input(), cashier);
+    const { sale } = made(await s.till.sell(input(), cashier));
     door = async (p, b) => (p === 'heartbeat' ? { status: 200, body: {} } : { status: 422, body: { results: (b as { sales: Array<{ ref: string }> }).sales.map((x) => ({ ref: x.ref, status: 'rejected', code: 'session_not_here', message: 'The register session this sale names is not at this till.' })) } });
     await s.till.sync();
     expect(s.till.sale(sale.ref)).toMatchObject({ state: 'refused', code: 'session_not_here' });
@@ -265,7 +271,7 @@ describe('POS till: selling, keeping and sending', () => {
     await expect(service({ usable: false }).till.sell(input(), cashier)).rejects.toMatchObject({ code: 'PERMISSION_DENIED' });
     const s = service({ door: offline, queue: 'disabled' });
     // The first sale finds WorkSuite gone: it is kept (money was taken), never thrown away.
-    expect((await s.till.sell(input(), cashier)).queued).toBe(true);
+    expect((made(await s.till.sell(input(), cashier))).queued).toBe(true);
     await expect(s.till.sell(input(), cashier)).rejects.toMatchObject({ code: 'POLICY_DENIED' });
   });
 
@@ -274,9 +280,9 @@ describe('POS till: selling, keeping and sending', () => {
     await s.till.sell(input(), cashier);
     await s.till.sell(input(), cashier);
     s.db.run('DELETE FROM pos_sales');
-    expect((await s.till.sell(input(), cashier)).sale.ref).toBe('T1-AAAAAA-000003');
+    expect((made(await s.till.sell(input(), cashier))).sale.ref).toBe('T1-AAAAAA-000003');
     s.db.run('DELETE FROM pos_counters');
-    expect((await s.till.sell(input(), cashier)).sale.ref).toBe('T1-AAAAAA-000004');
+    expect((made(await s.till.sell(input(), cashier))).sale.ref).toBe('T1-AAAAAA-000004');
   });
 
   it('lists a session’s sales, and forgets a till’s sales and copy', async () => {
@@ -339,11 +345,13 @@ describe('POS till: the catalogue', () => {
     expect(s.till.catalogue()).toMatchObject({ version: 'abc', source: 'pos', products: [{ id: 9, category: 'Tea' }] });
     expect(request).not.toHaveBeenCalled();
     await s.till.sync();
-    expect(other).toHaveBeenCalledTimes(1);
+    // The catalogue (the receipt template is asked for beside it).
+    const asked = () => other.mock.calls.filter((c) => c[1] === 'catalogue');
+    expect(asked()).toHaveLength(1);
     s.tick(31 * 60_000);
     await s.till.sync();
-    expect(other).toHaveBeenCalledTimes(2);
-    expect(other.mock.calls[1]![2]).toEqual({ query: { since_version: 'abc' } });
+    expect(asked()).toHaveLength(2);
+    expect(asked()[1]![2]).toEqual({ query: { since_version: 'abc' } });
     expect(s.till.catalogue()?.fetched_at).toBe('2026-09-30T08:31:00.000Z');
   });
 
@@ -378,7 +386,7 @@ describe('POS till: the catalogue', () => {
 describe('POS till: after the sale', () => {
   const sold = async (other?: AnyDoor) => {
     const s = service({ other });
-    const { sale } = await s.till.sell(input({ lines: [...input().lines, { product_id: 3, code: 'MUG', name: 'Mug', quantity: 1, unit_price: 100, discount_pct: 0, tax_rate: 0, net: 100, tax: 0, total: 100 }] }), cashier);
+    const { sale } = made(await s.till.sell(input({ lines: [...input().lines, { product_id: 3, code: 'MUG', name: 'Mug', quantity: 1, unit_price: 100, discount_pct: 0, tax_rate: 0, net: 100, tax: 0, total: 100 }] }), cashier));
     return { ...s, sale };
   };
   const refundAnswer = (ref: string, over: Record<string, unknown> = {}) => ({
@@ -424,7 +432,7 @@ describe('POS till: after the sale', () => {
   it('refunds some lines through the door with the cashier named, under the till’s own number, and keeps the answer', async () => {
     const other = vi.fn<AnyDoor>(async (_m, _p, o) => refundAnswer(String((o?.body as { ref: string }).ref)));
     const s = await sold(other);
-    const r = await s.till.giveBack({ ref: s.sale.ref, kind: 'refund', reason: 'Damaged', lines: [{ product_id: 9, quantity: 2 }] }, { id: 5 });
+    const r = made(await s.till.giveBack({ ref: s.sale.ref, kind: 'refund', reason: 'Damaged', lines: [{ product_id: 9, quantity: 2 }] }, { id: 5 }));
     expect(other.mock.calls[0]!.slice(0, 2)).toEqual(['POST', `sales/${s.sale.ref}/refund`]);
     expect(other.mock.calls[0]![2]).toEqual({ body: { ref: `${s.sale.ref}-R1`, cashier_id: 5, reason: 'Damaged', lines: [{ product_id: 9, quantity: 2 }] } });
     expect(r.refund).toMatchObject({ ref: `${s.sale.ref}-R1`, amount: 900, cash_out: 900, tenders: [{ method: 'cash', amount: 900 }], credit_note: 'CN-4', lines: [{ product_id: 9, quantity: 2 }] });
@@ -461,7 +469,7 @@ describe('POS till: after the sale', () => {
     const s = await sold(other);
     await expect(s.till.giveBack({ ref: s.sale.ref, kind: 'void', reason: 'Wrong till' }, { id: 5 })).rejects.toMatchObject({ code: 'PERMISSION_DENIED', message: 'Kasun may not void a sale.' });
     await expect(s.till.giveBack({ ref: s.sale.ref, kind: 'void', reason: 'Wrong till' }, { id: 5 })).rejects.toMatchObject({ code: 'CONFLICT', message: 'That session has closed; refund the sale instead.' });
-    const r = await s.till.giveBack({ ref: s.sale.ref, kind: 'void', reason: 'Wrong till', lines: [{ product_id: 9, quantity: 1 }] }, { id: 5 });
+    const r = made(await s.till.giveBack({ ref: s.sale.ref, kind: 'void', reason: 'Wrong till', lines: [{ product_id: 9, quantity: 1 }] }, { id: 5 }));
     expect(other.mock.calls[2]![2]).toEqual({ body: { ref: `${s.sale.ref}-V`, cashier_id: 5, reason: 'Wrong till' } });
     expect(r.sale.voided).toBe(true);
     await expect(s.till.giveBack({ ref: s.sale.ref, kind: 'refund', reason: 'Again' }, { id: 5 })).rejects.toMatchObject({ code: 'CONFLICT' });
@@ -469,7 +477,7 @@ describe('POS till: after the sale', () => {
 
   it('gives nothing back for a sale WorkSuite does not have yet', async () => {
     const s = service({ door: offline });
-    const { sale } = await s.till.sell(input(), cashier);
+    const { sale } = made(await s.till.sell(input(), cashier));
     await expect(s.till.giveBack({ ref: sale.ref, kind: 'refund', reason: 'Damaged' }, { id: 5 })).rejects.toMatchObject({ code: 'CONFLICT' });
     await expect(s.till.serverReceipt(sale.ref)).rejects.toMatchObject({ code: 'CONFLICT' });
     expect(returnRef({ ...sale, returns: [] }, 'refund')).toBe(`${sale.ref}-R1`);
