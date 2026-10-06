@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import {
   assignField,
   checkFile,
@@ -33,6 +33,7 @@ import {
   withField,
   withOperator,
 } from '../../../src/modules/marketing/lib/segment';
+import { setRegional } from '../../../src/core/time';
 
 /**
  * Marketing · segments and CSV import (WS-MKT-SRS-001 MKT-SEG-01, MKT-IMP-01..03, MKT-AUD-02): the rule model the
@@ -40,6 +41,10 @@ import {
  */
 
 const BOM = String.fromCharCode(0xfeff);
+
+// Dates and times follow the reader's regional settings (core/time); these read as a Sri Lankan, en-GB, 24-hour reader's.
+beforeAll(() => setRegional({ locale: 'en-GB', timeFormat: '24', timezone: 'Asia/Colombo' }));
+afterAll(() => setRegional({}));
 
 describe('CSV parsing (RFC 4180)', () => {
   it('reads plain rows and ignores the trailing empty line', () => {

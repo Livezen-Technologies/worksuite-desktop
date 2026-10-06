@@ -170,7 +170,23 @@ Because the controllers were not readable, check these on a server with the Mark
 
 A path spelled differently shows "isn't offered by this WorkSuite server yet" on that screen, never wrong data.
 
-## 6. Not in this change
+## 6. Where the desktop departs from the design, and why
+
+- **Next contact** is Alt+Ctrl/⌘+N, not Ctrl+Shift+N: that key is already *Move Tab to New Window* (§3).
+- **No "Softphone registered" chip and no call timer on the agent's card** (DK11, D01): the softphone's state belongs
+  to the Phone and its own call screens; the card has the Phone's Call button and says "Calling via WorkSuite Phone"
+  when the person has the Phone, or to dial on their own phone otherwise.
+- **"Phone consent: consented"** rather than "verbal 30 Sep": a contact's record carries its consent state, not the
+  basis and date of the last ledger row; the ledger tab has them.
+- **Additions the design does not draw:** Active / Archived contacts (archived ones can be found and restored); a
+  Table view of the weekly delivery chart; the contact's local time and callback note on a claim; the import preview
+  filtered by result and paged; suppressed rows marked in it; legacy and UTF-16 files refused before upload.
+- **Planned marks appear only after the server says so** (rejected-rows download, snapshots, version history,
+  approvals, analytics, journeys): until asked, the desktop cannot know whether this server offers them.
+- **Placeholders the design fills with sample data stay empty here:** the preference-centre preview shows the real
+  public topics, never a made-up contact; journeys show the planned example captioned as such.
+
+## 7. Not in this change
 
 - **The web screens** (W01–W13, R01) and the **public preference centre** (P01) — `Livezen-Technologies/worksuite`.
 - **WorkSuite Mobile** (M01, MKT-MOB-01) — `worksuite-mobile`.

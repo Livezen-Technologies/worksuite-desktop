@@ -14,6 +14,34 @@ import { count } from './lib/format';
  * blocked/suppressed, violet scheduled/planned), honest states (not offered by this server, planned) and tables.
  */
 
+/**
+ * A part's own classes with the caller's on top. Tailwind orders utilities of the same property by value, not by where
+ * they are written, so `px-0` cannot beat a part's `px-4` by coming later: a caller's width, height, padding, gap,
+ * background or border colour replaces the part's own instead.
+ */
+const REPLACES: ReadonlyArray<readonly [RegExp, RegExp]> = [
+  [/^w-/, /^w-/],
+  [/^min-w-/, /^min-w-/],
+  [/^max-w-/, /^max-w-/],
+  [/^h-/, /^h-/],
+  [/^min-h-/, /^min-h-/],
+  [/^p-/, /^p-/],
+  [/^px-/, /^(p|px)-/],
+  [/^py-/, /^(p|py)-/],
+  [/^pt-/, /^(p|py|pt)-/],
+  [/^pb-/, /^(p|py|pb)-/],
+  [/^gap-/, /^gap-/],
+  [/^bg-/, /^bg-/],
+  [/^border-(line|transparent|primary|danger|warning|success)\b/, /^border-(line|transparent|primary|danger|warning|success)\b/],
+];
+
+export function over(base: string, extra?: string | false | null): string {
+  if (!extra) return base;
+  const mine = extra.split(/\s+/).filter(Boolean);
+  const kept = base.split(/\s+/).filter((b) => !REPLACES.some(([own, theirs]) => own.test(b) && mine.some((m) => theirs.test(m))));
+  return [...kept, ...mine].join(' ');
+}
+
 /** Keys, IDs, numbers and merge tags (system mono in the design). */
 export function Mono({ children, className }: { children: ReactNode; className?: string }) {
   return <span className={cx('font-mono tabular-nums', className)}>{children}</span>;
@@ -38,7 +66,7 @@ export function PageHeader({ crumb, title, sub, actions, back }: { crumb?: React
 
 /** The scroll area under a page head. */
 export function PageBody({ children, className }: { children: ReactNode; className?: string }) {
-  return <div className={cx('min-h-0 flex-1 overflow-y-auto bg-ground p-5 scroll-thin', className)}>{children}</div>;
+  return <div className={over('min-h-0 flex-1 overflow-y-auto bg-ground p-5 scroll-thin', className)}>{children}</div>;
 }
 
 export function Panel({ title, sub, action, children, className, bodyClassName }: { title?: ReactNode; sub?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string }) {
@@ -53,7 +81,7 @@ export function Panel({ title, sub, action, children, className, bodyClassName }
           {action}
         </header>
       ) : null}
-      <div className={cx('min-h-0 flex-1 px-4 pb-4', bodyClassName)}>{children}</div>
+      <div className={over('min-h-0 flex-1 px-4 pb-4', bodyClassName)}>{children}</div>
     </section>
   );
 }
@@ -210,7 +238,7 @@ export const TD = 'px-3 py-2.5 align-middle text-[12.5px] text-ink';
 
 export function Table({ head, children, className, label }: { head: ReactNode; children: ReactNode; className?: string; label?: string }) {
   return (
-    <div className={cx('overflow-x-auto rounded-[12px] border border-line bg-surface scroll-thin', className)}>
+    <div className={over('overflow-x-auto rounded-[12px] border border-line bg-surface scroll-thin', className)}>
       <table className="w-full border-collapse" aria-label={label}>
         <thead className="border-b border-line bg-subtle/50">{head}</thead>
         <tbody className="divide-y divide-line">{children}</tbody>
@@ -244,11 +272,17 @@ export function Pager({ page, pages, total, perPage, onPage }: { page: number; p
  * Form pieces
  * ------------------------------------------------------------------------ */
 
-export const INPUT = 'h-9 w-full rounded-[8px] border border-line bg-surface px-3 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-primary disabled:opacity-60';
+/** A field: red while `aria-invalid` (a variant, so it wins over the border colour whatever else is set). */
+export const INPUT = 'h-9 w-full rounded-[8px] border border-line bg-surface px-3 text-[13px] text-ink outline-none transition-colors placeholder:text-ink-3 focus:border-primary disabled:opacity-60 aria-[invalid=true]:border-danger';
+
+/** INPUT with a caller's own width, height or padding (a raw `<input>` or `<select>`). */
+export function inputClass(extra?: string | false | null): string {
+  return over(INPUT, extra);
+}
 
 export function Field({ label, hint, error, children, className }: { label: ReactNode; hint?: ReactNode; error?: string | null; children: ReactNode; className?: string }) {
   return (
-    <label className={cx('flex min-w-0 flex-col gap-1', className)}>
+    <label className={over('flex min-w-0 flex-col gap-1', className)}>
       <span className="text-[12px] font-semibold text-ink-2">{label}</span>
       {children}
       {error ? <span className="text-[11.5px] text-danger">{error}</span> : hint ? <span className="text-[11.5px] text-ink-3">{hint}</span> : null}
@@ -257,11 +291,11 @@ export function Field({ label, hint, error, children, className }: { label: Reac
 }
 
 export function Input({ className, ...rest }: InputHTMLAttributes<HTMLInputElement>) {
-  return <input {...rest} className={cx(INPUT, className)} />;
+  return <input {...rest} className={over(INPUT, className)} />;
 }
 
 export function TextArea({ className, ...rest }: TextareaHTMLAttributes<HTMLTextAreaElement>) {
-  return <textarea {...rest} className={cx('min-h-[80px] w-full rounded-[8px] border border-line bg-surface px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-primary disabled:opacity-60', className)} />;
+  return <textarea {...rest} className={over('min-h-[80px] w-full rounded-[8px] border border-line bg-surface px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-primary disabled:opacity-60 aria-[invalid=true]:border-danger', className)} />;
 }
 
 /* ------------------------------------------------------------------------ *

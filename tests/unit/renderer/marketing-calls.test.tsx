@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
 vi.mock('sip.js', () => ({ Invitation: class {}, Inviter: class {}, Registerer: class {}, RegistererState: {}, SessionState: {}, UserAgent: { makeURI: () => undefined } }));
@@ -29,6 +29,7 @@ import CallCampaignEditor, { draftOf, inputOf, problemsOf } from '../../../src/m
 import { audienceLabel, callStatus } from '../../../src/modules/marketing/calls/CallCampaigns';
 import Queue, { callbackStamp, dueToday, FRESH_WRAP, fillScript, firstName, outcomeInputOf, outcomeMessage, scriptParts } from '../../../src/modules/marketing/calls/Queue';
 import { sectionsOf } from '../../../src/modules/marketing/calls/Scripts';
+import { setRegional } from '../../../src/core/time';
 
 /**
  * Call campaigns and the agent's workspace (WS-MKT-SRS-001 MKT-CAL, WF-12/13): the ten outcomes, the B-5 refusal
@@ -156,6 +157,10 @@ beforeEach(() => {
 });
 
 afterEach(() => cleanup());
+
+// Dates and times follow the reader's regional settings (core/time); these read as a Sri Lankan, en-GB, 24-hour reader's.
+beforeAll(() => setRegional({ locale: 'en-GB', timeFormat: '24', timezone: 'Asia/Colombo' }));
+afterAll(() => setRegional({}));
 
 describe('outcomes and the wrap-up', () => {
   it('has ten unique outcomes, and a callback needs its time', () => {

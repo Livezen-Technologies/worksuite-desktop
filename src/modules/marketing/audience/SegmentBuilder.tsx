@@ -49,7 +49,7 @@ import {
   type SegmentField,
 } from '../lib/segment';
 import { useMarketingOrg } from '../org';
-import { Bar, Field, Input, INPUT, Loaded, Notice, OptionalView, PageBody, PageHeader, Panel, Planned, Refused, TD, TH, Table, useAction } from '../parts';
+import { Bar, Field, Input, inputClass, Loaded, Notice, OptionalView, PageBody, PageHeader, Panel, Planned, Refused, TD, TH, Table, useAction } from '../parts';
 
 /**
  * DK04 · Segment builder (W04; MKT-SEG-01..05, MKT-SEG-08; WF-04). A segment is up to 20 rules over 19 fields, all or
@@ -406,7 +406,7 @@ function RuleRow({
   if (field && kind === 'days') {
     input = <NumberField value={value} onValueChange={set} min={1} max={MAX_DAYS} unit="days" size="sm" width={124} invalid={flagged} aria-label={label} />;
   } else if (field && kind === 'date') {
-    input = <input type="date" value={value} onChange={(e) => set(e.target.value)} aria-label={label} aria-invalid={flagged || undefined} className={cx(INPUT, 'w-[160px] font-mono', flagged && 'border-danger')} />;
+    input = <input type="date" value={value} onChange={(e) => set(e.target.value)} aria-label={label} aria-invalid={flagged || undefined} className={inputClass('w-[160px] font-mono')} />;
   } else if (field && kind === 'option') {
     input = <Select value={value} onValueChange={set} options={field.options ?? []} placeholder="Choose a value" aria-label={label} className="min-w-[150px] flex-[2]" />;
   } else if (field && kind === 'ref') {
@@ -423,7 +423,7 @@ function RuleRow({
         aria-label={label}
         aria-invalid={flagged || undefined}
         placeholder={field?.type === 'tag' ? 'Tag' : 'Value'}
-        className={cx(INPUT, 'min-w-[140px] flex-[2] basis-[140px] font-mono', flagged && 'border-danger')}
+        className={inputClass('min-w-[140px] flex-[2] basis-[140px] font-mono')}
       />
     );
   }
