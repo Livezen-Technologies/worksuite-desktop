@@ -518,6 +518,9 @@ to the as-built `/api/tickets` (list, show, reply, status, assign, take, agents)
 | D-02 drafts (FR-CRT-10) | Partial | The draft — text, mode, CC, status, files, mentions — kept encrypted on this computer per ticket ("Draft saved 09:47"), shared by the reading pane and the tab. Not on the server: the API has no drafts |
 | D-02 remote (FR-WSP-08, WF-13) | Done | RustDesk ID with Connect: `rustdesk://connect/<id>` only, checked again in the main process (`hardening.ts` `rustDeskId`); the server's RustDesk settings copied for the client's Import server config |
 | D-02 collision (FR-COM-11) | Done | `presence.tsx`: viewing on opening and every 30 s, typing a reply or a note, `left` when the tab closes or goes behind another; "Nimal is typing a note…" |
+| D-03 native notifications (FR-DSK-02, FR-NTF-01/03, FR-SLA-05) | Done | `electron/services/support-notices.ts` through `NotificationService` (`claim`, `CustomNotice`): assignment (Open, Take later), requester reply (Open, Mark read, inline public reply on macOS/Windows), mention from the ticket hint (inline note), SLA warning/breach (Open, Snooze 10 min, stays). Worded from the ticket read with `peek`; the notification's own words without it |
+| D-03 per-event settings, quiet hours, digest (FR-NTF-03/06) | Done | Notification settings › Support (`notifications/SupportPrefs.tsx`): In app per event (the server's `event:` choices), banner and sound here, SLA banners that stay, low priority as an hourly digest; quiet hours (this computer's do-not-disturb) silence them except an urgent ticket's |
+| D-03 badge (FR-DSK-04) | Done | `GET badges` `unread` on the Support rail icon, the Dock/taskbar and the tray (line and tooltip); the bell's support notifications are left out of the Dock count so a ticket counts once. No CSAT notification: the server raises none |
 
 ## Devices, security, updates (SEC, UPD)
 

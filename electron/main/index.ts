@@ -66,6 +66,7 @@ import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
+import { SupportNotices } from '../services/support-notices';
 import { WebchatRinger, announceEvent, ringerHeight } from '../services/webchat-ring';
 import { SystemFocus } from '../services/system-focus';
 import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '../services/live-desk';
@@ -1148,6 +1149,27 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   setLinkHandler(handleDeepLink);
 
+  // Support's banners and count (WS-SUPPORT-SRS-001 D-03, FR-DSK-02/04): the desk's notifications with their own buttons.
+  const supportNotices = new SupportNotices({
+    http,
+    notify: (n) => notifications.notify(n),
+    markRead: (ids) => notifications.markRead(ids),
+    me: () => Number(sessionCtl.userId()) || null,
+    enabled: () => canOpenApp('support', sessionCtl.visibleApps()),
+    prefs: () => settings.effective(),
+    open: (link) => notifications.onClick(link, 'support'),
+    refused: (ticketId, text, mode, error) => {
+      const me = sessionCtl.userId();
+      // Kept as the ticket's draft, where its composer finds it (modules/support/Composer.tsx).
+      if (me) queue.saveDraft(me, 'support', `ticket:${ticketId}`, { body: text, mode });
+      openLink(`/tickets?ticket=${ticketId}`);
+      broadcast('toast', { kind: 'error', text: `Your ${mode === 'note' ? 'note' : 'reply'} was not sent: ${error} It is in the ticket's message box to send again.` });
+    },
+    onChanged: () => emitStatus(),
+  });
+  notifications.claim = (n) => supportNotices.claim(n);
+  notifications.onRefresh = () => void supportNotices.refreshBadges();
+
   // ── status ─────────────────────────────────────────────────────────────
   let statusTimer: NodeJS.Timeout | null = null;
   // Visitors waiting on me in my website chats (#230), from the ringer: on the Dock and taskbar badge.
@@ -1156,10 +1178,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   let ringingCount = 0;
   const snapshot = (): StatusSnapshot => {
     const uid = sessionCtl?.userId();
-    const raw = notifications.counts();
+    const { supportNotices: supportBell, ...raw } = notifications.counts();
+    const support = supportNotices.count();
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
-    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0 };
+    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -1194,6 +1217,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         unreadChat: s.unread.chat + (s.unread.webchat ?? 0),
         unreadMail: s.unread.mail,
         unreadOther: s.unread.notifications,
+        unreadSupport: s.unread.support ?? 0,
+        unreadSupportNotices: s.unread.supportNotices ?? 0,
         badge: settings.effective().badgeCount !== false,
         notificationsPausedUntil: s.notificationsPausedUntil,
       });
@@ -1215,6 +1240,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   }
   realtime.onEvent = (e) => {
     notifications.handleRealtime(e);
+    supportNotices.handle(e);
     webchat.handle(e);
     calls.handle(e);
     aiPending.handle(e as { type?: string });
@@ -1886,6 +1912,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     setExternalAllowList([new URL(auth.getServer()!.origin).hostname]);
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
+    supportNotices.start();
     webchat.start();
     livePulse.start();
     syncQuickAsk();
@@ -1958,6 +1985,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void localAI.signedOut();
     realtime.stop();
     notifications.stop();
+    supportNotices.stop();
     device.stop();
     transfers.stopAll();
     sync.stop();

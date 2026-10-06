@@ -140,6 +140,8 @@ const customProfileSchema = z.object({
   tintColor: hexColour.nullable().optional(),
 });
 
+const supportNoticeChoice = z.object({ banner: z.boolean(), sound: z.boolean() });
+
 const bandwidthLimitSchema = z.object({ on: z.boolean(), value: z.number().positive().max(1_000_000), unit: z.enum(['KB', 'MB']) });
 
 export const preferencesPatchSchema = z
@@ -217,6 +219,17 @@ export const preferencesPatchSchema = z
     shortcuts: z.record(z.string().max(64), z.string().max(64)),
     backgroundServices: z.object({ notifications: z.boolean(), realtime: z.boolean() }),
     webchatRinging: z.object({ window: z.boolean(), duringDnd: z.enum(['card', 'at_risk', 'ring']), shortcut: z.boolean(), volume: z.number().int().min(0).max(100), ringOn: z.enum(['both', 'default']).optional(), liveShortcuts: z.boolean().optional() }),
+    // Notification settings › Support (WS-SUPPORT-SRS-001 D-03): each kind's banner and sound here.
+    supportNotices: z
+      .object({
+        assigned: supportNoticeChoice,
+        reply: supportNoticeChoice,
+        mention: supportNoticeChoice,
+        sla: supportNoticeChoice,
+        slaPersistent: z.boolean(),
+        lowPriority: z.enum(['banner', 'digest']),
+      })
+      .partial(),
     webchatFollowUps: z.object({ card: z.boolean(), desktop: z.boolean(), sound: z.boolean(), idleMinutes: z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]) }),
     ai: z.object({
       quickAsk: z.boolean(),

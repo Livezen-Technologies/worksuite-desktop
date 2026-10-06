@@ -1,6 +1,7 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect } from 'react';
 import type { TicketShow } from '@shared/support';
+import { call } from '../../core/bridge';
 import { K, markRead } from './api';
 
 /**
@@ -29,6 +30,8 @@ export function useMarkRead(id: number | null, show: (TicketShow & { offline?: b
           void qc.invalidateQueries({ queryKey: K.lists });
           void qc.invalidateQueries({ queryKey: ['support', 'views'] });
           void qc.invalidateQueries({ queryKey: K.badges });
+          // And the rail's, the Dock's and the tray's count, which the main process keeps (support-notices.ts).
+          void call('notifications:refresh').catch(() => undefined);
         },
         () => undefined,
       );

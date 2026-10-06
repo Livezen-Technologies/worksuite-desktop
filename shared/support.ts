@@ -881,3 +881,79 @@ export function legacyMeta(): Meta {
     legacy: true,
   };
 }
+
+/* ── native notifications (D-03) ────────────────────────────────────────── */
+
+/**
+ * The kinds of support banner (D-03, FR-DSK-02): a ticket assigned to me, a requester writing again on one of mine, a
+ * mention in a note, an SLA about to be missed or missed. Each has its own buttons and its own settings.
+ */
+export const SUPPORT_NOTICE_KINDS = ['assigned', 'reply', 'mention', 'sla'] as const;
+export type SupportNoticeKind = (typeof SUPPORT_NOTICE_KINDS)[number];
+
+export interface SupportNoticeChoice {
+  /** A banner on this computer. */
+  banner: boolean;
+  /** With a sound, when the app's sounds are on. */
+  sound: boolean;
+}
+
+/** This computer's choices for Support's banners (Notification settings › Support). */
+export interface SupportNoticePrefs {
+  assigned: SupportNoticeChoice;
+  reply: SupportNoticeChoice;
+  mention: SupportNoticeChoice;
+  sla: SupportNoticeChoice;
+  /** An SLA's banner stays on screen until it is acted on (FR-SLA-05). */
+  slaPersistent: boolean;
+  /** A low-priority ticket's banners: one by one, or gathered into one at the top of the hour (FR-NTF-06). */
+  lowPriority: 'banner' | 'digest';
+}
+
+/** As the design has them: assignment with a sound, a reply with a sound (and a reply box), a mention quietly, an SLA kept. */
+export const SUPPORT_NOTICE_DEFAULTS: SupportNoticePrefs = {
+  assigned: { banner: true, sound: true },
+  reply: { banner: true, sound: true },
+  mention: { banner: true, sound: false },
+  sla: { banner: true, sound: true },
+  slaPersistent: true,
+  lowPriority: 'digest',
+};
+
+/** The choices made, with the defaults for the rest (a choice saved before a kind existed takes its default). */
+export function supportNoticePrefs(p: Partial<SupportNoticePrefs> | null | undefined): SupportNoticePrefs {
+  const d = SUPPORT_NOTICE_DEFAULTS;
+  const one = (k: SupportNoticeKind): SupportNoticeChoice => ({ ...d[k], ...(p?.[k] ?? {}) });
+  return {
+    assigned: one('assigned'),
+    reply: one('reply'),
+    mention: one('mention'),
+    sla: one('sla'),
+    slaPersistent: typeof p?.slaPersistent === 'boolean' ? p.slaPersistent : d.slaPersistent,
+    lowPriority: p?.lowPriority === 'banner' || p?.lowPriority === 'digest' ? p.lowPriority : d.lowPriority,
+  };
+}
+
+/** The server's notification events each kind stands for: their own In app choice. A mention has none (it is the hint's). */
+export const SUPPORT_NOTICE_EVENTS: Record<SupportNoticeKind, readonly string[]> = {
+  assigned: ['support.ticket_assigned'],
+  reply: ['support.customer_replied'],
+  mention: [],
+  sla: ['support.sla_warning', 'support.sla_breach'],
+};
+
+/** The kind of banner a server notification about the desk is, by its event; null for any other. */
+export function supportNoticeKind(event: string | null | undefined): SupportNoticeKind | null {
+  for (const k of SUPPORT_NOTICE_KINDS) if (event && SUPPORT_NOTICE_EVENTS[k].includes(event)) return k;
+  return null;
+}
+
+/** The ticket a WorkSuite link names: the web's `/tickets?ticket=12`, or the desktop's `/support/ticket/12`. */
+export function ticketIdOfLink(link: string | null | undefined): number | null {
+  if (!link) return null;
+  const web = /^\/tickets\/?\?(?:[^#]*&)?ticket=(\d{1,18})(?:[&#]|$)/.exec(link);
+  if (web) return ticketIdOf(web[1]!);
+  if (!link.startsWith(SUPPORT_ROUTE)) return null;
+  const r = parseSupportRoute(link);
+  return r.kind === 'ticket' ? ticketIdOf(r.key) : null;
+}

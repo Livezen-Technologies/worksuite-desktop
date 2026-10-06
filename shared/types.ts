@@ -3,6 +3,7 @@ import type { ItemLink, ItemSource } from './item-links';
 import type { LinkPrefs } from './link-prefs';
 import type { MailMediaPrefs } from './mail-media';
 import type { ConnectionStats } from './connection';
+import type { SupportNoticePrefs } from './support';
 /**
  * Types shared by the main process and the renderer. Everything crossing the
  * IPC boundary is described here and validated by the zod schemas in
@@ -326,6 +327,8 @@ export interface Preferences {
   webchatRinging: WebchatRingPrefs;
   /** When a visitor writes again in a chat I have and I am away from it (worksuite-desktop#230). Unset: the defaults. */
   webchatFollowUps?: WebchatFollowUpPrefs;
+  /** Support's banners on this computer (Notification settings › Support, D-03): the defaults until chosen. */
+  supportNotices?: SupportNoticePrefs;
   /** Wall mode on a display (L-06, MAP-24): saved by its sheet. Unset: WALL_MODE_DEFAULTS. */
   wallMode?: WallModePrefs;
   /** The AI Assistant on this computer (Settings › AI Assistant). */
@@ -839,7 +842,11 @@ export interface StatusSnapshot {
   pendingChanges: number;
   /** `webchat`: visitors who wrote again in my website chats while I was away from them (worksuite-desktop#230), on the badge. */
   /** `ringing`: website chats and visitors' calls ringing for me and not silenced (R-05, R-06; RING-44), on the badge too. */
-  unread: { mail: number; chat: number; notifications: number; tasks: number; webchat?: number; ringing?: number };
+  /**
+   * `support`: my live support tickets with something unread (the desk's `GET badges`); `supportNotices`: the unread
+   * notifications about support tickets, which the badge leaves to `support` so a ticket counts once.
+   */
+  unread: { mail: number; chat: number; notifications: number; tasks: number; webchat?: number; ringing?: number; support?: number; supportNotices?: number };
   notificationsPausedUntil: string | null;
   /** Whether the operating system lets this app show notifications (false: banners are blocked there). */
   notificationsSupported?: boolean;

@@ -4,6 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.10.0 — 2026-10-06
+
+**Added**
+
+- banners a module words and answers itself (its buttons, a reply box, staying until acted on, its sound) — Support's, with Open, Take later, Mark read, Snooze and a typed reply (WS-SUPPORT-SRS-001 D-03)
+- Notification settings › Support — per kind, In app, a banner here and its sound; SLA banners that stay; low-priority tickets in an hourly digest
+
+**Changed**
+
+- unread notifications about support tickets are left out of the Dock and tray count, which counts those tickets by the desk's own measure
+
 ## 1.9.0 — 2026-10-05
 
 - Critical native notification when visitor messages are not reaching staff

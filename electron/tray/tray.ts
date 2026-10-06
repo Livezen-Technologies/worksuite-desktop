@@ -23,6 +23,9 @@ export interface TrayModel {
   unreadChat: number;
   unreadMail: number;
   unreadOther: number;
+  /** Support tickets needing me (the desk's count), and the unread notifications about them it stands for (FR-DSK-04). */
+  unreadSupport?: number;
+  unreadSupportNotices?: number;
   /** Off: no count on the app's icon (Settings › Notifications). */
   badge: boolean;
   notificationsPausedUntil: string | null;
@@ -228,7 +231,8 @@ export class TrayService {
     // unsigned build is never registered for notifications, and macOS will not
     // draw its badge.
     const hasChat = m.apps.includes('chat');
-    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther);
+    const hasSupport = m.apps.includes('support');
+    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther, hasSupport ? (m.unreadSupport ?? 0) : 0, hasSupport ? (m.unreadSupportNotices ?? 0) : 0);
     // A website chat ringing shows as something waiting for you, whatever else is going on (RING-43) — Chat's, so only with Chat.
     const ringing = m.signedIn && hasChat ? m.webchatRinging.length + (m.webchatCalls?.length ?? 0) : 0;
     const state = ringing ? 'unread' : trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
@@ -257,6 +261,7 @@ export class TrayService {
         unreadChat: hasChat ? m.unreadChat : 0,
         unreadMail: m.apps.includes('mail') ? m.unreadMail : 0,
         unreadOther: m.unreadOther,
+        unreadSupport: hasSupport ? (m.unreadSupport ?? 0) : 0,
       }),
     );
     // "18 · 2 waiting" for website staff (MAP-UI-04): on the sites, and waiting on me as the badge counts them (MAP-25).
@@ -333,6 +338,7 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     const unread = [
       has('chat') ? { label: `Unread Chat ${m.unreadChat}`, n: m.unreadChat, route: '/chat' } : null,
       has('mail') ? { label: `Unread Mail ${m.unreadMail}`, n: m.unreadMail, route: '/mail' } : null,
+      has('support') && m.unreadSupport ? { label: `Support ${m.unreadSupport}`, n: m.unreadSupport, route: '/support?view=mine' } : null,
     ].filter((x) => x !== null);
     if (unread.length) {
       const most = unread.reduce((x, y) => (y.n > x.n ? y : x));

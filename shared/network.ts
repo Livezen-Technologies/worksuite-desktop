@@ -40,6 +40,8 @@ export function trayTooltip(s: {
   unreadChat: number;
   unreadMail: number;
   unreadOther: number;
+  /** Support tickets needing me (optional for older callers). */
+  unreadSupport?: number;
 }): string {
   const parts: string[] = [];
   if (s.error) parts.push(s.error);
@@ -48,6 +50,7 @@ export function trayTooltip(s: {
   if (s.syncing > 0) parts.push(`Syncing ${s.syncing} file${s.syncing === 1 ? '' : 's'}`);
   const unread = s.unreadChat + s.unreadMail + s.unreadOther;
   if (unread > 0) parts.push(`${unread} unread (${s.unreadChat} chat, ${s.unreadMail} mail)`);
+  if (s.unreadSupport) parts.push(`${s.unreadSupport} support ticket${s.unreadSupport === 1 ? '' : 's'} waiting`);
   if (parts.length === 0) return 'WorkSuite — all up to date';
   return `WorkSuite — ${parts.join(' · ')}`;
 }
@@ -58,8 +61,10 @@ export function trayTooltip(s: {
  * count is every unread message in every inbox the person can open, shared
  * mailboxes included, which the sidebar shows as information.
  */
-export function attentionCount(chat: number, notifications: number): number {
-  return Math.max(0, chat || 0) + Math.max(0, notifications || 0);
+export function attentionCount(chat: number, notifications: number, support = 0, supportNotices = 0): number {
+  // Support tickets count by the desk's own measure (unread or newly assigned, FR-DSK-04): their notifications in the
+  // bell are not counted again.
+  return Math.max(0, chat || 0) + Math.max(0, (notifications || 0) - Math.max(0, supportNotices || 0)) + Math.max(0, support || 0);
 }
 
 /** OS offline evidence is separate from failure to reach the configured server. */
