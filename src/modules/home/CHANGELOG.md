@@ -9,6 +9,7 @@ the root CHANGELOG.md.
 **Added**
 
 - Home lays itself out by its own width — three, two or one column, stat tiles two by two when four don't fit, Customize always visible — so a docked chat drawer never covers it (#264)
+- Waiting for me: 'All ›' opens one page of everything waiting for you from every app, with type and organisation filters; rows show the full name and type over date, length and reason with small ✓/✕ actions and open their own item; cover to answer is its own item, and Approve follows the cover rule (#263)
 
 ## 1.5.0 — 2026-10-03
 

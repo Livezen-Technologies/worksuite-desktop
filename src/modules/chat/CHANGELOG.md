@@ -10,14 +10,18 @@ the root CHANGELOG.md.
 
 - the chat drawer docks beside the page by default, which reflows; it floats over it from the header's Docked ⇄ Floating button, Settings › Chat or a window under 1200px, and resizes from its edge (360–640px, 400 by default, kept per person) (#264)
 - a shared WorkSuite page is a card — the app's icon, its title, what the reader may see of it and Open in a new tab; without the app, 'You don't have access to this page' with Request access (#266)
+- Website chats › Widget settings › Contact options: the widget's WhatsApp numbers — from WorkSuite WhatsApp or typed in (E.164, +94 by default), label, pre-filled message, when to show, reorder, Test, 'Saved · live on <site> within 1 minute' and Refresh widget now where the server offers it (#260)
 
 **Changed**
 
 - sharing a page or record (the drawer's Attach, Share from WorkSuite) sends a full item link with its organisation, type and id, never a relative path; older relative paths show as cards too (#266)
+- Website chats open in place: closed, missed and offline chats show their saved copy at once, otherwise a full-pane placeholder under the list row's header with centred 'Still loading… · Retry' / 'Couldn't load · Retry'; threads draw Markdown formatted and saved replies and AI drafts go to visitors as plain text (#261)
+- Widget screens the server's Communication module lacks are hidden, with a version notice for admins; save errors show under their field on the right tab with a marker on it; 'Use 'Techubiz' as the name?'; the title uses the company name (#259)
 
 **Fixed**
 
 - a message's actions show on hover in its top-right corner (react, reply, star, more), not as a round ⌄ floating beside the bubble (#266)
+- website chat previews are plain text, and a last message without words shows what it was ('📷 Photo', '📎 File: …', '★★★★★ Rated 5', 'Chat closed', 'Visitor left') instead of a blank line (#261)
 
 ## 1.59.0 — 2026-10-05
 
