@@ -5,6 +5,45 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.192 — 2026-10-06
+
+- **Point of Sale's counter, redrawn for touch (pos 1.1.0, settings 1.24.0).** The till now looks and works as in
+  the POS design (D01–D18).
+  - **The till bar:** a navy bar across the top shows the till and register, whether the till is online, the clock,
+    the cashier, Lock and the till's menu. The side rail is gone; its screens, the customer display, Change cashier,
+    the web's screens and Forget this till are in that menu. The counter can go full screen.
+  - **Selling:** products in pages of five by three (or a list), with dots, arrows and swipe. The category button
+    opens a picker with each category's count and what sold most today on this till, and recent categories sit beside
+    it. A quick-action bar holds Hold, Recall, Return, Discount, Customer, Cash in/out, Open drawer and More. **Cash
+    exact** sells for the total in cash. F2 searches, F12 pays.
+  - **Several sales at once:** up to five open sales per till as tabs (Ctrl+N for a new one, Ctrl+1…5 to switch).
+    The customer display follows the sale on screen. **Hold** parks a sale with an optional note for 24 hours. Open
+    and held sales hold customer details, so the main process keeps them encrypted for this server and till, and
+    forgetting the till removes them.
+  - **Paying:** two panes, with tender tiles, what has been paid so far, a keypad, quick cash amounts and one button
+    that says the change to give. Sale complete shows the change, Print, Email and Open drawer, and the receipt on
+    screen.
+  - **Receipts** print the tax by rate ("VAT 18%") and end with the receipt number as a barcode, so a return can
+    start by scanning it.
+  - **Returns from the counter:** scan or type the receipt number, then choose quantities, each line's condition and
+    a reason. Damaged lines are refunded without going back into stock.
+  - **The drawer:** cash in and out from the counter, with the company's reasons and a reference. Opening and closing
+    the register use two panes and the keypad, note by note or as one figure. **Where it bites:** the register will
+    not close while a sale is open or held on the till, and when card was taken, "Card batch settled" must be ticked
+    first.
+  - **Pairing, till settings and the customer display** are redrawn. Pairing shows each till as free or in use and
+    takes one over only from a button that says so. Till settings have a device card each for the receipt printer,
+    cash drawer, scanner (with a test scan) and customer display. The customer display shows the sale, the tax,
+    what the discount saved and the change.
+  - Stock levels, promotions, loyalty, LankaQR, vouchers and store credit, and manager approval are not in this
+    release: the server does not offer them yet.
+  - Works with today's server; nothing new is needed on WorkSuite.
+- **PDF Studio: every tool in one place (pdf 1.1.0).** **All tools** lists every Acrobat-class tool in a searchable
+  panel beside the document, each with its own panel. A tool that cannot run yet says why. PDF Studio has a home
+  with its own rail (Recent, Starred, Shared, Agreements, Scans, Offline copies, Jobs, Recover, Settings and more),
+  an 18-tool grid and Open from Drive. New: sign by drawing or typing a signature and placing it on the page; find
+  NIC, phone, e-mail, card and bank numbers to redact; preview Bates numbering; copy the diagnostics report.
+
 ## 0.2.190 — 2026-10-06
 
 - **SalonMate's front desk, redrawn to the SalonMate desktop design (salon 2.0.0).** Every screen of the desk now
