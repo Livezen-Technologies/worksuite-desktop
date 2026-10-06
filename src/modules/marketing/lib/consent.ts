@@ -1,4 +1,4 @@
-import type { Basis, CampaignStatus, EmailConsent, PhoneConsent, SuppressionReason } from '../api';
+import type { Basis, Campaign, CampaignStatus, EmailConsent, PhoneConsent, SuppressionReason } from '../api';
 
 /**
  * Consent, suppression and campaign states as Marketing shows them (SRS §6.1, §6.3; design status colours: green
@@ -93,4 +93,10 @@ export function campaignActions(s: CampaignStatus): { edit: boolean; schedule: b
     cancel: s === 'draft' || s === 'scheduled' || s === 'paused',
     report: s === 'sending' || s === 'paused' || s === 'sent',
   };
+}
+
+/** Where a campaign opens by its state (§6.1): a draft in the editor, a scheduled one in Review & send, else its report. */
+export function campaignRoute(c: Pick<Campaign, 'id' | 'status'>): string {
+  const base = `/marketing/campaigns/${c.id}`;
+  return c.status === 'draft' ? `${base}/content` : c.status === 'scheduled' ? `${base}/review` : `${base}/report`;
 }

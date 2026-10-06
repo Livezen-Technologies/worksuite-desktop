@@ -3,7 +3,8 @@ import { lazy, Suspense, useEffect } from 'react';
 import { Spinner } from '../../components/ui';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import type { ModuleProps } from '../registry';
-import { fetchCampaign, MK, type CampaignStatus } from './api';
+import { fetchCampaign, MK } from './api';
+import { campaignRoute } from './lib/consent';
 import { MarketingNav, SECTIONS, type Section } from './Nav';
 import { useMarketingOrg } from './org';
 import { Refused } from './parts';
@@ -159,20 +160,14 @@ export default function MarketingPage(_props: ModuleProps) {
   );
 }
 
-/** Where a campaign opens when a link names only the campaign (a notification, a deep link): by its state (§6.1). */
-export function campaignRoute(id: number, status: CampaignStatus): string {
-  if (status === 'draft') return `/marketing/campaigns/${id}/content`;
-  if (status === 'scheduled') return `/marketing/campaigns/${id}/review`;
-  return `/marketing/campaigns/${id}/report`;
-}
-
+/** A link that names only the campaign (a notification, a deep link) opens it where it stands. */
 function CampaignOpen({ id }: { id: number }) {
   const { go } = useTab();
   const org = useMarketingOrg();
   const q = useQuery({ queryKey: MK.campaign(org, id), queryFn: ({ signal }) => fetchCampaign(id, signal) });
   const status = q.data?.status;
   useEffect(() => {
-    if (status) go(campaignRoute(id, status));
+    if (status) go(campaignRoute({ id, status }));
   }, [go, id, status]);
   if (q.error) return <Refused error={q.error} what="This campaign" onRetry={() => void q.refetch()} />;
   return <Spinner />;

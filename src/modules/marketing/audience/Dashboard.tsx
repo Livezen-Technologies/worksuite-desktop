@@ -4,7 +4,7 @@ import { useTab } from '../../../core/tab-context';
 import { Icon } from '../../../components/Icon';
 import { Button, cx, Empty, ErrorNote } from '../../../components/ui';
 import { useDashboard, useReadiness, type Campaign, type Dashboard as Summary } from '../api';
-import { campaignStatus, type Tone } from '../lib/consent';
+import { campaignRoute, campaignStatus, type Tone } from '../lib/consent';
 import { count, parseStamp, pct, plural, ratio, share } from '../lib/format';
 import { useCompanies, useMarketingOrg } from '../org';
 import { Bar, Kpi, Loaded, Mono, PageBody, PageHeader, Panel, Row, Status, Table, TD, TH } from '../parts';
@@ -53,12 +53,6 @@ export default function Dashboard() {
 /* ------------------------------------------------------------------------ *
  * Pure helpers
  * ------------------------------------------------------------------------ */
-
-/** Where a campaign row opens: a draft's content, a scheduled one's review, anything else its report. */
-export function campaignRoute(c: Pick<Campaign, 'id' | 'status'>): string {
-  const base = `/marketing/campaigns/${c.id}`;
-  return c.status === 'draft' ? `${base}/content` : c.status === 'scheduled' ? `${base}/review` : `${base}/report`;
-}
 
 /** The status chip, with how far a send has got ("Sending · 62%"). */
 export function campaignChip(c: Pick<Campaign, 'status' | 'progress'>): { label: string; tone: Tone } {

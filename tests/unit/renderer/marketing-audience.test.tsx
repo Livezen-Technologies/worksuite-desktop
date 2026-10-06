@@ -34,7 +34,8 @@ import { maskPhone } from '../../../src/modules/marketing/lib/format';
 import ContactDetail from '../../../src/modules/marketing/audience/ContactDetail';
 import { ContactEditor, changesFor, displayName, matchedOn, parseTags, phoneKey, shownPhone, timeZones, updateFor } from '../../../src/modules/marketing/audience/ContactEditor';
 import Contacts from '../../../src/modules/marketing/audience/Contacts';
-import Dashboard, { campaignChip, campaignRoute, weekLabel, weeklySummary } from '../../../src/modules/marketing/audience/Dashboard';
+import Dashboard, { campaignChip, weekLabel, weeklySummary } from '../../../src/modules/marketing/audience/Dashboard';
+import { campaignRoute } from '../../../src/modules/marketing/lib/consent';
 import { coverage } from '../../../src/modules/marketing/audience/Lists';
 import { websiteHost, websiteUrl } from '../../../src/modules/marketing/audience/Organisations';
 
