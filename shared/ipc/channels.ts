@@ -353,6 +353,10 @@ export const INVOKE_CHANNELS = [
   'offline:mailSearch',
   'offline:mailList',
   // Help & Guide's Contact Support (WS-SUPPORT-SRS-001 D-11): the window's picture and the redacted recent log.
+  // The support wallboard on a display (D-12): the screens to choose from, open it there, take it down.
+  'support:displays',
+  'support:wall',
+  'support:wallClose',
   'help:capture',
   'help:logs',
   'offline:submit',

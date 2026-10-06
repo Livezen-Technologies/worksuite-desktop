@@ -50,6 +50,8 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'support-quick': { width: 520, height: 560, minWidth: 420, minHeight: 420 },
   // An urgent ticket ringing (D-07): a centred card, answered or dismissed, not managed.
   'support-ring': { width: 460, height: 440, minWidth: 460, minHeight: 360 },
+  // The support wallboard (D-12): the whole screen it is on; this is only its size before it goes full screen.
+  'support-wall': { width: 1280, height: 720, minWidth: 640, minHeight: 360 },
 };
 /** Cards that ring: no window controls, no place remembered, on top of everything. */
 const RINGS = new Set<WindowKind>(['ring', 'support-ring']);
@@ -59,7 +61,7 @@ const RINGS = new Set<WindowKind>(['ring', 'support-ring']);
  */
 const ONE_AT_A_TIME = new Set<WindowKind>(['ring', 'support-quick', 'support-ring']);
 /** Remote control's own windows: placed by remote control, never remembered. */
-const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall', 'wall-sheet']);
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall', 'wall-sheet', 'support-wall']);
 
 /**
  * The tray's ringing menu's place (R-06, RING-UI-07): under the menu-bar icon on macOS (or a tray at the top), over it
@@ -633,6 +635,57 @@ export class WindowManager {
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && this.kinds.get(w.id) === 'wall-sheet') w.close();
   }
 
+  private supportWall: BrowserWindow | null = null;
+
+  /**
+   * The support wallboard on a display (WS-SUPPORT-SRS-001 D-12): the whole of that screen, menu-less, kept awake while
+   * it is up. Opened again on another screen, it moves there; unplugging its display closes it. Esc on it, or Close the
+   * wallboard in the inbox, takes it down.
+   */
+  showSupportWall(displayId: number | null): BrowserWindow {
+    const display = screen.getAllDisplays().find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
+    const existing = this.supportWall && !this.supportWall.isDestroyed() ? this.supportWall : null;
+    if (existing) {
+      if (existing.isFullScreen()) existing.setFullScreen(false);
+      existing.setBounds(display.bounds);
+      existing.setFullScreen(true);
+      existing.show();
+      return existing;
+    }
+    const win = new BrowserWindow({ ...display.bounds, show: false, frame: false, fullscreen: true, title: 'Support wallboard', backgroundColor: '#070B16', webPreferences: this.webPreferences() });
+    this.kinds.set(win.id, 'support-wall');
+    const wid = win.id;
+    this.supportWall = win;
+    const shown = display.id;
+    const awake = powerSaveBlocker.start('prevent-display-sleep');
+    const unplugged = (_e: unknown, d: { id: number }) => {
+      if (d.id === shown && !win.isDestroyed()) win.close();
+    };
+    screen.on('display-removed', unplugged);
+    win.on('closed', () => {
+      this.kinds.delete(wid);
+      if (this.supportWall === win) this.supportWall = null;
+      if (powerSaveBlocker.isStarted(awake)) powerSaveBlocker.stop(awake);
+      screen.removeListener('display-removed', unplugged);
+    });
+    win.once('ready-to-show', () => win.show());
+    win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
+    void win.loadURL(this.url('/window/support-wall'));
+    return win;
+  }
+
+  /** Takes the support wallboard down: whether one was up. */
+  closeSupportWall(): boolean {
+    const win = this.supportWall && !this.supportWall.isDestroyed() ? this.supportWall : null;
+    if (!win) return false;
+    win.close();
+    return true;
+  }
+
+  supportWallOpen(): boolean {
+    return !!this.supportWall && !this.supportWall.isDestroyed();
+  }
+
   /** The screen WorkSuite's main window is on ("this window" in the sheet), or null while it is closed. */
   mainDisplayId(): number | null {
     const main = this.getMain();
@@ -1119,5 +1172,7 @@ export function windowRoute(url: string): string | null {
   if (!hash.startsWith('/window/')) return null;
   // The Live map window and wall mode are the Live dashboard's (L-04, MAP-24): they close with Chat, and at sign-out.
   if (/^\/window\/(live-map|wall|wall-sheet)(\?|$)/.test(hash)) return LIVE_ROUTE;
+  // The support wallboard (D-12) is the desk's: it closes with Support, and at sign-out.
+  if (/^\/window\/support-wall(\?|$)/.test(hash)) return '/support';
   return new URLSearchParams(hash.split('?')[1] ?? '').get('route');
 }

@@ -17,6 +17,9 @@ import { ReadingPane } from './ReadingPane';
 import { OutboxBar } from './Outbox';
 import { ResolveDialog } from './ResolveDialog';
 import { NO_FILTERS, TicketList, type ListFilters } from './TicketList';
+import { WallboardChooser, mayReadReports } from './Wallboard';
+import { isMac } from '../../core/bridge';
+import { Button } from '../../components/ui';
 
 /**
  * The support inbox (D-01): three panes — the views rail with live counts, the view's tickets, and the reading pane —
@@ -161,6 +164,21 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
     return () => window.removeEventListener('keydown', onKey);
   }, [active]);
 
+  // The wallboard on a display (D-12), for whoever reads the desk's reports: ⌘⇧F / Ctrl+Shift+F, or the rail's button.
+  const [wallOpen, setWallOpen] = useState(false);
+  const wallAllowed = mayReadReports(metaQ.data);
+  useEffect(() => {
+    if (!active || !wallAllowed) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'f' || !e.shiftKey || e.altKey || !(isMac ? e.metaKey : e.ctrlKey)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      setWallOpen(true);
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [active, wallAllowed]);
+
   const title = saved ? saved.name : text(rail.data?.views.find((v) => v.key === view)?.label ?? VIEW_LABEL[view as keyof typeof VIEW_LABEL] ?? view);
   const count = saved ? saved.count : (rail.data?.views.find((v) => v.key === view)?.count ?? null);
   const single = orgs.length === 1 ? Number(orgs[0]) : orgOptions.length === 1 ? Number(orgOptions[0]!.id) : null;
@@ -178,7 +196,18 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
             onView={(key) => pick({ view: key })}
             onSaved={(s) => pick({ saved: s.id })}
             orgs={orgOptions.length > 1 ? { options: orgOptions, value: orgs, onChange: setOrgs } : null}
-            footer={<Availability organization={single} active={active} />}
+            footer={
+              <>
+                {wallAllowed ? (
+                  <div className="px-2 pb-1">
+                    <Button size="sm" variant="ghost" icon="tv" className="w-full justify-start" aria-keyshortcuts={isMac ? 'Meta+Shift+F' : 'Control+Shift+F'} onClick={() => setWallOpen(true)}>
+                      {text('Wallboard')}
+                    </Button>
+                  </div>
+                ) : null}
+                <Availability organization={single} active={active} />
+              </>
+            }
           />
         </SidePanel>
         <div className="relative flex shrink-0 border-r border-line" style={{ width: width.width }}>
@@ -220,6 +249,7 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
         </div>
       </div>
       {resolving ? <ResolveDialog ticket={resolving} onClose={() => setResolving(null)} /> : null}
+      {wallOpen ? <WallboardChooser onClose={() => setWallOpen(false)} /> : null}
     </div>
   );
 }

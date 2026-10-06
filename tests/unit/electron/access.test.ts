@@ -73,6 +73,8 @@ describe('the main process refuses what the bootstrap does not allow', () => {
   it('a window of an app the person may not open — and knows which app an open window is of', () => {
     expect(windowRoute('app://worksuite/index.html#/window/record?route=%2Fcrm%2Fleads%2F4')).toBe('/crm/leads/4');
     expect(windowRoute('app://worksuite/index.html#/window/ring?route=%2Fcalls%2Fring%3Fuuid%3Dx')).toBe('/calls/ring?uuid=x');
+    // The support wallboard (D-12) is the desk's: it closes with Support.
+    expect(windowRoute('app://worksuite/index.html#/window/support-wall')).toBe('/support');
     expect(windowRoute('app://worksuite/index.html')).toBeNull();
     expect(refused(() => assertRoute('/crm/leads/4', everyday))).toBe(true);
     expect(refused(() => assertRoute('/calls/ring?uuid=x', visibleAppIds({ apps: ['mail'], permissions: [] })))).toBe(true);

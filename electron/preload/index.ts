@@ -515,6 +515,11 @@ const api = {
   smime: {
     verify: call('smime:verify'),
   },
+  support: {
+    displays: call('support:displays'),
+    wall: call('support:wall'),
+    wallClose: call('support:wallClose'),
+  },
   help: {
     capture: call('help:capture'),
     logs: call('help:logs'),

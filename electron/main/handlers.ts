@@ -1,5 +1,6 @@
 import { verifyLockChange } from '../services/lock-verification';
-import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, nativeImage, screen, shell, systemPreferences, type WebContents } from 'electron';
+import { wallDisplays } from '../services/live-desk';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { writeAtomically } from '../services/pdf/host';
@@ -994,6 +995,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     ctx.queue.retry(uid(), input.id);
     void ctx.queue.replay(uid());
   });
+  // The support wallboard (D-12): which screens there are, and the wallboard on one of them.
+  router.handle('support:displays', () => ({ displays: wallDisplays(screen.getAllDisplays(), ctx.windows.mainDisplayId()), open: ctx.windows.supportWallOpen() }));
+  router.handle('support:wall', (input) => void ctx.windows.showSupportWall(input.displayId));
+  router.handle('support:wallClose', () => void ctx.windows.closeSupportWall());
   // Contact Support (D-11): the asking window's own pixels, and the last day's log (redacted as it was written).
   router.handle('help:capture', async (_i, c) => {
     const w = winOf(c.sender);
