@@ -4,6 +4,7 @@ import type { OfflineMutation } from '@shared/types';
 import { WEBSITE_REPLY_LABEL, websiteDraftKey } from '@shared/website-reply';
 import { useCanOpen } from '../../../core/access';
 import { text } from '../../../core/i18n';
+import { markdownLine } from '../../../core/markdown';
 import { navigate } from '../../../core/tabs';
 import { ApiError, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
@@ -36,7 +37,7 @@ import { CallbackCard, isPending } from './Callbacks';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
 import { BlockDialog, ContactCard, SharedFilesCard, TagsCard } from './panelCards';
 import { ClosedNotice } from './Closed';
-import { ThreadFailed, ThreadPlaceholder } from './ThreadPlaceholder';
+import { ThreadFailed, ThreadPlaceholder, type PaneHead } from './ThreadPlaceholder';
 import { useRingState, youJoinedLine } from './Ringing';
 import { MergeDialog, ProfileCards } from './IdentityCard';
 import { ConnectionWarning } from '../../../components/ConnectionWarning';
@@ -97,7 +98,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   useWebsiteSync(id, saved ? undefined : q.data, tabActive && pageVisible);
   const realtimeLive = useRealtimeLive();
   const count = data?.messages.length ?? 0;
-  useTabTitle(data ? `Website · ${data.visitor?.name || data.visitor?.label || 'Visitor'}` : 'Website chats');
+  useTabTitle(data ? `Website · ${data.visitor?.name || data.visitor?.label || 'Visitor'}` : row ? `Website · ${row.visitor_name || row.label}` : 'Website chats');
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
@@ -124,8 +125,11 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const gone = q.error instanceof ApiError && (q.error.status === 404 || q.error.forbidden);
   if (gone) return <Empty icon="globe" title="This website chat is not available" hint="It may have been removed, or you no longer staff this website." />;
   // A copy in hand is shown while the server is asked again, or could not be reached; without one, the thread's own
-  // layout in grey, then a centred Retry (#239).
-  if (!data) return q.error ? <ThreadFailed onRetry={() => void q.refetch()} /> : <ThreadPlaceholder mini={mini} onRetry={() => void qc.cancelQueries({ queryKey: ['website', 'conversation', id] }).then(() => q.refetch())} />;
+  // layout in grey, then a centred Retry (#239) — under the header the list row already gives it (#261).
+  if (!data) {
+    const head = row ? rowHead(row) : undefined;
+    return q.error ? <ThreadFailed head={head} mini={mini} onRetry={() => void q.refetch()} /> : <ThreadPlaceholder mini={mini} head={head} onRetry={() => void qc.cancelQueries({ queryKey: ['website', 'conversation', id] }).then(() => q.refetch())} />;
+  }
   const c = data.conversation;
   const v = data.visitor;
   const canReply = data.can?.reply !== false;
@@ -171,7 +175,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       if (!m) return;
       // A quote goes to the visitor, so answering one is a reply, never a note.
       setTab('reply');
-      setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: m.body ?? m.file?.filename ?? '' });
+      // The one-line bar above the box: the words without their Markdown (#261).
+      setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: markdownLine(m.body ?? '') || (m.file?.filename ?? '') });
       composer.current?.focus();
     },
     // A copy of the visitor's file in my own Drive (RDC-12, P-04): never a link, and the chat keeps its own.
@@ -372,6 +377,21 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       {dialog === 'transfer' ? <TransferDialog conversationId={c.id} me={me} onClose={() => setDialog(null)} onDone={refresh} /> : null}
     </div>
   );
+}
+
+/**
+ * The header a list row gives a conversation still loading (worksuite-desktop#261), said as the thread's own says it:
+ * who, and whether they are on the site and reading what, or when the chat closed.
+ */
+export function rowHead(r: WebsiteRow): PaneHead {
+  const name = r.visitor_name || r.label;
+  const page = r.current_url ? pathOf(r.current_url) : null;
+  const closed = r.status === 'closed';
+  return {
+    name: r.company ? `${name} · ${r.company}` : name,
+    line: closed ? `Closed${r.closed_at ? ` ${dateLabel(r.closed_at)}` : ''}` : r.online ? `On the site now${page ? ` · reading ${page}` : ''}` : 'Left the site',
+    presence: closed ? null : r.online ? 'online' : 'away',
+  };
 }
 
 /**

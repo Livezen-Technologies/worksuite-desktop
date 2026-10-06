@@ -26,6 +26,7 @@ import {
   type BehaviourSettings,
   type Seen,
 } from './behaviourSettings';
+import { fieldErrorsOf } from './fieldErrors';
 import { Group } from './parts';
 import { IdentitySection } from './IdentitySettings';
 
@@ -43,27 +44,47 @@ import { IdentitySection } from './IdentitySettings';
 
 export type BehaviourState = ReturnType<typeof useBehaviour>;
 
-export function useBehaviour(id: number) {
+/** The settings a refusal can be shown under (#259): each has its row's problem line. */
+const SHOWN: ReadonlySet<string> = new Set<keyof BehaviourSettings>(['default_agent_id', 'ask_details_after_minutes', 'missed_after_minutes', 'inactive_after_minutes', 'visitor_alert_pages']);
+
+/**
+ * `onRefused` (#259): the editor's turn at a refusal about fields on other tabs — a widget whose saved company name
+ * is a web address is refused whatever is saved — which it shows under those fields and marks their tab; true when
+ * it did. Whatever nobody can show under a field is a toast, as before.
+ */
+export function useBehaviour(id: number, onRefused?: (e: unknown) => boolean) {
   const qc = useQueryClient();
   const key = ['website', 'widget-behaviour', id];
   const q = useQuery({ queryKey: key, queryFn: ({ signal }) => behaviourOf(id, signal), retry: false });
   const [draft, setDraft] = useState<BehaviourSettings | null>(null);
   const [busy, setBusy] = useState(false);
+  // The server's word on a field, until that field is changed.
+  const [refused, setRefused] = useState<Partial<Record<keyof BehaviourSettings, string>>>({});
   const saved = q.data?.settings ?? null;
   const settings = draft ?? saved;
   const changes = saved && settings ? changedBehaviour(saved, settings) : {};
-  const issues = settings ? behaviourProblems(settings) : {};
+  const issues = { ...refused, ...(settings ? behaviourProblems(settings) : {}) };
   const dirty = Object.keys(changes).length > 0;
-  const blocked = Object.keys(issues).length > 0;
+  const blocked = settings ? Object.keys(behaviourProblems(settings)).length > 0 : false;
   // A server from before S-03 has no such page: the tab says so, and Embed code keeps the widgets list's snippet.
   const missing = q.error instanceof ApiError && q.error.status === 404;
 
-  const set = <K extends keyof BehaviourSettings>(k: K, v: BehaviourSettings[K]) =>
+  const set = <K extends keyof BehaviourSettings>(k: K, v: BehaviourSettings[K]) => {
     setDraft((d) => {
       const base = d ?? saved;
       return base ? { ...base, [k]: v } : d;
     });
-  const undo = () => setDraft(null);
+    setRefused((r) => {
+      if (!(k in r)) return r;
+      const next = { ...r };
+      delete next[k];
+      return next;
+    });
+  };
+  const undo = () => {
+    setDraft(null);
+    setRefused({});
+  };
   const save = async () => {
     if (!dirty || blocked) return;
     setBusy(true);
@@ -71,11 +92,15 @@ export function useBehaviour(id: number) {
       const fresh = await saveBehaviour(id, changes);
       qc.setQueryData<BehaviourPayload>(key, fresh);
       setDraft(null);
+      setRefused({});
       void qc.invalidateQueries({ queryKey: ['website', 'widgets'] });
       void qc.invalidateQueries({ queryKey: ['website', 'widget-design', id] });
       toast('success', text('Widget saved — visitors see it on their next page'));
     } catch (e) {
-      toast('error', errorMessage(e));
+      const own = Object.fromEntries(Object.entries(fieldErrorsOf(e)).filter(([k]) => SHOWN.has(k)));
+      setRefused(own);
+      const elsewhere = onRefused?.(e) ?? false;
+      if (!Object.keys(own).length && !elsewhere) toast('error', errorMessage(e));
     } finally {
       setBusy(false);
     }

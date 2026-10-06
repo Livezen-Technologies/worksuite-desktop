@@ -6,6 +6,7 @@ import { cx } from '../../../../components/ui';
 import { ApiError, apiPost } from '../../../../core/api';
 import { call, errorMessage, isMac } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
+import { markdownLine } from '../../../../core/markdown';
 import { parseTs, timeLabel } from '../../../../core/time';
 import { toast } from '../../../../core/toasts';
 import { useNow } from '../../../calls/parts';
@@ -121,9 +122,10 @@ export function LiveDashboard({ data, live, onLive, selected, onSelect, onStart,
   // Nothing at all after five seconds: "Still loading… · Retry", centred.
   const [slow, restartSlow] = useSlow();
 
-  // What was said last in each chat, from the inbox the workspace keeps fresh; nothing is fetched for it here.
+  // What was said last in each chat, from the inbox the workspace keeps fresh; nothing is fetched for it here. Plain
+  // words on one line, without Markdown's marks (#261).
   const inbox = useWebsiteInbox(false, false);
-  const said = useMemo(() => new Map((inbox.data?.conversations ?? []).map((r) => [r.id, r.last_message?.body ?? null])), [inbox.data]);
+  const said = useMemo(() => new Map((inbox.data?.conversations ?? []).map((r) => [r.id, markdownLine(r.last_message?.body ?? '') || null])), [inbox.data]);
   const lastOf = (id: number) => said.get(id) ?? null;
 
   // Esc steps back: out of Wall mode, then the visitor's details, then the full map.

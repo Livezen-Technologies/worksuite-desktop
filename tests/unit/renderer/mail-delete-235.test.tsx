@@ -364,7 +364,7 @@ describe('the app’s toasts', () => {
     expect(shown().map((t) => t.text)).toEqual(['2 messages deleted']);
   });
 
-  it('sits bottom-left, right of the apps rail and above the status bars — not over the reading pane', () => {
+  it('sits bottom-centre over the content, right of the apps rail, above the status bar and clear of the reading pane’s actions (#259)', () => {
     const nav = document.createElement('nav');
     nav.setAttribute('aria-label', 'Apps');
     nav.getBoundingClientRect = () => ({ right: 64, left: 0, top: 0, bottom: 800, width: 64, height: 800, x: 0, y: 0, toJSON: () => null });
@@ -372,9 +372,10 @@ describe('the app’s toasts', () => {
     render(<Toasts />);
     act(() => toast('info', 'Deleted'));
     const stack = document.querySelector('[data-toast-stack]') as HTMLElement;
-    expect(stack.style.left).toBe('80px');
-    expect(stack.className).toContain('bottom-[64px]');
-    expect(stack.className).not.toContain('left-1/2');
+    expect(stack.style.left).toBe(`${(64 + window.innerWidth) / 2}px`);
+    expect(stack.className).toContain('-translate-x-1/2');
+    // The reading pane's floating Reply · Archive · Delete ends about 84px up; the stack starts above it.
+    expect(stack.className).toContain('bottom-[96px]');
     nav.remove();
   });
 });

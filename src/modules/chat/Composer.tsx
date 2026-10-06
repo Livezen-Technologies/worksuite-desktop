@@ -11,6 +11,7 @@ import { apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
 import { useDraft } from '../../core/drafts';
 import { holdWhileSending } from '../../core/closeGuard';
+import { markdownText } from '../../core/markdown';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { uploadBlob } from '../../core/upload';
@@ -19,7 +20,7 @@ import { cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import { AttachMenu, CameraCapture, DrivePicker, RefusedNotes, Tray, type AttachChoice, type Staged } from './attach';
 import { KIND, type CardKind } from './cards/CardFrame';
-import { recordsIn } from './cards/recordLinks';
+import { pageTitle, recordsIn, shareLink } from './cards/recordLinks';
 import { SharePicker, ShareMenu, type ShareKind } from './cards/SharePicker';
 import { caretPoint } from './caret';
 import { PRESENCE } from './Details';
@@ -144,6 +145,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   // The channel profile (P-04, RDC-02): what this composer offers, Team Chat's or a website visitor's.
   const caps = site ? WEBSITE_COMPOSER : TEAM_COMPOSER;
   const note = !!site?.note;
+  // A saved reply or the writing assistant's text put into a message to a website visitor (a reply, or speaking first)
+  // goes without Markdown's marks — lists as lines, a link's address after its words — since their widget shows it as
+  // it is written (worksuite-desktop#261). What is typed is sent as typed; a note, read here, keeps its marks.
+  const forBox = (words: string) => ((site && !note) || channel?.plain ? markdownText(words) : words);
   // A website draft keeps the key the website thread always used, so none is lost in the move (RDC-06); a note has its own.
   const siteKey = site ? (note ? websiteNoteDraftKey(site.conversationId) : websiteDraftKey(site.conversationId)) : null;
   const draft = useDraft<string>(channel?.draftModule ?? siteKey?.module ?? 'chat', channel?.draftContext ?? siteKey?.context ?? `room:${roomId}`, '');
@@ -158,6 +163,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const [modal, setModal] = useState<'drive' | 'camera' | null>(null);
   const [sharing, setSharing] = useState<Exclude<ShareKind, 'drive'> | null>(null);
   const origin = useStore(app, (s) => s.auth?.server?.origin);
+  const org = useStore(app, (s) => s.organizationId);
   const [recording, setRecording] = useState(false);
   const [staged, setStaged] = useState<Staged[]>([]);
   // Files refused before any upload, each with why, under the tray (P-04 AttachmentTray; RDC-04).
@@ -567,9 +573,9 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   };
 
   /** A record from Share from WorkSuite goes as its address; each reader's app shows it as a card. */
+  // A full link that names the organisation and the record (worksuite-desktop#266), never a bare path.
   const shareRecord = async (path: string): Promise<boolean> => {
-    const base = (origin ?? 'https://app.worksuite.lk').replace(/\/+$/, '');
-    const ok = await sendWords(`${base}${path}`, false);
+    const ok = await sendWords(shareLink(path, { org, origin }), false);
     if (ok) onClearReply();
     return ok;
   };
@@ -609,12 +615,13 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const insertSlash = (body: string) => {
     // A website saved reply: counted as a use when the message is sent (RDC-03).
     if (ownReplies) cannedUsed.current = ownReplies.find((r) => r.body === body)?.id ?? cannedUsed.current;
+    const words = forBox(body);
     const start = slash ? slash.start : (input.current?.selectionStart ?? text.length);
     const end = slash ? slash.start + 1 + slash.word.length : start;
-    setText(`${text.slice(0, start)}${body}${text.slice(end)}`);
+    setText(`${text.slice(0, start)}${words}${text.slice(end)}`);
     setSlash(null);
     slashTyped.current = false;
-    focus(start + body.length);
+    focus(start + words.length);
   };
   const insertReply = (r: SavedReply) => insertSlash(r.body);
 
@@ -771,8 +778,9 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   label: ai.task === 'reply' ? 'Put in the message box' : 'Replace my message',
                   primary: true,
                   run: (t) => {
-                    setText(t);
-                    focus(t.length);
+                    const words = forBox(t);
+                    setText(words);
+                    focus(words.length);
                   },
                 },
               ]
@@ -904,7 +912,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           <Icon name="link" size={13} className="shrink-0 text-primary" />
           <span className="flex min-w-0 flex-1 flex-col">
             <b className="text-ink">{detected.length === 1 ? 'Link detected · will show as a card' : `${detected.length} links detected · each will show as a card`}</b>
-            <span className="truncate text-ink-2">{detected.map((r) => KIND[r.kind as CardKind].label).join(' · ')}</span>
+            <span className="truncate text-ink-2">{detected.map((r) => (r.kind === 'page' ? pageTitle(r) : KIND[r.kind as CardKind].label)).join(' · ')}</span>
           </span>
         </div>
       ) : null;

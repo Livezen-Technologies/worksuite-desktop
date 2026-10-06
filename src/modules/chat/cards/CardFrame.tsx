@@ -12,7 +12,7 @@ import { cx } from '../../../components/ui';
  * Colours come from the design ("Chat — shared items as cards"): each module
  * has an accent and a tint; the frame itself follows the theme.
  */
-export type CardKind = 'folder' | 'file' | 'meet' | 'note' | 'task' | 'event' | 'link' | 'deal' | 'lead' | 'account' | 'invoice' | 'contact' | 'mail' | 'meeting';
+export type CardKind = 'folder' | 'file' | 'meet' | 'note' | 'task' | 'event' | 'link' | 'deal' | 'lead' | 'account' | 'invoice' | 'contact' | 'mail' | 'meeting' | 'page';
 
 export const KIND: Record<CardKind, { label: string; icon: string; acc: string; tint: string; tintLight: string }> = {
   folder: { label: 'Drive · Folder', icon: 'folder', acc: '#F0A43A', tint: '#2A2213', tintLight: '#FDF1DF' },
@@ -29,6 +29,8 @@ export const KIND: Record<CardKind, { label: string; icon: string; acc: string; 
   invoice: { label: 'Invoice', icon: 'receipt', acc: '#9B7CF6', tint: '#1F1836', tintLight: '#F1ECFE' },
   contact: { label: 'Contact', icon: 'contact', acc: '#4FC3A1', tint: '#11281F', tintLight: '#E3F6EE' },
   mail: { label: 'Mail · Thread', icon: 'mail', acc: '#6C8CFF', tint: '#16203E', tintLight: '#E8EDFF' },
+  // A page of an app (worksuite-desktop#266): drawn in that app's own icon and colour (`app`), this only a fallback.
+  page: { label: 'Page', icon: 'link', acc: '#AFC0FF', tint: '#1B2542', tintLight: '#EEF1FB' },
 };
 
 export interface CardAction {
@@ -49,6 +51,7 @@ export function CardFrame({
   actions = [],
   foot,
   live,
+  app,
   children,
 }: {
   kind: CardKind;
@@ -62,9 +65,11 @@ export function CardFrame({
   foot?: ReactNode;
   /** A meeting going on now: the frame is edged in green. */
   live?: boolean;
+  /** The module strip in an app's own icon and colour (a page's card), its tints mixed from that colour. */
+  app?: { icon: string; colour: string };
   children?: ReactNode;
 }) {
-  const k = KIND[kind];
+  const k = app ? { ...KIND[kind], icon: app.icon, acc: app.colour, tint: `color-mix(in srgb, ${app.colour} 24%, #131B33)`, tintLight: `color-mix(in srgb, ${app.colour} 12%, #FFFFFF)` } : KIND[kind];
   return (
     <div
       data-card={kind}

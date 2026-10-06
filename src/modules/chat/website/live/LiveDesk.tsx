@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { WebchatRingState } from '@shared/types';
 import { call, errorMessage } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
+import { markdownLine } from '../../../../core/markdown';
 import { toast } from '../../../../core/toasts';
 import { Icon } from '../../../../components/Icon';
 import { cx } from '../../../../components/ui';
@@ -27,9 +28,9 @@ import { Pill, TINT, VisitorAvatar } from './OnSiteNow';
 export function useLiveDesk() {
   const live = useLiveData([], { full: false });
   const d = live.d;
-  // What was said last in each chat, for the expanded row's quote.
+  // What was said last in each chat, for the expanded row's quote: plain words on one line, without Markdown's marks (#261).
   const inbox = useWebsiteInbox(false, !!d);
-  const said = useMemo(() => new Map((inbox.data?.conversations ?? []).map((r) => [r.id, r.last_message?.body ?? null])), [inbox.data]);
+  const said = useMemo(() => new Map((inbox.data?.conversations ?? []).map((r) => [r.id, markdownLine(r.last_message?.body ?? '') || null])), [inbox.data]);
   const dash = { isPending: !d && !live.cardsFailed, error: live.cardsFailed ? new Error(text("Couldn't load")) : null, refetch: live.retryAll };
   return { dash, d, visitors: live.visitors, skew: live.skew, said: (id: number) => said.get(id) ?? null };
 }

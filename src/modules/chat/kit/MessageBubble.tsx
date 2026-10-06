@@ -13,9 +13,10 @@ import { EmojiPicker } from '../parts';
 import type { ChannelCaps } from './caps';
 import { isFirst, isLast, type Position } from './grouping';
 import { MessageLinkPreview, shortUrl } from './LinkPreview';
-import { DeleteDialog, DrawerActions, MessageMenu, REACTION_BAR, canReact, messageActionItems, type MessageHandlers } from './MessageActions';
+import { DeleteDialog, MessageToolbar, canReact, messageActionItems, type MessageHandlers } from './MessageActions';
 import { MessageAttachments, type Look } from './MessageAttachment';
 import { MessageMeta } from './MessageMeta';
+import { MessageText } from './MessageText';
 import type { KitMessage, KitRole } from './model';
 
 /**
@@ -185,7 +186,6 @@ function useBubbleState(m: KitMessage, h: MessageHandlers) {
 function PageBubble({ m, position, caps, handlers: h, renderers, cardContinuation = false, lastCard = true }: BubbleProps) {
   const own = m.own;
   const first = isFirst(position);
-  const [more, setMore] = useState(false);
   const { picker, setPicker, deleting, setDeleting, react } = useBubbleState(m, h);
   const { named, shown } = useShownText(m);
   // Record messages give up their width in a narrow column.
@@ -198,9 +198,8 @@ function PageBubble({ m, position, caps, handlers: h, renderers, cardContinuatio
   const files = !m.deleted ? (m.files ?? []) : [];
   const accent = accentOf(m, 'page');
   const attachment = files.length ? <MessageAttachments files={files} at={m.at} look="page" own={own} voice={caps.voice || m.chat?.type === 'voice'} seed={m.id} accent={accent} /> : null;
-  const actions = !m.deleted ? (
-    <MessageMenu own={own} named={header && !carded} open={more} setOpen={setMore} reactions={reactable ? REACTION_BAR : []} onReact={react} onMoreReactions={() => (setMore(false), setPicker(true))} items={items} />
-  ) : null;
+  // On hover, in the message's top-right corner: react, reply, star and the rest (worksuite-desktop#266).
+  const actions = !m.deleted ? <MessageToolbar look="page" m={m} own={own} caps={caps} handlers={h} items={items} onMoreReactions={() => setPicker(true)} /> : null;
   const inBubble = !!shown && !m.deleted && !carded;
   const meta = carded ? null : own ? (isLast(position) || m.receipt || m.edited || m.starred ? <MessageMeta m={m} /> : null) : m.edited || m.starred ? <MessageMeta m={m} showTime={false} /> : null;
   return (
@@ -222,9 +221,7 @@ function PageBubble({ m, position, caps, handlers: h, renderers, cardContinuatio
           <div data-bubble-body style={colleague ? { ['--c' as string]: nameColour(m.author.name) } : undefined} className={cx('whitespace-pre-wrap break-words px-[13px] py-[9px] text-[13.5px] leading-[1.55] selectable', bubbleTone(m, 'page'), CORNERS[own ? 'right' : 'left'][position])}>
             {m.author.role === 'bot' ? <BotLabel name={m.author.name} /> : null}
             <ReplyQuote m={m} look="page" inside />
-            <span>
-              <LinkedText text={shown!} className={accent} display={shortUrl} />
-            </span>
+            <MessageText text={shown!} accent={accent} markdown={caps.markdown} />
           </div>
         ) : m.deleted ? (
           <div className="rounded-[12px] border border-line px-3 py-2 text-[12.5px] text-ink-3 italic">Message deleted</div>
@@ -259,7 +256,7 @@ function DrawerBubble({ m, position, caps, handlers: h, renderers, group = false
   const accent = accentOf(m, 'drawer');
   const items = messageActionItems(m, caps, h, 'drawer', setDeleting);
   const attachment = media ? <MessageAttachments files={files} at={m.at} look="drawer" own={own} voice={caps.voice || m.chat?.type === 'voice'} seed={m.id} accent={accent} /> : null;
-  const actions = !m.deleted ? <DrawerActions m={m} own={own} caps={caps} handlers={h} items={items} onMoreReactions={() => setPicker(true)} /> : null;
+  const actions = !m.deleted ? <MessageToolbar m={m} own={own} caps={caps} handlers={h} items={items} onMoreReactions={() => setPicker(true)} /> : null;
   const padded = media || !!card;
   const named_ = ((group && !own) || !!m.signed) && first && m.author.role !== 'bot';
   return (
