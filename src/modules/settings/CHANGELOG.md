@@ -4,11 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.23.0 — 2026-10-06
+## 1.24.0 — 2026-10-06
 
 **Added**
 
 - Marketing's Next contact shortcut under Keyboard shortcuts and a Marketing switch under Notifications, both for whoever has Marketing
+
+## 1.23.0 — 2026-10-06
+
+**Added**
+
+- Settings › Chat — 'Chat drawer opens as: Docked (default) / Floating' (#264)
 
 ## 1.22.0 — 2026-10-05
 

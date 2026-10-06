@@ -8,7 +8,9 @@ import {
   itemAppLink,
   itemRoute,
   itemWebLink,
+  isPageType,
   looksLikeItemLink,
+  pageOfRoute,
   parseItemHeader,
   parseItemLink,
   workSuiteWebPath,
@@ -182,5 +184,41 @@ describe('link settings (#170)', () => {
     expect(linkPrefs({ links: { mailLinks: 'current-tab' } })).toEqual({ openInApp: true, mailLinks: 'current-tab', confirmActions: true });
     expect(linkPrefs({ links: { openInApp: false, confirmActions: false } })).toMatchObject({ openInApp: false, confirmActions: false });
     expect(linkPrefs({ links: { mailLinks: 'window' as never } }).mailLinks).toBe('new-tab');
+  });
+});
+
+describe('item links (#266): pages of an app', () => {
+  it('names a page by its app and its name, and opens it where the app reads it', () => {
+    const l = ok('https://app.worksuite.lk/o/7/hr/announcements');
+    expect(l).toMatchObject({ org: '7', type: 'hr', id: 'announcements', action: 'open', explicitAction: false, format: 'web' });
+    expect(itemRoute(l)).toBe('/hr?tab=announcements');
+    expect(itemApp(l)).toBe('hr');
+    expect(itemRoute(ok('worksuite://7/files/shared'))).toBe('/files?view=shared');
+    expect(itemRoute(ok('worksuite://7/sales/orders'))).toBe('/sales?tab=orders');
+    expect(cardActions('hr')).toEqual(['open']);
+    expect(isPageType('hr')).toBe(true);
+    expect(isPageType('task')).toBe(false);
+    expect(itemWebLink({ org: '7', type: 'hr', id: 'announcements' })).toBe('https://app.worksuite.lk/o/7/hr/announcements');
+  });
+
+  it('holds a page to the same allow-list: plain names, open only, apps that have pages', () => {
+    expect(reason('worksuite://7/hr/Announcements')).toBe('bad_id');
+    expect(reason('worksuite://7/hr/12')).toBe('bad_id');
+    expect(reason('worksuite://7/hr/announcements?action=approve')).toBe('unknown_action');
+    expect(reason('worksuite://7/hr/announcements?comment=1&tab=x')).toBe('unknown_parameter');
+    expect(reason('worksuite://7/payroll/runs')).toBe('unknown_type');
+    expect(reason('worksuite://7/settings/security')).toBe('unknown_type');
+    // A record type keeps its own rule: a task is a number, never a page name.
+    expect(reason('worksuite://7/task/announcements')).toBe('bad_id');
+  });
+
+  it('reads a page from a desktop route only when the route is just that page', () => {
+    expect(pageOfRoute('/hr?tab=announcements')).toEqual({ app: 'hr', page: 'announcements' });
+    expect(pageOfRoute('/files?view=shared')).toEqual({ app: 'files', page: 'shared' });
+    expect(pageOfRoute('/hr?tab=people&employee=12')).toBeNull();
+    expect(pageOfRoute('/hr')).toBeNull();
+    expect(pageOfRoute('/hr/leave/4')).toBeNull();
+    expect(pageOfRoute('/chat?view=website')).toBeNull();
+    expect(pageOfRoute('/hr?view=announcements')).toBeNull();
   });
 });

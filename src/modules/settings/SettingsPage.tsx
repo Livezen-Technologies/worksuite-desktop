@@ -3,7 +3,7 @@ import { ColorProfiles } from './Appearance';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
-import { FOLLOW_UP_DEFAULTS, QUICK_ASK_SHORTCUTS, type AiDisplay, type Preferences, type RemoteControlIdentity, type RemoteControlView, type WebchatFollowUpPrefs } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, QUICK_ASK_SHORTCUTS, type AiDisplay, type ChatDrawerMode, type Preferences, type RemoteControlIdentity, type RemoteControlView, type WebchatFollowUpPrefs } from '@shared/types';
 import { useCanOpen, useVisibleIds } from '../../core/access';
 import { app, isLocked, updatePrefs } from '../../core/app-state';
 import { call, errorMessage, isMac, on } from '../../core/bridge';
@@ -68,6 +68,8 @@ const SECTIONS = [
   { id: 'updates', label: 'Updates', icon: 'download', group: 'Desktop' },
   { id: 'update-diagnostics', label: 'Updates › Diagnostics', icon: 'stethoscope', group: 'Desktop' },
   { id: 'mail', label: 'Mail', icon: 'mail', group: 'Apps' },
+  // How the chat drawer opens: docked beside the page or floating over it (worksuite-desktop#264).
+  { id: 'chat', label: 'Chat', icon: 'chat', group: 'Apps' },
   // Contacts › Accounts & sync: Google, Outlook, iCloud, CardDAV, Mac Contacts (worksuite-desktop#175).
   { id: 'contacts', label: 'Contacts', icon: 'contact', group: 'Apps' },
   { id: 'ai', label: 'AI Assistant', icon: 'sparkles', group: 'Apps' },
@@ -107,6 +109,7 @@ function SettingsSections(_props: ModuleProps) {
   const prefs = useStore(app, (s) => s.prefs);
   const hasMail = useCanOpen('mail');
   const hasContacts = useCanOpen('contacts');
+  const hasChat = useCanOpen('chat');
   const managesRinging = useManagesRinging();
   const { ref: listRef, fades, onScroll: onListScroll } = useScrollFades<HTMLDivElement>();
   if (!prefs) return null;
@@ -121,7 +124,7 @@ function SettingsSections(_props: ModuleProps) {
           <div ref={listRef} onScroll={onListScroll} data-settings-scroller className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-4 scroll-thin">
             <div>
               <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
-              {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts)).map((s, i, list) => (
+              {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts) && (s.id !== 'chat' || hasChat)).map((s, i, list) => (
                 <div key={s.id}>
                   {s.group !== list[i - 1]?.group ? <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{s.group}</div> : null}
                   <button type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
@@ -157,6 +160,7 @@ function SettingsSections(_props: ModuleProps) {
           {section === 'updates' ? <UpdatesPage onDiagnostics={() => go('/settings/update-diagnostics')} /> : null}
           {section === 'update-diagnostics' ? <UpdateDiagnosticsPage /> : null}
           {section === 'mail' && hasMail ? <MailSettings query={query} /> : null}
+          {section === 'chat' && hasChat ? <ChatSection prefs={prefs} /> : null}
           {section === 'contacts' && hasContacts ? <AccountsSettings /> : null}
           {section === 'ai' ? <AiSection prefs={prefs} /> : null}
           {section === 'local-ai' ? <LocalAISection /> : null}
@@ -683,6 +687,35 @@ function FollowUpPrefs({ prefs }: { prefs: Preferences }) {
 type RingWhere = 'desktop_first' | 'browser' | 'all';
 
 const WEBSITE = 'https://worksuiteone.com/';
+
+const DRAWER_HINT: Record<ChatDrawerMode, string> = {
+  docked: 'Beside the page, under the tabs. The page makes room for it, so nothing is hidden underneath.',
+  floating: 'Over the page, which dims behind it. A click on the page or Esc closes it.',
+};
+
+/**
+ * Settings › Chat (worksuite-desktop#264): how the chat drawer from the title bar opens on this computer — the same
+ * choice as the button in the drawer's header. A window narrower than 1,200px floats it whatever is chosen here.
+ */
+export function ChatSection({ prefs }: { prefs: Preferences }) {
+  const mode = prefs.chatDrawer ?? 'docked';
+  return (
+    <>
+      <H title="Chat" hint="How Chat opens over your work on this computer." />
+      <Row label="Chat drawer opens as" hint={`${DRAWER_HINT[mode]} In a window narrower than 1,200 px it always floats.`}>
+        <Select<ChatDrawerMode>
+          label="Chat drawer opens as"
+          value={mode}
+          options={[
+            { value: 'docked', label: 'Docked (default)' },
+            { value: 'floating', label: 'Floating' },
+          ]}
+          onValueChange={(v) => void updatePrefs({ chatDrawer: v }).catch((e) => toast('error', errorMessage(e)))}
+        />
+      </Row>
+    </>
+  );
+}
 
 const DISPLAY_HINT: Record<AiDisplay, string> = {
   drawer: 'The AI button in the header opens the assistant beside your tabs.',

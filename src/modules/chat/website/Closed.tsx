@@ -3,16 +3,18 @@ import { useState } from 'react';
 import { ApiError } from '../../../core/api';
 import { errorMessage } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
+import { markdownLine } from '../../../core/markdown';
 import { dateLabel, listStamp, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
-import { Avatar, Button, Chip, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
+import { Avatar, Button, Chip, Empty, cx } from '../../../components/ui';
 import { SidePanel } from '../../../components/SidePanel';
 import { WEBSITE_CAPS } from '../kit/caps';
 import { MessageList } from '../kit/MessageList';
 import { byTime, dwell, eventsForThread, fromWebsiteMessage, fromWidgetEvent } from '../kit/model';
 import { sharedFilesOf } from '../kit/SharedFiles';
-import { PRIORITIES, useWebsiteConversation, websiteAction, type WebsiteConversation, type WebsiteRow } from './api';
+import { fileLine, PRIORITIES, useWebsiteConversation, websiteAction, type WebsiteConversation, type WebsiteRow } from './api';
+import { ThreadFailed, ThreadPlaceholder, type PaneHead } from './ThreadPlaceholder';
 import { ordinal } from './live/liveMap';
 import { firstName, FollowUpRow, missedStamp } from './Missed';
 import { BlockDialog, ContactCard, SharedFilesCard, TagsCard } from './panelCards';
@@ -60,14 +62,16 @@ export function closedHow(c: Pick<WebsiteConversation['conversation'], 'closed_a
 }
 
 /**
- * A closed chat's line on the list (C-06): what it was about — its subject, else what was said last — and who closed
- * it ("Activation fixed · Nuwan"); one that went quiet is "Inactive · closed automatically"; one the visitor ended says so.
+ * A closed chat's line on the list (C-06): what it was about — its subject, else what was said last, in plain words on
+ * one line, or the picture or file it was (#261) — and who closed it ("Activation fixed · Nuwan"); one that went quiet
+ * is "Inactive · closed automatically"; one the visitor ended says so; one with nothing else to say, "Chat closed".
  */
 export function closedLine(r: Pick<WebsiteRow, 'closed_reason' | 'closed_by' | 'subject' | 'last_message' | 'email'>): string {
   if (r.closed_reason === 'idle') return text('Inactive · closed automatically');
-  const about = r.subject || r.last_message?.body || r.last_message?.file || r.email || '';
+  const m = r.last_message;
+  const about = markdownLine(r.subject ?? '') || markdownLine(m?.body ?? '') || (m?.file ? fileLine(m.file) : '') || r.email || '';
   const who = r.closed_reason === 'visitor' ? text('ended by the visitor') : r.closed_by ? firstName(r.closed_by) : null;
-  return [about, who].filter(Boolean).join(' · ');
+  return [about, who].filter(Boolean).join(' · ') || text('Chat closed');
 }
 
 /** A closed chat in the list (C-06): the visitor and their company, when it closed, how it ended, and the stars it got. */
@@ -114,6 +118,13 @@ function between(from: string | null | undefined, to: string | null | undefined)
   return Number.isNaN(s) ? null : Math.max(0, s);
 }
 
+/** A closed chat's header from its row, while the chat itself loads (#261): who, how it ended and on which site. */
+function closedHead(r: WebsiteRow): PaneHead {
+  const name = r.visitor_name || r.label;
+  const how = r.status === 'closed' ? closedHow({ closed_at: r.closed_at ?? null, closed_reason: r.closed_reason ?? null, closed_by: r.closed_by ? { id: 0, name: r.closed_by } : null }) : text('Open again');
+  return { name: r.company ? `${name} · ${r.company}` : name, line: [how, r.site ?? r.widget].filter(Boolean).join(' · ') };
+}
+
 /**
  * One closed chat (C-06): read back without arriving in it (`review` — a closed chat has nobody to join, and a missed
  * one must not be handled by a look), with Star, Block visitor and Reopen; Reopen opens the chat to reply in.
@@ -125,13 +136,15 @@ export function ClosedDetail({ id, row, onReopened }: { id: string; row?: Websit
   const [blocking, setBlocking] = useState(false);
   const refresh = () => void qc.invalidateQueries({ queryKey: ['website'] });
 
-  if (q.isLoading) return <Spinner />;
-  if (q.error) {
-    const gone = q.error instanceof ApiError && (q.error.status === 404 || q.error.forbidden);
-    return gone ? <Empty icon="globe" title="This website chat is not available" hint="It may have been removed, or you no longer staff this website." /> : <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
-  }
+  const gone = q.error instanceof ApiError && (q.error.status === 404 || q.error.forbidden);
+  if (gone) return <Empty icon="globe" title="This website chat is not available" hint="It may have been removed, or you no longer staff this website." />;
   const data = q.data;
-  if (!data) return null;
+  // Not read here before (#261): the transcript's place in grey under the header the list row gives it, filling the
+  // pane — never a spinner at its edge — with "Still loading… · Retry" and "Couldn't load · Retry" in the middle.
+  if (!data) {
+    const head = row ? closedHead(row) : undefined;
+    return q.error ? <ThreadFailed head={head} look="detail" onRetry={() => void q.refetch()} /> : <ThreadPlaceholder head={head} look="detail" onRetry={() => void qc.cancelQueries({ queryKey: ['website', 'conversation', id, 'review'] }).then(() => q.refetch())} />;
+  }
   const c = data.conversation;
   const v = data.visitor;
   const name = v?.name || row?.visitor_name || v?.label || text('Visitor');

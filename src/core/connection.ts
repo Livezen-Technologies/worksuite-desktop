@@ -1,14 +1,15 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { POOR_TOAST_AFTER_MS, summarizeConnection, type ConnectionSummary } from '@shared/connection';
+import { POOR_TOAST_AFTER_MS, summarizeConnection, summarizeServer, type ConnectionSummary, type ServerSummary } from '@shared/connection';
 import type { StatusSnapshot } from '@shared/types';
 import { app } from './app-state';
 import { createStore, useStore } from './store';
 import { toast } from './toasts';
 
 /**
- * Connection strength in the renderer (worksuite-desktop#254): the main process's measurements, on the status
- * snapshot, turned into a level here. The window slides with the clock, so the level is re-worked every few
- * seconds even when no new ping has come in.
+ * Connection strength in the renderer (worksuite-desktop#254, #265): the main process's measurements, on the status
+ * snapshot, turned into a level here — your connection's, from the network delay alone, and the WorkSuite server's
+ * apart. The window slides with the clock, so the level is re-worked every few seconds even when no new ping has come
+ * in.
  */
 export const REFRESH_MS = 5_000;
 
@@ -21,6 +22,14 @@ export function summaryOf(status: StatusSnapshot | null | undefined, now: number
     attempt: status?.realtimeDiagnostics?.attempt ?? 0,
     now,
   });
+}
+
+/** The network delay the server is judged net of: a measured one, never an upper bound with the server's time in it. */
+const netDelay = (c: ConnectionSummary | null | undefined): number | null => (c && !c.upperBound ? c.delayMs : null);
+
+/** How the WorkSuite server is answering (#265): its own marker, never part of the connection's level. */
+export function serverOf(status: StatusSnapshot | null | undefined, connection?: ConnectionSummary | null): ServerSummary {
+  return summarizeServer(status?.connection?.api, netDelay(connection));
 }
 
 /** A clock that ticks every `ms`. */
@@ -37,6 +46,12 @@ export function useConnection(): ConnectionSummary {
   const status = useStore(app, (s) => s.status);
   const now = useTick(REFRESH_MS);
   return useMemo(() => summaryOf(status, now), [status, now]);
+}
+
+export function useServer(connection: ConnectionSummary): ServerSummary {
+  const api = useStore(app, (s) => s.status?.connection?.api);
+  const delay = netDelay(connection);
+  return useMemo(() => summarizeServer(api, delay), [api, delay]);
 }
 
 /** The status bar's two settings (right-click it): both on unless turned off. */

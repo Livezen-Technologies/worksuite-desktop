@@ -65,6 +65,18 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./chat/ChatPage'),
   },
   {
+    // Phone (WS-VOIP-SRS-001): the softphone, call history, voicemail, forwarding, supervision and telephony
+    // administration over WorkSuite's Voip module (/api/voip). The compact phone opens in a window of its own (D01).
+    input: defineDesktopManifest({
+      id: 'phone', name: 'Phone', icon: 'phone', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['notifications', 'microphone'],
+      windows: [{ id: 'phone', route: '/phone/compact', alwaysOnTop: true }],
+      quickActions: [{ id: 'dial', label: 'Dial a number', route: '/phone' }],
+      deepLinks: ['phone', 'phone/calls/:id'],
+    }),
+    load: () => import('./phone/PhonePage'),
+  },
+  {
     // Chat calls: the ring and the call each open in a window of their own.
     input: defineDesktopManifest({
       id: 'calls', name: 'Calls', icon: 'phone', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },

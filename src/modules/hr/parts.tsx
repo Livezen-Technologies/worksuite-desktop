@@ -101,6 +101,8 @@ export const btnPrimary = 'inline-flex h-[34px] shrink-0 items-center gap-1.5 ro
 export const btnGood = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] bg-[#1F7A4D] px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-white hover:bg-[#1A6841] disabled:opacity-50';
 export const btnBad = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] border border-[#F1B8A8] bg-surface px-2.5 dark:border-danger/40 text-[12.5px] font-semibold whitespace-nowrap text-danger hover:bg-danger-bg disabled:opacity-50';
 export const btnSmall = 'inline-flex h-[30px] shrink-0 items-center rounded-[7px] border border-line bg-surface px-2.5 text-[12.5px] font-semibold whitespace-nowrap text-ink hover:bg-subtle disabled:opacity-50';
+/** Borderless: the panel's Close beside the actions that matter. */
+export const btnGhost = 'inline-flex h-[34px] shrink-0 items-center gap-1.5 rounded-[8px] px-3 text-[13px] font-semibold whitespace-nowrap text-ink-2 hover:bg-subtle hover:text-ink disabled:opacity-50';
 export const input = 'h-[34px] w-full rounded-[8px] border border-line bg-surface px-2.5 text-[13px] font-medium text-ink outline-none focus:border-primary';
 
 export function Field({ label, hint, children, className }: { label: ReactNode; hint?: ReactNode; children: ReactNode; className?: string }) {

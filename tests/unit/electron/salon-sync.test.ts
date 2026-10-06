@@ -6,7 +6,7 @@ import type { SalonOutboxItem } from '@shared/types';
 import { Database } from '../../../electron/services/db';
 import { Vault } from '../../../electron/services/vault';
 import { DesktopError } from '../../../electron/main/errors';
-import { adoptClient, apply, batch, choicesFor, dropWithDependents, held, needsOf, substitute } from '../../../electron/services/salon-outbox';
+import { adoptClient, apply, batch, choicesFor, dropWithDependents, held, needsOf, offlineSaleProblem, substitute, tillReceipt } from '../../../electron/services/salon-outbox';
 import { SalonSync, dayIn, nationalDigits, prune, searchClients, type SalonSyncDeps } from '../../../electron/services/salon-sync';
 
 const C1 = 'C-11111111-1111-4111-8111-111111111111';
@@ -438,5 +438,66 @@ describe('salon sync: the outbox', () => {
     h.sync.add(walkInInputs()[0]!);
     h.sync.forgetAll();
     expect(h.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM salon_outbox')!.n).toBe(0);
+  });
+});
+
+describe('salon sync: a POS offline sale (POS-11)', () => {
+  const till = { id: 3, code: 'Front-1', name: 'Front counter', open: true, session_id: 41, opened_at: '2026-09-28T03:00:00Z' };
+  const sale = (over: Record<string, unknown> = {}) => ({
+    kind: 'visit.checkout' as const,
+    payload: { visit_id: 900, tenders: [{ method: 'cash', amount: 3500, reference: null }], expected_total: 3500, ...over },
+    label: 'Payment: Dilini Perera',
+  });
+
+  it('says what an offline sale may carry: a visit, cash or a card with its code', () => {
+    expect(offlineSaleProblem({ visit_id: 900, tenders: [{ method: 'cash', amount: 100 }] })).toBeNull();
+    expect(offlineSaleProblem({ visit_id: 'local:V-0b7e7c39-4c1e-4a39-9d0e-0a1b2c3d4e5f', tenders: [{ method: 'card', amount: 100, reference: '4417' }] })).toBeNull();
+    expect(offlineSaleProblem({ tenders: [{ method: 'cash', amount: 100 }] })).toMatch(/names the visit/);
+    expect(offlineSaleProblem({ visit_id: 'local:C-0b7e7c39-4c1e-4a39-9d0e-0a1b2c3d4e5f', tenders: [{ method: 'cash', amount: 100 }] })).toMatch(/names the visit/);
+    expect(offlineSaleProblem({ visit_id: 900, tenders: [] })).toMatch(/what was taken/);
+    expect(offlineSaleProblem({ visit_id: 900, tenders: [{ method: 'wallet', amount: 100, reference: 'x' }] })).toMatch(/cash or card only/);
+    expect(offlineSaleProblem({ visit_id: 900, tenders: [{ method: 'card', amount: 100 }] })).toMatch(/approval code/);
+    expect(offlineSaleProblem({ visit_id: 900, tenders: [{ method: 'cash', amount: 0 }] })).toMatch(/how much/);
+    expect(offlineSaleProblem({ visit_id: 900, tenders: [{ method: 'cash', amount: 10 }], expected_total: 'lots' })).toMatch(/not a sum/);
+  });
+
+  it('numbers the till receipt from the register’s code, padded', () => {
+    expect(tillReceipt('Front-1', 12)).toBe('FRONT-1-OFF-000012');
+    expect(tillReceipt('Nail bar / 2', 1)).toBe('NAIL-BAR-2-OFF-000001');
+    expect(tillReceipt('', 3)).toBe('DESK-OFF-000003');
+  });
+
+  it('is taken only on a desk paired as a till', async () => {
+    const h = harness();
+    await h.sync.sync();
+    expect(() => h.sync.add(sale())).toThrow(/paired as a POS till/);
+  });
+
+  it('gives each sale the next till receipt number, never one handed out before — even after a drop', async () => {
+    const h = harness({ routes: { 'GET /api/salon/v1/desk/bootstrap': () => bootstrap({ desk: { id: 5, org_id: 17, location_id: 16, name: 'Front desk', status: 'active', register: till } }) } });
+    await h.sync.sync();
+    h.state.down = true;
+
+    const first = h.sync.add(sale());
+    const second = h.sync.add(sale({ visit_id: 901, tenders: [{ method: 'card', amount: 2000, reference: '4417' }] }));
+    expect(first.payload.receipt).toBe('FRONT-1-OFF-000001');
+    expect(second.payload.receipt).toBe('FRONT-1-OFF-000002');
+    expect(() => h.sync.add(sale({ tenders: [{ method: 'wallet', amount: 10, reference: 'q' }] }))).toThrow(/cash or card only/);
+    expect(() => h.sync.add({ ...sale(), local_id: 'V-0b7e7c39-4c1e-4a39-9d0e-0a1b2c3d4e5f' })).toThrow(/local id/);
+
+    h.sync.resolve({ id: second.id, action: 'drop' });
+    expect(h.sync.add(sale({ visit_id: 902 })).payload.receipt).toBe('FRONT-1-OFF-000003');
+
+    /* Kept encrypted, with the rest of the outbox. */
+    const raw = h.db.all<{ item: string }>('SELECT item FROM salon_outbox').map((r) => r.item).join('');
+    expect(raw).not.toContain('FRONT-1-OFF');
+
+    h.state.down = false;
+    await h.sync.sync();
+    const sent = h.calls.filter((c) => c.path.endsWith('/desk/outbox')).at(-1)!.body as { items: Array<{ kind: string; payload: Record<string, unknown> }> };
+    expect(sent.items.map((i) => [i.kind, i.payload.receipt])).toEqual([
+      ['visit.checkout', 'FRONT-1-OFF-000001'],
+      ['visit.checkout', 'FRONT-1-OFF-000003'],
+    ]);
   });
 });

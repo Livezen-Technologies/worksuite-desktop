@@ -83,107 +83,23 @@ export function useDismiss(open: boolean, box: RefObject<HTMLElement | null>, cl
   }, [open, box, close]);
 }
 
-/**
- * The page's actions: a small round button on the message, shown on hover, that opens the reactions above and the
- * menu below.
- */
-export function MessageMenu({ own, named, open, setOpen, reactions, onReact, onMoreReactions, items }: { own: boolean; named: boolean; open: boolean; setOpen: (v: boolean) => void; reactions: string[]; onReact: (e: string) => void; onMoreReactions: () => void; items: MenuItem[] }) {
-  const box = useRef<HTMLDivElement>(null);
-  const [at, setAt] = useState<{ bar: { left: number; top: number }; menu: { left: number; top: number } } | null>(null);
-  useDismiss(open, box, () => setOpen(false));
-
-  // Placed when opened, from where the button and the message are: the reactions above the message, the menu under
-  // the button — or above it when the message sits at the bottom of the thread.
-  const place = (button: HTMLElement) => {
-    const r = button.getBoundingClientRect();
-    const col = (button.closest('[data-bubble]') ?? button).getBoundingClientRect();
-    const barW = 44 + reactions.length * 34 + 40;
-    const menuH = items.length * 34 + 12 + (items.some((x) => x.danger) ? 9 : 0);
-    const clampX = (x: number, w: number) => Math.max(8, Math.min(window.innerWidth - w - 8, x));
-    const below = r.bottom + 4 + menuH <= window.innerHeight - 8;
-    const menuTop = below ? r.bottom + 4 : Math.max(8, r.top - menuH - 4);
-    // Flipped, the reactions sit on top of the menu rather than under it.
-    const barTop = below ? col.top - 48 : menuTop - 48;
-    setAt({
-      bar: { left: clampX(own ? col.right - barW : col.left, barW), top: barTop >= 8 ? barTop : col.bottom + 6 },
-      menu: { left: clampX(own ? r.right - 200 : r.left, 200), top: menuTop },
-    });
-  };
-
-  if (!items.length && !reactions.length) return null;
-  return (
-    <div ref={box} className="pointer-events-none absolute inset-0 z-20">
-      <button
-        type="button"
-        aria-label="Message actions"
-        aria-haspopup="menu"
-        aria-expanded={open}
-        onClick={(e) => {
-          if (!open) place(e.currentTarget);
-          setOpen(!open);
-        }}
-        className={cx(
-          'pointer-events-auto absolute flex h-[22px] w-[22px] items-center justify-center rounded-full bg-selection text-primary shadow-[0_1px_3px_rgb(var(--ws-shadow-rgb)/.12)]',
-          named ? 'top-[24px]' : 'top-[2px]',
-          own ? '-left-7' : '-right-7',
-          open ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
-        )}
-      >
-        <Icon name="chevron-down" size={14} />
-      </button>
-      {open && at ? (
-        <>
-          {reactions.length ? (
-            <div role="toolbar" aria-label="React" className="pointer-events-auto fixed z-40 flex items-center gap-0.5 rounded-[22px] bg-surface px-1.5 py-1 shadow-[0_8px_24px_rgb(var(--ws-shadow-rgb)/.16),0_0_0_1px_var(--ws-edge)]" style={at.bar}>
-              {reactions.map((e) => (
-                <button key={e} type="button" aria-label={`React ${e}`} onClick={() => (setOpen(false), onReact(e))} className="flex h-8 w-8 items-center justify-center rounded-full text-[19px] leading-none hover:bg-selection">
-                  {e}
-                </button>
-              ))}
-              <span className="mx-0.5 h-5 w-px bg-line" />
-              <button type="button" aria-label="More reactions" title="More reactions" onClick={onMoreReactions} className="flex h-8 w-8 items-center justify-center rounded-full bg-subtle text-ink-2 hover:text-ink">
-                <Icon name="smile" size={16} />
-              </button>
-            </div>
-          ) : null}
-          {items.length ? (
-            <div role="menu" aria-label="Message actions" className="pointer-events-auto fixed z-40 w-[200px] rounded-[12px] bg-surface p-1.5 shadow-[0_16px_40px_rgb(var(--ws-shadow-rgb)/.2),0_0_0_1px_var(--ws-edge)]" style={at.menu}>
-              {items.map((it, i) => (
-                <div key={it.label}>
-                  {it.danger && i > 0 ? <span className="mx-1.5 my-1 block h-px bg-line" /> : null}
-                  <button
-                    type="button"
-                    role="menuitem"
-                    onClick={() => (setOpen(false), it.run())}
-                    className={cx('flex h-[34px] w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[13px] font-medium hover:bg-subtle', it.danger ? 'text-danger' : 'text-ink')}
-                  >
-                    <Icon name={it.icon} size={15} className={it.danger ? '' : 'text-ink-3'} />
-                    {it.label}
-                  </button>
-                </div>
-              ))}
-            </div>
-          ) : null}
-        </>
-      ) : null}
-    </div>
-  );
-}
-
 const toolBtn = 'flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-2 hover:bg-subtle hover:text-ink';
 
 /**
- * The chat drawer's actions (ChatDrawer · message actions): on hover or click, a compact bar on the bubble's top edge
- * — react, reply, star, more. The reactions pill and the menu float, stay inside the drawer, and the menu opens upward
- * when the message is down by the message box.
+ * A message's actions (ChatDrawer · message actions; worksuite-desktop#266): on hover or focus, a compact bar on the
+ * bubble's top edge — react, reply, star, more. The drawer keeps it at the corner on the message's own side; a
+ * conversation in its tab or window puts it in the top-right corner, inside the message's column, rather than a
+ * round button floating beside the bubble. The reactions pill and the menu float, stay inside the thread, and the
+ * menu opens upward when the message is down by the message box.
  */
-export function DrawerActions({ m, own, caps, handlers: h, items, onMoreReactions }: { m: KitMessage; own: boolean; caps: ChannelCaps; handlers: MessageHandlers; items: MenuItem[]; onMoreReactions: () => void }) {
+export function MessageToolbar({ m, own, caps, handlers: h, items, onMoreReactions, look = 'drawer' }: { m: KitMessage; own: boolean; caps: ChannelCaps; handlers: MessageHandlers; items: MenuItem[]; onMoreReactions: () => void; look?: 'page' | 'drawer' }) {
   const [pop, setPop] = useState<{ kind: 'react' | 'more'; left: number; top: number } | null>(null);
   const box = useRef<HTMLDivElement>(null);
   useDismiss(!!pop, box, () => setPop(null));
   const react = canReact(m, caps, h);
   const reply = canReply(m, h);
   const star = caps.star && !!h.onStar;
+  const reactions = look === 'page' ? REACTION_BAR : DRAWER_REACTIONS;
 
   // Placed when opened: inside the drawer, above the bar for the reactions, under the ⋯ for the menu unless that
   // would run into the message box.
@@ -192,7 +108,7 @@ export function DrawerActions({ m, own, caps, handlers: h, items, onMoreReaction
     const area = (button.closest('[data-thread]') ?? document.body).getBoundingClientRect();
     const b = button.getBoundingClientRect();
     const bar = (button.closest('[role="toolbar"]') ?? button).getBoundingClientRect();
-    const w = kind === 'react' ? 44 + DRAWER_REACTIONS.length * 36 : 214;
+    const w = kind === 'react' ? 44 + reactions.length * 36 : 214;
     const hgt = kind === 'react' ? 46 : items.length * 32 + 12 + (items.some((x) => x.danger) ? 9 : 0);
     const left = Math.max(area.left + 8, Math.min(area.right - w - 8, kind === 'react' ? (own ? bar.right - w : bar.left) : own ? b.right - w : b.left));
     const top =
@@ -207,48 +123,58 @@ export function DrawerActions({ m, own, caps, handlers: h, items, onMoreReaction
   };
 
   if (!react && !reply && !star && !items.length) return null;
+  const bar = (
+    <div
+      role="toolbar"
+      aria-label="Message actions"
+      className={cx(
+        'z-20 flex items-center gap-0.5 rounded-[10px] bg-surface p-[3px] shadow-[0_4px_14px_rgb(var(--ws-shadow-rgb)/.16),0_0_0_1px_var(--ws-edge)]',
+        look === 'page' ? 'pointer-events-auto shrink-0' : cx('absolute -top-[15px]', own ? 'right-1.5' : 'left-1.5'),
+        pop ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
+      )}
+    >
+      {react ? (
+        <button type="button" aria-label="React" title="React" aria-expanded={pop?.kind === 'react'} onClick={(e) => open('react', e.currentTarget)} className={cx(toolBtn, pop?.kind === 'react' && '!bg-selection !text-primary')}>
+          <Icon name="smile" size={15} />
+        </button>
+      ) : null}
+      {reply ? (
+        <button type="button" aria-label="Reply" title="Reply" onClick={() => h.onReply!(m)} className={toolBtn}>
+          <Icon name="reply" size={15} />
+        </button>
+      ) : null}
+      {star ? (
+        <button
+          type="button"
+          aria-label={m.starred ? 'Unstar message' : 'Star message'}
+          title={m.starred ? 'Unstar' : 'Star'}
+          aria-pressed={!!m.starred}
+          onClick={() => h.onStar!(m)}
+          className={cx(toolBtn, m.starred && '!text-[#CA8A04]')}
+        >
+          <Icon name="star" size={15} />
+        </button>
+      ) : null}
+      {items.length ? (
+        <button type="button" aria-label="More actions" title="More" aria-haspopup="menu" aria-expanded={pop?.kind === 'more'} onClick={(e) => open('more', e.currentTarget)} className={cx(toolBtn, pop?.kind === 'more' && '!bg-selection !text-primary')}>
+          <Icon name="more" size={15} />
+        </button>
+      ) : null}
+    </div>
+  );
   return (
     <div ref={box} className="contents">
-      <div
-        role="toolbar"
-        aria-label="Message actions"
-        className={cx(
-          'absolute -top-[15px] z-20 flex items-center gap-0.5 rounded-[10px] bg-surface p-[3px] shadow-[0_4px_14px_rgb(var(--ws-shadow-rgb)/.16),0_0_0_1px_var(--ws-edge)]',
-          own ? 'right-1.5' : 'left-1.5',
-          pop ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
-        )}
-      >
-        {react ? (
-          <button type="button" aria-label="React" title="React" aria-expanded={pop?.kind === 'react'} onClick={(e) => open('react', e.currentTarget)} className={cx(toolBtn, pop?.kind === 'react' && '!bg-selection !text-primary')}>
-            <Icon name="smile" size={15} />
-          </button>
-        ) : null}
-        {reply ? (
-          <button type="button" aria-label="Reply" title="Reply" onClick={() => h.onReply!(m)} className={toolBtn}>
-            <Icon name="reply" size={15} />
-          </button>
-        ) : null}
-        {star ? (
-          <button
-            type="button"
-            aria-label={m.starred ? 'Unstar message' : 'Star message'}
-            title={m.starred ? 'Unstar' : 'Star'}
-            aria-pressed={!!m.starred}
-            onClick={() => h.onStar!(m)}
-            className={cx(toolBtn, m.starred && '!text-[#CA8A04]')}
-          >
-            <Icon name="star" size={15} />
-          </button>
-        ) : null}
-        {items.length ? (
-          <button type="button" aria-label="More actions" title="More" aria-haspopup="menu" aria-expanded={pop?.kind === 'more'} onClick={(e) => open('more', e.currentTarget)} className={cx(toolBtn, pop?.kind === 'more' && '!bg-selection !text-primary')}>
-            <Icon name="more" size={15} />
-          </button>
-        ) : null}
-      </div>
+      {look === 'page' ? (
+        // The top-right corner; a bar wider than a short message from the other side runs right, never off the left edge.
+        <div data-message-toolbar className={cx('pointer-events-none absolute inset-x-1.5 -top-[15px] z-20 flex', own ? 'justify-end' : 'justify-end-safe')}>
+          {bar}
+        </div>
+      ) : (
+        bar
+      )}
       {pop?.kind === 'react' ? (
         <div role="toolbar" aria-label="React" className="fixed z-40 flex items-center gap-0.5 rounded-full bg-surface p-1 shadow-[0_8px_24px_rgb(var(--ws-shadow-rgb)/.18),0_0_0_1px_var(--ws-edge)]" style={{ left: pop.left, top: pop.top }}>
-          {DRAWER_REACTIONS.map((e) => (
+          {reactions.map((e) => (
             <button key={e} type="button" aria-label={`React ${e}`} onClick={() => (setPop(null), h.onReact!(m, e))} className="flex h-[34px] w-[34px] items-center justify-center rounded-full text-[21px] leading-none transition-transform hover:scale-110 hover:bg-selection">
               {e}
             </button>

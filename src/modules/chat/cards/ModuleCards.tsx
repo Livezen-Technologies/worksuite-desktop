@@ -19,7 +19,7 @@ import { openRecord } from './RecordCards';
  * yours" and "deleted", so the card says both; a 403 (a module permission)
  * is plainly "no access".
  */
-type Ref = Exclude<RecordRef, { kind: 'meet' }>;
+type Ref = Exclude<RecordRef, { kind: 'meet' } | { kind: 'page' }>;
 
 const ENDPOINT: Record<Ref['kind'], (id: number) => [string, Record<string, string | number>?]> = {
   task: (id) => [`/api/tasks/${id}`],

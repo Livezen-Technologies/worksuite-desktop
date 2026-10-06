@@ -3,9 +3,10 @@ import { useState, type ReactNode } from 'react';
 import { apiGet, apiPost } from '../../../core/api';
 import { errorMessage } from '../../../core/bridge';
 import { text } from '../../../core/i18n';
+import { markdownLine } from '../../../core/markdown';
 import { listStamp, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
-import { Avatar, Button, Chip, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
+import { Avatar, Button, Chip, Empty, Modal, cx } from '../../../components/ui';
 import { WEBSITE_CAPS } from '../kit/caps';
 import { MessageList } from '../kit/MessageList';
 import { byTime, eventsForThread, fromWebsiteMessage, fromWidgetEvent } from '../kit/model';
@@ -14,6 +15,7 @@ import { timed } from './timings';
 import { ordinal } from './live/liveMap';
 import { clock } from './Ringing';
 import { hostOf, PANEL_CARD, PANEL_HEADING, pathOf, siteAndPath, Tag } from './rowParts';
+import { ThreadFailed, ThreadPlaceholder, type PaneHead } from './ThreadPlaceholder';
 
 /**
  * Missed chats (C-04, X-UI-02): visitors who wrote and left before anyone replied. To follow up and Handled
@@ -112,7 +114,9 @@ export function FollowUpRow({ id, name, online, stamp, line, active, dim = false
 /** A missed chat in the list: the visitor, when, what they asked, how long they waited, and the contact they left. */
 export function MissedRow({ m, active, onOpen }: { m: Missed; active: boolean; onOpen: () => void }) {
   const handled = handledLine(m);
-  const line = m.preview ? `“${m.preview}”` : (m.email ?? m.phone ?? text('No way to reach them')) + (m.place ? ` · ${m.place}` : '');
+  // Their words on one line, without Markdown's marks (#261).
+  const said = m.preview ? markdownLine(m.preview) : '';
+  const line = said ? `“${said}”` : (m.email ?? m.phone ?? text('No way to reach them')) + (m.place ? ` · ${m.place}` : '');
   return (
     <FollowUpRow id={m.id} name={m.visitor} online={!!m.online} stamp={missedStamp(m.started_at ?? m.missed_at)} line={line} active={active} dim={!!handled} onOpen={onOpen}>
       {handled ? (
@@ -159,10 +163,13 @@ export function MissedDetail({ id, m, onOpenChat }: { id: string; m: Missed | un
   const [emailing, setEmailing] = useState(false);
   const refresh = () => void qc.invalidateQueries({ queryKey: ['website'] });
 
-  if (q.isLoading) return <Spinner />;
-  if (q.error) return <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
   const data = q.data;
-  if (!data) return null;
+  // Not read here before (#261): the transcript's place in grey under the header the list row gives it, filling the
+  // pane, with "Still loading… · Retry" and "Couldn't load · Retry" in the middle; a copy in hand stays on a failure.
+  if (!data) {
+    const head: PaneHead | undefined = m ? { name: m.visitor, line: m.online ? text('Back on the site now') : m.left_at ? text('Left the site at {time}', { time: timeLabel(m.left_at) }) : text('Left the site'), presence: m.online ? 'online' : null } : undefined;
+    return q.error ? <ThreadFailed head={head} look="detail" onRetry={() => void q.refetch()} /> : <ThreadPlaceholder head={head} look="detail" onRetry={() => void qc.cancelQueries({ queryKey: ['website', 'conversation', id, 'review'] }).then(() => q.refetch())} />;
+  }
   const c = data.conversation;
   const v = data.visitor;
   const name = v?.name || m?.visitor || v?.label || text('Visitor');

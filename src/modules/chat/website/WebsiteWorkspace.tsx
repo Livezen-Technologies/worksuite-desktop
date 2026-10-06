@@ -31,6 +31,7 @@ import { WebsiteThread } from './WebsiteThread';
 import { VoiceCalls } from './VoiceCalls';
 import { WidgetSettings } from './widget/WidgetSettings';
 import { WebsiteWidgets } from './widget/Widgets';
+import { useInsightsShown } from './widget/serverSupport';
 import { WebsiteInsights, type InsightsPeriod } from './Insights';
 import { AutomatedMessages } from './Automated';
 import { BusinessHours } from './BusinessHours';
@@ -99,6 +100,9 @@ export function WebsiteWorkspace() {
   const myName = useStore(app, (s) => s.bootstrap?.user?.name ?? null);
   // The organisation's ringing rules (P-03, Admin Center › Chat › Ringing): for whoever manages website chats.
   const managesRinging = useStore(app, (s) => !!s.bootstrap?.permissions?.some((p) => p === '*' || p === 'chat.widget.manage'));
+  // Insights that the server's capabilities leave out (#259) is hidden from whoever cannot change widgets; an admin
+  // still finds it, saying it needs a newer server. Without the capabilities, the page finds out for itself.
+  const insightsShown = useInsightsShown(managesRinging);
   const selected = query.get('website');
   // The LIVE views (worksuite-desktop#231): each its own section — not `live`, which is the Live chats section and
   // lit up beside both — with the selected visitor in the address.
@@ -361,7 +365,7 @@ export function WebsiteWorkspace() {
           <div className="flex flex-col gap-px">
             <MenuHead>REPORTS</MenuHead>
             {/* Insights is this app's own (L-07, X-UI-13). */}
-            <MenuItem icon="chart" label="Insights" here={insights} onClick={() => go('/chat?view=website&section=insights')} />
+            {insightsShown ? <MenuItem icon="chart" label="Insights" here={insights} onClick={() => go('/chat?view=website&section=insights')} /> : null}
           </div>
           <div className="flex flex-col gap-px">
             <MenuHead>SETUP</MenuHead>
@@ -583,7 +587,8 @@ export function WebsiteWorkspace() {
         ) : selected && missedDetail ? (
           <MissedDetail key={selected} id={selected} m={missedOpen} onOpenChat={() => to({ section: 'inbox', website: selected })} />
         ) : selected ? (
-          <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected)} />
+          // The row it was opened from — a search finds closed chats too — gives the header while it loads (#261).
+          <WebsiteThread key={selected} id={selected} row={openRows.find((r) => String(r.id) === selected) ?? rows.find((r) => String(r.id) === selected)} />
         ) : (
           <PickConversation rows={openRows} missed={missedCount.isSuccess ? missedCount.data.count : null} longest={longest} visitors={online.isSuccess ? visitorsOnline : null} onLongest={openLongest} onVisitors={() => go('/chat?view=website&section=visitors')} />
         )}

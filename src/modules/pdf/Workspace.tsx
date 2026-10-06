@@ -16,6 +16,9 @@ import { AnnotLayer } from './AnnotLayer';
 import { canUse, DEFAULT_STYLE, moveTarget, pdfEdit, type AnnotStyle, type AnnotTool } from './edit';
 import { AnnotateRibbon, CommentsPanel, ConflictDialog, EditBanners, ModeSwitch, OrganizeRibbon, SaveControls, SaveState } from './EditUI';
 import { Organize } from './Organize';
+import { recordOpened } from './recent';
+import { AllToolsPanel, ToolPanel } from './ToolPanels';
+import { toolById, type ToolId } from './tools';
 
 /**
  * One PDF in a WorkSuite tab (§4): the title bar with its save state, the
@@ -80,7 +83,7 @@ function RibbonButton({ icon, label, onClick, disabled, why, active, shortcut }:
 const Sep = () => <span className="mx-1 h-9 w-px shrink-0 bg-line" />;
 
 export function Workspace({ source }: { source: PdfSource }) {
-  const { navigate, active, tabId } = useTab();
+  const { navigate, active, tabId, query } = useTab();
   const [view, setView] = useState<PdfSessionView | null>(null);
   const [openError, setOpenError] = useState<string | null>(null);
   const [page, setPage] = useState(0);
@@ -107,6 +110,9 @@ export function Workspace({ source }: { source: PdfSource }) {
   const [selectedAnnot, setSelectedAnnot] = useState<{ id: string; page: number } | null>(null);
   const [organizeSel, setOrganizeSel] = useState<number[]>([]);
   const [annots, setAnnots] = useState<Map<number, PdfAnnotView[]>>(() => new Map());
+  // All tools (DK02, PRO-FW-001/002): the panel replaces the navigation panel; a tool replaces the list.
+  const [proTool, setProTool] = useState<ToolId | null>(() => toolById(query.get('tool'))?.id ?? null);
+  const [allTools, setAllTools] = useState(() => !!toolById(query.get('tool')));
   const root = useRef<HTMLDivElement>(null);
   const findInput = useRef<HTMLInputElement>(null);
   const searchId = useRef<string | null>(null);
@@ -155,6 +161,14 @@ export function Workspace({ source }: { source: PdfSource }) {
   }, [id]);
 
   const ready = view?.state === 'ready' ? view : null;
+
+  // Recent (PRO-HOME-002): this PDF, once it is open.
+  const readyId = ready?.id ?? null;
+  useEffect(() => {
+    if (readyId && view) recordOpened(key, view);
+    // Once per session; the name and version at opening are what Recent shows.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [readyId]);
   const effectiveZoom = useMemo(() => {
     if (!ready || !fit) return zoom;
     if (fit === 'auto') return Math.min(1.5, fitZoom(ready.pages, page, mode, viewport.w, viewport.h, 'width'));
@@ -430,6 +444,11 @@ export function Workspace({ source }: { source: PdfSource }) {
             {ready ? <SaveState view={ready} /> : null}
             {ready ? <ModeSwitch view={ready} onView={setView} /> : null}
             <span className="flex-1" />
+            {ready ? (
+              <Button size="sm" icon="grid" aria-pressed={allTools} onClick={() => setAllTools(!allTools)} title="All tools">
+                All tools
+              </Button>
+            ) : null}
             {ready ? <SaveControls view={ready} onView={setView} /> : null}
             {ready && !ready.gates.download ? <Button size="sm" icon="download" onClick={download}>Download</Button> : null}
             {ready ? <Button size="sm" icon="printer" disabled={!!ready.gates.print} title={ready.gates.print ?? 'Print (Ctrl/⌘ P)'} onClick={() => setPrinting(true)}>Print</Button> : null}
@@ -514,7 +533,25 @@ export function Workspace({ source }: { source: PdfSource }) {
       ) : null}
 
       <div className="flex min-h-0 flex-1">
-        {chrome && left && ready ? (
+        {chrome && allTools && ready ? (
+          <aside aria-label="Tools panel" className="flex w-[300px] shrink-0 flex-col border-e border-line bg-surface">
+            {proTool ? (
+              <ToolPanel
+                id={proTool}
+                onBack={() => setProTool(null)}
+                ctx={{
+                  view: ready,
+                  page,
+                  goTo,
+                  ribbon: (t) => setTab(t),
+                  showComments: () => setRight('comments'),
+                }}
+              />
+            ) : (
+              <AllToolsPanel onPick={setProTool} onClose={() => setAllTools(false)} />
+            )}
+          </aside>
+        ) : chrome && left && ready ? (
           <aside aria-label="Navigation panel" className="flex w-[240px] shrink-0 flex-col border-e border-line bg-surface">
             <LeftTabs value={left} onChange={setLeft} />
             <div className="min-h-0 flex-1">
@@ -653,6 +690,13 @@ export function Workspace({ source }: { source: PdfSource }) {
           <span className="tabular">/ {n || '—'}</span>
           <button type="button" aria-label="Next page" disabled={!ready || page >= n - 1} onClick={() => goTo(Math.min(n - 1, page + 1))} className="rounded-[6px] px-1.5 hover:bg-subtle disabled:opacity-40"><Icon name="chevron-right" size={15} /></button>
           <span className="flex-1" />
+          {ready ? (
+            <span className="hidden truncate text-[11.5px] text-ink-3 md:inline">
+              {ready.source.label}
+              {ready.source.version ? ` · base v${ready.source.version}` : ''} · {ready.mode === 'VIEW' ? 'View' : ready.mode === 'ANNOTATE' ? 'Annotate' : 'Edit'}
+              {ready.capabilities ? ` · ${ready.capabilities.engine}` : ''}
+            </span>
+          ) : null}
           <button type="button" aria-label="Zoom out" disabled={!ready} onClick={() => setZoomTo(nextZoom(effectiveZoom, -1))} className="rounded-[6px] px-1.5 hover:bg-subtle disabled:opacity-40"><Icon name="minus" size={14} /></button>
           <select
             aria-label="Zoom"

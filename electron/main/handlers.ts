@@ -565,8 +565,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('files:saveText', async (input, c) => {
     const w = winOf(c.sender);
-    const filter = input.name.endsWith('.csv') ? { name: 'CSV', extensions: ['csv'] } : { name: 'Text', extensions: ['txt'] };
-    const opts: Electron.SaveDialogOptions = { title: 'Save', defaultPath: `${ctx.settings.effective().downloadFolder}/${input.name}`, filters: [filter] };
+    const csv = input.name.endsWith('.csv');
+    const opts: Electron.SaveDialogOptions = { title: 'Save', defaultPath: `${ctx.settings.effective().downloadFolder}/${input.name}`, filters: [csv ? { name: 'CSV', extensions: ['csv'] } : { name: 'Text', extensions: ['txt'] }] };
     const res = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
     if (res.canceled || !res.filePath) return null;
     await writeFile(res.filePath, input.text, { encoding: 'utf8', mode: 0o600 });

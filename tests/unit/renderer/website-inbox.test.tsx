@@ -151,7 +151,8 @@ describe('the Website Chats inbox (CHAT-UI-00)', () => {
     const kasun = within(list()).getByText('Kasun P.').closest('button')!;
     expect(within(kasun).getByText('You: Yes, island-wide.')).toBeTruthy();
     expect(within(kasun).queryByLabelText(/unread/)).toBeNull();
-    expect(within(list()).getByText('Nimal Silva: 📎 invoice.pdf')).toBeTruthy();
+    // A file says it is one, with its name (#261).
+    expect(within(list()).getByText('Nimal Silva: 📎 File: invoice.pdf')).toBeTruthy();
   });
 
   it('searches what was said on the server, closed chats too, once typing pauses', async () => {

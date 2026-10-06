@@ -185,8 +185,10 @@ function Pill({ t, on, children }: { t: Tokens; on: boolean; children: ReactNode
   );
 }
 
-function HomeScreen({ design, name, people, replyTime, hours, away, dark, t }: { design: WidgetDesign; name: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; away: boolean; dark: boolean; t: Tokens }) {
+function HomeScreen({ design, name, people, replyTime, hours, away, dark, t, whatsapp }: { design: WidgetDesign; name: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; away: boolean; dark: boolean; t: Tokens; whatsapp?: string[] | null }) {
   const p = palette(design.brand_color);
+  // The Contact options list's labels (#260) where the server has one, else the away screen's one number.
+  const wa = whatsapp ?? (design.whatsapp_number ? [design.whatsapp_number] : []);
   const send = palette(design.accent_color);
   const links = design.quick_links.filter((l) => l.label.trim() && l.url.trim());
   const field = { background: t.fl, border: `1px solid ${t.fln}`, color: t.mut };
@@ -218,12 +220,12 @@ function HomeScreen({ design, name, people, replyTime, hours, away, dark, t }: {
             </span>
           </Card>
         )}
-        {away && design.whatsapp_number ? (
+        {away && wa.length ? (
           <Card t={t} className="flex-row items-center gap-2.5 px-3.5 py-3" style={{ boxShadow: '0 0 0 1px rgba(18,22,51,.05)' }}>
             <span className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px]" style={{ background: '#E7F7EC', color: '#15803D' }}><Icon name="phone" size={17} /></span>
             <span className="flex flex-col">
               <b className="text-[13px]">Urgent? Message us on WhatsApp</b>
-              <span className="text-[12px]" style={{ color: t.mut }}>{design.whatsapp_number}</span>
+              <span className="text-[12px]" style={{ color: t.mut }}>{wa.join(' · ')}</span>
             </span>
           </Card>
         ) : null}
@@ -403,7 +405,7 @@ function StartScreen({ design, siteName, starters, dark, launcher = true }: { de
 }
 
 /** `launcher`: the button under the new chat; Conversation starters' preview (S-08) shows the chat alone. */
-export function WidgetPreview({ design, siteName, people, replyTime, hours, screen, dark, starters = [], launcher = true }: { design: WidgetDesign; siteName: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; screen: PreviewScreen; dark: boolean; starters?: string[]; launcher?: boolean }) {
+export function WidgetPreview({ design, siteName, people, replyTime, hours, screen, dark, starters = [], launcher = true, whatsapp }: { design: WidgetDesign; siteName: string | null; people: PreviewPerson[]; replyTime: string | null; hours: HoursSummary | null; screen: PreviewScreen; dark: boolean; starters?: string[]; launcher?: boolean; whatsapp?: string[] | null }) {
   if (screen === 'start') {
     return (
       <div role="img" aria-label="Preview of a new chat" data-testid="widget-preview" className="flex w-full" style={{ fontFamily: '"Plus Jakarta Sans", -apple-system, "Segoe UI", system-ui, sans-serif' }}>
@@ -438,7 +440,7 @@ export function WidgetPreview({ design, siteName, people, replyTime, hours, scre
       ) : (
         <>
           <div className="flex h-[600px] w-[380px] flex-col overflow-hidden" style={{ borderRadius: radiusOf(design), boxShadow: '0 24px 60px -16px rgba(18,22,51,.35), 0 0 0 1px rgba(18,22,51,.06)' }}>
-            {screen === 'chat' ? <ChatScreen design={design} people={people} t={t} /> : <HomeScreen design={design} name={siteName} people={people} replyTime={replyTime} hours={hours} away={screen === 'away'} dark={dark} t={t} />}
+            {screen === 'chat' ? <ChatScreen design={design} people={people} t={t} /> : <HomeScreen design={design} name={siteName} people={people} replyTime={replyTime} hours={hours} away={screen === 'away'} dark={dark} t={t} whatsapp={whatsapp} />}
           </div>
           {/* Open, the launcher is the cross that closes it, 16px under the panel. */}
           <span className="flex h-[56px] w-[56px] items-center justify-center rounded-full" style={{ background: p.accent, color: p.onAccent }} title="Close chat"><Icon name="x" size={22} /></span>

@@ -1,4 +1,4 @@
-import { actionLabel, isDataChanging, itemApp, itemLabel, itemRoute, OFFLINE_TYPES, type ItemAction, type ItemLink, type ItemSource } from '@shared/item-links';
+import { actionLabel, isDataChanging, isPageType, itemApp, itemLabel, itemRoute, OFFLINE_TYPES, type ItemAction, type ItemLink, type ItemSource } from '@shared/item-links';
 import { linkPrefs } from '@shared/link-prefs';
 import { canOpen } from './access';
 import { ApiError, apiGet, apiPatch, apiPost } from './api';
@@ -260,8 +260,8 @@ export async function openItemLink(link: ItemLink, opts: OpenOptions): Promise<v
     }
     return;
   }
-  // 4. Access.
-  const status = opts.status !== undefined ? opts.status : await fetchItemStatus(link);
+  // 4. Access. A page of an app (#266) is the app's to allow, which step 1 asked; the server keeps no item for it.
+  const status = opts.status !== undefined ? opts.status : isPageType(link.type) ? null : await fetchItemStatus(link);
   if (status && !status.allowed) {
     itemDialog.set({ dialog: { kind: 'no-access', link, canRequest: !!status.can_request_access && (link.type === 'file' || link.type === 'folder' || link.type === 'shared') } });
     audit(link, opts.source, 'refused');

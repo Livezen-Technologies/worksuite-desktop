@@ -206,7 +206,7 @@ describe('message actions by channel (RDC-12)', () => {
     const k = fromWebsiteMessage(web({ id: 1, body: 'Hi' }), ctx);
     list([{ ...k, reactions: [{ emoji: '👍', count: 1, mine: false }] }], WEBSITE_CAPS, { onReply: vi.fn(), onReact: vi.fn() });
     expect((screen.getByRole('button', { name: '👍 1' }) as HTMLButtonElement).disabled).toBe(true);
-    fireEvent.click(screen.getByRole('button', { name: 'Message actions' }));
+    fireEvent.click(screen.getByRole('button', { name: 'More actions' }));
     expect(screen.queryByRole('toolbar', { name: 'React' })).toBeNull();
     expect(screen.getAllByRole('menuitem').map((b) => b.textContent)).toEqual(['Reply', 'Copy text']);
   });
