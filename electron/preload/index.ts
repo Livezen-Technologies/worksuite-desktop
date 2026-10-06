@@ -492,6 +492,11 @@ const api = {
     shortcuts: call('phone:shortcuts'),
     notify: call('phone:notify'),
   },
+  // Marketing (marketing-channels.ts): the next-contact shortcut, and looking again for callbacks and tray counts.
+  marketing: {
+    configure: call('marketing:configure'),
+    refresh: call('marketing:refresh'),
+  },
   // Mail data files, export, safe links and S/MIME (ENH-MAIL-03 P4).
   mailfile: {
     pick: call('mailfile:pick'),

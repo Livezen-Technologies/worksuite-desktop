@@ -35,6 +35,8 @@ import { canOpen } from '../core/access';
 
 // The phone (WS-VOIP-SRS-001): its SIP engine and ring toast, loaded only for someone who has the Phone.
 const PhoneHost = lazy(() => import('../modules/phone/softphone/PhoneHost'));
+// Marketing (WS-MKT-SRS-001 D01): whether the main process holds the next-contact shortcut, for someone who has Marketing.
+const MarketingHost = lazy(() => import('../modules/marketing/MarketingHost'));
 const GuestMeeting = lazy(() => import('../modules/meet/GuestMeeting').then((module) => ({ default: module.GuestMeeting })));
 
 /**
@@ -118,6 +120,11 @@ export function App() {
       {auth.stage === 'ready' && !guest && !required && !hash.startsWith('#/window/') && session.mode !== 'guest' && canOpen('phone') ? (
         <Suspense fallback={null}>
           <PhoneHost />
+        </Suspense>
+      ) : null}
+      {auth.stage === 'ready' && !guest && !hash.startsWith('#/window/') && session.mode !== 'guest' && canOpen('marketing') ? (
+        <Suspense fallback={null}>
+          <MarketingHost />
         </Suspense>
       ) : null}
       <Toasts />

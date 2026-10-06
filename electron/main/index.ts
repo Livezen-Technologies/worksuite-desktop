@@ -58,6 +58,7 @@ import { PmsLocks } from '../services/pms-locks';
 import { ContactSync } from '../services/contact-sync';
 import { createPos } from '../services/pos-ipc';
 import { PhoneService } from '../services/phone';
+import { MarketingService } from '../services/marketing';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
 import { SalonSync } from '../services/salon-sync';
@@ -649,6 +650,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     allowed: () => sessionCtl.isReady() && canOpenApp('phone', sessionCtl.visibleApps()),
     notify: (n) => notifications.notify(n),
     mainWindow: () => windows.getMain(),
+  });
+
+  // Marketing (WS-MKT-SRS-001 D01, MKT-DSK-01): callback reminders to the minute, the call queue's next-contact shortcut
+  // and the tray's counts. The screens themselves are the module's pages.
+  const marketing = new MarketingService({
+    http,
+    allowed: () => sessionCtl.isReady() && canOpenApp('marketing', sessionCtl.visibleApps()),
+    canCall: () => {
+      const p = sessionCtl.current()?.permissions ?? [];
+      return p.includes('*') || p.includes('marketing.call.make');
+    },
+    notify: (n) => notifications.notify(n),
+    openRoute: (route) => navigate({ route, source: 'shortcut' }),
+    onTray: (t) => tray.update({ marketing: t }),
   });
 
   // Hotel PMS door locks: the on-site lock server this front desk talks to (its secret only in the OS keystore).
@@ -1472,6 +1487,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     showRingMenu: (anchor) => ringTray.show(anchor),
     liveDashboard: () => liveDesk.open('dashboard'),
     liveMap: () => liveDesk.open('map'),
+    nextContact: () => marketing.nextContact(),
   });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
@@ -1917,6 +1933,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (!canOpenApp('restaurant', visible)) restaurant.signedOut(b.user.id);
       // The Phone's global shortcuts go with it.
       if (!canOpenApp('phone', visible)) phone.reset();
+      // Marketing's reminders, shortcut and tray lines come and go with the app (and marketing.call.make).
+      if (canOpenApp('marketing', visible) && sessionCtl.isReady()) marketing.start();
+      else marketing.reset();
     }
     emitStatus();
   };
@@ -1929,6 +1948,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.start(uid);
     webchat.start();
     livePulse.start();
+    // Marketing's callback reminders and tray lines, for whoever has Marketing.
+    marketing.start();
     syncQuickAsk();
     // Quick Ask waits on the company's rules; once they are known, it is offered (or not).
     void ai.refresh().then(() => {
@@ -1999,6 +2020,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void localAI.signedOut();
     // The compact phone's global shortcuts are released.
     phone.reset();
+    // Marketing's reminders stop and its shortcut is released.
+    marketing.reset();
     realtime.stop();
     notifications.stop();
     device.stop();
@@ -2451,6 +2474,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   mailFiles.register(router);
   pos.register(router);
   phone.register(router);
+  marketing.register(router);
   pmsLocks.register(router);
   contactSync.register(router);
   restaurant.register(router);

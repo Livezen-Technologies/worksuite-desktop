@@ -55,6 +55,11 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'chat/:id', module: 'chat', route: (p) => `/chat/${p.id}` },
   { pattern: 'phone', module: 'phone', route: () => '/phone' },
   { pattern: 'phone/calls/:id', module: 'phone', route: (p) => `/phone/calls/${p.id}` },
+  // Marketing (WS-MKT-SRS-001): a campaign, a contact, and the agent's call queue (D01's "Call now").
+  { pattern: 'marketing', module: 'marketing', route: () => '/marketing' },
+  { pattern: 'marketing/campaigns/:id', module: 'marketing', route: (p) => `/marketing/campaigns/${p.id}` },
+  { pattern: 'marketing/contacts/:id', module: 'marketing', route: (p) => `/marketing/contacts/${p.id}` },
+  { pattern: 'marketing/queue', module: 'marketing', route: () => '/marketing/queue' },
   // WhatsApp is a channel of Chat (worksuite-desktop#35): its links open there, on the same conversation.
   { pattern: 'whatsapp', module: 'whatsapp', route: () => whatsappRoute() },
   { pattern: 'whatsapp/:id', module: 'whatsapp', route: (p) => whatsappRoute({ chat: p.id }) },

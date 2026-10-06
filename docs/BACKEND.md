@@ -922,6 +922,52 @@ where `message` says what is still to do ("Saved. Apply the configuration to mak
 | Softphone (G-02, G-06) | `softphone` should answer the extension's own server's `ws_uri` and `ice` with time-limited TURN credentials (`{urls, username, credential}`), plus `server: {id, name}`, `ice_expires_at` |
 | Mappings | `GET mappings` → every server's mappings (today they are read per server) |
 
+## Marketing (WS-MKT-SRS-001)
+
+Marketing (`src/modules/marketing`, [MARKETING.md](MARKETING.md)) talks to WorkSuite's Marketing module
+(`app/Modules/Marketing`) at `/api/marketing`. Answers are the usual `{status, message, data}`; lists may be a
+Laravel paginator (`{data, current_page, last_page, per_page, total}`), `{items|rows, meta}` or a bare array, with
+optional `counts` (campaigns by state); stamps are UTC without a zone. Every read carries `org` (the company the rail
+shows); the server scopes to the session's company anyway and answers 404 outside it (C5).
+
+> **Derived from the SRS, not read from the server.** The worksuite repository could not be attached when this was
+> built, so the paths below follow SRS §7.1's groups and the requirement texts. A path the server spells differently
+> answers 404, and the screen says "isn't offered by this WorkSuite server yet" instead of showing anything wrong —
+> check each against `php artisan route:list --path=api/marketing` and adjust `src/modules/marketing/api.ts`.
+
+**Built capabilities (SRS "Built"/"Partial"), called as they are:**
+
+| Group | Calls |
+|---|---|
+| Dashboard (DSH-01) | `GET dashboard` → `{contacts: {total, added_this_month}, email_subscribed: {count, share}, human_open_rate, bounce_rate, bounce_guard_threshold, weekly: [{week, delivered, human_opens}], recent_campaigns: Campaign[], calls: {in_queue, claimed_now, callbacks_due_today, reached_30d, interested_30d}, consent: {email_recorded, phone_recorded, suppressed_email, do_not_call, total}, sending?: {route, priority, hourly_pace, control_plane?}}` |
+| Contacts (AUD-01..06) | `GET contacts?q&list_id&segment_id&email_consent&source&tag&organisation_id&archived&page&per_page` → page of Contact `{id, name, first_name, last_name, email, phone, phone_masked?, organisation_id, organisation, job_title, tags, owner, source, time_zone, email_consent: unknown\|pending\|subscribed\|unsubscribed\|bounced, phone_consent: unknown\|consented\|withdrawn, email_suppressed, do_not_call, lists?, segments?, topics?, crm_lead?: {id, number}, last_activity?: {kind, text, at}, archived_at?, created_at}`; `GET contacts/{id}`; `POST contacts` (with first `consent: {email: {state, basis, evidence}, phone: {…}}`); `PUT contacts/{id}`; `POST contacts/{id}/archive\|restore`; `POST contacts/bulk {action: add_to_list\|remove_from_list\|tag\|untag\|handover\|suppress_email\|do_not_call\|archive, ids, list_id?, tag?, notes?}` → `{affected, skipped?}`; `GET contacts/{id}/timeline` → `[{id, kind, title, detail, at, actor}]`; `GET contacts/{id}/consent` → ledger rows; `POST contacts/{id}/consent {channel, change: granted\|withdrawn, basis, evidence}`; `GET contacts/{id}/campaigns`, `GET contacts/{id}/calls`; `POST contacts/{id}/handover {notes, owner_id, campaign_id?}` → `{lead_id, lead_number, created}` (LeadWriter, channel `marketing`); `GET contacts/export` (CSV, audited) |
+| Organisations (AUD-03) | `GET organisations?q&page`, `GET organisations/{id}` (+ `contacts`, `activity`), `POST organisations`, `PUT organisations/{id}` |
+| Lists (LST-01/02) | `GET lists` → `[{id, name, description, members_count, email_subscribed_count?, phone_consented_count?, last_used_at?}]`; `POST lists`, `PUT/DELETE lists/{id}`; `GET lists/{id}/members?page`; `DELETE lists/{id}/members {contact_ids}`; `GET lists/{id}/export` (CSV) |
+| Segments (SEG-01..05) | `GET segments`, `GET segments/{id}` → `{id, name, match: all\|any, rules: [{field, op, value}], count?, last_used_at?}`; `POST segments/preview {match, rules}` → `{count, total, excluded?, sample: Contact[]}` (NFR-03); `POST segments`, `PUT/DELETE segments/{id}`; `POST segments/{id}/to-list {name}` → List; `GET segments/{id}/export` (CSV) |
+| Import (IMP-01..03, 05) | `POST imports` (multipart `file`) → `{id, file, size, rows, headers, sample, mapping, has_consent_column}`; `POST imports/{id}/preview {mapping}` → `{new, updated, duplicates_in_file, rejected, suppressed?, has_consent_column, rows: [{row, name, email, phone, match: email_key\|phone_key\|name_org\|in_file\|null, result: new\|update\|merged\|rejected, reason?, merged_into?}]}`; `POST imports/{id}/commit {consent: {email: {state, basis}, phone: {state, basis}} \| null, list_ids, new_list?, tags}` → `{id, status: queued\|running\|done\|failed, progress, created, updated, merged, rejected}` |
+| Consent and suppression (CON-01..06, SUP-01..04) | `GET suppressions?type&reason&q&page` → `[{id, key, type: email\|phone, reason: unsubscribe\|hard_bounce\|complaint\|manual\|do_not_call, source, since, scope, note?, contact?}]`; `POST suppressions {type, value, reason: manual\|do_not_call, note}`; `GET consent-ledger?channel&from&to&q&page` → `[{id, at, contact, channel, change, topic?, basis, evidence, actor: {kind: user\|contact\|system, name}}]` (insert-only — no update or delete route, AC-13); `GET/POST topics`, `PUT/DELETE topics/{id}` (`{id, name, description, subscribers_count, public}`) |
+| Email (EML-01..04, EDT-01..04, CHK-*, SND-*, ABT-01/02, TRK-01..03) | `GET campaigns?status&q&page` (+ `counts`); `GET/PUT/DELETE campaigns/{id}`; `POST campaigns {…, starter?, template_id?}`; `POST campaigns/{id}/duplicate`; `GET/PUT campaigns/{id}/content` (`{blocks, plain_text, version}`, a stale `version` → 409); `GET/POST templates`, `PUT/DELETE templates/{id}`; `GET/POST images` (multipart `image`, public library); `POST campaigns/{id}/check` → `{blockers, warnings, passed: [{code, title, detail}]}`; `POST campaigns/{id}/tests {emails ≤5, contact_id}` → `{sent, remaining}`; `GET campaigns/{id}/audience` → `{recipients, sources, duplicates_removed, suppressed, unsubscribed, not_in_topic, no_consent, other_zones?}`; `POST campaigns/{id}/schedule {send_at\|null, local_time}`, `…/unschedule`, `…/pause`, `…/resume`, `…/cancel`; `GET campaigns/{id}/report` → funnel, `open_quality: {apple_mpp, scanner, image_cache, human}`, `top_links`, `bounces: {hard, soft}`, `complaints`, `unsubscribe_sources`, `bounce_guard: {triggered, rate, threshold}`, `ab: {metric, winner, decided_at, variants}`; `GET campaigns/{id}/report/export` (CSV) |
+| Calls (CAL-01..11, 13) | `GET/POST call-campaigns`, `GET/PUT call-campaigns/{id}` (`{audience: {kind, id}, hours: {from, to, contact_local}, retries: {max_attempts, delay_hours}, script_id, agent_ids}`); `POST call-campaigns/{id}/start\|pause\|resume\|finish`; `GET agents` → `[{user_id, name, can_call}]` (who holds `marketing.call.make`); `GET queue` → `{waiting, campaigns: [{id, name, waiting}], items: [{id, contact, campaign, attempt, max_attempts, reason, due_at}], claim: Claim\|null}`; `POST queue/next {campaign_id}` → Claim or null — atomic (CAS), AC-08; a lost race answers 409; `POST queue/{claim}/release\|skip`; `POST queue/{claim}/outcome {outcome, notes, callback_at?, handover?, handover_notes?, follow_up_template_id?}` → `{saved, lead?: {id, number, created}, task_id?, next_attempt_at?}` (idempotent per claim); `GET/POST scripts`, `PUT scripts/{id}` (a new version) |
+| Settings (SET-01/02) | `GET settings` → `{sending: {route, routes: [{id, label, transactional?}], hourly_pace, relay_priority, bounce_guard_percent, max_test_recipients, default_time_zone, postal_address?}, calls: {hours_from, hours_to, contact_local, max_attempts, retry_delay_hours, claim_release_minutes}, consent: {require_phone_consent, double_opt_in, held_back?}, policies: {detect_machine_opens, one_click_unsubscribe, notify_owner}, can_edit}`; `PUT settings` with only what changed. General and Advanced are the standard `/api/module-settings/marketing`; access is `/api/access/module/Marketing` |
+
+**Asked for by the desktop — a missing route is said plainly:**
+
+| Need (SRS) | Calls |
+|---|---|
+| Go-live readiness (DSH-02, WF-01) | `GET readiness` → `{items: [{code: B-1…, title, owner, area, open, fix?}], open}` |
+| Dedupe before saving (AUD-02, WF-02 step 5) | `POST contacts/match {email, phone, name, organisation}` → `{key: email_key\|phone_key\|name_org\|null, contact}`; without it the server's own dedupe on create decides |
+| Filters | `GET tags`, `GET sources` → `string[]`; without them the filters offer lists, segments and consent only |
+| Merge, erase (AUD-08/09, NFR-10) | `POST contacts/{id}/merge {other_id}`; `POST contacts/{id}/erase {reason}` (keeps a hashed suppression key) |
+| Snapshots (SEG-08, G-07) | `GET/POST segments/{id}/snapshots {list_name, every: day\|week\|month}` |
+| Import (IMP-04/06) | `GET imports/{id}` → status with `progress`; `GET imports/{id}/rejected` (CSV) |
+| Ledger export, suppression removal (CON-07, SUP-05) | `GET consent-ledger/export` (CSV); `DELETE suppressions/{id} {reason}` (manager permission, audited) |
+| Merge tags (EDT-04) | `GET merge-tags` → `[{tag, label, required, fallback}]`; without it the desktop uses the closed list of SRS §14 |
+| Versions, approval (EDT-06, EML-05) | `GET campaigns/{id}/versions`, `POST campaigns/{id}/versions/{v}/restore`; `POST campaigns/{id}/approval {note}` (CoreApprovalEngine) |
+| Live board (CAL-15) | `GET call-campaigns/{id}/live` → `{agents: [{user_id, name, status: on_call\|wrap_up\|idle\|offline, idle_minutes, calls_today, reached, interested, avg_seconds, can_call}], in_queue, claimed_now}` |
+| Callbacks (CAL-12, G-01) | `GET queue/callbacks` → `[{id, queue_item_id, contact: {id, name, organisation, phone}, campaign, due_at, note, task_id}]` — the person's own; the desktop's main process reads it every 5 minutes for reminders at the minute |
+| Script versions (CAL-07) | `GET scripts/{id}/versions` |
+| Journeys, analytics (AUT-*, ANL-01) | `GET journeys`; `GET analytics?from&to` → `{campaigns, sent, human_open_rate, click_rate, unsubscribe_rate, by_topic, new_contacts}` |
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is

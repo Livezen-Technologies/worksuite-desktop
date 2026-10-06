@@ -5,6 +5,7 @@
  */
 import { CONTACT_SYNC_INVOKE_CHANNELS } from './contact-sync-channels';
 import { PMS_LOCKS_INVOKE_CHANNELS } from './pms-locks-channels';
+import { MARKETING_INVOKE_CHANNELS } from './marketing-channels';
 import { PHONE_EVENT_CHANNELS, PHONE_INVOKE_CHANNELS } from './phone-channels';
 import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
 
@@ -411,6 +412,8 @@ export const INVOKE_CHANNELS = [
   ...POS_INVOKE_CHANNELS,
   // The Phone: its switch in the page policy, global shortcuts, call notifications (phone-channels.ts).
   ...PHONE_INVOKE_CHANNELS,
+  // Marketing: the next-contact shortcut and callback reminders (marketing-channels.ts).
+  ...MARKETING_INVOKE_CHANNELS,
   // Hotel PMS door locks: the on-site lock server this desk talks to (pms-locks-channels.ts).
   ...PMS_LOCKS_INVOKE_CHANNELS,
   // Contact sync: iCloud, CardDAV and Mac Contacts on this computer (contact-sync-channels.ts).

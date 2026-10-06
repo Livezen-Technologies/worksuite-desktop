@@ -64,6 +64,7 @@ import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
 import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
 import { phoneContract, type PhoneOutputs } from '../phone';
+import { marketingContract, type MarketingOutputs } from '../marketing';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
@@ -1343,6 +1344,8 @@ export const contract = {
   ...posContract,
   // The Phone: what its page cannot do for itself (shared/phone.ts, electron/services/phone.ts).
   ...phoneContract,
+  // Marketing: the next-contact shortcut and callback reminders (shared/marketing.ts, electron/services/marketing.ts).
+  ...marketingContract,
   ...pmsLocksContract,
   ...contactSyncContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
@@ -1416,7 +1419,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, MarketingOutputs, PmsLocksOutputs, ContactSyncOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;

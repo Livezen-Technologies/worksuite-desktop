@@ -104,6 +104,13 @@ drawer kick (a reprint is WorkSuite's own receipt), e-mailed receipts, refunds a
 customer display on a second monitor. The catalogue, prices and discount rights are POS's own (no Inventory
 permission needed). What it uses on the server is in [docs/BACKEND.md](docs/BACKEND.md#pos--the-till).
 
+**Marketing** (`src/modules/marketing`, `electron/services/marketing.ts`) is WS-MKT-SRS-001's desktop: contacts with
+dedupe and the consent ledger, lists, live segments, CSV import with its preview, suppression and topics, email
+campaigns from setup through the block editor, review & send and the report, call campaigns with the agent's queue,
+scripts and outcomes, and settings. For call agents it adds what the web cannot: callback reminders at the minute as
+native notifications (Call now · Snooze), **Next contact** from any app (Alt+Ctrl/⌘+N) and the queue in the tray. What
+the server does not offer yet is said plainly — see [docs/MARKETING.md](docs/MARKETING.md).
+
 ## What is deliberately not here yet
 
 Phases 2–4 of the SRS, apart from Drive folder sync (Files → Sync devices),

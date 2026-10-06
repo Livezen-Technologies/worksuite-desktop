@@ -76,6 +76,11 @@ export interface Incoming {
   websiteCount?: number;
   /** A flagged message's reminder (ENH-MAIL-03 DMO-TSK-02): Snooze 1 hour and Mark complete on the banner. */
   flag?: FlagNotice | null;
+  /**
+   * The banner's own buttons, run by whoever raised it (Marketing's callback reminder: Call now, Snooze 15 min).
+   * Locked, or without the module any more, a button opens the link instead.
+   */
+  buttons?: { labels: string[]; onAction: (index: number) => void } | null;
 }
 
 /** The website conversation a visitor's message came in on. */
@@ -834,7 +839,9 @@ export class NotificationService {
               ? n.meeting.answers.map((a) => ({ type: 'button' as const, text: a.label }))
               : n.mail
                 ? MAIL_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
-                : undefined,
+                : n.buttons?.labels.length
+                  ? n.buttons.labels.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
+                  : undefined,
       timeoutType: n.critical ? 'never' : 'default',
     });
     // One banner per website conversation: a new message replaces the last (worksuite-desktop#230).
@@ -848,6 +855,12 @@ export class NotificationService {
     });
     const recipient = this.userId;
     note.on('action', (_event, index) => {
+      if (n.buttons && recipient === this.userId) {
+        if (this.isLocked() || !this.moduleEnabled(n)) this.onClick(n.link, n.module);
+        else n.buttons.onAction(index);
+        note.close();
+        return;
+      }
       if (n.flag && recipient === this.userId) {
         void this.flagAction(n, n.flag, index).then(() => note.close());
         return;

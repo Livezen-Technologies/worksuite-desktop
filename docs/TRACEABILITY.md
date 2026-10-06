@@ -548,6 +548,42 @@ Tests: `tests/unit/renderer/phone-lib.test.ts`, `phone-engine.test.ts`, `phone-s
 | VOIP-DEP-03/04 | Partial | Gateway status/SMS when served |
 | VOIP-DEP-05 | Done | Cloud FreePBX wizard (`admin/SetupWizard.tsx`), Sri Lankan routes (`lib/lkroutes.ts`) |
 
+## Marketing (WS-MKT-SRS-001 v1.1, desktop)
+
+`src/modules/marketing` (renderer), `electron/services/marketing.ts`, `shared/marketing.ts`,
+`shared/ipc/marketing-channels.ts`, over the server's `/api/marketing`. Gap analysis, server work and what to verify:
+[MARKETING.md](MARKETING.md); contract: [BACKEND.md § Marketing](BACKEND.md#marketing-ws-mkt-srs-001). Tests:
+`tests/unit/renderer/marketing-*.test.ts(x)`, `tests/unit/electron/marketing-service.test.ts`. **Asks** = built; the
+server's target endpoint is asked for and its absence said plainly. **Server** = the server's behaviour.
+
+| ID | Status | Where / note |
+|---|---|---|
+| MKT-DSH-01, DSH-02 | Done; DSH-02 Asks | `audience/Dashboard.tsx`: KPIs, weekly delivery, recent campaigns, calls, consent coverage; readiness panel from `readiness` |
+| MKT-AUD-01..07 | Done | `audience/Contacts.tsx` (filters, bulk bar, export, masked phones), `ContactEditor.tsx` (dedupe before save), `ContactDetail.tsx` (timeline, ledger, hand-over), `Organisations.tsx` |
+| MKT-AUD-08/09 | Asks | Contact › Merge, Erase |
+| MKT-LST-01/02 | Done | `audience/Lists.tsx` |
+| MKT-SEG-01/03/04/05 | Done | `audience/SegmentBuilder.tsx`, `lib/segment.ts`: ≤ 20 rules, 19 fields, live count and sample, Save as list |
+| MKT-SEG-06/08 | Planned; Asks | Target fields listed disabled; Snapshot card |
+| MKT-IMP-01..06 | Done; 04/06 Asks | `audience/Import.tsx`, `lib/csv.ts`, `lib/dedupe.ts` |
+| MKT-CON-01..04, 07, 09 | Done; 07 Asks; 09 Planned | `ContactDetail.tsx` Record consent, `consent/Consent.tsx`, `consent/Topics.tsx`, Settings › Consent |
+| MKT-SUP-01..05 | Done; 02–04 Server; 05 Asks | `consent/Consent.tsx`, contact and bulk suppression |
+| MKT-EML-01..05 | Done; 05 Asks | `email/Campaigns.tsx`, `NewCampaign.tsx`, `ReviewSend.tsx` |
+| MKT-EDT-01..06 | Done; 06 history Asks | `email/Editor.tsx`, `lib/blocks.ts`, `lib/merge.ts`, `email/Templates.tsx` |
+| MKT-CHK-01..03 | Done | `email/ReviewSend.tsx` (AC-05: Schedule disabled while a blocker stands) |
+| MKT-SND-04/05/06/08 | Done | Local time, pause/resume, bounce-guard state; owner notices through WorkSuite notifications |
+| MKT-SND-01..03, 07, 09..11 | Server | The rail's foot shows route, priority and pace |
+| MKT-ABT-01/02, ABT-03 | Done; Planned | `ReviewSend.tsx` Delivery, `Report.tsx` A/B |
+| MKT-TRK-01..03 | Done (02, 03); 01 Server | `email/Report.tsx`, `admin/Reports.tsx` |
+| MKT-CAL-01..11, 13 | Done | `calls/CallCampaignEditor.tsx`, `CallCampaign.tsx`, `Queue.tsx`, `Scripts.tsx`; click-to-call through `phone/CallButton` |
+| MKT-CAL-12 | Done (desktop); Asks | `electron/services/marketing.ts`: reminders at the minute from `queue/callbacks`, Call now · Snooze 15 min |
+| MKT-CAL-15 | Asks | `CallCampaign.tsx` live agents from `call-campaigns/{id}/live` |
+| MKT-CRM-01..03 | Done | Hand-over from a contact, the bulk bar and the wrap-up; the lead number shown |
+| MKT-SET-01/02 | Done | `admin/Settings.tsx` |
+| MKT-ANL-01 | Asks | `admin/Reports.tsx` Across campaigns |
+| MKT-AUT-01..03 | Planned | `admin/Automation.tsx` (DK14) |
+| MKT-DSK-01 | Done | Call-queue tab, next contact Alt+Ctrl/⌘+N (`marketing:configure`), native callback notifications (`Incoming.buttons`), tray lines (`trayMarketingItems`) |
+| MKT-MOB-01, FRM-01/02 | Later | worksuite-mobile; Forms |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

@@ -1,5 +1,6 @@
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions, type NativeImage, type Rectangle } from 'electron';
 import { join } from 'node:path';
+import { sendingLabel, type MarketingTray } from '@shared/marketing';
 import { attentionCount, trayState, trayTooltip, type TrayState } from '@shared/network';
 import { logger } from '../main/log';
 import { liveTitle } from '../services/live-desk';
@@ -50,6 +51,11 @@ export interface TrayModel {
    * at risk, and a click opens the mini-dashboard. Null for anybody else, or before the first answer.
    */
   live?: { online: number; atRisk: boolean } | null;
+  /**
+   * Marketing's lines for a call agent or a campaign owner (WS-MKT-SRS-001 D01 "WorkSuite tray"): waiting in the call
+   * queue, callbacks today, campaigns sending now, and Next contact with its shortcut. Null without Marketing.
+   */
+  marketing?: MarketingTray | null;
 }
 
 export interface TrayUpdate {
@@ -92,6 +98,7 @@ export const QUICK_ACTIONS: ReadonlyArray<{ app: string; label: string; route: s
   { app: 'chat', label: 'Open Chat', route: '/chat' },
   { app: 'files', label: 'Upload File', route: '/files?upload=1' },
   { app: 'crm', label: 'New Lead', route: '/crm?new=1' },
+  { app: 'marketing', label: 'New Campaign', route: '/marketing/campaigns/new' },
 ];
 
 export interface TrayActions {
@@ -122,6 +129,8 @@ export interface TrayActions {
   /** Open Live dashboard (⌘⇧D) and Show Live map window (⌘⇧M), for website staff (L-05, MAP-21/22). */
   liveDashboard?: () => void;
   liveMap?: () => void;
+  /** Marketing's Next contact (D01): My call queue, claiming the next contact. Optional for older callers. */
+  nextContact?: () => void;
 }
 
 /**
@@ -326,6 +335,7 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     items.push({ type: 'separator' });
   }
   items.push(...trayUpdateItems(m.update, a));
+  items.push(...trayMarketingItems(m, a));
   items.push({ label: 'Open WorkSuite', click: a.open });
   if (m.signedIn && m.quickAsk && has('ai')) items.push({ label: 'Quick Ask', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
   if (m.signedIn && m.aiChanges > 0 && has('ai')) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant is waiting' : `${m.aiChanges} changes from the assistant are waiting`, click: a.aiChanges });
@@ -369,5 +379,22 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
   items.push({ label: m.updateReady ? 'Restart to Update' : 'Check for Updates', click: a.checkUpdates });
   items.push({ type: 'separator' });
   items.push({ label: 'Quit WorkSuite', click: a.quit });
+  return items;
+}
+
+/**
+ * Marketing's lines (WS-MKT-SRS-001 D01): "Call queue waiting 38", "Callbacks today 9", "Sending now 1 · 62%" and
+ * Next contact with its shortcut — shown, not registered here (the Marketing service holds it). Only for somebody who
+ * has Marketing; the queue lines only for somebody who may work a call queue.
+ */
+export function trayMarketingItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'marketing'>, a: Pick<TrayActions, 'openRoute' | 'nextContact'>): MenuItemConstructorOptions[] {
+  const mk = m.marketing;
+  if (!m.signedIn || !m.apps.includes('marketing') || !mk) return [];
+  const items: MenuItemConstructorOptions[] = [];
+  if (mk.queue !== null) items.push({ label: `Call queue waiting: ${mk.queue}`, click: () => a.openRoute('/marketing/queue') });
+  if (mk.queue !== null || mk.callbacksToday > 0) items.push({ label: `Callbacks today: ${mk.callbacksToday}`, click: () => a.openRoute('/marketing/queue') });
+  if (mk.sending.count > 0) items.push({ label: `Sending now: ${sendingLabel(mk.sending)}`, click: () => a.openRoute('/marketing/campaigns') });
+  if (mk.queue !== null && a.nextContact) items.push({ label: 'Next contact', ...(mk.shortcut ? { accelerator: mk.shortcut, registerAccelerator: false } : {}), click: a.nextContact });
+  if (items.length) items.push({ type: 'separator' });
   return items;
 }

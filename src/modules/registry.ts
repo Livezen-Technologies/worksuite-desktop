@@ -182,6 +182,20 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./crm/CrmShell'),
   },
   {
+    // Marketing (WS-MKT-SRS-001 v1.1): DK01–DK14 over WorkSuite's Marketing module (/api/marketing). D01's desktop
+    // parts — the next-contact shortcut, callback reminders to the minute, tray counts — are electron/services/marketing.ts.
+    input: defineDesktopManifest({
+      id: 'marketing', name: 'Marketing', icon: 'megaphone', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['notifications', 'file-drop'],
+      quickActions: [
+        { id: 'new-campaign', label: 'New campaign', route: '/marketing/campaigns/new' },
+        { id: 'next-contact', label: 'Next contact', route: '/marketing/queue?next=1' },
+      ],
+      deepLinks: ['marketing', 'marketing/campaigns/:id', 'marketing/contacts/:id', 'marketing/queue'],
+    }),
+    load: () => import('./marketing/MarketingPage'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'sales', name: 'Sales & Orders', icon: 'trending-up', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['order'], cache: ['/api/oms/orders'] },

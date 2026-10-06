@@ -5,6 +5,31 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.190 — 2026-10-06
+
+- **Marketing (WS-MKT-SRS-001).** **Marketing** now opens in the app instead of the browser, with every screen of the
+  design (DK01–DK14):
+  - **Audience:** a dashboard with the go-live readiness panel; contacts with filters, a bulk bar (add to list, tag,
+    hand over to CRM, suppress, do not call) and CSV export; a contact's page with consent, suppression, the timeline
+    and the append-only consent ledger; organisations; lists; the segment builder with a live count; CSV import
+    that checks the file before sending it, previews new, updated, duplicate and rejected rows, and asks for a
+    consent decision when the file has none.
+  - **Email:** campaigns by state; a new campaign from a starter or a template; the block editor with merge tags,
+    the public image library, desktop, mobile and plain-text previews and autosave; Review & send with the pre-send
+    check, up to five tests, A/B subject tests and sending in each recipient's local time; the campaign report.
+  - **Consent:** the suppression list, the consent ledger, do-not-call and topics, with the preference centre as
+    contacts see it.
+  - **Calls:** call campaigns with live agents, outcomes and the consent hold-back; **My call queue** with Next
+    contact, the script, the ten outcomes, callbacks, CRM hand-over and click-to-call through the Phone; scripts.
+  - Reports, Automation (shown as planned) and Settings (Sending, Calls, Consent and the standard tabs).
+- **For call agents (D01):** a callback you booked rings as a notification at the minute it is due — **Call now** or
+  **Snooze 15 min** — whether or not Marketing is open; **Alt+Ctrl+N** (⌥⌘N on macOS) claims the next contact from any
+  app; the tray shows the queue, today's callbacks and what is sending.
+- **Where it bites:** needs the server's Marketing module. The design's Ctrl+Shift+N is already *Move Tab to New
+  Window*, so the next-contact key is Alt+Ctrl/⌘+N. Screens that need server features WorkSuite doesn't offer yet
+  (the readiness panel, callbacks to the minute, merge and erase, snapshots, version history, analytics, journeys,
+  among others) say so instead of pretending — see `docs/MARKETING.md`, including what to check against the server.
+
 ## 0.2.189 — 2026-10-06
 
 - **"Continue as" in WorkSuite Office.** WorkSuite Office, the desktop editor, can sign in with your WorkSuite
