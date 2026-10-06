@@ -1265,6 +1265,11 @@ export const contract = {
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
   'offline:retry': ch(z.object({ id: idString }), { session: true }),
   'offline:discard': ch(z.object({ id: idString }), { session: true }),
+  // A module's outbox (Support's D-09): a queued change's words and the server's answer, edited before it goes, and
+  // the queue sent now.
+  'offline:detail': ch(z.object({ id: idString }), { session: true }),
+  'offline:edit': ch(z.object({ id: idString, body: z.unknown() }), { session: true, rate: 10 }),
+  'offline:replay': ch(none, { session: true, rate: 2 }),
   'offline:saveDraft': ch(
     z.object({ module: z.string().max(64), context: z.string().max(256), content: z.unknown() }),
     { session: true, rate: 20 },
@@ -1776,6 +1781,9 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'offline:submit': SubmitResult;
   'offline:retry': void;
   'offline:discard': void;
+  'offline:detail': { body: unknown; response: unknown } | null;
+  'offline:edit': void;
+  'offline:replay': { done: number; conflicts: number; failed: number; remaining: number };
   'offline:saveDraft': Draft;
   'offline:getDraft': Draft | null;
   'offline:listDrafts': Draft[];

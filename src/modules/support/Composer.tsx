@@ -327,7 +327,9 @@ export function Composer({
       latest.current = { body: '', mode };
       draft.setValue({ body: '', mode });
       await draft.clear();
-      if (r.status_refused) toast('warning', text('Sent, but the status did not change: {why}', { why: r.status_refused.message }));
+      // Queued offline: the outbox has said so (api.ts), and sends it when WorkSuite is back.
+      if (r.queued) void qc.invalidateQueries({ queryKey: ['offline', 'pending'] });
+      else if (r.status_refused) toast('warning', text('Sent, but the status did not change: {why}', { why: r.status_refused.message }));
       else toast('success', internal ? text('Note added to {ref}.', { ref: ticket.reference }) : text('Reply sent on {ref}.', { ref: ticket.reference }));
       void qc.invalidateQueries({ queryKey: K.ticket(ticket.id) });
       void qc.invalidateQueries({ queryKey: K.lists });

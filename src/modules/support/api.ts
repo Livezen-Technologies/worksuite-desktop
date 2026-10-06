@@ -1,5 +1,7 @@
 import { ApiError, request, type Query } from '../../core/api';
 import { call } from '../../core/bridge';
+import { text } from '../../core/i18n';
+import { toast } from '../../core/toasts';
 import {
   SUPPORT_API as BASE,
   SUPPORT_LEGACY_API as LEGACY,
@@ -149,6 +151,34 @@ export function newClientId(prefix = 'desk'): string {
   return `${prefix}:${rand}`;
 }
 
+/* ── the outbox (D-09, FR-DSK-07) ───────────────────────────────────────── */
+
+/** Tickets' references as last read, to name a queued change ("Reply to requester · CFX-001284"). */
+const references = new Map<number, string>();
+
+/** What a queued support change is labelled: its kind, then the ticket. The outbox reads both back (queued.ts). */
+export function outboxLabel(what: string, id: number): string {
+  return `${what} · ${references.get(id) ?? `#${id}`}`;
+}
+
+/**
+ * A write that cannot reach WorkSuite goes to the offline queue (FR-DSK-07): kept encrypted on this computer, sent in
+ * order when the connection is back, with its retry key — a message's `client_id`, so a replay is stored once — and
+ * the version it was made at, so a ticket changed meanwhile is refused (409) and waits in the outbox's conflict review
+ * instead of overwriting. `queued` is what the screen is answered meanwhile.
+ */
+async function orQueue<T>(id: number, what: string, method: 'POST' | 'PATCH', path: string, body: unknown, now: () => Promise<T>, queued: () => T): Promise<T> {
+  try {
+    return await now();
+  } catch (e) {
+    if (!(e instanceof ApiError) || !e.offline) throw e;
+    const r = await call('offline:submit', { module: 'support', entity: 'ticket', entityId: String(id), label: outboxLabel(what, id).slice(0, 200), method, path, body, queueIfOffline: true });
+    if (r.queued) toast('info', text('You are offline: {what} is in the outbox and goes when WorkSuite is back.', { what: outboxLabel(what, id) }));
+    if (r.queued || r.delivered) return queued();
+    throw new ApiError(r.status ?? 0, r.error ?? 'The change could not be kept to send later.', r.code);
+  }
+}
+
 /* ── tickets ────────────────────────────────────────────────────────────── */
 
 /** One page of a view (FR-WSP-02/05): `next_cursor` asks for the next. `offline`: the copy kept on this computer. */
@@ -160,6 +190,7 @@ export function listTickets(p: ListParams, signal?: AbortSignal): Promise<Ticket
         { ...(p.extra ?? {}), view: p.view, sort: p.sort, q: p.q?.trim() || undefined, status: list(p.status), priority: list(p.priority), organization: list(p.organization) ?? p.extra?.organization, assignee: p.assignee, limit: p.limit, cursor: p.cursor ?? undefined },
         signal,
       );
+      for (const t of r.data.items ?? []) references.set(t.id, t.reference);
       return { ...r.data, offline: r.offline };
     },
     async () => {
@@ -177,6 +208,7 @@ export function getTicket(id: number, opts: { peek?: boolean } = {}, signal?: Ab
   return v1OrLegacy(
     async () => {
       const r = await getMeta<TicketShow>(`${BASE}/tickets/${id}`, opts.peek ? { peek: 1 } : undefined, signal);
+      if (r.data?.ticket) references.set(id, r.data.ticket.reference);
       return { ...r.data, offline: r.offline };
     },
     async () => fromLegacyShow(await get<Record<string, unknown>>(`${LEGACY}/${id}`, undefined, signal)),
@@ -207,13 +239,22 @@ export function ticketEvents(id: number, beforeId?: number): Promise<{ events: T
   return v1Only(() => get(`${BASE}/tickets/${id}/events`, beforeId ? { before_id: beforeId } : undefined));
 }
 
-/** Change fields with the version they were read at (FR-TKT-10): a stale one is `VERSION_CONFLICT` with the ticket as it stands. */
-export async function updateTicket(id: number, version: number, changes: TicketChanges): Promise<TicketFull> {
-  return (await v1Only(() => send<{ ticket: TicketFull }>('PATCH', `${BASE}/tickets/${id}`, { ...changes, version }))).ticket;
+/**
+ * Change fields with the version they were read at (FR-TKT-10): a stale one is `VERSION_CONFLICT` with the ticket as it
+ * stands. Offline, the change is queued with that version (null: read the ticket again later); a stale one comes back
+ * to the outbox's conflict review (D-09).
+ */
+export async function updateTicket(id: number, version: number, changes: TicketChanges): Promise<TicketFull | null> {
+  const body = { ...changes, version };
+  return orQueue(id, 'Property change', 'PATCH', `${BASE}/tickets/${id}`, body, async () => (await v1Only(() => send<{ ticket: TicketFull }>('PATCH', `${BASE}/tickets/${id}`, body))).ticket, () => null);
 }
 
 /** Move the status through the state machine. Null from the as-built API, which answers nothing: read the ticket again. */
 export function transition(id: number, input: TransitionInput): Promise<TicketFull | null> {
+  return orQueue(id, 'Status change', 'POST', `${BASE}/tickets/${id}/transition`, input, () => transitionNow(id, input), () => null);
+}
+
+function transitionNow(id: number, input: TransitionInput): Promise<TicketFull | null> {
   return v1OrLegacy(
     async () => (await send<{ ticket: TicketFull }>('POST', `${BASE}/tickets/${id}/transition`, input)).ticket,
     async () => {
@@ -225,6 +266,10 @@ export function transition(id: number, input: TransitionInput): Promise<TicketFu
 
 /** Give it to somebody (or nobody). Giving an unassigned ticket to yourself is taking it. */
 export function assign(id: number, input: AssignInput): Promise<TicketFull | null> {
+  return orQueue(id, 'Assignment', 'POST', `${BASE}/tickets/${id}/assign`, input, () => assignNow(id, input), () => null);
+}
+
+function assignNow(id: number, input: AssignInput): Promise<TicketFull | null> {
   return v1OrLegacy(
     async () => (await send<{ ticket: TicketFull }>('POST', `${BASE}/tickets/${id}/assign`, input)).ticket,
     async () => {
@@ -250,7 +295,17 @@ export function take(id: number, version?: number): Promise<TicketFull | null> {
  * the status as a second call (whose refusal is reported beside the message, as v1 does); mentions, CC and files
  * are not something it can take, and files are refused rather than dropped.
  */
-export function addMessage(id: number, input: MessageInput): Promise<MessageAnswer> {
+export function addMessage(id: number, input: MessageInput): Promise<MessageAnswer & { queued?: boolean }> {
+  return orQueue<MessageAnswer & { queued?: boolean }>(id, input.internal ? 'Internal note' : 'Reply to requester', 'POST', `${BASE}/tickets/${id}/messages`, input, () => addMessageNow(id, input), () => ({
+    message: { ...fromLegacyMessage({ id: 0, body: input.body, is_internal: input.internal, from: 'staff', author_id: null }), client_id: input.client_id ?? null, created_at: new Date().toISOString() },
+    duplicate: false,
+    ticket: null,
+    status_refused: null,
+    queued: true,
+  }));
+}
+
+function addMessageNow(id: number, input: MessageInput): Promise<MessageAnswer> {
   return v1OrLegacy(
     () => send<MessageAnswer>('POST', `${BASE}/tickets/${id}/messages`, input),
     async () => {

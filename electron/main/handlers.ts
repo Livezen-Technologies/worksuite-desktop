@@ -994,6 +994,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     void ctx.queue.replay(uid());
   });
   router.handle('offline:discard', (input) => ctx.queue.discard(uid(), input.id));
+  router.handle('offline:detail', (input) => ctx.queue.detail(uid(), input.id));
+  router.handle('offline:edit', (input) => ctx.queue.edit(uid(), input.id, input.body));
+  router.handle('offline:replay', () => ctx.queue.replay(uid()));
   router.handle('offline:saveDraft', (input) => ctx.queue.saveDraft(uid(), input.module, input.context, input.content));
   router.handle('offline:getDraft', (input) => ctx.queue.getDraft(uid(), input.module, input.context));
   router.handle('offline:listDrafts', (input) => ctx.queue.listDrafts(uid(), input?.module));

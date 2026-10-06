@@ -247,6 +247,25 @@ export class OfflineQueue {
       .map(toMutation);
   }
 
+  /**
+   * A queued change's own words and, after the server refused it, its answer — what a module's outbox shows and
+   * edits, and its conflict review compares (Support's D-09: mine against the ticket as the server now has it).
+   * Only the person's own changes.
+   */
+  detail(userId: string, id: string): { body: unknown; response: unknown } | null {
+    const r = this.db.get<{ payload: string; response: string | null }>('SELECT payload, response FROM offline_mutations WHERE id = ? AND user_id = ?', id, userId);
+    if (!r) return null;
+    const payload = this.vault().decrypt<{ body: unknown }>(r.payload);
+    return { body: payload?.body ?? null, response: r.response ? (this.vault().decrypt(r.response) ?? null) : null };
+  }
+
+  /** A change still waiting is edited before it goes (D-09): its body replaced, its place in line and its key kept. */
+  edit(userId: string, id: string, body: unknown): void {
+    const n = this.db.run("UPDATE offline_mutations SET payload = ?, updated_at = ? WHERE id = ? AND user_id = ? AND state = 'PENDING'", this.vault().encrypt({ body }), new Date().toISOString(), id, userId).changes;
+    if (n === 0) throw new DesktopError('NOT_FOUND', 'That change is no longer waiting: it may be on its way.');
+    this.onChanged();
+  }
+
   pendingCount(userId: string): number {
     const r = this.db.get<{ n: number }>("SELECT COUNT(*) AS n FROM offline_mutations WHERE user_id = ? AND state IN ('PENDING', 'SYNCING')", userId);
     return Number(r?.n ?? 0);

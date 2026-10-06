@@ -60,7 +60,7 @@ describe('the Support module', () => {
   it('is registered with its manifest: read cache offline, notifications and file drop, ticket deep links', () => {
     const m = moduleFor('support');
     expect(m).toBeTruthy();
-    expect(m!.manifest).toMatchObject({ name: 'Support', icon: 'life-buoy', offline: { mode: 'READ_CACHE' }, native: ['notifications', 'file-drop'] });
+    expect(m!.manifest).toMatchObject({ name: 'Support', icon: 'life-buoy', offline: { mode: 'PARTIAL_WRITE' }, native: ['notifications', 'file-drop'] });
     expect(m!.manifest.offline.cache).toContain('/api/support/v1/tickets');
     expect(m!.manifest.deepLinks).toEqual(['support', 'support/ticket/:id']);
     expect(m!.manifest.quickActions.map((q) => q.route)).toEqual(['/support', '/support?view=mine', '/support?view=unassigned']);

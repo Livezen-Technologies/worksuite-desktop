@@ -23,6 +23,7 @@ import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusChip } from './par
 import { Collision, useTicketPresence } from './presence';
 import { Properties } from './Properties';
 import { useMarkRead } from './reading';
+import { OutboxBar } from './Outbox';
 import { ResolveDialog } from './ResolveDialog';
 import { FileRow, FilesPanel, LinkRow, RelatedPanel, RemotePanel, RequesterPanel, SlaPanel, connectRustDesk } from './TicketSide';
 import { Thread } from './Thread';
@@ -191,6 +192,7 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
   return (
     <div className="flex h-full min-h-0 bg-ground">
       <div className="flex min-w-0 flex-1 flex-col">
+        <OutboxBar />
         <header className="flex shrink-0 flex-col gap-1.5 border-b border-line bg-surface px-5 pt-3">
           <div className="flex min-w-0 items-center gap-2 text-[12px] text-ink-3">
             <button type="button" onClick={() => navigate('/support')} className="shrink-0 hover:text-ink hover:underline">

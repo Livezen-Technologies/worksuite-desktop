@@ -14,6 +14,7 @@ import type { ComposerMode } from './Composer';
 import { usePollInterval, useRealtimeLive, useSupportLive } from './live';
 import { Rail } from './Rail';
 import { ReadingPane } from './ReadingPane';
+import { OutboxBar } from './Outbox';
 import { ResolveDialog } from './ResolveDialog';
 import { NO_FILTERS, TicketList, type ListFilters } from './TicketList';
 
@@ -165,55 +166,58 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   const single = orgs.length === 1 ? Number(orgs[0]) : orgOptions.length === 1 ? Number(orgOptions[0]!.id) : null;
 
   return (
-    <div className="flex h-full min-h-0 bg-ground">
-      <SidePanel id="support" label={text('the views')}>
-        <Rail
-          views={rail.data?.views ?? []}
-          saved={rail.data?.saved ?? []}
-          view={saved ? null : view}
-          savedId={savedId}
-          onView={(key) => pick({ view: key })}
-          onSaved={(s) => pick({ saved: s.id })}
-          orgs={orgOptions.length > 1 ? { options: orgOptions, value: orgs, onChange: setOrgs } : null}
-          footer={<Availability organization={single} active={active} />}
-        />
-      </SidePanel>
-      <div className="relative flex shrink-0 border-r border-line" style={{ width: width.width }}>
-        <div className="min-w-0 flex-1">
-          <TicketList
-            title={title}
-            count={count}
-            live={live}
-            offline={list.data?.pages[0]?.offline === true}
-            rows={rows}
-            selectedId={selectedId}
-            onSelect={(id) => select(id)}
-            onOpen={openTab}
-            loading={list.isLoading}
-            error={list.error}
-            onRetry={() => void list.refetch()}
-            hasMore={!!list.hasNextPage}
-            loadingMore={list.isFetchingNextPage}
-            onMore={() => void list.fetchNextPage()}
-            q={typed}
-            onQ={setTyped}
-            sort={(saved?.sort as SupportSort | null) ?? sort}
-            sorts={metaQ.data?.sorts ?? ['updated']}
-            onSort={setSort}
-            filters={filters}
-            onFilters={setFilters}
-            searchRef={searchRef}
-            now={now}
+    <div className="flex h-full min-h-0 flex-col bg-ground">
+      <OutboxBar />
+      <div className="flex min-h-0 flex-1">
+        <SidePanel id="support" label={text('the views')}>
+          <Rail
+            views={rail.data?.views ?? []}
+            saved={rail.data?.saved ?? []}
+            view={saved ? null : view}
+            savedId={savedId}
+            onView={(key) => pick({ view: key })}
+            onSaved={(s) => pick({ saved: s.id })}
+            orgs={orgOptions.length > 1 ? { options: orgOptions, value: orgs, onChange: setOrgs } : null}
+            footer={<Availability organization={single} active={active} />}
           />
+        </SidePanel>
+        <div className="relative flex shrink-0 border-r border-line" style={{ width: width.width }}>
+          <div className="min-w-0 flex-1">
+            <TicketList
+              title={title}
+              count={count}
+              live={live}
+              offline={list.data?.pages[0]?.offline === true}
+              rows={rows}
+              selectedId={selectedId}
+              onSelect={(id) => select(id)}
+              onOpen={openTab}
+              loading={list.isLoading}
+              error={list.error}
+              onRetry={() => void list.refetch()}
+              hasMore={!!list.hasNextPage}
+              loadingMore={list.isFetchingNextPage}
+              onMore={() => void list.fetchNextPage()}
+              q={typed}
+              onQ={setTyped}
+              sort={(saved?.sort as SupportSort | null) ?? sort}
+              sorts={metaQ.data?.sorts ?? ['updated']}
+              onSort={setSort}
+              filters={filters}
+              onFilters={setFilters}
+              searchRef={searchRef}
+              now={now}
+            />
+          </div>
+          <ResizeDivider state={width} label={text('Resize the ticket list')} />
         </div>
-        <ResizeDivider state={width} label={text('Resize the ticket list')} />
-      </div>
-      <div className="min-w-0 flex-1">
-        {selectedId !== null ? (
-          <ReadingPane key={selectedId} ticketId={selectedId} active={active} focusRequest={focusRequest} onOpenTab={openTab} onResolve={(s) => setResolving(s.ticket)} />
-        ) : (
-          <Empty icon="life-buoy" title={text('Choose a ticket to read it here')} hint={text('j and k move down and up the list; Enter opens the ticket in a tab of its own.')} />
-        )}
+        <div className="min-w-0 flex-1">
+          {selectedId !== null ? (
+            <ReadingPane key={selectedId} ticketId={selectedId} active={active} focusRequest={focusRequest} onOpenTab={openTab} onResolve={(s) => setResolving(s.ticket)} />
+          ) : (
+            <Empty icon="life-buoy" title={text('Choose a ticket to read it here')} hint={text('j and k move down and up the list; Enter opens the ticket in a tab of its own.')} />
+          )}
+        </div>
       </div>
       {resolving ? <ResolveDialog ticket={resolving} onClose={() => setResolving(null)} /> : null}
     </div>
