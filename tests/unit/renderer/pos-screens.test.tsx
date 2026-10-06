@@ -7,6 +7,7 @@ import type { PosGiveBack, PosSale, PosTillStatus } from '@shared/pos';
 import type { PosRegister, PosSession } from '../../../src/modules/pos/api';
 import { cartActions } from '../../../src/modules/pos/cart';
 import CashMove from '../../../src/modules/pos/CashMove';
+import Connect from '../../../src/modules/pos/Connect';
 import ReturnDialog from '../../../src/modules/pos/ReturnDialog';
 import { TillContext, type Till } from '../../../src/modules/pos/parts';
 import Shift from '../../../src/modules/pos/ShiftScreen';
@@ -238,5 +239,36 @@ describe('a return at the counter', () => {
     expect(giveBack.mock.calls[1]![0]).toEqual({ ref: sold.ref, kind: 'refund', reason: 'Faulty', lines: [{ product_id: 9, quantity: 1 }], restock: false });
     expect(await screen.findByText('LKR 200.00 given back.')).toBeTruthy();
     expect(openDrawer).toHaveBeenCalled();
+  });
+});
+
+describe('pairing this computer', () => {
+  it('lists the tills, and takes one over only on the button that says so', async () => {
+    vi.stubGlobal('fetch', async () =>
+      new Response(
+        JSON.stringify({
+          status: 'success',
+          data: {
+            terminals: [
+              { id: 1, code: 'POS-01', name: 'Front counter 1', org_id: 3, org_name: 'Acme', branch_name: 'Kollupitiya', warehouse_id: null, warehouse_name: null, in_use: true, device_name: 'FRONT-PC-01' },
+              { id: 4, code: 'POS-04', name: 'Pop-up stall', org_id: 3, org_name: 'Acme', branch_name: 'Kollupitiya', warehouse_id: null, warehouse_name: null, in_use: false, device_name: null },
+            ],
+          },
+        }),
+        { headers: { 'Content-Type': 'application/json' } },
+      ),
+    );
+    const pair = vi.fn(async () => ({ status, message: 'Paired.' }));
+    const onChange = vi.fn();
+    mount(<Connect status={{ ...status, till: null }} onChange={onChange} />, till(), { pair });
+    expect((await screen.findByRole('radio', { name: /Front counter 1/ })).textContent).toContain('In use on FRONT-PC-01');
+    expect((screen.getByRole('button', { name: 'Choose a till' }) as HTMLButtonElement).disabled).toBe(true);
+    fireEvent.click(screen.getByRole('radio', { name: /Pop-up stall/ }));
+    expect(screen.getByRole('button', { name: 'Pair with POS-04' })).toBeTruthy();
+    fireEvent.click(screen.getByRole('radio', { name: /Front counter 1/ }));
+    expect(screen.getByText(/two devices never hold one till/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Take over POS-01 and pair' }));
+    await waitFor(() => expect(onChange).toHaveBeenCalled());
+    expect(pair).toHaveBeenCalledWith({ terminal_id: 1, take_over: true });
   });
 });
