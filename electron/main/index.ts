@@ -25,6 +25,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
+import { SUPPORT_QUICK_SHORTCUT, quickRoute, ringRoute, supportNoticePrefs } from '@shared/support';
 import { FOLLOW_UP_DEFAULTS, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
@@ -69,6 +70,9 @@ import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
+import { SupportNotices } from '../services/support-notices';
+import { SupportDesk } from '../services/support-desk';
+import { SupportUrgent } from '../services/support-urgent';
 import { WebchatRinger, announceEvent, ringerHeight } from '../services/webchat-ring';
 import { SystemFocus } from '../services/system-focus';
 import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '../services/live-desk';
@@ -1204,6 +1208,75 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   setLinkHandler(handleDeepLink);
 
+  // A support ticket's quick-reply window (WS-SUPPORT-SRS-001 D-04, FR-DSK-03): floating over whatever is in front,
+  // from a banner, the tray or the global shortcut. Never behind the lock, never for somebody without the desk.
+  const openQuickReply = (ticketId: number): void => {
+    if (lock.isLocked() || !sessionCtl.isReady() || !canOpenApp('support', sessionCtl.visibleApps())) return;
+    windows.open('support-quick', quickRoute(ticketId), 'Quick reply', true);
+  };
+  // Support's banners and count (WS-SUPPORT-SRS-001 D-03, FR-DSK-02/04): the desk's notifications with their own buttons.
+  const supportNotices = new SupportNotices({
+    http,
+    notify: (n) => notifications.notify(n),
+    markRead: (ids) => notifications.markRead(ids),
+    me: () => Number(sessionCtl.userId()) || null,
+    enabled: () => canOpenApp('support', sessionCtl.visibleApps()),
+    prefs: () => settings.effective(),
+    open: (link) => notifications.onClick(link, 'support'),
+    quickReply: (id) => openQuickReply(id),
+    refused: (ticketId, text, mode, error) => {
+      const me = sessionCtl.userId();
+      // Kept as the ticket's draft, where its composer finds it (modules/support/Composer.tsx).
+      if (me) queue.saveDraft(me, 'support', `ticket:${ticketId}`, { body: text, mode });
+      openLink(`/tickets?ticket=${ticketId}`);
+      broadcast('toast', { kind: 'error', text: `Your ${mode === 'note' ? 'note' : 'reply'} was not sent: ${error} It is in the ticket's message box to send again.` });
+    },
+    onChanged: () => {
+      emitStatus();
+      supportDesk.soon();
+    },
+  });
+  // The desk in the tray / menu bar (D-05): my numbers, the next SLAs due, availability.
+  const supportDesk: SupportDesk = new SupportDesk({
+    http,
+    enabled: () => canOpenApp('support', sessionCtl.visibleApps()),
+    badges: () => supportNotices.badges(),
+    onChanged: () => tray.update({ support: supportDesk.get() }),
+  });
+  // An urgent ticket nobody has rings as a centred card (D-07): one at a time, each once; it closes when it is taken.
+  const supportUrgent: SupportUrgent = new SupportUrgent({
+    http,
+    allowed: () =>
+      sessionCtl.isReady() && !lock.isLocked() && canOpenApp('support', sessionCtl.visibleApps()) && settings.effective().notificationsEnabled !== false && supportNoticePrefs(settings.effective().supportNotices).urgentPopup,
+    ring: (id) => {
+      const win = windows.open('support-ring', ringRoute(id), 'Urgent ticket', true);
+      win.once('closed', () => supportUrgent.closed(id));
+    },
+    close: () => windows.closeKind('support-ring'),
+  });
+  // ⌃⌥R (Ctrl+Alt+R): the quick-reply window on my latest ticket, from any app (D-05). Held while signed in with the
+  // desk and unlocked, unless turned off in Notification settings › Support.
+  let supportKeyHeld = false;
+  const quickLatest = (): void => {
+    void supportDesk.latest().then((id) => (id ? openQuickReply(id) : navigate({ route: '/support?view=mine', source: 'tray' })));
+  };
+  const syncSupportKeys = (): void => {
+    const want = sessionCtl.isReady() && !lock.isLocked() && canOpenApp('support', sessionCtl.visibleApps()) && supportNoticePrefs(settings.effective().supportNotices).quickShortcut;
+    if (want && !supportKeyHeld) {
+      try {
+        supportKeyHeld = globalShortcut.register(SUPPORT_QUICK_SHORTCUT, quickLatest);
+      } catch {
+        supportKeyHeld = false;
+      }
+    } else if (!want && supportKeyHeld) {
+      globalShortcut.unregister(SUPPORT_QUICK_SHORTCUT);
+      supportKeyHeld = false;
+    }
+    tray.update({ supportShortcut: supportKeyHeld ? SUPPORT_QUICK_SHORTCUT : null });
+  };
+  notifications.claim = (n) => supportNotices.claim(n);
+  notifications.onRefresh = () => void supportNotices.refreshBadges();
+
   // ── status ─────────────────────────────────────────────────────────────
   let statusTimer: NodeJS.Timeout | null = null;
   // Visitors waiting on me in my website chats (#230), from the ringer: on the Dock and taskbar badge.
@@ -1212,10 +1285,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   let ringingCount = 0;
   const snapshot = (): StatusSnapshot => {
     const uid = sessionCtl?.userId();
-    const raw = notifications.counts();
+    const { supportNotices: supportBell, ...raw } = notifications.counts();
+    const support = supportNotices.count();
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
-    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0 };
+    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -1250,6 +1324,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         unreadChat: s.unread.chat + (s.unread.webchat ?? 0),
         unreadMail: s.unread.mail,
         unreadOther: s.unread.notifications,
+        unreadSupport: s.unread.support ?? 0,
+        unreadSupportNotices: s.unread.supportNotices ?? 0,
         badge: settings.effective().badgeCount !== false,
         notificationsPausedUntil: s.notificationsPausedUntil,
       });
@@ -1271,6 +1347,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   }
   realtime.onEvent = (e) => {
     notifications.handleRealtime(e);
+    supportNotices.handle(e);
+    supportDesk.handle(e);
+    supportUrgent.handle(e);
     webchat.handle(e);
     calls.handle(e);
     aiPending.handle(e as { type?: string });
@@ -1481,6 +1560,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     showRingMenu: (anchor) => ringTray.show(anchor),
     liveDashboard: () => liveDesk.open('dashboard'),
     liveMap: () => liveDesk.open('map'),
+    supportQuickReply: (id) => openQuickReply(id),
+    supportQuickLatest: () => quickLatest(),
+    supportPresence: (status) => void supportDesk.setPresence(status),
     marketingNextContact: () => openNextContact('tray'),
   });
 
@@ -1864,6 +1946,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const syncQuickAsk = (): void => {
     quickAsk.sync();
     tray.update({ quickAsk: quickAsk.shortcut() });
+    // Support's quick-reply shortcut follows the same moments: sign-in, the lock, the settings.
+    syncSupportKeys();
   };
 
   // ── what the person may open (shared/access.ts) ───────────────────────
@@ -1929,6 +2013,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/elearning/v1/me/lessons', 'elearning'],
     ['/api/elearning/v1/catalog', 'elearning'],
     ['/api/elearning/v1/categories', 'elearning'],
+    // Support: the rail and its counts, the lists, every ticket opened and the desk's vocabulary, so the desk opens
+    // offline as it was left; who else is on a ticket is never taken from this copy (modules/support/api.ts).
+    ['/api/support/v1/meta', 'support'],
+    ['/api/support/v1/views', 'support'],
+    ['/api/support/v1/badges', 'support'],
+    ['/api/support/v1/tickets', 'support'],
+    ['/api/support/v1/agents', 'support'],
+    ['/api/support/v1/canned', 'support'],
     // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
     // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];
@@ -1983,6 +2075,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     setExternalAllowList([new URL(auth.getServer()!.origin).hostname]);
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
+    supportNotices.start();
+    supportDesk.start();
+    supportUrgent.start();
     webchat.start();
     livePulse.start();
     syncQuickAsk();
@@ -2062,6 +2157,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     phone.reset();
     realtime.stop();
     notifications.stop();
+    supportNotices.stop();
+    supportDesk.stop();
+    supportUrgent.stop();
+    syncSupportKeys();
     device.stop();
     transfers.stopAll();
     sync.stop();
@@ -2218,6 +2317,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Locked: the call window stops saying who is waiting, and Quick Ask stops answering its shortcut.
     webchat.refresh();
     syncQuickAsk();
+    // Locked, an urgent ticket's card comes down; unlocked, the desk is looked at again.
+    void supportUrgent.check();
     nextContactKey.sync();
     if (s.locked) {
       windows.hideQuickAsk();
@@ -2724,6 +2825,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     livePulse.stop();
     atRisk.clear();
     quickAsk.release();
+    if (supportKeyHeld) globalShortcut.unregister(SUPPORT_QUICK_SHORTCUT);
     nextContactKey.release();
     marketingPulse.stop();
     callbackReminders.stop();

@@ -41,6 +41,9 @@ import { ThreadFailed, ThreadPlaceholder, type PaneHead } from './ThreadPlacehol
 import { useRingState, youJoinedLine } from './Ringing';
 import { MergeDialog, ProfileCards } from './IdentityCard';
 import { ConnectionWarning } from '../../../components/ConnectionWarning';
+import { ticketRoute } from '@shared/support';
+import { ConvertSheet, useConversion } from '../../support/ConvertSheet';
+import { StatusChip } from '../../support/parts';
 
 // Kept importable from here, where the drawer first had it.
 export { visitorLocalTime } from './panelCards';
@@ -500,7 +503,6 @@ interface Stop {
  */
 function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, peopleFirst = false, foot }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; top?: ReactNode; people?: ReactNode; peopleFirst?: boolean; foot?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
-  const [busy, setBusy] = useState(false);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
   const support = useCanOpen('support');
   const mail = useCanOpen('mail');
@@ -536,22 +538,11 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
     else void call('app:openExternal', { url: `mailto:${v.email}` });
   };
 
-  const ticket = async () => {
-    setBusy(true);
-    try {
-      const r = await apiPost<{ id: number; reference: string }>('/api/tickets/from-conversation', { conversation_id: c.id });
-      toast('success', `Raised as ${r.reference}.`);
-      void call('app:openInBrowser', { path: `/tickets?ticket=${r.id}` });
-    } catch (e) {
-      const existing = e instanceof ApiError ? (e.data as { ticket?: { id?: number } } | null)?.ticket?.id : undefined;
-      if (existing) {
-        toast('info', errorMessage(e));
-        void call('app:openInBrowser', { path: `/tickets?ticket=${existing}` });
-      } else toast('error', errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+  // Raise ticket opens Support's sheet here, not the browser (WS-SUPPORT-SRS-001 D-06, FR-DSK-08); a chat that is a
+  // ticket already shows it, with its status, and opens its tab (FR-LCH-08).
+  const [raising, setRaising] = useState(false);
+  const converted = useConversion(c.id, support);
+  const linked = converted.data?.ticket ?? null;
 
   const action = 'flex h-[30px] flex-1 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface text-[11.5px] font-semibold text-ink hover:bg-subtle';
   return (
@@ -643,7 +634,14 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
           }
         />
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
-          {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
+          {support && linked ? (
+            <button type="button" onClick={() => navigate(ticketRoute(linked.id))} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle" title={text('Open the ticket in WorkSuite')}>
+              <Icon name="life-buoy" size={13} className="text-ink-2" /> {text('Ticket {ref}', { ref: linked.reference })} · <StatusChip status={linked.status} />
+            </button>
+          ) : support ? (
+            <button type="button" onClick={() => setRaising(true)} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle">Raise a support ticket from this chat</button>
+          ) : null}
+          {raising ? <ConvertSheet conversationId={c.id} onClose={() => setRaising(false)} /> : null}
           {/* Leave chat, with the owner's warning, at the panel's foot (C-08, TEAM-06). */}
           {foot}
         </div>

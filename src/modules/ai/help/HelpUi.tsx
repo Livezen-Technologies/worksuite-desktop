@@ -1,17 +1,16 @@
 import { useState } from 'react';
-import { Checkbox } from '../../../components/Checkbox';
 import { Icon } from '../../../components/Icon';
-import { Button, Modal, cx } from '../../../components/ui';
-import { ApiError, apiPost } from '../../../core/api';
+import { Button, cx } from '../../../components/ui';
+import { apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
 import { LANGUAGES, useLanguage } from '../../../core/i18n';
 import { useStore } from '../../../core/store';
 import { navigate } from '../../../core/tabs';
-import { toast } from '../../../core/toasts';
 import { useTextAi } from '../textTools';
 import { GUIDES } from './catalog';
 import { findGuides, guideText, mayDo, suggestions, type Guide } from './guides';
 import { startShowMe } from './ShowMe';
+import { MyRequests, type SupportKind } from './ContactSupport';
 
 /**
  * Help & Guide in the AI Assistant (worksuite-desktop#54): the guide cards in the conversation, the Help & Guide
@@ -196,103 +195,10 @@ export function HelpPanel({ module, onOpenGuide, onSupport, onClose }: { module:
           Report an Issue
         </Button>
       </div>
+      <MyRequests className="border-t border-line pt-2" />
     </section>
   );
 }
 
-export type SupportKind = 'support' | 'issue';
-
-/**
- * Contact Support / Report an Issue: everything that would be sent, shown and editable first, and each piece of
- * context the person can leave out. `POST /api/desktop/support`; a server without it gets the text to copy instead.
- */
-export function SupportDialog({ kind, question, screen, onClose }: { kind: SupportKind; question?: string; screen: string | null; onClose: () => void }) {
-  const info = useStore(app, (s) => s.info);
-  const language = useLanguage();
-  const [subject, setSubject] = useState(kind === 'issue' ? 'Something is not working' : question ? `Help with: ${question.slice(0, 80)}` : 'Help with WorkSuite');
-  const [body, setBody] = useState(question ? `I asked the assistant: “${question}”\n\n` : '');
-  const [include, setInclude] = useState({ version: true, screen: !!screen });
-  const [state, setState] = useState<{ phase: 'edit' | 'sending' | 'fallback'; why?: string }>({ phase: 'edit' });
-  const details = [
-    include.version && info ? `WorkSuite Desktop ${info.version} · ${info.platform} ${info.osVersion} · ${info.channel}` : null,
-    include.screen && screen ? `Screen: ${screen}` : null,
-    `Language: ${languageName(language)}`,
-  ].filter(Boolean) as string[];
-  const text = `${subject}\n\n${body.trim()}\n\n${details.join('\n')}`;
-
-  const send = async () => {
-    setState({ phase: 'sending' });
-    try {
-      const r = await apiPost<{ reference?: string | null }>('/api/desktop/support', { kind, subject, body, details: { version: include.version ? info?.version : null, platform: include.version ? info?.platform : null, os: include.version ? info?.osVersion : null, screen: include.screen ? screen : null, language } });
-      toast('success', r?.reference ? `Sent. Your reference is ${r.reference}.` : 'Sent. Support will get back to you.');
-      onClose();
-    } catch (e) {
-      setState({ phase: 'fallback', why: e instanceof ApiError && (e.status === 404 || e.status === 405) ? 'Your WorkSuite server does not take support requests from the desktop yet.' : e instanceof ApiError && e.offline ? 'You are offline.' : e instanceof Error ? e.message : 'It could not be sent.' });
-    }
-  };
-
-  return (
-    <Modal
-      title={kind === 'issue' ? 'Report an Issue' : 'Contact Support'}
-      labelledBy="support-dialog-title"
-      onClose={onClose}
-      width={560}
-      footer={
-        state.phase === 'fallback' ? (
-          <>
-            <Button icon="copy" onClick={() => void navigator.clipboard.writeText(text).then(() => toast('success', 'Copied.'))}>
-              Copy the details
-            </Button>
-            <Button onClick={() => (onClose(), navigate('/diagnostics'))}>Open Diagnostics</Button>
-            <Button variant="primary" onClick={onClose}>
-              Close
-            </Button>
-          </>
-        ) : (
-          <>
-            <span className="mr-auto text-[11.5px] text-ink-3">Nothing is sent until you choose Send.</span>
-            <Button onClick={onClose}>Cancel</Button>
-            <Button variant="primary" icon="send" loading={state.phase === 'sending'} disabled={!subject.trim() || !body.trim()} onClick={() => void send()}>
-              Send
-            </Button>
-          </>
-        )
-      }
-    >
-      {state.phase === 'fallback' ? (
-        <div className="space-y-2 text-[13px] text-ink-2">
-          <p role="alert">{state.why} Copy the details and send them to your administrator or WorkSuite support, or save a diagnostic report from Diagnostics.</p>
-          <pre className="max-h-[220px] overflow-auto whitespace-pre-wrap rounded-[8px] bg-subtle p-2.5 text-[12px] text-ink selectable">{text}</pre>
-        </div>
-      ) : (
-        <div className="space-y-3 text-[13px]">
-          <label className="flex flex-col gap-1">
-            <span className="text-[12.5px] font-semibold text-ink-2">Subject</span>
-            <input value={subject} onChange={(e) => setSubject(e.target.value)} className="h-9 rounded-[8px] border border-line bg-surface px-3 text-ink outline-none focus:border-primary" />
-          </label>
-          <label className="flex flex-col gap-1">
-            <span className="text-[12.5px] font-semibold text-ink-2">{kind === 'issue' ? 'What happened, and what you expected' : 'How can we help?'}</span>
-            <textarea value={body} onChange={(e) => setBody(e.target.value)} rows={6} autoFocus className="rounded-[8px] border border-line bg-surface p-2.5 text-ink outline-none focus:border-primary" />
-          </label>
-          <fieldset className="space-y-1">
-            <legend className="text-[12.5px] font-semibold text-ink-2">Also send</legend>
-            <label className="flex items-center gap-2 text-ink-2">
-              <Checkbox checked={include.version} onChange={(e) => setInclude({ ...include, version: e.target.checked })} />
-              The app version and system ({info ? `${info.version}, ${info.platform}` : 'unknown'})
-            </label>
-            {screen ? (
-              <label className="flex items-center gap-2 text-ink-2">
-                <Checkbox checked={include.screen} onChange={(e) => setInclude({ ...include, screen: e.target.checked })} />
-                The screen you are on ({screen})
-              </label>
-            ) : null}
-          </fieldset>
-          <details className="text-[12px] text-ink-3">
-            <summary className="cursor-pointer">Exactly what will be sent</summary>
-            <pre className="mt-1 whitespace-pre-wrap rounded-[8px] bg-subtle p-2.5 text-ink selectable">{text}</pre>
-          </details>
-        </div>
-      )}
-    </Modal>
-  );
-}
+/** Contact Support and Report an Issue, D-11: ContactSupport.tsx. */
+export { SupportDialog, MyRequests, type SupportKind } from './ContactSupport';

@@ -5,6 +5,37 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.194 — 2026-10-06
+
+- **Support opens in the app (WS-SUPPORT-SRS-001).** The support desk is now a native module instead of the
+  browser. It needs the server's Support 1.1.0; on an older server it falls back to the old ticket routes for the
+  list, a ticket, replies, status and assignment.
+  - **Inbox:** three panes — views with live counts and saved views, a fast ticket list, and a reading pane with an
+    inline reply. j/k, Enter, R, N and E work as on the web. Your availability is Chat's Online/Away.
+  - **A ticket in its own tab:** the conversation, activity, linked records and files. Every change is sent with the
+    version you saw; if somebody changed it first you see both and choose. SLA timers, the requester's other tickets,
+    who else is viewing, RustDesk Connect, and a composer that takes dragged files and pasted screenshots. Drafts are
+    kept on this computer and on the server, so they follow you to the browser.
+  - **Notifications:** an assignment, a requester's reply, a mention or an SLA warning arrives as a banner with Open,
+    Take later, Snooze or a reply typed into the banner. The rail, Dock and tray show the desk's unread count. Each
+    kind can be tuned under Settings › Notifications › Support.
+  - **Quick reply (⌃⌥R / Ctrl+Alt+R from any app):** a small always-on-top window for the latest or a chosen ticket.
+  - **Tray:** my open tickets, due today, at risk and the next SLAs due, with a red dot while one of mine has breached.
+  - **Urgent tickets:** a new urgent, unassigned ticket rings once with a countdown, Take it, Assign and Dismiss.
+  - **Website chat → ticket:** a native sheet from the chat, raised once and appended to the visitor's open ticket
+    when there is one.
+  - **⌘K:** finds tickets and knowledge-base articles, runs the ticket's actions, and ⌘⇧C copies a ticket's link.
+  - **⌘J:** the knowledge-base and AI panel — articles to insert as a link or text, a thread summary, a suggested
+    reply, rewrite and translate, and suggested category and priority. AI only ever suggests; nothing is sent until
+    you send it.
+  - **Offline:** replies, notes and changes wait in an outbox and go when the connection comes back, once each. A
+    change somebody else overtook waits for you to choose, field by field.
+  - **Help & Guide › Contact Support** raises a real ticket and shows its reference. You choose which diagnostics go
+    with it, can attach a capture of the window, and see your requests.
+  - **Wallboard:** the desk's live dashboard full screen on a second display (for people who may read reports).
+- Settings 1.26.0 (Next/Previous tab and Copy ticket link shortcuts), notifications 1.12.0 (Support's banners), chat
+  1.61.0 (the ticket's reference on a converted chat), ai 1.9.0 (Contact Support).
+
 ## 0.2.193 — 2026-10-06
 
 - **Marketing opens in the app (WS-MKT-SRS-001 v1.1).** Marketing is now a native module in a tab of its own

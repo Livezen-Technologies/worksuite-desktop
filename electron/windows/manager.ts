@@ -17,7 +17,7 @@ const log = logger('windows');
  * fully visible on the primary display.
  */
 // The Live map window can be pinned on top of other apps (MAP-21, "📌 On top").
-const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map', 'phone']);
+const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map', 'phone', 'support-quick', 'support-ring']);
 /** Windows that can shrink to float over other apps while a call or meeting goes on. */
 const COMPACTABLE = new Set<WindowKind>(['call', 'video-call', 'meet']);
 /** One call at a time: a second "call" window focuses the one already open. */
@@ -46,9 +46,22 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   wall: { width: 1280, height: 720, minWidth: 640, minHeight: 360 },
   // The Wall mode sheet (L-06, MAP-UI-06): the design's 430 wide, its display cards and four choices.
   'wall-sheet': { width: 430, height: 384, minWidth: 430, minHeight: 384 },
+  // A support ticket's quick-reply window (WS-SUPPORT-SRS-001 D-04): the design's ~520 × 560, floating.
+  'support-quick': { width: 520, height: 560, minWidth: 420, minHeight: 420 },
+  // An urgent ticket ringing (D-07): a centred card, answered or dismissed, not managed.
+  'support-ring': { width: 460, height: 440, minWidth: 460, minHeight: 360 },
+  // The support wallboard (D-12): the whole screen it is on; this is only its size before it goes full screen.
+  'support-wall': { width: 1280, height: 720, minWidth: 640, minHeight: 360 },
 };
+/** Cards that ring: no window controls, no place remembered, on top of everything. */
+const RINGS = new Set<WindowKind>(['ring', 'support-ring']);
+/**
+ * Kinds of which one window is open at a time, a newer one replacing the older: a ring, and a quick reply (D-04) —
+ * whose draft is kept per ticket, so nothing typed in the older one is lost.
+ */
+const ONE_AT_A_TIME = new Set<WindowKind>(['ring', 'support-quick', 'support-ring']);
 /** Remote control's own windows: placed by remote control, never remembered. */
-const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall', 'wall-sheet']);
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall', 'wall-sheet', 'support-wall']);
 
 /**
  * The tray's ringing menu's place (R-06, RING-UI-07): under the menu-bar icon on macOS (or a tray at the top), over it
@@ -250,7 +263,7 @@ export class WindowManager {
     }
     for (const win of BrowserWindow.getAllWindows()) {
       const kind = this.kinds.get(win.id);
-      if (kind && kind !== 'ring' && !REMOTE.has(kind)) {
+      if (kind && !RINGS.has(kind) && !REMOTE.has(kind)) {
         try {
           this.saveLayout(win, kind);
         } catch {
@@ -622,6 +635,57 @@ export class WindowManager {
     for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && this.kinds.get(w.id) === 'wall-sheet') w.close();
   }
 
+  private supportWall: BrowserWindow | null = null;
+
+  /**
+   * The support wallboard on a display (WS-SUPPORT-SRS-001 D-12): the whole of that screen, menu-less, kept awake while
+   * it is up. Opened again on another screen, it moves there; unplugging its display closes it. Esc on it, or Close the
+   * wallboard in the inbox, takes it down.
+   */
+  showSupportWall(displayId: number | null): BrowserWindow {
+    const display = screen.getAllDisplays().find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
+    const existing = this.supportWall && !this.supportWall.isDestroyed() ? this.supportWall : null;
+    if (existing) {
+      if (existing.isFullScreen()) existing.setFullScreen(false);
+      existing.setBounds(display.bounds);
+      existing.setFullScreen(true);
+      existing.show();
+      return existing;
+    }
+    const win = new BrowserWindow({ ...display.bounds, show: false, frame: false, fullscreen: true, title: 'Support wallboard', backgroundColor: '#070B16', webPreferences: this.webPreferences() });
+    this.kinds.set(win.id, 'support-wall');
+    const wid = win.id;
+    this.supportWall = win;
+    const shown = display.id;
+    const awake = powerSaveBlocker.start('prevent-display-sleep');
+    const unplugged = (_e: unknown, d: { id: number }) => {
+      if (d.id === shown && !win.isDestroyed()) win.close();
+    };
+    screen.on('display-removed', unplugged);
+    win.on('closed', () => {
+      this.kinds.delete(wid);
+      if (this.supportWall === win) this.supportWall = null;
+      if (powerSaveBlocker.isStarted(awake)) powerSaveBlocker.stop(awake);
+      screen.removeListener('display-removed', unplugged);
+    });
+    win.once('ready-to-show', () => win.show());
+    win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
+    void win.loadURL(this.url('/window/support-wall'));
+    return win;
+  }
+
+  /** Takes the support wallboard down: whether one was up. */
+  closeSupportWall(): boolean {
+    const win = this.supportWall && !this.supportWall.isDestroyed() ? this.supportWall : null;
+    if (!win) return false;
+    win.close();
+    return true;
+  }
+
+  supportWallOpen(): boolean {
+    return !!this.supportWall && !this.supportWall.isDestroyed();
+  }
+
   /** The screen WorkSuite's main window is on ("this window" in the sheet), or null while it is closed. */
   mainDisplayId(): number | null {
     const main = this.getMain();
@@ -697,12 +761,14 @@ export class WindowManager {
     const size = SIZES[kind];
     // An incoming call always appears in the same place: top right of the
     // screen the pointer is on, clear of the menu bar.
-    const ring = kind === 'ring';
+    // An urgent support ticket rings as a card in the middle of the screen the pointer is on (D-07), and takes the focus.
+    const ring = RINGS.has(kind);
+    const corner = kind === 'ring';
     const saved = ring ? null : this.loadLayout(kind);
     const primary = ring ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) : screen.getPrimaryDisplay();
     const initial: Rectangle = opts.bounds ?? saved?.bounds ?? {
-      x: ring ? primary.workArea.x + primary.workArea.width - size.width - 20 : primary.workArea.x + Math.round((primary.workArea.width - size.width) / 2),
-      y: ring ? primary.workArea.y + 16 : primary.workArea.y + Math.round((primary.workArea.height - size.height) / 2),
+      x: corner ? primary.workArea.x + primary.workArea.width - size.width - 20 : primary.workArea.x + Math.round((primary.workArea.width - size.width) / 2),
+      y: corner ? primary.workArea.y + 16 : primary.workArea.y + Math.round((primary.workArea.height - size.height) / 2),
       width: size.width,
       height: size.height,
     };
@@ -756,10 +822,15 @@ export class WindowManager {
     if (mac && !ring) this.guardWorkArea(win);
     win.once('ready-to-show', () => {
       if (opts.show === false) return;
-      // A ring must not take the keyboard from whatever the person is typing in.
-      if (ring) {
+      // A call's ring must not take the keyboard from whatever the person is typing in; an urgent ticket's card does
+      // (D-07: "focus-stealing"), so Enter takes it and Esc dismisses it.
+      if (corner) {
         win.setAlwaysOnTop(true, 'pop-up-menu');
         win.showInactive();
+      } else if (ring) {
+        win.setAlwaysOnTop(true, 'pop-up-menu');
+        win.show();
+        win.focus();
       } else win.show();
     });
     win.webContents.on('render-process-gone', (_e, details) => {
@@ -815,6 +886,11 @@ export class WindowManager {
     return win;
   }
 
+  /** Closes every window of a kind (an urgent ticket's card, once somebody has taken the ticket). */
+  closeKind(kind: WindowKind): void {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && this.kinds.get(w.id) === kind) w.close();
+  }
+
   open(kind: Exclude<WindowKind, 'main'>, route: string, title?: string, alwaysOnTop?: boolean, place?: { at?: { x: number; y: number }; bounds?: Rectangle }): BrowserWindow {
     const hash = `/window/${kind}?route=${encodeURIComponent(route)}`;
     for (const w of BrowserWindow.getAllWindows()) {
@@ -828,8 +904,8 @@ export class WindowManager {
         w.focus();
         return w;
       }
-      // A newer ring replaces an older one.
-      if (k === 'ring' && kind === 'ring') w.close();
+      // A newer ring replaces an older one; so does a quick reply.
+      if (k === kind && ONE_AT_A_TIME.has(kind)) w.close();
     }
     if (kind !== 'record') return this.create(kind, { hash, title, alwaysOnTop: alwaysOnTop ?? kind !== 'meet', bounds: this.cascade(kind) });
     const win = this.create(kind, { hash, title, alwaysOnTop: false, bounds: this.recordPlace(place) });
@@ -1096,5 +1172,7 @@ export function windowRoute(url: string): string | null {
   if (!hash.startsWith('/window/')) return null;
   // The Live map window and wall mode are the Live dashboard's (L-04, MAP-24): they close with Chat, and at sign-out.
   if (/^\/window\/(live-map|wall|wall-sheet)(\?|$)/.test(hash)) return LIVE_ROUTE;
+  // The support wallboard (D-12) is the desk's: it closes with Support, and at sign-out.
+  if (/^\/window\/support-wall(\?|$)/.test(hash)) return '/support';
   return new URLSearchParams(hash.split('?')[1] ?? '').get('route');
 }
