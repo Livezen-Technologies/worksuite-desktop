@@ -4,6 +4,7 @@
     "paths": [
         "shared/support.ts",
         "electron/services/support-notices.ts",
-        "electron/services/support-desk.ts"
+        "electron/services/support-desk.ts",
+        "electron/services/support-urgent.ts"
     ]
 }

@@ -17,7 +17,7 @@ const log = logger('windows');
  * fully visible on the primary display.
  */
 // The Live map window can be pinned on top of other apps (MAP-21, "📌 On top").
-const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map', 'phone', 'support-quick']);
+const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map', 'phone', 'support-quick', 'support-ring']);
 /** Windows that can shrink to float over other apps while a call or meeting goes on. */
 const COMPACTABLE = new Set<WindowKind>(['call', 'video-call', 'meet']);
 /** One call at a time: a second "call" window focuses the one already open. */
@@ -48,12 +48,16 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'wall-sheet': { width: 430, height: 384, minWidth: 430, minHeight: 384 },
   // A support ticket's quick-reply window (WS-SUPPORT-SRS-001 D-04): the design's ~520 × 560, floating.
   'support-quick': { width: 520, height: 560, minWidth: 420, minHeight: 420 },
+  // An urgent ticket ringing (D-07): a centred card, answered or dismissed, not managed.
+  'support-ring': { width: 460, height: 440, minWidth: 460, minHeight: 360 },
 };
+/** Cards that ring: no window controls, no place remembered, on top of everything. */
+const RINGS = new Set<WindowKind>(['ring', 'support-ring']);
 /**
  * Kinds of which one window is open at a time, a newer one replacing the older: a ring, and a quick reply (D-04) —
  * whose draft is kept per ticket, so nothing typed in the older one is lost.
  */
-const ONE_AT_A_TIME = new Set<WindowKind>(['ring', 'support-quick']);
+const ONE_AT_A_TIME = new Set<WindowKind>(['ring', 'support-quick', 'support-ring']);
 /** Remote control's own windows: placed by remote control, never remembered. */
 const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall', 'wall-sheet']);
 
@@ -257,7 +261,7 @@ export class WindowManager {
     }
     for (const win of BrowserWindow.getAllWindows()) {
       const kind = this.kinds.get(win.id);
-      if (kind && kind !== 'ring' && !REMOTE.has(kind)) {
+      if (kind && !RINGS.has(kind) && !REMOTE.has(kind)) {
         try {
           this.saveLayout(win, kind);
         } catch {
@@ -704,12 +708,14 @@ export class WindowManager {
     const size = SIZES[kind];
     // An incoming call always appears in the same place: top right of the
     // screen the pointer is on, clear of the menu bar.
-    const ring = kind === 'ring';
+    // An urgent support ticket rings as a card in the middle of the screen the pointer is on (D-07), and takes the focus.
+    const ring = RINGS.has(kind);
+    const corner = kind === 'ring';
     const saved = ring ? null : this.loadLayout(kind);
     const primary = ring ? screen.getDisplayNearestPoint(screen.getCursorScreenPoint()) : screen.getPrimaryDisplay();
     const initial: Rectangle = opts.bounds ?? saved?.bounds ?? {
-      x: ring ? primary.workArea.x + primary.workArea.width - size.width - 20 : primary.workArea.x + Math.round((primary.workArea.width - size.width) / 2),
-      y: ring ? primary.workArea.y + 16 : primary.workArea.y + Math.round((primary.workArea.height - size.height) / 2),
+      x: corner ? primary.workArea.x + primary.workArea.width - size.width - 20 : primary.workArea.x + Math.round((primary.workArea.width - size.width) / 2),
+      y: corner ? primary.workArea.y + 16 : primary.workArea.y + Math.round((primary.workArea.height - size.height) / 2),
       width: size.width,
       height: size.height,
     };
@@ -763,10 +769,15 @@ export class WindowManager {
     if (mac && !ring) this.guardWorkArea(win);
     win.once('ready-to-show', () => {
       if (opts.show === false) return;
-      // A ring must not take the keyboard from whatever the person is typing in.
-      if (ring) {
+      // A call's ring must not take the keyboard from whatever the person is typing in; an urgent ticket's card does
+      // (D-07: "focus-stealing"), so Enter takes it and Esc dismisses it.
+      if (corner) {
         win.setAlwaysOnTop(true, 'pop-up-menu');
         win.showInactive();
+      } else if (ring) {
+        win.setAlwaysOnTop(true, 'pop-up-menu');
+        win.show();
+        win.focus();
       } else win.show();
     });
     win.webContents.on('render-process-gone', (_e, details) => {
@@ -820,6 +831,11 @@ export class WindowManager {
     win.show();
     win.focus();
     return win;
+  }
+
+  /** Closes every window of a kind (an urgent ticket's card, once somebody has taken the ticket). */
+  closeKind(kind: WindowKind): void {
+    for (const w of BrowserWindow.getAllWindows()) if (!w.isDestroyed() && this.kinds.get(w.id) === kind) w.close();
   }
 
   open(kind: Exclude<WindowKind, 'main'>, route: string, title?: string, alwaysOnTop?: boolean, place?: { at?: { x: number; y: number }; bounds?: Rectangle }): BrowserWindow {

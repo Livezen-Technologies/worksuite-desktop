@@ -64,7 +64,7 @@ export function WindowRoot({ hash }: { hash: string }) {
   }, [dockable, route, title]);
   return (
     <div className="flex h-full flex-col">
-      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'call' || barHidden) && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
+      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'support-ring' || kind === 'call' || barHidden) && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
         {dockable && windowId ? (
           <span
             draggable

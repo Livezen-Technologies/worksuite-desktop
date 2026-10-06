@@ -91,6 +91,9 @@ export function SupportNotifications({ categories, commit, prefs, local }: { cat
           onValueChange={(v) => set({ lowPriority: v as SupportNoticePrefs['lowPriority'] })}
         />
       </SettingRow>
+      <SettingRow label="Urgent tickets ring" hint="A new urgent ticket nobody has taken pops up in the middle of the screen, with Take it, Assign and Dismiss.">
+        <Switch label="Urgent tickets ring" checked={p.urgentPopup} onChange={(v) => set({ urgentPopup: v })} />
+      </SettingRow>
       <SettingRow label="Quick reply shortcut" hint="Ctrl+Alt+R (⌃⌥R on a Mac) from any app opens a quick reply on your latest ticket.">
         <Switch label="Quick reply shortcut" checked={p.quickShortcut} onChange={(v) => set({ quickShortcut: v })} />
       </SettingRow>

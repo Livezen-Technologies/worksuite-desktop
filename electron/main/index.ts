@@ -25,7 +25,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import { SUPPORT_QUICK_SHORTCUT, quickRoute, supportNoticePrefs } from '@shared/support';
+import { SUPPORT_QUICK_SHORTCUT, quickRoute, ringRoute, supportNoticePrefs } from '@shared/support';
 import { FOLLOW_UP_DEFAULTS, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
@@ -72,6 +72,7 @@ import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
 import { SupportNotices } from '../services/support-notices';
 import { SupportDesk } from '../services/support-desk';
+import { SupportUrgent } from '../services/support-urgent';
 import { WebchatRinger, announceEvent, ringerHeight } from '../services/webchat-ring';
 import { SystemFocus } from '../services/system-focus';
 import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '../services/live-desk';
@@ -1237,6 +1238,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     badges: () => supportNotices.badges(),
     onChanged: () => tray.update({ support: supportDesk.get() }),
   });
+  // An urgent ticket nobody has rings as a centred card (D-07): one at a time, each once; it closes when it is taken.
+  const supportUrgent: SupportUrgent = new SupportUrgent({
+    http,
+    allowed: () =>
+      sessionCtl.isReady() && !lock.isLocked() && canOpenApp('support', sessionCtl.visibleApps()) && settings.effective().notificationsEnabled !== false && supportNoticePrefs(settings.effective().supportNotices).urgentPopup,
+    ring: (id) => {
+      const win = windows.open('support-ring', ringRoute(id), 'Urgent ticket', true);
+      win.once('closed', () => supportUrgent.closed(id));
+    },
+    close: () => windows.closeKind('support-ring'),
+  });
   // ⌃⌥R (Ctrl+Alt+R): the quick-reply window on my latest ticket, from any app (D-05). Held while signed in with the
   // desk and unlocked, unless turned off in Notification settings › Support.
   let supportKeyHeld = false;
@@ -1332,6 +1344,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.handleRealtime(e);
     supportNotices.handle(e);
     supportDesk.handle(e);
+    supportUrgent.handle(e);
     webchat.handle(e);
     calls.handle(e);
     aiPending.handle(e as { type?: string });
@@ -2012,6 +2025,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.start(uid);
     supportNotices.start();
     supportDesk.start();
+    supportUrgent.start();
     webchat.start();
     livePulse.start();
     syncQuickAsk();
@@ -2088,6 +2102,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.stop();
     supportNotices.stop();
     supportDesk.stop();
+    supportUrgent.stop();
     syncSupportKeys();
     device.stop();
     transfers.stopAll();
@@ -2245,6 +2260,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Locked: the call window stops saying who is waiting, and Quick Ask stops answering its shortcut.
     webchat.refresh();
     syncQuickAsk();
+    // Locked, an urgent ticket's card comes down; unlocked, the desk is looked at again.
+    void supportUrgent.check();
     if (s.locked) {
       windows.hideQuickAsk();
       if (!settings.effective().lockedShowCallerDetails) for (const win of BrowserWindow.getAllWindows()) {

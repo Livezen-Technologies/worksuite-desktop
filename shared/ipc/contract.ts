@@ -230,6 +230,7 @@ export const preferencesPatchSchema = z
         slaPersistent: z.boolean(),
         lowPriority: z.enum(['banner', 'digest']),
         quickShortcut: z.boolean(),
+        urgentPopup: z.boolean(),
       })
       .partial(),
     webchatFollowUps: z.object({ card: z.boolean(), desktop: z.boolean(), sound: z.boolean(), idleMinutes: z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]) }),

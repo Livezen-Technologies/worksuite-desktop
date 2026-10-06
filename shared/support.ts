@@ -602,7 +602,12 @@ export function quickRoute(id: number | string): string {
   return `${SUPPORT_ROUTE}/quick/${id}`;
 }
 
-export type SupportRoute = { kind: 'ticket'; key: string } | { kind: 'quick'; key: string } | { kind: 'inbox'; view: string | null; saved: string | null; q: string | null };
+/** An urgent ticket's ringing card (D-07): `/support/ring/{id}`; like a quick reply, the ticket's tab in the main window. */
+export function ringRoute(id: number | string): string {
+  return `${SUPPORT_ROUTE}/ring/${id}`;
+}
+
+export type SupportRoute = { kind: 'ticket'; key: string } | { kind: 'quick'; key: string } | { kind: 'ring'; key: string } | { kind: 'inbox'; view: string | null; saved: string | null; q: string | null };
 
 /**
  * Where a support route goes. A ticket's tab is `/support/ticket/{id}` (or a reference in place of the id); the
@@ -617,6 +622,7 @@ export function parseSupportRoute(route: string): SupportRoute {
   if (segments[0] === 'support') {
     const rest = segments.slice(1);
     if (rest.length === 2 && rest[0] === 'quick' && isTicketKey(rest[1])) return { kind: 'quick', key: rest[1] };
+    if (rest.length === 2 && rest[0] === 'ring' && isTicketKey(rest[1])) return { kind: 'ring', key: rest[1] };
     const key = rest.length === 2 && (rest[0] === 'ticket' || rest[0] === 'tickets') ? rest[1] : rest.length === 1 ? rest[0] : null;
     if (isTicketKey(key)) return { kind: 'ticket', key };
     const asked = query.get('ticket') ?? query.get('open');
@@ -637,7 +643,7 @@ export function isTicketRoute(route: string): boolean {
 export function canonicalSupportRoute(route: string): string {
   if (!/^\/support(?:[/?#]|$)/.test(route)) return route;
   const r = parseSupportRoute(route);
-  return r.kind === 'ticket' || r.kind === 'quick' ? ticketRoute(r.key) : route;
+  return r.kind === 'ticket' || r.kind === 'quick' || r.kind === 'ring' ? ticketRoute(r.key) : route;
 }
 
 /** The inbox's route for a view (and a search). */
@@ -994,6 +1000,8 @@ export interface SupportNoticePrefs {
   lowPriority: 'banner' | 'digest';
   /** ⌃⌥R (Ctrl+Alt+R) from any app opens the quick-reply window on my latest ticket (D-05, FR-DSK-03). */
   quickShortcut: boolean;
+  /** A new unassigned urgent ticket in my queues rings as a pop-up card (D-07). */
+  urgentPopup: boolean;
 }
 
 /** As the design has them: assignment with a sound, a reply with a sound (and a reply box), a mention quietly, an SLA kept. */
@@ -1005,6 +1013,7 @@ export const SUPPORT_NOTICE_DEFAULTS: SupportNoticePrefs = {
   slaPersistent: true,
   lowPriority: 'digest',
   quickShortcut: true,
+  urgentPopup: true,
 };
 
 /** The choices made, with the defaults for the rest (a choice saved before a kind existed takes its default). */
@@ -1019,6 +1028,7 @@ export function supportNoticePrefs(p: Partial<SupportNoticePrefs> | null | undef
     slaPersistent: typeof p?.slaPersistent === 'boolean' ? p.slaPersistent : d.slaPersistent,
     lowPriority: p?.lowPriority === 'banner' || p?.lowPriority === 'digest' ? p.lowPriority : d.lowPriority,
     quickShortcut: typeof p?.quickShortcut === 'boolean' ? p.quickShortcut : d.quickShortcut,
+    urgentPopup: typeof p?.urgentPopup === 'boolean' ? p.urgentPopup : d.urgentPopup,
   };
 }
 

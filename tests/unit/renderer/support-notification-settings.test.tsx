@@ -34,6 +34,9 @@ describe('the Support card', () => {
     // The quick-reply shortcut from any app (D-05): on unless turned off.
     fireEvent.click(screen.getByRole('switch', { name: 'Quick reply shortcut' }));
     expect(local).toHaveBeenLastCalledWith({ supportNotices: { ...SUPPORT_NOTICE_DEFAULTS, quickShortcut: false } });
+    // The urgent ticket pop-up (D-07): on unless turned off.
+    fireEvent.click(screen.getByRole('switch', { name: 'Urgent tickets ring' }));
+    expect(local).toHaveBeenLastCalledWith({ supportNotices: { ...SUPPORT_NOTICE_DEFAULTS, urgentPopup: false } });
   });
 
   it('greys out banners and sounds while this computer shows none', () => {
