@@ -1,7 +1,7 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { Fragment, useEffect, useState, type FormEvent, type ReactNode } from 'react';
+import { Fragment, Suspense, lazy, useEffect, useState, type FormEvent, type ReactNode } from 'react';
 import { app } from '../../core/app-state';
-import { ApiError, apiGet, apiGetMeta, apiPost } from '../../core/api';
+import { ApiError, apiGet, apiGetMeta } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { t } from '../../core/i18n';
 import { useStore } from '../../core/store';
@@ -26,10 +26,12 @@ import { isJunkFile } from '../files/api';
 import type { Room } from '../chat/types';
 import { assistantSession } from '../ai/session';
 import { aiDock } from '../../app/overlays/AiDock';
-import { AllAnnouncements, AnnouncementReader, AnnouncementRows, current, forCompany, ranked, toAcknowledge, useMyAnnouncements, type MyAnnouncement } from './Announcements';
+import { AllAnnouncements, AnnouncementReader, AnnouncementRows, current, forCompany, ranked, toAcknowledge, useMyAnnouncements } from './Announcements';
 import { Agenda } from './Agenda';
 import { MoreButton, PopMenu, type MenuAction } from './Menu';
 import { TodaysWork } from './TodaysWork';
+import { inOrgs, useWaitingSources, waitingItems, type WaitingItem } from './waiting';
+import { WaitingPage, WaitingRows } from './WaitingItems';
 import { HeaderLink, Widget } from './Widget';
 import {
   CARDS,
@@ -80,16 +82,6 @@ export interface Dashboard {
   activity: Array<{ id: number; description: string | null; user: string | null; at: string; count?: number; link?: string | null; module?: string | null }>;
 }
 
-interface Approval {
-  kind: 'leave' | 'request' | 'resignation';
-  id: number;
-  who: string;
-  what: string;
-  when: string;
-  as: string;
-  link: string;
-}
-
 interface Summary {
   total: number;
   digest: { text: string | null; reason: string | null; points?: Array<{ text: string; link: string | null }>; sources?: Array<{ label: string; link: string }> };
@@ -97,6 +89,9 @@ interface Summary {
 
 /** Transfer parts and the like are not activity (#104): a line per chunk of an upload says nothing. */
 const NOISE = /\b(chunk|part \d+ of \d+|upload(ed)? part|transfer part)\b/i;
+
+/** A leave's review, opened over Home from Waiting for me (#263): HR's own panel, loaded when first asked for. */
+const ReviewLeave = lazy(() => import('../hr/Leave').then((m) => ({ default: m.ReviewLeave })));
 
 /**
  * Home lays itself out by its own width, not the window's (worksuite-desktop#264): the page is a size container, so
@@ -117,8 +112,11 @@ function useMinute(): number {
 }
 
 export default function HomePage(_props: ModuleProps) {
-  useTabTitle(t('nav.home'));
   const { navigate, openLink, query, go } = useTab();
+  // Waiting for me, all of it (#263): `/home?waiting=all`, in place of the dashboard.
+  const waitingAll = query.get('waiting') === 'all';
+  useTabTitle(waitingAll ? t('home.waiting') : t('nav.home'));
+  const qc = useQueryClient();
   const user = useStore(app, (s) => s.auth?.user);
   const orgId = useStore(app, (s) => s.organizationId);
   const orgs = useStore(app, (s) => s.bootstrap?.organizations ?? []);
@@ -159,12 +157,8 @@ export default function HomePage(_props: ModuleProps) {
     enabled: has('calendar'),
   });
   const invitations = useWaitingInvitations(has('calendar') || has('meetings'));
-  const approvals = useQuery({
-    queryKey: ['hr', 'approvals'],
-    queryFn: () => apiGet<{ count: number; items: Approval[] }>('/api/hr/approvals/pending'),
-    enabled: has('hr'),
-    retry: false,
-  });
+  // What waits on the person in HR (leave, cover, timesheets, HR's approvals) and Expenses (#263).
+  const { approvals, sources, unlisted } = useWaitingSources(has);
   // Chat's own list of conversations (one cache with the Chat page): its mentions are the tile's "N mentions".
   const rooms = useQuery({
     queryKey: ['chat', 'rooms'],
@@ -178,6 +172,10 @@ export default function HomePage(_props: ModuleProps) {
 
   const reading = Number(query.get('announcement') ?? 0) || null;
   const readingAll = query.get('announcements') === 'all';
+  const reviewing = has('hr') ? Number(query.get('leave') ?? 0) || null : null;
+  // An item opened from the Waiting for me page comes back to it when closed.
+  const base = waitingAll ? '/home?waiting=all' : '/home';
+  const at = (key: string, id: number) => `${base}${base.includes('?') ? '&' : '?'}${key}=${id}`;
 
   const inCompany = (o: number | null | undefined) => selection.length === 0 || o === null || o === undefined || selection.includes(String(o));
   const allTasks = tasks.data?.data.tasks ?? [];
@@ -194,12 +192,18 @@ export default function HomePage(_props: ModuleProps) {
   // Announcements: an older server without them, or one refusing, has no card rather than an error.
   const noAnnouncements = announcements.error instanceof ApiError && (announcements.error.status === 404 || announcements.error.forbidden);
   const notices = ranked(current(forCompany(announcements.data ?? [], selection)));
-  const acks = toAcknowledge(notices);
-  const approvalItems = has('hr') ? (approvals.data?.items ?? []) : [];
-  const approvalCount = has('hr') ? (approvals.data?.count ?? 0) : 0;
   // Waiting for an answer: one answered — even "maybe" — has left Waiting for me, and stays on the meeting (#97).
   const waiting = (invitations.data ?? []).filter((i) => awaitingAnswer(i.my_rsvp));
-  const waitingCount = approvalCount + waiting.length + acks.length;
+  // Every organisation's for the page (it filters for itself); the card keeps to the organisations chosen above.
+  const everything = waitingItems({ ...sources, invitations: waiting, acknowledgements: toAcknowledge(ranked(current(announcements.data ?? []))) });
+  const mine = everything.filter((i) => inOrgs(i, selection));
+  const waitingCount = mine.length + unlisted;
+  const ofKind = (...kinds: WaitingItem['kind'][]) => mine.filter((i) => kinds.includes(i.kind)).length;
+  const invites = mine.filter((i) => i.kind === 'invitation').slice(0, 3);
+  const rows = mine.filter((i) => i.kind !== 'invitation').slice(0, 5);
+  const openLeave = (id: number) => go(at('leave', id));
+  const openItem = (i: WaitingItem) => (i.kind === 'leave' || i.kind === 'cover' ? openLeave(i.id) : i.kind === 'announcement' ? go(at('announcement', i.id)) : i.link ? openLink(i.link) : undefined);
+  const approvalsError = has('hr') && approvals.error && !(approvals.error instanceof ApiError && approvals.error.forbidden) ? approvals.error : null;
   const unreadChat = has('chat') ? (status?.unread.chat ?? 0) : 0;
   const unreadMail = has('mail') ? (status?.unread.mail ?? 0) : 0;
   const mentions = (rooms.data?.data.rooms ?? []).reduce((n, r) => n + (r.mentions ?? 0), 0);
@@ -274,22 +278,21 @@ export default function HomePage(_props: ModuleProps) {
         title={t('home.waiting')}
         count={waitingCount}
         countTone="warning"
-        action={
-          waiting.length && has('meetings') ? (
-            <HeaderLink label="All invitations" onClick={() => navigate('/meetings?tab=invitations')}>All</HeaderLink>
-          ) : approvalItems.length ? (
-            <HeaderLink label="All approvals" onClick={() => openLink('/hr?tab=approvals')}>All</HeaderLink>
-          ) : null
-        }
+        // Every app's, not one module's list (#263): HR's "approvals" address is Timesheet approvals on the desktop.
+        action={waitingCount ? <HeaderLink label="All waiting for me" onClick={() => go('/home?waiting=all')}>All</HeaderLink> : null}
         loading={(has('hr') && approvals.isLoading) || invitations.isLoading}
-        error={has('hr') && approvals.error && !(approvals.error instanceof ApiError && approvals.error.forbidden) ? approvals.error : null}
+        error={approvalsError}
         onRetry={() => void approvals.refetch()}
         empty={waitingCount === 0 ? <><Icon name="check-circle" size={15} /> Nothing waiting for you.</> : null}
       >
         <div className="flex flex-col">
-          {waiting.length ? <WaitingInvitations items={waiting} canMeetings={has('meetings')} onOpen={openLink} /> : null}
-          {approvalItems.length ? <WaitingApprovals items={approvalItems} onOpen={openLink} /> : null}
-          {acks.length ? <WaitingAcknowledgements items={acks} onOpen={(id) => go(`/home?announcement=${id}`)} /> : null}
+          {invites.length ? <WaitingInvitations items={invites.map((i) => i.invitation!)} canMeetings={has('meetings')} onOpen={openLink} /> : null}
+          {rows.length ? <WaitingRows items={rows} onOpen={openItem} onOpenLeave={openLeave} /> : null}
+          {waitingCount > invites.length + rows.length ? (
+            <button type="button" onClick={() => go('/home?waiting=all')} className="border-t border-line pt-2.5 text-left text-[12.5px] font-medium text-primary hover:underline">
+              {(waitingCount - invites.length - rows.length).toLocaleString()} more waiting for you
+            </button>
+          ) : null}
         </div>
       </Widget>
     ),
@@ -418,7 +421,7 @@ export default function HomePage(_props: ModuleProps) {
       key="waiting"
       label={t('home.waitingForYou')}
       n={waitingCount}
-      note={waitingBreakdown({ invitations: waiting.length, approvals: approvalCount, acknowledgements: acks.length }) || null}
+      note={waitingBreakdown({ invitations: ofKind('invitation'), approvals: ofKind('leave', 'request', 'resignation', 'other', 'timesheet', 'expense') + unlisted, covers: ofKind('cover'), acknowledgements: ofKind('announcement') }) || null}
       icon="user"
       tone="amber"
       onClick={() => {
@@ -439,6 +442,43 @@ export default function HomePage(_props: ModuleProps) {
       />
     ) : null,
   ].filter(Boolean);
+
+  // What opens over Home or over the Waiting for me page: an announcement, or a leave's review (#263).
+  const over = (
+    <>
+      {reading ? <AnnouncementReader id={reading} onClose={() => go(base)} /> : null}
+      {reviewing ? (
+        <Suspense fallback={null}>
+          <ReviewLeave
+            id={reviewing}
+            canDecide={everything.some((i) => i.kind === 'leave' && i.id === reviewing && i.decides) ? true : undefined}
+            onClose={() => go(base)}
+            onDone={() => void qc.invalidateQueries({ queryKey: ['hr'] })}
+          />
+        </Suspense>
+      ) : null}
+    </>
+  );
+
+  if (waitingAll) {
+    return (
+      <>
+        <WaitingPage
+          items={everything}
+          loading={(has('hr') && approvals.isLoading) || invitations.isLoading}
+          error={approvalsError}
+          onRetry={() => void approvals.refetch()}
+          onBack={() => go('/home')}
+          onOpen={openItem}
+          onOpenLeave={openLeave}
+          canMeetings={has('meetings')}
+          onOpenLink={openLink}
+          orgName={(id) => orgs.find((o) => o.id === id)?.name ?? null}
+        />
+        {over}
+      </>
+    );
+  }
 
   return (
     <div data-home className="@container h-full overflow-y-auto scroll-thin">
@@ -533,7 +573,7 @@ export default function HomePage(_props: ModuleProps) {
           ) : null}
         </div>
       </div>
-      {reading ? <AnnouncementReader id={reading} onClose={() => go('/home')} /> : null}
+      {over}
       {readingAll ? <AllAnnouncements items={notices} onOpen={(id) => go(`/home?announcement=${id}`)} onClose={() => go('/home')} /> : null}
     </div>
   );
@@ -728,76 +768,5 @@ function DailyBrief({ summary, error, facts, canAsk, onOpen }: { summary?: Summa
         </form>
       ) : null}
     </div>
-  );
-}
-
-/** Approvals waiting for you: a leave request decided right here, anything else reviewed where it lives. */
-function WaitingApprovals({ items, onOpen }: { items: Approval[]; onOpen: (link: string) => void }) {
-  const qc = useQueryClient();
-  const [busy, setBusy] = useState<number | null>(null);
-  const decide = async (a: Approval, decision: 'approved' | 'rejected') => {
-    setBusy(a.id);
-    try {
-      await apiPost(`/api/hr/leave/requests/${a.id}/decide`, { decision });
-      toast('success', decision === 'approved' ? `Approved ${a.who}'s ${a.what.toLowerCase()}.` : `Declined ${a.who}'s request.`);
-      void qc.invalidateQueries({ queryKey: ['hr'] });
-    } catch (e) {
-      toast('error', errorMessage(e));
-    } finally {
-      setBusy(null);
-    }
-  };
-  return (
-    <ul className="m-0 flex list-none flex-col p-0" aria-label="Approvals waiting for you">
-      {items.slice(0, 5).map((a) => (
-        <li key={`${a.kind}:${a.id}`} className="flex items-center gap-3 border-t border-line py-3">
-          <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-warning-bg text-warning">
-            <Icon name="file-text" size={16} />
-          </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="truncate text-[14px] font-semibold text-ink">{a.what}</span>
-            <span className="truncate text-[12px] text-ink-3">{[a.who, a.when].filter(Boolean).join(' · ')}</span>
-          </div>
-          {a.kind === 'leave' && a.as !== 'responsible' ? (
-            <span className="flex shrink-0 gap-1.5">
-              <Button size="sm" className="h-8" disabled={busy === a.id} onClick={() => void decide(a, 'rejected')}>
-                Decline
-              </Button>
-              <Button size="sm" className="h-8" variant="success" disabled={busy === a.id} onClick={() => void decide(a, 'approved')}>
-                Approve
-              </Button>
-            </span>
-          ) : (
-            <Button size="sm" className="h-8 shrink-0 px-3 font-medium" aria-label={`Review ${a.what}`} onClick={() => onOpen(a.link)}>
-              Review
-            </Button>
-          )}
-        </li>
-      ))}
-    </ul>
-  );
-}
-
-/** Announcements that ask to be read and acknowledged. */
-function WaitingAcknowledgements({ items, onOpen }: { items: MyAnnouncement[]; onOpen: (id: number) => void }) {
-  return (
-    <ul className="m-0 flex list-none flex-col p-0" aria-label="Announcements to acknowledge">
-      {items.slice(0, 3).map((a) => (
-        <li key={a.id} className="flex items-center gap-3 border-t border-line py-3">
-          <span aria-hidden="true" className="flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] bg-danger-bg text-danger">
-            <Icon name="megaphone" size={16} />
-          </span>
-          <div className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="truncate text-[14px] font-semibold text-ink">Read announcement</span>
-            <span className="truncate text-[12px] text-ink-3" title={a.title}>
-              {[a.title, a.company].filter(Boolean).join(' · ')}
-            </span>
-          </div>
-          <Button size="sm" className="h-8 shrink-0 px-3 font-medium" aria-label={`Open ${a.title}`} onClick={() => onOpen(a.id)}>
-            Open
-          </Button>
-        </li>
-      ))}
-    </ul>
   );
 }

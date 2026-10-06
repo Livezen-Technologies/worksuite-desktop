@@ -434,11 +434,12 @@ describe('Announcements on Home (#98, #104)', () => {
     expect(within(box).getByText('2 companies')).toBeTruthy();
     expect(within(box).getAllByText(/^Ann HR · /)).toHaveLength(2);
 
+    // What it is in the title, the rest below it (#263).
     const waiting = screen.getByRole('region', { name: 'Waiting for me' });
-    expect(within(waiting).getByText('Read announcement')).toBeTruthy();
-    expect(within(waiting).getByText('New security policy · Livezen')).toBeTruthy();
-    expect(within(waiting).getByText('Expense claim')).toBeTruthy();
-    expect(within(waiting).getByText('Cy · Today')).toBeTruthy();
+    expect(within(waiting).getByText('New security policy')).toBeTruthy();
+    expect(within(waiting).getByText('Read and acknowledge · Livezen')).toBeTruthy();
+    expect(within(waiting).getByText('Cy · Expense claim')).toBeTruthy();
+    expect(within(waiting).getByText('Today')).toBeTruthy();
 
     fireEvent.click(within(box).getByRole('button', { name: 'Acknowledge' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/hr/announcements/mine/11/ack', {}));
@@ -603,7 +604,8 @@ describe('Invitations waiting for me (#97)', () => {
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/calendar/conflicts/invitations/meetings/7/rsvp', { rsvp: 'tentative' }));
     fireEvent.click(within(row).getByRole('button', { name: 'View meeting' }));
     expect(nav.navigate.mock.calls.flat().concat(go.mock.calls.flat())).toContain('/meetings?meeting=7');
-    fireEvent.click(within(waiting).getByRole('button', { name: 'All invitations' }));
-    expect(nav.navigate).toHaveBeenCalledWith('/meetings?tab=invitations');
+    // "All ›" is everything waiting, from every app (#263), not one app's list.
+    fireEvent.click(within(waiting).getByRole('button', { name: 'All waiting for me' }));
+    expect(go).toHaveBeenCalledWith('/home?waiting=all');
   });
 });

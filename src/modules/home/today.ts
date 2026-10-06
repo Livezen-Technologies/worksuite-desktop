@@ -60,11 +60,12 @@ export function cappedCount(n: number): string {
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 
-/** What is waiting for you, by kind: "1 invitation · 1 approval". Empty when nothing is. */
-export function waitingBreakdown(c: { invitations: number; approvals: number; acknowledgements: number }): string {
+/** What is waiting for you, by kind: "1 invitation · 1 approval · 1 cover request". Empty when nothing is. */
+export function waitingBreakdown(c: { invitations: number; approvals: number; acknowledgements: number; covers?: number }): string {
   return [
     c.invitations ? plural(c.invitations, 'invitation') : null,
     c.approvals ? plural(c.approvals, 'approval') : null,
+    c.covers ? plural(c.covers, 'cover request') : null,
     c.acknowledgements ? plural(c.acknowledgements, 'acknowledgement') : null,
   ]
     .filter(Boolean)
