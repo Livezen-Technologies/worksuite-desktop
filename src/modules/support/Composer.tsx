@@ -94,8 +94,8 @@ export function Composer({
   legacy?: boolean;
   /** Out of sight while the tab shows another view, and kept: the draft and the files going up stay. */
   hidden?: boolean;
-  /** The R and N keys: focus the composer in that mode. A new `n` asks again. */
-  focusRequest?: { mode: ComposerMode; n: number } | null;
+  /** The R and N keys: focus the composer in that mode. A new `n` asks again. `canned`: with the "/" picker open (⌘K). */
+  focusRequest?: { mode: ComposerMode; n: number; canned?: boolean } | null;
   onSent?: (answer: MessageAnswer) => void;
   /** Typing started or stopped, and in which mode: the collision bar's "typing a note…" (FR-COM-11). */
   onTyping?: (mode: ComposerMode | null) => void;
@@ -151,11 +151,13 @@ export function Composer({
   const highlighted = Math.min(pick, Math.max(0, choices.length - 1));
   const pickerId = `support-pick-${ticket.id}`;
 
-  // R / N: focus here, in that mode.
+  // R / N: focus here, in that mode — and the palette's "Insert canned response…", with "/" typed.
+  const startCanned = useRef<() => void>(() => undefined);
   useEffect(() => {
     if (!focusRequest) return;
     update({ mode: focusRequest.mode });
     box.current?.focus();
+    if (focusRequest.canned) setTimeout(() => startCanned.current(), 0);
     // Only a new request moves the focus: the draft changing must not.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRequest?.n]);
@@ -273,6 +275,18 @@ export function Composer({
     forget(previews[f.id]);
     // Taken back at the server too. One never sent is its uploader's alone either way.
     void removeAttachment(f.id).catch(() => undefined);
+  };
+
+  /** "/" where the caret is, at the start of a line: the canned responses' picker opens. */
+  startCanned.current = () => {
+    const el = box.current;
+    const body = latest.current.body;
+    const at = el?.selectionStart ?? body.length;
+    const prefix = at === 0 || body[at - 1] === '\n' ? '/' : '\n/';
+    const r = spliceText(body, at, el?.selectionEnd ?? at, prefix);
+    setBody(r.text, r.caret);
+    setDismissed(null);
+    placeCaret(r.caret);
   };
 
   const ccTyped = parseCc(ccText);
@@ -553,15 +567,7 @@ export function Composer({
           size="sm"
           variant="ghost"
           title={text('Canned responses: type / at the start of a line')}
-          onClick={() => {
-            const el = box.current;
-            const at = el?.selectionStart ?? d.body.length;
-            const prefix = at === 0 || d.body[at - 1] === '\n' ? '/' : '\n/';
-            const r = spliceText(d.body, at, el?.selectionEnd ?? at, prefix);
-            setBody(r.text, r.caret);
-            setDismissed(null);
-            placeCaret(r.caret);
-          }}
+          onClick={() => startCanned.current()}
         >
           <span className="font-mono">/</span> {text('canned')}
         </Button>

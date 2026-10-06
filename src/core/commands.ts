@@ -35,6 +35,8 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   // The next and the previous tab, as browsers have them on a Mac (WS-SUPPORT-SRS-001 D-02: ⌘⇧] next tab).
   'next-tab': 'Mod+Shift+]',
   'prev-tab': 'Mod+Shift+[',
+  // Copy the deep link of the support ticket in front (WS-SUPPORT-SRS-001 D-08: ⌘⇧C); nothing while none is.
+  'support-copy-link': 'Mod+Shift+C',
   settings: 'Mod+,',
   ai: 'Mod+Shift+A',
   // ⌘J / Ctrl+J opens or minimises the assistant too (worksuite-desktop#153); inside the mail editor it is Write with AI.

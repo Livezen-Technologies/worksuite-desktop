@@ -480,6 +480,18 @@ describe('the composer', () => {
     expect(screen.queryByRole('listbox', { name: 'Canned responses' })).toBeNull();
   });
 
+  it('⌘K’s actions on the ticket in front: Insert canned response… opens the "/" picker in a reply', async () => {
+    const { allCommands } = await import('../../../src/core/commands');
+    renderTab();
+    await screen.findByRole('heading', { name: /Microsoft 365/ });
+    const ids = allCommands().filter((c) => c.id.startsWith('support-')).map((c) => c.id);
+    expect(ids).toEqual(expect.arrayContaining(['support-canned', 'support-quick', 'support-copy-link']));
+    act(() => allCommands().find((c) => c.id === 'support-canned')!.run());
+    expect(await screen.findByRole('listbox', { name: 'Canned responses' })).toBeTruthy();
+    expect((composerBox() as HTMLTextAreaElement).value).toBe('/');
+    expect(screen.getByRole('radio', { name: /Reply to requester/ }).getAttribute('aria-checked')).toBe('true');
+  });
+
   it('Escape closes the canned list and leaves the text as typed', async () => {
     renderTab();
     await screen.findByRole('heading', { name: /Microsoft 365/ });

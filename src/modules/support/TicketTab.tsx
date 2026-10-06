@@ -13,7 +13,8 @@ import { useNow } from '../../core/use-now';
 import { SidePanel } from '../../components/SidePanel';
 import { useStickToBottom } from '../../components/useStickToBottom';
 import { Avatar, Button, Empty, ErrorNote, IconButton, Spinner, cx } from '../../components/ui';
-import { K, errorText, getTicket, links, messagesBefore, meta, take, ticketIdForReference, transition, unwatch, watch } from './api';
+import { K, assign, errorText, getTicket, links, messagesBefore, meta, take, ticketIdForReference, transition, unwatch, watch } from './api';
+import { useTicketCommands } from './palette';
 import { Activity } from './Activity';
 import { Composer, type ComposerMode } from './Composer';
 import { openAttachment } from './files';
@@ -120,6 +121,27 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
   }, [active]);
+
+  // ⌘K: this ticket's actions while its tab is in front (D-08), as its buttons allow them.
+  const composing = !readOnly && (show.can.reply === true);
+  useTicketCommands(active, {
+    id: t.id,
+    reference: t.reference,
+    take: readOnly
+      ? null
+      : !t.assignee && show.can.reply
+        ? { label: text('Assign {ref} to me', { ref: t.reference }), run: () => void act('take', () => take(t.id, t.version || undefined), text('{ref} is yours.', { ref: t.reference })) }
+        : t.assignee && me && t.assignee.id !== me && show.can.assign
+          ? { label: text('Reassign {ref} to me (from {name})', { ref: t.reference, name: t.assignee.name ?? '' }), run: () => void act('take', () => assign(t.id, { user_id: me, version: t.version || undefined }), text('{ref} is yours.', { ref: t.reference })) }
+          : null,
+    resolve: canResolve ? () => setResolveOpen(true) : null,
+    canned: composing
+      ? () => {
+          setView('conversation');
+          setFocusRequest((f) => ({ mode: 'reply', n: (f?.n ?? 0) + 1, canned: true }));
+        }
+      : null,
+  });
 
   const watching = !!me && (t.watchers ?? []).some((w) => w.id === me);
   const linkList: TicketLink[] = linksQ.data ?? [];

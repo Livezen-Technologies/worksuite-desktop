@@ -22,6 +22,8 @@ import { AppTile } from '../../components/AppTile';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { extOf, kindOf } from '../../modules/files/api';
+import { searchTickets, ticketDeepLink, ticketInFront, ticketSubtitle } from '../../modules/support/palette';
+import { ticketIdOfLink, ticketRoute } from '@shared/support';
 import { Button, cx, DATA_TEXT, Kbd as KeyChip } from '../../components/ui';
 
 /**
@@ -124,6 +126,8 @@ export function nextScope(scopes: string[], current: string, back = false): stri
 
 let searchAccessEpoch = 0;
 const RECENT_MAX = 6;
+/** The group Support's tickets are listed under (and the filter that keeps to them). */
+export const SUPPORT_GROUP = 'Support tickets';
 const recentKey = (user: string | number) => `ws.search.recent.${user}`;
 
 export function readRecentSearches(user: string | number | null | undefined): string[] {
@@ -261,6 +265,18 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     enabled: currentQuery && (!online || (server.error instanceof ApiError && server.error.offline)),
   });
 
+  // The support desk's tickets (WS-SUPPORT-SRS-001 D-08, FR-SRC-01): "tkt 128" finds TKT-000128 by reference, and
+  // the subject, requester, email and phone match too. Only for somebody with Support, only while online.
+  const supportOn = idsOf(apps).has('support') && !guest;
+  const tickets = useQuery({
+    queryKey: ['search-support', origin, user, accessEpoch, debounced],
+    queryFn: ({ signal }) => searchTickets(debounced, signal),
+    enabled: currentQuery && online && supportOn && (scope === 'All' || scope === SUPPORT_GROUP),
+    staleTime: 15_000,
+    retry: false,
+  });
+  const ticketData = currentQuery && online && supportOn ? tickets.data : undefined;
+
   const companyIdentity = `${origin}:${user}:${accessEpoch}`;
   const [companyList, setCompanyList] = useState<{ identity: string; companies: NonNullable<ServerAnswer['companies']> }>({ identity: '', companies: [] });
   const serverData = currentQuery && online ? server.data : undefined;
@@ -358,6 +374,9 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       for (const it of g.items) {
         // A hit in an app the person was not given is not shown (the server should not send one).
         if (!canOpenLink(it.route, allowed)) continue;
+        // A ticket the desk's own search found too is listed once, there (with its status and deep link).
+        const tid = ticketIdOfLink(it.route);
+        if (tid !== null && ticketData?.some((tk) => tk.id === tid)) continue;
         const candidate = g.key === 'files' || g.group.toLowerCase() === 'files' ? Number(it.id) : 0;
         const fileId = Number.isSafeInteger(candidate) && candidate > 0 ? candidate : undefined;
         const route = fileId && Number.isSafeInteger(fileId) && fileId > 0 ? `${it.route}${it.route.includes('?') ? '&' : '?'}file=${fileId}` : it.route;
@@ -383,6 +402,31 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
         });
       }
     }
+    // Support's tickets, with the ticket in front's actions beside it when it is among them (D-08).
+    const front = ticketInFront();
+    const me = user === null ? null : Number(user) || null;
+    for (const tk of ticketData ?? []) {
+      const look = groupLook('tickets');
+      out.push({
+        key: `support:${tk.id}`,
+        group: SUPPORT_GROUP,
+        title: `${tk.reference} · ${tk.subject}`,
+        subtitle: ticketSubtitle(tk, me),
+        at: tk.updated_at ? relative(tk.updated_at) : undefined,
+        colour: look.colour,
+        icon: 'life-buoy',
+        kv: [['Ticket', tk.reference], ['Status', ticketSubtitle(tk, me).split(' · ')[0]!], ['Opens', 'In the desktop app']],
+        verb: 'Open',
+        run: () => navigate(ticketRoute(tk.id)),
+        window: () => void call('windows:open', { kind: 'record', route: ticketRoute(tk.id), title: tk.reference }),
+        link: ticketDeepLink(tk.id),
+      });
+    }
+    if (front && (ticketData ?? []).some((tk) => tk.id === front.id)) {
+      for (const c of front.actions) {
+        out.push({ key: `support-action:${c.id}`, group: text('Actions on {ref}', { ref: front.reference }), title: c.label, colour: '#23349E', icon: 'zap', action: true, hint: c.hint ?? (shortcuts[c.id] ? prettyAccelerator(shortcuts[c.id]!) : undefined), kv: [['Command', 'Support']], verb: `Run “${c.label}”`, run: c.run });
+      }
+    }
     for (const it of offlineData ?? []) {
       // Saved on this computer while the app was the person's; not shown once it is not.
       if (!canOpenApp(it.module, allowed) || !canOpenRoute(it.route, allowed)) continue;
@@ -401,13 +445,13 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       });
     }
     return out;
-  }, [commandMode, term, listed, create, serverData, offlineData, shortcuts, scope, allowed, origin, user, guest]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [commandMode, term, listed, create, serverData, offlineData, ticketData, shortcuts, scope, allowed, origin, user, guest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filters: All, then each group that found something (and the one chosen, even when empty).
   const groups = [...new Set(items.filter((i) => i.group !== 'Apps').map((i) => i.group))];
   const scopes = ['All', ...groups, ...(scope !== 'All' && !groups.includes(scope) ? [scope] : [])];
   const shown = commandMode || scope === 'All' ? items : items.filter((i) => i.group === scope);
-  const fetchingResults = server.isFetching || offline.isFetching;
+  const fetchingResults = server.isFetching || offline.isFetching || tickets.isFetching;
   const selected = Math.max(
     0,
     shown.findIndex((it) => it.key === selectedKey),
@@ -479,9 +523,12 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       })
       .catch(() => toast('error', text('Could not copy the link.')));
   };
-  // Mod+C copies the selected result's link, but only when there is no text to copy instead.
+  // Mod+C copies the selected result's link, but only when there is no text to copy instead; on a support ticket,
+  // Mod+Shift+C copies its deep link whatever is selected (D-08).
   const copyKey = (e: React.KeyboardEvent<HTMLElement>) => {
-    if (!cur?.link || !isCopyChord(e) || hasTextSelection(e.target)) return false;
+    if (!cur?.link) return false;
+    const deepLink = isLinkChord(e) && cur.key.startsWith('support:');
+    if (!deepLink && (!isCopyChord(e) || hasTextSelection(e.target))) return false;
     e.preventDefault();
     copy(cur);
     return true;
@@ -957,6 +1004,11 @@ export const COPIED_MS = 1500;
 /** Cmd+C on macOS, Ctrl+C elsewhere — nothing else held. */
 export function isCopyChord(e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>, mac = isMac): boolean {
   return e.key.toLowerCase() === 'c' && (mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && !e.shiftKey;
+}
+
+/** Mod+Shift+C: copy the link, whatever is selected. */
+export function isLinkChord(e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey' | 'altKey' | 'shiftKey'>, mac = isMac): boolean {
+  return e.key.toLowerCase() === 'c' && (mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey) && !e.altKey && e.shiftKey;
 }
 
 /** Whether a copy would take text: a selection in the focused field or on the page. */

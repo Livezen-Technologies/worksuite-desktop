@@ -53,6 +53,7 @@ export const COMMAND_NAMES: Record<string, string> = {
   'dock-tab-beside': 'Dock tab beside',
   'next-tab': 'Next tab',
   'prev-tab': 'Previous tab',
+  'support-copy-link': 'Support: copy the ticket’s link',
   settings: 'Settings',
   ai: 'AI Assistant',
   'ai-alt': 'AI Assistant',

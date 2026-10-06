@@ -339,6 +339,7 @@ const SHORTCUT_LABELS: Record<string, string> = {
   'restore-tab': 'Reopen closed tab',
   'next-tab': 'Next tab',
   'prev-tab': 'Previous tab',
+  'support-copy-link': 'Support: copy the ticket’s link',
   settings: 'Settings',
   ai: 'AI Assistant',
   'switch-org': 'Switch organization',
