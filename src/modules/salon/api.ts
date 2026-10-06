@@ -501,6 +501,18 @@ export interface RecordInput {
 
 export const saveRecord = (appointmentId: number, input: RecordInput, key: string) => write<{ record: ServiceRecord | null }>(`/appointments/${appointmentId}/record`, input, key);
 
+/** How a receipt reaches the client after payment (D07). */
+export type ReceiptChannel = 'whatsapp' | 'email';
+
+/**
+ * Send a checked-out visit's receipt to the client — by WhatsApp from the
+ * company's shared number, or by email — to the address on file unless `to`
+ * gives another. A client who asked for no messages is refused `no_messages`
+ * unless `anyway` says they asked for this one.
+ */
+export const sendReceipt = (visitId: number, body: { channel: ReceiptChannel; to?: string; anyway?: boolean; desk?: number }, key: string) =>
+  write<{ to: string }>(`/visits/${visitId}/receipt/send`, body, key);
+
 /** A before or after photo for a saved record, checked by WorkSuite for what it really is. */
 export async function addPhoto(recordId: number, file: Blob, name: string, kind: 'before' | 'after' | 'other'): Promise<{ id: number; message: string | null }> {
   const form = new FormData();

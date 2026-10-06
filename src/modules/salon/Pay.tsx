@@ -3,7 +3,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { Avatar, Empty, Spinner, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { amount, answered, attemptKey, clockAt, dayMonth, fetchToday, fetchVisit, K, owing, readyToPay, refusal, shortDay, stillToPay } from './api';
+import { amount, answered, attemptKey, clockAt, dayMonth, fetchToday, fetchVisit, K, owing, readyToPay, refusal, shortDay, stillToPay, type ReceiptChannel } from './api';
 import {
   checkout,
   fetchCheckout,
@@ -30,6 +30,7 @@ import {
   type TenderMethod,
 } from './money';
 import { Failed, Figure, firstName, Keypad, MoneyLine, Note, Page, Panel, servicesOf, shortName, stylistsOf, TierTag, TouchButton, useDesk, usePrintSettings } from './parts';
+import { SendReceipt } from './SendReceipt';
 
 /**
  * Taking payment at the counter (D06, D07, D14, CHK-01…06, PAY-01…09).
@@ -799,6 +800,8 @@ export function Paid() {
   const receipt = useQuery({ queryKey: MK.receipt(id), queryFn: ({ signal }) => fetchReceipt(id, desk.desk.id, signal), enabled: id > 0 && !!visit && (visit.checked_out || !!result?.invoice), retry: false });
   const [printing, setPrinting] = useState(false);
   const [opening, setOpening] = useState(false);
+  const [sending, setSending] = useState<ReceiptChannel | null>(null);
+  const [sent, setSent] = useState<string[]>([]);
 
   async function again() {
     setPrinting(true);
@@ -894,6 +897,9 @@ export function Paid() {
           {(paid?.problems ?? []).map((p) => (
             <Done key={p} ok={false} text={p} side="" icon="warning" />
           ))}
+          {sent.map((t) => (
+            <Done key={t} ok text={t} side="" icon="send" />
+          ))}
           {next ? <Done ok text={`Next visit suggested ${shortDay(next.date)} — in ${next.weeks} week${next.weeks === 1 ? '' : 's'}`} side="" icon="calendar" muted /> : null}
         </ul>
 
@@ -905,6 +911,16 @@ export function Paid() {
             <TouchButton icon="banknote" loading={opening} onClick={() => void drawer()}>
               Open the drawer
             </TouchButton>
+          ) : null}
+          {(visit.checked_out || result?.invoice) && !desk.offline && desk.may('salon.checkout') ? (
+            <>
+              <TouchButton icon="message-circle" onClick={() => setSending('whatsapp')}>
+                WhatsApp receipt
+              </TouchButton>
+              <TouchButton icon="mail" onClick={() => setSending('email')}>
+                Email receipt
+              </TouchButton>
+            </>
           ) : null}
           {desk.may('salon.visit.book') ? (
             <TouchButton icon="calendar" onClick={() => desk.walkIn({ client_id: visit.client.id, service_ids: [...new Set(visit.items.map((i) => i.service_id))], provider_id: visit.items[0]?.provider_id, date: next?.date }, true)}>
@@ -923,6 +939,7 @@ export function Paid() {
       </Panel>
 
       {r ? <ReceiptPreview r={r} /> : null}
+      {sending ? <SendReceipt visit={visit} channel={sending} onClose={() => setSending(null)} onSent={(t) => setSent((s) => [...s, t])} /> : null}
     </div>
   );
 }
