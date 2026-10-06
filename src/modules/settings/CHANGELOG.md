@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.26.1 — 2026-10-06
+
+**Fixed**
+
+- About: the website is worksuitecloud.com (it said worksuiteone.com), the same as WorkSuite Office's About window
+
 ## 1.26.0 — 2026-10-06
 
 **Added**

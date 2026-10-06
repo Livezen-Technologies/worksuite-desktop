@@ -24,13 +24,13 @@ describe('Settings › About (#48)', () => {
     expect(notice.textContent).not.toContain('©');
   });
 
-  it('opens worksuiteone.com in the default browser, not in the app', () => {
+  it('opens worksuitecloud.com in the default browser, not in the app', () => {
     render(<QueryClientProvider client={new QueryClient()}><About /></QueryClientProvider>);
-    const link = screen.getByRole('link', { name: 'worksuiteone.com' });
-    expect(link.getAttribute('href')).toBe('https://worksuiteone.com/');
+    const link = screen.getByRole('link', { name: 'worksuitecloud.com' });
+    expect(link.getAttribute('href')).toBe('https://worksuitecloud.com/');
     const click = new MouseEvent('click', { bubbles: true, cancelable: true });
     fireEvent(link, click);
     expect(click.defaultPrevented).toBe(true);
-    expect(call).toHaveBeenCalledWith('app:openExternal', { url: 'https://worksuiteone.com/' });
+    expect(call).toHaveBeenCalledWith('app:openExternal', { url: 'https://worksuitecloud.com/' });
   });
 });

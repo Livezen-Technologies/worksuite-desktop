@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.195 — 2026-10-06
+## 0.2.196 — 2026-10-06
 
 - **Point of Sale, phase 2 at the counter (pos 1.2.0).** The till uses the new POS features of WorkSuite. **It needs
   the server's Pos 1.2.0.** Each part turns on only when the server says it offers it, and only online. Against an
@@ -32,6 +32,12 @@ person who has to live with the change — what it does, and where it bites.
     barcode or QR). Without one they print exactly as before. A template's logo is not printed yet.
   - **The drawer's X and Z reports** come from WorkSuite. This till can be renamed. Forget this till hands the till
     back to WorkSuite first.
+
+## 0.2.195 — 2026-10-06
+
+- **About links to worksuitecloud.com.** Settings › About now names worksuitecloud.com as the website (it said
+  worksuiteone.com), the same site as WorkSuite Office's About window, so both apps match.
+- Modules: settings 1.26.1.
 
 ## 0.2.194 — 2026-10-06
 
