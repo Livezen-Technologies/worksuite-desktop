@@ -2,8 +2,9 @@ import { localize } from '@shared/localization';
 import { meetingNoticeActions, type MeetingNoticeActions } from '@shared/meeting-invitations';
 import { inDnd } from '@shared/notification-block';
 import { mailAlertFor, type FocusContext } from '@shared/mail-focus';
+import { socialNoticeActions, type SocialNotice } from '@shared/social-notices';
 import { reminderAction } from '@shared/task-reminders';
-import { Notification, app, nativeImage } from 'electron';
+import { Notification, app, clipboard, nativeImage } from 'electron';
 import { join } from 'node:path';
 import type { SubmitResult } from '@shared/ipc/contract';
 import type { NotificationItem, NotificationPermission, NotificationPrivacy, Preferences, RealtimeState, RingTestNotice } from '@shared/types';
@@ -76,6 +77,8 @@ export interface Incoming {
   websiteCount?: number;
   /** A flagged message's reminder (ENH-MAIL-03 DMO-TSK-02): Snooze 1 hour and Mark complete on the banner. */
   flag?: FlagNotice | null;
+  /** Social Media Manager's post, approval or inbox thread (SMM-DSK-002): View post, Approve, Reply, Copy caption. */
+  social?: SocialNotice | null;
 }
 
 /** The website conversation a visitor's message came in on. */
@@ -205,9 +208,11 @@ export function utcStamp(s: string | null | undefined): string {
 function moduleOf(n: { category?: string | null; type?: string | null; entity_type?: string | null; link?: string | null }): string {
   const link = n.link ?? '';
   const fromLink = /^\/([a-z-]+)/.exec(link)?.[1];
+  // Social Media Manager is not the internal Social stream (`social`): its link names it, whatever the category says.
+  if (fromLink === 'social-media') return 'social-media';
   const raw = (n.category || n.entity_type || fromLink || n.type || 'system').toLowerCase();
   // `projects` is the server's category for tasks: without it, task alerts could not be muted by the Tasks switch.
-  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', projects: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat' };
+  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', projects: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat', social_media: 'social-media', 'social-media': 'social-media' };
   return map[raw] ?? raw.split(/[._:]/)[0] ?? 'system';
 }
 
@@ -249,6 +254,7 @@ const MODULE_LABELS: Record<string, string> = {
   files: 'Files',
   support: 'Support',
   salon: 'SalonMate',
+  'social-media': 'Social Media',
   ai: 'AI Assistant',
   system: 'WorkSuite',
 };
@@ -481,7 +487,7 @@ export class NotificationService {
         raw.forEach((n, k) => {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
-          if (n.desktop_allowed !== false) this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+          if (n.desktop_allowed !== false) this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), social: socialNoticeActions(n.event_key ?? n.type, n.link, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
       this.listed = true;
@@ -571,6 +577,7 @@ export class NotificationService {
           reminder: e.event === 'task.reminder' ? reminderAction(link, e.actions) : null,
           flag: e.event === 'mail.flag_reminder' ? flagFromLink(link) : null,
           meeting: meetingNoticeActions(typeof e.event === 'string' ? e.event : null, e.actions),
+          social: socialNoticeActions(typeof e.event === 'string' ? e.event : null, link, e.actions),
           module: moduleOf({ category: e.category as string, link }),
           category: typeof e.category === 'string' ? e.category : null,
           title: String(e.title ?? 'Notification'),
@@ -834,7 +841,9 @@ export class NotificationService {
               ? n.meeting.answers.map((a) => ({ type: 'button' as const, text: a.label }))
               : n.mail
                 ? MAIL_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
-                : undefined,
+                : n.social
+                  ? n.social.buttons.map((b) => ({ type: 'button' as const, text: localize(b.label, this.prefs().language) }))
+                  : undefined,
       timeoutType: n.critical ? 'never' : 'default',
     });
     // One banner per website conversation: a new message replaces the last (worksuite-desktop#230).
@@ -854,6 +863,17 @@ export class NotificationService {
       }
       if (n.mail && recipient === this.userId) {
         void this.mailAction(n, n.mail, index).then(() => note.close());
+        return;
+      }
+      // Social Media's buttons open the screen, or copy a manual reminder's caption; none of them acts on the post.
+      if (n.social && recipient === this.userId) {
+        const b = n.social.buttons[index];
+        if (!b) return;
+        if ('copy' in b) {
+          if (!this.isLocked()) clipboard.writeText(b.copy);
+          return;
+        }
+        this.onClick(b.link, n.module);
         return;
       }
       if (n.meeting && !n.reminder && recipient === this.userId) {

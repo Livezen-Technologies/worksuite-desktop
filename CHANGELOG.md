@@ -5,6 +5,26 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.191 — 2026-10-06
+
+- **Social Media Manager (WS-SMM-SRS-001).** A new **Social Media** app under Business: manage every social account
+  in one place — Facebook, Instagram, Threads, LinkedIn, X, YouTube, TikTok, Google Business Profile and Pinterest.
+  - **Publish:** Overview; Create post — write once, adjust each network, live checks with one-click fixes (split a
+    long X post into a thread, crop, alt text), previews, media from Drive or dragged in from the computer, AI
+    suggestions you choose to use; Calendar (month, week, list, drag to reschedule); Queue & posting slots; Approvals
+    with steps, comments and client review links.
+  - **Engage and measure:** a unified Inbox for comments, messages, mentions and reviews (saved replies, internal
+    notes, AI reply drafts, CRM lead and Support ticket, J/K); Analytics with a heat map of when your audience engages;
+    Content library; Campaigns with UTM tracking.
+  - **Administer:** Accounts (connect in your browser — WorkSuite never sees your social password), Module settings with
+    provider apps and "Pause all publishing", and the Publishing log.
+  - Native notifications for published, failed, approval and inbox events carry View post, Approve, Reply and Copy
+    caption; Ctrl/⌘+N starts a post, Ctrl/⌘+Enter schedules it; the calendar and drafts open offline.
+- **Where it bites:** needs the server's new Social Media module (app `worksuite.social-media`). Until a server has it,
+  the app shows only to super-admins and every screen says the server doesn't offer it yet — see
+  `docs/SOCIAL_MEDIA.md` for what the server needs. Publishing always runs on the server, so posts go out with the
+  computer off. (social-media 1.0.0, notifications 1.10.0)
+
 ## 0.2.190 — 2026-10-06
 
 - **SalonMate's front desk, redrawn to the SalonMate desktop design (salon 2.0.0).** Every screen of the desk now
