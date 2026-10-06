@@ -8,11 +8,14 @@ import { CollapsibleSection } from '../../../../components/Collapsible';
 import { Select } from '../../../../components/Select';
 import { Button, Card, Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
 import { Segmented } from '../live/LiveDashboard';
+import { formatPhone, toE164 } from '../../../../core/phone';
 import { Area, Choice, Labelled, Section, Toggle } from './parts';
 import { BehaviourTab, EmbedTab, useBehaviour } from './Behaviour';
 import { ChatbotTab, useChatbot } from './ChatbotTab';
 import { LiveStatusCalls } from './LiveStatusCalls';
 import { StaffTab, useStaffList } from './StaffTab';
+import { ContactTab, useWhatsapp } from './ContactOptions';
+import { awayLabels, rowName, type WaPickAccount, type WaRow } from './whatsappNumbers';
 import { siteOf } from './Widgets';
 import {
   ACCENT_SWATCHES,
@@ -64,6 +67,9 @@ import { OpenNow, WeekChart, WeekDays } from './HoursWeek';
  * in the header; each change there is saved as it is made. Live status & calls (V-05) saves on its own. CHATBOT (S-05,
  * X-UI-18) saves from the header's Save, only what it changed (`PUT widgets/{id}/chatbot`), beside its Try it panel. Anybody who can see website chats can look; only somebody who may configure
  * widgets can save, and the screen says so.
+ *
+ * CONTACT OPTIONS (#260) is the widget's WhatsApp numbers, saved from the header like Behaviour
+ * (`PUT widgets/{id}/whatsapp`); while the server has that list, the away screen shows it instead of its one number.
  */
 
 /** Whether this computer prefers a dark theme: what "Match the visitor" looks like to the person editing. */
@@ -89,16 +95,19 @@ function firstLine(v: string | null | undefined, max = 32): string | null {
 
 /**
  * What each folded Appearance section holds, for its header (#244): "Own logo · Light", "“Hi there,” · 2 links",
- * "20 px up · 20 px right · No greeting card".
+ * "20 px up · 20 px right · No greeting card". The away screen's WhatsApp is the Contact options list where the
+ * server has one (#260), else its one number.
  */
-export function appearanceSummaries(design: WidgetDesign) {
+export function appearanceSummaries(design: WidgetDesign, whatsapp?: WaRow[] | null) {
   const links = design.quick_links.length;
   const greeting = firstLine(design.greeting);
   const left = design.position === 'bottom_left';
   return {
     logoTheme: [design.logo_url ? text('Own logo') : text('No logo'), text(THEME_NAMES[design.theme] ?? THEME_NAMES.auto)].join(' · '),
     home: [greeting ? `“${greeting}”` : text('Standard greeting'), links === 0 ? text('No links') : links === 1 ? text('1 link') : text('{n} links', { n: links })].join(' · '),
-    away: design.whatsapp_number ? text('WhatsApp {number}', { number: design.whatsapp_number }) : text('No WhatsApp number'),
+    away: whatsapp
+      ? whatsapp.length ? text('WhatsApp: {labels}', { labels: whatsapp.map((r) => r.label.trim() || formatPhone(toE164(r.phone) ?? r.phone)).join(', ') }) : text('No WhatsApp number')
+      : design.whatsapp_number ? text('WhatsApp {number}', { number: design.whatsapp_number }) : text('No WhatsApp number'),
     launcher: [
       text('{n} px up', { n: design.launcher_offset_bottom }),
       left ? text('{n} px from the left', { n: design.launcher_offset_left }) : text('{n} px from the right', { n: design.launcher_offset_right }),
@@ -108,13 +117,14 @@ export function appearanceSummaries(design: WidgetDesign) {
   };
 }
 
-export type WidgetTab = 'appearance' | 'behaviour' | 'calls' | 'staff' | 'hours' | 'chatbot' | 'embed';
+export type WidgetTab = 'appearance' | 'behaviour' | 'calls' | 'contact' | 'staff' | 'hours' | 'chatbot' | 'embed';
 
 /** The tabs, in the design's order (UX-SET-02). */
 export const WIDGET_TABS: Array<{ id: WidgetTab; label: string }> = [
   { id: 'appearance', label: 'Appearance' },
   { id: 'behaviour', label: 'Behaviour' },
   { id: 'calls', label: 'Live status & calls' },
+  { id: 'contact', label: 'Contact options' },
   { id: 'staff', label: 'Staff' },
   { id: 'hours', label: 'Hours' },
   { id: 'chatbot', label: 'Chatbot' },
@@ -199,13 +209,22 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
   const staffList = useStaffList(id, Boolean(seen.staff));
   // The Chatbot (S-05) saves from this header too.
   const bot = useChatbot(id, Boolean(seen.chatbot));
+  const site = q.data?.widget.domain || siteOf(row);
+  // So do Contact options (#260), whose WhatsApp list the away screen shows too: read at once, to know which it shows.
+  const wa = useWhatsapp(id, site, Boolean(seen.contact));
 
   const saved = useMemo(() => (q.data?.design ? withDefaults(q.data.design, q.data.widget?.name ?? row.name) : null), [q.data, row.name]);
   const design = draft ?? saved;
   const savedWeek = useMemo(() => (hq.data ? weekOf(hq.data) : null), [hq.data]);
   const week = weekDraft ?? savedWeek;
   const hoursOn = hoursDraft ?? Boolean(savedWeek?.configured);
-  const issues = useMemo(() => (design ? problems(design) : {}), [design]);
+  // With the Contact options list (#260) the one number is the server's copy of it, never edited here: not a problem.
+  const waList = Boolean(wa.q.data && !wa.missing);
+  const issues = useMemo(() => {
+    const out = design ? problems(design) : {};
+    if (waList) delete out.whatsapp_number;
+    return out;
+  }, [design, waList]);
   const p = q.data;
 
   const open = (t: WidgetTab) => {
@@ -249,7 +268,6 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
 
   const designTab = DESIGN_TABS.includes(tab);
   const title = design?.name.trim() || p?.widget.name || row.name;
-  const site = p?.widget.domain || siteOf(row);
 
   return (
     <main aria-label={text('Widget settings')} className="flex h-full min-w-0 flex-1 flex-col gap-3 border-l border-line bg-ground px-[22px] py-4 text-[13px] text-ink">
@@ -280,6 +298,12 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
           </>
         ) : tab === 'staff' ? (
           <Button type="button" variant="primary" disabled={!staffList.data} onClick={() => setAdding(true)}>Add people</Button>
+        ) : tab === 'contact' && wa.rows && !wa.missing ? (
+          <>
+            {wa.blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
+            <Button type="button" disabled={wa.busy || !wa.dirty} onClick={wa.undo}>Cancel</Button>
+            <Button type="button" variant="primary" loading={wa.busy} disabled={!wa.can || wa.busy || wa.blocked || !wa.dirty} onClick={() => void wa.save()}>Save</Button>
+          </>
         ) : tab === 'chatbot' && bot.settings ? (
           <>
             {bot.blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
@@ -327,6 +351,9 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
                 screen={screen}
                 setScreen={setScreen}
                 onStaff={() => open('staff')}
+                whatsapp={waList ? wa.rows : null}
+                waAccounts={wa.accounts}
+                onContact={() => open('contact')}
               />
             </fieldset>
           </form>
@@ -340,6 +367,11 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
       {tab === 'behaviour' ? (
         <div role="tabpanel" id="widget-panel-behaviour" aria-labelledby="widget-tab-behaviour" className="flex min-h-0 flex-1">
           <BehaviourTab b={b} site={site} fallbackCode={row.embed_code ?? null} />
+        </div>
+      ) : null}
+      {tab === 'contact' ? (
+        <div role="tabpanel" id="widget-panel-contact" aria-labelledby="widget-tab-contact" className="flex min-h-0 flex-1">
+          <ContactTab w={wa} site={site} />
         </div>
       ) : null}
       {tab === 'staff' ? (
@@ -378,10 +410,14 @@ interface PanelProps {
   setScreen: (s: PreviewScreen) => void;
   /** Opens the Staff tab, where people are added (S-04). */
   onStaff: () => void;
+  /** The Contact options list (#260), or null on a server without it, where the away screen keeps its one number. */
+  whatsapp: WaRow[] | null;
+  waAccounts: WaPickAccount[] | null;
+  onContact: () => void;
 }
 
 /** Appearance and Hours: the panels of the one design form, each kept mounted so nothing typed is lost. */
-function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week, setWeek, hoursOn, setHoursOn, setHoursTouched, screen, setScreen, onStaff }: PanelProps) {
+function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week, setWeek, hoursOn, setHoursOn, setHoursTouched, screen, setScreen, onStaff, whatsapp, waAccounts, onContact }: PanelProps) {
   const set = <K extends keyof WidgetDesign>(k: K, v: WidgetDesign[K]) => setDesign((d) => ({ ...(d ?? design), [k]: v }));
   const { people, sample } = previewPeople(p, design, shown);
   const hoursPreview: HoursSummary | null = hoursOn && week ? { timezone: week.timezone, zone: p?.hours?.zone && p.hours.timezone === week.timezone ? p.hours.zone : week.timezone.replace(/_/g, ' '), text: hoursText(week.days), open_now: false, back_at: p?.hours?.back_at ?? '9:00 AM tomorrow' } : null;
@@ -400,7 +436,10 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
     </div>
   );
   const offsetField = design.position === 'bottom_left' ? 'launcher_offset_left' : 'launcher_offset_right';
-  const sum = appearanceSummaries(design);
+  const sum = appearanceSummaries(design, whatsapp);
+  // The one number as it will be kept: "0769 136 424" is +94 76 913 6424 (#260).
+  const legacyWa = design.whatsapp_number ? toE164(design.whatsapp_number) : null;
+  const legacyHint = legacyWa && legacyWa !== design.whatsapp_number?.replace(/[\s().-]/g, '') ? text('Saved as {n}', { n: formatPhone(legacyWa) }) : 'Optional. Offered on the away screen for anything urgent.';
 
   return (
     <>
@@ -487,8 +526,23 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
                 </div>
               </div>
             </CollapsibleSection>
-            <CollapsibleSection title="Away screen" persist="website.widget.away" summary={sum.away} forceOpen={Boolean(issues.whatsapp_number)} data-testid="widget-section-away">
-              <TextField label="WhatsApp number" value={design.whatsapp_number ?? ''} maxLength={32} onChange={(e) => set('whatsapp_number', e.target.value || null)} placeholder="+94 77 123 4567" hint="Optional. Offered on the away screen for anything urgent." error={issues.whatsapp_number ?? null} />
+            <CollapsibleSection title="Away screen" persist="website.widget.away" summary={sum.away} forceOpen={Boolean(!whatsapp && issues.whatsapp_number)} data-testid="widget-section-away">
+              {whatsapp ? (
+                // The server's list (#260): edited on Contact options, where each number says when it shows.
+                <div className="flex flex-col gap-2">
+                  <span className="text-[12.5px] font-semibold text-ink-2">WhatsApp numbers</span>
+                  {whatsapp.length ? (
+                    <ul aria-label="WhatsApp numbers on the away screen" className="flex flex-col gap-0.5 text-[12.5px] text-ink-2">
+                      {whatsapp.map((r) => <li key={r.key}>{rowName(r)}</li>)}
+                    </ul>
+                  ) : (
+                    <span className="text-[12.5px] text-ink-3">None yet: the away screen offers no WhatsApp.</span>
+                  )}
+                  <Button type="button" className="self-start" onClick={onContact}>Edit WhatsApp numbers</Button>
+                </div>
+              ) : (
+                <TextField label="WhatsApp number" value={design.whatsapp_number ?? ''} maxLength={32} onChange={(e) => set('whatsapp_number', e.target.value || null)} placeholder="+94 77 123 4567" hint={legacyHint} error={issues.whatsapp_number ?? null} />
+              )}
             </CollapsibleSection>
             <CollapsibleSection title="Launcher" persist="website.widget.launcher" summary={sum.launcher} forceOpen={Boolean(issues.launcher_offset_bottom || issues[offsetField])} data-testid="widget-section-launcher">
               <div className="flex flex-col gap-3">
@@ -549,7 +603,7 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
             </div>
             {/* The full screens are drawn at the widget's own size, 420px, and shown at four fifths to fit. */}
             <div className={cx('flex min-h-0 w-full flex-1', screen === 'start' ? 'items-end justify-end' : 'justify-center overflow-y-auto')} style={screen === 'start' ? undefined : { zoom: 0.8 }}>
-              <WidgetPreview design={design} siteName={siteNameOf(design, p?.fallback_name)} people={people} replyTime={p?.reply_time ?? 'Usually replies in a few minutes'} hours={hoursPreview} screen={screen} dark={darkFor(design.theme)} starters={p?.starters ?? []} />
+              <WidgetPreview design={design} siteName={siteNameOf(design, p?.fallback_name)} people={people} replyTime={p?.reply_time ?? 'Usually replies in a few minutes'} hours={hoursPreview} screen={screen} dark={darkFor(design.theme)} starters={p?.starters ?? []} whatsapp={whatsapp ? awayLabels(whatsapp, waAccounts) : null} />
             </div>
           </aside>
           </div>

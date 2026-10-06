@@ -1,4 +1,5 @@
 import { apiGet, apiPut } from '../../../../core/api';
+import { toE164 } from '../../../../core/phone';
 import { WEBSITE } from '../api';
 
 /**
@@ -207,6 +208,8 @@ export function saveDesign(id: number, design: WidgetDesign, shown: Record<numbe
   void _older;
   return apiPut<DesignPayload>(`${WEBSITE}/widgets/${id}/design`, {
     ...fields,
+    // "0769 136 424" is kept as +94769136424 (#260): the widget's wa.me link needs the country code.
+    whatsapp_number: design.whatsapp_number ? (toE164(design.whatsapp_number) ?? design.whatsapp_number.trim()) : null,
     quick_links: design.quick_links.filter((l) => l.label.trim() || l.url.trim()),
     agents: Object.entries(shown).map(([user_id, on]) => ({ user_id: Number(user_id), shown: on })),
   });
@@ -274,10 +277,8 @@ export function problems(d: WidgetDesign): Partial<Record<keyof WidgetDesign | '
   if (links.length > MAX_LINKS) out.quick_links = `Up to ${MAX_LINKS} quick links`;
   else if (links.some((l) => !l.label.trim() || !l.url.trim())) out.quick_links = 'Give every quick link a label and an address';
   else if (links.some((l) => !/^(https?:\/\/[^\s<>"']+|mailto:[^\s<>"']+|tel:\+?[\d\s().-]+)$/i.test(l.url.trim()))) out.quick_links = 'Quick links must start with https://, mailto: or tel:';
-  if (d.whatsapp_number) {
-    const digits = d.whatsapp_number.replace(/\D/g, '');
-    if (digits.length < 7 || digits.length > 15 || !/^\+?[\d\s().-]+$/.test(d.whatsapp_number.trim())) out.whatsapp_number = 'Enter the number with its country code, like +94 77 123 4567';
-  }
+  // Read as every number is (core/phone): a local "0769 136 424" is Sri Lanka's and is converted, not refused (#260).
+  if (d.whatsapp_number?.trim() && !toE164(d.whatsapp_number)) out.whatsapp_number = 'Enter a valid number, like 077 123 4567 or +94 77 123 4567';
   return out;
 }
 

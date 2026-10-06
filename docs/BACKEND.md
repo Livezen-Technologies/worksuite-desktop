@@ -256,6 +256,62 @@ specific to the desktop:
     allow): `GET /api/ai/speech/status` and `POST /api/ai/speech/transcribe`
     (multipart `audio` WAV, `language`) return segments with `uncertain`.
 
+### Website chat widget: WhatsApp numbers (worksuite-desktop#260)
+
+Widget settings › Contact options edits the WhatsApp numbers the widget offers
+("Message us on WhatsApp": Sales, Support). The Communication module needs
+three routes under `/api/chat/widget-admin`. Until it has them, the app shows
+"Not on this server yet" on that tab, and the away screen keeps its single
+`whatsapp_number` from the design.
+
+- **`GET widgets/{id}/whatsapp`** returns `{numbers, can_manage, cache_seconds?,
+  can_refresh?, accounts?}`. A 404 or 405 means the server does not have the
+  list.
+  - Each number is `{id, source: worksuite|manual, account_id, phone, label,
+    message, show, connected?}`, in the order the widget shows them.
+  - `phone` is E.164.
+  - `account_id` is the WhatsApp module's account (`/api/whatsapp/accounts`)
+    for `worksuite`, and null for `manual`.
+  - `show` is `always`, `connected`, `outside_hours` or `no_agents`.
+    `connected` is only valid for `worksuite`.
+  - `connected` is the server's view of a WorkSuite number's link. The app
+    uses the WhatsApp list's own status where it can read it.
+  - `cache_seconds` is how long the widget script may keep its settings. It
+    drives "Saved · live on techubiz.com within 1 minute", and should be 60 or
+    less. Without it, the app says the change shows on visitors' next page.
+  - `can_refresh: true` means `POST widgets/{id}/refresh` exists.
+  - `accounts` (optional) is the company's WorkSuite numbers as
+    `{id, name, phone, status, provider?, connected_at?}`, for admins the
+    numbers are not shared with. Without it, the picker reads
+    `/api/whatsapp/accounts`.
+- **`PUT widgets/{id}/whatsapp {numbers: [...]}`** replaces the list.
+  - The list arrives in display order, up to 5 numbers.
+  - Each number arrives as `{id?, source, account_id, phone, label, message,
+    show}`.
+  - The server re-checks each `phone` as E.164 and each `account_id` as one of
+    its WhatsApp accounts.
+  - Refusals are 422 with `errors` keyed like `numbers.1.phone`. The app shows
+    each one under that number's field.
+  - It answers like the GET, and ends the widget's settings cache.
+- **`POST widgets/{id}/refresh`** ends the cache now, so the widget asks again
+  on its next page load. It backs "Refresh widget now".
+- **The widget itself:**
+  - It replaces `{visitor_ref}` in `message` with the visitor's reference
+    before opening `https://wa.me/<digits>?text=…`. That reference is what
+    links the visitor's WhatsApp message to their chat (#224).
+  - It hides a `connected` number while every WhatsApp account on that number
+    is disconnected, and shows it again once one is relinked.
+  - It shows `outside_hours` numbers only outside business hours, and
+    `no_agents` numbers only while nobody is available.
+- **The older single number:**
+  - While the list exists, the server keeps `design.whatsapp_number` as the
+    first number shown `always`, for older widget scripts. It ignores that
+    field on `PUT widgets/{id}/design`.
+  - When the list first appears, a widget's existing `whatsapp_number` becomes
+    its first number (`manual`, labelled "WhatsApp").
+  - On an older server, the app still saves that one number, converted to
+    E.164: "0769 136 424" becomes `+94769136424`.
+
 ### Garage
 
 The Garage tab uses the server's Garage API, `/api/garage/v1` (`app/Modules/Garage`), the same one the web's
