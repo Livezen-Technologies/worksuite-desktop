@@ -45,10 +45,25 @@ person who has to live with the change — what it does, and where it bites.
     again** move to Settings.
   - **Receipts on A4 or Letter** as well as 80 mm and 58 mm rolls. A full page goes to the A4 printer when one is
     chosen.
+  - **Calendar Week and List:** the week a column a day, each booking in time order, and the same week as a list
+    narrowed by stylist, state, allergy on file or a name.
+  - **Products used on the service record:** start from the service's recipe and change it to what was really used,
+    or add from the desk's stock. Checkout takes exactly that from the desk's stock. A product whose name carries
+    one of the client's allergies is kept only when the stylist says it was used.
+  - **The desk's stock location and receipt template:** chosen when the computer is paired, and changed later in
+    Settings by somebody who manages desks. Receipts print in the desk's template: the full salon receipt, or a
+    short one.
+  - **WhatsApp receipt and Email receipt** on Paid, to the mobile or address on file or one typed for this receipt.
+    A client who asked for no messages is sent it only when they ask for it.
+  - **Taking payment offline:** a desk paired as a POS till takes cash or card while WorkSuite is out of reach. It
+    prints a till receipt numbered in the desk's own series, keeps the sale encrypted, and sends it first thing when
+    WorkSuite answers. WorkSuite issues the invoice then, into the register session the sale was made in. Closing
+    the register waits until those sales have gone.
 - **Where it bites:** deposits need the server's SalonMate with the register fix for desk deposits (2026-09-28).
-  Without it, a cash deposit is not counted in the register. Product usage on the service record, emailing or
-  WhatsApping the invoice from Paid, and choosing the till's stock location and receipt template at pairing are not
-  in the server's API yet, so the desk does not offer them.
+  Without it, a cash deposit is not counted in the register. Products used, the stock location and template,
+  offline payments and sending the receipt need the server's Salon 1.1.0; on an older server the desk does not
+  offer the choices, and an offline payment is refused when it is sent, and waits in Sync. A WhatsApp receipt
+  needs a shared WhatsApp number connected to WorkSuite.
 - **Security: `simple-git` 4.0.2 under Local AI.** `node-llama-cpp` (the Local AI engine) pulls in `simple-git` 3.x,
   which has four advisories that let a crafted git option run a command (GHSA-x6jw-m9v5-85vh, GHSA-g4wm-2vf7-vfgr,
   GHSA-858h-whjf-mvg5, GHSA-v5rq-49vh-5v5c). An npm override now pins it to 4.0.2, so the build's `npm audit` step is

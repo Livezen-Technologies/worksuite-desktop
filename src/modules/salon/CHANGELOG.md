@@ -7,7 +7,9 @@ the root CHANGELOG.md.
 ## 2.0.0 — 2026-10-06
 
 Major because the printer settings kept on this computer can now hold A4 or Letter receipt paper, which 1.x cannot
-print, and `salon:printSettingsSet` accepts them.
+print, and `salon:printSettingsSet` accepts them; the outbox kept on this computer can now hold a `visit.checkout` (a
+POS offline sale) that 1.x cannot send, and `salon:outboxAdd` and `salon:deskPair` accept more. Needs the server's
+Salon 1.1.0 for products used, the desk's stock location and template, offline sales and sending the receipt.
 
 **Added**
 
@@ -19,6 +21,11 @@ print, and `salon:printSettingsSet` accepts them.
 - Paid shows the drawer, store credit, points and advance, what was printed, and the receipt beside it
 - Today shows what is owed, chair time booked, the 30-day no-show rate and what needs attention; a tap on free time on the calendar books it
 - receipts on A4 or Letter as well as 80 mm and 58 mm rolls
+- the calendar's Week and List views: the week a column a day, and as a list narrowed by stylist, state, allergy or a name (CAL-02)
+- products used on the service record — from the service's recipe, with the desk's stock to add from, and a check against the client's allergies; checkout takes them from the desk's stock (REC-01, CHK-11)
+- the stock location and receipt template chosen when the desk is paired, and changed in Settings by somebody who manages desks (DSK-02); receipts print in the desk's template
+- WhatsApp receipt and Email receipt on Paid, to the client's mobile or address, or one typed for this receipt (D07)
+- taking payment offline on a desk paired as a POS till: cash or card, a till receipt numbered in the desk's own series, and the invoice issued when WorkSuite answers (POS-11); closing the register waits until they have gone
 
 **Changed**
 
