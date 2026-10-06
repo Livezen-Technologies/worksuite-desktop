@@ -120,6 +120,23 @@ describe('⌘K', () => {
     unmount();
   });
 
+  it('finds knowledge articles for the ticket in front and puts one into its composer (D-10)', async () => {
+    serveWith(request, {
+      'GET /api/support/v1/tickets': { items: [], next_cursor: null, has_more: false, sort: 'updated', view: 'all' },
+      'GET /api/support/v1/tickets/1284/kb': { articles: [{ id: 31, title: 'Fix 0xC004C003 after renewal', excerpt: 'Seats stay unassigned.', visibility: 'public', language: 'en', url: 'https://help/kb/31', score: 0.9 }] },
+    });
+    const insertArticle = vi.fn();
+    const { unmount } = renderHook(() => useTicketCommands(true, { id: 1284, reference: 'CFX-001284', take: null, resolve: null, canned: null, insertArticle }));
+    show();
+    type('renewal');
+    const hit = await screen.findByRole('option', { name: /Fix 0xC004C003 after renewal/ });
+    expect(hit.textContent).toContain('Insert link into CFX-001284');
+    fireEvent.click(hit);
+    fireEvent.keyDown(screen.getByLabelText('Search WorkSuite'), { key: 'Enter' });
+    expect(insertArticle).toHaveBeenCalledWith(expect.objectContaining({ id: 31 }), 'link');
+    unmount();
+  });
+
   it('asks the desk nothing for somebody without Support', async () => {
     app.set({ apps: visibleApps({ apps: ['notes'], permissions: [] }) } as never);
     show();

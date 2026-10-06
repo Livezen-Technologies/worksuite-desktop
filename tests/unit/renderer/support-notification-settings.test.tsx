@@ -22,8 +22,8 @@ describe('the Support card', () => {
     render(<SupportNotifications categories={{ 'event:support.customer_replied': { in_app: false } }} commit={commit} prefs={prefs()} local={local} />);
     expect((screen.getByRole('checkbox', { name: 'Assigned to me: In app' }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByRole('checkbox', { name: 'A requester replied: In app' }) as HTMLInputElement).checked).toBe(false);
-    // A mention is the ticket's own update, made into a banner here: no bell choice.
-    expect(screen.queryByRole('checkbox', { name: 'Mentioned in a note: In app' })).toBeNull();
+    // A mention is the server's support.mentioned now (T28): it has its bell choice like the others.
+    expect((screen.getByRole('checkbox', { name: 'Mentioned in a note: In app' }) as HTMLInputElement).checked).toBe(true);
     expect((screen.getByRole('checkbox', { name: 'Mentioned in a note: Sound' }) as HTMLInputElement).checked).toBe(false);
     fireEvent.click(screen.getByRole('checkbox', { name: 'SLA warning or breach: In app' }));
     expect(commit).toHaveBeenCalledWith({ categories: { 'event:support.customer_replied': { in_app: false }, 'event:support.sla_warning': { in_app: false }, 'event:support.sla_breach': { in_app: false } } });
@@ -48,7 +48,8 @@ describe('the Support card', () => {
   it('reads the bell choice the server keeps, on unless turned off', () => {
     expect(inApp({}, 'assigned')).toBe(true);
     expect(inApp({ 'event:support.sla_warning': { in_app: 0 } }, 'sla')).toBe(false);
-    expect(inApp({}, 'mention')).toBeNull();
+    expect(inApp({}, 'mention')).toBe(true);
+    expect(inApp({ 'event:support.mentioned': { in_app: false } }, 'mention')).toBe(false);
   });
 });
 

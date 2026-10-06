@@ -3,7 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { SOURCE_LABEL, ticketIdOf, ticketRoute, type Message, type SupportSource, type TicketLink, type TicketShow } from '@shared/support';
 import { ApiError } from '../../core/api';
 import { app } from '../../core/app-state';
-import { call, errorMessage } from '../../core/bridge';
+import { call, errorMessage, isMac } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
@@ -12,11 +12,12 @@ import { toast } from '../../core/toasts';
 import { useNow } from '../../core/use-now';
 import { SidePanel } from '../../components/SidePanel';
 import { useStickToBottom } from '../../components/useStickToBottom';
-import { Avatar, Button, Empty, ErrorNote, IconButton, Spinner, cx } from '../../components/ui';
-import { K, assign, errorText, getTicket, links, messagesBefore, meta, take, ticketIdForReference, transition, unwatch, watch } from './api';
+import { Avatar, Button, Empty, ErrorNote, IconButton, Kbd, Spinner, cx } from '../../components/ui';
+import { K, assign, assistError, errorText, getTicket, insertArticle, links, messagesBefore, meta, take, ticketIdForReference, transition, unwatch, watch } from './api';
 import { useTicketCommands } from './palette';
 import { Activity } from './Activity';
-import { Composer, type ComposerMode } from './Composer';
+import { Assist, kbInsertText, type AssistTab } from './Assist';
+import { Composer, type ComposerMode, type InsertRequest } from './Composer';
 import { openAttachment } from './files';
 import { usePollInterval, useSupportLive } from './live';
 import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusChip } from './parts';
@@ -94,6 +95,14 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
   const [earlier, setEarlier] = useState<Message[]>([]);
   const [hasEarlier, setHasEarlier] = useState<boolean | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  // The KB & AI panel (D-10): ⌘J opens and closes it; what it gives goes into the composer through `insert`.
+  const [assist, setAssist] = useState<{ open: boolean; tab: AssistTab; search: number }>({ open: false, tab: 'kb', search: 0 });
+  const [insert, setInsert] = useState<InsertRequest | null>(null);
+  const toInsert = (r: Omit<InsertRequest, 'n'>) => {
+    setView('conversation');
+    setInsert((x) => ({ ...r, n: (x?.n ?? 0) + 1 }));
+  };
+  const toggleAssist = () => setAssist((a) => ({ ...a, open: !a.open }));
   const present = useTicketPresence(t.id, { here: active, typing });
   const messages = [...earlier.filter((m) => !show.messages.some((x) => x.id === m.id)), ...show.messages];
   const { scroller, content, unseen, toEnd, onScroll } = useStickToBottom(`${view}:${messages.length}`);
@@ -123,6 +132,19 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
     return () => window.removeEventListener('keydown', onKey);
   }, [active]);
 
+  // ⌘J / Ctrl+J: the KB & AI panel, before the shell's (the assistant's) — only while this tab is in front.
+  useEffect(() => {
+    if (!active) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key.toLowerCase() !== 'j' || e.shiftKey || e.altKey || !(isMac ? e.metaKey : e.ctrlKey)) return;
+      e.preventDefault();
+      e.stopPropagation();
+      toggleAssist();
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => window.removeEventListener('keydown', onKey, true);
+  }, [active]);
+
   // ⌘K: this ticket's actions while its tab is in front (D-08), as its buttons allow them.
   const composing = !readOnly && (show.can.reply === true);
   useTicketCommands(active, {
@@ -141,6 +163,15 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
           setView('conversation');
           setFocusRequest((f) => ({ mode: 'reply', n: (f?.n ?? 0) + 1, canned: true }));
         }
+      : null,
+    assist: toggleAssist,
+    kbLink: composing ? () => setAssist((a) => ({ open: true, tab: 'kb', search: a.search + 1 })) : null,
+    insertArticle: composing
+      ? (a, mode) =>
+          void insertArticle(t.id, a.id, mode).then(
+            (r) => toInsert({ text: kbInsertText(mode, r), how: 'insert' }),
+            (e: unknown) => toast('error', assistError(e)),
+          )
       : null,
   });
 
@@ -253,6 +284,12 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
                   {text('Resolve')}
                 </Button>
               ) : null}
+              {legacy ? null : (
+                <Button size="sm" variant={assist.open ? 'secondary' : 'ghost'} icon="sparkles" aria-pressed={assist.open} aria-keyshortcuts={isMac ? 'Meta+J' : 'Control+J'} onClick={toggleAssist}>
+                  {text('KB & AI')}
+                  <Kbd aria-hidden>{isMac ? '⌘J' : 'Ctrl+J'}</Kbd>
+                </Button>
+              )}
               <IconButton icon="globe" label={text('Open on the web: merge, split and the rest of the desk')} onClick={() => void call('app:openInBrowser', { path: `/tickets?ticket=${t.id}` }).catch((e: unknown) => toast('error', errorMessage(e)))} />
             </span>
           </div>
@@ -333,8 +370,9 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
           ) : null}
         </div>
         {/* Kept while another view is shown: what is typed, and the files still going up, stay with it. */}
-        {!readOnly ? <Composer ticket={t} can={show.can} transitions={show.transitions} legacy={legacy} hidden={view !== 'conversation'} focusRequest={focusRequest} onTyping={setTyping} onSent={() => toEnd()} /> : null}
+        {!readOnly ? <Composer ticket={t} can={show.can} transitions={show.transitions} legacy={legacy} hidden={view !== 'conversation'} focusRequest={focusRequest} insertRequest={insert} onTyping={setTyping} onSent={() => toEnd()} /> : null}
       </div>
+      {assist.open && !legacy ? <Assist show={show} tab={assist.tab} onTab={(tab) => setAssist((a) => ({ ...a, tab }))} searchRequest={assist.search} onInsert={toInsert} onClose={() => setAssist((a) => ({ ...a, open: false }))} /> : null}
       <SidePanel id="support.ticket" side="right" label={text('the ticket’s details')}>
         <aside aria-label={text('Ticket details')} className="flex h-full w-[300px] flex-col gap-3 overflow-y-auto border-l border-line bg-surface px-4 py-3 scroll-thin">
           <Properties show={show} meta={metaQ.data} onResolve={() => setResolveOpen(true)} />

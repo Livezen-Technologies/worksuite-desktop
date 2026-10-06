@@ -36,8 +36,10 @@ const log = logger('support-notices');
  *
  * The server raises the notifications — a ticket assigned to me, a requester writing again on one of mine, an SLA
  * about to be missed or missed — and the bell keeps them. Those arrive through the notification service, which hands
- * them here (`claim`) instead of showing them plainly. A mention in a note is no notification of the server's: it
- * comes as the ticket's realtime hint (`mentioned`), and is made into one here.
+ * them here (`claim`) instead of showing them plainly. A mention arrives twice on a current server — as its
+ * notification (`support.mentioned`, which the bell keeps) and as the ticket's realtime hint (`mentioned`) — and on an
+ * older one as the hint alone: whichever comes first raises the banner, and the other is not said again for that
+ * ticket for a couple of minutes.
  *
  * Hints are hints, and a notification's words are the server's at the time: the ticket is read again (with `peek`,
  * so reading it to word a banner marks nothing read) for what the banner says — who, which ticket, how long the SLA
@@ -70,6 +72,8 @@ export const HINT_DEBOUNCE_MS = 2_000;
 export const TAKE_LATER_MS = 60 * 60_000;
 export const SNOOZE_MS = 10 * 60_000;
 const NO_V1_RECHECK_MS = 10 * 60_000;
+/** A mention's notification and its hint are one banner when they come this close together. */
+export const MENTION_SAME_MS = 2 * 60_000;
 const READ_TIMEOUT_MS = 10_000;
 
 /** A banner's buttons, by kind, in order. Mac and Windows add Reply where a banner takes one. */
@@ -131,6 +135,13 @@ const oneLine = (s: string, max = 200) => {
 /** The newest message the requester wrote (what a "replied" banner quotes). */
 export function lastFromRequester(show: Pick<TicketShow, 'messages'>): Message | null {
   for (let i = show.messages.length - 1; i >= 0; i--) if (show.messages[i]!.from === 'requester' && !show.messages[i]!.internal) return show.messages[i]!;
+  return null;
+}
+
+/** The newest message that mentions me (what a mention banner quotes when the notification does not say which). */
+export function lastMentioning(show: Pick<TicketShow, 'messages'>, me: number | null): Message | null {
+  if (!me) return null;
+  for (let i = show.messages.length - 1; i >= 0; i--) if ((show.messages[i]!.mentions ?? []).includes(me)) return show.messages[i]!;
   return null;
 }
 
@@ -204,6 +215,17 @@ export class SupportNotices {
   private claimed = new Set<string>();
   private noV1Until = 0;
   private generation = 0;
+  /** When each ticket's last mention banner was raised: the notification and the hint of one mention are one banner. */
+  private mentioned = new Map<number, number>();
+
+  /** Whether a mention on this ticket was just said; if not, it is now. */
+  private mentionSaid(ticketId: number): boolean {
+    const at = this.mentioned.get(ticketId);
+    if (at !== undefined && Date.now() - at < MENTION_SAME_MS) return true;
+    this.mentioned.set(ticketId, Date.now());
+    if (this.mentioned.size > 200) this.mentioned.delete(this.mentioned.keys().next().value!);
+    return false;
+  }
 
   constructor(private readonly d: SupportNoticeDeps) {}
 
@@ -226,6 +248,7 @@ export class SupportNotices {
     this.poll = this.nudge = this.digestTimer = null;
     this.digest = [];
     this.claimed.clear();
+    this.mentioned.clear();
     this.noV1Until = 0;
     this.last = null;
     if (this.unread) {
@@ -322,11 +345,15 @@ export class SupportNotices {
     const show = ticketId ? await this.ticket(ticketId) : null;
     if (gen !== this.generation || !this.running) return;
     const link = n.link ?? (ticketId ? `/tickets?ticket=${ticketId}` : '/tickets');
-    const text = noticeText(kind, n, show, Date.now(), this.d.prefs().language);
+    // A mention whose hint has already been said: the bell keeps the notification, and no second banner says it.
+    if (kind === 'mention' && ticketId && this.mentionSaid(ticketId)) return;
+    const message = kind === 'mention' && show ? lastMentioning(show, this.d.me()) : null;
+    if (message?.author?.id && message.author.id === this.d.me()) return;
+    const text = noticeText(kind, n, show, Date.now(), this.d.prefs().language, message);
     const shown: Shown = { kind, readId: /^\d+$/.test(n.id) ? n.id : null, ticketId: ticketId ?? 0, link, event: n.event, title: text.title, body: text.body };
     // A low-priority ticket's banner waits for the top of the hour (an SLA's never does).
     if (show?.ticket.priority === 'low' && kind !== 'sla' && prefs.lowPriority === 'digest') return this.hold(shown);
-    this.show(`support:${n.id}`, shown, text.sender, show);
+    this.show(`support:${n.id}`, shown, text.sender, show, message?.id ?? null);
   }
 
   /** A mention in a note (the ticket's hint): read, then said — unless it was mine. */
@@ -342,6 +369,8 @@ export class SupportNotices {
     const message = show.messages.find((m) => m.id === h.message_id) ?? null;
     const me = this.d.me();
     if (message?.author?.id && message.author.id === me) return;
+    // The notification of the same mention (support.mentioned) came first and was said.
+    if (this.mentionSaid(h.ticket_id)) return;
     const link = `/tickets?ticket=${h.ticket_id}`;
     const text = noticeText('mention', { title: '', body: '', event: null }, show, Date.now(), this.d.prefs().language, message);
     const shown: Shown = { kind: 'mention', readId: null, ticketId: h.ticket_id, link, event: null, title: text.title, body: text.body };

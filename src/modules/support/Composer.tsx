@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
-import { statusLabel, type Caps, type MessageAnswer, type SupportStatus, type Ticket } from '@shared/support';
+import { REWRITE_LABEL, REWRITE_MODES, statusLabel, type Caps, type IdName, type MessageAnswer, type RewriteMode, type ServerDraft, type SupportStatus, type Ticket } from '@shared/support';
 import { isMac } from '../../core/bridge';
 import { useDraft } from '../../core/drafts';
 import { text } from '../../core/i18n';
@@ -9,7 +9,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Avatar, Button, FileBadge, IconButton, Kbd, cx } from '../../components/ui';
-import { K, MAX_FILES, MAX_FILE_BYTES, addMessage, agents, canned, errorText, newClientId, removeAttachment, renderCanned, uploadAttachment } from './api';
+import { K, MAX_FILES, MAX_FILE_BYTES, addMessage, agents, aiRewrite, assistError, canned, errorText, newClientId, removeAttachment, renderCanned, saveServerDraft, serverDraft, uploadAttachment } from './api';
+import { AiBadge } from './parts';
 import { mentionQuery, mentionedIds, parseCc, pasteIsFiles, pastedName, slashQuery, spliceText } from './compose';
 
 /**
@@ -29,9 +30,15 @@ import { mentionQuery, mentionedIds, parseCc, pasteIsFiles, pastedName, slashQue
  *
  * What is typed — with its files, CC, status and mentions — is kept on this computer per ticket (`useDraft`,
  * encrypted, within a second), so a reply started in the inbox's reading pane carries on in the ticket's tab and
- * survives a restart (FR-CRT-10). A message goes with a `client_id` kept until it is in: Send pressed again after a
- * failure is the same message, never two. An as-built server takes neither files, CC nor mentions: they are not
- * offered there.
+ * survives a restart (FR-CRT-10). The server keeps a copy too (`PUT tickets/{id}/draft`, a couple of seconds after
+ * the typing stops), so a reply started on another device is offered here when this computer has none. A message goes
+ * with a `client_id` kept until it is in: Send pressed again after a failure is the same message, never two. An
+ * as-built server takes neither files, CC nor mentions: they are not offered there.
+ *
+ * The writing assistant (D-10, `POST ai/rewrite`) improves, shortens, changes the tone of or translates what is
+ * typed; the result is shown with the violet AI badge and replaces the text only when the agent says so. The KB & AI
+ * panel puts articles and suggested replies in through `insertRequest`. Nothing the assistant writes is sent without
+ * the agent pressing Send.
  */
 export type ComposerMode = 'reply' | 'note';
 
@@ -55,6 +62,29 @@ export interface SupportDraft {
 }
 
 export const EMPTY_DRAFT: SupportDraft = { body: '', mode: 'note' };
+
+/** How long after the typing stops the draft is copied to the server. */
+export const SERVER_DRAFT_MS = 2_000;
+
+/**
+ * Something to put into the composer from outside it (the KB & AI panel, D-10): a KB link or text at the caret, or a
+ * suggested reply in place of what is there. A new `n` asks again.
+ */
+export interface InsertRequest {
+  text: string;
+  how: 'insert' | 'replace';
+  /** Switch to writing this kind (a suggested reply is a reply). */
+  mode?: ComposerMode;
+  n: number;
+}
+
+/** `text` put into `body` at `at`, on a line of its own when it would run into what is there; where the caret goes. */
+export function insertAt(body: string, at: number, text: string): { text: string; caret: number } {
+  const pos = Math.max(0, Math.min(at, body.length));
+  const before = pos > 0 && !/\s$/.test(body.slice(0, pos)) ? (text.includes('\n') ? '\n\n' : ' ') : '';
+  const after = pos < body.length && !/^\s/.test(body.slice(pos)) ? ' ' : '';
+  return spliceText(body, pos, pos, before + text + after);
+}
 
 /** Whether the person may write each kind here: a note needs notes and reply (§5.2), a reply needs reply. */
 export function composerModes(can: Caps): { reply: boolean; note: boolean } {
@@ -80,11 +110,12 @@ export function Composer({
   legacy = false,
   hidden = false,
   focusRequest,
+  insertRequest,
   onSent,
   onTyping,
   className,
 }: {
-  ticket: Pick<Ticket, 'id' | 'reference' | 'requester' | 'version' | 'status'>;
+  ticket: Pick<Ticket, 'id' | 'reference' | 'requester' | 'version' | 'status'> & { organization?: IdName | null };
   can: Caps;
   /** The reading pane's denser form. */
   compact?: boolean;
@@ -96,6 +127,8 @@ export function Composer({
   hidden?: boolean;
   /** The R and N keys: focus the composer in that mode. A new `n` asks again. `canned`: with the "/" picker open (⌘K). */
   focusRequest?: { mode: ComposerMode; n: number; canned?: boolean } | null;
+  /** Text from the KB & AI panel (D-10). */
+  insertRequest?: InsertRequest | null;
   onSent?: (answer: MessageAnswer) => void;
   /** Typing started or stopped, and in which mode: the collision bar's "typing a note…" (FR-COM-11). */
   onTyping?: (mode: ComposerMode | null) => void;
@@ -162,6 +195,86 @@ export function Composer({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [focusRequest?.n]);
 
+  /** Focus back in the text, the caret after what was put in (once React has drawn the new text). */
+  const placeCaret = (at: number) =>
+    setTimeout(() => {
+      const el = box.current;
+      if (!el) return;
+      el.focus();
+      el.setSelectionRange(at, at);
+    }, 0);
+
+  // The KB & AI panel's text: at the caret, or in place of what is there; the focus comes here to review it.
+  useEffect(() => {
+    if (!insertRequest) return;
+    const now = latest.current.body;
+    const want = insertRequest.mode && (insertRequest.mode === 'reply' ? modes.reply : modes.note) ? insertRequest.mode : undefined;
+    const r = insertRequest.how === 'replace' || !now.trim() ? { text: insertRequest.text, caret: insertRequest.text.length } : insertAt(now, box.current?.selectionStart ?? now.length, insertRequest.text);
+    clientId.current = null;
+    update({ body: r.text, ...(want ? { mode: want } : {}) });
+    setCaret(r.caret);
+    placeCaret(r.caret);
+    // Only a new request puts text in.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [insertRequest?.n]);
+
+  // My draft on the server (FR-CRT-10): offered when this computer has none, and kept in step after typing stops.
+  // `synced` is what the server holds; null until it has answered (nothing is written over what it has unseen).
+  const synced = useRef<string | null>(null);
+  const [offered, setOffered] = useState<ServerDraft | null>(null);
+  useEffect(() => {
+    synced.current = null;
+    setOffered(null);
+    if (legacy) return;
+    let alive = true;
+    const ac = new AbortController();
+    serverDraft(ticket.id, ac.signal).then(
+      (sd) => {
+        if (!alive) return;
+        synced.current = sd?.body ?? '';
+        if (sd?.body.trim()) setOffered(sd);
+      },
+      () => undefined,
+    );
+    return () => {
+      alive = false;
+      ac.abort();
+    };
+  }, [ticket.id, legacy]);
+  // Taken once this computer's own draft has been looked for: a draft kept here wins.
+  useEffect(() => {
+    if (!offered || !draft.loaded) return;
+    setOffered(null);
+    const here = latest.current;
+    if (here.body.trim() || here.files?.length) return;
+    update({ body: offered.body, mode: offered.mode === 'reply' ? 'reply' : 'note', ...(offered.cc?.length ? { cc: offered.cc } : {}) });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [offered, draft.loaded]);
+  useEffect(() => {
+    if (legacy || synced.current === null || d.body === synced.current) return;
+    const body = d.body;
+    const timer = setTimeout(() => {
+      synced.current = body;
+      void saveServerDraft(ticket.id, { mode, body, cc: mode === 'reply' ? latest.current.cc : undefined }).catch(() => {
+        // Kept on this computer either way; the next change tries again.
+        synced.current = null;
+      });
+    }, SERVER_DRAFT_MS);
+    return () => clearTimeout(timer);
+  }, [d.body, mode, legacy, ticket.id]);
+
+  // The writing assistant's suggestion, shown above the text until it replaces it or is set aside.
+  const [rewrite, setRewrite] = useState<{ mode: RewriteMode; phase: 'working' | 'done' | 'error'; text: string } | null>(null);
+  const runRewrite = (m: RewriteMode) => {
+    const body = latest.current.body.trim();
+    if (!body) return;
+    setRewrite({ mode: m, phase: 'working', text: '' });
+    aiRewrite(body, m, ticket.organization?.id ?? null).then(
+      (r) => setRewrite((x) => (x?.mode === m ? { mode: m, phase: 'done', text: r.text } : x)),
+      (e: unknown) => setRewrite((x) => (x?.mode === m ? { mode: m, phase: 'error', text: assistError(e) } : x)),
+    );
+  };
+
   // Typing started, stopped, or changed kind: told once each time, not on every key.
   useEffect(() => {
     const now = typed ? mode : null;
@@ -195,15 +308,6 @@ export function Composer({
     update({ body });
     if (at !== undefined) setCaret(at);
   };
-
-  /** Focus back in the text, the caret after what was put in (once React has drawn the new text). */
-  const placeCaret = (at: number) =>
-    setTimeout(() => {
-      const el = box.current;
-      if (!el) return;
-      el.focus();
-      el.setSelectionRange(at, at);
-    }, 0);
 
   const choose = async (i: number) => {
     const c = choices[i];
@@ -325,6 +429,9 @@ export function Composer({
       setCcOpen(false);
       // Emptied, then cleared: nothing of it is kept on this computer.
       latest.current = { body: '', mode };
+      // Sending clears the server's copy too.
+      if (synced.current !== null) synced.current = '';
+      setRewrite(null);
       draft.setValue({ body: '', mode });
       await draft.clear();
       // Queued offline: the outbox has said so (api.ts), and sends it when WorkSuite is back.
@@ -427,6 +534,44 @@ export function Composer({
           />
           {ccTyped.bad.length ? <span className="text-danger">{text('Not an address: {list}', { list: ccTyped.bad.join(', ') })}</span> : null}
         </div>
+      ) : null}
+      {rewrite ? (
+        <section aria-label={text('Writing assistant')} className="flex flex-col gap-1.5 rounded-[8px] border border-[#DDD6FE] bg-[#F5F3FF] px-3 py-2 text-[12.5px] dark:border-[#3B2F63] dark:bg-[#1A1530]">
+          <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-2">
+            <AiBadge />
+            {text(REWRITE_LABEL[rewrite.mode])}
+            <span className="ml-auto font-normal text-ink-3">{text('Not sent until you send it')}</span>
+          </div>
+          {rewrite.phase === 'working' ? (
+            <p role="status" className="text-ink-3">
+              {text('Writing…')}
+            </p>
+          ) : rewrite.phase === 'error' ? (
+            <p role="alert" className="text-danger">
+              {rewrite.text}
+            </p>
+          ) : (
+            <p className="max-h-[160px] overflow-y-auto whitespace-pre-wrap text-ink selectable scroll-thin">{rewrite.text}</p>
+          )}
+          <div className="flex justify-end gap-1.5">
+            <Button size="sm" variant="ghost" onClick={() => setRewrite(null)}>
+              {rewrite.phase === 'done' ? text('Discard') : text('Close')}
+            </Button>
+            {rewrite.phase === 'done' ? (
+              <Button
+                size="sm"
+                variant="primary"
+                onClick={() => {
+                  setBody(rewrite.text, rewrite.text.length);
+                  placeCaret(rewrite.text.length);
+                  setRewrite(null);
+                }}
+              >
+                {text('Replace my text')}
+              </Button>
+            ) : null}
+          </div>
+        </section>
       ) : null}
       <div className="relative">
         <textarea
@@ -573,6 +718,18 @@ export function Composer({
         >
           <span className="font-mono">/</span> {text('canned')}
         </Button>
+        {extras ? (
+          <Select<string>
+            className={cx('h-7 text-[12px]', compact ? 'w-[96px]' : 'w-[150px]')}
+            aria-label={text('Writing assistant')}
+            value=""
+            disabled={!typed || rewrite?.phase === 'working'}
+            onValueChange={(v) => {
+              if (v) runRewrite(v as RewriteMode);
+            }}
+            options={[{ value: '', label: text('AI rewrite…') }, ...REWRITE_MODES.map((m) => ({ value: m, label: text(REWRITE_LABEL[m]) }))]}
+          />
+        ) : null}
         {compact ? <span className="min-w-0 truncate text-[11px] text-ink-3">{text('R reply · N note · {keys} send', { keys: sendKeys })}</span> : null}
         <span className="ml-auto" />
         {moves.length ? (

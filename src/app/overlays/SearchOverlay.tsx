@@ -22,7 +22,7 @@ import { AppTile } from '../../components/AppTile';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { extOf, kindOf } from '../../modules/files/api';
-import { searchTickets, ticketDeepLink, ticketInFront, ticketSubtitle } from '../../modules/support/palette';
+import { articleSubtitle, searchArticles, searchTickets, ticketDeepLink, ticketInFront, ticketSubtitle } from '../../modules/support/palette';
 import { ticketIdOfLink, ticketRoute } from '@shared/support';
 import { Button, cx, DATA_TEXT, Kbd as KeyChip } from '../../components/ui';
 
@@ -128,6 +128,8 @@ let searchAccessEpoch = 0;
 const RECENT_MAX = 6;
 /** The group Support's tickets are listed under (and the filter that keeps to them). */
 export const SUPPORT_GROUP = 'Support tickets';
+/** The knowledge base's articles (WS-SUPPORT-SRS-001 D-10): for the ticket in front, inserted into its composer. */
+export const KB_GROUP = 'Knowledge base';
 const recentKey = (user: string | number) => `ws.search.recent.${user}`;
 
 export function readRecentSearches(user: string | number | null | undefined): string[] {
@@ -276,6 +278,14 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
     retry: false,
   });
   const ticketData = currentQuery && online && supportOn ? tickets.data : undefined;
+  const articles = useQuery({
+    queryKey: ['search-kb', origin, user, accessEpoch, ticketInFront()?.id ?? 0, debounced],
+    queryFn: ({ signal }) => searchArticles(debounced, signal),
+    enabled: currentQuery && online && supportOn && (scope === 'All' || scope === KB_GROUP),
+    staleTime: 15_000,
+    retry: false,
+  });
+  const articleData = currentQuery && online && supportOn ? articles.data : undefined;
 
   const companyIdentity = `${origin}:${user}:${accessEpoch}`;
   const [companyList, setCompanyList] = useState<{ identity: string; companies: NonNullable<ServerAnswer['companies']> }>({ identity: '', companies: [] });
@@ -427,6 +437,27 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
         out.push({ key: `support-action:${c.id}`, group: text('Actions on {ref}', { ref: front.reference }), title: c.label, colour: '#23349E', icon: 'zap', action: true, hint: c.hint ?? (shortcuts[c.id] ? prettyAccelerator(shortcuts[c.id]!) : undefined), kv: [['Command', 'Support']], verb: `Run “${c.label}”`, run: c.run });
       }
     }
+    // Knowledge base articles (D-10): into the composer of the ticket in front, or opened on the web.
+    for (const a of articleData?.articles ?? []) {
+      const look = groupLook('knowledge base');
+      const target = articleData?.ticket ?? null;
+      const insert = target ? ticketInFront()?.insertArticle : null;
+      const mode = a.visibility === 'public' ? 'link' : 'text';
+      out.push({
+        key: `kb:${target?.id ?? 0}:${a.id}`,
+        group: KB_GROUP,
+        title: a.title,
+        subtitle: articleSubtitle(a, insert && target ? target.reference : null),
+        snippet: a.excerpt ?? undefined,
+        colour: look.colour,
+        icon: 'book-open',
+        ext: !insert,
+        kv: [['Article', a.visibility === 'public' ? 'Public' : 'Internal'], ['Does', insert && target ? (mode === 'link' ? `Inserts its link into ${target.reference}` : `Inserts its text into ${target.reference}`) : 'Opens it on the web']],
+        verb: insert ? (mode === 'link' ? 'Insert link' : 'Insert text') : 'Open',
+        run: () => (insert ? insert(a, mode) : void call('app:openInBrowser', { path: `/support/kb/${a.id}` })),
+        link: a.url ?? undefined,
+      });
+    }
     for (const it of offlineData ?? []) {
       // Saved on this computer while the app was the person's; not shown once it is not.
       if (!canOpenApp(it.module, allowed) || !canOpenRoute(it.route, allowed)) continue;
@@ -445,7 +476,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
       });
     }
     return out;
-  }, [commandMode, term, listed, create, serverData, offlineData, ticketData, shortcuts, scope, allowed, origin, user, guest]); // eslint-disable-line react-hooks/exhaustive-deps
+  }, [commandMode, term, listed, create, serverData, offlineData, ticketData, articleData, shortcuts, scope, allowed, origin, user, guest]); // eslint-disable-line react-hooks/exhaustive-deps
 
   // Filters: All, then each group that found something (and the one chosen, even when empty).
   const groups = [...new Set(items.filter((i) => i.group !== 'Apps').map((i) => i.group))];

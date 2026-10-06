@@ -572,6 +572,81 @@ export interface ConvertAnswer {
   notified: boolean;
 }
 
+/* ── knowledge and AI in a ticket (D-10, FR-KB-06/08, FR-AI-01…03) ──────── */
+
+/** An article offered for a ticket (`GET tickets/{id}/kb`): `url` (the help centre's) only for a public one. */
+export interface KbSuggestion {
+  id: number;
+  title: string;
+  excerpt: string | null;
+  visibility: 'public' | 'internal' | string;
+  language: string | null;
+  url: string | null;
+  /** How well it matches, 0…1; none for a search. */
+  score?: number | null;
+}
+
+/** What `POST tickets/{id}/kb/insert` gives to put in the reply; the insert is counted as a use. */
+export interface KbInsert {
+  url: string | null;
+  text: string;
+  title: string;
+}
+
+/** `POST tickets/{id}/ai/summary`: up to five bullets, kept by the server until the thread moves. */
+export interface AiSummary {
+  text: string;
+  model: string | null;
+  cached: boolean;
+  at: string | null;
+}
+
+export const AI_TONES = ['friendly', 'professional', 'concise', 'empathetic'] as const;
+export type AiTone = (typeof AI_TONES)[number];
+export const AI_TONE_LABEL: Record<AiTone, string> = { friendly: 'Friendly', professional: 'Professional', concise: 'Concise', empathetic: 'Empathetic' };
+
+/** `POST tickets/{id}/ai/reply`: a draft for the composer, grounded on the thread and these articles. */
+export interface AiReplyDraft {
+  draft: string;
+  sources: Array<{ id: number; title: string; url: string | null }>;
+  model: string | null;
+}
+
+/** `POST tickets/{id}/ai/classify`: only values the desk knows; anything else is null. Applied with PATCH. */
+export interface AiClassification {
+  category_id: number | null;
+  category: string | null;
+  priority: SupportPriority | null;
+  language: string | null;
+  sentiment: string | null;
+  model: string | null;
+}
+
+/** The composer's writing assistant (`POST ai/rewrite`). */
+export const REWRITE_MODES = ['improve', 'shorten', 'professional', 'friendly', 'translate_en', 'translate_si', 'translate_ta'] as const;
+export type RewriteMode = (typeof REWRITE_MODES)[number];
+export const REWRITE_LABEL: Record<RewriteMode, string> = {
+  improve: 'Improve writing',
+  shorten: 'Make shorter',
+  professional: 'More professional',
+  friendly: 'Friendlier',
+  translate_en: 'Translate to English',
+  translate_si: 'Translate to Sinhala',
+  translate_ta: 'Translate to Tamil',
+};
+
+/** The ticket languages the desk knows (FR-KB-10). */
+export const LANGUAGE_LABEL: Record<string, string> = { en: 'English', si: 'Sinhala', ta: 'Tamil' };
+
+/** My draft of a ticket kept by the server (FR-CRT-10, `GET/PUT/DELETE tickets/{id}/draft`): one per person and ticket. */
+export interface ServerDraft {
+  mode: 'reply' | 'note';
+  body: string;
+  body_html: string | null;
+  cc: string[];
+  updated_at: string | null;
+}
+
 /* ── routes ─────────────────────────────────────────────────────────────── */
 
 export const SUPPORT_ROUTE = '/support';
@@ -1032,11 +1107,14 @@ export function supportNoticePrefs(p: Partial<SupportNoticePrefs> | null | undef
   };
 }
 
-/** The server's notification events each kind stands for: their own In app choice. A mention has none (it is the hint's). */
+/**
+ * The server's notification events each kind stands for: their own In app choice. A mention is `support.mentioned`
+ * (on servers that raise it), and the ticket's realtime hint where they do not.
+ */
 export const SUPPORT_NOTICE_EVENTS: Record<SupportNoticeKind, readonly string[]> = {
   assigned: ['support.ticket_assigned'],
   reply: ['support.customer_replied'],
-  mention: [],
+  mention: ['support.mentioned'],
   sla: ['support.sla_warning', 'support.sla_breach'],
 };
 

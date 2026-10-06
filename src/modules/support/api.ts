@@ -13,6 +13,10 @@ import {
   legacyViews,
   quickRoute,
   type Agent,
+  type AiClassification,
+  type AiReplyDraft,
+  type AiSummary,
+  type AiTone,
   type Attachment,
   type AssignInput,
   type Badges,
@@ -20,12 +24,16 @@ import {
   type ConversionPreview,
   type ConvertAnswer,
   type ConvertInput,
+  type KbInsert,
+  type KbSuggestion,
   type ListParams,
   type Message,
   type MessageAnswer,
   type MessageInput,
   type Meta,
   type Present,
+  type RewriteMode,
+  type ServerDraft,
   type TicketChanges,
   type TicketEvent,
   type TicketFull,
@@ -139,7 +147,7 @@ async function getMeta<T>(path: string, query?: Query, signal?: AbortSignal): Pr
   return { data: r.data, offline: r.offline };
 }
 
-async function send<T>(method: 'POST' | 'PATCH' | 'DELETE', path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
+async function send<T>(method: 'POST' | 'PUT' | 'PATCH' | 'DELETE', path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
   return (await request<T>(method, path, { body, headers })).data;
 }
 
@@ -452,6 +460,67 @@ export function alreadyConverted(e: unknown): { id: number; reference: string; s
   return t && typeof t.id === 'number' ? { id: t.id, reference: String(t.reference ?? ''), status: typeof t.status === 'string' ? t.status : null } : null;
 }
 
+/* ── knowledge and AI in a ticket (D-10) ────────────────────────────────── */
+
+/**
+ * Articles for the ticket (FR-KB-06): from its subject and the requester's last message, ranked, or a search (`q`).
+ * Nobody without `kb.view` there gets an empty list rather than a refusal.
+ */
+export async function ticketArticles(ticketId: number, q?: string, signal?: AbortSignal): Promise<KbSuggestion[]> {
+  return (await v1Only(() => get<{ articles: KbSuggestion[] }>(`${BASE}/tickets/${ticketId}/kb`, { q: q?.trim() || undefined }, signal))).articles ?? [];
+}
+
+/** What to put in the reply for an article — its link (public articles only: `422 INTERNAL`) or its text; counted as a use. */
+export function insertArticle(ticketId: number, articleId: number, mode: 'link' | 'text'): Promise<KbInsert> {
+  return v1Only(() => send<KbInsert>('POST', `${BASE}/tickets/${ticketId}/kb/insert`, { article_id: articleId, mode }));
+}
+
+/** The thread in up to five bullets (FR-AI-01), kept by the server until the thread moves; `refresh` asks anew. */
+export function aiSummary(ticketId: number, refresh = false): Promise<AiSummary> {
+  return v1Only(() => send<AiSummary>('POST', `${BASE}/tickets/${ticketId}/ai/summary`, refresh ? { refresh: true } : {}));
+}
+
+/** A reply to edit and send oneself (FR-AI-02): never sent by this call. Notes go in only when asked. */
+export function aiReply(ticketId: number, input: { tone: AiTone; include_notes: boolean; instructions?: string }): Promise<AiReplyDraft> {
+  const body = { tone: input.tone, include_notes: input.include_notes, ...(input.instructions?.trim() ? { instructions: input.instructions.trim() } : {}) };
+  return v1Only(() => send<AiReplyDraft>('POST', `${BASE}/tickets/${ticketId}/ai/reply`, body));
+}
+
+/** Category, priority, language and sentiment as the assistant reads the ticket (FR-AI-03): applied, if at all, with PATCH. */
+export function aiClassify(ticketId: number): Promise<AiClassification> {
+  return v1Only(() => send<AiClassification>('POST', `${BASE}/tickets/${ticketId}/ai/classify`, {}));
+}
+
+/** The composer's text improved, shortened, made friendlier or more professional, or translated. */
+export function aiRewrite(text: string, mode: RewriteMode, organizationId?: number | null): Promise<{ text: string; model: string | null }> {
+  return v1Only(() => send<{ text: string; model: string | null }>('POST', `${BASE}/ai/rewrite`, { text, mode, ...(organizationId ? { organization_id: organizationId } : {}) }));
+}
+
+/** The assistant could not answer (`503 AI_UNAVAILABLE`): the rest of the desk carries on without it. */
+export function aiUnavailable(e: unknown): boolean {
+  return e instanceof ApiError && e.code === 'AI_UNAVAILABLE';
+}
+
+/** What an AI or knowledge refusal says on the panel: the assistant being away is not an error of the agent's. */
+export function assistError(e: unknown): string {
+  if (aiUnavailable(e)) return text('The AI assistant is not available just now. Everything else works; try again in a while.');
+  if (e instanceof ApiError && e.status === 403) return text('You do not have permission for this on this ticket.');
+  if (e instanceof ApiError && e.code === 'INTERNAL' && e.status === 422) return text('This article is internal: it has no link to send. Insert its text instead.');
+  return errorText(e);
+}
+
+/* ── my draft on the server (FR-CRT-10, "Workspace extras") ─────────────── */
+
+/** My draft of a ticket as the server keeps it, or null (none, or a server without drafts). */
+export async function serverDraft(ticketId: number, signal?: AbortSignal): Promise<ServerDraft | null> {
+  return v1OrElse(async () => (await get<{ draft: ServerDraft | null }>(`${BASE}/tickets/${ticketId}/draft`, undefined, signal)).draft ?? null, () => null);
+}
+
+/** Keeps my draft on the server too — an empty body removes it. */
+export function saveServerDraft(ticketId: number, draft: { mode: 'reply' | 'note'; body: string; cc?: string[] }): Promise<unknown> {
+  return v1OrElse(() => send('PUT', `${BASE}/tickets/${ticketId}/draft`, { mode: draft.mode, body: draft.body, ...(draft.cc?.length ? { cc: draft.cc } : {}) }), () => null);
+}
+
 /* ── windows ───────────────────────────────────────────────────────────── */
 
 /** A ticket's quick-reply window (D-04): floating, always on top, one at a time; its draft is the ticket's. */
@@ -502,5 +571,8 @@ export const K = {
   links: (id: number) => ['support', 'links', id] as const,
   requester: (email: string) => ['support', 'requester', email.toLowerCase()] as const,
   conversion: (conversationId: number) => ['support', 'conversion', conversationId] as const,
+  kb: (ticketId: number, q: string) => ['support', 'kb', ticketId, q] as const,
+  summary: (ticketId: number) => ['support', 'ai-summary', ticketId] as const,
+  dashboard: ['support', 'dashboard'] as const,
   myPresence: ['chat', 'presence', 'me'] as const,
 };

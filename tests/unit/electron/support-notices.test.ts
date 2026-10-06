@@ -23,7 +23,7 @@ vi.mock('electron', () => ({
   },
 }));
 import { NotificationService } from '../../../electron/services/notifications';
-import { SupportNotices, noticeActions, noticeText, spanWords, stillDue, TAKE_LATER_MS, SNOOZE_MS } from '../../../electron/services/support-notices';
+import { SupportNotices, lastMentioning, noticeActions, noticeText, spanWords, stillDue, TAKE_LATER_MS, SNOOZE_MS } from '../../../electron/services/support-notices';
 import { DesktopError } from '../../../electron/main/errors';
 import { supportNoticeKind, supportNoticePrefs, ticketIdOfLink, SUPPORT_NOTICE_DEFAULTS } from '../../../shared/support';
 import { attentionCount, trayTooltip } from '../../../shared/network';
@@ -251,6 +251,23 @@ describe('the banners', () => {
     support.handle({ type: 'support.ticket', kind: 'message', ticket_id: 1284, message_id: 5, mentioned: true });
     await new Promise((r) => setTimeout(r, 20));
     expect(notes).toHaveLength(1);
+  });
+
+  it('a mention notification (support.mentioned): the note that names me, Open, and one banner with its hint', async () => {
+    const mentioning = show({ messages: [{ id: 1, body: 'Hello', author: null, from: 'requester', internal: false, mentions: [] }, { id: 2, body: '@Ayesha can you approve the seat transfer?', author: { id: 4, name: 'Nimal Perera' }, author_name: 'Nimal Perera', from: 'staff', internal: true, mentions: [5] }] });
+    const { push, support, open } = setup({ ticket: mentioning });
+    expect(supportNoticeKind('support.mentioned')).toBe('mention');
+    push('support.mentioned', 81, { title: 'You were mentioned on CFX-001284', body: '' });
+    await vi.waitFor(() => expect(notes).toHaveLength(1));
+    expect(notes[0]!.options).toMatchObject({ title: 'Nimal Perera mentioned you · CFX-001284', body: '“@Ayesha can you approve the seat transfer?”', replyPlaceholder: 'Note to Nimal Perera (staff only)' });
+    // The same mention's hint: no second banner.
+    support.handle({ type: 'support.ticket', kind: 'message', ticket_id: 1284, reference: 'CFX-001284', version: 8, message_id: 2, internal: true, from: 'staff', mentioned: true });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(notes).toHaveLength(1);
+    notes[0]!.events.action!({}, 0);
+    await vi.waitFor(() => expect(open).toHaveBeenCalledWith('/tickets?ticket=1284'));
+    expect(lastMentioning(mentioning as never, 5)?.id).toBe(2);
+    expect(lastMentioning(mentioning as never, null)).toBeNull();
   });
 
   it('says what the notification said when the ticket cannot be read', async () => {
