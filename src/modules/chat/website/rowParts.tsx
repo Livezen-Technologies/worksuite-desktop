@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { WebchatRingChat } from '@shared/types';
 import { text } from '../../../core/i18n';
+import { markdownLine } from '../../../core/markdown';
 import { app } from '../../../core/app-state';
 import { useStore } from '../../../core/store';
 import { conversationStamp, listStamp, parseTs, timeLabel } from '../../../core/time';
@@ -8,7 +9,7 @@ import { Icon } from '../../../components/Icon';
 import { cx } from '../../../components/ui';
 import { UserAvatar } from '../../../components/UserAvatar';
 import { useNow } from '../../calls/parts';
-import { lastSaid, waitingSince, waitTone, type WebsiteRow } from './api';
+import { lastSaid, ratedLine, waitingSince, waitTone, type WebsiteRow } from './api';
 import { clock, waited } from './Ringing';
 
 /**
@@ -117,20 +118,31 @@ export function pathOf(url: string): string {
 
 /**
  * A row's one line under the visitor: what is ringing, else what was said last (the visitor's own words in quotes
- * when `quote`), else the page they are reading, else who has the chat, else their email.
+ * when `quote`) — plain words on one line, never Markdown's marks, and a picture or a file by what it is (#261) — else
+ * the page they are reading, else who has the chat, else their email.
+ *
+ * Never a blank line (worksuite-desktop#261): with nothing in words or a file, what happened last as far as the row
+ * tells it — a closed chat's rating ("★★★★★ Rated 5"), else "Visitor left" (they ended it) or "Chat closed"; an open
+ * one whose visitor has gone, "Visitor left"; else "Message" for something the row cannot name, or "No messages yet".
  */
 export function rowPreview(r: WebsiteRow, { me, myName, ring, quote = false }: { me: number | null; myName: string | null; ring?: WebchatRingChat; quote?: boolean }): string {
   const closed = r.status === 'closed';
   const page = r.current_url ? pathOf(r.current_url) : null;
   const mine = me !== null && r.assigned_to === me;
-  if (ring?.preview) return `“${ring.preview}”`;
-  if (r.last_message) {
-    const said = lastSaid(r.last_message, myName);
-    return quote && r.last_message.from === 'visitor' && said ? `“${said}”` : said;
+  const rung = ring?.preview ? markdownLine(ring.preview) : '';
+  if (rung) return `“${rung}”`;
+  const m = r.last_message;
+  if (m) {
+    const words = markdownLine(m.body ?? '');
+    if (words && quote && m.from === 'visitor') return `“${words}”`;
+    const said = lastSaid(m, myName);
+    if (said) return said;
   }
-  if (r.online && page && !closed) return text('Reading {page}', { page });
+  if (closed) return r.rating ? ratedLine(r.rating) : r.closed_reason === 'visitor' ? text('Visitor left') : text('Chat closed');
+  if (r.online && page) return text('Reading {page}', { page });
   if (r.agent) return mine ? text('With you') : text('With {name}', { name: r.agent });
-  return r.email ?? '';
+  if (r.email) return r.email;
+  return !r.online ? text('Visitor left') : m ? `💬 ${text('Message')}` : text('No messages yet');
 }
 
 /**

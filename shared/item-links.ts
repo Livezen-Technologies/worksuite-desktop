@@ -76,7 +76,61 @@ const withQuery = (base: string, extra: Record<string, string | number | null | 
 const commented = (base: string, l: ItemLink) => withQuery(base, { comment: l.comment });
 const reviewing = (base: string, l: ItemLink) => commented(l.action === 'review' || l.action === 'approve' || l.action === 'reject' ? withQuery(base, { review: 1 }) : base, l);
 
+/**
+ * Pages of a desktop app (worksuite-desktop#266): `/o/{org}/hr/announcements` is HR's Announcements, the same link
+ * whoever shares it. The type is the app's own id and the id the page's name, which each app reads from its own
+ * query parameter (`/hr?tab=announcements`, `/files?view=shared`). Only these apps, and only plain names, are
+ * accepted; a page only ever opens.
+ */
+export const PAGE_APPS: Readonly<Record<string, 'tab' | 'view'>> = {
+  hr: 'tab',
+  crm: 'tab',
+  tenders: 'tab',
+  sales: 'tab',
+  finance: 'tab',
+  meetings: 'tab',
+  billing: 'tab',
+  inventory: 'tab',
+  expenses: 'tab',
+  files: 'view',
+  tasks: 'view',
+  notes: 'view',
+  calendar: 'view',
+  contacts: 'view',
+  garage: 'view',
+  pms: 'view',
+  events: 'view',
+  salon: 'view',
+  restaurant: 'view',
+  pos: 'view',
+  elearning: 'view',
+};
+const ID_PAGE = /^[a-z][a-z0-9-]{0,39}$/;
+const pageRule = (app: string, key: 'tab' | 'view'): TypeRule => ({ app, label: 'page', id: ID_PAGE, actions: ['open'], route: (l) => `/${app}?${key}=${l.id}` });
+
+/** Whether an item type is a page of an app rather than a record. */
+export function isPageType(type: string): boolean {
+  return Object.prototype.hasOwnProperty.call(PAGE_APPS, type);
+}
+
+/**
+ * The page a desktop route shows (`/hr?tab=announcements` → HR's announcements), or null. Only the page itself: a
+ * route that also names something on it (`/hr?tab=people&employee=12`) is more than the page, and is not one.
+ */
+export function pageOfRoute(route: string): { app: string; page: string } | null {
+  const [path = '', qs = ''] = route.split('#')[0]!.split('?');
+  const seg = path.replace(/^\/+|\/+$/g, '').split('/');
+  const app = seg[0] ?? '';
+  if (seg.length !== 1 || !isPageType(app)) return null;
+  const key = PAGE_APPS[app]!;
+  const q = new URLSearchParams(qs);
+  const page = q.get(key);
+  if (!page || !ID_PAGE.test(page) || [...q.keys()].some((k) => k !== key)) return null;
+  return { app, page };
+}
+
 export const ITEM_TYPES: Record<string, TypeRule> = {
+  ...Object.fromEntries(Object.entries(PAGE_APPS).map(([app, key]) => [app, pageRule(app, key)])),
   file: { app: 'files', label: 'file', id: ID_NUM, actions: ['open', 'download', 'show', 'request-access'], route: (l) => commented(withQuery('/files', { file: l.id, play: l.action === 'show' || l.action === 'download' ? null : 1 }), l) },
   folder: { app: 'files', label: 'folder', id: ID_NUM, actions: ['open', 'request-access'], route: (l) => commented(`/files?folder=${l.id}`, l) },
   // Something shared with the person: Files › Shared with me, with it picked out.
@@ -305,6 +359,7 @@ export function parseItemHeader(value: string | null | undefined): ItemLink | nu
 
 /** The buttons a notification email's card offers for an item, in order. */
 export function cardActions(type: string): ItemAction[] {
+  if (isPageType(type)) return ['open'];
   switch (type) {
     case 'file':
       return ['open', 'download', 'show'];

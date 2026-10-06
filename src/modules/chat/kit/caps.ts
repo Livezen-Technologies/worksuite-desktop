@@ -33,6 +33,8 @@ export interface ChannelCaps {
   deleteForVisitorMinutes?: number | null;
   /** Where the server reads a link's card (#229); left out, links are shortened but get no card. */
   linkPreviewPath?: string;
+  /** Words written in Markdown — **bold**, lists, [links](…) — are drawn formatted (#261); left out, as they are written. */
+  markdown?: boolean;
 }
 
 export const TEAM_CAPS: ChannelCaps = {
@@ -70,6 +72,9 @@ export const WEBSITE_CAPS: ChannelCaps = {
   gridImages: true,
   deleteForVisitorMinutes: null,
   linkPreviewPath: '/api/chat/widget-admin/link-preview',
+  // A saved reply, an assistant's draft or the bot's answer written in Markdown reads formatted here, as the list's
+  // plain preview promises (worksuite-desktop#261).
+  markdown: true,
 };
 
 /**

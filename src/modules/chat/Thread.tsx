@@ -215,7 +215,7 @@ export function Thread({
     onCreateTask: tasksAllowed && drawer ? (m) => navigate(`/tasks?new=1&title=${encodeURIComponent((m.body ?? `Follow up: ${room?.name ?? 'conversation'}`).replace(/\s+/g, ' ').slice(0, 200))}`) : undefined,
   };
   const renderers: KitRenderers = {
-    records: (m, named) => (m.chat ? <MessageRecords m={m.chat} named={named} openLink={openLink} visible={visible} /> : null),
+    records: (m, named) => (m.chat ? <MessageRecords m={m.chat} own={m.own} named={named} openLink={openLink} visible={visible} /> : null),
     call: (m, compact) => (m.chat ? <CallCard m={m.chat} own={m.own} roomId={roomId} compact={compact} /> : null),
   };
 

@@ -1,12 +1,12 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
-import { Button, Chip, Modal, Spinner } from '../../components/ui';
+import { Spinner, cx } from '../../components/ui';
 import { ApiError } from '../../core/api';
 import { toast } from '../../core/toasts';
-import { answered, attemptKey, atLeast, checkIn, fetchVisit, K, refusal, shortDay, STATEMENT, type Allergy, type CheckInExtra, type Gate, type PatchTest, type Visit } from './api';
+import { answered, attemptKey, atLeast, checkIn, fetchVisit, K, refusal, dayMonth, STATEMENT, type Allergy, type CheckInExtra, type Gate, type PatchTest, type Visit } from './api';
 import { keep, SK, syncNow } from './offline';
-import { firstName, SEVERITY_TONE, servicesOf, severityLabel, stylistsOf } from './parts';
+import { DeskDialog, firstName, SEVERITY_TONE, servicesOf, severityLabel, stylistsOf, Tag, TouchButton } from './parts';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -33,7 +33,7 @@ interface Open {
   gate: Gate | null;
 }
 
-export function useCheckIn(ackSeverity: string, offline = false) {
+export function useCheckIn(ackSeverity: string, offline = false, onUpdate?: (clientId: number) => void) {
   const qc = useQueryClient();
   const [open, setOpen] = useState<Open | null>(null);
   const [busy, setBusy] = useState(false);
@@ -73,12 +73,29 @@ export function useCheckIn(ackSeverity: string, offline = false) {
     else void send(visit, {});
   }
 
-  const panel = open ? <CheckInPanel visit={open.visit} gate={open.gate} busy={busy} offline={offline} onSubmit={(x) => void send(open.visit, x)} onClose={() => setOpen(null)} /> : null;
+  const panel = open ? (
+    <CheckInPanel
+      visit={open.visit}
+      gate={open.gate}
+      busy={busy}
+      offline={offline}
+      onSubmit={(x) => void send(open.visit, x)}
+      onClose={() => setOpen(null)}
+      onUpdate={
+        onUpdate && !offline
+          ? () => {
+              setOpen(null);
+              onUpdate(open.visit.client.id);
+            }
+          : undefined
+      }
+    />
+  ) : null;
 
   return { start, panel, busy };
 }
 
-function CheckInPanel({ visit, gate, busy, offline, onSubmit, onClose }: { visit: Visit; gate: Gate | null; busy: boolean; offline: boolean; onSubmit: (x: CheckInExtra) => void; onClose: () => void }) {
+function CheckInPanel({ visit, gate, busy, offline, onSubmit, onClose, onUpdate }: { visit: Visit; gate: Gate | null; busy: boolean; offline: boolean; onSubmit: (x: CheckInExtra) => void; onClose: () => void; onUpdate?: () => void }) {
   const detail = useQuery({ queryKey: K.visit(visit.id), queryFn: ({ signal }) => fetchVisit(visit.id, signal), enabled: !offline });
   const onFile = visit.client.allergy;
   const allergies: Allergy[] = gate?.allergies?.length
@@ -104,12 +121,13 @@ function CheckInPanel({ visit, gate, busy, offline, onSubmit, onClose }: { visit
       confirmLabel={offline ? `Keep ${firstName(visit.client.name)}’s check-in` : `Check in ${firstName(visit.client.name)}`}
       onConfirm={onSubmit}
       onClose={onClose}
+      onUpdate={allergies.length > 0 ? onUpdate : undefined}
     />
   );
 }
 
 /**
- * The gate itself, shared by check-in and starting a walk-in now: the
+ * The gate itself, shared by check-in and starting a walk-in now (D05): the
  * allergies, the patch test, the reason when going ahead without one, and the
  * statement ticked by hand.
  */
@@ -126,6 +144,7 @@ export function AllergyGate({
   confirmLabel,
   onConfirm,
   onClose,
+  onUpdate,
   extra,
 }: {
   title: string;
@@ -140,6 +159,8 @@ export function AllergyGate({
   confirmLabel: string;
   onConfirm: (extra: CheckInExtra) => void;
   onClose: () => void;
+  /** "Update allergies": the client's card, to record what they say has changed. */
+  onUpdate?: () => void;
   extra?: ReactNode;
 }) {
   const [ticked, setTicked] = useState(false);
@@ -150,81 +171,81 @@ export function AllergyGate({
   const ready = (!needsAck || ticked) && (!needsReason || reason.trim() !== '');
 
   return (
-    <Modal
+    <DeskDialog
+      tone={needsAck ? 'danger' : needsReason ? 'warning' : 'indigo'}
+      icon={needsAck || needsReason ? 'warning' : 'check'}
       title={title}
-      width={640}
-      onClose={onClose}
+      sub={sub}
       labelledBy="salon-allergy-gate"
+      onClose={onClose}
       footer={
         <>
           {extra}
-          <Button variant="secondary" onClick={onClose}>
-            Not now
-          </Button>
-          <Button
-            variant="primary"
-            size="lg"
-            icon="shield-check"
-            loading={busy}
-            disabled={!ready || loading}
-            onClick={() => onConfirm({ ...(needsAck ? { ack: true, statement } : {}), ...(needsReason ? { patch_override: reason.trim() } : {}) })}
-          >
+          {onUpdate ? (
+            <TouchButton icon="pen" onClick={onUpdate}>
+              Update allergies
+            </TouchButton>
+          ) : (
+            <TouchButton onClick={onClose}>Not now</TouchButton>
+          )}
+          <TouchButton variant="primary" icon="check" loading={busy} disabled={!ready || loading} onClick={() => onConfirm({ ...(needsAck ? { ack: true, statement } : {}), ...(needsReason ? { patch_override: reason.trim() } : {}) })}>
             {confirmLabel}
-          </Button>
+          </TouchButton>
         </>
       }
     >
-      <div className="flex flex-col gap-3">
-        <p className="text-[12.5px] text-ink-2">{sub}</p>
-        {gate?.code ? <div className={gate.code === 'patch_test_override' ? 'rounded-[10px] bg-danger-bg px-3.5 py-2.5 text-[13px] font-medium text-danger' : 'rounded-[10px] bg-warning-bg px-3.5 py-2.5 text-[13px] font-medium text-warning'}>{gate.message}</div> : null}
+      {gate?.code ? <div className={gate.code === 'patch_test_override' ? 'rounded-[12px] bg-danger-bg px-3.5 py-2.5 text-[14px] font-medium text-danger' : 'rounded-[12px] bg-warning-bg px-3.5 py-2.5 text-[14px] font-medium text-warning-ink'}>{gate.message}</div> : null}
 
-        {loading ? (
-          <Spinner label="Reading the allergies on file…" />
-        ) : allergies.length === 0 ? (
-          <p className="text-[14px] text-ink-2">No allergy on file.</p>
-        ) : (
-          <ul className="flex flex-col gap-2">
-            {allergies.map((a, i) => (
-              <li key={a.id || i} className="flex flex-wrap items-baseline gap-2 rounded-[10px] border border-line px-3.5 py-2.5">
-                <Chip tone={SEVERITY_TONE[a.severity]}>
-                  <Icon name="warning" size={12} /> {severityLabel(a.severity)}
-                </Chip>
-                <span className="text-[16px] font-bold text-ink">{a.substance}</span>
-                {a.reaction ? <span className="text-[13.5px] text-ink-2">— {a.reaction}</span> : null}
-              </li>
-            ))}
-          </ul>
-        )}
+      {loading ? (
+        <Spinner label="Reading the allergies on file…" />
+      ) : allergies.length === 0 ? (
+        <p className="text-[15px] text-ink-2">No allergy on file.</p>
+      ) : (
+        <ul className="flex flex-col gap-3">
+          {allergies.map((a, i) => (
+            <li key={a.id || i} className="flex items-start gap-3">
+              <Tag tone={SEVERITY_TONE[a.severity]} className="mt-0.5 text-[13px]">
+                {severityLabel(a.severity)}
+              </Tag>
+              <div className="text-[15px] text-ink">
+                <b>{a.substance}</b>
+                {a.reaction ? <span> — {a.reaction}</span> : null}
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
 
-        {covering ? (
-          <div className="flex items-center gap-2 rounded-[10px] bg-success-bg px-3.5 py-2.5 text-[13px] text-success">
-            <Icon name="check-circle" size={16} />
-            Patch test {shortDay(covering.tested_at)}
-            {covering.product ? ` · ${covering.product}` : ''} · no reaction · valid until {shortDay(covering.valid_until)}
-          </div>
-        ) : null}
+      {covering ? (
+        <div className="flex items-start gap-2 rounded-[12px] bg-[#F0FDF4] px-3.5 py-3 text-[14px] text-[#166534] dark:bg-success-bg dark:text-success">
+          <Icon name="check" size={16} className="mt-0.5 shrink-0" />
+          <span>
+            Patch test {dayMonth(covering.tested_at)}
+            {covering.product ? ` · ${covering.product}` : ''} · no reaction · valid until {dayMonth(covering.valid_until)}
+          </span>
+        </div>
+      ) : null}
 
-        {needsReason ? (
-          <label className="flex flex-col gap-1.5 rounded-[10px] border border-warning/30 bg-warning-bg px-3.5 py-2.5">
-            <span className="text-[13px] font-semibold text-warning">{missing.length > 0 ? `${missing.join(', ')} needs a valid patch test, and there is none on file.` : 'A valid patch test is needed.'}</span>
-            <span className="text-[12.5px] font-semibold text-ink">Why are you going ahead?</span>
-            <textarea
-              value={reason}
-              onChange={(e) => setReason(e.target.value)}
-              rows={2}
-              maxLength={300}
-              className="rounded-[8px] border border-line bg-surface px-3 py-2 text-[13px] text-ink outline-none focus:border-primary"
-            />
-          </label>
-        ) : null}
+      {needsReason ? (
+        <label className="flex flex-col gap-1.5 rounded-[12px] border border-[var(--ws-note-line)] bg-warning-bg px-3.5 py-3">
+          <span className="text-[14px] font-semibold text-warning-ink">{missing.length > 0 ? `${missing.join(', ')} needs a valid patch test, and there is none on file.` : 'A valid patch test is needed.'}</span>
+          <span className="text-[13px] font-semibold text-ink">Why are you going ahead?</span>
+          <textarea
+            value={reason}
+            onChange={(e) => setReason(e.target.value)}
+            rows={2}
+            maxLength={300}
+            className="rounded-[10px] border border-line bg-surface px-3 py-2 text-[14px] text-ink outline-none focus:border-primary"
+          />
+        </label>
+      ) : null}
 
-        {needsAck ? (
-          <label className="flex cursor-pointer items-start gap-3 rounded-[10px] bg-selection px-3.5 py-3">
-            <Checkbox size="lg" checked={ticked} onChange={(e) => setTicked(e.target.checked)} className="mt-0.5" />
-            <span className="text-[14px] font-bold text-ink">{statement}</span>
-          </label>
-        ) : null}
-      </div>
-    </Modal>
+      {needsAck ? (
+        <label className={cx('flex cursor-pointer items-center gap-3 rounded-[12px] border-2 px-3.5 py-3', ticked ? 'border-primary bg-selection' : 'border-line bg-surface')}>
+          <Checkbox size="lg" checked={ticked} onChange={(e) => setTicked(e.target.checked)} />
+          <span className="text-[15px] font-bold text-ink">{statement}</span>
+        </label>
+      ) : null}
+    </DeskDialog>
   );
 }

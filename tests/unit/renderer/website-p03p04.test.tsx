@@ -359,8 +359,8 @@ describe('P-04 · website message actions (RDC-12)', () => {
         <WebsiteThread id="41" mini />
       </QueryClientProvider>,
     );
-    await waitFor(() => expect(screen.getAllByRole('button', { name: 'Message actions' }).length).toBeGreaterThan(0));
-    fireEvent.click(screen.getAllByRole('button', { name: 'Message actions' })[0]!);
+    await waitFor(() => expect(screen.getAllByRole('button', { name: 'More actions' }).length).toBeGreaterThan(0));
+    fireEvent.click(screen.getAllByRole('button', { name: 'More actions' })[0]!);
     await act(async () => {
       fireEvent.click(screen.getByRole('menuitem', { name: 'Save to Drive' }));
     });

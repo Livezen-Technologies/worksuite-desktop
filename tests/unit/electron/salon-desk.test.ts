@@ -36,12 +36,23 @@ describe('salon desk: the key stays in the main process', () => {
     const r = await d.pair({ location_id: 16, name: 'Front desk' }, 'desktop-abc', '0.2.41');
 
     expect(request).toHaveBeenCalledWith('POST', '/api/salon/v1/desk/pair', {
-      body: { location_id: 16, name: 'Front desk', device_id: 'desktop-abc', pos_register_id: null, app_version: 'desktop 0.2.41' },
+      body: { location_id: 16, name: 'Front desk', device_id: 'desktop-abc', pos_register_id: null, warehouse_id: null, receipt_template: null, app_version: 'desktop 0.2.41' },
     });
     expect(r).toEqual({ desk, message: 'Front desk is paired.' });
     expect(JSON.stringify(r)).not.toContain('kkkk');
     expect(d.pairing()).toEqual({ desk_id: 12, name: 'Front desk' });
     expect(JSON.stringify(d.pairing())).not.toContain('kkkk');
+  });
+
+  it('sends the stock location and receipt template chosen (DSK-02)', async () => {
+    const request = vi.fn(async () => ({ desk, key: 'k'.repeat(43) }));
+    const d = new SalonDesk(secrets(), { request } as never, () => 'https://ws.example');
+
+    await d.pair({ location_id: 16, name: 'Front desk', pos_register_id: 3, warehouse_id: 21, receipt_template: 'salon_short' }, 'desktop-abc', '0.2.41');
+
+    expect(request).toHaveBeenCalledWith('POST', '/api/salon/v1/desk/pair', {
+      body: expect.objectContaining({ pos_register_id: 3, warehouse_id: 21, receipt_template: 'salon_short' }) as unknown,
+    });
   });
 
   it('says a desk that waits for approval is waiting', async () => {

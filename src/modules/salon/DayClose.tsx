@@ -1,8 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { Button, Card, Chip, Spinner, TextField } from '../../components/ui';
+import { Spinner } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { amount, clockAt, longDay, todayAt } from './api';
+import { amount, clockAt, K, longDay, todayAt } from './api';
 import {
   closeRegister,
   countLines,
@@ -21,7 +21,8 @@ import {
   type PageHeading,
   type RegisterState,
 } from './money';
-import { Choice, CountSheet, Failed, MoneyLine, Note, useDesk, useNow, usePrintSettings } from './parts';
+import { useOutbox } from './offline';
+import { CountSheet, Failed, MoneyLine, Note, Page, Panel, Tag, TouchButton, useDesk, useNow, usePrintSettings } from './parts';
 import { MoveCash } from './Register';
 
 /**
@@ -48,15 +49,11 @@ export default function DayClose() {
   const date = day.data?.date ?? todayAt(tz, new Date(clock));
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <div>
-        <h1 className="text-[22px] font-extrabold text-ink">Close the day</h1>
-        <p className="mt-0.5 text-[13px] text-ink-2">
-          {[longDay(day.data?.date ?? todayAt(tz, new Date(clock))), desk.location.name, reg ? `register ${reg.code}${r?.session ? `, session #${r.session.id}` : ''}` : null, clockAt(new Date(clock).toISOString(), tz)].filter(Boolean).join(' · ')}
-        </p>
-      </div>
-
-      <div className="flex flex-col gap-4 2xl:flex-row">
+    <Page
+      title="Close the day"
+      sub={[longDay(date).replace(/ \d{4}$/, ''), desk.location.name, reg ? `register ${reg.code}${r?.session ? `, session #${r.session.id}` : ''}` : null, clockAt(new Date(clock).toISOString(), tz)].filter(Boolean).join(' · ')}
+    >
+      <div className="flex flex-col gap-3.5 xl:flex-row xl:items-start">
         <div className="min-w-0 flex-1">
           {closed ? (
             <ClosedRegister closed={closed} date={date} />
@@ -69,9 +66,9 @@ export default function DayClose() {
           ) : !r.session ? (
             <Note
               action={
-                <Button size="sm" onClick={() => desk.go('register')}>
+                <TouchButton className="min-h-10 text-[13px]" onClick={() => desk.go('register')}>
                   Register
-                </Button>
+                </TouchButton>
               }
             >
               Register {reg.code} is closed{r.last_close?.closed_at ? ` — last closed ${clockAt(r.last_close.closed_at, tz)} with ${amount(r.last_close.counted)} counted` : ''}.
@@ -80,7 +77,7 @@ export default function DayClose() {
             <CloseRegister state={r} date={date} onClosed={setClosed} />
           )}
         </div>
-        <div className="w-full 2xl:w-[420px]">
+        <div className="w-full xl:w-[500px] xl:shrink-0">
           {day.isError ? (
             <Failed text={day.error instanceof Error ? day.error.message : 'The day’s figures could not be loaded.'} onRetry={() => void day.refetch()} />
           ) : !day.data ? (
@@ -90,7 +87,7 @@ export default function DayClose() {
           )}
         </div>
       </div>
-    </div>
+    </Page>
   );
 }
 
@@ -122,9 +119,9 @@ function ClosedRegister({ closed, date }: { closed: Closed; date: string }) {
   const z = closed.result.z;
   const v = closed.result.variance;
   return (
-    <Card title={`Register ${closed.code} closed`}>
+    <Panel title={`Register ${closed.code} closed`} action={<Tag tone={v === 0 ? 'success' : 'warning'}>{v === 0 ? 'Counted exactly' : v < 0 ? 'Short' : 'Over'}</Tag>}>
       {closed.message ? <p className="mb-2 text-[13px] text-ink-2">{closed.message}</p> : null}
-      <dl className="flex flex-col gap-1">
+      <dl>
         <MoneyLine label={`Sales · ${z.sales.count}`} value={z.sales.total} currency={desk.currency} />
         <MoneyLine label="Cash in" value={z.sales.cash_in} />
         <MoneyLine label="Change given" value={z.sales.cash_change} />
@@ -135,11 +132,11 @@ function ClosedRegister({ closed, date }: { closed: Closed; date: string }) {
         ))}
       </dl>
       <div className="mt-3 flex justify-end">
-        <Button icon="printer" onClick={() => void printIt(zReport(closed.result, closed.code, heading, desk.currency), 'The Z-report')}>
+        <TouchButton icon="printer" onClick={() => void printIt(zReport(closed.result, closed.code, heading, desk.currency), 'The Z-report')}>
           Print the Z-report again
-        </Button>
+        </TouchButton>
       </div>
-    </Card>
+    </Panel>
   );
 }
 
@@ -157,6 +154,8 @@ function CloseRegister({ state, date, onClosed }: { state: RegisterState; date: 
   const [busy, setBusy] = useState(false);
   const [out, setOut] = useState(false);
   const counted = how === 'count' ? countTotal(counts) : Number(figure || 0);
+  /* Cash taken offline is in the drawer but not yet in WorkSuite's figure: the count would be over by it. */
+  const offlineSales = (useOutbox().data ?? []).filter((i) => i.kind === 'visit.checkout').length;
 
   async function close() {
     setBusy(true);
@@ -166,6 +165,7 @@ function CloseRegister({ state, date, onClosed }: { state: RegisterState; date: 
       toast('success', r.message ?? 'Register closed.');
       void qc.invalidateQueries({ queryKey: MK.register(desk.desk.id) });
       void qc.invalidateQueries({ queryKey: MK.day(desk.desk.id) });
+      void qc.invalidateQueries({ queryKey: K.desks });
       void printIt(zReport(r.data, reg.code, heading, desk.currency), 'The Z-report');
     } catch (e) {
       toast('error', e instanceof Error ? e.message : 'The register did not close.');
@@ -177,46 +177,48 @@ function CloseRegister({ state, date, onClosed }: { state: RegisterState; date: 
   }
 
   return (
-    <Card title={`Close register ${reg.code} · count the drawer`} action={rules.blind ? <Chip tone="indigo">Blind close</Chip> : undefined}>
-      <div className="flex flex-col gap-3">
-        <p className="text-[13px] text-ink-2">
-          {rules.blind
-            ? 'What the drawer should hold stays hidden until you close; a supervisor sees the difference.'
-            : `${s.expected !== null ? `It should hold ${amount(s.expected, desk.currency)}. ` : ''}Any difference needs a reason.`}
-        </p>
-        {!rules.count_to_close ? (
-          <Choice
-            label="How to count"
-            value={how}
-            onChange={setHow}
-            options={[
-              { value: 'count', label: 'Note by note' },
-              { value: 'figure', label: 'One figure' },
-            ]}
-          />
-        ) : null}
-        {how === 'count' ? (
-          <CountSheet values={state.denominations ?? []} counts={counts} onChange={setCounts} label="Closing count" />
-        ) : (
-          <TextField label="Cash in the drawer" inputMode="decimal" value={figure} onChange={(e) => setFigure(moneyTyped(e.target.value))} />
-        )}
-        <div className="flex items-baseline justify-between rounded-[10px] bg-selection px-4 py-3">
-          <span className="text-[14px] font-bold text-primary">Counted</span>
-          <output className="text-[22px] font-extrabold text-primary tabular-nums">{amount(counted, desk.currency)}</output>
-        </div>
-        {!rules.blind ? <TextField label="Why it is out, if it is" hint="Needed when the count is not what the drawer should hold." maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} /> : null}
-        <div className="flex flex-wrap items-center justify-end gap-2.5">
-          {!desk.may('pos.register.close') ? <span className="text-[12.5px] text-warning">Closing a register needs Point of Sale’s permission to close one.</span> : null}
-          <Button icon="arrow-up" onClick={() => setOut(true)}>
-            Take cash out to the safe
-          </Button>
-          <Button variant="primary" icon="printer" loading={busy} disabled={!desk.may('pos.register.close')} onClick={() => void close()}>
-            Close register &amp; print the Z-report
-          </Button>
-        </div>
+    <Panel title={`Close register ${reg.code} · count the drawer`} action={rules.blind ? <Tag tone="violet">Blind close</Tag> : undefined}>
+      <p className="mb-1 text-[12.5px] text-ink-2">
+        {rules.blind
+          ? 'Point of Sale owns the drawer. The expected amount stays hidden until you close; a supervisor sees the difference.'
+          : `${s.expected !== null ? `It should hold ${amount(s.expected, desk.currency)}. ` : ''}Any difference needs a reason.`}
+      </p>
+      {how === 'count' ? (
+        <CountSheet values={state.denominations ?? []} counts={counts} onChange={setCounts} label="Closing count" />
+      ) : (
+        <input aria-label="Cash in the drawer" inputMode="decimal" value={figure} onChange={(e) => setFigure(moneyTyped(e.target.value))} className="h-12 w-full rounded-[12px] border border-line bg-surface px-3.5 text-right text-[18px] text-ink outline-none tabular-nums focus:border-primary" />
+      )}
+      <div className="mt-1 flex items-baseline justify-between border-t-2 border-ink pt-2">
+        <span className="text-[20px] font-extrabold text-ink">Counted</span>
+        <output className="text-[20px] font-extrabold text-ink tabular-nums">{amount(counted, desk.currency)}</output>
+      </div>
+      {!rules.count_to_close ? (
+        <button type="button" onClick={() => setHow(how === 'count' ? 'figure' : 'count')} className="mt-1 text-[12.5px] font-semibold text-primary hover:underline">
+          {how === 'count' ? 'Give it as one figure instead' : 'Count it note by note instead'}
+        </button>
+      ) : null}
+      {!rules.blind ? (
+        <label className="mt-2 flex flex-col gap-1">
+          <span className="text-[12.5px] font-semibold text-ink-2">Why it is out, if it is</span>
+          <input maxLength={300} value={reason} onChange={(e) => setReason(e.target.value)} className="h-11 rounded-[12px] border border-line bg-surface px-3.5 text-[14px] text-ink outline-none focus:border-primary" />
+        </label>
+      ) : null}
+      {!desk.may('pos.register.close') ? <p className="mt-2 text-[12.5px] text-warning">Closing a register needs Point of Sale’s permission to close one.</p> : null}
+      {offlineSales > 0 ? (
+        <Note tone="warning">
+          {offlineSales} payment{offlineSales === 1 ? '' : 's'} taken offline {offlineSales === 1 ? 'has' : 'have'} not reached WorkSuite yet, so the drawer holds money its figure does not. Close once {offlineSales === 1 ? 'it has' : 'they have'} gone — see Sync.
+        </Note>
+      ) : null}
+      <div className="mt-3 flex flex-wrap gap-2.5">
+        <TouchButton icon="banknote" onClick={() => setOut(true)}>
+          Take cash out to safe
+        </TouchButton>
+        <TouchButton variant="primary" icon="lock" className="flex-1" loading={busy} disabled={!desk.may('pos.register.close') || offlineSales > 0} onClick={() => void close()}>
+          Close register &amp; print Z-report
+        </TouchButton>
       </div>
       {out ? <MoveCash direction="out" code={reg.code} onClose={() => setOut(false)} /> : null}
-    </Card>
+    </Panel>
   );
 }
 
@@ -224,80 +226,74 @@ function SalonDay({ day }: { day: DeskDay }) {
   const desk = useDesk();
   const heading = useHeading(day.date);
   const taken = day.figures.taken;
+  const owed = day.unpaid.reduce((n, u) => n + u.owed, 0);
+  const waiting = (desk.sync?.waiting ?? 0) + (desk.sync?.refused ?? 0);
 
   return (
-    <Card title="The salon day">
-      <div className="flex flex-col gap-3">
-        {taken ? (
-          <dl className="flex flex-col gap-1">
-            {taken.by_method
-              .filter((m) => m.new_money)
-              .map((m) => (
-                <MoneyLine key={m.method} label={`${m.label} · ${m.receipts} receipt${m.receipts === 1 ? '' : 's'}`} value={m.amount} />
-              ))}
-            <MoneyLine label="Taken today" value={taken.total} currency={day.currency} strong />
-          </dl>
-        ) : (
-          <p className="text-[13px] text-ink-2">Money figures need Billing’s permission to see them.</p>
-        )}
-        <div className="grid grid-cols-2 gap-2">
-          <Small label="Visits completed" value={String(day.completed)} />
-          <Small label="No-shows" value={String(day.no_shows)} />
-          <Small label="Invoices still owing" value={String(day.unpaid.length)} />
-          <Small label="Commission accrued" value={desk.may('salon.commission.view') ? amount(day.commission, day.currency) : '—'} />
+    <Panel title="The salon day">
+      {taken ? (
+        <ul className="border-b border-line">
+          {taken.by_method
+            .filter((m) => m.new_money)
+            .map((m) => (
+              <li key={m.method} className="grid grid-cols-[1fr_auto_auto] items-baseline gap-4 border-t border-line py-2 text-[15px] first:border-t-0">
+                <span className="text-ink">{m.label}</span>
+                <span className="text-[13px] text-ink-2 tabular-nums">
+                  {m.receipts} receipt{m.receipts === 1 ? '' : 's'}
+                </span>
+                <b className="w-28 text-right text-ink tabular-nums">{amount(m.amount)}</b>
+              </li>
+            ))}
+          <li className="flex items-baseline justify-between border-t border-line py-2 text-[15px]">
+            <span className="font-bold text-ink">Taken today</span>
+            <b className="text-ink tabular-nums">{amount(taken.total, day.currency)}</b>
+          </li>
+        </ul>
+      ) : (
+        <p className="py-2 text-[13px] text-ink-2">Money figures need Billing’s permission to see them.</p>
+      )}
+
+      <dl className="mt-2 text-[14px]">
+        <Stat label="Visits completed" value={String(day.completed)} />
+        <Stat label="No-shows" value={String(day.no_shows)} />
+        <Stat label="Invoices still owing" value={day.unpaid.length ? `${day.unpaid.length} · ${amount(owed, day.currency)}` : '0'} tone={day.unpaid.length ? 'warning' : undefined} />
+        <Stat label="Commission accrued" value={desk.may('salon.commission.view') ? amount(day.commission, day.currency) : '—'} />
+        <Stat label="Waiting to sync" value={String(waiting)} tone={waiting ? 'warning' : 'success'} />
+      </dl>
+      {taken && taken.not_new > 0 ? <p className="mt-1.5 text-[12px] text-ink-2">Advances, store credit and points used today ({amount(taken.not_new)}) are not new money and are not in the drawer.</p> : null}
+
+      {day.not_checked_out.length > 0 ? (
+        <div className="mt-3">
+          <div className="mb-1 text-[12px] font-bold tracking-[.05em] text-warning uppercase">Not checked out</div>
+          <ul>
+            {day.not_checked_out.map((v) => (
+              <li key={v.id} className="flex items-center gap-2 border-t border-line py-2 first:border-t-0">
+                <span className="min-w-0 flex-1 truncate text-[13.5px] text-ink">
+                  <b>{v.client}</b> · {v.number} · {v.status}
+                </span>
+                <TouchButton className="min-h-10 px-3 text-[13px]" onClick={() => desk.go('pay', { visit: v.id })}>
+                  Take payment
+                </TouchButton>
+              </li>
+            ))}
+          </ul>
         </div>
-        {taken && taken.not_new > 0 ? <p className="text-[12.5px] text-ink-2">Advances, store credit and points used today ({amount(taken.not_new)}) are not new money and are not in the drawer.</p> : null}
+      ) : null}
 
-        {day.not_checked_out.length > 0 ? (
-          <div>
-            <h3 className="mb-1 text-[10.5px] font-bold tracking-[.6px] text-warning uppercase">Not checked out</h3>
-            <ul>
-              {day.not_checked_out.map((v) => (
-                <li key={v.id} className="flex items-center gap-2 border-t border-line py-2 first:border-t-0">
-                  <span className="min-w-0 flex-1 truncate text-[13px] text-ink">
-                    <b>{v.client}</b> · {v.number} · {v.status}
-                  </span>
-                  <Button size="sm" onClick={() => desk.go('pay', { visit: v.id })}>
-                    Take payment
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        {day.unpaid.length > 0 ? (
-          <div>
-            <h3 className="mb-1 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">Still owing</h3>
-            <ul className="text-[13px]">
-              {day.unpaid.map((u) => (
-                <li key={u.id} className="flex justify-between gap-2 border-t border-line py-1.5 first:border-t-0">
-                  <span className="text-ink">
-                    {u.number}
-                    {u.invoice ? ` · ${u.invoice}` : ''}
-                  </span>
-                  <b className="text-ink tabular-nums">{amount(u.owed, day.currency)}</b>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ) : null}
-
-        <div className="flex justify-end">
-          <Button icon="printer" onClick={() => void printIt(daySummary(day, heading), 'The day’s summary')}>
-            Print the day’s summary
-          </Button>
-        </div>
+      <div className="mt-3 flex gap-2.5">
+        <TouchButton icon="printer" className="flex-1" onClick={() => void printIt(daySummary(day, heading), 'The day’s summary')}>
+          Print day summary
+        </TouchButton>
       </div>
-    </Card>
+    </Panel>
   );
 }
 
-function Small({ label, value }: { label: string; value: string }) {
+function Stat({ label, value, tone }: { label: string; value: string; tone?: 'warning' | 'success' }) {
   return (
-    <div className="rounded-[10px] bg-subtle px-3 py-2">
-      <div className="text-[12px] text-ink-3">{label}</div>
-      <div className="text-[17px] font-extrabold text-ink tabular-nums">{value}</div>
+    <div className="flex items-baseline justify-between gap-3 py-[3px]">
+      <dt className="text-ink-2">{label}</dt>
+      <dd className={tone === 'warning' ? 'm-0 font-bold text-warning tabular-nums' : tone === 'success' ? 'm-0 font-bold text-success tabular-nums' : 'm-0 font-bold text-ink tabular-nums'}>{value}</dd>
     </div>
   );
 }
