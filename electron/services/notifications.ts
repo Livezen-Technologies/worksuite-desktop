@@ -79,6 +79,14 @@ export interface Incoming {
   flag?: FlagNotice | null;
   /** Social Media Manager's post, approval or inbox thread (SMM-DSK-002): View post, Approve, Reply, Copy caption. */
   social?: SocialNotice | null;
+  /** A call the agent promised, due now (WS-MKT-SRS-001 MKT-CAL-12): Call now and Snooze 15 min on the banner. */
+  callback?: CallbackNotice | null;
+}
+
+/** The callback a Marketing reminder is about: its queue row and the time promised (the server's UTC stamp). */
+export interface CallbackNotice {
+  queueId: number;
+  at: string;
 }
 
 /** The website conversation a visitor's message came in on. */
@@ -150,6 +158,8 @@ export function flagFromLink(link: string | null | undefined): FlagNotice | null
 }
 
 const FLAG_ACTIONS = ['Snooze 1 hour', 'Mark complete'] as const;
+/** A callback reminder's buttons (the D01 design): open the queue on it, or ring again in a quarter of an hour. */
+export const CALLBACK_ACTIONS = ['Call now', 'Snooze 15 min'] as const;
 
 /** The new email a mail banner is about. */
 export interface MailNotice {
@@ -256,6 +266,7 @@ const MODULE_LABELS: Record<string, string> = {
   salon: 'SalonMate',
   'social-media': 'Social Media',
   ai: 'AI Assistant',
+  marketing: 'Marketing',
   system: 'WorkSuite',
 };
 
@@ -297,6 +308,8 @@ export class NotificationService {
   websiteAttending: (conversationId: number) => boolean = () => false;
   /** Whether a visitor writing again in my chat raises a system notification (Settings › Website chats; #230). */
   followUpDesktop: () => boolean = () => true;
+  /** A callback reminder's "Snooze 15 min": main sets the reminder again on this computer (marketing-reminders). */
+  snoozeCallback: ((c: CallbackNotice) => void) | null = null;
   /** The last banner shown for each website conversation, and how many messages it stands for: a new one replaces it (#230). */
   private websiteShown = new Map<number, { note: Notification; count: number; at: number }>();
 
@@ -843,7 +856,9 @@ export class NotificationService {
                 ? MAIL_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
                 : n.social
                   ? n.social.buttons.map((b) => ({ type: 'button' as const, text: localize(b.label, this.prefs().language) }))
-                  : undefined,
+                  : n.callback
+                    ? CALLBACK_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
+                    : undefined,
       timeoutType: n.critical ? 'never' : 'default',
     });
     // One banner per website conversation: a new message replaces the last (worksuite-desktop#230).
@@ -874,6 +889,11 @@ export class NotificationService {
           return;
         }
         this.onClick(b.link, n.module);
+        return;
+      }
+      if (n.callback && recipient === this.userId) {
+        this.callbackAction(n, n.callback, index);
+        note.close();
         return;
       }
       if (n.meeting && !n.reminder && recipient === this.userId) {
@@ -974,6 +994,18 @@ export class NotificationService {
       log.debug('Flag reminder action failed', { error: String(error) });
       this.onClick(route, 'mail');
     }
+  }
+
+  /**
+   * A callback reminder's button (MKT-CAL-12): Call now opens My call queue's workspace on the callback's campaign,
+   * where the due callback comes first; Snooze 15 min rings it again later, on this computer — the callback's time
+   * and its task stay as they were. Locked, or without Marketing any more, either opens WorkSuite as a click would.
+   */
+  callbackAction(n: Incoming, c: CallbackNotice, index: number): void {
+    const action = CALLBACK_ACTIONS[index];
+    if (!action) return;
+    if (this.isLocked() || !this.moduleEnabled(n) || action === 'Call now' || !this.snoozeCallback) return this.onClick(n.link, n.module);
+    this.snoozeCallback(c);
   }
 
   /**
