@@ -42,6 +42,11 @@ export function touchesExpenses(e: { type: string; event?: string }): boolean {
   return e.type === 'expense.claim.changed' || (e.type === 'notification' && typeof e.event === 'string' && e.event.startsWith('expense.'));
 }
 
+/** A realtime event about Social Media Manager: its own nudge, or a notification it raised. */
+export function touchesSocialMedia(e: { type: string; event?: string }): boolean {
+  return e.type.startsWith('social.') || (e.type === 'notification' && typeof e.event === 'string' && e.event.startsWith('social.'));
+}
+
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
@@ -87,6 +92,10 @@ export function wireQueryInvalidation(): void {
     if (e.type === 'mail') void queryClient.invalidateQueries({ queryKey: e.event === 'mail.sync.progress' ? ['mail', 'sync'] : ['mail'] });
     // Hotel PMS's live nudges (`pms.room`, `pms.hk_task`, `pms.request`): the rack and the desk's lists ask again (PMS-ARC-030).
     if (e.type.startsWith('pms.')) void queryClient.invalidateQueries({ queryKey: ['pms', 'live'] });
+    // Social Media Manager (WS-SMM-SRS-001): a post published, failed or held, an approval decided, an inbox message in,
+    // an account's connection changed (`social.post`, `social.inbox`, `social.account`… or a notification of one) —
+    // its screens ask again. Only ids travel; each screen re-reads what the person may see.
+    if (touchesSocialMedia(e)) void queryClient.invalidateQueries({ queryKey: ['social-media'] });
   });
   on('notifications:changed', () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }));
   on('offline:changed', () => void queryClient.invalidateQueries({ queryKey: ['offline'] }));

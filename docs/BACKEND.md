@@ -1086,6 +1086,23 @@ where `message` says what is still to do ("Saved. Apply the configuration to mak
 | Softphone (G-02, G-06) | `softphone` should answer the extension's own server's `ws_uri` and `ice` with time-limited TURN credentials (`{urls, username, credential}`), plus `server: {id, name}`, `ice_expires_at` |
 | Mappings | `GET mappings` → every server's mappings (today they are read per server) |
 
+## Social Media Manager (WS-SMM-SRS-001)
+
+Social Media Manager (`src/modules/social-media`, [SOCIAL_MEDIA.md](SOCIAL_MEDIA.md)) talks to the server's new
+`app/Modules/SocialMedia` at `/api/social-media`, the optional app `worksuite.social-media` (slug `social-media`,
+permission family `social.*`). No server has it yet, so every route is asked through `optional()` and a 404/405/501
+is said plainly ("isn't on this WorkSuite server yet"), never filled in.
+
+- **Contract.** SRS §15 as listed, plus the desktop's proposals (module status, choosing assets after OAuth, queue and
+  best-time preview, evergreen, AI compose and reply, inbox metrics, reading provider apps): the full list with
+  shapes is [SOCIAL_MEDIA.md §2](SOCIAL_MEDIA.md#2-what-the-server-needs-the-contract), the types in `api.ts`.
+- **OAuth.** `POST accounts/connect {network, brand_id, client: "desktop"}` → `{redirect_url}`; the desktop opens it
+  in the system browser and, when the person says they are done, reads `GET accounts/connect/assets`. Tokens never
+  reach the desktop (NFR-04); an account carries `granted` in words, not scopes.
+- **Notifications.** `event` `social.*`, `category` `social_media`, link `/social-media/posts|approvals|inbox/<id>`;
+  a manual reminder may carry `actions: [{copy}]`. Realtime events named `social.*` (ids only) refresh the screens.
+- **Offline.** `GET posts`, `accounts`, `brands` are kept in the encrypted READ_CACHE; nothing is written from it.
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is

@@ -119,6 +119,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'messenger', label: 'Messenger', group: 'communication', icon: 'message-circle', app: 'meta', webPath: '/messenger', surface: 'native', channelOf: 'chat', route: '/chat?channel=messenger', order: 48, keywords: 'facebook page fb messages customers' },
   { id: 'instagram', label: 'Instagram', group: 'communication', icon: 'camera', app: 'meta', webPath: '/instagram', surface: 'native', channelOf: 'chat', route: '/chat?channel=instagram', order: 49, keywords: 'ig direct dm messages customers' },
 
+  // Social Media Manager (WS-SMM-SRS-001): the optional app `worksuite.social-media` — accounts on external networks,
+  // the composer, calendar, queue, approvals, unified inbox and analytics. Not the internal Social stream below (Q-01).
+  { id: 'social-media', label: 'Social Media', group: 'business', icon: 'send', app: 'social-media', perm: 'social.view', webPath: '/social-media', surface: 'native', sidebar: 'business', order: 167, keywords: 'social media facebook instagram linkedin x twitter youtube tiktok threads pinterest google business post schedule publish queue calendar inbox comments approvals campaigns analytics' },
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
   { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170, guest: 'locked', guestLabel: 'Shared workspaces' },

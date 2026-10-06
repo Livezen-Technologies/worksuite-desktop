@@ -1847,6 +1847,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/chat/widget-admin/dashboard', 'chat'],
     ['/api/chat/widget-admin/visitors', 'chat'],
     ['/api/calendar/events', 'calendar'],
+    // Social Media Manager (SMM-DSK-004): the calendar, drafts and the accounts they go to, as last seen, open offline.
+    // Scheduling and publishing stay on the server; nothing here is sent from the cache.
+    ['/api/social-media/posts', 'social-media'],
+    ['/api/social-media/accounts', 'social-media'],
+    ['/api/social-media/brands', 'social-media'],
     ['/api/tasks', 'tasks'],
     ['/api/task-lists', 'tasks'],
     ['/api/crm/leads', 'crm'],
