@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.0 — 2026-10-06
+
+**Added**
+
+- Marketing callback reminders with Call now and Snooze 15 min on the banner, and Marketing in the module list
+
 ## 1.10.0 — 2026-10-06
 
 **Added**

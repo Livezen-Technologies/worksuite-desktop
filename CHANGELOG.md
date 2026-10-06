@@ -5,6 +5,23 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.193 — 2026-10-06
+
+- **Marketing opens in the app (WS-MKT-SRS-001 v1.1).** Marketing is now a native module in a tab of its own
+  instead of the browser, with the same four sections as the web: Audience, Email, Calls and Insights.
+  - **Audience:** dashboard with go-live readiness, contacts (phones masked), the contact page, organisations, lists,
+    segments with a live sample, imports with a file of rejected rows, and consent & suppression with the ledger.
+  - **Email:** campaigns, the three-step editor with a block editor that saves the same HTML as the web, review &
+    send with the pre-send check and test sends, and the report (funnel, links, human opens, deliverability, A/B).
+  - **Calls:** call campaigns, My call queue with the ten wrap-up outcomes and callbacks, and scripts.
+  - **Insights:** reports. Automation is shown as planned, not as working.
+- **Calls from anywhere.** ⌘⇧N / Ctrl+Shift+N claims the next contact while another app is in front (the key is held
+  only while no WorkSuite window is focused). The tray shows the call queue, today's callbacks and campaigns sending
+  now. A callback that falls due raises a notification with **Call now** and **Snooze 15 min**, and a campaign paused
+  by the bounce guard raises one too. Both can be switched off under Settings › Notifications › Marketing.
+- `worksuite://marketing/…` links open the queue, a contact or a campaign.
+- Needs the server's Marketing 2.0.0.
+
 ## 0.2.192 — 2026-10-06
 
 - **Point of Sale's counter, redrawn for touch (pos 1.1.0, settings 1.24.0).** The till now looks and works as in
@@ -63,6 +80,12 @@ person who has to live with the change — what it does, and where it bites.
   the app shows only to super-admins and every screen says the server doesn't offer it yet — see
   `docs/SOCIAL_MEDIA.md` for what the server needs. Publishing always runs on the server, so posts go out with the
   computer off. (social-media 1.0.0, notifications 1.10.0)
+- **Not in this release:** screens for bulk scheduling from a spreadsheet and for recurring posts (the server calls are
+  ready), campaign-level review links (no server route yet), Listening and competitor benchmarks (a later phase), and
+  the mobile screens, which are WorkSuite Mobile's.
+- **How it was checked:** GitHub Actions was not starting jobs for the repository when this merged (#275), so CI did
+  not run. It was verified locally on the merged head instead: typecheck, lint, the module-version check, all 5,312
+  unit tests and the production build.
 
 ## 0.2.190 — 2026-10-06
 

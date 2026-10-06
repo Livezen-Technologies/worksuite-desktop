@@ -1,0 +1,9 @@
+{
+    "module": "marketing",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/marketing-pulse.ts",
+        "electron/services/marketing-reminders.ts",
+        "electron/services/marketing-shortcut.ts"
+    ]
+}
