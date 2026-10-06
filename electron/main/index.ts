@@ -14,6 +14,7 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
+import { isOfficeSignInLink, OFFICE_CLIENT } from '@shared/office-signin';
 import { itemApp, itemRoute, looksLikeItemLink, parseItemLink } from '@shared/item-links';
 import { linkPrefs } from '@shared/link-prefs';
 import { findMailtoInArgv, mailBodiesKept, mailKeptForever, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
@@ -44,6 +45,7 @@ import { devOrigin, hardenSession, isTrustedShellUrl, openExternalSafely, regist
 import { createApiProxy } from '../services/api-proxy';
 import { AuditService } from '../services/audit';
 import { AuthService } from '../services/auth';
+import { DesktopAccountsFile, OfficeSignIn } from '../services/office-signin';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
@@ -1048,6 +1050,34 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (origin) void openExternalSafely(`${origin}${target.path}`);
     } else windows.showMain();
   };
+  // WorkSuite Office on this computer: who this app is signed in as, and its "Continue as" (worksuite-office#6).
+  const desktopAccounts = new DesktopAccountsFile(join(p.userData, 'desktop-accounts.json'), log);
+  const officeSignIn = new OfficeSignIn({
+    account: () => {
+      const origin = auth.getServer()?.origin;
+      const uid = sessionCtl.userId();
+      const user = sessionCtl.current()?.user ?? sessionCtl.get().user;
+      if (!origin || !uid || !user || !sessionCtl.isReady()) return null;
+      return { origin, userId: String(uid), name: user.name, organization: user.organizationName ?? null };
+    },
+    isLocked: () => lock.isLocked(),
+    confirm: async ({ message, detail }) => {
+      const parent = windows.getMain();
+      const opts = { type: 'question' as const, buttons: ['Continue', 'Cancel'], defaultId: 1, cancelId: 1, message, detail };
+      const { response } = parent ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
+      return response === 0;
+    },
+    handoff: (challenge) => http.post('/api/auth/apps/handoff', { client: OFFICE_CLIENT, code_challenge: challenge, code_challenge_method: 'S256' }),
+    // A fixed address with this app's code: nothing from the link that asked (hardening.ts allows https only).
+    open: async (url) => {
+      if (!app.isPackaged && process.env.WS_E2E_EXTERNAL_LOG) await fsp.writeFile(process.env.WS_E2E_EXTERNAL_LOG, `${url}\n`, { flag: 'a' });
+      else await shell.openExternal(url);
+    },
+    showMain: () => void windows.showMain(),
+    toast: (kind, text) => broadcast('toast', { kind, text }),
+    isNotFound: (e) => isDesktopError(e) && e.code === 'NOT_FOUND',
+    log,
+  });
   const handleDeepLink = (url: string): void => {
     // A mailto: link from another app (WorkSuite is the default mail app): a new message, prefilled, for the person to send.
     if (/^mailto:/i.test(url)) {
@@ -1077,6 +1107,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         return;
       }
       void sessionCtl.completePasskey(code, state);
+      return;
+    }
+    // WorkSuite Office asking to use this sign-in (worksuite-office#6). Before the link grammar, where
+    // office/:id would take it for a document, and never logged: it carries a PKCE challenge and state.
+    if (isOfficeSignInLink(url)) {
+      void officeSignIn.handle(url);
       return;
     }
     const meeting = /^worksuite:\/\/meet\/([0-9a-f-]{36})(?:[?#]|$)/i.exec(url);
@@ -1968,6 +2004,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     emitStatus();
   };
 
+  /** Who WorkSuite Office may offer to continue as: the signed-in person, or nobody. */
+  const desktopAccountOf = (ready: boolean) => {
+    const origin = auth.getServer()?.origin;
+    const user = sessionCtl.current()?.user ?? sessionCtl.get().user;
+    if (!ready || !origin || !user) return null;
+    return { server: origin, user: { id: String(user.id), name: user.name, email: user.email ?? '', organization: user.organizationName ?? '' } };
+  };
+
   sessionCtl = new SessionController(db, auth, device, bootstrap, fetchImpl, enterprise, {
     started: (b) => startServices(b),
     stopped: () => stopServices(),
@@ -2019,6 +2063,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       log.info('local data removed', { scope });
     },
     changed: (s) => {
+      desktopAccounts.update(desktopAccountOf(s.stage === 'ready'));
       // Signing in ends guest mode (the window may then offer to move its data here); signing out closes the Local Profile.
       if (s.stage === 'ready' && !wasSignedIn) localSession.signedIn(localAccountKey());
       else if (s.stage !== 'ready' && wasSignedIn) localSession.signedOut();
@@ -2033,6 +2078,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       }
     },
     bootstrapChanged: (b) => {
+      // A new name, picture or organisation for WorkSuite Office's "Continue as".
+      desktopAccounts.update(desktopAccountOf(sessionCtl.isReady()));
       if (b) settings.setPolicy(b.policy);
       if (b) void appearanceSync.pull();
       // Policy or trust may have turned sync on or off.
@@ -2105,6 +2152,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('realtime:resync');
       // What a notification clicked while locked pointed at, now that the workspace is back (#114).
       if (pendingNav.length) setTimeout(() => flushNavigation(), 300);
+      // And WorkSuite Office's "Continue as", if it asked while the app was locked.
+      officeSignIn.unlocked();
     }
   };
 

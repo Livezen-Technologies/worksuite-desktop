@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.4 — 2026-10-06
+
+**Security**
+
+- the renderer's API proxy refuses /api/auth/apps/* — a sign-in handed to WorkSuite Office is the main process's alone (worksuite-office#6).
+
 ## 1.8.3 — 2026-10-05
 
 - File viewer: Couldn't open this file with Retry and Open in its app, 60 s limit (#253)
