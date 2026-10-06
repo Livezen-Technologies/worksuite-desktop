@@ -4,6 +4,8 @@ import { attentionCount, trayState, trayTooltip, type TrayState } from '@shared/
 import { logger } from '../main/log';
 import { liveTitle } from '../services/live-desk';
 import type { SupportPulseFigures } from '../services/support-desk';
+import type { TrayMarketing } from '../services/marketing-pulse';
+import { NEXT_CONTACT_LABEL } from '../services/marketing-shortcut';
 
 const log = logger('tray');
 
@@ -62,6 +64,11 @@ export interface TrayModel {
   support?: SupportPulseFigures | null;
   /** The quick-reply shortcut while it is registered (⌃⌥R), or null. */
   supportShortcut?: string | null;
+  /**
+   * Marketing's counts (WS-MKT-SRS-001 MKT-DSK-01, the D01 tray): my call queue, today's callbacks, the campaigns
+   * sending now. Null for anybody with nothing to show, or before the server answers. Optional for older callers.
+   */
+  marketing?: TrayMarketing | null;
 }
 
 export interface TrayUpdate {
@@ -138,6 +145,26 @@ export interface TrayActions {
   supportQuickReply?: (ticketId: number) => void;
   supportQuickLatest?: () => void;
   supportPresence?: (status: 'available' | 'away') => void;
+  /** Marketing's Next contact (⌘⇧N / Ctrl+Shift+N from other apps): My call queue's workspace, on the next contact. */
+  marketingNextContact?: () => void;
+}
+
+/**
+ * Marketing's lines (MKT-DSK-01, the D01 tray): "Call queue waiting 38" and "Callbacks today 9" open My call queue
+ * and its callbacks, "Sending now 1 · 62%" says how far the campaigns sending now have got, and "Next contact" takes
+ * the next contact — its key shown, not registered here (main holds it while WorkSuite is not in front). The queue's
+ * lines only for somebody with a call queue, all of it only for somebody who has Marketing.
+ */
+export function trayMarketingItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'marketing'>, a: Pick<TrayActions, 'openRoute' | 'marketingNextContact'>): MenuItemConstructorOptions[] {
+  const mk = m.marketing;
+  if (!m.signedIn || !m.apps.includes('marketing') || !mk) return [];
+  const items: MenuItemConstructorOptions[] = [];
+  if (mk.queueWaiting !== null) items.push({ label: `Call queue waiting ${mk.queueWaiting}`, click: () => a.openRoute('/marketing?view=queue') });
+  if (mk.callbacksToday !== null) items.push({ label: `Callbacks today ${mk.callbacksToday}`, click: () => a.openRoute('/marketing?view=queue&tab=callbacks') });
+  if (mk.sending) items.push({ label: `Sending now ${mk.sending.count} · ${mk.sending.pct}%`, enabled: false });
+  if (mk.queueWaiting !== null && a.marketingNextContact) items.push({ label: 'Next contact', accelerator: NEXT_CONTACT_LABEL, registerAccelerator: false, click: a.marketingNextContact });
+  if (items.length) items.push({ type: 'separator' });
+  return items;
 }
 
 /**
@@ -346,6 +373,7 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     items.push({ type: 'separator' });
   }
   items.push(...trayUpdateItems(m.update, a));
+  items.push(...trayMarketingItems(m, a));
   items.push({ label: 'Open WorkSuite', click: a.open });
   if (m.signedIn && m.quickAsk && has('ai')) items.push({ label: 'Quick Ask', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
   if (m.signedIn && m.aiChanges > 0 && has('ai')) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant is waiting' : `${m.aiChanges} changes from the assistant are waiting`, click: a.aiChanges });

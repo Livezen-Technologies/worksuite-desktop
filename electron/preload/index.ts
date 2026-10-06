@@ -485,6 +485,8 @@ const api = {
     openDrawer: call('pos:openDrawer'),
     displayOpen: call('pos:displayOpen'),
     displayClose: call('pos:displayClose'),
+    carts: call('pos:carts'),
+    cartsSave: call('pos:cartsSave'),
   },
   // The Phone (phone-channels.ts): its switch in the page policy, global shortcuts, call notifications.
   phone: {

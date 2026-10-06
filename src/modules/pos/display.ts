@@ -1,4 +1,7 @@
 import { useEffect, useState } from 'react';
+import { createStore } from '../../core/store';
+import { toast } from '../../core/toasts';
+import { closeDisplay, openDisplay } from './api';
 
 /**
  * What the customer display shows, sent from the register over a BroadcastChannel: both are windows of this app, on
@@ -53,4 +56,23 @@ export function useDisplayState(): DisplayState {
     return () => c.close();
   }, []);
   return state;
+}
+
+/** Whether this window opened the customer display (the till bar's menu, the till's devices). */
+export const displayWindow = createStore<{ open: boolean }>({ open: false });
+
+/** Open the customer display (on the second screen when there is one), or close it. */
+export async function toggleCustomerDisplay(): Promise<void> {
+  try {
+    if (displayWindow.get().open) {
+      await closeDisplay();
+      displayWindow.set({ open: false });
+    } else {
+      const r = await openDisplay();
+      displayWindow.set({ open: r.opened });
+      if (!r.secondary) toast('info', 'Only one screen is connected: the customer display opened as a window. Move it to the customer’s screen.');
+    }
+  } catch (e) {
+    toast('error', e instanceof Error ? e.message : 'The customer display could not be opened.');
+  }
 }

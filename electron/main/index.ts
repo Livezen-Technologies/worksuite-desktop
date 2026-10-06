@@ -79,6 +79,9 @@ import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '
 import { QuickAsk } from '../services/quick-ask';
 import { AiService } from '../services/ai';
 import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
+import { MarketingPulse } from '../services/marketing-pulse';
+import { CallbackReminders } from '../services/marketing-reminders';
+import { NextContactKey, nextContactRoute } from '../services/marketing-shortcut';
 import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
@@ -1041,6 +1044,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const w = windows.showMain();
     w.webContents.send('navigate', req);
   };
+  // Marketing's Next contact (MKT-DSK-01): the global key and the tray's line — My call queue's workspace, on a new claim.
+  const openNextContact = (source: 'shortcut' | 'tray'): void => navigate({ route: nextContactRoute(), source });
   const flushNavigation = (): void => {
     if (!sessionCtl.isReady()) return;
     const w = windows.getMain();
@@ -1558,6 +1563,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     supportQuickReply: (id) => openQuickReply(id),
     supportQuickLatest: () => quickLatest(),
     supportPresence: (status) => void supportDesk.setPresence(status),
+    marketingNextContact: () => openNextContact('tray'),
   });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
@@ -1900,6 +1906,43 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     enabled: () => ai.rules().enabled && !lock.isLocked(),
     onCount: (n) => tray.update({ aiChanges: n }),
   });
+  // ── Marketing outside the window (WS-MKT-SRS-001 MKT-DSK-01, MKT-CAL-12) ──
+  // The tray's counts, callback reminders to the minute, and the Next contact key — for somebody with Marketing.
+  const marketingVisible = (): boolean => sessionCtl.isReady() && canOpenApp('marketing', sessionCtl.visibleApps());
+  const marketingPulse: MarketingPulse = new MarketingPulse({
+    get: (path, query) => http.get(path, { query }),
+    allowed: marketingVisible,
+    onChange: (m) => {
+      tray.update({ marketing: m });
+      // Whether the person has a call queue at all decides whether the key is worth holding.
+      nextContactKey.sync();
+    },
+  });
+  // ⌘⇧N / Ctrl+Shift+N from other apps (the D01 design). In WorkSuite the keys are "Move tab to new window", so — like
+  // the Live keys — held only while no WorkSuite window is in front, and given back on focus, lock, sign-out and quit.
+  const nextContactKey = new NextContactKey({
+    register: (acc, fn) => globalShortcut.register(acc, fn),
+    unregister: (acc) => globalShortcut.unregister(acc),
+    state: () => {
+      const pulse = marketingPulse.get();
+      return {
+        signedIn: sessionCtl.isReady(),
+        locked: lock.isLocked(),
+        marketing: marketingVisible(),
+        agent: pulse ? pulse.queue !== null : null,
+        focused: BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused()),
+      };
+    },
+    press: () => openNextContact('shortcut'),
+  });
+  app.on('browser-window-focus', () => nextContactKey.sync());
+  app.on('browser-window-blur', () => setImmediate(() => nextContactKey.sync()));
+  const callbackReminders = new CallbackReminders({
+    get: (path, query) => http.get(path, { query }),
+    notify: (n) => notifications.notify(n),
+    allowed: marketingVisible,
+  });
+  notifications.snoozeCallback = (c) => callbackReminders.snooze(c);
   const syncQuickAsk = (): void => {
     quickAsk.sync();
     tray.update({ quickAsk: quickAsk.shortcut() });
@@ -1931,6 +1974,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/chat/widget-admin/dashboard', 'chat'],
     ['/api/chat/widget-admin/visitors', 'chat'],
     ['/api/calendar/events', 'calendar'],
+    // Social Media Manager (SMM-DSK-004): the calendar, drafts and the accounts they go to, as last seen, open offline.
+    // Scheduling and publishing stay on the server; nothing here is sent from the cache.
+    ['/api/social-media/posts', 'social-media'],
+    ['/api/social-media/accounts', 'social-media'],
+    ['/api/social-media/brands', 'social-media'],
     ['/api/tasks', 'tasks'],
     ['/api/task-lists', 'tasks'],
     ['/api/crm/leads', 'crm'],
@@ -1998,6 +2046,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const visible = visibleAppIds(b);
     tray.update({ apps: [...visible] });
     rebuildMenu(visible);
+    // Marketing given or taken away (or another organisation): its counts, reminders and key follow.
+    marketingPulse.poke();
+    callbackReminders.poke();
+    nextContactKey.sync();
     if (b) {
       const closed = windows.closeWhere((route) => !canOpenRoute(route, visible));
       if (closed) log.info('windows closed: app no longer available', { closed });
@@ -2034,6 +2086,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       syncQuickAsk();
       aiPending.start();
     });
+    marketingPulse.start();
+    callbackReminders.start();
     device.start();
     device.extras = () => {
       const c = transfers.activeCounts();
@@ -2083,6 +2137,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     quickAsk.release();
     ai.forget();
     aiPending.stop();
+    marketingPulse.stop();
+    callbackReminders.stop();
+    nextContactKey.release();
     windows.hideQuickAsk();
     tray.update({ quickAsk: null });
     // Torn-off windows show the person's data: they close, and come back at their next sign-in.
@@ -2262,6 +2319,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     syncQuickAsk();
     // Locked, an urgent ticket's card comes down; unlocked, the desk is looked at again.
     void supportUrgent.check();
+    nextContactKey.sync();
     if (s.locked) {
       windows.hideQuickAsk();
       if (!settings.effective().lockedShowCallerDetails) for (const win of BrowserWindow.getAllWindows()) {
@@ -2768,6 +2826,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     atRisk.clear();
     quickAsk.release();
     if (supportKeyHeld) globalShortcut.unregister(SUPPORT_QUICK_SHORTCUT);
+    nextContactKey.release();
+    marketingPulse.stop();
+    callbackReminders.stop();
     void askHelper?.then((h) => h?.stop());
     // Windows' places are saved while the database is open; timers that read it stop first.
     windows.saveAllAndStop();
@@ -2814,6 +2875,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void eventDesk.sync();
     pos.sync();
     void restaurant.sync.sync();
+    // Callback reminders set again from the clock as it is now; the tray's counts asked again.
+    callbackReminders.resume();
+    marketingPulse.poke();
   });
   screen.on('display-removed', () => windows.refit());
   screen.on('display-metrics-changed', () => windows.refit());

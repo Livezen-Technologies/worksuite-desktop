@@ -1,28 +1,59 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { PosProduct } from '@shared/pos';
-import { Icon } from '../../components/Icon';
-import { Button, IconButton, Modal, TextField, cx } from '../../components/ui';
+import { Menu, type MenuSection } from '../../components/Menu';
+import { Button, TextField } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { customerOf, findInCatalogue, lookupProduct, PK, refreshCatalogue, useCartPrice, useCatalogue } from './api';
+import { customerOf, findInCatalogue, lookupProduct, openDrawer, PK, refreshCatalogue, useCartPrice, useCatalogue, useSales } from './api';
 import { useBarcodeScanner } from './barcode';
-import { cartActions, discountPct, itemCount, useCart } from './cart';
+import CartPane from './CartPane';
+import CashMove from './CashMove';
+import { activeSale, cartActions, discountPct, MAX_OPEN, useCart, useCarts, type CartState } from './cart';
+import CategoryPicker from './CategoryPicker';
 import { publish } from './display';
 import { useT } from './i18n';
-import { MoneyLine, Note, useTillContext } from './parts';
-import { formatMoney } from './pricing';
+import { BigAmount, Keypad } from './Keypad';
+import { press } from './numpad';
+import { HeldDialog, HoldDialog, OpenSalesDialog } from './OpenSales';
+import { clampPage, GRID_PAGE, LIST_PAGE, pushRecent } from './paging';
+import { Note, PosButton, PosDialog, useTillContext } from './parts';
+import { estimateCart } from './pricing';
+import ProductGrid, { type GridView, type QuickAction } from './ProductGrid';
+import ReturnDialog from './ReturnDialog';
 import Tender from './TenderPanel';
 
 /**
- * The register: the products (the catalogue copy, searched as you type, by category), a scanner's barcodes wherever
- * the keyboard's focus is, and the cart — quantities, the customer, the cashier's discount where they may give one —
- * with its price: WorkSuite's whenever it answers, the catalogue's preview meanwhile and offline (marked so). Pay opens
- * the tender. The customer display follows the cart.
+ * The counter: the products (the catalogue copy, searched as you type, by category, fifteen a page), a scanner's
+ * barcodes wherever the keyboard's focus is, and the sale on screen — one of up to five open on this till, as tabs —
+ * with its customer, quantities, the cashier's discount where they may give one, and its price: WorkSuite's whenever
+ * it answers, the catalogue's preview meanwhile and offline (marked so). Pay (F12) opens the payment, Cash exact
+ * takes the total in cash at once. F2 goes to the search, Ctrl+N opens a sale, Ctrl+1…5 switch between them. The
+ * customer display follows the sale on screen.
  *
  * No drawer, no sale (WorkSuite's rule on every door, `drawer_closed`): with no register open at this till nothing can
  * be put in the cart — a pick or a scan says to open the register, and the cart asks for it with the way there.
  */
-const SHOWN = 240;
+const RECENT_KEY = 'pos.recentCategories';
+const VIEW_KEY = 'pos.productView';
+
+function stored<T>(key: string, fallback: T): T {
+  try {
+    const v = localStorage.getItem(key);
+    return v ? (JSON.parse(v) as T) : fallback;
+  } catch {
+    return fallback;
+  }
+}
+
+function keep(key: string, v: unknown): void {
+  try {
+    localStorage.setItem(key, JSON.stringify(v));
+  } catch {
+    /* A private window or blocked storage: the counter just does not remember it. */
+  }
+}
+
+type Dialog = 'customer' | 'discount' | 'category' | 'open' | 'held' | 'hold' | 'cash' | 'return' | null;
 
 export default function Register({ active }: { active: boolean }) {
   const t = useT();
@@ -30,13 +61,20 @@ export default function Register({ active }: { active: boolean }) {
   const qc = useQueryClient();
   const catalogue = useCatalogue();
   const cart = useCart();
+  const all = useCarts();
   const [q, setQ] = useState('');
   const [category, setCategory] = useState<string | null>(null);
+  const [recent, setRecent] = useState<string[]>(() => stored<string[]>(RECENT_KEY, []));
+  const [view, setView] = useState<GridView>(() => (stored<string>(VIEW_KEY, 'grid') === 'list' ? 'list' : 'grid'));
+  // The page shown, for the search, category and view it was turned in: another of them starts at the first page.
+  const [paged, setPaged] = useState<{ where: string; page: number }>({ where: '', page: 0 });
   const [extras, setExtras] = useState<Map<number, PosProduct>>(new Map());
-  const [paying, setPaying] = useState(false);
-  const [customerOpen, setCustomerOpen] = useState(false);
+  const [paying, setPaying] = useState<'pay' | 'exact' | null>(null);
+  const [dialog, setDialog] = useState<Dialog>(null);
+  const [more, setMore] = useState<HTMLButtonElement | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const search = useRef<HTMLInputElement>(null);
+  const moreRef = useRef<HTMLButtonElement | null>(null);
 
   const products = useMemo(() => catalogue.data?.products ?? [], [catalogue.data]);
   const byId = useMemo(() => {
@@ -49,6 +87,19 @@ export default function Register({ active }: { active: boolean }) {
   const org = till.company?.id ?? null;
   const price = useCartPrice(cart.lines, pct, byId, currency, till.discount.ceiling, till.caps, !till.offline, org);
   const session = till.session;
+  const since = useMemo(() => {
+    const d = new Date();
+    d.setHours(0, 0, 0, 0);
+    return d.toISOString();
+  }, []);
+  const today = useSales({ since }, dialog === 'category');
+
+  /** What a sale not on screen comes to: the catalogue's preview. */
+  const totalOf = useCallback(
+    (c: CartState) => (c.lines.length ? estimateCart(c.lines, byId, discountPct(c, till.discount.allowed, till.discount.ceiling), till.discount.ceiling, currency).cart.total : 0),
+    [byId, till.discount.allowed, till.discount.ceiling, currency],
+  );
+
   // No drawer, no sale: nothing goes in the cart until a register is open here.
   const add = useCallback(
     (id: number): boolean => {
@@ -114,9 +165,9 @@ export default function Register({ active }: { active: boolean }) {
     },
     [byId, till.offline, till.caps, org, session, add, t],
   );
-  useBarcodeScanner(active && !paying && !customerOpen, (code) => void onScan(code));
+  useBarcodeScanner(active && !paying && !dialog, (code) => void onScan(code));
 
-  // The customer display follows the cart.
+  // The customer display follows the sale on screen.
   const shop = till.company?.name ?? null;
   useEffect(() => {
     if (paying) return;
@@ -129,188 +180,245 @@ export default function Register({ active }: { active: boolean }) {
     const needle = q.trim().toLowerCase();
     return products.filter((p) => (!category || p.category === category) && (!needle || p.name.toLowerCase().includes(needle) || p.code?.toLowerCase().includes(needle) || p.barcode?.includes(needle)));
   }, [products, q, category]);
+  const size = view === 'grid' ? GRID_PAGE : LIST_PAGE;
+  const where = JSON.stringify([q, category, view]);
+  const shownPage = clampPage(paged.where === where ? paged.page : 0, filtered.length, size);
+  const setPage = useCallback((p: number | ((p: number) => number)) => setPaged((x) => ({ where, page: Math.max(0, typeof p === 'function' ? p(x.where === where ? x.page : 0) : p) })), [where]);
+
+  const pickCategory = (c: string | null) => {
+    setCategory(c);
+    if (c) {
+      const next = pushRecent(recent, c);
+      setRecent(next);
+      keep(RECENT_KEY, next);
+    }
+    setDialog(null);
+  };
+  const recentShown = useMemo(() => recent.filter((c) => catalogue.data?.categories.includes(c) || products.some((p) => p.category === c)), [recent, catalogue.data, products]);
 
   const canSell = !!till.company?.can.sell;
+  const payable = !!session && canSell && !!price.cart && !price.error && !price.pending && cart.lines.length > 0;
+
+  // ?new=1 is the shell's "New" (⌘N / Ctrl+N from the menu): another sale.
+  const newAsked = till.params.get('new') === '1';
+  useEffect(() => {
+    if (!newAsked) return;
+    if (!cartActions.newSale()) toast('warning', t('pos.open.full', { n: MAX_OPEN }));
+    till.go('register');
+  }, [newAsked, till, t]);
+
+  // The counter's keys, while it is the tab in front and nothing is open over it.
+  useEffect(() => {
+    if (!active || paying || dialog) return;
+    const onKey = (e: KeyboardEvent) => {
+      const mod = e.ctrlKey || e.metaKey;
+      if (e.key === 'F2') {
+        e.preventDefault();
+        search.current?.focus();
+        search.current?.select();
+      } else if (e.key === 'F12') {
+        e.preventDefault();
+        if (payable) setPaying('pay');
+      } else if (mod && !e.shiftKey && !e.altKey && (e.key === 'n' || e.key === 'N')) {
+        e.preventDefault();
+        if (!cartActions.newSale()) toast('warning', t('pos.open.full', { n: MAX_OPEN }));
+      } else if (mod && !e.shiftKey && !e.altKey && /^[1-5]$/.test(e.key)) {
+        e.preventDefault();
+        cartActions.switchIndex(Number(e.key) - 1);
+      } else if (e.key === 'PageDown' && e.target === document.body) {
+        setPage((p) => p + 1);
+      } else if (e.key === 'PageUp' && e.target === document.body) {
+        setPage((p) => Math.max(0, p - 1));
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, paying, dialog, payable, t, setPage]);
+
+  const sale = activeSale(all);
+  const actions: QuickAction[] = [
+    { id: 'hold', label: t('pos.hold'), icon: 'pause', disabled: !cart.lines.length, onClick: () => setDialog('hold') },
+    { id: 'recall', label: all.held.length ? t('pos.recallN', { n: all.held.length }) : t('pos.recall'), icon: 'history', onClick: () => setDialog('held') },
+    { id: 'return', label: t('pos.return'), icon: 'undo', onClick: () => setDialog('return') },
+    { id: 'discount', label: t('pos.discountShort'), icon: 'tag', disabled: !till.discount.allowed || !cart.lines.length, title: till.discount.allowed ? undefined : t('pos.noDiscountRight'), onClick: () => setDialog('discount') },
+    { id: 'customer', label: t('pos.customer'), icon: 'user', onClick: () => setDialog('customer') },
+    { id: 'cash', label: t('pos.cashInOut'), icon: 'banknote', title: session ? undefined : t('pos.noDrawerShort'), onClick: () => (session ? setDialog('cash') : till.go('shift')) },
+    { id: 'drawer', label: t('pos.openDrawer'), icon: 'box', onClick: () => void openDrawer().then((o) => toast(o.ok ? 'success' : 'warning', o.message), (e: unknown) => toast('error', e instanceof Error ? e.message : 'The drawer did not open.')) },
+    {
+      id: 'more',
+      label: t('pos.more'),
+      icon: 'more',
+      onClick: (el) => {
+        moreRef.current = el;
+        setMore(el);
+      },
+    },
+  ];
+  const moreSections: MenuSection[] = [
+    {
+      id: 'sales',
+      items: [
+        { id: 'new', label: t('pos.newSale'), icon: 'plus', shortcut: 'Ctrl+N', onSelect: () => void (cartActions.newSale() || toast('warning', t('pos.open.full', { n: MAX_OPEN }))) },
+        { id: 'open', label: t('pos.open.all'), icon: 'grid', onSelect: () => setDialog('open') },
+        { id: 'clear', label: t('pos.clearSale'), icon: 'trash', danger: true, disabled: !cart.lines.length && !cart.customer, onSelect: () => cartActions.clear() },
+      ],
+    },
+    {
+      id: 'till',
+      items: [
+        { id: 'refresh', label: t('pos.refreshCatalogue'), icon: 'refresh', disabled: till.offline || refreshing, onSelect: () => void refresh() },
+        { id: 'history', label: t('pos.sales'), icon: 'receipt', onSelect: () => till.go('sales') },
+        { id: 'shift', label: t('pos.shift'), icon: 'banknote', onSelect: () => till.go('shift') },
+      ],
+    },
+  ];
+
+  const empty = !catalogue.data ? (
+    <div className="flex-1">
+      <Note action={<Button size="sm" loading={refreshing} disabled={till.offline} onClick={() => void refresh()}>{t('pos.refreshCatalogue')}</Button>}>{t('pos.noCatalogue')}</Note>
+    </div>
+  ) : filtered.length === 0 ? (
+    <div className="flex-1">
+      <Note>{t('pos.noProducts')}</Note>
+    </div>
+  ) : null;
 
   return (
-    <div className="flex h-full min-h-[560px]">
-      <section className="flex min-w-0 flex-1 flex-col gap-3 p-4" aria-label="Products">
-        <div className="flex items-center gap-2">
-          <label className="relative min-w-0 flex-1">
-            <Icon name="search" size={15} className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-ink-3" />
-            <input
-              ref={search}
-              value={q}
-              onChange={(e) => setQ(e.target.value)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' && q.trim()) {
-                  const exact = findInCatalogue(products, q);
-                  const only = filtered.length === 1 ? filtered[0] : null;
-                  const hit = exact ?? only;
-                  if (hit) {
-                    if (add(hit.id)) setQ('');
-                  } else void onScan(q.trim()).then(() => setQ(''));
-                }
-              }}
-              placeholder={t('pos.search')}
-              aria-label={t('pos.search')}
-              className="h-10 w-full rounded-[10px] border border-line bg-surface pr-3 pl-9 text-[14px] text-ink outline-none focus:border-primary"
-            />
-          </label>
-          <IconButton icon="refresh" label={t('pos.refreshCatalogue')} disabled={till.offline || refreshing} onClick={() => void refresh()} />
-        </div>
-        {catalogue.data?.categories.length ? (
-          <div className="flex flex-wrap gap-1.5" role="radiogroup" aria-label="Category">
-            {[null, ...catalogue.data.categories].map((c) => (
-              <button
-                key={c ?? '*'}
-                type="button"
-                role="radio"
-                aria-checked={category === c}
-                onClick={() => setCategory(c)}
-                className={cx('h-7 rounded-full px-3 text-[12px] font-semibold', category === c ? 'bg-primary text-white' : 'border border-line bg-surface text-ink hover:bg-subtle')}
-              >
-                {c ?? t('pos.all')}
-              </button>
-            ))}
-          </div>
-        ) : null}
-        {!catalogue.data ? (
-          <Note action={<Button size="sm" loading={refreshing} disabled={till.offline} onClick={() => void refresh()}>{t('pos.refreshCatalogue')}</Button>}>{t('pos.noCatalogue')}</Note>
-        ) : filtered.length === 0 ? (
-          <Note>{t('pos.noProducts')}</Note>
-        ) : (
-          <div className="grid min-h-0 flex-1 auto-rows-min grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2 overflow-y-auto pb-2 scroll-thin">
-            {filtered.slice(0, SHOWN).map((p) => (
-              <button
-                key={p.id}
-                type="button"
-                onClick={() => add(p.id)}
-                aria-disabled={!session || undefined}
-                className="flex min-h-[78px] flex-col items-start justify-between gap-1 rounded-[10px] border border-line bg-surface p-2.5 text-left transition-colors hover:border-primary/40 hover:bg-subtle"
-              >
-                <span className="line-clamp-2 text-[13px] leading-tight font-semibold text-ink">{p.name}</span>
-                <span className="flex w-full items-baseline justify-between gap-1 text-[12px]">
-                  <span className="truncate text-ink-3">{p.code ?? ''}</span>
-                  <span className="font-bold text-ink tabular-nums">{formatMoney(p.price)}</span>
-                </span>
-              </button>
-            ))}
-            {filtered.length > SHOWN ? <div className="col-span-full py-2 text-center text-[12px] text-ink-3">{filtered.length - SHOWN} more — search to narrow.</div> : null}
-          </div>
-        )}
-      </section>
+    <div className="flex h-full min-h-[560px] bg-pos-ground text-ink">
+      <ProductGrid
+        search={search}
+        q={q}
+        onQ={setQ}
+        onSearchKey={(e) => {
+          if (e.key === 'Enter' && q.trim()) {
+            const exact = findInCatalogue(products, q);
+            const only = filtered.length === 1 ? filtered[0] : null;
+            const hit = exact ?? only;
+            if (hit) {
+              if (add(hit.id)) setQ('');
+            } else void onScan(q.trim()).then(() => setQ(''));
+          } else if (e.key === 'Escape' && (q || category)) {
+            e.stopPropagation();
+            setQ('');
+            setCategory(null);
+          }
+        }}
+        category={category}
+        onCategory={pickCategory}
+        onPickCategory={() => setDialog('category')}
+        recent={recentShown}
+        view={view}
+        onView={(v) => {
+          setView(v);
+          keep(VIEW_KEY, v);
+        }}
+        products={filtered}
+        total={products.length}
+        page={shownPage}
+        onPage={(p) => setPage(clampPage(p, filtered.length, size))}
+        onAdd={(p) => {
+          if (!extras.has(p.id) && !products.some((x) => x.id === p.id)) setExtras((m) => new Map(m).set(p.id, p));
+          add(p.id);
+        }}
+        disabled={!session}
+        actions={actions}
+        empty={empty}
+      />
+      <CartPane
+        price={price}
+        byId={byId}
+        currency={currency}
+        totalOf={totalOf}
+        canSell={canSell}
+        onCustomer={() => setDialog('customer')}
+        onPay={() => setPaying('pay')}
+        onCashExact={() => setPaying('exact')}
+        onOpenSales={() => setDialog('open')}
+      />
 
-      <aside className="flex w-[380px] shrink-0 flex-col border-l border-line bg-surface" aria-label={t('pos.cart')}>
-        <header className="flex items-center justify-between px-4 pt-3.5 pb-2">
-          <h2 className="text-[15px] font-bold text-ink">
-            {t('pos.cart')} {cart.lines.length ? <span className="text-ink-3">· {itemCount(cart)}</span> : null}
-          </h2>
-          {cart.lines.length ? (
-            <Button size="sm" variant="ghost" onClick={() => cartActions.clear()}>
-              {t('pos.clear')}
-            </Button>
-          ) : null}
-        </header>
-        <div className="min-h-0 flex-1 overflow-y-auto px-4 scroll-thin">
-          {cart.lines.length === 0 && !session ? (
-            <div className="flex flex-col items-center gap-3 py-8 text-center" role="status">
-              <Icon name="banknote" size={28} className="text-warning" />
-              <p className="text-[13.5px] font-semibold text-ink">{t('pos.noDrawer')}</p>
-              <Button variant="primary" onClick={() => till.go('shift')}>
-                {t('pos.openShift')}
-              </Button>
-            </div>
-          ) : cart.lines.length === 0 ? (
-            <p className="py-8 text-center text-[13px] text-ink-3">{t('pos.cartEmpty')}</p>
-          ) : null}
-          <ul className="flex flex-col divide-y divide-line">
-            {cart.lines.map((l) => {
-              const p = byId.get(l.product_id);
-              const priced = price.cart?.lines.find((x) => x.product_id === l.product_id);
-              return (
-                <li key={l.product_id} className="flex items-center gap-2 py-2">
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13px] font-semibold text-ink">{p?.name ?? `#${l.product_id}`}</div>
-                    <div className="text-[12px] text-ink-3 tabular-nums">
-                      {formatMoney(priced?.unit_price ?? p?.price)}
-                      {priced?.discount_pct ? ` −${priced.discount_pct}%` : ''}
-                    </div>
-                  </div>
-                  <IconButton icon="minus" label={`One fewer ${p?.name ?? ''}`} size={14} onClick={() => cartActions.qty(l.product_id, l.quantity - 1)} />
-                  <input
-                    aria-label={`${t('pos.qty')} ${p?.name ?? ''}`}
-                    inputMode="decimal"
-                    value={String(l.quantity)}
-                    onChange={(e) => cartActions.qty(l.product_id, Number(e.target.value.replace(/[^\d.]/g, '')) || 0)}
-                    className="h-7 w-12 rounded-[6px] border border-line bg-surface text-center text-[13px] tabular-nums outline-none focus:border-primary"
-                  />
-                  <IconButton icon="plus" label={`One more ${p?.name ?? ''}`} size={14} onClick={() => cartActions.add(l.product_id)} />
-                  <span className="w-20 text-right text-[13px] font-semibold tabular-nums">{formatMoney(priced?.total)}</span>
-                  <IconButton icon="trash" label={t('pos.remove')} size={14} onClick={() => cartActions.remove(l.product_id)} />
-                </li>
-              );
-            })}
-          </ul>
-        </div>
-        <div className="flex flex-col gap-2 border-t border-line px-4 py-3">
-          <button type="button" onClick={() => setCustomerOpen(true)} className="flex items-center gap-2 rounded-[8px] px-1 py-1 text-left text-[13px] text-ink-2 hover:bg-subtle">
-            <Icon name="user" size={15} />
-            <span className="flex-1 truncate">{cart.customer ? [cart.customer.name, cart.customer.phone, cart.customer.email].filter(Boolean).join(' · ') : t('pos.walkIn')}</span>
-            <span className="text-[12px] font-semibold text-primary">{cart.customer ? 'Change' : t('pos.addCustomer')}</span>
-          </button>
-          {till.discount.allowed ? (
-            <label className="flex items-center justify-between gap-2 text-[13px] text-ink-2">
-              <span>
-                {t('pos.discount')}
-                {till.discount.ceiling ? <span className="text-ink-3"> (max {till.discount.ceiling}%)</span> : null}
-              </span>
-              <input inputMode="decimal" value={cart.discount} onChange={(e) => cartActions.discount(e.target.value, till.discount.ceiling)} aria-label={t('pos.discount')} className="h-7 w-20 rounded-[6px] border border-line bg-surface px-2 text-right tabular-nums outline-none focus:border-primary" />
-            </label>
-          ) : null}
-          {price.cart ? (
-            <div className="flex flex-col gap-0.5">
-              <MoneyLine label={t('pos.subtotal')} value={price.cart.subtotal} />
-              {price.cart.discount ? <MoneyLine label={t('pos.discount')} value={-price.cart.discount} /> : null}
-              <MoneyLine label={t('pos.tax')} value={price.cart.tax} />
-              <MoneyLine label={t('pos.total')} value={price.cart.total} currency={currency} strong />
-              <span className={cx('text-[11.5px]', price.source === 'server' ? 'text-success' : 'text-ink-3')}>
-                {price.pending ? t('pos.pricing') : price.source === 'server' ? t('pos.priceServer') : t('pos.priceEstimate')}
-              </span>
-            </div>
-          ) : null}
-          {price.error ? <Note tone="danger">{price.error}</Note> : null}
-          {!session && cart.lines.length ? (
-            <Note tone="warning" action={<Button size="sm" onClick={() => till.go('shift')}>{t('pos.openShift')}</Button>}>
-              {t('pos.noDrawer')}
-            </Note>
-          ) : !canSell ? (
-            <Note tone="warning">You may not sell at this till (pos.sale.create).</Note>
-          ) : null}
-          <Button variant="primary" size="lg" icon="banknote" disabled={!session || !canSell || !price.cart || !!price.error || price.pending || cart.lines.length === 0} onClick={() => setPaying(true)}>
-            {t('pos.pay')} {price.cart ? formatMoney(price.cart.total, currency) : ''}
-          </Button>
-        </div>
-      </aside>
-
+      {more ? <Menu sections={moreSections} label={t('pos.more')} anchor={moreRef} prefer="top" align="end" onClose={() => setMore(null)} /> : null}
       {paying && price.cart && session ? (
         <Tender
+          key={sale.id}
           cart={price.cart}
           source={price.source}
           currency={currency}
           session={session}
           customer={customerOf(cart.customer)}
           catalogueVersion={catalogue.data?.version ?? null}
-          onClose={() => setPaying(false)}
+          exact={paying === 'exact'}
+          onClose={() => setPaying(null)}
           onDone={() => {
-            cartActions.clear();
-            setPaying(false);
+            cartActions.paid();
+            setPaying(null);
             search.current?.focus();
           }}
         />
       ) : null}
-      {customerOpen ? <CustomerForm onClose={() => setCustomerOpen(false)} /> : null}
+      {dialog === 'return' ? <ReturnDialog onClose={() => setDialog(null)} /> : null}
+      {dialog === 'cash' && session ? <CashMove session={session} onClose={() => setDialog(null)} /> : null}
+      {dialog === 'customer' ? <CustomerForm onClose={() => setDialog(null)} /> : null}
+      {dialog === 'discount' ? <DiscountDialog onClose={() => setDialog(null)} /> : null}
+      {dialog === 'hold' ? <HoldDialog id={sale.id} onClose={() => setDialog(null)} /> : null}
+      {dialog === 'held' ? <HeldDialog totalOf={totalOf} onClose={() => setDialog(null)} /> : null}
+      {dialog === 'open' ? <OpenSalesDialog totalOf={totalOf} onClose={() => setDialog(null)} /> : null}
+      {dialog === 'category' && catalogue.data ? (
+        <CategoryPicker
+          categories={catalogue.data.categories}
+          products={products}
+          sales={today.data ?? []}
+          current={category}
+          onPick={pickCategory}
+          onAdd={(p) => add(p.id)}
+          onClose={() => setDialog(null)}
+        />
+      ) : null}
     </div>
+  );
+}
+
+/** The cashier's discount on the sale on screen, in percent, typed on the pad — never past their ceiling. */
+function DiscountDialog({ onClose }: { onClose: () => void }) {
+  const t = useT();
+  const till = useTillContext();
+  const cart = useCart();
+  const [typed, setTyped] = useState(cart.discount);
+  const ceiling = till.discount.ceiling;
+  const apply = () => {
+    cartActions.discount(typed, ceiling);
+    onClose();
+  };
+  return (
+    <PosDialog label={t('pos.discountTitle')} onClose={onClose} width={640} className="gap-4 p-7">
+      <div>
+        <h2 className="text-[20px] font-extrabold">{t('pos.discountTitle')}</h2>
+        <p className="text-[13px] text-ink-3">{ceiling ? t('pos.discountMax', { n: ceiling }) : t('pos.discountHint')}</p>
+      </div>
+      <div className="flex gap-4">
+        <div className="flex flex-1 flex-col gap-3">
+          <BigAmount autoFocus value={typed} onChange={(v) => setTyped(v)} rules={{ decimals: 2, digits: 3 }} aria-label={t('pos.discount')} placeholder="0" />
+          <div className="flex flex-wrap gap-2">
+            {[5, 10, 15, 20].filter((n) => !ceiling || n <= ceiling).map((n) => (
+              <PosButton key={n} className="h-touch-md flex-1 text-[16px]" onClick={() => setTyped(String(n))}>
+                {n}%
+              </PosButton>
+            ))}
+          </div>
+          <PosButton tone="danger" className="h-touch-md" onClick={() => setTyped('')}>
+            {t('pos.discountNone')}
+          </PosButton>
+        </div>
+        <Keypad className="w-[260px]" keys={['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', 'back']} onKey={(k) => setTyped((v) => press(v, k, { decimals: 2, digits: 3 }))} />
+      </div>
+      <div className="flex gap-2.5">
+        <PosButton className="h-touch-lg w-40" onClick={onClose}>
+          {t('pos.cancel')}
+        </PosButton>
+        <PosButton tone="primary" className="h-touch-lg flex-1 text-[16px]" onClick={apply}>
+          {t('pos.discountApply', { n: Math.min(Number(typed) || 0, ceiling ?? 100) })}
+        </PosButton>
+      </div>
+    </PosDialog>
   );
 }
 
@@ -324,38 +432,36 @@ function CustomerForm({ onClose }: { onClose: () => void }) {
   const badEmail = !!email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
   const needsName = !!phone.trim() && !name.trim() && !email.trim();
   return (
-    <Modal
-      title={t('pos.customer')}
-      onClose={onClose}
-      footer={
-        <>
-          <Button
-            onClick={() => {
-              cartActions.customer(null);
-              onClose();
-            }}
-          >
-            {t('pos.walkIn')}
-          </Button>
-          <Button
-            variant="primary"
-            disabled={badEmail || needsName}
-            onClick={() => {
-              cartActions.customer({ name: name.slice(0, 150), phone: phone.slice(0, 40), email: email.slice(0, 150) });
-              onClose();
-            }}
-          >
-            {t('pos.addCustomer')}
-          </Button>
-        </>
-      }
-    >
+    <PosDialog label={t('pos.customer')} onClose={onClose} width={560} className="gap-4 p-7">
+      <h2 className="text-[20px] font-extrabold">{t('pos.customer')}</h2>
       <div className="flex flex-col gap-3">
         <TextField label="Name" value={name} onChange={(e) => setName(e.target.value)} autoFocus maxLength={150} />
         <TextField label="Phone" value={phone} onChange={(e) => setPhone(e.target.value)} maxLength={40} inputMode="tel" error={needsName ? 'Give their name or e-mail address with the phone number.' : null} />
         <TextField label="E-mail" value={email} onChange={(e) => setEmail(e.target.value)} maxLength={150} inputMode="email" error={badEmail ? 'That is not an e-mail address.' : null} />
         <p className="text-[12px] text-ink-3">WorkSuite matches the customer by e-mail, then by name; a new one is added to Sales & Orders.</p>
       </div>
-    </Modal>
+      <div className="flex gap-2.5">
+        <PosButton
+          className="h-touch-lg w-48"
+          onClick={() => {
+            cartActions.customer(null);
+            onClose();
+          }}
+        >
+          {t('pos.walkIn')}
+        </PosButton>
+        <PosButton
+          tone="primary"
+          className="h-touch-lg flex-1 text-[16px]"
+          disabled={badEmail || needsName}
+          onClick={() => {
+            cartActions.customer({ name: name.slice(0, 150), phone: phone.slice(0, 40), email: email.slice(0, 150) });
+            onClose();
+          }}
+        >
+          {t('pos.addCustomer')}
+        </PosButton>
+      </div>
+    </PosDialog>
   );
 }

@@ -5,6 +5,119 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.194 — 2026-10-06
+
+- **Support opens in the app (WS-SUPPORT-SRS-001).** The support desk is now a native module instead of the
+  browser. It needs the server's Support 1.1.0; on an older server it falls back to the old ticket routes for the
+  list, a ticket, replies, status and assignment.
+  - **Inbox:** three panes — views with live counts and saved views, a fast ticket list, and a reading pane with an
+    inline reply. j/k, Enter, R, N and E work as on the web. Your availability is Chat's Online/Away.
+  - **A ticket in its own tab:** the conversation, activity, linked records and files. Every change is sent with the
+    version you saw; if somebody changed it first you see both and choose. SLA timers, the requester's other tickets,
+    who else is viewing, RustDesk Connect, and a composer that takes dragged files and pasted screenshots. Drafts are
+    kept on this computer and on the server, so they follow you to the browser.
+  - **Notifications:** an assignment, a requester's reply, a mention or an SLA warning arrives as a banner with Open,
+    Take later, Snooze or a reply typed into the banner. The rail, Dock and tray show the desk's unread count. Each
+    kind can be tuned under Settings › Notifications › Support.
+  - **Quick reply (⌃⌥R / Ctrl+Alt+R from any app):** a small always-on-top window for the latest or a chosen ticket.
+  - **Tray:** my open tickets, due today, at risk and the next SLAs due, with a red dot while one of mine has breached.
+  - **Urgent tickets:** a new urgent, unassigned ticket rings once with a countdown, Take it, Assign and Dismiss.
+  - **Website chat → ticket:** a native sheet from the chat, raised once and appended to the visitor's open ticket
+    when there is one.
+  - **⌘K:** finds tickets and knowledge-base articles, runs the ticket's actions, and ⌘⇧C copies a ticket's link.
+  - **⌘J:** the knowledge-base and AI panel — articles to insert as a link or text, a thread summary, a suggested
+    reply, rewrite and translate, and suggested category and priority. AI only ever suggests; nothing is sent until
+    you send it.
+  - **Offline:** replies, notes and changes wait in an outbox and go when the connection comes back, once each. A
+    change somebody else overtook waits for you to choose, field by field.
+  - **Help & Guide › Contact Support** raises a real ticket and shows its reference. You choose which diagnostics go
+    with it, can attach a capture of the window, and see your requests.
+  - **Wallboard:** the desk's live dashboard full screen on a second display (for people who may read reports).
+- Settings 1.26.0 (Next/Previous tab and Copy ticket link shortcuts), notifications 1.12.0 (Support's banners), chat
+  1.61.0 (the ticket's reference on a converted chat), ai 1.9.0 (Contact Support).
+
+## 0.2.193 — 2026-10-06
+
+- **Marketing opens in the app (WS-MKT-SRS-001 v1.1).** Marketing is now a native module in a tab of its own
+  instead of the browser, with the same four sections as the web: Audience, Email, Calls and Insights.
+  - **Audience:** dashboard with go-live readiness, contacts (phones masked), the contact page, organisations, lists,
+    segments with a live sample, imports with a file of rejected rows, and consent & suppression with the ledger.
+  - **Email:** campaigns, the three-step editor with a block editor that saves the same HTML as the web, review &
+    send with the pre-send check and test sends, and the report (funnel, links, human opens, deliverability, A/B).
+  - **Calls:** call campaigns, My call queue with the ten wrap-up outcomes and callbacks, and scripts.
+  - **Insights:** reports. Automation is shown as planned, not as working.
+- **Calls from anywhere.** ⌘⇧N / Ctrl+Shift+N claims the next contact while another app is in front (the key is held
+  only while no WorkSuite window is focused). The tray shows the call queue, today's callbacks and campaigns sending
+  now. A callback that falls due raises a notification with **Call now** and **Snooze 15 min**, and a campaign paused
+  by the bounce guard raises one too. Both can be switched off under Settings › Notifications › Marketing.
+- `worksuite://marketing/…` links open the queue, a contact or a campaign.
+- Needs the server's Marketing 2.0.0.
+
+## 0.2.192 — 2026-10-06
+
+- **Point of Sale's counter, redrawn for touch (pos 1.1.0, settings 1.24.0).** The till now looks and works as in
+  the POS design (D01–D18).
+  - **The till bar:** a navy bar across the top shows the till and register, whether the till is online, the clock,
+    the cashier, Lock and the till's menu. The side rail is gone; its screens, the customer display, Change cashier,
+    the web's screens and Forget this till are in that menu. The counter can go full screen.
+  - **Selling:** products in pages of five by three (or a list), with dots, arrows and swipe. The category button
+    opens a picker with each category's count and what sold most today on this till, and recent categories sit beside
+    it. A quick-action bar holds Hold, Recall, Return, Discount, Customer, Cash in/out, Open drawer and More. **Cash
+    exact** sells for the total in cash. F2 searches, F12 pays.
+  - **Several sales at once:** up to five open sales per till as tabs (Ctrl+N for a new one, Ctrl+1…5 to switch).
+    The customer display follows the sale on screen. **Hold** parks a sale with an optional note for 24 hours. Open
+    and held sales hold customer details, so the main process keeps them encrypted for this server and till, and
+    forgetting the till removes them.
+  - **Paying:** two panes, with tender tiles, what has been paid so far, a keypad, quick cash amounts and one button
+    that says the change to give. Sale complete shows the change, Print, Email and Open drawer, and the receipt on
+    screen.
+  - **Receipts** print the tax by rate ("VAT 18%") and end with the receipt number as a barcode, so a return can
+    start by scanning it.
+  - **Returns from the counter:** scan or type the receipt number, then choose quantities, each line's condition and
+    a reason. Damaged lines are refunded without going back into stock.
+  - **The drawer:** cash in and out from the counter, with the company's reasons and a reference. Opening and closing
+    the register use two panes and the keypad, note by note or as one figure. **Where it bites:** the register will
+    not close while a sale is open or held on the till, and when card was taken, "Card batch settled" must be ticked
+    first.
+  - **Pairing, till settings and the customer display** are redrawn. Pairing shows each till as free or in use and
+    takes one over only from a button that says so. Till settings have a device card each for the receipt printer,
+    cash drawer, scanner (with a test scan) and customer display. The customer display shows the sale, the tax,
+    what the discount saved and the change.
+  - Stock levels, promotions, loyalty, LankaQR, vouchers and store credit, and manager approval are not in this
+    release: the server does not offer them yet.
+  - Works with today's server; nothing new is needed on WorkSuite.
+- **PDF Studio: every tool in one place (pdf 1.1.0).** **All tools** lists every Acrobat-class tool in a searchable
+  panel beside the document, each with its own panel. A tool that cannot run yet says why. PDF Studio has a home
+  with its own rail (Recent, Starred, Shared, Agreements, Scans, Offline copies, Jobs, Recover, Settings and more),
+  an 18-tool grid and Open from Drive. New: sign by drawing or typing a signature and placing it on the page; find
+  NIC, phone, e-mail, card and bank numbers to redact; preview Bates numbering; copy the diagnostics report.
+
+## 0.2.191 — 2026-10-06
+
+- **Social Media Manager (WS-SMM-SRS-001).** A new **Social Media** app under Business: manage every social account
+  in one place — Facebook, Instagram, Threads, LinkedIn, X, YouTube, TikTok, Google Business Profile and Pinterest.
+  - **Publish:** Overview; Create post — write once, adjust each network, live checks with one-click fixes (split a
+    long X post into a thread, crop, alt text), previews, media from Drive or dragged in from the computer, AI
+    suggestions you choose to use; Calendar (month, week, list, drag to reschedule); Queue & posting slots; Approvals
+    with steps, comments and client review links.
+  - **Engage and measure:** a unified Inbox for comments, messages, mentions and reviews (saved replies, internal
+    notes, AI reply drafts, CRM lead and Support ticket, J/K); Analytics with a heat map of when your audience engages;
+    Content library; Campaigns with UTM tracking.
+  - **Administer:** Accounts (connect in your browser — WorkSuite never sees your social password), Module settings with
+    provider apps and "Pause all publishing", and the Publishing log.
+  - Native notifications for published, failed, approval and inbox events carry View post, Approve, Reply and Copy
+    caption; Ctrl/⌘+N starts a post, Ctrl/⌘+Enter schedules it; the calendar and drafts open offline.
+- **Where it bites:** needs the server's new Social Media module (app `worksuite.social-media`). Until a server has it,
+  the app shows only to super-admins and every screen says the server doesn't offer it yet — see
+  `docs/SOCIAL_MEDIA.md` for what the server needs. Publishing always runs on the server, so posts go out with the
+  computer off. (social-media 1.0.0, notifications 1.10.0)
+- **Not in this release:** screens for bulk scheduling from a spreadsheet and for recurring posts (the server calls are
+  ready), campaign-level review links (no server route yet), Listening and competitor benchmarks (a later phase), and
+  the mobile screens, which are WorkSuite Mobile's.
+- **How it was checked:** GitHub Actions was not starting jobs for the repository when this merged (#275), so CI did
+  not run. It was verified locally on the merged head instead: typecheck, lint, the module-version check, all 5,312
+  unit tests and the production build.
+
 ## 0.2.190 — 2026-10-06
 
 - **SalonMate's front desk, redrawn to the SalonMate desktop design (salon 2.0.0).** Every screen of the desk now
