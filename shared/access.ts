@@ -122,7 +122,8 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   task: ['tasks'],
   chat: ['chat'],
   message: ['chat'],
-  voip: ['chat'],
+  // The Phone's own (missed PBX calls, voicemail, PBX offline) and Chat's calls (`voip.missed_call` for a chat call).
+  voip: ['phone', 'chat'],
   mail: ['mail'],
   calendar: ['calendar', 'meet'],
   event: ['calendar'],

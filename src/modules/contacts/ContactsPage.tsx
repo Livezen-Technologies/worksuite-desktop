@@ -299,7 +299,15 @@ export default function ContactsPage(_props: ModuleProps) {
             key={editing.contact?.id ?? 'new'}
             contact={editing.contact}
             groups={groups}
-            defaults={'group' in place && !editing.contact ? { group_ids: [place.group] } : 'view' in place && ['employee', 'customer', 'vendor'].includes(place.view) && !editing.contact ? { type: place.view as 'employee' } : undefined}
+            defaults={
+              editing.contact
+                ? undefined
+                : {
+                    ...('group' in place ? { group_ids: [place.group] } : 'view' in place && ['employee', 'customer', 'vendor'].includes(place.view) ? { type: place.view as 'employee' } : {}),
+                    // "Create contact" from the Phone (VOIP-POP-05): the caller's number comes with it.
+                    ...(query.get('mobile') ? { mobile: query.get('mobile')!.replace(/[^0-9+]/g, '').slice(0, 32) } : {}),
+                  }
+            }
             onClose={() => (setEditing(null), query.get('new') ? set({}) : undefined)}
             onSaved={(id) => {
               setEditing(null);

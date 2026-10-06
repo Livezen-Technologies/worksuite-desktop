@@ -33,6 +33,8 @@ import { MailLinkGuard } from '../modules/mail/LinkGuard';
 import { MailReminders } from '../modules/mail/Reminders';
 import { canOpen } from '../core/access';
 
+// The phone (WS-VOIP-SRS-001): its SIP engine and ring toast, loaded only for someone who has the Phone.
+const PhoneHost = lazy(() => import('../modules/phone/softphone/PhoneHost'));
 const GuestMeeting = lazy(() => import('../modules/meet/GuestMeeting').then((module) => ({ default: module.GuestMeeting })));
 
 /**
@@ -112,6 +114,12 @@ export function App() {
       {auth.stage === 'ready' && !locked ? <MailLinkGuard /> : null}
       {/* Due flags, snoozes and events, in the main window only (ENH-MAIL-03 DMO-NTF-05). */}
       {auth.stage === 'ready' && !locked && !guest && !hash.startsWith('#/window/') && canOpen('mail') ? <MailReminders /> : null}
+      {/* The phone stays registered while locked, so a call in progress is not cut off; it rings only when unlocked. */}
+      {auth.stage === 'ready' && !guest && !required && !hash.startsWith('#/window/') && session.mode !== 'guest' && canOpen('phone') ? (
+        <Suspense fallback={null}>
+          <PhoneHost />
+        </Suspense>
+      ) : null}
       <Toasts />
       <ShowMeHost />
     </Suspense>

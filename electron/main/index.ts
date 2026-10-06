@@ -55,6 +55,7 @@ import { archName, DeviceService, platformName } from '../services/device';
 import { PmsLocks } from '../services/pms-locks';
 import { ContactSync } from '../services/contact-sync';
 import { createPos } from '../services/pos-ipc';
+import { PhoneService } from '../services/phone';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
 import { SalonSync } from '../services/salon-sync';
@@ -636,6 +637,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('pos:changed');
       emitStatus();
     },
+  });
+
+  // The Phone (WS-VOIP-SRS-001): its switch's WebSocket in the page policy, the compact phone's global shortcuts and
+  // calls as native notifications. The SIP phone itself runs in the main window's page.
+  const phone = new PhoneService({
+    config: db,
+    http,
+    allowed: () => sessionCtl.isReady() && canOpenApp('phone', sessionCtl.visibleApps()),
+    notify: (n) => notifications.notify(n),
+    mainWindow: () => windows.getMain(),
   });
 
   // Hotel PMS door locks: the on-site lock server this front desk talks to (its secret only in the OS keystore).
@@ -1868,6 +1879,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       // So do an event desk's copies of the gates' tickets (scans still unsent wait, should the app come back).
       if (!canOpenApp('events', visible)) eventDesk.signedOut(b.user.id);
       if (!canOpenApp('restaurant', visible)) restaurant.signedOut(b.user.id);
+      // The Phone's global shortcuts go with it.
+      if (!canOpenApp('phone', visible)) phone.reset();
     }
     emitStatus();
   };
@@ -1948,6 +1961,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void pdfStudio.closeAll();
     // Local AI's model stops; the models on this computer stay.
     void localAI.signedOut();
+    // The compact phone's global shortcuts are released.
+    phone.reset();
     realtime.stop();
     notifications.stop();
     device.stop();
@@ -2252,7 +2267,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       },
     }),
     // Read on each page load: the server chosen, and the media servers it announced.
-    () => ({ server: auth.getServer()?.origin ?? null, media: [...mediaServers(), ...guests.media] }),
+    () => ({ server: auth.getServer()?.origin ?? null, media: [...mediaServers(), ...guests.media, ...phone.origins()] }),
     // A course's lessons kept offline, played by the app's own pages.
     (request, path) =>
       path.startsWith('/chat-media/')
@@ -2386,6 +2401,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   pdfStudio.register(router);
   mailFiles.register(router);
   pos.register(router);
+  phone.register(router);
   pmsLocks.register(router);
   contactSync.register(router);
   restaurant.register(router);
