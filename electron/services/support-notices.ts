@@ -80,6 +80,15 @@ export const SUPPORT_ACTIONS: Record<SupportNoticeKind, readonly string[]> = {
   sla: ['Open', 'Snooze 10 min'],
 };
 
+/** The button that opens the ticket's quick-reply window (D-04, FR-DSK-03), second after Open where the app has one. */
+export const QUICK_REPLY_ACTION = 'Quick reply';
+
+/** A banner's buttons: its kind's, with Quick reply after Open when the window can be opened from here. */
+export function noticeActions(kind: SupportNoticeKind, quick: boolean): string[] {
+  const base = [...SUPPORT_ACTIONS[kind]];
+  return quick ? [base[0]!, QUICK_REPLY_ACTION, ...base.slice(1)] : base;
+}
+
 export interface SupportNoticeDeps {
   http: HttpClient;
   /** Shows a banner (the notification service's `notify`): its switches, quiet hours and privacy apply. */
@@ -93,6 +102,11 @@ export interface SupportNoticeDeps {
   prefs: () => Preferences;
   /** Opens a link as a notification's click does. */
   open: (link: string) => void;
+  /**
+   * Opens the ticket's quick-reply window (D-04) over whatever is in front. Without it (an older caller) banners have
+   * no Quick reply button, and an empty reply opens the ticket.
+   */
+  quickReply?: (ticketId: number) => void;
   /** A reply typed in a banner that was not sent: kept as the ticket's draft, and the ticket opened. */
   refused: (ticketId: number, text: string, mode: 'reply' | 'note', error: string) => void;
   /** The count changed. */
@@ -335,12 +349,13 @@ export class SupportNotices {
         : s.kind === 'mention' && s.ticketId
           ? localize('Note to {who} (staff only)', language, { who: author || localize('the team', language) })
           : null;
+    const actions = noticeActions(s.kind, !!this.d.quickReply && !!s.ticketId);
     const custom: CustomNotice = {
-      actions: [...SUPPORT_ACTIONS[s.kind]],
+      actions,
       reply: replyTo,
       persistent: s.kind === 'sla' && prefs.slaPersistent,
       sound: prefs[s.kind].sound,
-      onAction: (index) => this.act(s, SUPPORT_ACTIONS[s.kind][index] ?? null, show),
+      onAction: (index) => this.act(s, actions[index] ?? null, show),
       onReply: (text) => this.reply(s, text, show, messageId),
     };
     this.d.notify({
@@ -364,6 +379,11 @@ export class SupportNotices {
     switch (action) {
       case 'Open':
         this.d.open(s.link);
+        if (s.readId) await this.d.markRead([s.readId]).catch(() => undefined);
+        return;
+      case QUICK_REPLY_ACTION:
+        if (s.ticketId && this.d.quickReply) this.d.quickReply(s.ticketId);
+        else this.d.open(s.link);
         if (s.readId) await this.d.markRead([s.readId]).catch(() => undefined);
         return;
       case 'Take later':
@@ -407,11 +427,13 @@ export class SupportNotices {
 
   /**
    * A reply typed in the banner: to the requester (a "replied" banner) or an internal note (a mention), sent with a
-   * retry key. Nothing typed opens the ticket; a refusal keeps the words as the ticket's draft and opens it.
+   * retry key. Nothing typed opens the ticket's quick-reply window (or the ticket, without one); a refusal keeps the
+   * words as the ticket's draft and opens it.
    */
   async reply(s: Shown, text: string | null, show: TicketShow | null, messageId: number | null = null): Promise<void> {
     if (!text || !s.ticketId) {
-      this.d.open(s.link);
+      if (s.ticketId && this.d.quickReply) this.d.quickReply(s.ticketId);
+      else this.d.open(s.link);
       return;
     }
     const internal = s.kind === 'mention';

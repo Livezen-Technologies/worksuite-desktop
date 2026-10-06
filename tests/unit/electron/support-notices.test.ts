@@ -23,7 +23,7 @@ vi.mock('electron', () => ({
   },
 }));
 import { NotificationService } from '../../../electron/services/notifications';
-import { SupportNotices, noticeText, spanWords, stillDue, TAKE_LATER_MS, SNOOZE_MS } from '../../../electron/services/support-notices';
+import { SupportNotices, noticeActions, noticeText, spanWords, stillDue, TAKE_LATER_MS, SNOOZE_MS } from '../../../electron/services/support-notices';
 import { DesktopError } from '../../../electron/main/errors';
 import { supportNoticeKind, supportNoticePrefs, ticketIdOfLink, SUPPORT_NOTICE_DEFAULTS } from '../../../shared/support';
 import { attentionCount, trayTooltip } from '../../../shared/network';
@@ -62,7 +62,7 @@ const show = (over: Record<string, unknown> = {}, t: Record<string, unknown> = {
 });
 
 let prefs: Preferences;
-function setup(opts: { badges?: number; ticket?: unknown; enabled?: boolean } = {}) {
+function setup(opts: { badges?: number; ticket?: unknown; enabled?: boolean; quick?: (id: number) => void } = {}) {
   prefs = { notificationsEnabled: true, backgroundServices: { notifications: true }, moduleNotifications: {}, notificationPrivacy: 'FULL', notificationSounds: true, dndEnabled: false, language: 'en' } as unknown as Preferences;
   const db = { all: () => [], run: () => undefined, tx: (fn: () => void) => fn(), getConfig: () => null, setConfig: () => undefined } as unknown as Database;
   const http = {
@@ -91,6 +91,7 @@ function setup(opts: { badges?: number; ticket?: unknown; enabled?: boolean } = 
     enabled: () => opts.enabled ?? true,
     prefs: () => prefs,
     open,
+    quickReply: opts.quick,
     refused,
     onChanged: changed,
   });
@@ -351,5 +352,33 @@ describe('the tray (FR-DSK-04)', () => {
 
   it('says so in the tooltip', () => {
     expect(trayTooltip({ error: null, offline: false, pending: 0, monitoring: null, syncing: 0, unreadChat: 0, unreadMail: 0, unreadOther: 0, unreadSupport: 2 })).toBe('WorkSuite — 2 support tickets waiting');
+  });
+});
+
+describe('the quick-reply window from a banner (D-04, FR-DSK-03)', () => {
+  it('adds Quick reply after Open where the window can be opened', () => {
+    expect(noticeActions('assigned', true)).toEqual(['Open', 'Quick reply', 'Take later']);
+    expect(noticeActions('mention', true)).toEqual(['Open', 'Quick reply']);
+    expect(noticeActions('sla', false)).toEqual(['Open', 'Snooze 10 min']);
+  });
+
+  it('opens the ticket’s quick-reply window from the button, and marks the bell read', async () => {
+    const quick = vi.fn();
+    const { push, http, open } = setup({ quick });
+    push('support.sla_warning', 79, { title: 'SLA warning' });
+    await vi.waitFor(() => expect(notes).toHaveLength(1));
+    expect(notes[0]!.options.actions).toEqual([{ type: 'button', text: 'Open' }, { type: 'button', text: 'Quick reply' }, { type: 'button', text: 'Snooze 10 min' }]);
+    notes[0]!.events.action!({}, 1);
+    await vi.waitFor(() => expect(quick).toHaveBeenCalledWith(1284));
+    expect(open).not.toHaveBeenCalled();
+    await vi.waitFor(() => expect(http.post).toHaveBeenCalledWith('/api/notifications/79/read'));
+  });
+
+  it('a reply box sent empty opens the quick-reply window instead of the ticket', async () => {
+    const quick = vi.fn();
+    const { support, open } = setup({ quick });
+    await support.reply({ kind: 'reply', readId: null, ticketId: 1284, link: '/tickets?ticket=1284', event: null, title: 't', body: 'b' } as never, '', null);
+    expect(quick).toHaveBeenCalledWith(1284);
+    expect(open).not.toHaveBeenCalled();
   });
 });

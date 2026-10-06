@@ -23,7 +23,8 @@ import { flushDrafts } from '../core/drafts';
  * by dragging its handle onto the main window. It tells the main process
  * where it has moved to, so it opens there again at the next start.
  */
-const PINNABLE = new Set(['chat-mini', 'timer', 'call', 'video-call']);
+// A support ticket's quick-reply window floats too (WS-SUPPORT-SRS-001 D-04), and its pin is the window's own.
+const PINNABLE = new Set(['chat-mini', 'timer', 'call', 'video-call', 'support-quick']);
 // A conversation in its own window can go back to the main window (#103).
 const TO_MAIN = new Set(['chat-mini']);
 export function WindowRoot({ hash }: { hash: string }) {

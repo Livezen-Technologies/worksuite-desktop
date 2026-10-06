@@ -525,7 +525,15 @@ export function ticketRoute(id: number | string): string {
   return `${SUPPORT_ROUTE}/ticket/${id}`;
 }
 
-export type SupportRoute = { kind: 'ticket'; key: string } | { kind: 'inbox'; view: string | null; saved: string | null; q: string | null };
+/**
+ * A ticket's quick-reply window (D-04): `/support/quick/{id}`, a small window of its own over whatever is in front.
+ * In the main window the same route is the ticket's tab (`canonicalSupportRoute`): "Open full ticket" carries on there.
+ */
+export function quickRoute(id: number | string): string {
+  return `${SUPPORT_ROUTE}/quick/${id}`;
+}
+
+export type SupportRoute = { kind: 'ticket'; key: string } | { kind: 'quick'; key: string } | { kind: 'inbox'; view: string | null; saved: string | null; q: string | null };
 
 /**
  * Where a support route goes. A ticket's tab is `/support/ticket/{id}` (or a reference in place of the id); the
@@ -539,6 +547,7 @@ export function parseSupportRoute(route: string): SupportRoute {
   const query = new URLSearchParams(qs);
   if (segments[0] === 'support') {
     const rest = segments.slice(1);
+    if (rest.length === 2 && rest[0] === 'quick' && isTicketKey(rest[1])) return { kind: 'quick', key: rest[1] };
     const key = rest.length === 2 && (rest[0] === 'ticket' || rest[0] === 'tickets') ? rest[1] : rest.length === 1 ? rest[0] : null;
     if (isTicketKey(key)) return { kind: 'ticket', key };
     const asked = query.get('ticket') ?? query.get('open');
@@ -552,11 +561,14 @@ export function isTicketRoute(route: string): boolean {
   return /^\/support(?:[/?#]|$)/.test(route) && parseSupportRoute(route).kind === 'ticket';
 }
 
-/** A support route in its one form: every way of naming a ticket becomes its tab's route; anything else stays. */
+/**
+ * A support route in its one form: every way of naming a ticket becomes its tab's route — its quick-reply window's
+ * too, which the main window shows as the ticket's tab; anything else stays.
+ */
 export function canonicalSupportRoute(route: string): string {
   if (!/^\/support(?:[/?#]|$)/.test(route)) return route;
   const r = parseSupportRoute(route);
-  return r.kind === 'ticket' ? ticketRoute(r.key) : route;
+  return r.kind === 'ticket' || r.kind === 'quick' ? ticketRoute(r.key) : route;
 }
 
 /** The inbox's route for a view (and a search). */

@@ -17,7 +17,7 @@ const log = logger('windows');
  * fully visible on the primary display.
  */
 // The Live map window can be pinned on top of other apps (MAP-21, "📌 On top").
-const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map']);
+const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map', 'support-quick']);
 /** Windows that can shrink to float over other apps while a call or meeting goes on. */
 const COMPACTABLE = new Set<WindowKind>(['call', 'video-call', 'meet']);
 /** One call at a time: a second "call" window focuses the one already open. */
@@ -44,7 +44,14 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   wall: { width: 1280, height: 720, minWidth: 640, minHeight: 360 },
   // The Wall mode sheet (L-06, MAP-UI-06): the design's 430 wide, its display cards and four choices.
   'wall-sheet': { width: 430, height: 384, minWidth: 430, minHeight: 384 },
+  // A support ticket's quick-reply window (WS-SUPPORT-SRS-001 D-04): the design's ~520 × 560, floating.
+  'support-quick': { width: 520, height: 560, minWidth: 420, minHeight: 420 },
 };
+/**
+ * Kinds of which one window is open at a time, a newer one replacing the older: a ring, and a quick reply (D-04) —
+ * whose draft is kept per ticket, so nothing typed in the older one is lost.
+ */
+const ONE_AT_A_TIME = new Set<WindowKind>(['ring', 'support-quick']);
 /** Remote control's own windows: placed by remote control, never remembered. */
 const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall', 'wall-sheet']);
 
@@ -826,8 +833,8 @@ export class WindowManager {
         w.focus();
         return w;
       }
-      // A newer ring replaces an older one.
-      if (k === 'ring' && kind === 'ring') w.close();
+      // A newer ring replaces an older one; so does a quick reply.
+      if (k === kind && ONE_AT_A_TIME.has(kind)) w.close();
     }
     if (kind !== 'record') return this.create(kind, { hash, title, alwaysOnTop: alwaysOnTop ?? kind !== 'meet', bounds: this.cascade(kind) });
     const win = this.create(kind, { hash, title, alwaysOnTop: false, bounds: this.recordPlace(place) });

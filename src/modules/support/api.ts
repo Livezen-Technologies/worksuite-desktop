@@ -1,4 +1,5 @@
 import { ApiError, request, type Query } from '../../core/api';
+import { call } from '../../core/bridge';
 import {
   SUPPORT_API as BASE,
   SUPPORT_LEGACY_API as LEGACY,
@@ -8,6 +9,7 @@ import {
   legacyListQuery,
   legacyMeta,
   legacyViews,
+  quickRoute,
   type Agent,
   type Attachment,
   type AssignInput,
@@ -358,6 +360,13 @@ export function presence(ticketId: number): Promise<Present[]> {
 /** I am on this ticket (viewing, typing a reply or a note), or I have left it. Answers who else is. */
 export function here(ticketId: number, state: 'viewing' | 'typing' | 'left', mode?: 'reply' | 'note'): Promise<Present[]> {
   return v1OrElse(async () => (await send<{ present: Present[] }>('POST', `${BASE}/tickets/${ticketId}/presence`, mode ? { state, mode } : { state })).present ?? [], () => []);
+}
+
+/* ── windows ───────────────────────────────────────────────────────────── */
+
+/** A ticket's quick-reply window (D-04): floating, always on top, one at a time; its draft is the ticket's. */
+export function openQuickReply(ticketId: number): void {
+  void call('windows:open', { kind: 'support-quick', route: quickRoute(ticketId), title: 'Quick reply', alwaysOnTop: true }).catch(() => undefined);
 }
 
 /* ── refusals ───────────────────────────────────────────────────────────── */

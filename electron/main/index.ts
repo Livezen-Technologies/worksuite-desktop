@@ -24,6 +24,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
+import { quickRoute } from '@shared/support';
 import { FOLLOW_UP_DEFAULTS, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
@@ -1149,6 +1150,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   setLinkHandler(handleDeepLink);
 
+  // A support ticket's quick-reply window (WS-SUPPORT-SRS-001 D-04, FR-DSK-03): floating over whatever is in front,
+  // from a banner, the tray or the global shortcut. Never behind the lock, never for somebody without the desk.
+  const openQuickReply = (ticketId: number): void => {
+    if (lock.isLocked() || !sessionCtl.isReady() || !canOpenApp('support', sessionCtl.visibleApps())) return;
+    windows.open('support-quick', quickRoute(ticketId), 'Quick reply', true);
+  };
   // Support's banners and count (WS-SUPPORT-SRS-001 D-03, FR-DSK-02/04): the desk's notifications with their own buttons.
   const supportNotices = new SupportNotices({
     http,
@@ -1158,6 +1165,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     enabled: () => canOpenApp('support', sessionCtl.visibleApps()),
     prefs: () => settings.effective(),
     open: (link) => notifications.onClick(link, 'support'),
+    quickReply: (id) => openQuickReply(id),
     refused: (ticketId, text, mode, error) => {
       const me = sessionCtl.userId();
       // Kept as the ticket's draft, where its composer finds it (modules/support/Composer.tsx).

@@ -7,9 +7,9 @@ import { stampDayLabel, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { useStore } from '../../core/store';
 import { useNow } from '../../core/use-now';
-import { Avatar, Button, Empty, ErrorNote, Spinner } from '../../components/ui';
+import { Avatar, Button, Empty, ErrorNote, IconButton, Spinner } from '../../components/ui';
 import { SOURCE_LABEL, type SupportSource, type TicketShow } from '@shared/support';
-import { K, errorText, getTicket, take } from './api';
+import { K, errorText, getTicket, openQuickReply, take } from './api';
 import { Composer, type ComposerMode } from './Composer';
 import { openAttachment } from './files';
 import { usePollInterval } from './live';
@@ -121,6 +121,8 @@ export function ReadingPane({
             <Button size="sm" variant="ghost" icon="external" onClick={() => onOpenTab(t.id)}>
               {text('Open in tab')}
             </Button>
+            {/* The quick-reply window (D-04): this ticket floating over other apps while the desk goes on. */}
+            <IconButton icon="app-window" label={text('Quick reply window')} onClick={() => openQuickReply(t.id)} />
           </span>
         </div>
         {t.merged_into ? (
