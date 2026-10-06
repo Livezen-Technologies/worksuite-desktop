@@ -97,6 +97,10 @@ EuroOffice (the server's Document Server) or, without one, in the built-in
 [BetterOffice](https://github.com/Livezen-Technologies/betteroffice) editor (Apache-2.0; bundled fonts OFL 1.1). Its engine can be checked on a real system with
 `npm run build && node tests/os/pdf/check.mjs` (Linux: under `xvfb-run`).
 
+**Social Media Manager** (`src/modules/social-media`, WS-SMM-SRS-001) composes one post for many networks, approves,
+schedules on a calendar or queue, answers a unified inbox and measures the results, over the server's
+`/api/social-media`; publishing runs on the server. What the server still needs: [docs/SOCIAL_MEDIA.md](docs/SOCIAL_MEDIA.md).
+
 **POS** (`src/modules/pos`, `electron/services/pos-*.ts`) makes a counter PC a paired till: its credential in the
 OS keystore, the drawer's shift over WorkSuite's POS API, selling from a sealed catalogue copy with a keyboard-wedge
 scanner — offline too, sales numbered here and sent in order through the till's own door — thermal receipts and the

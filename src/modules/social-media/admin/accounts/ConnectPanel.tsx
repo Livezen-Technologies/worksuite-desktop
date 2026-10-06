@@ -1,3 +1,4 @@
+import { Checkbox } from '../../../../components/Checkbox';
 import { useMutation } from '@tanstack/react-query';
 import { useState, type Ref } from 'react';
 import { errorMessage } from '../../../../core/bridge';
@@ -134,9 +135,7 @@ export function ConnectPanel({ brands, defaultBrand, canConnect, focusRef }: { b
                 return (
                   <li key={a.external_id}>
                     <label className={cx('flex items-start gap-2.5 rounded-[10px] border px-3 py-2.5', a.already_connected ? 'border-line opacity-60' : on ? 'cursor-pointer border-primary bg-selection' : 'cursor-pointer border-line')}>
-                      <input
-                        type="checkbox"
-                        className="mt-1 accent-[var(--ws-indigo)]"
+                      <Checkbox
                         disabled={a.already_connected}
                         checked={on}
                         onChange={(e) => setPicked(e.target.checked ? [...picked, a.external_id] : picked.filter((x) => x !== a.external_id))}

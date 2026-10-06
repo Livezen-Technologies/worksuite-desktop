@@ -3,6 +3,7 @@
  * picker, grouped by brand so a whole brand is one click. An account needing reconnect can be chosen; its post is
  * held until it is reconnected (WF-06).
  */
+import { Checkbox } from '../../../components/Checkbox';
 import { useState } from 'react';
 import { Button, cx, Modal } from '../../../components/ui';
 import type { Account, Brand } from '../api';
@@ -84,7 +85,7 @@ function Picker({ usable, brands, initial, onClose, onDone }: { usable: Account[
                 {g.accounts.map((a) => (
                   <li key={a.id}>
                     <label className="flex cursor-pointer items-center gap-2.5 rounded-[8px] px-2 py-1.5 hover:bg-subtle">
-                      <input type="checkbox" checked={sel.includes(a.id)} onChange={() => toggle(a.id)} className="h-4 w-4 accent-[var(--ws-indigo)]" />
+                      <Checkbox checked={sel.includes(a.id)} onChange={() => toggle(a.id)} />
                       <NetChip network={a.network} />
                       <span className="flex min-w-0 flex-col">
                         <span className="truncate text-[13px] font-semibold text-ink">{a.display_name}</span>

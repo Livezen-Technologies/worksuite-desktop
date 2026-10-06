@@ -1,3 +1,4 @@
+import { Checkbox } from '../../components/Checkbox';
 import { useState, type ReactNode } from 'react';
 import { ApiError } from '../../core/api';
 import { createStore, useStore } from '../../core/store';
@@ -295,7 +296,7 @@ export function Field({ label, hint, children, className }: { label: string; hin
 
 export function NativeSelect({ value, onChange, children, label, className, disabled }: { value: string; onChange: (v: string) => void; children: ReactNode; label: string; className?: string; disabled?: boolean }) {
   return (
-    <select aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cx(INPUT, 'pr-8', className)}>
+    <select aria-label={label} value={value} disabled={disabled} onChange={(e) => onChange(e.target.value)} className={cx(className && /(^|\s)w-/.test(className) ? INPUT.replace('w-full ', '') : INPUT, 'pr-8', className)}>
       {children}
     </select>
   );
@@ -356,7 +357,7 @@ export function ConfirmButton({ label, confirm, onConfirm, variant = 'danger', i
 export function Check({ checked, onChange, children, swatch }: { checked: boolean; onChange: (v: boolean) => void; children: ReactNode; swatch?: string }) {
   return (
     <label className="inline-flex cursor-pointer items-center gap-1.5 text-[12.5px] text-ink-2 select-none">
-      <input type="checkbox" checked={checked} onChange={(e) => onChange(e.target.checked)} className="h-3.5 w-3.5 accent-[var(--ws-indigo)]" />
+      <Checkbox checked={checked} onChange={(e) => onChange(e.target.checked)} />
       {swatch ? <span className={cx('h-2.5 w-2.5 rounded-[3px]', swatch)} aria-hidden /> : null}
       {children}
     </label>

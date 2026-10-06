@@ -1,3 +1,4 @@
+import { Checkbox } from '../../../../components/Checkbox';
 import { useMutation } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiPost } from '../../../../core/api';
@@ -130,10 +131,8 @@ export function NotificationsGrid({ values, onChange, disabled }: { values: Reco
               return (
                 <td key={c.id} className={TD}>
                   {usable ? (
-                    <input
-                      type="checkbox"
+                    <Checkbox
                       aria-label={`${e.label} by ${c.label}`}
-                      className="h-4 w-4 accent-[var(--ws-indigo)]"
                       disabled={disabled}
                       checked={checked}
                       onChange={(ev) => onChange(`ntf_${e.id}`, ev.target.checked ? [...on(e.id), c.id] : on(e.id).filter((x) => x !== c.id))}

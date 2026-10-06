@@ -77,6 +77,12 @@ POST), `posts/{id}` (GET → `{post, events}`; PUT), `posts/{id}/validate|schedu
 | Media from Drive into the library (MED-002) | `POST library {kind: "media", file_ids, brand_id}` → `{items}` |
 | Inbox metrics (ANL-005) | `GET analytics/inbox?from&to&brand_id` → `{volume, median_first_reply_minutes, median_resolution_minutes, by_agent, by_brand}` |
 | Reading provider apps (ADM-002) | `GET settings/provider-apps` → `{redirect_uri, apps: [{network, label, product, covers, mode, enabled, client_id, has_secret, secret_set_at, status, status_note, tier, webhook}]}` — never a secret |
+| Post saves (CMP-009, SCH-001) | `POST/PUT posts` also take `ai_used`, `scheduled_at`, `schedule_mode`, `entered_timezone`, so the AI flag and a draft's chosen time are kept |
+| Delete an inbox item at the network (INB-004) | `DELETE inbox/threads/{id}/remote` → 204 |
+| Campaign review links (CPG-004) | `POST campaigns/{id}/review-links` → `{link}` — the button stays disabled until it exists |
+| Advanced settings (ADM-005) | `POST export` → `{job_id}`; `POST webhooks/resubscribe` → `{accounts}` |
+| Overview's "past reply target" (INB-008) | `status.counts.inbox_past_target` |
+| People to assign (INB-005) | a user/team directory route; today "Someone else…" asks for an id |
 | Native banners (DSK-002, WF-17) | notifications with `event` `social.*`, `category` `social_media` and a `/social-media/...` link; a manual reminder adds `actions: [{copy: "<caption>"}]` for Copy caption; realtime `social.*` events (ids only) refresh the screens |
 
 ## 3. Open questions this build had to answer

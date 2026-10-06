@@ -4,6 +4,7 @@
  * primary action is Schedule, or Send for approval for a brand with a policy and for anyone who may not publish on
  * every chosen account. It stays disabled, saying why, while any check blocks.
  */
+import { Checkbox } from '../../../components/Checkbox';
 import { Button, cx } from '../../../components/ui';
 import { dataOf, rowsOf, useBlackouts, useNextTimes, type Brand } from '../api';
 import { currentZone, fromLocalInput, longWhen } from '../lib/time';
@@ -75,7 +76,7 @@ export function WhenCard({
               Best time
             </Button>
             <label className="inline-flex items-center gap-1.5 text-[12.5px] text-ink-2">
-              <input type="checkbox" checked={draft.mode === 'now'} onChange={(e) => onMode(e.target.checked ? 'now' : 'at')} className="h-3.5 w-3.5 accent-[var(--ws-indigo)]" />
+              <Checkbox checked={draft.mode === 'now'} onChange={(e) => onMode(e.target.checked ? 'now' : 'at')} />
               Publish now
             </label>
           </>
