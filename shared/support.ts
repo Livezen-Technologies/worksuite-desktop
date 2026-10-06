@@ -130,6 +130,32 @@ export const SORTS = ['updated', 'created', 'sla', 'priority'] as const;
 export type SupportSort = (typeof SORTS)[number];
 export const SORT_LABEL: Record<SupportSort, string> = { updated: 'Last updated', created: 'Newest', sla: 'SLA due', priority: 'Priority' };
 
+/** "18m", "3h 20m", "1d 4h": a span as the desk's chips say it. */
+export function spanShort(ms: number): string {
+  const m = Math.max(0, Math.round(Math.abs(ms) / 60_000));
+  if (m < 60) return `${m}m`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return m % 60 ? `${h}h ${m % 60}m` : `${h}h`;
+  const d = Math.floor(h / 24);
+  return h % 24 ? `${d}d ${h % 24}h` : `${d}d`;
+}
+
+export const SLA_TARGET_SHORT: Record<SlaTarget, string> = { first_response: 'FRT', next_response: 'Next', resolution: 'Res' };
+
+/**
+ * An SLA in a few words, as the tray and a pop-up say it where no chip can be drawn: "Next 18m", "Res overdue 5m",
+ * "Paused", "FRT met". Null when no policy applies or the server has not computed a state.
+ */
+export function slaShort(sla: Partial<Sla> | null | undefined, now: number): string | null {
+  if (!sla?.state || sla.state === 'none') return null;
+  const target = sla.target ? SLA_TARGET_SHORT[sla.target] : 'SLA';
+  if (sla.state === 'paused') return 'Paused';
+  if (sla.state === 'met') return `${target} met`;
+  const due = sla.due_at ? Date.parse(sla.due_at) : NaN;
+  if (!Number.isFinite(due)) return target;
+  return due < now ? `${target} overdue ${spanShort(due - now)}` : `${target} ${spanShort(due - now)}`;
+}
+
 export function isStatus(v: unknown): v is SupportStatus {
   return typeof v === 'string' && (STATUSES as readonly string[]).includes(v);
 }
@@ -894,6 +920,9 @@ export function legacyMeta(): Meta {
   };
 }
 
+/** The global shortcut for "Quick reply to latest" (D-05: ⌃⌥R; Ctrl+Alt+R on Windows and Linux). */
+export const SUPPORT_QUICK_SHORTCUT = 'Control+Alt+R';
+
 /* ── native notifications (D-03) ────────────────────────────────────────── */
 
 /**
@@ -920,6 +949,8 @@ export interface SupportNoticePrefs {
   slaPersistent: boolean;
   /** A low-priority ticket's banners: one by one, or gathered into one at the top of the hour (FR-NTF-06). */
   lowPriority: 'banner' | 'digest';
+  /** ⌃⌥R (Ctrl+Alt+R) from any app opens the quick-reply window on my latest ticket (D-05, FR-DSK-03). */
+  quickShortcut: boolean;
 }
 
 /** As the design has them: assignment with a sound, a reply with a sound (and a reply box), a mention quietly, an SLA kept. */
@@ -930,6 +961,7 @@ export const SUPPORT_NOTICE_DEFAULTS: SupportNoticePrefs = {
   sla: { banner: true, sound: true },
   slaPersistent: true,
   lowPriority: 'digest',
+  quickShortcut: true,
 };
 
 /** The choices made, with the defaults for the rest (a choice saved before a kind existed takes its default). */
@@ -943,6 +975,7 @@ export function supportNoticePrefs(p: Partial<SupportNoticePrefs> | null | undef
     sla: one('sla'),
     slaPersistent: typeof p?.slaPersistent === 'boolean' ? p.slaPersistent : d.slaPersistent,
     lowPriority: p?.lowPriority === 'banner' || p?.lowPriority === 'digest' ? p.lowPriority : d.lowPriority,
+    quickShortcut: typeof p?.quickShortcut === 'boolean' ? p.quickShortcut : d.quickShortcut,
   };
 }
 

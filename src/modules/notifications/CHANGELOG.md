@@ -9,7 +9,7 @@ the root CHANGELOG.md.
 **Added**
 
 - banners a module words and answers itself (its buttons, a reply box, staying until acted on, its sound) — Support's, with Open, Take later, Mark read, Snooze and a typed reply (WS-SUPPORT-SRS-001 D-03)
-- Notification settings › Support — per kind, In app, a banner here and its sound; SLA banners that stay; low-priority tickets in an hourly digest
+- Notification settings › Support — per kind, In app, a banner here and its sound; SLA banners that stay; low-priority tickets in an hourly digest; the Quick reply shortcut (⌃⌥R / Ctrl+Alt+R from any app) on or off
 
 **Changed**
 

@@ -25,7 +25,7 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
-import { quickRoute } from '@shared/support';
+import { SUPPORT_QUICK_SHORTCUT, quickRoute, supportNoticePrefs } from '@shared/support';
 import { FOLLOW_UP_DEFAULTS, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
@@ -71,6 +71,7 @@ import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
 import { SupportNotices } from '../services/support-notices';
+import { SupportDesk } from '../services/support-desk';
 import { WebchatRinger, announceEvent, ringerHeight } from '../services/webchat-ring';
 import { SystemFocus } from '../services/system-focus';
 import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '../services/live-desk';
@@ -1224,8 +1225,38 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       openLink(`/tickets?ticket=${ticketId}`);
       broadcast('toast', { kind: 'error', text: `Your ${mode === 'note' ? 'note' : 'reply'} was not sent: ${error} It is in the ticket's message box to send again.` });
     },
-    onChanged: () => emitStatus(),
+    onChanged: () => {
+      emitStatus();
+      supportDesk.soon();
+    },
   });
+  // The desk in the tray / menu bar (D-05): my numbers, the next SLAs due, availability.
+  const supportDesk: SupportDesk = new SupportDesk({
+    http,
+    enabled: () => canOpenApp('support', sessionCtl.visibleApps()),
+    badges: () => supportNotices.badges(),
+    onChanged: () => tray.update({ support: supportDesk.get() }),
+  });
+  // ⌃⌥R (Ctrl+Alt+R): the quick-reply window on my latest ticket, from any app (D-05). Held while signed in with the
+  // desk and unlocked, unless turned off in Notification settings › Support.
+  let supportKeyHeld = false;
+  const quickLatest = (): void => {
+    void supportDesk.latest().then((id) => (id ? openQuickReply(id) : navigate({ route: '/support?view=mine', source: 'tray' })));
+  };
+  const syncSupportKeys = (): void => {
+    const want = sessionCtl.isReady() && !lock.isLocked() && canOpenApp('support', sessionCtl.visibleApps()) && supportNoticePrefs(settings.effective().supportNotices).quickShortcut;
+    if (want && !supportKeyHeld) {
+      try {
+        supportKeyHeld = globalShortcut.register(SUPPORT_QUICK_SHORTCUT, quickLatest);
+      } catch {
+        supportKeyHeld = false;
+      }
+    } else if (!want && supportKeyHeld) {
+      globalShortcut.unregister(SUPPORT_QUICK_SHORTCUT);
+      supportKeyHeld = false;
+    }
+    tray.update({ supportShortcut: supportKeyHeld ? SUPPORT_QUICK_SHORTCUT : null });
+  };
   notifications.claim = (n) => supportNotices.claim(n);
   notifications.onRefresh = () => void supportNotices.refreshBadges();
 
@@ -1300,6 +1331,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   realtime.onEvent = (e) => {
     notifications.handleRealtime(e);
     supportNotices.handle(e);
+    supportDesk.handle(e);
     webchat.handle(e);
     calls.handle(e);
     aiPending.handle(e as { type?: string });
@@ -1510,6 +1542,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     showRingMenu: (anchor) => ringTray.show(anchor),
     liveDashboard: () => liveDesk.open('dashboard'),
     liveMap: () => liveDesk.open('map'),
+    supportQuickReply: (id) => openQuickReply(id),
+    supportQuickLatest: () => quickLatest(),
+    supportPresence: (status) => void supportDesk.setPresence(status),
   });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
@@ -1855,6 +1890,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const syncQuickAsk = (): void => {
     quickAsk.sync();
     tray.update({ quickAsk: quickAsk.shortcut() });
+    // Support's quick-reply shortcut follows the same moments: sign-in, the lock, the settings.
+    syncSupportKeys();
   };
 
   // ── what the person may open (shared/access.ts) ───────────────────────
@@ -1974,6 +2011,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
     supportNotices.start();
+    supportDesk.start();
     webchat.start();
     livePulse.start();
     syncQuickAsk();
@@ -2049,6 +2087,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     realtime.stop();
     notifications.stop();
     supportNotices.stop();
+    supportDesk.stop();
+    syncSupportKeys();
     device.stop();
     transfers.stopAll();
     sync.stop();
@@ -2710,6 +2750,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     livePulse.stop();
     atRisk.clear();
     quickAsk.release();
+    if (supportKeyHeld) globalShortcut.unregister(SUPPORT_QUICK_SHORTCUT);
     void askHelper?.then((h) => h?.stop());
     // Windows' places are saved while the database is open; timers that read it stop first.
     windows.saveAllAndStop();

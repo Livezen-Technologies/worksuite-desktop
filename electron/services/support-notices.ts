@@ -192,6 +192,8 @@ interface Shown {
 
 export class SupportNotices {
   private unread = 0;
+  /** The whole answer last read: the tray's dashboard shows more of it than the count (support-desk.ts). */
+  private last: Badges | null = null;
   private running = false;
   private poll: NodeJS.Timeout | null = null;
   private nudge: NodeJS.Timeout | null = null;
@@ -225,10 +227,16 @@ export class SupportNotices {
     this.digest = [];
     this.claimed.clear();
     this.noV1Until = 0;
+    this.last = null;
     if (this.unread) {
       this.unread = 0;
       this.d.onChanged();
     }
+  }
+
+  /** The badges as last read, or null (not yet, no Support, a server without them). */
+  badges(): Badges | null {
+    return this.running && this.d.enabled() ? this.last : null;
   }
 
   /** The rail's, the Dock's and the tray's count: 0 for somebody without the desk. */
@@ -243,7 +251,10 @@ export class SupportNotices {
       const r = await this.d.http.get<{ badges?: Partial<Badges> }>(`${SUPPORT_API}/badges`, { timeoutMs: READ_TIMEOUT_MS });
       if (gen !== this.generation) return;
       const n = Math.max(0, Math.floor(Number(r?.badges?.unread ?? 0)) || 0);
-      if (n !== this.unread) {
+      const whole: Badges = { assigned_open: 0, unassigned: 0, overdue: 0, at_risk: 0, ...(r?.badges ?? {}), unread: n };
+      const moved = JSON.stringify(whole) !== JSON.stringify(this.last);
+      this.last = whole;
+      if (n !== this.unread || moved) {
         this.unread = n;
         this.d.onChanged();
       }

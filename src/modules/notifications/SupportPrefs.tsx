@@ -91,6 +91,9 @@ export function SupportNotifications({ categories, commit, prefs, local }: { cat
           onValueChange={(v) => set({ lowPriority: v as SupportNoticePrefs['lowPriority'] })}
         />
       </SettingRow>
+      <SettingRow label="Quick reply shortcut" hint="Ctrl+Alt+R (⌃⌥R on a Mac) from any app opens a quick reply on your latest ticket.">
+        <Switch label="Quick reply shortcut" checked={p.quickShortcut} onChange={(v) => set({ quickShortcut: v })} />
+      </SettingRow>
     </Card>
   );
 }

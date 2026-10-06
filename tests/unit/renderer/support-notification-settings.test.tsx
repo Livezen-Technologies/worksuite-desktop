@@ -31,6 +31,9 @@ describe('the Support card', () => {
     expect(local).toHaveBeenCalledWith({ supportNotices: { ...SUPPORT_NOTICE_DEFAULTS, assigned: { banner: false, sound: true } } });
     fireEvent.click(screen.getByRole('switch', { name: 'SLA banners stay until acted on' }));
     expect(local).toHaveBeenLastCalledWith({ supportNotices: { ...SUPPORT_NOTICE_DEFAULTS, slaPersistent: false } });
+    // The quick-reply shortcut from any app (D-05): on unless turned off.
+    fireEvent.click(screen.getByRole('switch', { name: 'Quick reply shortcut' }));
+    expect(local).toHaveBeenLastCalledWith({ supportNotices: { ...SUPPORT_NOTICE_DEFAULTS, quickShortcut: false } });
   });
 
   it('greys out banners and sounds while this computer shows none', () => {

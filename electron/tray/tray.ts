@@ -3,6 +3,7 @@ import { join } from 'node:path';
 import { attentionCount, trayState, trayTooltip, type TrayState } from '@shared/network';
 import { logger } from '../main/log';
 import { liveTitle } from '../services/live-desk';
+import type { SupportPulseFigures } from '../services/support-desk';
 
 const log = logger('tray');
 
@@ -53,6 +54,14 @@ export interface TrayModel {
    * at risk, and a click opens the mini-dashboard. Null for anybody else, or before the first answer.
    */
   live?: { online: number; atRisk: boolean } | null;
+  /**
+   * The support desk's mini dashboard (WS-SUPPORT-SRS-001 D-05): my numbers, the next SLAs due and my availability,
+   * for whoever has Support (support-desk.ts). A breached SLA among mine puts the red dot on the icon. Null before
+   * the first answer, or for anybody else.
+   */
+  support?: SupportPulseFigures | null;
+  /** The quick-reply shortcut while it is registered (⌃⌥R), or null. */
+  supportShortcut?: string | null;
 }
 
 export interface TrayUpdate {
@@ -125,6 +134,10 @@ export interface TrayActions {
   /** Open Live dashboard (⌘⇧D) and Show Live map window (⌘⇧M), for website staff (L-05, MAP-21/22). */
   liveDashboard?: () => void;
   liveMap?: () => void;
+  /** Support (D-05): a ticket's quick-reply window, the latest ticket's, and Online / Away. Optional for older callers. */
+  supportQuickReply?: (ticketId: number) => void;
+  supportQuickLatest?: () => void;
+  supportPresence?: (status: 'available' | 'away') => void;
 }
 
 /**
@@ -245,7 +258,8 @@ export class TrayService {
     if (!this.tray) return;
     // Red while somebody is at risk (MAP-22): the icon's red dot in colour in the menu bar.
     const live = m.signedIn && hasChat ? (m.live ?? null) : null;
-    const red = !!live?.atRisk;
+    // Red, too, while one of my support tickets has missed its SLA (D-05's badge rule).
+    const red = !!live?.atRisk || (m.signedIn && hasSupport && !!m.support?.breached);
     const look = red ? `${ringing ? 'unread' : state}:red` : state;
     if (look !== this.lastState) {
       this.tray.setImage(icon(red ? 'unread' : state, red));
@@ -326,6 +340,7 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     if (a.liveMap) items.push({ label: 'Show Live map window', accelerator: 'CmdOrCtrl+Shift+M', registerAccelerator: false, click: a.liveMap });
     items.push({ type: 'separator' });
   }
+  if (m.signedIn && has('support') && m.support) items.push(...supportItems(m.support, a, m.supportShortcut ?? null));
   if (m.signedIn) {
     items.push({ label: [m.userName, m.organization].filter(Boolean).join(' · ') || 'WorkSuite', enabled: false });
     items.push({ type: 'separator' });
@@ -375,5 +390,47 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
   items.push({ label: m.updateReady ? 'Restart to Update' : 'Check for Updates', click: a.checkUpdates });
   items.push({ type: 'separator' });
   items.push({ label: 'Quit WorkSuite', click: a.quit });
+  return items;
+}
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many.replace('{n}', String(n)));
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+/**
+ * The tray's Support section (WS-SUPPORT-SRS-001 D-05): the mini dashboard as menu items, the same on the macOS menu
+ * bar and in a Windows or Linux tray.
+ *
+ *  - My numbers (FR-WSP-02): open, overdue, unassigned and at risk, each opening its view; unread and due today
+ *    beside them.
+ *  - Next SLA due (FR-SLA-07): the four soonest of mine, each opening its quick-reply window (D-04, FR-DSK-03).
+ *  - Quick reply to latest (⌃⌥R) and Open Support; Online / Away (FR-ASN-06), Chat's presence as routing reads it.
+ */
+export function supportItems(f: SupportPulseFigures, a: Pick<TrayActions, 'openRoute' | 'supportQuickReply' | 'supportQuickLatest' | 'supportPresence'>, shortcut: string | null = null): MenuItemConstructorOptions[] {
+  const items: MenuItemConstructorOptions[] = [];
+  items.push({ label: `Support · synced ${hhmm(f.syncedAt)}`, enabled: false });
+  const mine = [`My open ${f.open}`, f.unread ? plural(f.unread, '1 unread', '{n} unread') : null, f.dueToday !== null ? `${f.dueToday} due today` : null].filter(Boolean).join(' · ');
+  items.push({ label: mine, click: () => a.openRoute('/support?view=mine') });
+  if (f.overdue !== null) items.push({ label: `Overdue ${f.overdue}`, click: () => a.openRoute('/support?view=overdue') });
+  if (f.unassigned !== null) items.push({ label: `Unassigned ${f.unassigned}`, click: () => a.openRoute('/support?view=unassigned') });
+  items.push({ label: `At risk ${f.atRisk}${f.breached ? ' · breached' : ''}`, click: () => a.openRoute('/support?view=overdue') });
+  if (f.next.length) {
+    items.push({ label: 'Next SLA due', enabled: false });
+    for (const n of f.next) {
+      const subject = n.subject.length > 42 ? `${n.subject.slice(0, 41)}…` : n.subject;
+      items.push({
+        label: `${n.reference} · ${subject}${n.sla ? ` — ${n.sla}` : ''}`,
+        sublabel: n.requester || undefined,
+        click: () => (a.supportQuickReply ? a.supportQuickReply(n.id) : a.openRoute(`/support/ticket/${n.id}`)),
+      });
+    }
+  }
+  if (a.supportQuickLatest) items.push({ label: 'Quick reply to latest', ...(shortcut ? { accelerator: shortcut, registerAccelerator: false } : {}), click: a.supportQuickLatest });
+  items.push({ label: 'Open Support', click: () => a.openRoute('/support') });
+  if (f.presence && a.supportPresence) {
+    const set = a.supportPresence;
+    items.push({ label: 'Online', type: 'radio', checked: f.presence === 'available', click: () => set('available') });
+    items.push({ label: 'Away', type: 'radio', checked: f.presence !== 'available', click: () => set('away') });
+  }
+  items.push({ type: 'separator' });
   return items;
 }
