@@ -395,6 +395,21 @@ export interface PosOutputs {
   'pos:cartsSave': boolean;
 }
 
+/**
+ * The tax on a receipt, by rate (`VAT 18%`), from the lines' rates and taxes: one row per rate charged, or a single
+ * row of the total when no line says its rate. The rows add up to the sale's tax.
+ */
+export function vatRows(lines: Array<Pick<PosSaleLine, 'tax_rate' | 'tax'>>, total: number): Array<{ label: string; amount: number }> {
+  const by = new Map<number, number>();
+  for (const l of lines) if (l.tax_rate > 0) by.set(l.tax_rate, (by.get(l.tax_rate) ?? 0) + l.tax);
+  if (!by.size) return [{ label: 'VAT', amount: total }];
+  const rows = [...by].sort((a, b) => b[0] - a[0]).map(([rate, amount]) => ({ label: `VAT ${Number(rate.toFixed(2))}%`, amount: Math.round(amount * 100) / 100 }));
+  // Whatever the lines leave over (a server's rounding) goes on the biggest rate, so the rows meet the total.
+  const rest = Math.round((total - rows.reduce((a, r) => a + r.amount, 0)) * 100) / 100;
+  if (rest) rows[0]!.amount = Math.round((rows[0]!.amount + rest) * 100) / 100;
+  return rows;
+}
+
 /** A receipt number: the till's prefix and a six-digit sequence (`T01-7F3A2B-000042`). */
 export function formatReceipt(prefix: string, n: number): string {
   return `${prefix}-${String(Math.max(1, Math.floor(n))).padStart(6, '0')}`;

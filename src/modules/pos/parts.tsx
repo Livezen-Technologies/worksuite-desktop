@@ -1,4 +1,4 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
 import type { PosTillStatus } from '@shared/pos';
 import { Icon } from '../../components/Icon';
 import { Button, cx } from '../../components/ui';
@@ -148,4 +148,70 @@ export function timeOf(iso: string | null | undefined): string {
   if (!iso) return '';
   const d = new Date(iso.includes('T') || iso.endsWith('Z') ? iso : `${iso.replace(' ', 'T')}Z`);
   return Number.isNaN(d.getTime()) ? iso : d.toLocaleString(undefined, { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+}
+
+/**
+ * A dialog over the counter, as the till draws them: the navy scrim under the till bar, a rounded white sheet, no
+ * header of its own. Esc closes it (when it may be closed); focus goes into it and back where it was.
+ */
+export function PosDialog({ label, onClose, width, children, className, place = 'center' }: { label: string; onClose?: () => void; width?: number; children: ReactNode; className?: string; place?: 'center' | 'right' }) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [prev] = useState(() => (typeof document !== 'undefined' ? (document.activeElement as HTMLElement | null) : null));
+  const close = useRef(onClose);
+  useEffect(() => {
+    close.current = onClose;
+  });
+  useEffect(() => {
+    if (!ref.current?.contains(document.activeElement)) ref.current?.focus();
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && close.current) {
+        e.stopPropagation();
+        close.current();
+      }
+    };
+    window.addEventListener('keydown', onKey, true);
+    return () => {
+      window.removeEventListener('keydown', onKey, true);
+      if (prev?.isConnected) prev.focus?.();
+    };
+  }, [prev]);
+  return (
+    <div
+      className={cx('no-drag absolute inset-x-0 top-16 bottom-0 z-40 flex bg-[rgba(15,27,61,.55)]', place === 'center' ? 'items-center justify-center p-6' : 'justify-end')}
+      onMouseDown={(e) => e.target === e.currentTarget && onClose?.()}
+    >
+      <div
+        ref={ref}
+        tabIndex={-1}
+        role="dialog"
+        aria-modal="true"
+        aria-label={label}
+        className={cx(
+          'animate-in bare-focus flex max-h-full w-full flex-col overflow-hidden bg-pos-panel text-ink shadow-[0_24px_60px_rgba(15,27,61,.35)] outline-none',
+          place === 'center' ? 'rounded-pos-xl' : 'h-full',
+          className,
+        )}
+        style={{ maxWidth: width }}
+      >
+        {children}
+      </div>
+    </div>
+  );
+}
+
+/** A big touch button in a POS dialog: the main action, or a quiet grey one. */
+export function PosButton({ tone = 'quiet', className, children, ...rest }: React.ButtonHTMLAttributes<HTMLButtonElement> & { tone?: 'primary' | 'quiet' | 'danger' }) {
+  return (
+    <button
+      type="button"
+      {...rest}
+      className={cx(
+        'flex items-center justify-center gap-2 rounded-pos px-4 font-bold disabled:cursor-not-allowed disabled:opacity-45',
+        tone === 'primary' ? 'bg-primary text-white hover:bg-primary-hover' : tone === 'danger' ? 'bg-pos-key text-danger hover:brightness-95' : 'bg-pos-key text-ink hover:brightness-95',
+        className,
+      )}
+    >
+      {children}
+    </button>
+  );
 }

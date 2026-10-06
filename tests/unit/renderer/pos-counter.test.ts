@@ -1,8 +1,9 @@
 import { describe, expect, it } from 'vitest';
-import { heldWithin, POS_HOLD_TTL_MS, posCartsSchema } from '@shared/pos';
+import { heldWithin, POS_HOLD_TTL_MS, posCartsSchema, type PosSale } from '@shared/pos';
 import { activeSale, addLine, discardHeld, dropSale, EMPTY_CART, expireHeld, holdSale, initialCarts, MAX_OPEN, newSale, openWithLines, recallSale, switchIndex, switchSale, updateActive, type TillCarts } from '../../../src/modules/pos/cart';
 import { clean, grouped, press, typedOf } from '../../../src/modules/pos/keypad';
 import { tintOf, TINTS } from '../../../src/modules/pos/look';
+import { categoryCounts, clampPage, dots, GRID_PAGE, pageCount, pageOf, pushRecent, shown, topSellers } from '../../../src/modules/pos/paging';
 
 const typeKeys = (keys: string[], o?: Parameters<typeof press>[2]) => keys.reduce((v, k) => press(v, k, o), '');
 
@@ -107,5 +108,43 @@ describe('open sales and held ones', () => {
     const s = holdSale(withLine(newSale(withLine(initialCarts(T0), 9), T0, 'b'), 3), 'b', 'back soon', T0);
     expect(posCartsSchema.safeParse(s).success).toBe(true);
     expect(posCartsSchema.safeParse({ ...s, sales: [] }).success).toBe(false);
+  });
+});
+
+describe('the product pages and categories', () => {
+  const p = (id: number, category: string | null, name = `P${id}`) => ({ id, code: null, barcode: null, name, unit: null, category, price: 100, discount_pct: 0, tax_rate: 0 });
+
+  it('pages fifteen at a time, clamped, with a window of dots', () => {
+    const items = Array.from({ length: 142 }, (_, i) => i);
+    expect(pageCount(142, GRID_PAGE)).toBe(10);
+    expect(pageCount(0, GRID_PAGE)).toBe(1);
+    expect(pageOf(items, 0, GRID_PAGE)).toHaveLength(15);
+    expect(pageOf(items, 9, GRID_PAGE)).toEqual([135, 136, 137, 138, 139, 140, 141]);
+    expect(pageOf(items, 40, GRID_PAGE)).toEqual(pageOf(items, 9, GRID_PAGE));
+    expect(clampPage(-3, 142, GRID_PAGE)).toBe(0);
+    expect(shown(142, 1, GRID_PAGE)).toEqual({ from: 16, to: 30, of: 142 });
+    expect(shown(0, 0, GRID_PAGE)).toEqual({ from: 0, to: 0, of: 0 });
+    expect(dots(3, 0)).toEqual([0, 1, 2]);
+    expect(dots(10, 0)).toEqual([0, 1, 2, 3, 4, 5]);
+    expect(dots(10, 5)).toEqual([2, 3, 4, 5, 6, 7]);
+    expect(dots(10, 9)).toEqual([4, 5, 6, 7, 8, 9]);
+  });
+
+  it('counts each category’s products, keeps the recent ones, and finds what sold most', () => {
+    const products = [p(1, 'Tea'), p(2, 'Tea'), p(3, 'Cups'), p(4, null), p(5, 'Spices')];
+    expect(categoryCounts(['Cups', 'Tea', 'Empty'], products)).toEqual([
+      { name: 'Cups', count: 1 },
+      { name: 'Tea', count: 2 },
+      { name: 'Spices', count: 1 },
+    ]);
+    expect(pushRecent(['Tea', 'Cups'], 'Cups')).toEqual(['Cups', 'Tea']);
+    expect(pushRecent(['a', 'b', 'c', 'd'], 'e')).toEqual(['e', 'a', 'b', 'c']);
+    expect(pushRecent(['a'], null)).toEqual(['a']);
+    const sale = (lines: Array<[number, number]>, state: 'sent' | 'refused' = 'sent') => ({ state, lines: lines.map(([product_id, quantity]) => ({ product_id, quantity })) }) as unknown as PosSale;
+    const top = topSellers([sale([[1, 2], [3, 1]]), sale([[3, 4]]), sale([[1, 9]], 'refused')], products.filter((x) => x.category !== 'Spices'));
+    expect(top.map((x) => [x.product.id, x.sold])).toEqual([
+      [3, 5],
+      [1, 2],
+    ]);
   });
 });
