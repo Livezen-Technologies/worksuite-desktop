@@ -405,11 +405,24 @@ export function useBrandScope(): [number | null, (id: number | null) => void] {
 }
 
 function BrandDot({ brand }: { brand: Pick<Brand, 'name' | 'color'> | null }) {
+  if (!brand) {
+    return (
+      <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] bg-subtle text-ink-2" aria-hidden>
+        <Icon name="grid" size={12} />
+      </span>
+    );
+  }
   return (
-    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-[9px] font-bold text-white" style={{ background: brand?.color || '#0f172a' }} aria-hidden>
-      {(brand?.name ?? 'All').slice(0, 2).toUpperCase()}
+    <span className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-[9px] font-bold text-white" style={{ background: brand.color || '#0f172a' }} aria-hidden>
+      {initialsOf(brand.name)}
     </span>
   );
+}
+
+/** "TechHubiz" → "TH", "CreativeFX" → "CF": the capitals of a brand's name, else its first two letters. */
+function initialsOf(name: string): string {
+  const caps = name.replace(/[^A-Z]/g, '');
+  return (caps.length >= 2 ? caps.slice(0, 2) : name.slice(0, 2)).toUpperCase();
 }
 
 /** The header's brand selector: everything is filtered by the brands someone can access (W01 note). */
