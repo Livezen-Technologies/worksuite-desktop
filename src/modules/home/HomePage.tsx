@@ -98,8 +98,13 @@ interface Summary {
 /** Transfer parts and the like are not activity (#104): a line per chunk of an upload says nothing. */
 const NOISE = /\b(chunk|part \d+ of \d+|upload(ed)? part|transfer part)\b/i;
 
-/** The span of a main card on the 9-column main grid. */
-const SPAN = { full: 'md:col-span-9', major: 'md:col-span-5', minor: 'md:col-span-4' } as const;
+/**
+ * Home lays itself out by its own width, not the window's (worksuite-desktop#264): the page is a size container, so
+ * with the chat drawer docked beside it, or in a narrow window, it takes fewer columns — three from 1400px (the main
+ * cards two by two, the side cards in a column of their own), two from 1000px (the side cards under the main ones, two
+ * by two), one below — and no card is ever narrower than about 320px, cut off or under something.
+ */
+const SPAN = { full: '@min-[1000px]:col-span-9', major: '@min-[1000px]:col-span-5', minor: '@min-[1000px]:col-span-4' } as const;
 
 /** The clock, a minute at a time: the agenda's "now" line and "in 55 min" move with it. */
 function useMinute(): number {
@@ -436,10 +441,11 @@ export default function HomePage(_props: ModuleProps) {
   ].filter(Boolean);
 
   return (
-    <div className="h-full overflow-y-auto px-4 py-6 sm:px-6 lg:px-8 scroll-thin">
-      <div className="mx-auto flex max-w-[1400px] flex-col gap-5">
-        <header className="flex flex-wrap items-end justify-between gap-x-6 gap-y-3">
-          <div className="flex min-w-0 flex-col gap-1.5">
+    <div data-home className="@container h-full overflow-y-auto scroll-thin">
+      <div className="mx-auto flex max-w-[1464px] flex-col gap-5 px-4 py-6 @min-[640px]:px-6 @min-[1000px]:px-8">
+        {/* Side by side when there is room: the greeting gives way (it truncates) and the buttons stay whole; tight, they go under it. */}
+        <header className="flex flex-col items-start gap-3 @min-[760px]:flex-row @min-[760px]:items-end @min-[760px]:justify-between @min-[760px]:gap-6">
+          <div className="flex w-full min-w-0 flex-col gap-1.5 @min-[760px]:w-auto @min-[760px]:flex-1">
             <div className="flex min-h-8 flex-wrap items-center gap-x-2 gap-y-1 text-[13px] text-ink-3">
               <span>{dayLabel(today)}</span>
               {orgs.length > 1 ? (
@@ -462,7 +468,7 @@ export default function HomePage(_props: ModuleProps) {
               {greeting()}, {user?.name.split(' ')[0] ?? ''}
             </h1>
           </div>
-          <div className="relative flex flex-wrap items-center gap-2">
+          <div data-home-actions className="relative flex shrink-0 flex-wrap items-center gap-2">
             {offlineAt ? <OfflineNote cachedAt={offlineAt} /> : null}
             <Button className="h-[38px] rounded-[10px] px-3.5 font-medium" onClick={() => setCustomizing((v) => !v)} aria-haspopup="dialog" aria-expanded={customizing} icon="sliders">
               {t('home.customize')}
@@ -489,26 +495,37 @@ export default function HomePage(_props: ModuleProps) {
           </div>
         </header>
 
-        {/* One bordered row; the hairlines between tiles are the gaps. An odd one out at two columns takes the row. */}
+        {/*
+          One bordered row; the hairlines between tiles are the gaps. Four across where four fit, else two by two, else
+          one under another; an odd one out at two columns takes the row.
+        */}
         <div
+          data-home-tiles
           className={cx(
-            'grid grid-cols-1 gap-px overflow-hidden rounded-[14px] border border-line bg-line sm:grid-cols-2 sm:[&>:last-child:nth-child(odd)]:col-span-2',
-            tiles.length >= 4 ? 'xl:grid-cols-4 xl:[&>:last-child:nth-child(odd)]:col-span-1' : tiles.length === 3 ? 'xl:grid-cols-3 xl:[&>:last-child:nth-child(odd)]:col-span-1' : '',
+            'grid grid-cols-1 gap-px overflow-hidden rounded-[14px] border border-line bg-line @min-[520px]:grid-cols-2 @min-[520px]:[&>:last-child:nth-child(odd)]:col-span-2',
+            tiles.length >= 4 ? '@min-[1000px]:grid-cols-4 @min-[1000px]:[&>:last-child:nth-child(odd)]:col-span-1' : tiles.length === 3 ? '@min-[1000px]:grid-cols-3 @min-[1000px]:[&>:last-child:nth-child(odd)]:col-span-1' : '',
           )}
         >
           {tiles}
         </div>
 
-        <div className={cx('grid grid-cols-1 items-start gap-5', main.length && rail.length ? 'xl:grid-cols-12' : '')}>
+        {/* Three columns: the main cards take three parts, the side column one, never under 320px. */}
+        <div data-home-grid className={cx('grid grid-cols-1 items-start gap-5', main.length && rail.length ? '@min-[1400px]:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)]' : '')}>
           {main.length ? (
-            <div className={cx('grid min-w-0 grid-cols-1 gap-5 md:grid-cols-9', rail.length > 0 && 'xl:col-span-9')}>
+            <div data-home-main className="grid min-w-0 grid-cols-1 gap-5 @min-[1000px]:grid-cols-9">
               {main.map((id) => (
                 <Fragment key={id}>{cards[id]()}</Fragment>
               ))}
             </div>
           ) : null}
           {rail.length ? (
-            <div className={cx('grid min-w-0 grid-cols-1 content-start gap-5', main.length ? 'md:grid-cols-2 xl:col-span-3 xl:grid-cols-1' : 'md:grid-cols-3')}>
+            <div
+              data-home-rail
+              className={cx(
+                'grid min-w-0 grid-cols-1 content-start gap-5 @min-[1000px]:grid-cols-2 @min-[1000px]:[&>:last-child:nth-child(odd)]:col-span-2',
+                main.length ? '@min-[1400px]:grid-cols-1 @min-[1400px]:[&>:last-child:nth-child(odd)]:col-span-1' : '@min-[1400px]:grid-cols-3 @min-[1400px]:[&>:last-child:nth-child(odd)]:col-span-1',
+              )}
+            >
               {rail.map((id) => (
                 <Fragment key={id}>{cards[id]()}</Fragment>
               ))}
@@ -533,7 +550,8 @@ function Customize({ layout, available, onChange, onClose }: { layout: Layout; a
     { zone: 'rail', title: 'Side' },
   ];
   return (
-    <div role="dialog" aria-label="Customize Home" className="animate-in absolute top-12 right-0 z-20 w-[340px] max-w-[calc(100vw-32px)] rounded-[12px] border border-line bg-surface p-3 shadow-xl" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
+    // Under the button, on the page whichever side the button is: its right edge beside the greeting, its left under it.
+    <div role="dialog" aria-label="Customize Home" className="animate-in absolute top-12 left-0 z-20 w-[340px] max-w-[calc(100cqw-32px)] rounded-[12px] border border-line bg-surface p-3 shadow-xl @min-[760px]:right-0 @min-[760px]:left-auto" onKeyDown={(e) => e.key === 'Escape' && onClose()}>
       <div className="mb-2 flex items-center justify-between">
         <span className="text-[13px] font-bold text-ink">Cards on Home</span>
         <button type="button" onClick={onClose} className="text-[12.5px] font-semibold text-primary hover:underline">

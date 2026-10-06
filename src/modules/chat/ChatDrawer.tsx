@@ -1,16 +1,17 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { apiGetMeta, apiPost } from '../../core/api';
 import { errorMessage, isMac } from '../../core/bridge';
 import { ContextMenu } from '../../components/ContextMenu';
-import { app } from '../../core/app-state';
+import { app, updatePrefs } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { TabProvider } from '../../core/tab-context';
 import { navigate, tabsStore } from '../../core/tabs';
 import { listStamp, parseTs } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { minimiseChatDrawer, openChatDrawer, ui } from '../../core/ui';
+import { minimiseChatDrawer, openChatDrawer, ui, useChatDrawerMode } from '../../core/ui';
 import { Icon } from '../../components/Icon';
+import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import { Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import { APP_CATALOGUE } from '@shared/apps';
@@ -33,57 +34,116 @@ import { useRoomActions } from './RoomActions';
  * The chat drawer (ChatDrawer, ChatDrawerCalls): chat over whatever you are
  * doing, from the title bar. Chats, calls and archived conversations; a
  * conversation opens in place, and minimising leaves it in the corner.
+ *
+ * Docked or floating (worksuite-desktop#264). Docked — the default — it stands beside the page, under the tab strip:
+ * the page gives up the drawer's width and lays itself out again in what is left, so nothing is hidden under it.
+ * Floating — chosen, or a window narrower than DOCK_MIN_WINDOW — it lies over the page with a shadow and a light dim,
+ * and a click on the page or Esc closes it. Either way it comes and goes in DRAWER_MS, and its left edge is the shared
+ * divider: drag it, use the arrow keys, double-click for the default; the width is kept for this person on this computer.
  */
 const WIDTH_KEY = 'ws.chatDrawer.width';
-/** The drawer's width range and default (worksuite-desktop#211). */
+/** The drawer's width range and default (worksuite-desktop#211, #264). */
 export const DRAWER_MIN = 360;
 export const DRAWER_MAX = 640;
-export const DRAWER_DEFAULT = 420;
+export const DRAWER_DEFAULT = 400;
+/** How long the drawer takes to come and go; a page beside it eases to its new width as long. */
+export const DRAWER_MS = 200;
+/** What the drawer leaves of the window: docked, the sidebar and a page still worth working in; floating, a strip of the page. */
+const DOCKED_ROOM = 720;
+const FLOATING_ROOM = 420;
 
-export function savedWidth(): number {
-  try {
-    const w = Number(localStorage.getItem(WIDTH_KEY));
-    return w >= DRAWER_MIN && w <= DRAWER_MAX ? w : DRAWER_DEFAULT;
-  } catch {
-    return DRAWER_DEFAULT;
-  }
+/** The most of this window the drawer may take. */
+export function drawerMax(floating: boolean): number {
+  return Math.min(DRAWER_MAX, window.innerWidth - (floating ? FLOATING_ROOM : DOCKED_ROOM));
 }
 
-export function ChatDrawer() {
-  const room = useStore(ui, (s) => s.chatRoom);
-  const [width, setWidth] = useState(savedWidth);
-  // Drag the left edge to make it wider or narrower; the width is remembered.
-  const resize = (e: React.MouseEvent) => {
-    e.preventDefault();
-    const right = (e.currentTarget.parentElement?.getBoundingClientRect().right ?? window.innerWidth);
-    let last = width;
-    const move = (m: MouseEvent) => {
-      last = Math.round(Math.max(DRAWER_MIN, Math.min(Math.min(DRAWER_MAX, window.innerWidth - 420), right - m.clientX)));
-      setWidth(last);
-    };
-    const up = () => {
-      window.removeEventListener('mousemove', move);
-      window.removeEventListener('mouseup', up);
-      document.body.style.cursor = '';
-      try {
-        localStorage.setItem(WIDTH_KEY, String(last));
-      } catch {
-        // The width is a convenience.
-      }
-    };
-    document.body.style.cursor = 'ew-resize';
-    window.addEventListener('mousemove', move);
-    window.addEventListener('mouseup', up);
-  };
+/** Where this person's drawer width is kept on this computer. */
+export function drawerWidthKey(user: string | number | null | undefined): string {
+  return user == null || user === '' ? WIDTH_KEY : `${WIDTH_KEY}.${user}`;
+}
+
+/** A width kept before it was kept per person becomes the first person's to open the drawer here. */
+function adoptWidth(key: string): string {
+  if (key === WIDTH_KEY) return key;
+  try {
+    const old = localStorage.getItem(WIDTH_KEY);
+    if (old !== null) {
+      if (localStorage.getItem(key) === null) localStorage.setItem(key, old);
+      localStorage.removeItem(WIDTH_KEY);
+    }
+  } catch {
+    // The width is a convenience.
+  }
+  return key;
+}
+
+/** Whether the drawer is on screen: while it is open, and for the moment it takes to leave once put away. */
+export function useDrawerShown(open: boolean): boolean {
+  const [shown, setShown] = useState(open);
+  if (open && !shown) setShown(true);
+  useEffect(() => {
+    if (open || !shown) return;
+    const t = window.setTimeout(() => setShown(false), DRAWER_MS);
+    return () => window.clearTimeout(t);
+  }, [open, shown]);
+  return open || shown;
+}
+
+export function ChatDrawer({ closing = false }: { closing?: boolean }) {
+  const current = useStore(ui, (s) => s.chatRoom);
+  // Leaving, it goes on showing what it showed: minimising has already let go of the conversation.
+  const [room, setRoom] = useState(current);
+  if (!closing && room !== current) setRoom(current);
+  const user = useStore(app, (s) => s.auth?.user?.id ?? null);
+  const [key] = useState(() => adoptWidth(drawerWidthKey(user)));
+  const { floating } = useChatDrawerMode();
+  const max = useCallback(() => drawerMax(floating), [floating]);
+  const size = useResizableWidth('chatDrawer', { key, defaultWidth: DRAWER_DEFAULT, min: DRAWER_MIN, max });
+  // It comes in once; switching between docked and floating afterwards, or the window crossing the line, moves it at once.
+  const [entered, setEntered] = useState(false);
+  const motion = closing ? (floating ? 'chat-float-out' : 'chat-dock-out') : entered ? null : floating ? 'chat-float-in' : 'chat-dock-in';
   return (
-    // One container with one left edge (worksuite-desktop#211): a 1px border and a soft shadow so it reads as a
-    // layer over the app in both themes; every part inside (header, messages, composer) shares that edge.
-    <aside aria-label="Chat drawer" className="absolute top-0 right-0 bottom-0 z-30 flex flex-col overflow-hidden border-l border-line bg-surface shadow-[-12px_0_32px_-16px_rgb(0_0_0/.45)]" style={{ width }}>
-      <div aria-hidden onMouseDown={resize} onDoubleClick={() => setWidth(DRAWER_DEFAULT)} title="Drag to resize" className="absolute top-0 bottom-0 left-0 z-10 w-1.5 cursor-ew-resize bg-transparent hover:bg-primary/30" />
-      <TabProvider tabId="chat-drawer" route={room ? `/chat?room=${room}` : '/chat'} active onGo={(r) => navigate(r)}>
-        {room ? <Conversation roomId={room} /> : <Lists />}
-      </TabProvider>
-    </aside>
+    <>
+      {floating ? <div aria-hidden data-chat-scrim onMouseDown={minimiseChatDrawer} className={cx('absolute inset-0 z-30 bg-scrim/40', closing ? 'chat-scrim-out' : 'chat-scrim-in')} /> : null}
+      {/*
+        One container with one left edge (worksuite-desktop#211): a 1px border, every part inside (header, messages,
+        composer) sharing it. Docked, it is a column of the window, and the page beside it is narrower by its width;
+        floating, it lies over the page with a soft shadow, so it reads as a layer in both themes. Its content keeps
+        the drawer's width while the column grows or shrinks, so it slides rather than squeezes.
+      */}
+      <div
+        data-chat-drawer={floating ? 'floating' : 'docked'}
+        inert={closing}
+        onAnimationEnd={(e) => e.target === e.currentTarget && !closing && setEntered(true)}
+        className={cx(floating ? 'absolute inset-y-0 right-0 z-30' : 'relative shrink-0', motion)}
+        style={{ width: size.width }}
+      >
+        <aside aria-label="Chat drawer" className={cx('absolute inset-y-0 left-0 flex flex-col overflow-hidden border-l border-line bg-surface', floating && 'shadow-[-12px_0_32px_-16px_rgb(0_0_0/.45)]')} style={{ width: size.width }}>
+          <TabProvider tabId="chat-drawer" route={room ? `/chat?room=${room}` : '/chat'} active onGo={(r) => navigate(r)}>
+            {room ? <Conversation roomId={room} /> : <Lists />}
+          </TabProvider>
+        </aside>
+        <ResizeDivider state={size} side="left" label="Resize the chat drawer" />
+      </div>
+    </>
+  );
+}
+
+/** Docked ⇄ Floating, from the drawer's header: kept as the Settings › Chat choice. A narrow window has no room to dock. */
+export function DrawerModeButton({ className }: { className?: string }) {
+  const { chosen, narrow, floating } = useChatDrawerMode();
+  const label = floating ? 'Dock beside the page' : 'Float over the page';
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={narrow ? 'Make the window wider to dock the chat beside the page' : label}
+      disabled={narrow}
+      onClick={() => void updatePrefs({ chatDrawer: chosen === 'floating' ? 'docked' : 'floating' }).catch((e) => toast('error', errorMessage(e)))}
+      className={cx(className, 'disabled:opacity-40 disabled:hover:bg-transparent')}
+    >
+      <Icon name={floating ? 'layout-side' : 'pip'} size={15} />
+    </button>
   );
 }
 
@@ -140,6 +200,7 @@ function Lists() {
         <button type="button" aria-label="Open full chat" title="Open full chat" onClick={() => (minimiseChatDrawer(), navigate('/chat'))} className={round}>
           <Icon name="maximize" size={15} />
         </button>
+        <DrawerModeButton className={round} />
         <button type="button" aria-label="Minimise" title="Minimise" onClick={minimiseChatDrawer} className={round}>
           <Icon name="minus" size={16} />
         </button>

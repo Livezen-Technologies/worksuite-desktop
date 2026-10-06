@@ -1,4 +1,5 @@
-import type { AiDisplay } from '@shared/types';
+import { useSyncExternalStore } from 'react';
+import type { AiDisplay, ChatDrawerMode } from '@shared/types';
 import { app, type AppState } from './app-state';
 import { createStore, useStore } from './store';
 
@@ -64,6 +65,32 @@ export function minimiseChatDrawer(): void {
   ui.set((s) => ({ dock: null, chatRoom: null, chatMinimised: s.chatRoom && !s.chatMinimised.includes(s.chatRoom) ? [...s.chatMinimised, s.chatRoom].slice(-4) : s.chatMinimised }));
 }
 
+/**
+ * Docked or floating (worksuite-desktop#264). Docked, the chat drawer sits beside the page, which gives up its width
+ * and lays itself out again; floating, it lies over the page, dimmed, and a click on the page or Esc closes it. The
+ * person chooses in Settings › Chat or with the button in the drawer's header; a window narrower than this has no room
+ * to dock it, and floats it whatever they chose.
+ */
+export const DOCK_MIN_WINDOW = 1200;
+
+const onResize = (cb: () => void) => {
+  window.addEventListener('resize', cb);
+  return () => window.removeEventListener('resize', cb);
+};
+const tooNarrow = () => window.innerWidth < DOCK_MIN_WINDOW;
+
+/** Whether the chat drawer floats over the page now: chosen, or the window too narrow to dock it. */
+export function chatDrawerFloats(): boolean {
+  return app.get().prefs?.chatDrawer === 'floating' || tooNarrow();
+}
+
+/** The mode chosen, whether the window leaves room to dock, and so whether the drawer floats; follows the window. */
+export function useChatDrawerMode(): { chosen: ChatDrawerMode; narrow: boolean; floating: boolean } {
+  const chosen = useStore(app, (s) => s.prefs?.chatDrawer ?? 'docked');
+  const narrow = useSyncExternalStore(onResize, tooNarrow);
+  return { chosen, narrow, floating: chosen === 'floating' || narrow };
+}
+
 /** Settings › AI Assistant › Display mode: the header button and its drawer, the floating widget, or neither. */
 export function aiDisplay(): AiDisplay {
   return app.get().prefs?.ai?.display ?? 'widget';
@@ -100,8 +127,9 @@ export function toggleAssistant(): void {
 }
 
 /**
- * Escape, when nothing nearer took it: the open menu closes, else the assistant goes down to its launcher.
- * Whether anything was closed.
+ * Escape, when nothing nearer took it: the open menu closes, else the assistant goes down to its launcher, else the
+ * chat drawer, when it floats over the page, is minimised (worksuite-desktop#264) — docked, it is part of the window
+ * and stays. Whether anything was closed.
  */
 export function closeTopPanel(): boolean {
   if (ui.get().overlay) {
@@ -110,6 +138,10 @@ export function closeTopPanel(): boolean {
   }
   if (aiWidget.get().open || ui.get().dock === 'ai') {
     putAssistantAway();
+    return true;
+  }
+  if (ui.get().dock === 'chat' && chatDrawerFloats()) {
+    minimiseChatDrawer();
     return true;
   }
   return false;

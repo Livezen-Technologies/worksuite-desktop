@@ -328,6 +328,11 @@ export interface Preferences {
   webchatFollowUps?: WebchatFollowUpPrefs;
   /** Wall mode on a display (L-06, MAP-24): saved by its sheet. Unset: WALL_MODE_DEFAULTS. */
   wallMode?: WallModePrefs;
+  /**
+   * Settings › Chat › Chat drawer opens as (worksuite-desktop#264): docked beside the page, which makes room for it,
+   * or floating over it. Unset: docked. A window too narrow to dock it floats it either way.
+   */
+  chatDrawer?: ChatDrawerMode;
   /** The AI Assistant on this computer (Settings › AI Assistant). */
   ai: AiPrefs;
   /** Meet › Recording (worksuite-desktop#68). */
@@ -450,6 +455,9 @@ export type AiModuleAccessPrefs = Record<AiEngine, Record<string, AiModuleToggle
 
 export const AI_DISPLAYS = ['drawer', 'widget', 'hidden'] as const;
 export type AiDisplay = (typeof AI_DISPLAYS)[number];
+
+/** How the chat drawer opens (worksuite-desktop#264): beside the page, which makes room, or over it. */
+export type ChatDrawerMode = 'docked' | 'floating';
 
 /** The shortcuts Quick Ask may use: ones no system or common app claims. */
 export const QUICK_ASK_SHORTCUTS = ['Alt+Space', 'Control+Alt+Space', 'CommandOrControl+Shift+Space'] as const;

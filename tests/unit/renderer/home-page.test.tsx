@@ -505,8 +505,42 @@ describe('Customize (#104, optimized)', () => {
     show();
     await screen.findByRole('region', { name: 'Recent activity' });
     expect(regions()).toEqual(["Today's work", "Today's agenda", 'Recent activity', 'Recent files', 'Your daily brief', 'Waiting for me', 'Announcements']);
-    expect(screen.getByRole('region', { name: "Today's work" }).className).toContain('md:col-span-5');
-    expect(screen.getByRole('region', { name: "Today's agenda" }).className).toContain('md:col-span-4');
+    expect(screen.getByRole('region', { name: "Today's work" }).className).toContain('@min-[1000px]:col-span-5');
+    expect(screen.getByRole('region', { name: "Today's agenda" }).className).toContain('@min-[1000px]:col-span-4');
+  });
+
+  it('lays itself out by its own width, not the window’s (#264): 3 columns past 1400px, 2 from 1000px, 1 below', async () => {
+    show();
+    await screen.findByRole('region', { name: 'Recent activity' });
+    const page = document.querySelector<HTMLElement>('[data-home]')!;
+    const cls = (sel: string) => document.querySelector<HTMLElement>(sel)!.className.split(' ');
+    // The page is the size container every breakpoint below reads; none of them is the window's.
+    expect(page.className.split(' ')).toContain('@container');
+    const layout = [page, page.firstElementChild!, page.querySelector('header')!, ...page.querySelectorAll('[data-home-tiles], [data-home-grid], [data-home-main], [data-home-rail], [data-card]')];
+    expect(layout.flatMap((el) => el.className.split(' ')).filter((c) => /^(sm|md|lg|xl|2xl):/.test(c))).toEqual([]);
+    // Three columns: the main cards (two by two) and the side cards beside them, never under 320px.
+    expect(cls('[data-home-grid]')).toEqual(expect.arrayContaining(['grid-cols-1', '@min-[1400px]:grid-cols-[minmax(0,3fr)_minmax(320px,1fr)]']));
+    expect(cls('[data-home-main]')).toEqual(expect.arrayContaining(['grid-cols-1', '@min-[1000px]:grid-cols-9']));
+    // Two columns: the side cards under the main ones, two by two, an odd one out taking the row; one column at 1400.
+    expect(cls('[data-home-rail]')).toEqual(expect.arrayContaining(['grid-cols-1', '@min-[1000px]:grid-cols-2', '@min-[1000px]:[&>:last-child:nth-child(odd)]:col-span-2', '@min-[1400px]:grid-cols-1']));
+    // The four numbers: four across where they fit, two by two below that, then one under another.
+    expect(cls('[data-home-tiles]')).toEqual(expect.arrayContaining(['grid-cols-1', '@min-[520px]:grid-cols-2', '@min-[1000px]:grid-cols-4']));
+    // Customize stays whole: beside the greeting when there is room (the greeting truncates), under it when tight.
+    const header = page.querySelector('header')!;
+    expect(header.className.split(' ')).toEqual(expect.arrayContaining(['flex-col', '@min-[760px]:flex-row']));
+    expect(cls('[data-home-actions]')).toContain('shrink-0');
+    expect(within(header).getByRole('heading', { level: 1 }).className).toContain('truncate');
+    fireEvent.click(screen.getByRole('button', { name: 'Customize' }));
+    expect(screen.getByRole('dialog', { name: 'Customize Home' }).className.split(' ')).toEqual(expect.arrayContaining(['left-0', '@min-[760px]:right-0', '@min-[760px]:left-auto']));
+  });
+
+  it('with the main cards all hidden, the side cards take the columns themselves', async () => {
+    localStorage.setItem('ws.home.layout:5', JSON.stringify({ version: 2, order: ['work', 'calendar', 'activity', 'files', 'summary', 'waiting', 'announcements'], hidden: ['work', 'calendar', 'activity', 'files'], wide: [] }));
+    show();
+    await screen.findByRole('region', { name: 'Announcements' });
+    expect(document.querySelector('[data-home-main]')).toBeNull();
+    expect(document.querySelector('[data-home-grid]')!.className).not.toContain('grid-cols-[');
+    expect(document.querySelector('[data-home-rail]')!.className.split(' ')).toEqual(expect.arrayContaining(['@min-[1000px]:grid-cols-2', '@min-[1400px]:grid-cols-3']));
   });
 
   it('hides, widens, reorders and resets, kept for next time', async () => {
@@ -516,7 +550,7 @@ describe('Customize (#104, optimized)', () => {
     fireEvent.click(screen.getByRole('checkbox', { name: 'Show Recent activity' }));
     expect(screen.queryByRole('region', { name: 'Recent activity' })).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: "Make Today's agenda wide" }));
-    expect(screen.getByRole('region', { name: "Today's agenda" }).className).toContain('md:col-span-9');
+    expect(screen.getByRole('region', { name: "Today's agenda" }).className).toContain('@min-[1000px]:col-span-9');
     fireEvent.click(screen.getByRole('button', { name: 'Move Announcements up' }));
     expect(regions().slice(-3)).toEqual(['Your daily brief', 'Announcements', 'Waiting for me']);
     // The first of its zone cannot go further up, though a main card is above it in the list.
@@ -524,7 +558,7 @@ describe('Customize (#104, optimized)', () => {
     expect(JSON.parse(localStorage.getItem('ws.home.layout:5') ?? '{}')).toMatchObject({ version: 2, hidden: ['activity'], wide: ['calendar'] });
     await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Reset Layout' })));
     expect(screen.getByRole('region', { name: 'Recent activity' })).toBeTruthy();
-    expect(screen.getByRole('region', { name: "Today's agenda" }).className).not.toContain('md:col-span-9');
+    expect(screen.getByRole('region', { name: "Today's agenda" }).className).not.toContain('@min-[1000px]:col-span-9');
     expect(regions().slice(-3)).toEqual(['Your daily brief', 'Waiting for me', 'Announcements']);
   });
 
@@ -533,9 +567,9 @@ describe('Customize (#104, optimized)', () => {
     show();
     await screen.findByRole('region', { name: 'Recent activity' });
     expect(regions()).toEqual(["Today's work", "Today's agenda", 'Recent activity', 'Your daily brief', 'Waiting for me', 'Announcements']);
-    expect(screen.getByRole('region', { name: "Today's agenda" }).className).toContain('md:col-span-4');
+    expect(screen.getByRole('region', { name: "Today's agenda" }).className).toContain('@min-[1000px]:col-span-4');
     // Alone in its row, activity takes all of it.
-    expect(screen.getByRole('region', { name: 'Recent activity' }).className).toContain('md:col-span-9');
+    expect(screen.getByRole('region', { name: 'Recent activity' }).className).toContain('@min-[1000px]:col-span-9');
   });
 });
 
