@@ -81,7 +81,7 @@ import { attachmentStorePathOf } from '@shared/mail-media';
 import { mimeFor } from '@shared/mime';
 import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
-import { ConnectionMonitor, timeFetch } from '../services/connection-quality';
+import { ConnectionMonitor, tcpHandshake, timeFetch } from '../services/connection-quality';
 import { ApiTimings } from '@shared/connection';
 import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
@@ -417,10 +417,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const realtime = new RealtimeService(http, () => auth.getServer()?.origin ?? null, allowInsecure);
   let realtimeDownSince: number | null = null;
-  // Connection strength (worksuite-desktop#254): pings over the realtime socket, or /api/health without one.
+  // Connection strength (worksuite-desktop#254, #265): the network delay by the realtime socket's echo, else the time to
+  // open a TCP connection to the server (not through a proxy), else /api/health as an upper bound. The speed test runs
+  // on the bulk pool, so it never holds up chats (#252).
   const connection = new ConnectionMonitor({
     realtime,
     http,
+    bulk: bulkHttp,
+    tcpPing: tcpHandshake({ resolveProxy: (url) => net.resolveProxy(url) }),
     origin: () => auth.getServer()?.origin ?? null,
     active: () => !!sessionCtl?.isReady() && !!auth.getServer(),
     onChange: () => emitStatus(),

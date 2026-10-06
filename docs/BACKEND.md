@@ -973,6 +973,54 @@ and offers to copy a support request instead of sending it.
   - It is not the company helpdesk (`/api/tickets`), which needs the "Reply to tickets" permission and serves the
     company's own customers.
 
+## Connection strength and the speed test (worksuite-desktop#254, #265)
+
+The status bar shows two things apart: **your connection** (the network delay, its stability, the speed test) and
+**the WorkSuite server** (the API's median and slowest 5% of the last 50 requests, timed to their response headers,
+and how many failed). A slow server gets its own amber "Server slow" marker (median over 1 s); it never makes the
+connection Poor. The connection's level is the documented thresholds on the network delay alone: under 100 ms
+Excellent, 100–250 Good, 250–600 Fair, over 600 Poor.
+
+How the desktop measures the network delay, every 10 s, lightest first:
+
+1. **The realtime echo**, where realtime runs over a socket: `ping:<id>` (v1) or `{"type":"ping","id"}` (v2), which
+   the gateway answers at once with `{"type":"pong","id"}`. A gateway that never answers is asked no more.
+2. **A TCP connection to the server** where the echo cannot be sent (SSE is one-way, the built-in service polls, an
+   older gateway): the time to open it, then it is closed. Nothing is sent on it. Not used through a proxy.
+3. **`GET /api/health`** only where neither works. It includes the server's own time, so the desktop treats it as an
+   upper bound ("Fair · ≤ 312 ms") and never calls the connection Poor on it.
+
+The speed test downloads up to 25 MB over 4 connections at once, and uploads up to 20 MB where the server takes it,
+for at most 8 s each way. It runs on the bulk connection pool, so chats are not held up. The download is timed from
+its first byte, so the server's wait before it starts answering is left out. The upload is timed by Chromium's own
+count of the bytes sent, so the server's work after the body arrives is left out.
+
+None of the following exists on the server yet. Each is optional: the desktop detects it and uses it once it is
+there.
+
+- **`GET /api/health/probe?kb=N` — a sized test download.**
+  - It answers N KB of random (incompressible) bytes: `Content-Type: application/octet-stream`,
+    `Cache-Control: no-store`, and no gzip or brotli.
+  - The desktop asks for 6400 KB per connection. Cap N at 25600 (25 MB) and limit how often each person can call it.
+  - The desktop sends the session's bearer token. The server may require it, so the endpoint cannot be used
+    anonymously.
+  - **Without it:** the desktop fetches `/widget.js` again and again instead. The result says that a small file reads
+    low on a fast connection.
+  - **Wrong answers:** a JSON or HTML answer on this path is not taken as the test download.
+- **`POST /api/health/probe` — an upload sink.**
+  - It reads the raw body and throws it away: `application/octet-stream`, up to 5 MB per request. Check nginx
+    `client_max_body_size` and PHP's limits, and read the body from `php://input`.
+  - It answers `{"status":"success","data":{"bytes":<bytes received>}}`.
+  - The desktop first sends a 16 KB check, and uploads more only when the answer confirms those bytes exactly.
+  - An upload the server answers with a different count gives no figure. So does one that fails.
+  - **Without it:** the desktop shows "Upload test needs a newer server" and sends nothing more. It never shows a
+    figure it did not measure.
+- **`Server-Timing: app;dur=<ms>` on `/api/health` — the server's own time.**
+  - The desktop takes the largest `dur` as the server's whole time and subtracts it from the round trip. The server
+    check then measures the network delay, not just an upper bound on it.
+- **`/api/health`'s `data.time`** (ISO 8601 with its offset) already exists. The desktop shows it in the computer's
+  own time and zone ("23:06 Sri Lanka Time").
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is
