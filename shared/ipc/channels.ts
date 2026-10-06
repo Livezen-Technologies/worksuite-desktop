@@ -352,6 +352,9 @@ export const INVOKE_CHANNELS = [
   'offline:clearMailbox',
   'offline:mailSearch',
   'offline:mailList',
+  // Help & Guide's Contact Support (WS-SUPPORT-SRS-001 D-11): the window's picture and the redacted recent log.
+  'help:capture',
+  'help:logs',
   'offline:submit',
   'offline:retry',
   'offline:discard',

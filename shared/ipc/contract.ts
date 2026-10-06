@@ -1262,6 +1262,9 @@ export const contract = {
   'mail:setSpellLanguages': ch(z.strictObject({ languages: z.array(z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/)).max(4) }), { session: true, rate: 5 }),
   // S/MIME (DMO-SEC-05): a signed message checked against its own bytes, in the main process.
   'smime:verify': ch(z.strictObject({ uid: z.string().regex(/^\d{1,20}$/), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), mailbox: z.string().regex(/^\d{1,20}$/).nullable() }), { session: true, rate: 5 }),
+  // Contact Support (D-11): a picture of the asking window, and the last day's redacted log — shown before they go.
+  'help:capture': ch(none, { session: true, rate: 5 }),
+  'help:logs': ch(none, { session: true, rate: 10 }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
   'offline:retry': ch(z.object({ id: idString }), { session: true }),
   'offline:discard': ch(z.object({ id: idString }), { session: true }),
@@ -1778,6 +1781,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'mail:images': { enabled: boolean; images: Record<string, string> };
   'mail:keptAttachments': string[];
   'smime:verify': SmimeVerdict;
+  'help:capture': { name: string; data: string; width: number; height: number };
+  'help:logs': { text: string; lines: number; bytes: number };
   'offline:submit': SubmitResult;
   'offline:retry': void;
   'offline:discard': void;

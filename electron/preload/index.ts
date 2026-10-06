@@ -515,6 +515,10 @@ const api = {
   smime: {
     verify: call('smime:verify'),
   },
+  help: {
+    capture: call('help:capture'),
+    logs: call('help:logs'),
+  },
   offline: {
     status: call('offline:status'),
     pending: call('offline:pending'),
