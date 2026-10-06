@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Transfer } from '@shared/types';
 import { transferSections, transferSummary } from '@shared/transfers';
+import { CONNECTION_LOST, STALLED, uploadPercent } from '@shared/uploads';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
@@ -101,12 +102,14 @@ function useSecondsUntil(iso: string | null | undefined): number | null {
 /** What a waiting transfer is waiting for: its turn, or the time it is tried again. */
 export function waitingLine(t: Transfer, secondsLeft: number | null): string {
   if (t.state === 'paused') return t.error ? `Paused · ${t.error}` : `Paused · ${bytes(t.bytes)} of ${bytes(t.total)}`;
+  // The connection went (or stalled): it carries on by itself from the last part the server has (#249).
+  if (t.retryAt && (t.error === CONNECTION_LOST || t.error === STALLED)) return `${t.error}${secondsLeft ? ` · next try in ${duration(secondsLeft)}` : ''}`;
   if (t.retryAt) return `Trying again ${secondsLeft ? `in ${duration(secondsLeft)}` : 'now'} · try ${(t.attempts ?? 0) + 1}${t.error ? ` · ${t.error}` : ''}`;
   return t.position ? `Queued · #${t.position} in line` : 'Queued';
 }
 
 function TransferRow({ t }: { t: Transfer }) {
-  const pct = t.total > 0 ? Math.min(100, Math.round((t.bytes / t.total) * 100)) : 0;
+  const pct = uploadPercent(t.bytes, t.total);
   const eta = t.speed > 0 && t.total > 0 ? duration((t.total - t.bytes) / t.speed) : null;
   const left = useSecondsUntil(t.state === 'queued' ? t.retryAt : null);
   const act = (ch: 'transfers:pause' | 'transfers:resume' | 'transfers:cancel' | 'transfers:retry' | 'transfers:open' | 'transfers:reveal') => call(ch, { id: t.id }).catch((e) => toast('error', errorMessage(e)));
@@ -121,21 +124,22 @@ function TransferRow({ t }: { t: Transfer }) {
               <div className="h-full rounded-full bg-primary" style={{ width: `${pct}%` }} />
             </div>
             <div className="mt-0.5 font-mono text-[11px] text-ink-3">
-              {bytes(t.bytes)} / {bytes(t.total)} · {bytes(t.speed)}/s{eta ? ` · ${eta} left` : ''}
+              {pct}% · {bytes(t.bytes)} / {bytes(t.total)} · {bytes(t.speed)}/s{eta ? ` · ${eta} left` : ''}
             </div>
           </>
         ) : t.state === 'queued' || t.state === 'paused' ? (
           <div className={cx('truncate text-[11.5px]', t.retryAt ? 'text-warning' : 'text-ink-3')}>{waitingLine(t, left)}</div>
         ) : (
           <div className={cx('text-[11.5px]', t.state === 'failed' ? 'text-danger' : 'text-ink-3')}>
-            {t.state === 'done' ? `${bytes(t.total)} · ${t.direction === 'upload' ? 'uploaded' : 'saved'}` : t.state === 'failed' ? (t.error ?? 'Failed') : 'Cancelled'}
+            {t.state === 'done' ? `${bytes(t.total)} · ${t.direction === 'upload' ? 'uploaded' : 'saved'}` : t.state === 'failed' ? `${t.bytes > 0 && t.total > 0 ? `Stopped at ${pct}% · ` : ''}${t.error ?? 'Failed'}` : 'Cancelled'}
           </div>
         )}
       </div>
       <div className="flex shrink-0 gap-0.5">
         {t.state === 'running' || t.state === 'queued' ? <IconButton icon="pause" label="Pause" size={15} onClick={() => void act('transfers:pause')} /> : null}
         {t.state === 'paused' ? <IconButton icon="play" label="Resume" size={15} onClick={() => void act('transfers:resume')} /> : null}
-        {t.state === 'failed' ? <IconButton icon="refresh" label="Retry" size={15} onClick={() => void act('transfers:retry')} /> : null}
+        {/* Retry carries on from the parts the server already has (#249): nothing is sent twice. */}
+        {t.state === 'failed' ? <IconButton icon="refresh" label={t.bytes > 0 ? 'Retry — continues from where it stopped' : 'Retry'} size={15} onClick={() => void act('transfers:retry')} /> : null}
         {t.state === 'done' && t.direction === 'download' && !t.destination.startsWith('Kept in WorkSuite') ? (
           <>
             <IconButton icon="external" label="Open" size={15} onClick={() => void act('transfers:open')} />

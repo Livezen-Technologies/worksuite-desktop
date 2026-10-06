@@ -1,5 +1,6 @@
 import { channelAppOfRoute, redirectRoute } from '@shared/channels';
 import type { TabRecord } from '@shared/ipc/contract';
+import { canonicalSupportRoute, isTicketRoute } from '@shared/support';
 import { canOpen, refuse } from './access';
 import { startRoute } from './session';
 import { call } from './bridge';
@@ -60,6 +61,17 @@ const newId = () => `t${Date.now().toString(36)}${(++seq).toString(36)}`;
  */
 const RECORD_TAB_APPS = new Set(['office']);
 /**
+ * Routes that are one record's own tab inside an app with other screens: a support ticket (D-02, FR-DSK-05). Opening
+ * it again — a deep link, a notification, the inbox — brings its tab forward (WF-12); the app's other screens (the
+ * inbox) never open in a ticket's tab, nor a ticket in theirs.
+ */
+const isRecordRoute = (route: string): boolean => isTicketRoute(route);
+/**
+ * A route in its one form: a channel's old route as its host's (#35), every way of naming a support ticket as its
+ * tab's route (`/support?ticket=4` from a web link is `/support/ticket/4`).
+ */
+const canonical = (at: string): string => canonicalSupportRoute(redirectRoute(at));
+/**
  * Apps that have one tab at most (worksuite-desktop#155): Home. Opening it again — "+", ⌘T, the launcher,
  * Duplicate, a window taken back in — brings the tab there is forward instead of a second one.
  */
@@ -118,7 +130,7 @@ function guardWait(id: string): Promise<void> | null {
 
 function make(at: string, organizationId: string | null, title?: string): Tab {
   // A channel's old route (`/whatsapp?chat=5`) opens in its host now, on the same conversation (#35).
-  const route = redirectRoute(at);
+  const route = canonical(at);
   return {
     id: newId(),
     route,
@@ -200,7 +212,7 @@ function allowed(route: string): boolean {
 
 /** Opens a route in a new tab; null when the person may not open its app. */
 export function openTab(at: string, opts: { background?: boolean; title?: string; organizationId?: string | null } = {}): string | null {
-  const route = redirectRoute(at);
+  const route = canonical(at);
   if (!allowed(route)) return null;
   const existing = singletonTab(tabsStore.get(), route);
   if (existing) {
@@ -219,22 +231,23 @@ export function openTab(at: string, opts: { background?: boolean; title?: string
  * to a new tab only when the app has none.
  */
 export function navigate(at: string, organizationId: string | null = null): void {
-  const route = redirectRoute(at);
+  const route = canonical(at);
   if (!allowed(route)) return;
   const s = tabsStore.get();
   const app = appForRoute(route);
-  if (RECORD_TAB_APPS.has(app)) {
+  if (RECORD_TAB_APPS.has(app) || isRecordRoute(route)) {
     const same = s.tabs.find((t) => t.app === app && recordKey(t.route) === recordKey(route));
     if (same) activate(same.id);
     else openTab(route, { organizationId });
     return;
   }
+  // An app's own screens move within its tab — never within one of its records' tabs.
   const current = s.tabs.find((t) => t.id === s.activeId);
-  if (current && current.app === app) {
+  if (current && current.app === app && !isRecordRoute(current.route)) {
     setRoute(current.id, route);
     return;
   }
-  const existing = s.tabs.find((t) => t.app === app);
+  const existing = s.tabs.find((t) => t.app === app && !isRecordRoute(t.route));
   if (existing) {
     setRoute(existing.id, route);
     activate(existing.id);
@@ -244,7 +257,7 @@ export function navigate(at: string, organizationId: string | null = null): void
 }
 
 export function setRoute(id: string, at: string): void {
-  const route = redirectRoute(at);
+  const route = canonical(at);
   if (!allowed(route)) return;
   update((s) => ({
     tabs: s.tabs.map((t) => (t.id === id ? { ...t, route, app: appForRoute(route), title: t.route === route ? t.title : titleForRoute(route), suspended: false } : t)),
@@ -339,7 +352,7 @@ export async function detachTab(id: string, at?: { x: number; y: number }): Prom
 
 /** Opens a tab at a place in the strip (a window docked back, dropped between two tabs). */
 export function insertTab(route: string, opts: { title?: string; index?: number; side?: boolean } = {}): string {
-  const existing = singletonTab(tabsStore.get(), redirectRoute(route));
+  const existing = singletonTab(tabsStore.get(), canonical(route));
   if (existing) {
     if (opts.side && tabsStore.get().activeId !== existing.id) dockSide(existing.id);
     else activate(existing.id);
@@ -435,6 +448,15 @@ export function activateIndex(n: number): void {
   if (t) activate(t.id);
 }
 
+/** The next tab (`step` 1) or the previous one (-1), round from the last to the first and back (⌘⇧] and ⌘⇧[). */
+export function activateRelative(step: 1 | -1): void {
+  const s = tabsStore.get();
+  if (s.tabs.length < 2) return;
+  const at = s.tabs.findIndex((t) => t.id === s.activeId);
+  const next = s.tabs[(Math.max(at, 0) + step + s.tabs.length) % s.tabs.length];
+  if (next) activate(next.id);
+}
+
 /** FR-NAV-08: unmount tabs idle longer than the suspension time. */
 export function suspendIdle(minutes: number): void {
   const now = Date.now();
@@ -487,7 +509,7 @@ export async function restoreTabs(allowed: Set<string>): Promise<boolean> {
     const saved = await call('tabs:restore');
     const seen = new Set<string>();
     const tabs: Tab[] = saved.tabs
-      .map((r) => ({ ...r, route: redirectRoute(r.route) }))
+      .map((r) => ({ ...r, route: canonical(r.route) }))
       .filter((r) => allowed.has(appForRoute(r.route)))
       // Two Home tabs saved by an older version come back as one.
       .filter((r) => {

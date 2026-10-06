@@ -40,10 +40,12 @@ export function clockIn(zone: string, now: Date = new Date()): { weekday: number
   }
 }
 
-/** "UTC+05:30", "UTC−04:00", "UTC" — the zone's offset now. */
+/** "UTC+05:30", "UTC−04:00", "UTC+00:00" — the zone's offset now; "UTC" only when it cannot be read. */
 export function offsetOf(zone: string, now: Date = new Date()): string {
   try {
     const name = new Intl.DateTimeFormat('en-US', { timeZone: zone, timeZoneName: 'longOffset' }).formatToParts(now).find((p) => p.type === 'timeZoneName')?.value ?? '';
+    // A zone with no offset reads plain "GMT".
+    if (name === 'GMT' || name === 'UTC') return 'UTC+00:00';
     const m = /GMT([+-−])(\d{1,2})(?::?(\d{2}))?/.exec(name);
     if (!m) return 'UTC';
     return `UTC${m[1] === '-' ? '−' : '+'}${m[2]!.padStart(2, '0')}:${m[3] ?? '00'}`;

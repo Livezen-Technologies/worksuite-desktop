@@ -11,7 +11,7 @@ import type { LocalRecording, Transfer } from './types';
  */
 
 export type RecordingPhase = 'starting' | 'stopping' | 'recording' | 'finalizing' | 'queued' | 'processing' | 'uploading' | 'ready' | 'paused' | 'failed';
-export type RecordingAction = 'retry' | 'pause' | 'resume' | 'cancel' | 'play' | 'openInDrive' | 'reveal';
+export type RecordingAction = 'retry' | 'pause' | 'resume' | 'cancel' | 'play' | 'openInDrive' | 'reveal' | 'fixPermission' | 'delete';
 export type DownloadAction = 'pause' | 'resume' | 'cancel' | 'retry' | 'open' | 'reveal';
 
 export interface MeasuredProgress {
@@ -171,6 +171,8 @@ export function localRecordingStatus(r: LocalRecording, t: Transfer | null | und
   }
 
   const note = r.failedAt === 'uploading' ? explainTransferProblem(r.error) : r.error;
+  // Nothing was recorded, or the file is not a whole video (#240): trying again cannot help. Fix the cause, or delete it.
+  if (r.problem) return out('failed', 'danger', [...(r.problem === 'screen-permission' ? (['fixPermission'] as const) : []), 'delete', ...(local && r.problem === 'unplayable' ? (['reveal'] as const) : [])], { note });
   return out('failed', 'danger', ['retry', ...(local ? (['reveal'] as const) : [])], { note });
 }
 

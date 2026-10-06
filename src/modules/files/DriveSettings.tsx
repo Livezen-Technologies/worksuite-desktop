@@ -9,7 +9,7 @@ import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { bytes } from '../../core/time';
 import { toast } from '../../core/toasts';
-import { Button, Switch, cx } from '../../components/ui';
+import { Button, NumberField, Switch, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 
 /**
@@ -161,16 +161,18 @@ function SpeedRow({ label, hint, value, onChange }: { label: string; hint: strin
         <Select label={label} value={value.on ? 'custom' : 'unlimited'} options={[{ value: 'unlimited', label: 'Unlimited' }, { value: 'custom', label: 'Custom' }]} onValueChange={(v) => onChange({ ...value, on: v === 'custom' })} />
         {value.on ? (
           <>
-            <input
-              type="number"
+            <NumberField
+              size="sm"
+              width={80}
               min={1}
-              step="any"
+              max={1_000_000}
+              inputMode="decimal"
               aria-label={`${label} limit`}
               value={text}
-              onChange={(e) => setText(e.target.value)}
+              invalid={!(Number(text) > 0 && Number(text) <= 1_000_000)}
+              onValueChange={setText}
               onBlur={commit}
               onKeyDown={(e) => e.key === 'Enter' && commit()}
-              className="h-9 w-20 rounded-[8px] border border-line bg-surface px-2 text-right text-[13px] text-ink outline-none focus:border-primary"
             />
             <Select label={`${label} unit`} value={value.unit} options={[{ value: 'KB', label: 'KB/s' }, { value: 'MB', label: 'MB/s' }]} onValueChange={(v) => onChange({ ...value, unit: v as BandwidthLimit['unit'] })} />
           </>

@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.22.0 — 2026-10-05
+
+- Attachments upload in parts with progress and Retry (#249)
+
+## 1.21.0 — 2026-10-05
+
+- Delete removes at once with one Undo toast, batched per folder, restores on real failures (#235); pull to refresh, new-mail pill, Checked line and the Pull to refresh setting (#236)
+
 ## 1.20.0 — 2026-10-04
 
 - Account tags (#227): rows of the combined views show the account's first name (or the address before the @) in a soft pill of the account's colour instead of two letters of the domain; accounts that would match are told apart; each account's label, colour and where it shows are edited in Settings › Mail › Accounts with a preview and Reset to default; Appearance & reading › Account tag switches between Name tag, Dot only and Off; the same tag shows in the sidebar, From and the reading pane.

@@ -37,8 +37,9 @@ vi.mock('../../../src/core/tab-context', () => ({
 }));
 
 import { apiGet, apiPost } from '../../../src/core/api';
+import { call } from '../../../src/core/bridge';
 import { app } from '../../../src/core/app-state';
-import { readBy, typingWords, visitorHas, type WebsiteConversation, type WebsiteMarks } from '../../../src/modules/chat/website/api';
+import { marksWith, readBy, typingWords, visitorHas, type WebsiteConversation, type WebsiteMarks } from '../../../src/modules/chat/website/api';
 import { WebsiteThread } from '../../../src/modules/chat/website/WebsiteThread';
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
@@ -76,6 +77,7 @@ beforeEach(() => {
     throw new Error(`unexpected ${path}`);
   }) as never);
   vi.mocked(apiPost).mockClear();
+  vi.mocked(call).mockClear();
 });
 afterEach(() => cleanup());
 
@@ -131,12 +133,81 @@ describe('typing, live (LIVE-02, LIVE-03, LIVE-04)', () => {
     expect(screen.queryByText(/Me/)).toBeNull();
   });
 
-  it('a read frame asks for the thread again', async () => {
+  it('the visitor\'s read frame moves the ticks at once, without asking for the thread again (DLV-08)', async () => {
+    mount();
+    await screen.findByText('It is yearly.');
+    expect(screen.getByText('Delivered')).toBeTruthy();
+    const before = vi.mocked(apiGet).mock.calls.filter(([p]) => p === '/api/chat/widget-admin/conversations/41').length;
+    act(() => frame({ type: 'chat.widget.read', conversation_id: 41, by: 'visitor', message_id: 4, at: '2026-10-03 10:45:00' }));
+    await waitFor(() => expect(screen.getAllByRole('img', { name: 'Read by the visitor' })).toHaveLength(2));
+    expect(screen.queryByText('Delivered')).toBeNull();
+    expect(vi.mocked(apiGet).mock.calls.filter(([p]) => p === '/api/chat/widget-admin/conversations/41').length).toBe(before);
+  });
+
+  it('a colleague\'s read frame asks for the thread again', async () => {
     mount();
     await screen.findByText('It is yearly.');
     const before = vi.mocked(apiGet).mock.calls.filter(([p]) => p === '/api/chat/widget-admin/conversations/41').length;
-    act(() => frame({ type: 'chat.widget.read', conversation_id: 41, by: 'visitor', message_id: 4 }));
+    act(() => frame({ type: 'chat.widget.read', conversation_id: 41, by: 'agent', user_id: 7, message_id: 5 }));
     await waitFor(() => expect(vi.mocked(apiGet).mock.calls.filter(([p]) => p === '/api/chat/widget-admin/conversations/41').length).toBeGreaterThan(before));
+  });
+});
+
+describe('by seq (plan 2.9, DLV-08)', () => {
+  const seqd = (): WebsiteConversation => {
+    const c = conversation();
+    return {
+      ...c,
+      last_seq: 6,
+      messages: c.messages.map((m, i) => ({ ...m, seq: i + 2 })),
+      marks: { visitor: { ...marks.visitor, delivered: null, read: null, delivered_seq: 3, read_seq: null }, staff: marks.staff },
+    };
+  };
+
+  it('ticks by the visitor\'s seq marks, and only from them: a message the visitor has not acknowledged stays Sent', async () => {
+    vi.mocked(apiGet).mockImplementation((async (path: string) => {
+      if (path === '/api/chat/widget-admin/conversations/41') return seqd();
+      if (path === '/api/chat/widget-admin/canned') return { responses: [] };
+      if (path === '/api/chat/widget-admin/agents') return { agents: [] };
+      throw new Error(`unexpected ${path}`);
+    }) as never);
+    mount();
+    await screen.findByText('It is yearly.');
+    // Message 3 is seq 3 (delivered); message 4 is seq 4, past the visitor's mark.
+    expect(screen.getByRole('img', { name: 'Delivered to the visitor' })).toBeTruthy();
+    expect(screen.getByText('Sent')).toBeTruthy();
+    act(() => frame({ type: 'chat.widget.delivered', conversation_id: 41, by: 'visitor', message_id: 4, seq: 4 }));
+    await waitFor(() => expect(screen.getAllByRole('img', { name: 'Delivered to the visitor' })).toHaveLength(2));
+    expect(screen.getByText('Delivered')).toBeTruthy();
+  });
+
+  it('sends the receipts through the main process\'s batch by seq, ids beside them', async () => {
+    vi.mocked(apiGet).mockImplementation((async (path: string) => {
+      if (path === '/api/chat/widget-admin/conversations/41') return seqd();
+      if (path === '/api/chat/widget-admin/canned') return { responses: [] };
+      if (path === '/api/chat/widget-admin/agents') return { agents: [] };
+      throw new Error(`unexpected ${path}`);
+    }) as never);
+    mount();
+    await screen.findByText('It is yearly.');
+    await waitFor(() => expect(call).toHaveBeenCalledWith('realtime:receipt', { conversationId: 41, deliveredSeq: 5, readSeq: 5, read: 5, delivered: 5 }));
+    expect(apiPost).not.toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/receipts', expect.anything());
+    // The thread's channels are heard while it is open.
+    expect(call).toHaveBeenCalledWith('realtime:watch', { conversationId: 41, on: true });
+    cleanup();
+    expect(call).toHaveBeenCalledWith('realtime:watch', { conversationId: 41, on: false });
+  });
+
+  it('the helpers compare seqs where both sides have them, ids otherwise', () => {
+    const m: WebsiteMarks = { visitor: { delivered: 900, read: null, delivered_at: null, read_at: null, delivered_seq: 7, read_seq: 5 }, staff: [{ user_id: 3, name: 'Samali', delivered: null, read: null, read_at: null, read_seq: 6 }] };
+    expect([visitorHas({ id: 1, seq: 5 }, m), visitorHas({ id: 1, seq: 7 }, m), visitorHas({ id: 1, seq: 8 }, m), visitorHas(899, m)]).toEqual(['read', 'delivered', 'sent', 'delivered']);
+    expect(readBy({ id: 1, seq: 6 }, m, 3)).toEqual(['you']);
+    expect(readBy({ id: 1, seq: 7 }, m, 3)).toEqual([]);
+    const next = marksWith(m, { type: 'chat.widget.read', by: 'visitor', message_id: 950, seq: 9, at: '2026-10-05 10:00:00' })!;
+    expect(next.visitor).toMatchObject({ read: 950, read_seq: 9, delivered: 950, delivered_seq: 9, read_at: '2026-10-05 10:00:00' });
+    expect(marksWith(next, { type: 'chat.widget.delivered', by: 'visitor', message_id: 940, seq: 8 })!.visitor).toMatchObject({ delivered: 950, delivered_seq: 9 });
+    expect(marksWith(m, { type: 'chat.widget.read', by: 'agent', message_id: 950 })).toBeNull();
+    expect(marksWith(null, { type: 'chat.widget.read', by: 'visitor', message_id: 950 })).toBeNull();
   });
 });
 

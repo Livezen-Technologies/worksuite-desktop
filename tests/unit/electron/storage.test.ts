@@ -191,6 +191,28 @@ describe('offline mutation queue (FR-OFF-02/03/04, WF-17)', () => {
     expect(list.map((m) => m.state)).toEqual(['CONFLICT', 'PENDING']);
   });
 
+  it('shows a queued change and the server’s refusal, and edits one still waiting (a module’s outbox: Support D-09)', async () => {
+    let online = false;
+    const sent: unknown[] = [];
+    const { queue } = setup(async (url, init) => {
+      if (!online) throw new TypeError('fetch failed');
+      sent.push(JSON.parse(String(init.body)));
+      return url.endsWith('/1') ? json(409, { status: 'error', message: 'Changed', code: 'VERSION_CONFLICT', errors: { ticket: { id: 1, version: 15 } } }) : json(200, { status: 'success' });
+    });
+    const a = await queue.submit('u1', input('1'));
+    const b = await queue.submit('u1', input('2'));
+    expect(queue.detail('u1', b.id!)).toEqual({ body: { field: 'status', value: 'done' }, response: null });
+    expect(queue.detail('u2', b.id!)).toBeNull();
+    queue.edit('u1', b.id!, { field: 'status', value: 'todo' });
+    expect(() => queue.edit('u2', b.id!, {})).toThrow();
+    online = true;
+    await queue.replay('u1');
+    expect(sent).toEqual([{ field: 'status', value: 'done' }, { field: 'status', value: 'todo' }]);
+    expect(queue.detail('u1', a.id!)!.response).toMatchObject({ code: 'VERSION_CONFLICT', errors: { ticket: { version: 15 } } });
+    // A change that has gone (or is refused) is no longer edited.
+    expect(() => queue.edit('u1', a.id!, {})).toThrow();
+  });
+
   it('keeps order: a server error stops the replay rather than letting later changes overtake', async () => {
     let online = false;
     const { queue } = setup(async (url) => {
@@ -242,7 +264,9 @@ describe('upload part size', () => {
     const { chunkSizeFor } = await import('../../../electron/services/transfers');
     expect(chunkSizeFor(0)).toBe(256 * 1024);
     expect(chunkSizeFor(2 * 1024 * 1024)).toBe(256 * 1024);
-    expect(chunkSizeFor(20 * 1024 * 1024)).toBe(1024 * 1024);
+    // Over 8 MB: full 8 MB parts, several at a time (worksuite-desktop#249).
+    expect(chunkSizeFor(20 * 1024 * 1024)).toBe(8 * 1024 * 1024);
+    expect(chunkSizeFor(5 * 1024 * 1024)).toBe(256 * 1024);
     expect(chunkSizeFor(2 * 1024 * 1024 * 1024)).toBe(8 * 1024 * 1024);
     expect(Math.ceil((5 * 1024 * 1024) / chunkSizeFor(5 * 1024 * 1024))).toBe(20);
   });

@@ -1,10 +1,21 @@
-import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
+import { useEffect, useMemo } from 'react';
 import { ApiError, apiGet, request } from '../../../core/api';
-import { errorMessage } from '../../../core/bridge';
+import { useLocalFirstQuery } from '../../../core/local-first-query';
+import { call, errorMessage } from '../../../core/bridge';
+import { app } from '../../../core/app-state';
+import { createStore, useStore } from '../../../core/store';
 import { toast } from '../../../core/toasts';
 import { text } from '../../../core/i18n';
+import { markdownLine } from '../../../core/markdown';
 import { parseTs } from '../../../core/time';
+import { mergeBySeq, newClientId } from '@shared/chat-seq';
+import { websiteReplyMutation } from '@shared/website-reply';
+import type { SubmitResult } from '@shared/ipc/contract';
 import type { SavedReply } from './profile';
+import { recordTiming, timed, type ServerTiming } from './timings';
+
+const recordTimingOf = (what: string, ms: number, server: ServerTiming | null) => recordTiming({ what, at: new Date().toISOString(), ms: Math.round(ms), rows: 1, server, ok: true });
 
 /**
  * Website chat (UI-08: "group, direct and website-chat conversations") — the
@@ -78,6 +89,10 @@ export interface WebsiteRow {
   reply_waiting_since?: string | null;
   /** How far that has gone: a reminder sent, the team alerted, or the chat reassigned. */
   reply_stage?: 'reminded' | 'team' | 'reassigned' | null;
+  /** Returning visitors (#222): the visitor's profile, which visit this is ("Returning · 3rd visit"), how we know them. */
+  visitor_id?: number;
+  visits?: number;
+  identity?: 'signed' | 'verified' | 'returning' | 'new';
 }
 
 /**
@@ -98,24 +113,62 @@ export function waitTone(seconds: number, amber: number | null | undefined, red:
   return 'plain';
 }
 
-/** Message-id marks that only move forward (LIVE-05): how far the visitor has the team's messages, and each person the visitor's. */
+/**
+ * Marks that only move forward (LIVE-05): how far the visitor has the team's messages, and each person the visitor's.
+ * By message id, and (DLV-08, a server from Phase 2) the same marks as seqs.
+ */
 export interface WebsiteMarks {
-  visitor: { delivered: number | null; read: number | null; delivered_at: string | null; read_at: string | null };
-  staff: Array<{ user_id: number; name: string; delivered: number | null; read: number | null; read_at: string | null }>;
+  visitor: { delivered: number | null; read: number | null; delivered_at: string | null; read_at: string | null; delivered_seq?: number | null; read_seq?: number | null };
+  staff: Array<{ user_id: number; name: string; delivered: number | null; read: number | null; read_at: string | null; delivered_seq?: number | null; read_seq?: number | null }>;
 }
 
-/** A team message's state for the visitor (LIVE-08): sent, delivered to their widget, or read with its panel open. */
-export function visitorHas(id: number, marks: WebsiteMarks | null | undefined): 'sent' | 'delivered' | 'read' {
+/** A message by id, or by its seq where both it and the mark have one (DLV-08). */
+type Marked = number | { id: number; seq?: number | null };
+
+function reached(m: Marked, id: number | null | undefined, seq: number | null | undefined): boolean {
+  const mine = typeof m === 'number' ? { id: m, seq: null } : m;
+  if (typeof mine.seq === 'number' && mine.seq > 0 && typeof seq === 'number' && seq > 0) return seq >= mine.seq;
+  return !!id && id >= mine.id;
+}
+
+/**
+ * A team message's state for the visitor (LIVE-08): sent, delivered to their widget, or read with its panel open. Only
+ * the visitor's own acknowledgement moves it (DLV-08): never on send.
+ */
+export function visitorHas(m: Marked, marks: WebsiteMarks | null | undefined): 'sent' | 'delivered' | 'read' {
   const v = marks?.visitor;
-  if (v?.read && v.read >= id) return 'read';
-  if (v?.delivered && v.delivered >= id) return 'delivered';
+  if (!v) return 'sent';
+  if (reached(m, v.read, v.read_seq)) return 'read';
+  if (reached(m, v.delivered, v.delivered_seq)) return 'delivered';
   return 'sent';
 }
 
 /** Who of the team has read the visitor's message (LIVE-08): "you" first. */
-export function readBy(id: number, marks: WebsiteMarks | null | undefined, me: number | null): string[] {
-  const who = (marks?.staff ?? []).filter((s) => s.read !== null && s.read >= id);
+export function readBy(m: Marked, marks: WebsiteMarks | null | undefined, me: number | null): string[] {
+  const who = (marks?.staff ?? []).filter((s) => reached(m, s.read, s.read_seq));
   return [...who.filter((s) => s.user_id === me).map(() => 'you'), ...who.filter((s) => s.user_id !== me).map((s) => s.name)];
+}
+
+/**
+ * A `chat.widget.delivered` / `read` event (DLV-08) over the marks a thread holds: the visitor's acknowledgement moves
+ * the ticks now, without asking for the thread again. Null when it cannot be applied (no marks yet, a colleague's
+ * mark, an older server's event without ids): the caller refetches.
+ */
+export function marksWith(marks: WebsiteMarks | null | undefined, e: { type: string; by?: string; message_id?: number; seq?: number | null; at?: string }): WebsiteMarks | null {
+  if (!marks || e.by !== 'visitor' || typeof e.message_id !== 'number') return null;
+  const kind = e.type === 'chat.widget.read' ? 'read' : e.type === 'chat.widget.delivered' ? 'delivered' : null;
+  if (!kind) return null;
+  const v = { ...marks.visitor };
+  const up = (a: number | null | undefined, b: number | null | undefined) => (typeof b === 'number' && b > 0 ? Math.max(a ?? 0, b) : (a ?? null));
+  // Read is delivered too.
+  for (const k of kind === 'read' ? (['read', 'delivered'] as const) : (['delivered'] as const)) {
+    const sk = k === 'read' ? 'read_seq' : 'delivered_seq';
+    v[k] = up(v[k], e.message_id);
+    v[sk] = up(v[sk], e.seq);
+  }
+  if (kind === 'read' && e.at) v.read_at = e.at;
+  if (e.at && !v.delivered_at) v.delivered_at = e.at;
+  return { ...marks, visitor: v };
 }
 
 /** "Nimal is typing", "Nimal and Dilini are typing". */
@@ -186,9 +239,28 @@ export function isMine(r: Pick<WebsiteRow, 'assigned_to' | 'my_role'>, me: numbe
   return me !== null && (r.assigned_to === me || r.my_role === 'owner' || r.my_role === 'participant');
 }
 
-/** A row's preview: who said it last, unless it was the visitor, then the words or the file. */
+/** A file's name that says it is a picture. */
+const PICTURE = /\.(?:jpe?g|png|gif|webp|heic|heif|bmp|avif|svg)$/i;
+
+/** A file on a row (worksuite-desktop#261): "📷 Photo" for a picture, "📎 File: invoice.pdf" for anything else. */
+export function fileLine(name: string): string {
+  return PICTURE.test(name.trim()) ? `📷 ${text('Photo')}` : `📎 ${text('File: {name}', { name })}`;
+}
+
+/** "★★★★☆ Rated 4": the visitor's rating, on a row whose chat has nothing later to show (#261). */
+export function ratedLine(n: number): string {
+  const r = Math.max(0, Math.min(5, Math.round(n)));
+  return `${'★'.repeat(r)}${'☆'.repeat(5 - r)} ${text('Rated {n}', { n: r })}`;
+}
+
+/**
+ * A row's preview: who said it last, unless it was the visitor, then the words — plain and on one line, never
+ * Markdown's marks (worksuite-desktop#261) — or what was sent instead: "📷 Photo", "📎 File: invoice.pdf". Empty only
+ * when the message has neither words nor a file: the row then says what happened (rowPreview).
+ */
 export function lastSaid(m: NonNullable<WebsiteRow['last_message']>, myName: string | null): string {
-  const what = m.body ?? (m.file ? `📎 ${m.file}` : '');
+  const what = markdownLine(m.body ?? '') || (m.file ? fileLine(m.file) : '');
+  if (!what) return '';
   const who = m.from === 'visitor' ? null : m.from === 'bot' ? text('Bot') : m.agent && m.agent === myName ? text('You') : (m.agent ?? text('Agent'));
   return who ? `${who}: ${what}` : what;
 }
@@ -220,6 +292,10 @@ export interface WebsiteMessage {
   /** The message this one answers (RDC-10): an excerpt both the agent and the visitor see above it. */
   reply_to?: number | null;
   reply?: WebsiteQuote | null;
+  /** Its place in the conversation (DLV-05): the thread is drawn in this order. Absent from an older server. */
+  seq?: number | null;
+  /** The id the sending device gave it (DLV-01): my reply on its way gives way to the copy carrying this. */
+  client_id?: string | null;
 }
 
 /**
@@ -338,6 +414,10 @@ export interface WebsiteConversation {
    */
   delete_window_minutes?: number;
   can_save_to_drive?: boolean;
+  /** Returning visitors (#222): the profile behind this chat; absent or null on a server without them. */
+  profile?: { visitor_id: number; identity: 'signed' | 'verified' | 'returning' | 'new'; visits: number; suggestions: number } | null;
+  /** The conversation's highest seq, counting what I cannot see (DLV-05); absent from an older server. */
+  last_seq?: number | null;
 }
 
 /** A voice call in a website chat as the thread has it (WidgetCalls::forThread). */
@@ -528,12 +608,18 @@ export function waitingSince(r: Pick<WebsiteRow, 'waiting_since' | 'last_visitor
   return r.waiting_since ?? r.last_visitor_at ?? null;
 }
 
+/**
+ * Waiting for a reply in a live chat: not an offline enquiry still in its queue, which waits for an answer by email
+ * under Offline enquiries — counted there — and once made "1 visitor is waiting… waited 20 days" here (#252).
+ */
+export const waitsLive = (r: WebsiteRow): boolean => r.awaiting_reply && !(r.is_offline && r.status === 'pending');
+
 /** The visitor who has waited longest for a reply, the one "Open the longest waiting" opens. */
 export function longestWaiting(rows: WebsiteRow[]): WebsiteRow | null {
   let best: WebsiteRow | null = null;
   let bestAt = Number.NaN;
   for (const r of rows) {
-    if (!r.awaiting_reply) continue;
+    if (!waitsLive(r)) continue;
     const since = waitingSince(r);
     const at = since ? parseTs(since).getTime() : Number.NaN;
     // A row without a stamp still counts, but any stamped one has waited longer as far as anybody can tell.
@@ -559,7 +645,7 @@ function minutesText(m: number): string {
 
 /** The "Pick a conversation" line (CHAT-UI-00): how many are waiting, and for how long the longest has. */
 export function waitingSummary(rows: WebsiteRow[], now: number): string {
-  const n = rows.filter((r) => r.awaiting_reply).length;
+  const n = rows.filter(waitsLive).length;
   if (!n) return text('Nobody is waiting for a reply.');
   const head = n === 1 ? text('1 visitor is waiting for a reply.') : text('{n} visitors are waiting for a reply.', { n });
   const since = waitingSince(longestWaiting(rows) ?? { waiting_since: null, last_visitor_at: null });
@@ -580,15 +666,105 @@ export function stepRow(ids: number[], current: number | null, step: 1 | -1): nu
   return ids[Math.min(ids.length - 1, Math.max(0, at + step))]!;
 }
 
+/** A page of a website list as the server answers it; paging and `timing` from a server with #252. */
+export interface WebsiteListPage {
+  conversations: WebsiteRow[];
+  can: WebsiteCan;
+  sites?: Array<{ widget_id: number; site: string; widget?: string | null }>;
+  has_more?: boolean;
+  next_cursor?: string | null;
+  timing?: ServerTiming;
+}
+
+/** A saved copy is a list only when it has one: anything else waits for the server. */
+export const isWebsiteList = (hit: unknown): boolean => !!hit && typeof hit === 'object' && Array.isArray((hit as { conversations?: unknown }).conversations);
+
+const deniedOrGone = (e: unknown): boolean => e instanceof ApiError && (e.forbidden || e.status === 404);
+
+/**
+ * This computer's saved copy of a GET (the main process keeps the website lists' answers, #239, #252), shown while the
+ * first answer is on its way, so a list opens at once with what it showed last. Never over a live answer or an error,
+ * and stamped 0, so the server is still asked at once. `wrap` shapes it for the query (a first page, for paging).
+ */
+export function useSavedCopy(key: QueryKey, path: string, params: Record<string, string> | undefined, accept: (hit: unknown) => boolean, enabled: boolean, wrap: (hit: unknown) => unknown = (hit) => hit): void {
+  const qc = useQueryClient();
+  const keyJson = JSON.stringify(key);
+  const paramsJson = JSON.stringify(params ?? null);
+  useEffect(() => {
+    const k = JSON.parse(keyJson) as QueryKey;
+    if (!enabled || qc.getQueryData(k) !== undefined) return;
+    const controller = new AbortController();
+    const query = JSON.parse(paramsJson) as Record<string, string> | null;
+    void Promise.resolve()
+      .then(() => request<unknown>('GET', path, { query: query ?? undefined, signal: controller.signal, headers: { 'X-WS-Local-Read': '1' } }))
+      .then((hit) => {
+        const state = qc.getQueryState(k);
+        if (!controller.signal.aborted && hit && accept(hit.data) && (!state || (state.data === undefined && state.error === null))) qc.setQueryData(k, wrap(hit.data), { updatedAt: 0 });
+      })
+      .catch(() => undefined);
+    return () => controller.abort();
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- `accept` and `wrap` are shape helpers, read when the copy arrives
+  }, [qc, keyJson, path, paramsJson, enabled]);
+}
+
+/**
+ * The open conversations: every section's rows and counts are drawn from this one list, so it is read whole (the
+ * server keeps it to the ongoing chats). From the copy saved here at once, then from the server every 15 s, and at once
+ * on a realtime event; a new answer keeps the rows that did not change, so the list updates in place.
+ */
 export function useWebsiteInbox(closed: boolean, enabled = true) {
+  useSavedCopy(['website', 'inbox', closed ? 'closed' : 'open'], `${WEBSITE}/conversations`, closed ? { status: 'closed' } : undefined, isWebsiteList, enabled);
   return useQuery({
     queryKey: ['website', 'inbox', closed ? 'closed' : 'open'],
-    queryFn: ({ signal }) => apiGet<{ conversations: WebsiteRow[]; can: WebsiteCan }>(`${WEBSITE}/conversations`, closed ? { status: 'closed' } : undefined, signal),
+    queryFn: ({ signal }) => timed('conversations', () => apiGet<WebsiteListPage>(`${WEBSITE}/conversations`, closed ? { status: 'closed' } : undefined, signal), (d) => d?.conversations?.length ?? null),
     enabled,
     // Somebody who does not staff website chat is told once, not every 15 s.
-    refetchInterval: (query) => (query.state.error instanceof ApiError && (query.state.error.forbidden || query.state.error.status === 404) ? false : 15_000),
-    retry: (n, e) => !(e instanceof ApiError && (e.forbidden || e.status === 404)) && n < 2,
+    refetchInterval: (query) => (deniedOrGone(query.state.error) ? false : 15_000),
+    retry: (n, e) => !deniedOrGone(e) && n < 2,
   });
+}
+
+/** How many closed chats a page of the Closed list holds (#252). */
+export const CLOSED_PAGE = 50;
+const CLOSED_QUERY = { status: 'closed', fields: 'list', limit: String(CLOSED_PAGE) };
+
+/**
+ * Closed chats, a page at a time (worksuite-desktop#252): Closed only grows, and reading two hundred whole rows every
+ * 15 s — 2 KB each, with devices, pages and teams nobody reads in a list of finished chats — was a large part of what
+ * made the lists slow. Fifty rows of list fields at a time, the next page as the list is scrolled to its end, the first
+ * from the copy saved on this computer at once; asked again once a minute (a closed chat changes rarely).
+ */
+export function useWebsiteClosed(enabled = true) {
+  const key = ['website', 'inbox', 'closed', 'pages'];
+  const path = `${WEBSITE}/conversations`;
+  useSavedCopy(key, path, CLOSED_QUERY, isWebsiteList, enabled, (hit) => ({ pages: [hit], pageParams: [null] }));
+  const q = useInfiniteQuery({
+    queryKey: key,
+    queryFn: ({ pageParam, signal }) => timed('conversations:closed', () => apiGet<WebsiteListPage>(path, pageParam ? { ...CLOSED_QUERY, cursor: pageParam } : CLOSED_QUERY, signal), (d) => d?.conversations?.length ?? null),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => (last?.has_more && last.next_cursor ? last.next_cursor : undefined),
+    enabled,
+    refetchInterval: (query) => (deniedOrGone(query.state.error) ? false : 60_000),
+    retry: (n, e) => !deniedOrGone(e) && n < 2,
+  });
+  const pages = q.data?.pages;
+  const data = useMemo(() => {
+    if (!pages) return undefined;
+    // A chat closed while paging moves to the top: each id once, where it is newest.
+    const seen = new Set<number>();
+    const conversations = pages.flatMap((p) => p?.conversations ?? []).filter((r) => (seen.has(r.id) ? false : (seen.add(r.id), true)));
+    return { conversations, can: pages[0]?.can ?? ({} as WebsiteCan) };
+  }, [pages]);
+  const { hasNextPage, isFetchingNextPage, fetchNextPage } = q;
+  return {
+    ...q,
+    data,
+    hasMore: !!hasNextPage,
+    loadingMore: isFetchingNextPage,
+    loadMore: () => {
+      if (hasNextPage && !isFetchingNextPage) void fetchNextPage();
+    },
+  };
 }
 
 /**
@@ -598,7 +774,7 @@ export function useWebsiteInbox(closed: boolean, enabled = true) {
 export function useWebsiteSearch(needle: string, closed: boolean) {
   return useQuery({
     queryKey: ['website', 'inbox', 'search', closed ? 'closed' : 'all', needle],
-    queryFn: ({ signal }) => apiGet<{ conversations: WebsiteRow[]; can: WebsiteCan }>(`${WEBSITE}/conversations`, closed ? { q: needle, status: 'closed' } : { q: needle }, signal),
+    queryFn: ({ signal }) => timed('conversations:search', () => apiGet<{ conversations: WebsiteRow[]; can: WebsiteCan }>(`${WEBSITE}/conversations`, closed ? { q: needle, status: 'closed' } : { q: needle }, signal), (d) => d?.conversations?.length ?? null),
     enabled: needle.length >= 2,
     placeholderData: keepPreviousData,
     staleTime: 10_000,
@@ -615,17 +791,209 @@ export function useWebsiteAccess(): boolean {
   return q.isSuccess && q.data.can?.view !== false;
 }
 
+/** A saved copy is a conversation only when it has one: anything else waits for the server. */
+const isConversation = (hit: unknown): boolean => {
+  const c = hit as Partial<WebsiteConversation> | null;
+  return !!c && typeof c === 'object' && !!c.conversation && typeof c.conversation === 'object' && Array.isArray(c.messages);
+};
+
 /**
  * `review` reads a chat back without arriving in it (C-04): the server neither joins, claims nor handles it, so a
- * missed chat's detail can be looked at before anybody decides what to do, and a returning visitor still rings.
+ * missed chat's detail can be looked at before anybody decides what to do, and a returning visitor still rings. From
+ * the copy saved on this computer at once when it was read before (worksuite-desktop#261), then from the server.
  */
 export function useWebsiteConversation(id: string, { review = false }: { review?: boolean } = {}) {
+  const key = review ? ['website', 'conversation', id, 'review'] : ['website', 'conversation', id];
+  useSavedCopy(key, `${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, isConversation, true);
   return useQuery({
-    queryKey: review ? ['website', 'conversation', id, 'review'] : ['website', 'conversation', id],
-    queryFn: ({ signal }) => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, signal),
+    queryKey: key,
+    queryFn: ({ signal }) => timed('conversation', () => apiGet<WebsiteConversation>(`${WEBSITE}/conversations/${id}`, review ? { review: '1' } : undefined, signal), (d) => d?.messages?.length ?? null),
     // No realtime event for replies or visitor typing: poll, slower in the background.
     refetchInterval: () => (document.visibilityState === 'visible' ? 5_000 : 30_000),
   });
+}
+
+/**
+ * The conversations opened last, kept in memory so going back to one is instant (worksuite-desktop#239). Older ones
+ * are let go once nothing shows them; the saved copy on disk still opens them at once.
+ */
+export const RECENT_CONVERSATIONS = 8;
+const recentlyOpened: string[] = [];
+
+/** Remembers `id` as opened now, and lets go of the one opened longest ago beyond the limit. */
+export function rememberOpened(qc: QueryClient, id: string, limit = RECENT_CONVERSATIONS): void {
+  const at = recentlyOpened.indexOf(id);
+  if (at >= 0) recentlyOpened.splice(at, 1);
+  recentlyOpened.unshift(id);
+  while (recentlyOpened.length > limit) {
+    const old = recentlyOpened.pop()!;
+    const key = ['website', 'conversation', old];
+    // Still on screen somewhere (a second pane): kept; it goes the next time the list moves on.
+    if (qc.getQueryCache().findAll({ queryKey: key }).some((q) => q.getObserversCount() > 0)) continue;
+    qc.removeQueries({ queryKey: key });
+  }
+}
+
+/** For tests: forget which conversations were opened. */
+export function resetRecentlyOpened(): void {
+  recentlyOpened.length = 0;
+}
+
+/**
+ * The open thread (worksuite-desktop#239): from memory when it was opened lately, else from the copy saved on this
+ * computer, while the server is asked in the background; polled as before. Held in memory for as long as it is among
+ * the last {@link RECENT_CONVERSATIONS} opened.
+ */
+export function useOpenConversation(id: string) {
+  const qc = useQueryClient();
+  useEffect(() => rememberOpened(qc, id), [qc, id]);
+  return useLocalFirstQuery<WebsiteConversation>({
+    queryKey: ['website', 'conversation', id],
+    path: `${WEBSITE}/conversations/${id}`,
+    // No realtime event for replies or visitor typing: poll, slower in the background.
+    interval: 5_000,
+    gcTime: Infinity,
+    accept: isConversation,
+    // Timed for Help › Diagnostics (#252).
+    wrapFetch: (fetch) => timed('conversation', fetch, (d) => d?.messages?.length ?? null),
+  });
+}
+
+/**
+ * A reply on its way (worksuite-desktop#252; plan 1.9): drawn in the thread the moment Send is pressed, marked
+ * "Sending…", and replaced by the message the server stored — with its "Sent" tick — as soon as the server says so,
+ * without waiting for the thread to be read again. One that went to the outbox leaves this list at once (the outbox
+ * shows its own, Pending, kept on this computer). One the server refused stays, "Not sent", with the reason, Retry
+ * (under the same client id, so the server never stores it twice) and Discard.
+ */
+export interface SendingReply {
+  key: string;
+  conversationId: number;
+  body: string;
+  at: string;
+  /** Made before the first try, sent on every one (DLV-01). */
+  clientId: string;
+  state: 'sending' | 'failed';
+  error: string | null;
+  replyTo: number | null;
+  cannedId: number | null;
+}
+
+export const sendingReplies = createStore<{ list: SendingReply[] }>({ list: [] });
+let sendingSeq = 0;
+
+/** The replies still on their way in this conversation. */
+export function useSendingReplies(conversationId: number): SendingReply[] {
+  const list = useStore(sendingReplies, (s) => s.list);
+  return useMemo(() => list.filter((r) => r.conversationId === conversationId), [list, conversationId]);
+}
+
+/** The server's stamp, as the thread's messages carry it: UTC without a zone. */
+const serverStamp = (d: Date): string => d.toISOString().slice(0, 19).replace('T', ' ');
+
+const patchSending = (key: string, changes: Partial<SendingReply>) => sendingReplies.set((s) => ({ list: s.list.map((x) => (x.key === key ? { ...x, ...changes } : x)) }));
+
+/**
+ * Show a reply at once; call what this returns with the outbox's answer. Delivered: the stored message goes into the
+ * thread by seq (as the server will list it, merged by id and client id) and only that thread and the open list are
+ * asked again — not every website query, as a reply used to (the closed list, missed chats and the rest, all at once
+ * behind the reply). Refused: kept, Not sent. Queued, or no answer at all: let go.
+ */
+export function startWebsiteReply(
+  qc: QueryClient,
+  conversationId: number,
+  body: string,
+  replyTo: number | null = null,
+  opts: { clientId?: string; cannedId?: number | null; key?: string } = {},
+): (r: { delivered: boolean; queued: boolean; data?: unknown; error?: string | null } | null) => void {
+  const clientId = opts.clientId ?? newClientId();
+  const key = opts.key ?? `sending-${++sendingSeq}`;
+  const started = Date.now();
+  if (opts.key && sendingReplies.get().list.some((x) => x.key === key)) patchSending(key, { state: 'sending', error: null });
+  else sendingReplies.set((s) => ({ list: [...s.list, { key, conversationId, body, at: new Date().toISOString(), clientId, state: 'sending', error: null, replyTo, cannedId: opts.cannedId ?? null }] }));
+  let done = false;
+  return (r) => {
+    if (done) return;
+    done = true;
+    const posted = r?.delivered ? ((r.data ?? null) as { id?: number; at?: string; seq?: number | null; client_id?: string | null; timing?: ServerTiming } | null) : null;
+    if (posted && typeof posted.id === 'number') {
+      const s = app.get();
+      const me = s.auth?.user?.id ? Number(s.auth.user.id) : null;
+      const message: WebsiteMessage = {
+        id: posted.id, body, from: 'agent', agent: s.bootstrap?.user?.name ?? null, agent_id: me, at: posted.at ?? serverStamp(new Date()),
+        file: null, visibility: 'public', reply_to: replyTo, reply: null,
+        ...(typeof posted.seq === 'number' ? { seq: posted.seq } : {}), client_id: posted.client_id ?? clientId,
+      };
+      qc.setQueriesData<WebsiteConversation>({ queryKey: ['website', 'conversation', String(conversationId)] }, (d) =>
+        d && Array.isArray(d.messages) && !d.messages.some((m) => m.id === message.id) ? { ...d, messages: mergeBySeq(d.messages, [message]) } : d,
+      );
+      recordTimingOf('reply', Date.now() - started, posted.timing ?? null);
+    }
+    if (r && !r.delivered && !r.queued) {
+      // Refused: the words stay, Not sent, with the server's reason and Retry.
+      patchSending(key, { state: 'failed', error: r.error ?? text('The server refused it.') });
+      return;
+    }
+    sendingReplies.set((st) => ({ list: st.list.filter((x) => x.key !== key) }));
+    if (r?.delivered) {
+      void qc.invalidateQueries({ queryKey: ['website', 'conversation', String(conversationId)] });
+      void qc.invalidateQueries({ queryKey: ['website', 'inbox', 'open'] });
+    }
+  };
+}
+
+/**
+ * Send a reply to a visitor through the outbox (RDC-07, plan 1.9): drawn at once, sent with its client id, pending on
+ * this computer while offline and sent once on reconnecting. Resolves with the outbox's answer.
+ */
+export async function sendWebsiteReply(qc: QueryClient, conversationId: number, words: string, replyTo: number | null = null, cannedId: number | null = null): Promise<SubmitResult> {
+  const clientId = newClientId();
+  const finish = startWebsiteReply(qc, conversationId, words, replyTo, { clientId, cannedId });
+  const r = await call('offline:submit', websiteReplyMutation(conversationId, words, replyTo, cannedId, clientId)).catch((e: unknown) => {
+    finish(null);
+    throw e;
+  });
+  finish(r);
+  if (r.queued) void qc.invalidateQueries({ queryKey: ['offline'] });
+  return r;
+}
+
+/** Send a Not sent reply again, under the same client id: the server answers a repeat with the copy it has. */
+export async function retryWebsiteReply(qc: QueryClient, key: string): Promise<void> {
+  const p = sendingReplies.get().list.find((x) => x.key === key);
+  if (!p || p.state !== 'failed') return;
+  const finish = startWebsiteReply(qc, p.conversationId, p.body, p.replyTo, { clientId: p.clientId, cannedId: p.cannedId, key });
+  try {
+    const r = await call('offline:submit', websiteReplyMutation(p.conversationId, p.body, p.replyTo, p.cannedId, p.clientId));
+    finish(r);
+    if (r.queued) void qc.invalidateQueries({ queryKey: ['offline'] });
+  } catch (e) {
+    finish({ delivered: false, queued: false, error: errorMessage(e) });
+  }
+}
+
+/** Let go of a Not sent reply. */
+export function discardWebsiteReply(key: string): void {
+  sendingReplies.set((s) => ({ list: s.list.filter((x) => x.key !== key) }));
+}
+
+/** What the open thread has loaded, wherever it came from: the composer's suggestions read it. */
+export function openConversationData(qc: QueryClient, id: string): WebsiteConversation | undefined {
+  return qc.getQueriesData<WebsiteConversation>({ queryKey: ['website', 'conversation', id] }).find(([key, data]) => key[3] !== 'review' && data)?.[1];
+}
+
+/**
+ * Change the open thread's loaded copy in place, under whatever key holds it (the key carries the account's scope after
+ * the id, so an exact key misses it). @returns whether there was a copy to change
+ */
+export function updateOpenConversation(qc: QueryClient, id: string, fn: (d: WebsiteConversation) => WebsiteConversation): boolean {
+  let hit = false;
+  qc.setQueriesData<WebsiteConversation>({ queryKey: ['website', 'conversation', id], predicate: (q) => q.queryKey[3] !== 'review' }, (d) => {
+    if (!d) return d;
+    hit = true;
+    return fn(d);
+  });
+  return hit;
 }
 
 export function useAgents(enabled: boolean, conversationId?: number) {

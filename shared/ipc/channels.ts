@@ -5,6 +5,7 @@
  */
 import { CONTACT_SYNC_INVOKE_CHANNELS } from './contact-sync-channels';
 import { PMS_LOCKS_INVOKE_CHANNELS } from './pms-locks-channels';
+import { PHONE_EVENT_CHANNELS, PHONE_INVOKE_CHANNELS } from './phone-channels';
 import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
 
 export const INVOKE_CHANNELS = [
@@ -79,6 +80,7 @@ export const INVOKE_CHANNELS = [
   'ring:join',
   'ring:silence',
   'ring:pass',
+  'ring:test',
   'ring:joinSend',
   'ring:reply',
   'ring:closeJoined',
@@ -98,6 +100,8 @@ export const INVOKE_CHANNELS = [
   'ring:call',
   'ring:mic',
   'ring:onCall',
+  'realtime:watch',
+  'realtime:receipt',
   'windows:detach',
   'windows:dock',
   'windows:toMain',
@@ -195,6 +199,7 @@ export const INVOKE_CHANNELS = [
   'notifications:pause',
   'notifications:test',
   'notifications:permission',
+  'notifications:openSettings',
   'notifications:refresh',
   // A reminder this computer worked out by itself, while WorkSuite could not send it (ENH-MAIL-03 DMO-TSK-02).
   'notifications:reminder',
@@ -347,9 +352,19 @@ export const INVOKE_CHANNELS = [
   'offline:clearMailbox',
   'offline:mailSearch',
   'offline:mailList',
+  // Help & Guide's Contact Support (WS-SUPPORT-SRS-001 D-11): the window's picture and the redacted recent log.
+  // The support wallboard on a display (D-12): the screens to choose from, open it there, take it down.
+  'support:displays',
+  'support:wall',
+  'support:wallClose',
+  'help:capture',
+  'help:logs',
   'offline:submit',
   'offline:retry',
   'offline:discard',
+  'offline:detail',
+  'offline:edit',
+  'offline:replay',
   'offline:saveDraft',
   'offline:getDraft',
   'offline:listDrafts',
@@ -389,6 +404,7 @@ export const INVOKE_CHANNELS = [
   'settings:get',
   'settings:set',
   'settings:launcherDefaults',
+  'settings:appearanceDefaults',
 
   'status:snapshot',
 
@@ -397,8 +413,14 @@ export const INVOKE_CHANNELS = [
   'diagnostics:saveBundle',
   'diagnostics:restartSafeMode',
   'diagnostics:services',
+  'diagnostics:timings',
+  'connection:details',
+  'connection:speedTest',
+  'connection:reconnect',
   // POS: the till on this computer (pos-channels.ts).
   ...POS_INVOKE_CHANNELS,
+  // The Phone: its switch in the page policy, global shortcuts, call notifications (phone-channels.ts).
+  ...PHONE_INVOKE_CHANNELS,
   // Hotel PMS door locks: the on-site lock server this desk talks to (pms-locks-channels.ts).
   ...PMS_LOCKS_INVOKE_CHANNELS,
   // Contact sync: iCloud, CardDAV and Mac Contacts on this computer (contact-sync-channels.ts).
@@ -428,6 +450,7 @@ export const EVENT_CHANNELS = [
   'update:changed',
   'update:prepare',
   'settings:changed',
+  'appearance:changed',
   'organization:changed',
   'windows:changed',
   'window:fullscreen',
@@ -457,6 +480,7 @@ export const EVENT_CHANNELS = [
   'mail:exportChanged',
   'mail:link',
   ...POS_EVENT_CHANNELS,
+  ...PHONE_EVENT_CHANNELS,
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

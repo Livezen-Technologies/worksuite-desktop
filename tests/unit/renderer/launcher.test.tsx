@@ -203,7 +203,7 @@ describe('full screen', () => {
     expect(headings()[0]).toBe('Communication');
     // Communication's apps under it.
     const first = grid().querySelector('[role="presentation"]')!;
-    expect(within(first as HTMLElement).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual(['Mail', 'Chat']);
+    expect(within(first as HTMLElement).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual(['Mail', 'Chat', 'Phone']);
     // One category, or a search: no headings.
     fireEvent.click(screen.getByRole('tab', { name: /Work/ }));
     expect(headings()).toEqual([]);
@@ -212,33 +212,28 @@ describe('full screen', () => {
     expect(headings()).toEqual([]);
   });
 
-  it('keeps the footer right under the content: the grid is only as tall as what is in it', () => {
-    // A tall window: everything fits. Each section is its 32px heading and its rows of 96px tiles, 4px apart, in
-    // nine columns, with 8px above and 12px below; no room left over, so the footer sits right under the last row.
+  it('keeps the footer attached to the bottom, with nothing under it; the grid takes what is left (worksuite-desktop#233)', () => {
     setSize(1280, 1000);
     render(<Launcher />);
-    const area = () => parseInt(dialog().querySelector<HTMLElement>('[data-grid-area]')!.style.height, 10);
-    const content = Array.from(grid().querySelectorAll('[data-grid]')).reduce((sum, g) => {
-      const rows = Math.ceil(g.children.length / 9);
-      return sum + 32 + rows * 96 + (rows - 1) * 4;
-    }, 0);
-    expect(area()).toBe(8 + content + 12);
-    expect(area()).toBeLessThan(948 - 221);
-    // 800 high: not all of it fits, so the grid stops at the end of the last whole section row that does (three of
-    // the four sections here), and scrolls.
-    setSize(1280, 800);
-    act(() => {
-      window.dispatchEvent(new Event('resize'));
-    });
-    expect(area()).toBe(8 + 3 * (32 + 96) + 12);
-    expect(area()).toBeLessThanOrEqual(748 - 221);
+    const column = dialog().querySelector<HTMLElement>('[data-column]')!;
+    const area = dialog().querySelector<HTMLElement>('[data-grid-area]')!;
+    const footer = dialog().querySelector<HTMLElement>('[data-footer]')!;
+    // The column is as tall as the launcher; the grid grows into it, so the footer is its last child, at the bottom.
+    expect(column.className).toContain('h-full');
+    expect(column.className).not.toContain('self-start');
+    expect(column.style.paddingBottom).toBe('0px');
+    expect(area.className).toContain('flex-1');
+    expect(area.style.height).toBe('');
+    expect(column.lastElementChild).toBe(footer);
+    // 24px under the last section, before the footer.
+    expect(grid().style.paddingBottom).toBe('24px');
   });
 
-  it('is drawn on the app\'s dark, over a blur, and closes with × and with Esc', async () => {
+  it('is drawn on the app\'s dark, and closes with × and with Esc', async () => {
     render(<Launcher />);
     expect(dialog().dataset.theme).toBe('dark');
-    expect(dialog().className).toContain('bg-launcher-full');
-    expect(dialog().className).toContain('backdrop-blur');
+    // One background for the grid, the headings and the footer (worksuite-desktop#233).
+    expect(dialog().className).toContain('bg-launcher');
     fireEvent.click(screen.getByRole('button', { name: 'Close launcher' }));
     await waitFor(() => expect(ui.get().overlay).toBeNull());
     openOverlay('launcher');
@@ -269,7 +264,7 @@ describe('the grid\'s scrolling', () => {
     Object.defineProperty(el, 'clientHeight', { configurable: true, value: clientHeight });
     Object.defineProperty(el, 'scrollTop', { configurable: true, writable: true, value: scrollTop });
   };
-  const fade = () => dialog().querySelector('[data-fade]');
+  const fade = () => dialog().querySelector('[data-fade="bottom"]');
 
   it('fades out at the bottom only while there is more to scroll to', () => {
     render(<Launcher />);
@@ -294,7 +289,7 @@ describe('the grid\'s scrolling', () => {
     fireEvent.keyDown(search(), { key: 'ArrowDown' });
     expect(into).toHaveBeenCalledWith({ block: 'nearest' });
     expect((into.mock.contexts.at(-1) as HTMLElement).dataset.index).toBe('9');
-    expect(grid().style.scrollPaddingBottom).toBe('20px');
+    expect(grid().style.scrollPaddingBottom).toBe('32px');
     into.mockRestore();
   });
 });
@@ -362,11 +357,11 @@ describe('finding an app', () => {
   it('filters by a category chip, with its count', () => {
     render(<Launcher />);
     const comms = screen.getByRole('tab', { name: /Communication/ });
-    expect(comms.textContent).toBe('Communication2');
+    expect(comms.textContent).toBe('Communication3');
     fireEvent.click(comms);
-    expect(names()).toEqual(['Mail', 'Chat']);
+    expect(names()).toEqual(['Mail', 'Chat', 'Phone']);
     fireEvent.click(screen.getByRole('tab', { name: /All apps/ }));
-    expect(names()).toHaveLength(11);
+    expect(names()).toHaveLength(12);
   });
 
   it('searches as soon as a key is typed, wherever the focus is', () => {
@@ -488,13 +483,13 @@ describe('tiles', () => {
     const mail = within(grid()).getByRole('option', { name: 'Mail' });
     fireEvent.dragOver(mail, { dataTransfer });
     fireEvent.drop(mail, { dataTransfer });
-    expect(names()).toEqual(['Chat', 'Mail']);
+    expect(names()).toEqual(['Chat', 'Mail', 'Phone']);
     expect(currentLauncherPrefs().sort).toBe('mine');
   });
 
   it('has a footer with the count, the keys and Customise', () => {
     render(<Launcher />);
-    expect(dialog().textContent).toContain('11 apps · Arrow keys to move · Enter to open · ⌘Enter for a new window · Esc to close');
+    expect(dialog().textContent).toContain('12 apps · ↑↓←→ move · ↵ open · ⌘↵ new window · Esc close');
     fireEvent.click(screen.getByRole('button', { name: 'Customise' }));
     expect(ui.get().overlay).toBeNull();
     expect(tabsStore.get().tabs.some((t) => t.route === '/settings/launcher')).toBe(true);

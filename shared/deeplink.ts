@@ -9,6 +9,7 @@
  */
 
 import { metaRoute, whatsappRoute } from './channels';
+import { ticketRoute } from './support';
 
 export const MAX_LINK_LENGTH = 2048;
 
@@ -53,6 +54,12 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'mail/:id', module: 'mail', route: (p) => `/mail/${p.id}` },
   { pattern: 'chat', module: 'chat', route: () => '/chat' },
   { pattern: 'chat/:id', module: 'chat', route: (p) => `/chat/${p.id}` },
+  { pattern: 'phone', module: 'phone', route: () => '/phone' },
+  { pattern: 'phone/calls/:id', module: 'phone', route: (p) => `/phone/calls/${p.id}` },
+  { pattern: 'social-media', module: 'social-media', route: () => '/social-media' },
+  { pattern: 'social-media/posts/:id', module: 'social-media', route: (p) => `/social-media/posts/${p.id}` },
+  { pattern: 'social-media/inbox/:id', module: 'social-media', route: (p) => `/social-media/inbox/${p.id}` },
+  { pattern: 'social-media/approvals/:id', module: 'social-media', route: (p) => `/social-media/approvals/${p.id}` },
   // WhatsApp is a channel of Chat (worksuite-desktop#35): its links open there, on the same conversation.
   { pattern: 'whatsapp', module: 'whatsapp', route: () => whatsappRoute() },
   { pattern: 'whatsapp/:id', module: 'whatsapp', route: (p) => whatsappRoute({ chat: p.id }) },
@@ -71,6 +78,12 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'files/:id', module: 'files', route: (p) => `/files/file/${p.id}` },
   { pattern: 'crm', module: 'crm', route: () => '/crm' },
   { pattern: 'crm/leads/:id', module: 'crm', route: (p) => `/crm/leads/${p.id}` },
+  // Marketing (WS-MKT-SRS-001 MKT-DSK-01): the module, my call queue, a contact and an email campaign — in the web's
+  // address grammar, which the Marketing shell reads (`?view=`), so a link and a notification land on the same screen.
+  { pattern: 'marketing', module: 'marketing', route: () => '/marketing' },
+  { pattern: 'marketing/queue', module: 'marketing', route: () => '/marketing?view=queue' },
+  { pattern: 'marketing/contacts/:id', module: 'marketing', route: (p) => `/marketing?view=contacts&contact=${p.id}` },
+  { pattern: 'marketing/campaigns/:id', module: 'marketing', route: (p) => `/marketing?view=campaigns&campaign=${p.id}` },
   { pattern: 'hr', module: 'hr', route: () => '/hr' },
   { pattern: 'hr/leave/:id', module: 'hr', route: (p) => `/hr/leave/${p.id}` },
   { pattern: 'notifications', module: 'notifications', route: () => '/notifications' },
@@ -96,6 +109,10 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'elearning', module: 'elearning', route: () => '/elearning' },
   { pattern: 'elearning/courses/:id', module: 'elearning', route: (p) => `/elearning/my/courses/${p.id}` },
   { pattern: 'elearning/catalog/:id', module: 'elearning', route: (p) => `/elearning/catalog/${p.id}` },
+  // The support desk (FR-DSK-05): the inbox, and a ticket by its id or reference — its tab brought forward when it is
+  // open, opened when not (WF-12).
+  { pattern: 'support', module: 'support', route: () => '/support' },
+  { pattern: 'support/ticket/:id', module: 'support', route: (p) => ticketRoute(p.id!) },
   { pattern: 'tenders/:id', module: 'tender', route: (p) => `/tenders/${p.id}` },
   { pattern: 'projects/:id', module: 'projects', route: (p) => `/projects/${p.id}` },
 ];

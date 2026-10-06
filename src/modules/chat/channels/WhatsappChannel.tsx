@@ -17,6 +17,7 @@ import { Icon } from '../../../components/Icon';
 import { ResizeDivider, useResizableWidth } from '../../../components/ResizeDivider';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
+import { refreshWords, useListRefresh } from '../../../components/PullToRefresh';
 import { Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { openChatAttachment, previewKind, type Attachment } from '../AttachmentViewer';
 import { mediaUrl } from '../types';
@@ -71,6 +72,17 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   useTabTitle(current ? `WhatsApp · ${fullName(whoIs(current, index, picks[current.id]))}` : selected ? null : 'WhatsApp');
   const list = useResizableWidth('chat.list', LIST_WIDTH);
   const down = accounts.filter((a) => !isConnected(a));
+  // Pull to check for new messages, ⌘R/F5, "Checked…" and "↑ 3 new conversations" (worksuite-desktop#236).
+  const { attach: listRef, ...refresh } = useListRefresh({
+    list: 'whatsapp',
+    check: () => chats.refetch({ throwOnError: true }),
+    items: rows.map((c) => ({ key: String(c.id), stamp: c.last_message_at })),
+    view: `${account}:${scope}:${q.trim()}`,
+    ready: chats.isSuccess,
+    words: refreshWords('messages'),
+    errorText: () => l10n('Couldn’t check for new messages'),
+    lastChecked: chats.dataUpdatedAt || null,
+  });
   const byId = new Map(accounts.map((a) => [a.id, a]));
 
   useEffect(() => rememberWhatsapp(selected), [selected]);
@@ -120,18 +132,22 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
           )}
         </div>
       ))}
-      <div className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1.5 pb-2 scroll-thin">
-        {chats.isLoading ? <Spinner /> : chats.error && !chats.data ? <div className="p-4"><ErrorNote error={chats.error} onRetry={() => void chats.refetch()} /></div> : null}
-        {chats.isSuccess && !rows.length ? (
-          <Empty icon="phone" title={q.trim() ? 'Nothing matches' : scope === 'unread' ? 'Nothing unread' : scope === 'waiting' ? 'Nobody is waiting' : scope === 'mine' ? 'No conversations assigned to you' : 'No WhatsApp conversations yet'} hint={scope === 'all' && !q.trim() ? 'Messages to your numbers appear here.' : undefined} />
-        ) : null}
-        {rows.map((c) => {
-          const who = whoIs(c, index, picks[c.id]);
-          const on = byId.get(c.account_id);
-          // A conversation on a number that is down cannot be answered until it is up again: dimmed, and said why.
-          const blocked = on && !isConnected(on) ? `Can’t reply until ${on.name} is ${isConnecting(on) ? 'connected' : 'linked'}.` : null;
-          return <ChatRow key={c.id} c={c} who={who} active={String(c.id) === selected} many={accounts.length > 1 && !account} blocked={blocked} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} onMenu={(x, y) => setMenu({ who, c, x, y })} />;
-        })}
+      <div className="relative flex min-h-0 flex-1 flex-col">
+        {refresh.indicator}
+        {refresh.pill}
+        <div ref={listRef} onKeyDown={refresh.onKeyDown} className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1.5 pb-2 scroll-thin">
+          {chats.isLoading ? <Spinner /> : chats.error && !chats.data ? <div className="p-4"><ErrorNote error={chats.error} onRetry={() => void chats.refetch()} /></div> : null}
+          {chats.isSuccess && !rows.length ? (
+            <Empty icon="phone" title={q.trim() ? 'Nothing matches' : scope === 'unread' ? 'Nothing unread' : scope === 'waiting' ? 'Nobody is waiting' : scope === 'mine' ? 'No conversations assigned to you' : 'No WhatsApp conversations yet'} hint={scope === 'all' && !q.trim() ? 'Messages to your numbers appear here.' : undefined} />
+          ) : null}
+          {rows.map((c) => {
+            const who = whoIs(c, index, picks[c.id]);
+            const on = byId.get(c.account_id);
+            // A conversation on a number that is down cannot be answered until it is up again: dimmed, and said why.
+            const blocked = on && !isConnected(on) ? `Can’t reply until ${on.name} is ${isConnecting(on) ? 'connected' : 'linked'}.` : null;
+            return <ChatRow key={c.id} mark={refresh.rowProps(String(c.id))} markClass={refresh.freshClass(String(c.id))} c={c} who={who} active={String(c.id) === selected} many={accounts.length > 1 && !account} blocked={blocked} onOpen={() => go(`/chat?channel=whatsapp&wa=${c.id}`)} onMenu={(x, y) => setMenu({ who, c, x, y })} />;
+          })}
+        </div>
       </div>
     </>
   );
@@ -187,6 +203,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
                     </button>
                   ))}
                 </div>
+                <div className="-mt-1 flex min-w-0">{refresh.checked}</div>
               </>
             ) : null}
           </div>
@@ -375,7 +392,7 @@ const PICKS = 'ws.chat.whatsapp.picks';
  * count and a small waiting dot whose tooltip says how long. The number it is on leads the preview only while all
  * numbers are shown. A row on a number that is down is dimmed, its tooltip saying why.
  */
-function ChatRow({ c, who, active, many, blocked, onOpen, onMenu }: { c: WaChat; who: WaWho; active: boolean; many: boolean; blocked: string | null; onOpen: () => void; onMenu: (x: number, y: number) => void }) {
+function ChatRow({ c, who, active, many, blocked, onOpen, onMenu, mark, markClass }: { c: WaChat; who: WaWho; active: boolean; many: boolean; blocked: string | null; onOpen: () => void; onMenu: (x: number, y: number) => void; mark?: { 'data-refresh-key': string; 'data-fresh'?: '' }; markClass?: string }) {
   const waiting = c.waiting_minutes !== null && c.status !== 'resolved';
   const waitingFor = waiting ? `Waiting ${waitedFor(c.waiting_minutes ?? 0)}${c.overdue ? ' · overdue' : ''}` : '';
   const p = previewParts(c);
@@ -392,10 +409,12 @@ function ChatRow({ c, who, active, many, blocked, onOpen, onMenu }: { c: WaChat;
       title={blocked ?? undefined}
       aria-current={active ? 'true' : undefined}
       data-blocked={blocked ? 'true' : undefined}
+      {...mark}
       className={cx(
         'flex min-h-[64px] w-full shrink-0 items-center gap-2.5 rounded-[8px] px-2.5 py-2 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset',
         active ? 'bg-selection shadow-[inset_3px_0_0_var(--color-primary)]' : 'hover:bg-subtle',
         blocked && 'opacity-60',
+        markClass,
       )}
     >
       <WaAvatar who={who} size={40} />

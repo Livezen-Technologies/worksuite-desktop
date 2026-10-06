@@ -1,9 +1,10 @@
 import { MAX_CONCURRENT } from '../transfers';
-import { DARK_PROFILE_IDS } from '../theme-profiles';
+import { DARK_PROFILE_IDS, MAX_CUSTOM_PROFILES } from '../theme-profiles';
 import { localProfileInput, type LocalOverview, type LocalProfile, type LocalStatus, type MoveOffer, type MoveResult, type RestorePreview } from '../local-workspace';
 import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
 import type { DataFolder, ImportProgress, MailFileHandle, MailFileView } from '../mail-files';
 import type { SmimeVerdict } from '../smime';
+import type { ConnectionDetails, SpeedTestResult } from '../connection';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -62,11 +63,13 @@ import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, offi
 import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
 import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
+import { phoneContract, type PhoneOutputs } from '../phone';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
   ActiveCall,
   LocalRecording,
+  ScreenRecordingAccess,
   SpeechSegment,
   SpeechStatus,
   AiRules,
@@ -80,6 +83,7 @@ import type {
   Draft,
   NotificationItem,
   NotificationPermission,
+  RingTestStep,
   OfflineMutation,
   Preferences,
   PreferenceLock,
@@ -102,6 +106,7 @@ import type {
   SyncStatus,
   WebchatRingState,
   LiveDeskInfo,
+  WallDisplay,
   QuickAskContext,
   Transfer,
   UpdateStatus,
@@ -110,7 +115,7 @@ import type {
 } from '../types';
 
 const none = z.undefined().or(z.null()).optional();
-const salonPaper = z.enum(['80mm', '58mm', 'a4']);
+const salonPaper = z.enum(['80mm', '58mm', 'a4', 'letter']);
 const idString = z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/);
 const route = z
   .string()
@@ -127,6 +132,18 @@ export const tabRecordSchema = z.object({
 });
 export type TabRecord = z.infer<typeof tabRecordSchema>;
 
+const hexColour = z.string().regex(/^#[0-9a-fA-F]{6}$/);
+const appearanceProfileId = z.string().regex(/^(purple|red|green|blue|orange|teal|gray|org|c-[a-z0-9]{4,16})$/);
+const customProfileSchema = z.object({
+  id: z.string().regex(/^c-[a-z0-9]{4,16}$/),
+  name: z.string().max(40),
+  accent: hexColour,
+  tint: z.enum(['neutral', 'accent', 'custom']),
+  tintColor: hexColour.nullable().optional(),
+});
+
+const supportNoticeChoice = z.object({ banner: z.boolean(), sound: z.boolean() });
+
 const bandwidthLimitSchema = z.object({ on: z.boolean(), value: z.number().positive().max(1_000_000), unit: z.enum(['KB', 'MB']) });
 
 export const preferencesPatchSchema = z
@@ -137,12 +154,25 @@ export const preferencesPatchSchema = z
     restoreTabs: z.boolean(),
     theme: z.enum(['system', 'light', 'dark']),
     darkColorProfile: z.enum(DARK_PROFILE_IDS),
+    // Colour profiles (worksuite-desktop#234). The mode is `theme`; a profile id is a built-in one, `org`, or one of
+    // the custom ones (`c-…`), which the settings service checks against the list.
+    appearance: z
+      .object({
+        mode: z.enum(['system', 'light', 'dark']),
+        lightProfile: appearanceProfileId,
+        darkProfile: appearanceProfileId,
+        custom: z.array(customProfileSchema).max(MAX_CUSTOM_PROFILES),
+        chosen: z.boolean(),
+      })
+      .partial(),
     density: z.enum(['comfortable', 'compact']),
     hardwareAcceleration: z.boolean(),
     notificationSounds: z.boolean(),
     notificationPrivacy: z.enum(['FULL', 'SENDER_ONLY', 'GENERIC']),
     notificationsEnabled: z.boolean(),
     badgeCount: z.boolean(),
+    statusConnectionStrength: z.boolean(),
+    statusResponseTime: z.boolean(),
     moduleNotifications: z.record(z.string().max(64), z.boolean()),
     dndEnabled: z.boolean(),
     dndFrom: z.string().regex(/^([01]\d|2[0-3]):[0-5]\d$/),
@@ -191,7 +221,22 @@ export const preferencesPatchSchema = z
     shortcuts: z.record(z.string().max(64), z.string().max(64)),
     backgroundServices: z.object({ notifications: z.boolean(), realtime: z.boolean() }),
     webchatRinging: z.object({ window: z.boolean(), duringDnd: z.enum(['card', 'at_risk', 'ring']), shortcut: z.boolean(), volume: z.number().int().min(0).max(100), ringOn: z.enum(['both', 'default']).optional(), liveShortcuts: z.boolean().optional() }),
+    // Notification settings › Support (WS-SUPPORT-SRS-001 D-03): each kind's banner and sound here.
+    supportNotices: z
+      .object({
+        assigned: supportNoticeChoice,
+        reply: supportNoticeChoice,
+        mention: supportNoticeChoice,
+        sla: supportNoticeChoice,
+        slaPersistent: z.boolean(),
+        lowPriority: z.enum(['banner', 'digest']),
+        quickShortcut: z.boolean(),
+        urgentPopup: z.boolean(),
+      })
+      .partial(),
     webchatFollowUps: z.object({ card: z.boolean(), desktop: z.boolean(), sound: z.boolean(), idleMinutes: z.union([z.literal(1), z.literal(2), z.literal(5), z.literal(10)]) }),
+    // Settings › Chat: the chat drawer docked beside the page or floating over it (worksuite-desktop#264).
+    chatDrawer: z.enum(['docked', 'floating']),
     ai: z.object({
       quickAsk: z.boolean(),
       shortcut: z.enum(['Alt+Space', 'Control+Alt+Space', 'CommandOrControl+Shift+Space']),
@@ -276,6 +321,8 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
     id: z.number().int().positive().optional(),
     docKind: z.string().regex(/^[a-z_]{1,60}$/).optional(),
   }),
+  /** A mail attachment (worksuite-desktop#249): sent in parts like any upload, then staged for the message — not kept in Drive. */
+  z.object({ kind: z.literal('mail') }),
   /** Offered to the other end of a remote-control session (RC06): they accept or decline it there. */
   z.object({ kind: z.literal('remote'), sessionId: z.number().int().positive() }),
   // To a website visitor (ENH-WCHAT-02, RDC-04/14): one request to the conversation's attach, the widget's own store.
@@ -389,7 +436,7 @@ export const contract = {
 
   'windows:open': ch(
     z.object({
-      kind: z.enum(['chat-mini', 'timer', 'record', 'call', 'video-call', 'ring', 'meet']),
+      kind: z.enum(['chat-mini', 'timer', 'record', 'call', 'video-call', 'ring', 'meet', 'phone', 'support-quick']),
       route,
       title: z.string().max(200).optional(),
       alwaysOnTop: z.boolean().optional(),
@@ -440,6 +487,8 @@ export const contract = {
   'ring:join': ch(z.object({ id: z.number().int().positive(), then: z.enum(['transfer']).optional(), visitor: z.string().max(200).optional() }), { session: true, rate: 4 }),
   'ring:silence': ch(z.object({ id: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 10 }),
   'ring:pass': ch(z.object({ id: z.number().int().positive() }), { session: true, rate: 4 }),
+  /** Settings › Ringing › Send a test chat notification (#251): routed, received, notification shown. */
+  'ring:test': ch(none, { session: true, rate: 2 }),
   // The card's Join chat and Join & send, then the mini chat's replies, Open full chat or minimise, and its height (#225).
   // `open`: the native call window's Send & join and Join chat open the thread (R-05, UX-ALR-01; RING-41); `cannedId`: the
   // saved reply it was written from, counted once it is sent (RDC-03).
@@ -480,6 +529,13 @@ export const contract = {
     z.object({ conversationId: z.number().int().positive(), visitor: z.string().max(120), since: z.number().int().nonnegative(), held: z.boolean() }).nullable(),
     { session: true, rate: 20 },
   ),
+  // Website chats over realtime (plan 2.7, 2.9): a thread a window shows is heard on its own channels; what it has and
+  // shows is acknowledged by seq, in batches.
+  'realtime:watch': ch(z.strictObject({ conversationId: z.number().int().positive(), on: z.boolean() }), { session: true, rate: 60 }),
+  'realtime:receipt': ch(
+    z.strictObject({ conversationId: z.number().int().positive(), deliveredSeq: z.number().int().positive().optional(), readSeq: z.number().int().positive().optional(), delivered: z.number().int().positive().optional(), read: z.number().int().positive().optional() }),
+    { session: true, rate: 60 },
+  ),
   // Multi-window docking (FR-NAV-05/07): tear a tab off into its own window, and dock it back.
   'windows:detach': ch(
     z.object({ route, title: z.string().max(200).optional(), at: z.object({ x: z.number().int(), y: z.number().int() }).optional() }),
@@ -501,8 +557,15 @@ export const contract = {
   'files:pickFiles': ch(z.object({ multiple: z.boolean(), title: z.string().max(100).optional(), only: z.enum(['gif', 'document', 'image', 'video', 'audio']).optional() }), { session: true, rate: 2 }),
   // The dialog runs in the main process, which stores the chosen folder itself.
   'files:chooseDownloadFolder': ch(none, { rate: 2 }),
-  /** A short text the page made (backup codes), saved where the person chooses in a save dialog. */
-  'files:saveText': ch(z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.txt$/), text: z.string().max(64_000) }), { session: true, rate: 2 }),
+  /** A text the page made (backup codes, a CSV export), saved where the person chooses in a save dialog. */
+  'files:saveText': ch(
+    z.union([
+      z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.txt$/), text: z.string().max(64_000) }),
+      // An export the page built (the Phone's call history, extensions): larger, and saved as CSV.
+      z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.csv$/), text: z.string().max(8_000_000) }),
+    ]),
+    { session: true, rate: 2 },
+  ),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
   /** A folder, with everything in it: each file carries its path inside the folder. */
   'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
@@ -856,6 +919,8 @@ export const contract = {
     { session: true, rate: 5 },
   ),
   'notifications:permission': ch(none, { session: true }),
+  /** The operating system's notification settings for WorkSuite (#251): the banner's Open System Settings. */
+  'notifications:openSettings': ch(none, { session: true, rate: 4 }),
   /** The bell's count again, now: after the notification centre read, snoozed or archived something. */
   'notifications:refresh': ch(none, { session: true, rate: 10 }),
 
@@ -931,7 +996,13 @@ export const contract = {
   // SalonMate's front desk: the key it is paired with stays in the main process.
   'salon:deskPairing': ch(none, { session: true }),
   'salon:deskPair': ch(
-    z.object({ location_id: z.number().int().positive(), name: z.string().trim().min(1).max(80), pos_register_id: z.number().int().positive().nullable().optional() }),
+    z.object({
+      location_id: z.number().int().positive(),
+      name: z.string().trim().min(1).max(80),
+      pos_register_id: z.number().int().positive().nullable().optional(),
+      warehouse_id: z.number().int().positive().nullable().optional(),
+      receipt_template: z.string().regex(/^[a-z0-9_]{1,40}$/).nullable().optional(),
+    }),
     { session: true, rate: 3, sensitive: true },
   ),
   'salon:deskForget': ch(none, { session: true, rate: 3, sensitive: true }),
@@ -942,7 +1013,7 @@ export const contract = {
       .object({
         receipt_printer: z.string().trim().min(1).max(200).nullable(),
         a4_printer: z.string().trim().min(1).max(200).nullable(),
-        paper: z.enum(['80mm', '58mm']),
+        paper: salonPaper,
         copies: z.number().int().min(1).max(3),
         auto_print: z.boolean(),
         silent: z.boolean(),
@@ -964,7 +1035,7 @@ export const contract = {
   'salon:outbox': ch(none, { session: true }),
   'salon:outboxAdd': ch(
     z.object({
-      kind: z.enum(['client.create', 'visit.book', 'visit.check_in']),
+      kind: z.enum(['client.create', 'visit.book', 'visit.check_in', 'visit.checkout']),
       local_id: z.string().max(40).nullable().optional(),
       payload: z.record(z.string(), z.unknown()),
       label: z.string().trim().min(1).max(200),
@@ -1192,9 +1263,20 @@ export const contract = {
   'mail:setSpellLanguages': ch(z.strictObject({ languages: z.array(z.string().regex(/^[a-z]{2,3}(-[A-Z]{2})?$/)).max(4) }), { session: true, rate: 5 }),
   // S/MIME (DMO-SEC-05): a signed message checked against its own bytes, in the main process.
   'smime:verify': ch(z.strictObject({ uid: z.string().regex(/^\d{1,20}$/), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), mailbox: z.string().regex(/^\d{1,20}$/).nullable() }), { session: true, rate: 5 }),
+  // Contact Support (D-11): a picture of the asking window, and the last day's redacted log — shown before they go.
+  'support:displays': ch(none, { session: true }),
+  'support:wall': ch(z.object({ displayId: z.number().int().nullable() }), { session: true, rate: 10 }),
+  'support:wallClose': ch(none, { session: true }),
+  'help:capture': ch(none, { session: true, rate: 5 }),
+  'help:logs': ch(none, { session: true, rate: 10 }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
   'offline:retry': ch(z.object({ id: idString }), { session: true }),
   'offline:discard': ch(z.object({ id: idString }), { session: true }),
+  // A module's outbox (Support's D-09): a queued change's words and the server's answer, edited before it goes, and
+  // the queue sent now.
+  'offline:detail': ch(z.object({ id: idString }), { session: true }),
+  'offline:edit': ch(z.object({ id: idString, body: z.unknown() }), { session: true, rate: 10 }),
+  'offline:replay': ch(none, { session: true, rate: 2 }),
   'offline:saveDraft': ch(
     z.object({ module: z.string().max(64), context: z.string().max(256), content: z.unknown() }),
     { session: true, rate: 20 },
@@ -1248,6 +1330,18 @@ export const contract = {
     { permission: 'desktop.policies.manage', session: true, sensitive: true, rate: 5 },
   ),
 
+  // The organization's colour profile (#234): four keys of its desktop policy, for whoever may set that policy.
+  'settings:appearanceDefaults': ch(
+    z.object({
+      organizationId: z.string().regex(/^\d{1,12}$/),
+      accent: hexColour.nullable(),
+      tint: z.enum(['neutral', 'accent', 'custom']),
+      tintColor: hexColour.nullable(),
+      locked: z.boolean(),
+    }),
+    { permission: 'desktop.policies.manage', session: true, sensitive: true, rate: 5 },
+  ),
+
   'status:snapshot': ch(none, { whileLocked: true }),
 
   'diagnostics:run': ch(none, { whileLocked: true, rate: 1 }),
@@ -1255,9 +1349,35 @@ export const contract = {
   'diagnostics:saveBundle': ch(none, { permission: 'desktop.diagnostics.export', whileLocked: true, sensitive: true, rate: 1 }),
   'diagnostics:restartSafeMode': ch(z.object({ safe: z.boolean() }), { whileLocked: true }),
   'diagnostics:services': ch(none, { whileLocked: true }),
+  // Request, server and render times from the screens (worksuite-desktop#252), kept for the report's timings.json.
+  'diagnostics:timings': ch(
+    z.object({
+      entries: z
+        .array(
+          z.object({
+            what: z.string().regex(/^[a-z][a-z0-9:_-]{0,39}$/),
+            at: z.string().max(40),
+            ms: z.number().min(0).max(3_600_000),
+            rows: z.number().int().min(0).max(1_000_000).nullable(),
+            server: z.object({ ms: z.number(), db_ms: z.number(), queries: z.number().int(), rows: z.number().int() }).nullable(),
+            render_ms: z.number().min(0).max(3_600_000).nullable().optional(),
+            ok: z.boolean(),
+          }),
+        )
+        .max(50),
+    }),
+    { whileLocked: true, rate: 2 },
+  ),
+
+  // Connection strength's popover (worksuite-desktop#254): the server's clock, a light speed test, Reconnect now.
+  'connection:details': ch(none, { session: true, rate: 2 }),
+  'connection:speedTest': ch(none, { session: true, rate: 1 }),
+  'connection:reconnect': ch(none, { session: true, rate: 1 }),
 
   // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
   ...posContract,
+  // The Phone: what its page cannot do for itself (shared/phone.ts, electron/services/phone.ts).
+  ...phoneContract,
   ...pmsLocksContract,
   ...contactSyncContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
@@ -1331,7 +1451,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;
@@ -1377,7 +1497,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'media:privacySettings': void;
   'calls:active': void;
   'calls:list': ActiveCall[];
-  'meetrec:preflight': { folder: string; free: number | null; ok: boolean; why: string | null };
+  'meetrec:preflight': { folder: string; free: number | null; ok: boolean; why: string | null; screen?: ScreenRecordingAccess; fix?: 'screen-permission' | null };
   'meetrec:start': { id: string };
   'meetrec:active': void;
   'meetrec:abort': void;
@@ -1462,6 +1582,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:join': boolean;
   'ring:silence': void;
   'ring:pass': boolean;
+  'ring:test': RingTestStep[];
   'ring:joinSend': { ok: boolean; why: string | null };
   'ring:reply': { ok: boolean; why: string | null };
   'ring:closeJoined': void;
@@ -1481,6 +1602,8 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'ring:call': boolean;
   'ring:mic': void;
   'ring:onCall': void;
+  'realtime:watch': void;
+  'realtime:receipt': void;
   'windows:detach': { id: number };
   'windows:dock': void;
   'windows:toMain': void;
@@ -1529,6 +1652,7 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'notifications:test': boolean;
   'notifications:reminder': void;
   'notifications:permission': NotificationPermission;
+  'notifications:openSettings': boolean;
   'notifications:refresh': void;
   'clipboard:readForPaste': { text: string | null; image: string | null; files: PickedFile[] };
   'print:print': boolean;
@@ -1661,9 +1785,17 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'mail:images': { enabled: boolean; images: Record<string, string> };
   'mail:keptAttachments': string[];
   'smime:verify': SmimeVerdict;
+  'support:displays': { displays: WallDisplay[]; open: boolean };
+  'support:wall': void;
+  'support:wallClose': void;
+  'help:capture': { name: string; data: string; width: number; height: number };
+  'help:logs': { text: string; lines: number; bytes: number };
   'offline:submit': SubmitResult;
   'offline:retry': void;
   'offline:discard': void;
+  'offline:detail': { body: unknown; response: unknown } | null;
+  'offline:edit': void;
+  'offline:replay': { done: number; conflicts: number; failed: number; remaining: number };
   'offline:saveDraft': Draft;
   'offline:getDraft': Draft | null;
   'offline:listDrafts': Draft[];
@@ -1700,12 +1832,17 @@ export interface Outputs extends PosOutputs, PmsLocksOutputs, ContactSyncOutputs
   'settings:get': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:set': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:launcherDefaults': { pinned: string[]; order: string[] };
+  'settings:appearanceDefaults': { accent: string | null; tint: 'neutral' | 'accent' | 'custom'; tintColor: string | null; locked: boolean };
   'status:snapshot': StatusSnapshot;
   'diagnostics:run': DiagnosticCheck[];
   'diagnostics:previewBundle': BundlePreview;
   'diagnostics:saveBundle': string | null;
   'diagnostics:restartSafeMode': void;
   'diagnostics:services': Record<string, ServiceHealth>;
+  'diagnostics:timings': void;
+  'connection:details': ConnectionDetails;
+  'connection:speedTest': SpeedTestResult;
+  'connection:reconnect': void;
 }
 
 /** Typed error codes returned across IPC (§8.3 plus IPC-specific ones). */

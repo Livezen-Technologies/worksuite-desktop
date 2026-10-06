@@ -112,7 +112,7 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
-    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ module: 'website-chat', entityId: '41', path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'We can help with that.' }, queueIfOffline: true }));
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ module: 'website-chat', entityId: '41', path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'We can help with that.', client_id: expect.any(String) }, queueIfOffline: true }));
     // Sending stops it at once (LIVE-04).
     expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/chat/widget-admin/conversations/41/typing', { state: 'stop' });
     // Never Team Chat's message endpoint.
@@ -129,7 +129,7 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
-    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'Students get 50% off.', reply_to: 7 } }));
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ path: '/api/chat/widget-admin/conversations/41/reply', body: { message: 'Students get 50% off.', reply_to: 7, client_id: expect.any(String) } }));
     expect(clear).toHaveBeenCalled();
   });
 
@@ -158,13 +158,43 @@ describe('the website thread on the shared composer (RDC-01/02)', () => {
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
-    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ body: { message: 'Schools get 20% off the first year.', canned_id: 1 } }));
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ body: { message: 'Schools get 20% off the first year.', canned_id: 1, client_id: expect.any(String) } }));
     fireEvent.change(box, { target: { value: 'Anything else?' } });
     await act(async () => {
       fireEvent.keyDown(box, { key: 'Enter' });
     });
     const sent = calls.mock.calls.filter(([c]) => c === 'offline:submit').map(([, x]) => (x as { body: unknown }).body);
-    expect(sent).toEqual([{ message: 'Schools get 20% off the first year.', canned_id: 1 }, { message: 'Anything else?' }]);
+    expect(sent).toEqual([{ message: 'Schools get 20% off the first year.', canned_id: 1, client_id: expect.any(String) }, { message: 'Anything else?', client_id: expect.any(String) }]);
+    // Each reply its own client id (DLV-01, plan 1.9).
+    expect(new Set(sent.map((b) => (b as { client_id: string }).client_id)).size).toBe(2);
+  });
+
+  it('a saved reply written in Markdown goes to the visitor as plain text, still counted as that reply (#261)', async () => {
+    const win = { id: 9, shortcut: 'win', title: 'Windows settings', body: 'Press **Windows + I**, then open [Windows Update](https://support.microsoft.com/update):\n- Check for updates\n- Restart' };
+    render(
+      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
+        <Composer roomId="website-41" roomName="Visitor 4F2A" group={false} reply={null} onClearReply={() => undefined} website={{ conversationId: 41, replies: [win] }} />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole('button', { name: 'Windows settings' }));
+    const box = screen.getByRole('textbox', { name: 'Message' }) as HTMLTextAreaElement;
+    // The widget shows a reply as it is written: no **, a link's address after its words, the list as lines.
+    const plain = 'Press Windows + I, then open Windows Update (https://support.microsoft.com/update):\n• Check for updates\n• Restart';
+    expect(box.value).toBe(plain);
+    await act(async () => {
+      fireEvent.keyDown(box, { key: 'Enter' });
+    });
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ body: { message: plain, canned_id: 9, client_id: expect.any(String) } }));
+  });
+
+  it('what is typed is sent exactly as typed, Markdown or not (#261)', async () => {
+    mount();
+    const box = screen.getByRole('textbox', { name: 'Message' });
+    fireEvent.change(box, { target: { value: 'It is **free** for schools' } });
+    await act(async () => {
+      fireEvent.keyDown(box, { key: 'Enter' });
+    });
+    expect(calls).toHaveBeenCalledWith('offline:submit', expect.objectContaining({ body: { message: 'It is **free** for schools', client_id: expect.any(String) } }));
   });
 
   it('holds files to the website\'s own size limit, not a fixed 5 MB (RDC-04)', () => {

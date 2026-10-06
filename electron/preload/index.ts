@@ -1,5 +1,6 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron';
 import { EVENT_CHANNELS, INVOKE_CHANNELS, type EventChannel, type InvokeChannel } from '@shared/ipc/channels';
+import { applyAppearance, type AppearancePrefs } from '@shared/theme-profiles';
 
 /**
  * The only bridge between the sandboxed renderer and the desktop (§3.3, §8.4).
@@ -44,6 +45,36 @@ function activity(): void {
 for (const type of ['pointerdown', 'keydown', 'wheel', 'touchstart'] as const) {
   window.addEventListener(type, activity, { capture: true, passive: true });
 }
+
+/**
+ * The colour profile before the first paint (worksuite-desktop#234): asked for once, synchronously, and written onto
+ * the page as soon as it has a root element — before its stylesheet, its scripts or anything is drawn — so no window
+ * flashes the default colours on its way to the person's. Changes after this arrive as `appearance:changed`.
+ */
+function appearanceFirst(): void {
+  let look: AppearancePrefs | null = null;
+  try {
+    look = ipcRenderer.sendSync('appearance:initial') as AppearancePrefs | null;
+  } catch {
+    return;
+  }
+  if (!look || typeof look !== 'object') return;
+  const apply = () => {
+    try {
+      applyAppearance(document, look, typeof window.matchMedia === 'function' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    } catch {
+      // The page's own start applies it a moment later.
+    }
+  };
+  if (document.documentElement) return apply();
+  const watch = new MutationObserver(() => {
+    if (!document.documentElement) return;
+    watch.disconnect();
+    apply();
+  });
+  watch.observe(document, { childList: true });
+}
+appearanceFirst();
 
 const api = {
   platform: process.platform,
@@ -132,6 +163,7 @@ const api = {
     join: call('ring:join'),
     silence: call('ring:silence'),
     pass: call('ring:pass'),
+    test: call('ring:test'),
     joinSend: call('ring:joinSend'),
     reply: call('ring:reply'),
     closeJoined: call('ring:closeJoined'),
@@ -148,6 +180,10 @@ const api = {
     call: call('ring:call'),
     mic: call('ring:mic'),
     onCall: call('ring:onCall'),
+  },
+  realtime: {
+    watch: call('realtime:watch'),
+    receipt: call('realtime:receipt'),
   },
   live: {
     open: call('live:open'),
@@ -269,6 +305,7 @@ const api = {
     pause: call('notifications:pause'),
     test: call('notifications:test'),
     permission: call('notifications:permission'),
+    openSettings: call('notifications:openSettings'),
     refresh: call('notifications:refresh'),
     reminder: call('notifications:reminder'),
   },
@@ -448,6 +485,14 @@ const api = {
     openDrawer: call('pos:openDrawer'),
     displayOpen: call('pos:displayOpen'),
     displayClose: call('pos:displayClose'),
+    carts: call('pos:carts'),
+    cartsSave: call('pos:cartsSave'),
+  },
+  // The Phone (phone-channels.ts): its switch in the page policy, global shortcuts, call notifications.
+  phone: {
+    prepare: call('phone:prepare'),
+    shortcuts: call('phone:shortcuts'),
+    notify: call('phone:notify'),
   },
   // Mail data files, export, safe links and S/MIME (ENH-MAIL-03 P4).
   mailfile: {
@@ -472,6 +517,15 @@ const api = {
   smime: {
     verify: call('smime:verify'),
   },
+  support: {
+    displays: call('support:displays'),
+    wall: call('support:wall'),
+    wallClose: call('support:wallClose'),
+  },
+  help: {
+    capture: call('help:capture'),
+    logs: call('help:logs'),
+  },
   offline: {
     status: call('offline:status'),
     pending: call('offline:pending'),
@@ -485,6 +539,9 @@ const api = {
     submit: call('offline:submit'),
     retry: call('offline:retry'),
     discard: call('offline:discard'),
+    detail: call('offline:detail'),
+    edit: call('offline:edit'),
+    replay: call('offline:replay'),
     saveDraft: call('offline:saveDraft'),
     getDraft: call('offline:getDraft'),
     listDrafts: call('offline:listDrafts'),
@@ -527,6 +584,7 @@ const api = {
     get: call('settings:get'),
     set: call('settings:set'),
     launcherDefaults: call('settings:launcherDefaults'),
+    appearanceDefaults: call('settings:appearanceDefaults'),
   },
   status: {
     snapshot: call('status:snapshot'),
@@ -537,6 +595,12 @@ const api = {
     saveBundle: call('diagnostics:saveBundle'),
     restartSafeMode: call('diagnostics:restartSafeMode'),
     services: call('diagnostics:services'),
+    timings: call('diagnostics:timings'),
+  },
+  connection: {
+    details: call('connection:details'),
+    speedTest: call('connection:speedTest'),
+    reconnect: call('connection:reconnect'),
   },
   events: { on },
 };

@@ -5,12 +5,13 @@ import { queueMedia } from './outgoing';
 import { useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import { useEffect, useImperativeHandle, useRef, useState, type Ref, type ReactNode } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
-import { websiteDraftKey, websiteReplyMutation } from '@shared/website-reply';
+import { websiteDraftKey } from '@shared/website-reply';
 import { app } from '../../core/app-state';
 import { apiGet, apiPost, request } from '../../core/api';
 import { call, errorMessage, registerDropped } from '../../core/bridge';
 import { useDraft } from '../../core/drafts';
 import { holdWhileSending } from '../../core/closeGuard';
+import { markdownText } from '../../core/markdown';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { uploadBlob } from '../../core/upload';
@@ -19,7 +20,7 @@ import { cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import { AttachMenu, CameraCapture, DrivePicker, RefusedNotes, Tray, type AttachChoice, type Staged } from './attach';
 import { KIND, type CardKind } from './cards/CardFrame';
-import { recordsIn } from './cards/recordLinks';
+import { pageTitle, recordsIn, shareLink } from './cards/recordLinks';
 import { SharePicker, ShareMenu, type ShareKind } from './cards/SharePicker';
 import { caretPoint } from './caret';
 import { PRESENCE } from './Details';
@@ -34,7 +35,7 @@ import { transcript, useChatSavedReplies, type RepliesState, type Turn } from '.
 import { AiTextDialog } from '../ai/AiTextDialog';
 import { AiMenuButton } from '../ai/AiMenuButton';
 import { WRITING_TASKS, type TextTask } from '../ai/textTools';
-import { team, useAgents, type WebsiteConversation } from './website/api';
+import { openConversationData, sendWebsiteReply, team, useAgents } from './website/api';
 import { NOTE_TONE } from './kit/MessageBubble';
 import { TEAM_COMPOSER, WEBSITE_COMPOSER } from './kit/caps';
 import { usePresence } from './presence';
@@ -144,6 +145,10 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   // The channel profile (P-04, RDC-02): what this composer offers, Team Chat's or a website visitor's.
   const caps = site ? WEBSITE_COMPOSER : TEAM_COMPOSER;
   const note = !!site?.note;
+  // A saved reply or the writing assistant's text put into a message to a website visitor (a reply, or speaking first)
+  // goes without Markdown's marks — lists as lines, a link's address after its words — since their widget shows it as
+  // it is written (worksuite-desktop#261). What is typed is sent as typed; a note, read here, keeps its marks.
+  const forBox = (words: string) => ((site && !note) || channel?.plain ? markdownText(words) : words);
   // A website draft keeps the key the website thread always used, so none is lost in the move (RDC-06); a note has its own.
   const siteKey = site ? (note ? websiteNoteDraftKey(site.conversationId) : websiteDraftKey(site.conversationId)) : null;
   const draft = useDraft<string>(channel?.draftModule ?? siteKey?.module ?? 'chat', channel?.draftContext ?? siteKey?.context ?? `room:${roomId}`, '');
@@ -158,6 +163,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const [modal, setModal] = useState<'drive' | 'camera' | null>(null);
   const [sharing, setSharing] = useState<Exclude<ShareKind, 'drive'> | null>(null);
   const origin = useStore(app, (s) => s.auth?.server?.origin);
+  const org = useStore(app, (s) => s.organizationId);
   const [recording, setRecording] = useState(false);
   const [staged, setStaged] = useState<Staged[]>([]);
   // Files refused before any upload, each with why, under the tray (P-04 AttachmentTray; RDC-04).
@@ -389,14 +395,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
       return true;
     }
     if (site) {
-      // A reply to a visitor goes through the outbox too: pending while offline, sent once on reconnecting (RDC-07).
-      const r = await call('offline:submit', websiteReplyMutation(site.conversationId, words, reply?.id ?? null, cannedUsed.current));
+      // Drawn at once, "Sending…", and as the stored message the moment the server has it (worksuite-desktop#252).
+      // Through the outbox with its client id (RDC-07, plan 1.9): pending while offline and sent once on reconnecting;
+      // refused, it stays in the thread as Not sent with the reason and Retry, so the box is free for the next one.
+      const cannedId = cannedUsed.current;
       cannedUsed.current = null;
-      if (!r.delivered && !r.queued) {
-        toast('error', r.error ?? 'Not sent.');
-        return false;
-      }
-      void qc.invalidateQueries({ queryKey: r.queued ? ['offline'] : ['website'] });
+      await sendWebsiteReply(qc, site.conversationId, words, reply?.id ?? null, cannedId);
       return true;
     }
     const mentions = mentionsIn(words);
@@ -569,9 +573,9 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   };
 
   /** A record from Share from WorkSuite goes as its address; each reader's app shows it as a card. */
+  // A full link that names the organisation and the record (worksuite-desktop#266), never a bare path.
   const shareRecord = async (path: string): Promise<boolean> => {
-    const base = (origin ?? 'https://app.worksuite.lk').replace(/\/+$/, '');
-    const ok = await sendWords(`${base}${path}`, false);
+    const ok = await sendWords(shareLink(path, { org, origin }), false);
     if (ok) onClearReply();
     return ok;
   };
@@ -601,7 +605,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const conversation = (): Turn[] => {
     if (channel) return channel.context();
     if (site) {
-      const c = qc.getQueryData<WebsiteConversation>(['website', 'conversation', String(site.conversationId)]);
+      const c = openConversationData(qc, String(site.conversationId));
       return (c?.messages ?? []).filter((m) => m.from === 'visitor' || m.from === 'agent').map((m) => ({ mine: m.from === 'agent', name: m.from === 'agent' ? (m.agent ?? myName) : (c?.visitor?.name ?? 'Visitor'), text: m.body ?? '' }));
     }
     const pages = qc.getQueryData<InfiniteData<{ messages: ChatMessage[] }>>(['chat', 'messages', roomId])?.pages ?? [];
@@ -611,12 +615,13 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   const insertSlash = (body: string) => {
     // A website saved reply: counted as a use when the message is sent (RDC-03).
     if (ownReplies) cannedUsed.current = ownReplies.find((r) => r.body === body)?.id ?? cannedUsed.current;
+    const words = forBox(body);
     const start = slash ? slash.start : (input.current?.selectionStart ?? text.length);
     const end = slash ? slash.start + 1 + slash.word.length : start;
-    setText(`${text.slice(0, start)}${body}${text.slice(end)}`);
+    setText(`${text.slice(0, start)}${words}${text.slice(end)}`);
     setSlash(null);
     slashTyped.current = false;
-    focus(start + body.length);
+    focus(start + words.length);
   };
   const insertReply = (r: SavedReply) => insertSlash(r.body);
 
@@ -773,8 +778,9 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
                   label: ai.task === 'reply' ? 'Put in the message box' : 'Replace my message',
                   primary: true,
                   run: (t) => {
-                    setText(t);
-                    focus(t.length);
+                    const words = forBox(t);
+                    setText(words);
+                    focus(words.length);
                   },
                 },
               ]
@@ -906,7 +912,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
           <Icon name="link" size={13} className="shrink-0 text-primary" />
           <span className="flex min-w-0 flex-1 flex-col">
             <b className="text-ink">{detected.length === 1 ? 'Link detected · will show as a card' : `${detected.length} links detected · each will show as a card`}</b>
-            <span className="truncate text-ink-2">{detected.map((r) => KIND[r.kind as CardKind].label).join(' · ')}</span>
+            <span className="truncate text-ink-2">{detected.map((r) => (r.kind === 'page' ? pageTitle(r) : KIND[r.kind as CardKind].label)).join(' · ')}</span>
           </span>
         </div>
       ) : null;

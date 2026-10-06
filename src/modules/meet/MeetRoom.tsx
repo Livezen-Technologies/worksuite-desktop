@@ -4,7 +4,9 @@ import BrowserMeetingChat from './BrowserMeetingChat';
 import { GuestChat } from './GuestChat';
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState, useSyncExternalStore } from 'react';
-import type { Participant } from 'livekit-client';
+import { RoomEvent, type Participant } from 'livekit-client';
+import { callQuality, type CallQuality } from '../../core/connection';
+import { ConnectionWarning } from '../../components/ConnectionWarning';
 import { call } from '../../core/bridge';
 import { parseTs } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -96,6 +98,17 @@ export function MeetRoom() {
   // Sharing and control in this meeting, as the server sees it: asking to control a shared screen, and controlling it.
   const uuid = meet.uuid;
   useEffect(() => remote.start(uuid), [uuid]);
+  // Connection strength's Meet row (worksuite-desktop#254): this call's quality as LiveKit rates it, while the room is open.
+  useEffect(() => {
+    if (typeof room.on !== 'function') return;
+    const publish = () => callQuality.set({ meet: { quality: String(room.localParticipant.connectionQuality ?? 'unknown') as CallQuality['quality'], packetLossPct: null } });
+    publish();
+    room.on(RoomEvent.ConnectionQualityChanged, publish);
+    return () => {
+      room.off(RoomEvent.ConnectionQualityChanged, publish);
+      callQuality.set({ meet: null });
+    };
+  }, [room]);
   // Whether this computer can be controlled, for the picker's "Let people ask to control" (RC01).
   const rcView = useQuery({ queryKey: ['rc-state'], queryFn: () => call('rc:recheck'), enabled: picking === 'start', staleTime: 0 });
   const pickerControl = rcView.data
@@ -243,6 +256,7 @@ export function MeetRoom() {
           <>
             <LivestreamBadge status={meet.livestream} />
             <RecordingFeedback active={!!rec} since={rec?.since ?? null} now={now} phase={meet.recordingCommand !== 'idle' ? meet.recordingCommand : meet.rec?.pending?.some((r) => r.phase === 'stopping') ? 'stopping' : meet.rec?.pending?.some((r) => r.phase === 'starting') ? 'starting' : 'idle'} error={meet.recordingError} stopped={meet.recordingStopped}
+              size={meet.localRec?.bytes ?? null} fix={meet.recordingFix} openSettings={() => void call('media:privacySettings', { pane: 'screen' }).catch(() => undefined)}
               retry={() => void (meet.recordingRetry === 'start' ? meet.startRecording() : meet.stopRecording())}
               stopPending={meet.rec?.pending?.some((r) => r.phase === 'starting') ? () => void meet.stopRecording() : undefined} />
             {meet.transcribing ? (
@@ -252,6 +266,8 @@ export function MeetRoom() {
               </span>
             ) : null}
             {meet.locked ? <span className="rounded-full bg-[#2A3A66] px-2 py-0.5 text-[11.5px] font-semibold">Locked</span> : null}
+            {/* Poor or Offline connection strength (#254): said in the call bar too. */}
+            <ConnectionWarning tone="dark" />
           </>
         }
         headerExtra={

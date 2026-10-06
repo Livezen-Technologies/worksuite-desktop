@@ -6,6 +6,7 @@
  * When the server cannot be reached, a module's last cached answer may come
  * back instead, marked offline (FR-OFF-01, FR-SRCH-02).
  */
+import { safeHeaders } from '@shared/http-headers';
 import { app } from './app-state';
 import { call } from './bridge';
 import { text } from './i18n';
@@ -18,6 +19,8 @@ export class ApiError extends Error {
     message: string,
     readonly code: string | null,
     readonly data: unknown = null,
+    /** The server's `X-Request-Id` (or `request_id` in the answer), for "Copy details" (worksuite-desktop#247). */
+    readonly requestId: string | null = null,
   ) {
     super(message);
     this.name = 'ApiError';
@@ -87,7 +90,14 @@ async function localRequest<T>(method: string, path: string, opts: { query?: Que
 
 export async function request<T = unknown>(method: string, path: string, opts: { query?: Query; body?: unknown; signal?: AbortSignal; headers?: Record<string, string> } = {}): Promise<ApiResult<T>> {
   if (app.get().session.mode === 'guest') return localRequest<T>(method, path, opts);
-  const headers: Record<string, string> = { Accept: 'application/json', ...(opts.headers ?? {}) };
+  // ASCII only (#238): the main process reads these bytes back as UTF-8, so U+202F, Sinhala, Tamil or an emoji in a
+  // header would fail there. A value outside it is percent-encoded; one that cannot be sent is this screen's error.
+  let headers: Record<string, string>;
+  try {
+    headers = safeHeaders({ Accept: 'application/json', ...(opts.headers ?? {}) }, { ascii: true });
+  } catch {
+    throw new ApiError(0, text("Couldn't send this request. Try again."), 'INTERNAL');
+  }
   let body: BodyInit | undefined;
   if (opts.body instanceof FormData) body = opts.body;
   else if (opts.body !== undefined) {
@@ -104,7 +114,8 @@ export async function request<T = unknown>(method: string, path: string, opts: {
   const { body: json } = await parse(res);
   if (!res.ok || json?.status === 'error') {
     const message = typeof json?.message === 'string' ? json.message : `The server answered ${res.status}.`;
-    throw new ApiError(res.status, message, typeof json?.code === 'string' ? json.code : null, json?.errors ?? json?.data ?? null);
+    const requestId = res.headers.get('x-request-id') || (typeof json?.request_id === 'string' ? json.request_id : null);
+    throw new ApiError(res.status, message, typeof json?.code === 'string' ? json.code : null, json?.errors ?? json?.data ?? null, requestId);
   }
   return {
     data: (json && 'data' in json ? json.data : json) as T,

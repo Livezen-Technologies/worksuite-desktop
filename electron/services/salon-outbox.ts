@@ -14,7 +14,39 @@ import type { SalonOutboxItem, SalonOutboxKind } from '@shared/types';
  * a desk's local ids for ever, so a counter that restarted from 1 would book
  * the next walk-in for a client created last week.
  */
-export const KINDS: readonly SalonOutboxKind[] = ['client.create', 'visit.book', 'visit.check_in'];
+export const KINDS: readonly SalonOutboxKind[] = ['client.create', 'visit.book', 'visit.check_in', 'visit.checkout'];
+
+/**
+ * What a POS offline sale may carry (POS-11): the visit, what was taken — in
+ * cash or by card, the two a desk takes without WorkSuite checking anything —
+ * and what the desk asked for. Pure; null when it will do.
+ */
+export function offlineSaleProblem(payload: Record<string, unknown>): string | null {
+  const visit = payload.visit_id;
+  if (!(typeof visit === 'number' && Number.isInteger(visit) && visit > 0) && !(typeof visit === 'string' && LOCAL_ID.test(visit.replace(/^local:/, '')) && visit.startsWith('local:V-'))) {
+    return 'An offline payment names the visit it is for.';
+  }
+  const tenders = payload.tenders;
+  if (!Array.isArray(tenders) || tenders.length === 0 || tenders.length > 4) return 'An offline payment says what was taken.';
+  for (const t of tenders as Array<Record<string, unknown>>) {
+    if (t.method !== 'cash' && t.method !== 'card') return 'Offline, a desk takes cash or card only.';
+    if (typeof t.amount !== 'number' || !Number.isFinite(t.amount) || t.amount <= 0 || t.amount > 100_000_000) return 'Say how much was taken.';
+    if (t.method === 'card' && (typeof t.reference !== 'string' || t.reference.trim() === '')) return 'Give the card payment’s approval code or last four digits.';
+  }
+  if (payload.expected_total !== undefined && (typeof payload.expected_total !== 'number' || payload.expected_total < 0)) return 'The total asked for is not a sum of money.';
+  return null;
+}
+
+/** An offline sale's till receipt: the register's code, OFF, and this desk's own count, never reused. Pure. */
+export function tillReceipt(prefix: string, n: number): string {
+  const p =
+    prefix
+      .toUpperCase()
+      .replace(/[^A-Z0-9]+/g, '-')
+      .replace(/^-+|-+$/g, '')
+      .slice(0, 20) || 'DESK';
+  return `${p}-OFF-${String(n).padStart(6, '0')}`;
+}
 
 /** At most this many items go in one request (Desk::BATCH). */
 export const BATCH = 50;

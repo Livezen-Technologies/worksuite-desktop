@@ -101,6 +101,9 @@ export function menuTemplate(send: (command: string, arg?: number) => void, acti
             // ⌃⌘F is View › Enter Full Screen's; shown here too, registered once.
             { role: 'togglefullscreen', registerAccelerator: false },
             { type: 'separator' },
+            { label: 'Show Previous Tab', accelerator: 'Cmd+Shift+[', click: cmd('prev-tab'), ...r },
+            { label: 'Show Next Tab', accelerator: 'Cmd+Shift+]', click: cmd('next-tab'), ...r },
+            { type: 'separator' },
             { role: 'front' },
           ],
         }

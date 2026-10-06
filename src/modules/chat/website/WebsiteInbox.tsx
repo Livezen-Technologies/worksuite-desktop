@@ -5,7 +5,7 @@ import { useTab } from '../../../core/tab-context';
 import { duration, listStamp, parseTs } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Avatar, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
-import { filterRows, sortRows, useWebsiteInbox, WEBSITE_FILTERS, type WebsiteFilter, type WebsiteRow } from './api';
+import { filterRows, sortRows, useWebsiteClosed, useWebsiteInbox, WEBSITE_FILTERS, type WebsiteFilter, type WebsiteRow } from './api';
 
 /** The website-chat list in the Chat rail: waiting first, then mine, all open, closed. */
 export function WebsiteInbox({ selected, q }: { selected: string | null; q: string }) {
@@ -13,7 +13,8 @@ export function WebsiteInbox({ selected, q }: { selected: string | null; q: stri
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   const [filter, setFilter] = useState<WebsiteFilter>('waiting');
   const open = useWebsiteInbox(false);
-  const closed = useWebsiteInbox(true, filter === 'closed');
+  // The latest closed chats, a page of list fields (#252).
+  const closed = useWebsiteClosed(filter === 'closed');
   const source = filter === 'closed' ? closed : open;
   const openRows = open.data?.conversations ?? [];
   const counts: Record<WebsiteFilter, number> = {

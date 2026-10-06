@@ -8,12 +8,13 @@ import { createHash, randomUUID } from 'node:crypto';
 import { localize } from '@shared/localization';
 import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
-import { app, net as electronNet, Notification, clipboard, crashReporter, dialog, globalShortcut, ipcMain, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
+import { app, net as electronNet, Notification, clipboard, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, nativeTheme, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
+import { isOfficeSignInLink, OFFICE_CLIENT } from '@shared/office-signin';
 import { itemApp, itemRoute, looksLikeItemLink, parseItemLink } from '@shared/item-links';
 import { linkPrefs } from '@shared/link-prefs';
 import { findMailtoInArgv, mailBodiesKept, mailKeptForever, mailListKept, mailtoRoute, parseMailto } from '@shared/mailto';
@@ -24,12 +25,15 @@ import { networkStatus } from '@shared/network';
 import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
+import { SUPPORT_QUICK_SHORTCUT, quickRoute, ringRoute, supportNoticePrefs } from '@shared/support';
 import { FOLLOW_UP_DEFAULTS, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
 import type { AppContext, ClockExtra } from './context';
 import { broadcast, guestWindowIds } from './events';
+import { installAppearance } from '../windows/appearance';
+import { AppearanceSync } from '../services/appearance-sync';
 import { registerHandlers } from './handlers';
 import { initLog, logger } from './log';
 import { DesktopError, isDesktopError } from './errors';
@@ -42,6 +46,7 @@ import { devOrigin, hardenSession, isTrustedShellUrl, openExternalSafely, regist
 import { createApiProxy } from '../services/api-proxy';
 import { AuditService } from '../services/audit';
 import { AuthService } from '../services/auth';
+import { DesktopAccountsFile, OfficeSignIn } from '../services/office-signin';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
@@ -53,21 +58,30 @@ import { archName, DeviceService, platformName } from '../services/device';
 import { PmsLocks } from '../services/pms-locks';
 import { ContactSync } from '../services/contact-sync';
 import { createPos } from '../services/pos-ipc';
+import { PhoneService } from '../services/phone';
 import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
 import { SalonSync } from '../services/salon-sync';
 import { DiagnosticsService } from '../services/diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
-import { HttpClient, type FetchLike } from '../services/http';
+import { CLIENT_TYPE, CLIENT_TYPE_HEADER, HttpClient, withSafeHeaders, type FetchLike } from '../services/http';
+import { createNetFetch } from '../services/net-fetch';
+import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
-import { WebchatRinger, ringerHeight } from '../services/webchat-ring';
+import { SupportNotices } from '../services/support-notices';
+import { SupportDesk } from '../services/support-desk';
+import { SupportUrgent } from '../services/support-urgent';
+import { WebchatRinger, announceEvent, ringerHeight } from '../services/webchat-ring';
 import { SystemFocus } from '../services/system-focus';
 import { AtRiskAlerts, LivePulse, wallDisplays, wallPrefsOf, wallTarget } from '../services/live-desk';
 import { QuickAsk } from '../services/quick-ask';
 import { AiService } from '../services/ai';
 import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/ai-pending';
+import { MarketingPulse } from '../services/marketing-pulse';
+import { CallbackReminders } from '../services/marketing-reminders';
+import { NextContactKey, nextContactRoute } from '../services/marketing-shortcut';
 import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
@@ -77,6 +91,8 @@ import { attachmentStorePathOf } from '@shared/mail-media';
 import { mimeFor } from '@shared/mime';
 import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
+import { ConnectionMonitor, tcpHandshake, timeFetch } from '../services/connection-quality';
+import { ApiTimings } from '@shared/connection';
 import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
 import { DriveSync } from '../services/sync/engine';
@@ -155,6 +171,8 @@ function main(): void {
   const p = paths();
   initLog(p.logs);
   const log = logger('main');
+  // #238: an error nothing caught is logged for Diagnostics and told to the person in the app — never the raw dialog.
+  installProcessGuards({ notify: (text) => broadcast('toast', { kind: 'error', text }), report: (summary) => crashReporter.addExtraParameter('last-js-error', summary.slice(0, 120)) });
   const boot = evaluateBoot(p, process.argv);
   if (!boot.hardwareAcceleration) app.disableHardwareAcceleration();
   markRunning(p.runningMarker);
@@ -231,12 +249,23 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // A dedicated network session for API traffic: its own cookie jar and proxy.
   const net = session.fromPartition('persist:ws-net');
+  // Bulk traffic (uploads, downloads, mail pictures and bodies fetched ahead) has its own connection pool
+  // (worksuite-desktop#252): Chromium allows 6 connections per host per session, and an upload's parts used to take
+  // all of them, so every chat list, thread and reply waited behind an 8 MB part. Auth is a header, not a cookie, so
+  // the second session needs no shared cookie jar.
+  const bulkNet = session.fromPartition('persist:ws-bulk');
   const proxyConfig = enterprise.proxy && enterprise.proxy.mode !== 'system' ? (enterprise.proxy.mode === 'pac' ? { pacScript: enterprise.proxy.url ?? '' } : { proxyRules: enterprise.proxy.rules ?? enterprise.proxy.url ?? '', proxyBypassRules: enterprise.proxy.bypass ?? '' }) : null;
   if (proxyConfig) {
     void net.setProxy(proxyConfig);
+    void bulkNet.setProxy(proxyConfig);
     void session.defaultSession.setProxy(proxyConfig);
   }
-  const fetchImpl: FetchLike = (url, init) => net.fetch(url, init as RequestInit);
+  // Every main-process request's headers go through the header-safety helper (#238): nothing above 255 reaches undici.
+  // And every response's (#253): not `net.fetch`, whose own listener throws on a raw UTF-8 file name and never settles.
+  const netFetch = createNetFetch((o) => electronNet.request(o), net);
+  const fetchImpl: FetchLike = withSafeHeaders((url, init) => netFetch(url, init as RequestInit));
+  const bulkNetFetch = createNetFetch((o) => electronNet.request(o), bulkNet);
+  const bulkFetchImpl: FetchLike = withSafeHeaders((url, init) => bulkNetFetch(url, init as RequestInit));
 
   const local = new LocalWorkspace(join(p.profile, 'guest-workspace.sqlite'));
   // Guest mode runs in the main window (#149): which window is in it and past its PIN, and where a move may go.
@@ -249,7 +278,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const guests = new GuestMeetService({ fetch: fetchImpl, server: () => auth.getServer()?.origin ?? null });
   const mediaServers = (): string[] => db.getConfig<string[]>('media_servers') ?? [];
   const clientHeaders = (): Record<string, string> => {
-    const h: Record<string, string> = { 'X-WS-Client': `worksuite-desktop/${app.getVersion()} (${platformName()}; ${archName()})` };
+    const h: Record<string, string> = {
+      'X-WS-Client': `worksuite-desktop/${app.getVersion()} (${platformName()}; ${archName()})`,
+      // The client type, for the server's per-client chat service scope; HttpClient sets it too.
+      [CLIENT_TYPE_HEADER]: CLIENT_TYPE,
+    };
     const dev = device?.current();
     if (dev) h['X-WS-Device'] = dev.id;
     return h;
@@ -276,7 +309,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       reachabilityProbe = setInterval(() => {
         const origin = auth.getServer()?.origin;
         if (!origin) return;
-        fetchImpl(`${origin}/api/auth/config`, { method: 'GET', signal: AbortSignal.timeout(10_000) })
+        fetchImpl(`${origin}/api/auth/config`, { method: 'GET', headers: { [CLIENT_TYPE_HEADER]: CLIENT_TYPE }, signal: AbortSignal.timeout(10_000) })
           .then(() => onReachability(true))
           .catch(() => undefined);
       }, 15_000);
@@ -287,8 +320,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Forward-declared so the HTTP client's callbacks can reach the session.
   // eslint-disable-next-line prefer-const
   let sessionCtl: SessionController;
-  const http = new HttpClient({
-    fetch: fetchImpl,
+  // The API's last 20 requests, for connection strength's median (worksuite-desktop#254).
+  const apiTimings = new ApiTimings();
+  const httpDeps = (fetch: FetchLike): ConstructorParameters<typeof HttpClient>[0] => ({
+    fetch,
     origin: () => auth.getServer()?.origin ?? null,
     tokens: { accessToken: () => auth.accessToken(), refresh: () => auth.refresh() },
     clientHeaders,
@@ -300,10 +335,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       else if (code === 'VERSION_UNSUPPORTED' || code === 'UPDATE_REQUIRED') updater.serverRejected();
     },
   });
+  const http = new HttpClient(httpDeps(timeFetch(fetchImpl, apiTimings)));
+  // The same client on the bulk pool (#252): uploads, downloads and mail's pictures and bodies fetched ahead.
+  const bulkHttp = new HttpClient(httpDeps(bulkFetchImpl));
 
   const device: DeviceService = new DeviceService(db, secrets, http);
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
-  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
+  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null, desk: () => salonDesk.pairing()?.desk_id ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
   const mailLimits = () => {
@@ -313,7 +351,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   // Mail's pictures and attachments kept on this computer (#163): pictures through WorkSuite's proxy, attachments ahead.
   const mailMedia = new MailMedia({
-    http,
+    http: bulkHttp,
     cache,
     userId: () => sessionCtl?.userId() ?? null,
     prefs: () => settings.effective(),
@@ -323,7 +361,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // "Download message bodies" (#190): Mail's bodies within the keep period, fetched ahead into the offline cache.
   const mailBodies = new MailBodies({
     afterBody: (user, path, body) => mailMedia.afterBody(user, path, body),
-    http,
+    http: bulkHttp,
     cache,
     userId: () => sessionCtl?.userId() ?? null,
     prefs: () => settings.effective(),
@@ -336,6 +374,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const lockPin = new LockPin(db, getVault);
   const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
+  // Colour profiles (worksuite-desktop#234): on every page before its first paint, to every page on a change, and
+  // between the person's devices.
+  installAppearance({ settings, windows, ipc: ipcMain, nativeTheme });
+  const appearanceSync = new AppearanceSync({ http, settings, online: () => sessionCtl.isReady() });
   // A call rings only for whoever may open Chat (calls are part of it).
   const calls = new CallService(
     windows,
@@ -385,6 +427,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const realtime = new RealtimeService(http, () => auth.getServer()?.origin ?? null, allowInsecure);
   let realtimeDownSince: number | null = null;
+  // Connection strength (worksuite-desktop#254, #265): the network delay by the realtime socket's echo, else the time to
+  // open a TCP connection to the server (not through a proxy), else /api/health as an upper bound. The speed test runs
+  // on the bulk pool, so it never holds up chats (#252).
+  const connection = new ConnectionMonitor({
+    realtime,
+    http,
+    bulk: bulkHttp,
+    tcpPing: tcpHandshake({ resolveProxy: (url) => net.resolveProxy(url) }),
+    origin: () => auth.getServer()?.origin ?? null,
+    active: () => !!sessionCtl?.isReady() && !!auth.getServer(),
+    onChange: () => emitStatus(),
+    api: apiTimings,
+  });
+  connection.start();
 
   const notifications = new NotificationService(db, getVault, http, () => settings.effective());
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
@@ -442,7 +498,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const transfers: TransferManager = new TransferManager({
     db,
     vault: getVault,
-    http,
+    http: bulkHttp,
     userId: () => sessionCtl.userId(),
     downloadFolder: () => settings.effective().downloadFolder,
     hash,
@@ -508,6 +564,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     prefs: () => settings.effective().meetRecording,
     userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
     // The server tells the owner about cloud recordings; one made here is told from here (worksuite-desktop#89).
+    // A recording without macOS Screen Recording permission is empty (worksuite-desktop#240). Never asked yet: listing
+    // the screens once has macOS ask, and puts WorkSuite in System Settings' list to turn on.
+    screenAccess: async () => {
+      if (process.platform !== 'darwin' || (!app.isPackaged && process.env.WS_E2E_FAKE_MEDIA)) return 'not_required';
+      let status = systemPreferences.getMediaAccessStatus('screen');
+      if (status === 'not-determined') {
+        await desktopCapturer.getSources({ types: ['screen'], thumbnailSize: { width: 0, height: 0 } }).catch(() => undefined);
+        status = systemPreferences.getMediaAccessStatus('screen');
+      }
+      return status === 'granted' ? 'granted' : 'missing';
+    },
     notify: (r, how) =>
       notifications.notify({
         id: `meetrec:${r.id}:${how}`,
@@ -583,6 +650,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('pos:changed');
       emitStatus();
     },
+  });
+
+  // The Phone (WS-VOIP-SRS-001): its switch's WebSocket in the page policy, the compact phone's global shortcuts and
+  // calls as native notifications. The SIP phone itself runs in the main window's page.
+  const phone = new PhoneService({
+    config: db,
+    http,
+    allowed: () => sessionCtl.isReady() && canOpenApp('phone', sessionCtl.visibleApps()),
+    notify: (n) => notifications.notify(n),
+    mainWindow: () => windows.getMain(),
   });
 
   // Hotel PMS door locks: the on-site lock server this front desk talks to (its secret only in the OS keystore).
@@ -967,6 +1044,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const w = windows.showMain();
     w.webContents.send('navigate', req);
   };
+  // Marketing's Next contact (MKT-DSK-01): the global key and the tray's line — My call queue's workspace, on a new claim.
+  const openNextContact = (source: 'shortcut' | 'tray'): void => navigate({ route: nextContactRoute(), source });
   const flushNavigation = (): void => {
     if (!sessionCtl.isReady()) return;
     const w = windows.getMain();
@@ -995,6 +1074,34 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (origin) void openExternalSafely(`${origin}${target.path}`);
     } else windows.showMain();
   };
+  // WorkSuite Office on this computer: who this app is signed in as, and its "Continue as" (worksuite-office#6).
+  const desktopAccounts = new DesktopAccountsFile(join(p.userData, 'desktop-accounts.json'), log);
+  const officeSignIn = new OfficeSignIn({
+    account: () => {
+      const origin = auth.getServer()?.origin;
+      const uid = sessionCtl.userId();
+      const user = sessionCtl.current()?.user ?? sessionCtl.get().user;
+      if (!origin || !uid || !user || !sessionCtl.isReady()) return null;
+      return { origin, userId: String(uid), name: user.name, organization: user.organizationName ?? null };
+    },
+    isLocked: () => lock.isLocked(),
+    confirm: async ({ message, detail }) => {
+      const parent = windows.getMain();
+      const opts = { type: 'question' as const, buttons: ['Continue', 'Cancel'], defaultId: 1, cancelId: 1, message, detail };
+      const { response } = parent ? await dialog.showMessageBox(parent, opts) : await dialog.showMessageBox(opts);
+      return response === 0;
+    },
+    handoff: (challenge) => http.post('/api/auth/apps/handoff', { client: OFFICE_CLIENT, code_challenge: challenge, code_challenge_method: 'S256' }),
+    // A fixed address with this app's code: nothing from the link that asked (hardening.ts allows https only).
+    open: async (url) => {
+      if (!app.isPackaged && process.env.WS_E2E_EXTERNAL_LOG) await fsp.writeFile(process.env.WS_E2E_EXTERNAL_LOG, `${url}\n`, { flag: 'a' });
+      else await shell.openExternal(url);
+    },
+    showMain: () => void windows.showMain(),
+    toast: (kind, text) => broadcast('toast', { kind, text }),
+    isNotFound: (e) => isDesktopError(e) && e.code === 'NOT_FOUND',
+    log,
+  });
   const handleDeepLink = (url: string): void => {
     // A mailto: link from another app (WorkSuite is the default mail app): a new message, prefilled, for the person to send.
     if (/^mailto:/i.test(url)) {
@@ -1024,6 +1131,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         return;
       }
       void sessionCtl.completePasskey(code, state);
+      return;
+    }
+    // WorkSuite Office asking to use this sign-in (worksuite-office#6). Before the link grammar, where
+    // office/:id would take it for a document, and never logged: it carries a PKCE challenge and state.
+    if (isOfficeSignInLink(url)) {
+      void officeSignIn.handle(url);
       return;
     }
     const meeting = /^worksuite:\/\/meet\/([0-9a-f-]{36})(?:[?#]|$)/i.exec(url);
@@ -1095,6 +1208,75 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   setLinkHandler(handleDeepLink);
 
+  // A support ticket's quick-reply window (WS-SUPPORT-SRS-001 D-04, FR-DSK-03): floating over whatever is in front,
+  // from a banner, the tray or the global shortcut. Never behind the lock, never for somebody without the desk.
+  const openQuickReply = (ticketId: number): void => {
+    if (lock.isLocked() || !sessionCtl.isReady() || !canOpenApp('support', sessionCtl.visibleApps())) return;
+    windows.open('support-quick', quickRoute(ticketId), 'Quick reply', true);
+  };
+  // Support's banners and count (WS-SUPPORT-SRS-001 D-03, FR-DSK-02/04): the desk's notifications with their own buttons.
+  const supportNotices = new SupportNotices({
+    http,
+    notify: (n) => notifications.notify(n),
+    markRead: (ids) => notifications.markRead(ids),
+    me: () => Number(sessionCtl.userId()) || null,
+    enabled: () => canOpenApp('support', sessionCtl.visibleApps()),
+    prefs: () => settings.effective(),
+    open: (link) => notifications.onClick(link, 'support'),
+    quickReply: (id) => openQuickReply(id),
+    refused: (ticketId, text, mode, error) => {
+      const me = sessionCtl.userId();
+      // Kept as the ticket's draft, where its composer finds it (modules/support/Composer.tsx).
+      if (me) queue.saveDraft(me, 'support', `ticket:${ticketId}`, { body: text, mode });
+      openLink(`/tickets?ticket=${ticketId}`);
+      broadcast('toast', { kind: 'error', text: `Your ${mode === 'note' ? 'note' : 'reply'} was not sent: ${error} It is in the ticket's message box to send again.` });
+    },
+    onChanged: () => {
+      emitStatus();
+      supportDesk.soon();
+    },
+  });
+  // The desk in the tray / menu bar (D-05): my numbers, the next SLAs due, availability.
+  const supportDesk: SupportDesk = new SupportDesk({
+    http,
+    enabled: () => canOpenApp('support', sessionCtl.visibleApps()),
+    badges: () => supportNotices.badges(),
+    onChanged: () => tray.update({ support: supportDesk.get() }),
+  });
+  // An urgent ticket nobody has rings as a centred card (D-07): one at a time, each once; it closes when it is taken.
+  const supportUrgent: SupportUrgent = new SupportUrgent({
+    http,
+    allowed: () =>
+      sessionCtl.isReady() && !lock.isLocked() && canOpenApp('support', sessionCtl.visibleApps()) && settings.effective().notificationsEnabled !== false && supportNoticePrefs(settings.effective().supportNotices).urgentPopup,
+    ring: (id) => {
+      const win = windows.open('support-ring', ringRoute(id), 'Urgent ticket', true);
+      win.once('closed', () => supportUrgent.closed(id));
+    },
+    close: () => windows.closeKind('support-ring'),
+  });
+  // ⌃⌥R (Ctrl+Alt+R): the quick-reply window on my latest ticket, from any app (D-05). Held while signed in with the
+  // desk and unlocked, unless turned off in Notification settings › Support.
+  let supportKeyHeld = false;
+  const quickLatest = (): void => {
+    void supportDesk.latest().then((id) => (id ? openQuickReply(id) : navigate({ route: '/support?view=mine', source: 'tray' })));
+  };
+  const syncSupportKeys = (): void => {
+    const want = sessionCtl.isReady() && !lock.isLocked() && canOpenApp('support', sessionCtl.visibleApps()) && supportNoticePrefs(settings.effective().supportNotices).quickShortcut;
+    if (want && !supportKeyHeld) {
+      try {
+        supportKeyHeld = globalShortcut.register(SUPPORT_QUICK_SHORTCUT, quickLatest);
+      } catch {
+        supportKeyHeld = false;
+      }
+    } else if (!want && supportKeyHeld) {
+      globalShortcut.unregister(SUPPORT_QUICK_SHORTCUT);
+      supportKeyHeld = false;
+    }
+    tray.update({ supportShortcut: supportKeyHeld ? SUPPORT_QUICK_SHORTCUT : null });
+  };
+  notifications.claim = (n) => supportNotices.claim(n);
+  notifications.onRefresh = () => void supportNotices.refreshBadges();
+
   // ── status ─────────────────────────────────────────────────────────────
   let statusTimer: NodeJS.Timeout | null = null;
   // Visitors waiting on me in my website chats (#230), from the ringer: on the Dock and taskbar badge.
@@ -1103,16 +1285,18 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   let ringingCount = 0;
   const snapshot = (): StatusSnapshot => {
     const uid = sessionCtl?.userId();
-    const raw = notifications.counts();
+    const { supportNotices: supportBell, ...raw } = notifications.counts();
+    const support = supportNotices.count();
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
-    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0 };
+    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
       realtimeDiagnostics: realtime.diagnostics(),
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
+      connection: connection.stats(),
       pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
@@ -1140,6 +1324,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         unreadChat: s.unread.chat + (s.unread.webchat ?? 0),
         unreadMail: s.unread.mail,
         unreadOther: s.unread.notifications,
+        unreadSupport: s.unread.support ?? 0,
+        unreadSupportNotices: s.unread.supportNotices ?? 0,
         badge: settings.effective().badgeCount !== false,
         notificationsPausedUntil: s.notificationsPausedUntil,
       });
@@ -1148,6 +1334,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   realtime.onState = (s: RealtimeState) => {
     notifications.realtimeState(s);
+    connection.realtimeState(s);
     realtimeDownSince = s === 'down' || s === 'connecting' ? (realtimeDownSince ?? Date.now()) : null;
     emitStatus();
   };
@@ -1160,6 +1347,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   }
   realtime.onEvent = (e) => {
     notifications.handleRealtime(e);
+    supportNotices.handle(e);
+    supportDesk.handle(e);
+    supportUrgent.handle(e);
     webchat.handle(e);
     calls.handle(e);
     aiPending.handle(e as { type?: string });
@@ -1370,6 +1560,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     showRingMenu: (anchor) => ringTray.show(anchor),
     liveDashboard: () => liveDesk.open('dashboard'),
     liveMap: () => liveDesk.open('map'),
+    supportQuickReply: (id) => openQuickReply(id),
+    supportQuickLatest: () => quickLatest(),
+    supportPresence: (status) => void supportDesk.setPresence(status),
+    marketingNextContact: () => openNextContact('tray'),
   });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
@@ -1472,6 +1666,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     followUpPrefs: () => ({ ...FOLLOW_UP_DEFAULTS, ...settings.effective().webchatFollowUps }),
     idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    // While the live connection is down the list is read every 10 s (worksuite-desktop#251).
+    realtimeUp: () => realtime.getState() === 'connected',
+    // A chat found by reading the list is announced as its event would have been: the system notification with Join
+    // and Reply when the card is not showing (#251).
+    // Named by the ring's start, so a chat that rings again later is announced again (TRN-34).
+    announce: (c) => notifications.handleRealtime(announceEvent(c)),
+    testNotify: () => notifications.testChat(),
     onChanged: (s) => {
       broadcast('ring:changed', s);
       const prefs = settings.effective().webchatRinging;
@@ -1705,9 +1906,48 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     enabled: () => ai.rules().enabled && !lock.isLocked(),
     onCount: (n) => tray.update({ aiChanges: n }),
   });
+  // ── Marketing outside the window (WS-MKT-SRS-001 MKT-DSK-01, MKT-CAL-12) ──
+  // The tray's counts, callback reminders to the minute, and the Next contact key — for somebody with Marketing.
+  const marketingVisible = (): boolean => sessionCtl.isReady() && canOpenApp('marketing', sessionCtl.visibleApps());
+  const marketingPulse: MarketingPulse = new MarketingPulse({
+    get: (path, query) => http.get(path, { query }),
+    allowed: marketingVisible,
+    onChange: (m) => {
+      tray.update({ marketing: m });
+      // Whether the person has a call queue at all decides whether the key is worth holding.
+      nextContactKey.sync();
+    },
+  });
+  // ⌘⇧N / Ctrl+Shift+N from other apps (the D01 design). In WorkSuite the keys are "Move tab to new window", so — like
+  // the Live keys — held only while no WorkSuite window is in front, and given back on focus, lock, sign-out and quit.
+  const nextContactKey = new NextContactKey({
+    register: (acc, fn) => globalShortcut.register(acc, fn),
+    unregister: (acc) => globalShortcut.unregister(acc),
+    state: () => {
+      const pulse = marketingPulse.get();
+      return {
+        signedIn: sessionCtl.isReady(),
+        locked: lock.isLocked(),
+        marketing: marketingVisible(),
+        agent: pulse ? pulse.queue !== null : null,
+        focused: BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused()),
+      };
+    },
+    press: () => openNextContact('shortcut'),
+  });
+  app.on('browser-window-focus', () => nextContactKey.sync());
+  app.on('browser-window-blur', () => setImmediate(() => nextContactKey.sync()));
+  const callbackReminders = new CallbackReminders({
+    get: (path, query) => http.get(path, { query }),
+    notify: (n) => notifications.notify(n),
+    allowed: marketingVisible,
+  });
+  notifications.snoozeCallback = (c) => callbackReminders.snooze(c);
   const syncQuickAsk = (): void => {
     quickAsk.sync();
     tray.update({ quickAsk: quickAsk.shortcut() });
+    // Support's quick-reply shortcut follows the same moments: sign-in, the lock, the settings.
+    syncSupportKeys();
   };
 
   // ── what the person may open (shared/access.ts) ───────────────────────
@@ -1725,7 +1965,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/whatsapp/chats', 'chat'],
     ['/api/chat/rooms', 'chat'],
     ['/api/chat/messages', 'chat'],
+    // Website chats: the list and each conversation opened, so a thread opens at once from its last copy (#239).
+    ['/api/chat/widget-admin/conversations', 'chat'],
+    // Missed chats and Offline enquiries too, so every website list opens at once from its last copy (#252).
+    ['/api/chat/widget-admin/missed', 'chat'],
+    ['/api/chat/widget-admin/offline', 'chat'],
+    // The Live dashboard (its summary, the full answer) and who is on the sites, so it opens at once from its last copy (#248).
+    ['/api/chat/widget-admin/dashboard', 'chat'],
+    ['/api/chat/widget-admin/visitors', 'chat'],
     ['/api/calendar/events', 'calendar'],
+    // Social Media Manager (SMM-DSK-004): the calendar, drafts and the accounts they go to, as last seen, open offline.
+    // Scheduling and publishing stay on the server; nothing here is sent from the cache.
+    ['/api/social-media/posts', 'social-media'],
+    ['/api/social-media/accounts', 'social-media'],
+    ['/api/social-media/brands', 'social-media'],
     ['/api/tasks', 'tasks'],
     ['/api/task-lists', 'tasks'],
     ['/api/crm/leads', 'crm'],
@@ -1760,6 +2013,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/elearning/v1/me/lessons', 'elearning'],
     ['/api/elearning/v1/catalog', 'elearning'],
     ['/api/elearning/v1/categories', 'elearning'],
+    // Support: the rail and its counts, the lists, every ticket opened and the desk's vocabulary, so the desk opens
+    // offline as it was left; who else is on a ticket is never taken from this copy (modules/support/api.ts).
+    ['/api/support/v1/meta', 'support'],
+    ['/api/support/v1/views', 'support'],
+    ['/api/support/v1/badges', 'support'],
+    ['/api/support/v1/tickets', 'support'],
+    ['/api/support/v1/agents', 'support'],
+    ['/api/support/v1/canned', 'support'],
     // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
     // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];
@@ -1785,6 +2046,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const visible = visibleAppIds(b);
     tray.update({ apps: [...visible] });
     rebuildMenu(visible);
+    // Marketing given or taken away (or another organisation): its counts, reminders and key follow.
+    marketingPulse.poke();
+    callbackReminders.poke();
+    nextContactKey.sync();
     if (b) {
       const closed = windows.closeWhere((route) => !canOpenRoute(route, visible));
       if (closed) log.info('windows closed: app no longer available', { closed });
@@ -1798,6 +2063,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       // So do an event desk's copies of the gates' tickets (scans still unsent wait, should the app come back).
       if (!canOpenApp('events', visible)) eventDesk.signedOut(b.user.id);
       if (!canOpenApp('restaurant', visible)) restaurant.signedOut(b.user.id);
+      // The Phone's global shortcuts go with it.
+      if (!canOpenApp('phone', visible)) phone.reset();
     }
     emitStatus();
   };
@@ -1808,6 +2075,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     setExternalAllowList([new URL(auth.getServer()!.origin).hostname]);
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
+    supportNotices.start();
+    supportDesk.start();
+    supportUrgent.start();
     webchat.start();
     livePulse.start();
     syncQuickAsk();
@@ -1816,6 +2086,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       syncQuickAsk();
       aiPending.start();
     });
+    marketingPulse.start();
+    callbackReminders.start();
     device.start();
     device.extras = () => {
       const c = transfers.activeCounts();
@@ -1865,6 +2137,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     quickAsk.release();
     ai.forget();
     aiPending.stop();
+    marketingPulse.stop();
+    callbackReminders.stop();
+    nextContactKey.release();
     windows.hideQuickAsk();
     tray.update({ quickAsk: null });
     // Torn-off windows show the person's data: they close, and come back at their next sign-in.
@@ -1878,8 +2153,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void pdfStudio.closeAll();
     // Local AI's model stops; the models on this computer stay.
     void localAI.signedOut();
+    // The compact phone's global shortcuts are released.
+    phone.reset();
     realtime.stop();
     notifications.stop();
+    supportNotices.stop();
+    supportDesk.stop();
+    supportUrgent.stop();
+    syncSupportKeys();
     device.stop();
     transfers.stopAll();
     sync.stop();
@@ -1896,6 +2177,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     pendingNav.length = 0;
     lock.reset();
     emitStatus();
+  };
+
+  /** Who WorkSuite Office may offer to continue as: the signed-in person, or nobody. */
+  const desktopAccountOf = (ready: boolean) => {
+    const origin = auth.getServer()?.origin;
+    const user = sessionCtl.current()?.user ?? sessionCtl.get().user;
+    if (!ready || !origin || !user) return null;
+    return { server: origin, user: { id: String(user.id), name: user.name, email: user.email ?? '', organization: user.organizationName ?? '' } };
   };
 
   sessionCtl = new SessionController(db, auth, device, bootstrap, fetchImpl, enterprise, {
@@ -1949,6 +2238,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       log.info('local data removed', { scope });
     },
     changed: (s) => {
+      desktopAccounts.update(desktopAccountOf(s.stage === 'ready'));
       // Signing in ends guest mode (the window may then offer to move its data here); signing out closes the Local Profile.
       if (s.stage === 'ready' && !wasSignedIn) localSession.signedIn(localAccountKey());
       else if (s.stage !== 'ready' && wasSignedIn) localSession.signedOut();
@@ -1963,7 +2253,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       }
     },
     bootstrapChanged: (b) => {
+      // A new name, picture or organisation for WorkSuite Office's "Continue as".
+      desktopAccounts.update(desktopAccountOf(sessionCtl.isReady()));
       if (b) settings.setPolicy(b.policy);
+      if (b) void appearanceSync.pull();
       // Policy or trust may have turned sync on or off.
       sync.kick('policy');
       applyAccess(b);
@@ -1987,6 +2280,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     requireUpdate: (v) => updater.requireUpdate(v),
     toast: (kind, text) => broadcast('toast', { kind, text }),
     audit: (uid, action, details) => audit.record(uid, action, details),
+    // The session expired: nothing signed in is left behind the lock, and signing in again must not be refused (LOGIN-001).
+    unlock: () => lock.reset(),
   });
 
   auth.onDeviceRevoked = (message) => void sessionCtl.wipe(message);
@@ -2022,6 +2317,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Locked: the call window stops saying who is waiting, and Quick Ask stops answering its shortcut.
     webchat.refresh();
     syncQuickAsk();
+    // Locked, an urgent ticket's card comes down; unlocked, the desk is looked at again.
+    void supportUrgent.check();
+    nextContactKey.sync();
     if (s.locked) {
       windows.hideQuickAsk();
       if (!settings.effective().lockedShowCallerDetails) for (const win of BrowserWindow.getAllWindows()) {
@@ -2034,6 +2332,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('realtime:resync');
       // What a notification clicked while locked pointed at, now that the workspace is back (#114).
       if (pendingNav.length) setTimeout(() => flushNavigation(), 300);
+      // And WorkSuite Office's "Continue as", if it asked while the app was locked.
+      officeSignIn.unlocked();
     }
   };
 
@@ -2092,7 +2392,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Text read from images on this computer (worksuite-desktop#59): Tesseract, its language data fetched once when first needed.
   const ocr = new OcrService({
     dir: join(p.userData, 'LocalAI', 'ocr'),
-    fetch: (url, init) => net.fetch(url, { ...init, cache: 'no-store' } as RequestInit),
+    fetch: withSafeHeaders((url, init) => netFetch(url, { ...init, cache: 'no-store' } as RequestInit)),
     progress: (sender, ev) => {
       const wc = webContents.fromId(sender);
       if (wc && !wc.isDestroyed()) wc.send('ai:ocrProgress', ev);
@@ -2127,7 +2427,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     timedFetch: async (path) => {
       const origin = auth.getServer()?.origin;
       const t0 = Date.now();
-      const res = await fetchImpl(`${origin}${path}`, { method: 'GET', signal: AbortSignal.timeout(15_000) });
+      const res = await fetchImpl(`${origin}${path}`, { method: 'GET', headers: { [CLIENT_TYPE_HEADER]: CLIENT_TYPE }, signal: AbortSignal.timeout(15_000) });
       return { ok: res.ok, status: res.status, ms: Date.now() - t0 };
     },
     signedIn: () => sessionCtl.isReady(),
@@ -2181,7 +2481,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       },
     }),
     // Read on each page load: the server chosen, and the media servers it announced.
-    () => ({ server: auth.getServer()?.origin ?? null, media: [...mediaServers(), ...guests.media] }),
+    () => ({ server: auth.getServer()?.origin ?? null, media: [...mediaServers(), ...guests.media, ...phone.origins()] }),
     // A course's lessons kept offline, played by the app's own pages.
     (request, path) =>
       path.startsWith('/chat-media/')
@@ -2309,9 +2609,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     attendanceBreak,
   };
   registerHandlers(router, ctx);
+  router.handle('connection:details', () => connection.details());
+  router.handle('connection:speedTest', () => connection.speedTest());
+  router.handle('connection:reconnect', () => connection.reconnect());
   pdfStudio.register(router);
   mailFiles.register(router);
   pos.register(router);
+  phone.register(router);
   pmsLocks.register(router);
   contactSync.register(router);
   restaurant.register(router);
@@ -2521,6 +2825,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     livePulse.stop();
     atRisk.clear();
     quickAsk.release();
+    if (supportKeyHeld) globalShortcut.unregister(SUPPORT_QUICK_SHORTCUT);
+    nextContactKey.release();
+    marketingPulse.stop();
+    callbackReminders.stop();
     void askHelper?.then((h) => h?.stop());
     // Windows' places are saved while the database is open; timers that read it stop first.
     windows.saveAllAndStop();
@@ -2558,6 +2866,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (process.platform === 'darwin') void accessibility.refresh().then(() => broadcast('rc:changed', remoteControl.view()));
     device.poke();
     sync.kick('resume');
+    // A socket or SSE stream silent through the sleep is replaced, resuming from its last sid (plan 2.12): the
+    // gateway replays what came meanwhile, or says reset and every view syncs.
     realtime.kick();
     const uid = sessionCtl.userId();
     if (uid) void queue.replay(uid);
@@ -2565,6 +2875,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void eventDesk.sync();
     pos.sync();
     void restaurant.sync.sync();
+    // Callback reminders set again from the clock as it is now; the tray's counts asked again.
+    callbackReminders.resume();
+    marketingPulse.poke();
   });
   screen.on('display-removed', () => windows.refit());
   screen.on('display-metrics-changed', () => windows.refit());

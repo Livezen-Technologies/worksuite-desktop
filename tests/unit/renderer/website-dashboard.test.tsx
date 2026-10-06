@@ -128,7 +128,7 @@ describe('the header and the six figures', () => {
     await ready();
     fireEvent.click(screen.getByRole('button', { name: 'Site' }));
     fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'techhub.com.lk' }));
-    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/chat/widget-admin/dashboard', { widget_id: 2 }, expect.anything()));
+    await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/chat/widget-admin/dashboard', { widget_id: '2' }, expect.anything()));
     // The list narrows to that site's visitors.
     await waitFor(() => expect(within(list()).getAllByRole('listitem').map((r) => r.getAttribute('aria-label'))).toEqual(['Visitor B210']));
   });

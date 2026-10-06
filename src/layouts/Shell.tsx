@@ -10,7 +10,7 @@ import { initLauncherPrefs, shellShortcuts } from '../core/launcher-prefs';
 import { initOrgPrefs } from '../core/org-prefs';
 import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
-import { activateIndex, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, newRoute, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
+import { activateIndex, activateRelative, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, newRoute, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
 import { toast } from '../core/toasts';
 import { aiWidget, closeOverlay, closeTopPanel, minimiseChatDrawer, openAssistant, openChatDrawer, openOverlay, toggleAssistant, toggleDock, ui, useAiDisplay } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
@@ -31,7 +31,7 @@ import { UpdateBanner, UpdatePopover } from '../app/screens/UpdateScreens';
 import { UpdateNotices } from '../app/overlays/UpdateControls';
 import { MandatoryBanner } from '../app/screens/MandatoryUpdate';
 import { UpdateDialogs } from '../app/screens/UpdateDialogs';
-import { ChatDrawer, MinimisedChats } from '../modules/chat/ChatDrawer';
+import { ChatDrawer, MinimisedChats, useDrawerShown } from '../modules/chat/ChatDrawer';
 import { RingingBar } from '../modules/chat/website/Ringing';
 import { watchMicrophone } from '../modules/chat/website/mic';
 import { Sidebar } from './Sidebar';
@@ -48,6 +48,8 @@ export function Shell() {
   const visible = useVisibleIds();
   const hasChat = useCanOpen('chat');
   const hasAi = useCanOpen('ai');
+  const chatOpen = dock === 'chat' && hasChat;
+  const chatShown = useDrawerShown(chatOpen);
   // With the call window off, the bar under the tabs plays the tone instead.
   const ringWindow = useStore(app, (s) => s.prefs?.webchatRinging?.window ?? true);
   const info = useStore(app, (s) => s.info);
@@ -125,6 +127,8 @@ export function Shell() {
         },
       }),
       registerCommand({ id: 'restore-tab', label: 'Reopen closed tab', group: 'Shell', run: restoreClosed }),
+      registerCommand({ id: 'next-tab', label: 'Next tab', group: 'Shell', keywords: 'switch tab right', run: () => activateRelative(1) }),
+      registerCommand({ id: 'prev-tab', label: 'Previous tab', group: 'Shell', keywords: 'switch tab left back', run: () => activateRelative(-1) }),
       registerCommand({ id: 'move-tab-to-window', label: 'Move tab to new window', group: 'Shell', keywords: 'tear off detach undock window', run: () => { const t = activeTab(); if (t) void detachTab(t.id); } }),
       registerCommand({
         id: 'dock-tab-beside',
@@ -157,6 +161,8 @@ export function Shell() {
       registerCommand({ id: 'upload', label: 'Upload file', group: 'Create', run: () => navigate('/files?upload=1'), when: () => canOpen('files') }),
       registerCommand({ id: 'clock-in', label: 'Clock in / out', group: 'Create', run: () => navigate('/hr'), when: () => canOpen('hr') }),
       registerCommand({ id: 'new-lead', label: 'New lead', group: 'Create', run: () => navigate('/crm?new=1'), when: () => canOpen('crm') }),
+      // Marketing (MKT-DSK-01): My call queue's workspace with a new claim, which takes the next contact.
+      registerCommand({ id: 'marketing-claim-next', label: 'Claim next contact', group: 'Create', keywords: 'marketing call queue next contact dial agent', run: () => navigate(`/marketing?view=queue&tab=work&claim=${Date.now()}`), when: () => canOpen('marketing') }),
       ...Array.from({ length: 9 }, (_, i) => registerCommand({ id: `tab-${i + 1}`, label: `Go to tab ${i + 1}`, group: 'Shell', run: () => activateIndex(i + 1) })),
       // ⌃0–⌃9 (Ctrl+Alt elsewhere): All organizations, then the switcher's list in order. Shortcuts only, not palette entries.
       ...Array.from({ length: 10 }, (_, i) =>
@@ -310,9 +316,14 @@ export function Shell() {
                 <AiDock />
               </PanelBoundary>
             ) : null}
-            {dock === 'chat' && hasChat ? (
+            {/*
+              The chat drawer (worksuite-desktop#264): docked, a column beside the workspace, which gives up its width —
+              the title bar and the tab strip above keep the window's; floating, over the workspace. It stays a moment
+              after it is put away, to leave as it came.
+            */}
+            {chatShown ? (
               <PanelBoundary name="Chat" onClose={() => minimiseChatDrawer()}>
-                <ChatDrawer />
+                <ChatDrawer closing={!chatOpen} />
               </PanelBoundary>
             ) : null}
             {hasChat ? (

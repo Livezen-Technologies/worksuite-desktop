@@ -10,7 +10,7 @@ import { WebsiteLive } from '../WebsiteLive';
 import { DeskTiles, NeedsYou, needsRows, useLiveDesk } from './LiveDesk';
 import { countryBox, padded, placesNow, presetsFor, px, py, type Box, type Preset } from './liveMap';
 import { findCountry } from './countries';
-import { LiveMap } from './WorldMapView';
+import { LiveMap } from './LazyMap';
 
 /**
  * The Live map window (worksuite-desktop L-04; WS-WCHAT MAP-UI-04, MAP-21): "Live map" popped out of the dashboard into

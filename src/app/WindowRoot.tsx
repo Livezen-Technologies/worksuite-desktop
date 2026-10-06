@@ -23,7 +23,8 @@ import { flushDrafts } from '../core/drafts';
  * by dragging its handle onto the main window. It tells the main process
  * where it has moved to, so it opens there again at the next start.
  */
-const PINNABLE = new Set(['chat-mini', 'timer', 'call', 'video-call']);
+// A support ticket's quick-reply window floats too (WS-SUPPORT-SRS-001 D-04), and its pin is the window's own.
+const PINNABLE = new Set(['chat-mini', 'timer', 'call', 'video-call', 'phone', 'support-quick']);
 // A conversation in its own window can go back to the main window (#103).
 const TO_MAIN = new Set(['chat-mini']);
 export function WindowRoot({ hash }: { hash: string }) {
@@ -63,7 +64,7 @@ export function WindowRoot({ hash }: { hash: string }) {
   }, [dockable, route, title]);
   return (
     <div className="flex h-full flex-col">
-      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'call' || barHidden) && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
+      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'support-ring' || kind === 'call' || barHidden) && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
         {dockable && windowId ? (
           <span
             draggable

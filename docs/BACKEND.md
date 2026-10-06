@@ -39,6 +39,7 @@ sign-in) and, once the laptop is registered, `X-WS-Device: <device id>`.
 | Open a `worksuite://` link | `GET /desktop/v1/links/resolve?url=` → `{valid, module, route, window, allowed, organization_id}` |
 | An item link's item (#170) | `GET /api/links/items/{org}/{type}/{id}` → `{allowed, state, state_label?, title?, kind_label?, size?, sharer?, task_id?, can_request_access}`; `POST …/request-access` |
 | Item link in a browser (#170) | `GET /o/{org}/{type}/{id}?action=` (public): hands `worksuite://{org}/{type}/{id}` to the app, "Open in browser instead" |
+| A page of an app as an item link (#266) | `/o/{org}/{app}/{page}`, e.g. `/o/7/hr/announcements` (open only; the apps and the query parameter each reads its page from are `PAGE_APPS` in `shared/item-links.ts`). Chat's shares send these; the server's `ItemLinks.php` and its `/o/` page should accept the same list, and `GET /api/links/items/…` is not asked for a page (its app's access decides) |
 | Device-side audit | `POST /desktop/v1/audit` `{events:[{id, action, at, details}]}` (idempotent on `id`); item links log `desktop.link.opened` |
 | Drive change feed | `GET /desktop/v1/sync/changes?cursor=&limit=`, `POST /desktop/v1/sync/events` |
 | File locks | `POST` / `DELETE /desktop/v1/files/{id}/lock` |
@@ -82,6 +83,27 @@ app's screens are `app://bundle`. So when discovery announces
 The code is good for two minutes and one attempt. Without the verifier,
 which never leaves the app, it is worth nothing to another program that
 registered `worksuite://`.
+
+### WorkSuite Office "Continue as" (worksuite-office#6)
+
+WorkSuite Office, the desktop editor, signs in with the person's WorkSuite account. When this app is signed in on
+the same computer, WorkSuite Office offers **Continue as <name>** without a browser:
+
+1. This app keeps `<app data>/WorkSuite/desktop-accounts.json` (its own data folder, mode 600):
+   `{version: 1, app, accounts: [{server, user: {id, name, email, organization}}]}` — names and addresses only,
+   rewritten on sign-in and profile changes, emptied at sign-out (`electron/services/office-signin.ts`).
+2. WorkSuite Office opens `worksuite://office/signin?client=worksuite-office&server=…&uid=…&challenge=S256(verifier)&state=…`.
+3. This app checks the link names its own server and user, waits for the person to unlock it if it is locked, and
+   asks **Sign in to WorkSuite Office as <name>?** (Cancel is the default).
+4. On **Continue**, `POST /api/auth/apps/handoff {client: "worksuite-office", code_challenge, code_challenge_method: "S256"}`
+   with this app's session returns a one-time code (two minutes, one attempt), and the app opens
+   `worksuiteoffice://auth/callback?code=…&state=…` — a fixed address, never one the link named.
+5. WorkSuite Office exchanges `{client, code, code_verifier}` at `POST /api/auth/apps/exchange` for a session of its
+   own, which the person can end like any other.
+
+The verifier never leaves WorkSuite Office, so a program that opened the link without being it gets a code it
+cannot use. `/api/auth/apps/*` is refused by the renderer's API proxy: only the main process mints these codes.
+Needs the server's Auth 1.2.0.
 
 ### Revocation
 
@@ -254,6 +276,121 @@ specific to the desktop:
   - Online speech to text (when the computer cannot, and the AI settings
     allow): `GET /api/ai/speech/status` and `POST /api/ai/speech/transcribe`
     (multipart `audio` WAV, `language`) return segments with `uncertain`.
+
+### What the server has: `GET /api/capabilities` (worksuite-desktop#259)
+
+The app can be newer than the server: Beta may run ahead of it. So that
+nobody lands on an empty "Not on this server yet" screen, the app asks the
+server what it has once per session. It needs a signed-in user and no
+permission:
+
+```json
+{ "communication": "2.4.0",
+  "features": ["widget.behaviour", "chat.insights", "widget.whatsapp"],
+  "update_url": "/admin/modules", "can_update": true }
+```
+
+- **Module versions** sit at the top level, keyed by module, or under
+  `modules: {communication: "2.4.0"}`. The admin notice quotes them as
+  "(server has 2.3.1)".
+- **`features`** lists what the modules offer. The app reads it only when
+  `features` is an array. The website chat keys so far:
+  - `widget.behaviour`: `widgets/{id}/behaviour`, S-03.
+  - `chat.insights`: `insights`, L-07.
+  - `widget.whatsapp`: `widgets/{id}/whatsapp`, #260.
+
+  Add a key whenever a module gains a screen the desktop gates on.
+- **`update_url`** is a path on this server where the person can update
+  modules. The app shows "Update server" only when `can_update` is `true` for
+  that person.
+- **On a server without this route (404)**, or with any other response, each
+  screen still detects support itself, as before: its own endpoint answers
+  404.
+- **A screen's own endpoint overrides the list.** One that answers is shown
+  even if the list leaves its key out.
+
+When a feature is missing:
+
+- People who cannot change widgets don't see the Behaviour or Contact options
+  tabs, or the Insights entry.
+- Admins (`chat.widget.manage`, or the widget's `can_manage`) see a notice at
+  the top of the widget's settings, for example "Behaviour and Insights need
+  Communication module 2.4 or later (server has 2.3.1). Update server · Learn
+  more".
+- The notice names a minimum version only when the app knows it for every
+  missing feature (`MIN_COMMUNICATION` in
+  `src/modules/chat/website/widget/serverSupport.ts`). Otherwise it says "a
+  newer Communication module".
+
+**Field errors.** A save that the server refuses should answer 422 with
+`errors` keyed by field, as Laravel and CodeIgniter do: `website_name`,
+`quick_links.0.url`, `numbers.1.phone`, `missed_after_minutes`.
+
+- The app shows each message under its field, on that field's tab, and marks
+  the tab ("Appearance •") while another tab is open.
+- A widget whose saved company name is a web address may be refused on any
+  tab's save (`PUT widgets/{id}/behaviour` included). The server should name
+  `website_name` in `errors` so the message lands on Appearance. A refusal
+  without `errors` becomes a toast, except one in the company-name rule's own
+  words.
+
+### Website chat widget: WhatsApp numbers (worksuite-desktop#260)
+
+Widget settings › Contact options edits the WhatsApp numbers the widget offers
+("Message us on WhatsApp": Sales, Support). The Communication module needs
+three routes under `/api/chat/widget-admin`. Until it has them:
+
+- the tab is hidden, and admins see the version notice (feature
+  `widget.whatsapp`, #259);
+- the away screen keeps its single `whatsapp_number` from the design.
+
+- **`GET widgets/{id}/whatsapp`** returns `{numbers, can_manage, cache_seconds?,
+  can_refresh?, accounts?}`. A 404 or 405 means the server does not have the
+  list.
+  - Each number is `{id, source: worksuite|manual, account_id, phone, label,
+    message, show, connected?}`, in the order the widget shows them.
+  - `phone` is E.164.
+  - `account_id` is the WhatsApp module's account (`/api/whatsapp/accounts`)
+    for `worksuite`, and null for `manual`.
+  - `show` is `always`, `connected`, `outside_hours` or `no_agents`.
+    `connected` is only valid for `worksuite`.
+  - `connected` is the server's view of a WorkSuite number's link. The app
+    uses the WhatsApp list's own status where it can read it.
+  - `cache_seconds` is how long the widget script may keep its settings. It
+    drives "Saved · live on techubiz.com within 1 minute", and should be 60 or
+    less. Without it, the app says the change shows on visitors' next page.
+  - `can_refresh: true` means `POST widgets/{id}/refresh` exists.
+  - `accounts` (optional) is the company's WorkSuite numbers as
+    `{id, name, phone, status, provider?, connected_at?}`, for admins the
+    numbers are not shared with. Without it, the picker reads
+    `/api/whatsapp/accounts`.
+- **`PUT widgets/{id}/whatsapp {numbers: [...]}`** replaces the list.
+  - The list arrives in display order, up to 5 numbers.
+  - Each number arrives as `{id?, source, account_id, phone, label, message,
+    show}`.
+  - The server re-checks each `phone` as E.164 and each `account_id` as one of
+    its WhatsApp accounts.
+  - Refusals are 422 with `errors` keyed like `numbers.1.phone`. The app shows
+    each one under that number's field.
+  - It answers like the GET, and ends the widget's settings cache.
+- **`POST widgets/{id}/refresh`** ends the cache now, so the widget asks again
+  on its next page load. It backs "Refresh widget now".
+- **The widget itself:**
+  - It replaces `{visitor_ref}` in `message` with the visitor's reference
+    before opening `https://wa.me/<digits>?text=…`. That reference is what
+    links the visitor's WhatsApp message to their chat (#224).
+  - It hides a `connected` number while every WhatsApp account on that number
+    is disconnected, and shows it again once one is relinked.
+  - It shows `outside_hours` numbers only outside business hours, and
+    `no_agents` numbers only while nobody is available.
+- **The older single number:**
+  - While the list exists, the server keeps `design.whatsapp_number` as the
+    first number shown `always`, for older widget scripts. It ignores that
+    field on `PUT widgets/{id}/design`.
+  - When the list first appears, a widget's existing `whatsapp_number` becomes
+    its first number (`manual`, labelled "WhatsApp").
+  - On an older server, the app still saves that one number, converted to
+    E.164: "0769 136 424" becomes `+94769136424`.
 
 ### Garage
 
@@ -856,6 +993,115 @@ and offers to copy a support request instead of sending it.
   - The endpoint answers `{reference}`, and the desktop shows that reference.
   - It is not the company helpdesk (`/api/tickets`), which needs the "Reply to tickets" permission and serves the
     company's own customers.
+
+## Connection strength and the speed test (worksuite-desktop#254, #265)
+
+The status bar shows two things apart: **your connection** (the network delay, its stability, the speed test) and
+**the WorkSuite server** (the API's median and slowest 5% of the last 50 requests, timed to their response headers,
+and how many failed). A slow server gets its own amber "Server slow" marker (median over 1 s); it never makes the
+connection Poor. The connection's level is the documented thresholds on the network delay alone: under 100 ms
+Excellent, 100–250 Good, 250–600 Fair, over 600 Poor.
+
+How the desktop measures the network delay, every 10 s, lightest first:
+
+1. **The realtime echo**, where realtime runs over a socket: `ping:<id>` (v1) or `{"type":"ping","id"}` (v2), which
+   the gateway answers at once with `{"type":"pong","id"}`. A gateway that never answers is asked no more.
+2. **A TCP connection to the server** where the echo cannot be sent (SSE is one-way, the built-in service polls, an
+   older gateway): the time to open it, then it is closed. Nothing is sent on it. Not used through a proxy.
+3. **`GET /api/health`** only where neither works. It includes the server's own time, so the desktop treats it as an
+   upper bound ("Fair · ≤ 312 ms") and never calls the connection Poor on it.
+
+The speed test downloads up to 25 MB over 4 connections at once, and uploads up to 20 MB where the server takes it,
+for at most 8 s each way. It runs on the bulk connection pool, so chats are not held up. The download is timed from
+its first byte, so the server's wait before it starts answering is left out. The upload is timed by Chromium's own
+count of the bytes sent, so the server's work after the body arrives is left out.
+
+None of the following exists on the server yet. Each is optional: the desktop detects it and uses it once it is
+there.
+
+- **`GET /api/health/probe?kb=N` — a sized test download.**
+  - It answers N KB of random (incompressible) bytes: `Content-Type: application/octet-stream`,
+    `Cache-Control: no-store`, and no gzip or brotli.
+  - The desktop asks for 6400 KB per connection. Cap N at 25600 (25 MB) and limit how often each person can call it.
+  - The desktop sends the session's bearer token. The server may require it, so the endpoint cannot be used
+    anonymously.
+  - **Without it:** the desktop fetches `/widget.js` again and again instead. The result says that a small file reads
+    low on a fast connection.
+  - **Wrong answers:** a JSON or HTML answer on this path is not taken as the test download.
+- **`POST /api/health/probe` — an upload sink.**
+  - It reads the raw body and throws it away: `application/octet-stream`, up to 5 MB per request. Check nginx
+    `client_max_body_size` and PHP's limits, and read the body from `php://input`.
+  - It answers `{"status":"success","data":{"bytes":<bytes received>}}`.
+  - The desktop first sends a 16 KB check, and uploads more only when the answer confirms those bytes exactly.
+  - An upload the server answers with a different count gives no figure. So does one that fails.
+  - **Without it:** the desktop shows "Upload test needs a newer server" and sends nothing more. It never shows a
+    figure it did not measure.
+- **`Server-Timing: app;dur=<ms>` on `/api/health` — the server's own time.**
+  - The desktop takes the largest `dur` as the server's whole time and subtracts it from the round trip. The server
+    check then measures the network delay, not just an upper bound on it.
+- **`/api/health`'s `data.time`** (ISO 8601 with its offset) already exists. The desktop shows it in the computer's
+  own time and zone ("23:06 Sri Lanka Time").
+
+## Phone (WS-VOIP-SRS-001)
+
+The Phone (`src/modules/phone`, [PHONE.md](PHONE.md)) talks to WorkSuite's Voip module at `/api/voip` with the
+same endpoints as the web. Answers are the usual `{status, message, data}`; stamps are UTC without a zone.
+
+**Used as they are today:** `status`, `dashboard`, `softphone`, `extensions` (+ `allocate`, `{id}`, `{id}/secret`,
+`{id}/assign`), `hotdesk`, `call`, `calls/control` (`hangup`, `transfer`, `complete_transfer`, `record`,
+`pause_recording`, `resume_recording`, `stop_recording`, `park`, `conference`), `screen-pop`, `live`, `calls`
+(`page`, `per_page`, `direction`, `disposition`, `extension_id`, `queue_id`, `from`, `to`, `q`), `calls/{id}`,
+`calls/{id}/notes`, `forwards`, `short-codes` (+ `check`), `recordings` (+ `{id}/play`, `ingest`, `retention`),
+`intelligence/status`, `calls/{id}/intelligence`, `calls/{id}/analyse`, `servers` (+ `test`, `health`, `apply`,
+`maintenance`, `mappings`, `sync`), `mappings/{id}`, `sync-runs`, `sync/due`, `config`, `config/apply`, `settings`,
+`reports/summary|volume|agents|queues|departments`.
+
+- **The page policy.** The softphone opens a WebSocket to the PBX. The main process reads `ws_uri` from
+  `GET softphone` (it keeps the origin only, never the secret) and adds `wss://host:port` to `connect-src`. A
+  `ws_uri` that is not `wss://` is refused by the phone (a SIP password never crosses an unencrypted socket).
+- **Placing a call.** `POST call {number, contact_id?}` — the switch rings the person's extension with its own
+  caller ID (`CallerID` = the extension's `caller_id`, else its name) and the desktop answers that ring-back
+  without a click when it arrives within 20 s. Keep the caller ID on the ring-back the extension's own.
+- **Recordings** play from the signed `/media/stream/<token>` the `play` answer gives, at the server's origin.
+
+**Proposed — asked for, and said plainly when absent.** A route that is not there (404/405/501) shows "isn't offered
+by this WorkSuite server yet"; anything else is shown as the server's own refusal. Writes answer `{…, message}`
+where `message` says what is still to do ("Saved. Apply the configuration to make it live.").
+
+| Need (SRS) | Calls |
+|---|---|
+| My phone (W01, W07; SP-09, FWD-05, G-11) | `GET me` → `{extensions, devices: Registration[], caller_ids: [{value,label}], caller_id, dnd, sync_presence, presence, hotdesk: {extension_id, extension, since} \| null, shared_phones: [{id, extension, name, branch}]}`; `PUT me/dnd {dnd, sync_presence}`; `PUT me/caller-id {caller_id}`; `GET registrations` → `{registrations: [{extension_id, aor, contact, user_agent, ip, transport, rtt_ms, seen_at}]}` |
+| Speed dials (G-03) | `GET speed-dials` → `{speed_dials: [{id, label, number, slot, contact_id, presence?}]}`; `POST speed-dials`; `DELETE speed-dials/{id}` |
+| Wrap-up, call path (CTL-06, HIS-07) | `GET wrapup-codes` → `{codes: [{code, label}]}`; `POST calls/{id}/wrapup {code}`; `GET calls/{id}/events` → `{events: [{at, event: start\|ivr\|queue\|answer\|transfer\|hangup, text, detail}]}` |
+| Voicemail (REC-06) | `POST voicemail/{id}/heard {heard}`; `POST voicemail/{id}/forward {extension_id}`; `DELETE recordings/{id}`; `recordings?kind=voicemail` rows may carry `mailbox` (a shared mailbox's name) |
+| Supervision (RPT-05/06, AC-11) | `GET supervisor/board?server_id=` → `{queues: [{id, name, number, strategy, agents, waiting, longest_wait, free, logged_in, sla_rate, sla_seconds}], agents: [{extension_id, extension, name, state: free\|on_call\|ringing\|wrapup\|paused\|offline, since_seconds, detail, queue}], calls: [{channel, started_seconds, agent, extension, other, queue, direction}], totals: {calls_now, external, internal, waiting, longest_wait, agents_free, agents_total, agents_paused, answered_today, answer_rate, abandoned_today, avg_abandon_wait}}`; `POST supervise {channel, mode: listen\|whisper\|barge}` → `{ok, message, session_id}` (needs `voip.supervise`, audited; rings the supervisor's own extension with ChanSpy q/w/B); `POST supervise/stop {session_id}`; `POST queues/{id\|all}/pause {extension_id, paused, reason}` |
+| Trunks, routes (TRK-01/02/05) | `GET/POST trunks`, `PUT/DELETE trunks/{id}` — the `voip_trunks` columns, `secret` write-only (`has_secret`), plus `channels_in_use`, `calls_today`, `currency`; `GET/POST routes`, `PUT/DELETE routes/{id}` — the `voip_routes` columns; `POST routes/order {ids}`; `POST routes/test {number, extension}` → `{steps: [{text, tone: ok\|warn\|fail}], route_id, trunk_id, cost_per_min}` |
+| Gateways, SIMs, SMS (TRK-03/04, G-18, DEP-03/04) | `GET/POST gateways`, `PUT/DELETE gateways/{id}` (+ `adapter: dinstar\|grandstream`, `admin_password` write-only, `via`); `POST gateways/{id}/poll` → `{gateway, sims, message}`; `GET/POST sim-cards`, `PUT sim-cards/{id}` (`pin`, `puk` write-only → `has_pin`, `has_puk`); `GET sms?contact_id=` → `{messages}`; `POST sms {to, body, sim_id?, contact_id?}` |
+| Inbound & IVR (IVR-01/02, G-05) | `GET/POST inbound-routes`, `PUT/DELETE inbound-routes/{id}` — `{did, server_id, trunk, open_dest, closed_dest, holiday_dest, hours, calendar_id, open_now, enabled}` with a destination `{kind: extension\|queue\|ring_group\|ivr\|voicemail\|external\|announcement\|hangup, value, label?, missing?}`; `GET/POST ivr-flows`, `PUT/DELETE ivr-flows/{id}` — the `voip_ivr_flows` columns, `nodes` as `{key: destination}`, plus `repeat`, `direct_dial`, `greeting_file` |
+| Queues, ring groups (IVR-03/04) | `GET/POST queues`, `PUT/DELETE queues/{id}` — the `voip_queues` columns plus `wrapup_seconds`, `callback_after`, `record`, `agents: [{id, extension_id, extension, name, penalty, skill, paused, calls_today, talk_today, state}]`; `POST queues/{id}/agents {extension_id, penalty?, skill?}`, `PUT/DELETE queues/{id}/agents/{agentId}`; `GET/POST ring-groups`, `PUT/DELETE ring-groups/{id}` |
+| Extensions (EXT-08/09/10, G-08) | `POST extensions/{id}/provisioning` → `{url, expires_at, username, domain, port, transport, ws_uri}` (a short-lived link a SIP app reads); `POST extensions/{id}/setup-email`; `POST extensions/import {rows}` → `{created, skipped, detail}`; `POST extensions/provision-hr` → `{created, message}`; list rows may add `server`, `department`, `department_id`, `holder_kind`, `registration`, `missing_on_pbx`, `max_contacts` |
+| Forwarding (FWD-02) | `PUT forwards/{id} {enabled, …}`; rows may add `pending` (not applied yet), `date_from`, `date_to` |
+| Dial plan (DP-06) | `GET config?server_id=` may add `applied: {file: text}` (what was last applied), `pending`, `applied_at` — the desktop diffs them |
+| Reports (RPT-01) | `reports/volume` may add `heat: [{dow, hour, total}]`; every report takes `org_id` (G-14) |
+| Softphone (G-02, G-06) | `softphone` should answer the extension's own server's `ws_uri` and `ice` with time-limited TURN credentials (`{urls, username, credential}`), plus `server: {id, name}`, `ice_expires_at` |
+| Mappings | `GET mappings` → every server's mappings (today they are read per server) |
+
+## Social Media Manager (WS-SMM-SRS-001)
+
+Social Media Manager (`src/modules/social-media`, [SOCIAL_MEDIA.md](SOCIAL_MEDIA.md)) talks to the server's new
+`app/Modules/SocialMedia` at `/api/social-media`, the optional app `worksuite.social-media` (slug `social-media`,
+permission family `social.*`). No server has it yet, so every route is asked through `optional()` and a 404/405/501
+is said plainly ("isn't on this WorkSuite server yet"), never filled in.
+
+- **Contract.** SRS §15 as listed, plus the desktop's proposals (module status, choosing assets after OAuth, queue and
+  best-time preview, evergreen, AI compose and reply, inbox metrics, reading provider apps): the full list with
+  shapes is [SOCIAL_MEDIA.md §2](SOCIAL_MEDIA.md#2-what-the-server-needs-the-contract), the types in `api.ts`.
+- **OAuth.** `POST accounts/connect {network, brand_id, client: "desktop"}` → `{redirect_url}`; the desktop opens it
+  in the system browser and, when the person says they are done, reads `GET accounts/connect/assets`. Tokens never
+  reach the desktop (NFR-04); an account carries `granted` in words, not scopes.
+- **Notifications.** `event` `social.*`, `category` `social_media`, link `/social-media/posts|approvals|inbox/<id>`;
+  a manual reminder may carry `actions: [{copy}]`. Realtime events named `social.*` (ids only) refresh the screens.
+- **Offline.** `GET posts`, `accounts`, `brands` are kept in the encrypted READ_CACHE; nothing is written from it.
 
 ## Not provided yet
 

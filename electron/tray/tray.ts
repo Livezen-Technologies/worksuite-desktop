@@ -3,6 +3,9 @@ import { join } from 'node:path';
 import { attentionCount, trayState, trayTooltip, type TrayState } from '@shared/network';
 import { logger } from '../main/log';
 import { liveTitle } from '../services/live-desk';
+import type { SupportPulseFigures } from '../services/support-desk';
+import type { TrayMarketing } from '../services/marketing-pulse';
+import { NEXT_CONTACT_LABEL } from '../services/marketing-shortcut';
 
 const log = logger('tray');
 
@@ -23,6 +26,9 @@ export interface TrayModel {
   unreadChat: number;
   unreadMail: number;
   unreadOther: number;
+  /** Support tickets needing me (the desk's count), and the unread notifications about them it stands for (FR-DSK-04). */
+  unreadSupport?: number;
+  unreadSupportNotices?: number;
   /** Off: no count on the app's icon (Settings › Notifications). */
   badge: boolean;
   notificationsPausedUntil: string | null;
@@ -50,6 +56,19 @@ export interface TrayModel {
    * at risk, and a click opens the mini-dashboard. Null for anybody else, or before the first answer.
    */
   live?: { online: number; atRisk: boolean } | null;
+  /**
+   * The support desk's mini dashboard (WS-SUPPORT-SRS-001 D-05): my numbers, the next SLAs due and my availability,
+   * for whoever has Support (support-desk.ts). A breached SLA among mine puts the red dot on the icon. Null before
+   * the first answer, or for anybody else.
+   */
+  support?: SupportPulseFigures | null;
+  /** The quick-reply shortcut while it is registered (⌃⌥R), or null. */
+  supportShortcut?: string | null;
+  /**
+   * Marketing's counts (WS-MKT-SRS-001 MKT-DSK-01, the D01 tray): my call queue, today's callbacks, the campaigns
+   * sending now. Null for anybody with nothing to show, or before the server answers. Optional for older callers.
+   */
+  marketing?: TrayMarketing | null;
 }
 
 export interface TrayUpdate {
@@ -122,6 +141,30 @@ export interface TrayActions {
   /** Open Live dashboard (⌘⇧D) and Show Live map window (⌘⇧M), for website staff (L-05, MAP-21/22). */
   liveDashboard?: () => void;
   liveMap?: () => void;
+  /** Support (D-05): a ticket's quick-reply window, the latest ticket's, and Online / Away. Optional for older callers. */
+  supportQuickReply?: (ticketId: number) => void;
+  supportQuickLatest?: () => void;
+  supportPresence?: (status: 'available' | 'away') => void;
+  /** Marketing's Next contact (⌘⇧N / Ctrl+Shift+N from other apps): My call queue's workspace, on the next contact. */
+  marketingNextContact?: () => void;
+}
+
+/**
+ * Marketing's lines (MKT-DSK-01, the D01 tray): "Call queue waiting 38" and "Callbacks today 9" open My call queue
+ * and its callbacks, "Sending now 1 · 62%" says how far the campaigns sending now have got, and "Next contact" takes
+ * the next contact — its key shown, not registered here (main holds it while WorkSuite is not in front). The queue's
+ * lines only for somebody with a call queue, all of it only for somebody who has Marketing.
+ */
+export function trayMarketingItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'marketing'>, a: Pick<TrayActions, 'openRoute' | 'marketingNextContact'>): MenuItemConstructorOptions[] {
+  const mk = m.marketing;
+  if (!m.signedIn || !m.apps.includes('marketing') || !mk) return [];
+  const items: MenuItemConstructorOptions[] = [];
+  if (mk.queueWaiting !== null) items.push({ label: `Call queue waiting ${mk.queueWaiting}`, click: () => a.openRoute('/marketing?view=queue') });
+  if (mk.callbacksToday !== null) items.push({ label: `Callbacks today ${mk.callbacksToday}`, click: () => a.openRoute('/marketing?view=queue&tab=callbacks') });
+  if (mk.sending) items.push({ label: `Sending now ${mk.sending.count} · ${mk.sending.pct}%`, enabled: false });
+  if (mk.queueWaiting !== null && a.marketingNextContact) items.push({ label: 'Next contact', accelerator: NEXT_CONTACT_LABEL, registerAccelerator: false, click: a.marketingNextContact });
+  if (items.length) items.push({ type: 'separator' });
+  return items;
 }
 
 /**
@@ -228,7 +271,8 @@ export class TrayService {
     // unsigned build is never registered for notifications, and macOS will not
     // draw its badge.
     const hasChat = m.apps.includes('chat');
-    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther);
+    const hasSupport = m.apps.includes('support');
+    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther, hasSupport ? (m.unreadSupport ?? 0) : 0, hasSupport ? (m.unreadSupportNotices ?? 0) : 0);
     // A website chat ringing shows as something waiting for you, whatever else is going on (RING-43) — Chat's, so only with Chat.
     const ringing = m.signedIn && hasChat ? m.webchatRinging.length + (m.webchatCalls?.length ?? 0) : 0;
     const state = ringing ? 'unread' : trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
@@ -241,7 +285,8 @@ export class TrayService {
     if (!this.tray) return;
     // Red while somebody is at risk (MAP-22): the icon's red dot in colour in the menu bar.
     const live = m.signedIn && hasChat ? (m.live ?? null) : null;
-    const red = !!live?.atRisk;
+    // Red, too, while one of my support tickets has missed its SLA (D-05's badge rule).
+    const red = !!live?.atRisk || (m.signedIn && hasSupport && !!m.support?.breached);
     const look = red ? `${ringing ? 'unread' : state}:red` : state;
     if (look !== this.lastState) {
       this.tray.setImage(icon(red ? 'unread' : state, red));
@@ -257,6 +302,7 @@ export class TrayService {
         unreadChat: hasChat ? m.unreadChat : 0,
         unreadMail: m.apps.includes('mail') ? m.unreadMail : 0,
         unreadOther: m.unreadOther,
+        unreadSupport: hasSupport ? (m.unreadSupport ?? 0) : 0,
       }),
     );
     // "18 · 2 waiting" for website staff (MAP-UI-04): on the sites, and waiting on me as the badge counts them (MAP-25).
@@ -321,11 +367,13 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     if (a.liveMap) items.push({ label: 'Show Live map window', accelerator: 'CmdOrCtrl+Shift+M', registerAccelerator: false, click: a.liveMap });
     items.push({ type: 'separator' });
   }
+  if (m.signedIn && has('support') && m.support) items.push(...supportItems(m.support, a, m.supportShortcut ?? null));
   if (m.signedIn) {
     items.push({ label: [m.userName, m.organization].filter(Boolean).join(' · ') || 'WorkSuite', enabled: false });
     items.push({ type: 'separator' });
   }
   items.push(...trayUpdateItems(m.update, a));
+  items.push(...trayMarketingItems(m, a));
   items.push({ label: 'Open WorkSuite', click: a.open });
   if (m.signedIn && m.quickAsk && has('ai')) items.push({ label: 'Quick Ask', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
   if (m.signedIn && m.aiChanges > 0 && has('ai')) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant is waiting' : `${m.aiChanges} changes from the assistant are waiting`, click: a.aiChanges });
@@ -333,6 +381,7 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     const unread = [
       has('chat') ? { label: `Unread Chat ${m.unreadChat}`, n: m.unreadChat, route: '/chat' } : null,
       has('mail') ? { label: `Unread Mail ${m.unreadMail}`, n: m.unreadMail, route: '/mail' } : null,
+      has('support') && m.unreadSupport ? { label: `Support ${m.unreadSupport}`, n: m.unreadSupport, route: '/support?view=mine' } : null,
     ].filter((x) => x !== null);
     if (unread.length) {
       const most = unread.reduce((x, y) => (y.n > x.n ? y : x));
@@ -369,5 +418,47 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
   items.push({ label: m.updateReady ? 'Restart to Update' : 'Check for Updates', click: a.checkUpdates });
   items.push({ type: 'separator' });
   items.push({ label: 'Quit WorkSuite', click: a.quit });
+  return items;
+}
+
+const plural = (n: number, one: string, many: string) => (n === 1 ? one : many.replace('{n}', String(n)));
+const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
+
+/**
+ * The tray's Support section (WS-SUPPORT-SRS-001 D-05): the mini dashboard as menu items, the same on the macOS menu
+ * bar and in a Windows or Linux tray.
+ *
+ *  - My numbers (FR-WSP-02): open, overdue, unassigned and at risk, each opening its view; unread and due today
+ *    beside them.
+ *  - Next SLA due (FR-SLA-07): the four soonest of mine, each opening its quick-reply window (D-04, FR-DSK-03).
+ *  - Quick reply to latest (⌃⌥R) and Open Support; Online / Away (FR-ASN-06), Chat's presence as routing reads it.
+ */
+export function supportItems(f: SupportPulseFigures, a: Pick<TrayActions, 'openRoute' | 'supportQuickReply' | 'supportQuickLatest' | 'supportPresence'>, shortcut: string | null = null): MenuItemConstructorOptions[] {
+  const items: MenuItemConstructorOptions[] = [];
+  items.push({ label: `Support · synced ${hhmm(f.syncedAt)}`, enabled: false });
+  const mine = [`My open ${f.open}`, f.unread ? plural(f.unread, '1 unread', '{n} unread') : null, f.dueToday !== null ? `${f.dueToday} due today` : null].filter(Boolean).join(' · ');
+  items.push({ label: mine, click: () => a.openRoute('/support?view=mine') });
+  if (f.overdue !== null) items.push({ label: `Overdue ${f.overdue}`, click: () => a.openRoute('/support?view=overdue') });
+  if (f.unassigned !== null) items.push({ label: `Unassigned ${f.unassigned}`, click: () => a.openRoute('/support?view=unassigned') });
+  items.push({ label: `At risk ${f.atRisk}${f.breached ? ' · breached' : ''}`, click: () => a.openRoute('/support?view=overdue') });
+  if (f.next.length) {
+    items.push({ label: 'Next SLA due', enabled: false });
+    for (const n of f.next) {
+      const subject = n.subject.length > 42 ? `${n.subject.slice(0, 41)}…` : n.subject;
+      items.push({
+        label: `${n.reference} · ${subject}${n.sla ? ` — ${n.sla}` : ''}`,
+        sublabel: n.requester || undefined,
+        click: () => (a.supportQuickReply ? a.supportQuickReply(n.id) : a.openRoute(`/support/ticket/${n.id}`)),
+      });
+    }
+  }
+  if (a.supportQuickLatest) items.push({ label: 'Quick reply to latest', ...(shortcut ? { accelerator: shortcut, registerAccelerator: false } : {}), click: a.supportQuickLatest });
+  items.push({ label: 'Open Support', click: () => a.openRoute('/support') });
+  if (f.presence && a.supportPresence) {
+    const set = a.supportPresence;
+    items.push({ label: 'Online', type: 'radio', checked: f.presence === 'available', click: () => set('available') });
+    items.push({ label: 'Away', type: 'radio', checked: f.presence !== 'available', click: () => set('away') });
+  }
+  items.push({ type: 'separator' });
   return items;
 }

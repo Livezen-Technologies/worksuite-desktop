@@ -1,9 +1,9 @@
 import { useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { apiPost } from '../../../core/api';
-import { on } from '../../../core/bridge';
+import { call, on } from '../../../core/bridge';
 import { useNow } from '../../calls/parts';
-import { WEBSITE, type WebsiteConversation } from './api';
+import { marksWith, openConversationData, updateOpenConversation, WEBSITE, type WebsiteConversation } from './api';
 
 /**
  * Live status in a website chat on the desktop (WS-WCHAT ENH-WCHAT-04, LIVE-02…08, LIVE-12): the same marks and
@@ -11,10 +11,12 @@ import { WEBSITE, type WebsiteConversation } from './api';
  *
  * - Receipts: the visitor's messages up to the newest are delivered to this device, and read while the thread is in
  *   front (LIVE-07). Reported once each time a mark moves; the server counts them only for the chat's owner and
- *   participants, never somebody monitoring it.
+ *   participants, never somebody monitoring it. Where messages carry a seq they go by seq through the main process,
+ *   batched with what realtime delivered (plan 2.9, DLV-08); from an older server, by id as before.
  * - Typing: the visitor's and colleagues' typing frames are shown at once and go at once on a stop, never outliving
  *   seven seconds (LIVE-04); between frames the thread's own answer says who was typing when it was read.
- * - A delivered or read frame for this chat asks for the thread again, so its ticks move now.
+ * - A delivered or read frame for this chat moves the ticks now: the visitor's is applied to the marks held (DLV-08:
+ *   only the other side's acknowledgement moves them); anything else asks for the thread again.
  */
 
 /** How long a typing frame counts without another (LiveActivity::WINDOW). */
@@ -23,6 +25,10 @@ export const TYPING_MS = 7_000;
 interface Frame {
   type: string;
   conversation_id?: number;
+  by?: 'visitor' | 'agent';
+  message_id?: number;
+  seq?: number | null;
+  at?: string;
   who?: 'visitor' | 'agent';
   state?: 'start' | 'stop';
   user_id?: number;
@@ -43,7 +49,9 @@ export function useLiveStatus(id: number, data: WebsiteConversation | undefined,
   const [typists, setTypists] = useState<Record<number, { name: string; until: number; internal: boolean }>>({});
 
   // ---- receipts (LIVE-07)
-  const lastVisitor = (data?.messages ?? []).reduce((n, m) => (m.from === 'visitor' && m.id > n ? m.id : n), 0);
+  const newest = (data?.messages ?? []).reduce<{ id: number; seq: number | null } | null>((n, m) => (m.from === 'visitor' && (!n || m.id > n.id) ? { id: m.id, seq: m.seq ?? null } : n), null);
+  const lastVisitor = newest?.id ?? 0;
+  const lastSeq = newest?.seq ?? null;
   const sent = useRef({ delivered: 0, read: 0 });
   useEffect(() => {
     if (!lastVisitor || !data?.marks) return;
@@ -52,8 +60,14 @@ export function useLiveStatus(id: number, data: WebsiteConversation | undefined,
     if (visible && lastVisitor > sent.current.read) body.read = lastVisitor;
     if (body.delivered === undefined && body.read === undefined) return;
     sent.current = { delivered: Math.max(sent.current.delivered, body.delivered ?? 0), read: Math.max(sent.current.read, body.read ?? 0) };
+    if (lastSeq) {
+      // By seq, in the main process's batch (plan 2.9); the ids go too, for a server that reads only those.
+      const mark = { conversationId: id, deliveredSeq: lastSeq, ...(body.read ? { readSeq: lastSeq, read: body.read } : {}), delivered: lastVisitor };
+      void call('realtime:receipt', mark).catch(() => apiPost(`${WEBSITE}/conversations/${id}/receipts`, body).catch(() => undefined));
+      return;
+    }
     void apiPost(`${WEBSITE}/conversations/${id}/receipts`, body).catch(() => undefined);
-  }, [id, lastVisitor, visible, data?.marks]);
+  }, [id, lastVisitor, lastSeq, visible, data?.marks]);
 
   // ---- frames (LIVE-02, LIVE-03)
   useEffect(
@@ -65,7 +79,9 @@ export function useLiveStatus(id: number, data: WebsiteConversation | undefined,
           if (e.who === 'visitor') setVisitor({ until, at: Date.now() });
           else if (e.user_id && e.user_id !== me) setTypists((t) => ({ ...t, [e.user_id!]: { name: e.name ?? 'A colleague', until, internal: !!e.internal } }));
         } else if (e.type === 'chat.widget.read' || e.type === 'chat.widget.delivered') {
-          void qc.invalidateQueries({ queryKey: ['website', 'conversation', String(id)] });
+          const key = String(id);
+          if (marksWith(openConversationData(qc, key)?.marks, e)) updateOpenConversation(qc, key, (d) => ({ ...d, marks: marksWith(d.marks, e) ?? d.marks }));
+          else void qc.invalidateQueries({ queryKey: ['website', 'conversation', key] });
         }
       }),
     [id, me, qc],

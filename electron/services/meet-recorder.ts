@@ -4,13 +4,13 @@ import { appendFile, mkdir, open, rename, rm, stat, statfs, writeFile } from 'no
 import { basename, extname, join } from 'node:path';
 import { pipeline } from 'node:stream/promises';
 import { shell } from 'electron';
-import type { LocalRecording, MeetRecordingPrefs } from '@shared/types';
+import type { LocalRecording, LocalRecordingProblem, MeetRecordingPrefs, ScreenRecordingAccess } from '@shared/types';
 import { logger } from '../main/log';
 import { DesktopError, isDesktopError } from '../main/errors';
 import type { Database } from './db';
 import type { HttpClient } from './http';
 import type { TransferManager } from './transfers';
-import { videoProblem } from './video-check';
+import { isNothingRecorded, videoIssue } from './video-check';
 import { withDuration } from './webm-duration';
 
 const log = logger('meet-recorder');
@@ -21,6 +21,15 @@ export const MIN_FREE = 2 * 1024 ** 3;
 export const MAX_CHUNK = 16 * 1024 * 1024;
 const HEAD = 1024 * 1024;
 const DAY = 24 * 60 * 60 * 1000;
+
+/** Said before a recording starts without Screen Recording permission (worksuite-desktop#240): it would be empty. */
+export const SCREEN_PERMISSION_NEEDED =
+  "WorkSuite doesn't have Screen Recording permission, so the recording would be empty. Allow WorkSuite in System Settings › Privacy & Security › Screen Recording, then choose Check again.";
+/** Said of a recording that holds nothing, by why (worksuite-desktop#240): the real cause and its fix. */
+export const NOTHING_RECORDED: Record<Exclude<LocalRecordingProblem, 'unplayable'>, string> = {
+  'screen-permission': "Nothing was recorded because WorkSuite doesn't have Screen Recording permission. Turn it on in System Settings › Privacy & Security › Screen Recording, then record again.",
+  'no-video': 'Nothing was recorded: no video reached the file. Keep the meeting window open while you record (not minimised or hidden), then record again.',
+};
 
 interface Entry extends LocalRecording {
   /** Where it is on this computer: `.part` while it is written. */
@@ -40,6 +49,8 @@ export interface MeetRecorderDeps {
   notify?: (r: LocalRecording, how: 'ready' | 'failed') => void;
   /** Opens a file in the system's own application. */
   openPath?: (path: string) => Promise<string>;
+  /** Whether macOS lets WorkSuite record the screen (worksuite-desktop#240); not asked means no gate. */
+  screenAccess?: () => ScreenRecordingAccess | Promise<ScreenRecordingAccess>;
 }
 
 /** Downloads of Meet recordings kept per person, by recording: the newest few. */
@@ -173,19 +184,32 @@ export class MeetRecorder {
 
   // ── recording ──────────────────────────────────────────────────────────
 
-  /** Whether a recording can start here now: the folder, and the room on its disk. */
-  async preflight(): Promise<{ folder: string; free: number | null; ok: boolean; why: string | null }> {
+  private async screen(): Promise<ScreenRecordingAccess> {
+    try {
+      return (await this.deps.screenAccess?.()) ?? 'not_required';
+    } catch {
+      return 'not_required';
+    }
+  }
+
+  /**
+   * Whether a recording can start here now: Screen Recording permission (a recording without it is empty,
+   * worksuite-desktop#240), the folder, and the room on its disk.
+   */
+  async preflight(): Promise<{ folder: string; free: number | null; ok: boolean; why: string | null; screen: ScreenRecordingAccess; fix: 'screen-permission' | null }> {
     const folder = this.deps.prefs().localFolder;
+    const screen = await this.screen();
+    if (screen === 'missing') return { folder, free: null, ok: false, why: SCREEN_PERMISSION_NEEDED, screen, fix: 'screen-permission' };
     try {
       await mkdir(folder, { recursive: true });
     } catch {
-      return { folder, free: null, ok: false, why: `WorkSuite cannot write to ${folder}. Choose another folder in Settings › Meet › Recording.` };
+      return { folder, free: null, ok: false, why: `WorkSuite cannot write to ${folder}. Choose another folder in Settings › Meet › Recording.`, screen, fix: null };
     }
     const free = await (this.deps.freeSpace ?? freeBytes)(folder);
     if (free !== null && free < MIN_FREE) {
-      return { folder, free, ok: false, why: `There is only ${(free / 1024 ** 3).toFixed(1)} GB free where recordings are saved. Free up space or choose another folder in Settings › Meet › Recording.` };
+      return { folder, free, ok: false, why: `There is only ${(free / 1024 ** 3).toFixed(1)} GB free where recordings are saved. Free up space or choose another folder in Settings › Meet › Recording.`, screen, fix: null };
     }
-    return { folder, free, ok: true, why: null };
+    return { folder, free, ok: true, why: null, screen, fix: null };
   }
 
   async start(input: { meeting: string; title: string; layout: string; mime: string }): Promise<{ id: string }> {
@@ -279,14 +303,23 @@ export class MeetRecorder {
 
   // ── after: processing, uploading, checking ──────────────────────────────
 
+  /**
+   * Nothing reached the file (worksuite-desktop#240): say the real cause — Screen Recording permission when it is
+   * off, else no video — with its fix. It is never uploaded, and Try again is not offered: it would be empty again.
+   */
+  private async nothingRecorded(e: Entry): Promise<void> {
+    const problem = (await this.screen()) === 'missing' ? 'screen-permission' : 'no-video';
+    this.fail(e, 'processing', NOTHING_RECORDED[problem], true, problem);
+  }
+
   /** Give it its length and its final name. */
   private async process(e: Entry): Promise<void> {
-    this.set(e, { state: 'processing', error: null, failedAt: null });
+    this.set(e, { state: 'processing', error: null, failedAt: null, problem: null });
     try {
       if (e.path.endsWith('.part')) {
         const final = e.path.slice(0, -'.part'.length);
         const st = await stat(e.path);
-        if (st.size === 0) throw new DesktopError('SERVER_ERROR', 'Nothing was recorded: the file is empty.');
+        if (st.size === 0) return await this.nothingRecorded(e);
         let fixed: ReturnType<typeof withDuration> = null;
         if (extname(final) === '.webm' && e.durationMs) {
           const fh = await open(e.path, 'r');
@@ -306,9 +339,12 @@ export class MeetRecorder {
         this.set(e, { path: final, fileName: basename(final), bytes: (await stat(final)).size });
       }
       // Ready to play means it plays (worksuite-desktop#89): a file that is not a whole video is not sent at all.
-      const problem = await videoProblem(e.path);
+      const problem = await videoIssue(e.path);
+      // No video frame, or no length: nothing was recorded, and only recording again fixes that (#240). One finished
+      // after a crash has only an estimated length, so its frames decide.
+      if (isNothingRecorded(problem?.kind) || (!problem && !e.recovered && !(e.durationMs && e.durationMs > 0))) return await this.nothingRecorded(e);
       if (problem) {
-        this.fail(e, 'processing', `${problem} The file is kept on this computer; Show the file to look at it.`);
+        this.fail(e, 'processing', `${problem.message} The file is kept on this computer; Show the file to look at it.`, true, 'unplayable');
         return;
       }
       await this.upload(e);
@@ -363,9 +399,9 @@ export class MeetRecorder {
   }
 
   /** A step failed. The local file is never touched here: whatever went wrong, the recording stays recoverable. */
-  private fail(e: Entry, at: NonNullable<LocalRecording['failedAt']>, message: string, tellPerson = true): void {
-    log.warn('local recording step failed', { id: e.id, at, error: message });
-    this.set(e, { state: 'failed', failedAt: at, error: message });
+  private fail(e: Entry, at: NonNullable<LocalRecording['failedAt']>, message: string, tellPerson = true, problem: LocalRecordingProblem | null = null): void {
+    log.warn('local recording step failed', { id: e.id, at, error: message, problem });
+    this.set(e, { state: 'failed', failedAt: at, error: message, problem });
     void this.tell(e, 'failed', { error: message }).catch(() => undefined);
     if (tellPerson) this.deps.notify?.(this.view(e), 'failed');
   }
@@ -374,6 +410,8 @@ export class MeetRecorder {
   async retry(id: string): Promise<void> {
     const e = this.entry(id);
     if (e.state !== 'failed') return;
+    // Nothing was recorded, or the file is not a whole video (#240): finishing it again would only find the same.
+    if (e.problem) throw new DesktopError('IPC_VALIDATION_FAILED', e.problem === 'unplayable' ? 'This recording file cannot be played, so trying again would not help. Delete it, or Show the file to look at it.' : 'Nothing was recorded, so there is nothing to try again. Delete it and record again.');
     if (e.failedAt === 'processing' || e.failedAt === 'recording') return this.process(e);
     if (e.failedAt === 'registering' && e.driveFileId) return this.register(e, e.driveFileId);
     // The same upload, from where it got to — never a second file.

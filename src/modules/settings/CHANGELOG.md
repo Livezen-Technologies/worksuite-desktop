@@ -4,9 +4,45 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.20.1 — 2026-10-05
+## 1.26.1 — 2026-10-06
 
-- About: website is worksuitecloud.com (was worksuiteone.com), matching WorkSuite Office
+**Fixed**
+
+- About: the website is worksuitecloud.com (it said worksuiteone.com), the same as WorkSuite Office's About window
+
+## 1.26.0 — 2026-10-06
+
+**Added**
+
+- Next tab and Previous tab (⌘⇧] and ⌘⇧[, Ctrl+Shift+] and Ctrl+Shift+[ elsewhere) among the keyboard shortcuts, to remap like the others
+- Support: copy the ticket's link (⌘⇧C / Ctrl+Shift+C) among the keyboard shortcuts
+- ⌘K search lists Support tickets (status, priority, requester, whose) with the ticket in front's actions beside it, and ⌘⇧C / Ctrl+Shift+C copies a result's link (WS-SUPPORT-SRS-001 D-08)
+
+## 1.25.0 — 2026-10-06
+
+**Added**
+
+- Marketing's Next contact shortcut under Keyboard shortcuts and a Marketing switch under Notifications, both for whoever has Marketing
+
+## 1.24.0 — 2026-10-06
+
+**Added**
+
+- the POS counter's design tokens in styles.css — tile tints, promo, stock and tier badges, radii 14/16/24 and touch sizes 44–72 — resolved only inside .pos-scope, with dark values
+
+## 1.23.0 — 2026-10-06
+
+**Added**
+
+- Settings › Chat — 'Chat drawer opens as: Docked (default) / Floating' (#264)
+
+## 1.22.0 — 2026-10-05
+
+- Admin Center footer and scrolling nav (#246); notifications-off banner and test chat notification (#251); Remote control disclosures use the shared collapsible (#244)
+
+## 1.21.0 — 2026-10-05
+
+- Custom timeout on one row with a shared NumberField (#232); colour profiles apply everywhere, light and dark, custom profiles, organisation default and lock (#234)
 
 ## 1.20.0 — 2026-10-04
 

@@ -31,6 +31,7 @@ import { AccountAvatar } from './parts';
 import type { MailPrefs, Mailbox, SyncMailbox } from './types';
 import type { MailStoreStats } from '@shared/types';
 import { SyncButton } from '../../components/SyncButton';
+import { pullPrefs, setPullEnabled } from '../../components/listRefresh';
 import { forgetMailbox } from './localFirst';
 
 /**
@@ -587,6 +588,8 @@ function Storage() {
 
 function Layout() {
   const { prefs, set } = useMailPrefs();
+  // Pull to refresh (worksuite-desktop#236): kept on this computer, on unless turned off.
+  const pull = useStore(pullPrefs, (s) => !s.off.mail);
   const theme = useStore(app, (s) => s.prefs?.theme ?? 'system');
   const desktopPrefs = useStore(app, (s) => s.prefs);
   const seg = <K extends keyof MailPrefs>(key: K, value: MailPrefs[K] | undefined, fallback: MailPrefs[K], options: Array<[NonNullable<MailPrefs[K]>, string]>, label: string) => (
@@ -660,6 +663,7 @@ function Layout() {
         {seg('openIn', prefs.openIn, 'tabs', [['tabs', 'Tabs'], ['windows', 'Windows'], ['both', 'Both']], 'Open messages in')}
         {/* Which account a message came to, on the rows of the combined views (#227); each account's own label and colour are under Accounts. */}
         {seg('accountTag', prefs.accountTag, 'name', [['name', 'Name tag'], ['dot', 'Dot only'], ['off', 'Off']], 'Account tag')}
+        <SwitchRow label={text('Pull to refresh')} hint={text('At the top of the mail list, scroll or pull down a little further to check for new mail.')} checked={pull} onChange={(v) => setPullEnabled('mail', v)} />
       </section>
       <InboxAndKeyboard prefs={prefs} set={set} />
       <FormattingSettings prefs={prefs} set={set} />

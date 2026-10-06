@@ -6,6 +6,7 @@ import type { BundlePreview } from '@shared/ipc/contract';
 import { redact, redactString } from '@shared/redact';
 import type { DiagnosticCheck } from '@shared/types';
 import { logFiles, recentLog, redactionCount } from '../main/log';
+import { screenTimings } from './screen-timings';
 import type { ZipEntry } from './zip';
 
 /**
@@ -173,6 +174,8 @@ export class DiagnosticsService {
       // The update log: every check, download, install and rollback (#205).
       ...(this.deps.updateHistory ? [{ name: 'updates.json', data: json({ state: this.deps.updaterState(), history: this.deps.updateHistory() }) }] : []),
       { name: 'services.json', data: json(this.deps.services()) },
+      // Request, server and render times from the screens (worksuite-desktop#252): where a slow list spent its time.
+      { name: 'timings.json', data: json(screenTimings.report()) },
     ];
     for (const file of logFiles()) {
       try {

@@ -5,11 +5,11 @@ import {
   addGroup,
   categoryOf,
   FADE_PX,
-  fitGridHeight,
+  footerNarrow,
   FULL_COLUMN,
+  FULL_GRID,
   FULL_SEARCH,
   GRID_PAD,
-  hasMoreBelow,
   LAUNCHER_PARTS,
   launcherLayout,
   launcherSections,
@@ -20,7 +20,7 @@ import {
   OTHER_GROUP,
   pinApp,
   reorderApps,
-  sectionBlocks,
+  scrollFades,
   sectionStep,
   setHidden,
   unpinApp,
@@ -55,10 +55,13 @@ import { cx } from '../../components/ui';
  *    app. Its height is the fixed parts plus whole rows of tiles, never a row cut through; only the grid scrolls,
  *    with a fade at the bottom while there is more;
  *  - full screen: the window below the top bar (never over the traffic lights or the window buttons), the app's
- *    dark over a blur, with one centred column at most 1080px wide, larger tiles and, under All apps, each category
- *    under its heading;
+ *    dark, with one centred column at most 1080px wide, larger tiles and, under All apps, each category under its
+ *    sticky heading; the grid takes what the column has left, and the footer is attached to the window's bottom;
  *  - a bottom sheet in a window narrower than 480px.
  * Geometry is `launcherLayout` (shared/launcher), worked out again whenever the window is resized or moved.
+ * One background, `--launcher-bg`, under the grid, the headings, the scroll fades and the footer, and one soft
+ * hairline, `--launcher-line` (worksuite-desktop#233). The grid fades to that background at the top and the bottom,
+ * each only while there is more past that edge, within the column.
  *
  * Typing searches at once (names and keywords, hidden apps too); the arrow keys move over the grid, Enter opens,
  * ⌘Enter opens in a new window, Esc closes, as does a click outside. Right-click a tile, or drag it, to pin it, hide
@@ -133,7 +136,7 @@ export function Launcher() {
   const [menu, setMenu] = useState<{ id: string; x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState<string | null>(null);
   const [over, setOver] = useState<string | null>(null);
-  const [more, setMore] = useState(false);
+  const [fades, setFades] = useState<{ top: boolean; bottom: boolean }>({ top: false, bottom: false });
   const [measuredColumns, setMeasuredColumns] = useState<number | null>(null);
   const [closing, setClosing] = useState(false);
   const grid = useRef<HTMLDivElement>(null);
@@ -177,15 +180,32 @@ export function Launcher() {
     grid.current?.querySelector<HTMLElement>(`[data-index="${selected}"]`)?.scrollIntoView?.({ block: 'nearest' });
   }, [selected]);
 
-  // Whenever what is listed or the launcher's size changes: is there more below (the fade), and how many columns?
+  /** Which scroll fades to draw: each only while there is more past that edge. */
+  const updateFades = () => {
+    const next = scrollFades(grid.current);
+    setFades((prev) => (prev.top === next.top && prev.bottom === next.bottom ? prev : next));
+  };
+
+  // Whenever what is listed or the launcher's size changes: how many columns, and is there more above or below?
   useLayoutEffect(() => {
     const el = grid.current;
-    setMore(!!el && hasMoreBelow(el));
     const g = el?.querySelector<HTMLElement>('[data-grid]');
     const tpl = g ? getComputedStyle(g).gridTemplateColumns : '';
     const n = tpl && !tpl.includes('(') ? tpl.trim().split(/\s+/).length : 0;
     setMeasuredColumns(n > 0 ? n : null);
-  }, [list.length, cat, query, layout.kind, layout.width, layout.height, layout.rowHeight, showPinned, showRecent]);
+    updateFades();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [list.length, cat, query, layout.kind, layout.width, layout.height, layout.rowHeight, showPinned, showRecent, measuredColumns, !!dragging]);
+
+  // The scroller or what is in it changes size without a render (fonts, images, the window): look again.
+  useEffect(() => {
+    const el = grid.current;
+    if (!el || typeof ResizeObserver !== 'function') return;
+    const ro = new ResizeObserver(() => updateFades());
+    ro.observe(el);
+    for (const child of Array.from(el.children)) ro.observe(child);
+    return () => ro.disconnect();
+  }, [list.length, cat, query, layout.kind]);
 
   /** Closes with the launcher's fade out; at once for reduced motion. */
   const dismiss = () => {
@@ -461,39 +481,44 @@ export function Launcher() {
     </div>
   );
 
-  // The grid's height: whole rows in the popover; in full screen, all of it, or the whole rows and headings that fit.
-  const gridHeight = layout.grid
-    ? layout.grid.height
-    : layout.column && list.length
-      ? fitGridHeight(
-          sectionBlocks(
-            sections.map((s) => ({ label: s.label, items: s.items })),
-            columns,
-            layout.rowHeight,
-            layout.gap,
-          ),
-          layout.column.gridRoom,
-        )
-      : null;
+  // Category headings: 24px above each name, 8px below it, sticky while its section scrolls by (worksuite-desktop#233).
+  const headed = sections.some((s) => s.label);
+  const stuck = headed ? LAUNCHER_PARTS.heading : 0;
+  // The grid's scroller: whole rows in the popover; in full screen and the sheet, what the launcher has left, so the
+  // footer stays at the bottom.
+  const scrollerStyle: CSSProperties | undefined = sheet
+    ? { scrollPaddingTop: stuck, scrollPaddingBottom: FADE_PX }
+    : full
+      ? { paddingTop: headed ? 0 : GRID_PAD.top, paddingBottom: FULL_GRID.bottom, scrollPaddingTop: stuck + GRID_PAD.top, scrollPaddingBottom: FADE_PX }
+      : { paddingTop: GRID_PAD.top, paddingBottom: GRID_PAD.bottom, paddingLeft: GRID_PAD.x, paddingRight: GRID_PAD.x, scrollPaddingTop: GRID_PAD.top, scrollPaddingBottom: FADE_PX };
+  const fade = (edge: 'top' | 'bottom') => (
+    <div
+      aria-hidden
+      data-fade={edge}
+      className={cx('pointer-events-none absolute inset-x-0 z-[2]', edge === 'bottom' && 'bottom-0')}
+      // Under a stuck heading at the top; to the launcher's own background, so never darker than what is under it.
+      style={{ height: FADE_PX, top: edge === 'top' ? stuck : undefined, background: `linear-gradient(to ${edge}, transparent, var(--launcher-bg))` }}
+    />
+  );
 
   const body = (
-    <div
-      data-grid-area
-      className={cx('relative min-h-0', sheet ? 'flex-1' : full ? 'shrink' : 'shrink-0')}
-      style={gridHeight === null ? undefined : { height: gridHeight }}
-    >
+    <div data-grid-area className={cx('relative min-h-0', sheet || full ? 'flex-1' : 'shrink-0')} style={layout.grid ? { height: layout.grid.height } : undefined}>
       <div
         ref={grid}
         role="listbox"
         aria-label="Apps"
-        onScroll={(e) => setMore(hasMoreBelow(e.currentTarget))}
+        onScroll={updateFades}
         className={cx('h-full overflow-y-auto overscroll-contain scroll-thin', sheet && 'px-2 pb-3')}
-        style={sheet ? undefined : { paddingTop: GRID_PAD.top, paddingBottom: GRID_PAD.bottom, paddingLeft: full ? 0 : GRID_PAD.x, paddingRight: full ? 0 : GRID_PAD.x, scrollPaddingTop: GRID_PAD.top, scrollPaddingBottom: FADE_PX }}
+        style={scrollerStyle}
       >
         {sections.map((s) => (
           <div key={s.id} role="presentation">
             {s.label ? (
-              <div style={{ height: LAUNCHER_PARTS.heading }} className="flex items-end px-2 pb-1.5 text-[11px] font-semibold tracking-[0.06em] text-ink-3 uppercase">
+              <div
+                data-heading
+                style={{ marginTop: FULL_GRID.headingMargin, paddingTop: FULL_GRID.headingPad, paddingBottom: FULL_GRID.headingPad }}
+                className="sticky top-0 z-[1] flex bg-launcher px-2 text-[11px] leading-4 font-semibold tracking-[0.08em] text-ink-3 uppercase"
+              >
                 <span className="truncate">{s.label}</span>
               </div>
             ) : null}
@@ -504,9 +529,16 @@ export function Launcher() {
         ))}
         {!list.length ? searching ? empty : <div className="py-14 text-center text-[13px] text-ink-3">Every app is hidden. Search finds them, or show them again in Customise.</div> : null}
       </div>
-      {more ? <div aria-hidden data-fade className="pointer-events-none absolute inset-x-0 bottom-0" style={{ height: FADE_PX, background: `linear-gradient(to bottom, transparent, ${full ? 'var(--ws-launcher-full)' : 'var(--ws-surface)'})` }} /> : null}
+      {fades.top ? fade('top') : null}
+      {fades.bottom ? fade('bottom') : null}
     </div>
   );
+
+  // The footer's keys, or only the count and Esc when it is narrow (worksuite-desktop#233). ⌘↵ (Ctrl+↵ off the Mac)
+  // is the launcher's own: it opens the app in a new window.
+  const footerWidth = full ? Math.min(layout.column?.width ?? layout.width, layout.width) - 2 * FULL_COLUMN.padSide : layout.width;
+  const narrow = footerNarrow(footerWidth, sheet);
+  const count = `${list.length} ${list.length === 1 ? 'app' : 'apps'}`;
 
   const footer =
     dragging && draggedApp ? (
@@ -521,10 +553,19 @@ export function Launcher() {
         onWindow={() => open(draggedApp, 'window')}
       />
     ) : (
-      <div style={{ height: LAUNCHER_PARTS.footer }} className={cx('flex shrink-0 items-center justify-between gap-3 border-t border-line text-[11px] text-ink-3', full ? 'px-1' : 'px-3.5')}>
-        <span className="min-w-0 truncate">
-          {list.length} {list.length === 1 ? 'app' : 'apps'}
-          {sheet ? null : ` · Arrow keys to move · Enter to open · ${isMac ? '⌘' : 'Ctrl+'}Enter for a new window · Esc to close`}
+      <div data-footer style={{ height: LAUNCHER_PARTS.footer }} className="flex shrink-0 items-center justify-between gap-3 border-t border-launcher-line bg-launcher px-3 text-[11px] text-ink-3">
+        <span data-hints data-narrow={narrow || undefined} className="min-w-0 truncate">
+          {narrow ? (
+            `${count} · Esc to close`
+          ) : (
+            <>
+              {count} · <Key k="↑" />
+              <Key k="↓" />
+              <Key k="←" />
+              <Key k="→" /> move · <Key k="↵" /> open · <Key k={isMac ? '⌘' : 'Ctrl'} />
+              <Key k="↵" /> new window · <Key k="Esc" /> close
+            </>
+          )}
         </span>
         <button type="button" onClick={customise} className="shrink-0 font-semibold text-primary hover:underline">
           Customise
@@ -609,7 +650,7 @@ export function Launcher() {
           data-size={prefs.size}
           // The app's own dark, whichever theme is on: everything in it is drawn in the dark theme's colours.
           data-theme="dark"
-          className={cx('absolute flex justify-center overflow-hidden bg-launcher-full text-ink backdrop-blur-xl', motion)}
+          className={cx('absolute flex justify-center overflow-hidden bg-launcher text-ink', motion)}
           style={frame}
           onMouseDown={(e) => {
             if (menu) setMenu(null);
@@ -619,7 +660,7 @@ export function Launcher() {
           <div className="absolute top-4 right-4">{closeButton}</div>
           <div
             data-column
-            className="flex max-h-full w-full min-w-0 flex-col self-start"
+            className="flex h-full w-full min-w-0 flex-col"
             style={{ maxWidth: FULL_COLUMN.maxWidth, paddingTop: FULL_COLUMN.padTop, paddingLeft: FULL_COLUMN.padSide, paddingRight: FULL_COLUMN.padSide, paddingBottom: FULL_COLUMN.padBottom }}
             onMouseDown={outside}
           >
@@ -630,7 +671,7 @@ export function Launcher() {
             {showPinned ? chipRow('Pinned', view.pinned, { pinned: true }) : null}
             {showRecent ? chipRow('Recent', recent) : null}
             {chips}
-            <div className="h-px shrink-0 bg-line" />
+            <div className="h-px shrink-0 bg-launcher-line" />
             {body}
             {footer}
           </div>
@@ -649,7 +690,7 @@ export function Launcher() {
         data-layout={layout.kind}
         data-size={prefs.size}
         className={cx(
-          'absolute flex flex-col overflow-hidden border border-line bg-surface text-ink shadow-[0_30px_80px_-20px_rgb(var(--ws-shadow-rgb)/.45)]',
+          'absolute flex flex-col overflow-hidden border border-line bg-launcher text-ink shadow-[0_30px_80px_-20px_rgb(var(--ws-shadow-rgb)/.45)]',
           motion,
           layout.kind === 'popover' && 'rounded-[18px]',
           sheet && 'rounded-t-[18px] border-b-0',
@@ -689,7 +730,7 @@ export function Launcher() {
             {showPinned ? chipRow('Pinned', view.pinned, { pinned: true }) : null}
             {showRecent ? chipRow('Recent', recent) : null}
             {chips}
-            <div className="h-px shrink-0 bg-line" />
+            <div className="h-px shrink-0 bg-launcher-line" />
           </>
         )}
         {body}
@@ -719,7 +760,7 @@ function DragActions(props: {
       </div>
     ) : null;
   return (
-    <div style={{ height: LAUNCHER_PARTS.footer }} className="flex shrink-0 items-center gap-2 border-t border-line px-3.5" aria-label={`Drop ${appLabel(props.app)} to`}>
+    <div style={{ height: LAUNCHER_PARTS.footer }} className="flex shrink-0 items-center gap-2 border-t border-launcher-line bg-launcher px-3" aria-label={`Drop ${appLabel(props.app)} to`}>
       {target('pin', props.pinned ? 'pin-off' : 'pin', props.pinned ? 'Unpin' : 'Pin', props.onPin)}
       {target('hide', props.hidden ? 'eye' : 'eye-off', props.hidden ? 'Show' : 'Hide', props.onHide)}
       {target('window', 'external', 'Open in new window', props.onWindow, props.app.surface === 'native')}
@@ -799,6 +840,11 @@ function TileMenu(props: {
       )}
     </div>
   );
+}
+
+/** A key in the footer's hints, as a chip. */
+function Key({ k }: { k: string }) {
+  return <kbd className="mx-px inline-flex h-4 min-w-4 items-center justify-center rounded-[4px] border border-launcher-line bg-subtle px-1 align-[-3px] font-sans text-[10px] leading-none font-semibold text-ink-2">{k}</kbd>;
 }
 
 function Sep() {

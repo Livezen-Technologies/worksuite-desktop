@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { SubmitResult } from '@shared/ipc/contract';
-import { FOLLOW_UP_DEFAULTS, type WebchatCall, type WebchatFollowUp, type WebchatFollowUpPrefs, type WebchatHandoff, type WebchatJoined, type WebchatMic, type WebchatRingChat, type WebchatRingOutcome, type WebchatRingPrefs, type WebchatRingState } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, type RingTestNotice, type RingTestStep, type WebchatCall, type WebchatFollowUp, type WebchatFollowUpPrefs, type WebchatHandoff, type WebchatJoined, type WebchatMic, type WebchatRingChat, type WebchatRingOutcome, type WebchatRingPrefs, type WebchatRingState } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -422,6 +422,77 @@ export interface WebchatRingDeps {
   followUpPrefs?: () => WebchatFollowUpPrefs;
   /** Seconds since the last keyboard or mouse input on this computer. */
   idleSeconds?: () => number;
+  /**
+   * Whether the realtime connection is up (worksuite-desktop#251): while it is not, the list is read every 10 s instead
+   * of every 15, so a new chat still rings within seconds.
+   */
+  realtimeUp?: () => boolean;
+  /**
+   * A chat found ringing by reading the list, not by a realtime event (the socket was down, or the frame was lost):
+   * told as the event would have been — the system notification with Join and Reply when the card is not showing.
+   */
+  announce?: (chat: WebchatRingChat) => void;
+  /** The test chat notification (#251): shown by the system, and whether it said it was. */
+  testNotify?: () => Promise<RingTestNotice>;
+}
+
+/** What the server answers for a test ring (RingController::test). */
+interface RingTestAnswer {
+  routed?: boolean;
+  why?: string | null;
+  widgets?: string[];
+  status?: string;
+  available?: boolean;
+  test_id?: string;
+  sent?: boolean;
+  realtime?: boolean;
+}
+
+/** How long a refusal (403/404: not website staff, or no website chat) stands before the list is asked for again. */
+export const REFUSED_RETRY_MS = 5 * 60_000;
+/** How often the list is read while realtime is down (#251); 15 s otherwise. */
+export const FALLBACK_POLL_MS = 10_000;
+/** How long the test ring waits for its realtime event. */
+export const TEST_WAIT_MS = 5_000;
+
+/**
+ * The test's steps from what happened (worksuite-desktop#251): routed to you · received by this computer · desktop
+ * notification shown. The sound is the window's to play and say.
+ */
+export function ringTestSteps(a: RingTestAnswer | null, error: string | null, received: 'realtime' | 'none' | null, notice: RingTestNotice | null): RingTestStep[] {
+  const presence: Record<string, string> = { busy: 'Busy', dnd: 'Do not disturb', away: 'Away', offline: 'Offline' };
+  const routed: RingTestStep = error
+    ? { id: 'routed', label: 'Routed to you', state: 'fail', detail: error }
+    : !a?.routed
+      ? { id: 'routed', label: 'Routed to you', state: 'fail', detail: a?.why ?? 'No website chat would ring for you.' }
+      : {
+          id: 'routed',
+          label: 'Routed to you',
+          state: a.available === false ? 'warn' : 'ok',
+          detail:
+            a.available === false
+              ? `New chats ring for you on ${(a.widgets ?? []).join(', ')}, but you show as ${presence[a.status ?? ''] ?? a.status ?? 'not available'}, so none is given to you by turn.`
+              : `New chats on ${(a.widgets ?? []).join(', ')} ring for you.`,
+        };
+  const got: RingTestStep =
+    received === 'realtime'
+      ? { id: 'received', label: 'Received by this computer', state: 'ok', detail: 'Over the live connection, at once.' }
+      : received === 'none'
+        ? {
+            id: 'received',
+            label: 'Received by this computer',
+            state: 'warn',
+            detail: a?.realtime === false ? 'Live updates are off on this server: chats reach this computer by checking every 10–15 seconds.' : 'The live connection did not deliver it: chats reach this computer by checking every 10–15 seconds until it is back.',
+          }
+        : { id: 'received', label: 'Received by this computer', state: error ? 'fail' : 'pending', detail: null };
+  const shown: RingTestStep = !notice
+    ? { id: 'notification', label: 'Desktop notification shown', state: 'pending', detail: null }
+    : notice.state === 'shown'
+      ? { id: 'notification', label: 'Desktop notification shown', state: 'ok', detail: notice.detail }
+      : notice.state === 'unknown'
+        ? { id: 'notification', label: 'Desktop notification shown', state: 'warn', detail: notice.detail }
+        : { id: 'notification', label: 'Desktop notification shown', state: 'fail', detail: notice.detail };
+  return [routed, got, shown];
 }
 
 /** What `joinAndSend` does after joining: a mini chat on the card (#225), nothing more, or the thread opened (R-05). */
@@ -437,6 +508,23 @@ export interface JoinSendOptions {
    * ring for me (the escalation has not reached me, say). Who the visitor is, so it can be joined all the same.
    */
   visitor?: string;
+}
+
+/**
+ * The realtime event a chat found by reading the list is announced as (worksuite-desktop#251; TRN-34: the system
+ * notification while no realtime connection is up). Its `event_id` names the ring by its start, so a chat that stops
+ * ringing and rings again later is announced again: the notification service shows one banner per id, for good.
+ */
+export function announceEvent(c: WebchatRingChat): RealtimeEvent {
+  return {
+    type: c.mine ? 'chat.assigned' : 'chat.incoming',
+    event_id: `list-${c.id}-${c.since}`,
+    conversation_id: c.id,
+    visitor: c.visitor,
+    site: c.site,
+    preview: c.preview,
+    at: c.since,
+  };
 }
 
 /**
@@ -493,8 +581,19 @@ export class WebchatRinger {
   private soon: NodeJS.Timeout | null = null;
   private outcomeTimer: NodeJS.Timeout | null = null;
   private tick: NodeJS.Timeout | null = null;
-  /** Not website staff (the server refused): asked again only at the next sign-in. */
+  /**
+   * Not website staff, or no website chat on this server (the server refused): asked again after REFUSED_RETRY_MS, at
+   * the next sign-in or on a reconnect. It was until the next sign-in only, so one refusal — a server mid-update, its
+   * routes briefly missing — silenced every chat on this computer for as long as the app stayed signed in (#251).
+   */
   private refused = false;
+  private refusedAt = 0;
+  /** When the list was last read, for the faster reading while realtime is down (#251). */
+  private lastRead = 0;
+  /** Chats this computer has been told about, by event or by notice, so a list read does not announce them again. */
+  private announced = new Set<number>();
+  /** The test ring waiting for its event (#251). */
+  private testWait: { id: string; resolve: () => void } | null = null;
   private running = false;
   private last = '';
   /** The chat I just joined from the card: a mini chat there until I open the full chat or minimise it (#225). */
@@ -533,12 +632,20 @@ export class WebchatRinger {
     this.tick = setInterval(() => {
       this.sweepFollowUps();
       this.emit();
+      // While realtime is down the list is the only way a new chat reaches this computer (#251); a refusal is asked
+      // about again after a while rather than never.
+      const now = Date.now();
+      if (this.refused && now - this.refusedAt >= REFUSED_RETRY_MS) this.refused = false;
+      if (this.deps.realtimeUp && !this.deps.realtimeUp() && now - this.lastRead >= FALLBACK_POLL_MS) void this.reconcile();
     }, 5_000);
     this.tick.unref?.();
   }
 
   stop(): void {
     this.running = false;
+    this.announced.clear();
+    this.testWait?.resolve();
+    this.testWait = null;
     for (const t of [this.timer, this.soon, this.outcomeTimer, this.tick, this.beatTimer]) if (t) clearTimeout(t);
     this.timer = this.soon = this.outcomeTimer = this.tick = this.beatTimer = null;
     this.chats.clear();
@@ -898,8 +1005,13 @@ export class WebchatRinger {
 
   /** Realtime frames that start, change or end a ring. */
   handle(e: RealtimeEvent): void {
-    if (!this.running || this.refused) return;
     const ev = e as unknown as Record<string, unknown>;
+    // The test chat notification arrived (#251): never a chat, never on the card.
+    if (e.type === 'chat.ring.test') {
+      if (this.testWait && ev.test_id === this.testWait.id) this.testWait.resolve();
+      return;
+    }
+    if (!this.running || this.refused) return;
     // Which of my devices plays the ring changed: a browser took it, or gave it back (RING-10).
     if (e.type === 'chat.ring.device') {
       const here = ev.where === 'all' || !ev.device_id || ev.device_id === this.deps.deviceId();
@@ -986,6 +1098,7 @@ export class WebchatRinger {
         break;
       }
       case 'chat.incoming': {
+        this.announced.add(cid);
         const c = fromContext(ev as unknown as WaitingContext, this.chats.get(cid));
         if (c) this.chats.set(cid, { ...c, mine: this.chats.get(cid)?.mine ?? false, by: this.chats.get(cid)?.by ?? null });
         this.changed();
@@ -993,6 +1106,7 @@ export class WebchatRinger {
         break;
       }
       case 'chat.assigned': {
+        this.announced.add(cid);
         const before = this.chats.get(cid);
         const base = before ?? fromContext({ conversation_id: cid, visitor: text(ev.visitor), site: text(ev.site), at: text(ev.at) }, undefined);
         if (base) this.chats.set(cid, { ...base, mine: true, by: text(ev.by, 120) });
@@ -1256,6 +1370,42 @@ export class WebchatRinger {
     }
   }
 
+  /**
+   * "Send a test chat notification" (Settings › Ringing, worksuite-desktop#251): the server says whether a new chat
+   * would be routed to me and sends a test to my own devices; this computer says whether it received it and whether
+   * the system showed its notification. No conversation is made. The sound is played and checked by the window.
+   */
+  async testRing(): Promise<RingTestStep[]> {
+    let answer: RingTestAnswer | null = null;
+    try {
+      answer = await this.deps.http.post<RingTestAnswer>('/api/chat/ring/test', {});
+    } catch (e) {
+      const why = isDesktopError(e) && e.status === 404 ? 'This server cannot send a test yet: it needs the Communication update with worksuite-desktop#251.' : isDesktopError(e) && e.status === 403 ? 'You cannot see website chats, so none rings for you.' : e instanceof Error ? e.message : 'The server did not answer.';
+      return ringTestSteps(null, why, null, null);
+    }
+    const testId = typeof answer?.test_id === 'string' ? answer.test_id : null;
+    let received: 'realtime' | 'none' = 'none';
+    if (testId && answer?.sent !== false) {
+      received = await new Promise<'realtime' | 'none'>((resolve) => {
+        const timer = setTimeout(() => {
+          if (this.testWait?.id === testId) this.testWait = null;
+          resolve('none');
+        }, TEST_WAIT_MS);
+        timer.unref?.();
+        this.testWait = {
+          id: testId,
+          resolve: () => {
+            clearTimeout(timer);
+            this.testWait = null;
+            resolve('realtime');
+          },
+        };
+      });
+    }
+    const notice = this.deps.testNotify ? await this.deps.testNotify() : { state: 'unknown' as const, detail: null };
+    return ringTestSteps(answer, null, received, notice);
+  }
+
   /** Settings changed (Do not disturb, volume, the window): say it again. */
   refresh(): void {
     this.last = '';
@@ -1263,17 +1413,29 @@ export class WebchatRinger {
   }
 
   async reconcile(): Promise<void> {
-    if (!this.running || this.refused || !this.deps.signedIn()) return;
+    if (!this.running || !this.deps.signedIn()) return;
+    if (this.refused && Date.now() - this.refusedAt < REFUSED_RETRY_MS) return;
+    this.lastRead = Date.now();
     try {
       const answer = await this.deps.http.get<PendingAnswer>(`${WEBSITE}/assignments/pending`, { query: { device_id: this.deps.deviceId() } });
       if (!this.running) return;
+      this.refused = false;
       this.ringSeconds = Math.max(0, Number(answer?.ring_seconds ?? 0) || 0);
       this.sessions = Array.isArray(answer?.ringing);
       if (typeof answer?.ring_here === 'boolean') this.ringHere = answer.ring_here;
       const tone = answer?.ring_prefs?.ringtone;
       if (typeof tone === 'string' && /^[a-z0-9_-]{1,20}$/.test(tone)) this.ringtone = tone;
       const next = mergeAnswer(answer ?? {}, this.chats);
+      // A chat this computer had heard nothing about — the socket was down, or the frame was lost — is announced as
+      // the event would have announced it (#251); one that stopped ringing may be announced again if it rings again.
+      // Announced BEFORE the list changes, as its event is (the notification service hears an event before this does):
+      // otherwise the card this very read is about to show counts as already showing, and on the built-in service —
+      // no realtime connection — no new chat ever raised the system notification (TRN-34).
+      const fresh = next.filter((c) => !this.announced.has(c.id));
+      for (const c of fresh) this.announced.add(c.id);
+      for (const c of fresh) if (!c.silenced) this.deps.announce?.(c);
       this.chats = new Map(next.map((c) => [c.id, c]));
+      for (const cid of this.announced) if (!this.chats.has(cid)) this.announced.delete(cid);
       for (const cid of this.drafts.keys()) if (!this.chats.has(cid)) this.drafts.delete(cid);
       // The server's list of invitations and transfers is the truth, where it has one (ENH-WCHAT-03).
       if (Array.isArray(answer?.handoffs)) {
@@ -1286,8 +1448,9 @@ export class WebchatRinger {
       this.changed();
     } catch (e) {
       if (isDesktopError(e) && (e.status === 403 || e.status === 404)) {
-        // Not website staff, or no website chat on this server: nothing rings here.
+        // Not website staff, or no website chat on this server: nothing rings here — until asked again (#251).
         this.refused = true;
+        this.refusedAt = Date.now();
         this.chats.clear();
         this.handoffs.clear();
         this.calls.clear();

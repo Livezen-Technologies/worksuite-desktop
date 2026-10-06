@@ -32,11 +32,19 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   'restore-tab': 'Mod+Shift+T',
   'move-tab-to-window': 'Mod+Shift+N',
   'dock-tab-beside': 'Mod+Shift+D',
+  // The next and the previous tab, as browsers have them on a Mac (WS-SUPPORT-SRS-001 D-02: ⌘⇧] next tab).
+  'next-tab': 'Mod+Shift+]',
+  'prev-tab': 'Mod+Shift+[',
+  // Copy the deep link of the support ticket in front (WS-SUPPORT-SRS-001 D-08: ⌘⇧C); nothing while none is.
+  'support-copy-link': 'Mod+Shift+C',
   settings: 'Mod+,',
   ai: 'Mod+Shift+A',
   // ⌘J / Ctrl+J opens or minimises the assistant too (worksuite-desktop#153); inside the mail editor it is Write with AI.
   'ai-alt': 'Mod+J',
   'switch-org': 'Mod+Shift+O',
+  // Marketing's Next contact inside WorkSuite (MKT-DSK-01). From other apps it is ⌘⇧N / Ctrl+Shift+N, held by the main
+  // process only while WorkSuite is not in front: in here those keys are Move tab to new window.
+  'marketing-claim-next': isMac ? 'Mod+Ctrl+N' : 'Mod+Alt+N',
   // The app launcher (worksuite-desktop#201); the person's own choice is kept with the launcher's preferences.
   launcher: 'Mod+Shift+K',
   lock: 'Mod+L',
@@ -113,6 +121,8 @@ export function accelerator(e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey'
   if (['Meta', 'Control', 'Shift', 'Alt'].includes(key)) return null;
   // Shift+digit gives "!" etc.; use the physical digit.
   if (/^Digit\d$/.test(e.code)) key = e.code.slice(5);
+  // Shift+] gives "}" (and Shift+[ "{"): the bracket keys, as the shortcuts name them.
+  else if (e.shiftKey && (e.code === 'BracketLeft' || e.code === 'BracketRight')) key = e.code === 'BracketLeft' ? '[' : ']';
   if (key.length === 1) key = key.toUpperCase();
   parts.push(key);
   return parts.join('+');

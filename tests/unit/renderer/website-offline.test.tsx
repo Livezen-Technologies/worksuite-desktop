@@ -160,7 +160,9 @@ describe('the Offline enquiries list (C-05, UX-OFF-01)', () => {
     inbox = [{ id: 44, label: 'Visitor 44', visitor_name: 'Nimal', email: null, is_offline: true, online: false, status: 'pending', assigned_to: null, awaiting_reply: true, priority: 'normal', widget_id: 1 } as unknown as WebsiteRow];
     wrap(<WebsiteWorkspace />);
     const row = (await within(list()).findByText('Nimal')).closest('button')!;
-    expect(within(row).getByText('Offline')).toBeTruthy();
+    // The section says it is an enquiry; the row no longer repeats it as a badge, and the grey dot says they left (#239).
+    expect(within(row).queryByText('Offline')).toBeNull();
+    expect(within(row).getByText('Left the site')).toBeTruthy();
   });
 
   it('an enquiry whose visitor came back and wrote is a live chat too (MIS-02)', () => {

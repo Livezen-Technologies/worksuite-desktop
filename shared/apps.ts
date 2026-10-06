@@ -47,8 +47,11 @@ export interface AppDefinition {
   icon: string;
   /** Server app slug checked against the user's app access. Omitted = not app-gated. */
   app?: string;
-  /** Permission the app's own screens demand. Omitted = no permission gate. */
-  perm?: string;
+  /**
+   * Permission the app's own screens demand. Omitted = no permission gate. Several: any one of them opens it (a
+   * permission renamed on the server, where an older server still grants the old name).
+   */
+  perm?: string | readonly string[];
   /** Path of the app in the WorkSuite web client. */
   webPath: string;
   surface: AppSurface;
@@ -56,7 +59,7 @@ export interface AppDefinition {
   sidebar?: 'work' | 'business';
   order: number;
   /** Badge counter key (from /api/badges or module unread endpoints). */
-  badge?: 'mail' | 'chat' | 'tasks' | 'notifications';
+  badge?: 'mail' | 'chat' | 'tasks' | 'notifications' | 'support';
   keywords?: string;
   /** Set on a visible app the person has only in self-service mode (their own claims), not the full app. */
   selfService?: boolean;
@@ -76,6 +79,9 @@ export interface AppDefinition {
   /** What guest mode calls a locked app, when that says more than its name ("Drive & Files"). */
   guestLabel?: string;
 }
+
+/** Who may open the support desk: `support.view` (WS-SUPPORT-SRS-001 §5.2), or the as-built slugs that granted it. */
+export const SUPPORT_PERMISSIONS: readonly string[] = ['support.view', 'ticket.view', 'ticket.reply', 'ticket.manage'];
 
 export const APP_CATALOGUE: AppDefinition[] = [
   // Everyday — native desktop modules (Phase 1, §18).
@@ -103,6 +109,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
   { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in', guest: 'locked', guestLabel: 'HR & People' },
 
+  // Phone (WS-VOIP-SRS-001): the web's `/phone`, open to everyone signed in like the web's catalogue — the server has
+  // no `voip` row in `applications` yet (G-13); the screens ask the server what the person may do.
+  { id: 'phone', label: 'Phone', group: 'communication', icon: 'phone', webPath: '/phone', surface: 'native', sidebar: 'work', order: 43, keywords: 'voip sip call extension pbx dial softphone voicemail' },
   { id: 'meet', label: 'Meet', group: 'communication', icon: 'video', app: 'meet', webPath: '/meet', surface: 'native', sidebar: 'work', order: 45, keywords: 'video call meeting join code', guest: 'local' },
   // Agendas, attendance and minutes. Not an application on the server — the
   // `meeting.view` permission is its only gate (AppGate::CORE notes).
@@ -116,6 +125,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'messenger', label: 'Messenger', group: 'communication', icon: 'message-circle', app: 'meta', webPath: '/messenger', surface: 'native', channelOf: 'chat', route: '/chat?channel=messenger', order: 48, keywords: 'facebook page fb messages customers' },
   { id: 'instagram', label: 'Instagram', group: 'communication', icon: 'camera', app: 'meta', webPath: '/instagram', surface: 'native', channelOf: 'chat', route: '/chat?channel=instagram', order: 49, keywords: 'ig direct dm messages customers' },
 
+  // Social Media Manager (WS-SMM-SRS-001): the optional app `worksuite.social-media` — accounts on external networks,
+  // the composer, calendar, queue, approvals, unified inbox and analytics. Not the internal Social stream below (Q-01).
+  { id: 'social-media', label: 'Social Media', group: 'business', icon: 'send', app: 'social-media', perm: 'social.view', webPath: '/social-media', surface: 'native', sidebar: 'business', order: 167, keywords: 'social media facebook instagram linkedin x twitter youtube tiktok threads pinterest google business post schedule publish queue calendar inbox comments approvals campaigns analytics' },
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
   { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170, guest: 'locked', guestLabel: 'Shared workspaces' },
@@ -130,7 +142,8 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'expenses', label: 'Expenses', group: 'business', icon: 'wallet', app: 'expenses', webPath: '/expenses', surface: 'native', sidebar: 'business', order: 135, keywords: 'expense claims receipts reimbursement advances petty cash corporate cards mileage per diem budgets policies subscriptions' },
   { id: 'purchasing', label: 'Purchasing', group: 'business', icon: 'cart', app: 'inventory', webPath: '/purchase', surface: 'browser', order: 161 },
   { id: 'subscriptions', label: 'Subscriptions', group: 'business', icon: 'repeat', app: 'subscriptions', webPath: '/subscriptions', surface: 'browser', order: 165 },
-  { id: 'marketing', label: 'Marketing', group: 'business', icon: 'megaphone', app: 'marketing', webPath: '/marketing', surface: 'browser', order: 166 },
+  // Native since 0.2.193 (WS-MKT-SRS-001 v1.1, MKT-DSK-01): the web's fourteen screens, the call queue and its Next contact shortcut.
+  { id: 'marketing', label: 'Marketing', group: 'business', icon: 'megaphone', app: 'marketing', webPath: '/marketing', surface: 'native', sidebar: 'business', order: 166, keywords: 'marketing campaigns email newsletter audience contacts segments lists consent suppression unsubscribe call queue call campaigns telemarketing' },
   { id: 'payroll', label: 'Payroll', group: 'people', icon: 'banknote', app: 'payroll', perm: 'payroll.view', webPath: '/payroll', surface: 'browser', order: 150 },
   { id: 'appointments', label: 'Appointments', group: 'people', icon: 'calendar-clock', app: 'appointments', webPath: '/appointments', surface: 'browser', order: 155 },
   // A salon's front desk: native here (the counter PC); the owners' screens open on the web from its rail.
@@ -153,7 +166,11 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // team's courses, builder, enrolment, grading and dashboard by permission. `/elearning/my/courses/<id>`
   // (the server's notifications) opens the course here.
   { id: 'elearning', label: 'eLearning', group: 'people', icon: 'graduation-cap', app: 'elearning', perm: 'elearning.access', webPath: '/elearning', surface: 'native', sidebar: 'business', order: 145, keywords: 'elearning learning lms training courses course catalogue lessons quiz quizzes assessment assignment grading enrol enrolment my learning' },
-  { id: 'support', label: 'Support', group: 'operations', icon: 'life-buoy', app: 'tickets', webPath: '/tickets', surface: 'browser', order: 200 },
+  // The support desk (WS-SUPPORT-SRS-001 D-01…D-12): native here — the inbox, a tab per ticket, native notifications.
+  // Not an application on the server (Support's routes are gated by permission alone, like the web's sidebar entry), so
+  // its gate is the desk's own `support.view` — or an as-built `ticket.*` slug on a server from before it. The web's
+  // `/tickets?ticket=<id>` (notifications, search) opens that ticket's tab here.
+  { id: 'support', label: 'Support', group: 'operations', icon: 'life-buoy', perm: SUPPORT_PERMISSIONS, webPath: '/tickets', surface: 'native', sidebar: 'business', order: 200, badge: 'support', keywords: 'support tickets ticket helpdesk help desk service desk customers requester sla reply inbox' },
   { id: 'assets', label: 'Assets', group: 'operations', icon: 'box', app: 'assets', webPath: '/assets', surface: 'browser', order: 210 },
   { id: 'amc', label: 'AMC & Service', group: 'operations', icon: 'wrench', app: 'amc', webPath: '/amc', surface: 'browser', order: 215 },
   // A shop's till: native here (the counter PC) — pairing, the drawer's shift, selling (offline too), receipts, the drawer
@@ -175,9 +192,10 @@ export interface AccessGrant {
   selfService?: string[] | null;
 }
 
-export function hasPermission(grant: AccessGrant, perm: string | undefined): boolean {
-  if (!perm) return true;
-  return grant.permissions.includes('*') || grant.permissions.includes(perm);
+export function hasPermission(grant: AccessGrant, perm: string | readonly string[] | undefined): boolean {
+  if (!perm || perm.length === 0) return true;
+  if (grant.permissions.includes('*')) return true;
+  return typeof perm === 'string' ? grant.permissions.includes(perm) : perm.some((p) => grant.permissions.includes(p));
 }
 
 export function hasAppAccess(grant: AccessGrant, slug: string | undefined): boolean {

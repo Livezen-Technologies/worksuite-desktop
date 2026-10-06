@@ -1,17 +1,17 @@
-import { useQueryClient } from '@tanstack/react-query';
-import { useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
+import { useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useRef, useState, type Dispatch, type ReactNode, type SetStateAction } from 'react';
 import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
-import { toast } from '../../core/toasts';
+import { dismissKey, toast } from '../../core/toasts';
 import type { MenuItem, MenuSection } from '../../components/Menu';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
-import { messageAction, moveMessage, useFolders, type MessageActionName, type Outcome } from './api';
+import { MailActionError, mailKeys, messageAction, moveMessage, removeItem, removeMessages, restoreMessages, undoQueued, useFolders, type FailReason, type MessageActionName, type Outcome, type RemoveAnswer } from './api';
 import { slugRole } from './allAccounts';
 import type { Target } from './MessageMenus';
 import { folderName } from './model';
 import { sendAfterUndoWindow } from './outgoing';
-import type { MessageRef } from './types';
+import type { Folder, Mailbox, MessageRef } from './types';
 
 /**
  * What can be done to messages from the list (worksuite-desktop#161): one
@@ -92,6 +92,68 @@ export function actionLabel(id: ListActionId, n = 1): string {
 
 const refOf = (t: Target): MessageRef => ({ uid: String(t.row.id), folder: t.folder, mailbox: t.mailbox });
 
+/** At most this many in one request (the server's limit); a folder's selection goes in pieces of this. */
+export const DELETE_BATCH = 500;
+
+/**
+ * The messages by the account and folder each is really in — a combined view's rows each name their own — in
+ * pieces of DELETE_BATCH: one request per folder (worksuite-desktop#235).
+ */
+export function byFolder(targets: Target[]): Target[][] {
+  const groups = new Map<string, Target[]>();
+  for (const t of targets) {
+    const k = `${t.mailbox ?? ''}\u0000${t.folder}`;
+    groups.set(k, [...(groups.get(k) ?? []), t]);
+  }
+  const out: Target[][] = [];
+  for (const g of groups.values()) for (let i = 0; i < g.length; i += DELETE_BATCH) out.push(g.slice(i, i + DELETE_BATCH));
+  return out;
+}
+
+/** What a failed delete says, by its reason. */
+export function reasonText(r: FailReason): string {
+  if (r === 'permission') return text('You don’t have permission to delete in this mailbox');
+  if (r === 'connection') return text('The mail server could not be reached');
+  if (r === 'quota') return text('The mailbox is full');
+  return text('The mail server refused it');
+}
+
+/** The sidebar's numbers move with the rows: the folder's total and unread, the account's unread, the Trash. */
+function moveCounts(qc: QueryClient, targets: Target[], sign: 1 | -1, toTrash: boolean): void {
+  const byBox = new Map<string, Target[]>();
+  for (const t of targets) if (t.mailbox) byBox.set(t.mailbox, [...(byBox.get(t.mailbox) ?? []), t]);
+  for (const [box, ts] of byBox) {
+    qc.setQueryData<{ folders: Folder[] }>(mailKeys.folders(Number(box)), (d) => {
+      if (!d?.folders) return d;
+      return {
+        ...d,
+        folders: d.folders.map((f) => {
+          const here = ts.filter((t) => t.folder === f.slug);
+          const n = here.length;
+          const unread = here.filter((t) => !t.row.is_read).length;
+          if (n) return { ...f, total: Math.max(0, f.total + sign * n), unread: Math.max(0, f.unread + sign * unread) };
+          if (toTrash && f.slug === 'trash') return { ...f, total: Math.max(0, f.total - sign * ts.filter((t) => t.folder !== 'trash').length) };
+          return f;
+        }),
+      };
+    });
+    const unreadInbox = ts.filter((t) => t.folder === 'inbox' && !t.row.is_read).length;
+    if (unreadInbox) {
+      qc.setQueryData<{ mailboxes: Mailbox[] }>(mailKeys.mailboxes, (d) => (d?.mailboxes ? { ...d, mailboxes: d.mailboxes.map((m) => (String(m.id) === box && m.unread !== null ? { ...m, unread: Math.max(0, m.unread + sign * unreadInbox) } : m)) } : d));
+    }
+  }
+}
+
+/** One delete that failed, for the grouped toast and its Details. */
+export interface DeleteFailure {
+  t: Target;
+  reason: FailReason;
+  why: string;
+}
+
+const DELETED_TOAST = 'mail-deleted';
+const FAILED_TOAST = 'mail-delete-failed';
+
 type Dest = { slug: string; name: string };
 
 export interface ListActionsOptions {
@@ -118,6 +180,150 @@ export function useListActions(o: ListActionsOptions): { run: (id: ListActionId,
     });
   const hide = (keys: string[]) => o.setHidden((h) => new Set([...h, ...keys]));
   const refresh = () => Promise.all([qc.invalidateQueries({ queryKey: ['mail'] }), qc.invalidateQueries({ queryKey: ['offline'] })]);
+
+  /*
+   * DELETE (worksuite-desktop#235). The rows leave the list at once, the next message opens, the counts move,
+   * and ONE toast says "Deleted · Undo" — the deletes of the next few seconds join it ("4 messages deleted").
+   * After the Undo window the change goes through the change queue, one request per folder with the messages'
+   * whole identity, and the server finds each one: at its UID, else by Message-ID; one on the server nowhere is
+   * already deleted and stays gone without a word. A real failure (permission, connection, quota) brings the
+   * row back with one grouped error — Retry runs the whole lookup again — and is in the account's sync log.
+   */
+  const undoBatch = useRef<{ n: number; undo: Array<() => void>; seq: number } | null>(null);
+  const failBatch = useRef<{ items: DeleteFailure[]; permanent: boolean } | null>(null);
+  const [details, setDetails] = useState<DeleteFailure[] | null>(null);
+
+  const reportFailures = (failures: DeleteFailure[], permanent: boolean) => {
+    const prev = failBatch.current && failBatch.current.permanent === permanent ? failBatch.current.items : [];
+    const keysNow = new Set(failures.map((f) => o.keyOf(f.t)));
+    const items = [...prev.filter((f) => !keysNow.has(o.keyOf(f.t))), ...failures];
+    failBatch.current = { items, permanent };
+    const one = items.length === 1 ? items[0]! : null;
+    const what = one
+      ? text('“{subject}” couldn’t be deleted: {why}', { subject: one.t.row.subject || text('(no subject)'), why: reasonText(one.reason) })
+      : text('{n} couldn’t be deleted', { n: items.length });
+    const retry = { label: text('Retry'), run: () => {
+      const again = failBatch.current?.items.map((f) => f.t) ?? [];
+      failBatch.current = null;
+      void runDelete(again, permanent, true);
+    } };
+    toast('error', what, retry, undefined, { key: FAILED_TOAST, actions: [{ label: text('Details'), run: () => setDetails(failBatch.current?.items ?? items) }] });
+  };
+
+  const announceDeleted = (n: number, undo: () => void) => {
+    const batch = undoBatch.current ?? { n: 0, undo: [], seq: 0 };
+    batch.n += n;
+    batch.undo.push(undo);
+    const seq = ++batch.seq;
+    undoBatch.current = batch;
+    const what = batch.n === 1 ? text('Deleted') : text('{n} messages deleted', { n: batch.n });
+    const seconds = o.undoSeconds ?? 5;
+    toast('info', what, { label: text('Undo'), run: () => {
+      undoBatch.current = null;
+      for (const u of batch.undo) u();
+    } }, seconds * 1000, { key: DELETED_TOAST });
+    // The group ends with its toast: the last delete's window, not the first's.
+    setTimeout(() => {
+      if (undoBatch.current === batch && batch.seq === seq) undoBatch.current = null;
+    }, seconds * 1000);
+  };
+
+  /** Send a delete: a request per folder, each answered message by message. */
+  const sendDelete = (targets: Target[], permanent: boolean) =>
+    Promise.all(
+      byFolder(targets).map(async (g): Promise<{ g: Target[]; a?: RemoveAnswer; e?: unknown }> => {
+        const label = g.length === 1 ? text('Delete “{subject}”', { subject: g[0]!.row.subject || text('(no subject)') }) : text('Delete {n} messages', { n: g.length });
+        try {
+          // A Trash (by its role, whatever its name) is emptied for good, never moved into itself.
+          return { g, a: await removeMessages({ mailbox: g[0]!.mailbox, folder: g[0]!.folder, items: g.map((t) => removeItem(t.row)) }, permanent || slugRole(g[0]!.folder) === 'trash', label) };
+        } catch (e) {
+          return { g, e };
+        }
+      }),
+    );
+
+  /** Undo after the delete went: what reached the Trash comes back; what waits in the queue is withdrawn. */
+  const undoSent = async (sent: Awaited<ReturnType<typeof sendDelete>>) => {
+    const failures: DeleteFailure[] = [];
+    for (const s of sent) {
+      if (!s.a) continue;
+      if (s.a.outcome === 'queued') {
+        if (s.a.queueId) await undoQueued(s.a.queueId).catch(() => undefined);
+        continue;
+      }
+      const back = s.g.filter((_, i) => s.a!.results[i]?.status === 'trashed');
+      if (!back.length) continue;
+      try {
+        const r = await restoreMessages({ mailbox: back[0]!.mailbox, folder: back[0]!.folder, items: back.map((t, i) => ({ ...removeItem(t.row), ...(s.a!.results[i]?.at?.folder === 'trash' ? { trash_uid: s.a!.results[i]!.at!.uid } : {}) })) }, text('Undo delete'));
+        r.results.forEach((x, i) => x.status === 'failed' && back[i] && failures.push({ t: back[i]!, reason: x.reason ?? 'server', why: x.response ?? '' }));
+      } catch (e) {
+        for (const t of back) failures.push({ t, reason: e instanceof MailActionError ? e.reason : 'server', why: errorMessage(e) });
+      }
+    }
+    void refresh();
+    if (failures.length) toast('error', failures.length === 1 ? text('“{subject}” couldn’t be restored: {why}', { subject: failures[0]!.t.row.subject || text('(no subject)'), why: reasonText(failures[0]!.reason) }) : text('{n} couldn’t be restored', { n: failures.length }));
+  };
+
+  async function runDelete(targets: Target[], permanent: boolean, retry = false): Promise<void> {
+    if (!targets.length) return;
+    const keys = targets.map(o.keyOf);
+    hide(keys);
+    o.onRemoved?.(keys);
+    moveCounts(qc, targets, -1, !permanent);
+    if (failBatch.current) {
+      // Retried or deleted again: no longer among the failures.
+      failBatch.current.items = failBatch.current.items.filter((f) => !keys.includes(o.keyOf(f.t)));
+      if (!failBatch.current.items.length) {
+        failBatch.current = null;
+        dismissKey(FAILED_TOAST);
+      }
+    }
+    let undone = false;
+    let sent: Promise<Awaited<ReturnType<typeof sendDelete>>> | null = null;
+    const restoreRows = () => {
+      undone = true;
+      show(keys);
+      moveCounts(qc, targets, 1, !permanent);
+      if (sent) void sent.then(undoSent);
+    };
+    const go = async () => {
+      if (undone) return;
+      sent = sendDelete(targets, permanent);
+      const done = await sent;
+      if (undone) return;
+      const failures: DeleteFailure[] = [];
+      let queued = false;
+      for (const s of done) {
+        if (s.e !== undefined || !s.a) {
+          for (const t of s.g) failures.push({ t, reason: s.e instanceof MailActionError ? s.e.reason : 'server', why: errorMessage(s.e) });
+          continue;
+        }
+        if (s.a.outcome === 'queued') {
+          queued = true;
+          continue;
+        }
+        s.g.forEach((t, i) => {
+          const r = s.a!.results[i];
+          if (r?.status === 'failed') failures.push({ t, reason: r.reason ?? 'server', why: r.response ?? '' });
+        });
+      }
+      if (failures.length) {
+        show(failures.map((f) => o.keyOf(f.t)));
+        moveCounts(qc, failures.map((f) => f.t), 1, !permanent);
+      }
+      // Said before the list is asked again: offline, that refetch waits for the connection.
+      if (failures.length) reportFailures(failures, permanent);
+      else if (queued) toast('info', text('Offline — this happens when you reconnect. Undo it in Waiting to send.'));
+      void refresh();
+    };
+    // Delete permanently was confirmed instead, and a Retry was already waited out once: sent now, no Undo.
+    if (permanent || retry) {
+      if (permanent && !retry) toast('info', targets.length === 1 ? text('Deleted permanently') : text('{n} messages deleted permanently', { n: targets.length }), undefined, undefined, { key: DELETED_TOAST });
+      return void go();
+    }
+    announceDeleted(targets.length, restoreRows);
+    setTimeout(() => void go(), (o.undoSeconds ?? 5) * 1000);
+  }
 
   /** Each message in its own account and folder; what failed, and whether any waits offline. */
   const send = async (id: ListActionId, targets: Target[], dests: Map<Target, Dest>) => {
@@ -148,6 +354,12 @@ export function useListActions(o: ListActionsOptions): { run: (id: ListActionId,
     if (targets.length === 0) return;
     const spec = LIST_ACTIONS[id];
     if (id === 'deleteForever' && !confirmed) return setConfirm(targets);
+    // Delete (worksuite-desktop#235). In the Trash it is for good, and asked first.
+    if ((id === 'delete' || id === 'deleteForever') && !to) {
+      const inTrash = (t: Target) => slugRole(t.folder) === 'trash';
+      if (targets.some(inTrash) && !confirmed) return setConfirm(targets);
+      return runDelete(targets, targets.every(inTrash));
+    }
     const dests = new Map<Target, Dest>();
     let acting = targets;
     if (to) for (const t of targets) dests.set(t, to);
@@ -215,7 +427,24 @@ export function useListActions(o: ListActionsOptions): { run: (id: ListActionId,
     </Modal>
   ) : null;
 
-  return { run, dialog };
+  const failed = details ? (
+    <Modal title={text('Couldn’t be deleted')} labelledBy="mail-delete-failed" width={520} onClose={() => setDetails(null)}>
+      <ul role="list" aria-label={text('Messages not deleted')} className="flex max-h-[360px] flex-col gap-2 overflow-y-auto p-4 text-[13px] scroll-thin">
+        {details.map((f) => (
+          <li key={o.keyOf(f.t)} className="rounded-[8px] border border-line p-2.5">
+            <div className="font-semibold text-ink">{f.t.row.subject || text('(no subject)')}</div>
+            <div className="text-ink-2">{reasonText(f.reason)}</div>
+            <div className="mt-1 font-mono text-[11.5px] text-ink-3">
+              {[f.t.row.mailbox?.email ?? f.t.mailbox ?? '', f.t.folder, `UID ${f.t.row.id}`, f.why].filter(Boolean).join(' · ')}
+            </div>
+          </li>
+        ))}
+      </ul>
+      <p className="px-4 pb-4 text-[12px] text-ink-3">{text('Each one is in the account’s sync log under Fetch errors, with what the server answered.')}</p>
+    </Modal>
+  ) : null;
+
+  return { run, dialog: dialog || failed ? <>{dialog}{failed}</> : null };
 }
 
 /** Move to folder…: the folders of the messages' account. */

@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.0 — 2026-10-06
+
+**Added**
+
+- Home lays itself out by its own width — three, two or one column, stat tiles two by two when four don't fit, Customize always visible — so a docked chat drawer never covers it (#264)
+- Waiting for me: 'All ›' opens one page of everything waiting for you from every app, with type and organisation filters; rows show the full name and type over date, length and reason with small ✓/✕ actions and open their own item; cover to answer is its own item, and Approve follows the cover rule (#263)
+
 ## 1.5.0 — 2026-10-03
 
 - A compact organisation pill on the date line (#214): search, several organisations with Apply, a default organisation, due-today counts; cards refetch for the chosen organisations and the stat numbers are tabular in the app font.

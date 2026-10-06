@@ -122,7 +122,8 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   task: ['tasks'],
   chat: ['chat'],
   message: ['chat'],
-  voip: ['chat'],
+  // The Phone's own (missed PBX calls, voicemail, PBX offline) and Chat's calls (`voip.missed_call` for a chat call).
+  voip: ['phone', 'chat'],
   mail: ['mail'],
   calendar: ['calendar', 'meet'],
   event: ['calendar'],
@@ -152,6 +153,9 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   finance: ['finance'],
   marketing: ['marketing'],
   social: ['social'],
+  // Social Media Manager's own (post needs approval, published, failed, held, reminder due, account expiring…).
+  social_media: ['social-media'],
+  'social-media': ['social-media'],
   whatsapp: ['whatsapp'],
   meta: ['messenger', 'instagram'],
   customer_subscriptions: ['subscriptions'],

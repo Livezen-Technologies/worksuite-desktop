@@ -2,6 +2,7 @@ import { QueryClient } from '@tanstack/react-query';
 import { ApiError } from './api';
 import { touchesInvitations } from '@shared/meeting-invitations';
 import { on } from './bridge';
+import { watchedBySeq } from '@shared/chat-seq';
 
 /**
  * Server state. REST is authoritative (FR-RT-03): realtime events and a
@@ -41,13 +42,20 @@ export function touchesExpenses(e: { type: string; event?: string }): boolean {
   return e.type === 'expense.claim.changed' || (e.type === 'notification' && typeof e.event === 'string' && e.event.startsWith('expense.'));
 }
 
+/** A realtime event about Social Media Manager: its own nudge, or a notification it raised. */
+export function touchesSocialMedia(e: { type: string; event?: string }): boolean {
+  return e.type.startsWith('social.') || (e.type === 'notification' && typeof e.event === 'string' && e.event.startsWith('social.'));
+}
+
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
-  on<{ type: string; room_id?: number; conversation_id?: number; event?: string }>('realtime:event', (e) => {
+  on<{ type: string; room_id?: number; conversation_id?: number; event?: string; seq?: number }>('realtime:event', (e) => {
     if (WEBSITE_EVENTS.has(e.type)) {
       void queryClient.invalidateQueries({ queryKey: ['website', 'inbox'] });
-      if (e.conversation_id !== undefined) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', String(e.conversation_id)] });
+      // A message in a thread open on screen is fetched by its seq there (plan 1.9), not by reading the whole thread again.
+      const bySeq = e.type === 'chat.widget.message' && Number(e.seq) > 0 && watchedBySeq(`website:${String(e.conversation_id)}`);
+      if (e.conversation_id !== undefined && !bySeq) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', String(e.conversation_id)] });
       if (e.type === 'chat.widget.callback' || e.type === 'chat.widget.call') void queryClient.invalidateQueries({ queryKey: ['website', 'callbacks'] });
     } else if (e.type === 'chat.presence') {
       void queryClient.invalidateQueries({ queryKey: ['chat', 'presence'] });
@@ -84,6 +92,10 @@ export function wireQueryInvalidation(): void {
     if (e.type === 'mail') void queryClient.invalidateQueries({ queryKey: e.event === 'mail.sync.progress' ? ['mail', 'sync'] : ['mail'] });
     // Hotel PMS's live nudges (`pms.room`, `pms.hk_task`, `pms.request`): the rack and the desk's lists ask again (PMS-ARC-030).
     if (e.type.startsWith('pms.')) void queryClient.invalidateQueries({ queryKey: ['pms', 'live'] });
+    // Social Media Manager (WS-SMM-SRS-001): a post published, failed or held, an approval decided, an inbox message in,
+    // an account's connection changed (`social.post`, `social.inbox`, `social.account`… or a notification of one) —
+    // its screens ask again. Only ids travel; each screen re-reads what the person may see.
+    if (touchesSocialMedia(e)) void queryClient.invalidateQueries({ queryKey: ['social-media'] });
   });
   on('notifications:changed', () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }));
   on('offline:changed', () => void queryClient.invalidateQueries({ queryKey: ['offline'] }));

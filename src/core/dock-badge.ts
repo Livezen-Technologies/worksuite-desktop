@@ -12,7 +12,8 @@ import { call } from './bridge';
  * count is drawn onto the icon itself, as the system badge would look, and
  * the main process swaps the Dock icon. When the count is 0 the plain icon
  * goes back. Same count as the tray: unread chat + unread notifications —
- * not mail, whose count covers every inbox including shared ones (see tray.ts).
+ * not mail, whose count covers every inbox including shared ones (see tray.ts) — and support tickets needing me,
+ * counted once (FR-DSK-04).
  */
 const SIZE = 512;
 
@@ -71,7 +72,7 @@ export async function updateDockBadge(status: StatusSnapshot | null, signedIn: b
   const u = status?.unread;
   // Visitors waiting on me in my website chats count with chat (worksuite-desktop#230), and so do chats ringing for me
   // until joined or silenced — the "1" on the Dock icon under the call window (R-05, R-06; RING-44).
-  const label = signedIn && u && enabled ? badgeLabel(attentionCount(u.chat + (u.webchat ?? 0) + (u.ringing ?? 0), u.notifications)) : '';
+  const label = signedIn && u && enabled ? badgeLabel(attentionCount(u.chat + (u.webchat ?? 0) + (u.ringing ?? 0), u.notifications, u.support ?? 0, u.supportNotices ?? 0)) : '';
   if (label === shown) return;
   shown = label;
   try {

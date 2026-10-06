@@ -2,16 +2,17 @@ import { localize } from '@shared/localization';
 import { meetingNoticeActions, type MeetingNoticeActions } from '@shared/meeting-invitations';
 import { inDnd } from '@shared/notification-block';
 import { mailAlertFor, type FocusContext } from '@shared/mail-focus';
+import { socialNoticeActions, type SocialNotice } from '@shared/social-notices';
 import { reminderAction } from '@shared/task-reminders';
-import { Notification, app, nativeImage } from 'electron';
+import { Notification, app, clipboard, nativeImage } from 'electron';
 import { join } from 'node:path';
 import type { SubmitResult } from '@shared/ipc/contract';
-import type { NotificationItem, NotificationPermission, NotificationPrivacy, Preferences, RealtimeState } from '@shared/types';
+import type { NotificationItem, NotificationPermission, NotificationPrivacy, Preferences, RealtimeState, RingTestNotice } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import type { HttpClient } from './http';
-import { notificationPermission, presentLocked } from './locked-notifications';
+import { notificationPermission, presentLocked, testNoticeFor } from './locked-notifications';
 import type { RealtimeEvent } from './realtime';
 import type { Vault } from './vault';
 
@@ -76,6 +77,49 @@ export interface Incoming {
   websiteCount?: number;
   /** A flagged message's reminder (ENH-MAIL-03 DMO-TSK-02): Snooze 1 hour and Mark complete on the banner. */
   flag?: FlagNotice | null;
+  /** A banner a module shows its own way (Support's, D-03): its buttons, its reply box, and what they do. */
+  custom?: CustomNotice | null;
+  /** The bell's notification this banner stands for, when its id is not that one's: read when it is clicked. */
+  readId?: string | null;
+  /** Social Media Manager's post, approval or inbox thread (SMM-DSK-002): View post, Approve, Reply, Copy caption. */
+  social?: SocialNotice | null;
+  /** A call the agent promised, due now (WS-MKT-SRS-001 MKT-CAL-12): Call now and Snooze 15 min on the banner. */
+  callback?: CallbackNotice | null;
+}
+
+/**
+ * A banner a module words and answers itself (WS-SUPPORT-SRS-001 D-03): its buttons (macOS, Windows), whether it takes
+ * a typed reply and what the box says, whether it stays until acted on, whether it makes a sound — and what each does,
+ * which the module handles. Locked, or without the module's app any more, a button opens the app instead, as every
+ * banner's does; and with content hidden it has no buttons at all.
+ */
+export interface CustomNotice {
+  actions: string[];
+  /** The reply box's placeholder: a banner that takes a typed reply, where the system has one. */
+  reply?: string | null;
+  /** Stays on screen until it is acted on (and is urgent where the system says so). */
+  persistent?: boolean;
+  /** False: no sound, whatever the app's sounds are. */
+  sound?: boolean;
+  onAction: (index: number) => Promise<void> | void;
+  onReply?: (text: string | null) => Promise<void> | void;
+}
+
+/** A server notification as a module may claim it, to show it its own way (`NotificationService.claim`). */
+export interface ClaimedNotice {
+  id: string;
+  event: string | null;
+  title: string;
+  body: string;
+  link: string | null;
+  category: string | null;
+  priority: string | null;
+}
+
+/** The callback a Marketing reminder is about: its queue row and the time promised (the server's UTC stamp). */
+export interface CallbackNotice {
+  queueId: number;
+  at: string;
 }
 
 /** The website conversation a visitor's message came in on. */
@@ -94,6 +138,31 @@ export function inlineReply(platform: NodeJS.Platform, privacy: NotificationPriv
 }
 
 /** What to do with an inline reply: nothing typed opens the conversation, anything else is sent as it is. */
+/**
+ * The native notification for a visitor message the server re-published because no device of the team acknowledged it
+ * for a minute (WS-WCHAT DLV-09, AC-D09): for whoever holds the chat (assigned to me, or I am in it), critical, one per
+ * message, answerable like any visitor's banner. Null for anybody else, or an event that cannot be read.
+ */
+export function notReachingNotice(e: Record<string, unknown>, me: number): Incoming | null {
+  const id = Number(e.conversation_id);
+  if (!Number.isSafeInteger(id) || id <= 0) return null;
+  const participants = Array.isArray(e.participants) ? e.participants.map((p) => Number(typeof p === 'object' && p ? (p as { user_id?: unknown }).user_id : p)) : [];
+  if (!Number.isFinite(me) || me <= 0 || (Number(e.assigned_to) !== me && !participants.includes(me))) return null;
+  const visitor = String(e.visitor ?? 'A visitor');
+  const preview = typeof e.preview === 'string' ? e.preview : '';
+  const site = typeof e.site === 'string' && e.site ? e.site : null;
+  return {
+    id: `webchat-nrs:${id}:${String(e.message_id ?? e.seq ?? e.event_id ?? '')}`,
+    module: 'chat',
+    title: `${visitor}'s message is not reaching you`,
+    body: [preview ? `“${preview}”` : null, site, 'Open the chat to receive it'].filter(Boolean).join(' · '),
+    sender: visitor,
+    link: `/chat?website=${id}`,
+    critical: true,
+    website: { conversationId: id, visitor },
+  };
+}
+
 export function replyText(details: { reply?: unknown } | null | undefined, legacy?: unknown): string | null {
   // Electron passes the words twice: in the event's details, and in an older second argument some versions still fill.
   for (const raw of [details?.reply, legacy]) {
@@ -122,6 +191,8 @@ export function flagFromLink(link: string | null | undefined): FlagNotice | null
 }
 
 const FLAG_ACTIONS = ['Snooze 1 hour', 'Mark complete'] as const;
+/** A callback reminder's buttons (the D01 design): open the queue on it, or ring again in a quarter of an hour. */
+export const CALLBACK_ACTIONS = ['Call now', 'Snooze 15 min'] as const;
 
 /** The new email a mail banner is about. */
 export interface MailNotice {
@@ -180,9 +251,11 @@ export function utcStamp(s: string | null | undefined): string {
 function moduleOf(n: { category?: string | null; type?: string | null; entity_type?: string | null; link?: string | null }): string {
   const link = n.link ?? '';
   const fromLink = /^\/([a-z-]+)/.exec(link)?.[1];
+  // Social Media Manager is not the internal Social stream (`social`): its link names it, whatever the category says.
+  if (fromLink === 'social-media') return 'social-media';
   const raw = (n.category || n.entity_type || fromLink || n.type || 'system').toLowerCase();
   // `projects` is the server's category for tasks: without it, task alerts could not be muted by the Tasks switch.
-  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', projects: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat' };
+  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', projects: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat', social_media: 'social-media', 'social-media': 'social-media' };
   return map[raw] ?? raw.split(/[._:]/)[0] ?? 'system';
 }
 
@@ -224,7 +297,9 @@ const MODULE_LABELS: Record<string, string> = {
   files: 'Files',
   support: 'Support',
   salon: 'SalonMate',
+  'social-media': 'Social Media',
   ai: 'AI Assistant',
+  marketing: 'Marketing',
   system: 'WorkSuite',
 };
 
@@ -266,8 +341,22 @@ export class NotificationService {
   websiteAttending: (conversationId: number) => boolean = () => false;
   /** Whether a visitor writing again in my chat raises a system notification (Settings › Website chats; #230). */
   followUpDesktop: () => boolean = () => true;
+  /** A callback reminder's "Snooze 15 min": main sets the reminder again on this computer (marketing-reminders). */
+  snoozeCallback: ((c: CallbackNotice) => void) | null = null;
   /** The last banner shown for each website conversation, and how many messages it stands for: a new one replaces it (#230). */
   private websiteShown = new Map<number, { note: Notification; count: number; at: number }>();
+  /**
+   * A server notification a module shows its own way — Support's, with their buttons (D-03): true when it took it,
+   * so it is not shown plainly as well. Asked for each one pushed, and for each the list finds the push missed.
+   */
+  claim: (n: ClaimedNotice) => boolean = () => false;
+  /** Asked with the counts (every minute, and `notifications:refresh`): a module's own count, Support's. */
+  onRefresh: () => void = () => undefined;
+  /**
+   * The unread notifications about support tickets: the Dock and the tray count those tickets by the desk's own
+   * measure (`GET badges`), so these are not counted twice (FR-DSK-04).
+   */
+  private supportUnread = new Set<string>();
 
   constructor(
     private readonly db: Database,
@@ -310,11 +399,12 @@ export class NotificationService {
     this.userId = null;
     this.lastMailCount = null;
     this.unread = { mail: 0, chat: 0, notifications: 0, tasks: 0 };
+    this.supportUnread.clear();
     this.gapSince = null;
   }
 
   counts() {
-    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length };
+    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length, supportNotices: this.supportUnread.size };
   }
 
   /**
@@ -357,6 +447,7 @@ export class NotificationService {
   }
 
   async refreshCounts(): Promise<void> {
+    this.onRefresh();
     try {
       const [chat, notif, badges] = await Promise.allSettled([
         this.http.get<{ count?: number }>('/api/chat/unread'),
@@ -450,13 +541,16 @@ export class NotificationService {
       const raw = data.items ?? [];
       const items = raw.map(mapServerNotification);
       this.unread.notifications = Number(data.unread ?? items.filter((i) => !i.read).length);
+      this.supportUnread = new Set(items.filter((i) => !i.read && i.module === 'support').map((i) => i.id));
       this.cache(items);
       if (announce && this.listed) {
         const since = Date.now() - MISSED_WINDOW_MS;
         raw.forEach((n, k) => {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
-          if (n.desktop_allowed !== false) this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+          if (n.desktop_allowed === false) return;
+          if (this.claim({ id: i.id, event: n.event_key ?? n.type ?? null, title: i.title, body: i.body, link: i.link, category: n.category ?? null, priority: n.priority ?? null })) return;
+          this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), social: socialNoticeActions(n.event_key ?? n.type, n.link, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
       this.listed = true;
@@ -511,6 +605,7 @@ export class NotificationService {
   async markRead(allIds: string[]): Promise<void> {
     this.markLocalRead(allIds.filter((id) => id.startsWith('local:')));
     const ids = allIds.filter((id) => !id.startsWith('local:'));
+    for (const id of ids) this.supportUnread.delete(id);
     await Promise.allSettled(ids.map((id) => this.http.post(`/api/notifications/${encodeURIComponent(id)}/read`)));
     if (this.userId) for (const id of ids) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ? AND id = ?', this.userId, id);
     for (const id of ids) this.live.get(id)?.close();
@@ -519,6 +614,7 @@ export class NotificationService {
 
   async markAllRead(): Promise<void> {
     this.markLocalRead('all');
+    this.supportUnread.clear();
     await this.http.post('/api/notifications/read-all');
     if (this.userId) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ?', this.userId);
     for (const n of this.live.values()) n.close();
@@ -541,11 +637,21 @@ export class NotificationService {
         if (!id) return;
         this.unread.notifications += 1;
         const link = typeof e.link === 'string' ? e.link : null;
+        const category = typeof e.category === 'string' ? e.category : null;
+        if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
+        // Shown its module's way (Support's banners): remembered, so the list does not show it again.
+        if (!this.shown.includes(id) && this.claim({ id, event: typeof e.event === 'string' ? e.event : null, title: String(e.title ?? 'Notification'), body: String(e.body ?? ''), link, category, priority: typeof e.priority === 'string' ? e.priority : null })) {
+          this.remember(id);
+          this.onChanged();
+          void this.refreshList(true);
+          break;
+        }
         this.notify({
           id,
           reminder: e.event === 'task.reminder' ? reminderAction(link, e.actions) : null,
           flag: e.event === 'mail.flag_reminder' ? flagFromLink(link) : null,
           meeting: meetingNoticeActions(typeof e.event === 'string' ? e.event : null, e.actions),
+          social: socialNoticeActions(typeof e.event === 'string' ? e.event : null, link, e.actions),
           module: moduleOf({ category: e.category as string, link }),
           category: typeof e.category === 'string' ? e.category : null,
           title: String(e.title ?? 'Notification'),
@@ -629,6 +735,12 @@ export class NotificationService {
         break;
       }
       case 'chat.widget.message': {
+        // The server's re-publish of a visitor message no device of the team acknowledged for a minute (DLV-09, AC-D09).
+        if (e.not_reaching_staff === true) {
+          const note = notReachingNotice(e, Number(this.userId));
+          if (note && !this.websiteAttending(note.website!.conversationId)) this.notify(note);
+          break;
+        }
         const conv = String(e.conversation_id ?? '');
         const visitor = String(e.visitor ?? 'Visitor');
         const id = Number(conv);
@@ -657,6 +769,17 @@ export class NotificationService {
           website: valid ? { conversationId: id, visitor } : null,
           websiteCount: count,
         });
+        break;
+      }
+      case 'chat.widget.reaching': {
+        // A device has the message now (DLV-09): the "not reaching you" banner goes.
+        const prefix = `webchat-nrs:${String(e.conversation_id ?? '')}:`;
+        for (const [key, note] of this.live) {
+          if (key.startsWith(prefix)) {
+            note.close();
+            this.live.delete(key);
+          }
+        }
         break;
       }
       case 'chat.widget.followup': {
@@ -771,20 +894,24 @@ export class NotificationService {
     const locked = this.isLocked();
     const privacy: NotificationPrivacy = locked ? 'GENERIC' : this.prefs().notificationPrivacy;
     const shown = locked ? presentLocked(n, this.prefs()) : present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1), this.prefs().language);
-    const replyable = !!n.website && !!this.sendWebsiteReply && inlineReply(process.platform, privacy, locked);
+    const custom = n.custom ?? null;
+    const replyable = ((!!n.website && !!this.sendWebsiteReply) || (!!custom?.reply && !!custom.onReply)) && inlineReply(process.platform, privacy, locked);
+    const lasting = n.critical || !!custom?.persistent;
     const icon = process.platform === 'darwin' ? undefined : nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '128x128.png'));
     const note = new Notification({
       title: shown.title,
       body: shown.body,
-      silent: !this.prefs().notificationSounds || locked && this.prefs().lockedNotificationSounds === false,
+      silent: !this.prefs().notificationSounds || custom?.sound === false || (locked && this.prefs().lockedNotificationSounds === false),
       icon,
-      urgency: n.critical ? 'critical' : 'normal',
+      urgency: lasting ? 'critical' : 'normal',
       hasReply: replyable,
-      replyPlaceholder: replyable && n.website ? localize('Reply to {visitor}', this.prefs().language, { visitor: n.website.visitor }) : undefined,
+      replyPlaceholder: replyable && n.website ? localize('Reply to {visitor}', this.prefs().language, { visitor: n.website.visitor }) : replyable && custom?.reply ? custom.reply : undefined,
       actions:
         privacy !== 'FULL'
           ? undefined
-          : n.reminder
+          : custom
+            ? custom.actions.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
+            : n.reminder
             ? [{ type: 'button', text: 'Snooze 15 min' }, { type: 'button', text: 'Mark Complete' }]
             : n.flag
               ? FLAG_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
@@ -792,8 +919,12 @@ export class NotificationService {
               ? n.meeting.answers.map((a) => ({ type: 'button' as const, text: a.label }))
               : n.mail
                 ? MAIL_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
-                : undefined,
-      timeoutType: n.critical ? 'never' : 'default',
+                : n.social
+                  ? n.social.buttons.map((b) => ({ type: 'button' as const, text: localize(b.label, this.prefs().language) }))
+                  : n.callback
+                    ? CALLBACK_ACTIONS.map((label) => ({ type: 'button' as const, text: localize(label, this.prefs().language) }))
+                    : undefined,
+      timeoutType: lasting ? 'never' : 'default',
     });
     // One banner per website conversation: a new message replaces the last (worksuite-desktop#230).
     if (n.website) {
@@ -802,16 +933,44 @@ export class NotificationService {
     }
     note.on('click', () => {
       this.onClick(n.link, n.module);
-      if (/^\d+$/.test(n.id)) void this.markRead([n.id]).catch(() => undefined);
+      const readId = n.readId ?? (/^\d+$/.test(n.id) ? n.id : null);
+      if (readId) void this.markRead([readId]).catch(() => undefined);
     });
     const recipient = this.userId;
     note.on('action', (_event, index) => {
+      if (custom && recipient === this.userId) {
+        if (this.isLocked() || !this.moduleEnabled(n)) {
+          this.onClick(n.link, n.module);
+          return;
+        }
+        void Promise.resolve()
+          .then(() => custom.onAction(index))
+          .catch((error: unknown) => log.debug('a banner button failed', { module: n.module, error: String(error) }))
+          .finally(() => note.close());
+        return;
+      }
       if (n.flag && recipient === this.userId) {
         void this.flagAction(n, n.flag, index).then(() => note.close());
         return;
       }
       if (n.mail && recipient === this.userId) {
         void this.mailAction(n, n.mail, index).then(() => note.close());
+        return;
+      }
+      // Social Media's buttons open the screen, or copy a manual reminder's caption; none of them acts on the post.
+      if (n.social && recipient === this.userId) {
+        const b = n.social.buttons[index];
+        if (!b) return;
+        if ('copy' in b) {
+          if (!this.isLocked()) clipboard.writeText(b.copy);
+          return;
+        }
+        this.onClick(b.link, n.module);
+        return;
+      }
+      if (n.callback && recipient === this.userId) {
+        this.callbackAction(n, n.callback, index);
+        note.close();
         return;
       }
       if (n.meeting && !n.reminder && recipient === this.userId) {
@@ -836,6 +995,18 @@ export class NotificationService {
       });
     });
     note.on('reply', (details, legacy) => {
+      if (custom?.onReply && recipient === this.userId) {
+        const text = replyText(details, legacy);
+        if (this.isLocked() || !this.moduleEnabled(n)) {
+          this.onClick(n.link, n.module);
+          return;
+        }
+        void Promise.resolve()
+          .then(() => custom.onReply!(text))
+          .catch((error: unknown) => log.debug('a banner reply failed', { module: n.module, error: String(error) }))
+          .finally(() => note.close());
+        return;
+      }
       if (!n.website || recipient !== this.userId) return;
       void this.websiteReply(n, n.website, replyText(details, legacy)).then(() => note.close());
     });
@@ -915,6 +1086,18 @@ export class NotificationService {
   }
 
   /**
+   * A callback reminder's button (MKT-CAL-12): Call now opens My call queue's workspace on the callback's campaign,
+   * where the due callback comes first; Snooze 15 min rings it again later, on this computer — the callback's time
+   * and its task stay as they were. Locked, or without Marketing any more, either opens WorkSuite as a click would.
+   */
+  callbackAction(n: Incoming, c: CallbackNotice, index: number): void {
+    const action = CALLBACK_ACTIONS[index];
+    if (!action) return;
+    if (this.isLocked() || !this.moduleEnabled(n) || action === 'Call now' || !this.snoozeCallback) return this.onClick(n.link, n.module);
+    this.snoozeCallback(c);
+  }
+
+  /**
    * Answer a meeting invitation from its banner: through the Calendar, which everybody invited has, or Meetings'
    * own answer for a server or a person without the Calendar's.
    */
@@ -935,6 +1118,44 @@ export class NotificationService {
   test(): boolean {
     this.notify({ id: `test:${Date.now()}`, module: 'system', title: 'Notifications are working', body: 'This is how WorkSuite notifications will look.', sender: 'WorkSuite', link: null, critical: false });
     return Notification.isSupported();
+  }
+
+  /**
+   * The test chat notification (Settings › Ringing, worksuite-desktop#251): shown as a ringing chat's is, and whether
+   * the system said it showed it. Electron cannot read the operating system's per-app permission, so this is the
+   * attempt and its failure: macOS and Windows report a refusal; a banner that never says either way is "unknown".
+   * A refusal is remembered, so Settings › Notifications says notifications are off for WorkSuite.
+   */
+  testChat(waitMs = 4_000): Promise<RingTestNotice> {
+    const p = this.prefs();
+    const off = p.notificationsEnabled === false ? 'Show notifications is off in Settings › Notifications & calls.' : p.moduleNotifications?.chat === false ? 'Chat notifications are off in Settings › Notifications & calls › By app.' : null;
+    if (off) return Promise.resolve({ state: 'off', detail: off });
+    if (!Notification.isSupported()) return Promise.resolve(testNoticeFor(process.platform, 'unsupported', null));
+    return new Promise((resolve) => {
+      let settled = false;
+      const note = new Notification({ title: 'Test chat notification', body: 'Test visitor: this is how a new website chat shows on this computer.', silent: true, urgency: 'critical' });
+      const done = (r: RingTestNotice) => {
+        if (settled) return;
+        settled = true;
+        clearTimeout(timer);
+        resolve(r);
+      };
+      const timer = setTimeout(() => done(testNoticeFor(process.platform, 'unknown', null)), waitMs);
+      timer.unref?.();
+      note.on('show', () => {
+        this.lastFailure = null;
+        done(testNoticeFor(process.platform, 'shown', null));
+      });
+      note.on('failed', (_event, error) => {
+        this.lastFailure = String(error);
+        log.info('the system refused the test chat notification', { error: this.lastFailure.slice(0, 200) });
+        done(testNoticeFor(process.platform, 'failed', this.lastFailure));
+      });
+      note.on('click', () => note.close());
+      note.show();
+      const closer = setTimeout(() => note.close(), 10_000);
+      closer.unref?.();
+    });
   }
 
   /** Whether this computer shows banners, as far as can be told, and what to check (#114). */

@@ -1,9 +1,10 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { OfflineMutation } from '@shared/types';
 import { WEBSITE_REPLY_LABEL, websiteDraftKey } from '@shared/website-reply';
 import { useCanOpen } from '../../../core/access';
 import { text } from '../../../core/i18n';
+import { markdownLine } from '../../../core/markdown';
 import { navigate } from '../../../core/tabs';
 import { ApiError, apiPost } from '../../../core/api';
 import { app } from '../../../core/app-state';
@@ -13,10 +14,12 @@ import { useTab, useTabTitle } from '../../../core/tab-context';
 import { dateLabel, parseTs, timeLabel } from '../../../core/time';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
-import { Avatar, Button, Chip, Empty, ErrorNote, Spinner, cx } from '../../../components/ui';
+import { Avatar, Button, Chip, Empty, cx } from '../../../components/ui';
 import { Composer, websiteNoteDraftKey, type ComposerHandle } from '../Composer';
-import { callLive, PRIORITIES, quoteAuthor, readBy, typingWords, useAgents, useCanned, useWebsiteConversation, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
+import { callLive, discardWebsiteReply, PRIORITIES, quoteAuthor, readBy, retryWebsiteReply, typingWords, useAgents, useCanned, useOpenConversation, useSendingReplies, visitorHas, websiteAction, WEBSITE, type WebsiteConversation, type WebsiteMessage, type WebsiteRow, type WebsiteVisitor } from './api';
 import { usePageVisible, useLiveStatus } from './live';
+import { useRealtimeLive, useWebsiteSync } from './sync';
+import { bySeq, weave } from '@shared/chat-seq';
 import { useViewing } from './viewing';
 import type { ReplyTarget } from '../Thread';
 import { Select } from '../../../components/Select';
@@ -34,7 +37,13 @@ import { CallbackCard, isPending } from './Callbacks';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
 import { BlockDialog, ContactCard, SharedFilesCard, TagsCard } from './panelCards';
 import { ClosedNotice } from './Closed';
+import { ThreadFailed, ThreadPlaceholder, type PaneHead } from './ThreadPlaceholder';
 import { useRingState, youJoinedLine } from './Ringing';
+import { MergeDialog, ProfileCards } from './IdentityCard';
+import { ConnectionWarning } from '../../../components/ConnectionWarning';
+import { ticketRoute } from '@shared/support';
+import { ConvertSheet, useConversion } from '../../support/ConvertSheet';
+import { StatusChip } from '../../support/parts';
 
 // Kept importable from here, where the drawer first had it.
 export { visitorLocalTime } from './panelCards';
@@ -57,7 +66,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const me = useStore(app, (s) => (s.auth?.user?.id ? Number(s.auth.user.id) : null));
   // The chat I just joined from its ring, and how many colleagues that ring stopped for (R-03 "YOU JOIN").
   const youJoined = useRingState().youJoined;
-  const q = useWebsiteConversation(id);
+  // From memory or the copy saved here at once, then from the server (worksuite-desktop#239).
+  const q = useOpenConversation(id);
   const data = q.data;
   const scroller = useRef<HTMLDivElement>(null);
   const composer = useRef<ComposerHandle>(null);
@@ -67,23 +77,35 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const [tab, setTab] = useState<'reply' | 'note' | null>(null);
   const { active: tabActive, query: tabQuery } = useTab();
   // From the ringing card's Transfer (#225), or a visitor's Invite a colleague (#231): the chat opens with that dialog up.
+  // Merge this visitor with another (#222), from the header.
+  const [merging, setMerging] = useState(false);
   const [dialog, setDialog] = useState<'invite' | 'transfer' | null>(() => (tabQuery?.get('transfer') === '1' ? 'transfer' : tabQuery?.get('invite') === '1' ? 'invite' : null));
   const declined = useDeclined(Number(id), me, q.data?.team);
   // Typing and receipts, live (ENH-WCHAT-04): reading counts while this tab is in front and the window can be seen.
   const pageVisible = usePageVisible();
-  const live = useLiveStatus(Number(id), q.data, q.dataUpdatedAt, me, tabActive && pageVisible);
+  // A copy saved on this computer (stamped 0) says nothing about now: nobody is typing in it until the server answers.
+  const saved = q.data !== undefined && q.dataUpdatedAt === 0;
+  const liveData = useMemo(() => (saved && q.data ? { ...q.data, conversation: { ...q.data.conversation, visitor_typing: false }, agents_typing: [] } : q.data), [saved, q.data]);
+  const live = useLiveStatus(Number(id), liveData, q.dataUpdatedAt, me, tabActive && pageVisible);
   // In front in the main window: a visitor writing again here raises no card (#230). The mini chat window does not count.
   useViewing(Number(id), !mini && tabActive && pageVisible);
   // The replies for every widget and this chat's own (CAN-01, S-09), once the chat says which widget it is on.
   const canned = useCanned(Boolean(q.data), q.data?.conversation.widget_id);
   const outbox = useQuery({ queryKey: ['offline', 'pending'], queryFn: () => call('offline:pending') });
   const waiting = (outbox.data ?? []).filter((m: OfflineMutation) => m.module === 'website-chat' && m.entityId === id && m.state !== 'DONE');
+  // Render by seq (DLV-05): a reply on its way gives way to the server's copy carrying its client id.
+  const held = useMemo(() => new Set((data?.messages ?? []).map((m) => m.client_id).filter((x): x is string => !!x)), [data?.messages]);
+  const allSending = useSendingReplies(Number(id));
+  const sending = useMemo(() => allSending.filter((p) => !held.has(p.clientId)), [allSending, held]);
+  // Sync by seq on a gap, on focus and after a reconnect (DLV-06, plan 1.9); Live, or updating every few seconds.
+  useWebsiteSync(id, saved ? undefined : q.data, tabActive && pageVisible);
+  const realtimeLive = useRealtimeLive();
   const count = data?.messages.length ?? 0;
-  useTabTitle(data ? `Website · ${data.visitor?.name || data.visitor?.label || 'Visitor'}` : 'Website chats');
+  useTabTitle(data ? `Website · ${data.visitor?.name || data.visitor?.label || 'Visitor'}` : row ? `Website · ${row.visitor_name || row.label}` : 'Website chats');
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
-  }, [count, live.visitorTyping, waiting.length]);
+  }, [count, live.visitorTyping, waiting.length, sending.length]);
 
   // Removed from the chat by its owner or a supervisor (TEAM-07): what I was writing to the visitor goes too.
   useEffect(
@@ -103,18 +125,20 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
     void qc.invalidateQueries({ queryKey: ['website'] });
   };
 
-  if (q.isLoading) return <Spinner />;
-  if (q.error) {
-    const gone = q.error instanceof ApiError && (q.error.status === 404 || q.error.forbidden);
-    return gone ? <Empty icon="globe" title="This website chat is not available" hint="It may have been removed, or you no longer staff this website." /> : <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
+  const gone = q.error instanceof ApiError && (q.error.status === 404 || q.error.forbidden);
+  if (gone) return <Empty icon="globe" title="This website chat is not available" hint="It may have been removed, or you no longer staff this website." />;
+  // A copy in hand is shown while the server is asked again, or could not be reached; without one, the thread's own
+  // layout in grey, then a centred Retry (#239) — under the header the list row already gives it (#261).
+  if (!data) {
+    const head = row ? rowHead(row) : undefined;
+    return q.error ? <ThreadFailed head={head} mini={mini} onRetry={() => void q.refetch()} /> : <ThreadPlaceholder mini={mini} head={head} onRetry={() => void qc.cancelQueries({ queryKey: ['website', 'conversation', id] }).then(() => q.refetch())} />;
   }
-  if (!data) return null;
   const c = data.conversation;
   const v = data.visitor;
   const canReply = data.can?.reply !== false;
   const name = v?.name || v?.label || 'Visitor';
   // On the site: seen in the two minutes before this copy was fetched, as the list decides.
-  const online = row?.online ?? (v?.last_seen ? q.dataUpdatedAt - parseTs(v.last_seen).getTime() < 120_000 : false);
+  const online = row?.online ?? (v?.last_seen && !saved ? q.dataUpdatedAt - parseTs(v.last_seen).getTime() < 120_000 : false);
   const page = v?.current_url ? pathOf(v.current_url) : null;
   const t = data.team ?? null;
   // Somebody monitoring reads along unseen and writes notes: their box opens on Internal note (C-08, TEAM-62).
@@ -126,15 +150,17 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const replyOpen = canReply && c.status !== 'closed';
   // My own "joined the chat" line, told as R-03 tells it: "You joined the chat · ringing stopped for 2 colleagues".
   const joinLine = youJoined && String(youJoined.id) === String(c.id) ? [...data.messages].reverse().find((m) => m.from === 'system' && me !== null && m.agent_id === me && /joined the chat$/.test(m.body ?? ''))?.id : undefined;
-  const items = byTime([
-    ...data.messages.map((m) => {
+  // Messages in seq order, the visitor's page visits woven in by time (plan 1.9).
+  const ordered = [...data.messages].sort(bySeq);
+  const items = weave(
+    ordered.map((m) => {
       if (m.id === joinLine) return { ...fromWebsiteMessage(m, { me, visitor: name, canReply: replyOpen }), body: youJoinedLine(youJoined?.colleagues) };
       const k = fromWebsiteMessage(m, {
         me,
         visitor: name,
         canReply: replyOpen,
         // Sent, delivered or read by the visitor, on the team's messages; who read the visitor's latest (LIVE-08).
-        status: data.marks && m.from === 'agent' && m.visibility !== 'internal' ? visitorHas(m.id, data.marks) : undefined,
+        status: data.marks && m.from === 'agent' && m.visibility !== 'internal' ? visitorHas(m, data.marks) : undefined,
         footer: data.marks ? footerFor(m, data, me) : null,
         // The server's own window for Delete for the visitor (RDC-12); 15 minutes from an older one.
         deleteMinutes: data.delete_window_minutes ?? 15,
@@ -143,8 +169,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       const notice = m.from === 'system' ? callNotice(m.body, m.agent_id, me) : null;
       return notice ? { ...k, body: notice.body, tone: notice.tone } : k;
     }),
-    ...eventsForThread(data.events, c.started_at).map((e, i) => fromWidgetEvent(e, i)),
-  ]);
+    byTime(eventsForThread(data.events, c.started_at).map((e, i) => fromWidgetEvent(e, i))),
+  );
   const handlers: MessageHandlers = {
     // Answering one message quotes it, for the visitor too (RDC-10).
     onReply: (k) => {
@@ -152,7 +178,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       if (!m) return;
       // A quote goes to the visitor, so answering one is a reply, never a note.
       setTab('reply');
-      setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: m.body ?? m.file?.filename ?? '' });
+      // The one-line bar above the box: the words without their Markdown (#261).
+      setReply({ id: m.id, sender_name: quoteAuthor({ from: m.from === 'system' ? 'agent' : m.from, agent: m.agent }, name), snippet: markdownLine(m.body ?? '') || (m.file?.filename ?? '') });
       composer.current?.focus();
     },
     // A copy of the visitor's file in my own Drive (RDC-12, P-04): never a link, and the chat keeps its own.
@@ -211,6 +238,17 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
             </span>
           </span>
           <span className="flex flex-wrap items-center gap-2">
+            {/* How this thread is kept current (plan 1.9): the live connection, or a fetch every few seconds. */}
+            {!mini && c.status !== 'closed' ? (
+              <span
+                data-testid="thread-live"
+                title={realtimeLive ? 'New messages arrive as they are sent' : 'The live connection is off; this chat updates every few seconds'}
+                className={cx('flex h-[22px] items-center gap-1 rounded-full px-2 text-[11px] font-semibold', realtimeLive ? 'bg-success-bg text-success' : 'bg-subtle text-ink-3')}
+              >
+                <span className={cx('h-1.5 w-1.5 rounded-full', realtimeLive ? 'bg-success' : 'bg-ink-3')} />
+                {realtimeLive ? 'Live' : 'Updating every few seconds'}
+              </span>
+            ) : null}
             {t ? <TeamFaces people={t.people} /> : null}
             {/* Invite and Transfer, beside Close (TEAM-UI-01). */}
             {!mini && t?.can.invite && c.status !== 'closed' ? (
@@ -223,6 +261,13 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
                 <Icon name="transfers" size={13} /> Transfer
               </button>
             ) : null}
+            {/* Merge with another visitor (#222): the same person under two names, after a preview, undoable. */}
+            {!mini && canReply && data.profile ? (
+              <button type="button" onClick={() => setMerging(true)} title={data.profile.suggestions ? 'Possibly the same person as another visitor' : 'Merge with another visitor'} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
+                <Icon name="users" size={13} /> Merge{data.profile.suggestions ? <span className="ml-0.5 rounded-full bg-warning-bg px-1.5 text-[10.5px] text-[#9A4A06] dark:text-warning">{data.profile.suggestions}</span> : null}
+              </button>
+            ) : null}
+            {merging && data.profile ? <MergeDialog keepId={data.profile.visitor_id} keepName={name} onClose={() => setMerging(false)} /> : null}
             {/* Offer the visitor a call that rings only me (VOICE-15). */}
             {!mini && data.can_call && c.status !== 'closed' && !callLive(data.call) ? (
               <button type="button" title="The visitor sees a call button; starting the call rings only you" onClick={() => void apiPost(`${WEBSITE}/conversations/${c.id}/offer-call`, {}).then(() => { toast('success', 'Call offered'); refresh(); }, (e) => toast('error', errorMessage(e)))} className="flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
@@ -257,6 +302,19 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
           {/* The shared chat kit (C-02, RDC-11, LIVE-12; #229): Team Chat's bubbles, meta, ticks and attachments, with what a visitor cannot receive turned off. */}
           <MessageList items={items} caps={{ ...WEBSITE_CAPS, deleteForVisitorMinutes: data.delete_window_minutes ?? 15, saveToDrive: data.can_save_to_drive === true }} look="page" handlers={handlers} />
+          {/* Sent a moment ago, not yet stored (#252): at once, then the stored message with its tick. */}
+          {/* Sending…, or Not sent with the reason, Retry (the same client id) and Discard (plan 1.9). */}
+          {sending.map((p) => (
+            <PendingBubble
+              key={p.key}
+              label={p.body}
+              failed={p.state === 'failed'}
+              error={p.error}
+              waiting={text('Sending…')}
+              onRetry={() => void retryWebsiteReply(qc, p.key)}
+              onDiscard={() => discardWebsiteReply(p.key)}
+            />
+          ))}
           {waiting.map((p) => (
             <PendingBubble
               key={p.id}
@@ -283,18 +341,22 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         ) : canReply ? (
           // One shared composer for both tabs (C-08): its note mode is the amber Internal note; remounted per tab, so
           // each keeps its own draft and nothing typed for the visitor slips into a note.
-          <Composer
-            key={noting ? 'note' : 'reply'}
-            ref={composer}
-            roomId={`website-${c.id}`}
-            roomName={name}
-            compact={mini}
-            group={false}
-            reply={noting ? null : reply}
-            onClearReply={() => setReply(null)}
-            extras={t?.can.note ? <MessageTypeTabs value={noting ? 'note' : 'reply'} onChange={setTab} /> : undefined}
-            website={{ conversationId: c.id, replies: canned.data?.responses ?? [], maxUploadKb: c.max_upload_kb, note: noting }}
-          />
+          // Above it, while connection strength is Poor or Offline (#254), a small warning.
+          <>
+            <ConnectionWarning />
+            <Composer
+              key={noting ? 'note' : 'reply'}
+              ref={composer}
+              roomId={`website-${c.id}`}
+              roomName={name}
+              compact={mini}
+              group={false}
+              reply={noting ? null : reply}
+              onClearReply={() => setReply(null)}
+              extras={t?.can.note ? <MessageTypeTabs value={noting ? 'note' : 'reply'} onChange={setTab} /> : undefined}
+              website={{ conversationId: c.id, replies: canned.data?.responses ?? [], maxUploadKb: c.max_upload_kb, note: noting }}
+            />
+          </>
         ) : (
           <div className="border-t border-line bg-surface px-3.5 py-2.5 text-[13px] text-ink-3">You can read this chat but not reply to it.</div>
         )}
@@ -321,6 +383,21 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
 }
 
 /**
+ * The header a list row gives a conversation still loading (worksuite-desktop#261), said as the thread's own says it:
+ * who, and whether they are on the site and reading what, or when the chat closed.
+ */
+export function rowHead(r: WebsiteRow): PaneHead {
+  const name = r.visitor_name || r.label;
+  const page = r.current_url ? pathOf(r.current_url) : null;
+  const closed = r.status === 'closed';
+  return {
+    name: r.company ? `${name} · ${r.company}` : name,
+    line: closed ? `Closed${r.closed_at ? ` ${dateLabel(r.closed_at)}` : ''}` : r.online ? `On the site now${page ? ` · reading ${page}` : ''}` : 'Left the site',
+    presence: closed ? null : r.online ? 'online' : 'away',
+  };
+}
+
+/**
  * The line under a message (LIVE-08): under the team's latest, how far the visitor has it — Sent, Delivered, or Read
  * and when; under the visitor's latest, who of the team has read it.
  */
@@ -330,11 +407,11 @@ function footerFor(m: WebsiteMessage, data: WebsiteConversation, me: number | nu
   const team = data.messages.filter((x) => (x.from === 'agent' || x.from === 'bot') && x.visibility !== 'internal').at(-1);
   const visitor = data.messages.filter((x) => x.from === 'visitor').at(-1);
   if (team && m.id === team.id) {
-    const s = visitorHas(m.id, marks);
+    const s = visitorHas(m, marks);
     return s === 'read' ? `Read${marks.visitor.read_at ? ` ${timeLabel(marks.visitor.read_at)}` : ''}` : s === 'delivered' ? 'Delivered' : 'Sent';
   }
   if (visitor && m.id === visitor.id) {
-    const who = readBy(m.id, marks, me);
+    const who = readBy(m, marks, me);
     return who.length ? `Read by ${who.join(', ')}` : null;
   }
   return null;
@@ -426,7 +503,6 @@ interface Stop {
  */
 function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, peopleFirst = false, foot }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; top?: ReactNode; people?: ReactNode; peopleFirst?: boolean; foot?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
-  const [busy, setBusy] = useState(false);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
   const support = useCanOpen('support');
   const mail = useCanOpen('mail');
@@ -462,22 +538,11 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
     else void call('app:openExternal', { url: `mailto:${v.email}` });
   };
 
-  const ticket = async () => {
-    setBusy(true);
-    try {
-      const r = await apiPost<{ id: number; reference: string }>('/api/tickets/from-conversation', { conversation_id: c.id });
-      toast('success', `Raised as ${r.reference}.`);
-      void call('app:openInBrowser', { path: `/tickets?ticket=${r.id}` });
-    } catch (e) {
-      const existing = e instanceof ApiError ? (e.data as { ticket?: { id?: number } } | null)?.ticket?.id : undefined;
-      if (existing) {
-        toast('info', errorMessage(e));
-        void call('app:openInBrowser', { path: `/tickets?ticket=${existing}` });
-      } else toast('error', errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+  // Raise ticket opens Support's sheet here, not the browser (WS-SUPPORT-SRS-001 D-06, FR-DSK-08); a chat that is a
+  // ticket already shows it, with its status, and opens its tab (FR-LCH-08).
+  const [raising, setRaising] = useState(false);
+  const converted = useConversion(c.id, support);
+  const linked = converted.data?.ticket ?? null;
 
   const action = 'flex h-[30px] flex-1 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface text-[11.5px] font-semibold text-ink hover:bg-subtle';
   return (
@@ -552,16 +617,31 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
         ) : null}
         <TagsCard conversationId={c.id} tags={c.tags} canEdit={canReply} onDone={onDone} />
         <SharedFilesCard files={files} />
-        <div className={CARD}>
-          <h3 className={HEADING}>Previous chats · {history.length}</h3>
-          {history.slice(0, 5).map((h) => (
-            <span key={h.id} className="text-ink-2">
-              {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
-            </span>
-          ))}
-        </div>
+        {/* The profile (#222): how we know them, visits, devices, Previous chats with links, possible duplicates and
+            merges; on a server without it, the list it had before. */}
+        <ProfileCards
+          visitorId={data.profile?.visitor_id}
+          conversationId={c.id}
+          legacy={
+            <div className={CARD}>
+              <h3 className={HEADING}>Previous chats · {history.length}</h3>
+              {history.slice(0, 5).map((h) => (
+                <span key={h.id} className="text-ink-2">
+                  {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
+                </span>
+              ))}
+            </div>
+          }
+        />
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
-          {support ? <button type="button" disabled={busy} onClick={() => void ticket()} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle disabled:opacity-60">Raise a support ticket from this chat</button> : null}
+          {support && linked ? (
+            <button type="button" onClick={() => navigate(ticketRoute(linked.id))} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle" title={text('Open the ticket in WorkSuite')}>
+              <Icon name="life-buoy" size={13} className="text-ink-2" /> {text('Ticket {ref}', { ref: linked.reference })} · <StatusChip status={linked.status} />
+            </button>
+          ) : support ? (
+            <button type="button" onClick={() => setRaising(true)} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle">Raise a support ticket from this chat</button>
+          ) : null}
+          {raising ? <ConvertSheet conversationId={c.id} onClose={() => setRaising(false)} /> : null}
           {/* Leave chat, with the owner's warning, at the panel's foot (C-08, TEAM-06). */}
           {foot}
         </div>

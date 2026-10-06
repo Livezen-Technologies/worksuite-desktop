@@ -6,6 +6,7 @@ import { Menu, type MenuSection } from '../../components/Menu';
 import { Checkbox } from '../../components/Checkbox';
 import { Avatar, Empty, ErrorNote, cx } from '../../components/ui';
 import { VirtualList } from '../../components/VirtualList';
+import type { ListRefresh } from '../../components/PullToRefresh';
 import { CHIPS, rowStamp, type ChipId, type QueuedAction, type RowGroup } from './model';
 import { AccountTag, CategoryChip } from './parts';
 import { accountTags, tagShows, type AccountTagInfo } from './accountTags';
@@ -90,6 +91,8 @@ export interface MessageListProps {
   empty?: EmptyReason;
   /** Turns every quick filter off: shown beside the chips while one is on. */
   onClearFilters?: () => void;
+  /** Pull to check for new mail, the "↑ 3 new emails" pill and "Checked 2 min ago" (worksuite-desktop#236). */
+  refresh?: ListRefresh;
 }
 
 export interface RowAction {
@@ -198,6 +201,7 @@ export function MessageList(p: MessageListProps) {
             <Icon name="chevron-down" size={12} />
           </button>
         </div>
+        {p.refresh ? <div className="-mt-0.5 flex min-w-0">{p.refresh.checked}</div> : null}
         {p.offline ? (
           <div role="status" className="mt-2 flex items-start gap-2.5 rounded-[10px] border border-[var(--ws-note-line)] bg-[var(--ws-note-bg)] px-3 py-2 text-[12.5px] leading-snug text-ink">
             <Icon name="wifi-off" size={16} className="mt-0.5 shrink-0 text-warning" />
@@ -292,34 +296,38 @@ export function MessageList(p: MessageListProps) {
       </div>
       {p.toolbar}
       {view === 'table' && flat.length ? <TableHead unified={p.unified} /> : null}
-      <div className="@container min-h-0 flex-1 border-t border-line" role="listbox" tabIndex={0} aria-label="Messages" aria-activedescendant={p.selectedKey && flat.some((r) => r.key === p.selectedKey) ? `mail-row-${p.selectedKey}` : undefined}>
-        {p.loading ? (
-          <Placeholders view={view} label={text('Loading the latest messages…')} />
-        ) : p.error && flat.length === 0 ? (
-          <div className="p-4">
-            <ErrorNote error={p.error} onRetry={p.onRetry} />
-          </div>
-        ) : flat.length === 0 && p.loadingMore ? (
-          <Placeholders view={view} label={text('Loading more…')} />
-        ) : flat.length === 0 ? (
-          <EmptyList reason={p.empty ?? { kind: p.search ? 'search' : 'caught-up', title: p.search ? text('No messages match') : text('All caught up'), hint: p.search ? text('Press Enter to search every mailbox, older mail too.') : null }} onClearFilters={p.onClearFilters} />
-        ) : null}
-        {items.length > 0 ? (
-          items.length > 150 ? (
-            <VirtualList items={items} estimate={view === 'classic' ? 78 : view === 'compact' ? 52 : 36} getKey={(it) => (it.kind === 'head' ? `h:${it.g.key}` : it.r.key)} onEndReached={() => p.hasMore && !p.loadingMore && p.onMore()} render={(it) => (it.kind === 'head' ? <GroupHead g={it.g} /> : <Row r={it.r} {...p} tags={tags} view={view} />)} />
+      <div className="relative flex min-h-0 flex-1 flex-col border-t border-line">
+        {/* Pull to check for new mail, and "↑ 3 new emails" while scrolled down (#236). */}
+        {p.refresh?.indicator}
+        {p.refresh?.pill}
+        <div className="@container flex min-h-0 flex-1 flex-col" role="listbox" tabIndex={0} aria-label="Messages" aria-activedescendant={p.selectedKey && flat.some((r) => r.key === p.selectedKey) ? `mail-row-${p.selectedKey}` : undefined}>
+          {items.length > 150 ? (
+            <VirtualList className="min-h-0 flex-1 overflow-y-auto scroll-thin" scrollRef={p.refresh?.attach} items={items} estimate={view === 'classic' ? 78 : view === 'compact' ? 52 : 36} getKey={(it) => (it.kind === 'head' ? `h:${it.g.key}` : it.r.key)} onEndReached={() => p.hasMore && !p.loadingMore && p.onMore()} render={(it) => (it.kind === 'head' ? <GroupHead g={it.g} /> : <Row r={it.r} {...p} tags={tags} view={view} />)} />
           ) : (
             <div
-              className="h-full overflow-y-auto scroll-thin"
+              ref={p.refresh?.attach}
+              className="min-h-0 flex-1 overflow-y-auto scroll-thin"
               data-mail-scroll
               onScroll={(e) => {
                 // The next 100 as the end comes into view, not on a click (#208).
                 const el = e.currentTarget;
-                if (p.hasMore && !p.loadingMore && el.scrollTop + el.clientHeight >= el.scrollHeight - NEAR_END) p.onMore();
+                if (p.hasMore && !p.loadingMore && items.length > 0 && el.scrollTop + el.clientHeight >= el.scrollHeight - NEAR_END) p.onMore();
               }}
             >
+              {p.loading ? (
+                <Placeholders view={view} label={text('Loading the latest messages…')} />
+              ) : p.error && flat.length === 0 ? (
+                <div className="p-4">
+                  <ErrorNote error={p.error} onRetry={p.onRetry} />
+                </div>
+              ) : flat.length === 0 && p.loadingMore ? (
+                <Placeholders view={view} label={text('Loading more…')} />
+              ) : flat.length === 0 ? (
+                <EmptyList reason={p.empty ?? { kind: p.search ? 'search' : 'caught-up', title: p.search ? text('No messages match') : text('All caught up'), hint: p.search ? text('Press Enter to search every mailbox, older mail too.') : null }} onClearFilters={p.onClearFilters} />
+              ) : null}
               {items.map((it) => (it.kind === 'head' ? <GroupHead key={`h:${it.g.key}`} g={it.g} /> : <Row key={it.r.key} r={it.r} {...p} tags={tags} view={view} />))}
-              {p.loadingMore ? <Placeholders view={view} label={text('Loading more…')} rows={3} /> : null}
-              {p.hasMore && !p.loadingMore ? (
+              {items.length > 0 && p.loadingMore ? <Placeholders view={view} label={text('Loading more…')} rows={3} /> : null}
+              {items.length > 0 && p.hasMore && !p.loadingMore ? (
                 <div className="p-3 text-center">
                   <button type="button" onClick={p.onMore} className="text-[12.5px] font-semibold text-primary hover:underline">
                     {text('Show more')}
@@ -327,8 +335,8 @@ export function MessageList(p: MessageListProps) {
                 </div>
               ) : null}
             </div>
-          )
-        ) : null}
+          )}
+        </div>
       </div>
       {menu === 'density' ? <Menu sections={densitySections} label={text('Layout and density')} anchor={densityBtn} prefer="bottom" align="end" width={264} onClose={() => setMenu(null)} /> : null}
       {menu === 'sort' ? <SortMenu anchor={sortAt === 'chip' ? sortChip : sortBtn} prefs={p.prefs} conversations={p.conversations} onPrefs={p.onPrefs} onConversations={p.onConversations} onClose={() => setMenu(null)} /> : null}
@@ -421,7 +429,7 @@ function StateMarks({ m }: { m: MessageRow }) {
   );
 }
 
-function Row({ r, view, selectedKey, onOpen, onStar, unified, mailboxId, prefs, onRowMenu, selection, onSelect, rowActions, tags }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']>; tags: Map<number, AccountTagInfo> }) {
+function Row({ r, view, selectedKey, onOpen, onStar, unified, mailboxId, prefs, onRowMenu, selection, onSelect, rowActions, tags, refresh }: MessageListProps & { r: ListRow; view: NonNullable<MailPrefs['view']>; tags: Map<number, AccountTagInfo> }) {
   const m = r.row;
   // Settings › Reading › Show message previews in the list (D10).
   const preview = prefs.previews === false ? '' : m.preview;
@@ -479,6 +487,8 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, mailboxId, prefs, 
     role: 'option',
     'aria-selected': selected,
     'data-mail-row': r.key,
+    // New mail is marked and slides in (#236); the key keeps the place when mail comes above the view.
+    ...(refresh?.rowProps(r.key) ?? {}),
     // Dragged onto My Day: an event or a task from the message (DMO-CAL-07, DMO-TSK-04).
     draggable: true,
     onDragStart: (e: React.DragEvent) => {
@@ -497,7 +507,7 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, mailboxId, prefs, 
           onRowMenu(r, e.clientX, e.clientY);
         }
       : undefined,
-    className: cx('group relative w-full cursor-default border-b border-line text-left', selected ? 'bg-selection' : 'hover:bg-subtle', r.queued && r.queued !== 'read' && r.queued !== 'star' && r.queued !== 'unstar' && 'opacity-60'),
+    className: cx('group relative w-full cursor-default border-b border-line text-left', selected ? 'bg-selection' : 'hover:bg-subtle', r.queued && r.queued !== 'read' && r.queued !== 'star' && r.queued !== 'unstar' && 'opacity-60', refresh?.freshClass(r.key)),
   } as const;
   const dot = <span aria-hidden className={cx('h-[7px] w-[7px] shrink-0 rounded-full', unread ? 'bg-primary' : 'bg-transparent')} />;
   const count = m.count && m.count > 1 ? <span className="shrink-0 text-[12px] font-semibold text-ink-3">{m.count}</span> : null;

@@ -1,5 +1,6 @@
 import { verifyLockChange } from '../services/lock-verification';
-import { app, BrowserWindow, clipboard, dialog, nativeImage, shell, systemPreferences, type WebContents } from 'electron';
+import { app, BrowserWindow, clipboard, dialog, nativeImage, screen, shell, systemPreferences, type WebContents } from 'electron';
+import { wallDisplays } from '../services/live-desk';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { writeAtomically } from '../services/pdf/host';
@@ -15,6 +16,7 @@ import { windowRoute } from '../windows/manager';
 import { attachmentRisk } from '@shared/attachments';
 import { DesktopError, isDesktopError } from './errors';
 import { saveLauncherDefaults } from '../services/launcher-defaults';
+import { saveAppearanceDefaults } from '../services/appearance-defaults';
 import type { AppContext } from './context';
 import type { IpcRouter } from '../ipc/router';
 import { applyAutostart } from './autostart';
@@ -29,8 +31,11 @@ import { restartForAccessibility } from '../services/remote-control/accessibilit
 import { createZip } from '../services/zip';
 import { openExternalSafely } from '../security/hardening';
 import { answerNotice } from '../services/ai-pending';
+import { notificationSettingsUrl } from '../services/locked-notifications';
 import { broadcast } from './events';
-import { logger } from './log';
+import { logger, recentLog } from './log';
+import { captureName, helpLogText } from '../services/ai-help';
+import { screenTimings } from '../services/screen-timings';
 
 /** The web app's pages `auth:openPage` may open, signed out. */
 const AUTH_PAGES = { 'forgot-password': '/forgot-password', account: '/account/settings' } as const;
@@ -361,6 +366,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:join', (input) => ctx.webchat.join(input.id, input.then, input.visitor));
   router.handle('ring:silence', (input) => ctx.webchat.silence(input.id, input.on));
   router.handle('ring:pass', (input) => ctx.webchat.pass(input.id));
+  router.handle('ring:test', () => ctx.webchat.testRing());
   router.handle('ring:joinSend', (input) => ctx.webchat.joinAndSend(input.id, input.message ?? null, { ...(input.open ? { open: true } : {}), ...(input.cannedId ? { cannedId: input.cannedId } : {}), ...(input.visitor ? { visitor: input.visitor } : {}) }));
   router.handle('ring:draft', (input) => ctx.webchat.setDraft(input.id, input.text));
   router.handle('ring:reply', (input) => ctx.webchat.replyJoined(input.message));
@@ -382,6 +388,24 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('ring:call', (input) => ctx.webchat.answerCall(input.id, input.accept));
   router.handle('ring:mic', (input) => ctx.webchat.setMic(input.has, input.label ?? null, input.headset ?? false));
   router.handle('ring:onCall', (input) => ctx.webchatOnCall(input));
+  // A website thread a window shows (plan 2.7): heard on its channels while any window shows it; let go with the window.
+  const watching = new Set<number>();
+  router.handle('realtime:watch', (input, c) => {
+    const sender = c.sender;
+    if (input.on && !watching.has(sender.id)) {
+      watching.add(sender.id);
+      const id = sender.id;
+      sender.once('destroyed', () => {
+        watching.delete(id);
+        ctx.realtime.forget(id);
+      });
+    }
+    ctx.realtime.watch(sender.id, input.conversationId, input.on);
+  });
+  // Delivered and read by seq, batched (plan 2.9).
+  router.handle('realtime:receipt', (input) => {
+    ctx.realtime.receipts.mark({ conversation_id: input.conversationId, delivered_seq: input.deliveredSeq, read_seq: input.readSeq, delivered: input.delivered, read: input.read });
+  });
 
   // ── multi-window docking (FR-NAV-05/07) ─────────────────────────────────
   const fromMain = (sender: WebContents) => {
@@ -498,9 +522,20 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('meetrec:preflight', () => ctx.meetRecorder.preflight());
   router.handle('meetrec:start', (input) => ctx.meetRecorder.start(input));
   router.handle('meetrec:chunk', (input) => ctx.meetRecorder.chunk(input.id, input.data));
-  router.handle('meetrec:active', (input) => ctx.meetRecorder.active(input.id));
-  router.handle('meetrec:abort', (input) => ctx.meetRecorder.abort(input.id));
-  router.handle('meetrec:stop', (input) => ctx.meetRecorder.stop(input.id, input.durationMs));
+  // While it records, the meeting's window keeps drawing when hidden or minimised: a throttled page draws no
+  // pictures, and the recording would be empty (worksuite-desktop#240).
+  router.handle('meetrec:active', async (input, c) => {
+    await ctx.meetRecorder.active(input.id);
+    if (!c.sender.isDestroyed()) c.sender.setBackgroundThrottling(false);
+  });
+  router.handle('meetrec:abort', async (input, c) => {
+    if (!c.sender.isDestroyed()) c.sender.setBackgroundThrottling(true);
+    await ctx.meetRecorder.abort(input.id);
+  });
+  router.handle('meetrec:stop', async (input, c) => {
+    if (!c.sender.isDestroyed()) c.sender.setBackgroundThrottling(true);
+    await ctx.meetRecorder.stop(input.id, input.durationMs);
+  });
   router.handle('meetrec:list', () => ctx.meetRecorder.list());
   router.handle('meetrec:retry', (input) => ctx.meetRecorder.retry(input.id));
   router.handle('meetrec:discard', (input) => ctx.meetRecorder.discard(input.id));
@@ -532,7 +567,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('files:saveText', async (input, c) => {
     const w = winOf(c.sender);
-    const opts: Electron.SaveDialogOptions = { title: 'Save', defaultPath: `${ctx.settings.effective().downloadFolder}/${input.name}`, filters: [{ name: 'Text', extensions: ['txt'] }] };
+    const csv = input.name.endsWith('.csv');
+    const opts: Electron.SaveDialogOptions = { title: 'Save', defaultPath: `${ctx.settings.effective().downloadFolder}/${input.name}`, filters: [csv ? { name: 'CSV', extensions: ['csv'] } : { name: 'Text', extensions: ['txt'] }] };
     const res = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
     if (res.canceled || !res.filePath) return null;
     await writeFile(res.filePath, input.text, { encoding: 'utf8', mode: 0o600 });
@@ -838,6 +874,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('notifications:pause', (input) => ({ pausedUntil: ctx.notifications.pause(input.minutes) }));
   router.handle('notifications:test', () => ctx.notifications.test());
   router.handle('notifications:permission', () => ctx.notifications.permission());
+  router.handle('notifications:openSettings', async () => {
+    // A fixed address of the system's own page; nothing from the page that asked (#251).
+    const url = notificationSettingsUrl(process.platform);
+    if (!url) return false;
+    await shell.openExternal(url);
+    return true;
+  });
   router.handle('notifications:refresh', () => ctx.notifications.refreshCounts());
   router.handle('notifications:reminder', (input) =>
     ctx.notifications.notify({ id: `reminder:${input.id}`, module: 'mail', title: input.title, body: input.body, sender: null, link: input.route, critical: false, flag: input.flag ?? null }),
@@ -952,7 +995,23 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     ctx.queue.retry(uid(), input.id);
     void ctx.queue.replay(uid());
   });
+  // The support wallboard (D-12): which screens there are, and the wallboard on one of them.
+  router.handle('support:displays', () => ({ displays: wallDisplays(screen.getAllDisplays(), ctx.windows.mainDisplayId()), open: ctx.windows.supportWallOpen() }));
+  router.handle('support:wall', (input) => void ctx.windows.showSupportWall(input.displayId));
+  router.handle('support:wallClose', () => void ctx.windows.closeSupportWall());
+  // Contact Support (D-11): the asking window's own pixels, and the last day's log (redacted as it was written).
+  router.handle('help:capture', async (_i, c) => {
+    const w = winOf(c.sender);
+    if (!w || w.isDestroyed()) throw new DesktopError('NOT_FOUND', 'There is no window to capture.');
+    const img = await w.webContents.capturePage();
+    const size = img.getSize();
+    return { name: captureName(new Date()), data: img.toPNG().toString('base64'), width: size.width, height: size.height };
+  });
+  router.handle('help:logs', () => helpLogText(recentLog(), Date.now()));
   router.handle('offline:discard', (input) => ctx.queue.discard(uid(), input.id));
+  router.handle('offline:detail', (input) => ctx.queue.detail(uid(), input.id));
+  router.handle('offline:edit', (input) => ctx.queue.edit(uid(), input.id, input.body));
+  router.handle('offline:replay', () => ctx.queue.replay(uid()));
   router.handle('offline:saveDraft', (input) => ctx.queue.saveDraft(uid(), input.module, input.context, input.content));
   router.handle('offline:getDraft', (input) => ctx.queue.getDraft(uid(), input.module, input.context));
   router.handle('offline:listDrafts', (input) => ctx.queue.listDrafts(uid(), input?.module));
@@ -1141,6 +1200,14 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return saved;
   });
 
+  // The organization's colour profile (worksuite-desktop#234), as the launcher's defaults above.
+  router.handle('settings:appearanceDefaults', async (input) => {
+    if (ctx.session.get().server?.api !== 'desktop-v1') throw new DesktopError('UNSUPPORTED', 'This WorkSuite server does not take an organisation colour profile.');
+    const saved = await saveAppearanceDefaults(ctx.http, input.organizationId, input);
+    void ctx.session.refreshBootstrap().catch(() => undefined);
+    return saved;
+  });
+
   router.handle('status:snapshot', () => ctx.status());
 
   // ── diagnostics ────────────────────────────────────────────────────────
@@ -1159,4 +1226,6 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   });
   router.handle('diagnostics:restartSafeMode', (input) => ctx.relaunch(input.safe));
   router.handle('diagnostics:services', () => ctx.supervisor.health());
+  // Website chats' request, server and render times (worksuite-desktop#252), for the report's timings.json.
+  router.handle('diagnostics:timings', (input) => screenTimings.add(input.entries));
 }

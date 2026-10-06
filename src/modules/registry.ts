@@ -65,6 +65,31 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./chat/ChatPage'),
   },
   {
+    // Phone (WS-VOIP-SRS-001): the softphone, call history, voicemail, forwarding, supervision and telephony
+    // administration over WorkSuite's Voip module (/api/voip). The compact phone opens in a window of its own (D01).
+    input: defineDesktopManifest({
+      id: 'phone', name: 'Phone', icon: 'phone', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['notifications', 'microphone'],
+      windows: [{ id: 'phone', route: '/phone/compact', alwaysOnTop: true }],
+      quickActions: [{ id: 'dial', label: 'Dial a number', route: '/phone' }],
+      deepLinks: ['phone', 'phone/calls/:id'],
+    }),
+    load: () => import('./phone/PhonePage'),
+  },
+  {
+    // Social Media Manager (WS-SMM-SRS-001, design "WorkSuite Social Media Manager — UI"): compose once for many
+    // accounts, approve, schedule on a calendar or queue, answer the unified inbox and measure — over /api/social-media.
+    // Publishing runs on the WorkSuite server (C3); the desktop keeps drafts and the last calendar for offline (DSK-004).
+    input: defineDesktopManifest({
+      id: 'social-media', name: 'Social Media', icon: 'send', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'DRAFTS', entities: ['post'], cache: ['/api/social-media/posts', '/api/social-media/accounts', '/api/social-media/brands'] },
+      native: ['notifications', 'file-drop'],
+      quickActions: [{ id: 'new-post', label: 'New social post', route: '/social-media/compose' }],
+      deepLinks: ['social-media', 'social-media/posts/:id', 'social-media/inbox/:id', 'social-media/approvals/:id'],
+    }),
+    load: () => import('./social-media/SocialMediaPage'),
+  },
+  {
     // Chat calls: the ring and the call each open in a window of their own.
     input: defineDesktopManifest({
       id: 'calls', name: 'Calls', icon: 'phone', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
@@ -168,6 +193,19 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
       deepLinks: ['crm/leads/:id'],
     }),
     load: () => import('./crm/CrmShell'),
+  },
+  {
+    input: defineDesktopManifest({
+      id: 'marketing', name: 'Marketing', icon: 'megaphone', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      native: ['notifications'],
+      quickActions: [
+        { id: 'marketing-queue', label: 'My call queue', route: '/marketing?view=queue' },
+        { id: 'marketing-new-campaign', label: 'New campaign', route: '/marketing?view=campaigns&new=1' },
+      ],
+      deepLinks: ['marketing', 'marketing/queue', 'marketing/contacts/:id', 'marketing/campaigns/:id'],
+    }),
+    load: () => import('./marketing/MarketingShell'),
   },
   {
     input: defineDesktopManifest({
@@ -348,6 +386,28 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
       quickActions: [{ id: 'clock-in', label: 'Clock In', route: '/hr' }],
     }),
     load: () => import('./hr/HrShell'),
+  },
+  {
+    // Support (WS-SUPPORT-SRS-001 D-01…D-12): the inbox — views with live counts, the list, the reading pane — and a
+    // tab per ticket, over /api/support/v1, or the as-built /api/tickets on a server from before it (api.ts). Offline,
+    // the rail, the lists and the tickets already opened are the last copy; replies, notes, status and property changes
+    // go to the outbox and are sent in order when WorkSuite is back (PARTIAL_WRITE, D-09).
+    input: defineDesktopManifest({
+      id: 'support', name: 'Support', icon: 'life-buoy', contractVersion: 1, desktop: { enabled: true },
+      offline: {
+        mode: 'PARTIAL_WRITE',
+        entities: ['ticket'],
+        cache: ['/api/support/v1/meta', '/api/support/v1/views', '/api/support/v1/badges', '/api/support/v1/tickets', '/api/support/v1/agents', '/api/support/v1/canned'],
+      },
+      native: ['notifications', 'file-drop'],
+      quickActions: [
+        { id: 'support-inbox', label: 'Support inbox', route: '/support' },
+        { id: 'support-mine', label: 'My tickets', route: '/support?view=mine' },
+        { id: 'support-unassigned', label: 'Unassigned tickets', route: '/support?view=unassigned' },
+      ],
+      deepLinks: ['support', 'support/ticket/:id'],
+    }),
+    load: () => import('./support/SupportPage'),
   },
   {
     input: defineDesktopManifest({ id: 'notifications', name: 'Notifications', icon: 'bell', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', cache: ['/api/notifications'] } }),

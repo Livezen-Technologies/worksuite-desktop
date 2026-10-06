@@ -118,7 +118,8 @@ describe('the Closed list (C-06)', () => {
   it('asks for closed chats, keeps the server’s order of closing, and has no Open / Mine pills', async () => {
     wrap(<WebsiteWorkspace />);
     await within(list()).findByText('Anne · Acme Ltd');
-    expect(apiGet).toHaveBeenCalledWith('/api/chat/widget-admin/conversations', { status: 'closed' }, expect.anything());
+    // A page of list fields at a time (worksuite-desktop#252).
+    expect(apiGet).toHaveBeenCalledWith('/api/chat/widget-admin/conversations', { status: 'closed', fields: 'list', limit: '50' }, expect.anything());
     const names = Array.from(list().querySelectorAll('[data-website-row] b')).map((b) => b.textContent);
     expect(names).toEqual(['Anne · Acme Ltd', 'Visitor 3D11', 'Kamal F.']);
     expect(within(list()).queryByRole('group', { name: 'Show' })).toBeNull();

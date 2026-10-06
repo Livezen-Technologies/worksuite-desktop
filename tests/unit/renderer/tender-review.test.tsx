@@ -33,7 +33,8 @@ describe('upload progress', () => {
   it('says where an upload is, and never shows 100% before it is filed', () => {
     expect(uploadStage({ state: 'queued', bytes: 0, total: 10 })).toEqual({ label: 'Waiting…', pct: null });
     expect(uploadStage({ state: 'running', bytes: 0, total: 10 })).toEqual({ label: 'Preparing…', pct: null });
-    expect(uploadStage({ state: 'running', bytes: 4, total: 10 })).toEqual({ label: '40%', pct: 40 });
+    // Said as "Uploading 42%" on the tender's own tab (worksuite-desktop#249).
+    expect(uploadStage({ state: 'running', bytes: 4, total: 10 })).toEqual({ label: 'Uploading 40%', pct: 40 });
     expect(uploadStage({ state: 'running', bytes: 10, total: 10 })).toEqual({ label: 'Filing…', pct: null });
   });
   it('opens the Attach menu above its button near the bottom of the window, and inside the window', () => {

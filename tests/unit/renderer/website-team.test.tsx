@@ -204,7 +204,11 @@ describe('Invite and Transfer (TEAM-UI-02)', () => {
 
   it('says the server\'s refusal in its own words', async () => {
     const { ApiError } = await vi.importActual<typeof CoreApi>('../../../src/core/api');
-    vi.mocked(request).mockRejectedValueOnce(new ApiError(409, 'A chat can have 4 staff at most, owner included: this one has 4.', null));
+    // Only the invitation is refused: the thread's read of its saved copy (#239) goes through `request` too.
+    vi.mocked(request).mockImplementation((async (method: string) => {
+      if (method === 'POST') throw new ApiError(409, 'A chat can have 4 staff at most, owner included: this one has 4.', null);
+      return { data: {} };
+    }) as never);
     mount();
     await screen.findByRole('region', { name: 'In this chat' });
     fireEvent.click(screen.getByRole('button', { name: 'Invite someone' }));

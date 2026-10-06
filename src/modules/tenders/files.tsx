@@ -8,6 +8,7 @@ import { call, errorMessage, registerDropped } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { bytes } from '../../core/time';
+import { uploadPercent } from '@shared/uploads';
 import { DriveFilePicker, type DriveFileRow } from '../../components/DriveFilePicker';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
@@ -23,20 +24,28 @@ type TenderTarget = Omit<Extract<UploadTarget, { kind: 'tender' }>, 'kind' | 'te
 
 export function useTenderUploads(tenderId: number, onSettled: () => void) {
   const transfers = useStore(app, (s) => s.transfers);
-  // What each upload started here is for, so a line can show its own.
-  const [started, setStarted] = useState<Record<string, TenderTarget>>({});
-  const ids = useMemo(() => Object.keys(started), [started]);
-  const add = (out: Array<{ id: string }>, target: TenderTarget) => setStarted((x) => ({ ...x, ...Object.fromEntries(out.map((o) => [o.id, target])) }));
-  // Each finished upload is reported once; the list of ids started here only grows.
-  const handled = useRef(new Set<string>());
-  const mine = useMemo(() => transfers.filter((t) => ids.includes(t.id)), [transfers, ids]);
-  const live: LiveUpload[] = mine.filter((t) => t.state !== 'done' && t.state !== 'cancelled' && t.state !== 'failed').map((t) => ({ ...t, target: started[t.id]! }));
+  // This tender's uploads, from the transfer manager itself (#249): they show the moment they are asked for,
+  // keep showing after the tab is left and opened again, and after WorkSuite restarts mid-upload.
+  const mine = useMemo(() => transfers.filter((t) => t.direction === 'upload' && t.tender?.tenderId === tenderId), [transfers, tenderId]);
+  const live: LiveUpload[] = mine
+    .filter((t) => t.state !== 'done' && t.state !== 'cancelled')
+    .map((t) => {
+      const { tenderId: _tender, ...target } = t.tender!;
+      return { ...t, target };
+    });
   const ended = useMemo(() => mine.filter((t) => t.state === 'done' || t.state === 'cancelled' || t.state === 'failed'), [mine]);
+  // Each finished upload is reported once. What had already ended before this screen opened is not news.
+  const handled = useRef<Set<string> | null>(null);
   useEffect(() => {
-    const fresh = ended.filter((t) => !handled.current.has(t.id));
+    if (handled.current === null) {
+      handled.current = new Set(ended.map((t) => t.id));
+      return;
+    }
+    const seen = handled.current;
+    const fresh = ended.filter((t) => !seen.has(t.id));
     if (!fresh.length) return;
     for (const t of fresh) {
-      handled.current.add(t.id);
+      seen.add(t.id);
       if (t.state === 'failed') toast('error', `${t.name}: ${t.error ?? 'it could not be filed.'}`);
     }
     onSettled();
@@ -45,8 +54,7 @@ export function useTenderUploads(tenderId: number, onSettled: () => void) {
     try {
       const files = await call('files:pickFiles', { multiple, title: title.slice(0, 100) });
       if (!files.length) return;
-      const out = await call('transfers:upload', { handles: files.map((f) => f.handle), target: { kind: 'tender', tenderId, ...target } });
-      add(out, target);
+      await call('transfers:upload', { handles: files.map((f) => f.handle), target: { kind: 'tender', tenderId, ...target } });
     } catch (e) {
       toast('error', errorMessage(e));
     }
@@ -57,8 +65,7 @@ export function useTenderUploads(tenderId: number, onSettled: () => void) {
     try {
       const handles = await registerDropped(files);
       if (!handles.length) return;
-      const out = await call('transfers:upload', { handles: handles.map((f) => f.handle), target: { kind: 'tender', tenderId, ...target } });
-      add(out, target);
+      await call('transfers:upload', { handles: handles.map((f) => f.handle), target: { kind: 'tender', tenderId, ...target } });
     } catch (e) {
       toast('error', errorMessage(e));
     }
@@ -205,14 +212,19 @@ export async function saveTenderFile(source: Source, name: string, open = false)
   }
 }
 
-/** Where an upload is, in words: waiting its turn, getting ready (checked and announced), sending, or being filed. */
-export function uploadStage(t: Pick<Transfer, 'state' | 'bytes' | 'total'>): { label: string; pct: number | null } {
-  if (t.state === 'queued') return { label: 'Waiting…', pct: null };
-  if (t.state === 'paused') return { label: 'Paused', pct: t.total ? Math.floor((t.bytes / t.total) * 100) : 0 };
+/**
+ * Where an upload is, in words: waiting its turn, getting ready (checked and announced), "Uploading 42%",
+ * being filed — or paused, or failed, at the share it had reached.
+ */
+export function uploadStage(t: Pick<Transfer, 'state' | 'bytes' | 'total'> & { retryAt?: string | null }): { label: string; pct: number | null } {
+  const reached = uploadPercent(t.bytes, t.total);
+  if (t.state === 'failed') return { label: 'Failed', pct: reached };
+  if (t.state === 'paused') return { label: `Paused ${reached}%`, pct: reached };
+  if (t.state === 'queued') return t.retryAt ? { label: `Waiting ${reached}%`, pct: reached } : { label: 'Waiting…', pct: null };
   if (t.bytes <= 0) return { label: 'Preparing…', pct: null };
   if (t.total && t.bytes >= t.total) return { label: 'Filing…', pct: null };
-  const pct = t.total ? Math.min(99, Math.floor((t.bytes / t.total) * 100)) : 0;
-  return { label: `${pct}%`, pct };
+  const pct = Math.min(99, reached);
+  return { label: `Uploading ${pct}%`, pct };
 }
 
 /** One upload with its progress bar, and Cancel. */
@@ -224,11 +236,17 @@ export function UploadBar({ t }: { t: Transfer }) {
         <Icon name="upload" size={12} className="shrink-0 text-primary" />
         <span className="min-w-0 flex-1 truncate">{t.name}</span>
         <span className="shrink-0 text-ink-3 tabular-nums">{t.total ? `${bytes(t.bytes)} of ${bytes(t.total)}` : ''}</span>
-        <b className="w-[70px] shrink-0 text-right font-semibold text-ink tabular-nums">{st.label}</b>
+        <b className={cx('w-[104px] shrink-0 text-right font-semibold tabular-nums', t.state === 'failed' ? 'text-danger' : 'text-ink')}>{st.label}</b>
+        {t.state === 'failed' || t.state === 'paused' ? (
+          <button type="button" aria-label={`${t.state === 'failed' ? 'Retry' : 'Resume'} uploading ${t.name}`} title={t.state === 'failed' ? 'Retry — continues from where it stopped' : 'Resume'} onClick={() => void call(t.state === 'failed' ? 'transfers:retry' : 'transfers:resume', { id: t.id }).catch((e) => toast('error', errorMessage(e)))} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-ink-3 hover:bg-subtle hover:text-ink">
+            <Icon name={t.state === 'failed' ? 'refresh' : 'play'} size={12} />
+          </button>
+        ) : null}
         <button type="button" aria-label={`Cancel uploading ${t.name}`} title="Cancel" onClick={() => void call('transfers:cancel', { id: t.id }).catch(() => undefined)} className="flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-ink-3 hover:bg-subtle hover:text-ink">
           <Icon name="x" size={12} />
         </button>
       </span>
+      {(t.state === 'failed' || t.state === 'paused' || t.retryAt) && t.error ? <span className={cx('text-[11.5px]', t.state === 'failed' ? 'text-danger' : 'text-warning')}>{t.error}</span> : null}
       <span
         role="progressbar"
         aria-label={`${t.name} upload`}

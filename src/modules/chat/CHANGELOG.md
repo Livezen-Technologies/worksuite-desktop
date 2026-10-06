@@ -4,6 +4,51 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.61.0 — 2026-10-06
+
+**Changed**
+
+- Raise ticket in a website chat opens Support's native sheet (subject, priority, department, team, category, assignee, append to the visitor's open ticket, the transcript with chosen messages public) and the ticket's desktop tab, instead of the browser; a chat that is a ticket shows its reference and status (WS-SUPPORT-SRS-001 D-06, FR-DSK-08)
+
+## 1.60.0 — 2026-10-06
+
+**Added**
+
+- the chat drawer docks beside the page by default, which reflows; it floats over it from the header's Docked ⇄ Floating button, Settings › Chat or a window under 1200px, and resizes from its edge (360–640px, 400 by default, kept per person) (#264)
+- a shared WorkSuite page is a card — the app's icon, its title, what the reader may see of it and Open in a new tab; without the app, 'You don't have access to this page' with Request access (#266)
+- Website chats › Widget settings › Contact options: the widget's WhatsApp numbers — from WorkSuite WhatsApp or typed in (E.164, +94 by default), label, pre-filled message, when to show, reorder, Test, 'Saved · live on <site> within 1 minute' and Refresh widget now where the server offers it (#260)
+
+**Changed**
+
+- sharing a page or record (the drawer's Attach, Share from WorkSuite) sends a full item link with its organisation, type and id, never a relative path; older relative paths show as cards too (#266)
+- Website chats open in place: closed, missed and offline chats show their saved copy at once, otherwise a full-pane placeholder under the list row's header with centred 'Still loading… · Retry' / 'Couldn't load · Retry'; threads draw Markdown formatted and saved replies and AI drafts go to visitors as plain text (#261)
+- Widget screens the server's Communication module lacks are hidden, with a version notice for admins; save errors show under their field on the right tab with a marker on it; 'Use 'Techubiz' as the name?'; the title uses the company name (#259)
+
+**Fixed**
+
+- a message's actions show on hover in its top-right corner (react, reply, star, more), not as a round ⌄ floating beside the bubble (#266)
+- website chat previews are plain text, and a last message without words shows what it was ('📷 Photo', '📎 File: …', '★★★★★ Rated 5', 'Chat closed', 'Visitor left') instead of a blank line (#261)
+
+## 1.59.0 — 2026-10-05
+
+- Not-reaching-staff flag on the Live dashboard, delivery figures on Insights, native ring notifications on the built-in service fixed
+
+## 1.58.0 — 2026-10-05
+
+- Website chats over the WebSocket chat service: v2 transport with SSE and built-in fallback, resume without loss, delivered/read by seq, live switching
+
+## 1.57.0 — 2026-10-05
+
+- Website chat replies through an outbox with client_id (Not sent · Retry · Discard), threads rendered by seq with sync on gap, focus and reconnect
+
+## 1.56.0 — 2026-10-05
+
+- Ringing reaches everyone, retries, test tool (#251); Live dashboard instant with lazy map (#248); paged lists, saved copies, instant replies, timings (#252); Insights states and new sections (#247); widget settings collapsibles (#244); connection warning in the composer (#254)
+
+## 1.55.0 — 2026-10-05
+
+- Website chats instant loading, placeholder and lighter rows (#239); returning visitors in the agent view (#222); pull to refresh in Team Chat, WhatsApp and Website chats (#236); zero-offset zone label fix
+
 ## 1.54.1 — 2026-10-04
 
 - W-02: widget preview's home status in two lines, Expand then Minimise, as the visitor widget

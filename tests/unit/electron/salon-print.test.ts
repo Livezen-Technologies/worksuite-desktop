@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ BrowserWindow: class {} }));
 
 import { contract } from '@shared/ipc/contract';
-import { DEFAULT_PRINT, drawerPulse, pageSize, printDocument, rawCommand, SalonPrint, sendRaw, type PrintJob, type SpawnLike } from '../../../electron/services/salon-print';
+import { DEFAULT_PRINT, drawerPulse, fullPage, pageSize, printDocument, rawCommand, SalonPrint, sendRaw, type PrintJob, type SpawnLike } from '../../../electron/services/salon-print';
 
 function config() {
   const m = new Map<string, unknown>();
@@ -16,7 +16,7 @@ function config() {
   };
 }
 
-function service(over: { origin?: string | null; response?: () => Response } = {}) {
+function service(over: { origin?: string | null; response?: () => Response; desk?: number | null } = {}) {
   const cfg = config();
   const jobs: PrintJob[] = [];
   const raw = vi.fn(async (_p: string, _b: Buffer) => ({ ok: true as const }));
@@ -33,6 +33,7 @@ function service(over: { origin?: string | null; response?: () => Response } = {
     config: cfg,
     http: http as never,
     origin: () => origin,
+    desk: over.desk === undefined ? undefined : () => over.desk ?? null,
     print: async (j) => {
       jobs.push(j);
       return { ok: true };
@@ -56,6 +57,8 @@ describe('the page a receipt is printed from', () => {
     // A short receipt is still taller than it is wide, so it is not printed turned.
     expect(pageSize('80mm', 40)).toEqual({ width: 80_000, height: 90_000 });
     expect(pageSize('a4', 5000)).toBe('A4');
+    expect(pageSize('letter', 5000)).toBe('Letter');
+    expect(fullPage('letter') && fullPage('a4') && !fullPage('80mm') && !fullPage('58mm')).toBe(true);
   });
 });
 
@@ -143,6 +146,12 @@ describe('printing a receipt', () => {
     expect(fetched).toEqual(['https://salon.example/api/salon/v1/visits/42/receipt?paper=80mm']);
     expect(jobs).toEqual([{ html: expect.stringContaining('Receipt') as string, paper: '80mm', deviceName: 'TM-T20', silent: true, copies: 2 }]);
     expect(r).toEqual({ ok: true, printer: 'TM-T20', silent: true, message: 'Sent to TM-T20.' });
+  });
+
+  it('names the desk, so the receipt comes in the template the desk was paired with', async () => {
+    const { s, fetched } = service({ desk: 7 });
+    await s.receipt(42, '58mm', []);
+    expect(fetched).toEqual(['https://salon.example/api/salon/v1/visits/42/receipt?paper=58mm&desk=7']);
   });
 
   it('asks where to print when no printer is set up, and sends A4 to the A4 printer', async () => {

@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.9.0 — 2026-10-06
+
+**Added**
+
+- Help & Guide › Contact Support finished (WS-SUPPORT-SRS-001 D-11, FR-DSK-09): a real ticket at the help desk with its reference shown (Copy reference, Open the ticket); Question, Problem or Feature request; diagnostics the person sees and can untick — app version, operating system, current screen, and the last day's redacted log (help:logs, the newest 8 KB) — with View exact payload; Capture this window (help:capture) sent as files[]; offline the request waits in the outbox; My requests in Help & Guide and after sending (kept on this computer, with the desk's status for somebody who reads it)
+
+## 1.8.7 — 2026-10-05
+
+- Local AI downloads use the safe main-process fetch (#253)
+
 ## 1.8.6 — 2026-10-04
 
 - AiMenuButton takes the composer's label (Writing assistant on website chats)

@@ -36,7 +36,7 @@ export function RecordingProgress({ recording, local: supplied }: { recording?: 
   const fileId = mine?.driveFileId ?? recording?.drive_file_id;
   return <>
     <RecordingStatusView status={status} on={{
-      ...(mine ? { retry: run(() => call('meetrec:retry', { id: mine.id })), reveal: run(() => call('meetrec:reveal', { id: mine.id })) } : recording ? { retry: run(async () => { await apiPost(`/api/meet/recordings/${recording.id}/retry`); await qc.invalidateQueries({ queryKey: ['meet'] }); await qc.invalidateQueries({ queryKey: ['meetings'] }); }) } : {}),
+      ...(mine ? { retry: run(() => call('meetrec:retry', { id: mine.id })), reveal: run(() => call('meetrec:reveal', { id: mine.id })), fixPermission: run(() => call('media:privacySettings', { pane: 'screen' })), delete: run(() => call('meetrec:discard', { id: mine.id })) } : recording ? { retry: run(async () => { await apiPost(`/api/meet/recordings/${recording.id}/retry`); await qc.invalidateQueries({ queryKey: ['meet'] }); await qc.invalidateQueries({ queryKey: ['meetings'] }); }) } : {}),
       ...(mine?.transferId ? { pause: transferAct('transfers:pause', mine.transferId), resume: transferAct('transfers:resume', mine.transferId), cancel: transferAct('transfers:cancel', mine.transferId) } : {}),
       ...(fileId ? { play: () => navigate(`/files?file=${fileId}&play=1`), openInDrive: () => navigate(`/files?file=${fileId}`) } : mine ? { play: run(() => call('meetrec:open', { id: mine.id })) } : {}),
     }} />

@@ -5,10 +5,368 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.183 — 2026-10-05
+## 0.2.195 — 2026-10-06
 
 - **About links to worksuitecloud.com.** Settings › About now names worksuitecloud.com as the website (it said
   worksuiteone.com), the same site as WorkSuite Office's About window, so both apps match.
+- Modules: settings 1.26.1.
+
+## 0.2.194 — 2026-10-06
+
+- **Support opens in the app (WS-SUPPORT-SRS-001).** The support desk is now a native module instead of the
+  browser. It needs the server's Support 1.1.0; on an older server it falls back to the old ticket routes for the
+  list, a ticket, replies, status and assignment.
+  - **Inbox:** three panes — views with live counts and saved views, a fast ticket list, and a reading pane with an
+    inline reply. j/k, Enter, R, N and E work as on the web. Your availability is Chat's Online/Away.
+  - **A ticket in its own tab:** the conversation, activity, linked records and files. Every change is sent with the
+    version you saw; if somebody changed it first you see both and choose. SLA timers, the requester's other tickets,
+    who else is viewing, RustDesk Connect, and a composer that takes dragged files and pasted screenshots. Drafts are
+    kept on this computer and on the server, so they follow you to the browser.
+  - **Notifications:** an assignment, a requester's reply, a mention or an SLA warning arrives as a banner with Open,
+    Take later, Snooze or a reply typed into the banner. The rail, Dock and tray show the desk's unread count. Each
+    kind can be tuned under Settings › Notifications › Support.
+  - **Quick reply (⌃⌥R / Ctrl+Alt+R from any app):** a small always-on-top window for the latest or a chosen ticket.
+  - **Tray:** my open tickets, due today, at risk and the next SLAs due, with a red dot while one of mine has breached.
+  - **Urgent tickets:** a new urgent, unassigned ticket rings once with a countdown, Take it, Assign and Dismiss.
+  - **Website chat → ticket:** a native sheet from the chat, raised once and appended to the visitor's open ticket
+    when there is one.
+  - **⌘K:** finds tickets and knowledge-base articles, runs the ticket's actions, and ⌘⇧C copies a ticket's link.
+  - **⌘J:** the knowledge-base and AI panel — articles to insert as a link or text, a thread summary, a suggested
+    reply, rewrite and translate, and suggested category and priority. AI only ever suggests; nothing is sent until
+    you send it.
+  - **Offline:** replies, notes and changes wait in an outbox and go when the connection comes back, once each. A
+    change somebody else overtook waits for you to choose, field by field.
+  - **Help & Guide › Contact Support** raises a real ticket and shows its reference. You choose which diagnostics go
+    with it, can attach a capture of the window, and see your requests.
+  - **Wallboard:** the desk's live dashboard full screen on a second display (for people who may read reports).
+- Settings 1.26.0 (Next/Previous tab and Copy ticket link shortcuts), notifications 1.12.0 (Support's banners), chat
+  1.61.0 (the ticket's reference on a converted chat), ai 1.9.0 (Contact Support).
+
+## 0.2.193 — 2026-10-06
+
+- **Marketing opens in the app (WS-MKT-SRS-001 v1.1).** Marketing is now a native module in a tab of its own
+  instead of the browser, with the same four sections as the web: Audience, Email, Calls and Insights.
+  - **Audience:** dashboard with go-live readiness, contacts (phones masked), the contact page, organisations, lists,
+    segments with a live sample, imports with a file of rejected rows, and consent & suppression with the ledger.
+  - **Email:** campaigns, the three-step editor with a block editor that saves the same HTML as the web, review &
+    send with the pre-send check and test sends, and the report (funnel, links, human opens, deliverability, A/B).
+  - **Calls:** call campaigns, My call queue with the ten wrap-up outcomes and callbacks, and scripts.
+  - **Insights:** reports. Automation is shown as planned, not as working.
+- **Calls from anywhere.** ⌘⇧N / Ctrl+Shift+N claims the next contact while another app is in front (the key is held
+  only while no WorkSuite window is focused). The tray shows the call queue, today's callbacks and campaigns sending
+  now. A callback that falls due raises a notification with **Call now** and **Snooze 15 min**, and a campaign paused
+  by the bounce guard raises one too. Both can be switched off under Settings › Notifications › Marketing.
+- `worksuite://marketing/…` links open the queue, a contact or a campaign.
+- Needs the server's Marketing 2.0.0.
+
+## 0.2.192 — 2026-10-06
+
+- **Point of Sale's counter, redrawn for touch (pos 1.1.0, settings 1.24.0).** The till now looks and works as in
+  the POS design (D01–D18).
+  - **The till bar:** a navy bar across the top shows the till and register, whether the till is online, the clock,
+    the cashier, Lock and the till's menu. The side rail is gone; its screens, the customer display, Change cashier,
+    the web's screens and Forget this till are in that menu. The counter can go full screen.
+  - **Selling:** products in pages of five by three (or a list), with dots, arrows and swipe. The category button
+    opens a picker with each category's count and what sold most today on this till, and recent categories sit beside
+    it. A quick-action bar holds Hold, Recall, Return, Discount, Customer, Cash in/out, Open drawer and More. **Cash
+    exact** sells for the total in cash. F2 searches, F12 pays.
+  - **Several sales at once:** up to five open sales per till as tabs (Ctrl+N for a new one, Ctrl+1…5 to switch).
+    The customer display follows the sale on screen. **Hold** parks a sale with an optional note for 24 hours. Open
+    and held sales hold customer details, so the main process keeps them encrypted for this server and till, and
+    forgetting the till removes them.
+  - **Paying:** two panes, with tender tiles, what has been paid so far, a keypad, quick cash amounts and one button
+    that says the change to give. Sale complete shows the change, Print, Email and Open drawer, and the receipt on
+    screen.
+  - **Receipts** print the tax by rate ("VAT 18%") and end with the receipt number as a barcode, so a return can
+    start by scanning it.
+  - **Returns from the counter:** scan or type the receipt number, then choose quantities, each line's condition and
+    a reason. Damaged lines are refunded without going back into stock.
+  - **The drawer:** cash in and out from the counter, with the company's reasons and a reference. Opening and closing
+    the register use two panes and the keypad, note by note or as one figure. **Where it bites:** the register will
+    not close while a sale is open or held on the till, and when card was taken, "Card batch settled" must be ticked
+    first.
+  - **Pairing, till settings and the customer display** are redrawn. Pairing shows each till as free or in use and
+    takes one over only from a button that says so. Till settings have a device card each for the receipt printer,
+    cash drawer, scanner (with a test scan) and customer display. The customer display shows the sale, the tax,
+    what the discount saved and the change.
+  - Stock levels, promotions, loyalty, LankaQR, vouchers and store credit, and manager approval are not in this
+    release: the server does not offer them yet.
+  - Works with today's server; nothing new is needed on WorkSuite.
+- **PDF Studio: every tool in one place (pdf 1.1.0).** **All tools** lists every Acrobat-class tool in a searchable
+  panel beside the document, each with its own panel. A tool that cannot run yet says why. PDF Studio has a home
+  with its own rail (Recent, Starred, Shared, Agreements, Scans, Offline copies, Jobs, Recover, Settings and more),
+  an 18-tool grid and Open from Drive. New: sign by drawing or typing a signature and placing it on the page; find
+  NIC, phone, e-mail, card and bank numbers to redact; preview Bates numbering; copy the diagnostics report.
+
+## 0.2.191 — 2026-10-06
+
+- **Social Media Manager (WS-SMM-SRS-001).** A new **Social Media** app under Business: manage every social account
+  in one place — Facebook, Instagram, Threads, LinkedIn, X, YouTube, TikTok, Google Business Profile and Pinterest.
+  - **Publish:** Overview; Create post — write once, adjust each network, live checks with one-click fixes (split a
+    long X post into a thread, crop, alt text), previews, media from Drive or dragged in from the computer, AI
+    suggestions you choose to use; Calendar (month, week, list, drag to reschedule); Queue & posting slots; Approvals
+    with steps, comments and client review links.
+  - **Engage and measure:** a unified Inbox for comments, messages, mentions and reviews (saved replies, internal
+    notes, AI reply drafts, CRM lead and Support ticket, J/K); Analytics with a heat map of when your audience engages;
+    Content library; Campaigns with UTM tracking.
+  - **Administer:** Accounts (connect in your browser — WorkSuite never sees your social password), Module settings with
+    provider apps and "Pause all publishing", and the Publishing log.
+  - Native notifications for published, failed, approval and inbox events carry View post, Approve, Reply and Copy
+    caption; Ctrl/⌘+N starts a post, Ctrl/⌘+Enter schedules it; the calendar and drafts open offline.
+- **Where it bites:** needs the server's new Social Media module (app `worksuite.social-media`). Until a server has it,
+  the app shows only to super-admins and every screen says the server doesn't offer it yet — see
+  `docs/SOCIAL_MEDIA.md` for what the server needs. Publishing always runs on the server, so posts go out with the
+  computer off. (social-media 1.0.0, notifications 1.10.0)
+- **Not in this release:** screens for bulk scheduling from a spreadsheet and for recurring posts (the server calls are
+  ready), campaign-level review links (no server route yet), Listening and competitor benchmarks (a later phase), and
+  the mobile screens, which are WorkSuite Mobile's.
+- **How it was checked:** GitHub Actions was not starting jobs for the repository when this merged (#275), so CI did
+  not run. It was verified locally on the merged head instead: typecheck, lint, the module-version check, all 5,312
+  unit tests and the production build.
+
+## 0.2.190 — 2026-10-06
+
+- **SalonMate's front desk, redrawn to the SalonMate desktop design (salon 2.0.0).** Every screen of the desk now
+  looks and works as in the design (D01–D17), with buttons sized for touch.
+  - **The rail:** Today, Calendar, Walk-in, Clients, Checkout, Register, Sync and Settings, icons over their names.
+    Its foot says whether the desk is online and when it last synced, whether the register is open, the receipt
+    printer, and the location, desk and register.
+  - **Today:** a greeting by name; Walk-in, New booking, Take payment and Find a client; who arrives next, with the
+    stylist's initials in their colour; who is on the floor and how far through. It also shows what is owed, how
+    much chair time is booked, the 30-day no-show rate and **Needs attention** (online bookings to confirm, time off,
+    reviews, deposits owed, items waiting to sync).
+  - **Deposits are taken at the desk:** **Take deposit** on Today and the calendar, and **Book · take deposit** on a
+    new booking, by cash, card, LankaQR or bank transfer. The deposit goes into the desk's open POS register as a sale
+    of its own, and is refused while the register is closed.
+  - **New booking by touch:** services back to back, each with its stylist or whoever is free. A strip of days, every
+    start with taken times struck through, and the chain WorkSuite offers ("Kasun, then Nadeesha"). A watch-list
+    client's deposit is shown before booking.
+  - **The calendar:** bookings are coloured by status (confirmed, waiting, late, in the chair, done, cancelled) and
+    marked for an allergy, an advance or a deposit owed. Leave and block-outs are hatched and labelled. The time now
+    is labelled, and a tap on free time books it with that stylist.
+  - **Check-in:** the allergy read-out in a red-banded dialog, the patch test that covers today, and
+    **Update allergies** beside **Check in**.
+  - **Take payment:** the bill on the left with the amount to pay in large type. On the right, the register the money
+    goes into, Cash, Card, LankaQR, Bank transfer, Store credit or Split, the cash received on a calculator keypad,
+    and over-payment as store credit or change.
+  - **Add retail** opens Point of Sale's catalogue as a sheet: categories, stock (in stock, a few left, out),
+    barcode scan, quantities and who sold it.
+  - **Paid:** the drawer, store credit, points and advance; the POS sale and the receipt printed; **Print again**,
+    **Book next visit**, **Done — next client**; and the receipt beside it, as it printed.
+  - **Clients:** the client's tier and reliability, what they asked for, every allergy in one red line, points,
+    store credit and what they owe, recent visits, the last formula, and **WhatsApp** beside **Book again**.
+  - **Service record (new):** the formula, technique and timings for a visit's service, **Same as last time**, and
+    before and after photos from the desk's webcam or a file. Photos are kept in WorkSuite Files, staff-only, and used
+    on the website only with the client's consent on file.
+  - **Register, Close the day, Sync, Settings, pairing:** the float and the closing count note by note, the salon's
+    day by tender, Sync's numbered queue with the stylist's free times nearest a refused booking, and Printers &
+    receipts with a preview of the test receipt. The desk's details, the owners' screens and **Pair this computer
+    again** move to Settings.
+  - **Receipts on A4 or Letter** as well as 80 mm and 58 mm rolls. A full page goes to the A4 printer when one is
+    chosen.
+  - **Calendar Week and List:** the week a column a day, each booking in time order, and the same week as a list
+    narrowed by stylist, state, allergy on file or a name.
+  - **Products used on the service record:** start from the service's recipe and change it to what was really used,
+    or add from the desk's stock. Checkout takes exactly that from the desk's stock. A product whose name carries
+    one of the client's allergies is kept only when the stylist says it was used.
+  - **The desk's stock location and receipt template:** chosen when the computer is paired, and changed later in
+    Settings by somebody who manages desks. Receipts print in the desk's template: the full salon receipt, or a
+    short one.
+  - **WhatsApp receipt and Email receipt** on Paid, to the mobile or address on file or one typed for this receipt.
+    A client who asked for no messages is sent it only when they ask for it.
+  - **Taking payment offline:** a desk paired as a POS till takes cash or card while WorkSuite is out of reach. It
+    prints a till receipt numbered in the desk's own series, keeps the sale encrypted, and sends it first thing when
+    WorkSuite answers. WorkSuite issues the invoice then, into the register session the sale was made in. Closing
+    the register waits until those sales have gone.
+- **Where it bites:** deposits need the server's SalonMate with the register fix for desk deposits (2026-09-28).
+  Without it, a cash deposit is not counted in the register. Products used, the stock location and template,
+  offline payments and sending the receipt need the server's Salon 1.1.0; on an older server the desk does not
+  offer the choices, and an offline payment is refused when it is sent, and waits in Sync. A WhatsApp receipt
+  needs a shared WhatsApp number connected to WorkSuite.
+- **Security: `simple-git` 4.0.2 under Local AI.** `node-llama-cpp` (the Local AI engine) pulls in `simple-git` 3.x,
+  which has four advisories that let a crafted git option run a command (GHSA-x6jw-m9v5-85vh, GHSA-g4wm-2vf7-vfgr,
+  GHSA-858h-whjf-mvg5, GHSA-v5rq-49vh-5v5c). An npm override now pins it to 4.0.2, so the build's `npm audit` step is
+  clean again. `node-llama-cpp` only uses git to fetch llama.cpp when it builds from source, and the calls it makes
+  are unchanged in 4.x.
+
+## 0.2.189 — 2026-10-06
+
+- **"Continue as" in WorkSuite Office.** WorkSuite Office, the desktop editor, can sign in with your WorkSuite
+  account straight from this app: choose **Continue as <your name>** there and confirm here. No browser, no
+  password. WorkSuite Office gets a sign-in of its own, which you can end like any other session.
+  - The app asks every time, never while it is locked (it asks once you unlock), and only for the account and server
+    it is signed in to.
+  - WorkSuite Office learns who is signed in from `desktop-accounts.json` in the app's data folder: name, email,
+    organisation and server, never a token. It is emptied when you sign out.
+- **Security:** pages in the app can no longer call `/api/auth/apps/*` through the API proxy (files 1.8.4).
+- Needs the server's Auth 1.2.0.
+
+## 0.2.188 — 2026-10-06
+
+- **Phone (WS-VOIP-SRS-001).** A new **Phone** app under Work: a softphone built into the app that registers your
+  WorkSuite extension over secure WebSocket and stays registered while the app is locked, so a call is never cut.
+  - **My phone:** dialer with live match, recents, speed dials and caller-ID choice; in-call controls (hold, mute,
+    keypad, blind and attended transfer, conference, park, record, call quality); notes, a follow-up task and wrap-up
+    after the call; Calls history with filters and CSV export; call detail with the recording; Voicemail;
+    Forwarding, Do Not Disturb and hot desk.
+  - **Incoming calls** ring in a toast on any page and as a native notification; missed calls are counted on the Phone.
+  - **Compact phone:** a small always-on-top window (Phone › Compact phone) with Alt+Ctrl/⌘+A, H and M to answer,
+    hang up and mute from any app.
+  - **Supervise** (voip.reports / voip.supervise): Live board with listen, whisper and barge; Reports; Recordings.
+  - **Administer** (voip.manage): extensions (with the SIP secret shown once and a QR code), PBX servers and
+    mappings, trunks, gateways, SIM cards and outbound routes with a route tester, inbound numbers and IVR, queues and
+    ring groups, the dial plan with a config diff, and settings with sync runs.
+  - Contacts: a phone number's menu now offers **Call on my WorkSuite phone**.
+- **Where it bites:** needs the server's Voip module and an extension mapped to you. The first time the Phone connects,
+  the main window restarts once so it may reach the phone system. Screens that need server features WorkSuite doesn't
+  offer yet (trunk and queue editors, voicemail actions, the supervisor board, among others) say so instead of
+  pretending — see `docs/PHONE.md`.
+
+## 0.2.187 — 2026-10-05
+
+- **Visitor messages that aren't reaching staff (delivery Phase 3).** When no staff device has received a visitor's
+  message in a chat you hold for 60 seconds, the server sends it again and the app shows an urgent native
+  notification, closed once it arrives. The Live dashboard row is flagged **Not reaching staff**.
+- **Ring notifications without a live connection.** With the ringing window on and no realtime connection, the
+  fallback check found new chats but never showed a notification, and a chat that rang a second time was dropped as a
+  repeat. Both are fixed.
+- **Insights › Delivery.** Daily counts of messages sent, retried, deduplicated, re-synced, emailed and not reaching
+  staff, for the whole installation. Hidden on older servers.
+- The app now tells the server it is WorkSuite Desktop (`X-WorkSuite-Client: desktop`), so an administrator can keep
+  Desktop on the built-in chat service separately.
+- Needs the server's Communication 1.54.0 and Notifications 1.12.0.
+
+## 0.2.186 — 2026-10-05
+
+- **Website chats over the WebSocket chat service (delivery Phase 2).**
+  - **Connection:** when the server's chat service is WebSocket, the app connects with the new protocol, falls back to
+    SSE and then to the built-in service, and tries to move back up every 5 minutes. The status bar's Realtime row
+    names the connection, e.g. "Connected · WebSocket".
+  - **No loss:** after a gateway restart or waking from sleep it resumes where it left off; when it can't, the open
+    threads fetch what they missed. Repeated events are dropped, so rings and notifications fire once.
+  - **Delivered and Read:** receipts go to the server in batches about once a second; ticks move only when the visitor
+    has the message.
+  - **Switching:** a switch to Built-in takes effect at once. On the older connection, a switch to WebSocket is picked
+    up within 5 minutes.
+  - **Fixed:** syncing an open website thread re-read the whole thread instead of merging the missing messages.
+  - Needs the server's Communication 1.53.0 and Notifications 1.11.0.
+
+## 0.2.185 — 2026-10-05
+
+- **Website chat replies are never lost or sent twice (delivery Phase 1).**
+  - **Sending:** each reply carries a message id. It shows Sending…, then appears in the thread; if the server refuses
+    it, it stays as **Not sent** with the reason, **Retry** and **Discard**, and the text box is cleared. Retry and the
+    offline queue reuse the same id, so the visitor gets it once.
+  - **Order:** threads are ordered by the server's message number. A missed message is fetched on a gap, when the
+    window comes to the front, and after a reconnect; a repeated live event is dropped once in the main process, so
+    rings and notifications fire once.
+  - **Header:** a Live / Updating every few seconds pill.
+  - A refused reply is kept until the app restarts; replies waiting for a connection survive restarts as before.
+  - Needs the server's Communication 1.52.0.
+
+## 0.2.184 — 2026-10-05
+
+- **New website chats reach everyone again (#251).**
+  - **Why they didn't:** round robin gave each new chat to one person straight away, and the server stopped ringing
+    for any chat that already had someone assigned. Everyone else heard nothing, and chats drifted to Missed.
+  - **Now:** a chat the system assigned rings everyone available until someone joins.
+  - **In the app:** it keeps trying after a refusal instead of going quiet until the next sign-in, and when the live
+    connection is down it reads the waiting list every 10 seconds.
+  - **Settings › Notifications & calls:** a new **Send a test chat notification** shows each step. A banner says when
+    the system has turned WorkSuite's notifications off.
+  - "Taking chats" now uses the same status as the top bar.
+  - Needs the server's Communication 1.51.0.
+- **Files with "—" in their names open (#253).** Opening "FORM TECH-10 — Bid Security (Bank Guarantee).pdf" crashed
+  the app: Electron's own fetch throws on a file name it can't hold. The app now fetches in a way that never throws.
+  The viewer says "Couldn't open this file", with Retry, Open in its app and Save a copy. Saved files keep their exact
+  names.
+- **Website chats are fast (#252, #248).**
+  - **Saved copies:** lists, the Closed pages and the Live dashboard show their saved copy first, then update.
+  - **Paging:** Closed loads 50 at a time.
+  - **Replies:** a reply appears at once as "Sending…".
+  - **Live dashboard:** it never shows a full-page spinner. Each card fills in on its own with its own Retry, the map
+    loads last, and the header's count matches the sidebar.
+  - **Separate pool for transfers:** uploads and downloads now use their own connections, so they never hold up chats.
+  - **Diagnostics:** the report includes the timings.
+- **Large uploads finish (#249).**
+  - A 50 MB tender document failed with "The request was cancelled": the final step hit a 30-second limit.
+  - **Stall limit:** only 60 seconds without progress now stops an upload, and uploads resume after a drop or a restart.
+  - **Size check:** files over 2 GB are refused before they start.
+  - **Mail attachments** upload in parts too.
+  - **Progress:** Transfers shows speed and time left, with a Retry that continues where it stopped. A tender's
+    Documents tab shows "Uploading 42%".
+- **Insights explains itself (#247).**
+  - **Older server:** it says when the server needs updating, instead of "Not found".
+  - **Errors:** it says when you lack access. Other errors show their cause, a request ID, and Copy details.
+  - **Empty periods** show "No chats in this period".
+  - **New sections:** by widget, busiest hours, and top start pages.
+- **Connection strength in the status bar (#254).**
+  - **The indicator:** four bars with "Excellent · 42 ms" (or Good, Fair, Poor, Offline, Reconnecting), smoothed over
+    30 seconds.
+  - **Details:** hover for the server, network and services, plus a small speed test, Reconnect now and Copy details.
+  - **Warnings:** a weak connection gets a notice after 30 seconds, and a warning by the chat composer and in the Meet
+    call bar.
+  - Right-click the status bar to hide it or the milliseconds.
+- **Smaller fixes:**
+  - **Settings sidebar (#246):** Admin Center is a footer above the status bar, and the list above it scrolls.
+  - **Widget settings (#244):** the sections no longer overlap. Each is a collapsible section with a summary, and
+    remembers whether it's open.
+
+## 0.2.183 — 2026-10-05
+
+- **No more crash from a time in a header (#238).**
+  - **Cause:** a request header holding the narrow space macOS puts in formatted times (U+202F), or other text
+    above character 255, made the app's request code throw, and Electron showed its raw crash dialog.
+  - **Fix:** every request's headers are now cleaned in one place. A header that can't be sent gives a normal
+    "Couldn't send this request. Try again." on that screen.
+  - **Other uncaught errors** are logged to Diagnostics and the crash reporter, with a friendly message instead of
+    the dialog.
+- **Meet recordings are never empty (#240).**
+  - **Before recording:** on a Mac, recording checks for Screen Recording permission first, with Open System
+    Settings and Check again. It also needs a live video track.
+  - **While recording:** it records WebM before MP4 and saves in 1-second pieces. The meeting window keeps drawing,
+    and if only a header has arrived after 5 seconds it stops and says so.
+  - **Empty recordings** say why and offer Delete (and Fix permission), never Try again.
+  - **One card per recording**, with one status pill, progress on the card and the rest in a ⋯ menu.
+- **Website chats open at once (#239).**
+  - **Opening a chat:** conversations are kept on this computer and the last 8 in memory, so a chat opened before
+    shows straight away. A new one shows a placeholder of the conversation instead of a spinner at the edge.
+    "Still loading… Retry" and the error state are centred.
+  - **List rows:**
+    - one pill ("Waiting 4m", amber then red, or "Unread");
+    - online shown only by the avatar dot;
+    - assignee photos instead of "You".
+  - **No chat open:** the pane says "Select a conversation" with today's Waiting · Open · Missed.
+- **Returning visitors (#222).**
+  - **The visitor panel** shows how sure we are who it is, visits, devices, Previous chats, possible same-person
+    matches with Merge or Dismiss, merge history with Unmerge, the linked contact with company and deals, and
+    Delete visitor data.
+  - **Inbox rows** show "Returning · 3rd visit", and Merge is in the conversation header and right-click menu.
+  - **The widget's Embed code tab** sets the reopen window, continuing on another device, contact linking, cookie
+    lifetime, retention and the identify() secret.
+  - Needs the server's Communication 1.50.0.
+- **Mail delete works (#235).**
+  - **Deleting:** the row disappears at once with one "Deleted · Undo" toast, and several deletes join it ("3
+    messages deleted"). Messages already gone are removed quietly.
+  - **Failures:** a real failure brings the row back with one error and Retry.
+  - Needs the server's Mail 1.15.0.
+- **Toasts everywhere (#235):** at most 3, repeats merged as ×N, errors stay until closed, and they sit bottom-left
+  above the status bar instead of over the reading pane.
+- **Pull to refresh (#236).**
+  - **Mail, Team Chat, WhatsApp and Website chats:** scroll or pull a little past the top to check for new items.
+    New items arriving while you're scrolled down show "↑ 3 new emails", and the list keeps its place.
+  - **In Mail,** F5 and ⌘R also check (F5 only in the Outlook keys), "Checked 2 min ago" sits under the list header,
+    and Mail › Appearance & reading › Pull to refresh turns it off.
+- **Colour profiles work (#234).**
+  - **Applying:** choosing a profile changes every window at once, in light and dark, with no flash at startup.
+    System follows your computer.
+  - **Custom profiles:** up to five, from your own colour, checked for readability, with export and import.
+  - **Admins** can set the organisation's colour as the default and lock it.
+- **App launcher (#233):** no dark band above the footer. The fades show only when there's more to scroll, and the
+  footer sits at the bottom with one soft line.
+- **Settings › Security (#232):** the custom timeout is one row with "min" inside the field and the time in hours.
+  Admin Center › Ringing and Drive's speed limits use the same field.
+- **Business hours:** a zone with no offset reads "UTC (UTC+00:00)".
 
 ## 0.2.182 — 2026-10-04
 

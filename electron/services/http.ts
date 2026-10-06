@@ -1,4 +1,5 @@
 import type { DesktopErrorCode } from '@shared/ipc/contract';
+import { safeHeaders, UnsafeHeaderError } from '@shared/http-headers';
 import { DesktopError, UNREACHABLE_MESSAGE } from '../main/errors';
 import { logger } from '../main/log';
 
@@ -65,8 +66,59 @@ const KNOWN_CODES = new Set<DesktopErrorCode>([
   'RATE_LIMITED',
 ]);
 
+/**
+ * The client type every request to the WorkSuite server names: the server picks the chat service's scope (poll
+ * intervals, realtime transport) per client type from it, so desktop is told apart from the web app and the widget.
+ */
+export const CLIENT_TYPE_HEADER = 'X-WorkSuite-Client';
+export const CLIENT_TYPE = 'desktop';
+
+/** What a screen shows when a request could not even be put together (worksuite-desktop#238): it offers Retry. */
+export const NOT_SENT_MESSAGE = "Couldn't send this request. Try again.";
+
+/**
+ * A request that could not be built — a header value no HTTP header may carry, most often (#238) — as the
+ * ordinary error its screen shows with Retry. Never thrown past the caller, never a main-process crash.
+ */
+export function requestBuildError(e: unknown): DesktopError {
+  if (e instanceof DesktopError) return e;
+  const which = e instanceof UnsafeHeaderError ? e.header : null;
+  log.error('request could not be built', { header: which, error: e instanceof Error ? `${e.name}: ${e.message.slice(0, 160)}` : String(e) });
+  return new DesktopError('INTERNAL', NOT_SENT_MESSAGE);
+}
+
+/**
+ * A fetch whose every request goes through the header-safety helper, and that never throws synchronously: a request
+ * that cannot be built is a rejected promise with a `DesktopError`, which the caller handles like any other failure.
+ * The main process wraps `net.fetch` in this once, so no header with characters above 255 reaches undici (#238).
+ */
+export function withSafeHeaders<I extends object>(fetch: (url: string, init: I) => Promise<Response>): (url: string, init?: I) => Promise<Response> {
+  return (url, init) => {
+    try {
+      const safe = { ...(init ?? {}) } as I & { headers?: unknown };
+      if (safe.headers !== undefined) safe.headers = safeHeaders(safe.headers as Record<string, string>);
+      return fetch(url, safe);
+    } catch (e) {
+      return Promise.reject(requestBuildError(e));
+    }
+  };
+}
+
+/**
+ * A request that ran out of time (worksuite-desktop#249). Told apart from one somebody cancelled: a timeout's
+ * DOMException reads "The operation was aborted due to timeout", and that word "aborted" once made every slow
+ * request — a large upload's last step among them — say "The request was cancelled.", which nobody had done.
+ */
+export const TIMEOUT_MESSAGE = 'The server took too long to answer. Check your connection and try again.';
+
 export function classifyNetworkError(e: unknown): DesktopError {
   const text = `${(e as Error)?.message ?? e} ${String((e as { cause?: unknown })?.cause ?? '')}`;
+  // Not the network: a request that could not be built (a header no HTTP header may carry, #238).
+  if (e instanceof DesktopError || e instanceof UnsafeHeaderError || /ByteString|Invalid value for header|Invalid header name/i.test(text)) return requestBuildError(e);
+  // Before "aborted": a timeout's own message says it was aborted.
+  if ((e as Error)?.name === 'TimeoutError' || /due to timeout|signal timed out/i.test(text)) {
+    return new DesktopError('NETWORK_UNREACHABLE', TIMEOUT_MESSAGE);
+  }
   if ((e as Error)?.name === 'AbortError' || /aborted/i.test(text)) {
     return new DesktopError('CANCELLED', 'The request was cancelled.');
   }
@@ -78,6 +130,16 @@ export function classifyNetworkError(e: unknown): DesktopError {
     return new DesktopError('TLS_ERROR', "The server's security certificate isn't valid. Contact your administrator — WorkSuite will not connect to it.");
   }
   return new DesktopError('NETWORK_UNREACHABLE', UNREACHABLE_MESSAGE);
+}
+
+/**
+ * A failure that says nothing about the session, the account or this computer, and may well be gone on the next try:
+ * the server out of reach or too slow, the server — or the proxy in front of it — failing with a 5xx, a rate limit.
+ */
+export function isPassingFailure(e: unknown): boolean {
+  if (!(e instanceof DesktopError)) return false;
+  if (e.code === 'NETWORK_UNREACHABLE' || e.code === 'RATE_LIMITED') return true;
+  return e.code === 'SERVER_ERROR' && e.status !== null && e.status >= 500;
 }
 
 export function errorFromResponse(status: number, body: Envelope | null, retryAfter: string | null): DesktopError {
@@ -141,24 +203,59 @@ export class HttpClient {
    * refresh refused means the session is gone. A 401 that comes back after a
    * refresh that worked is this request's own answer — a locked folder's
    * wrong password answers 401 — so it is returned, not taken as a sign-out.
+   *
+   * A 401 to a request sent with a token that is no longer the session's —
+   * sent with none while signed out and answered after a new sign-in, or with
+   * the one a refresh by another request has since replaced — is about that
+   * old token. The request is sent again with the current one, and nothing is
+   * refreshed: a refresh spends the new session's refresh token (it rotates)
+   * and ends the access token every other request is carrying, so stale 401s
+   * landing just after a sign-in refreshed it away from under the sign-in's
+   * own requests, whose refusals then sent the person back to the sign-in
+   * screen (LOGIN-001).
+   *
+   * `timeoutMs` 0 sets no time limit at all: the caller watches the request
+   * itself (an upload's part, stopped only when it stalls — #249).
    */
-  async raw(method: string, url: string, init: RequestInit & { auth?: boolean; timeoutMs?: number } = {}): Promise<Response> {
+  async raw(method: string, url: string, init: RequestInit & { auth?: boolean; timeoutMs?: number; bodyFactory?: () => { body: BodyInit; contentType: string } } = {}): Promise<Response> {
     const auth = init.auth !== false;
+    // A streamed body is read once: built afresh for every send, the one after a token refresh included (#249).
+    const { bodyFactory, ...rest } = init;
+    init = rest;
+    // The bearer the last send carried (null: none), to tell a 401 about an old token from one about the current.
+    let sent: string | null = null;
     const attempt = async (): Promise<Response> => {
-      const headers = new Headers(init.headers);
-      for (const [k, v] of Object.entries(this.deps.clientHeaders())) headers.set(k, v);
-      if (!headers.has('Accept')) headers.set('Accept', 'application/json');
-      if (auth) {
-        const token = this.deps.tokens.accessToken();
-        if (token) headers.set('Authorization', `Bearer ${token}`);
+      // Every header through the safety helper (#238); a request that cannot be built is this screen's error, not a crash.
+      let headers: Headers;
+      try {
+        headers = new Headers(safeHeaders(init.headers as Record<string, string> | Headers | undefined));
+        for (const [k, v] of Object.entries(safeHeaders(this.deps.clientHeaders()))) headers.set(k, v);
+        headers.set(CLIENT_TYPE_HEADER, CLIENT_TYPE);
+        if (!headers.has('Accept')) headers.set('Accept', 'application/json');
+        if (auth) {
+          const token = this.deps.tokens.accessToken();
+          sent = token;
+          if (token) headers.set('Authorization', `Bearer ${token}`);
+        }
+      } catch (e) {
+        throw requestBuildError(e);
       }
-      const signals: AbortSignal[] = [AbortSignal.timeout(init.timeoutMs ?? 30_000)];
+      let body = init.body;
+      if (bodyFactory) {
+        const built = bodyFactory();
+        body = built.body;
+        headers.set('Content-Type', built.contentType);
+      }
+      const limit = init.timeoutMs === 0 ? null : AbortSignal.timeout(init.timeoutMs ?? 30_000);
+      const signals: AbortSignal[] = limit ? [limit] : [];
       if (init.signal) signals.push(init.signal);
       try {
-        const res = await this.deps.fetch(url, { ...init, method, headers, signal: AbortSignal.any(signals), redirect: 'manual' });
+        const res = await this.deps.fetch(url, { ...init, body, method, headers, signal: signals.length ? AbortSignal.any(signals) : undefined, redirect: 'manual' });
         this.deps.onReachability(true);
         return res;
       } catch (e) {
+        // Out of time, not cancelled by anybody: said so (#249). A slow answer is no sign the server is gone.
+        if (limit?.aborted && !init.signal?.aborted) throw new DesktopError('NETWORK_UNREACHABLE', TIMEOUT_MESSAGE);
         const err = classifyNetworkError(e);
         if (err.code === 'NETWORK_UNREACHABLE') this.deps.onReachability(false);
         throw err;
@@ -166,19 +263,30 @@ export class HttpClient {
     };
 
     let res = await attempt();
-    if (res.status === 401 && auth) {
+    let refreshed = false;
+    let resent = 0;
+    while (res.status === 401 && auth) {
       const body = await readEnvelope(res.clone());
       const code = body?.code;
       if (code === 'DEVICE_REVOKED' || code === 'DEVICE_NOT_REGISTERED') {
         this.deps.onDeviceDirective?.(code, body?.message ?? code);
         return res;
       }
-      const refreshed = await this.deps.tokens.refresh();
-      if (refreshed === 'offline') throw new DesktopError('NETWORK_UNREACHABLE', UNREACHABLE_MESSAGE);
-      if (refreshed === 'lost') {
+      // Answered for a token the session has since replaced: sent again with the current one, no refresh (LOGIN-001).
+      const current = this.deps.tokens.accessToken();
+      if (current && current !== sent && resent < 2) {
+        resent++;
+        res = await attempt();
+        continue;
+      }
+      if (refreshed) break;
+      const outcome = await this.deps.tokens.refresh();
+      if (outcome === 'offline') throw new DesktopError('NETWORK_UNREACHABLE', UNREACHABLE_MESSAGE);
+      if (outcome === 'lost') {
         this.deps.onAuthLost(body?.message ?? 'Session ended');
         return res;
       }
+      refreshed = true;
       res = await attempt();
     }
     // A version the server no longer accepts may be refused with 426 or with any error carrying UPDATE_REQUIRED.

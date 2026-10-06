@@ -91,6 +91,8 @@ function serve() {
   vi.mocked(apiGet).mockImplementation((async (path: string) => {
     if (path === '/api/chat/widget-admin/visitors') return { visitors: [] };
     if (path === '/api/chat/widget-admin/dashboard') return DASH;
+    // The first view in one answer (#248).
+    if (path === '/api/chat/widget-admin/dashboard/summary') return { now: DASH.now, today: DASH.today, visitors: [], visitors_total: 0, widgets: DASH.widgets, server_time: DASH.server_time };
     if (path === '/api/chat/widget-admin/conversations') return { conversations: [], can: {} };
     if (path === '/api/chat/widget-admin/canned') return { responses: [] };
     if (path === '/api/chat/widget-admin/insights') return INSIGHTS;
@@ -169,7 +171,7 @@ describe('L-06 · the Wall mode sheet (MAP-UI-06, MAP-24)', () => {
 
   it('the dashboard’s Wall mode asks first on this computer (WF-M3)', async () => {
     show(<WebsiteLive view="dashboard" selected={null} onSelect={vi.fn()} onOpenChat={vi.fn()} onSection={vi.fn()} live={NO_LIVE_PARAMS} onLive={vi.fn()} />);
-    await screen.findByRole('listitem', { name: /^On the site now: 18/ });
+    await screen.findByRole('listitem', { name: /^On the site now: \d+ —/ });
     await waitFor(() => expect(call).toHaveBeenCalledWith('live:info'));
     await act(async () => undefined);
     fireEvent.click(screen.getByRole('button', { name: 'Wall mode' }));
@@ -185,6 +187,8 @@ describe('L-06 · the wall on its display (MAP-16, MAP-24)', () => {
     const wall = await screen.findByRole('dialog', { name: 'Website chats — live, wall mode' });
     const view = () => wall.querySelector('svg[viewBox]')?.getAttribute('viewBox');
     await waitFor(() => expect(call).toHaveBeenCalledWith('live:info'));
+    // The map's code loads on demand (#248).
+    await waitFor(() => expect(view()).toBeTruthy());
     const world = view();
     expect(world).toMatch(/^0 /);
     await act(async () => void vi.advanceTimersByTime(WALL_CYCLE_MS));
@@ -202,6 +206,7 @@ describe('L-06 · the wall on its display (MAP-16, MAP-24)', () => {
     show(<WallWindow />);
     const wall = await screen.findByRole('dialog', { name: 'Website chats — live, wall mode' });
     await waitFor(() => expect(call).toHaveBeenCalledWith('live:info'));
+    await waitFor(() => expect(wall.querySelector('svg[viewBox]')).toBeTruthy());
     const world = wall.querySelector('svg[viewBox]')?.getAttribute('viewBox');
     await act(async () => void vi.advanceTimersByTime(WALL_CYCLE_MS));
     expect(wall.querySelector('svg[viewBox]')?.getAttribute('viewBox')).toBe(world);

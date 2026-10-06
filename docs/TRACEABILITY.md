@@ -492,6 +492,172 @@ design, staff, settings, reports, the day close, a booking's deposit) is the web
 | RM-DSK-007 | Done | Heartbeat every 30 s: queue size, version, online, last sync, the hosted printers' state |
 | §5.7 reservations (host stand) | Done | `Reservations.tsx`: the day's bookings with the server's `choices` (confirm, arrived, seat at a free table with guests and the table's version, cancel with a reason, no-show), the tables' timeline (`reservations/timeline`), a booking after `reservations/availability` (free tables, or the server's other times). `reservation.view` to see, `reservation.manage` to move; online only. Deposits and changing a booking stay on the web |
 
+## Support desk (WS-SUPPORT-SRS-001 v1.0, desktop D-01…D-12)
+
+`src/modules/support`, over the server's `/api/support/v1` (contract: the server's `docs/SUPPORT_API.md`), falling back
+to the as-built `/api/tickets` (list, show, reply, status, assign, take, agents) on a server without v1
+(`api.ts`). The shapes, vocabulary, routes and realtime hints are `shared/support.ts`. Build plan:
+`docs/SUPPORT_BUILD_PLAN.md`. Tests: `tests/unit/shared/support.test.ts`, `tests/unit/renderer/support-*.test.ts*`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| FR-DSK-01 | Done | A native module (`registry.ts` manifest, `shared/apps.ts` native, opened by `support.view` or an as-built `ticket.*` permission): the inbox, a tab per ticket and the composer, no browser hand-off |
+| FR-DSK-05 | Done | `worksuite://support` and `worksuite://support/ticket/{id or reference}` (`shared/deeplink.ts`); a ticket's tab is brought forward when open, opened when not (`core/tabs.ts`, WF-12); the web's `/tickets?ticket=` links open the same tab |
+| D-01 views & counts (FR-WSP-02/03) | Done | `Rail.tsx`: system views with live counts (`GET views`), saved views with theirs, the organisation filter |
+| D-01 compact rows, paging (FR-WSP-05, FR-SLA-07) | Done | `TicketList.tsx`: status dot, channel icon, monospace reference, Urgent/High chip, requester, SLA chip (none until the server computes a state), unread bold with a blue edge; keyset pages (`next_cursor`), virtualized |
+| D-01 search & filters (FR-SRC-01/02) | Partial | Search, status, priority and sort; a saved view's other filters (team, category, tag, SLA, dates…) are applied as saved. No editor for those filters here |
+| D-01 reading pane (FR-COM-10, FR-COM-11) | Partial | `ReadingPane.tsx`: header, collision ("Nimal is viewing"), the conversation with notes marked Internal and "New since you last viewed", Take it, Resolve, Open in tab, inline reply or note. No AI summary: the server's AI endpoints are T17 |
+| D-01 keyboard (FR-WSP-06) | Done | j/k, Enter/O, R, N, E (resolve dialog, sent with the version), /, ⌘↵ in the composer |
+| D-01 availability (FR-ASN-06) | Partial | `Availability.tsx`: Online/Away through Chat's presence (what routing reads) and open tickets against capacity (`GET agents`), ⌥⌘A. No auto-assign switch or working hours: the server has no API for them yet |
+| D-01 live list (FR-NTF-04) | Done | `live.ts`: desk hints refetch lists, counts and badges (debounced), ticket hints that ticket, presence hints the collision bar; a 30 s poll without the gateway |
+| D-02 ticket tab (FR-DSK-01) | Done | `TicketTab.tsx`: a tab per ticket, restored on relaunch, ⌘W closes it, ⌘⇧] / ⌘⇧[ the next and previous tab (`core/commands.ts`, `core/tabs.ts` `activateRelative`); Conversation, Activity (the journal, paged), Linked and Files views; Take it, Follow, Remote, Escalate, Resolve; merged and trashed tickets read-only |
+| D-02 properties (FR-TKT-03/10) | Done | `Properties.tsx`: status through the allowed `transitions`, priority, assignee (`GET agents`, presence and load), team, category, department (`GET meta`, the ticket's organization's), due, tags; each change sent with the version, a 409 opens the conflict review (keep theirs, or mine on top) |
+| D-02 SLA panel (FR-SLA-07) | Done | `TicketSide.tsx` `slaRows`: first, next and resolution from the server's `sla_timers` (met with the time taken, at risk, overdue, paused); the current target only on a server without timers. The policy's name is not in the API |
+| D-02 requester, files, related (FR-WSP-07, FR-TKT-05) | Partial | Requester with their other tickets (by email) and the CRM contact; files opened with the system's application through the download manager (reveal from the transfers panel; no Quick Look); links (`GET links`) opened natively or on the web. The requester's company name is not in the API; links are made on the web |
+| D-02 composer (FR-COM-01/04/05/08/09, FR-DSK-06, FR-SEC-06) | Partial | `Composer.tsx`: reply or note (note by default), To + CC, "/" canned responses filled by the server, @mentions in notes, status on send (`status_refused` reported), files dropped (overlay naming the ticket), pasted (a screenshot becomes a named PNG with its picture) or chosen — uploaded and scanned at once, ten of 25 MB at most, × takes one back. No BCC (not in the API); the AI writing assistant came with D-10 (T28) |
+| D-02 drafts (FR-CRT-10) | Partial | The draft — text, mode, CC, status, files, mentions — kept encrypted on this computer per ticket ("Draft saved 09:47"), shared by the reading pane and the tab; since T28 also kept on the server (`PUT tickets/{id}/draft`), offered on a computer without one |
+| D-02 remote (FR-WSP-08, WF-13) | Done | RustDesk ID with Connect: `rustdesk://connect/<id>` only, checked again in the main process (`hardening.ts` `rustDeskId`); the server's RustDesk settings copied for the client's Import server config |
+| D-02 collision (FR-COM-11) | Done | `presence.tsx`: viewing on opening and every 30 s, typing a reply or a note, `left` when the tab closes or goes behind another; "Nimal is typing a note…" |
+| D-03 native notifications (FR-DSK-02, FR-NTF-01/03, FR-SLA-05) | Done | `electron/services/support-notices.ts` through `NotificationService` (`claim`, `CustomNotice`): assignment (Open, Take later), requester reply (Open, Mark read, inline public reply on macOS/Windows), mention from the ticket hint (inline note), SLA warning/breach (Open, Snooze 10 min, stays). Worded from the ticket read with `peek`; the notification's own words without it |
+| D-03 per-event settings, quiet hours, digest (FR-NTF-03/06) | Done | Notification settings › Support (`notifications/SupportPrefs.tsx`): In app per event (the server's `event:` choices), banner and sound here, SLA banners that stay, low priority as an hourly digest; quiet hours (this computer's do-not-disturb) silence them except an urgent ticket's |
+| D-03 badge (FR-DSK-04) | Done | `GET badges` `unread` on the Support rail icon, the Dock/taskbar and the tray (line and tooltip); the bell's support notifications are left out of the Dock count so a ticket counts once. No CSAT notification: the server raises none |
+| D-04 quick-reply window (FR-DSK-03, FR-COM-01/05/10, FR-STS-03) | Done | `QuickReply.tsx` in a `support-quick` window (`/support/quick/{id}`, ~520×560, always on top with the title bar's pin, its place remembered per display, one at a time): reference, subject, requester, priority, live SLA chip, status, the last three messages with notes and "New since you last viewed"; the desk's composer (Reply/Note, "/" canned, Then: status); ⌘O / Ctrl+O opens the ticket's tab in the main window with the draft, Esc closes and keeps it, a message sent closes it. Opened from a banner's Quick reply (an empty banner reply too), the reading pane, and (T23) the tray and ⌃⌥R |
+| D-05 tray / menu-bar dashboard (FR-DSK-04, FR-WSP-02, FR-SLA-07, FR-ASN-06) | Partial | `electron/services/support-desk.ts` + `tray.ts` `supportItems`: my open, due today, at risk (`GET dashboard/mine`; the badges' `assigned_open`/`at_risk` on a server without it), overdue and unassigned (`GET badges`), each opening its view; the four soonest SLAs of mine (`GET tickets?view=mine&sort=sla`) opening the quick-reply window; Quick reply to latest (⌃⌥R global, switchable), Open Support, Online/Away (Chat's presence); red icon dot while one of mine is breached; Pause notifications is the tray's own. Native menu items, not a drawn flyout; no auto-assign switch (no API), no New ticket (D-11), no per-organization counts |
+| D-06 website chat → ticket (FR-DSK-08, FR-LCH-01…06/08, FR-CRT-03/05) | Done | `ConvertSheet.tsx` from the chat's visitor panel (`chat/website/WebsiteThread.tsx`): `GET conversions/{id}` prefill (subject, organization, priority), department/team/category (`GET meta`), assignee (`GET agents`, me by default), append to a candidate (offered first) or new, transcript internal with ticked messages / last reply public, notify visitor; `POST conversions` with an Idempotency-Key; `ALREADY_CONVERTED` and a converted chat open that ticket; the result opens the ticket's tab here; the panel shows the chat's ticket and status (FR-LCH-08). As-built server: `POST /api/tickets/from-conversation`, ticket opened natively. Requester matching (FR-CRT-05) is the server's; the sheet says so |
+| D-07 urgent ticket pop-up (FR-DSK-03, FR-NTF-03, FR-SLA-01/06/07, FR-ASN-02/03/05/08) | Partial | `electron/services/support-urgent.ts` asks `GET tickets?view=unassigned&priority=urgent&sort=created` on desk hints and every minute; one raised in the last 15 min rings once, one card at a time (`support-ring` window: centred, on top, takes the focus). `UrgentRing.tsx`: queue, requester, subject, first lines, live first-response countdown, Take it ↵ (opens the tab), Assign… A (presence, load/capacity), Dismiss Esc; closes when taken anywhere; switchable in Notification settings › Support. Not VIP (no VIP flag in the API), no AI category/sentiment (T17), one ring rather than three; detection by polling, since the server raises no `support.urgent_unassigned` |
+| D-08 command palette (FR-SRC-01/04, FR-WSP-06, FR-STS-07, FR-COM-05, FR-DSK-05) | Partial | `palette.ts` + `SearchOverlay.tsx`: ticket results from `GET tickets?view=all&q=` (the server's fuzzy reference) under Support tickets (a filter of its own), status/priority/requester/owner, ↵ the ticket's tab, ⌘↵ a window, ⌘⇧C the `worksuite://support/ticket/{id}` link; the ticket in front's actions (assign/reassign to me, resolve, insert canned → the composer's "/" picker, quick-reply window, copy link) registered as commands while its tab is in front and listed beside its result, each only when the ticket's `can`/`transitions` allow it; ⌘⇧C (`support-copy-link`, remappable); KB results and Insert KB link since T28 (D-10); ⌘↵ opens a window, not a second tab (a ticket has one tab) |
+| D-09 offline cache, outbox, conflict review (FR-DSK-07, FR-TKT-10, FR-MOB-03, FR-CRT-10) | Partial | Read cache: the manifest's prefixes (rail, lists, tickets opened, meta, agents, canned). `api.ts` `orQueue`: an offline write (message with `client_id`, PATCH/transition/assign with `version`) goes to `offline:submit` (the encrypted, ordered queue, `offline-queue.ts`); a 409 on replay is CONFLICT and holds later changes to that ticket. `Outbox.tsx`: the offline strip (Retry now → `offline:replay`), the outbox (`offline:pending`, `offline:detail`), edit a waiting message (`offline:edit`) or discard, Retry a refused one, the conflict review per field (Keep server / Keep mine with the server's version), tags merged automatically. Not here: greying uncached tickets, the connection log, Pause sending, cache settings; the original time and device are not stamped on replay (the API takes no such fields) |
+| D-10 KB & AI side panel (FR-KB-02/06/08/10, FR-AI-01/02/03/07, AC-17, FR-CRT-10) | Partial | `Assist.tsx`, ⌘J in `TicketTab.tsx` (capture phase, before the shell's assistant): Knowledge — `GET tickets/{id}/kb[?q=]` with score, visibility, language; Insert link (public only) / Insert text via `POST tickets/{id}/kb/insert` into the composer at the caret (`Composer.tsx` `insertRequest`, `insertAt`). AI assist — summary (`POST …/ai/summary`, refresh), suggested reply (tone, include notes, instructions, sources; inserted as a reply draft), Detected (`POST …/ai/classify`, Apply / Apply all through PATCH with the version; sentiment shown). Writing assistant in the composer (`POST ai/rewrite`, Replace on request). Violet AI badge; `503 AI_UNAVAILABLE` said quietly; nothing sent automatically. ⌘K: knowledge results (`palette.ts` `searchArticles`; ticket in front → its composer, else `/support/kb/{id}` on the web), Insert KB link… and KB & AI panel commands. Draft also kept on the server (`GET/PUT tickets/{id}/draft`, 2 s debounce; local draft wins). `support.mentioned` notices (`support-notices.ts`, one banner with the hint). Not here: article languages SI/TA switch (FR-KB-10: the ticket endpoint answers one language), find duplicates/merge (FR-AI-04, on the web), Draft KB article (FR-KB-07) |
+| D-11 Help & Guide → Contact Support (FR-DSK-09, FR-SEC-05, FR-DSK-06/07, FR-CRT-03, FR-POR-02) | Partial | `src/modules/ai/help/ContactSupport.tsx` (ai 1.9.0): `POST /api/desktop/support` raises a real ticket, reference shown (Copy reference, Open the ticket when the desk is readable); Question / Problem (`kind: issue`) / Feature request; diagnostics as unticked-able boxes — version+arch, OS, current screen, last 24 h of the redacted log ring (`help:logs`, `electron/services/ai-help.ts`, newest 8 KB, appended to the message since the route has no log field) — "Everything shown is what will be sent" and View exact payload; Capture this window (`help:capture`, `capturePage` of the asking window, the dialog steps aside) sent as multipart `files[]`, with a note when the server's answer does not confirm it kept the file; offline → the outbox (`offline:submit`, without the picture); 404/405 → text to copy; My requests (Help & Guide panel and after sending): kept on this computer per person plus the desk's `GET tickets?view=all&source=desktop&q=<my email>` with status for people who read the desk. Not here: Track in portal (no portal URL in the API), replies listed in-app; server gaps: `files[]`, a log field, `type`, and a requester-side list of one's own requests |
+| D-12 wallboard on a second display (FR-RPT-01/02/03/06, FR-SLA-05/07, FR-ASN-06, FR-NTF-04) | Partial | `Wallboard.tsx`: `WallboardChooser` (⌘⇧F in the inbox, or the rail's Wallboard; displays from `support:displays` = `wallDisplays`) → `support:wall` → `WindowManager.showSupportWall` (frameless full screen on that display, kept awake, closed when unplugged; `#/window/support-wall`, closes with Support via `windowRoute`); `SupportWallWindow`: `GET dashboard?from=to=today` KPIs, `GET views` queue counts, agents with presence (`GET agents` per organization) and load/capacity, attention list with time to breach (red < 30 min), `sla_by_priority` bars; refetch on desk hints (2 s gathered) and every 60 s; dark high-contrast; only with `support.reports` (meta caps for the button, 403 explained); Esc / Exit closes. Not here: department queues stacked by status and created-vs-resolved by hour (not in the dashboard API), CSAT latest comment, the live event ticker, organization scope switch |
+
+## Marketing (WS-MKT-SRS-001 v1.1)
+
+`src/modules/marketing` (renderer: `MarketingShell.tsx` reads the web's `?view=` addresses, so a server link, a search
+hit or a notification lands on the same screen), over the server's `/api/marketing` (`app/Modules/Marketing`). Who is a
+duplicate, who may be emailed or called, what a campaign may send and what an outcome does are the server's; the
+screens show its answers and send back what was typed. The desktop's own parts live in the main process:
+`electron/services/marketing-shortcut.ts`, `marketing-pulse.ts`, `marketing-reminders.ts`, the callback kind in
+`notifications.ts` and the Marketing lines in `electron/tray/tray.ts`, wired in `electron/main/index.ts`. Tests:
+`tests/unit/electron/marketing-native.test.ts`, `tests/unit/renderer/marketing-calls.test.tsx`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| MKT-DSK-01 (call queue tab) | Done | `MyQueue.tsx`: My call queue as in D01 — who is waiting, in the order Next contact takes them, without taking anybody (`GET calls/queue/list`; a server without it says so and Next contact still works), Callbacks due now and later, and the workspace (`calls-workspace.tsx`, DK11) |
+| MKT-DSK-01 (global Next contact) | Done | ⌘⇧N / Ctrl+Shift+N from other apps (`marketing-shortcut.ts`): held only while no WorkSuite window is in front — in WorkSuite those keys are Move tab to new window — and only signed in, unlocked, with Marketing, and not for somebody the server says has no call queue; given back on focus, lock, sign-out and quit. It brings WorkSuite forward on the workspace with a new `claim`. Inside WorkSuite: the command "Claim next contact" (`src/layouts/Shell.tsx`), Ctrl+Alt+N / ⌘⌃N by default (`src/core/commands.ts`), remappable in Settings › Keyboard shortcuts |
+| MKT-DSK-01 (native notifications) | Done | Callback reminders (MKT-CAL-12, below). Campaign notices ("“Vendor re-permission” paused — bounce guard reached 5.3%") are the server's notifications with category `marketing`: they show like any other, open the campaign in the Marketing tab, and are muted with Settings › Notifications › Marketing |
+| MKT-DSK-01 (tray counts) | Partial | `marketing-pulse.ts`: `GET /api/marketing/pulse` once a minute, on waking and when the person's apps change; the tray shows Call queue waiting, Callbacks today, Sending now N · P% and Next contact (its key shown, not registered by the menu), updated only when they change. Needs the server's go-live part: a server without the pulse (404) or a person refused (403) gets no Marketing lines |
+| MKT-DSK-01 (deep links) | Done | `shared/deeplink.ts`: `worksuite://marketing`, `marketing/queue`, `marketing/contacts/:id`, `marketing/campaigns/:id`, opened in the web's grammar (`/marketing?view=contacts&contact=42`) |
+| MKT-CAL-12 | Done (desktop) | `marketing-reminders.ts`: my callbacks (`GET calls/callbacks`) read every two minutes, each given a timer for its minute (never set more than ten minutes ahead, set again on waking, a 30-second sweep as a backstop); each promise rings once; one moved rings at its new time, one made or handed on is dropped, one missed by over an hour is not announced late. The banner goes through the notification service (Do not disturb, pause, privacy, the lock, the Marketing switch): "Callback due · name", the campaign and the notes, with Call now (the workspace on that campaign, where the due callback comes first) and Snooze 15 min (this computer only; the callback and its task keep their time). Buttons only when banners show their content |
+| MKT-CAL-01, MKT-CAL-02 | Done | `CallCampaigns.tsx`: the list with status, waiting, calls, reached and whether I call; a new campaign opens as a draft. `CallCampaignView.tsx`: audience (lists, segments, who to leave out), script, priority, dates, calling hours, attempts, retry, agents (the company's people; the server checks `marketing.call.make`) |
+| MKT-CAL-03, MKT-CAL-04, MKT-CAL-09, MKT-CAL-10, MKT-CAL-11 | Done | `calls-workspace.tsx`: `GET calls/queue` claims one contact (once per claim — never refetched behind the agent's back); the header says when it was claimed and when it is let go (`claimed_at`), and the call timer counts from it; Skip hands it back to the end of the queue for a while (`skip {later: true}`), Release hands it back for anybody at once (`skip {}`); the ten outcomes (`options.call_outcomes`), Do not call asked first; the callback's day, time and who makes it; "Hand over to CRM as lead" for Interested with the convert permission (`handover: true`); a 409 says the contact was let go and takes the next. "Call via WorkSuite Phone" (`POST /api/voip/call`), else the number is copied. "Send follow-up email" is shown as Planned |
+| MKT-CAL-07 | Done | `Scripts.tsx`, `calls-scripts.tsx`: the six parts, language, archive (kept for campaigns using it); "Edit script" from the campaign |
+| MKT-CAL-08, MKT-CAL-15 | Done | `CallCampaignView.tsx` (DK10): In queue, Claimed now, Reached, Interested (with how many were handed to CRM, `handed_over`), Callbacks due; agents on a call, wrapping up or idle N min (`results.live`, refreshed every 30 s while calling; a server a part behind shows each agent's totals); the ten outcomes; the rules; the amber hold-back for contacts without phone consent; Pause, Resume, Finish, Add new people, Start calling, Delete a draft |
+
+| Screen | Design | Where (the shell's lazy imports) |
+|---|---|---|
+| DK01 | W01 Dashboard and readiness | `Dashboard.tsx` |
+| DK02 | W02 Contacts | `Contacts.tsx` (with `Companies.tsx`, `Lists.tsx`) |
+| DK03 | W03 Contact detail | `ContactPage.tsx` |
+| DK04 | W04 Segment builder | `Segments.tsx`, `SegmentBuilder.tsx` |
+| DK05 | W05 Import | `Import.tsx` |
+| DK06 | W06 Email campaigns | `Campaigns.tsx` |
+| DK07 | W07 Campaign editor | `CampaignView.tsx` (with `Templates.tsx`, `Topics.tsx`) |
+| DK08 | W08 Review & send | `CampaignView.tsx` |
+| DK09 | W09 Campaign report | `CampaignView.tsx`, `Reports.tsx` |
+| DK10 | W10 Call campaign (supervisor) | `CallCampaigns.tsx`, `CallCampaignView.tsx` |
+| DK11 | W11 Agent workspace | `MyQueue.tsx`, `calls-workspace.tsx`, `Scripts.tsx` |
+| DK12 | W12 Consent & suppression | `Consent.tsx` |
+| DK13 | W13 Settings › Sending | `Settings.tsx` |
+| DK14 | R01 Automation (planned) | `Automation.tsx` |
+| D01 | Desktop queue, callback banner, tray | `MyQueue.tsx`; `marketing-reminders.ts`; `marketing-pulse.ts`, `electron/tray/tray.ts` |
+
+Not done: the D01 "Softphone registered" pill (WorkSuite cannot tell whether the agent's softphone is registered; the
+workspace says "Calling via WorkSuite Phone" when the phone system answers), the workspace's Mute and Hang up (the
+phone system places the call, the desktop does not hold it) and W10's "Avg. handle" column (the server sends no
+handle times). The global key cannot yet be turned off in Settings.
+
+## Phone (WS-VOIP-SRS-001 v1.1, desktop)
+
+`src/modules/phone` (renderer), `electron/services/phone.ts`, `shared/phone.ts`, `shared/ipc/phone-channels.ts`, over
+the server's `/api/voip`. Gap analysis and server work: [PHONE.md](PHONE.md); contract: [BACKEND.md § Phone](BACKEND.md#phone-ws-voip-srs-001).
+Tests: `tests/unit/renderer/phone-lib.test.ts`, `phone-engine.test.ts`, `phone-screens.test.tsx`, `phone-smoke.test.tsx`,
+`tests/unit/electron/phone-service.test.ts`. **Server** = works fully once the server side named in PHONE.md §3 lands.
+
+| ID | Status | Where / note |
+|---|---|---|
+| VOIP-SP-01/02/03 | Done | `softphone/engine.ts` + `PhoneHost.tsx`: one UA from sign-in, own credentials only, rings anywhere |
+| VOIP-SP-04 | Done | `POST /call` with ring-back answered here (WF-05); direct SIP fallback, said |
+| VOIP-SP-05 | Done | `PbxBanner`, grey Call (W01) |
+| VOIP-SP-06/07 | Partial | Uses the server's `ice`/`ws_uri` as sent — Server (G-02, G-06) |
+| VOIP-SP-08 | Done | `CallButton`, `placeCall`; Contacts' phone menu |
+| VOIP-SP-09 | Partial | Caller-ID choice when `GET me` is served |
+| VOIP-SP-10 | Done | `AudioDevices` (mic, speaker, echo test `*43`), MOS from `getStats` (`lib/mos.ts`) |
+| VOIP-CTL-01…04 | Done | Hold/mute/DTMF in SIP; transfer, consult/complete (REFER/Replaces); park/record via `calls/control` (ARI on the switch) |
+| VOIP-CTL-05 | Done | Call waiting: Hold & answer, dock on every page |
+| VOIP-CTL-06 | Partial | Wrap-up saved as the call's outcome; as a note until `calls/{id}/wrapup` |
+| VOIP-POP-01 | Done | Screen pop in W02/W03/W05 |
+| VOIP-POP-03/04 | Server | S-2, G-01 |
+| VOIP-POP-05 | Done | Create contact (`/contacts?new=1&mobile=`) / lead |
+| VOIP-HIS-01/02/03/05 | Done | W04, W05 (HIS-05 values as the server fills them, G-01) |
+| VOIP-HIS-07 | Done | Call path from events, else from the record |
+| VOIP-HIS-08 | Done | CSV export (`files:saveText` .csv) |
+| VOIP-FWD-01…04 | Done | W07 rules, pending apply, own vs department |
+| VOIP-FWD-05 | Partial | DND on this computer; on the switch when `me/dnd` is served |
+| VOIP-FWD-06 | Done | Holiday rules; IVR reads HR holidays |
+| VOIP-EXT-01…07 | Done | A02/A03 |
+| VOIP-EXT-08 | Server | G-08 (`provision-hr` called) |
+| VOIP-EXT-09 | Partial | QR when `provisioning` is served |
+| VOIP-EXT-10 | Done | CSV import/export (import one by one until `extensions/import`) |
+| VOIP-SRV-01…08 | Done | A04/A05 |
+| VOIP-SYN-01…03 | Done | A12 sync runs and detail |
+| VOIP-DP-01…05 | Done | A09; DP-05 refused by the server today (G-09) and said |
+| VOIP-DP-06 | Partial | Diff when the server sends `applied` |
+| VOIP-REC-01…05 | Done | A11, W05 player with pinned notes |
+| VOIP-REC-06 | Partial | W06; heard/forward/delete when served |
+| VOIP-REC-07 | Partial | Pause recording in W02; consent setting in A12 |
+| VOIP-AI-01/02 | Done | "Unavailable" with reasons; requests when an engine exists |
+| VOIP-RPT-01…03 | Done | A10 with coverage |
+| VOIP-RPT-04 | Partial | Live board under Supervise; Server (S-1) |
+| VOIP-RPT-05/06 | Partial | A01 built; derived board until `supervisor/board`; listen/whisper/barge/pause when served |
+| VOIP-TRK-01…05 | Partial | A06 built incl. local route tester; Server (G-03) |
+| VOIP-IVR-01…04 | Partial | A07/A08 built; Server (G-03, G-05) |
+| VOIP-NOT-01 | Done | Missed and incoming as native notifications from this computer |
+| VOIP-NOT-02/03 | Server | G-10 (listed in A12) |
+| VOIP-ADM-01/02 | Done | Permission-shaped navigation (`access.ts`) |
+| VOIP-ADM-03/04/05 | Server | G-09, G-13, G-14 |
+| VOIP-DEV-01 | Done | `CompactPhone.tsx`, window kind `phone`, global shortcuts |
+| VOIP-DEV-02 | Later | worksuite-mobile |
+| VOIP-DEP-01 | Done | ARI as a URL, private/public, WSS, TURN in A05 |
+| VOIP-DEP-02/06 | Server | G-17, G-01 |
+| VOIP-DEP-03/04 | Partial | Gateway status/SMS when served |
+| VOIP-DEP-05 | Done | Cloud FreePBX wizard (`admin/SetupWizard.tsx`), Sri Lankan routes (`lib/lkroutes.ts`) |
+
+## Social Media Manager (WS-SMM-SRS-001 v1.1, desktop)
+
+`src/modules/social-media`, `shared/social-notices.ts`, over the server's `/api/social-media`. Gap analysis and server
+work: [SOCIAL_MEDIA.md](SOCIAL_MEDIA.md). Tests: `tests/unit/renderer/social-*.test.ts(x)`, `tests/unit/shared/social-media-app.test.ts`,
+`tests/unit/electron/social-notifications.test.ts`. **Server** = works once the server module of SOCIAL_MEDIA.md §2 exists.
+
+| Area | Status | Where / note |
+|---|---|---|
+| ACC-001…013 | Done · Server | `admin/Accounts.tsx`, `admin/accounts/` — OAuth in the browser, assets, reconnect, access, pause, disconnect, quota |
+| CMP-001…015, MED-001…004 | Done · Server | `composer/`, `lib/text.ts`, `lib/validate.ts`; AC-04, AC-18 in `social-lib.test.ts` |
+| SCH-001…008, SCH-010/011 | Done · Server | `screens/Calendar.tsx`, `screens/Queue.tsx`, `screens/plan/`; SCH-009 recurrence and SCH-012 bulk CSV: client only (`bulkPreview/Commit` in `api.ts`), no screen yet |
+| APR-001…008 | Done · Server | `screens/Approvals.tsx`, `screens/engage/`; AC-05 (role-shaped composer), AC-06 (held notice), AC-14 (review links) |
+| PUB-003, PUB-011 | Done · Server | `admin/PublishLog.tsx`; publishing itself is the server's (C3) |
+| INB-001…012, AI-002 | Done · Server | `screens/Inbox.tsx`, `screens/engage/`; AC-13 (AI never sends) |
+| ANL-001…009 | Done · Server | `screens/Analytics.tsx`, `screens/measure/`; ANL-010 later phase |
+| MED-005…007, CPG-001…003 | Done · Server | `screens/Library.tsx`, `screens/Campaigns.tsx`; CPG-004 needs a campaign review-link route |
+| AI-001/004 | Done · Server | suggestions only, applied on a click, `ai_used` recorded |
+| NTF-001/002, DSK-002 | Done | `shared/social-notices.ts`, `electron/services/notifications.ts` (AC-16) |
+| DSK-001 | Done | catalogue, registry, `Nav.tsx` |
+| DSK-003 | Done | composer drag-drop → `transfers:upload` into the brand's Drive folder |
+| DSK-004 | Done | READ_CACHE of posts/accounts/brands; local draft copy |
+| DSK-005 | Done | Mod+N (`?new=1`), Ctrl/Cmd+Enter in the composer, J/K in the inbox |
+| ADM-001…007 | Done · Server | `admin/Settings.tsx`, `admin/settings/` |
+| MOB-001…004, LST-001/002 | Not here | WorkSuite Mobile; Listening is P5 |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

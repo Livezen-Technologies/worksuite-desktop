@@ -1,31 +1,28 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Icon } from '../../components/Icon';
-import { Button, Card, Chip, Empty, Modal, Spinner, TextField, cx } from '../../components/ui';
+import { Avatar, Empty, Modal, Spinner, cx } from '../../components/ui';
 import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
-import { addAllergy, amount, answered, attemptKey, fetchClient, fetchClients, K, shortDay, todayAt, type ClientCard, type ClientRow, type Reliability, type Severity } from './api';
+import { addAllergy, amount, answered, attemptKey, dayMonth, fetchClient, fetchClients, K, todayAt, whatsAppUrl, type Allergy, type ClientCard, type ClientRow, type PatchTest, type Reliability, type Severity } from './api';
+import { NewClient } from './ClientPick';
 import { unreachable, useCopyClient, useCopyClients } from './offline';
-import { AllergyChip, Choice, Failed, Figure, Note, Person, SEVERITY_TONE, servicesOf, severityLabel, useDesk, useNow } from './parts';
+import { Choice, DeskDialog, Failed, Figure, firstName, Label, Note, Page, Panel, ReliabilityTag, severityLabel, TierTag, TouchButton, useDesk, useNow } from './parts';
 
 /**
  * Clients at the counter (D08, CLI-05, CTR-02): find somebody by any part of
  * their name, mobile or email, and see what the desk needs — the allergy
  * first, points, store credit, what they owe, their last visits — with Book
- * again one press away. The full record opens in WorkSuite on the web.
+ * again one press away, WhatsApp beside it, and each visit's service record
+ * (D17). The full record opens in WorkSuite on the web.
  *
  * With WorkSuite out of reach the search runs over the day's copy — the
  * clients seen in the last year, with the allergy on file.
  */
-const RELIABILITY: Record<Reliability, { tone: 'success' | 'warning' | 'danger'; label: string }> = {
-  reliable: { tone: 'success', label: 'Reliable' },
-  watch: { tone: 'warning', label: 'Watch' },
-  unreliable: { tone: 'danger', label: 'Unreliable' },
-};
-
 export default function Clients() {
   const desk = useDesk();
   const [term, setTerm] = useState('');
+  const [adding, setAdding] = useState(false);
   const selected = Number(desk.params.get('client') ?? 0) || null;
   const t = term.trim();
   const live = useQuery({ queryKey: K.clients(desk.org, t), queryFn: ({ signal }) => fetchClients(desk.org, t, 20, signal), retry: desk.offline ? false : undefined });
@@ -35,48 +32,115 @@ export default function Clients() {
     offline && desk.copy
       ? { data: copied.data ? { items: copied.data.map((c) => ({ ...c, tier: c.tier ?? null, points: c.points ?? 0, reliability: (c.reliability ?? 'reliable') as Reliability, visits: -1, store_credit: 0, allergy: (c.allergy ?? null) as ClientRow['allergy'] })) } : undefined, isError: copied.isError, refetch: copied.refetch }
       : live;
+  const rows = q.data?.items ?? [];
 
   return (
-    <div className="flex flex-col gap-4 p-6 xl:flex-row">
-      <div className="flex w-full flex-col gap-3 xl:w-[380px]">
-        <h1 className="text-[22px] font-extrabold text-ink">Clients</h1>
-        <TextField aria-label="Name, mobile or email" placeholder="Name, mobile or email" value={term} onChange={(e) => setTerm(e.target.value)} />
-        {offline && desk.copy ? <p className="text-[12.5px] text-ink-3">Searching this desk’s copy: the clients seen in the last year.</p> : null}
-        {q.isError ? (
-          <Failed text="Clients could not be searched." onRetry={() => void q.refetch()} />
-        ) : !q.data ? (
-          <Spinner label="Searching clients…" />
-        ) : q.data.items.length === 0 ? (
-          <p className="text-[13px] text-ink-2">{t ? `Nobody matches “${t}”.` : 'No clients yet.'}</p>
-        ) : (
-          <ul className="flex flex-col gap-1.5">
-            {q.data.items.map((c) => (
-              <li key={c.id}>
-                <button
-                  type="button"
-                  aria-current={selected === c.id ? 'true' : undefined}
-                  onClick={() => desk.go('clients', { client: c.id })}
-                  className={cx('w-full rounded-[10px] border px-3 py-2 text-left', selected === c.id ? 'border-primary bg-selection' : 'border-line bg-surface hover:bg-subtle')}
-                >
-                  <Person name={c.name} sub={[c.phone, c.tier, c.visits >= 0 ? `${c.visits} visit${c.visits === 1 ? '' : 's'}` : null].filter(Boolean).join(' · ')} size={30} trailing={c.allergy ? <AllergyChip allergy={c.allergy} /> : null} />
-                </button>
-              </li>
-            ))}
-          </ul>
-        )}
+    <Page title="Clients">
+      <div className="flex flex-col gap-3.5 xl:flex-row xl:items-start">
+        <div className="flex w-full flex-col gap-3 xl:w-[420px] xl:shrink-0">
+          <label className="flex min-h-[52px] items-center gap-2.5 rounded-[14px] border-2 border-line bg-surface px-4 focus-within:border-primary">
+            <Icon name="search" size={20} className="text-ink-2" />
+            <input aria-label="Name, mobile or email" value={term} onChange={(e) => setTerm(e.target.value)} autoFocus className="bare-focus min-w-0 flex-1 bg-transparent text-[18px] text-ink outline-none" />
+            <span className="shrink-0 text-[12px] text-ink-2">name, mobile or email</span>
+          </label>
+          {q.isError ? (
+            <Failed text="Clients could not be searched." onRetry={() => void q.refetch()} />
+          ) : !q.data ? (
+            <Spinner label="Searching clients…" />
+          ) : rows.length === 0 ? (
+            <p className="text-[13px] text-ink-2">{t ? `Nobody matches “${t}”.` : 'No clients yet.'}</p>
+          ) : (
+            <ul className="flex flex-col gap-2.5">
+              {rows.map((c) => {
+                const on = selected === c.id;
+                return (
+                  <li key={c.id}>
+                    <button
+                      type="button"
+                      aria-current={on ? 'true' : undefined}
+                      onClick={() => desk.go('clients', { client: c.id })}
+                      className={cx('flex w-full items-center gap-3 rounded-[14px] px-3.5 py-3 text-left', on ? 'border-2 border-primary bg-selection' : 'border border-line bg-surface hover:bg-subtle')}
+                    >
+                      <Avatar name={c.name} size={40} />
+                      <div className="min-w-0 flex-1">
+                        <div className="truncate text-[16px] font-bold text-ink">{c.name}</div>
+                        <div className="truncate text-[13px] text-ink-2">{c.phone ?? c.email ?? ''}</div>
+                      </div>
+                      {c.allergy ? <Icon name="warning" size={16} className="shrink-0 text-danger" label={`Allergy: ${c.allergy.substance}`} /> : null}
+                      <TierTag tier={c.tier} />
+                    </button>
+                  </li>
+                );
+              })}
+            </ul>
+          )}
+          {q.data ? (
+            <p className="text-[13px] text-ink-2">
+              {t ? `${rows.length} match${rows.length === 1 ? '' : 'es'}` : `${rows.length} shown`}
+              {offline && desk.copy ? ' · searched this desk’s copy: the clients seen in the last year' : desk.copy ? ' · searchable offline too, from this desk’s copy' : ''}
+            </p>
+          ) : null}
+          <TouchButton icon="plus" disabled={!desk.may('salon.client.edit')} onClick={() => setAdding(true)}>
+            New client
+          </TouchButton>
+        </div>
+
+        <div className="min-w-0 flex-1">
+          {selected ? (
+            offline && desk.copy ? (
+              <CopiedClient key={selected} id={selected} />
+            ) : (
+              <ClientCardView key={selected} id={selected} />
+            )
+          ) : (
+            <Panel>
+              <Empty icon="users" title="Choose a client" hint="Their allergy, points, store credit and last visits show here." />
+            </Panel>
+          )}
+        </div>
       </div>
 
+      {adding ? (
+        <Modal width={520} onClose={() => setAdding(false)}>
+          <NewClient
+            initial={t}
+            onBack={() => setAdding(false)}
+            onChosen={(c) => {
+              setAdding(false);
+              if (c.id) desk.go('clients', { client: c.id });
+              else if (desk.may('salon.visit.book')) desk.walkIn({ local: { id: c.local!, name: c.name, mobile: c.mobile } }, true);
+            }}
+          />
+        </Modal>
+      ) : null}
+    </Page>
+  );
+}
+
+/** The client's allergies as one red line: the worst first, then the patch test that covers them (D08). */
+export function AllergyLine({ allergies, test, onUpdate }: { allergies: Array<Pick<Allergy, 'severity' | 'substance' | 'reaction'>>; test?: PatchTest | null; onUpdate?: () => void }) {
+  if (allergies.length === 0) return null;
+  const sorted = [...allergies].sort((a, b) => ['mild', 'moderate', 'severe'].indexOf(b.severity) - ['mild', 'moderate', 'severe'].indexOf(a.severity));
+  return (
+    <div role="alert" className="flex items-start gap-2.5 rounded-[10px] border border-[#FECDD3] bg-[#FFF1F2] px-3 py-2.5 text-[14px] text-[#9F1239] dark:border-danger/40 dark:bg-danger-bg dark:text-danger">
+      <Icon name="warning" size={18} className="mt-0.5 shrink-0" />
       <div className="min-w-0 flex-1">
-        {selected ? (
-          offline && desk.copy ? (
-            <CopiedClient key={selected} id={selected} />
-          ) : (
-            <ClientCardView key={selected} id={selected} />
-          )
-        ) : (
-          <Empty icon="users" title="Choose a client" hint="Their allergy, points, store credit and last visits show here." />
-        )}
+        {sorted.map((a, i) => (
+          <span key={i}>
+            {i > 0 ? ' ' : ''}
+            <b>
+              {severityLabel(a.severity)} · {a.substance}.
+            </b>{' '}
+            {a.reaction ? `${a.reaction.replace(/\.$/, '')}.` : ''}
+            {i === 0 && test ? ` Patch test ${dayMonth(test.tested_at, false)} — no reaction.` : ''}
+          </span>
+        ))}
       </div>
+      {onUpdate ? (
+        <button type="button" onClick={onUpdate} className="shrink-0 text-[12.5px] font-bold underline">
+          Update
+        </button>
+      ) : null}
     </div>
   );
 }
@@ -88,45 +152,43 @@ function CopiedClient({ id }: { id: number }) {
   if (q.isLoading) return <Spinner label="Loading the client…" />;
   const c = q.data;
   if (!c) return <Note tone="warning">This client is not in the desk’s copy. Their card opens when WorkSuite answers.</Note>;
-  const rel = RELIABILITY[(c.reliability ?? 'reliable') as Reliability] ?? RELIABILITY.reliable;
   return (
-    <Card>
-      <div className="flex flex-col gap-4 pt-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-[19px] font-extrabold text-ink">{c.name}</h2>
-          {c.tier ? <Chip tone="warning">{c.tier}</Chip> : null}
-          <Chip tone={rel.tone}>{rel.label}</Chip>
-          <span className="text-[12.5px] text-ink-2">{[c.phone, c.email].filter(Boolean).join(' · ')}</span>
-        </div>
-        {c.allergy ? (
-          <div className="flex flex-wrap items-baseline gap-2 rounded-[10px] border border-danger/30 bg-danger-bg px-3.5 py-2.5 text-[14px] text-ink">
-            <Chip tone={SEVERITY_TONE[c.allergy.severity as Severity]}>
-              <Icon name="warning" size={12} /> {severityLabel(c.allergy.severity as Severity)}
-            </Chip>
-            <b>{c.allergy.substance}</b>
-            <span className="text-[12.5px] text-ink-2">— the worst on file. Every allergy, patch tests and past visits show when WorkSuite answers.</span>
-          </div>
-        ) : null}
-        <div className="grid grid-cols-3 gap-3">
-          <Figure label="Points" value={(c.points ?? 0).toLocaleString()} />
-          <Figure label="Store credit" value="—" />
-          <Figure label="Owes" value="—" />
-        </div>
-        {desk.may('salon.visit.book') ? (
-          <div className="flex justify-end">
-            <Button variant="primary" onClick={() => desk.walkIn({ client_id: c.id }, true)}>
-              Book them in
-            </Button>
-          </div>
-        ) : null}
+    <Panel className="flex flex-col gap-3.5">
+      <Header name={c.name} tier={c.tier} reliability={c.reliability} sub={[c.phone, c.email].filter(Boolean).join(' · ')} />
+      {c.allergy ? <AllergyLine allergies={[{ severity: c.allergy.severity as Severity, substance: c.allergy.substance, reaction: 'The worst on file. Every allergy, patch tests and past visits show when WorkSuite answers' }]} /> : null}
+      <div className="grid grid-cols-3 gap-3">
+        <Figure label="Points" value={(c.points ?? 0).toLocaleString()} />
+        <Figure label="Store credit" value="—" />
+        <Figure label="Owes" value="—" />
       </div>
-    </Card>
+      {desk.may('salon.visit.book') ? (
+        <TouchButton variant="primary" icon="plus" onClick={() => desk.walkIn({ client_id: c.id }, true)}>
+          Book them in
+        </TouchButton>
+      ) : null}
+    </Panel>
+  );
+}
+
+function Header({ name, tier, reliability, sub }: { name: string; tier: string | null | undefined; reliability: string | null | undefined; sub: string }) {
+  return (
+    <div className="flex items-center gap-3.5">
+      <Avatar name={name} size={60} />
+      <div className="min-w-0 flex-1">
+        <div className="flex flex-wrap items-center gap-2">
+          <h2 className="truncate text-[22px] font-extrabold text-ink">{name}</h2>
+          <TierTag tier={tier} />
+          <ReliabilityTag reliability={reliability} />
+        </div>
+        {sub ? <div className="text-[14px] text-ink-2">{sub}</div> : null}
+      </div>
+    </div>
   );
 }
 
 function ClientCardView({ id }: { id: number }) {
   const desk = useDesk();
-  const [recording, setRecording] = useState(false);
+  const [recording, setRecording] = useState(() => desk.params.get('allergy') === '1');
   const now = useNow(60_000);
   const q = useQuery({ queryKey: K.client(id), queryFn: ({ signal }) => fetchClient(id, signal) });
 
@@ -138,99 +200,102 @@ function ClientCardView({ id }: { id: number }) {
   const test = d.patch_tests.find((p) => p.result === 'negative' && p.valid_until);
   const owing = (d.invoices ?? []).filter((i) => i.owed > 0);
   const last = d.visits.find((v) => v.status !== 'cancelled' && v.status !== 'no_show');
-  const rel = RELIABILITY[d.profile.reliability] ?? RELIABILITY.reliable;
   const today = todayAt(desk.location.timezone, new Date(now));
+  const wa = whatsAppUrl(d.client.mobile);
+  const prefs = Object.values(d.preferences ?? {}).filter(Boolean);
+  const formula = (d.records ?? []).find((r) => r.formula);
+  const sub = [
+    d.client.phone,
+    `${d.profile.visits} visit${d.profile.visits === 1 ? '' : 's'}`,
+    d.profile.preferred ? `${firstName(d.profile.preferred)} usually` : null,
+    ...prefs,
+  ]
+    .filter(Boolean)
+    .join(' · ');
+  const canRecord = desk.may('salon.visit.service');
 
   return (
-    <Card>
-      <div className="flex flex-col gap-4 pt-4">
-        <div className="flex flex-wrap items-center gap-2">
-          <h2 className="text-[19px] font-extrabold text-ink">{d.client.name}</h2>
-          {d.profile.tier ? <Chip tone="warning">{d.profile.tier}</Chip> : null}
-          <Chip tone={rel.tone}>{rel.label}</Chip>
-          <span className="text-[12.5px] text-ink-2">
-            {[d.client.phone, `${d.profile.visits} visit${d.profile.visits === 1 ? '' : 's'}`, d.profile.preferred ? `${d.profile.preferred.split(' ')[0]} usually` : null].filter(Boolean).join(' · ')}
-          </span>
-        </div>
+    <Panel className="flex flex-col gap-3.5">
+      <Header name={d.client.name} tier={d.profile.tier} reliability={d.profile.reliability} sub={sub} />
+      <AllergyLine allergies={live} test={test} onUpdate={d.may.edit ? () => setRecording(true) : undefined} />
 
-        {live.length > 0 ? (
-          <div className="flex flex-col gap-1.5 rounded-[10px] border border-danger/30 bg-danger-bg px-3.5 py-2.5">
-            {live.map((a) => (
-              <div key={a.id} className="flex flex-wrap items-baseline gap-2 text-[14px] text-ink">
-                <Chip tone={SEVERITY_TONE[a.severity]}>
-                  <Icon name="warning" size={12} /> {severityLabel(a.severity)}
-                </Chip>
-                <b>{a.substance}</b>
-                {a.reaction ? <span className="text-ink-2">— {a.reaction}</span> : null}
-              </div>
-            ))}
-            {test ? (
-              <div className="text-[12.5px] text-success">
-                Patch test {shortDay(test.tested_at)}
-                {test.product ? ` · ${test.product}` : ''} — no reaction · valid until {shortDay(test.valid_until)}
-              </div>
-            ) : null}
-          </div>
-        ) : null}
-
-        <div className="grid grid-cols-3 gap-3">
-          <Figure label="Points" value={(d.loyalty?.points ?? d.profile.points).toLocaleString()} />
-          <Figure label="Store credit" value={d.credit ? amount(d.credit.balance, d.credit.currency) : '—'} />
-          <Figure label="Owes" value={d.invoices === null ? '—' : owing.length === 0 ? 'Nothing' : owing.map((i) => amount(i.owed, i.currency)).join(' + ')} />
-        </div>
-
-        <div>
-          <h3 className="mb-1 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">Recent visits</h3>
-          {d.visits.length === 0 ? (
-            <p className="text-[13px] text-ink-2">No visits yet.</p>
-          ) : (
-            <ul>
-              {d.visits.slice(0, 5).map((v) => (
-                <li key={v.id} className="flex items-center gap-3 border-t border-line py-2 first:border-t-0">
-                  <span className="w-20 text-[13px] font-bold text-ink">{v.date === today ? 'Today' : shortDay(v.date)}</span>
-                  <div className="min-w-0 flex-1">
-                    <div className="truncate text-[13.5px] text-ink">{servicesOf(v)}</div>
-                    <div className="truncate text-[12px] text-ink-3">
-                      {[...new Set(v.items.map((i) => i.provider.split(' ')[0]))].join(', ')} · {v.status_label}
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-2.5">
-          <Button icon="external" onClick={() => void call('app:openInBrowser', { path: `/salon?view=clients&client=${d.client.id}` })}>
-            Open full record
-          </Button>
-          {d.may.edit ? (
-            <Button icon="plus" onClick={() => setRecording(true)}>
-              Record an allergy
-            </Button>
-          ) : null}
-          {desk.may('salon.visit.book') ? (
-            <Button
-              variant="primary"
-              className="ml-auto"
-              onClick={() =>
-                desk.walkIn(
-                  {
-                    client_id: d.client.id,
-                    service_ids: last ? [...new Set(last.items.map((i) => i.service_id))] : [],
-                    provider_id: last?.items[0]?.provider_id,
-                  },
-                  true,
-                )
-              }
-            >
-              Book again
-            </Button>
-          ) : null}
-        </div>
+      <div className="grid grid-cols-3 gap-3">
+        <Figure label="Points" value={(d.loyalty?.points ?? d.profile.points).toLocaleString()} />
+        <Figure label="Store credit" value={d.credit ? amount(d.credit.balance, d.credit.currency) : '—'} />
+        <Figure label="Owes" value={d.invoices === null ? '—' : owing.length === 0 ? 'Nothing' : owing.map((i) => amount(i.owed, i.currency)).join(' + ')} />
       </div>
-      {recording ? <RecordAllergy clientId={d.client.id} name={d.client.name} onClose={() => setRecording(false)} /> : null}
-    </Card>
+
+      <div>
+        <Label className="tracking-[.06em]">Recent visits</Label>
+        {d.visits.length === 0 ? (
+          <p className="py-2 text-[14px] text-ink-2">No visits yet.</p>
+        ) : (
+          <ul>
+            {d.visits.slice(0, 5).map((v) => {
+              const done = ['checked_in', 'in_service', 'completed'].includes(v.status);
+              return (
+                <li key={v.id} className="flex items-center gap-3 border-b border-line py-2.5 text-[14px] last:border-b-0">
+                  <span className={cx('min-w-0 flex-1 truncate text-ink', (v.status === 'cancelled' || v.status === 'no_show') && 'text-ink-3 line-through')}>
+                    <b>{v.date === today ? 'Today' : dayMonth(v.date, false)}</b> · {v.items.map((i) => i.service).join(', ')}
+                  </span>
+                  <span className="shrink-0 text-ink-2">{[...new Set(v.items.map((i) => firstName(i.provider)))].join(', ')}</span>
+                  {done && canRecord && !desk.offline ? (
+                    <button type="button" onClick={() => desk.go('record', { visit: v.id })} title="Formula & photos" aria-label={`Service record for ${dayMonth(v.date, false)}`} className="grid h-9 w-9 shrink-0 place-items-center rounded-[10px] text-ink-2 hover:bg-subtle hover:text-primary">
+                      <Icon name="file-text" size={17} />
+                    </button>
+                  ) : null}
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </div>
+
+      {formula ? (
+        <div className="rounded-[12px] bg-ground px-3.5 py-2.5 text-[13.5px] text-ink">
+          <span className="font-bold">Last formula</span>
+          <span className="text-ink-2">
+            {' '}
+            · {formula.service}
+            {formula.date ? ` · ${dayMonth(formula.date, false)}` : ''}
+            {formula.provider ? ` · ${firstName(formula.provider)}` : ''}
+          </span>
+          <div className="mt-0.5 font-mono text-[13px]">{formula.formula}</div>
+          {formula.products?.length ? <div className="mt-0.5 text-[13px] text-ink-2">{formula.products.map((p) => `${p.name} ${p.quantity}${p.unit ? ` ${p.unit}` : ''}`).join(' · ')}</div> : null}
+        </div>
+      ) : null}
+
+      <div className="flex flex-wrap gap-2.5">
+        <TouchButton icon="external" onClick={() => void call('app:openInBrowser', { path: `/salon?view=clients&client=${d.client.id}` })}>
+          Open full record
+        </TouchButton>
+        {wa ? (
+          <TouchButton icon="message-circle" onClick={() => void call('app:openExternal', { url: wa }).catch(() => toast('error', 'WhatsApp could not be opened.'))}>
+            WhatsApp
+          </TouchButton>
+        ) : null}
+        {desk.may('salon.visit.book') ? (
+          <TouchButton
+            variant="primary"
+            icon="plus"
+            className="min-w-[200px] flex-1"
+            onClick={() =>
+              desk.walkIn(
+                {
+                  client_id: d.client.id,
+                  service_ids: last ? [...new Set(last.items.map((i) => i.service_id))] : [],
+                  provider_id: last?.items[0]?.provider_id,
+                },
+                true,
+              )
+            }
+          >
+            Book again
+          </TouchButton>
+        ) : null}
+      </div>
+      {recording && d.may.edit ? <RecordAllergy clientId={d.client.id} name={d.client.name} onClose={() => setRecording(false)} /> : null}
+    </Panel>
   );
 }
 
@@ -258,36 +323,46 @@ function RecordAllergy({ clientId, name, onClose }: { clientId: number; name: st
     }
   }
 
+  const field = 'h-12 rounded-[12px] border border-line bg-surface px-3.5 text-[15px] text-ink outline-none focus:border-primary';
   return (
-    <Modal
+    <DeskDialog
+      tone="danger"
+      icon="warning"
       title={`An allergy for ${name}`}
+      sub="As the client tells it. It is read out at every check-in from now on."
+      labelledBy="salon-record-allergy"
+      width={560}
       onClose={onClose}
       footer={
         <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={busy} disabled={substance.trim() === ''} onClick={() => void save()}>
+          <TouchButton onClick={onClose}>Cancel</TouchButton>
+          <TouchButton variant="primary" icon="check" loading={busy} disabled={substance.trim() === ''} onClick={() => void save()}>
             Record it
-          </Button>
+          </TouchButton>
         </>
       }
     >
-      <div className="flex flex-col gap-3">
-        <TextField label="What to" placeholder="PPD, latex, fragrance…" value={substance} onChange={(e) => setSubstance(e.target.value)} autoFocus />
-        <TextField label="What happened" placeholder="Swelling of the scalp" value={reaction} onChange={(e) => setReaction(e.target.value)} />
-        <div className="flex flex-col gap-1">
-          <span className="text-[12.5px] font-semibold text-ink-2">How severe</span>
-          <Choice
-            label="How severe"
-            value={severity}
-            onChange={setSeverity}
-            options={[
-              { value: 'mild', label: 'Mild' },
-              { value: 'moderate', label: 'Moderate' },
-              { value: 'severe', label: 'Severe' },
-            ]}
-          />
-        </div>
+      <label className="flex flex-col gap-1">
+        <span className="text-[12.5px] font-semibold text-ink-2">What to</span>
+        <input className={field} placeholder="PPD, latex, fragrance…" value={substance} onChange={(e) => setSubstance(e.target.value)} autoFocus />
+      </label>
+      <label className="flex flex-col gap-1">
+        <span className="text-[12.5px] font-semibold text-ink-2">What happened</span>
+        <input className={field} placeholder="Swelling of the scalp" value={reaction} onChange={(e) => setReaction(e.target.value)} />
+      </label>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[12.5px] font-semibold text-ink-2">How severe</span>
+        <Choice
+          label="How severe"
+          value={severity}
+          onChange={setSeverity}
+          options={[
+            { value: 'mild', label: 'Mild' },
+            { value: 'moderate', label: 'Moderate' },
+            { value: 'severe', label: 'Severe' },
+          ]}
+        />
       </div>
-    </Modal>
+    </DeskDialog>
   );
 }

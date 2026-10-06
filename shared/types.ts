@@ -1,7 +1,9 @@
-import type { DarkColorProfile } from './theme-profiles';
+import type { AppearancePrefs, DarkColorProfile, Tint } from './theme-profiles';
 import type { ItemLink, ItemSource } from './item-links';
 import type { LinkPrefs } from './link-prefs';
 import type { MailMediaPrefs } from './mail-media';
+import type { ConnectionStats } from './connection';
+import type { SupportNoticePrefs } from './support';
 /**
  * Types shared by the main process and the renderer. Everything crossing the
  * IPC boundary is described here and validated by the zod schemas in
@@ -13,6 +15,12 @@ export type Arch = 'x64' | 'arm64';
 
 export type NetworkStatus = 'ONLINE' | 'LIMITED' | 'RECONNECTING' | 'OFFLINE';
 export type RealtimeState = 'connected' | 'connecting' | 'disabled' | 'down' | 'idle';
+
+/**
+ * How realtime reaches this computer (plan 2.7): the chat service's WebSocket (protocol v2), its SSE fallback, the
+ * built-in service with the older gateway's socket (protocol v1) for live events, or the built-in service alone, polling.
+ */
+export type RealtimeTransport = 'websocket' | 'sse' | 'legacy' | 'polling';
 
 export type ServiceHealth = 'STARTING' | 'HEALTHY' | 'DEGRADED' | 'RESTARTING' | 'FAILED' | 'STOPPED';
 
@@ -143,6 +151,15 @@ export interface DesktopPolicy {
    */
   launcher_pinned?: string[];
   launcher_order?: string[];
+  /**
+   * The organisation's colour profile (worksuite-desktop#234): its accent ('' or absent: none), how tinted the
+   * backgrounds are, the background colour for `custom`, and whether everyone must use it. Unlocked, it is the
+   * profile of everyone who has not picked their own.
+   */
+  appearance_accent?: string;
+  appearance_tint?: Tint;
+  appearance_tint_color?: string;
+  appearance_locked?: boolean;
 }
 
 export interface MonitoringPolicySummary {
@@ -230,6 +247,11 @@ export interface Preferences {
   theme: Theme;
   /** Optional for compatibility with preferences saved before dark profiles existed. */
   darkColorProfile?: DarkColorProfile;
+  /**
+   * Colour profiles (worksuite-desktop#234): the mode (the same as `theme`), the Light and Dark profiles and up to
+   * five custom ones. Absent in preferences saved before; read with `appearanceOf`.
+   */
+  appearance?: AppearancePrefs;
   density: Density;
   hardwareAcceleration: boolean;
   notificationSounds: boolean;
@@ -237,6 +259,10 @@ export interface Preferences {
   notificationsEnabled: boolean;
   /** The count of what needs you (chat + notifications) on the app's icon: the Dock, the taskbar. */
   badgeCount: boolean;
+  /** The status bar's connection strength (worksuite-desktop#254); unset: shown. */
+  statusConnectionStrength?: boolean;
+  /** The response time in ms beside it; unset: shown. */
+  statusResponseTime?: boolean;
   /** Per-module notification toggles; a missing key means enabled. */
   moduleNotifications: Record<string, boolean>;
   dndEnabled: boolean;
@@ -301,8 +327,15 @@ export interface Preferences {
   webchatRinging: WebchatRingPrefs;
   /** When a visitor writes again in a chat I have and I am away from it (worksuite-desktop#230). Unset: the defaults. */
   webchatFollowUps?: WebchatFollowUpPrefs;
+  /** Support's banners on this computer (Notification settings › Support, D-03): the defaults until chosen. */
+  supportNotices?: SupportNoticePrefs;
   /** Wall mode on a display (L-06, MAP-24): saved by its sheet. Unset: WALL_MODE_DEFAULTS. */
   wallMode?: WallModePrefs;
+  /**
+   * Settings › Chat › Chat drawer opens as (worksuite-desktop#264): docked beside the page, which makes room for it,
+   * or floating over it. Unset: docked. A window too narrow to dock it floats it either way.
+   */
+  chatDrawer?: ChatDrawerMode;
   /** The AI Assistant on this computer (Settings › AI Assistant). */
   ai: AiPrefs;
   /** Meet › Recording (worksuite-desktop#68). */
@@ -425,6 +458,9 @@ export type AiModuleAccessPrefs = Record<AiEngine, Record<string, AiModuleToggle
 
 export const AI_DISPLAYS = ['drawer', 'widget', 'hidden'] as const;
 export type AiDisplay = (typeof AI_DISPLAYS)[number];
+
+/** How the chat drawer opens (worksuite-desktop#264): beside the page, which makes room, or over it. */
+export type ChatDrawerMode = 'docked' | 'floating';
 
 /** The shortcuts Quick Ask may use: ones no system or common app claims. */
 export const QUICK_ASK_SHORTCUTS = ['Alt+Space', 'Control+Alt+Space', 'CommandOrControl+Shift+Space'] as const;
@@ -814,13 +850,19 @@ export interface StatusSnapshot {
   pendingChanges: number;
   /** `webchat`: visitors who wrote again in my website chats while I was away from them (worksuite-desktop#230), on the badge. */
   /** `ringing`: website chats and visitors' calls ringing for me and not silenced (R-05, R-06; RING-44), on the badge too. */
-  unread: { mail: number; chat: number; notifications: number; tasks: number; webchat?: number; ringing?: number };
+  /**
+   * `support`: my live support tickets with something unread (the desk's `GET badges`); `supportNotices`: the unread
+   * notifications about support tickets, which the badge leaves to `support` so a ticket counts once.
+   */
+  unread: { mail: number; chat: number; notifications: number; tasks: number; webchat?: number; ringing?: number; support?: number; supportNotices?: number };
   notificationsPausedUntil: string | null;
   /** Whether the operating system lets this app show notifications (false: banners are blocked there). */
   notificationsSupported?: boolean;
   services: Record<string, ServiceHealth>;
   locked: boolean;
   safeMode: boolean;
+  /** Connection strength's measurements (worksuite-desktop#254): pings, reconnects and the API's median. */
+  connection?: ConnectionStats;
 }
 
 export type TransferDirection = 'upload' | 'download';
@@ -853,6 +895,10 @@ export interface Transfer {
   movedAt?: string | null;
   /** Waiting in the queue because the connection is lost, or a metered connection is set to wait. */
   held?: 'connection' | 'metered' | null;
+  /** A mail attachment's staged copy once its parts are in (worksuite-desktop#249): what Compose attaches. */
+  attachment?: { token: string; name: string; size: number } | null;
+  /** Where a tender's upload goes, so the tender's tabs show it as it moves — also after a restart (#249). */
+  tender?: { tenderId: number; into: 'document' | 'line' | 'replace' | 'security'; id?: number; docKind?: string } | null;
 }
 
 export interface OfflineMutation {
@@ -1085,7 +1131,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask' | 'live-map' | 'wall' | 'wall-sheet';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'phone' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask' | 'live-map' | 'wall' | 'wall-sheet' | 'support-quick' | 'support-ring' | 'support-wall';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {
@@ -1376,6 +1422,13 @@ export interface SalonDeskInfo {
   status: 'requested' | 'active' | 'revoked';
   device_id: string | null;
   register: { id: number; code: string; name: string; open: boolean; session_id: number | null; opened_at: string | null } | null;
+  /** The POS till it is paired as, when it is one (POS-01). */
+  till?: { id: number; code: string; name: string; revoked: boolean } | null;
+  /** Where its checkouts and retail take stock from (DSK-02). */
+  warehouse?: { id: number; code: string | null; name: string } | null;
+  /** The receipt layout it prints with — `salon_80` or `salon_short` (POS-08). */
+  receipt_template?: string;
+  receipt_template_name?: string;
   approved_at: string | null;
   revoked_at: string | null;
   [field: string]: unknown;
@@ -1392,16 +1445,21 @@ export interface SalonDeskPairInput {
   location_id: number;
   name: string;
   pos_register_id?: number | null;
+  /** The stock location it takes from; none for the location's own. */
+  warehouse_id?: number | null;
+  /** The receipt layout it prints with; none for the salon receipt. */
+  receipt_template?: string | null;
 }
 
-/** What a SalonMate receipt is printed on: an 80 mm or 58 mm roll, or A4. */
-export type SalonPaper = '80mm' | '58mm' | 'a4';
+/** What a SalonMate receipt is printed on: an 80 mm or 58 mm roll, or a full page (A4, Letter). */
+export type SalonPaper = '80mm' | '58mm' | 'a4' | 'letter';
 
 /** This computer's printers for SalonMate, on one server (salon-print.ts). */
 export interface SalonPrintSettings {
   receipt_printer: string | null;
   a4_printer: string | null;
-  paper: '80mm' | '58mm';
+  /** The receipt's paper (PRN-02): a roll, or a full page that goes to the A4 printer when there is one. */
+  paper: SalonPaper;
   copies: number;
   /** Print the receipt as soon as a payment is taken. */
   auto_print: boolean;
@@ -1415,7 +1473,7 @@ export interface SalonPrintSettings {
 export type SalonPrintPatch = Partial<SalonPrintSettings>;
 
 /** What the front desk does while WorkSuite is out of reach (salon-outbox.ts). */
-export type SalonOutboxKind = 'client.create' | 'visit.book' | 'visit.check_in';
+export type SalonOutboxKind = 'client.create' | 'visit.book' | 'visit.check_in' | 'visit.checkout';
 
 export interface SalonOutboxCandidate {
   id: number;
@@ -1545,7 +1603,19 @@ export interface LocalRecording {
   stepAt?: string | null;
   /** Its upload in the transfer queue, while there is one: its progress, Pause, Resume and Cancel are the queue's. */
   transferId?: string | null;
+  /**
+   * Why its file cannot be used (worksuite-desktop#240): nothing was recorded because Screen Recording permission
+   * was off, no video reached the file, or the file is not a whole video. Trying again cannot fix any of these, so it
+   * is never offered Try again — only Delete, and Fix permission when that is the cause.
+   */
+  problem?: LocalRecordingProblem | null;
 }
+
+/** Why a recording made here cannot be used, when trying again would not help (worksuite-desktop#240). */
+export type LocalRecordingProblem = 'screen-permission' | 'no-video' | 'unplayable';
+
+/** Whether this computer lets WorkSuite record the screen (macOS Screen Recording); elsewhere there is no such gate. */
+export type ScreenRecordingAccess = 'granted' | 'missing' | 'not_required';
 
 /** What a piece of speech said, when, and whether it was unclear (worksuite-desktop#81). */
 export interface SpeechSegment {
@@ -1589,4 +1659,18 @@ export interface MailBodiesProgress {
   /** ISO time of the last pass that finished. */
   doneAt: string | null;
   error: string | null;
+}
+
+/** What the system did with the test chat notification (Settings › Ringing, worksuite-desktop#251). */
+export interface RingTestNotice {
+  state: 'shown' | 'failed' | 'unknown' | 'unsupported' | 'off';
+  detail: string | null;
+}
+
+/** One step of "Send a test chat notification" (worksuite-desktop#251): routed · received · notification shown · sound. */
+export interface RingTestStep {
+  id: 'routed' | 'received' | 'notification' | 'sound';
+  label: string;
+  state: 'ok' | 'warn' | 'fail' | 'pending';
+  detail: string | null;
 }

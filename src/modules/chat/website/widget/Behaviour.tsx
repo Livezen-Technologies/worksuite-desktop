@@ -4,6 +4,7 @@ import { ApiError } from '../../../../core/api';
 import { errorMessage } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { toast } from '../../../../core/toasts';
+import { CollapsibleSection } from '../../../../components/Collapsible';
 import { Select } from '../../../../components/Select';
 import { Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
 import { Note, SettingRow } from '../../../account/parts';
@@ -25,7 +26,9 @@ import {
   type BehaviourSettings,
   type Seen,
 } from './behaviourSettings';
+import { fieldErrorsOf } from './fieldErrors';
 import { Group } from './parts';
+import { IdentitySection } from './IdentitySettings';
 
 /**
  * Widget settings › Behaviour and Embed code (S-03; WS-WCHAT X-UI-16, UX-SET-04, UX-SET-05).
@@ -41,27 +44,47 @@ import { Group } from './parts';
 
 export type BehaviourState = ReturnType<typeof useBehaviour>;
 
-export function useBehaviour(id: number) {
+/** The settings a refusal can be shown under (#259): each has its row's problem line. */
+const SHOWN: ReadonlySet<string> = new Set<keyof BehaviourSettings>(['default_agent_id', 'ask_details_after_minutes', 'missed_after_minutes', 'inactive_after_minutes', 'visitor_alert_pages']);
+
+/**
+ * `onRefused` (#259): the editor's turn at a refusal about fields on other tabs — a widget whose saved company name
+ * is a web address is refused whatever is saved — which it shows under those fields and marks their tab; true when
+ * it did. Whatever nobody can show under a field is a toast, as before.
+ */
+export function useBehaviour(id: number, onRefused?: (e: unknown) => boolean) {
   const qc = useQueryClient();
   const key = ['website', 'widget-behaviour', id];
   const q = useQuery({ queryKey: key, queryFn: ({ signal }) => behaviourOf(id, signal), retry: false });
   const [draft, setDraft] = useState<BehaviourSettings | null>(null);
   const [busy, setBusy] = useState(false);
+  // The server's word on a field, until that field is changed.
+  const [refused, setRefused] = useState<Partial<Record<keyof BehaviourSettings, string>>>({});
   const saved = q.data?.settings ?? null;
   const settings = draft ?? saved;
   const changes = saved && settings ? changedBehaviour(saved, settings) : {};
-  const issues = settings ? behaviourProblems(settings) : {};
+  const issues = { ...refused, ...(settings ? behaviourProblems(settings) : {}) };
   const dirty = Object.keys(changes).length > 0;
-  const blocked = Object.keys(issues).length > 0;
+  const blocked = settings ? Object.keys(behaviourProblems(settings)).length > 0 : false;
   // A server from before S-03 has no such page: the tab says so, and Embed code keeps the widgets list's snippet.
   const missing = q.error instanceof ApiError && q.error.status === 404;
 
-  const set = <K extends keyof BehaviourSettings>(k: K, v: BehaviourSettings[K]) =>
+  const set = <K extends keyof BehaviourSettings>(k: K, v: BehaviourSettings[K]) => {
     setDraft((d) => {
       const base = d ?? saved;
       return base ? { ...base, [k]: v } : d;
     });
-  const undo = () => setDraft(null);
+    setRefused((r) => {
+      if (!(k in r)) return r;
+      const next = { ...r };
+      delete next[k];
+      return next;
+    });
+  };
+  const undo = () => {
+    setDraft(null);
+    setRefused({});
+  };
   const save = async () => {
     if (!dirty || blocked) return;
     setBusy(true);
@@ -69,11 +92,15 @@ export function useBehaviour(id: number) {
       const fresh = await saveBehaviour(id, changes);
       qc.setQueryData<BehaviourPayload>(key, fresh);
       setDraft(null);
+      setRefused({});
       void qc.invalidateQueries({ queryKey: ['website', 'widgets'] });
       void qc.invalidateQueries({ queryKey: ['website', 'widget-design', id] });
       toast('success', text('Widget saved — visitors see it on their next page'));
     } catch (e) {
-      toast('error', errorMessage(e));
+      const own = Object.fromEntries(Object.entries(fieldErrorsOf(e)).filter(([k]) => SHOWN.has(k)));
+      setRefused(own);
+      const elsewhere = onRefused?.(e) ?? false;
+      if (!Object.keys(own).length && !elsewhere) toast('error', errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -293,35 +320,33 @@ export function EmbedColumn({ code, seen, site, wide }: { code: string | null; s
   );
 }
 
-/** WordPress, Shopify and Tag Manager (UX-SET-05): each opens to its steps. */
+/** WordPress, Shopify and Tag Manager (UX-SET-05): each opens to its steps, as many at once as wanted (#244). */
 function InstallGuides() {
-  const [open, setOpen] = useState<string | null>(null);
   return (
-    <section aria-labelledby="widget-guides-title" className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface px-4 py-3.5 text-[12.5px]">
+    <section aria-labelledby="widget-guides-title" className="flex shrink-0 flex-col gap-1 rounded-[12px] border border-line bg-surface px-4 py-3.5 text-[12.5px]">
       <h2 id="widget-guides-title" className="text-[14px] font-bold text-ink">Install guides</h2>
-      {GUIDES.map((g) => (
-        <div key={g.id} className="flex flex-col gap-1">
-          <button type="button" aria-expanded={open === g.id} aria-controls={`guide-${g.id}`} onClick={() => setOpen(open === g.id ? null : g.id)} className="self-start text-left font-semibold text-primary hover:underline">
-            {g.title}
-          </button>
-          {open === g.id ? (
-            <ol id={`guide-${g.id}`} className="ml-4 list-decimal text-ink-2">
+      <div className="flex flex-col">
+        {GUIDES.map((g) => (
+          <CollapsibleSection key={g.id} variant="row" defaultOpen={false} title={g.title} summary={text('{n} steps', { n: g.steps.length })} data-testid={`guide-${g.id}`}>
+            <ol className="ml-4 list-decimal text-ink-2">
               {g.steps.map((x) => <li key={x}>{x}</li>)}
             </ol>
-          ) : null}
-        </div>
-      ))}
+          </CollapsibleSection>
+        ))}
+      </div>
       <p className="text-ink-3">The script is small, loads after the page, and fails silently if WorkSuite cannot be reached.</p>
     </section>
   );
 }
 
 /** Embed code (S-03): the design's column, from the Behaviour page when the server has it, else the widgets list's snippet. */
-export function EmbedTab({ b, site, fallbackCode }: { b: BehaviourState; site: string; fallbackCode: string | null }) {
+export function EmbedTab({ b, site, fallbackCode, widgetId }: { b: BehaviourState; site: string; fallbackCode: string | null; widgetId?: number }) {
   if (b.q.isLoading) return <div className="flex flex-1 items-center justify-center"><Spinner /></div>;
   return (
-    <div className="flex min-h-0 flex-1">
+    <div className="flex min-h-0 flex-1 gap-4 overflow-y-auto scroll-thin">
       <EmbedColumn code={b.q.data?.embed_code ?? fallbackCode} seen={b.q.data ? b.q.data.seen : undefined} site={site} wide />
+      {/* Returning visitors (#222): their settings and the developer guide for identify(), beside the snippet. */}
+      {widgetId ? <div className="w-[420px] shrink-0 pb-4"><IdentitySection widgetId={widgetId} /></div> : null}
     </div>
   );
 }
