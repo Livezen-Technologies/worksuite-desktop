@@ -4,6 +4,21 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-06
+
+**Added**
+
+- customers and loyalty at the counter (D04) — CRM search, quick add with duplicate candidates, the customer card (12-month spend, visits, tier, points, store credit, last purchases), points to spend, points earned on the sale-complete screen, the receipt and the customer display
+- a manager's override (D09) — discount past the cashier's rights, refund, void and cash out past the company's figure: approvers, a 6-dot PIN and keypad, or a request sent to the managers and polled; the action is sent again with approval_id, the PIN never kept
+- the company's configured tenders — LankaQR, gift voucher (code and balance), store credit and account for a named customer; the old four where none are configured
+- stock, promotion badges and pictures on the grid; the category tree and favourites in the category picker; today's top sellers from WorkSuite; promotions and points as lines of the cart's totals (apply_promotions online, promotion_ids [] offline)
+- held sales on WorkSuite (park and recall across tills), the local hold kept as the fallback; refund-to and each line's condition in returns; the drawer's X and Z report from WorkSuite; the device's name at pairing and in This till; Forget this till unpairs on the server
+- receipts printed by the company's published template (blocks, 58/80 mm, footer, Code 128 or QR); without one the receipt is unchanged byte for byte
+
+**Changed**
+
+- every Phase 2 part is lit only by the server's options.capabilities flags and only online; an older server sees the Phase 1 requests
+
 ## 1.1.0 — 2026-10-06
 
 **Added**

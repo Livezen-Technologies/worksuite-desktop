@@ -436,6 +436,17 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   the shell on the second monitor; the register tells it what to show over a same-origin `BroadcastChannel`.
   Offline the drawer's screens read the last `/api/pos/options`, `registers` and `sessions` from READ_CACHE and wait
   for WorkSuite to open, move cash or close; selling goes on.
+  Phase 2 (pos 1.2.0) is lit per `options.capabilities` flag and only online: the counter's Phase 2 calls go through
+  one channel, `pos:desk` (an operation list mapped to door paths by `pos-till.ts: deskCall`, the cashier named by the
+  main process), plus `pos:approve` (a manager's PIN, passed once to `POST device/approvals`, never kept) and
+  `pos:rename`; the renderer reads the answers in `desk.ts`. A sale or refund WorkSuite would take only with a
+  manager's approval comes back as `{needs}` (not an error), the override (`Override.tsx`, `approval.ts`) gets an
+  `approval_id`, kept in window memory only, and the action is sent again with it. Customers and loyalty
+  (`CustomerDialog.tsx`), configured tenders with voucher and store-credit lookups (`TenderPanel.tsx`, `tender.ts`),
+  held sales on the server (`OpenSales.tsx`), the category tree, favourites, stock, pictures and promotion badges
+  (`catalog.ts`, `ProductGrid.tsx`, `CategoryPicker.tsx`), refund-to and line condition (`returns.ts`), the drawer's
+  X/Z report (`ShiftScreen.tsx`) and the receipt template (`pos-print.ts: templateRows`, kept per till by
+  `pos-till.ts`) each fall back to the Phase 1 behaviour on a server without the flag.
 - Restaurant Manager (`modules/restaurant`, main process `electron/services/restaurant/`, rules in
   `shared/restaurant.ts`): this computer as one of a branch's **terminals** — a till, a kitchen screen, the pass or a
   printer host. `terminal.ts` pairs it (`POST terminals/{id}/pair`, after reading the terminal back from the

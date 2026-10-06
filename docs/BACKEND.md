@@ -734,6 +734,29 @@ not reachable: its `mobile` filter takes only mobile access tokens (`aud=mobile`
 | Refund, void (main process, till credential) | `POST api/pos/device/sales/{ref}/refund {ref: <receipt>-R<n>, cashier_id, reason, lines?: [{product_id, quantity}], restock?}`, `POST …/void {ref: <receipt>-V, cashier_id, reason}` → `{refund: {ref, kind, amount, cash_out, tenders, lines, credit_note, …}, sale}` (201; 200 when the same `ref` was had) — where `capabilities.refund` / `.void` and `can.refund` / `.void` |
 | Receipt, e-mail (main process, till credential) | `GET api/pos/device/sales/{ref}/receipt` → `{receipt}` (`Receipt::data`, with `payment_missing` and `status: payment_missing`, printed as a "Payment missing" line) for a reprint, where `capabilities.receipt`; `POST api/pos/device/sales/{ref}/email {email?}` where `capabilities.email_receipt` |
 
+**Phase 2 (pos 1.2.0).** Every Phase 2 call is made only where `GET api/pos/options` → `capabilities` announces it
+(and, for anything but printing, only while WorkSuite answers); a server without the flags gets exactly the Phase 1
+requests. The door's Phase 2 calls go through `pos:desk` (`shared/pos.ts posDeskSchema`, mapped by
+`pos-till.ts: deskCall`), the cashier (`cashier_id`) always the signed-in person, named by the main process.
+
+| Need (capability) | Calls |
+|---|---|
+| Configured tenders (`tenders`) | `options.companies[].tenders`; on the door `tenders` beside `GET device/catalogue` (also when unchanged) and `POST device/heartbeat`, kept on the catalogue copy for offline (cash and card only). A sale's tender sends the kind as `method` (`qr`, `voucher` with the code as `reference`, `store_credit`, `account`); none configured → the old four |
+| Gift voucher, store credit (`vouchers`, `store_credit`) | `GET device/vouchers/{code}` → `{voucher}` (404 none), `GET device/store-credit/{client_id}` → `{balance, currency}` before taking them |
+| Held sales on the server (`held`) | `GET device/held` → `{items, expiry_hours}`; `POST device/held {cashier_id, lines [{product_id, quantity, name}], discount_pct?, customer {name, phone, email, client_id}?, note?, label?, total?}`; `POST device/held/{id}/recall {cashier_id}` → `{held, cart, cart_problem}`; `POST …/discard`. `409 gone` / `too_many` shown; offline, or refused, the sale is held on this till as before |
+| Manager approval (`approvals`, `remote_approvals`) | `GET device/approvers` → `{items [{id, name, initials, has_pin}]}`; `POST device/approvals {cashier_id, approver_id, pin, action, amount, subject?, reason?}` → `{approval_id, expires_at, approver}` (`pin_wrong`, `pin_locked`, `approver_unknown`, `self_approval`); `POST device/approval-requests {cashier_id, action, amount, subject?, reason?}` → `{request}`, polled every 3 s at `GET device/approval-requests/{id}?cashier_id=` until `approved` (with `approval_id`) / `denied` / `expired`, `POST …/{id}/cancel` when the cashier gives up. The approval is sent as `approval_id` on the device sale (discount; no `subject`, the retry is numbered afresh), `device/sales/{ref}/refund\|void` (the same `<receipt>-R<n>` / `-V`) and the staff `POST api/pos/sessions/{id}/cash` (cash out). Asked first where the till knows the rule (`can.max_discount_pct`, `companies[].approvals.manager_above_amount`), else when WorkSuite answers `approval_required` (device `results[].code` + `approval`, `403 {code, approval}`; staff `403 errors.code`, `errors.approval`) |
+| Refund-to, line condition (`refund_to`, `line_condition`) | `device/sales/{ref}/refund` gains `refund_to: cash\|store_credit` (sent only when not `original`) and `lines[].condition: resaleable\|opened\|damaged\|faulty` — one refund; without `line_condition` two (restocked, and not) as before |
+| Customers and loyalty (`customers`, `loyalty`) | `GET device/customers?q=` → `{items}`, `GET device/customers/{id}` → `{customer: Card}`, `POST device/customers {cashier_id, name, phone?, email?}` → 201 `{customer}` / 409 `customer_exists` + `candidates` (offered to pick). The sale and the price name `customer_id`; `redeem_points` within the card's `loyalty` (`max_redeem_pct`, `min_redeem`) |
+| Counter pricing (`promotions`, `coupons`) | `POST api/pos/price` gains `apply_promotions: true`, `customer_id`, `coupon_code`, `redeem_points` → `promotion_discount`, `points_discount`, `points_redeemed`, `deduction`, `promotions [{id, label, amount}]`, `pricing_notes`. The device sale: priced by WorkSuite → `apply_promotions: true` (+ coupon, points); priced here offline → `promotion_ids: []` (the till applies no promotion offline, so WorkSuite keeps its price); with any of these the sale also sends `discount_pct` (its `discount` is the whole deduction). A discount a manager approved past the cashier's rights is priced at 0 % on the price door and taken locally the way `Cart::quote` does (WorkSuite prices the sale under the approver's rights) |
+| Catalogue enrichment (`stock`, `category_tree`, `favourites`, `product_images`, `top_sellers`) | The catalogue's `category_tree`, `favourites`, per product `stock_state` / `stock_available`, `image_url`, `promo_label`, `favourite` (kept in the copy); `GET device/stock` every five minutes while the counter is open (stock does not change the version); `GET device/top-sellers?limit=` in the category picker; pictures through the person's session `GET api/pos/products/{id}/image?org=` (the door's `image_url` needs the till's credential) |
+| X and Z report (`session_report`) | `GET device/session/report` (the drawer open at this till; 404 `drawer_closed`), `GET device/sessions/{id}/report` (Z once closed) → `{report}` shown and printed as rows; a blind drawer's money stays hidden. Otherwise the till's own from its record |
+| Receipt template (`receipt_templates`) | `GET device/receipt-template` → `{template \| null}` with the catalogue (every 30 min) and on refresh, kept per till; a reprint follows the receipt's own `template`. ESC/POS walks its blocks at its paper (58/80 mm; A4 keeps the printer's roll), QR by `GS ( k`; no template → the old receipt byte for byte |
+| The device (`device_rename`, `device_unpair`) | Pairing sends `device_name` (the person's, else the computer's) and `platform` (`windows`, `macos`, `linux`); `POST device/name {device_name}` from This till; *Forget this till* calls `POST device/unpair` first (its failure does not stop the forgetting) |
+
+Seen in the server's code and worth fixing there: the template's `points` block prints `loyalty.earned` /
+`loyalty.points`, but a receipt's `loyalty` carries `points_earned` / `points_balance` (`Receipt::designed`); the till
+reads both. `Customer.store_credit` is always `null` — the till reads `device/store-credit/{id}` instead.
+
 **A sale as the till sends it** (`electron/services/pos-outbox.ts: saleBody`): `ref` (the receipt number,
 `<TILL CODE>-<6 hex per pairing>-<000001>`), `date`, `currency`, `paid: true`, `customer {name?, phone?, email?}`,
 `lines [{description, sku, product_id, quantity, unit_price, discount_pct, tax_rate, net, tax, total}]`, `subtotal`,
@@ -775,7 +798,11 @@ Still open:
 
 - On a `/desktop/v1` server, `links/resolve` does not know `worksuite://pos` or `worksuite://pos/sales/{ref}`.
 - The till's history is its own record (90 days); `GET api/pos/sales?review=` (other tills', the server's review queue)
-  is not shown yet — the till filters its own sales by their flags.
+  is not shown yet — the till filters its own sales by their flags. The Phase 2 journal, export, overview and reports
+  (`journal`, `export`, `overview`, `reports`) are the web's, not the till's.
+- Offline the till applies no promotion (`promotion_ids: []`): `PromoEngine` (`promotion_engine: 1`) is not ported to
+  the desktop yet, so an offline sale is priced without promotions and WorkSuite keeps that price.
+- A template's logo is not printed (ESC/POS would need it rastered).
 
 ### Restaurant Manager — till, kitchen screen, print agent
 
