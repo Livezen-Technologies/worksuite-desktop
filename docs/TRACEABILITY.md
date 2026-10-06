@@ -492,6 +492,52 @@ design, staff, settings, reports, the day close, a booking's deposit) is the web
 | RM-DSK-007 | Done | Heartbeat every 30 s: queue size, version, online, last sync, the hosted printers' state |
 | §5.7 reservations (host stand) | Done | `Reservations.tsx`: the day's bookings with the server's `choices` (confirm, arrived, seat at a free table with guests and the table's version, cancel with a reason, no-show), the tables' timeline (`reservations/timeline`), a booking after `reservations/availability` (free tables, or the server's other times). `reservation.view` to see, `reservation.manage` to move; online only. Deposits and changing a booking stay on the web |
 
+## Marketing (WS-MKT-SRS-001 v1.1)
+
+`src/modules/marketing` (renderer: `MarketingShell.tsx` reads the web's `?view=` addresses, so a server link, a search
+hit or a notification lands on the same screen), over the server's `/api/marketing` (`app/Modules/Marketing`). Who is a
+duplicate, who may be emailed or called, what a campaign may send and what an outcome does are the server's; the
+screens show its answers and send back what was typed. The desktop's own parts live in the main process:
+`electron/services/marketing-shortcut.ts`, `marketing-pulse.ts`, `marketing-reminders.ts`, the callback kind in
+`notifications.ts` and the Marketing lines in `electron/tray/tray.ts`, wired in `electron/main/index.ts`. Tests:
+`tests/unit/electron/marketing-native.test.ts`, `tests/unit/renderer/marketing-calls.test.tsx`.
+
+| ID | Status | Where / note |
+|---|---|---|
+| MKT-DSK-01 (call queue tab) | Done | `MyQueue.tsx`: My call queue as in D01 — who is waiting, in the order Next contact takes them, without taking anybody (`GET calls/queue/list`; a server without it says so and Next contact still works), Callbacks due now and later, and the workspace (`calls-workspace.tsx`, DK11) |
+| MKT-DSK-01 (global Next contact) | Done | ⌘⇧N / Ctrl+Shift+N from other apps (`marketing-shortcut.ts`): held only while no WorkSuite window is in front — in WorkSuite those keys are Move tab to new window — and only signed in, unlocked, with Marketing, and not for somebody the server says has no call queue; given back on focus, lock, sign-out and quit. It brings WorkSuite forward on the workspace with a new `claim`. Inside WorkSuite: the command "Claim next contact" (`src/layouts/Shell.tsx`), Ctrl+Alt+N / ⌘⌃N by default (`src/core/commands.ts`), remappable in Settings › Keyboard shortcuts |
+| MKT-DSK-01 (native notifications) | Done | Callback reminders (MKT-CAL-12, below). Campaign notices ("“Vendor re-permission” paused — bounce guard reached 5.3%") are the server's notifications with category `marketing`: they show like any other, open the campaign in the Marketing tab, and are muted with Settings › Notifications › Marketing |
+| MKT-DSK-01 (tray counts) | Partial | `marketing-pulse.ts`: `GET /api/marketing/pulse` once a minute, on waking and when the person's apps change; the tray shows Call queue waiting, Callbacks today, Sending now N · P% and Next contact (its key shown, not registered by the menu), updated only when they change. Needs the server's go-live part: a server without the pulse (404) or a person refused (403) gets no Marketing lines |
+| MKT-DSK-01 (deep links) | Done | `shared/deeplink.ts`: `worksuite://marketing`, `marketing/queue`, `marketing/contacts/:id`, `marketing/campaigns/:id`, opened in the web's grammar (`/marketing?view=contacts&contact=42`) |
+| MKT-CAL-12 | Done (desktop) | `marketing-reminders.ts`: my callbacks (`GET calls/callbacks`) read every two minutes, each given a timer for its minute (never set more than ten minutes ahead, set again on waking, a 30-second sweep as a backstop); each promise rings once; one moved rings at its new time, one made or handed on is dropped, one missed by over an hour is not announced late. The banner goes through the notification service (Do not disturb, pause, privacy, the lock, the Marketing switch): "Callback due · name", the campaign and the notes, with Call now (the workspace on that campaign, where the due callback comes first) and Snooze 15 min (this computer only; the callback and its task keep their time). Buttons only when banners show their content |
+| MKT-CAL-01, MKT-CAL-02 | Done | `CallCampaigns.tsx`: the list with status, waiting, calls, reached and whether I call; a new campaign opens as a draft. `CallCampaignView.tsx`: audience (lists, segments, who to leave out), script, priority, dates, calling hours, attempts, retry, agents (the company's people; the server checks `marketing.call.make`) |
+| MKT-CAL-03, MKT-CAL-04, MKT-CAL-09, MKT-CAL-10, MKT-CAL-11 | Done | `calls-workspace.tsx`: `GET calls/queue` claims one contact (once per claim — never refetched behind the agent's back); the header says when it was claimed and when it is let go (`claimed_at`), and the call timer counts from it; Skip hands it back to the end of the queue for a while (`skip {later: true}`), Release hands it back for anybody at once (`skip {}`); the ten outcomes (`options.call_outcomes`), Do not call asked first; the callback's day, time and who makes it; "Hand over to CRM as lead" for Interested with the convert permission (`handover: true`); a 409 says the contact was let go and takes the next. "Call via WorkSuite Phone" (`POST /api/voip/call`), else the number is copied. "Send follow-up email" is shown as Planned |
+| MKT-CAL-07 | Done | `Scripts.tsx`, `calls-scripts.tsx`: the six parts, language, archive (kept for campaigns using it); "Edit script" from the campaign |
+| MKT-CAL-08, MKT-CAL-15 | Done | `CallCampaignView.tsx` (DK10): In queue, Claimed now, Reached, Interested (with how many were handed to CRM, `handed_over`), Callbacks due; agents on a call, wrapping up or idle N min (`results.live`, refreshed every 30 s while calling; a server a part behind shows each agent's totals); the ten outcomes; the rules; the amber hold-back for contacts without phone consent; Pause, Resume, Finish, Add new people, Start calling, Delete a draft |
+
+| Screen | Design | Where (the shell's lazy imports) |
+|---|---|---|
+| DK01 | W01 Dashboard and readiness | `Dashboard.tsx` |
+| DK02 | W02 Contacts | `Contacts.tsx` (with `Companies.tsx`, `Lists.tsx`) |
+| DK03 | W03 Contact detail | `ContactPage.tsx` |
+| DK04 | W04 Segment builder | `Segments.tsx`, `SegmentBuilder.tsx` |
+| DK05 | W05 Import | `Import.tsx` |
+| DK06 | W06 Email campaigns | `Campaigns.tsx` |
+| DK07 | W07 Campaign editor | `CampaignView.tsx` (with `Templates.tsx`, `Topics.tsx`) |
+| DK08 | W08 Review & send | `CampaignView.tsx` |
+| DK09 | W09 Campaign report | `CampaignView.tsx`, `Reports.tsx` |
+| DK10 | W10 Call campaign (supervisor) | `CallCampaigns.tsx`, `CallCampaignView.tsx` |
+| DK11 | W11 Agent workspace | `MyQueue.tsx`, `calls-workspace.tsx`, `Scripts.tsx` |
+| DK12 | W12 Consent & suppression | `Consent.tsx` |
+| DK13 | W13 Settings › Sending | `Settings.tsx` |
+| DK14 | R01 Automation (planned) | `Automation.tsx` |
+| D01 | Desktop queue, callback banner, tray | `MyQueue.tsx`; `marketing-reminders.ts`; `marketing-pulse.ts`, `electron/tray/tray.ts` |
+
+Not done: the D01 "Softphone registered" pill (WorkSuite cannot tell whether the agent's softphone is registered; the
+workspace says "Calling via WorkSuite Phone" when the phone system answers), the workspace's Mute and Hang up (the
+phone system places the call, the desktop does not hold it) and W10's "Avg. handle" column (the server sends no
+handle times). The global key cannot yet be turned off in Settings.
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

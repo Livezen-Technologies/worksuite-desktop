@@ -37,6 +37,9 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   // ⌘J / Ctrl+J opens or minimises the assistant too (worksuite-desktop#153); inside the mail editor it is Write with AI.
   'ai-alt': 'Mod+J',
   'switch-org': 'Mod+Shift+O',
+  // Marketing's Next contact inside WorkSuite (MKT-DSK-01). From other apps it is ⌘⇧N / Ctrl+Shift+N, held by the main
+  // process only while WorkSuite is not in front: in here those keys are Move tab to new window.
+  'marketing-claim-next': isMac ? 'Mod+Ctrl+N' : 'Mod+Alt+N',
   // The app launcher (worksuite-desktop#201); the person's own choice is kept with the launcher's preferences.
   launcher: 'Mod+Shift+K',
   lock: 'Mod+L',

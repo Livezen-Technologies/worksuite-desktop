@@ -538,8 +538,8 @@ export const contract = {
   'files:pickFiles': ch(z.object({ multiple: z.boolean(), title: z.string().max(100).optional(), only: z.enum(['gif', 'document', 'image', 'video', 'audio']).optional() }), { session: true, rate: 2 }),
   // The dialog runs in the main process, which stores the chosen folder itself.
   'files:chooseDownloadFolder': ch(none, { rate: 2 }),
-  /** A short text the page made (backup codes), saved where the person chooses in a save dialog. */
-  'files:saveText': ch(z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.txt$/), text: z.string().max(64_000) }), { session: true, rate: 2 }),
+  /** A short text the page made (backup codes, a report's CSV), saved where the person chooses in a save dialog. */
+  'files:saveText': ch(z.object({ name: z.string().regex(/^[A-Za-z0-9 ._-]{1,80}\.(txt|csv)$/), text: z.string().max(64_000) }), { session: true, rate: 2 }),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
   /** A folder, with everything in it: each file carries its path inside the folder. */
   'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),

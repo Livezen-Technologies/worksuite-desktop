@@ -171,6 +171,19 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   },
   {
     input: defineDesktopManifest({
+      id: 'marketing', name: 'Marketing', icon: 'megaphone', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      native: ['notifications'],
+      quickActions: [
+        { id: 'marketing-queue', label: 'My call queue', route: '/marketing?view=queue' },
+        { id: 'marketing-new-campaign', label: 'New campaign', route: '/marketing?view=campaigns&new=1' },
+      ],
+      deepLinks: ['marketing', 'marketing/queue', 'marketing/contacts/:id', 'marketing/campaigns/:id'],
+    }),
+    load: () => import('./marketing/MarketingShell'),
+  },
+  {
+    input: defineDesktopManifest({
       id: 'sales', name: 'Sales & Orders', icon: 'trending-up', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['order'], cache: ['/api/oms/orders'] },
       quickActions: [{ id: 'new-order', label: 'New Order', route: '/sales?tab=orders&new=1' }],

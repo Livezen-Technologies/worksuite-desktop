@@ -336,6 +336,7 @@ const SHORTCUT_LABELS: Record<string, string> = {
   settings: 'Settings',
   ai: 'AI Assistant',
   'switch-org': 'Switch organization',
+  'marketing-claim-next': 'Marketing: claim the next contact',
   launcher: 'App launcher',
   lock: 'Lock WorkSuite',
   help: 'Help & Diagnostics',
@@ -355,8 +356,9 @@ function Shortcuts({ prefs }: { prefs: Preferences }) {
   const map: Record<string, string> = { ...effectiveShortcuts(prefs.shortcuts), launcher: launcher.shortcut };
   const clashes = conflicts(map);
   const [recording, setRecording] = useState<string | null>(null);
-  // The AI Assistant's shortcut only for whoever has the AI app.
+  // The AI Assistant's shortcut only for whoever has the AI app; Marketing's Next contact only for whoever has Marketing.
   const hasAi = useCanOpen('ai');
+  const hasMarketing = useCanOpen('marketing');
   return (
     <div className="mt-8">
       <h3 className="mb-2 text-[16px] font-bold text-ink">Keyboard shortcuts</h3>
@@ -365,7 +367,7 @@ function Shortcuts({ prefs }: { prefs: Preferences }) {
           {clashes.map((c) => `${prettyAccelerator(c.accelerator)} is used by ${c.commands.map((id) => SHORTCUT_LABELS[id] ?? id).join(' and ')}`).join('. ')}. The shell command wins.
         </div>
       ) : null}
-      {Object.keys(SHORTCUT_LABELS).filter((id) => id !== 'ai' || hasAi).map((id) =>
+      {Object.keys(SHORTCUT_LABELS).filter((id) => (id !== 'ai' || hasAi) && (id !== 'marketing-claim-next' || hasMarketing)).map((id) =>
         id === 'launcher' ? (
           // Kept with the launcher's own preferences, synced to the person's devices, and checked against ⌘K.
           <Row key={id} label={SHORTCUT_LABELS[id]!}>
@@ -430,6 +432,8 @@ const MODULE_TOGGLES = [
   ['support', 'Support'],
   ['salon', 'SalonMate front desk'],
   ['ai', 'AI Assistant'],
+  // Campaign notices (a campaign paused by the bounce guard) and callback reminders (MKT-DSK-01, MKT-CAL-12).
+  ['marketing', 'Marketing'],
   ['system', 'System alerts'],
 ] as const;
 

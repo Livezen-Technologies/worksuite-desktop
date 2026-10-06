@@ -5,6 +5,24 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.188 — 2026-10-06
+
+- **Marketing opens in the app (WS-MKT-SRS-001 v1.1).** Marketing is now a native module in a tab of its own
+  instead of the browser, with the same four sections as the web: Audience, Email, Calls and Insights.
+  - **Audience:** dashboard with go-live readiness, contacts (phones masked), the contact page, organisations, lists,
+    segments with a live sample, imports with a file of rejected rows, and consent & suppression with the ledger.
+  - **Email:** campaigns, the three-step editor with a block editor that saves the same HTML as the web, review &
+    send with the pre-send check and test sends, and the report (funnel, links, human opens, deliverability, A/B).
+  - **Calls:** call campaigns, My call queue with the ten wrap-up outcomes and callbacks, and scripts.
+  - **Insights:** reports. Automation is shown as planned, not as working.
+- **Calls from anywhere.** ⌘⇧N / Ctrl+Shift+N claims the next contact while another app is in front (the key is held
+  only while no WorkSuite window is focused). The tray shows the call queue, today's callbacks and campaigns sending
+  now. A callback that falls due raises a notification with **Call now** and **Snooze 15 min**, and a campaign paused
+  by the bounce guard raises one too. Both can be switched off under Settings › Notifications › Marketing.
+- `worksuite://marketing/…` links open the queue, a contact or a campaign.
+- A text file a screen writes can now be saved as `.csv` as well as `.txt`.
+- Needs the server's Marketing 2.0.0.
+
 ## 0.2.187 — 2026-10-05
 
 - **Visitor messages that aren't reaching staff (delivery Phase 3).** When no staff device has received a visitor's
