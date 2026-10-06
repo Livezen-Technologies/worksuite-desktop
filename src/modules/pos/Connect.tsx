@@ -9,8 +9,7 @@ import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { fetchSetup, pairTill, PK, type PosBindable } from './api';
 import { useT, type PosKey } from './i18n';
-import { Failed, Note, PosButton } from './parts';
-import { Mark } from './TillBar';
+import { Failed, Mark, Note, PosButton } from './parts';
 
 /**
  * Making this computer a till, on two panes: what pairing is (the person signs in once; the computer gets a

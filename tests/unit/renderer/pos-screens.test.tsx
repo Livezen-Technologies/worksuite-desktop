@@ -8,6 +8,9 @@ import type { PosRegister, PosSession } from '../../../src/modules/pos/api';
 import { cartActions } from '../../../src/modules/pos/cart';
 import CashMove from '../../../src/modules/pos/CashMove';
 import Connect from '../../../src/modules/pos/Connect';
+import CustomerDisplay from '../../../src/modules/pos/CustomerDisplay';
+import { publish } from '../../../src/modules/pos/display';
+import { TabProvider } from '../../../src/core/tab-context';
 import ReturnDialog from '../../../src/modules/pos/ReturnDialog';
 import { TillContext, type Till } from '../../../src/modules/pos/parts';
 import Shift from '../../../src/modules/pos/ShiftScreen';
@@ -291,5 +294,25 @@ describe('the till’s devices', () => {
     let at = 1000;
     for (const key of [...'4790001000011', 'Enter']) fireEvent.keyDown(window, { key, timeStamp: (at += 5) });
     expect(await screen.findByText('Read 4790001000011')).toBeTruthy();
+  });
+});
+
+describe('the customer display', () => {
+  it('shows the sale on screen, what they pay and what the discount saved them, then the change', async () => {
+    mount(
+      <TabProvider tabId="d" route="/pos/display" active onGo={() => undefined}>
+        <CustomerDisplay />
+      </TabProvider>,
+      till(),
+    );
+    expect(screen.getByText('Welcome')).toBeTruthy();
+    publish({ kind: 'cart', shop: 'Acme', currency: 'LKR', lines: [{ name: 'Ceylon tea', quantity: 2, total: 900 }], discount: 90, tax: 0, total: 810, provisional: false });
+    expect(await screen.findByText('2 × Ceylon tea')).toBeTruthy();
+    expect(screen.getByText('You pay')).toBeTruthy();
+    expect(screen.getByText('LKR · you saved 90.00')).toBeTruthy();
+    publish({ kind: 'paid', shop: 'Acme', currency: 'LKR', total: 810, paid: 1000, change: 190 });
+    expect(await screen.findByText('Your change')).toBeTruthy();
+    expect(screen.getByText('190.00')).toBeTruthy();
+    publish({ kind: 'idle', shop: 'Acme' });
   });
 });

@@ -11,7 +11,7 @@ import { useNow } from '../../core/use-now';
 import { forgetTill, PK } from './api';
 import { displayWindow, toggleCustomerDisplay } from './display';
 import { useT, type PosKey } from './i18n';
-import type { PosView, Till } from './parts';
+import { Mark, type PosView, type Till } from './parts';
 
 /**
  * The till bar (64px, navy): which till and register this is, whether WorkSuite answers, the time, the cashier,
@@ -24,16 +24,6 @@ export const MENU_VIEWS: Array<{ view: PosView; label: PosKey; icon: string }> =
   { view: 'sales', label: 'pos.sales', icon: 'receipt' },
   { view: 'printers', label: 'pos.settings', icon: 'printer' },
 ];
-
-export function Mark({ size = 28 }: { size?: number }) {
-  return (
-    <svg viewBox="0 0 63 63" width={size} height={size} aria-hidden="true">
-      <rect x="0" y="21" width="42" height="42" fill="#00DAF2" />
-      <rect x="21" y="0" width="42" height="42" fill="#0A6CFF" />
-      <rect x="21" y="21" width="21" height="21" fill="#001842" />
-    </svg>
-  );
-}
 
 export default function TillBar({ till, view, full, onFull, onSync }: { till: Till; view: PosView; full: boolean; onFull: () => void; onSync: () => void }) {
   const t = useT();

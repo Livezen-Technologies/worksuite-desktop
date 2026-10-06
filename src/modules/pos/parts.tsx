@@ -215,3 +215,14 @@ export function PosButton({ tone = 'quiet', className, children, ...rest }: Reac
     </button>
   );
 }
+
+/** The WorkSuite mark, as the till bar, pairing and the customer display draw it. */
+export function Mark({ size = 28 }: { size?: number }) {
+  return (
+    <svg viewBox="0 0 63 63" width={size} height={size} aria-hidden="true">
+      <rect x="0" y="21" width="42" height="42" fill="#00DAF2" />
+      <rect x="21" y="0" width="42" height="42" fill="#0A6CFF" />
+      <rect x="21" y="21" width="21" height="21" fill="#001842" />
+    </svg>
+  );
+}
