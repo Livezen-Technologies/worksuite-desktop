@@ -303,7 +303,7 @@ export default function Register({ active }: { active: boolean }) {
           catalogueVersion={catalogue.data?.version ?? null}
           onClose={() => setPaying(false)}
           onDone={() => {
-            cartActions.clear();
+            cartActions.paid();
             setPaying(false);
             search.current?.focus();
           }}

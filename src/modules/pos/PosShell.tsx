@@ -5,6 +5,7 @@ import { Button, Spinner, cx } from '../../components/ui';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import type { ModuleProps } from '../registry';
 import { discountRights, fetchOptions, fetchRegisters, PK, syncNow, unreachable, useTill, usePosChanged } from './api';
+import { useKeptCarts } from './cart';
 import Connect from './Connect';
 import { useT, type PosKey } from './i18n';
 import { Failed, Note, posRoute, TillContext, type PosView, type Till } from './parts';
@@ -57,6 +58,8 @@ function Counter({ active }: { active: boolean }) {
   const paired = !!till.data?.till && till.data.till.state !== 'revoked';
   const options = useQuery({ queryKey: PK.options, queryFn: ({ signal }) => fetchOptions(signal), enabled: paired, staleTime: 60_000 });
   const registers = useQuery({ queryKey: PK.registers, queryFn: ({ signal }) => fetchRegisters(signal), enabled: paired, refetchInterval: 60_000 });
+  // The open and held sales, as the main process keeps them for this till.
+  useKeptCarts(paired ? String(till.data!.till!.terminal.id) : null);
   // Full-screen counter mode: the till alone on the screen (the element, not the window: Esc leaves it).
   const root = useRef<HTMLDivElement>(null);
   const [full, setFull] = useState(false);

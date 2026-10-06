@@ -280,6 +280,42 @@ export const posReportSchema = z.strictObject({
 });
 export type PosReport = z.infer<typeof posReportSchema>;
 
+/* ── Open and held sales ─────────────────────────────────────────────────── */
+
+/**
+ * The sales open at the counter (at most five, one on screen) and those held — parked — for up to a day: what was
+ * rung up, the customer and the cashier's discount, never a price. They are the till's, kept sealed by the main
+ * process where the desktop policy lets this computer keep data (in memory otherwise), so a restart keeps them; none
+ * reaches WorkSuite until it is paid.
+ */
+export const POS_MAX_OPEN = 5;
+export const POS_MAX_HELD = 50;
+/** A held sale older than this is discarded. */
+export const POS_HOLD_TTL_MS = 24 * 60 * 60 * 1000;
+
+const cartSchema = z.strictObject({
+  lines: z.array(z.strictObject({ product_id: z.number().int().positive(), quantity: z.number().finite().positive().max(100_000) })).max(300),
+  customer: posCustomerSchema.nullable(),
+  discount: z.string().max(8),
+});
+const saleId = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/);
+const stamp = z.string().datetime();
+
+export const posCartsSchema = z.strictObject({
+  sales: z.array(z.strictObject({ id: saleId, cart: cartSchema, started_at: stamp })).min(1).max(POS_MAX_OPEN),
+  active: saleId,
+  held: z.array(z.strictObject({ id: saleId, cart: cartSchema, started_at: stamp, held_at: stamp, note: z.string().max(120) })).max(POS_MAX_HELD),
+});
+export type PosCarts = z.infer<typeof posCartsSchema>;
+
+/** The held sales still within their day. */
+export function heldWithin<T extends { held_at: string }>(held: T[], now: number): T[] {
+  return held.filter((h) => {
+    const at = Date.parse(h.held_at);
+    return Number.isFinite(at) && now - at < POS_HOLD_TTL_MS;
+  });
+}
+
 /* ── The contract ─────────────────────────────────────────────────────────── */
 
 const none = z.undefined().or(z.null()).optional();
@@ -329,6 +365,8 @@ export const posContract = {
   'pos:openDrawer': { input: none, session: true, rate: 1, sensitive: true },
   'pos:displayOpen': { input: none, session: true, rate: 2 },
   'pos:displayClose': { input: none, session: true, rate: 2 },
+  'pos:carts': { input: none, session: true, rate: 10 },
+  'pos:cartsSave': { input: posCartsSchema, session: true, rate: 20 },
 };
 
 export interface PosOutputs {
@@ -353,6 +391,8 @@ export interface PosOutputs {
   'pos:openDrawer': PosPrintOutcome;
   'pos:displayOpen': { opened: boolean; secondary: boolean };
   'pos:displayClose': boolean;
+  'pos:carts': PosCarts | null;
+  'pos:cartsSave': boolean;
 }
 
 /** A receipt number: the till's prefix and a six-digit sequence (`T01-7F3A2B-000042`). */

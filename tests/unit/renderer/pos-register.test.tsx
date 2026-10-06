@@ -4,14 +4,14 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { PosCatalogue } from '@shared/pos';
 import type { PosSession } from '../../../src/modules/pos/api';
-import { cart, cartActions } from '../../../src/modules/pos/cart';
+import { activeCart, cartActions } from '../../../src/modules/pos/cart';
 import { TillContext, type Till } from '../../../src/modules/pos/parts';
 import Register from '../../../src/modules/pos/Register';
 import { toasts } from '../../../src/core/toasts';
 
 afterEach(() => {
   cleanup();
-  cartActions.clear();
+  cartActions.reset();
   toasts.set({ items: [] });
   delete (window as { worksuite?: unknown }).worksuite;
 });
@@ -59,7 +59,7 @@ describe('the register: no drawer, no sale', () => {
   it('starts no sale without an open register, and says how to open one', async () => {
     const { go } = mount(false);
     fireEvent.click(await screen.findByRole('button', { name: /Ceylon tea/ }));
-    expect(cart.get().lines).toEqual([]);
+    expect(activeCart().lines).toEqual([]);
     expect(toasts.get().items.at(-1)).toMatchObject({ kind: 'warning', text: 'Open the register before you sell.' });
     expect(screen.getByText(/No register is open at this till, so no sale can be started/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Open the register' }));
@@ -69,7 +69,7 @@ describe('the register: no drawer, no sale', () => {
   it('sells with a register open', async () => {
     mount(true);
     fireEvent.click(await screen.findByRole('button', { name: /Ceylon tea/ }));
-    expect(cart.get().lines).toEqual([{ product_id: 9, quantity: 1 }]);
+    expect(activeCart().lines).toEqual([{ product_id: 9, quantity: 1 }]);
     expect(screen.queryByText(/No register is open/)).toBeNull();
   });
 });

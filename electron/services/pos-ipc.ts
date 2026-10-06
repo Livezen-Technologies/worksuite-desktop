@@ -6,6 +6,7 @@ import type { IpcRouter } from '../ipc/router';
 import type { WindowManager } from '../windows/manager';
 import type { Database } from './db';
 import type { HttpClient } from './http';
+import { PosCartsStore } from './pos-carts';
 import { PosDesk } from './pos-desk';
 import { closeDisplay, openDisplay } from './pos-display';
 import { PosPrint } from './pos-print';
@@ -43,6 +44,15 @@ export function createPos(d: PosDeps) {
   const desk = new PosDesk({ secrets: d.secrets, http: d.http, origin: d.origin, installId: d.installId, device: d.device, appVersion: d.appVersion });
   const till = new PosTill({ db: d.db, vault: d.vault, http: d.http, desk, origin: d.origin, caps: d.caps, changed: d.changed });
   const print = new PosPrint({ config: d.db, origin: d.origin });
+  const scopeOf = (origin: string | null, terminal: number | null | undefined) => (origin && terminal ? `${origin}|${terminal}` : null);
+  const carts = new PosCartsStore({ config: d.db, vault: d.vault, scope: () => scopeOf(d.origin(), desk.pairing()?.terminal.id), keep: () => {
+      try {
+        return d.caps().offlineCache;
+      } catch {
+        return false;
+      }
+    },
+  });
 
   const guard = (): void => {
     if (!d.allowed()) throw new DesktopError('APP_ACCESS_DENIED', "You don't have access to POS.");
@@ -61,7 +71,10 @@ export function createPos(d: PosDeps) {
         throw new DesktopError('CONFLICT', `${till.pending()} sale(s) from ${before.terminal.name} have not reached WorkSuite yet. Send them, or forget this till, before pairing another.`);
       }
       const r = await desk.pair(input.terminal_id, input.take_over === true);
-      if (before && origin && before.terminal.id !== input.terminal_id) till.forgetTill(origin, before.terminal.id);
+      if (before && origin && before.terminal.id !== input.terminal_id) {
+        till.forgetTill(origin, before.terminal.id);
+        carts.forget(scopeOf(origin, before.terminal.id)!);
+      }
       d.changed();
       void till.sync();
       return { status: till.status(), message: r.message };
@@ -75,6 +88,7 @@ export function createPos(d: PosDeps) {
         throw new DesktopError('CONFLICT', `${pending} sale(s) have not reached WorkSuite yet. Forgetting the till drops them.`);
       }
       till.forgetTill(origin, p.terminal.id);
+      carts.forget(scopeOf(origin, p.terminal.id)!);
       desk.forget();
       d.changed();
       return till.status();
@@ -155,6 +169,14 @@ export function createPos(d: PosDeps) {
       return openDisplay(d.windows);
     });
     router.handle('pos:displayClose', () => closeDisplay());
+    router.handle('pos:carts', () => {
+      guard();
+      return carts.read();
+    });
+    router.handle('pos:cartsSave', (input) => {
+      guard();
+      return carts.save(input);
+    });
   }
 
   return {
@@ -171,6 +193,7 @@ export function createPos(d: PosDeps) {
       desk.forgetAll();
       till.forgetAll();
       print.forgetAll();
+      carts.forgetAll();
     },
   };
 }
