@@ -113,7 +113,7 @@ function Counter({ active }: { active: boolean }) {
 
   return (
     <TillContext.Provider value={ctx}>
-      <div ref={root} className="pos-scope flex h-full min-h-0 flex-col bg-pos-ground">
+      <div ref={root} className="pos-scope relative flex h-full min-h-0 flex-col bg-pos-ground text-ink">
         <TillBar till={ctx} view={view} full={full} onFull={() => void toggleFull()} onSync={() => goRoute(posRoute('till'))} />
         <main className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden" aria-label={`POS · ${t(VIEWS[view].label)}`}>
           <SyncBar till={ctx} />
