@@ -1,0 +1,9 @@
+{
+    "module": "phone",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/phone.ts",
+        "shared/phone.ts",
+        "shared/ipc/phone-channels.ts"
+    ]
+}
