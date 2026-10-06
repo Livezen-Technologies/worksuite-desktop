@@ -9,6 +9,7 @@ const COLOURS: Record<string, string> = {
   mail: '#1D4ED8',
   chat: '#0F766E',
   meet: '#0369A1',
+  phone: '#0F766E',
   social: '#A21CAF',
   whatsapp: '#15803D',
   calendar: '#B91C1C',

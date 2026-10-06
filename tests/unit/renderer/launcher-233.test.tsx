@@ -155,7 +155,7 @@ describe('the footer (worksuite-desktop#233)', () => {
 
   it('lists the keys the launcher has, as chips, with Customise on the right', () => {
     render(<Launcher />);
-    expect(hints().textContent).toBe('11 apps · ↑↓←→ move · ↵ open · ⌘↵ new window · Esc close');
+    expect(hints().textContent).toBe('12 apps · ↑↓←→ move · ↵ open · ⌘↵ new window · Esc close');
     expect(Array.from(hints().querySelectorAll('kbd')).map((k) => k.textContent)).toEqual(['↑', '↓', '←', '→', '↵', '⌘', '↵', 'Esc']);
     expect(footer().lastElementChild!.textContent).toBe('Customise');
   });
@@ -167,7 +167,7 @@ describe('the footer (worksuite-desktop#233)', () => {
     // 600px wide: a 536px column.
     setSize(600, 800);
     render(<Launcher />);
-    expect(hints().textContent).toBe('11 apps · Esc to close');
+    expect(hints().textContent).toBe('12 apps · Esc to close');
     expect(hints().querySelector('kbd')).toBeNull();
     expect(hints().dataset.narrow).toBe('true');
   });
@@ -176,7 +176,7 @@ describe('the footer (worksuite-desktop#233)', () => {
     setSize(420, 800);
     render(<Launcher />);
     expect(dialog().dataset.layout).toBe('sheet');
-    expect(hints().textContent).toBe('11 apps · Esc to close');
+    expect(hints().textContent).toBe('12 apps · Esc to close');
     cleanup();
     setSize(1280, 800);
     updateLauncherPrefs((p) => ({ ...p, mode: 'popover' }));

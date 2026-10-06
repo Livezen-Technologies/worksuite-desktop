@@ -203,7 +203,7 @@ describe('full screen', () => {
     expect(headings()[0]).toBe('Communication');
     // Communication's apps under it.
     const first = grid().querySelector('[role="presentation"]')!;
-    expect(within(first as HTMLElement).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual(['Mail', 'Chat']);
+    expect(within(first as HTMLElement).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual(['Mail', 'Chat', 'Phone']);
     // One category, or a search: no headings.
     fireEvent.click(screen.getByRole('tab', { name: /Work/ }));
     expect(headings()).toEqual([]);
@@ -357,11 +357,11 @@ describe('finding an app', () => {
   it('filters by a category chip, with its count', () => {
     render(<Launcher />);
     const comms = screen.getByRole('tab', { name: /Communication/ });
-    expect(comms.textContent).toBe('Communication2');
+    expect(comms.textContent).toBe('Communication3');
     fireEvent.click(comms);
-    expect(names()).toEqual(['Mail', 'Chat']);
+    expect(names()).toEqual(['Mail', 'Chat', 'Phone']);
     fireEvent.click(screen.getByRole('tab', { name: /All apps/ }));
-    expect(names()).toHaveLength(11);
+    expect(names()).toHaveLength(12);
   });
 
   it('searches as soon as a key is typed, wherever the focus is', () => {
@@ -483,13 +483,13 @@ describe('tiles', () => {
     const mail = within(grid()).getByRole('option', { name: 'Mail' });
     fireEvent.dragOver(mail, { dataTransfer });
     fireEvent.drop(mail, { dataTransfer });
-    expect(names()).toEqual(['Chat', 'Mail']);
+    expect(names()).toEqual(['Chat', 'Mail', 'Phone']);
     expect(currentLauncherPrefs().sort).toBe('mine');
   });
 
   it('has a footer with the count, the keys and Customise', () => {
     render(<Launcher />);
-    expect(dialog().textContent).toContain('11 apps · ↑↓←→ move · ↵ open · ⌘↵ new window · Esc close');
+    expect(dialog().textContent).toContain('12 apps · ↑↓←→ move · ↵ open · ⌘↵ new window · Esc close');
     fireEvent.click(screen.getByRole('button', { name: 'Customise' }));
     expect(ui.get().overlay).toBeNull();
     expect(tabsStore.get().tabs.some((t) => t.route === '/settings/launcher')).toBe(true);

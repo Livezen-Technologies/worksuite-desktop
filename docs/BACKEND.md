@@ -878,6 +878,50 @@ and offers to copy a support request instead of sending it.
   - It is not the company helpdesk (`/api/tickets`), which needs the "Reply to tickets" permission and serves the
     company's own customers.
 
+## Phone (WS-VOIP-SRS-001)
+
+The Phone (`src/modules/phone`, [PHONE.md](PHONE.md)) talks to WorkSuite's Voip module at `/api/voip` with the
+same endpoints as the web. Answers are the usual `{status, message, data}`; stamps are UTC without a zone.
+
+**Used as they are today:** `status`, `dashboard`, `softphone`, `extensions` (+ `allocate`, `{id}`, `{id}/secret`,
+`{id}/assign`), `hotdesk`, `call`, `calls/control` (`hangup`, `transfer`, `complete_transfer`, `record`,
+`pause_recording`, `resume_recording`, `stop_recording`, `park`, `conference`), `screen-pop`, `live`, `calls`
+(`page`, `per_page`, `direction`, `disposition`, `extension_id`, `queue_id`, `from`, `to`, `q`), `calls/{id}`,
+`calls/{id}/notes`, `forwards`, `short-codes` (+ `check`), `recordings` (+ `{id}/play`, `ingest`, `retention`),
+`intelligence/status`, `calls/{id}/intelligence`, `calls/{id}/analyse`, `servers` (+ `test`, `health`, `apply`,
+`maintenance`, `mappings`, `sync`), `mappings/{id}`, `sync-runs`, `sync/due`, `config`, `config/apply`, `settings`,
+`reports/summary|volume|agents|queues|departments`.
+
+- **The page policy.** The softphone opens a WebSocket to the PBX. The main process reads `ws_uri` from
+  `GET softphone` (it keeps the origin only, never the secret) and adds `wss://host:port` to `connect-src`. A
+  `ws_uri` that is not `wss://` is refused by the phone (a SIP password never crosses an unencrypted socket).
+- **Placing a call.** `POST call {number, contact_id?}` — the switch rings the person's extension with its own
+  caller ID (`CallerID` = the extension's `caller_id`, else its name) and the desktop answers that ring-back
+  without a click when it arrives within 20 s. Keep the caller ID on the ring-back the extension's own.
+- **Recordings** play from the signed `/media/stream/<token>` the `play` answer gives, at the server's origin.
+
+**Proposed — asked for, and said plainly when absent.** A route that is not there (404/405/501) shows "isn't offered
+by this WorkSuite server yet"; anything else is shown as the server's own refusal. Writes answer `{…, message}`
+where `message` says what is still to do ("Saved. Apply the configuration to make it live.").
+
+| Need (SRS) | Calls |
+|---|---|
+| My phone (W01, W07; SP-09, FWD-05, G-11) | `GET me` → `{extensions, devices: Registration[], caller_ids: [{value,label}], caller_id, dnd, sync_presence, presence, hotdesk: {extension_id, extension, since} \| null, shared_phones: [{id, extension, name, branch}]}`; `PUT me/dnd {dnd, sync_presence}`; `PUT me/caller-id {caller_id}`; `GET registrations` → `{registrations: [{extension_id, aor, contact, user_agent, ip, transport, rtt_ms, seen_at}]}` |
+| Speed dials (G-03) | `GET speed-dials` → `{speed_dials: [{id, label, number, slot, contact_id, presence?}]}`; `POST speed-dials`; `DELETE speed-dials/{id}` |
+| Wrap-up, call path (CTL-06, HIS-07) | `GET wrapup-codes` → `{codes: [{code, label}]}`; `POST calls/{id}/wrapup {code}`; `GET calls/{id}/events` → `{events: [{at, event: start\|ivr\|queue\|answer\|transfer\|hangup, text, detail}]}` |
+| Voicemail (REC-06) | `POST voicemail/{id}/heard {heard}`; `POST voicemail/{id}/forward {extension_id}`; `DELETE recordings/{id}`; `recordings?kind=voicemail` rows may carry `mailbox` (a shared mailbox's name) |
+| Supervision (RPT-05/06, AC-11) | `GET supervisor/board?server_id=` → `{queues: [{id, name, number, strategy, agents, waiting, longest_wait, free, logged_in, sla_rate, sla_seconds}], agents: [{extension_id, extension, name, state: free\|on_call\|ringing\|wrapup\|paused\|offline, since_seconds, detail, queue}], calls: [{channel, started_seconds, agent, extension, other, queue, direction}], totals: {calls_now, external, internal, waiting, longest_wait, agents_free, agents_total, agents_paused, answered_today, answer_rate, abandoned_today, avg_abandon_wait}}`; `POST supervise {channel, mode: listen\|whisper\|barge}` → `{ok, message, session_id}` (needs `voip.supervise`, audited; rings the supervisor's own extension with ChanSpy q/w/B); `POST supervise/stop {session_id}`; `POST queues/{id\|all}/pause {extension_id, paused, reason}` |
+| Trunks, routes (TRK-01/02/05) | `GET/POST trunks`, `PUT/DELETE trunks/{id}` — the `voip_trunks` columns, `secret` write-only (`has_secret`), plus `channels_in_use`, `calls_today`, `currency`; `GET/POST routes`, `PUT/DELETE routes/{id}` — the `voip_routes` columns; `POST routes/order {ids}`; `POST routes/test {number, extension}` → `{steps: [{text, tone: ok\|warn\|fail}], route_id, trunk_id, cost_per_min}` |
+| Gateways, SIMs, SMS (TRK-03/04, G-18, DEP-03/04) | `GET/POST gateways`, `PUT/DELETE gateways/{id}` (+ `adapter: dinstar\|grandstream`, `admin_password` write-only, `via`); `POST gateways/{id}/poll` → `{gateway, sims, message}`; `GET/POST sim-cards`, `PUT sim-cards/{id}` (`pin`, `puk` write-only → `has_pin`, `has_puk`); `GET sms?contact_id=` → `{messages}`; `POST sms {to, body, sim_id?, contact_id?}` |
+| Inbound & IVR (IVR-01/02, G-05) | `GET/POST inbound-routes`, `PUT/DELETE inbound-routes/{id}` — `{did, server_id, trunk, open_dest, closed_dest, holiday_dest, hours, calendar_id, open_now, enabled}` with a destination `{kind: extension\|queue\|ring_group\|ivr\|voicemail\|external\|announcement\|hangup, value, label?, missing?}`; `GET/POST ivr-flows`, `PUT/DELETE ivr-flows/{id}` — the `voip_ivr_flows` columns, `nodes` as `{key: destination}`, plus `repeat`, `direct_dial`, `greeting_file` |
+| Queues, ring groups (IVR-03/04) | `GET/POST queues`, `PUT/DELETE queues/{id}` — the `voip_queues` columns plus `wrapup_seconds`, `callback_after`, `record`, `agents: [{id, extension_id, extension, name, penalty, skill, paused, calls_today, talk_today, state}]`; `POST queues/{id}/agents {extension_id, penalty?, skill?}`, `PUT/DELETE queues/{id}/agents/{agentId}`; `GET/POST ring-groups`, `PUT/DELETE ring-groups/{id}` |
+| Extensions (EXT-08/09/10, G-08) | `POST extensions/{id}/provisioning` → `{url, expires_at, username, domain, port, transport, ws_uri}` (a short-lived link a SIP app reads); `POST extensions/{id}/setup-email`; `POST extensions/import {rows}` → `{created, skipped, detail}`; `POST extensions/provision-hr` → `{created, message}`; list rows may add `server`, `department`, `department_id`, `holder_kind`, `registration`, `missing_on_pbx`, `max_contacts` |
+| Forwarding (FWD-02) | `PUT forwards/{id} {enabled, …}`; rows may add `pending` (not applied yet), `date_from`, `date_to` |
+| Dial plan (DP-06) | `GET config?server_id=` may add `applied: {file: text}` (what was last applied), `pending`, `applied_at` — the desktop diffs them |
+| Reports (RPT-01) | `reports/volume` may add `heat: [{dow, hour, total}]`; every report takes `org_id` (G-14) |
+| Softphone (G-02, G-06) | `softphone` should answer the extension's own server's `ws_uri` and `ice` with time-limited TURN credentials (`{urls, username, credential}`), plus `server: {id, name}`, `ice_expires_at` |
+| Mappings | `GET mappings` → every server's mappings (today they are read per server) |
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is

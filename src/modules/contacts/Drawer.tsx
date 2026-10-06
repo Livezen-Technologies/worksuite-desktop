@@ -11,6 +11,7 @@ import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
 import { createMeeting, openMeeting } from '../meet/api';
+import { placeCall } from '../phone/dial';
 import { SOCIAL, addressOf, birthdayOf, digits, initials, phoneLabel, pillOf, stampLabel, subLine, typeOf, type Activity, type Contact, type ContactDetail, type ContactNote } from './api';
 import { providerLabel, syncedWith } from './sync/api';
 import { useSyncAccounts } from './sync/AccountsSettings';
@@ -360,6 +361,8 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
   const canMail = useCanOpen('mail');
   const canWhatsapp = useCanOpen('whatsapp');
   const [menu, setMenu] = useState<string | null>(null);
+  // The WorkSuite phone, when the person has it (WS-VOIP-SRS-001 G-07): the call is placed and logged against this contact.
+  const phoneApp = useCanOpen('phone');
   const [whatsapp, setWhatsapp] = useState<string | null>(null);
   const mail = (to: string) => {
     void logAct(c.id, 'email', `Emailed ${to}`);
@@ -436,6 +439,14 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
                     phone={r.phone}
                     onClose={() => setMenu(null)}
                     onWhatsapp={canWhatsapp ? () => (setMenu(null), setWhatsapp(r.phone!)) : undefined}
+                    onPhone={
+                      phoneApp
+                        ? () => {
+                            setMenu(null);
+                            void placeCall(r.phone, { contactId: c.id, name: c.display_name });
+                          }
+                        : undefined
+                    }
                     onCall={() => {
                       setMenu(null);
                       void logAct(c.id, 'call', `Called ${r.phone}`);
@@ -464,7 +475,7 @@ function Details({ c, loading }: { c: Contact & Partial<ContactDetail>; loading:
 }
 
 /** Call, and — for whoever has WhatsApp — send on it or open the conversation there (Chat › WhatsApp). */
-function PhoneMenu({ phone, onClose, onWhatsapp, onCall }: { phone: string; onClose: () => void; onWhatsapp?: () => void; onCall: () => void }) {
+function PhoneMenu({ phone, onClose, onWhatsapp, onCall, onPhone }: { phone: string; onClose: () => void; onWhatsapp?: () => void; onCall: () => void; onPhone?: () => void }) {
   const { navigate } = useTab();
   const d = digits(phone);
   const item = 'flex h-[34px] w-full items-center gap-2.5 rounded-[8px] px-2.5 text-left text-[12.5px] font-semibold text-ink hover:bg-ground';
@@ -482,8 +493,13 @@ function PhoneMenu({ phone, onClose, onWhatsapp, onCall }: { phone: string; onCl
             </button>
           </>
         ) : null}
+        {onPhone ? (
+          <button type="button" role="menuitem" onClick={onPhone} className={item}>
+            <Icon name="phone-call" size={15} className="text-success" /> Call on my WorkSuite phone
+          </button>
+        ) : null}
         <button type="button" role="menuitem" onClick={onCall} className={item}>
-          <Icon name="phone" size={15} className="text-ink-2" /> Call
+          <Icon name="phone" size={15} className="text-ink-2" /> {onPhone ? 'Call with another app' : 'Call'}
         </button>
       </div>
     </>
