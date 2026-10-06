@@ -1,5 +1,5 @@
-import type { PosProduct, PosSaleLine, PosTender, PosTenderMethod } from '@shared/pos';
-import { OFFLINE_TENDERS } from '@shared/pos';
+import type { PosProduct, PosSaleLine, PosTender, PosTenderMethod, PosTenderOption } from '@shared/pos';
+import { LEGACY_TENDERS, OFFLINE_TENDERS } from '@shared/pos';
 
 /**
  * Display arithmetic only (ported from the mobile till's pricing.ts). WorkSuite prices every sale; with the line down
@@ -21,10 +21,25 @@ export interface PricedCart {
   subtotal: number;
   line_discount: number;
   discount_pct: number;
-  /** The cashier's discount. subtotal − discount + tax = total. */
+  /** The cashier's discount. subtotal − discount + tax = total (with Phase 2's pricing, − deduction). */
   discount: number;
   tax: number;
   total: number;
+  /* Phase 2, the counter's pricing (`apply_promotions`, `customer_id`, `coupon_code`, `redeem_points`): absent otherwise. */
+  /** What promotions took off, each (`promotions`), and in all. */
+  promotions?: Array<{ id: number; label: string; amount: number }>;
+  promotion_discount?: number;
+  points_discount?: number;
+  points_redeemed?: number;
+  /** Promotions + the cashier's discount + points: the order's discount. */
+  deduction?: number;
+  /** WorkSuite's notes on it (an unusable coupon ignored…). */
+  notes?: string[];
+}
+
+/** The whole deduction: promotions, the cashier's discount, points (the cashier's alone on an older server). */
+export function deductionOf(c: PricedCart): number {
+  return c.deduction ?? c.discount;
 }
 
 const cents = (v: number) => Math.round(Math.abs(v) * 100 + 1e-7) * Math.sign(v);
@@ -131,9 +146,47 @@ export function quickCash(total: number, denominations: number[]): number[] {
   return out;
 }
 
-/** Which tenders may be taken now: all online; offline only cash and the shop's own card machine. */
-export function allowedTenders(online: boolean): PosTenderMethod[] {
-  return (['cash', 'card', 'bank_transfer', 'wallet'] as PosTenderMethod[]).filter((m) => online || OFFLINE_TENDERS.has(m));
+/**
+ * Which tenders may be taken now: the company's configured ones (`capabilities.tenders`), else the four every server
+ * takes — all online; offline only those that may be (cash and the shop's own card machine).
+ */
+export function allowedTenders(online: boolean, configured?: PosTenderOption[] | null): PosTenderOption[] {
+  const list: PosTenderOption[] = configured?.length
+    ? configured
+    : LEGACY_TENDERS.map((k) => ({ kind: k, name: '', opens_drawer: k === 'cash', offline: OFFLINE_TENDERS.has(k), needs_customer: false, needs_reference: false }));
+  return list.filter((t) => online || (t.offline && OFFLINE_TENDERS.has(t.kind)));
+}
+
+/** The kinds only (the screens' older shape). */
+export function allowedMethods(online: boolean, configured?: PosTenderOption[] | null): PosTenderMethod[] {
+  return allowedTenders(online, configured).map((t) => t.kind);
+}
+
+/**
+ * A discount a manager approved past the cashier's own rights: WorkSuite prices the sale under the approver's rights
+ * when it arrives (`approval_id`), but its price door answers only for the cashier — so the cart is priced there
+ * without the discount and the percentage is taken here the way WorkSuite takes it (`Cart::quote`): off the goods
+ * after their list discounts and promotions, spread over the lines by largest remainder before the tax, points after.
+ * A preview: the sale is priced again by WorkSuite.
+ */
+export function withDiscount(c: PricedCart, pct: number): PricedCart {
+  const p = Math.max(0, Math.min(100, pct || 0));
+  if (p <= 0 || !c.lines.length) return c;
+  const nets = c.lines.map((l) => Math.round(l.net * 100));
+  const goods = nets.reduce((a, x) => a + x, 0);
+  const promo = Math.min(Math.round((c.promotion_discount ?? 0) * 100), goods);
+  const points = Math.round((c.points_discount ?? 0) * 100);
+  const off = percentOf(goods - promo, p);
+  const deduction = Math.min(goods, promo + off + points);
+  const spread = allocate(deduction, nets);
+  let tax = 0;
+  const lines = c.lines.map((l, i) => {
+    const taxable = nets[i]! - spread[i]!;
+    const t = l.tax_rate > 0 ? percentOf(taxable, l.tax_rate) : 0;
+    tax += t;
+    return { ...l, tax: money(t), total: money(taxable + t) };
+  });
+  return { ...c, lines, discount_pct: p, discount: money(off), tax: money(tax), total: money(goods - deduction + tax), ...(c.deduction !== undefined || promo || points ? { deduction: money(deduction) } : {}) };
 }
 
 /* ── Counting the drawer ─────────────────────────────────────────────── */

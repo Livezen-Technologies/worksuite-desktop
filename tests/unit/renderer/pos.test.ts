@@ -5,7 +5,7 @@ import { WedgeDetector } from '../../../src/modules/pos/barcode';
 import { addLine, discountPct, EMPTY_CART, itemCount, removeLine, setCustomer, setDiscount, setQty } from '../../../src/modules/pos/cart';
 import { translate } from '../../../src/modules/pos/i18n';
 import { posRoute } from '../../../src/modules/pos/parts';
-import { allocate, allowedTenders, countBody, countTotal, estimateCart, quickCash, settle, settles, variance } from '../../../src/modules/pos/pricing';
+import { allocate, allowedMethods, countBody, countTotal, estimateCart, quickCash, settle, settles, variance } from '../../../src/modules/pos/pricing';
 import { canStillRefund, refundable, refundLines, returned } from '../../../src/modules/pos/returns';
 import { closeBody, filterSales, needsReason, salesSummary, xReport, zReport } from '../../../src/modules/pos/shift';
 import { buildSale, remaining, tendersOf } from '../../../src/modules/pos/tender';
@@ -99,8 +99,8 @@ describe('the tender', () => {
   });
 
   it('takes only cash and the shop’s own card machine with WorkSuite out of reach', () => {
-    expect(allowedTenders(true)).toEqual(['cash', 'card', 'bank_transfer', 'wallet']);
-    expect(allowedTenders(false)).toEqual(['cash', 'card']);
+    expect(allowedMethods(true)).toEqual(['cash', 'card', 'bank_transfer', 'wallet']);
+    expect(allowedMethods(false)).toEqual(['cash', 'card']);
   });
 
   it('builds the sale from WorkSuite’s cart and the payments, with the change', () => {

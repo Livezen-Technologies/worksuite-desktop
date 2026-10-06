@@ -9,12 +9,13 @@ import { useT } from './i18n';
 import { BADGE } from './look';
 import { who } from './OpenSales';
 import { PosButton, useTillContext } from './parts';
-import { formatMoney } from './pricing';
+import { deductionOf, formatMoney } from './pricing';
 
 /**
  * The counter's right side: the open sales on this till as tabs (a new one, all of them), the customer on the sale
  * on screen, its lines with their quantities, what the price stands on (WorkSuite's, or the catalogue's preview), the
- * totals and the big total, and Cash exact / Pay.
+ * totals and the big total, and Cash exact / Pay. Phase 2: the CRM customer's tier and points, each promotion and the
+ * points spent as lines of the totals, and a discount waiting for a manager's approval (Pay waits with it).
  */
 const clock = (iso: string) => new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' });
 
@@ -25,6 +26,9 @@ export default function CartPane({
   totalOf,
   canSell,
   onCustomer,
+  needsApproval = false,
+  approvedBy = null,
+  onApproval,
   onPay,
   onCashExact,
   onOpenSales,
@@ -35,6 +39,11 @@ export default function CartPane({
   totalOf: (c: CartState) => number | null;
   canSell: boolean;
   onCustomer: () => void;
+  /** The discount typed is past the cashier's rights and no manager has approved it yet. */
+  needsApproval?: boolean;
+  /** A manager approved the discount (their name). */
+  approvedBy?: string | null;
+  onApproval?: () => void;
   onPay: () => void;
   onCashExact: () => void;
   onOpenSales: () => void;
@@ -48,7 +57,9 @@ export default function CartPane({
   const session = till.session;
   const n = s.sales.findIndex((x) => x.id === sale.id) + 1;
   const total = price.cart?.total ?? null;
-  const payable = !!session && canSell && !!price.cart && !price.error && !price.pending && cart.lines.length > 0;
+  const payable = !!session && canSell && !!price.cart && !price.error && !price.pending && cart.lines.length > 0 && !needsApproval;
+  const c = price.cart;
+  const promos = c?.promotions ?? [];
 
   const hint: { tone: 'ok' | 'info' | 'warn' | 'danger'; text: string } | null = price.error
     ? { tone: 'danger', text: price.error }
@@ -107,7 +118,11 @@ export default function CartPane({
         <span className={cx('flex h-10 w-10 shrink-0 items-center justify-center rounded-full text-[14px] font-extrabold', cart.customer ? BADGE.gold : 'bg-pos-tint-slate text-ink-2')}>{cart.customer ? initials(who(cart, '')) : 'WI'}</span>
         <div className="min-w-0 flex-1">
           <div className="truncate text-[14px] font-bold">{cart.customer ? who(cart, '') : t('pos.walkIn')}</div>
-          <div className="truncate text-[12px] text-ink-3">{cart.customer ? [cart.customer.phone, cart.customer.email].filter(Boolean).join(' · ') || t('pos.custNoContact') : t('pos.custNone')}</div>
+          <div className="truncate text-[12px] text-ink-3">
+            {cart.customer
+              ? [cart.customer.tier, typeof cart.customer.points === 'number' && till.caps.loyalty ? t('pos.cust.points', { n: cart.customer.points }) : null, cart.customer.phone, cart.customer.email].filter(Boolean).join(' · ') || t('pos.custNoContact')
+              : t('pos.custNone')}
+          </div>
         </div>
         <button type="button" onClick={onCustomer} className="h-10 shrink-0 rounded-[10px] bg-pos-key px-3.5 text-[13px] font-semibold text-primary hover:brightness-95">
           {cart.customer ? t('pos.changeCustomer') : t('pos.addCustomer')}
@@ -182,6 +197,21 @@ export default function CartPane({
           );
         })}
         {hint ? <div className={cx('mx-2 my-1.5 rounded-[10px] px-3 py-2 text-[12px]', HINT[hint.tone])}>{hint.text}</div> : null}
+        {needsApproval ? (
+          <div className="mx-2 my-1.5 flex items-center gap-3 rounded-[10px] bg-warning-bg px-3 py-2 text-[12px] text-warning-ink">
+            <span className="flex-1">{t('pos.ovr.discountWaits', { n: Number(cart.discount) || 0 })}</span>
+            <button type="button" className="font-bold underline" onClick={onApproval}>
+              {t('pos.ovr.askManager')}
+            </button>
+          </div>
+        ) : approvedBy !== null ? (
+          <div className="mx-2 my-1.5 rounded-[10px] bg-success-bg px-3 py-2 text-[12px] text-success">{t('pos.ovr.approvedBy', { name: approvedBy })}</div>
+        ) : null}
+        {c?.notes?.map((n) => (
+          <div key={n} className="mx-2 my-1 rounded-[10px] bg-pos-key px-3 py-2 text-[12px] text-ink-2">
+            {n}
+          </div>
+        ))}
         {!session && cart.lines.length ? (
           <div className="mx-2 my-1.5 flex items-center gap-3 rounded-[10px] bg-warning-bg px-3 py-2 text-[12px] text-warning-ink">
             <span className="flex-1">{t('pos.noDrawer')}</span>
@@ -193,8 +223,16 @@ export default function CartPane({
       </div>
 
       <div className="flex flex-col gap-1 border-t border-pos-line/60 px-5 pt-2.5 pb-3.5">
-        <Line label={t('pos.subtotal')} value={formatMoney(price.cart?.subtotal ?? 0)} />
-        <Line label={t('pos.discounts')} value={price.cart?.discount ? `− ${formatMoney(price.cart.discount)}` : formatMoney(0)} tone="text-warning" />
+        <Line label={t('pos.subtotal')} value={formatMoney(c?.subtotal ?? 0)} />
+        {promos.map((p) => (
+          <Line key={p.id} label={p.label || t('pos.promotion')} value={`− ${formatMoney(p.amount)}`} tone="text-success" />
+        ))}
+        {c?.points_discount ? <Line label={t('pos.pay.points', { n: c.points_redeemed ?? 0 })} value={`− ${formatMoney(c.points_discount)}`} tone="text-primary" /> : null}
+        {promos.length || c?.points_discount ? (
+          c?.discount ? <Line label={t('pos.discounts')} value={`− ${formatMoney(c.discount)}`} tone="text-warning" /> : null
+        ) : (
+          <Line label={t('pos.discounts')} value={c && deductionOf(c) ? `− ${formatMoney(deductionOf(c))}` : formatMoney(0)} tone="text-warning" />
+        )}
         <Line label={t('pos.tax')} value={formatMoney(price.cart?.tax ?? 0)} />
         <div className="mt-0.5 flex items-baseline justify-between gap-3">
           <span className="text-[16px] font-bold">{t('pos.total')}</span>

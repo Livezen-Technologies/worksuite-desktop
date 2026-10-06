@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button, Card } from '../../components/ui';
 import { toast } from '../../core/toasts';
-import { PK, refreshCatalogue, syncNow } from './api';
+import { PK, refreshCatalogue, renameDevice, syncNow } from './api';
 import { useT } from './i18n';
 import { Note, timeOf, useTillContext } from './parts';
 
@@ -12,6 +12,7 @@ export default function TillScreen() {
   const till = useTillContext();
   const qc = useQueryClient();
   const [busy, setBusy] = useState<string | null>(null);
+  const [name, setName] = useState('');
   const s = till.status;
   const p = s.till!;
 
@@ -47,6 +48,24 @@ export default function TillScreen() {
         {row('Receipt numbers', `${p.prefix}-000001 …`)}
         {row('State', p.state === 'paired' ? 'Paired' : p.state === 'pos_off' ? (s.problem ?? 'POS is switched off on WorkSuite. An administrator turns it on in Admin Centre → Apps → POS.') : 'Not accepted — pair again')}
       </Card>
+      {till.caps.device_rename ? (
+        <Card title={t('pos.dev.title')}>
+          <p className="mb-2 text-[13px] text-ink-2">{t('pos.dev.hint')}</p>
+          <div className="flex gap-2">
+            <input
+              value={name}
+              maxLength={120}
+              onChange={(e) => setName(e.target.value.slice(0, 120))}
+              aria-label={t('pos.dev.name')}
+              placeholder={t('pos.dev.name')}
+              className="h-9 min-w-0 flex-1 rounded-[8px] border border-line bg-surface px-3 text-[13px] text-ink outline-none focus:border-primary"
+            />
+            <Button size="sm" loading={busy === 'name'} disabled={till.offline || !name.trim()} onClick={() => void run('name', async () => setName((await renameDevice(name.trim())).device_name), t('pos.dev.done'))}>
+              {t('pos.dev.save')}
+            </Button>
+          </div>
+        </Card>
+      ) : null}
       <Card
         title="Catalogue"
         action={

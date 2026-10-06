@@ -1,12 +1,32 @@
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx, initials } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { activeSale, cartActions, itemCount, MAX_OPEN, useCarts, type CartState, type HeldSale } from './cart';
+import { DeskError, discardOnServer, listServerHeld, parkOnServer, recallFromServer, type ServerHeld } from './desk';
 import { useT } from './i18n';
 import { ON, OFF } from './look';
-import { PosButton, PosDialog, useTillContext } from './parts';
+import { Note, PosButton, PosDialog, timeOf, useTillContext } from './parts';
 import { formatMoney } from './pricing';
+
+/**
+ * Held sales on WorkSuite (`capabilities.held`, online): parked through the till's door, seen and recalled by any till
+ * of the same register or branch, recalled once and priced again then. Offline, or on an older server, a sale is held
+ * on this till as before (and those stay listed until recalled).
+ */
+export const HELD_KEY = ['pos', 'held'] as const;
+
+export function useServerHeld(enabled: boolean) {
+  return useQuery({ queryKey: HELD_KEY, queryFn: listServerHeld, enabled, staleTime: 15_000, refetchInterval: enabled ? 60_000 : false, retry: false });
+}
+
+/** A held sale back as a cart: its lines, its customer (with the CRM id when it had one) and its discount. */
+export function cartOfHeld(h: ServerHeld): CartState {
+  const c = h.customer;
+  const customer = c && (c.name || c.phone || c.email || c.client_id) ? { ...(c.name ? { name: c.name.slice(0, 150) } : {}), ...(c.phone ? { phone: c.phone.slice(0, 40) } : {}), ...(c.email && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(c.email) ? { email: c.email.slice(0, 150) } : {}), ...(c.client_id ? { id: c.client_id } : {}) } : null;
+  return { lines: h.lines.map((l) => ({ product_id: l.product_id, quantity: l.quantity })), customer, discount: h.discount_pct > 0 ? String(h.discount_pct) : '' };
+}
 
 /**
  * The till's open sales and its held ones: every sale open on this till (up to five) to switch to, hold or discard,
@@ -20,7 +40,7 @@ export function who(c: CartState, walkIn: string): string {
   return c.customer?.name || c.customer?.email || c.customer?.phone || walkIn;
 }
 
-export function OpenSalesDialog({ totalOf, onClose }: { totalOf: (c: CartState) => number | null; onClose: () => void }) {
+export function OpenSalesDialog({ totalOf, onClose, server, nameOf }: { totalOf: (c: CartState) => number | null; onClose: () => void; server?: boolean; nameOf?: (productId: number) => string | null }) {
   const t = useT();
   const till = useTillContext();
   const s = useCarts();
@@ -29,7 +49,7 @@ export function OpenSalesDialog({ totalOf, onClose }: { totalOf: (c: CartState) 
   const [holding, setHolding] = useState<string | null>(null);
   const cashier = till.session?.cashier;
   // Holding one asks for its note in place of this dialog, then comes back to it.
-  if (holding) return <HoldDialog id={holding} onClose={() => setHolding(null)} />;
+  if (holding) return <HoldDialog id={holding} server={server} nameOf={nameOf} totalOf={totalOf} onClose={() => setHolding(null)} />;
   return (
     <PosDialog label={t('pos.open.title', { till: till.status.till?.terminal.code ?? '' })} onClose={onClose} width={1080} className="gap-4 p-[26px]">
       <div className="flex items-center gap-3">
@@ -108,11 +128,44 @@ export function OpenSalesDialog({ totalOf, onClose }: { totalOf: (c: CartState) 
   );
 }
 
-/** Hold a sale: a note on why (optional), then it is parked. */
-export function HoldDialog({ id, onClose }: { id: string; onClose: () => void }) {
+/**
+ * Hold a sale: a note on why (optional), then it is parked — on WorkSuite where it takes held sales (`server`), so
+ * another till of the register or branch can recall it; on this till otherwise, or when WorkSuite does not answer.
+ */
+export function HoldDialog({ id, onClose, server, nameOf, totalOf }: { id: string; onClose: () => void; server?: boolean; nameOf?: (productId: number) => string | null; totalOf?: (c: CartState) => number | null }) {
   const t = useT();
+  const qc = useQueryClient();
+  const s = useCarts();
   const [note, setNote] = useState('');
-  const hold = () => {
+  const [busy, setBusy] = useState(false);
+  const hold = async () => {
+    const sale = s.sales.find((x) => x.id === id);
+    if (server && sale && sale.cart.lines.length) {
+      setBusy(true);
+      try {
+        const c = sale.cart;
+        const total = totalOf?.(c);
+        await parkOnServer({
+          lines: c.lines.map((l) => ({ product_id: l.product_id, quantity: l.quantity, ...(nameOf?.(l.product_id) ? { name: nameOf(l.product_id)!.slice(0, 200) } : {}) })),
+          ...(Number(c.discount) > 0 ? { discount_pct: Math.min(100, Number(c.discount)) } : {}),
+          ...(c.customer ? { customer: { ...(c.customer.name ? { name: c.customer.name } : {}), ...(c.customer.phone ? { phone: c.customer.phone } : {}), ...(c.customer.email ? { email: c.customer.email } : {}), ...(c.customer.id ? { client_id: c.customer.id } : {}) } } : {}),
+          ...(note.trim() ? { note: note.trim().slice(0, 200) } : {}),
+          ...(c.customer?.name ? { label: c.customer.name.slice(0, 120) } : {}),
+          ...(typeof total === 'number' && total >= 0 ? { total } : {}),
+        });
+        cartActions.discard(id);
+        void qc.invalidateQueries({ queryKey: HELD_KEY });
+        toast('success', t('pos.held.doneServer'));
+        onClose();
+        return;
+      } catch (e) {
+        // WorkSuite would not take it (or does not answer): it is held on this till, as before.
+        if (e instanceof DeskError && e.code === 'too_many') toast('warning', e.message);
+        else toast('warning', t('pos.held.keptHere'));
+      } finally {
+        setBusy(false);
+      }
+    }
     cartActions.hold(id, note);
     toast('success', t('pos.held.done'));
     onClose();
@@ -126,7 +179,7 @@ export function HoldDialog({ id, onClose }: { id: string; onClose: () => void })
         value={note}
         maxLength={120}
         onChange={(e) => setNote(e.target.value)}
-        onKeyDown={(e) => e.key === 'Enter' && hold()}
+        onKeyDown={(e) => e.key === 'Enter' && !busy && void hold()}
         placeholder={t('pos.held.note')}
         aria-label={t('pos.held.note')}
         className="h-touch-md rounded-[12px] bg-pos-panel px-3.5 text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none focus:shadow-[inset_0_0_0_2px_var(--pos-on-ring)]"
@@ -135,7 +188,8 @@ export function HoldDialog({ id, onClose }: { id: string; onClose: () => void })
         <PosButton className="h-touch-lg w-40" onClick={onClose}>
           {t('pos.cancel')}
         </PosButton>
-        <PosButton tone="primary" className="h-touch-lg flex-1 text-[16px]" onClick={hold}>
+        <PosButton tone="primary" className="h-touch-lg flex-1 text-[16px]" disabled={busy} onClick={() => void hold()}>
+          {busy ? <Icon name="spinner" size={18} className="animate-spin" /> : null}
           {t('pos.hold')}
         </PosButton>
       </div>
@@ -144,14 +198,41 @@ export function HoldDialog({ id, onClose }: { id: string; onClose: () => void })
 }
 
 /** The held sales: recall one onto the counter, or discard it. Those older than a day are gone already. */
-export function HeldDialog({ totalOf, onClose }: { totalOf: (c: CartState) => number | null; onClose: () => void }) {
+export function HeldDialog({ totalOf, onClose, server }: { totalOf: (c: CartState) => number | null; onClose: () => void; server?: boolean }) {
   const t = useT();
   const till = useTillContext();
   const s = useCarts();
+  const qc = useQueryClient();
+  const remote = useServerHeld(!!server);
+  const [busy, setBusy] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const recall = (h: HeldSale) => {
     if (cartActions.recall(h.id)) onClose();
     else toast('warning', t('pos.open.full', { n: MAX_OPEN }));
   };
+  const act = async (h: ServerHeld, what: 'recall' | 'discard') => {
+    if (what === 'recall' && s.sales.length >= MAX_OPEN && s.sales.every((x) => x.cart.lines.length || x.cart.customer)) {
+      toast('warning', t('pos.open.full', { n: MAX_OPEN }));
+      return;
+    }
+    setBusy(h.id);
+    setError(null);
+    try {
+      if (what === 'discard') await discardOnServer(h.id);
+      else {
+        const r = await recallFromServer(h.id);
+        cartActions.load(cartOfHeld(r.held));
+        if (r.problem) toast('warning', r.problem);
+        onClose();
+      }
+    } catch (e) {
+      setError(e instanceof Error ? e.message : t('pos.held.failed'));
+    } finally {
+      setBusy(null);
+      void qc.invalidateQueries({ queryKey: HELD_KEY });
+    }
+  };
+  const items = remote.data?.items ?? [];
   return (
     <PosDialog label={t('pos.held.title')} onClose={onClose} width={900} className="gap-3.5 p-[26px]">
       <div className="flex items-center">
@@ -164,7 +245,33 @@ export function HeldDialog({ totalOf, onClose }: { totalOf: (c: CartState) => nu
         </PosButton>
       </div>
       <div className="flex min-h-0 flex-col gap-3.5 overflow-y-auto scroll-thin">
-        {s.held.length === 0 ? <p className="py-6 text-center text-[14px] text-ink-3">{t('pos.held.none')}</p> : null}
+        {server && remote.isError ? <Note tone="warning">{t('pos.held.serverFailed')}</Note> : null}
+        {error ? <Note tone="danger">{error}</Note> : null}
+        {items.map((h) => (
+          <div key={`w${h.id}`} className={cx('flex items-center gap-3.5 rounded-pos-lg p-4', OFF)}>
+            <span className="flex h-touch w-touch shrink-0 items-center justify-center rounded-full bg-pos-tint-indigo text-[14px] font-extrabold text-pos-tint-indigo-ink">{initials(h.customer?.name ?? h.label ?? 'W I')}</span>
+            <div className="min-w-0 flex-1">
+              <div className="truncate text-[16px] font-bold">{h.customer?.name ?? h.label ?? t('pos.walkIn')}</div>
+              <div className="truncate text-[13px] text-ink-3">
+                {[t('pos.nItems', { n: h.item_count || h.lines.reduce((a, l) => a + l.quantity, 0) }), h.lines.map((l) => l.name).filter(Boolean).slice(0, 3).join(', '), h.register, h.held_by].filter(Boolean).join(' · ')}
+              </div>
+              {h.note ? <div className="mt-1 truncate text-[12px] text-warning-ink">{h.note}</div> : null}
+            </div>
+            <div className="text-right">
+              <div className="font-mono text-[18px] font-bold">{formatMoney(h.total)}</div>
+              <div className="text-[12px] text-ink-3">{t('pos.held.since', { at: timeOf(h.held_at) })}</div>
+            </div>
+            <PosButton tone="danger" className="h-touch-md" disabled={busy !== null} onClick={() => void act(h, 'discard')}>
+              {t('pos.held.discard')}
+            </PosButton>
+            <PosButton tone="primary" className="h-touch-md px-[22px] text-[15px] font-extrabold" disabled={busy !== null} onClick={() => void act(h, 'recall')}>
+              {busy === h.id ? <Icon name="spinner" size={16} className="animate-spin" /> : null}
+              {t('pos.held.recall')}
+            </PosButton>
+          </div>
+        ))}
+        {server && items.length && s.held.length ? <div className="text-[13px] font-bold text-ink-2">{t('pos.held.onThisTill')}</div> : null}
+        {s.held.length === 0 && !items.length ? <p className="py-6 text-center text-[14px] text-ink-3">{t('pos.held.none')}</p> : null}
         {s.held.map((h, i) => (
           <div key={h.id} className={cx('flex items-center gap-3.5 rounded-pos-lg p-4', i === 0 ? ON : OFF)}>
             <span className="flex h-touch w-touch shrink-0 items-center justify-center rounded-full bg-pos-tint-indigo text-[14px] font-extrabold text-pos-tint-indigo-ink">{initials(who(h.cart, 'W I'))}</span>
@@ -186,7 +293,7 @@ export function HeldDialog({ totalOf, onClose }: { totalOf: (c: CartState) => nu
           </div>
         ))}
       </div>
-      <p className="text-[12px] text-ink-3">{t('pos.held.expiry')}</p>
+      <p className="text-[12px] text-ink-3">{server ? t('pos.held.expiryServer', { n: remote.data?.expiry_hours ?? 24 }) : t('pos.held.expiry')}</p>
     </PosDialog>
   );
 }

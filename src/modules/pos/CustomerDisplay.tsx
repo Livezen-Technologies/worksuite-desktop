@@ -38,6 +38,7 @@ export default function CustomerDisplay() {
     <div className="drag flex h-full overflow-hidden bg-navy text-white">
       <div className="flex min-w-0 flex-[600] flex-col gap-2.5 p-[clamp(20px,2.8vw,40px)]">
         {brand}
+        {s.customer ? <div className="text-[clamp(18px,2.2vw,30px)] font-extrabold">{t('pos.cd.hello', { name: s.customer.split(/\s+/)[0] ?? s.customer })}</div> : null}
         {s.kind === 'cart' ? (
           <ul className="mt-2.5 flex min-h-0 flex-1 flex-col justify-end overflow-hidden text-[clamp(15px,1.7vw,24px)]">
             {s.lines.slice(-12).map((l, i) => (
@@ -61,12 +62,22 @@ export default function CustomerDisplay() {
             <div className="text-[clamp(13px,1.4vw,18px)] text-[#64748b]">
               {[s.currency, s.tax ? t('pos.cd.taxIn', { n: formatMoney(s.tax) }) : null, s.discount ? t('pos.cd.saved', { n: formatMoney(s.discount) }) : null].filter(Boolean).join(' · ')}
             </div>
-            {s.provisional ? <div className="mt-auto text-[clamp(12px,1.2vw,16px)] text-[#64748b]">{t('pos.provisional')}</div> : null}
+            {s.points != null ? (
+              <div className="mt-auto rounded-[14px] bg-[#EEF1FB] px-4 py-3 text-[clamp(13px,1.4vw,18px)]">
+                {[s.tier, t('pos.cd.points', { n: s.points })].filter(Boolean).join(' · ')}
+              </div>
+            ) : null}
+            {s.provisional ? <div className={`${s.points != null ? '' : 'mt-auto '}text-[clamp(12px,1.2vw,16px)] text-[#64748b]`}>{t('pos.provisional')}</div> : null}
           </>
         ) : (
           <>
             <div className="text-[clamp(14px,1.5vw,20px)] text-[#64748b]">{t('pos.cd.paid', { n: formatMoney(s.paid, s.currency) })}</div>
             <div className="text-[clamp(14px,1.5vw,20px)] text-[#64748b]">{t('pos.cd.total', { n: formatMoney(s.total, s.currency) })}</div>
+            {s.points ? (
+              <div className="text-[clamp(14px,1.5vw,20px)] font-bold text-primary">
+                {[s.points.earned ? t('pos.cd.earned', { n: s.points.earned }) : null, s.points.balance != null ? t('pos.cd.points', { n: s.points.balance }) : null].filter(Boolean).join(' · ')}
+              </div>
+            ) : null}
             <div className="mt-auto rounded-[16px] bg-[#7FD8DF] px-5 py-4">
               <div className="text-[clamp(16px,1.7vw,22px)] font-bold">{t('pos.cd.change')}</div>
               <div className="font-mono text-[clamp(36px,4.6vw,72px)] leading-none font-bold tabular-nums">{formatMoney(s.change)}</div>

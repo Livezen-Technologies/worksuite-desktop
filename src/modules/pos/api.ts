@@ -3,7 +3,7 @@ import { useEffect, useMemo, useState } from 'react';
 import type { PosCatalogue, PosCustomer, PosGiveBack, PosPrintPatch, PosPrintSettings, PosProduct, PosReport, PosSale, PosSellInput, PosTillStatus } from '@shared/pos';
 import { apiGet, ApiError, request } from '../../core/api';
 import { call, on } from '../../core/bridge';
-import { estimateCart, type CartLineInput, type PricedCart } from './pricing';
+import { estimateCart, withDiscount, type CartLineInput, type PricedCart } from './pricing';
 
 /**
  * POS's two halves, for the screens.
@@ -75,6 +75,10 @@ export interface PosCompany {
   today: string | null;
   can: PosCan;
   rules?: PosRules;
+  /** Phase 2: the tenders this company takes, active, in order (`capabilities.tenders`). */
+  tenders?: unknown;
+  /** Phase 2: the figure past which a manager approves a refund, void or cash out (`approvals`). */
+  approvals?: { manager_above_amount?: number; cash_drop_limit?: number; held_expiry_hours?: number; may_approve?: boolean };
 }
 
 /** What WorkSuite announces it can do for a till (not on every server yet: absent means no). */
@@ -102,6 +106,36 @@ export interface PosCapabilities {
   /** Sales carry `flags` (`price_differs`, `payment_missing`, `late`). */
   flags?: boolean;
   customer_display?: boolean;
+  /* Phase 2 S1: sales and control. */
+  held?: boolean;
+  tenders?: boolean;
+  vouchers?: boolean;
+  store_credit?: boolean;
+  approvals?: boolean;
+  remote_approvals?: boolean;
+  refund_to?: boolean;
+  line_condition?: boolean;
+  journal?: boolean;
+  export?: boolean;
+  /* Phase 2 S2: the catalogue, prices and promotions, customers and loyalty. */
+  stock?: boolean;
+  category_tree?: boolean;
+  product_images?: boolean;
+  top_sellers?: boolean;
+  favourites?: boolean;
+  promotions?: boolean;
+  coupons?: boolean;
+  price_rules?: boolean;
+  customers?: boolean;
+  loyalty?: boolean;
+  /* Phase 2 S3: reports and devices. */
+  overview?: boolean;
+  reports?: boolean;
+  session_report?: boolean;
+  session_review?: boolean;
+  receipt_templates?: boolean;
+  device_unpair?: boolean;
+  device_rename?: boolean;
 }
 
 export interface PosOptions {
@@ -191,7 +225,8 @@ export async function openSession(body: { register_id: number; opening_float: nu
   return { id: r.data.id, message: r.message ?? null };
 }
 
-export async function cashMove(sessionId: number, body: { direction: 'in' | 'out'; amount: number; reason: string; reference?: string }): Promise<string | null> {
+/** Cash in or out of the drawer; `approval_id` a manager's approval for cash out past the company's figure (Phase 2). */
+export async function cashMove(sessionId: number, body: { direction: 'in' | 'out'; amount: number; reason: string; reference?: string; approval_id?: string }): Promise<string | null> {
   return (await request('POST', `${BASE}/sessions/${sessionId}/cash`, { body })).message ?? null;
 }
 
@@ -226,8 +261,9 @@ export function mayGiveBack(caps: PosCapabilities, can: PosCan | null | undefine
 /* ── The till (main process) ─────────────────────────────────────────── */
 
 export const tillStatus = () => call('pos:till');
-export const pairTill = (terminal_id: number, take_over = false) => call('pos:pair', { terminal_id, take_over });
-export const forgetTill = (discard = false) => call('pos:forget', { discard });
+export const pairTill = (terminal_id: number, take_over = false, device_name?: string) => call('pos:pair', { terminal_id, take_over, ...(device_name?.trim() ? { device_name: device_name.trim().slice(0, 120) } : {}) });
+export const renameDevice = (device_name: string) => call('pos:rename', { device_name });
+export const forgetTill = (discard = false, unpair = false) => call('pos:forget', { discard, ...(unpair ? { unpair } : {}) });
 export const readCatalogue = () => call('pos:catalogue');
 export const refreshCatalogue = (capable?: boolean) => call('pos:catalogueRefresh', capable === undefined ? {} : { capable });
 export const sell = (input: PosSellInput) => call('pos:sell', input);
@@ -338,32 +374,74 @@ export interface CartPrice {
  */
 let inventoryPriceRefused = false;
 
-export async function priceCart(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, caps: PosCapabilities | undefined, org?: number | null): Promise<PricedCart> {
-  if (caps?.price) {
-    const c = await request<Record<string, unknown>>('POST', `${BASE}/price`, { body: { lines, discount_pct: discountPct, ...(org ? { org_id: org } : {}) } });
-    const d = c.data;
-    return {
-      currency: s(d.currency) ?? currency,
-      lines: (Array.isArray(d.lines) ? (d.lines as Array<Record<string, unknown>>) : []).map((l) => ({
-        product_id: n(l.product_id),
-        code: s(l.code),
-        name: s(l.name) ?? '',
-        quantity: n(l.quantity),
-        unit_price: n(l.unit_price),
-        discount_pct: n(l.discount_pct),
-        tax_rate: n(l.tax_rate),
-        net: n(l.net),
-        tax: n(l.tax),
-        total: n(l.total),
-      })),
-      subtotal: n(d.subtotal),
-      line_discount: n(d.line_discount),
-      discount_pct: n(d.discount_pct, discountPct),
-      discount: n(d.discount),
-      tax: n(d.tax),
-      total: n(d.total),
-    };
+/**
+ * Phase 2's counter pricing, asked of WorkSuite only where it announces each part: promotions (`capabilities.promotions`),
+ * the CRM customer (`customers`), a coupon (`coupons`) and points (`loyalty`). None of them: the request is exactly
+ * the old one, and so is the answer.
+ */
+export interface CounterPricing {
+  customer_id?: number;
+  coupon_code?: string;
+  redeem_points?: number;
+}
+
+export function pricingBody(caps: PosCapabilities | undefined, p: CounterPricing): Record<string, unknown> {
+  const out: Record<string, unknown> = {};
+  if (caps?.promotions) out.apply_promotions = true;
+  if (caps?.customers && p.customer_id) out.customer_id = p.customer_id;
+  if (caps?.coupons && p.coupon_code) out.coupon_code = p.coupon_code;
+  if (caps?.loyalty && p.customer_id && p.redeem_points && p.redeem_points > 0) out.redeem_points = Math.floor(p.redeem_points);
+  return out;
+}
+
+/** The cart as WorkSuite priced it (`POST price`), with Phase 2's parts where it sent them. */
+export function pricedOf(d: Record<string, unknown>, currency: string, discountPct: number): PricedCart {
+  const out: PricedCart = {
+    currency: s(d.currency) ?? currency,
+    lines: (Array.isArray(d.lines) ? (d.lines as Array<Record<string, unknown>>) : []).map((l) => ({
+      product_id: n(l.product_id),
+      code: s(l.code),
+      name: s(l.name) ?? '',
+      quantity: n(l.quantity),
+      unit_price: n(l.unit_price),
+      discount_pct: n(l.discount_pct),
+      tax_rate: n(l.tax_rate),
+      net: n(l.net),
+      tax: n(l.tax),
+      total: n(l.total),
+    })),
+    subtotal: n(d.subtotal),
+    line_discount: n(d.line_discount),
+    discount_pct: n(d.discount_pct, discountPct),
+    discount: n(d.discount),
+    tax: n(d.tax),
+    total: n(d.total),
+  };
+  if ('deduction' in d) out.deduction = n(d.deduction);
+  if ('promotion_discount' in d) out.promotion_discount = n(d.promotion_discount);
+  if ('points_discount' in d) out.points_discount = n(d.points_discount);
+  if ('points_redeemed' in d) out.points_redeemed = Math.floor(n(d.points_redeemed));
+  if (Array.isArray(d.promotions)) {
+    out.promotions = (d.promotions as Array<Record<string, unknown>>)
+      .map((p) => ({ id: n(p.id), label: s(p.label) ?? s(p.name) ?? '', amount: n(p.amount) }))
+      .filter((p) => Number.isInteger(p.id) && p.id > 0 && p.amount > 0);
   }
+  if (Array.isArray(d.pricing_notes)) out.notes = (d.pricing_notes as unknown[]).map((x) => s(x)).filter((x): x is string => !!x).slice(0, 5);
+  return out;
+}
+
+export async function priceCart(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, caps: PosCapabilities | undefined, org?: number | null, counter: CounterPricing = {}, approvedPct: number | null = null): Promise<PricedCart> {
+  if (caps?.price) {
+    // A discount a manager approved past the cashier's rights: priced without it here, the percentage taken locally (`withDiscount`).
+    const asked = approvedPct !== null ? 0 : discountPct;
+    const c = await request<Record<string, unknown>>('POST', `${BASE}/price`, { body: { lines, discount_pct: asked, ...(org ? { org_id: org } : {}), ...pricingBody(caps, counter) } });
+    const priced = pricedOf(c.data, currency, asked);
+    return approvedPct !== null ? withDiscount(priced, approvedPct) : priced;
+  }
+  return legacyPrice(lines, discountPct, products, currency, ceiling);
+}
+
+async function legacyPrice(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null): Promise<PricedCart> {
   if (inventoryPriceRefused) throw new ApiError(403, 'Inventory prices are not readable here.', null);
   const priced = new Map(products);
   await Promise.all(
@@ -383,9 +461,22 @@ export async function priceCart(lines: CartLineInput[], discountPct: number, pro
   return e.cart;
 }
 
-export function useCartPrice(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, caps: PosCapabilities | undefined, online: boolean, org?: number | null): CartPrice {
-  const estimate = useMemo(() => estimateCart(lines, products, discountPct, ceiling, currency), [lines, products, discountPct, ceiling, currency]);
-  const signature = JSON.stringify([lines, discountPct]);
+export function useCartPrice(
+  lines: CartLineInput[],
+  discountPct: number,
+  products: Map<number, PosProduct>,
+  currency: string,
+  ceiling: number | null,
+  caps: PosCapabilities | undefined,
+  online: boolean,
+  org?: number | null,
+  counter: CounterPricing = {},
+  /** The discount a manager approved (its percentage), past the cashier's own ceiling. */
+  approvedPct: number | null = null,
+): CartPrice {
+  // Offline (and while WorkSuite is asked) the preview takes no promotion: the sale says so (`promotion_ids: []`).
+  const estimate = useMemo(() => estimateCart(lines, products, discountPct, approvedPct !== null ? null : ceiling, currency), [lines, products, discountPct, ceiling, currency, approvedPct]);
+  const signature = JSON.stringify([lines, discountPct, counter.customer_id ?? null, counter.coupon_code ?? null, counter.redeem_points ?? null, approvedPct]);
   const [debounced, setDebounced] = useState(signature);
   useEffect(() => {
     const t = setTimeout(() => setDebounced(signature), 250);
@@ -393,10 +484,10 @@ export function useCartPrice(lines: CartLineInput[], discountPct: number, produc
   }, [signature]);
   const settled = debounced === signature;
   const server = useQuery<PricedCart, Error>({
-    queryKey: ['pos', 'price', debounced, currency, !!caps?.price, org ?? null],
+    queryKey: ['pos', 'price', debounced, currency, !!caps?.price, !!caps?.promotions, org ?? null],
     queryFn: () => {
-      const [l, d] = JSON.parse(debounced) as [CartLineInput[], number];
-      return priceCart(l, d, products, currency, ceiling, caps, org);
+      const [l, d, customer_id, coupon_code, redeem_points, approved] = JSON.parse(debounced) as [CartLineInput[], number, number | null, string | null, number | null, number | null];
+      return priceCart(l, d, products, currency, ceiling, caps, org, { ...(customer_id ? { customer_id } : {}), ...(coupon_code ? { coupon_code } : {}), ...(redeem_points ? { redeem_points } : {}) }, approved);
     },
     enabled: online && lines.length > 0 && settled,
     staleTime: 60_000,
