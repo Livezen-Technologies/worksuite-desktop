@@ -6,6 +6,7 @@ import { Select } from '../../../components/Select';
 import { Avatar, Button, Modal } from '../../../components/ui';
 import { createContact, fetchSources, isNotOffered, matchContact, MK, NOT_OFFERED, updateContact, type Basis, type Contact, type ContactInput, type MatchResult } from '../api';
 import { BASIS, basisLabel, emailConsent, phoneConsent } from '../lib/consent';
+import { phoneKey } from '../lib/dedupe';
 import { maskPhone } from '../lib/format';
 import { useMarketingOrg } from '../org';
 import { Field, Input, Notice } from '../parts';
@@ -35,10 +36,8 @@ export function shownPhone(c: Pick<Contact, 'phone' | 'phone_masked'>): string |
   return c.phone_masked && !c.phone.includes('*') ? maskPhone(c.phone) : c.phone;
 }
 
-/** The phone key the server dedupes and suppresses by: the last 9 digits (MKT-AUD-02). */
-export function phoneKey(phone: string): string {
-  return phone.replace(/\D/g, '').slice(-9);
-}
+/** The same number however it is written: by the dedupe key (last 9 digits), or every digit for a short one. */
+const samePhone = (a: string, b: string) => (phoneKey(a) ?? a.replace(/\D/g, '')) === (phoneKey(b) ?? b.replace(/\D/g, ''));
 
 /** A small red marker beside a name: "Suppressed", "Do not call". */
 export function Marker({ children }: { children: ReactNode }) {
@@ -123,7 +122,7 @@ export function changesFor(existing: Contact, input: ContactInput): Change[] {
   text('first_name', 'First name', existing.first_name, input.first_name);
   text('last_name', 'Last name', existing.last_name, input.last_name);
   text('email', 'Email', existing.email, input.email, sameFolded);
-  if (!existing.phone_masked) text('phone', 'Phone', existing.phone, input.phone, (a, b) => phoneKey(a) === phoneKey(b));
+  if (!existing.phone_masked) text('phone', 'Phone', existing.phone, input.phone, (a, b) => samePhone(a, b));
   text('organisation', 'Organisation', existing.organisation, input.organisation, sameFolded);
   text('job_title', 'Job title', existing.job_title, input.job_title);
   text('time_zone', 'Time zone', existing.time_zone, input.time_zone);

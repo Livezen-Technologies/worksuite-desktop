@@ -1,11 +1,11 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useState } from 'react';
+import { useId, useState } from 'react';
 import { errorMessage } from '../../../core/bridge';
 import { toast } from '../../../core/toasts';
 import { Button, cx, Modal } from '../../../components/ui';
 import { fetchContacts, MK, sendTests, useSettings, type Campaign, type Contact, type ContactFilters } from '../api';
 import { useMarketingOrg } from '../org';
-import { Field, Input, Mono, Notice, TextArea } from '../parts';
+import { Field, Input, Mono, Notice, TextArea, useDebounced } from '../parts';
 import { count, plural } from '../lib/format';
 
 /**
@@ -17,16 +17,6 @@ import { count, plural } from '../lib/format';
 /** An address as far as a form can tell: something@domain.tld. */
 export function isEmail(s: string): boolean {
   return /^[^\s@<>(),;:"]+@[^\s@<>(),;:"]+\.[^\s@<>(),;:".]{2,}$/.test(s.trim());
-}
-
-/** The value once it has stopped changing for `ms` (a search as it is typed). */
-export function useDebounced<T>(value: T, ms = 300): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
 }
 
 /** "a@x.lk, b@x.lk" or one per line → the addresses, each once. */

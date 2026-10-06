@@ -9,8 +9,8 @@ import { fetchAudience, fetchCampaign, MK, requestApproval, runCheck, scheduleCa
 import { useMarketingOrg } from '../org';
 import { Field, Input, Loaded, Mono, Notice, PageBody, PageHeader, Panel, Planned, Refused, Row, Status, TextArea, useAction } from '../parts';
 import { campaignActions, campaignStatus } from '../lib/consent';
-import { count, isoDay, localToUtc, parseStamp, pct, plural } from '../lib/format';
-import { Confirm, useCampaignCommands, when } from './Campaigns';
+import { count, isoDay, localToUtc, parseStamp, pct, plural, addDays, clockLabel, isoTime, when } from '../lib/format';
+import { Confirm, useCampaignCommands } from './Campaigns';
 import { senderErrors } from './NewCampaign';
 import { TestSendModal } from './TestSend';
 
@@ -64,16 +64,11 @@ const senderOf = (c: Campaign): SenderForm => ({
   preview_text: c.preview_text ?? '',
 });
 
-const hhmm = (d: Date) => `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
-
-/** The scheduled time, or the next 09:00. */
+/** The scheduled time, or the next 09:00 — both on the reader's clock, which is the one `localToUtc` reads back. */
 function deliveryOf(c: Campaign): Delivery {
-  let at = parseStamp(c.scheduled_at);
-  if (!at) {
-    at = new Date();
-    if (at.getHours() >= 9) at.setDate(at.getDate() + 1);
-    at.setHours(9, 0, 0, 0);
-  }
+  const at = parseStamp(c.scheduled_at);
+  const now = new Date();
+  const date = at ? isoDay(at) : isoTime(now) >= '09:00' ? addDays(isoDay(now), 1) : isoDay(now);
   return {
     ab: c.ab?.enabled ?? false,
     kind: c.ab?.kind ?? 'subject',
@@ -82,8 +77,8 @@ function deliveryOf(c: Campaign): Delivery {
     metric: c.ab?.metric ?? 'opens',
     local: c.local_time,
     when: 'later',
-    date: isoDay(at),
-    time: hhmm(at),
+    date,
+    time: at ? isoTime(at) : '09:00',
   };
 }
 
@@ -99,7 +94,7 @@ function abOf(d: Delivery, s: SenderForm): Partial<AbSettings> {
 
 /** "10:56" when it ends the day it starts, else "7 Oct 01:12". */
 function finishOf(start: Date, end: Date): string {
-  return start.toDateString() === end.toDateString() ? hhmm(end) : when(end.toISOString());
+  return isoDay(start) === isoDay(end) ? clockLabel(end.toISOString()) : when(end.toISOString());
 }
 
 /** "1 h 56 min" */
@@ -154,6 +149,8 @@ function Review({ campaign: c }: { campaign: Campaign }) {
       ? `Clear ${blockers.length === 1 ? 'the blocker' : `the ${blockers.length} blockers`} first.`
       : errs.from_email || errs.reply_to
         ? 'Fix the sender addresses first.'
+        : senderDirty
+          ? 'Save the sender and subject first, so the check reads them.'
         : abSubject && !s.subject_b.trim()
           ? 'Write subject B, or turn the A/B test off.'
           : d.ab && (!shareOk || !hoursOk)

@@ -28,7 +28,7 @@ import {
 import { useMarketingOrg } from '../org';
 import { Field, Input, Loaded, Mono, Notice, OptionalView, Panel, Planned, Tabs, TextArea, useAction } from '../parts';
 import { campaignStatus } from '../lib/consent';
-import { full, parseStamp, plural } from '../lib/format';
+import { clockLabel, full, plural } from '../lib/format';
 import { asBlocks, blocksToPlainText, imagesWithoutAlt, moveBlock, newBlock, patchBlock, removeBlock, safeUrl, textsOf, type BlockPatch, type BlockType } from '../lib/blocks';
 import { MERGE_TAGS, missingRequired, tagsIn, tagText, unknownTags } from '../lib/merge';
 import { Confirm, useCampaignCommands } from './Campaigns';
@@ -105,7 +105,7 @@ function fieldValue(b: Block, f: FieldKey): string | null {
   return typeof v === 'string' ? v : v === null ? '' : null;
 }
 
-const clockOf = (s: string | null) => parseStamp(s)?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) ?? '';
+const clockOf = (s: string | null) => clockLabel(s);
 
 /** The server's merge-tag list, or this desktop's when the server does not list one. */
 function useMergeTagList(): MergeTag[] {
@@ -164,6 +164,9 @@ function Workspace({ campaign, content, step, onReload }: { campaign: Campaign; 
   const [modal, setModal] = useState<'test' | 'history' | 'template' | null>(null);
   const [leaving, setLeaving] = useState(false);
   const [stranded, setStranded] = useState<string | null>(null);
+  // Setup's form keeps its own changes until its Save; leaving with some unsaved asks first.
+  const [setupDirty, setSetupDirty] = useState(false);
+  const [unsavedSetup, setUnsavedSetup] = useState<string | null>(null);
   const live = useRef<Live>({ blocks: initial, version: content.version, dirty: false, retired: false, queue: Promise.resolve() });
   const base = `/marketing/campaigns/${campaign.id}`;
 
@@ -241,9 +244,14 @@ function Workspace({ campaign, content, step, onReload }: { campaign: Campaign; 
     };
   }, [campaign.id, org, qc]);
 
-  /** To another screen, after the content is saved; a save that fails asks first. */
+  /** To another screen, after the content is saved; a save that fails, or Setup changes not saved, ask first. */
   const leave = async (route: string) => {
     if (readOnly) return go(route);
+    if (setupDirty) return setUnsavedSetup(route);
+    await proceed(route);
+  };
+
+  const proceed = async (route: string) => {
     setLeaving(true);
     const ok = await persist();
     setLeaving(false);
@@ -310,7 +318,7 @@ function Workspace({ campaign, content, step, onReload }: { campaign: Campaign; 
           </Notice>
         </div>
       ) : null}
-      <SetupStep campaign={campaign} readOnly={readOnly} hidden={step !== 'setup'} />
+      <SetupStep campaign={campaign} readOnly={readOnly} hidden={step !== 'setup'} onDirty={setSetupDirty} />
       <ContentStep hidden={step !== 'content'} blocks={blocks} selected={selected} onSelect={setSelected} edit={edit} readOnly={readOnly} tags={tags} />
       {modal === 'test' ? <TestSendModal campaign={campaign} beforeSend={persist} onClose={() => setModal(null)} /> : null}
       {modal === 'history' ? <HistoryModal campaign={campaign} readOnly={readOnly} flush={persist} onRestored={retire} onClose={() => setModal(null)} /> : null}
@@ -329,6 +337,25 @@ function Workspace({ campaign, content, step, onReload }: { campaign: Campaign; 
           }}
         >
           The latest changes to the content could not be saved. Stay to try again, or leave and lose them.
+        </Confirm>
+      ) : null}
+      {unsavedSetup ? (
+        <Confirm
+          title="Setup isn’t saved"
+          action="Leave without them"
+          danger
+          onClose={() => {
+            setUnsavedSetup(null);
+            go(`${base}/setup`);
+          }}
+          onYes={() => {
+            const to = unsavedSetup;
+            setUnsavedSetup(null);
+            void proceed(to);
+          }}
+        >
+          The name, audience, sender or subject on Setup has changes that aren’t saved. Go back to save them, or leave
+          without them.
         </Confirm>
       ) : null}
       {commands.dialog}
@@ -366,7 +393,7 @@ const formOf = (c: Campaign): SetupForm => ({
 
 const keyOf = (f: SetupForm) => JSON.stringify({ ...f, list_ids: [...f.list_ids].sort(), segment_ids: [...f.segment_ids].sort() });
 
-function SetupStep({ campaign, readOnly, hidden }: { campaign: Campaign; readOnly: boolean; hidden: boolean }) {
+function SetupStep({ campaign, readOnly, hidden, onDirty }: { campaign: Campaign; readOnly: boolean; hidden: boolean; onDirty: (dirty: boolean) => void }) {
   const org = useMarketingOrg();
   const qc = useQueryClient();
   const [f, setF] = useState(() => formOf(campaign));
@@ -376,6 +403,7 @@ function SetupStep({ campaign, readOnly, hidden }: { campaign: Campaign; readOnl
   const errs = senderErrors(f);
   const nameMissing = !f.name.trim();
   const dirty = keyOf(f) !== keyOf(formOf(campaign));
+  useEffect(() => onDirty(dirty && !readOnly), [dirty, readOnly, onDirty]);
 
   const submit = () => {
     setTried(true);

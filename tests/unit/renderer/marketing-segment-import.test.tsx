@@ -286,6 +286,7 @@ describe('import (DK05)', () => {
     // 5 · Import: the report.
     expect(await screen.findByText('Suppressed people stay suppressed even if they appear in a new file.')).toBeTruthy();
     expect(apiPost).toHaveBeenCalledWith('/api/marketing/imports/7/commit', {
+      mapping: { Name: 'name', 'E-mail': 'email', Mobile: 'phone' },
       consent: { email: { state: 'unknown', basis: 'unknown' }, phone: { state: 'unknown', basis: 'unknown' } },
       list_ids: [3],
       new_list: null,

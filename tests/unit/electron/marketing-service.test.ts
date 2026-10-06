@@ -12,7 +12,7 @@ import { HORIZON_MS, MarketingService, POLL_MS } from '../../../electron/service
 import { trayMarketingItems } from '../../../electron/tray/tray';
 import { contract } from '@shared/ipc/contract';
 import { INVOKE_CHANNELS } from '@shared/ipc/channels';
-import { callbackNotice, callbacksToday, dueCallbacks, NEXT_CONTACT_ROUTE, NEXT_CONTACT_SHORTCUT, sendingLabel, stampMs } from '@shared/marketing';
+import { callbackNotice, callbackRoute, callbacksToday, dueCallbacks, NEXT_CONTACT_ROUTE, NEXT_CONTACT_SHORTCUT, sendingLabel, stampMs } from '@shared/marketing';
 import type { Incoming } from '../../../electron/services/notifications';
 
 /**
@@ -60,8 +60,8 @@ function service(over: { canCall?: boolean; allowed?: boolean; answers?: Record<
   const clock = fakeClock();
   const answers: Record<string, unknown> = {
     '/api/marketing/queue/callbacks': [
-      { id: 7, due_at: utc(T0 + 30 * 60_000), note: 'Call after 2 pm', contact: { name: 'Iresha Dias', organisation: 'Dias Printers' } },
-      { id: 8, due_at: utc(T0 + 2 * 3_600_000), note: null, contact: { name: 'Ruwan W.', organisation: 'SriLogix' } },
+      { id: 7, queue_item_id: 103, due_at: utc(T0 + 30 * 60_000), note: 'Call after 2 pm', contact: { name: 'Iresha Dias', organisation: 'Dias Printers' } },
+      { id: 8, queue_item_id: 105, due_at: utc(T0 + 2 * 3_600_000), note: null, contact: { name: 'Ruwan W.', organisation: 'SriLogix' } },
     ],
     '/api/marketing/queue': { waiting: 38, campaigns: [], items: [], claim: null },
     '/api/marketing/campaigns': { data: [{ id: 1, status: 'sending', progress: 62 }], total: 1, current_page: 1, last_page: 1, per_page: 5 },
@@ -124,7 +124,7 @@ describe('callbacks from the server', () => {
 });
 
 describe('the reminders', () => {
-  it('rings at the minute a callback is due, with Call now and Snooze', async () => {
+  it('rings at the minute a callback is due; Call now claims that callback, a click on the banner only opens the queue', async () => {
     const h = service();
     h.s.start();
     await settle();
@@ -134,10 +134,11 @@ describe('the reminders', () => {
     h.clock.advance(1);
     expect(h.notify).toHaveBeenCalledTimes(1);
     const n = h.notify.mock.calls[0]![0];
-    expect(n).toMatchObject({ module: 'marketing', title: 'Callback due · Iresha Dias', link: NEXT_CONTACT_ROUTE });
+    expect(n).toMatchObject({ module: 'marketing', title: 'Callback due · Iresha Dias', link: '/marketing/queue' });
     expect(n.buttons?.labels).toEqual(['Call now', 'Snooze 15 min']);
     n.buttons!.onAction(0);
-    expect(h.openRoute).toHaveBeenCalledWith(NEXT_CONTACT_ROUTE);
+    expect(h.openRoute).toHaveBeenCalledWith('/marketing/queue?next=1&item=103');
+    expect(callbackRoute({ queueItemId: null })).toBe(NEXT_CONTACT_ROUTE);
   });
 
   it('a snooze brings the same reminder back fifteen minutes later, once', async () => {
@@ -153,6 +154,36 @@ describe('the reminders', () => {
     expect(h.notify).toHaveBeenCalledTimes(2);
     expect(h.notify.mock.calls[1]![0].id).not.toBe(first.id);
     expect(h.notify.mock.calls[1]![0].title).toBe('Callback due · Iresha Dias');
+  });
+
+  it('a snoozed reminder does not come back once its callback is done', async () => {
+    const h = service();
+    h.s.start();
+    await settle();
+    h.clock.advance(30 * 60_000);
+    h.notify.mock.calls[0]![0].buttons!.onAction(1);
+    // Called back in the meantime: the server no longer lists it.
+    h.get.mockImplementation(async (path: string) => (path === '/api/marketing/queue/callbacks' ? [] : null) as never);
+    await h.s.refresh();
+    h.clock.advance(60 * 60_000);
+    expect(h.notify).toHaveBeenCalledTimes(1);
+  });
+
+  it('keeps nothing from a look that was still waiting when its person signed out', async () => {
+    let answer: (v: unknown) => void = () => undefined;
+    const h = service();
+    h.get.mockImplementation((path: string) => (path === '/api/marketing/queue/callbacks' ? new Promise((r) => (answer = r)) : Promise.resolve(null)) as never);
+    h.s.start();
+    await settle();
+    // Signed out, and somebody else signs in, while the first look waits on a slow server.
+    h.s.reset();
+    h.get.mockImplementation(async () => [] as never);
+    h.s.start();
+    answer([{ id: 9, queue_item_id: 1, due_at: utc(T0 + 60_000), note: 'theirs', contact: { name: 'Previous person’s contact' } }]);
+    await settle();
+    await settle();
+    h.clock.advance(3_600_000);
+    expect(h.notify).not.toHaveBeenCalled();
   });
 
   it('a later look does not ring a reminder again, and drops one whose callback went away', async () => {

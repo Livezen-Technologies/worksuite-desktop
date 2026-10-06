@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useEffect, useId, useMemo, useState } from 'react';
+import { useId, useMemo, useState } from 'react';
 import { useTab } from '../../../core/tab-context';
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
@@ -8,7 +8,7 @@ import { fetchAnalytics, fetchCampaigns, MK, type Analytics, type Campaign, type
 import { campaignStatus } from '../lib/consent';
 import { count, day, isoDay, pct, share } from '../lib/format';
 import { useMarketingOrg } from '../org';
-import { Input, Kpi, Loaded, Mono, OptionalView, PageBody, PageHeader, Pager, Panel, Planned, Status, Table, TD, TH } from '../parts';
+import { Input, Kpi, Loaded, Mono, OptionalView, PageBody, PageHeader, Pager, Panel, Planned, Status, Table, TD, TH, useDebounced } from '../parts';
 
 /**
  * Reports (MKT-TRK-03, MKT-ANL-01). Every campaign that has a report — sent, sending or paused (SRS §6.1) — with its
@@ -76,16 +76,6 @@ function rangeOf(days: number): { from: string; to: string } {
   const from = new Date(to);
   from.setDate(to.getDate() - (days - 1));
   return { from: isoDay(from), to: isoDay(to) };
-}
-
-/** A typed search, sent once typing pauses. */
-function useDebounced<T>(value: T, ms = 300): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
 }
 
 /* ------------------------------------------------------------------------ *

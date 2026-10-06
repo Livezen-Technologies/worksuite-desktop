@@ -1,5 +1,5 @@
 import { globalShortcut } from 'electron';
-import { CALLBACK_SNOOZE_MINUTES, callbackNotice, callbacksToday, dueCallbacks, NEXT_CONTACT_ROUTE, NEXT_CONTACT_SHORTCUT, stampMs, type CallbackDue, type MarketingOutputs, type MarketingTray } from '@shared/marketing';
+import { CALLBACK_SNOOZE_MINUTES, callbackNotice, callbackRoute, callbacksToday, dueCallbacks, NEXT_CONTACT_ROUTE, NEXT_CONTACT_SHORTCUT, stampMs, type CallbackDue, type MarketingOutputs, type MarketingTray } from '@shared/marketing';
 import { logger } from '../main/log';
 import type { IpcRouter } from '../ipc/router';
 import type { Incoming } from './notifications';
@@ -61,6 +61,8 @@ export class MarketingService {
   /** Endpoints the server answered 404/405/501 for: not asked again this session. */
   private missing = new Set<Path>();
   private polling: Promise<void> | null = null;
+  /** Bumped on every reset: a look started before it (another person's, before a sign-out) keeps nothing it found. */
+  private generation = 0;
   private last: MarketingTray | null = null;
 
   constructor(private readonly d: MarketingDeps) {
@@ -84,6 +86,8 @@ export class MarketingService {
 
   /** Signed out, locked out of Marketing, or the app went away: nothing held, nothing timed, nothing in the tray. */
   reset(): void {
+    this.generation++;
+    this.polling = null;
     if (this.poller !== null) this.clock.clearInterval(this.poller);
     this.poller = null;
     for (const t of this.timers.values()) this.clock.clearTimeout(t);
@@ -105,9 +109,13 @@ export class MarketingService {
     return { shortcut: this.shortcutHeld };
   }
 
-  /** Look again now (a callback booked, an outcome saved). Calls made while a look runs share it. */
+  /**
+   * Look again now (a callback booked, an outcome saved). A look already running started before that change, so its
+   * answer may not show it: this one waits for it, then looks again.
+   */
   refresh(): Promise<void> {
-    return this.poll();
+    const running = this.polling;
+    return running ? running.then(() => this.poll()) : this.poll();
   }
 
   /** The tray's Next contact, the shortcut, and a reminder's Call now. */
@@ -138,11 +146,15 @@ export class MarketingService {
 
   private poll(): Promise<void> {
     if (this.polling) return this.polling;
-    this.polling = this.look().finally(() => (this.polling = null));
-    return this.polling;
+    const gen = this.generation;
+    const p = this.look(gen).finally(() => {
+      if (this.polling === p) this.polling = null;
+    });
+    this.polling = p;
+    return p;
   }
 
-  private async look(): Promise<void> {
+  private async look(gen: number): Promise<void> {
     if (!this.d.allowed()) return this.reset();
     const now = this.clock.now();
     const canCall = this.d.canCall();
@@ -151,8 +163,8 @@ export class MarketingService {
       canCall ? this.ask<{ waiting?: unknown }>('queue', '/api/marketing/queue') : Promise.resolve(null),
       this.ask<unknown>('sending', '/api/marketing/campaigns', { status: 'sending', per_page: 5 }),
     ]);
-    // Signed out while asking: nothing of the answers is kept.
-    if (!this.d.allowed()) return;
+    // Signed out (or reset) while asking: nothing of the answers is kept, even if somebody else is signed in by now.
+    if (gen !== this.generation || !this.d.allowed()) return;
     if (callbacks !== null) this.schedule(dueCallbacks(callbacks, now, HORIZON_MS), now);
     const rows = sendingRows(sending);
     const first = rows.find((r) => typeof r.progress === 'number');
@@ -194,11 +206,14 @@ export class MarketingService {
       const at = this.snoozed.get(key) ?? stampMs(c.dueAt) ?? now;
       this.time(key, c, at - now);
     }
+    // A callback no longer listed (done, moved, or given to someone else) rings no more, snoozed or not.
     for (const [key, t] of this.timers) {
-      if (keep.has(key) || this.snoozed.has(key)) continue;
+      if (keep.has(key)) continue;
       this.clock.clearTimeout(t);
       this.timers.delete(key);
+      this.snoozed.delete(key);
     }
+    for (const key of this.snoozed.keys()) if (!keep.has(key)) this.snoozed.delete(key);
   }
 
   private time(key: string, c: CallbackDue, ms: number): void {
@@ -222,13 +237,20 @@ export class MarketingService {
       title,
       body,
       sender: null,
-      link: NEXT_CONTACT_ROUTE,
+      // A click on the banner opens the queue; only Call now claims, and it claims this callback.
+      link: '/marketing/queue',
       critical: false,
       buttons: {
         labels: ['Call now', `Snooze ${CALLBACK_SNOOZE_MINUTES} min`],
-        onAction: (index) => (index === 0 ? this.nextContact() : this.snooze(key, c)),
+        onAction: (index) => (index === 0 ? this.callNow(c) : this.snooze(key, c)),
       },
     });
+  }
+
+  /** Call now: My call queue, claiming the reminded callback. */
+  private callNow(c: CallbackDue): void {
+    if (!this.d.allowed()) return;
+    this.d.openRoute(callbackRoute(c));
   }
 
   /** Snooze 15 min: the same reminder again then, on this computer. */

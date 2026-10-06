@@ -95,9 +95,42 @@ export function cloneBlocks(blocks: readonly Block[]): Block[] {
 const KINDS: ReadonlySet<string> = new Set<BlockType>(['text', 'image', 'button', 'columns', 'divider', 'footer']);
 
 /** Blocks as the server sent them, keeping only ones this editor knows how to show (a null list is none). */
+/**
+ * Blocks as the editor can trust them, from content another client may have saved (the web editor, an older server):
+ * unknown kinds are left out, and every field the editor reads is the type it expects — a missing alt text is '', a
+ * missing link null — so nothing throws while it is drawn.
+ */
 export function asBlocks(v: unknown): Block[] {
   if (!Array.isArray(v)) return [];
-  return v.filter((b): b is Block => !!b && typeof b === 'object' && typeof (b as { id?: unknown }).id === 'string' && KINDS.has(String((b as { type?: unknown }).type)));
+  const str = (x: unknown, d = ''): string => (typeof x === 'string' ? x : d);
+  const opt = (x: unknown): string | null => (typeof x === 'string' && x !== '' ? x : null);
+  const out: Block[] = [];
+  for (const raw of v) {
+    if (!raw || typeof raw !== 'object') continue;
+    const b = raw as Record<string, unknown>;
+    const type = String(b.type);
+    if (typeof b.id !== 'string' || !KINDS.has(type)) continue;
+    const id = b.id;
+    switch (type) {
+      case 'text':
+      case 'footer':
+        out.push({ id, type, html: str(b.html) });
+        break;
+      case 'image':
+        out.push({ id, type, src: opt(b.src), alt: str(b.alt), link: opt(b.link), width: b.width === 'half' || b.width === 'auto' ? b.width : 'full' });
+        break;
+      case 'button':
+        out.push({ id, type, label: str(b.label), url: str(b.url), align: b.align === 'center' ? 'center' : 'left' });
+        break;
+      case 'columns':
+        out.push({ id, type, left: str(b.left), right: str(b.right) });
+        break;
+      case 'divider':
+        out.push({ id, type });
+        break;
+    }
+  }
+  return out;
 }
 
 /* ------------------------------------------------------------------------ *

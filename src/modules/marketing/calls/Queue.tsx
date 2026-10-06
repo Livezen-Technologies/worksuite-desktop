@@ -129,10 +129,13 @@ export function outcomeMessage(o: Outcome, r: OutcomeResult | null | undefined, 
 
 /** Callbacks due by the end of today (overdue ones too), soonest first. */
 export function dueToday(rows: readonly Callback[], now: Date): Callback[] {
-  const end = new Date(now);
-  end.setHours(23, 59, 59, 999);
+  const today = isoDay(now);
   const at = (c: Callback) => parseStamp(c.due_at)?.getTime() ?? Number.POSITIVE_INFINITY;
-  return rows.filter((c) => at(c) <= end.getTime()).sort((a, b) => at(a) - at(b));
+  const day = (c: Callback) => {
+    const d = parseStamp(c.due_at);
+    return d ? isoDay(d) : '9999-12-31';
+  };
+  return rows.filter((c) => day(c) <= today).sort((a, b) => at(a) - at(b));
 }
 
 /** The time where the contact is ("14:05"), when their time zone is known. */
@@ -156,6 +159,12 @@ function refreshDesktop(): void {
 }
 
 const clearClaim = (q: MyQueue | undefined) => (q ? { ...q, claim: null } : q);
+
+/**
+ * The claim this agent is working on, kept apart from the queue's answer: when the server gives an idle claim back
+ * (MKT-CAL-03), the queue says nobody is claimed, but the call and its wrap-up may still be on this screen.
+ */
+const HELD = (org: string) => ['marketing', 'held-claim', org] as const;
 
 /* ------------------------------------------------------------------------ *
  * The screen
@@ -185,6 +194,7 @@ function Workspace() {
   const qc = useQueryClient();
   const { query, go } = useTab();
   const queue = useQueue();
+  const held = useQuery({ queryKey: HELD(org), queryFn: () => null as Claim | null, enabled: false, staleTime: Infinity, gcTime: Infinity }).data ?? null;
   const now = useNow(30_000);
   const [pick, setPick] = useState('all');
   const [busy, run] = useAction();
@@ -193,11 +203,12 @@ function Workspace() {
   const scope = chosen?.id ?? null;
 
   /** The atomic claim (CAS): one contact for this agent, nobody when the queue is empty, or refused when taken. */
-  const claim = (campaignId: number | null) =>
+  const claim = (campaignId: number | null, queueItemId: number | null = null) =>
     run('next', async () => {
       try {
-        const got = await claimNext(org, campaignId);
+        const got = await claimNext(org, campaignId, queueItemId);
         qc.setQueryData<MyQueue>(MK.queue(org), (q) => (q ? { ...q, claim: got ?? null } : q));
+        qc.setQueryData(HELD(org), got ?? null);
         if (!got) toast('info', 'Nobody is waiting in this queue right now.');
       } catch (e) {
         if (!refusedClaim(e)) throw e;
@@ -214,7 +225,9 @@ function Workspace() {
   const settled = !queue.isPending;
   const asked = useRef(false);
   const arrive = useEffectEvent(() => {
-    if (queue.data && !queue.data.claim) void claim(scope);
+    // A callback reminder's Call now names its queue item (`&item=`): that contact, not whoever is next.
+    const item = Number(query.get('item'));
+    if (queue.data && !queue.data.claim) void claim(scope, Number.isInteger(item) && item > 0 ? item : null);
     go('/marketing/queue');
   });
   useEffect(() => {
@@ -239,7 +252,20 @@ function Workspace() {
       </div>
     );
   }
-  if (data.claim) return <ClaimView key={data.claim.id} claim={data.claim} queue={data} now={now} onNext={() => claim(scope)} />;
+  const shown = data.claim ?? held;
+  if (shown) {
+    return (
+      <ClaimView
+        key={shown.id}
+        claim={shown}
+        released={!data.claim}
+        queue={data}
+        now={now}
+        onNext={() => claim(scope)}
+        onDone={() => qc.setQueryData(HELD(org), null)}
+      />
+    );
+  }
   return <Waiting queue={data} now={now} pick={chosen ? pick : 'all'} onPick={setPick} chosen={chosen} busy={busy === 'next'} onNext={() => void claim(scope)} />;
 }
 
@@ -374,7 +400,7 @@ function Callbacks({ now }: { now: Date }) {
  * A claim: contact, script, outcome, wrap-up (DK11)
  * ------------------------------------------------------------------------ */
 
-function ClaimView({ claim, queue, now, onNext }: { claim: Claim; queue: MyQueue; now: Date; onNext: () => Promise<boolean> }) {
+function ClaimView({ claim, released: givenBack, queue, now, onNext, onDone }: { claim: Claim; released: boolean; queue: MyQueue; now: Date; onNext: () => Promise<boolean>; onDone: () => void }) {
   const org = useMarketingOrg();
   const qc = useQueryClient();
   const me = useStore(app, (s) => s.bootstrap?.user?.name ?? null);
@@ -385,7 +411,13 @@ function ClaimView({ claim, queue, now, onNext }: { claim: Claim; queue: MyQueue
   const set = (p: Partial<Wrap>) => setW((x) => ({ ...x, ...p }));
   const c = claim.contact;
   const left = minutesUntil(claim.release_at, now);
-  const gone = left === 0;
+  // Released by the clock here, or already by the server (the queue no longer lists it as claimed).
+  const gone = left === 0 || givenBack;
+
+  // Held while it is live, so a release by the server leaves the call and its wrap-up on screen.
+  useEffect(() => {
+    if (!givenBack) qc.setQueryData(HELD(org), claim);
+  }, [claim, givenBack, org, qc]);
   const input = outcomeInputOf(w, now);
   const info = outcomeInfo(w.outcome);
 
@@ -407,6 +439,7 @@ function ClaimView({ claim, queue, now, onNext }: { claim: Claim; queue: MyQueue
         if (kind === 'skip') await skipClaim(claim.id);
         else await releaseClaim(claim.id);
         qc.setQueryData<MyQueue>(MK.queue(org), clearClaim);
+        onDone();
         void qc.invalidateQueries({ queryKey: MK.queue(org) });
       },
       kind === 'skip' ? `Skipped ${c.name}.` : `${c.name} is back in the queue for anyone to claim.`,
@@ -432,7 +465,10 @@ function ClaimView({ claim, queue, now, onNext }: { claim: Claim; queue: MyQueue
       refreshDesktop();
       setAsking(false);
       if (andNext) await onNext();
-      else qc.setQueryData<MyQueue>(MK.queue(org), clearClaim);
+      else {
+        qc.setQueryData<MyQueue>(MK.queue(org), clearClaim);
+        onDone();
+      }
       // The contact, its campaign, suppression and the dashboard all move with an outcome.
       void qc.invalidateQueries({ queryKey: MK.all });
     });
@@ -471,8 +507,16 @@ function ClaimView({ claim, queue, now, onNext }: { claim: Claim; queue: MyQueue
       />
       <PageBody>
         {gone ? (
-          <Notice tone="warning" className="mb-4">
-            {`Your claim was released after ${IDLE_MINUTES} minutes idle. ${c.name} is back in the queue, so an outcome saved now may be refused.`}
+          <Notice
+            tone="warning"
+            className="mb-4"
+            action={
+              <Button size="sm" disabled={busy !== null} onClick={onDone}>
+                Discard
+              </Button>
+            }
+          >
+            {`Your claim was released after ${IDLE_MINUTES} minutes idle. ${c.name} is back in the queue, so an outcome saved now may be refused — your notes stay here until you save or discard them.`}
           </Notice>
         ) : null}
         <div className="grid grid-cols-1 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">

@@ -21,7 +21,8 @@ import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../../src/core/
 import { app } from '../../../src/core/app-state';
 import { toast } from '../../../src/core/toasts';
 import { NOT_OFFERED, type Block, type Campaign, type CheckResult, type Content } from '../../../src/modules/marketing/api';
-import Campaigns, { when } from '../../../src/modules/marketing/email/Campaigns';
+import Campaigns from '../../../src/modules/marketing/email/Campaigns';
+import { when } from '../../../src/modules/marketing/lib/format';
 import Editor from '../../../src/modules/marketing/email/Editor';
 import NewCampaign from '../../../src/modules/marketing/email/NewCampaign';
 import ReviewSend from '../../../src/modules/marketing/email/ReviewSend';

@@ -188,14 +188,14 @@ export function suggestMapping(headers: readonly string[]): Record<string, strin
   exact.sort((a, b) => a.rank - b.rank || a.i - b.i);
   for (const c of exact) {
     const header = headers[c.i]!;
-    if (taken.has(c.i) || used.has(c.field) || header in out) continue;
+    if (taken.has(c.i) || used.has(c.field) || Object.hasOwn(out, header)) continue;
     taken.add(c.i);
     used.add(c.field);
     out[header] = c.field;
   }
   normed.forEach((h, i) => {
     const header = headers[i]!;
-    if (taken.has(i) || header in out) return;
+    if (taken.has(i) || Object.hasOwn(out, header)) return;
     const words = new Set(h.split(' ').filter(Boolean));
     const guess = GUESSES.find(([, fits]) => fits(words, h))?.[0];
     if (guess && !used.has(guess)) {
@@ -204,7 +204,7 @@ export function suggestMapping(headers: readonly string[]): Record<string, strin
       out[header] = guess;
     }
   });
-  for (const h of headers) if (!(h in out)) out[h] = 'ignore';
+  for (const h of headers) if (!Object.hasOwn(out, h)) out[h] = 'ignore';
   return out;
 }
 
@@ -228,7 +228,7 @@ export function initialMapping(headers: readonly string[], remembered: Readonly<
   // The remembered fields first, each to one header.
   for (const h of headers) {
     const f = remembered[h];
-    if (!f || h in out) continue;
+    if (!f || Object.hasOwn(out, h)) continue;
     if (f !== 'ignore' && used.has(f)) out[h] = 'ignore';
     else {
       out[h] = f;
@@ -237,7 +237,7 @@ export function initialMapping(headers: readonly string[], remembered: Readonly<
   }
   // Headers it does not cover, from their names, while the field is free.
   for (const h of headers) {
-    if (h in out) continue;
+    if (Object.hasOwn(out, h)) continue;
     const s = suggested[h] ?? 'ignore';
     out[h] = s !== 'ignore' && !used.has(s) ? s : 'ignore';
     if (out[h] !== 'ignore') used.add(s);

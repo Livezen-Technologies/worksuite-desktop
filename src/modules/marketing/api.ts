@@ -32,9 +32,19 @@ export type Optional<T> = { offered: true; data: T } | { offered: false; message
 
 export const NOT_OFFERED = 'This WorkSuite server does not offer this yet. It needs a newer Marketing module on the server.';
 
-/** True when the server has no such route (as opposed to refusing, or a record that is missing). */
+/**
+ * True when the server has no such route — as opposed to refusing, or a record that is missing. 405 and 501 always
+ * are; a 404 only when it names a route (Laravel's "The route … could not be found.") or says no more than "Not Found"
+ * (or came with no JSON at all). A missing record names itself ("No query results for model…", "Contact not found.",
+ * code NOT_FOUND) and is not "not offered".
+ */
 export function isNotOffered(e: unknown): boolean {
-  return e instanceof ApiError && (e.status === 404 || e.status === 405 || e.status === 501) && (e.code === null || /route|not.?found|unknown|implement/i.test(`${e.code} ${e.message}`));
+  if (!(e instanceof ApiError)) return false;
+  if (e.status === 405 || e.status === 501) return true;
+  if (e.status !== 404) return false;
+  if (e.code && /route|not_?implemented|unknown_?endpoint/i.test(e.code)) return true;
+  if (e.code) return false;
+  return /\broute\b|not implemented|unknown endpoint/i.test(e.message) || /^\s*(not found\.?|the server answered 404\.)\s*$/i.test(e.message);
 }
 
 export async function optional<T>(p: Promise<T>): Promise<Optional<T>> {
@@ -373,6 +383,8 @@ export interface ImportPreview {
 }
 
 export interface ImportCommit {
+  /** The mapping the preview was read with: rows are written as previewed, and the server remembers it for the header set. */
+  mapping: Record<string, string>;
   consent: { email: { state: EmailConsent; basis: Basis }; phone: { state: PhoneConsent; basis: Basis } } | null;
   list_ids: number[];
   new_list?: string | null;
@@ -1054,8 +1066,12 @@ export const fetchAgents = (org: string, signal?: AbortSignal) => apiGet<Array<{
 export const fetchCallLive = (id: number, signal?: AbortSignal) => optional(apiGet<{ agents: CallAgent[]; in_queue: number; claimed_now: number }>(`${M}/call-campaigns/${id}/live`, undefined, signal));
 
 export const fetchQueue = (org: string, signal?: AbortSignal) => apiGet<MyQueue>(`${M}/queue`, withOrg(org), signal);
-/** The atomic claim (CAS; MKT-CAL-03, NFR-08, AC-08): one item for this agent, or null when the queue is empty. */
-export const claimNext = (org: string, campaignId: number | null) => apiPost<Claim | null>(`${M}/queue/next`, { campaign_id: campaignId }, withOrg(org));
+/**
+ * The atomic claim (CAS; MKT-CAL-03, NFR-08, AC-08): one item for this agent, or null when the queue is empty. A
+ * reminder's Call now names its callback's own item; a server that does not know `queue_item_id` claims the next.
+ */
+export const claimNext = (org: string, campaignId: number | null, queueItemId: number | null = null) =>
+  apiPost<Claim | null>(`${M}/queue/next`, { campaign_id: campaignId, ...(queueItemId ? { queue_item_id: queueItemId } : {}) }, withOrg(org));
 export const releaseClaim = (claimId: number) => apiPost<void>(`${M}/queue/${claimId}/release`);
 export const skipClaim = (claimId: number) => apiPost<void>(`${M}/queue/${claimId}/skip`);
 /** Idempotent per claim (§7.1). */

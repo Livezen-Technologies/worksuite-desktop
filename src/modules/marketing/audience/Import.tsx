@@ -155,7 +155,13 @@ function Flow({ restart }: { restart: () => void }) {
   const commit = () =>
     run('commit', async () => {
       if (!upload) return;
-      const status = await commitImport(upload.id, { consent: hasConsent ? null : batchConsent(email, phone), list_ids: listIds, new_list: newList.trim() || null, tags: splitTags(tags) });
+      const status = await commitImport(upload.id, {
+        mapping,
+        consent: hasConsent ? null : batchConsent(email, phone),
+        list_ids: listIds,
+        new_list: newList.trim() || null,
+        tags: splitTags(tags),
+      });
       setCommitted(status);
       setStep(5);
     });

@@ -6,8 +6,8 @@ import { exportReportCsv, fetchCampaign, fetchReport, MK, type Campaign, type Re
 import { useMarketingOrg } from '../org';
 import { Bar, Kpi, Loaded, Mono, Notice, PageBody, PageHeader, Panel, Row, saveCsv, Status, TD, TH, useAction } from '../parts';
 import { campaignActions } from '../lib/consent';
-import { count, full, parseStamp, pct, ratio, share } from '../lib/format';
-import { useCampaignCommands, when } from './Campaigns';
+import { count, full, parseStamp, pct, ratio, share, clockLabel, isoDay, when } from '../lib/format';
+import { useCampaignCommands } from './Campaigns';
 
 /**
  * DK09 · Campaign report (W09; PDF p44) — MKT-TRK-01..04, MKT-ABT-02, AC-04/06. Delivered, human opens (machine
@@ -28,7 +28,7 @@ export default function Report({ id }: { id: number }) {
   );
 }
 
-const clockOf = (s: string | null) => parseStamp(s)?.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }) ?? '—';
+const clockOf = (s: string | null) => clockLabel(s) || '—';
 
 /** "Sent 28 Sep 2026 10:00 · 3,702 recipients · finished 13:06". */
 function subOf(c: Campaign): string {
@@ -36,7 +36,7 @@ function subOf(c: Campaign): string {
     case 'sent': {
       const a = parseStamp(c.started_at);
       const b = parseStamp(c.finished_at);
-      const sameDay = a && b && a.toDateString() === b.toDateString();
+      const sameDay = a && b && isoDay(a) === isoDay(b);
       return `Sent ${full(c.started_at)} · ${count(c.recipients_count)} recipients${c.finished_at ? ` · finished ${sameDay ? clockOf(c.finished_at) : when(c.finished_at)}` : ''}`;
     }
     case 'sending':

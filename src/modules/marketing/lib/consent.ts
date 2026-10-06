@@ -100,3 +100,12 @@ export function campaignRoute(c: Pick<Campaign, 'id' | 'status'>): string {
   const base = `/marketing/campaigns/${c.id}`;
   return c.status === 'draft' ? `${base}/content` : c.status === 'scheduled' ? `${base}/review` : `${base}/report`;
 }
+
+/** "Sending · 62%", "Paused · bounce guard", "Paused · failed": a campaign's state with what matters about it. */
+export function campaignChip(c: Pick<Campaign, 'status' | 'progress'> & Partial<Pick<Campaign, 'paused_reason'>>): { label: string; tone: Tone } {
+  const s = campaignStatus(c.status);
+  if (c.status === 'sending' && typeof c.progress === 'number' && Number.isFinite(c.progress)) return { tone: s.tone, label: `${s.label} · ${Math.round(c.progress)}%` };
+  if (c.status === 'paused' && c.paused_reason === 'bounce_guard') return { tone: s.tone, label: `${s.label} · bounce guard` };
+  if (c.status === 'paused' && c.paused_reason === 'failed') return { tone: 'danger', label: `${s.label} · failed` };
+  return s;
+}

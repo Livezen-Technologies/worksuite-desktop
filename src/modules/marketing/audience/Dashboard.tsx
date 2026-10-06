@@ -4,7 +4,7 @@ import { useTab } from '../../../core/tab-context';
 import { Icon } from '../../../components/Icon';
 import { Button, cx, Empty, ErrorNote } from '../../../components/ui';
 import { useDashboard, useReadiness, type Campaign, type Dashboard as Summary } from '../api';
-import { campaignRoute, campaignStatus, type Tone } from '../lib/consent';
+import { campaignChip, campaignRoute } from '../lib/consent';
 import { count, parseStamp, pct, plural, ratio, share } from '../lib/format';
 import { useCompanies, useMarketingOrg } from '../org';
 import { Bar, Kpi, Loaded, Mono, PageBody, PageHeader, Panel, Row, Status, Table, TD, TH } from '../parts';
@@ -53,12 +53,6 @@ export default function Dashboard() {
 /* ------------------------------------------------------------------------ *
  * Pure helpers
  * ------------------------------------------------------------------------ */
-
-/** The status chip, with how far a send has got ("Sending · 62%"). */
-export function campaignChip(c: Pick<Campaign, 'status' | 'progress'>): { label: string; tone: Tone } {
-  const s = campaignStatus(c.status);
-  return c.status === 'sending' && typeof c.progress === 'number' && Number.isFinite(c.progress) ? { ...s, label: `${s.label} · ${Math.round(c.progress)}%` } : s;
-}
 
 /** "7 Sep" for the week that starts on a date; the server's own words when it is not one. */
 export function weekLabel(week: string): string {

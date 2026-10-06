@@ -1,5 +1,5 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useId, useState, type ReactNode } from 'react';
+import { useId, useState, type ReactNode } from 'react';
 import { useTab } from '../../../core/tab-context';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
@@ -24,7 +24,7 @@ import {
 import { basisLabel, suppressionReason, type Tone } from '../lib/consent';
 import { count, day, full, isoDay } from '../lib/format';
 import { useMarketingOrg } from '../org';
-import { Field, Input, Loaded, Mono, Notice, PageBody, PageHeader, Pager, Panel, Planned, saveCsv, Status, Table, Tabs, TD, TextArea, TH, useAction } from '../parts';
+import { Field, Input, Loaded, Mono, Notice, PageBody, PageHeader, Pager, Panel, Planned, saveCsv, Status, Table, Tabs, TD, TextArea, TH, useAction, useDebounced } from '../parts';
 
 /**
  * DK12 / W12 · Consent & suppression (MKT-CON-01/02/07/09, MKT-SUP-01…05; WF-05, WF-11; AC-03, AC-13). The company's
@@ -155,16 +155,6 @@ function channelLabel(e: LedgerEntry): string {
   if (e.channel === 'email') return 'Email';
   if (e.channel === 'phone') return 'Phone';
   return e.topic ? `Topic · ${e.topic}` : 'Topic';
-}
-
-/** A typed search, sent once typing pauses. */
-function useDebounced<T>(value: T, ms = 300): T {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const t = setTimeout(() => setV(value), ms);
-    return () => clearTimeout(t);
-  }, [value, ms]);
-  return v;
 }
 
 /* ------------------------------------------------------------------------ *

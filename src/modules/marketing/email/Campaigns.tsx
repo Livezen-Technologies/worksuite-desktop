@@ -6,10 +6,9 @@ import { Menu, type MenuItem } from '../../../components/Menu';
 import { Button, Empty, IconButton, Modal } from '../../../components/ui';
 import { cancelCampaign, deleteCampaign, duplicateCampaign, fetchCampaigns, MK, pauseCampaign, resumeCampaign, unscheduleCampaign, useSettings, type Campaign, type CampaignFilters, type CampaignStatus, type Page } from '../api';
 import { useMarketingOrg } from '../org';
-import { Loaded, PageBody, PageHeader, Pager, Status, Table, Tabs, TD, TH, useAction } from '../parts';
-import { campaignRoute, campaignActions, campaignStatus, type Tone } from '../lib/consent';
-import { count, parseStamp, pct, share } from '../lib/format';
-import { useDebounced } from './TestSend';
+import { Loaded, PageBody, PageHeader, Pager, Status, Table, Tabs, TD, TH, useAction, useDebounced } from '../parts';
+import { campaignActions, campaignChip, campaignRoute } from '../lib/consent';
+import { count, pct, share, when } from '../lib/format';
 
 /**
  * DK06 · Email campaigns (W06; PDF p54) — MKT-EML-01/04, the campaign states of SRS §6.1: draft → scheduled →
@@ -29,23 +28,6 @@ const TABS: Array<{ id: Filter; label: string }> = [
   { id: 'sent', label: 'Sent' },
   { id: 'cancelled', label: 'Cancelled' },
 ];
-
-/** `6 Oct 09:00` (with the year when it is not this one). */
-export function when(s: string | null | undefined, withTime = true): string {
-  const d = parseStamp(s);
-  if (!d) return '—';
-  const date = d.toLocaleDateString('en-GB', d.getFullYear() === new Date().getFullYear() ? { day: 'numeric', month: 'short' } : { day: 'numeric', month: 'short', year: 'numeric' });
-  return withTime ? `${date} ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })}` : date;
-}
-
-/** "Sending · 62%", "Paused · bounce guard": the state with what matters about it. */
-export function campaignChip(c: Pick<Campaign, 'status' | 'progress' | 'paused_reason'>): { label: string; tone: Tone } {
-  const s = campaignStatus(c.status);
-  if (c.status === 'sending' && c.progress !== null) return { tone: s.tone, label: `${s.label} · ${Math.round(c.progress)}%` };
-  if (c.status === 'paused' && c.paused_reason === 'bounce_guard') return { tone: s.tone, label: `${s.label} · bounce guard` };
-  if (c.status === 'paused' && c.paused_reason === 'failed') return { tone: 'danger', label: `${s.label} · failed` };
-  return s;
-}
 
 /** "Customers (list)", "Engaged vendors (segment)". */
 export function audienceOf(c: Pick<Campaign, 'audience_label' | 'lists' | 'segments'>): string {

@@ -61,6 +61,8 @@ export interface MarketingTray {
 /** A callback as the reminder needs it (GET /api/marketing/queue/callbacks). */
 export interface CallbackDue {
   id: number;
+  /** The queue item it brings back: Call now claims this one, not whoever is next. */
+  queueItemId: number | null;
   contact: string;
   organisation: string | null;
   note: string | null;
@@ -84,8 +86,10 @@ export function dueCallbacks(raw: unknown, now: number, horizonMs: number, grace
     const at = stampMs(dueAt);
     if (at === null || at < now - graceMs || at > now + horizonMs) continue;
     const c = (o.contact ?? {}) as Record<string, unknown>;
+    const item = typeof o.queue_item_id === 'number' ? o.queue_item_id : Number(o.queue_item_id);
     out.push({
       id,
+      queueItemId: Number.isInteger(item) && item > 0 ? item : null,
       contact: typeof c.name === 'string' && c.name.trim() ? c.name.trim().slice(0, 120) : 'A contact',
       organisation: typeof c.organisation === 'string' && c.organisation.trim() ? c.organisation.trim().slice(0, 120) : null,
       note: typeof o.note === 'string' && o.note.trim() ? o.note.trim().slice(0, 200) : null,
@@ -112,6 +116,11 @@ export function stampMs(s: string): number | null {
   const iso = /[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s.replace(' ', 'T') : `${s.replace(' ', 'T')}Z`;
   const t = Date.parse(iso);
   return Number.isNaN(t) ? null : t;
+}
+
+/** Where a reminder's Call now goes: My call queue, claiming that callback's own queue item when it is known. */
+export function callbackRoute(c: Pick<CallbackDue, 'queueItemId'>): string {
+  return c.queueItemId ? `${NEXT_CONTACT_ROUTE}&item=${c.queueItemId}` : NEXT_CONTACT_ROUTE;
 }
 
 /** "Callback due · Iresha Dias" / "Dias Printers · “Call after 2 pm”" (design D01). */

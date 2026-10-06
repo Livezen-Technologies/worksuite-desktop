@@ -1,4 +1,4 @@
-import { useState, type ReactNode, type TextareaHTMLAttributes, type InputHTMLAttributes } from 'react';
+import { useEffect, useState, type ReactNode, type TextareaHTMLAttributes, type InputHTMLAttributes } from 'react';
 import { ApiError } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
@@ -150,19 +150,21 @@ export function Refused({ error, onRetry, what = 'This' }: { error: unknown; onR
   );
 }
 
-/** Loading, refused, or the content: the one switch a screen's main read goes through. */
+/**
+ * Loading, refused, or the content: the one switch a screen's main read goes through. Once there is content, a later
+ * refresh that fails (the server away for a moment) keeps it on screen — with whatever is being edited in it.
+ */
 export function Loaded<T>({ q, what, children }: { q: { data?: T; isLoading: boolean; error: unknown; refetch: () => unknown }; what?: string; children: (data: T) => ReactNode }) {
   if (q.isLoading) return <Spinner />;
+  if (q.data !== undefined) return <>{children(q.data)}</>;
   if (q.error) return <Refused error={q.error} what={what} onRetry={() => void q.refetch()} />;
-  if (q.data === undefined) return null;
-  return <>{children(q.data)}</>;
+  return null;
 }
 
 /** The same for a Target endpoint, which may not be offered. */
 export function OptionalView<T>({ q, what, children, notOffered }: { q: { data?: Optional<T>; isLoading: boolean; error: unknown; refetch: () => unknown }; what: string; children: (data: T) => ReactNode; notOffered?: ReactNode }) {
   if (q.isLoading) return <Spinner />;
-  if (q.error) return <Refused error={q.error} what={what} onRetry={() => void q.refetch()} />;
-  if (!q.data) return null;
+  if (!q.data) return q.error ? <Refused error={q.error} what={what} onRetry={() => void q.refetch()} /> : null;
   if (!q.data.offered) return <>{notOffered ?? <NotOffered what={what} />}</>;
   return <>{children(q.data.data)}</>;
 }
@@ -330,4 +332,14 @@ export function useAction(): [string | null, (key: string, fn: () => Promise<unk
     }
   };
   return [busy, run];
+}
+
+/** A value that settles `ms` after its last change: a search box asks the server once typing stops. */
+export function useDebounced<T>(value: T, ms = 300): T {
+  const [v, setV] = useState(value);
+  useEffect(() => {
+    const t = setTimeout(() => setV(value), ms);
+    return () => clearTimeout(t);
+  }, [value, ms]);
+  return v;
 }

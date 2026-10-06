@@ -1,5 +1,7 @@
 import { addDays, currentZone, dayKey, dayWords, relative, stampDayLabel, timeLabel, wallToUtc } from '../../../core/time';
 
+export { addDays };
+
 /**
  * How Marketing shows numbers, rates and times (design "WorkSuite Marketing — Modern UI": system mono for keys, IDs,
  * numbers and merge tags). Pure functions, shared by every screen and tested on their own. Dates and times are on the
@@ -95,20 +97,40 @@ export function isoDay(d: Date): string {
   return dayKey(d);
 }
 
+/** `09:00` on the reader's clock, for a time input (always 24-hour, as the input takes it). */
+export function isoTime(d: Date): string {
+  const parts = new Intl.DateTimeFormat('en-GB', { hour: '2-digit', minute: '2-digit', hourCycle: 'h23', timeZone: currentZone() }).formatToParts(d);
+  const part = (k: string) => parts.find((x) => x.type === k)?.value ?? '00';
+  return `${part('hour')}:${part('minute')}`;
+}
+
+/** A stamp's time of day on the reader's clock and in their format (`9:00`, `9:00 am`); empty when unreadable. */
+export function clockLabel(s: string | null | undefined): string {
+  return s && parseStamp(s) ? timeLabel(s) : '';
+}
+
+/** `6 Oct 9:00`, with the year when it is not this one — on the reader's calendar and clock. */
+export function when(s: string | null | undefined, withTime = true): string {
+  const d = parseStamp(s);
+  if (!s || !d) return '—';
+  const date = stampDayLabel(s, isoDay(d).slice(0, 4) === isoDay(new Date()).slice(0, 4) ? 'short' : 'year');
+  return withTime ? `${date} ${timeLabel(s)}` : date;
+}
+
 /**
  * A phone number as someone without contact-edit permission sees it (MKT-AUD-07): `+94 77 123 4521` → `+94 77 *** 4521`,
- * `077 123 4521` → `077 *** 4521`. Written as groups, the group before the last is hidden; written as one run of
- * digits, everything between the prefix and the last four.
+ * `077 123 4521` → `077 *** 4521`, `06 12 34 56 78` → `06 1*** 56 78`. By digits, whatever the grouping: the prefix
+ * (all but the last seven) and the last four stay, the three or more between are hidden as one `***`.
  */
 export function maskPhone(phone: string | null | undefined): string {
   if (!phone) return '—';
   const p = phone.trim();
-  const digits = p.replace(/\D/g, '');
-  if (digits.length < 7) return p;
-  const groups = p.split(/\s+/);
-  if (groups.length >= 3) return [...groups.slice(0, -2), '***', groups[groups.length - 1]].join(' ');
-  const compact = p.replace(/\s+/g, '');
-  return `${compact.slice(0, Math.max(0, compact.length - 7))} *** ${digits.slice(-4)}`.trim();
+  const total = p.replace(/\D/g, '').length;
+  if (total < 7) return p;
+  let seen = 0;
+  // Hidden digits become a private-use mark in place; a run of them, with the separators between, becomes one `***`.
+  const marked = p.replace(/\d/g, (d) => (seen++ >= total - 7 && seen <= total - 4 ? '\uE000' : d));
+  return marked.replace(/\uE000(?:[^\d\uE000]*\uE000)*/g, '***');
 }
 
 /** `1 contact`, `3 contacts`. */
