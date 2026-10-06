@@ -320,18 +320,18 @@ describe('Widget settings › Contact options (#260)', () => {
     expect(toast).not.toHaveBeenCalledWith('error', expect.anything());
   });
 
-  it('on a server without the list, says it needs updating, and the away screen keeps its one number, kept in E.164', async () => {
+  it('on a server without the list, an admin is told it needs updating (#259), and the away screen keeps its one number, kept in E.164', async () => {
     wa = new ApiError(404, 'Not found', null);
     render(
       <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
         <WidgetSettings />
       </QueryClientProvider>,
     );
-    expect(await screen.findByText('Not on this server yet')).toBeTruthy();
-    expect(screen.getByText(/Update WorkSuite's Communication module to set the widget's WhatsApp numbers here/)).toBeTruthy();
-    expect(screen.queryByRole('button', { name: 'Save' })).toBeNull();
+    expect((await screen.findByRole('region', { name: 'Server update needed' })).textContent).toContain('WhatsApp numbers need a newer Communication module.');
+    // The tab is left out rather than opened onto nothing; the address's tab falls back to Appearance.
+    expect(screen.queryByRole('tab', { name: 'Contact options' })).toBeNull();
+    expect(screen.getByRole('tab', { name: 'Appearance' }).getAttribute('aria-selected')).toBe('true');
 
-    fireEvent.click(screen.getByRole('tab', { name: 'Appearance' }));
     fireEvent.change(screen.getByRole('textbox', { name: /^WhatsApp number/ }), { target: { value: '0769 136 424' } });
     expect(screen.getByText('Saved as +94 76 913 6424')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Save' }));
@@ -343,7 +343,8 @@ describe('Widget settings › Contact options (#260)', () => {
     await mount();
     fireEvent.click(screen.getByRole('button', { name: 'Remove Support' }));
     saveNow();
-    expect(await screen.findByText('Not on this server yet')).toBeTruthy();
+    expect((await screen.findByRole('region', { name: 'Server update needed' })).textContent).toContain('WhatsApp numbers need a newer Communication module.');
+    expect(screen.queryByRole('tab', { name: 'Contact options' })).toBeNull();
     expect(toast).not.toHaveBeenCalledWith('error', expect.anything());
   });
 

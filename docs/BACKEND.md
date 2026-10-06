@@ -256,13 +256,72 @@ specific to the desktop:
     allow): `GET /api/ai/speech/status` and `POST /api/ai/speech/transcribe`
     (multipart `audio` WAV, `language`) return segments with `uncertain`.
 
+### What the server has: `GET /api/capabilities` (worksuite-desktop#259)
+
+The app can be newer than the server: Beta may run ahead of it. So that
+nobody lands on an empty "Not on this server yet" screen, the app asks the
+server what it has once per session. It needs a signed-in user and no
+permission:
+
+```json
+{ "communication": "2.4.0",
+  "features": ["widget.behaviour", "chat.insights", "widget.whatsapp"],
+  "update_url": "/admin/modules", "can_update": true }
+```
+
+- **Module versions** sit at the top level, keyed by module, or under
+  `modules: {communication: "2.4.0"}`. The admin notice quotes them as
+  "(server has 2.3.1)".
+- **`features`** lists what the modules offer. The app reads it only when
+  `features` is an array. The website chat keys so far:
+  - `widget.behaviour`: `widgets/{id}/behaviour`, S-03.
+  - `chat.insights`: `insights`, L-07.
+  - `widget.whatsapp`: `widgets/{id}/whatsapp`, #260.
+
+  Add a key whenever a module gains a screen the desktop gates on.
+- **`update_url`** is a path on this server where the person can update
+  modules. The app shows "Update server" only when `can_update` is `true` for
+  that person.
+- **On a server without this route (404)**, or with any other response, each
+  screen still detects support itself, as before: its own endpoint answers
+  404.
+- **A screen's own endpoint overrides the list.** One that answers is shown
+  even if the list leaves its key out.
+
+When a feature is missing:
+
+- People who cannot change widgets don't see the Behaviour or Contact options
+  tabs, or the Insights entry.
+- Admins (`chat.widget.manage`, or the widget's `can_manage`) see a notice at
+  the top of the widget's settings, for example "Behaviour and Insights need
+  Communication module 2.4 or later (server has 2.3.1). Update server · Learn
+  more".
+- The notice names a minimum version only when the app knows it for every
+  missing feature (`MIN_COMMUNICATION` in
+  `src/modules/chat/website/widget/serverSupport.ts`). Otherwise it says "a
+  newer Communication module".
+
+**Field errors.** A save that the server refuses should answer 422 with
+`errors` keyed by field, as Laravel and CodeIgniter do: `website_name`,
+`quick_links.0.url`, `numbers.1.phone`, `missed_after_minutes`.
+
+- The app shows each message under its field, on that field's tab, and marks
+  the tab ("Appearance •") while another tab is open.
+- A widget whose saved company name is a web address may be refused on any
+  tab's save (`PUT widgets/{id}/behaviour` included). The server should name
+  `website_name` in `errors` so the message lands on Appearance. A refusal
+  without `errors` becomes a toast, except one in the company-name rule's own
+  words.
+
 ### Website chat widget: WhatsApp numbers (worksuite-desktop#260)
 
 Widget settings › Contact options edits the WhatsApp numbers the widget offers
 ("Message us on WhatsApp": Sales, Support). The Communication module needs
-three routes under `/api/chat/widget-admin`. Until it has them, the app shows
-"Not on this server yet" on that tab, and the away screen keeps its single
-`whatsapp_number` from the design.
+three routes under `/api/chat/widget-admin`. Until it has them:
+
+- the tab is hidden, and admins see the version notice (feature
+  `widget.whatsapp`, #259);
+- the away screen keeps its single `whatsapp_number` from the design.
 
 - **`GET widgets/{id}/whatsapp`** returns `{numbers, can_manage, cache_seconds?,
   can_refresh?, accounts?}`. A 404 or 405 means the server does not have the

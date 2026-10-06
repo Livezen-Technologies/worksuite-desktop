@@ -1,12 +1,17 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useId, useMemo, useState, type ReactNode } from 'react';
+import { ApiError } from '../../../../core/api';
+import { app } from '../../../../core/app-state';
 import { errorMessage } from '../../../../core/bridge';
+import { useServerCapabilities } from '../../../../core/capabilities';
 import { text } from '../../../../core/i18n';
+import { useStore } from '../../../../core/store';
 import { toast } from '../../../../core/toasts';
 import { useTab, useTabTitle } from '../../../../core/tab-context';
 import { CollapsibleSection } from '../../../../components/Collapsible';
 import { Select } from '../../../../components/Select';
 import { Button, Card, Empty, ErrorNote, Spinner, Switch, TextField, cx } from '../../../../components/ui';
+import { insightsQuery } from '../Insights';
 import { Segmented } from '../live/LiveDashboard';
 import { formatPhone, toE164 } from '../../../../core/phone';
 import { Area, Choice, Labelled, Section, Toggle } from './parts';
@@ -16,11 +21,15 @@ import { LiveStatusCalls } from './LiveStatusCalls';
 import { StaffTab, useStaffList } from './StaffTab';
 import { ContactTab, useWhatsapp } from './ContactOptions';
 import { awayLabels, rowName, type WaPickAccount, type WaRow } from './whatsappNumbers';
+import { fieldErrorsOf } from './fieldErrors';
+import { ServerNotice } from './ServerNotice';
+import { lacks, type CommFeature, type EndpointState } from './serverSupport';
 import { siteOf } from './Widgets';
 import {
   ACCENT_SWATCHES,
   AUTO_OPEN_MAX,
   BRAND_SWATCHES,
+  DESIGN_FIELDS,
   MAX_LINKS,
   OFFSET_MAX,
   RADIUS_MAX,
@@ -28,6 +37,9 @@ import {
   designOf,
   hoursOf,
   hoursText,
+  looksLikeAddress,
+  looksLikeDomain,
+  nameFromAddress,
   palette,
   previewPeople,
   problems,
@@ -35,6 +47,7 @@ import {
   saveHours,
   siteNameOf,
   weekOf,
+  widgetTitle,
   widgetsList,
   withDefaults,
   type DesignPayload,
@@ -70,6 +83,11 @@ import { OpenNow, WeekChart, WeekDays } from './HoursWeek';
  *
  * CONTACT OPTIONS (#260) is the widget's WhatsApp numbers, saved from the header like Behaviour
  * (`PUT widgets/{id}/whatsapp`); while the server has that list, the away screen shows it instead of its one number.
+ *
+ * #259: a tab the server's Communication module lacks (Behaviour, Contact options) is left out once it is known who is
+ * looking, and whoever can change widgets reads what needs updating at the top instead (ServerNotice). A save's
+ * refusal is shown under the field it is about, on that field's tab, never as a toast over another tab; a tab with a
+ * field to fix is marked "Appearance •" while another is open. The title is the company's name, not the site's slug.
  */
 
 /** Whether this computer prefers a dark theme: what "Match the visitor" looks like to the person editing. */
@@ -146,7 +164,7 @@ export function WidgetSettings({ onList }: { onList?: () => void }) {
   const widgets = list.data?.widgets ?? [];
   const asked = Number(query.get('widget')) || null;
   const row = widgets.find((w) => w.id === asked) ?? widgets[0] ?? null;
-  useTabTitle(row?.name ?? 'Widget');
+  useTabTitle(row ? widgetTitle(row.name, row.website_name) : 'Widget');
 
   if (list.isLoading) return <div className="flex flex-1 items-center justify-center"><Spinner /></div>;
   if (list.error) return <div className="flex-1 p-6"><ErrorNote error={list.error} onRetry={() => void list.refetch()} /></div>;
@@ -186,6 +204,13 @@ function Swatches({ label, value, swatches, onChange, error }: { label: string; 
   );
 }
 
+type DesignIssues = Partial<Record<keyof WidgetDesign | 'quick_links', string>>;
+
+/** The fields Appearance shows a problem under; any other's is listed at the top of the form. */
+const UNDER_FIELD: ReadonlySet<string> = new Set(['name', 'website_name', 'header_title', 'header_subtitle', 'welcome_message', 'accent_color', 'brand_color', 'auto_open_delay', 'logo_url', 'quick_links', 'whatsapp_number', 'launcher_offset_bottom', 'launcher_offset_right', 'launcher_offset_left']);
+
+const tabLabel = (t: WidgetTab) => text(WIDGET_TABS.find((x) => x.id === t)?.label ?? t);
+
 function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab: WidgetTab; onList?: () => void }) {
   const id = row.id;
   const formId = useId();
@@ -203,8 +228,35 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
   const [hoursTouched, setHoursTouched] = useState(false);
   const [screen, setScreen] = useState<PreviewScreen>('start');
   const [busy, setBusy] = useState(false);
+  // The server's refusals of the design's and the hours' fields (#259), each shown under its field until it changes,
+  // and the tab whose Save was refused, so its header can say where the field to fix is.
+  const [refused, setRefused] = useState<DesignIssues>({});
+  const [hoursRefused, setHoursRefused] = useState<string | null>(null);
+  const [failedOn, setFailedOn] = useState<WidgetTab | null>(null);
+
+  /**
+   * A refusal's fields, on their own tabs (#259): the design's under each field on Appearance, the hours' on Hours. A
+   * widget whose saved company name is a web address is refused whatever is saved — the toast over Behaviour that
+   * named a field nobody could see. True when there was a field to show it under.
+   */
+  const route = (e: unknown, from: WidgetTab): boolean => {
+    const own: DesignIssues = {};
+    let hours: string | null = null;
+    for (const [k, v] of Object.entries(fieldErrorsOf(e))) {
+      const base = k.split('.')[0]!;
+      if (DESIGN_FIELDS.has(base)) own[base as keyof DesignIssues] ??= v;
+      else if (base === 'days' || base === 'timezone' || base === 'hours') hours ??= v;
+    }
+    // A refusal that names no field but is in the words of the company name's rule is about that field.
+    if (!Object.keys(own).length && !hours && e instanceof ApiError && e.status >= 400 && e.status < 500 && /web address/i.test(e.message)) own.website_name = e.message;
+    if (!Object.keys(own).length && !hours) return false;
+    setRefused((r) => ({ ...r, ...own }));
+    if (hours) setHoursRefused(hours);
+    setFailedOn(from);
+    return true;
+  };
   // Behaviour (S-03) saves from this header, so its draft lives here; Staff (S-04) adds from it.
-  const b = useBehaviour(id);
+  const b = useBehaviour(id, (e) => route(e, 'behaviour'));
   const [adding, setAdding] = useState(false);
   const staffList = useStaffList(id, Boolean(seen.staff));
   // The Chatbot (S-05) saves from this header too.
@@ -221,19 +273,39 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
   // With the Contact options list (#260) the one number is the server's copy of it, never edited here: not a problem.
   const waList = Boolean(wa.q.data && !wa.missing);
   const issues = useMemo(() => {
-    const out = design ? problems(design) : {};
+    const out: DesignIssues = { ...refused, ...(design ? problems(design) : {}) };
     if (waList) delete out.whatsapp_number;
     return out;
-  }, [design, waList]);
+  }, [design, waList, refused]);
   const p = q.data;
+
+  // What the server lacks (#259): its own list where it has one, each screen's endpoint where it has answered, and
+  // Insights as Widgets & embed last read its week (not asked again here).
+  const caps = useServerCapabilities();
+  const managesWidgets = useStore(app, (s) => Boolean(s.bootstrap?.permissions?.some((x) => x === '*' || x === 'chat.widget.manage')));
+  // Whether this person can change widgets, cannot, or it is not known yet (the design has not answered).
+  const admin: boolean | null = managesWidgets || p?.can_manage ? true : p ? false : null;
+  const insightsWeek = useQuery({ ...insightsQuery('7d', null), enabled: false });
+  const endpoint = (data: unknown, missing: boolean): EndpointState => (missing ? 'missing' : data ? 'ok' : 'unknown');
+  const lacking = (
+    [
+      ['widget.behaviour', endpoint(b.q.data, b.missing)],
+      ['chat.insights', endpoint(insightsWeek.data, insightsWeek.error instanceof ApiError && insightsWeek.error.status === 404)],
+      ['widget.whatsapp', endpoint(wa.q.data, wa.missing)],
+    ] as Array<[CommFeature, EndpointState]>
+  ).filter(([f, e]) => lacks(f, caps, e)).map(([f]) => f);
+  // Left out for everybody once it is known who is looking; until then each tab says it for itself, as before.
+  const hidden = new Set<WidgetTab>(admin === null ? [] : [...(lacking.includes('widget.behaviour') ? (['behaviour'] as const) : []), ...(lacking.includes('widget.whatsapp') ? (['contact'] as const) : [])]);
+  const current: WidgetTab = hidden.has(tab) ? 'appearance' : tab;
 
   const open = (t: WidgetTab) => {
     setTab(t);
     setSeen((s) => ({ ...s, [t]: true }));
   };
   const can = Boolean(p?.can_manage);
+  const dayProblems = hoursOn && week ? Object.keys(weekProblems(week.days)).length > 0 : false;
   // A day that closes before it opens holds Save back too (S-10).
-  const blocked = Object.keys(issues).length > 0 || (hoursOn && week ? Object.keys(weekProblems(week.days)).length > 0 : false);
+  const blocked = Object.keys(issues).length > 0 || dayProblems || Boolean(hoursRefused);
   const dirty = Boolean(draft || weekDraft || hoursDraft !== null || Object.keys(shown).length);
   const undo = () => {
     setDesign(null);
@@ -241,7 +313,20 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
     setWeek(null);
     setHoursOn(null);
     setHoursTouched(false);
+    setRefused({});
+    setHoursRefused(null);
+    setFailedOn(null);
   };
+  // A tab with a field to fix, marked while another is open (#259): "Appearance •".
+  const marks: Partial<Record<WidgetTab, boolean>> = {
+    appearance: Object.keys(issues).length > 0,
+    hours: dayProblems || Boolean(hoursRefused),
+    behaviour: Object.keys(b.issues).length > 0,
+    contact: Object.keys(wa.issues).length > 0,
+  };
+  // Where the field a refused save is about is, said in the header of the tab whose Save it was.
+  const fixOn: WidgetTab | null = Object.keys(refused).length ? 'appearance' : hoursRefused ? 'hours' : null;
+  const fixNote = failedOn === current && fixOn && fixOn !== current ? text("Couldn't save: fix the highlighted field on {tab}.", { tab: tabLabel(fixOn) }) : null;
 
   const save = async () => {
     if (!design || blocked) return;
@@ -260,14 +345,15 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
       void qc.invalidateQueries({ queryKey: ['website', 'widgets'] });
       toast('success', text('Widget saved — visitors see it on their next page'));
     } catch (e) {
-      toast('error', errorMessage(e));
+      if (!route(e, current)) toast('error', errorMessage(e));
     } finally {
       setBusy(false);
     }
   };
 
-  const designTab = DESIGN_TABS.includes(tab);
-  const title = design?.name.trim() || p?.widget.name || row.name;
+  const designTab = DESIGN_TABS.includes(current);
+  // "Techubiz", not the slug "techubiz" a widget made from its site is called (#259).
+  const title = widgetTitle(design?.name.trim() || p?.widget.name || row.name, design ? design.website_name : row.website_name);
 
   return (
     <main aria-label={text('Widget settings')} className="flex h-full min-w-0 flex-1 flex-col gap-3 border-l border-line bg-ground px-[22px] py-4 text-[13px] text-ink">
@@ -284,39 +370,45 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
           </nav>
           <h1 className="truncate text-[21px] font-bold">{title}</h1>
         </div>
+        {fixNote ? <span role="alert" className="text-[12px] text-danger">{fixNote}</span> : null}
         {designTab ? (
           <>
             {blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
             <Button type="button" disabled={busy || !dirty} onClick={undo}>Cancel</Button>
             <Button type="submit" form={formId} variant="primary" loading={busy} disabled={!can || busy || blocked || !design}>Save</Button>
           </>
-        ) : tab === 'behaviour' && b.settings ? (
+        ) : current === 'behaviour' && b.settings ? (
           <>
             {b.blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
             <Button type="button" disabled={b.busy || !b.dirty} onClick={b.undo}>Cancel</Button>
             <Button type="button" variant="primary" loading={b.busy} disabled={!b.can || b.busy || b.blocked || !b.dirty} onClick={() => void b.save()}>Save</Button>
           </>
-        ) : tab === 'staff' ? (
+        ) : current === 'staff' ? (
           <Button type="button" variant="primary" disabled={!staffList.data} onClick={() => setAdding(true)}>Add people</Button>
-        ) : tab === 'contact' && wa.rows && !wa.missing ? (
+        ) : current === 'contact' && wa.rows && !wa.missing ? (
           <>
             {wa.blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
             <Button type="button" disabled={wa.busy || !wa.dirty} onClick={wa.undo}>Cancel</Button>
             <Button type="button" variant="primary" loading={wa.busy} disabled={!wa.can || wa.busy || wa.blocked || !wa.dirty} onClick={() => void wa.save()}>Save</Button>
           </>
-        ) : tab === 'chatbot' && bot.settings ? (
+        ) : current === 'chatbot' && bot.settings ? (
           <>
             {bot.blocked ? <span className="text-[12px] text-danger">Fix the highlighted fields to save.</span> : null}
             <Button type="button" variant="primary" loading={bot.busy} disabled={!bot.can || bot.busy || bot.blocked || !bot.dirty} onClick={() => void bot.save()}>Save</Button>
           </>
         ) : null}
       </div>
+      {admin ? <ServerNotice missing={lacking} caps={caps} /> : null}
       <div role="tablist" aria-label="Widget settings" className="flex gap-0.5 border-b border-line">
-        {WIDGET_TABS.map((t) => (
-          <button key={t.id} type="button" role="tab" id={`widget-tab-${t.id}`} aria-selected={tab === t.id} aria-controls={`widget-panel-${t.id}`} onClick={() => open(t.id)} className={cx('-mb-px border-b-2 px-[13px] py-2 text-[13px]', tab === t.id ? 'border-primary font-bold text-primary' : 'border-transparent text-ink-2 hover:text-ink')}>
-            {t.label}
-          </button>
-        ))}
+        {WIDGET_TABS.filter((t) => !hidden.has(t.id)).map((t) => {
+          const mark = Boolean(marks[t.id]) && current !== t.id;
+          return (
+            <button key={t.id} type="button" role="tab" id={`widget-tab-${t.id}`} aria-selected={current === t.id} aria-controls={`widget-panel-${t.id}`} title={mark ? text('A field here needs fixing') : undefined} onClick={() => open(t.id)} className={cx('-mb-px border-b-2 px-[13px] py-2 text-[13px]', current === t.id ? 'border-primary font-bold text-primary' : 'border-transparent text-ink-2 hover:text-ink')}>
+              {t.label}
+              {mark ? <span aria-hidden className="font-bold text-danger"> •</span> : null}
+            </button>
+          );
+        })}
       </div>
 
       {designTab ? (
@@ -336,18 +428,30 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
             {p && !p.installed ? <p role="note" className="mb-3 rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-ink-2">The server has not been updated for the new widget yet: only the colour, position, theme and away message can be saved.</p> : null}
             <fieldset disabled={!can || busy} className="flex min-h-0 flex-1 flex-col">
               <DesignPanels
-                tab={tab}
+                tab={current}
                 design={design}
                 p={p}
                 issues={issues}
                 setDesign={setDesign}
+                onEdit={(k) =>
+                  setRefused((r) => {
+                    if (!(k in r)) return r;
+                    const next = { ...r };
+                    delete next[k];
+                    return next;
+                  })
+                }
                 shown={shown}
                 setShown={setShown}
                 week={week}
                 setWeek={setWeek}
                 hoursOn={hoursOn}
                 setHoursOn={setHoursOn}
-                setHoursTouched={setHoursTouched}
+                setHoursTouched={(v) => {
+                  setHoursTouched(v);
+                  setHoursRefused(null);
+                }}
+                hoursIssue={hoursRefused}
                 screen={screen}
                 setScreen={setScreen}
                 onStaff={() => open('staff')}
@@ -360,31 +464,31 @@ function WidgetEditor({ row, initialTab, onList }: { row: WidgetRow; initialTab:
         )
       ) : null}
       {seen.calls ? (
-        <div role="tabpanel" id="widget-panel-calls" aria-labelledby="widget-tab-calls" hidden={tab !== 'calls'} className={cx('-mx-[22px] min-h-0 flex-1', tab === 'calls' ? 'flex' : 'hidden')}>
+        <div role="tabpanel" id="widget-panel-calls" aria-labelledby="widget-tab-calls" hidden={current !== 'calls'} className={cx('-mx-[22px] min-h-0 flex-1', current === 'calls' ? 'flex' : 'hidden')}>
           <LiveStatusCalls key={id} id={id} onManageStaff={() => open('staff')} />
         </div>
       ) : null}
-      {tab === 'behaviour' ? (
+      {current === 'behaviour' ? (
         <div role="tabpanel" id="widget-panel-behaviour" aria-labelledby="widget-tab-behaviour" className="flex min-h-0 flex-1">
           <BehaviourTab b={b} site={site} fallbackCode={row.embed_code ?? null} />
         </div>
       ) : null}
-      {tab === 'contact' ? (
+      {current === 'contact' ? (
         <div role="tabpanel" id="widget-panel-contact" aria-labelledby="widget-tab-contact" className="flex min-h-0 flex-1">
           <ContactTab w={wa} site={site} />
         </div>
       ) : null}
-      {tab === 'staff' ? (
+      {current === 'staff' ? (
         <div role="tabpanel" id="widget-panel-staff" aria-labelledby="widget-tab-staff" className="flex min-h-0 flex-1">
           <StaffTab id={id} widgetName={title} adding={adding} setAdding={setAdding} />
         </div>
       ) : null}
-      {tab === 'chatbot' ? (
+      {current === 'chatbot' ? (
         <div role="tabpanel" id="widget-panel-chatbot" aria-labelledby="widget-tab-chatbot" className="flex min-h-0 flex-1">
           <ChatbotTab id={id} c={bot} />
         </div>
       ) : null}
-      {tab === 'embed' ? (
+      {current === 'embed' ? (
         <div role="tabpanel" id="widget-panel-embed" aria-labelledby="widget-tab-embed" className="flex min-h-0 flex-1">
           <EmbedTab b={b} site={site} fallbackCode={row.embed_code ?? null} widgetId={id} />
         </div>
@@ -397,8 +501,10 @@ interface PanelProps {
   tab: WidgetTab;
   design: WidgetDesign;
   p: DesignPayload | undefined;
-  issues: Partial<Record<keyof WidgetDesign | 'quick_links', string>>;
+  issues: DesignIssues;
   setDesign: (f: (d: WidgetDesign | null) => WidgetDesign | null) => void;
+  /** A field was changed: the server's word on it no longer stands (#259). */
+  onEdit: (k: keyof WidgetDesign) => void;
   shown: Record<number, boolean>;
   setShown: (f: (s: Record<number, boolean>) => Record<number, boolean>) => void;
   week: { days: HoursDay[]; timezone: string; configured: boolean } | null;
@@ -406,6 +512,8 @@ interface PanelProps {
   hoursOn: boolean;
   setHoursOn: (v: boolean) => void;
   setHoursTouched: (v: boolean) => void;
+  /** The server's refusal of the hours (#259), shown on the Hours tab. */
+  hoursIssue: string | null;
   screen: PreviewScreen;
   setScreen: (s: PreviewScreen) => void;
   /** Opens the Staff tab, where people are added (S-04). */
@@ -417,8 +525,11 @@ interface PanelProps {
 }
 
 /** Appearance and Hours: the panels of the one design form, each kept mounted so nothing typed is lost. */
-function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week, setWeek, hoursOn, setHoursOn, setHoursTouched, screen, setScreen, onStaff, whatsapp, waAccounts, onContact }: PanelProps) {
-  const set = <K extends keyof WidgetDesign>(k: K, v: WidgetDesign[K]) => setDesign((d) => ({ ...(d ?? design), [k]: v }));
+function DesignPanels({ tab, design, p, issues, setDesign, onEdit, shown, setShown, week, setWeek, hoursOn, setHoursOn, setHoursTouched, hoursIssue, screen, setScreen, onStaff, whatsapp, waAccounts, onContact }: PanelProps) {
+  const set = <K extends keyof WidgetDesign>(k: K, v: WidgetDesign[K]) => {
+    setDesign((d) => ({ ...(d ?? design), [k]: v }));
+    onEdit(k);
+  };
   const { people, sample } = previewPeople(p, design, shown);
   const hoursPreview: HoursSummary | null = hoursOn && week ? { timezone: week.timezone, zone: p?.hours?.zone && p.hours.timezone === week.timezone ? p.hours.zone : week.timezone.replace(/_/g, ' '), text: hoursText(week.days), open_now: false, back_at: p?.hours?.back_at ?? '9:00 AM tomorrow' } : null;
   const brand = palette(design.brand_color);
@@ -440,6 +551,11 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
   // The one number as it will be kept: "0769 136 424" is +94 76 913 6424 (#260).
   const legacyWa = design.whatsapp_number ? toE164(design.whatsapp_number) : null;
   const legacyHint = legacyWa && legacyWa !== design.whatsapp_number?.replace(/[\s().-]/g, '') ? text('Saved as {n}', { n: formatPhone(legacyWa) }) : 'Optional. Offered on the away screen for anything urgent.';
+  // An address typed as the company's name (#259): the name it suggests, one click away. A bare "techubiz.com" is only
+  // a hint ("Booking.com" is a name); a full address is refused as well.
+  const suggested = looksLikeAddress(design.website_name) || looksLikeDomain(design.website_name) ? nameFromAddress(design.website_name) : null;
+  // The server's word on a field Appearance has no line under, at the top of the form.
+  const elsewhere = Object.entries(issues).filter(([k]) => !UNDER_FIELD.has(k));
 
   return (
     <>
@@ -449,19 +565,32 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
         <div className="@container flex min-h-0 min-w-0 flex-1 flex-col">
           <div data-testid="appearance-layout" className="flex min-h-0 flex-1 flex-col gap-4 overflow-y-auto scroll-thin @4xl:flex-row @4xl:overflow-visible">
           <div data-testid="appearance-sections" className="@container flex min-w-0 shrink-0 flex-col gap-3 pb-4 @4xl:min-h-0 @4xl:flex-1 @4xl:shrink @4xl:overflow-y-auto scroll-thin">
+            {elsewhere.length ? (
+              <div role="alert" className="flex shrink-0 flex-col gap-0.5 rounded-[8px] bg-danger-bg px-3 py-2 text-[12.5px] text-danger">
+                {elsewhere.map(([k, m]) => <span key={k}>{m}</span>)}
+              </div>
+            ) : null}
             <div className="grid shrink-0 grid-cols-1 gap-3.5 rounded-[12px] border border-line bg-surface p-4 @lg:grid-cols-2">
               <TextField label="Widget name" value={design.name} maxLength={120} onChange={(e) => set('name', e.target.value)} error={issues.name ?? null} />
-              <TextField
-                label="Website name"
-                value={design.website_name ?? ''}
-                maxLength={190}
-                onChange={(e) => set('website_name', e.target.value || null)}
-                placeholder={p?.fallback_name || undefined}
-                error={issues.website_name ?? null}
-              />
-              <TextField label="Header title" value={design.header_title ?? ''} maxLength={120} onChange={(e) => set('header_title', e.target.value || null)} placeholder="Chat with us" />
-              <TextField label="Header subtitle" value={design.header_subtitle ?? ''} maxLength={190} onChange={(e) => set('header_subtitle', e.target.value || null)} />
-              <TextField label="Welcome message" className="@lg:col-span-2" value={design.welcome_message ?? ''} maxLength={500} onChange={(e) => set('welcome_message', e.target.value || null)} />
+              <div className="flex flex-col gap-1">
+                <TextField
+                  label="Website name"
+                  value={design.website_name ?? ''}
+                  maxLength={190}
+                  onChange={(e) => set('website_name', e.target.value || null)}
+                  placeholder={p?.fallback_name || undefined}
+                  error={issues.website_name ?? null}
+                />
+                {suggested ? (
+                  <span className="flex flex-wrap items-center gap-2 text-[12px] text-ink-2">
+                    {text("Use '{name}' as the name?", { name: suggested })}
+                    <Button type="button" size="sm" onClick={() => set('website_name', suggested)}>Use it</Button>
+                  </span>
+                ) : null}
+              </div>
+              <TextField label="Header title" value={design.header_title ?? ''} maxLength={120} onChange={(e) => set('header_title', e.target.value || null)} placeholder="Chat with us" error={issues.header_title ?? null} />
+              <TextField label="Header subtitle" value={design.header_subtitle ?? ''} maxLength={190} onChange={(e) => set('header_subtitle', e.target.value || null)} error={issues.header_subtitle ?? null} />
+              <TextField label="Welcome message" className="@lg:col-span-2" value={design.welcome_message ?? ''} maxLength={500} onChange={(e) => set('welcome_message', e.target.value || null)} error={issues.welcome_message ?? null} />
               <div className="@lg:col-span-2">
                 <Area label="Offline message" value={design.offline_message ?? ''} max={500} onChange={(v) => set('offline_message', v || null)} />
               </div>
@@ -623,6 +752,7 @@ function DesignPanels({ tab, design, p, issues, setDesign, shown, setShown, week
                   setHoursTouched(true);
                 }}
               />
+              {hoursIssue ? <span role="alert" className="text-[12px] text-danger">{hoursIssue}</span> : null}
               {hoursOn && week ? (
                 <div className="flex flex-col gap-3">
                   {/* The same week as Website chats › Business hours (S-10): the zone, open now, a row a day, the chart. */}
