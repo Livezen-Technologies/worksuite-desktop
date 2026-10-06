@@ -24,6 +24,12 @@ person who has to live with the change — what it does, and where it bites.
   the app shows only to super-admins and every screen says the server doesn't offer it yet — see
   `docs/SOCIAL_MEDIA.md` for what the server needs. Publishing always runs on the server, so posts go out with the
   computer off. (social-media 1.0.0, notifications 1.10.0)
+- **Not in this release:** screens for bulk scheduling from a spreadsheet and for recurring posts (the server calls are
+  ready), campaign-level review links (no server route yet), Listening and competitor benchmarks (a later phase), and
+  the mobile screens, which are WorkSuite Mobile's.
+- **How it was checked:** GitHub Actions was not starting jobs for the repository when this merged (#275), so CI did
+  not run. It was verified locally on the merged head instead: typecheck, lint, the module-version check, all 5,312
+  unit tests and the production build.
 
 ## 0.2.190 — 2026-10-06
 
