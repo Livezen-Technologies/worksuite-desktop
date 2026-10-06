@@ -152,6 +152,16 @@ export interface ServiceRecord {
   formula: string | null;
   technique: string | null;
   timing: string | null;
+  /** What went on the client, as the stylist wrote it; null while nobody has, and the recipe stands (REC-01). */
+  products?: UsedProduct[] | null;
+}
+
+/** A product a service used: so much of it, in its unit. */
+export interface UsedProduct {
+  product_id: number;
+  name: string;
+  unit: string | null;
+  quantity: number;
 }
 
 /** The last formula a client had for a service, offered when it is done again (REC-05). */
@@ -159,6 +169,7 @@ export interface LastFormula {
   formula: string | null;
   technique: string | null;
   timing: string | null;
+  products?: UsedProduct[] | null;
   at: string | null;
 }
 
@@ -170,7 +181,8 @@ export interface VisitDetail {
   missing_patch: string[];
   ack_statement: string;
   preferences?: Record<string, string>;
-  records?: Array<{ appointment_id: number; record: ServiceRecord | null; last: LastFormula | null }>;
+  /** Each service's record, its last one, and what its recipe plans to use. */
+  records?: Array<{ appointment_id: number; record: ServiceRecord | null; last: LastFormula | null; planned?: UsedProduct[] }>;
   advances?: Array<{ id: number; amount: number; method?: string; date?: string | null }> | null;
 }
 
@@ -292,6 +304,7 @@ export interface ClientRecord {
   formula: string | null;
   technique: string | null;
   timing: string | null;
+  products?: UsedProduct[] | null;
   date: string | null;
   by: string | null;
   media: RecordMedia[];
@@ -476,8 +489,17 @@ export const addAllergy = (clientId: number, input: { substance: string; reactio
 // ── service records and their photos (D17, REC-01…05) ───────────────────
 
 /** Keep what was done for one appointment. One record each: saving again changes it. */
-export const saveRecord = (appointmentId: number, input: { formula: string; technique: string; timing: string }, key: string) =>
-  write<{ record: ServiceRecord | null }>(`/appointments/${appointmentId}/record`, input, key);
+export interface RecordInput {
+  formula: string;
+  technique: string;
+  timing: string;
+  /** Sent once written: the whole list of what was used. Left out, the record keeps what it had. */
+  products?: Array<{ product_id: number; quantity: number }>;
+  /** The stylist says a product that names one of the client's allergies really was used. */
+  confirm_allergy?: boolean;
+}
+
+export const saveRecord = (appointmentId: number, input: RecordInput, key: string) => write<{ record: ServiceRecord | null }>(`/appointments/${appointmentId}/record`, input, key);
 
 /** A before or after photo for a saved record, checked by WorkSuite for what it really is. */
 export async function addPhoto(recordId: number, file: Blob, name: string, kind: 'before' | 'after' | 'other'): Promise<{ id: number; message: string | null }> {

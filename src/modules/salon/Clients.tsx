@@ -261,6 +261,7 @@ function ClientCardView({ id }: { id: number }) {
             {formula.provider ? ` · ${firstName(formula.provider)}` : ''}
           </span>
           <div className="mt-0.5 font-mono text-[13px]">{formula.formula}</div>
+          {formula.products?.length ? <div className="mt-0.5 text-[13px] text-ink-2">{formula.products.map((p) => `${p.name} ${p.quantity}${p.unit ? ` ${p.unit}` : ''}`).join(' · ')}</div> : null}
         </div>
       ) : null}
 

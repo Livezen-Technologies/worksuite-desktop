@@ -4,15 +4,20 @@ import { Icon } from '../../components/Icon';
 import { Avatar, Spinner, Switch, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { CameraCapture } from '../chat/attach';
-import { addPhoto, answered, attemptKey, fetchClient, fetchVisit, K, mediaUrl, publishPhoto, saveRecord, type RecordMedia, type VisitItem } from './api';
+import { addPhoto, answered, attemptKey, fetchClient, fetchVisit, K, mediaUrl, publishPhoto, refusal, saveRecord, type LastFormula, type RecordMedia, type ServiceRecord as SavedRecord, type UsedProduct, type VisitItem } from './api';
 import { AllergyLine } from './Clients';
-import { Choice, Failed, Label, Note, Page, Panel, Tag, TouchButton, useDesk, type TagTone } from './parts';
+import { fetchRetail, MK } from './money';
+import { Choice, DeskDialog, Failed, Label, Note, Page, Panel, Tag, TouchButton, useDesk, type TagTone } from './parts';
 
 /**
  * The service record at the desk (D17, REC-01…05): what was used and how —
- * the formula, the technique, the timings — and photos before and after, so
- * the next visit can repeat it. "Same as last time" fills in the client's
- * last record for the same service.
+ * the formula, the products and how much of each, the technique, the
+ * timings — and photos before and after, so the next visit can repeat it.
+ * "Same as last time" fills in the client's last record for the same service.
+ *
+ * The products start from the service's recipe; once the stylist writes them
+ * they are what checkout takes from the desk's stock (CHK-11). A product that
+ * names one of the client's allergies is kept only when they say it was used.
  *
  * Kept by WorkSuite against the appointment, one record each; saving again
  * changes it. Photos are files in WorkSuite Files, checked by what they are,
@@ -102,6 +107,7 @@ function RecordFor({ initial }: { initial: number }) {
             appointmentId={item.appointment_id}
             record={entry?.record ?? null}
             last={entry?.last ?? null}
+            planned={entry?.planned ?? []}
             onSaved={() => {
               void qc.invalidateQueries({ queryKey: K.visit(visitId) });
               void qc.invalidateQueries({ queryKey: K.client(visit.client.id) });
@@ -123,27 +129,48 @@ function RecordFor({ initial }: { initial: number }) {
   );
 }
 
-function RecordForm({ appointmentId, record, last, onSaved }: { appointmentId: number; record: { formula: string | null; technique: string | null; timing: string | null } | null; last: { formula: string | null; technique: string | null; timing: string | null; at: string | null } | null; onSaved: () => void }) {
+export function RecordForm({ appointmentId, record, last, planned, onSaved }: { appointmentId: number; record: SavedRecord | null; last: LastFormula | null; planned: UsedProduct[]; onSaved: () => void }) {
   const desk = useDesk();
   const [formula, setFormula] = useState(record?.formula ?? '');
   const [technique, setTechnique] = useState(record?.technique ?? '');
   const [timing, setTiming] = useState(record?.timing ?? '');
+  /* Written: what the record keeps. Not yet: the recipe, shown to start from, and not sent. */
+  const [products, setProducts] = useState<UsedProduct[]>(record?.products ?? planned);
+  const [written, setWritten] = useState(record?.products != null);
+  const [allergic, setAllergic] = useState<Array<{ product: string; allergy: string }> | null>(null);
   const [busy, setBusy] = useState(false);
   const [key, setKey] = useState(attemptKey);
-  const empty = formula.trim() === '' && technique.trim() === '' && timing.trim() === '';
+  const empty = formula.trim() === '' && technique.trim() === '' && timing.trim() === '' && !written;
   const may = desk.may('salon.visit.service');
   const box = 'w-full rounded-[14px] border-2 border-line bg-surface px-4 py-3 text-[15px] leading-relaxed text-ink outline-none focus:border-primary';
+  const change = (next: UsedProduct[]) => {
+    setProducts(next);
+    setWritten(true);
+  };
 
-  async function save() {
+  async function save(confirmAllergy = false) {
     setBusy(true);
     try {
-      const r = await saveRecord(appointmentId, { formula: formula.trim(), technique: technique.trim(), timing: timing.trim() }, key);
+      const r = await saveRecord(
+        appointmentId,
+        {
+          formula: formula.trim(),
+          technique: technique.trim(),
+          timing: timing.trim(),
+          ...(written ? { products: products.filter((p) => p.quantity > 0).map((p) => ({ product_id: p.product_id, quantity: p.quantity })) } : {}),
+          ...(confirmAllergy ? { confirm_allergy: true } : {}),
+        },
+        key,
+      );
       toast('success', r.message || 'Record saved.');
       setKey(attemptKey());
+      setAllergic(null);
       onSaved();
     } catch (e) {
       if (answered(e)) setKey(attemptKey());
-      toast('error', e instanceof Error ? e.message : 'The record was not saved.');
+      const d = refusal<{ code?: string; matches?: Array<{ product: string; allergy: string }> }>(e);
+      if (d.code === 'allergy_product' && d.matches?.length) setAllergic(d.matches);
+      else toast('error', e instanceof Error ? e.message : 'The record was not saved.');
     } finally {
       setBusy(false);
     }
@@ -153,6 +180,7 @@ function RecordForm({ appointmentId, record, last, onSaved }: { appointmentId: n
     <>
       <Label className="mt-1">Formula</Label>
       <textarea aria-label="Formula" rows={4} maxLength={4000} value={formula} placeholder="6.1 + 7.3 (3:1), 20 vol 1:1.5" onChange={(e) => setFormula(e.target.value)} className={box} />
+      <Products products={products} written={written} hasRecipe={planned.length > 0} disabled={!may} onChange={change} />
       <Label>Technique</Label>
       <textarea aria-label="Technique" rows={2} maxLength={4000} value={technique} placeholder="Roots only, 2 cm regrowth. Rinsed cool." onChange={(e) => setTechnique(e.target.value)} className={box} />
       <label className="flex items-center gap-3">
@@ -170,6 +198,7 @@ function RecordForm({ appointmentId, record, last, onSaved }: { appointmentId: n
             setFormula(last.formula ?? '');
             setTechnique(last.technique ?? '');
             setTiming(last.timing ?? '');
+            if (last.products?.length) change(last.products);
           }}
         >
           Same as last time
@@ -178,7 +207,133 @@ function RecordForm({ appointmentId, record, last, onSaved }: { appointmentId: n
           Save to Client 360
         </TouchButton>
       </div>
+      {allergic ? (
+        <DeskDialog
+          tone="danger"
+          icon="warning"
+          title="On the client’s allergy list"
+          sub="Keep it on the record only if it really was used."
+          labelledBy="salon-record-allergy"
+          width={560}
+          onClose={() => setAllergic(null)}
+          footer={
+            <>
+              <TouchButton onClick={() => setAllergic(null)}>Go back</TouchButton>
+              <TouchButton variant="danger" loading={busy} onClick={() => void save(true)}>
+                It was used — save
+              </TouchButton>
+            </>
+          }
+        >
+          <ul className="flex flex-col gap-1.5 text-[15px] text-ink">
+            {allergic.map((m) => (
+              <li key={m.product}>
+                <b>{m.product}</b> names <b>{m.allergy}</b>.
+              </li>
+            ))}
+          </ul>
+        </DeskDialog>
+      ) : null}
     </>
+  );
+}
+
+/** What went on the client, and how much: from the recipe until the stylist writes it (REC-01, CHK-11). */
+function Products({ products, written, hasRecipe, disabled, onChange }: { products: UsedProduct[]; written: boolean; hasRecipe: boolean; disabled: boolean; onChange: (p: UsedProduct[]) => void }) {
+  const [adding, setAdding] = useState(false);
+  const set = (id: number, quantity: number) => onChange(products.map((p) => (p.product_id === id ? { ...p, quantity } : p)));
+
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex items-baseline justify-between gap-2">
+        <Label>Products used</Label>
+        {!written && hasRecipe ? <span className="text-[12.5px] text-ink-3">From the recipe — change it to what was really used</span> : null}
+        {written ? <span className="text-[12.5px] text-ink-3">Taken from the desk’s stock at checkout</span> : null}
+      </div>
+      {products.length === 0 ? <div className="rounded-[12px] border border-dashed border-line px-3.5 py-3 text-[13.5px] text-ink-3">No products. Add what went on the client.</div> : null}
+      {products.length > 0 ? (
+        <ul className="overflow-hidden rounded-[12px] border border-line">
+          {products.map((p) => (
+            <li key={p.product_id} className="flex items-center gap-3 border-t border-line px-3.5 py-2 first:border-t-0">
+              <span className={cx('min-w-0 flex-1 truncate text-[15px] font-semibold', p.quantity > 0 ? 'text-ink' : 'text-ink-3 line-through')}>{p.name}</span>
+              <input
+                aria-label={`How much ${p.name}`}
+                type="number"
+                inputMode="decimal"
+                min={0}
+                step="any"
+                disabled={disabled}
+                value={Number.isFinite(p.quantity) ? p.quantity : 0}
+                onChange={(e) => set(p.product_id, Math.max(0, Number(e.target.value) || 0))}
+                className="h-11 w-[96px] rounded-[10px] border border-line bg-surface px-2.5 text-right text-[15px] text-ink tabular-nums outline-none focus:border-primary"
+              />
+              <span className="w-8 shrink-0 text-[13px] text-ink-2">{p.unit ?? ''}</span>
+              <button type="button" aria-label={`Remove ${p.name}`} disabled={disabled} onClick={() => onChange(products.filter((x) => x.product_id !== p.product_id))} className="grid h-10 w-10 place-items-center rounded-[10px] text-ink-3 hover:bg-subtle hover:text-danger disabled:opacity-40">
+                <Icon name="x" size={18} />
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+      {adding ? (
+        <ProductSearch
+          taken={products.map((p) => p.product_id)}
+          onPick={(p) => {
+            onChange([...products, p]);
+            setAdding(false);
+          }}
+          onClose={() => setAdding(false)}
+        />
+      ) : (
+        <div>
+          <TouchButton variant="quiet" icon="plus" disabled={disabled} className="min-h-10 px-3 text-[14px]" onClick={() => setAdding(true)}>
+            Add a product
+          </TouchButton>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** The desk's stock, searched by name or code, with what it has (D14's catalogue). */
+function ProductSearch({ taken, onPick, onClose }: { taken: number[]; onPick: (p: UsedProduct) => void; onClose: () => void }) {
+  const desk = useDesk();
+  const [q, setQ] = useState('');
+  const term = q.trim();
+  const found = useQuery({ queryKey: MK.retail(desk.desk.id, term), queryFn: ({ signal }) => fetchRetail(desk.desk.id, term, signal), enabled: term.length >= 2 });
+  const items = (found.data?.items ?? []).filter((i) => !taken.includes(i.id)).slice(0, 6);
+
+  return (
+    <div className="rounded-[12px] border border-line bg-surface p-2">
+      <div className="flex items-center gap-2 px-1.5">
+        <Icon name="search" size={18} className="text-ink-3" />
+        <input autoFocus aria-label="Find a product" value={q} placeholder="Developer, toner, bond builder…" onChange={(e) => setQ(e.target.value)} onKeyDown={(e) => e.key === 'Escape' && onClose()} className="bare-focus h-10 min-w-0 flex-1 bg-transparent text-[15px] text-ink outline-none placeholder:text-ink-3" />
+        <button type="button" aria-label="Close" onClick={onClose} className="grid h-9 w-9 place-items-center rounded-[8px] text-ink-3 hover:bg-subtle">
+          <Icon name="x" size={16} />
+        </button>
+      </div>
+      {term.length >= 2 ? (
+        found.isLoading ? (
+          <div className="px-2 py-2 text-[13px] text-ink-3">Looking…</div>
+        ) : items.length === 0 ? (
+          <div className="px-2 py-2 text-[13px] text-ink-3">Nothing in the desk’s stock is called that.</div>
+        ) : (
+          <ul className="mt-1">
+            {items.map((i) => (
+              <li key={i.id}>
+                <button type="button" onClick={() => onPick({ product_id: i.id, name: i.name, unit: i.unit ?? null, quantity: 1 })} className="flex w-full items-center gap-2 rounded-[8px] px-2 py-2 text-left hover:bg-subtle">
+                  <span className="min-w-0 flex-1 truncate text-[14.5px] font-semibold text-ink">{i.name}</span>
+                  {i.code ? <span className="text-[12px] text-ink-3">{i.code}</span> : null}
+                  <Tag tone={i.badge === 'out' ? 'danger' : i.badge === 'low' ? 'warning' : i.badge === 'in' ? 'success' : 'muted'}>
+                    {i.badge === 'untracked' ? 'Not tracked' : i.stock === null ? i.badge : `${i.stock} in stock`}
+                  </Tag>
+                </button>
+              </li>
+            ))}
+          </ul>
+        )
+      ) : null}
+    </div>
   );
 }
 

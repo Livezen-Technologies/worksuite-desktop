@@ -166,6 +166,7 @@ export interface RetailItem {
   id: number;
   code: string | null;
   name: string;
+  unit?: string | null;
   price: number;
   currency: string;
   category: string | null;
