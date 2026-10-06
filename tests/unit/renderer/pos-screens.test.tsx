@@ -3,10 +3,11 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PosSale, PosTillStatus } from '@shared/pos';
+import type { PosGiveBack, PosSale, PosTillStatus } from '@shared/pos';
 import type { PosRegister, PosSession } from '../../../src/modules/pos/api';
 import { cartActions } from '../../../src/modules/pos/cart';
 import CashMove from '../../../src/modules/pos/CashMove';
+import ReturnDialog from '../../../src/modules/pos/ReturnDialog';
 import { TillContext, type Till } from '../../../src/modules/pos/parts';
 import Shift from '../../../src/modules/pos/ShiftScreen';
 import SyncDrawer from '../../../src/modules/pos/SyncDrawer';
@@ -174,5 +175,68 @@ describe('the sync drawer', () => {
     expect(refs).toEqual(['T1-AAAAAA-000051', 'T1-AAAAAA-000052']);
     fireEvent.click(screen.getByRole('button', { name: 'Try now' }));
     await waitFor(() => expect(syncNow).toHaveBeenCalled());
+  });
+});
+
+describe('a return at the counter', () => {
+  const sold: PosSale = {
+    ref: 'T1-AAAAAA-000118',
+    created_at: '2026-10-06T08:38:00Z',
+    terminal_id: 7,
+    cashier_id: 5,
+    cashier_name: 'Kasun',
+    state: 'sent',
+    number: 'SO-1',
+    message: null,
+    attempts: 1,
+    sent_at: null,
+    session_id: 41,
+    register_id: 3,
+    currency: 'LKR',
+    customer: { name: 'Ruwan' },
+    lines: [
+      { product_id: 9, code: null, name: 'Wireless mouse', quantity: 1, unit_price: 3450, discount_pct: 0, tax_rate: 0, net: 3450, tax: 0, total: 3450 },
+      { product_id: 3, code: null, name: 'Notebook', quantity: 3, unit_price: 450, discount_pct: 0, tax_rate: 0, net: 1350, tax: 0, total: 1350 },
+    ],
+    discount_pct: 0,
+    totals: { subtotal: 4800, discount: 0, tax: 0, total: 4800 },
+    tenders: [{ method: 'cash', amount: 4800 }],
+    change_given: 0,
+    priced_by: 'server',
+    catalogue_version: 'v1',
+  };
+
+  it('finds the sale by its receipt number and refunds what comes back, damaged goods kept out of stock', async () => {
+    const giveBack = vi.fn(async (input: PosGiveBack) => ({
+      sale: sold,
+      refund: { ref: `${sold.ref}-R${giveBack.mock.calls.length}`, kind: 'refund', status: 'done', amount: 100, cash_out: 100, tenders: [{ method: 'cash', amount: 100 }], lines: input.lines ?? [], reason: input.reason, credit_note: null, at: null },
+      message: 'Refunded.',
+    }));
+    const openDrawer = vi.fn(async () => ({ ok: true, printer: 'Thermal', message: 'Drawer opened.' }));
+    mount(<ReturnDialog onClose={() => undefined} />, till({ session, caps: { refund: true }, company: { ...till().company!, can: { ...till().company!.can, refund: true } } }), {
+      sale: async ({ ref }: { ref: string }) => (ref === sold.ref ? sold : null),
+      giveBack,
+      openDrawer,
+    });
+    fireEvent.change(screen.getByLabelText('Receipt number'), { target: { value: 'T1-NOPE' } });
+    fireEvent.submit(screen.getByLabelText('Receipt number').closest('form')!);
+    expect(await screen.findByText(/No sale T1-NOPE on this till/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Receipt number'), { target: { value: sold.ref } });
+    fireEvent.submit(screen.getByLabelText('Receipt number').closest('form')!);
+    expect(await screen.findByRole('heading', { name: `Return against ${sold.ref}` })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: 'One more Wireless mouse' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Damaged' }));
+    fireEvent.click(screen.getByRole('button', { name: 'One more Notebook' }));
+    fireEvent.click(screen.getByRole('button', { name: 'One more Notebook' }));
+    const go = screen.getByRole('button', { name: 'Refund about 4,350.00' }) as HTMLButtonElement;
+    expect(go.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: 'Faulty' }));
+    fireEvent.click(go);
+    await waitFor(() => expect(giveBack).toHaveBeenCalledTimes(2));
+    expect(giveBack.mock.calls[0]![0]).toEqual({ ref: sold.ref, kind: 'refund', reason: 'Faulty', lines: [{ product_id: 3, quantity: 2 }] });
+    expect(giveBack.mock.calls[1]![0]).toEqual({ ref: sold.ref, kind: 'refund', reason: 'Faulty', lines: [{ product_id: 9, quantity: 1 }], restock: false });
+    expect(await screen.findByText('LKR 200.00 given back.')).toBeTruthy();
+    expect(openDrawer).toHaveBeenCalled();
   });
 });

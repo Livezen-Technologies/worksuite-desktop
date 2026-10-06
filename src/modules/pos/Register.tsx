@@ -19,6 +19,7 @@ import { clampPage, GRID_PAGE, LIST_PAGE, pushRecent } from './paging';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';
 import { estimateCart } from './pricing';
 import ProductGrid, { type GridView, type QuickAction } from './ProductGrid';
+import ReturnDialog from './ReturnDialog';
 import Tender from './TenderPanel';
 
 /**
@@ -52,7 +53,7 @@ function keep(key: string, v: unknown): void {
   }
 }
 
-type Dialog = 'customer' | 'discount' | 'category' | 'open' | 'held' | 'hold' | 'cash' | null;
+type Dialog = 'customer' | 'discount' | 'category' | 'open' | 'held' | 'hold' | 'cash' | 'return' | null;
 
 export default function Register({ active }: { active: boolean }) {
   const t = useT();
@@ -238,7 +239,7 @@ export default function Register({ active }: { active: boolean }) {
   const actions: QuickAction[] = [
     { id: 'hold', label: t('pos.hold'), icon: 'pause', disabled: !cart.lines.length, onClick: () => setDialog('hold') },
     { id: 'recall', label: all.held.length ? t('pos.recallN', { n: all.held.length }) : t('pos.recall'), icon: 'history', onClick: () => setDialog('held') },
-    { id: 'return', label: t('pos.return'), icon: 'undo', onClick: () => till.go('sales') },
+    { id: 'return', label: t('pos.return'), icon: 'undo', onClick: () => setDialog('return') },
     { id: 'discount', label: t('pos.discountShort'), icon: 'tag', disabled: !till.discount.allowed || !cart.lines.length, title: till.discount.allowed ? undefined : t('pos.noDiscountRight'), onClick: () => setDialog('discount') },
     { id: 'customer', label: t('pos.customer'), icon: 'user', onClick: () => setDialog('customer') },
     { id: 'cash', label: t('pos.cashInOut'), icon: 'banknote', title: session ? undefined : t('pos.noDrawerShort'), onClick: () => (session ? setDialog('cash') : till.go('shift')) },
@@ -354,6 +355,7 @@ export default function Register({ active }: { active: boolean }) {
           }}
         />
       ) : null}
+      {dialog === 'return' ? <ReturnDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'cash' && session ? <CashMove session={session} onClose={() => setDialog(null)} /> : null}
       {dialog === 'customer' ? <CustomerForm onClose={() => setDialog(null)} /> : null}
       {dialog === 'discount' ? <DiscountDialog onClose={() => setDialog(null)} /> : null}
