@@ -359,6 +359,49 @@ html[data-contrast='more'] :focus-visible {
   animation: ws-scrim-out 120ms ease-in both;
 }
 
+/* The chat drawer coming and going (worksuite-desktop#264), in 200ms. Docked, it grows from the window's edge and the
+   page beside it eases to its new width as it does; floating, it slides in over the page above a light dim. Coming in
+   ends on the drawer's own width (no fill), so a drag afterwards is not held; going out holds at nothing until it is
+   gone. Reduced motion ends them at once (above). */
+@keyframes ws-dock-in {
+  from {
+    width: 0;
+  }
+}
+@keyframes ws-dock-out {
+  to {
+    width: 0;
+  }
+}
+@keyframes ws-slide-in {
+  from {
+    transform: translateX(100%);
+  }
+}
+@keyframes ws-slide-out {
+  to {
+    transform: translateX(100%);
+  }
+}
+.chat-dock-in {
+  animation: ws-dock-in 200ms ease-out;
+}
+.chat-dock-out {
+  animation: ws-dock-out 200ms ease-in forwards;
+}
+.chat-float-in {
+  animation: ws-slide-in 200ms ease-out;
+}
+.chat-float-out {
+  animation: ws-slide-out 200ms ease-in forwards;
+}
+.chat-scrim-in {
+  animation: ws-scrim-in 200ms ease-out;
+}
+.chat-scrim-out {
+  animation: ws-scrim-out 200ms ease-in forwards;
+}
+
 @keyframes ws-spin {
   to {
     transform: rotate(360deg);

@@ -7,6 +7,7 @@ import { Icon } from '../../../components/Icon';
 import { write, writerProblem, useWriter } from '../../ai/writer';
 import { useCanned } from './api';
 import { text } from '../../../core/i18n';
+import { markdownText } from '../../../core/markdown';
 import { clock, firstName, handoverIn, ringsFor, silencedFor, stageLabel, stepLabel, visitLabel, waited, youJoinedLine } from './Ringing';
 
 /**
@@ -215,7 +216,8 @@ export function ReplyBox({ id, label, placeholder, sendLabel, sendAria, draft, s
     if (!visitorSaid || thinking) return;
     setThinking(true);
     try {
-      setDraft(await write('reply', `Visitor: ${visitorSaid}`));
+      // To the visitor without Markdown's marks: their widget shows a reply as it is written (#261).
+      setDraft(markdownText(await write('reply', `Visitor: ${visitorSaid}`)));
     } catch (e) {
       toast('error', writerProblem(e));
     } finally {
@@ -369,7 +371,8 @@ export function RingCard({ s, c, now, after }: { s: WebchatRingState; c: Webchat
     setSavedOpen(v.startsWith('/'));
   };
   const pick = (t: string, id?: number) => {
-    setDraft(t);
+    // A saved reply goes to the visitor without Markdown's marks (#261).
+    setDraft(markdownText(t));
     setCanned(id ?? null);
     setSavedOpen(false);
   };

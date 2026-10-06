@@ -85,7 +85,7 @@ import { attachmentStorePathOf } from '@shared/mail-media';
 import { mimeFor } from '@shared/mime';
 import { OfflineQueue } from '../services/offline-queue';
 import { RealtimeService } from '../services/realtime';
-import { ConnectionMonitor, timeFetch } from '../services/connection-quality';
+import { ConnectionMonitor, tcpHandshake, timeFetch } from '../services/connection-quality';
 import { ApiTimings } from '@shared/connection';
 import { SecureStore } from '../services/secure-store';
 import { SettingsService } from '../services/settings';
@@ -335,7 +335,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const device: DeviceService = new DeviceService(db, secrets, http);
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
-  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null });
+  const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null, desk: () => salonDesk.pairing()?.desk_id ?? null });
   const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
   const cache = new OfflineCache(db, getVault);
   const mailLimits = () => {
@@ -421,10 +421,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const realtime = new RealtimeService(http, () => auth.getServer()?.origin ?? null, allowInsecure);
   let realtimeDownSince: number | null = null;
-  // Connection strength (worksuite-desktop#254): pings over the realtime socket, or /api/health without one.
+  // Connection strength (worksuite-desktop#254, #265): the network delay by the realtime socket's echo, else the time to
+  // open a TCP connection to the server (not through a proxy), else /api/health as an upper bound. The speed test runs
+  // on the bulk pool, so it never holds up chats (#252).
   const connection = new ConnectionMonitor({
     realtime,
     http,
+    bulk: bulkHttp,
+    tcpPing: tcpHandshake({ resolveProxy: (url) => net.resolveProxy(url) }),
     origin: () => auth.getServer()?.origin ?? null,
     active: () => !!sessionCtl?.isReady() && !!auth.getServer(),
     onChange: () => emitStatus(),
@@ -2143,6 +2147,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     requireUpdate: (v) => updater.requireUpdate(v),
     toast: (kind, text) => broadcast('toast', { kind, text }),
     audit: (uid, action, details) => audit.record(uid, action, details),
+    // The session expired: nothing signed in is left behind the lock, and signing in again must not be refused (LOGIN-001).
+    unlock: () => lock.reset(),
   });
 
   auth.onDeviceRevoked = (message) => void sessionCtl.wipe(message);

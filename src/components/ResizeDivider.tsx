@@ -6,7 +6,8 @@ import { cx } from './ui';
  * maximum, remembered on this computer (a view preference, not data), back to its default on a double-click.
  *
  * `max` may be a function, read when the window changes size, so a panel never leaves its neighbour less room than
- * that neighbour needs.
+ * that neighbour needs; a new function (the limit depends on something else that changed) is read at once. `key` is
+ * where the width is kept when it is not `ws.width.<id>` (a panel that remembered its width before this hook).
  */
 export interface ResizableWidth {
   width: number;
@@ -21,55 +22,58 @@ export interface ResizableWidth {
 
 const KEY = 'ws.width.';
 
-function read(id: string): number | null {
+function read(key: string): number | null {
   try {
-    const v = Number(localStorage.getItem(KEY + id));
+    const v = Number(localStorage.getItem(key));
     return Number.isFinite(v) && v > 0 ? v : null;
   } catch {
     return null;
   }
 }
 
-function store(id: string, w: number | null): void {
+function store(key: string, w: number | null): void {
   try {
-    if (w === null) localStorage.removeItem(KEY + id);
-    else localStorage.setItem(KEY + id, String(Math.round(w)));
+    if (w === null) localStorage.removeItem(key);
+    else localStorage.setItem(key, String(Math.round(w)));
   } catch {
     // Only a convenience: the panel opens at its default next time.
   }
 }
 
-export function useResizableWidth(id: string, opts: { defaultWidth: number; min: number; max: number | (() => number) }): ResizableWidth {
+export function useResizableWidth(id: string, opts: { defaultWidth: number; min: number; max: number | (() => number); key?: string }): ResizableWidth {
   const { defaultWidth, min } = opts;
+  const key = opts.key ?? KEY + id;
   const maxOf = opts.max;
   const limit = useCallback(() => Math.max(min, typeof maxOf === 'function' ? maxOf() : maxOf), [maxOf, min]);
   const [max, setMax] = useState(limit);
   const clamp = useCallback((w: number) => Math.round(Math.min(limit(), Math.max(min, w))), [limit, min]);
-  const [width, setWidth] = useState(() => clamp(read(id) ?? defaultWidth));
+  const [width, setWidth] = useState(() => clamp(read(key) ?? defaultWidth));
 
-  // A smaller window lowers the most the panel may take; it gives the room back when the window grows again.
+  // A smaller window lowers the most the panel may take; it gives the room back when the window grows again. A new
+  // limit is taken at once (the effect runs again with it); the first run finds what the first render already has.
   useEffect(() => {
     const onResize = () => {
       setMax(limit());
-      setWidth((w) => clamp(read(id) ?? w));
+      setWidth((w) => clamp(read(key) ?? w));
     };
+    onResize();
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
-  }, [clamp, id, limit]);
+  }, [clamp, key, limit]);
 
   const set = useCallback((w: number) => setWidth(clamp(w)), [clamp]);
   const commit = useCallback(
     (w: number) => {
       const c = clamp(w);
       setWidth(c);
-      store(id, c === defaultWidth ? null : c);
+      store(key, c === defaultWidth ? null : c);
     },
-    [clamp, defaultWidth, id],
+    [clamp, defaultWidth, key],
   );
   const reset = useCallback(() => {
     setWidth(clamp(defaultWidth));
-    store(id, null);
-  }, [clamp, defaultWidth, id]);
+    store(key, null);
+  }, [clamp, defaultWidth, key]);
 
   return { width, min, max, set, commit, reset, defaultWidth };
 }

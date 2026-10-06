@@ -8,7 +8,7 @@ import type * as CoreApi from '../../../src/core/api';
 /**
  * Website chats › Widgets & embed (S-01; WS-WCHAT X-UI-14, UX-SET-01, WGT-01, WGT-02) and a widget's editor with
  * Appearance and its live preview (S-02; X-UI-15, UX-SET-02, UX-SET-03, WGT-03, WGT-05): the cards with their open
- * state, counts and chips, Customise and Embed code, this week's figures from Insights, New widget; and the seven tabs,
+ * state, counts and chips, Customise and Embed code, this week's figures from Insights, New widget; and the tabs,
  * the design's fields, the preview following them, and a save that sends them.
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPut: vi.fn(), apiPost: vi.fn() }));
@@ -167,13 +167,13 @@ describe('S-02 · a widget\'s editor and Appearance with live preview', () => {
     expect([tabOf(null), tabOf('design'), tabOf('calls'), tabOf('embed'), tabOf('nonsense')]).toEqual(['appearance', 'appearance', 'calls', 'embed', 'appearance']);
   });
 
-  it('has the breadcrumb, the widget\'s name, Cancel and Save, and the seven tabs in the design\'s order', async () => {
+  it('has the breadcrumb, the widget\'s name, Cancel and Save, and the tabs in the design\'s order, Contact options (#260) after Live status & calls', async () => {
     const onList = vi.fn();
     wrap(<WidgetSettings onList={onList} />);
     await screen.findByTestId('widget-preview');
     expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).textContent).toBe('Widgets & embed › techubiz.com');
     expect(screen.getByRole('heading', { name: 'Techubiz support' })).toBeTruthy();
-    expect(screen.getAllByRole('tab').slice(0, 7).map((t) => t.textContent)).toEqual(['Appearance', 'Behaviour', 'Live status & calls', 'Staff', 'Hours', 'Chatbot', 'Embed code']);
+    expect(screen.getAllByRole('tab').slice(0, 8).map((t) => t.textContent)).toEqual(['Appearance', 'Behaviour', 'Live status & calls', 'Contact options', 'Staff', 'Hours', 'Chatbot', 'Embed code']);
     expect(screen.getByRole('tab', { name: 'Appearance' }).getAttribute('aria-selected')).toBe('true');
     expect(screen.getByRole('button', { name: 'Cancel' })).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Save' })).toBeTruthy();

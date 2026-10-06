@@ -220,3 +220,61 @@ function blockPlain(b: MdBlock): string[] {
 export function markdownPlain(src: string): string {
   return parseMarkdown(src).flatMap(blockPlain).join('\n');
 }
+
+/** What Markdown starts with: words without any of these are plain as they stand, and are not parsed at all. */
+const MARKISH = /[*_~`[#>]|^\s*(?:[-+•]|\d{1,9}[.)])\s/m;
+
+const marked = (b: MdBlock): boolean => b.t !== 'p' || b.lines.some((l) => l.some((x) => x.t !== 'text'));
+
+/** Whether the words carry Markdown that draws as more than plain text: bold, a list, a link, code, a heading, a quote. */
+export function hasMarkdown(src: string): boolean {
+  return MARKISH.test(src) && parseMarkdown(src).some(marked);
+}
+
+/**
+ * The words on one line, for a list's preview (worksuite-desktop#261): no marks (**bold** is bold, a link its words),
+ * list items and lines run together, spaces collapsed.
+ */
+export function markdownLine(src: string): string {
+  return (MARKISH.test(src) ? markdownPlain(src) : src).replace(/\s+/g, ' ').trim();
+}
+
+/** The words of a run, a link's with its address after them — unless the words are the address. */
+function inlineText(c: MdInline[]): string {
+  return c
+    .map((x) => {
+      if (x.t === 'text' || x.t === 'code') return x.v;
+      if (x.t !== 'link') return inlineText(x.c);
+      const words = inlineText(x.c).trim();
+      return !words || safeHref(words) === x.href || safeHref(`https://${words}`) === x.href ? x.href : `${words} (${x.href})`;
+    })
+    .join('');
+}
+
+/**
+ * The words as somebody who cannot see Markdown should get them (worksuite-desktop#261): a website visitor's widget
+ * shows a reply as it is written, so a saved reply or an assistant's draft goes to them without its marks. Line by
+ * line, so its lines and blank lines stay where they were: a heading's or a quote's sign goes, a bullet is "•" (a
+ * number stays), a code fence goes and its lines stay as written, a rule is a blank line, and a link is its words with
+ * its address after them. Words without Markdown come back exactly as they were.
+ */
+export function markdownText(src: string): string {
+  if (!hasMarkdown(src)) return src;
+  let fenced = false;
+  const out: string[] = [];
+  for (const line of src.replace(/\r\n?/g, '\n').split('\n')) {
+    if (FENCE.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced) out.push(line);
+    else if (RULE.test(line)) out.push('');
+    else {
+      const heading = HEADING.exec(line);
+      const rest = heading ? heading[2]! : (QUOTE.exec(line)?.[1] ?? line);
+      const item = ITEM.exec(rest);
+      out.push(item ? `${item[1]}${/\d/.test(item[2]!) ? item[2] : '•'} ${inlineText(parseInline(item[3]!))}` : inlineText(parseInline(rest)));
+    }
+  }
+  return out.join('\n');
+}

@@ -1,16 +1,24 @@
-import { Fragment, useMemo, type ReactNode } from 'react';
+import { createContext, Fragment, useContext, useMemo, type ReactNode } from 'react';
 import { parseMarkdown, type MdBlock, type MdInline, type MdList } from '../core/markdown';
 import { openAnyLink, splitLinks } from './LinkedText';
 import { cx } from './ui';
 
+/** The links' colour: indigo, unless what draws the words is indigo itself (a message bubble of our own, #261). */
+const LinkTone = createContext('text-primary');
+
 /**
  * An answer written in Markdown, drawn (worksuite-desktop#150): the tree core/markdown parses, made into React
  * elements — never HTML from the text, so nothing in it can become markup. Web addresses in the words are links too,
- * and every link opens the way the rest of WorkSuite's do (openAnyLink).
+ * and every link opens the way the rest of WorkSuite's do (openAnyLink). Headings take the colour of the words around
+ * them; `linkClassName` colours the links.
  */
-export function Markdown({ text, className }: { text: string; className?: string }) {
+export function Markdown({ text, className, linkClassName = 'text-primary' }: { text: string; className?: string; linkClassName?: string }) {
   const blocks = useMemo(() => parseMarkdown(text), [text]);
-  return <div className={cx('flex flex-col gap-2 break-words', className)}>{blocks.map((b, i) => <Block key={i} b={b} />)}</div>;
+  return (
+    <LinkTone.Provider value={linkClassName}>
+      <div className={cx('flex flex-col gap-2 break-words', className)}>{blocks.map((b, i) => <Block key={i} b={b} />)}</div>
+    </LinkTone.Provider>
+  );
 }
 
 const HEADING = ['text-[15px]', 'text-[14.5px]', 'text-[14px]'];
@@ -30,7 +38,7 @@ function Block({ b }: { b: MdBlock }): ReactNode {
       );
     case 'h':
       return (
-        <p role="heading" aria-level={Math.min(b.level + 2, 6)} className={cx('m-0 font-bold text-ink', HEADING[b.level - 1] ?? 'text-[13.5px]')}>
+        <p role="heading" aria-level={Math.min(b.level + 2, 6)} className={cx('m-0 font-bold', HEADING[b.level - 1] ?? 'text-[13.5px]')}>
           <Inline c={b.c} />
         </p>
       );
@@ -115,6 +123,7 @@ function Inline({ c }: { c: MdInline[] }) {
 }
 
 function Link({ href, children }: { href: string; children: ReactNode }) {
+  const tone = useContext(LinkTone);
   return (
     <a
       href={href}
@@ -123,7 +132,7 @@ function Link({ href, children }: { href: string; children: ReactNode }) {
         e.preventDefault();
         openAnyLink(href);
       }}
-      className="text-primary underline underline-offset-2 hover:no-underline"
+      className={cx(tone, 'underline underline-offset-2 hover:no-underline')}
     >
       {children}
     </a>

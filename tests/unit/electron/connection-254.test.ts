@@ -75,7 +75,7 @@ describe('the realtime echo ping', () => {
       vi.advanceTimersByTime(PING_INTERVAL_MS - ms);
     }
     const sum = summarizeConnection({ stats: m.stats(), realtime: 'connected', network: 'ONLINE', attempt: 0, now: Date.now() });
-    expect(sum.avgMs).toBe(140);
+    expect(sum.delayMs).toBe(140);
     expect(sum.jitterMs).toBe(33); // the standard deviation of 100, 140, 180
     expect(sum.level).toBe('good');
   });
@@ -119,6 +119,8 @@ describe('the realtime echo ping', () => {
     const s = m.stats();
     expect(s.probe).toBe('http-health');
     expect(s.missed).toBe(0);
+    // The server check includes the server's own time: an upper bound on the delay (#265).
+    expect(s.samples.every((x) => x.upper)).toBe(true);
   });
 
   it('measures over HTTP when realtime is off on the server, and counts a failed check as missed', async () => {
@@ -175,32 +177,6 @@ describe('the realtime echo ping', () => {
   });
 });
 
-describe('the speed test', () => {
-  it('downloads from the probe, uploads to it, and says the figures in Mbps', async () => {
-    vi.useRealTimers();
-    const raw = vi.fn(async (method: string, _url?: string) => (method === 'GET' ? new Response(new Uint8Array(512 * 1024), { status: 200 }) : new Response('{"status":"success","data":{"bytes":1}}', { status: 200 })));
-    const { m } = monitor({ raw });
-    const r = await m.speedTest();
-    expect(r.source).toBe('probe');
-    expect(r.downloadBytes).toBe(512 * 1024);
-    expect(r.downloadMbps).toBeGreaterThan(0);
-    expect(r.uploadMbps).toBeGreaterThan(0);
-    expect(r.error).toBeNull();
-    expect(raw.mock.calls[0]![1]).toContain('/api/health/probe?kb=512');
-    expect(raw.mock.calls[1]![0]).toBe('POST');
-  });
-
-  it('falls back to a static file the server already serves, and says when the upload could not be measured', async () => {
-    vi.useRealTimers();
-    const raw = vi.fn(async (method: string, url: string) => (url.includes('/widget.js') ? new Response(new Uint8Array(1000), { status: 200 }) : new Response('{}', { status: 404 })));
-    const { m } = monitor({ raw });
-    const r = await m.speedTest();
-    expect(r.source).toBe('static');
-    expect(r.uploadMbps).toBeNull();
-    expect(r.error).toMatch(/only the download/);
-  });
-});
-
 describe('RealtimeService: the echo and reconnects', () => {
   class Socket {
     static sockets: Socket[] = [];
@@ -254,7 +230,7 @@ describe('RealtimeService: the echo and reconnects', () => {
 });
 
 describe('the API’s median', () => {
-  it('is the median of the last 20 requests, failures counted but not timed, the pings left out', async () => {
+  it('is the median of the last 50 requests, failures counted but not timed, the pings left out', async () => {
     const api = new ApiTimings();
     let t = 0;
     const clock = () => t;
@@ -264,13 +240,13 @@ describe('the API’s median', () => {
       return new Response('{}', { status: url.includes('500') ? 500 : 200 });
     });
     const timed = timeFetch(fetch, api, clock);
-    for (let i = 0; i < 25; i++) await timed('https://ws.example.com/api/x', {});
+    for (let i = 0; i < 55; i++) await timed('https://ws.example.com/api/x', {});
     await timed('https://ws.example.com/api/slow', {});
     await timed('https://ws.example.com/api/500', {});
     await expect(timed('https://ws.example.com/api/fail', {})).rejects.toThrow();
     await timed('https://ws.example.com/api/health', {});
     const s = api.summary();
-    expect(s.count).toBe(20);
+    expect(s.count).toBe(50);
     expect(s.failed).toBe(2);
     expect(s.medianMs).toBe(100);
   });

@@ -13,7 +13,7 @@ const calls = vi.hoisted(() => ({ prefs: {} as Record<string, unknown> }));
 vi.mock('../../../src/core/bridge', () => ({
   call: vi.fn(async (channel: string, input?: Record<string, unknown>) => {
     if (channel === 'connection:details') return { host: 'ws.example.com', serverTime: '2026-10-05T14:02:11+05:30', realtimeHost: 'rt.example.com' };
-    if (channel === 'connection:speedTest') return { downloadMbps: 42.5, uploadMbps: 11.2, downloadBytes: 512 * 1024, uploadBytes: 192 * 1024, source: 'probe', error: null };
+    if (channel === 'connection:speedTest') return { downloadMbps: 92.4, uploadMbps: 31.2, downloadBytes: 25 * 1024 * 1024, uploadBytes: 10 * 1024 * 1024, streams: 4, source: 'probe', uploadSupported: true, delayMs: 140, jitterMs: 33, delayUpperBound: false, error: null };
     if (channel === 'connection:reconnect') return undefined;
     if (channel === 'settings:set') {
       calls.prefs = { ...calls.prefs, ...input };
@@ -74,22 +74,26 @@ afterEach(() => {
 
 describe('the level', () => {
   it('follows the thresholds: Excellent, Good, Fair, Poor', () => {
-    expect(level([40, 44, 42])).toMatchObject({ level: 'excellent', bars: 4, avgMs: 42 });
-    expect(level([140, 150, 130])).toMatchObject({ level: 'good', bars: 3, avgMs: 140 });
+    expect(level([40, 44, 42])).toMatchObject({ level: 'excellent', bars: 4, delayMs: 42 });
+    expect(level([140, 150, 130])).toMatchObject({ level: 'good', bars: 3, delayMs: 140 });
     expect(level([300, 320, 310])).toMatchObject({ level: 'fair', bars: 2 });
     expect(level([700, 650, 800])).toMatchObject({ level: 'poor', bars: 1 });
   });
 
-  it('is Fair with one reconnect in 5 min, one lost reply, or uneven replies — even when fast', () => {
-    expect(level([40, 44, 42], { reconnects: [NOW - 60_000] }).level).toBe('fair');
-    expect(level([40, null, 42]).level).toBe('fair');
-    expect(level([20, 200, 30]).level).toBe('fair'); // varies by far more than half the average
+  // #263, #265: the level is the delay's alone, so the word always matches the number; stability is said apart.
+  it('says a reconnect in 5 min, a lost reply or uneven replies as stability, without moving the level', () => {
+    expect(level([40, 44, 42], { reconnects: [NOW - 60_000] })).toMatchObject({ level: 'excellent', stable: false, reasons: ['1 reconnect in 5 min'] });
+    expect(level([40, null, 42])).toMatchObject({ level: 'excellent', stable: false, reasons: ['1 reply lost'] });
+    expect(level([20, 200, 30])).toMatchObject({ level: 'excellent', delayMs: 83, stable: false, reasons: ['Uneven replies'] }); // varies by far more than half the average
+    expect(level([40, 44, 42])).toMatchObject({ stable: true, reasons: [] });
   });
 
-  it('is Poor with frequent drops or lost replies', () => {
-    expect(level([40, 44, 42], { reconnects: [NOW - 60_000, NOW - 120_000, NOW - 200_000] }).level).toBe('poor');
-    expect(level([40, null, null]).level).toBe('poor');
-    expect(level([null]).level).toBe('poor');
+  it('is Poor when most replies are lost, said in words rather than a delay', () => {
+    expect(level([40, 44, 42], { reconnects: [NOW - 60_000, NOW - 120_000, NOW - 200_000] }).level).toBe('excellent');
+    const lost = level([40, null, null]);
+    expect(lost).toMatchObject({ level: 'poor', lossy: true });
+    expect(connectionLabel(lost, true)).toBe('Poor · 2 of 3 replies lost');
+    expect(connectionLabel(level([null]), true)).toBe('Poor · no replies');
   });
 
   it('says Offline and Reconnecting before anything measured, with the attempt', () => {
@@ -141,10 +145,13 @@ describe('the status bar', () => {
     render(<ConnectionStatus plain={{ text: 'Realtime connected', dot: 'bg-success' }} />);
     fireEvent.click(screen.getByTestId('connection-status'));
     const dialog = await screen.findByRole('dialog', { name: 'Connection details' });
-    expect(within(dialog).getByTestId('connection-line').textContent).toMatch(/^Good · 140 ms average · varies ±33 ms · last reconnect /);
-    await waitFor(() => expect(within(dialog).getByText(/ws\.example\.com · 14:02 \(UTC\+05:30\)/)).toBeTruthy());
+    expect(within(dialog).getByTestId('connection-line').textContent).toBe('Good · 140 ms average · varies ±33 ms');
+    expect(within(dialog).getByTestId('connection-stability').textContent).toMatch(/^Steady · last reconnect /);
+    await waitFor(() => expect(within(dialog).getByText('ws.example.com')).toBeTruthy());
+    expect(within(dialog).getByTestId('server-time').textContent).toBe(serverClock('2026-10-05T14:02:11+05:30'));
+    expect(within(dialog).getByTestId('server-line').textContent).toContain('Responding normally · 120 ms median');
     expect(within(dialog).getByTestId('service-realtime').textContent).toContain('Connected · rt.example.com');
-    expect(within(dialog).getByTestId('service-api').textContent).toContain('120 ms median of the last 20 requests');
+    expect(within(dialog).queryByTestId('service-api')).toBeNull();
     expect(within(dialog).getByTestId('service-mail')).toBeTruthy();
     expect(within(dialog).getByTestId('service-files')).toBeTruthy();
     // Meet only while a call is on.
@@ -153,7 +160,10 @@ describe('the status bar', () => {
     expect(within(dialog).getByTestId('service-meet').textContent).toContain('Good call quality');
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Run speed test' }));
-    await waitFor(() => expect(within(dialog).getByText(/Download 42\.5 Mbps \(512 KB\) · Upload 11\.2 Mbps \(192 KB\)/)).toBeTruthy());
+    await waitFor(() => expect(within(dialog).getByTestId('speed-result').textContent).toContain('Download 92.4 Mbps · 25.0 MB over 4 connections'));
+    expect(within(dialog).getByTestId('speed-result').textContent).toContain('Upload 31.2 Mbps · 10.0 MB over 4 connections');
+    expect(within(dialog).getByTestId('speed-result').textContent).toContain('Delay 140 ms · varies ±33 ms');
+    expect(within(dialog).getByTestId('connection-speed').textContent).toBe('Download 92.4 Mbps · 25.0 MB over 4 connections · Upload 31.2 Mbps · 10.0 MB over 4 connections');
     fireEvent.click(within(dialog).getByRole('button', { name: 'Reconnect now' }));
     expect(call).toHaveBeenCalledWith('connection:reconnect');
     const write = vi.fn(async () => undefined);
@@ -161,10 +171,12 @@ describe('the status bar', () => {
     fireEvent.click(within(dialog).getByRole('button', { name: 'Copy details' }));
     expect(write).toHaveBeenCalledTimes(1);
     const copied = (write.mock.calls[0] as unknown as [string])[0];
-    expect(copied).toContain('Connection: Good · 140 ms average');
-    expect(copied).toContain('Server: ws.example.com · server time 14:02 (UTC+05:30)');
+    expect(copied).toContain('Your connection: Good · 140 ms average');
+    expect(copied).toContain('Stability: Steady');
+    expect(copied).toContain('WorkSuite server: Responding normally · 120 ms median');
+    expect(copied).toContain(`Server: ws.example.com · server time ${serverClock('2026-10-05T14:02:11+05:30')} (2026-10-05T14:02:11+05:30)`);
     expect(copied).toContain('Realtime: OK · Connected · rt.example.com');
-    expect(copied).toContain('Speed test: Download 42.5 Mbps');
+    expect(copied).toContain('Speed test: Download 92.4 Mbps');
   });
 
   it('opens on hover too, and closes when the pointer leaves', async () => {
@@ -239,23 +251,26 @@ describe('warnings', () => {
 });
 
 describe('the popover’s parts', () => {
-  it('reads the server’s clock with its offset', () => {
-    expect(serverClock('2026-10-05T14:02:11+05:30')).toBe('14:02 (UTC+05:30)');
-    expect(serverClock('2026-10-05T08:32:11Z')).toBe('08:32 (UTC)');
+  it('says the server’s clock in this computer’s time and zone, by name (#265)', () => {
+    const lk = { timeZone: 'Asia/Colombo', locale: 'en-GB' };
+    expect(serverClock('2026-10-05T17:36:00Z', lk)).toBe('23:06 Sri Lanka Time');
+    expect(serverClock('2026-10-05T14:02:11+05:30', lk)).toBe('14:02 Sri Lanka Time');
+    expect(serverClock('2026-10-05T14:02:11+05:30', { timeZone: 'Europe/London', locale: 'en-GB' })).toBe('09:32 United Kingdom Time');
     expect(serverClock(null)).toBeNull();
+    expect(serverClock('not a time')).toBeNull();
   });
 
   it('marks each service in words as well as a sign', () => {
     const rows = serviceRows({ status: snapshot({ realtime: 'disabled', connection: stats([40], { api: { medianMs: 90, count: 7, failed: 1 } }) }), sync: null, mail: { failed: 1, syncing: 0, total: 3 }, meet: null });
+    // The API is the WorkSuite server's own section now (#265), not a service.
     expect(rows.map((r) => [r.id, r.mark])).toEqual([
       ['realtime', 'off'],
-      ['api', 'ok'],
       ['mail', 'bad'],
       ['files', 'ok'],
     ]);
-    expect(rows[1]!.detail).toBe('90 ms median of the last 7 requests · 1 failed');
-    const text = detailsText({ summary: level([40]), stats: stats([40]), details: null, net: null, services: rows, speed: null });
+    const text = detailsText({ summary: level([40]), stats: stats([40], { api: { medianMs: 90, p95Ms: 300, count: 7, failed: 1 } }), details: null, net: null, services: rows, speed: null });
     expect(text).toContain('Mail sync: Problem · 1 of 3 accounts failed');
     expect(text).toContain('Network: Not reported by this computer');
+    expect(text).toContain('WorkSuite server: Responding normally · 90 ms median (90 ms median · slowest 5% 300 ms · last 7 requests · 1 failed)');
   });
 });

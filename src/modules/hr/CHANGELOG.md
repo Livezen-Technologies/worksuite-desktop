@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-06
+
+**Changed**
+
+- Review leave — the cover's answer in the Cover card (Accept/Decline only for the cover person), an approval-only footer that wraps instead of cutting off Approve, balances as chips, days late with its period, the decision shown after it (#262)
+
+**Fixed**
+
+- Approve before the cover accepts asks first (Approve anyway · Remind · Open request) or shows 'Waiting for cover', never an error toast (#262, #263)
+
 ## 1.3.0 — 2026-10-03
 
 - The organisation filter is the shared compact switcher (#214): one pill, search, several at once, a default organisation, remembered per person.

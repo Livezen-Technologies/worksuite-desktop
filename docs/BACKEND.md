@@ -39,6 +39,7 @@ sign-in) and, once the laptop is registered, `X-WS-Device: <device id>`.
 | Open a `worksuite://` link | `GET /desktop/v1/links/resolve?url=` → `{valid, module, route, window, allowed, organization_id}` |
 | An item link's item (#170) | `GET /api/links/items/{org}/{type}/{id}` → `{allowed, state, state_label?, title?, kind_label?, size?, sharer?, task_id?, can_request_access}`; `POST …/request-access` |
 | Item link in a browser (#170) | `GET /o/{org}/{type}/{id}?action=` (public): hands `worksuite://{org}/{type}/{id}` to the app, "Open in browser instead" |
+| A page of an app as an item link (#266) | `/o/{org}/{app}/{page}`, e.g. `/o/7/hr/announcements` (open only; the apps and the query parameter each reads its page from are `PAGE_APPS` in `shared/item-links.ts`). Chat's shares send these; the server's `ItemLinks.php` and its `/o/` page should accept the same list, and `GET /api/links/items/…` is not asked for a page (its app's access decides) |
 | Device-side audit | `POST /desktop/v1/audit` `{events:[{id, action, at, details}]}` (idempotent on `id`); item links log `desktop.link.opened` |
 | Drive change feed | `GET /desktop/v1/sync/changes?cursor=&limit=`, `POST /desktop/v1/sync/events` |
 | File locks | `POST` / `DELETE /desktop/v1/files/{id}/lock` |
@@ -275,6 +276,121 @@ specific to the desktop:
   - Online speech to text (when the computer cannot, and the AI settings
     allow): `GET /api/ai/speech/status` and `POST /api/ai/speech/transcribe`
     (multipart `audio` WAV, `language`) return segments with `uncertain`.
+
+### What the server has: `GET /api/capabilities` (worksuite-desktop#259)
+
+The app can be newer than the server: Beta may run ahead of it. So that
+nobody lands on an empty "Not on this server yet" screen, the app asks the
+server what it has once per session. It needs a signed-in user and no
+permission:
+
+```json
+{ "communication": "2.4.0",
+  "features": ["widget.behaviour", "chat.insights", "widget.whatsapp"],
+  "update_url": "/admin/modules", "can_update": true }
+```
+
+- **Module versions** sit at the top level, keyed by module, or under
+  `modules: {communication: "2.4.0"}`. The admin notice quotes them as
+  "(server has 2.3.1)".
+- **`features`** lists what the modules offer. The app reads it only when
+  `features` is an array. The website chat keys so far:
+  - `widget.behaviour`: `widgets/{id}/behaviour`, S-03.
+  - `chat.insights`: `insights`, L-07.
+  - `widget.whatsapp`: `widgets/{id}/whatsapp`, #260.
+
+  Add a key whenever a module gains a screen the desktop gates on.
+- **`update_url`** is a path on this server where the person can update
+  modules. The app shows "Update server" only when `can_update` is `true` for
+  that person.
+- **On a server without this route (404)**, or with any other response, each
+  screen still detects support itself, as before: its own endpoint answers
+  404.
+- **A screen's own endpoint overrides the list.** One that answers is shown
+  even if the list leaves its key out.
+
+When a feature is missing:
+
+- People who cannot change widgets don't see the Behaviour or Contact options
+  tabs, or the Insights entry.
+- Admins (`chat.widget.manage`, or the widget's `can_manage`) see a notice at
+  the top of the widget's settings, for example "Behaviour and Insights need
+  Communication module 2.4 or later (server has 2.3.1). Update server · Learn
+  more".
+- The notice names a minimum version only when the app knows it for every
+  missing feature (`MIN_COMMUNICATION` in
+  `src/modules/chat/website/widget/serverSupport.ts`). Otherwise it says "a
+  newer Communication module".
+
+**Field errors.** A save that the server refuses should answer 422 with
+`errors` keyed by field, as Laravel and CodeIgniter do: `website_name`,
+`quick_links.0.url`, `numbers.1.phone`, `missed_after_minutes`.
+
+- The app shows each message under its field, on that field's tab, and marks
+  the tab ("Appearance •") while another tab is open.
+- A widget whose saved company name is a web address may be refused on any
+  tab's save (`PUT widgets/{id}/behaviour` included). The server should name
+  `website_name` in `errors` so the message lands on Appearance. A refusal
+  without `errors` becomes a toast, except one in the company-name rule's own
+  words.
+
+### Website chat widget: WhatsApp numbers (worksuite-desktop#260)
+
+Widget settings › Contact options edits the WhatsApp numbers the widget offers
+("Message us on WhatsApp": Sales, Support). The Communication module needs
+three routes under `/api/chat/widget-admin`. Until it has them:
+
+- the tab is hidden, and admins see the version notice (feature
+  `widget.whatsapp`, #259);
+- the away screen keeps its single `whatsapp_number` from the design.
+
+- **`GET widgets/{id}/whatsapp`** returns `{numbers, can_manage, cache_seconds?,
+  can_refresh?, accounts?}`. A 404 or 405 means the server does not have the
+  list.
+  - Each number is `{id, source: worksuite|manual, account_id, phone, label,
+    message, show, connected?}`, in the order the widget shows them.
+  - `phone` is E.164.
+  - `account_id` is the WhatsApp module's account (`/api/whatsapp/accounts`)
+    for `worksuite`, and null for `manual`.
+  - `show` is `always`, `connected`, `outside_hours` or `no_agents`.
+    `connected` is only valid for `worksuite`.
+  - `connected` is the server's view of a WorkSuite number's link. The app
+    uses the WhatsApp list's own status where it can read it.
+  - `cache_seconds` is how long the widget script may keep its settings. It
+    drives "Saved · live on techubiz.com within 1 minute", and should be 60 or
+    less. Without it, the app says the change shows on visitors' next page.
+  - `can_refresh: true` means `POST widgets/{id}/refresh` exists.
+  - `accounts` (optional) is the company's WorkSuite numbers as
+    `{id, name, phone, status, provider?, connected_at?}`, for admins the
+    numbers are not shared with. Without it, the picker reads
+    `/api/whatsapp/accounts`.
+- **`PUT widgets/{id}/whatsapp {numbers: [...]}`** replaces the list.
+  - The list arrives in display order, up to 5 numbers.
+  - Each number arrives as `{id?, source, account_id, phone, label, message,
+    show}`.
+  - The server re-checks each `phone` as E.164 and each `account_id` as one of
+    its WhatsApp accounts.
+  - Refusals are 422 with `errors` keyed like `numbers.1.phone`. The app shows
+    each one under that number's field.
+  - It answers like the GET, and ends the widget's settings cache.
+- **`POST widgets/{id}/refresh`** ends the cache now, so the widget asks again
+  on its next page load. It backs "Refresh widget now".
+- **The widget itself:**
+  - It replaces `{visitor_ref}` in `message` with the visitor's reference
+    before opening `https://wa.me/<digits>?text=…`. That reference is what
+    links the visitor's WhatsApp message to their chat (#224).
+  - It hides a `connected` number while every WhatsApp account on that number
+    is disconnected, and shows it again once one is relinked.
+  - It shows `outside_hours` numbers only outside business hours, and
+    `no_agents` numbers only while nobody is available.
+- **The older single number:**
+  - While the list exists, the server keeps `design.whatsapp_number` as the
+    first number shown `always`, for older widget scripts. It ignores that
+    field on `PUT widgets/{id}/design`.
+  - When the list first appears, a widget's existing `whatsapp_number` becomes
+    its first number (`manual`, labelled "WhatsApp").
+  - On an older server, the app still saves that one number, converted to
+    E.164: "0769 136 424" becomes `+94769136424`.
 
 ### Garage
 
@@ -877,6 +993,54 @@ and offers to copy a support request instead of sending it.
   - The endpoint answers `{reference}`, and the desktop shows that reference.
   - It is not the company helpdesk (`/api/tickets`), which needs the "Reply to tickets" permission and serves the
     company's own customers.
+
+## Connection strength and the speed test (worksuite-desktop#254, #265)
+
+The status bar shows two things apart: **your connection** (the network delay, its stability, the speed test) and
+**the WorkSuite server** (the API's median and slowest 5% of the last 50 requests, timed to their response headers,
+and how many failed). A slow server gets its own amber "Server slow" marker (median over 1 s); it never makes the
+connection Poor. The connection's level is the documented thresholds on the network delay alone: under 100 ms
+Excellent, 100–250 Good, 250–600 Fair, over 600 Poor.
+
+How the desktop measures the network delay, every 10 s, lightest first:
+
+1. **The realtime echo**, where realtime runs over a socket: `ping:<id>` (v1) or `{"type":"ping","id"}` (v2), which
+   the gateway answers at once with `{"type":"pong","id"}`. A gateway that never answers is asked no more.
+2. **A TCP connection to the server** where the echo cannot be sent (SSE is one-way, the built-in service polls, an
+   older gateway): the time to open it, then it is closed. Nothing is sent on it. Not used through a proxy.
+3. **`GET /api/health`** only where neither works. It includes the server's own time, so the desktop treats it as an
+   upper bound ("Fair · ≤ 312 ms") and never calls the connection Poor on it.
+
+The speed test downloads up to 25 MB over 4 connections at once, and uploads up to 20 MB where the server takes it,
+for at most 8 s each way. It runs on the bulk connection pool, so chats are not held up. The download is timed from
+its first byte, so the server's wait before it starts answering is left out. The upload is timed by Chromium's own
+count of the bytes sent, so the server's work after the body arrives is left out.
+
+None of the following exists on the server yet. Each is optional: the desktop detects it and uses it once it is
+there.
+
+- **`GET /api/health/probe?kb=N` — a sized test download.**
+  - It answers N KB of random (incompressible) bytes: `Content-Type: application/octet-stream`,
+    `Cache-Control: no-store`, and no gzip or brotli.
+  - The desktop asks for 6400 KB per connection. Cap N at 25600 (25 MB) and limit how often each person can call it.
+  - The desktop sends the session's bearer token. The server may require it, so the endpoint cannot be used
+    anonymously.
+  - **Without it:** the desktop fetches `/widget.js` again and again instead. The result says that a small file reads
+    low on a fast connection.
+  - **Wrong answers:** a JSON or HTML answer on this path is not taken as the test download.
+- **`POST /api/health/probe` — an upload sink.**
+  - It reads the raw body and throws it away: `application/octet-stream`, up to 5 MB per request. Check nginx
+    `client_max_body_size` and PHP's limits, and read the body from `php://input`.
+  - It answers `{"status":"success","data":{"bytes":<bytes received>}}`.
+  - The desktop first sends a 16 KB check, and uploads more only when the answer confirms those bytes exactly.
+  - An upload the server answers with a different count gives no figure. So does one that fails.
+  - **Without it:** the desktop shows "Upload test needs a newer server" and sends nothing more. It never shows a
+    figure it did not measure.
+- **`Server-Timing: app;dur=<ms>` on `/api/health` — the server's own time.**
+  - The desktop takes the largest `dur` as the server's whole time and subtracts it from the round trip. The server
+    check then measures the network delay, not just an upper bound on it.
+- **`/api/health`'s `data.time`** (ISO 8601 with its offset) already exists. The desktop shows it in the computer's
+  own time and zone ("23:06 Sri Lanka Time").
 
 ## Phone (WS-VOIP-SRS-001)
 
