@@ -1,4 +1,4 @@
-import { ApiError, apiGet, request } from '../../core/api';
+import { ApiError, apiGet, apiUrl, request } from '../../core/api';
 import { call } from '../../core/bridge';
 import type { SalonDeskInfo, SalonDeskPairInput, SalonDeskPairing } from '@shared/types';
 
@@ -58,6 +58,8 @@ export interface Stylist {
   id: number;
   name: string;
   title: string | null;
+  /** The stylist's price tier (Senior ×1.25), where the server sends it. */
+  tier?: { name: string | null; multiplier: number | null } | null;
   color: string | null;
   active: boolean;
   services: number[];
@@ -144,20 +146,40 @@ export interface Gate {
   missing_patch: string[];
 }
 
-/** GET /visits/{id}: what the check-in panel reads. */
+/** What was used and how, kept against one appointment (REC-01). */
+export interface ServiceRecord {
+  id: number;
+  formula: string | null;
+  technique: string | null;
+  timing: string | null;
+}
+
+/** The last formula a client had for a service, offered when it is done again (REC-05). */
+export interface LastFormula {
+  formula: string | null;
+  technique: string | null;
+  timing: string | null;
+  at: string | null;
+}
+
+/** GET /visits/{id}: what the check-in panel and the service record read. */
 export interface VisitDetail {
   visit: Visit;
   allergies: Allergy[];
   patch_tests: PatchTest[];
   missing_patch: string[];
   ack_statement: string;
+  preferences?: Record<string, string>;
+  records?: Array<{ appointment_id: number; record: ServiceRecord | null; last: LastFormula | null }>;
+  advances?: Array<{ id: number; amount: number; method?: string; date?: string | null }> | null;
 }
 
 export interface FloorStylist {
   provider_id: number;
   name: string;
   color: string | null;
-  current: { client: string; service: string; until: string } | null;
+  /** In the chair now, and how far through (0–100) by the clock. */
+  current: { client: string; service: string; until: string; progress?: number; visit_id?: number; appointment_id?: number; status?: string } | null;
   next: { label: string; client: string } | null;
 }
 
@@ -168,18 +190,37 @@ export interface TodayBoard {
   now_label: string;
   location: { id: number; name: string; opens: string | null; closes: string | null };
   currency: string;
-  figures: { bookings: number; done: number; to_come: number; taken: { total: number } | null };
+  figures: {
+    bookings: number;
+    done: number;
+    to_come: number;
+    taken: { total: number } | null;
+    /** What invoices at this location still owe (CAL-01); null without Billing's permission. */
+    owed?: { amount: number; invoices: number } | null;
+    /** Booked minutes over bookable ones today, and no-shows over the last 30 days, as percentages. */
+    utilisation?: number | null;
+    no_show_rate?: number | null;
+  };
   arriving: Visit[];
   late: Visit[];
   floor: FloorStylist[];
+  /** What needs somebody now (CAL-06): online bookings to confirm, time off, reviews, deposits owed, the desks' queues. */
+  attention?: Array<{ kind: string; count: number; label: string; action: string; view: string }>;
   visits: Visit[];
+}
+
+/** Approved HR leave on the day: a whole day, a half (the server splits the stylist's own hours), or a short absence. */
+export interface StylistLeave {
+  portion: 'full' | 'half_morning' | 'half_afternoon' | 'short' | string;
+  starts_at: string | null;
+  minutes: number | null;
 }
 
 /** GET /calendar */
 export interface CalendarDay {
   date: string;
   hours: { weekday: number | string; opens: string; closes: string }[];
-  stylists: (Stylist & { working: [string, string][] })[];
+  stylists: (Stylist & { working: [string, string][]; leave?: StylistLeave[]; blocks?: Array<{ starts_at: string; ends_at: string; reason: string | null }> })[];
   visits: Visit[];
 }
 
@@ -232,6 +273,30 @@ export interface ClientCandidate {
   email: string | null;
 }
 
+/** A photo kept with a service record: staff-only unless the client consented to its use. */
+export interface RecordMedia {
+  id: number;
+  kind: 'before' | 'after' | 'other';
+  mime: string;
+  public: boolean;
+  url: string;
+}
+
+/** A service record as the client's card lists it, with its photos. */
+export interface ClientRecord {
+  id: number;
+  appointment_id: number;
+  service: string;
+  service_id: number | null;
+  provider: string | null;
+  formula: string | null;
+  technique: string | null;
+  timing: string | null;
+  date: string | null;
+  by: string | null;
+  media: RecordMedia[];
+}
+
 /** GET /clients/{id}: the parts the desk shows. */
 export interface ClientCard {
   client: { id: number; name: string; email: string | null; phone: string | null; mobile: string | null };
@@ -243,6 +308,9 @@ export interface ClientCard {
   loyalty: { points: number } | null;
   credit: { balance: number; currency: string } | null;
   invoices: { id: number; number: string | null; owed: number; currency: string }[] | null;
+  /** What the client asked for: a quiet room, tea with no sugar. */
+  preferences?: Record<string, string>;
+  records?: ClientRecord[];
   may: { edit: boolean };
 }
 
@@ -352,6 +420,36 @@ export const addClient = (org: number, input: { name: string; mobile?: string; e
 export const addAllergy = (clientId: number, input: { substance: string; reaction?: string; severity: Severity }, key: string) =>
   write<unknown>(`/clients/${clientId}/allergies`, input, key);
 
+// ── service records and their photos (D17, REC-01…05) ───────────────────
+
+/** Keep what was done for one appointment. One record each: saving again changes it. */
+export const saveRecord = (appointmentId: number, input: { formula: string; technique: string; timing: string }, key: string) =>
+  write<{ record: ServiceRecord | null }>(`/appointments/${appointmentId}/record`, input, key);
+
+/** A before or after photo for a saved record, checked by WorkSuite for what it really is. */
+export async function addPhoto(recordId: number, file: Blob, name: string, kind: 'before' | 'after' | 'other'): Promise<{ id: number; message: string | null }> {
+  const form = new FormData();
+  form.set('file', file, name);
+  form.set('kind', kind);
+  const r = await request<{ id: number }>('POST', `${BASE}/records/${recordId}/media`, { body: form });
+  return { id: r.data.id, message: r.message ?? null };
+}
+
+/** Whether a photo may be used on the website, under the client's consent (REC-04). */
+export async function publishPhoto(org: number, mediaId: number, on: boolean): Promise<string | null> {
+  const r = await request<null>('POST', `${BASE}/media/${mediaId}/publish`, { body: { org, on } });
+  return r.message ?? null;
+}
+
+/** A kept photo, as an image the desk may show: served by SalonMate to staff who may see the client. */
+export const mediaUrl = (id: number) => apiUrl(`${BASE}/media/${id}`);
+
+/** WhatsApp, for a mobile number WorkSuite holds in E.164. */
+export function whatsAppUrl(e164: string | null | undefined): string | null {
+  const digits = (e164 ?? '').replace(/\D+/g, '');
+  return digits.length >= 8 ? `https://wa.me/${digits}` : null;
+}
+
 // ── rules the screens share ─────────────────────────────────────────────
 
 export const SEVERITIES: Severity[] = ['mild', 'moderate', 'severe'];
@@ -430,6 +528,15 @@ export function shortDay(ymd: string | null | undefined): string {
   if (!ymd) return '—';
   const d = new Date(`${ymd.slice(0, 10)}T12:00:00Z`);
   return Number.isNaN(d.getTime()) ? ymd : d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', timeZone: 'UTC' });
+}
+
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+
+/** "21 Sep 2026" (or "21 Sep" with `year` false) for a YYYY-MM-DD, as the desk's cards write a date. */
+export function dayMonth(ymd: string | null | undefined, year = true): string {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(ymd ?? '');
+  if (!m) return '—';
+  return `${String(Number(m[3])).padStart(2, '0')} ${MONTHS[Number(m[2]) - 1] ?? ''}${year ? ` ${m[1]}` : ''}`;
 }
 
 export function longDay(ymd: string): string {

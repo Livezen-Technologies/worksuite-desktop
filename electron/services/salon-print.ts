@@ -51,7 +51,7 @@ export const DEFAULT_PRINT: SalonPrintSettings = {
 };
 
 /** Laid out at the width the server's receipt is drawn for (Receipt::PAPERS). */
-const WIDTH_PX: Record<SalonPaper, number> = { '80mm': 302, '58mm': 219, a4: 794 };
+const WIDTH_PX: Record<SalonPaper, number> = { '80mm': 302, '58mm': 219, a4: 794, letter: 816 };
 const WIDTH_UM = { '80mm': 80_000, '58mm': 58_000 } as const;
 const UM_PER_PX = 25_400 / 96;
 /** Paper fed past the last line, so the cutter does not cut through it. */
@@ -67,9 +67,13 @@ export function printDocument(html: string): string {
   return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="${CSP}">${html.replace(/^\s*<!doctype[^>]*>/i, '')}`;
 }
 
-/** A roll is as long as what is printed on it; A4 is A4. */
-export function pageSize(paper: SalonPaper, heightPx: number): 'A4' | { width: number; height: number } {
+/** A full page, not a roll: A4 or Letter. */
+export const fullPage = (paper: SalonPaper): paper is 'a4' | 'letter' => paper === 'a4' || paper === 'letter';
+
+/** A roll is as long as what is printed on it; A4 is A4 and Letter is Letter. */
+export function pageSize(paper: SalonPaper, heightPx: number): 'A4' | 'Letter' | { width: number; height: number } {
   if (paper === 'a4') return 'A4';
+  if (paper === 'letter') return 'Letter';
   return { width: WIDTH_UM[paper], height: Math.max(MIN_HEIGHT_UM, Math.ceil(heightPx * UM_PER_PX) + FEED_UM) };
 }
 
@@ -95,7 +99,7 @@ export async function printInWindow(job: PrintJob): Promise<PrintResult> {
   win.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*'] }, (_d, cb) => cb({ cancel: true }));
   try {
     await win.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(printDocument(job.html))}`);
-    const height = job.paper === 'a4' ? 0 : Number(await win.webContents.executeJavaScript('Math.ceil(document.documentElement.scrollHeight)')) || 0;
+    const height = fullPage(job.paper) ? 0 : Number(await win.webContents.executeJavaScript('Math.ceil(document.documentElement.scrollHeight)')) || 0;
     return await new Promise<PrintResult>((resolve) => {
       win.webContents.print(
         {
@@ -103,7 +107,7 @@ export async function printInWindow(job: PrintJob): Promise<PrintResult> {
           deviceName: job.deviceName ?? undefined,
           printBackground: true,
           copies: job.copies,
-          margins: { marginType: job.paper === 'a4' ? 'default' : 'none' },
+          margins: { marginType: fullPage(job.paper) ? 'default' : 'none' },
           pageSize: pageSize(job.paper, height),
         },
         (ok, reason) => resolve(ok ? { ok: true } : { ok: false, reason: reason || 'cancelled' }),
@@ -257,7 +261,7 @@ export class SalonPrint {
   }
 
   private printerFor(paper: SalonPaper, s: SalonPrintSettings): string | null {
-    return paper === 'a4' ? (s.a4_printer ?? s.receipt_printer) : s.receipt_printer;
+    return fullPage(paper) ? (s.a4_printer ?? s.receipt_printer) : s.receipt_printer;
   }
 
   private async fetchHtml(path: string, query: Record<string, string | number>): Promise<string> {

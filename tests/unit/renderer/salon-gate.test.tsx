@@ -63,4 +63,11 @@ describe('the allergy is read out before check-in (SAFE-02)', () => {
 
     expect(screen.getByText('This client has severe PPD on file.')).toBeTruthy();
   });
+
+  it('offers to update the allergies on file, beside Check in', () => {
+    const onUpdate = vi.fn();
+    gate({ onUpdate });
+    fireEvent.click(screen.getByRole('button', { name: /Update allergies/ }));
+    expect(onUpdate).toHaveBeenCalled();
+  });
 });

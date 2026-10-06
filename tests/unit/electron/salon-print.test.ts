@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ BrowserWindow: class {} }));
 
 import { contract } from '@shared/ipc/contract';
-import { DEFAULT_PRINT, drawerPulse, pageSize, printDocument, rawCommand, SalonPrint, sendRaw, type PrintJob, type SpawnLike } from '../../../electron/services/salon-print';
+import { DEFAULT_PRINT, drawerPulse, fullPage, pageSize, printDocument, rawCommand, SalonPrint, sendRaw, type PrintJob, type SpawnLike } from '../../../electron/services/salon-print';
 
 function config() {
   const m = new Map<string, unknown>();
@@ -56,6 +56,8 @@ describe('the page a receipt is printed from', () => {
     // A short receipt is still taller than it is wide, so it is not printed turned.
     expect(pageSize('80mm', 40)).toEqual({ width: 80_000, height: 90_000 });
     expect(pageSize('a4', 5000)).toBe('A4');
+    expect(pageSize('letter', 5000)).toBe('Letter');
+    expect(fullPage('letter') && fullPage('a4') && !fullPage('80mm') && !fullPage('58mm')).toBe(true);
   });
 });
 

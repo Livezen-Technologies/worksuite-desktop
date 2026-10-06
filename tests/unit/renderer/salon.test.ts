@@ -3,8 +3,9 @@ import { APP_CATALOGUE, isAppVisible } from '@shared/apps';
 import { tabRecordSchema } from '@shared/ipc/contract';
 import { ApiError } from '../../../src/core/api';
 import * as s from '../../../src/modules/salon/api';
-import { dayWindow } from '../../../src/modules/salon/Calendar';
-import { salonRoute, seedOf, seedParam } from '../../../src/modules/salon/parts';
+import { dayWindow, gaps, toneOf } from '../../../src/modules/salon/Calendar';
+import { hours } from '../../../src/modules/salon/NewBooking';
+import { greetingFor, safeColor, salonRoute, seedOf, seedParam } from '../../../src/modules/salon/parts';
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -218,5 +219,68 @@ describe('a walk-in started with what is known', () => {
     expect(seedOf(new URLSearchParams({ seed: JSON.stringify({ client_id: 9, service_ids: [3] }) }))).toEqual({ client_id: 9, service_ids: [3] });
     expect(seedOf(new URLSearchParams({ seed: '{nope' }))).toEqual({});
     expect(seedOf(new URLSearchParams())).toEqual({});
+  });
+});
+
+describe('the day by stylist (D03)', () => {
+  it('hatches the open hours a stylist is not working, and nothing shorter than a quarter', () => {
+    // Open 09:00–19:00; working 09:00–14:00 (an afternoon's leave) with 10 minutes off at 11:00.
+    expect(gaps(540, 1140, [[540, 660], [670, 840]])).toEqual([[840, 1140]]);
+    expect(gaps(540, 1140, [[600, 1140]])).toEqual([[540, 600]]);
+    expect(gaps(540, 1140, [])).toEqual([[540, 1140]]);
+    expect(gaps(540, 1140, [[540, 1140]])).toEqual([]);
+  });
+
+  it('colours a booking by where it stands, and a waiting one past its time as late', () => {
+    const now = Date.parse('2026-09-28T06:11:00Z');
+    const past = '2026-09-28T04:30:00Z';
+    const later = '2026-09-28T08:00:00Z';
+    expect(toneOf({ status: 'completed', starts_at: past }, now, true)).toBe('done');
+    expect(toneOf({ status: 'in_service', starts_at: past }, now, true)).toBe('service');
+    expect(toneOf({ status: 'confirmed', starts_at: past }, now, true)).toBe('late');
+    expect(toneOf({ status: 'confirmed', starts_at: past }, now, false)).toBe('confirmed');
+    expect(toneOf({ status: 'pending', starts_at: later }, now, true)).toBe('pending');
+    expect(toneOf({ status: 'cancelled', starts_at: later }, now, true)).toBe('off');
+    expect(toneOf({ status: 'no_show', starts_at: past }, now, true)).toBe('off');
+  });
+});
+
+describe('the desk’s words for figures', () => {
+  it('says how long a booking keeps the client in the salon', () => {
+    expect(hours(45)).toBe('45 min');
+    expect(hours(240)).toBe('4 h');
+    expect(hours(90)).toBe('1 h 30 min');
+  });
+
+  it('writes a day as the cards do, without the computer’s locale', () => {
+    expect(s.dayMonth('2026-09-21')).toBe('21 Sep 2026');
+    expect(s.dayMonth('2026-07-02', false)).toBe('02 Jul');
+    expect(s.dayMonth('2026-08-17 11:00:00', false)).toBe('17 Aug');
+    expect(s.dayMonth(null)).toBe('—');
+  });
+
+  it('opens WhatsApp only for a number that is one', () => {
+    expect(s.whatsAppUrl('+94771234567')).toBe('https://wa.me/94771234567');
+    expect(s.whatsAppUrl('077 123')).toBeNull();
+    expect(s.whatsAppUrl(null)).toBeNull();
+  });
+
+  it('greets on the salon’s clock, by first name', () => {
+    const at = Date.parse('2026-09-28T06:11:00Z'); // 11:41 in Colombo, 07:11 in London
+    expect(greetingFor({ me: 'Hiruni Wijesinghe', location: { id: 1, org_id: 1, name: 'Colombo 05', timezone: 'Asia/Colombo' } }, at)).toBe('Good morning, Hiruni');
+    expect(greetingFor({ me: null, location: { id: 1, org_id: 1, name: 'X', timezone: 'Asia/Colombo' } }, Date.parse('2026-09-28T09:00:00Z'))).toBe('Good afternoon');
+  });
+
+  it('takes a stylist’s colour into a style only when it is a colour', () => {
+    expect(safeColor('#1d4ed8')).toBe('#1d4ed8');
+    expect(safeColor('red; background: url(x)')).toBeNull();
+    expect(safeColor(null)).toBeNull();
+  });
+});
+
+describe('a time tapped on the calendar', () => {
+  it('travels with the stylist and day into New booking', () => {
+    const seed = seedParam({ provider_id: 2, date: '2026-09-29', time: '10:30' });
+    expect(seedOf(new URLSearchParams(salonRoute('book', { seed }).split('?')[1]))).toEqual({ provider_id: 2, date: '2026-09-29', time: '10:30' });
   });
 });

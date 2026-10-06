@@ -113,7 +113,7 @@ import type {
 } from '../types';
 
 const none = z.undefined().or(z.null()).optional();
-const salonPaper = z.enum(['80mm', '58mm', 'a4']);
+const salonPaper = z.enum(['80mm', '58mm', 'a4', 'letter']);
 const idString = z.string().min(1).max(128).regex(/^[A-Za-z0-9._:-]+$/);
 const route = z
   .string()
@@ -981,7 +981,7 @@ export const contract = {
       .object({
         receipt_printer: z.string().trim().min(1).max(200).nullable(),
         a4_printer: z.string().trim().min(1).max(200).nullable(),
-        paper: z.enum(['80mm', '58mm']),
+        paper: salonPaper,
         copies: z.number().int().min(1).max(3),
         auto_print: z.boolean(),
         silent: z.boolean(),

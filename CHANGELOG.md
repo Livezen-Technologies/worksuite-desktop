@@ -5,6 +5,51 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.188 — 2026-10-06
+
+- **SalonMate's front desk, redrawn to the SalonMate desktop design (salon 2.0.0).** Every screen of the desk now
+  looks and works as in the design (D01–D17), with buttons sized for touch.
+  - **The rail:** Today, Calendar, Walk-in, Clients, Checkout, Register, Sync and Settings, icons over their names.
+    Its foot says whether the desk is online and when it last synced, whether the register is open, the receipt
+    printer, and the location, desk and register.
+  - **Today:** a greeting by name; Walk-in, New booking, Take payment and Find a client; who arrives next, with the
+    stylist's initials in their colour; who is on the floor and how far through. It also shows what is owed, how
+    much chair time is booked, the 30-day no-show rate and **Needs attention** (online bookings to confirm, time off,
+    reviews, deposits owed, items waiting to sync).
+  - **Deposits are taken at the desk:** **Take deposit** on Today and the calendar, and **Book · take deposit** on a
+    new booking, by cash, card, LankaQR or bank transfer. The deposit goes into the desk's open POS register as a sale
+    of its own, and is refused while the register is closed.
+  - **New booking by touch:** services back to back, each with its stylist or whoever is free. A strip of days, every
+    start with taken times struck through, and the chain WorkSuite offers ("Kasun, then Nadeesha"). A watch-list
+    client's deposit is shown before booking.
+  - **The calendar:** bookings are coloured by status (confirmed, waiting, late, in the chair, done, cancelled) and
+    marked for an allergy, an advance or a deposit owed. Leave and block-outs are hatched and labelled. The time now
+    is labelled, and a tap on free time books it with that stylist.
+  - **Check-in:** the allergy read-out in a red-banded dialog, the patch test that covers today, and
+    **Update allergies** beside **Check in**.
+  - **Take payment:** the bill on the left with the amount to pay in large type. On the right, the register the money
+    goes into, Cash, Card, LankaQR, Bank transfer, Store credit or Split, the cash received on a calculator keypad,
+    and over-payment as store credit or change.
+  - **Add retail** opens Point of Sale's catalogue as a sheet: categories, stock (in stock, a few left, out),
+    barcode scan, quantities and who sold it.
+  - **Paid:** the drawer, store credit, points and advance; the POS sale and the receipt printed; **Print again**,
+    **Book next visit**, **Done — next client**; and the receipt beside it, as it printed.
+  - **Clients:** the client's tier and reliability, what they asked for, every allergy in one red line, points,
+    store credit and what they owe, recent visits, the last formula, and **WhatsApp** beside **Book again**.
+  - **Service record (new):** the formula, technique and timings for a visit's service, **Same as last time**, and
+    before and after photos from the desk's webcam or a file. Photos are kept in WorkSuite Files, staff-only, and used
+    on the website only with the client's consent on file.
+  - **Register, Close the day, Sync, Settings, pairing:** the float and the closing count note by note, the salon's
+    day by tender, Sync's numbered queue with the stylist's free times nearest a refused booking, and Printers &
+    receipts with a preview of the test receipt. The desk's details, the owners' screens and **Pair this computer
+    again** move to Settings.
+  - **Receipts on A4 or Letter** as well as 80 mm and 58 mm rolls. A full page goes to the A4 printer when one is
+    chosen.
+- **Where it bites:** deposits need the server's SalonMate with the register fix for desk deposits (2026-09-28).
+  Without it, a cash deposit is not counted in the register. Product usage on the service record, emailing or
+  WhatsApping the invoice from Paid, and choosing the till's stock location and receipt template at pairing are not
+  in the server's API yet, so the desk does not offer them.
+
 ## 0.2.187 — 2026-10-05
 
 - **Visitor messages that aren't reaching staff (delivery Phase 3).** When no staff device has received a visitor's

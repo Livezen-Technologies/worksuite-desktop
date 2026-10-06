@@ -1,14 +1,16 @@
 import { useQuery } from '@tanstack/react-query';
-import { Avatar, Button, Card, Chip, Empty, Spinner } from '../../components/ui';
+import { Avatar, Empty, Spinner } from '../../components/ui';
+import { call } from '../../core/bridge';
 import { amount, clockAt, fetchToday, greeting, K, longDay, minutesOf, owing, readyToPay, stillToPay, type TodayBoard, type Visit } from './api';
 import { boardFromCopy, copyAge, unreachable, useOutbox } from './offline';
-import { AllergyChip, Failed, Note, QuickAction, servicesOf, stylistsOf, useDesk, useNow } from './parts';
+import { AllergyChip, Bar, Failed, firstName, Note, Page, Panel, QuickAction, servicesOf, stylistsOf, Tag, TouchButton, useDesk, useNow, Who } from './parts';
 
 /**
  * Today at the counter (D02): who walks in next, who is late, who is in a
  * chair and until when, and the jobs the desk does most — a walk-in, a
- * booking, finding a client. The server's board for this desk's location,
- * refreshed every minute; its day and times are the salon's clock.
+ * booking, taking payment, finding a client. The server's board for this
+ * desk's location, refreshed every minute; its day and times are the salon's
+ * clock.
  *
  * With WorkSuite out of reach it is the same board, worked out from the day's
  * copy by the server's rules, with what the desk has kept to send beside it.
@@ -24,35 +26,36 @@ export default function Today() {
   const kept = new Set(waiting.filter((i) => i.kind === 'visit.check_in' && typeof i.payload.visit_id === 'number').map((i) => i.payload.visit_id as number));
   const hour = Math.floor(minutesOf(board?.now_label ?? clockAt(new Date(now).toISOString(), desk.location.timezone)) / 60);
   const book = desk.may('salon.visit.book');
+  const hello = desk.me ? `${greeting(hour)}, ${firstName(desk.me)}` : greeting(hour);
 
   return (
-    <div className="flex flex-col gap-4 p-6">
-      <div>
-        <h1 className="text-[22px] font-extrabold text-ink">{greeting(hour)}</h1>
-        <p className="mt-0.5 text-[13px] text-ink-2">
+    <Page
+      title={hello}
+      sub={
+        <>
           {board ? summary(board) : desk.location.name}
           {fromCopy ? ` · from this desk’s copy, taken at ${copyAge(desk.copy, desk.location.timezone) ?? '—'}` : ''}
-        </p>
-      </div>
-
+        </>
+      }
+    >
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <QuickAction icon="user-plus" label="Walk-in" onClick={() => desk.walkIn({})} disabled={!book} />
-        <QuickAction icon="calendar-check" label="New booking" onClick={() => desk.walkIn({}, true)} disabled={!book} />
-        <QuickAction icon="search" label="Find a client" onClick={() => desk.go('clients')} />
-        <QuickAction icon="calendar" label="The day by stylist" onClick={() => desk.go('calendar')} />
+        <QuickAction icon="door" label="Walk-in" onClick={() => desk.walkIn({})} disabled={!book} />
+        <QuickAction icon="plus" tone="teal" label="New booking" onClick={() => desk.walkIn({}, true)} disabled={!book} />
+        <QuickAction icon="banknote" tone="amber" label="Take payment" onClick={() => desk.go('pay')} disabled={!desk.may('salon.checkout') || desk.offline} />
+        <QuickAction icon="search" tone="pink" label="Find a client" onClick={() => desk.go('clients')} />
       </div>
 
       {waiting.length > 0 ? (
-        <Card title="Kept to send" action={<span className="text-[12.5px] text-ink-3">Goes to WorkSuite when it answers</span>}>
+        <Panel title="Kept to send" action={<span className="text-[13px] text-ink-2">Goes to WorkSuite when it answers</span>}>
           <ul>
             {waiting.map((i) => (
-              <li key={i.id} className="flex items-baseline gap-3 border-t border-line py-2 text-[13.5px] first:border-t-0">
+              <li key={i.id} className="flex items-baseline gap-3 border-t border-line py-2 text-[14px] first:border-t-0">
                 <span className="min-w-0 flex-1 truncate font-semibold text-ink">{i.label}</span>
-                {i.detail ? <span className="truncate text-[12.5px] text-ink-3">{i.detail}</span> : null}
+                {i.detail ? <span className="truncate text-[13px] text-ink-2">{i.detail}</span> : null}
               </li>
             ))}
           </ul>
-        </Card>
+        </Panel>
       ) : null}
 
       {fromCopy && board && board.figures.taken === null ? <Note tone="muted">What was taken today, and who is ready to pay, show when WorkSuite answers.</Note> : null}
@@ -60,8 +63,8 @@ export default function Today() {
       {!board ? (
         q.isError ? <Failed text="Today's board could not be loaded." onRetry={() => void q.refetch()} /> : <Spinner label="Loading today…" />
       ) : (
-        <div className="flex flex-col gap-4 2xl:flex-row">
-          <Card title="Arriving next" action={<span className="text-[12.5px] text-ink-3">{board.figures.to_come} still to come today</span>} className="min-w-0 flex-1">
+        <div className="flex flex-col items-start gap-3.5 xl:flex-row">
+          <Panel title="Arriving next" action={<span className="text-[13px] text-ink-2">{board.figures.to_come} still to come today</span>} className="w-full min-w-0 xl:flex-1">
             {board.late.length + board.arriving.length === 0 ? (
               <Empty icon="calendar" title="Nobody else is booked in today." hint="Walk-ins and new bookings appear here as they are made." />
             ) : (
@@ -74,86 +77,135 @@ export default function Today() {
                 ))}
               </ul>
             )}
-          </Card>
+          </Panel>
 
-          <div className="grid w-full items-start gap-4 lg:grid-cols-2 2xl:flex 2xl:w-[380px] 2xl:flex-col">
-            {fromCopy ? null : <ReadyToPay board={board} />}
-            <Card title="On the floor">
+          <div className="flex w-full flex-col gap-3 xl:w-[420px] xl:shrink-0">
+            {!fromCopy && board.attention?.length ? <Attention board={board} /> : null}
+            <Panel title="On the floor">
               {board.floor.length === 0 ? (
                 <Empty icon="users" title="No stylist is working here today." />
               ) : (
-                <ul className="grid grid-cols-2 gap-2.5">
+                <ul>
                   {board.floor.map((f) => (
-                    <li key={f.provider_id} className="rounded-[10px] border border-line p-3">
-                      <div className="flex items-center gap-2">
-                        <Avatar name={f.name} size={28} />
-                        <div className="min-w-0">
-                          <div className="truncate text-[13px] font-bold text-ink">{f.name.split(' ')[0]}</div>
-                          {f.current ? <div className="text-[12px] text-ink-3">till {f.current.until}</div> : null}
+                    <li key={f.provider_id} className="flex items-center gap-3 border-t border-line py-2.5 first:border-t-0">
+                      <Who name={f.name} color={f.color} size={38} />
+                      <div className="min-w-0 flex-1">
+                        <div className="flex justify-between gap-2 text-[14px]">
+                          <b className="truncate text-ink">{firstName(f.name)}</b>
+                          {f.current ? <span className="shrink-0 text-ink-2">till {f.current.until}</span> : null}
                         </div>
+                        {f.current ? (
+                          <>
+                            <div className="mt-0.5 mb-1.5 truncate text-[13px] font-medium text-ink-2">
+                              {f.current.client} · {f.current.service}
+                            </div>
+                            <Bar value={f.current.progress ?? 0} color={f.color} />
+                          </>
+                        ) : (
+                          <div className="mt-0.5 text-[13px] font-bold text-success">Free{f.next ? ` · until ${f.next.label}` : ''}</div>
+                        )}
                       </div>
-                      {f.current ? (
-                        <div className="mt-1.5 truncate text-[12.5px] text-ink-2">
-                          {f.current.client} · {f.current.service}
-                        </div>
-                      ) : (
-                        <div className="mt-1.5 text-[12.5px] font-bold text-success">Free{f.next ? ` · until ${f.next.label}` : ''}</div>
-                      )}
                     </li>
                   ))}
                 </ul>
               )}
-            </Card>
+            </Panel>
+            {fromCopy ? null : <ReadyToPay board={board} />}
           </div>
         </div>
       )}
-    </div>
+    </Page>
   );
 }
 
 function summary(b: TodayBoard): string {
+  const f = b.figures;
   return [
-    longDay(b.date),
-    `${b.figures.bookings} booking${b.figures.bookings === 1 ? '' : 's'}`,
-    `${b.figures.done} done or in the chair`,
-    b.figures.taken ? `${amount(b.figures.taken.total, b.currency)} taken` : null,
+    longDay(b.date).replace(/ \d{4}$/, ''),
+    `${f.bookings} booking${f.bookings === 1 ? '' : 's'}`,
+    `${f.done} done or in the chair`,
+    f.taken ? `${amount(f.taken.total, b.currency).replace(/\.00$/, '')} taken` : null,
+    f.owed && f.owed.amount > 0 ? `${amount(f.owed.amount, b.currency).replace(/\.00$/, '')} owed` : null,
+    typeof f.utilisation === 'number' ? `${Math.round(f.utilisation)}% of chair time booked` : null,
+    typeof f.no_show_rate === 'number' ? `${f.no_show_rate}% no-shows (30 days)` : null,
   ]
     .filter(Boolean)
     .join(' · ');
 }
 
+/** What needs somebody now (CAL-06). The owners' lists open in WorkSuite on the web; a deposit is taken here. */
+function Attention({ board }: { board: TodayBoard }) {
+  const desk = useDesk();
+  const owed = [...board.late, ...board.arriving].find((v) => v.money.deposit_owed > 0);
+  const act = (view: string) => {
+    if (view === 'today' && owed && desk.may('salon.checkout')) desk.deposit(owed);
+    else if (view === 'settings') desk.go('outbox');
+    else void call('app:openInBrowser', { path: `/salon?view=${encodeURIComponent(view)}` }).catch(() => undefined);
+  };
+  return (
+    <Panel title="Needs attention">
+      <ul>
+        {(board.attention ?? []).map((a) => (
+          <li key={a.kind} className="flex items-center gap-3 border-t border-line py-2.5 first:border-t-0">
+            <span className="grid h-7 min-w-7 place-items-center rounded-full bg-warning-bg px-1.5 text-[12px] font-extrabold text-warning tabular-nums">{a.count}</span>
+            <span className="min-w-0 flex-1 text-[14px] text-ink">{a.label.replace(/^\d+\s/, '')}</span>
+            <TouchButton className="min-h-10 px-3.5 text-[13px]" onClick={() => act(a.view)}>
+              {a.action}
+            </TouchButton>
+          </li>
+        ))}
+      </ul>
+    </Panel>
+  );
+}
+
 function dueIn(v: Visit, now: number): string | null {
   const mins = Math.round((Date.parse(v.starts_at) - now) / 60_000);
-  return mins > 0 && mins <= 90 ? `due in ${mins} min` : null;
+  return mins > 0 && mins <= 90 ? `Due in ${mins} min` : null;
 }
 
 function Arriving({ visit, late, now, kept }: { visit: Visit; late: boolean; now: number; kept: boolean }) {
   const desk = useDesk();
   const owed = visit.money.deposit_owed > 0;
   const due = dueIn(visit, now);
+  const first = visit.items[0];
+  const canDeposit = owed && !desk.offline && desk.may('salon.checkout');
 
   return (
     <li className="flex items-center gap-3.5 border-t border-line py-3 first:border-t-0">
-      <span className="w-[52px] text-[17px] font-extrabold text-ink tabular-nums">{visit.start}</span>
-      <Avatar name={visit.client.name} size={34} />
+      <span className="w-[58px] shrink-0 text-[18px] font-extrabold text-ink tabular-nums">{visit.start}</span>
+      {first ? <Who name={first.provider} color={first.provider_color} size={40} /> : <Avatar name={visit.client.name} size={40} />}
       <div className="min-w-0 flex-1">
         <div className="flex flex-wrap items-center gap-2">
-          <button type="button" onClick={() => desk.go('clients', { client: visit.client.id })} className="truncate text-left text-[15px] font-bold text-ink hover:underline">
+          <button type="button" onClick={() => desk.go('clients', { client: visit.client.id })} className="truncate text-left text-[16px] font-bold text-ink hover:underline">
             {visit.client.name}
           </button>
-          {kept ? <Chip tone="indigo">Check-in kept</Chip> : late ? <Chip tone="danger">Late</Chip> : null}
+          {kept ? <Tag tone="indigo">Check-in kept</Tag> : late ? <Tag tone="danger">Late</Tag> : null}
+          {owed ? <Tag tone="warning">Deposit owed</Tag> : null}
           {visit.client.allergy ? <AllergyChip allergy={visit.client.allergy} /> : null}
-          {owed ? <Chip tone="warning">Deposit owed</Chip> : null}
-          {!owed && visit.money.advance > 0 ? <Chip tone="indigo">Advance</Chip> : null}
+          {!owed && visit.money.advance > 0 ? <Tag tone="violet">Advance</Tag> : null}
         </div>
-        <div className="truncate text-[12.5px] text-ink-2">
-          {servicesOf(visit)} · {stylistsOf(visit)} · {visit.status_label}
-          {due ? ` · ${due}` : ''}
+        <div className="truncate text-[13px] text-ink-2">
+          {[
+            servicesOf(visit),
+            stylistsOf(visit),
+            visit.status_label,
+            owed ? 'deposit owed' : visit.money.advance > 0 ? `Advance ${amount(visit.money.advance, visit.money.currency).replace(/\.00$/, '')}` : null,
+            late ? null : due,
+          ]
+            .filter(Boolean)
+            .join(' · ')}
         </div>
       </div>
-      <Button variant="primary" size="lg" icon="check-circle" disabled={kept || !desk.may('salon.visit.checkin')} onClick={() => desk.checkIn(visit)}>
-        Check in
-      </Button>
+      {canDeposit ? (
+        <TouchButton icon="wallet" onClick={() => desk.deposit(visit)}>
+          Take deposit
+        </TouchButton>
+      ) : (
+        <TouchButton variant="primary" icon="check" disabled={kept || !desk.may('salon.visit.checkin')} onClick={() => desk.checkIn(visit)}>
+          Check in
+        </TouchButton>
+      )}
     </li>
   );
 }
@@ -165,26 +217,25 @@ function ReadyToPay({ board }: { board: TodayBoard }) {
   if (ready.length === 0) return null;
 
   return (
-    <Card title="Ready to pay">
+    <Panel title="Ready to pay" action={<span className="text-[13px] text-ink-2">{ready.length}</span>}>
       <ul>
         {ready.map((v) => (
           <li key={v.id} className="flex items-center gap-3 border-t border-line py-2.5 first:border-t-0">
-            <Avatar name={v.client.name} size={30} />
             <div className="min-w-0 flex-1">
               <div className="truncate text-[14px] font-bold text-ink">{v.client.name}</div>
-              <div className="truncate text-[12.5px] text-ink-2">
+              <div className="truncate text-[13px] text-ink-2">
                 {servicesOf(v)} · {owing(v) ? 'still owing' : v.status_label}
               </div>
             </div>
-            <span className="text-[13px] font-bold text-ink tabular-nums" title="Still to pay, after any advance">
-              {amount(stillToPay(v), v.money.currency)}
+            <span className="text-[14px] font-bold text-ink tabular-nums" title="Still to pay, after any advance">
+              {amount(stillToPay(v))}
             </span>
-            <Button size="sm" variant="primary" disabled={!desk.may('salon.checkout')} onClick={() => desk.go('pay', { visit: v.id })}>
+            <TouchButton variant="primary" className="min-h-10 px-3.5 text-[13px]" disabled={!desk.may('salon.checkout')} onClick={() => desk.go('pay', { visit: v.id })}>
               {owing(v) ? 'Take the rest' : 'Pay'}
-            </Button>
+            </TouchButton>
           </li>
         ))}
       </ul>
-    </Card>
+    </Panel>
   );
 }

@@ -114,6 +114,9 @@ export interface CheckoutResult {
   next_visit?: { date: string; weeks: number } | null;
   message?: string;
   visit: Visit;
+  /** What this desk did with it, for Paid to say: the receipt printed, the drawer opened (not the server's). */
+  printed?: SalonPrintOutcome | null;
+  drawer?: SalonPrintOutcome | null;
 }
 
 export interface RegisterSession {
@@ -170,11 +173,46 @@ export interface RetailItem {
   badge: 'untracked' | 'out' | 'low' | 'in';
 }
 
+/** GET /visits/{id}/receipt?format=json — what the printed receipt says, for showing it beside Paid (D07, D12). */
+export interface ReceiptData {
+  company: { name: string; address: string | null; phone: string | null; registration: string | null; location: string | null };
+  invoice: { number: string; status: string; date: string | null };
+  visit: { number: string; at: string };
+  pos: { sale: string | null; register: string | null; till: string | null } | null;
+  client: string | null;
+  lines: Array<{ description: string; quantity: number; amount: number }>;
+  currency: string;
+  subtotal: number;
+  tier_discount: number;
+  points_value: number;
+  points: number;
+  tax: number;
+  total: number;
+  paid: number;
+  owed: number;
+  tenders: Array<{ method: string; amount: number; reference: string | null; change: number }>;
+  change: number;
+  credit_kept: number;
+  loyalty: { earned: number; balance: number; tier: string | null } | null;
+  store_credit: number;
+  next_visit: { date: string; weeks: number } | null;
+  footer: string;
+}
+
+/** An advance taken for a visit still to come (PAY-05): the deposit, into the desk's register. */
+export interface AdvanceBody {
+  amount: number;
+  method: Exclude<TenderMethod, 'online'>;
+  reference: string | null;
+  desk_id: number;
+}
+
 /* ── Reading ────────────────────────────────────────────────────────── */
 
 export const fetchCheckout = (visitId: number, signal?: AbortSignal) => apiGet<CheckoutQuote>(`${BASE}/visits/${visitId}/checkout`, undefined, signal);
 export const fetchRegister = (deskId: number, signal?: AbortSignal) => apiGet<RegisterState>(`${BASE}/desk/register`, { desk: deskId }, signal);
 export const fetchDay = (deskId: number, signal?: AbortSignal) => apiGet<DeskDay>(`${BASE}/desk/day`, { desk: deskId }, signal);
+export const fetchReceipt = (visitId: number, signal?: AbortSignal) => apiGet<ReceiptData>(`${BASE}/visits/${visitId}/receipt`, { format: 'json' }, signal);
 export const fetchRetail = (deskId: number, q: string, signal?: AbortSignal) => apiGet<{ items: RetailItem[]; categories: string[] }>(`${BASE}/desk/retail`, { desk: deskId, q }, signal);
 
 export const MK = {
@@ -182,6 +220,7 @@ export const MK = {
   register: (deskId: number) => ['salon', 'register', deskId] as const,
   day: (deskId: number) => ['salon', 'day', deskId] as const,
   retail: (deskId: number, q: string) => ['salon', 'retail', deskId, q] as const,
+  receipt: (visitId: number) => ['salon', 'receipt', visitId] as const,
   print: ['salon', 'print'] as const,
 };
 
@@ -212,6 +251,15 @@ export async function checkout(visitId: number, inputs: PriceInputs, pay: PayBod
 export async function payRest(visitId: number, pay: PayBody & { use_credit: boolean }, key: string): Promise<{ data: CheckoutResult; message: string | null }> {
   const r = await write<PayResult & { visit: Visit }>(`/visits/${visitId}/payments`, pay, key);
   return { data: { paid: r.data, visit: r.data.visit, message: r.message ?? undefined }, message: r.message };
+}
+
+/**
+ * Take a deposit for a visit (PAY-05). Under one key per attempt, as a
+ * payment is; WorkSuite records it in the desk's open register, and refuses
+ * with `register_closed` before anything is recorded while the register is shut.
+ */
+export async function takeAdvance(visitId: number, body: AdvanceBody, key: string): Promise<{ data: { visit: Visit }; message: string | null }> {
+  return write<{ visit: Visit }>(`/visits/${visitId}/advances`, body, key);
 }
 
 /**
@@ -352,13 +400,13 @@ function rows(pairs: Array<[string, string]>): string {
   return `<table>${pairs.map(([l, r]) => `<tr><td>${esc(l)}</td><td class="r">${esc(r)}</td></tr>`).join('')}</table>`;
 }
 
-const WIDTH = { '80mm': 302, '58mm': 219 } as const;
+const WIDTH: Record<SalonPaper, number> = { '80mm': 302, '58mm': 219, a4: 794, letter: 816 };
 
 export interface PageHeading {
   company: string;
   location: string;
   date: string;
-  paper: '80mm' | '58mm';
+  paper: SalonPaper;
 }
 
 /** The Z-report, from what the close answered: nothing is added up here. */

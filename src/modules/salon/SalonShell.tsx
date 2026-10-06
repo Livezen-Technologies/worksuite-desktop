@@ -1,29 +1,31 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { lazy, Suspense, useEffect, useState } from 'react';
 import { Icon } from '../../components/Icon';
-import { Button, Modal, Spinner, cx } from '../../components/ui';
-import { call } from '../../core/bridge';
+import { Spinner, cx } from '../../components/ui';
+import { app } from '../../core/app-state';
+import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { toast } from '../../core/toasts';
 import type { ModuleProps } from '../registry';
-import { deskState, fetchDesks, fetchOptions, forgetDesk, K, pairing as readPairing } from './api';
+import { clockAt, deskState, fetchDesks, fetchOptions, K, pairing as readPairing } from './api';
 import { useCheckIn } from './CheckIn';
-import type { CheckoutResult } from './money';
 import Connect from './Connect';
+import { useDeposit } from './Deposit';
+import type { CheckoutResult } from './money';
 import { copyAge, deskFromCopy, optionsFromCopy, syncNow, unreachable, useCopy, useOnline, useSalonChanged, useSyncStatus, waitingLine } from './offline';
-import { DeskContext, Failed, Note, salonRoute, seedParam, type Desk, type DeskView } from './parts';
+import { DeskContext, Failed, Note, salonRoute, seedParam, TouchButton, usePrintSettings, type Desk, type DeskView } from './parts';
 import { SidePanel } from '../../components/SidePanel';
 
 /**
  * SalonMate's front desk, native in WorkSuite Desktop. Addressed as
- * `/salon?view=today|calendar|walkin|book|clients|outbox|…` (`&client=<id>`
- * for a client's card, `&date=YYYY-MM-DD` for a day, `&seed=` for a walk-in
- * started with what is known). A notification's `view=checkout` is the
+ * `/salon?view=today|calendar|walkin|book|clients|record|outbox|…`
+ * (`&client=<id>` for a client's card, `&date=YYYY-MM-DD` for a day,
+ * `&seed=` for a walk-in started with what is known, `&visit=` for a
+ * payment or a service record). A notification's `view=checkout` is the
  * payment screen.
  *
  * Until this computer is an approved desk it shows the pairing screen. The
  * owners' screens — reports, commission, settings, the desks list — open in
- * WorkSuite on the web.
+ * WorkSuite on the web, from Settings.
  *
  * When WorkSuite does not answer, the desk opens from its copy of the day and
  * says so (offline.ts); taking money waits for WorkSuite.
@@ -31,7 +33,9 @@ import { SidePanel } from '../../components/SidePanel';
 const Today = lazy(() => import('./Today'));
 const Calendar = lazy(() => import('./Calendar'));
 const WalkIn = lazy(() => import('./WalkIn'));
+const NewBooking = lazy(() => import('./NewBooking'));
 const Clients = lazy(() => import('./Clients'));
+const ServiceRecord = lazy(() => import('./ServiceRecord'));
 const Pay = lazy(() => import('./Pay'));
 const Paid = lazy(() => import('./Pay').then((m) => ({ default: m.Paid })));
 const Register = lazy(() => import('./Register'));
@@ -39,32 +43,49 @@ const DayClose = lazy(() => import('./DayClose'));
 const Printers = lazy(() => import('./Printers'));
 const Outbox = lazy(() => import('./Outbox'));
 
-const VIEWS: Record<DeskView, { label: string; icon: string }> = {
-  today: { label: 'Today', icon: 'home' },
-  calendar: { label: 'Calendar', icon: 'calendar' },
-  walkin: { label: 'Walk-in', icon: 'user-plus' },
-  book: { label: 'New booking', icon: 'calendar-check' },
-  clients: { label: 'Clients', icon: 'users' },
-  pay: { label: 'Take payment', icon: 'banknote' },
-  paid: { label: 'Paid', icon: 'check-circle' },
-  register: { label: 'Register', icon: 'unlock' },
-  close: { label: 'Close the day', icon: 'moon' },
-  printers: { label: 'Printers', icon: 'printer' },
-  outbox: { label: 'Changes to send', icon: 'upload' },
+const TITLES: Record<DeskView, string> = {
+  today: 'Today',
+  calendar: 'Calendar',
+  walkin: 'Walk-in',
+  book: 'New booking',
+  clients: 'Clients',
+  record: 'Service record',
+  pay: 'Take payment',
+  paid: 'Paid',
+  register: 'Register',
+  close: 'Close the day',
+  printers: 'Printers & receipts',
+  outbox: 'Sync',
 };
+
+/** The desk's rail (D02): each item, and the screens it stands for. */
+const RAIL: Array<{ view: DeskView; label: string; icon: string; covers: DeskView[] }> = [
+  { view: 'today', label: 'Today', icon: 'grid', covers: ['today'] },
+  { view: 'calendar', label: 'Calendar', icon: 'calendar', covers: ['calendar', 'book'] },
+  { view: 'walkin', label: 'Walk-in', icon: 'door', covers: ['walkin'] },
+  { view: 'clients', label: 'Clients', icon: 'users', covers: ['clients', 'record'] },
+  { view: 'pay', label: 'Checkout', icon: 'file-text', covers: ['pay', 'paid'] },
+  { view: 'register', label: 'Register', icon: 'store', covers: ['register', 'close'] },
+  { view: 'outbox', label: 'Sync', icon: 'refresh', covers: ['outbox'] },
+  { view: 'printers', label: 'Settings', icon: 'settings', covers: ['printers'] },
+];
 
 /** Screens that take or count money: they need WorkSuite, always. */
 const MONEY: DeskView[] = ['pay', 'register', 'close'];
+
+/** Old and outside names for a screen: a notification's `checkout`, `settings`, `sync`. */
+const ALIASES: Record<string, DeskView> = { checkout: 'pay', settings: 'printers', sync: 'outbox' };
 
 export default function SalonShell(_props: ModuleProps) {
   const { query, go: goRoute } = useTab();
   const qc = useQueryClient();
   const raw = query.get('view') ?? '';
-  const asked = (raw === 'checkout' ? 'pay' : raw) as DeskView;
-  const view: DeskView = asked in VIEWS ? asked : 'today';
-  useTabTitle(`SalonMate · ${VIEWS[view].label}`);
+  const asked = (ALIASES[raw] ?? raw) as DeskView;
+  const view: DeskView = asked in TITLES ? asked : 'today';
+  useTabTitle(`SalonMate · ${TITLES[view]}`);
   useSalonChanged();
   const online = useOnline();
+  const me = useStore(app, (s) => s.auth?.user?.name ?? null);
 
   const pairing = useQuery({ queryKey: K.pairing, queryFn: readPairing });
   const deskId = pairing.data?.desk_id ?? null;
@@ -86,7 +107,8 @@ export default function SalonShell(_props: ModuleProps) {
   const options = useQuery({ queryKey: K.options(info?.org_id ?? null), queryFn: ({ signal }) => fetchOptions(info!.org_id, signal), enabled: state === 'active' && !!info });
   const offline = !online || desksDown || unreachable(options) || sync.data?.reachable === false;
   const opts = options.data ?? (offline && copy ? optionsFromCopy(copy) : undefined);
-  const checkIn = useCheckIn(opts?.ack_severity ?? 'moderate', offline);
+  const go: Desk['go'] = (v, params = {}) => goRoute(salonRoute(v, params));
+  const checkIn = useCheckIn(opts?.ack_severity ?? 'moderate', offline, (client) => go('clients', { client, allergy: 1 }));
   /* What each payment answered, for the Paid screen that follows it. */
   const [paid, setPaid] = useState<Record<number, CheckoutResult>>({});
 
@@ -99,9 +121,9 @@ export default function SalonShell(_props: ModuleProps) {
   const location = opts?.locations.find((l) => l.id === info?.location_id) ?? null;
 
   let desk: Desk | null = null;
+  const may = opts?.may ?? {};
+  const deposit = useDeposit(info ? { desk: info, go, may: (p) => may[p] === true } : null);
   if (info && opts && location) {
-    const may = opts.may ?? {};
-    const go: Desk['go'] = (v, params = {}) => goRoute(salonRoute(v, params));
     desk = {
       desk: info,
       location,
@@ -110,11 +132,17 @@ export default function SalonShell(_props: ModuleProps) {
       currency: opts.currency ?? '',
       options: opts,
       params: query,
+      me,
       may: (p) => may[p] === true,
       go,
       checkIn: (v) => checkIn.start(v),
+      deposit: (v) => deposit.start(v),
       walkIn: (seed, later = false) => go(later ? 'book' : 'walkin', { seed: seedParam(seed) }),
-      paid: { remember: (id, r) => setPaid((p) => ({ ...p, [id]: r })), get: (id) => paid[id] },
+      paid: {
+        remember: (id, r) => setPaid((p) => ({ ...p, [id]: r })),
+        note: (id, o) => setPaid((p) => (p[id] ? { ...p, [id]: { ...p[id], ...o } } : p)),
+        get: (id) => paid[id],
+      },
       offline,
       copy,
       sync: sync.data ?? null,
@@ -125,7 +153,7 @@ export default function SalonShell(_props: ModuleProps) {
   if (pairing.isLoading) return <Spinner label="Opening SalonMate…" />;
 
   if (!pairing.data || state !== 'active') {
-    return <Connect pairing={pairing.data ?? null} desk={info} state={state} desks={desks} onChange={() => void qc.invalidateQueries({ queryKey: K.all })} />;
+    return <Connect pairing={pairing.data ?? null} desk={info} state={state} desks={desks} me={me} onChange={() => void qc.invalidateQueries({ queryKey: K.all })} />;
   }
 
   if (options.isError && !opts) {
@@ -155,7 +183,7 @@ export default function SalonShell(_props: ModuleProps) {
         <SidePanel id="salon" label="the SalonMate menu">
           <Rail view={view} desk={desk} />
         </SidePanel>
-        <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`SalonMate · ${VIEWS[view].label}`}>
+        <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`SalonMate · ${TITLES[view]}`}>
           <SyncBar desk={desk} view={view} />
           <Suspense fallback={<Spinner />}>
             {offline && MONEY.includes(view) ? (
@@ -164,10 +192,14 @@ export default function SalonShell(_props: ModuleProps) {
               <Outbox />
             ) : view === 'calendar' ? (
               <Calendar />
-            ) : view === 'walkin' || view === 'book' ? (
-              <WalkIn key={`${view}-${query.get('seed') ?? ''}`} later={view === 'book'} />
+            ) : view === 'walkin' ? (
+              <WalkIn key={`walkin-${query.get('seed') ?? ''}`} />
+            ) : view === 'book' ? (
+              <NewBooking key={`book-${query.get('seed') ?? ''}`} />
             ) : view === 'clients' ? (
               <Clients />
+            ) : view === 'record' ? (
+              <ServiceRecord key={`${query.get('visit') ?? ''}-${query.get('appointment') ?? ''}`} />
             ) : view === 'pay' ? (
               <Pay key={query.get('visit') ?? ''} />
             ) : view === 'paid' ? (
@@ -185,14 +217,16 @@ export default function SalonShell(_props: ModuleProps) {
         </main>
       </div>
       {checkIn.panel}
+      {deposit.panel}
     </DeskContext.Provider>
   );
 }
 
-/** What the desk is working from, and what waits to be sent. */
+/** What the desk is working from (D09's banner), and what waits to be sent. */
 function SyncBar({ desk, view }: { desk: Desk; view: DeskView }) {
   const [busy, setBusy] = useState(false);
   const s = desk.sync;
+  const tz = desk.location.timezone;
   const tryNow = async () => {
     setBusy(true);
     try {
@@ -203,33 +237,37 @@ function SyncBar({ desk, view }: { desk: Desk; view: DeskView }) {
   };
 
   if (desk.offline) {
-    const age = copyAge(desk.copy, desk.location.timezone);
+    const age = copyAge(desk.copy, tz);
     return (
-      <div className="px-6 pt-4">
-        <Note
-          tone="warning"
-          action={
-            <Button size="sm" icon="refresh" loading={busy} onClick={() => void tryNow()}>
-              Try now
-            </Button>
-          }
-        >
-          <span className="font-bold">WorkSuite cannot be reached.</span> {age ? `Working from this desk’s copy of the day, taken at ${age}.` : 'This computer has no copy of the day yet.'}{' '}
-          {s?.can_write ? 'New clients, walk-ins, bookings and check-ins are kept here and sent when it is back.' : (s?.why_not ?? '')} Payments and the register need WorkSuite.
-        </Note>
+      <div className="px-5 pt-4">
+        <div role="status" className="flex flex-wrap items-center gap-3.5 rounded-[16px] border border-[var(--ws-note-line)] bg-warning-bg px-[18px] py-3.5 text-warning-ink">
+          <Icon name="wifi-off" size={22} className="shrink-0" />
+          <div className="min-w-0 flex-1">
+            <div className="text-[17px] font-extrabold">No connection to WorkSuite{s?.last_contact ? ` since ${clockAt(s.last_contact, tz)}` : ''}</div>
+            <div className="text-[13px]">
+              {age ? `Showing the calendar, clients and services as of ${age}. ` : 'This computer has no copy of the day yet. '}
+              {s?.can_write ? 'New clients, bookings and check-ins are kept here and sent in order when the line is back. ' : s?.why_not ? `${s.why_not} ` : ''}
+              Payments, deposits and the register need WorkSuite.
+            </div>
+          </div>
+          <TouchButton icon="refresh" loading={busy} onClick={() => void tryNow()}>
+            Try now
+          </TouchButton>
+        </div>
       </div>
     );
   }
   const line = view === 'outbox' ? null : waitingLine(s ?? undefined);
   if (!line) return null;
   return (
-    <div className="px-6 pt-4">
+    <div className="px-5 pt-4">
       <Note
         tone={s && s.refused > 0 ? 'danger' : 'indigo'}
+        icon={s && s.refused > 0 ? 'warning' : 'upload'}
         action={
-          <Button size="sm" onClick={() => desk.go('outbox')}>
-            Open
-          </Button>
+          <TouchButton className="min-h-10 text-[13px]" onClick={() => desk.go('outbox')}>
+            Open Sync
+          </TouchButton>
         }
       >
         {line}
@@ -241,130 +279,80 @@ function SyncBar({ desk, view }: { desk: Desk; view: DeskView }) {
 function NeedsWorkSuite({ view }: { view: DeskView }) {
   const what = view === 'pay' ? 'Taking payment' : view === 'register' ? 'The register' : 'Closing the day';
   return (
-    <div className="p-6">
+    <div className="px-5 py-4">
       <Note tone="muted">{what} needs WorkSuite, so that the money is counted once, in one place. Clients can still be checked in, walked in and booked here; take payment when the line is back.</Note>
     </div>
   );
 }
 
+/** The desk's own rail (D02): icons over their names, and where this desk stands at its foot. */
 function Rail({ view, desk }: { view: DeskView; desk: Desk }) {
-  const qc = useQueryClient();
-  const [confirming, setConfirming] = useState(false);
-  const item = (v: DeskView, disabled = false) => {
-    const on = view === v;
-    return (
-      <button
-        key={v}
-        type="button"
-        disabled={disabled}
-        aria-current={on ? 'page' : undefined}
-        onClick={() => (v === 'walkin' || v === 'book' ? desk.walkIn({}, v === 'book') : desk.go(v))}
-        className={cx(
-          'relative flex h-[34px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left disabled:opacity-50',
-          on ? 'bg-selection font-bold text-primary' : 'font-medium text-ink hover:bg-subtle',
-        )}
-      >
-        <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
-        <Icon name={VIEWS[v].icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
-        <span className="min-w-0 flex-1 truncate">{VIEWS[v].label}</span>
-      </button>
-    );
-  };
-  const book = desk.may('salon.visit.book');
-  const unsent = (desk.sync?.waiting ?? 0) + (desk.sync?.refused ?? 0) + (desk.sync?.others ?? 0);
-
-  async function forget() {
-    try {
-      await forgetDesk();
-      setConfirming(false);
-      void qc.invalidateQueries({ queryKey: K.all });
-    } catch (e) {
-      toast('error', e instanceof Error ? e.message : 'The pairing could not be forgotten.');
-    }
-  }
-
-  return (
-    <nav aria-label="SalonMate" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-surface text-[13px] text-ink">
-      <div className="flex flex-col gap-0.5 px-2.5 pt-3.5">
-        {item('today')}
-        {item('calendar')}
-        {item('walkin', !book)}
-        {item('book', !book)}
-        {item('clients')}
-        {outboxItem(view, desk)}
-        <div className="mx-1 my-1.5 border-t border-line" />
-        {item('pay', !desk.may('salon.checkout'))}
-        {desk.desk.register ? item('register') : null}
-        {item('close')}
-        {item('printers')}
-      </div>
-      <div className="mt-auto flex flex-col gap-2 border-t border-line px-3 py-3">
-        <button type="button" onClick={() => void call('app:openInBrowser', { path: '/salon' })} className="flex items-center gap-2 text-left text-[12.5px] font-semibold text-ink-2 hover:text-ink">
-          <Icon name="external" size={14} /> Owners’ screens on the web
-        </button>
-        <div className="text-[12px] text-ink-3">
-          <div className="truncate font-semibold text-ink-2">{desk.desk.name}</div>
-          <div className="truncate">
-            {desk.location.name}
-            {desk.desk.register ? ` · ${desk.desk.register.code}` : ''}
-          </div>
-        </div>
-        <button type="button" onClick={() => setConfirming(true)} className="text-left text-[12px] text-ink-3 hover:text-danger">
-          Pair this computer again…
-        </button>
-      </div>
-      {confirming ? (
-        <Modal
-          title="Pair this computer again?"
-          onClose={() => setConfirming(false)}
-          footer={
-            <>
-              <Button onClick={() => setConfirming(false)}>Keep this desk</Button>
-              <Button variant="danger" onClick={() => void forget()}>
-                Forget this desk
-              </Button>
-            </>
-          }
-        >
-          <p className="text-[13.5px] text-ink">
-            This computer forgets that it is {desk.desk.name}. To work as a front desk again it is paired anew, and an owner approves it. The old desk stays on the server until an owner revokes it.
-          </p>
-          {unsent > 0 ? (
-            <p className="mt-2 text-[13.5px] font-semibold text-danger">
-              {unsent} change{unsent === 1 ? '' : 's'} made at this desk while WorkSuite was out of reach {unsent === 1 ? 'has' : 'have'} not reached it, and will be dropped.
-            </p>
-          ) : null}
-        </Modal>
-      ) : null}
-    </nav>
-  );
-}
-
-/** "Changes to send", with how many wait and whether any needs a person. */
-function outboxItem(view: DeskView, desk: Desk) {
+  const print = usePrintSettings();
   const s = desk.sync;
-  const n = (s?.waiting ?? 0) + (s?.refused ?? 0);
-  if (n === 0 && view !== 'outbox' && !desk.offline) return null;
-  const on = view === 'outbox';
+  const tz = desk.location.timezone;
+  const unsent = (s?.waiting ?? 0) + (s?.refused ?? 0);
+  const book = desk.may('salon.visit.book');
+  const reg = desk.desk.register;
+  const disabled: Partial<Record<DeskView, boolean>> = { walkin: !book, pay: !desk.may('salon.checkout') };
+
   return (
-    <button
-      key="outbox"
-      type="button"
-      aria-current={on ? 'page' : undefined}
-      onClick={() => desk.go('outbox')}
-      className={cx(
-        'relative flex h-[34px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left',
-        on ? 'bg-selection font-bold text-primary' : 'font-medium text-ink hover:bg-subtle',
-      )}
-    >
-      <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
-      <Icon name={VIEWS.outbox.icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
-      <span className="min-w-0 flex-1 truncate">{VIEWS.outbox.label}</span>
-      {n > 0 ? (
-        <span className={cx('rounded-full px-1.5 text-[11px] font-bold tabular-nums', s && s.refused > 0 ? 'bg-danger text-white' : 'bg-subtle text-ink-2')} aria-label={`${n} waiting`}>
-          {n}
+    <nav aria-label="SalonMate" className="flex h-full w-[88px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-surface px-[7px] py-2.5 scroll-thin">
+      <div className="pt-1 pb-2 text-center text-[10px] font-extrabold tracking-[.08em] text-[#6D28D9] dark:text-[#C4B5FD]">SALONMATE</div>
+      {RAIL.map((r) => {
+        const on = r.covers.includes(view);
+        return (
+          <button
+            key={r.view}
+            type="button"
+            disabled={disabled[r.view]}
+            aria-current={on ? 'page' : undefined}
+            onClick={() => (r.view === 'walkin' ? desk.walkIn({}) : desk.go(r.view))}
+            className={cx(
+              'relative flex shrink-0 flex-col items-center gap-[3px] rounded-[12px] py-2 text-[11.5px] font-semibold transition-colors disabled:cursor-not-allowed disabled:opacity-40',
+              on ? 'bg-selection text-primary' : 'text-ink-2 enabled:hover:bg-subtle enabled:hover:text-ink',
+            )}
+          >
+            <span className="relative">
+              <Icon name={r.icon} size={22} />
+              {r.view === 'outbox' && unsent > 0 ? (
+                <span
+                  aria-label={`${unsent} waiting`}
+                  className={cx('absolute -top-1.5 -right-2.5 grid h-[18px] min-w-[18px] place-items-center rounded-full px-1 text-[10.5px] font-bold text-white', s && s.refused > 0 ? 'bg-danger' : 'bg-[#F59E0B]')}
+                >
+                  {unsent > 99 ? '99+' : unsent}
+                </span>
+              ) : null}
+            </span>
+            {r.label}
+          </button>
+        );
+      })}
+
+      <div className="mt-auto flex flex-col items-center gap-1 pt-3 text-center text-[10px] leading-tight text-ink-2">
+        <span className={cx('flex items-center gap-1 font-bold', desk.offline ? 'text-warning' : 'text-success')}>
+          <span className={cx('h-[7px] w-[7px] rounded-full', desk.offline ? 'bg-warning' : 'bg-success')} />
+          {desk.offline ? 'Offline' : 'Online'}
         </span>
-      ) : null}
-    </button>
+        <span>{desk.offline ? (unsent > 0 ? `${unsent} waiting` : 'nothing waiting') : s?.last_contact ? `synced ${clockAt(s.last_contact, tz)}` : ''}</span>
+        {reg ? (
+          <span className={cx('mt-1 flex items-center gap-1 font-semibold', reg.open ? 'text-teal' : 'text-ink-3')} title={`Register ${reg.code} ${reg.open ? 'open' : 'closed'}`}>
+            <Icon name="store" size={11} />
+            {reg.code} {reg.open ? 'open' : 'closed'}
+          </span>
+        ) : null}
+        {print.data?.receipt_printer ? (
+          <span className="flex max-w-full items-center gap-1" title={print.data.receipt_printer}>
+            <Icon name="printer" size={11} className="shrink-0" />
+            <span className="truncate">{print.data.receipt_printer}</span>
+          </span>
+        ) : null}
+        <span className="mt-1.5 border-t border-line pt-1.5">
+          {desk.location.name}
+          <br />
+          {desk.desk.name}
+          {reg ? ` · ${reg.code}` : ''}
+        </span>
+      </div>
+    </nav>
   );
 }

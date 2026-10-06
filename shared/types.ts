@@ -1425,14 +1425,15 @@ export interface SalonDeskPairInput {
   pos_register_id?: number | null;
 }
 
-/** What a SalonMate receipt is printed on: an 80 mm or 58 mm roll, or A4. */
-export type SalonPaper = '80mm' | '58mm' | 'a4';
+/** What a SalonMate receipt is printed on: an 80 mm or 58 mm roll, or a full page (A4, Letter). */
+export type SalonPaper = '80mm' | '58mm' | 'a4' | 'letter';
 
 /** This computer's printers for SalonMate, on one server (salon-print.ts). */
 export interface SalonPrintSettings {
   receipt_printer: string | null;
   a4_printer: string | null;
-  paper: '80mm' | '58mm';
+  /** The receipt's paper (PRN-02): a roll, or a full page that goes to the A4 printer when there is one. */
+  paper: SalonPaper;
   copies: number;
   /** Print the receipt as soon as a payment is taken. */
   auto_print: boolean;
