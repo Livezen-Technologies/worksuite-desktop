@@ -29,6 +29,7 @@ person who has to live with the change — what it does, and where it bites.
   Window*, so the next-contact key is Alt+Ctrl/⌘+N. Screens that need server features WorkSuite doesn't offer yet
   (the readiness panel, callbacks to the minute, merge and erase, snapshots, version history, analytics, journeys,
   among others) say so instead of pretending — see `docs/MARKETING.md`, including what to check against the server.
+- Modules: marketing 1.0.0 (new), notifications 1.10.0.
 
 ## 0.2.189 — 2026-10-06
 

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.10.0 — 2026-10-06
+
+**Added**
+
+- A native notification can carry its own buttons, run by whoever raised it (Marketing's callback reminder: Call now, Snooze 15 min); locked, or without the module any more, a button opens the link instead.
+
 ## 1.9.0 — 2026-10-05
 
 - Critical native notification when visitor messages are not reaching staff
