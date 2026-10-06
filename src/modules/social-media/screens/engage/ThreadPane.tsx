@@ -94,7 +94,7 @@ function Conversation({ thread: t, access, ai, account, brand, me, now }: { thre
     <div className="flex h-full min-h-0 flex-col">
       <header className="flex flex-wrap items-center gap-2.5 border-b border-line px-4 py-3">
         <Avatar name={t.participant.name} size={36} src={t.participant.avatar_url} />
-        <div className="min-w-0 flex-1">
+        <div className="min-w-[180px] flex-1">
           <div className="truncate text-[14px] font-bold text-ink">{t.participant.name}</div>
           <div className={cx('truncate text-[12px]', due?.state === 'overdue' ? 'text-danger' : due?.state === 'at_risk' ? 'text-warning' : 'text-ink-3')}>
             {[channelWord(t), account?.display_name, due?.text].filter(Boolean).join(' · ')}

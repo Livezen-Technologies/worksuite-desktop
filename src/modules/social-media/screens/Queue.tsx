@@ -99,8 +99,8 @@ export default function Queue() {
                 ) : null}
                 <SlotGrid key={scopeKey} info={data} scope={scope} canEdit={access.publish} canBlackouts={access.settings} />
                 <div className="grid min-w-0 gap-4 lg:grid-cols-[minmax(0,1fr)_340px]">
-                  <NextInQueue key={`${scopeKey}-${q.dataUpdatedAt}`} info={data} scope={scope} canReorder={access.publish} brandTz={brand?.timezone ?? data.timezone} />
-                  <Evergreen key={`${scopeKey}-${q.dataUpdatedAt}`} info={data} brandId={brandId} canEdit={access.publish} aiEnabled={status?.ai_enabled ?? true} />
+                  <NextInQueue key={`next-${scopeKey}-${q.dataUpdatedAt}`} info={data} scope={scope} canReorder={access.publish} brandTz={brand?.timezone ?? data.timezone} />
+                  <Evergreen key={`evergreen-${scopeKey}-${q.dataUpdatedAt}`} info={data} brandId={brandId} canEdit={access.publish} aiEnabled={status?.ai_enabled ?? true} />
                 </div>
               </>
             )}
