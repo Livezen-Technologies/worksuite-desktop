@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.24.0 — 2026-10-07
+
+**Added**
+
+- a Select all box over the message list (all, some, none), Shift-click for a range, Ctrl/⌘-click to toggle, Esc to clear; the selection bar reads 'N selected · Archive · Delete · Move · Mark read · ⋯ · Clear' (#290)
+
+**Fixed**
+
+- the unread dot and the checkbox no longer overlap — one 28px lead column holds the dot or, on hover and while anything is selected, the 16px checkbox, with even 12px padding; selected unread mail stays bold (#290)
+
 ## 1.23.0 — 2026-10-07
 
 **Added**
