@@ -31,7 +31,7 @@ const TOKEN = /^wsp_[1-9][0-9]{0,9}_[a-f0-9]{64}$/;
 /**
  * The door's calls: its own, one of its sales by its (URL-encoded) receipt number, and Phase 2's — held sales, tenders
  * and balances, approvals, customers and loyalty, stock and top sellers, the X report, the receipt template, the
- * device's name and unpairing.
+ * device's name and unpairing — and the customer display's (#294): its promotions and logo, and a number looked up.
  */
 const DOOR = new RegExp(
   '^(' +
@@ -53,6 +53,10 @@ const DOOR = new RegExp(
       'approval-requests\\/\\d{1,12}(\\/cancel)?',
       'customers',
       'customers\\/\\d{1,12}',
+      'customers\\/by-phone',
+      'display',
+      'display\\/logo',
+      'display\\/slides\\/\\d{1,12}\\/image',
       'loyalty',
       'top-sellers',
       'stock',
@@ -252,6 +256,27 @@ export class PosDesk {
       }
     }
     return { status: res.status, body: json };
+  }
+
+  /**
+   * A picture through the door (the customer display's promotions and logo, #294): its bytes and type, at most `max`
+   * bytes — a bigger one, or one that is not an image, is refused here rather than kept.
+   */
+  async bytes(path: string, max: number): Promise<{ status: number; type: string | null; bytes: Buffer | null }> {
+    if (!DOOR.test(path) || !path.startsWith('display/')) throw new DesktopError('INTERNAL', 'Not a picture of the till’s door.');
+    const s = this.read();
+    if (!s?.token) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
+    const res = await this.d.http.raw('GET', this.d.http.url(`/api/pos/device/${path}`), {
+      auth: false,
+      headers: { Authorization: `Bearer ${s.token}`, Accept: 'image/jpeg, image/png, image/webp' },
+      timeoutMs: 30_000,
+    });
+    const type = (res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase() || null;
+    if (!res.ok || !type || !/^image\/(jpeg|png|webp)$/.test(type)) return { status: res.status, type, bytes: null };
+    const length = Number(res.headers.get('content-length') ?? 0);
+    if (length > max) return { status: 413, type, bytes: null };
+    const bytes = Buffer.from(await res.arrayBuffer());
+    return bytes.length > max ? { status: 413, type, bytes: null } : { status: res.status, type, bytes };
   }
 
   /** Tell WorkSuite the till is alive and how much waits; learn its current name, branch and warehouse. */

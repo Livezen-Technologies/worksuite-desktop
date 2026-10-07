@@ -8,7 +8,8 @@ import type { Database } from './db';
 import type { HttpClient } from './http';
 import { PosCartsStore } from './pos-carts';
 import { PosDesk } from './pos-desk';
-import { closeDisplay, openDisplay } from './pos-display';
+import { closeDisplay, displayTouchSupport, isDisplayWindow, openDisplay, touchOf } from './pos-display';
+import { mediaFor, PosDisplayMediaStore } from './pos-display-media';
 import { PosPrint } from './pos-print';
 import { PosTill } from './pos-till';
 import { listPrinters } from './print';
@@ -55,6 +56,9 @@ export function createPos(d: PosDeps) {
     },
   });
 
+  // The customer display's promotions and logo (#294), kept like the catalogue: sealed where the policy allows.
+  const media = new PosDisplayMediaStore({ db: d.db, vault: d.vault, desk, origin: d.origin, keep: () => d.caps().offlineCache });
+
   const guard = (): void => {
     if (!d.allowed()) throw new DesktopError('APP_ACCESS_DENIED', "You don't have access to POS.");
   };
@@ -77,6 +81,7 @@ export function createPos(d: PosDeps) {
       if (before && origin && before.terminal.id !== input.terminal_id) {
         till.forgetTill(origin, before.terminal.id);
         carts.forget(scopeOf(origin, before.terminal.id)!);
+        media.forget(origin, before.terminal.id);
       }
       d.changed();
       void till.sync();
@@ -94,6 +99,7 @@ export function createPos(d: PosDeps) {
       if (input?.unpair) await till.unpair();
       till.forgetTill(origin, p.terminal.id);
       carts.forget(scopeOf(origin, p.terminal.id)!);
+      media.forget(origin, p.terminal.id);
       desk.forget();
       d.changed();
       return till.status();
@@ -104,6 +110,8 @@ export function createPos(d: PosDeps) {
     });
     router.handle('pos:catalogueRefresh', (input) => {
       guard();
+      // The display's promotions are read again with the catalogue (#294).
+      media.maybeRefresh(true);
       return till.refreshCatalogue(input?.capable);
     });
     router.handle('pos:sell', async (input, c) => {
@@ -176,6 +184,15 @@ export function createPos(d: PosDeps) {
       return openDisplay(d.windows);
     });
     router.handle('pos:displayClose', () => closeDisplay());
+    // The customer display's own window only (#294): pictures and whether its screen takes touch — nothing of a sale.
+    router.handle('pos:displayMedia', async (_i, c) => {
+      if (!isDisplayWindow(c.sender)) throw new DesktopError('PERMISSION_DENIED', 'Only the customer display reads this.');
+      guard();
+      // Nothing kept yet (a till's first display): read it now; otherwise in the background, every half hour.
+      const kept = media.kept() ?? (await media.refresh());
+      media.maybeRefresh();
+      return mediaFor(kept, touchOf(print.settings().display_touch, displayTouchSupport()));
+    });
     router.handle('pos:carts', () => {
       guard();
       return carts.read();
@@ -204,6 +221,7 @@ export function createPos(d: PosDeps) {
     desk,
     till,
     print,
+    media,
     register,
     start: () => till.start(),
     stop: () => till.stop(),
@@ -215,6 +233,7 @@ export function createPos(d: PosDeps) {
       till.forgetAll();
       print.forgetAll();
       carts.forgetAll();
+      media.forgetAll();
     },
   };
 }

@@ -264,6 +264,18 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (origin, prefix)
   );
   `,
+  // 7 — POS's customer display (worksuite-desktop#294): the company's promotions and logo as this till last read them,
+  // per server and till, so the display goes on showing them offline (electron/services/pos-display-media.ts).
+  `
+  CREATE TABLE pos_display_media (
+    origin TEXT NOT NULL,
+    terminal_id INTEGER NOT NULL,
+    version TEXT NOT NULL,
+    payload TEXT NOT NULL,            -- enc: the pictures' bytes, the logo, the interval and transition
+    fetched_at TEXT NOT NULL,
+    PRIMARY KEY (origin, terminal_id)
+  );
+  `,
 ];
 
 export type Row = Record<string, unknown>;

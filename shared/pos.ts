@@ -479,6 +479,11 @@ export interface PosPrintSettings {
   /** Lines above and below every receipt (the shop's name and address, a returns policy). */
   header: string;
   footer: string;
+  /**
+   * Whether the customer display's screen takes touch (worksuite-desktop#294): `auto` asks the system about the monitor
+   * it is on; `yes`/`no` say so where the system cannot tell. Without touch the display offers no phone entry.
+   */
+  display_touch?: 'auto' | 'yes' | 'no';
 }
 
 export interface PosPrintOutcome {
@@ -500,6 +505,7 @@ export const posPrintPatchSchema = z
     drawer_pin: z.union([z.literal(2), z.literal(5)]),
     header: text(400),
     footer: text(400),
+    display_touch: z.enum(['auto', 'yes', 'no']),
   })
   .partial();
 export type PosPrintPatch = z.infer<typeof posPrintPatchSchema>;
@@ -614,6 +620,8 @@ export const posDeskSchema = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('cancel'), id }),
   z.strictObject({ op: z.literal('customers'), q: z.string().trim().min(2).max(80) }),
   z.strictObject({ op: z.literal('customer'), id }),
+  /** A phone number the customer typed on the customer display, in E.164: WorkSuite answers `{items: [{id, masked}]}`. */
+  z.strictObject({ op: z.literal('byPhone'), phone: z.string().regex(/^\+[1-9]\d{6,14}$/) }),
   z.strictObject({
     op: z.literal('customerCreate'),
     name: z.string().trim().min(1).max(150),
@@ -675,7 +683,28 @@ export const posContract = {
   'pos:desk': { input: posDeskSchema, session: true, rate: 10 },
   'pos:approve': { input: posApproveSchema, session: true, rate: 2, sensitive: true },
   'pos:rename': { input: z.strictObject({ device_name: z.string().trim().min(1).max(120) }), session: true, rate: 2, sensitive: true },
+  /**
+   * The customer display's promotions and the company's logo, as kept by this till, and whether its screen takes touch
+   * (worksuite-desktop#294). Answered only to the customer display's own window (`/pos/display`).
+   */
+  'pos:displayMedia': { input: none, session: true, rate: 20 },
 };
+
+/** What the customer display shows beside the cart (worksuite-desktop#294): pictures as data URLs, kept on this computer. */
+export interface PosDisplayMedia {
+  slides: Array<{ id: number; src: string; title: string | null }>;
+  /** The company's logo, or null: the display shows the app's mark. */
+  logo: string | null;
+  company: string | null;
+  /** The company's brand colour (`#rrggbb`), or null. */
+  accent: string | null;
+  /** Seconds each picture stays. */
+  interval: number;
+  transition: 'fade' | 'slide';
+  /** Whether the display's screen takes touch (the till's setting, else what the system says of the monitor). */
+  touch: boolean;
+  version: string | null;
+}
 
 /** A sale WorkSuite would take only with a manager's approval: nothing was sold; what to ask for. */
 export type PosSellOutcome = { sale: PosSale; queued: boolean; printed: PosPrintOutcome | null } | { needs: PosApprovalNeed };
@@ -708,6 +737,7 @@ export interface PosOutputs {
   'pos:desk': PosDeskAnswer;
   'pos:approve': PosDeskAnswer;
   'pos:rename': { device_name: string; message: string };
+  'pos:displayMedia': PosDisplayMedia;
 }
 
 /**
