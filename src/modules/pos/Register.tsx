@@ -24,7 +24,7 @@ import { HeldDialog, HoldDialog, OpenSalesDialog, useServerHeld } from './OpenSa
 import Override from './Override';
 import { clampPage, GRID_PAGE, LIST_PAGE, pushRecent } from './paging';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';
-import { deductionOf, discountBase, estimateCart, formatMoney, shareOf } from './pricing';
+import { discountBase, estimateCart, formatMoney, shareOf } from './pricing';
 import ProductGrid, { type GridView, type QuickAction } from './ProductGrid';
 import ReturnDialog from './ReturnDialog';
 import Tender from './TenderPanel';
