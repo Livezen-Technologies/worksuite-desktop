@@ -1,3 +1,4 @@
+import { text } from '../../../../core/i18n';
 import { parseTs } from '../../../../core/time';
 import { findCountry } from './countries';
 import { COUNTRY_BOXES } from './countryBoxes';
@@ -129,6 +130,19 @@ export const STATE: Record<VisitorState, { label: string; colour: string }> = {
   waiting: { label: 'Waiting on us', colour: '#d9922e' },
   at_risk: { label: 'At risk', colour: '#c2392d' },
   on_call: { label: 'On a call', colour: '#2f9e67' },
+};
+
+/**
+ * The states as the map and its legend draw them (worksuite-desktop#284): the theme's `--map-*` variables (styles.css),
+ * a step darker than STATE's on light and brighter on dark, so each stands 3:1 off the ring round a marker in either
+ * theme — and repaints the moment the theme changes. The rows and chips keep STATE's colours.
+ */
+export const MAP_STATE: Record<VisitorState, { stroke: string; fill: string; border: string }> = {
+  browsing: { stroke: 'stroke-[var(--map-browsing)]', fill: 'fill-[var(--map-browsing)]', border: 'border-[var(--map-browsing)]' },
+  chatting: { stroke: 'stroke-[var(--map-chatting)]', fill: 'fill-[var(--map-chatting)]', border: 'border-[var(--map-chatting)]' },
+  waiting: { stroke: 'stroke-[var(--map-waiting)]', fill: 'fill-[var(--map-waiting)]', border: 'border-[var(--map-waiting)]' },
+  at_risk: { stroke: 'stroke-[var(--map-at-risk)]', fill: 'fill-[var(--map-at-risk)]', border: 'border-[var(--map-at-risk)]' },
+  on_call: { stroke: 'stroke-[var(--map-on-call)]', fill: 'fill-[var(--map-on-call)]', border: 'border-[var(--map-on-call)]' },
 };
 
 /** The legend's order, as the design lists it. */
@@ -538,6 +552,44 @@ export function clock(seconds: number): string {
   const m = Math.floor((s % 3600) / 60);
   const pad = (n: number) => String(n).padStart(2, '0');
   return h > 0 ? `${h}:${pad(m)}:${pad(s % 60)}` : `${m}:${pad(s % 60)}`;
+}
+
+/**
+ * A wait in words (worksuite-desktop#284): m:ss under an hour, "2 h 5 min" under a day, "22 days" past one — never
+ * "532:00:52".
+ */
+export function waitWords(seconds: number): string {
+  const s = Math.max(0, Math.floor(seconds));
+  if (s >= 86_400) {
+    const n = Math.floor(s / 86_400);
+    return n === 1 ? text('1 day') : text('{n} days', { n });
+  }
+  if (s >= 3600) return text('{h} h {m} min', { h: Math.floor(s / 3600), m: Math.floor((s % 3600) / 60) });
+  return clock(s);
+}
+
+/** A chat in one of these is over, whatever its `awaiting` still says. */
+const ENDED = new Set(['closed', 'ended']);
+
+/**
+ * How long the chat waiting longest has waited, in seconds, counting only chats somebody is waiting in now
+ * (worksuite-desktop#284): a visitor on the site whose chat waits on us — not one closed or ended, nor one quiet for
+ * longer than the dashboard counts anybody as here (`window_seconds`). The server's `longest_wait_since` counts every
+ * chat still open, those of visitors who left weeks ago and were never closed among them ("longest 532:00:52", which
+ * its clean-up job puts right); it stands in only while `visitors` is not known (null). Null when nobody waits.
+ */
+export function longestWait(d: Pick<Dashboard, 'now'>, visitors: OnlineVisitor[] | null, now: number, skew = 0): number | null {
+  if (!d.now.waiting_on_us) return null;
+  if (!visitors) return since(d.now.longest_wait_since, now, skew);
+  const gone = d.now.window_seconds > 0 ? d.now.window_seconds : Infinity;
+  let longest: number | null = null;
+  for (const v of visitors) {
+    const c = v.chat;
+    if (!c?.awaiting || !c.waiting_since || ENDED.has(v.conversation_status ?? '') || v.idle_seconds > gone) continue;
+    const waited = since(c.waiting_since, now, skew) ?? 0;
+    longest = longest === null ? waited : Math.max(longest, waited);
+  }
+  return longest;
 }
 
 /** mm:ss, as a call's length reads in the design ("On a call 02:14"). */

@@ -134,7 +134,7 @@ export function LiveMapWindow() {
           </div>
           <div className="relative min-h-[200px] flex-1 border-y border-line">
             {box ? (
-              <LiveMap places={places} box={box} onBox={setMoved} zoomButtons={false} edges={false} label="Map of visitors on the site now" className="absolute inset-0 bg-[#f8f9fc] dark:bg-ground" />
+              <LiveMap places={places} box={box} onBox={setMoved} zoomButtons={false} edges={false} label="Map of visitors on the site now" className="absolute inset-0" />
             ) : null}
             {box ? (
               <div className="absolute top-2 right-2">

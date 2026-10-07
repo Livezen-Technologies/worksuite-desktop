@@ -18,12 +18,11 @@ const Lazy = lazy(() => loadMap().then((m) => ({ default: m.LiveMap })));
 
 type Props = ComponentProps<View['LiveMap']>;
 
-/** The map's frame while it loads: its size and ground, shimmering where motion is welcome. */
-export const MapPlaceholder = forwardRef<HTMLDivElement, { className?: string; dark?: boolean }>(function MapPlaceholder({ className, dark }, ref) {
+/** The map's frame while it loads: its sea and a shimmer of its land, in the theme's colours (#284), where motion is welcome. */
+export const MapPlaceholder = forwardRef<HTMLDivElement, { className?: string }>(function MapPlaceholder({ className }, ref) {
   return (
-    <div ref={ref} role="img" aria-busy="true" aria-label={text('Loading the map')} data-testid="map-placeholder"
-      className={cx('relative overflow-hidden', dark ? 'bg-[#0b1430]' : 'bg-[#f8f9fc] dark:bg-subtle', className)}>
-      <span aria-hidden className={cx('absolute inset-[12%_8%] rounded-[40%] motion-safe:animate-pulse', dark ? 'bg-[#1a2550]' : 'bg-subtle dark:bg-ground')} />
+    <div ref={ref} role="img" aria-busy="true" aria-label={text('Loading the map')} data-testid="map-placeholder" className={cx('relative overflow-hidden bg-[var(--map-ocean)]', className)}>
+      <span aria-hidden className="absolute inset-[12%_8%] rounded-[40%] bg-[var(--map-land)] motion-safe:animate-pulse" />
     </div>
   );
 });
@@ -43,10 +42,9 @@ export function LiveMap({ whenVisible = false, ...props }: Props & { whenVisible
     io.observe(ref.current);
     return () => io.disconnect();
   }, [seen]);
-  const dark = props.theme === 'dark';
-  if (!seen) return <MapPlaceholder ref={ref} className={props.className} dark={dark} />;
+  if (!seen) return <MapPlaceholder ref={ref} className={props.className} />;
   return (
-    <Suspense fallback={<MapPlaceholder className={props.className} dark={dark} />}>
+    <Suspense fallback={<MapPlaceholder className={props.className} />}>
       <Lazy {...props} />
     </Suspense>
   );

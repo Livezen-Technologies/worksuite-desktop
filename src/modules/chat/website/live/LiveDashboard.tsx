@@ -4,9 +4,11 @@ import { Icon } from '../../../../components/Icon';
 import { Menu } from '../../../../components/Menu';
 import { cx } from '../../../../components/ui';
 import { ApiError, apiPost } from '../../../../core/api';
+import { app } from '../../../../core/app-state';
 import { call, errorMessage, isMac } from '../../../../core/bridge';
 import { text } from '../../../../core/i18n';
 import { markdownLine } from '../../../../core/markdown';
+import { useStore } from '../../../../core/store';
 import { parseTs, timeLabel } from '../../../../core/time';
 import { toast } from '../../../../core/toasts';
 import { useNow } from '../../../calls/parts';
@@ -14,7 +16,7 @@ import { useWebsiteInbox, WEBSITE, type Section } from '../api';
 import { PaneNotice, RetryButton, useSlow } from '../ThreadPlaceholder';
 import { findCountry, flagOf } from './countries';
 import {
-  boxOfParam, byCountry, callClock, clock, CLUSTER, demonymOf, groupOf, mapParam, mergePlaces, pathOf, placesNow, placesToday, presetsFor, sameBox, since, STATE, stateOf, WORLD_BOX,
+  boxOfParam, byCountry, callClock, clock, CLUSTER, demonymOf, groupOf, longestWait, mapParam, mergePlaces, pathOf, placesNow, placesToday, presetsFor, sameBox, since, STATE, stateOf, waitWords, WORLD_BOX,
   type Box, type Dashboard, type Group, type OnlineVisitor, type Place, type Preset,
 } from './liveMap';
 import { LiveMap, loadMap, MapPlaceholder } from './LazyMap';
@@ -121,6 +123,8 @@ export function LiveDashboard({ data, live, onLive, selected, onSelect, onStart,
   const snapshot = data.snapshotAt !== null ? Math.max(0, Math.round((now - data.snapshotAt) / 1000)) : null;
   // Nothing at all after five seconds: "Still loading… · Retry", centred.
   const [slow, restartSlow] = useSlow();
+  // Who is on the site, once known: "longest" counts only their chats, not ones left open by visitors long gone (#284).
+  const here = data.hasVisitors ? visitors : null;
 
   // What was said last in each chat, from the inbox the workspace keeps fresh; nothing is fetched for it here. Plain
   // words on one line, without Markdown's marks (#261).
@@ -218,7 +222,7 @@ export function LiveDashboard({ data, live, onLive, selected, onSelect, onStart,
           </button>
         </>,
       )}
-      {d ? <Tiles d={d} online={total} now={now} skew={skew} onSection={onSection} /> : <TilesPlaceholder failed={data.cardsFailed} onRetry={data.retryCards} />}
+      {d ? <Tiles d={d} online={total} here={here} now={now} skew={skew} onSection={onSection} /> : <TilesPlaceholder failed={data.cardsFailed} onRetry={data.retryCards} />}
       <div className="grid min-h-0 items-start gap-3.5 [grid-template-columns:minmax(0,65fr)_minmax(0,35fr)]">
         {d ? (
           <WhereTheyAre d={d} full={data.full} visitors={visitors} now={now} skew={skew} home={homeOf(d, visitors)} />
@@ -251,7 +255,7 @@ export function LiveDashboard({ data, live, onLive, selected, onSelect, onStart,
           <RetryButton onRetry={() => (restartSlow(), data.retryAll())} />
         </PaneNotice>
       ) : null}
-      {mode === 'wall' && d ? <WallMode d={d} online={total} visitors={visitors} sites={live.sites} now={now} skew={skew} updated={updated} onClose={() => onLive({ wall: false })} cycle={wall?.cycle ?? false} awake={wall?.keepAwake ?? true} /> : null}
+      {mode === 'wall' && d ? <WallMode d={d} online={total} visitors={visitors} here={here} sites={live.sites} now={now} skew={skew} updated={updated} onClose={() => onLive({ wall: false })} cycle={wall?.cycle ?? false} awake={wall?.keepAwake ?? true} /> : null}
     </main>
   );
 }
@@ -418,14 +422,15 @@ export function homeOf(d: Dashboard, visitors: OnlineVisitor[]): string | null {
 
 export type Tone = 'plain' | 'amber' | 'red' | 'green';
 
-function Tiles({ d, online, now, skew, onSection }: { d: Dashboard; online: number | null; now: number; skew: number; onSection: (s: 'visitors' | Section) => void }) {
-  const waited = d.now.waiting_on_us ? since(d.now.longest_wait_since, now, skew) : null;
+function Tiles({ d, online, here, now, skew, onSection }: { d: Dashboard; online: number | null; here: OnlineVisitor[] | null; now: number; skew: number; onSection: (s: 'visitors' | Section) => void }) {
+  // The longest of the chats somebody is waiting in now, in days past one ("22 days", not "532:00:52"; #284).
+  const waited = longestWait(d, here, now, skew);
   const calls = d.now.on_call?.count ?? 0;
   const call = calls ? since(d.now.on_call?.since, now, skew) : null;
   const tiles: Array<{ label: string; value: string; sub: string; tone: Tone; live?: boolean; go: 'visitors' | Section; action: string }> = [
     // Counted as the visitor list counts them once it is in, so this, the list's header and the sidebar agree (#248).
     { label: 'On the site now', value: String(online ?? d.now.visitors_online), sub: d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) }), tone: 'plain', live: true, go: 'visitors', action: 'see who' },
-    { label: 'Waiting on us', value: String(d.now.waiting_on_us), sub: waited !== null ? text('longest {time}', { time: clock(waited) }) : text('visitor spoke last'), tone: d.now.waiting_on_us ? 'amber' : 'plain', go: 'awaiting', action: 'open those chats' },
+    { label: 'Waiting on us', value: String(d.now.waiting_on_us), sub: waited !== null ? text('longest {time}', { time: waitWords(waited) }) : text('visitor spoke last'), tone: d.now.waiting_on_us ? 'amber' : 'plain', go: 'awaiting', action: 'open those chats' },
     { label: 'At risk', value: String(d.now.at_risk), sub: d.now.at_risk_after ? text('past {time}', { time: clock(d.now.at_risk_after) }) : text('nobody answered in time'), tone: d.now.at_risk ? 'red' : 'plain', go: 'awaiting', action: 'open those chats' },
     { label: 'Open chats', value: String(d.now.open + d.now.pending), sub: text('{n} staff', { n: d.now.staff_in_chats ?? 0 }), tone: 'plain', go: 'inbox', action: 'open the inbox' },
     { label: 'On a call', value: String(calls), sub: call !== null ? callClock(call) : text('no calls on'), tone: calls ? 'green' : 'plain', go: 'inbox', action: 'open the inbox' },
@@ -510,12 +515,22 @@ function callout(now: number, skew: number, named: boolean) {
   };
 }
 
+/**
+ * What the shading means, in the theme's words (#284): on light more visitors is a darker country, on dark a brighter
+ * one — read from the theme in force, so it changes the moment the theme does.
+ */
+function captionOf(when: When, dark: boolean): string {
+  if (when === 'now') return dark ? text('Shaded by visitors now · brighter = more') : text('Shaded by visitors now · darker = more');
+  return dark ? text('Shaded by visitors today · brighter = more') : text('Shaded by visitors today · darker = more');
+}
+
 function WhereTheyAre({ d, full, visitors, now, skew, home }: { d: Dashboard; full: boolean; visitors: OnlineVisitor[]; now: number; skew: number; home: string | null }) {
   const [when, setWhen] = useState<When>('now');
   const [box, setBox] = useState<Box>(WORLD_BOX);
   const places = useMemo(() => placesOf(d, visitors, when), [d, visitors, when]);
   const countries = byCountry(places);
   const cities = places.filter((p) => !p.approx).length;
+  const dark = useStore(app, (s) => s.resolvedTheme === 'dark');
   return (
     <section aria-label={text('Where they are')} className="flex min-w-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
       <div className="flex min-h-[46px] shrink-0 flex-wrap items-center gap-2.5 px-3.5 py-1.5">
@@ -535,7 +550,7 @@ function WhereTheyAre({ d, full, visitors, now, skew, home }: { d: Dashboard; fu
         box={box}
         onBox={setBox}
         callout={when === 'now' ? callout(now, skew, true) : undefined}
-        caption={when === 'now' ? text('Shaded by visitors now · darker = more') : text('Shaded by visitors today · darker = more')}
+        caption={captionOf(when, dark)}
         label={when === 'now' ? 'Map of visitors on the site now' : 'Map of visitors today'}
         className="h-[400px] shrink-0 border-y border-line"
       />
@@ -693,12 +708,11 @@ function FullMap({ d, full, visitors, list, drawer, header, live, onLive }: {
             box={box}
             onBox={setBox}
             fit
-            labels="detail"
             selected={place?.key ?? null}
             onSelect={(p) => onLive({ place: p.key })}
             caption={text('Detailed outlines load when you zoom past a region · drag to pan · scroll or pinch to zoom')}
             label={when === 'now' ? 'Map of visitors on the site now' : 'Map of visitors today'}
-            className="absolute inset-0 bg-[#f3f6fb]"
+            className="absolute inset-0"
           />
         </section>
         <section aria-label={text('Selected place')} className="relative flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
@@ -868,11 +882,11 @@ function useWallView(home: string | null, cycle: boolean): Box {
  * happened and the sites — with nobody named, since anybody walking past can read it (MNFR-04). It keeps the screen
  * awake and carries on through a dropped connection; Esc (or its button) comes back.
  */
-function WallMode({ d, online, visitors, sites, now, skew, updated, onClose, cycle, awake }: { d: Dashboard; online: number | null; visitors: OnlineVisitor[]; sites: number[]; now: number; skew: number; updated: number | null; onClose: () => void; cycle: boolean; awake: boolean }) {
+function WallMode({ d, online, visitors, here, sites, now, skew, updated, onClose, cycle, awake }: { d: Dashboard; online: number | null; visitors: OnlineVisitor[]; here: OnlineVisitor[] | null; sites: number[]; now: number; skew: number; updated: number | null; onClose: () => void; cycle: boolean; awake: boolean }) {
   useWallScreen(onClose, awake);
   const box = useWallView(homeOf(d, visitors), cycle);
   const places = useMemo(() => placesNow(visitors), [visitors]);
-  const waited = d.now.waiting_on_us ? since(d.now.longest_wait_since, now, skew) : null;
+  const waited = longestWait(d, here, now, skew);
   // In a chat as the chips count it (MAP-UI-02): somebody waiting on us is under Waiting, not here.
   const inChat = visitors.filter((v) => groupOf(stateOf(v)) === 'chat').length;
   const calls = d.now.on_call?.count ?? 0;
@@ -880,7 +894,8 @@ function WallMode({ d, online, visitors, sites, now, skew, updated, onClose, cyc
   const names = shown.map((w) => w.name).join(', ');
   const stale = updated !== null && updated > STALE_AFTER;
   return (
-    <div role="dialog" aria-modal="true" aria-label={text('Website chats — live, wall mode')} className="fixed inset-0 z-[120] flex flex-col gap-4 overflow-auto bg-[#0b1430] px-7 py-[22px] text-[#f1f4fb]">
+    // Dark whichever theme the app is in, its map and legend too: inside it the theme's variables are the dark ones (#284).
+    <div role="dialog" aria-modal="true" aria-label={text('Website chats — live, wall mode')} data-theme="dark" className="fixed inset-0 z-[120] flex flex-col gap-4 overflow-auto bg-[#0b1430] px-7 py-[22px] text-[#f1f4fb]">
       <div className="flex flex-wrap items-center gap-3">
         <span className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] bg-[#4a63e8] font-bold" aria-hidden>W</span>
         <span className="text-[20px] font-bold">{text('Website chats — live')}</span>
@@ -898,17 +913,18 @@ function WallMode({ d, online, visitors, sites, now, skew, updated, onClose, cyc
       </div>
       <div className="grid grid-cols-6 gap-3.5" role="list" aria-label={text('Right now')}>
         <Tile wall label="On the site now" value={String(online ?? d.now.visitors_online)} sub={d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) })} tone="plain" />
-        <Tile wall label="Waiting on us" value={String(d.now.waiting_on_us)} sub={waited !== null ? text('longest {time}', { time: clock(waited) }) : text('Nobody waiting')} tone={d.now.waiting_on_us ? 'amber' : 'plain'} />
+        <Tile wall label="Waiting on us" value={String(d.now.waiting_on_us)} sub={waited !== null ? text('longest {time}', { time: waitWords(waited) }) : text('Nobody waiting')} tone={d.now.waiting_on_us ? 'amber' : 'plain'} />
         <Tile wall label="At risk" value={String(d.now.at_risk)} sub={d.now.at_risk_after ? text('past {time}', { time: clock(d.now.at_risk_after) }) : text('nobody answered in time')} tone={d.now.at_risk ? 'red' : 'plain'} />
         <Tile wall label="In a chat" value={String(inChat)} sub={calls ? text('{n} on a call', { n: calls }) : text('{n} staff', { n: d.now.staff_in_chats ?? 0 })} tone="plain" />
         <Tile wall label="First reply" value={d.today.first_response_median === null ? '—' : clock(d.today.first_response_median)} sub={text('median today')} tone="plain" />
         <Tile wall label="Missed today" value={String(d.today.missed)} sub={text('{n} in last hour', { n: d.today.missed_last_hour ?? 0 })} tone="plain" />
       </div>
       <div className="grid min-h-0 flex-1 gap-[18px] [grid-template-columns:minmax(0,1fr)_minmax(320px,26%)]">
-        <div className="relative min-h-[360px] overflow-hidden rounded-[16px] border border-[#1c2858]">
-          <LiveMap places={places} box={box} theme="dark" labels="name" edges={false} label="Map of visitors on the site now" className="absolute inset-0" />
+        {/* The dashboard's map in its dark colours, its dots a step brighter (`data-map-wall`) and larger, names larger. */}
+        <div data-map-wall className="relative min-h-[360px] overflow-hidden rounded-[16px] border border-[#1c2858]">
+          <LiveMap places={places} box={box} wall edges={false} label="Map of visitors on the site now" className="absolute inset-0" />
           <div className="absolute bottom-3.5 left-3.5 rounded-[10px] border border-[#22306a] bg-[rgba(11,20,48,0.85)] px-3 py-2">
-            <MapLegend theme="dark" />
+            <MapLegend />
           </div>
         </div>
         <div className="flex min-h-0 flex-col">
