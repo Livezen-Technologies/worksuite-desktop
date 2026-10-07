@@ -603,6 +603,8 @@ export interface ConvertInput {
   /** Transcript messages copied as public replies; the rest are internal (FR-LCH-02). */
   public_message_ids?: number[];
   notify_visitor?: boolean;
+  /** The visitor's email address, asked for in the sheet when they gave none (#298: `422 requester_email_required`). */
+  requester_email?: string;
 }
 
 export interface ConvertAnswer {

@@ -495,11 +495,68 @@ export function convertChat(input: ConvertInput, key: string): Promise<{ id: num
   );
 }
 
-/** A chat that is a ticket already (`ALREADY_CONVERTED`): that ticket. */
+/** A chat or an email that is a ticket already (`ALREADY_CONVERTED`, `already_converted`): that ticket. */
 export function alreadyConverted(e: unknown): { id: number; reference: string; status: string | null } | null {
-  if (!(e instanceof ApiError) || e.code !== 'ALREADY_CONVERTED') return null;
+  if (!(e instanceof ApiError) || e.code?.toUpperCase() !== 'ALREADY_CONVERTED') return null;
   const t = (e.data as { ticket?: { id?: unknown; reference?: unknown; status?: unknown } } | null)?.ticket;
   return t && typeof t.id === 'number' ? { id: t.id, reference: String(t.reference ?? ''), status: typeof t.status === 'string' ? t.status : null } : null;
+}
+
+/** The visitor left no email address, and the ticket needs one to reach them (`422 requester_email_required`). */
+export function requesterEmailRequired(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 422 && e.code?.toLowerCase() === 'requester_email_required';
+}
+
+/* ── what this server converts, and email → ticket (worksuite-desktop#298) ── */
+
+/** Whether a conversion is offered: yes, no (off for the company, or not mine to do), or not said — an older server. */
+export type ConversionOffer = 'yes' | 'no' | 'unknown';
+
+/**
+ * What `GET meta` says about converting a website chat or an email: `capabilities.convert_chat|convert_email` (the
+ * company has Support, and Chat or Email, switched on) and `can.convert_chat|convert_email` (my right; `can.create`
+ * where the server names no separate one). A server from before them says neither: 'unknown', and the screens keep
+ * what they did before.
+ */
+export function conversionOffer(m: unknown, kind: 'chat' | 'email'): ConversionOffer {
+  const d = (m ?? null) as { capabilities?: Record<string, unknown> | null; can?: Record<string, unknown> | null } | null;
+  const on = d?.capabilities?.[`convert_${kind}`];
+  if (typeof on !== 'boolean') return 'unknown';
+  if (!on) return 'no';
+  return (d?.can?.[`convert_${kind}`] ?? d?.can?.create) === false ? 'no' : 'yes';
+}
+
+/** `POST conversions/email`: the message as Mail names it (its uid, in its folder and mailbox) and what it becomes. */
+export interface EmailConvertInput {
+  mail_message_id: number;
+  folder?: string;
+  mailbox?: string;
+  /** A new ticket, or the id of one to add the email to. */
+  target: 'new' | number;
+  subject?: string;
+  /** Null: the server files it under my only organization, or in Needs organization. */
+  organization_id?: number | null;
+}
+
+/** The ticket an email became or joined. `existing`: it was one already, so nothing new was made. */
+export interface EmailConvertAnswer {
+  id: number;
+  reference: string;
+  status: TicketFull['status'] | null;
+  appended: boolean;
+  existing: boolean;
+}
+
+/**
+ * An email made a ticket, or added to one (FR-EML-07): the requester is the sender, the email the first message, its
+ * files kept. The same email twice is one ticket — `409 already_converted` with that ticket (`alreadyConverted`),
+ * or an answer marked `existing`. Read either way the server sends the ticket: alone, or as `{ticket, appended}`.
+ */
+export async function convertEmail(input: EmailConvertInput): Promise<EmailConvertAnswer> {
+  const a = await v1Only(() => send<Record<string, unknown>>('POST', `${BASE}/conversions/email`, input));
+  const t = (a.ticket && typeof a.ticket === 'object' ? a.ticket : a) as { id?: unknown; reference?: unknown; status?: unknown };
+  if (typeof t.id === 'number' && typeof t.reference === 'string') references.set(t.id, t.reference);
+  return { id: Number(t.id), reference: String(t.reference ?? ''), status: typeof t.status === 'string' ? (t.status as TicketFull['status']) : null, appended: a.appended === true, existing: a.existing === true };
 }
 
 /* ── knowledge and AI in a ticket (D-10) ────────────────────────────────── */
