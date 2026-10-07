@@ -15,6 +15,11 @@ export interface ChannelCaps {
   edit: boolean;
   /** Voice notes play inline as a voice message (otherwise an audio file is a file). */
   voice: boolean;
+  /**
+   * Where playing somebody's voice message is noted (#285), `{id}` the message's: its dot goes on every device. Left
+   * out, the dot goes on this computer only.
+   */
+  listenedPath?: string;
   urgent: boolean;
   copy: boolean;
   /** "Save to Drive" on a message's files; only where a save path exists for that channel's files. */
@@ -44,6 +49,7 @@ export const TEAM_CAPS: ChannelCaps = {
   star: true,
   edit: true,
   voice: true,
+  listenedPath: '/api/chat/messages/{id}/listened',
   urgent: true,
   copy: true,
   saveToDrive: false,
@@ -63,7 +69,9 @@ export const WEBSITE_CAPS: ChannelCaps = {
   pin: false,
   star: false,
   edit: false,
-  voice: false,
+  // A visitor's recording (a phone's voice memo, a forwarded voice note) plays in the voice player (#285); their
+  // widget cannot play one back, so the composer still sends none.
+  voice: true,
   urgent: false,
   copy: true,
   saveToDrive: true,

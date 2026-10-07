@@ -18,12 +18,15 @@ const TEXT_EXT = /\.(txt|text|md|markdown|log|json|xml|ya?ml|ini|conf|cfg|env|sq
 
 const extOf = (name: string) => /\.([A-Za-z0-9]{1,8})$/.exec(name)?.[1]?.toLowerCase() ?? '';
 
-export function previewKind(f: Pick<Attachment, 'filename' | 'mime' | 'preview' | 'is_image'>): PreviewKind {
+export function previewKind(f: Pick<Attachment, 'filename' | 'mime' | 'preview' | 'is_image'> & { kind?: string | null }): PreviewKind {
   const mime = (f.mime ?? '').toLowerCase();
   const name = f.filename ?? '';
   if (f.preview === 'image' || f.is_image || mime.startsWith('image/')) return 'image';
+  // The server's word before the type: a voice message recorded as WebM reads as `video/webm` by its bytes, yet it is
+  // sound, and is never given a video's empty picture (#285).
+  if (f.preview === 'audio' || f.kind === 'voice') return 'audio';
   if (f.preview === 'video' || mime.startsWith('video/')) return 'video';
-  if (f.preview === 'audio' || mime.startsWith('audio/')) return 'audio';
+  if (mime.startsWith('audio/')) return 'audio';
   if (mime === 'application/pdf' || /\.pdf$/i.test(name)) return 'pdf';
   if (isOfficeFile(name)) return 'office';
   if (mime === 'text/csv' || mime === 'text/tab-separated-values' || /\.(csv|tsv)$/i.test(name)) return 'csv';
@@ -38,9 +41,10 @@ export const CSV_ROWS = 1000;
 
 /**
  * Where the attachment's bytes are read from inside the page: the app's own origin (the API proxy, which reads a
- * signed `/media/` address for it), since the page may not fetch the server directly.
+ * signed `/media/` address for it), since the page may not fetch the server directly. A voice message's loudness is
+ * read from the same address (#285).
  */
-function readUrl(f: Attachment): string | null {
+export function readUrl(f: Pick<Attachment, 'url' | 'download_url'>): string | null {
   const token = mediaToken(f.url) ?? mediaToken(f.download_url);
   if (token) return apiUrl(`/media/${token}`);
   return f.url?.startsWith('/chat/files/') || f.url?.startsWith('/api/') ? mediaUrl(f.url) : null;

@@ -277,6 +277,35 @@ specific to the desktop:
     allow): `GET /api/ai/speech/status` and `POST /api/ai/speech/transcribe`
     (multipart `audio` WAV, `language`) return segments with `uncertain`.
 
+### Voice messages (worksuite-desktop#285)
+
+Team Chat, website chats and WhatsApp play a voice message in the app's own
+player. What the desktop sends and reads:
+
+- **Sending.** `POST /api/chat/messages/attachments {room_id, upload_id,
+  client_message_id, reply_to?, voice: true, duration_ms, waveform}`.
+  `duration_ms` is counted while recording, pauses left out. `waveform` is
+  64 whole numbers 0–100: the loudest moment of each equal slice of the
+  recording, as a share of the loudest slice. A server that does not know
+  `waveform` ignores it.
+- **The message.** The voice message's file keeps `kind: 'voice'` and
+  `preview: 'audio'`; the desktop goes by these, or by an `audio/*` type,
+  never by the name — a recording made in a browser is `.webm` and may be
+  sniffed as `video/webm`. Beside `duration_ms` the file may carry:
+  - `waveform: number[] | null` — the 64 steps above;
+  - `m4a_url: string | null` — an AAC copy, played when the original
+    (Opus) cannot be.
+  The message may carry `listened: boolean`, whether this person has played
+  it. Absent, as from an older server, the desktop remembers what was played
+  on the computer.
+- **Played.** `POST /api/chat/messages/{id}/listened` (no body) → `{ok: true}`,
+  sent once, the first time somebody plays another person's voice message.
+  A 404 changes nothing: the "not played yet" dot goes on that computer.
+- **Without a length or waveform** (an older message, a WhatsApp voice note,
+  a visitor's recording) the desktop reads the recording once, through the
+  API proxy, for both. A WebM made in a browser has no length its player
+  can tell, so this is the only way to show it before it is played.
+
 ### What the server has: `GET /api/capabilities` (worksuite-desktop#259)
 
 The app can be newer than the server: Beta may run ahead of it. So that

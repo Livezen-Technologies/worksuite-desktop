@@ -5,6 +5,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { holdWhileSending } from '../../core/closeGuard';
 import { createStore } from '../../core/store';
 import type { Staged } from './attach';
+import { rememberVoice } from './kit/voice';
 
 export type MediaPhase = 'preparing' | 'queued' | 'uploading' | 'processing' | 'sending' | 'sent' | 'failed' | 'cancelled';
 export interface OutgoingMedia {
@@ -64,7 +65,8 @@ function launch(id: string, originalQuality: boolean): void {
         const data = source.kind === 'blob' ? new Uint8Array(await source.blob.arrayBuffer()) : undefined;
         file = await call('transfers:prepareMedia', { name: j.name, originalQuality, ...(data ? { data } : { handle: source.kind === 'disk' ? source.file.handle : undefined }) });
         if (file.preview && j.preview?.startsWith('blob:')) URL.revokeObjectURL(j.preview);
-        update(id, { prepared: file, source: undefined, name: file.name, size: file.size, ...(file.mime ? { mime: file.mime } : {}), ...(file.preview ? { preview: file.preview } : {}) });
+        // A voice message keeps the recording's own type: by its name a `.webm` would read as a video (#285).
+        update(id, { prepared: file, source: undefined, name: file.name, size: file.size, ...(file.mime && !j.target.voice ? { mime: file.mime } : {}), ...(file.preview ? { preview: file.preview } : {}) });
       }
       if (outgoing.get().jobs.find((j) => j.id === id)?.phase === 'cancelled' || j.owner !== owner()) return;
       const [t] = await call('transfers:upload', { handles: [file.handle], target: j.target });
@@ -77,8 +79,11 @@ function launch(id: string, originalQuality: boolean): void {
   }));
 }
 
-/** Synchronous enqueue: the bubble exists before preparation or IPC starts. */
-export function queueMedia(roomId: string, sources: Staged[], extra: { caption?: string; replyTo?: number; voice?: boolean; durationMs?: number }, originalQuality = false): void {
+/**
+ * Synchronous enqueue: the bubble exists before preparation or IPC starts. A voice message's length and loudness,
+ * measured while it was recorded, go with it and are its bubble's at once (#285).
+ */
+export function queueMedia(roomId: string, sources: Staged[], extra: { caption?: string; replyTo?: number; voice?: boolean; durationMs?: number; waveform?: number[] }, originalQuality = false): void {
   const jobs = sources.map((source, i): OutgoingMedia => {
     const id = `desktop-${crypto.randomUUID()}`;
     const createdAt = new Date(Date.now() + i).toISOString();
@@ -87,6 +92,7 @@ export function queueMedia(roomId: string, sources: Staged[], extra: { caption?:
     return { id, owner: owner(), roomId, name: source.kind === 'blob' ? source.name : source.file.name, size: source.kind === 'blob' ? source.blob.size : source.file.size, mime, preview, source, originalQuality, target: { kind: 'chat', roomId, clientMessageId: id, submittedAt: createdAt, ...(i === 0 ? extra : {}) }, phase: 'preparing', progress: null, error: null, createdAt };
   });
   outgoing.set({ jobs: [...outgoing.get().jobs, ...jobs] });
+  if (extra.voice && jobs[0]) rememberVoice(jobs[0].id, { ms: extra.durationMs ?? null, peaks: extra.waveform ?? null });
   jobs.forEach((j) => launch(j.id, originalQuality));
 }
 

@@ -1,5 +1,5 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { useCanOpen } from '../../../core/access';
 import { call, errorMessage, isMac } from '../../../core/bridge';
 import { navigate } from '../../../core/tabs';
@@ -18,8 +18,9 @@ import { ResizeDivider, useResizableWidth } from '../../../components/ResizeDivi
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
 import { refreshWords, useListRefresh } from '../../../components/PullToRefresh';
-import { Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
+import { Avatar, Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
 import { openChatAttachment, previewKind, type Attachment } from '../AttachmentViewer';
+import { VoiceMessage } from '../kit/VoiceMessage';
 import { mediaUrl } from '../types';
 import { ConversationMenu } from '../ConversationMenu';
 import { LIST_WIDTH, badgeText, rememberWhatsapp } from './channels';
@@ -529,7 +530,9 @@ function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id:
           {!shown.length ? <Empty icon="phone" title="No messages yet" /> : null}
           {shown.map((m) => {
             const author = group && m.direction === 'in' ? whoSent(m, index) : null;
-            return <Bubble key={m.id} m={m} author={author?.name ?? null} index={index} gallery={gallery} onReply={() => setReply({ id: m.id, sender_name: m.direction === 'out' ? (m.sender_name ?? 'You') : (author?.name ?? who.name), snippet: messageText(m).slice(0, 120) })} />;
+            // Their avatar beside a voice note of theirs (#285): the contact's, or the group member's initials.
+            const avatar = m.direction === 'in' ? (group ? <Avatar name={author?.name ?? who.name} size={30} /> : <WaAvatar who={who} size={30} />) : null;
+            return <Bubble key={m.id} m={m} author={author?.name ?? null} avatar={avatar} index={index} gallery={gallery} onReply={() => setReply({ id: m.id, sender_name: m.direction === 'out' ? (m.sender_name ?? 'You') : (author?.name ?? who.name), snippet: messageText(m).slice(0, 120) })} />;
           })}
         </div>
         <WhatsappComposer chatId={chat.id} accountId={chat.account_id} name={who.name} messages={shown} reply={reply} onClearReply={() => setReply(null)} reconnect={down ? () => onRelink(chat.account) : undefined} refusal={refusal} templates={!blocked} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
@@ -562,15 +565,25 @@ const MEDIA_ICON: Record<string, string> = { image: 'image', video: 'video', aud
 
 const linkOut = (url: string) => void call('app:openInBrowser', { path: url });
 
-/** A message: its words, and its attachment — a picture shown, anything else by its name — opened in the shared preview. */
-function Bubble({ m, author, index, gallery, onReply }: { m: WaMessage; author: string | null; index: PhoneIndex | undefined; gallery: Attachment[]; onReply: () => void }) {
+/** A WhatsApp voice note or sound (an Ogg/Opus from a phone): played in place, as Team Chat plays one (#285). */
+const VOICE_KINDS = new Set(['audio', 'voice', 'ptt']);
+
+/**
+ * A message: its words, and its attachment — a picture shown, a voice note played in place with the shared voice player
+ * (#285), anything else by its name — opened in the shared preview.
+ */
+function Bubble({ m, author, avatar, index, gallery, onReply }: { m: WaMessage; author: string | null; avatar?: ReactNode; index: PhoneIndex | undefined; gallery: Attachment[]; onReply: () => void }) {
   const ours = m.direction === 'out';
   const file = waAttachment(m);
+  // What it is comes from its type, never its name: a phone's voice note is `audio/ogg`.
+  const voice = !!file && VOICE_KINDS.has(m.kind) && previewKind(file) === 'audio';
   return (
     <div className={cx('flex max-w-[75%] flex-col gap-0.5', ours ? 'items-end self-end' : 'items-start self-start')}>
       {author ? <span className="px-1 text-[11.5px] font-semibold text-primary">{author}</span> : null}
-      <div className={cx('px-3 py-2 text-[13px] whitespace-pre-wrap break-words text-ink', ours ? 'rounded-[12px_4px_12px_12px] bg-selection' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface')}>
-        {file && previewKind(file) === 'image' ? (
+      <div className={cx('text-[13px] whitespace-pre-wrap break-words text-ink', voice ? 'p-1' : 'px-3 py-2', ours ? 'rounded-[12px_4px_12px_12px] bg-selection' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface')}>
+        {voice ? (
+          <VoiceMessage file={file} own={ours} look="drawer" of={{ key: `wa${m.id}`, avatar }} />
+        ) : file && previewKind(file) === 'image' ? (
           <button type="button" aria-label={`${l10n('Open')} ${file.filename}`} onClick={() => openChatAttachment(file, linkOut, gallery)} className="mb-1 block overflow-hidden rounded-[8px]">
             <img src={mediaUrl(file.url) ?? undefined} alt={file.filename} loading="lazy" className="max-h-[240px] max-w-[280px] object-cover" />
           </button>
@@ -582,7 +595,7 @@ function Bubble({ m, author, index, gallery, onReply }: { m: WaMessage; author: 
         ) : m.kind !== 'text' && m.kind !== 'template' ? (
           <Icon name={MEDIA_ICON[m.kind] ?? 'paperclip'} size={13} className="mr-1 inline text-ink-3" />
         ) : null}
-        {withMentionNames(file ? (m.caption ?? '') : messageText(m), index)}
+        {voice ? ((m.caption ?? '').trim() ? <span className="block px-2 pb-1">{withMentionNames(m.caption ?? '', index)}</span> : null) : withMentionNames(file ? (m.caption ?? '') : messageText(m), index)}
         {!file && m.media_note ? <span className="block text-[11.5px] text-ink-3">{m.media_note}</span> : null}
       </div>
       <span className={cx('text-[11px]', m.status === 'failed' ? 'font-semibold text-danger' : 'text-ink-3')}>

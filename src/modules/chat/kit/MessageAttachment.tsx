@@ -3,16 +3,18 @@ import { useTab } from '../../../core/tab-context';
 import { text } from '../../../core/i18n';
 import { FileBadge, cx } from '../../../components/ui';
 import { openChatAttachment, previewKind, useAttachmentGallery, type Attachment } from '../AttachmentViewer';
-import { VoicePlayer } from '../parts';
 import { mediaUrl } from '../types';
 import type { KitFile } from './model';
+import { isVoiceFile } from './voice';
+import { VoiceMessage, type VoiceOf } from './VoiceMessage';
 
 /**
  * A message's attachments (C-02, RDC-13; worksuite-desktop#229): a picture as a thumbnail, several in a grid, a video
  * or voice note that plays inline, anything else as a file card. What a file is comes from its type — the server's
  * preview kind or its MIME — never its extension, so `invoice.png` that is really a PDF is a file card and a photo
  * named `IMG_2231` is still a picture. Files arrive through the server's file route, which keeps nosniff and only
- * serves safe pictures inline (SEC-06).
+ * serves safe pictures inline (SEC-06). A voice message is the voice player alone: no name, no size, no video's
+ * picture, and no "processing" line while the server finishes it (#285).
  */
 
 export type Look = 'page' | 'drawer';
@@ -111,19 +113,19 @@ export function FileCard({ file, at, look, accent = 'text-primary', onOpen }: { 
 }
 
 /**
- * One attachment. `voice` plays an audio file as a voice note (a channel that has them); `seed` shapes its waveform.
+ * One attachment. `voice` plays sound as a voice message (a channel that has them, or a message that is one); `of` is
+ * that message, for what is known of its recording and whether this person has played it.
  */
-export function MessageAttachment({ file: f, at, look, own, voice = false, seed = 0, accent }: { file: KitFile; at: string; look: Look; own: boolean; voice?: boolean; seed?: number; accent?: string }) {
+export function MessageAttachment({ file: f, at, look, own, voice = false, of, accent }: { file: KitFile; at: string; look: Look; own: boolean; voice?: boolean; of?: VoiceOf | null; accent?: string }) {
   const gallery = useAttachmentGallery();
   const { openLink } = useTab();
   const kind = previewKind(f);
   const url = mediaUrl(f.url);
   const src = mediaUrl(f.mime === 'image/gif' ? f.url : (f.thumb_url ?? f.url));
   const drawer = look === 'drawer';
-  const asVoice = voice && kind === 'audio';
   const open = () => openKitFile(f, openLink, gallery);
-  if (f.status === 'processing' || ((kind === 'video' || asVoice) && !f.url)) return <Processing />;
-  if (asVoice && url) return <VoicePlayer src={url} ms={f.duration_ms ?? null} seed={seed} own={own} bare={drawer} />;
+  if (isVoiceFile(f, voice)) return <VoiceMessage file={f} own={own} look={look} of={of} />;
+  if (f.status === 'processing' || (kind === 'video' && !f.url)) return <Processing />;
   if (kind === 'image' && src) {
     const [maxW, maxH] = drawer ? [260, 220] : [280, 320];
     const size = thumbSize(f, maxW, maxH);
@@ -171,14 +173,14 @@ export function AttachmentGrid({ files, at, look }: { files: KitFile[]; at: stri
 }
 
 /** A message's files: pictures together in a grid when there are several, each other file on its own. */
-export function MessageAttachments({ files, at, look, own, voice, seed, accent }: { files: KitFile[]; at: string; look: Look; own: boolean; voice?: boolean; seed?: number; accent?: string }) {
+export function MessageAttachments({ files, at, look, own, voice, of, accent }: { files: KitFile[]; at: string; look: Look; own: boolean; voice?: boolean; of?: VoiceOf | null; accent?: string }) {
   const pictures = files.filter((f) => isImage(f) && f.status !== 'processing' && mediaUrl(f.url));
   const rest = pictures.length >= 2 ? files.filter((f) => !pictures.includes(f)) : files;
   return (
     <>
       {pictures.length >= 2 ? <AttachmentGrid files={pictures} at={at} look={look} /> : null}
       {rest.map((f, i) => (
-        <MessageAttachment key={`${f.url ?? f.filename}-${i}`} file={f} at={at} look={look} own={own} voice={voice} seed={seed} accent={accent} />
+        <MessageAttachment key={`${f.url ?? f.filename}-${i}`} file={f} at={at} look={look} own={own} voice={voice} of={of} accent={accent} />
       ))}
     </>
   );

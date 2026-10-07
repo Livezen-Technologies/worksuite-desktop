@@ -55,6 +55,10 @@ export interface ChatFile {
   size: number;
   is_image: boolean;
   duration_ms: number | null;
+  /** A voice message's loudness, 64 steps of 0–100, as its sender's device measured it (#285); absent from an older server. */
+  waveform?: number[] | null;
+  /** An AAC copy of a voice message, for a player that cannot play the Opus original (#285); absent from an older server. */
+  m4a_url?: string | null;
   width: number | null;
   height: number | null;
   preview: string | null;
@@ -93,6 +97,8 @@ export interface ChatMessage {
   urgent?: boolean;
   can?: MessageCan;
   receipt: { status: 'sent' | 'delivered' | 'read'; read: number; total: number } | null;
+  /** Whether this person has played the voice message (#285); absent from an older server. */
+  listened?: boolean;
   client_message_id: string | null;
   /** A call's card: the call or Meet meeting it stands for, and how it stands now. */
   call_uuid?: string | null;

@@ -587,7 +587,7 @@ export class TransferManager {
   }
 
   private chatInfo(id: string, target: Extract<UploadTarget, { kind: 'chat' }>): NonNullable<Transfer['chat']> {
-    return { roomId: target.roomId, clientMessageId: target.clientMessageId ?? `desktop-${id}`, caption: target.caption, voice: target.voice, durationMs: target.durationMs };
+    return { roomId: target.roomId, clientMessageId: target.clientMessageId ?? `desktop-${id}`, caption: target.caption, voice: target.voice, durationMs: target.durationMs, waveform: target.waveform };
   }
 
   private phase(l: Live, phase: NonNullable<Transfer['phase']>): void {
@@ -1198,7 +1198,8 @@ export class TransferManager {
           upload_id: meta.uploadId,
           // The same message id on every try: the server posts it once.
           client_message_id: meta.target.clientMessageId ?? `desktop-${l.t.id}`,
-          ...(meta.target.voice ? { voice: true, duration_ms: meta.target.durationMs ?? 0 } : {}),
+          // A voice message's length and loudness, measured while recording (#285); a server without `waveform` ignores it.
+          ...(meta.target.voice ? { voice: true, duration_ms: meta.target.durationMs ?? 0, ...(meta.target.waveform?.length ? { waveform: meta.target.waveform } : {}) } : {}),
           ...(meta.target.caption ? { caption: meta.target.caption } : {}),
           ...(meta.target.replyTo ? { reply_to: meta.target.replyTo } : {}),
         });

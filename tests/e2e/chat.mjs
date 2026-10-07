@@ -218,19 +218,19 @@ try {
     t.check('the partner typing is shown above the composer', typed);
   }
 
-  // Voice message, recorded in place: stop, then send.
+  // Voice message, recorded in place: pause, then send (#285).
   await t.clickButton('Attach');
   await t.evaluate(`[...document.querySelectorAll('[role="menuitem"]')].find(b => b.textContent.includes('Voice message')).click()`);
-  await t.waitFor(`!!document.querySelector('[aria-label="Stop recording"]') || ${t.hasText('not allowed to use the microphone')}`, 'recording, or a refusal', 15_000);
-  if (!(await t.evaluate(`!!document.querySelector('[aria-label="Stop recording"]')`))) throw new Error('the microphone was refused');
+  await t.waitFor(`!!document.querySelector('[aria-label="Pause recording"]') || ${t.hasText('not allowed to use the microphone')}`, 'recording, or a refusal', 15_000);
+  if (!(await t.evaluate(`!!document.querySelector('[aria-label="Pause recording"]')`))) throw new Error('the microphone was refused');
   await sleep(2200);
   await t.shot('c2-recording');
   const loudest = await t.evaluate(`Math.max(0, ...[...document.querySelectorAll('[role="group"][aria-label="Recording a voice message"] [data-level]')].map(b => Number(b.dataset.level)))`);
   t.check('the level meter moves with the microphone while recording', loudest > 0.12, `loudest ${loudest}`);
-  await t.clickButton('Stop recording');
-  await t.waitFor(`!document.querySelector('[aria-label="Stop recording"]') && !document.querySelector('[aria-label="Send the voice message"]').disabled`, 'the stopped recording');
+  await t.clickButton('Pause recording');
+  await t.waitFor(`!!document.querySelector('[aria-label="Resume recording"]') && !document.querySelector('[aria-label="Send the voice message"]').disabled`, 'the paused recording');
   await t.clickButton('Send the voice message');
-  await t.waitFor(`!!document.querySelector('[aria-label="Play the voice note"]')`, 'the voice note in the thread', 30_000);
+  await t.waitFor(`!!document.querySelector('[aria-label="Play the voice message"]')`, 'the voice note in the thread', 30_000);
   await t.shot('c3-voice');
   const voiced = await api('GET', `/api/chat/messages?room_id=${roomId}`);
   const note = voiced.data.messages.find((m) => m.type === 'voice');
