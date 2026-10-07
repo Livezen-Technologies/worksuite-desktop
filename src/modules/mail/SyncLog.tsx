@@ -8,8 +8,8 @@ import { toast } from '../../core/toasts';
 import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import { mailboxLetter } from './model';
 import { AccountAvatar } from './parts';
-import { accountName, syncAt } from './sync';
-import type { FetchErrorGroup, Mailbox, SyncAccount, SyncRun, SyncRunFolder } from './types';
+import { accountName, firstSyncLine, syncAt } from './sync';
+import type { FetchErrorGroup, FolderSyncState, Mailbox, SyncAccount, SyncRun, SyncRunFolder } from './types';
 
 /**
  * The sync log (D18, DMO-SYN-10; worksuite-desktop#190): one row per run —
@@ -18,16 +18,25 @@ import type { FetchErrorGroup, Mailbox, SyncAccount, SyncRun, SyncRunFolder } fr
  * every folder, with its error in full. Nothing is cut off: the panel is
  * wide, the table scrolls sideways when it must, and the details wrap.
  * Copy log and Export give support the same text.
+ *
+ * From a server that says each folder's state (#286) a run's folders come in
+ * groups — errors, downloading, waiting, then up to date and skipped folded
+ * away — rather than 27 rows of "More to download"; a batch of the first
+ * sync reads "First sync", not "Partial". An older server's runs show as
+ * before.
  */
 
-export function resultWord(result: string): string {
+/** A run's result in a word: a first sync's batch without an error is "First sync", not "Partial" (#286). */
+export function resultWord(result: string, phase?: string | null, errors = 0): string {
   if (result === 'ok') return text('Success');
   if (result === 'failed') return text('Failed');
   if (result === 'running') return text('Running');
+  if (phase === 'first_sync' && errors === 0) return text('First sync');
   return text('Partial');
 }
 
-function resultTone(result: string): string {
+function resultTone(result: string, phase?: string | null, errors = 0): string {
+  if (result === 'partial' && phase === 'first_sync' && errors === 0) return 'text-primary';
   return result === 'failed' ? 'text-danger' : result === 'ok' ? 'text-success' : result === 'running' ? 'text-primary' : 'text-warning';
 }
 
@@ -37,13 +46,46 @@ export function took(ms: number | null): string {
   return `${Math.floor(ms / 60_000)} min ${Math.round((ms % 60_000) / 1000)} s`;
 }
 
-/** A folder's state in words. */
+/** "Downloading 250 of 1,200" — the headers of its window held, and the messages in it. */
+function downloadingWord(f: Pick<SyncRunFolder, 'have' | 'want'>): string {
+  return typeof f.want === 'number' && typeof f.have === 'number' ? text('Downloading {n} of {total}', { n: f.have.toLocaleString(), total: f.want.toLocaleString() }) : text('Downloading');
+}
+
+/** Why a folder is not synced, in words. */
+export function skippedWord(f: Pick<SyncRunFolder, 'reason'>): string {
+  return f.reason === 'off' ? text('Skipped (turned off)') : text('Skipped (not a mail folder)');
+}
+
+/**
+ * A folder's state in words: Up to date · Downloading N of M · Waiting · Error · Skipped from a server that says
+ * (#286); otherwise from what the run did, as before.
+ */
 export function folderWord(f: SyncRunFolder): string {
+  if (f.state === 'up_to_date') return text('Up to date');
+  if (f.state === 'downloading') return downloadingWord(f);
+  if (f.state === 'waiting') return text('Waiting for its turn');
+  if (f.state === 'error') return text('Error');
+  if (f.state === 'skipped' || f.status === 'skipped') return skippedWord(f);
   if (f.status === 'error') return text('Failed');
   if (f.status === 'pending') return text('More to download');
   if (f.status === 'not_reached') return text('Not reached in this run');
   if (f.note === 'unchanged') return text('No changes');
   return text('Synced');
+}
+
+/** The groups a run's folders come in (#286), in the order shown; up to date and skipped start folded away. */
+export const FOLDER_GROUPS: ReadonlyArray<{ state: FolderSyncState; label: string; open: boolean; tone: string }> = [
+  { state: 'error', label: 'Errors', open: true, tone: 'text-danger' },
+  { state: 'downloading', label: 'Downloading', open: true, tone: 'text-primary' },
+  { state: 'waiting', label: 'Waiting', open: true, tone: 'text-ink-2' },
+  { state: 'up_to_date', label: 'Up to date', open: false, tone: 'text-success' },
+  { state: 'skipped', label: 'Skipped', open: false, tone: 'text-ink-3' },
+];
+
+/** A run's folders by state, when the server says each one's (#286); null for a run from an older server. */
+export function folderGroups(details: SyncRunFolder[]): Array<{ state: FolderSyncState; label: string; open: boolean; tone: string; folders: SyncRunFolder[] }> | null {
+  if (!details.length || !details.every((d) => typeof d.state === 'string')) return null;
+  return FOLDER_GROUPS.map((g) => ({ ...g, folders: details.filter((d) => d.state === g.state) })).filter((g) => g.folders.length > 0);
 }
 
 function errorsOf(r: SyncRun): number {
@@ -54,7 +96,7 @@ function errorsOf(r: SyncRun): number {
 export function logText(email: string, runs: SyncRun[]): string {
   const lines = [`${email} — ${text('sync log')}`, ['Started', 'Took', 'Result', 'Folders', 'Added', 'Updated', 'Removed', 'Bodies', 'Errors', 'Details'].join('\t')];
   for (const r of runs) {
-    lines.push([r.started_at ?? '', took(r.duration_ms), resultWord(r.result), `${r.folders}/${r.folders_total}`, r.added, r.changed, r.removed, r.bodies ?? 0, errorsOf(r), r.error ?? ''].join('\t'));
+    lines.push([r.started_at ?? '', took(r.duration_ms), resultWord(r.result, r.phase, errorsOf(r)), `${r.folders}/${r.folders_total}`, r.added, r.changed, r.removed, r.bodies ?? 0, errorsOf(r), r.error ?? ''].join('\t'));
     for (const f of r.details ?? []) {
       lines.push(`\t${f.folder}${f.role ? ` (${f.role})` : ''}: ${folderWord(f)} · +${f.added} ~${f.changed} -${f.removed}${f.ms !== undefined ? ` · ${took(f.ms)}` : ''}${f.error ? ` — ${f.error}` : ''}`);
     }
@@ -62,9 +104,14 @@ export function logText(email: string, runs: SyncRun[]): string {
   return lines.join('\n');
 }
 
-/** "Syncing · headers 2 of 27 folders · started 11:20" (#228), while a pass is going. */
+/**
+ * "Syncing · headers 2 of 27 folders · started 11:20" (#228), while a pass is going — or, on a first sync,
+ * "First sync · headers 12 of 21 folders · started 1:20 · about 4 min left" (#286).
+ */
 export function syncingLine(a: SyncAccount): string | null {
   if (!a.running) return null;
+  const first = firstSyncLine(a);
+  if (first) return first;
   const parts = [text('Syncing')];
   if (a.folders && a.complete === false) parts.push(text('headers {done} of {n} folders', { done: a.folders_done, n: a.folders }));
   if (a.running_since) parts.push(text('started {time}', { time: timeLabel(a.running_since) }));
@@ -198,13 +245,14 @@ export function SyncLog({ box, account, onClose, onRepair }: { box: Mailbox; acc
               {runs.map((r) => {
                 const expanded = open.has(r.id);
                 const details = r.details ?? [];
+                const groups = expanded ? folderGroups(details) : null;
                 const errors = errorsOf(r);
                 return (
                   <Fragment key={r.id}>
                     <tr className="border-t border-line align-top" aria-label={text('Run started {time}', { time: r.started_at ? syncAt(r.started_at) : '' })}>
                       <td className="whitespace-nowrap py-1.5 pr-3 font-mono text-ink">{r.started_at ? syncAt(r.started_at) : ''}</td>
                       <td className="whitespace-nowrap py-1.5 pr-3 text-ink-2">{took(r.duration_ms)}</td>
-                      <td className={cx('whitespace-nowrap py-1.5 pr-3 font-semibold', resultTone(r.result))}>{resultWord(r.result)}</td>
+                      <td className={cx('whitespace-nowrap py-1.5 pr-3 font-semibold', resultTone(r.result, r.phase, errors))}>{resultWord(r.result, r.phase, errors)}</td>
                       <td className={num}>{text('{done} of {n}', { done: r.folders, n: r.folders_total })}</td>
                       <td className={num}>+{r.added}</td>
                       <td className={num}>{r.changed}</td>
@@ -230,22 +278,15 @@ export function SyncLog({ box, account, onClose, onRepair }: { box: Mailbox; acc
                       <tr>
                         <td colSpan={10} className="pb-2">
                           {r.error ? <p className="mb-1.5 whitespace-normal break-words rounded-[6px] bg-subtle p-2 text-[12px] text-ink">{r.error}</p> : null}
-                          <ul role="list" aria-label={text('Folders in this run')} className="flex flex-col gap-0.5">
-                            {details.map((f) => (
-                              <li key={f.path} className="grid grid-cols-[minmax(120px,1.2fr)_minmax(110px,1fr)_auto] gap-x-3 rounded-[6px] px-2 py-1 even:bg-subtle/60">
-                                <span className="min-w-0 break-words text-ink">
-                                  {f.folder}
-                                  {f.role ? <span className="text-ink-3"> · {f.role}</span> : null}
-                                </span>
-                                <span className={cx('font-semibold', f.status === 'error' ? 'text-danger' : f.status === 'ok' ? 'text-success' : 'text-warning')}>{folderWord(f)}</span>
-                                <span className="whitespace-nowrap text-right tabular-nums text-ink-2">
-                                  +{f.added} · {f.changed} · −{f.removed}
-                                  {f.ms !== undefined ? ` · ${took(f.ms)}` : ''}
-                                </span>
-                                {f.error ? <span className="col-span-3 whitespace-normal break-words text-[12px] text-danger">{f.error}</span> : null}
-                              </li>
-                            ))}
-                          </ul>
+                          {groups ? (
+                            <FolderGroups groups={groups} />
+                          ) : (
+                            <ul role="list" aria-label={text('Folders in this run')} className="flex flex-col gap-0.5">
+                              {details.map((f) => (
+                                <FolderRow key={f.path} f={f} tone={f.status === 'error' ? 'text-danger' : f.status === 'ok' ? 'text-success' : 'text-warning'} />
+                              ))}
+                            </ul>
+                          )}
                         </td>
                       </tr>
                     ) : null}
@@ -272,6 +313,64 @@ export function SyncLog({ box, account, onClose, onRepair }: { box: Mailbox; acc
         <span className="flex-1" />
         <Button onClick={onClose}>{text('Close')}</Button>
       </footer>
+    </div>
+  );
+}
+
+/** One folder's line in a run: its name and role, its state, what it added, changed and removed, and its error in full. */
+function FolderRow({ f, tone }: { f: SyncRunFolder; tone: string }) {
+  return (
+    <li className="grid grid-cols-[minmax(120px,1.2fr)_minmax(110px,1fr)_auto] gap-x-3 rounded-[6px] px-2 py-1 even:bg-subtle/60">
+      <span className="min-w-0 break-words text-ink">
+        {f.folder}
+        {f.role ? <span className="text-ink-3"> · {f.role}</span> : null}
+      </span>
+      <span className={cx('font-semibold', tone)}>{folderWord(f)}</span>
+      <span className="whitespace-nowrap text-right tabular-nums text-ink-2">
+        +{f.added} · {f.changed} · −{f.removed}
+        {f.ms !== undefined ? ` · ${took(f.ms)}` : ''}
+      </span>
+      {f.error ? <span className="col-span-3 whitespace-normal break-words text-[12px] text-danger">{f.error}</span> : null}
+    </li>
+  );
+}
+
+/**
+ * A run's folders in groups (#286): errors, downloading and waiting open, each folder with its state in words;
+ * up to date and skipped folded to a count that opens on a click.
+ */
+function FolderGroups({ groups }: { groups: NonNullable<ReturnType<typeof folderGroups>> }) {
+  const [open, setOpen] = useState<Set<string>>(() => new Set(groups.filter((g) => g.open).map((g) => g.state)));
+  const toggle = (state: string) =>
+    setOpen((s) => {
+      const n = new Set(s);
+      if (n.has(state)) n.delete(state);
+      else n.add(state);
+      return n;
+    });
+  return (
+    <div className="flex flex-col gap-1.5">
+      {groups.map((g) => {
+        const shown = open.has(g.state);
+        const label = text(g.label);
+        return (
+          <section key={g.state} aria-label={label}>
+            <button type="button" aria-expanded={shown} onClick={() => toggle(g.state)} className="flex w-full items-center gap-1.5 rounded-[6px] px-1 py-0.5 text-left text-[12px] font-semibold hover:bg-subtle">
+              <span aria-hidden className="w-3 text-ink-3">
+                {shown ? '▾' : '▸'}
+              </span>
+              <span className={g.tone}>{text('{group} · {n}', { group: label, n: g.folders.length })}</span>
+            </button>
+            {shown ? (
+              <ul role="list" aria-label={text('Folders · {group}', { group: label })} className="mt-0.5 flex flex-col gap-0.5">
+                {g.folders.map((f) => (
+                  <FolderRow key={f.path} f={f} tone={g.tone} />
+                ))}
+              </ul>
+            ) : null}
+          </section>
+        );
+      })}
     </div>
   );
 }
