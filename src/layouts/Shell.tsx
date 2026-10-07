@@ -8,6 +8,7 @@ import { call, errorMessage, isMac, on } from '../core/bridge';
 import { accelerator, commandForAccelerator, getCommand, registerCommand, runCommand } from '../core/commands';
 import { initLauncherPrefs, shellShortcuts } from '../core/launcher-prefs';
 import { initOrgPrefs } from '../core/org-prefs';
+import { initSidebarPrefs } from '../core/sidebar-prefs';
 import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
 import { activateIndex, activateRelative, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, newRoute, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
@@ -71,6 +72,8 @@ export function Shell() {
   // The launcher's preferences follow whoever is signed in: this computer's copy at once, then the server's (#201).
   useEffect(() => initLauncherPrefs(), []);
   useEffect(() => initOrgPrefs(), []);
+  // The person's own sidebar, per organisation: this computer's copy at once, then the server's.
+  useEffect(() => initSidebarPrefs(), []);
 
   // Tab restore at start (FR-NAV-04) — only apps the user can still open.
   useEffect(() => {

@@ -31,13 +31,14 @@ import {
   type Rect,
   type WindowSize,
 } from '@shared/launcher';
-import { app, updatePrefs } from '../../core/app-state';
+import { app } from '../../core/app-state';
 import { appColour } from '../../core/app-look';
 import { call, isMac } from '../../core/bridge';
 import { prettyAccelerator } from '../../core/commands';
 import { appLabel } from '../../core/i18n';
 import { syncLauncherPrefsIfStale, updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
 import { noteRecentApp, readRecentApps } from '../../core/recent-apps';
+import { pinSidebarItem, useSidebarPinnedKeys } from '../../core/sidebar-prefs';
 import { useStore } from '../../core/store';
 import { activeTab, navigate, openTab, setRoute } from '../../core/tabs';
 import { toast } from '../../core/toasts';
@@ -73,7 +74,6 @@ import { cx } from '../../components/ui';
  * (`app.apps` is through the gates). It fades and scales in and out over 120ms, not at all for reduced motion.
  */
 
-const EMPTY: string[] = [];
 const DRAG_TYPE = 'application/x-worksuite-app';
 /** How long the launcher takes to close: its fade out. */
 export const LAUNCHER_CLOSE_MS = 120;
@@ -130,7 +130,7 @@ type OpenHow = 'window' | 'new-tab' | 'current-tab';
 
 export function Launcher() {
   const apps = useStore(app, (s) => s.apps);
-  const sidebarPins = useStore(app, (s) => s.prefs?.pinnedApps ?? EMPTY);
+  const sidebarPins = useSidebarPinnedKeys();
   const status = useStore(app, (s) => s.status);
   const userId = useStore(app, (s) => s.auth?.user?.id ?? null);
   const prefs = useLauncherPrefs();
@@ -267,7 +267,7 @@ export function Launcher() {
       const made = addGroup(p, name);
       return made ? { ...moveToGroup(made.prefs, a.id, made.id), groupBy: 'mine' } : null;
     }, 'That group could not be made.');
-  const toggleSidebarPin = (a: AppDefinition) => void updatePrefs({ pinnedApps: sidebarPins.includes(a.id) ? sidebarPins.filter((p) => p !== a.id) : [...sidebarPins, a.id] });
+  const toggleSidebarPin = (a: AppDefinition) => void pinSidebarItem(a.id, !sidebarPins.includes(a.id));
 
   /** Settings › App launcher: the settings button by the search, and Customise in the footer. */
   const customise = () => {
