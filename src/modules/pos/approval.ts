@@ -2,6 +2,7 @@ import type { PosApprovalAsk } from '@shared/pos';
 import { createStore, useStore } from '../../core/store';
 import type { CartState } from './cart';
 import type { Approval } from './desk';
+import { shareOf } from './pricing';
 
 /**
  * A manager's approval at the counter, as rules with no screen in them (D09). WorkSuite decides who must ask: a
@@ -41,12 +42,38 @@ export function covers(a: Approval | null | undefined, action: PosApprovalAsk['a
  * give it, or a manager approved it; otherwise only what the cashier may give, and `needs` says a manager is wanted.
  * Without approvals on the server, exactly the old rule: never past the cashier's ceiling, none without the right.
  */
-export function saleDiscount(c: Pick<CartState, 'discount'>, rights: DiscountRights, approvals: boolean, approval: Approval | null | undefined, now = Date.now()): { pct: number; approved: number | null; needs: boolean } {
+export function saleDiscount(
+  c: Pick<CartState, 'discount' | 'discount_type'>,
+  rights: DiscountRights,
+  approvals: boolean,
+  approval: Approval | null | undefined,
+  now = Date.now(),
+  /** What a fixed amount comes off (`discountBase`): it is measured as the percentage it is of that (#293). */
+  base: number | null = null,
+): { pct: number; approved: number | null; needs: boolean; amount?: number } {
+  if (c.discount_type === 'amount') return amountDiscount(Number(c.discount) || 0, rights, approvals, approval, now, base);
   const typed = Math.max(0, Math.min(100, Number(c.discount) || 0));
   const own = !rights.allowed ? 0 : rights.ceiling !== null && rights.ceiling > 0 ? Math.min(typed, rights.ceiling) : typed;
   if (!approvals || !discountNeedsApproval(typed, rights)) return { pct: own, approved: null, needs: false };
   if (covers(approval, 'discount', typed, now)) return { pct: typed, approved: typed, needs: false };
   return { pct: own, approved: null, needs: true };
+}
+
+/**
+ * A fixed amount off (#293), held to the same rights as a percentage: its share of what it comes off (`shareOf`) is
+ * what the cashier's ceiling and a manager's approval measure. Within the cashier's rights (or with no approvals on the
+ * server, where WorkSuite refuses what is past them) the amount stands; past them it waits for a manager — and the
+ * sale carries no discount until one approves at least that share.
+ */
+export function amountDiscount(value: number, rights: DiscountRights, approvals: boolean, approval: Approval | null | undefined, now = Date.now(), base: number | null = null): { pct: number; approved: number | null; needs: boolean; amount?: number } {
+  const amount = Math.round(Math.max(0, value) * 100) / 100;
+  if (!(amount > 0)) return { pct: 0, approved: null, needs: false };
+  const pct = base === null ? 0 : shareOf(amount, base);
+  if (!approvals || !discountNeedsApproval(base === null ? 0.0001 : pct, rights)) {
+    return rights.allowed ? { pct, approved: null, needs: false, amount } : { pct: 0, approved: null, needs: false };
+  }
+  if (base !== null && covers(approval, 'discount', pct, now)) return { pct, approved: pct, needs: false, amount };
+  return { pct: 0, approved: null, needs: true };
 }
 
 /** The approvals given on this till's open sales (by sale id): in memory, gone with the window. */

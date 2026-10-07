@@ -56,6 +56,8 @@ export interface PosCan {
   discount_override?: boolean;
   /** The most they may take off, in percent: null no ceiling, 0 none. */
   max_discount_pct?: number | null;
+  /** #293: `pos.sale.voucher.accept` — may take a gift voucher as payment (absent on an older server: as before, yes). */
+  voucher?: boolean;
 }
 
 /** How a drawer closes in the company (the POS settings). */
@@ -136,6 +138,17 @@ export interface PosCapabilities {
   receipt_templates?: boolean;
   device_unpair?: boolean;
   device_rename?: boolean;
+  /* #293: discount, coupon and gift voucher on the payment screen. */
+  /** A fixed amount off with a reason (`discount_type: amount`). */
+  discount_amount?: boolean;
+  /** `POST coupons/validate`, and `coupon_report` on the price. */
+  coupon_validate?: boolean;
+  /** Gift vouchers on by default and their own right (`can.voucher`). */
+  voucher_accept?: boolean;
+  /** A void or full refund gives a coupon's use back. */
+  coupon_restore?: boolean;
+  /** The sale keeps its discount and coupon (`adjustments` on the receipt). */
+  sale_adjustments?: boolean;
 }
 
 export interface PosOptions {
@@ -389,7 +402,11 @@ export function pricingBody(caps: PosCapabilities | undefined, p: CounterPricing
   const out: Record<string, unknown> = {};
   if (caps?.promotions) out.apply_promotions = true;
   if (caps?.customers && p.customer_id) out.customer_id = p.customer_id;
-  if (caps?.coupons && p.coupon_code) out.coupon_code = p.coupon_code;
+  if (caps?.coupons && p.coupon_code) {
+    out.coupon_code = p.coupon_code;
+    // #293: a coupon that does not apply is said in `coupon`, and the cart priced without it, rather than refusing the price.
+    if (caps.coupon_validate) out.coupon_report = true;
+  }
   if (caps?.loyalty && p.customer_id && p.redeem_points && p.redeem_points > 0) out.redeem_points = Math.floor(p.redeem_points);
   return out;
 }
@@ -423,25 +440,77 @@ export function pricedOf(d: Record<string, unknown>, currency: string, discountP
   if ('points_redeemed' in d) out.points_redeemed = Math.floor(n(d.points_redeemed));
   if (Array.isArray(d.promotions)) {
     out.promotions = (d.promotions as Array<Record<string, unknown>>)
-      .map((p) => ({ id: n(p.id), label: s(p.label) ?? s(p.name) ?? '', amount: n(p.amount) }))
+      .map((p) => ({ id: n(p.id), label: s(p.label) ?? s(p.name) ?? '', amount: n(p.amount), ...(p.coupon === true ? { coupon: true } : {}) }))
       .filter((p) => Number.isInteger(p.id) && p.id > 0 && p.amount > 0);
+  }
+  // #293, each only where the server sent it.
+  if (d.discount_type === 'amount') {
+    out.discount_type = 'amount';
+    out.discount_value = n(d.discount_value);
+  }
+  if ('coupon_discount' in d) out.coupon_discount = n(d.coupon_discount);
+  if (d.coupon && typeof d.coupon === 'object') {
+    const c = d.coupon as Record<string, unknown>;
+    const code = s(c.code);
+    if (code) out.coupon = { code, amount: n(c.amount), valid: c.valid !== false, reason: s(c.reason), message: s(c.message) };
   }
   if (Array.isArray(d.pricing_notes)) out.notes = (d.pricing_notes as unknown[]).map((x) => s(x)).filter((x): x is string => !!x).slice(0, 5);
   return out;
 }
 
-export async function priceCart(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, caps: PosCapabilities | undefined, org?: number | null, counter: CounterPricing = {}, approvedPct: number | null = null): Promise<PricedCart> {
-  if (caps?.price) {
-    // A discount a manager approved past the cashier's rights: priced without it here, the percentage taken locally (`withDiscount`).
-    const asked = approvedPct !== null ? 0 : discountPct;
-    const c = await request<Record<string, unknown>>('POST', `${BASE}/price`, { body: { lines, discount_pct: asked, ...(org ? { org_id: org } : {}), ...pricingBody(caps, counter) } });
-    const priced = pricedOf(c.data, currency, asked);
-    return approvedPct !== null ? withDiscount(priced, approvedPct) : priced;
-  }
-  return legacyPrice(lines, discountPct, products, currency, ceiling);
+/** How the cashier's discount goes to the price door: a fixed amount where the server takes one (#293), else the percentage. */
+export function discountBody(caps: PosCapabilities | undefined, pct: number, amount: number | null): Record<string, unknown> {
+  return amount !== null && amount > 0 && caps?.discount_amount ? { discount_type: 'amount', discount_value: amount } : { discount_pct: pct };
 }
 
-async function legacyPrice(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null): Promise<PricedCart> {
+export async function priceCart(
+  lines: CartLineInput[],
+  discountPct: number,
+  products: Map<number, PosProduct>,
+  currency: string,
+  ceiling: number | null,
+  caps: PosCapabilities | undefined,
+  org?: number | null,
+  counter: CounterPricing = {},
+  approvedPct: number | null = null,
+  /** The cashier's discount as a fixed amount (#293), with `discountPct` the share it comes to. */
+  amount: number | null = null,
+): Promise<PricedCart> {
+  if (caps?.price) {
+    // A discount a manager approved past the cashier's rights: priced without it here, taken locally (`withDiscount`).
+    const approved = approvedPct !== null;
+    const c = await request<Record<string, unknown>>('POST', `${BASE}/price`, {
+      body: { lines, ...(approved ? { discount_pct: 0 } : discountBody(caps, discountPct, amount)), ...(org ? { org_id: org } : {}), ...pricingBody(caps, counter) },
+    });
+    const priced = pricedOf(c.data, currency, approved ? 0 : discountPct);
+    return approved ? withDiscount(priced, approvedPct, caps.discount_amount ? amount : null) : priced;
+  }
+  return legacyPrice(lines, discountPct, products, currency, ceiling, amount);
+}
+
+/**
+ * Whether a coupon may be used on this cart and what it takes off (`POST coupons/validate`, `capabilities.coupon_validate`,
+ * #293): WorkSuite runs its promotions on the cart and writes nothing. `reason` names why not (`not_found`, `expired`,
+ * `min_spend` …), `message` says it in WorkSuite's words.
+ */
+export interface CouponCheck {
+  valid: boolean;
+  code: string;
+  reason: string | null;
+  message: string;
+  amount: number;
+  promotion: string | null;
+}
+
+export async function validateCoupon(code: string, lines: CartLineInput[], o: { org?: number | null; customer_id?: number } = {}): Promise<CouponCheck> {
+  const r = await request<Record<string, unknown>>('POST', `${BASE}/coupons/validate`, {
+    body: { coupon_code: code, lines, ...(o.org ? { org_id: o.org } : {}), ...(o.customer_id ? { customer_id: o.customer_id } : {}) },
+  });
+  const d = r.data ?? {};
+  return { valid: d.valid === true, code: s(d.code) ?? code, reason: s(d.reason), message: s(d.message) ?? r.message ?? '', amount: n(d.amount), promotion: s(d.promotion) };
+}
+
+async function legacyPrice(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, amount: number | null = null): Promise<PricedCart> {
   if (inventoryPriceRefused) throw new ApiError(403, 'Inventory prices are not readable here.', null);
   const priced = new Map(products);
   await Promise.all(
@@ -456,7 +525,7 @@ async function legacyPrice(lines: CartLineInput[], discountPct: number, products
       priced.set(l.product_id, { ...p, price: n(r.price, p.price), discount_pct: n(r.discount_pct, p.discount_pct), tax_rate: n(r.tax_rate, p.tax_rate) });
     }),
   );
-  const e = estimateCart(lines, priced, discountPct, ceiling, currency);
+  const e = estimateCart(lines, priced, discountPct, ceiling, currency, amount);
   if (e.error) throw new ApiError(422, e.error, 'validation_failed');
   return e.cart;
 }
@@ -473,10 +542,12 @@ export function useCartPrice(
   counter: CounterPricing = {},
   /** The discount a manager approved (its percentage), past the cashier's own ceiling. */
   approvedPct: number | null = null,
+  /** The cashier's discount as a fixed amount (#293); `discountPct` is then the share it comes to. */
+  amount: number | null = null,
 ): CartPrice {
   // Offline (and while WorkSuite is asked) the preview takes no promotion: the sale says so (`promotion_ids: []`).
-  const estimate = useMemo(() => estimateCart(lines, products, discountPct, approvedPct !== null ? null : ceiling, currency), [lines, products, discountPct, ceiling, currency, approvedPct]);
-  const signature = JSON.stringify([lines, discountPct, counter.customer_id ?? null, counter.coupon_code ?? null, counter.redeem_points ?? null, approvedPct]);
+  const estimate = useMemo(() => estimateCart(lines, products, discountPct, approvedPct !== null ? null : ceiling, currency, amount), [lines, products, discountPct, ceiling, currency, approvedPct, amount]);
+  const signature = JSON.stringify([lines, discountPct, counter.customer_id ?? null, counter.coupon_code ?? null, counter.redeem_points ?? null, approvedPct, amount]);
   const [debounced, setDebounced] = useState(signature);
   useEffect(() => {
     const t = setTimeout(() => setDebounced(signature), 250);
@@ -486,8 +557,8 @@ export function useCartPrice(
   const server = useQuery<PricedCart, Error>({
     queryKey: ['pos', 'price', debounced, currency, !!caps?.price, !!caps?.promotions, org ?? null],
     queryFn: () => {
-      const [l, d, customer_id, coupon_code, redeem_points, approved] = JSON.parse(debounced) as [CartLineInput[], number, number | null, string | null, number | null, number | null];
-      return priceCart(l, d, products, currency, ceiling, caps, org, { ...(customer_id ? { customer_id } : {}), ...(coupon_code ? { coupon_code } : {}), ...(redeem_points ? { redeem_points } : {}) }, approved);
+      const [l, d, customer_id, coupon_code, redeem_points, approved, fixed] = JSON.parse(debounced) as [CartLineInput[], number, number | null, string | null, number | null, number | null, number | null];
+      return priceCart(l, d, products, currency, ceiling, caps, org, { ...(customer_id ? { customer_id } : {}), ...(coupon_code ? { coupon_code } : {}), ...(redeem_points ? { redeem_points } : {}) }, approved, fixed);
     },
     enabled: online && lines.length > 0 && settled,
     staleTime: 60_000,

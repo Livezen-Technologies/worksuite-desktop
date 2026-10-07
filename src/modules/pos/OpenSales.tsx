@@ -147,7 +147,8 @@ export function HoldDialog({ id, onClose, server, nameOf, totalOf }: { id: strin
         const total = totalOf?.(c);
         await parkOnServer({
           lines: c.lines.map((l) => ({ product_id: l.product_id, quantity: l.quantity, ...(nameOf?.(l.product_id) ? { name: nameOf(l.product_id)!.slice(0, 200) } : {}) })),
-          ...(Number(c.discount) > 0 ? { discount_pct: Math.min(100, Number(c.discount)) } : {}),
+          // A fixed amount (#293) is not a percentage: a sale held on WorkSuite keeps only a percentage.
+          ...(c.discount_type !== 'amount' && Number(c.discount) > 0 ? { discount_pct: Math.min(100, Number(c.discount)) } : {}),
           ...(c.customer ? { customer: { ...(c.customer.name ? { name: c.customer.name } : {}), ...(c.customer.phone ? { phone: c.customer.phone } : {}), ...(c.customer.email ? { email: c.customer.email } : {}), ...(c.customer.id ? { client_id: c.customer.id } : {}) } } : {}),
           ...(note.trim() ? { note: note.trim().slice(0, 200) } : {}),
           ...(c.customer?.name ? { label: c.customer.name.slice(0, 120) } : {}),
