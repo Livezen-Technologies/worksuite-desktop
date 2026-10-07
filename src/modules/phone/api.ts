@@ -388,6 +388,21 @@ export interface MyPhone {
   presence: Presence;
   hotdesk: { extension_id: number; extension: string; since: string | null } | null;
   shared_phones: Array<{ id: number; extension: string; name: string; branch: string | null }>;
+  /** Proposed with the status menu (#288): the number Away forwards calls to, when the switch knows it. */
+  away_forward_to?: string | null;
+}
+
+/**
+ * PUT /me/dnd (proposed, VOIP-FWD-05): Do not disturb on the switch, linked to the WorkSuite status or not. The status
+ * menu (#288) also sends the status itself and when a Do not disturb ends; a server that keeps them answers them back
+ * (`status`, `until`), one that keeps only Do not disturb answers `dnd`.
+ */
+export interface CallStatusInput {
+  dnd: boolean;
+  sync_presence: boolean;
+  status: 'available' | 'busy' | 'dnd' | 'away';
+  /** ISO, UTC; null for "until I turn it off". */
+  until: string | null;
 }
 
 export interface SpeedDial {
@@ -905,7 +920,7 @@ export const phoneApi = {
 
   /* me (proposed) */
   me: (signal?: AbortSignal) => optional(apiGet<MyPhone>(`${V}/me`, undefined, signal)),
-  setDnd: (dnd: boolean, syncPresence?: boolean) => apiPut<{ dnd: boolean; message?: string }>(`${V}/me/dnd`, { dnd, sync_presence: syncPresence }),
+  setCallStatus: (input: CallStatusInput) => apiPut<{ dnd: boolean; status?: string | null; until?: string | null; message?: string }>(`${V}/me/dnd`, input),
   setCallerId: (value: string) => apiPut<{ caller_id: string }>(`${V}/me/caller-id`, { caller_id: value }),
   speedDials: (signal?: AbortSignal) => optional(apiGet<{ speed_dials: SpeedDial[] }>(`${V}/speed-dials`, undefined, signal).then((r) => r.speed_dials)),
   addSpeedDial: (input: Omit<SpeedDial, 'id' | 'presence'>) => apiPost<{ id: number }>(`${V}/speed-dials`, input),

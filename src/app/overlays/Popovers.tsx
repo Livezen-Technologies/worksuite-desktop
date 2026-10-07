@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { app, organizationName } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
-import { PRESENCE_SHOWN, shownPresence } from '../../core/presence';
+import { PRESENCE_SHOWN, refreshMyPresence, shownPresence } from '../../core/presence';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { closeOverlay, openOverlay } from '../../core/ui';
@@ -61,7 +61,8 @@ export function ProfileMenu() {
     setPicking(false);
     try {
       await apiPost('/api/chat/presence', { status, active: true });
-      await qc.invalidateQueries({ queryKey: ['account', 'presence'] });
+      // Every copy of my status asks again: Chat, Website chats and the Phone's status follow at once (#288).
+      await refreshMyPresence(qc);
     } catch (e) {
       toast('error', errorMessage(e));
     }

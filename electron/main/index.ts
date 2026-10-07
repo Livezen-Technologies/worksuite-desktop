@@ -659,6 +659,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     http,
     allowed: () => sessionCtl.isReady() && canOpenApp('phone', sessionCtl.visibleApps()),
     notify: (n) => notifications.notify(n),
+    bell: (item) => void notifications.addLocal(item),
     mainWindow: () => windows.getMain(),
   });
 

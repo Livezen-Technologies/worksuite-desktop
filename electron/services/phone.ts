@@ -18,6 +18,8 @@ export interface PhoneDeps {
   /** Signed in, not locked, and the Phone is one of the person's apps. */
   allowed: () => boolean;
   notify: (n: Incoming) => void;
+  /** This computer's own entry in the bell (`NotificationService.addLocal`): a missed call nothing popped up for. */
+  bell?: (item: { id: string; title: string; body: string; link: string | null; module?: string }) => void;
   mainWindow: () => BrowserWindow | null;
   /** Shortcut registration, replaceable in tests. */
   shortcuts?: { register(acc: string, fn: () => void): boolean; unregister(acc: string): void };
@@ -86,9 +88,17 @@ export class PhoneService {
     win.webContents.send('phone:shortcut', { action });
   }
 
-  /** A call as a native notification; clicking it opens the Phone. */
+  /**
+   * A call as a native notification; clicking it opens the Phone. As the status calls are in says (#288): Busy's is
+   * silent whatever the app's sounds are, and a call turned away by Do not disturb or Away is only kept in the bell.
+   */
   notify(n: PhoneNotify): void {
     if (!this.d.allowed()) return;
+    const link = n.kind === 'missed' ? '/phone/calls' : '/phone';
+    if (n.delivery === 'bell') {
+      this.d.bell?.({ id: n.id, title: n.title, body: n.body, link, module: 'phone' });
+      return;
+    }
     this.d.notify({
       id: n.id,
       module: 'phone',
@@ -96,9 +106,10 @@ export class PhoneService {
       title: n.title,
       body: n.body,
       sender: null,
-      link: n.kind === 'missed' ? '/phone/calls' : '/phone',
+      link,
       critical: n.kind === 'incoming',
       call: n.kind === 'incoming',
+      ...(n.delivery === 'silent' ? { custom: { actions: [], sound: false, onAction: () => undefined } } : {}),
     });
   }
 

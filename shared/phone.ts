@@ -9,7 +9,9 @@ import { z } from 'zod';
  *    known, so it must reload once to connect.
  *  - `phone:shortcuts` — the global shortcuts of the compact phone (D01): answer, hang up, mute, held only while the
  *    phone is registered. Pressed, they arrive as `phone:shortcut` in the main window.
- *  - `phone:notify` — an incoming or missed call as a native notification (VOIP-NOT-01, D01).
+ *  - `phone:notify` — an incoming or missed call as a native notification (VOIP-NOT-01, D01), as the status calls are
+ *    in says (worksuite-desktop#288): a banner with the app's sound, a `silent` one (Busy), or only an entry in the
+ *    bell (`bell`: a call turned away while Do not disturb or Away, so nothing pops up).
  */
 const none = z.undefined().or(z.null()).optional();
 
@@ -29,6 +31,7 @@ export const phoneNotifySchema = z.strictObject({
   id: z.string().regex(/^phone-[a-z]+:[A-Za-z0-9]{1,40}$/),
   title: z.string().min(1).max(160),
   body: z.string().max(300),
+  delivery: z.enum(['silent', 'bell']).optional(),
 });
 export type PhoneNotify = z.infer<typeof phoneNotifySchema>;
 

@@ -107,6 +107,23 @@ describe('calls as native notifications', () => {
     expect(notify.mock.calls[1]![0]).toMatchObject({ link: '/phone/calls', critical: false, call: false });
   });
 
+  it('rings without a sound while Busy, and keeps a call turned away by Do not disturb in the bell only (#288)', () => {
+    const bell = vi.fn();
+    const { s, notify } = service({ bell });
+    s.notify({ kind: 'incoming', id: 'phone-ring:l1', title: 'Incoming call from Nimal Perera', body: '+94 77 312 4408', delivery: 'silent' });
+    expect(notify.mock.calls[0]![0]).toMatchObject({ critical: true, call: true, custom: { actions: [], sound: false } });
+    s.notify({ kind: 'missed', id: 'phone-missed:l2', title: 'Missed call from Nimal Perera', body: '+94 77 312 4408 · Do not disturb: sent to voicemail', delivery: 'bell' });
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(bell).toHaveBeenCalledWith({ id: 'phone-missed:l2', title: 'Missed call from Nimal Perera', body: '+94 77 312 4408 · Do not disturb: sent to voicemail', link: '/phone/calls', module: 'phone' });
+    // An ordinary banner has no `custom` of its own: the app's sounds apply.
+    s.notify({ kind: 'incoming', id: 'phone-ring:l3', title: 'Incoming call', body: '1042' });
+    expect(notify.mock.calls[1]![0].custom).toBeUndefined();
+    // Nobody without the Phone hears of a call, banner or bell.
+    const off = service({ allowed: () => false, bell });
+    off.s.notify({ kind: 'missed', id: 'phone-missed:l4', title: 'x', body: 'y', delivery: 'bell' });
+    expect(bell).toHaveBeenCalledTimes(1);
+  });
+
   it('is in the IPC contract with a strict payload', () => {
     for (const c of ['phone:prepare', 'phone:shortcuts', 'phone:notify'] as const) expect(INVOKE_CHANNELS).toContain(c);
     expect(EVENT_CHANNELS).toContain('phone:shortcut');
@@ -114,6 +131,8 @@ describe('calls as native notifications', () => {
     expect(schema.safeParse({ kind: 'incoming', id: 'phone-ring:l1', title: 'x', body: 'y' }).success).toBe(true);
     expect(schema.safeParse({ kind: 'incoming', id: 'chat:1', title: 'x', body: 'y' }).success).toBe(false);
     expect(schema.safeParse({ kind: 'incoming', id: 'phone-ring:l1', title: 'x', body: 'y', link: '/mail' }).success).toBe(false);
+    expect(schema.safeParse({ kind: 'missed', id: 'phone-missed:l1', title: 'x', body: 'y', delivery: 'bell' }).success).toBe(true);
+    expect(schema.safeParse({ kind: 'incoming', id: 'phone-ring:l1', title: 'x', body: 'y', delivery: 'loud' }).success).toBe(false);
     expect(contract['windows:open'].input.safeParse({ kind: 'phone', route: '/phone/compact', alwaysOnTop: true }).success).toBe(true);
   });
 });

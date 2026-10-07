@@ -1090,6 +1090,14 @@ same endpoints as the web. Answers are the usual `{status, message, data}`; stam
   caller ID (`CallerID` = the extension's `caller_id`, else its name) and the desktop answers that ring-back
   without a click when it arrives within 20 s. Keep the caller ID on the ring-back the extension's own.
 - **Recordings** play from the signed `/media/stream/<token>` the `play` answer gives, at the server's origin.
+- **The status (worksuite-desktop#288).** One status across WorkSuite: the Phone's status menu (Available, Busy,
+  Do not disturb, Away) is the WorkSuite status — Chat's presence, `GET /api/chat/presence/me` and
+  `POST /api/chat/presence {status, active: true}` as the top bar sets it — unless the person gives calls their own
+  (kept on the computer). Appear offline counts as Away for calls. On this computer: Available rings, Busy rings
+  without a sound (a silent banner), Do not disturb and Away answer the call 486 Busy — the switch's busy path
+  (voicemail, the next queue or ring-group member, the "When busy" forwarding rule) — and the missed call goes to
+  Calls and the bell without a banner. Do not disturb for 30 min / 1 h / 2 h / until tomorrow 08:00 is ended by the
+  desktop (at the time, or at its next start). What the server needs for the rest is under *Proposed* below.
 
 **Proposed — asked for, and said plainly when absent.** A route that is not there (404/405/501) shows "isn't offered
 by this WorkSuite server yet"; anything else is shown as the server's own refusal. Writes answer `{…, message}`
@@ -1097,7 +1105,9 @@ where `message` says what is still to do ("Saved. Apply the configuration to mak
 
 | Need (SRS) | Calls |
 |---|---|
-| My phone (W01, W07; SP-09, FWD-05, G-11) | `GET me` → `{extensions, devices: Registration[], caller_ids: [{value,label}], caller_id, dnd, sync_presence, presence, hotdesk: {extension_id, extension, since} \| null, shared_phones: [{id, extension, name, branch}]}`; `PUT me/dnd {dnd, sync_presence}`; `PUT me/caller-id {caller_id}`; `GET registrations` → `{registrations: [{extension_id, aor, contact, user_agent, ip, transport, rtt_ms, seen_at}]}` |
+| My phone (W01, W07; SP-09, FWD-05, G-11) | `GET me` → `{extensions, devices: Registration[], caller_ids: [{value,label}], caller_id, dnd, sync_presence, presence, hotdesk: {extension_id, extension, since} \| null, shared_phones: [{id, extension, name, branch}]}`; `PUT me/dnd {dnd, sync_presence}` (plus `status`, `until`: see *Status for calls*); `PUT me/caller-id {caller_id}`; `GET registrations` → `{registrations: [{extension_id, aor, contact, user_agent, ip, transport, rtt_ms, seen_at}]}` |
+| Status for calls (FWD-05, #288) | `PUT me/dnd {dnd, sync_presence, status: available\|busy\|dnd\|away, until: ISO-UTC \| null}` → `{dnd, status?, until?, message?}`. `dnd` is true for Do not disturb and Away: the switch's own Do not disturb on every device of the extension, not only this computer. `sync_presence` is true while calls follow the WorkSuite status (the server may then link the switch's DND to Chat's presence itself). A server that keeps the status answers `status` (and `until`) back: Busy rings the person's other devices without a ring tone where they can, Away applies the person's forwarding to their own phone (`away_forward_to`) instead of Do not disturb, and Do not disturb ends at `until` on the switch even with the desktop closed. One that answers only `dnd` gets Busy on this computer only and Away as Do not disturb, and the person is told. `GET me` may add `status` (calls' own, or null when it follows the WorkSuite status), `until` and `away_forward_to` (the number Away forwards to). The desktop reads `away_forward_to` today (the menu says "Calls forward to …"); without it, the person's enabled "When busy" rule to a mobile or external number from `forwards`, and it says when none is set. Calls' own status and the end of a Do not disturb are kept on the computer, not read back from `GET me` |
+| WorkSuite status end time (#288) | `POST /api/chat/presence {status, active, until}` — the server puts back the status before it at `until` and sends `chat.presence`; `GET /api/chat/presence/me` adds `until`. Until then the desktop does not send `until` there: it puts the status back itself (checked every 15 s and at the next start), and only when Chat's presence still says Do not disturb |
 | Speed dials (G-03) | `GET speed-dials` → `{speed_dials: [{id, label, number, slot, contact_id, presence?}]}`; `POST speed-dials`; `DELETE speed-dials/{id}` |
 | Wrap-up, call path (CTL-06, HIS-07) | `GET wrapup-codes` → `{codes: [{code, label}]}`; `POST calls/{id}/wrapup {code}`; `GET calls/{id}/events` → `{events: [{at, event: start\|ivr\|queue\|answer\|transfer\|hangup, text, detail}]}` |
 | Voicemail (REC-06) | `POST voicemail/{id}/heard {heard}`; `POST voicemail/{id}/forward {extension_id}`; `DELETE recordings/{id}`; `recordings?kind=voicemail` rows may carry `mailbox` (a shared mailbox's name) |

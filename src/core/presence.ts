@@ -1,3 +1,4 @@
+import type { QueryClient } from '@tanstack/react-query';
 import type { NetworkStatus } from '@shared/types';
 
 export type ShownPresence = 'online' | 'busy' | 'dnd' | 'away' | 'offline';
@@ -32,4 +33,19 @@ export function shownPresence(presence: { status?: string | null; choice?: strin
   const chosen = CHOSEN[presence.choice ?? 'available'] ?? 'online';
   if (status === 'offline' || status === null) return chosen;
   return status;
+}
+
+/**
+ * My own status as the screens ask for it (`GET /api/chat/presence/me`): Chat's and Website chats' status, Support's
+ * availability and the Phone's status read this copy, which a realtime `chat.presence` refreshes; the top bar's account
+ * menu and the tray read `['account', 'presence']`.
+ */
+export const MY_PRESENCE_KEY = ['chat', 'presence', 'me'] as const;
+
+/**
+ * After my status changed — from the top bar, Chat, the desk or the Phone — every copy of it asks again at once, so
+ * they all show the one status (worksuite-desktop#288).
+ */
+export function refreshMyPresence(qc: Pick<QueryClient, 'invalidateQueries'>): Promise<unknown> {
+  return Promise.all([qc.invalidateQueries({ queryKey: ['chat', 'presence'] }), qc.invalidateQueries({ queryKey: ['account', 'presence'] })]);
 }

@@ -26,6 +26,7 @@ vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreAp
 
 import { Invitation, Inviter } from 'sip.js';
 import { ApiError, apiGet, apiPost } from '../../../src/core/api';
+import { playOnce, playTone } from '../../../src/modules/calls/tones';
 import { answeredElsewhere, INITIAL, phaseLabel, PhoneEngine, sipTarget, viaOf } from '../../../src/modules/phone/softphone/engine';
 import { isHostWindow } from '../../../src/modules/phone/softphone/client';
 
@@ -192,6 +193,81 @@ describe('ringing (WF-06)', () => {
     ring(e, b);
     await e.decline(e.state.lines.find((l) => l.remote === '0722222222')!.id);
     expect(b.reject).toHaveBeenCalledWith({ statusCode: 603 });
+  });
+});
+
+describe('ringing by the status (#288)', () => {
+  it('Available rings out loud with an ordinary banner', () => {
+    const e = new PhoneEngine();
+    const notify = vi.fn();
+    e.notify = notify;
+    registered(e);
+    ring(e, invitation('0773124408', 'Nimal Perera'));
+    expect(playTone).toHaveBeenCalledWith('ring', 0.5);
+    expect(notify).toHaveBeenCalledWith({ kind: 'incoming', id: expect.stringMatching(/^phone-ring:/), title: 'Incoming call from Nimal Perera', body: '0773124408' });
+  });
+
+  it('Busy rings on screen only: no ring tone, no call-waiting beep, a silent banner', () => {
+    const e = new PhoneEngine();
+    const notify = vi.fn();
+    e.notify = notify;
+    registered(e);
+    e.setStatus('busy');
+    ring(e, invitation('0773124408', 'Nimal Perera'));
+    expect(e.state.lines[0]).toMatchObject({ state: 'ringing', remote: '0773124408' });
+    expect(playTone).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ kind: 'incoming', delivery: 'silent' }));
+    // On a call, a second caller: no beep in the ear either.
+    e.store.set((s) => ({ lines: s.lines.map((l) => ({ ...l, state: 'connected' as const })) }));
+    ring(e, invitation('0711111111'));
+    expect(playOnce).not.toHaveBeenCalled();
+  });
+
+  it('going Busy while a call rings silences it, and the call stays to be answered', () => {
+    const e = new PhoneEngine();
+    registered(e);
+    ring(e, invitation('0773124408'));
+    const tone = vi.mocked(playTone).mock.results[0]!.value as { stop: ReturnType<typeof vi.fn> };
+    e.setStatus('busy');
+    expect(tone.stop).toHaveBeenCalled();
+    expect(e.state.lines[0]!.state).toBe('ringing');
+  });
+
+  it('Do not disturb turns the caller away to voicemail; the missed call is kept, in the bell without a banner', () => {
+    const e = new PhoneEngine();
+    const notify = vi.fn();
+    e.notify = notify;
+    registered(e);
+    e.setStatus('dnd');
+    expect(e.state.dnd).toBe(true);
+    const a = invitation('0773124408', 'Nimal Perera');
+    ring(e, a);
+    expect(a.reject).toHaveBeenCalledWith({ statusCode: 486 });
+    expect(e.state.lines).toHaveLength(0);
+    expect(e.state.missed).toEqual([expect.objectContaining({ remote: '0773124408', name: 'Nimal Perera' })]);
+    expect(playTone).not.toHaveBeenCalled();
+    expect(notify).toHaveBeenCalledTimes(1);
+    expect(notify).toHaveBeenCalledWith({ kind: 'missed', id: expect.stringMatching(/^phone-missed:/), title: 'Missed call from Nimal Perera', body: '0773124408 · Do not disturb: sent to voicemail', delivery: 'bell' });
+  });
+
+  it('Away does not ring here either: the switch’s busy path forwards or takes a message', () => {
+    const e = new PhoneEngine();
+    const notify = vi.fn();
+    e.notify = notify;
+    registered(e);
+    e.setStatus('away');
+    const a = invitation('0711111111');
+    ring(e, a);
+    expect(a.reject).toHaveBeenCalledWith({ statusCode: 486 });
+    expect(e.state.missed).toHaveLength(1);
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ kind: 'missed', delivery: 'bell', body: '0711111111 · Away: sent to your forwarding or voicemail' }));
+  });
+
+  it('keeps the status through a stop that finishes late', async () => {
+    const e = new PhoneEngine();
+    e.setStatus('dnd');
+    await e.stop();
+    expect(e.state).toMatchObject({ phase: 'stopped', status: 'dnd', dnd: true });
   });
 });
 

@@ -3,10 +3,12 @@ import { useMemo, useState } from 'react';
 import { toast } from '../../../core/toasts';
 import { Button, Chip, cx, Empty, IconButton, Modal, Spinner, Switch } from '../../../components/ui';
 import { isNotOffered, NOT_OFFERED, phoneApi, PK, rowsOf, useExtensions, useForwards, useMe, useRegistrations, type ForwardCondition, type ForwardKind, type ForwardRule } from '../api';
+import { atLabel } from '../lib/callstatus';
 import { dialable, isDialable, prettyNumber, stamp } from '../lib/format';
 import { checkTimeSpec, describeTimeSpec } from '../lib/timespec';
 import { Field, INPUT, Mono, Notice, PageBody, PageHeader, Panel, Refused } from '../parts';
-import { runPhone, usePhaseLabel, usePhoneState } from '../softphone/client';
+import { usePhaseLabel, usePhoneState } from '../softphone/client';
+import { chooseCallStatus, linkCallStatus, useCallStatus } from '../status';
 import { Checkbox } from '../../../components/Checkbox';
 
 /**
@@ -162,29 +164,33 @@ function detail(r: ForwardRule): string {
   return 'Forward every call immediately';
 }
 
-/** Do not disturb (VOIP-FWD-05): on the switch when the server offers it, on this computer always. */
+/**
+ * Do not disturb (VOIP-FWD-05): the status menu's Do not disturb (#288) — on the switch when the server offers it, on
+ * this computer always — and whether it is the WorkSuite status everybody sees or for calls only.
+ */
 function DndCard() {
+  const qc = useQueryClient();
   const me = useMe();
-  const local = usePhoneState((s) => s.dnd);
+  const view = useCallStatus();
   const server = me.data?.offered ? me.data.data : null;
-  const [sync, setSync] = useState(server?.sync_presence ?? false);
-  const on = server ? server.dnd || local : local;
+  // The switch's own Do not disturb counts too (set from the web); Away is its own status, though the switch keeps it as one.
+  const on = view.status === 'dnd' || (!!server?.dnd && view.status !== 'away');
   const set = async (v: boolean) => {
-    await runPhone({ cmd: 'dnd', on: v });
-    try {
-      await phoneApi.setDnd(v, sync);
-      void me.refetch();
-    } catch {
-      toast('info', v ? 'Calls won’t ring on this computer. This server can’t set Do not disturb on the switch yet.' : 'Calls ring on this computer again.');
-    }
+    await chooseCallStatus(qc, v ? 'dnd' : 'available');
+    if (server) void me.refetch();
   };
   return (
     <Panel title="Do not disturb" action={<Switch checked={on} onChange={(v) => void set(v)} label="Do not disturb" />} bodyClassName="flex flex-col gap-2 text-[12.5px] text-ink-2">
-      <p>Calls go straight to voicemail. Queue calls skip you.{!server ? ' On this server it applies to this computer only.' : ''}</p>
-      <label className="flex items-center gap-2">
-        <Checkbox checked={sync} disabled={!server} onChange={(e) => setSync(e.target.checked)} />
-        Sync with my WorkSuite presence
-      </label>
+      <p>
+        Calls go straight to voicemail. Queue calls skip you.{view.until ? ` On until ${atLabel(view.until, view.now)}.` : ''}
+        {!server ? ' On this server it applies to this computer only.' : ''}
+      </p>
+      {view.canLink ? (
+        <label className="flex items-center gap-2">
+          <Checkbox checked={view.linked} onChange={(e) => void linkCallStatus(qc, e.target.checked)} />
+          Same status for Chat and Website chats
+        </label>
+      ) : null}
     </Panel>
   );
 }

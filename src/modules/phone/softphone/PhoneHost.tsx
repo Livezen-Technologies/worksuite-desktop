@@ -7,19 +7,25 @@ import { toast } from '../../../core/toasts';
 import { useNow } from '../../../core/use-now';
 import { Icon } from '../../../components/Icon';
 import { Button, cx, IconButton } from '../../../components/ui';
+import type { CallStatus } from '../lib/callstatus';
 import { clock, prettyNumber } from '../lib/format';
 import { CallerBadge, Mono } from '../parts';
+import { useCallStatusSync } from '../status';
 import { phone, type Line } from './engine';
 import { runPhone, serveRemote, usePhoneState } from './client';
+
+const applyStatus = (status: CallStatus) => phone.setStatus(status);
 
 /**
  * The phone in the shell (VOIP-SP-01/03, design W03): held by the main window from sign-in to sign-out, so the
  * extension stays registered on every screen. It rings over any page with who is calling and what the business
  * knows about them; the call itself always lands in the one in-call screen (Phone), and a call on hold stays in
  * the dock at the bottom of every page. Native notifications and the global shortcuts (D01) are the main process's.
+ * It rings by the status calls are in (#288), which it keeps in step with the WorkSuite status here.
  */
 export default function PhoneHost() {
   const locked = useStore(app, (s) => s.lock?.locked ?? false);
+  useCallStatusSync(applyStatus);
 
   useEffect(() => {
     if (hasDesktop()) {
@@ -69,6 +75,7 @@ function PhoneOverlays() {
 /** W03: the call toast over any page — account context, Answer / To voicemail / Decline. */
 function RingToast({ line, waiting }: { line: Line; waiting: boolean }) {
   const now = useNow(1000);
+  const quiet = usePhoneState((s) => s.status === 'busy');
   const c = line.context;
   const name = line.remoteName ?? c?.contact?.name ?? c?.account?.name ?? c?.lead?.name ?? null;
   const open = c?.deals.filter((d) => d.open) ?? [];
@@ -84,6 +91,7 @@ function RingToast({ line, waiting }: { line: Line; waiting: boolean }) {
         <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-success" />
         {waiting ? 'Call waiting' : 'Incoming call'}
         {line.via ? ` · ${line.via}` : ''}
+        {quiet ? ' · Busy, no sound' : ''}
         <span className="ml-auto font-normal tracking-normal text-ink-3 normal-case">waiting {clock(Math.floor((now.getTime() - line.createdAt) / 1000))}</span>
       </div>
       <div className="flex items-center gap-3">
