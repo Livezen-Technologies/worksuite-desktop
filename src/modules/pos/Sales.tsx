@@ -16,7 +16,7 @@ import { Checkbox } from '../../components/Checkbox';
 
 /**
  * The till's sales — this shift's, or today's — from its own record (sealed on this computer): where each stands on
- * its way to WorkSuite, WorkSuite's own total and its flags (`price_differs`, `payment_missing`, `late` — filtered like
+ * its way to WorkSuite, WorkSuite's own total and its flags (`price_differs`, `payment_missing`, `late`, `product_archived`, `negative_stock` — filtered like
  * the web's "to review"), its receipt
  * (WorkSuite's, where it has one), a reprint and e-mailing it. A sale WorkSuite refused is sent again or dropped here —
  * one refused for its drawer (`drawer_closed`, `session_not_here`) is sent again into the register open now.
@@ -71,6 +71,7 @@ export default function Sales() {
           onChange={setReview}
           options={[
             { value: 'all', label: t('pos.showAll') },
+            { value: 'needs', label: t('pos.showNeeds') },
             { value: 'review', label: t('pos.showReview') },
             ...FLAGS.map((f) => ({ value: f, label: t(`pos.flag.${f}`) })),
           ]}
@@ -107,7 +108,7 @@ export default function Sales() {
   );
 }
 
-const FLAGS: PosSaleFlag[] = ['price_differs', 'payment_missing', 'late'];
+const FLAGS: PosSaleFlag[] = ['price_differs', 'payment_missing', 'late', 'product_archived', 'negative_stock'];
 
 function Flag({ tone, children }: { tone: 'warning' | 'danger' | 'muted'; children: React.ReactNode }) {
   const tones = { warning: 'bg-warning-bg text-warning', danger: 'bg-danger-bg text-danger', muted: 'bg-subtle text-ink-2' };
@@ -180,9 +181,11 @@ function SaleDetail({ sale, onClose }: { sale: PosSale; onClose: () => void }) {
       {flags.length || differs ? (
         <Note tone={flags.includes('payment_missing') ? 'danger' : 'warning'}>
           <strong>{t('pos.review')}.</strong>
-          {flags.includes('price_differs') || differs ? <span className="block">{t('pos.reviewNote', { total: formatMoney(sale.server_total ?? null, c), charged: formatMoney(sale.totals.total, c) })}</span> : null}
+          {differs ? <span className="block">{t('pos.reviewNote', { total: formatMoney(sale.server_total ?? null, c), charged: formatMoney(sale.totals.total, c) })}</span> : flags.includes('price_differs') ? <span className="block">{t('pos.flagNote.offlinePrice')}</span> : null}
           {flags.includes('payment_missing') ? <span className="block">{t('pos.flagNote.payment_missing')}</span> : null}
           {flags.includes('late') ? <span className="block">{t('pos.flagNote.late')}</span> : null}
+          {flags.includes('product_archived') ? <span className="block">{t('pos.flagNote.product_archived')}</span> : null}
+          {flags.includes('negative_stock') ? <span className="block">{t('pos.flagNote.negative_stock')}</span> : null}
           {sale.review ? <span className="block text-[12px] font-normal">{sale.review}</span> : null}
         </Note>
       ) : null}

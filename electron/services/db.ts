@@ -264,6 +264,42 @@ const MIGRATIONS: string[] = [
     PRIMARY KEY (origin, prefix)
   );
   `,
+  // 7 — POS's catalogue copy one product a row (worksuite-desktop#296), so what changed since the last sync is applied
+  // a row at a time instead of the whole copy sealed again: `pos_catalogue` keeps the copy's head (version, cursor,
+  // categories, tenders), `pos_products` its products. The codes a scan looks up and the category are plain (they are
+  // printed on the goods); the product itself — name, price, tax, stock — is sealed. `gen` is the whole download a row
+  // came from: one that finishes drops the rows of the one before. A copy kept as one sealed blob before this is split
+  // into rows the first time it is read (pos-catalogue.ts). `pos_thumbs` is the products' small pictures kept for
+  // offline, by size, the least recently shown dropped first.
+  `
+  CREATE TABLE pos_products (
+    origin TEXT NOT NULL,
+    terminal_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    gen INTEGER NOT NULL,
+    barcode TEXT,
+    code TEXT,
+    category_id TEXT,
+    payload TEXT NOT NULL,            -- enc: the product (name, price, tax, stock, picture, badge)
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (origin, terminal_id, product_id)
+  );
+  CREATE INDEX pos_products_barcode ON pos_products(origin, terminal_id, barcode);
+  CREATE INDEX pos_products_code ON pos_products(origin, terminal_id, code);
+
+  CREATE TABLE pos_thumbs (
+    origin TEXT NOT NULL,
+    terminal_id INTEGER NOT NULL,
+    product_id INTEGER NOT NULL,
+    file TEXT NOT NULL,
+    mime TEXT NOT NULL,
+    bytes INTEGER NOT NULL,
+    fetched_at TEXT NOT NULL,
+    used_at TEXT NOT NULL,
+    PRIMARY KEY (origin, terminal_id, product_id)
+  );
+  CREATE INDEX pos_thumbs_used ON pos_thumbs(used_at);
+  `,
 ];
 
 export type Row = Record<string, unknown>;

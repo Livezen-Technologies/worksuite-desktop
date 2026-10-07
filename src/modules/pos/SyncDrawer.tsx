@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { PK, syncNow, useSales } from './api';
+import { clockOf } from './syncstate';
 import { useT, type PosKey } from './i18n';
 import { PosButton, PosDialog, type Till } from './parts';
 import { formatMoney } from './pricing';
@@ -14,7 +15,7 @@ import { formatMoney } from './pricing';
  * refused) in the order they go — each kept sealed on this computer under its till number, so sending it twice
  * records it once.
  */
-const clock = (iso: string | null) => (iso ? new Date(iso).toLocaleTimeString(undefined, { hour: '2-digit', minute: '2-digit' }) : null);
+const clock = (iso: string | null) => clockOf(iso);
 
 export default function SyncDrawer({ till, onClose }: { till: Till; onClose: () => void }) {
   const t = useT();
@@ -28,8 +29,10 @@ export default function SyncDrawer({ till, onClose }: { till: Till; onClose: () 
   async function send() {
     setBusy(true);
     try {
-      await syncNow();
+      // Sync now: the sales waiting and the catalogue both (worksuite-desktop#296).
+      await syncNow({ catalogue: true });
       void qc.invalidateQueries({ queryKey: PK.till });
+      void qc.invalidateQueries({ queryKey: PK.catalogue });
       void qc.invalidateQueries({ queryKey: ['pos', 'sales'] });
     } catch (e) {
       toast('error', e instanceof Error ? e.message : 'The sales could not be sent.');
@@ -49,11 +52,12 @@ export default function SyncDrawer({ till, onClose }: { till: Till; onClose: () 
           <h2 className="text-[19px] font-extrabold">{online ? t('pos.sync.online') : t('pos.sync.offline')}</h2>
           <p className="text-[13px] text-ink-3">{[last ? t('pos.sync.last', { at: last }) : t('pos.sync.never'), t('pos.sync.retry')].join(' · ')}</p>
         </div>
-        <PosButton tone="primary" className="h-touch text-[14px]" disabled={busy} onClick={() => void send()}>
-          {busy ? <Icon name="spinner" size={16} className="animate-spin" /> : null}
-          {t('pos.sync.try')}
+        <PosButton tone="primary" className="h-touch text-[14px]" disabled={busy || !!s.syncing} onClick={() => void send()}>
+          {busy || s.syncing ? <Icon name="spinner" size={16} className="animate-spin" /> : null}
+          {t(online ? 'pos.sync.now' : 'pos.sync.try')}
         </PosButton>
       </div>
+      <CatalogueState till={till} />
       {!online ? (
         <div className="grid grid-cols-2 gap-2.5">
           <div className="rounded-pos bg-pos-key px-3.5 py-3">
@@ -92,5 +96,31 @@ export default function SyncDrawer({ till, onClose }: { till: Till; onClose: () 
       </div>
       <div className="rounded-[12px] bg-pos-key px-3.5 py-3 text-[12px] text-ink-2">{t('pos.sync.foot')}</div>
     </PosDialog>
+  );
+}
+
+/** The catalogue copy: how many products, when it was last brought up to date, a sync under way, why one failed. */
+function CatalogueState({ till }: { till: Till }) {
+  const t = useT();
+  const s = till.status;
+  const c = s.catalogue;
+  const sync = s.syncing;
+  return (
+    <div className="flex flex-col gap-1.5 rounded-pos bg-pos-key px-3.5 py-3 text-[13px]" aria-live="polite">
+      <div className="font-semibold">{c ? t('pos.sync.catalogue', { n: c.products.toLocaleString(), at: clockOf(c.fetched_at) ?? '—' }) : t('pos.sync.catalogueNever')}</div>
+      <div className="text-[12px] text-ink-3">{t('pos.sync.salesLast', { at: clockOf(s.last_sync) ?? t('pos.bar.never') })}</div>
+      {sync ? (
+        <div className="flex flex-col gap-1">
+          <span className="text-[12px] font-semibold text-primary">{sync.total ? t('pos.sync.progress', { done: sync.done.toLocaleString(), total: sync.total.toLocaleString() }) : t('pos.sync.progressSome', { done: sync.done.toLocaleString() })}</span>
+          {sync.total ? (
+            <span className="h-1.5 overflow-hidden rounded-full bg-white" role="progressbar" aria-valuemin={0} aria-valuemax={sync.total} aria-valuenow={sync.done}>
+              <span className="block h-full bg-primary" style={{ width: `${Math.min(100, Math.round((sync.done / Math.max(1, sync.total)) * 100))}%` }} />
+            </span>
+          ) : null}
+        </div>
+      ) : null}
+      {!sync && c?.stale ? <div className="text-[12px] font-semibold text-warning-ink">{t('pos.sync.catalogueStale')}</div> : null}
+      {c?.error ? <div className="text-[12px] text-danger">{t('pos.sync.catalogueError', { why: c.error })}</div> : null}
+    </div>
   );
 }

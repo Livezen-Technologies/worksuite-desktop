@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState, type ReactNode } from 'react';
-import type { PosTillStatus } from '@shared/pos';
+import type { PosTillSettings, PosTillStatus } from '@shared/pos';
 import { Icon } from '../../components/Icon';
 import { Button, cx } from '../../components/ui';
 import type { PosCapabilities, PosCompany, PosOptions, PosRegister, PosSession } from './api';
@@ -26,6 +26,10 @@ export interface Till {
   discount: { allowed: boolean; ceiling: number | null };
   params: URLSearchParams;
   go: (view: PosView, params?: Record<string, string | number | null | undefined>) => void;
+  /** The till's own settings on this computer (worksuite-desktop#296): card offline, the catalogue's interval. */
+  settings?: PosTillSettings;
+  /** Open the sync status (the till bar's drawer). */
+  openSync?: () => void;
 }
 
 export const TillContext = createContext<Till | null>(null);

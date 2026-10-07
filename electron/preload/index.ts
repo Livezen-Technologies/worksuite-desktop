@@ -469,6 +469,8 @@ const api = {
     forget: call('pos:forget'),
     catalogue: call('pos:catalogue'),
     catalogueRefresh: call('pos:catalogueRefresh'),
+    tillSettings: call('pos:tillSettings'),
+    tillSettingsSet: call('pos:tillSettingsSet'),
     sell: call('pos:sell'),
     sales: call('pos:sales'),
     sale: call('pos:sale'),

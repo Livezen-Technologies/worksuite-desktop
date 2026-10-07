@@ -9,6 +9,8 @@ export const POS_INVOKE_CHANNELS = [
   'pos:forget',
   'pos:catalogue',
   'pos:catalogueRefresh',
+  'pos:tillSettings',
+  'pos:tillSettingsSet',
   'pos:sell',
   'pos:sales',
   'pos:sale',

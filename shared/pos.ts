@@ -46,8 +46,46 @@ export interface PosTillStatus {
   /** What the company's desktop policy lets this computer do. */
   can_queue: boolean;
   can_keep: boolean;
-  catalogue: { version: string; fetched_at: string; products: number; source: PosCatalogueSource; truncated: boolean } | null;
+  catalogue: {
+    version: string;
+    /** When the copy was last brought up to date (a sync that finished, unchanged or not). */
+    fetched_at: string;
+    products: number;
+    source: PosCatalogueSource;
+    truncated: boolean;
+    /* worksuite-desktop#296, each absent on an older app's status. */
+    /** Older than two refresh intervals (`PosTillSettings.catalogue_minutes`), or never synced: "Online · synced" waits for it. */
+    stale?: boolean;
+    /** Why the last catalogue sync did not finish, when it did not. */
+    error?: string | null;
+    /** Pictures kept for offline, and the bytes they take. */
+    thumbs?: { count: number; bytes: number };
+  } | null;
+  /** A catalogue sync under way (worksuite-desktop#296): the products read so far, of how many when WorkSuite said. */
+  syncing?: { done: number; total: number | null; full: boolean } | null;
 }
+
+/**
+ * The till's own settings on this computer (worksuite-desktop#296), kept with its other settings (not secrets):
+ * whether a card may be taken while WorkSuite is out of reach — recorded only, nothing verifies it, so off unless the
+ * shop says so; how often the catalogue is brought up to date; how much room its offline pictures may take.
+ */
+export interface PosTillSettings {
+  card_offline: boolean;
+  catalogue_minutes: number;
+  thumbs_mb: number;
+}
+
+export const POS_TILL_SETTINGS_DEFAULT: PosTillSettings = { card_offline: false, catalogue_minutes: 30, thumbs_mb: 200 };
+
+export const posTillSettingsPatchSchema = z
+  .strictObject({
+    card_offline: z.boolean(),
+    catalogue_minutes: z.number().int().min(5).max(24 * 60),
+    thumbs_mb: z.number().int().min(0).max(4096),
+  })
+  .partial();
+export type PosTillSettingsPatch = z.infer<typeof posTillSettingsPatchSchema>;
 
 /* ── The catalogue ────────────────────────────────────────────────────────── */
 
@@ -77,6 +115,8 @@ export interface PosProduct {
   /** The first promotion that targets the product ("3 for 1,200"). */
   promo_label?: string | null;
   favourite?: boolean;
+  /** worksuite-desktop#296: a small picture of it is kept on this computer (`/__local/pos-thumb/<id>`), for offline. */
+  thumb?: boolean;
 }
 
 export type PosStockState = 'in_stock' | 'low' | 'out' | 'untracked';
@@ -309,11 +349,13 @@ export interface PosApprovalNeed {
 }
 
 /**
- * Why WorkSuite flagged a sale for review (`pos_sale_books.flags`): it priced it differently (`price_differs`), the till
- * sent no tenders so it is recorded unpaid (`payment_missing`), or it was sold while a register that has since closed
- * was open (`late`). A flag is never a refusal: the sale stands.
+ * Why WorkSuite flagged a sale for review (`pos_sale_books.flags`): it priced it differently (`price_differs` — for a
+ * sale made offline, the till's price was kept and differs from WorkSuite's now), the till sent no tenders so it is
+ * recorded unpaid (`payment_missing`), it was sold while a register that has since closed was open (`late`), a product
+ * it sold offline is no longer sold (`product_archived`), or it took stock below zero (`negative_stock`). A flag is
+ * never a refusal: the sale stands.
  */
-export const POS_SALE_FLAGS = ['price_differs', 'payment_missing', 'late'] as const;
+export const POS_SALE_FLAGS = ['price_differs', 'payment_missing', 'late', 'product_archived', 'negative_stock'] as const;
 export type PosSaleFlag = (typeof POS_SALE_FLAGS)[number];
 
 /** The flags WorkSuite put on a sale; an older server said only `review`, which meant the price differed. */
@@ -646,6 +688,9 @@ export const posContract = {
   /** `unpair`: hand the till back on the server too (`capabilities.device_unpair`), not only forget it here. */
   'pos:forget': { input: z.strictObject({ discard: z.boolean().optional(), unpair: z.boolean().optional() }).optional(), session: true, rate: 2, sensitive: true },
   'pos:catalogue': { input: none, session: true, rate: 10 },
+  /** The till's own settings (worksuite-desktop#296): card offline, the catalogue's refresh, the pictures' room. */
+  'pos:tillSettings': { input: none, session: true },
+  'pos:tillSettingsSet': { input: posTillSettingsPatchSchema, session: true, rate: 5 },
   /** `capable`: what `options.capabilities.catalogue` said — false goes straight to Inventory's list (an older server). */
   'pos:catalogueRefresh': { input: z.strictObject({ capable: z.boolean().optional() }).optional().or(z.null()), session: true, rate: 1 },
   'pos:sell': { input: posSellSchema, session: true, rate: 4, sensitive: true },
@@ -655,7 +700,8 @@ export const posContract = {
     rate: 20,
   },
   'pos:sale': { input: z.strictObject({ ref }), session: true, rate: 20 },
-  'pos:syncNow': { input: none, session: true, rate: 2 },
+  /** `catalogue`: bring the catalogue copy up to date as well, now (Sync now, the till opened). */
+  'pos:syncNow': { input: z.strictObject({ catalogue: z.boolean().optional() }).optional().or(z.null()), session: true, rate: 2 },
   /** `session_id`: a sale refused for its drawer (`POS_DRAWER_REFUSALS`) is sent again into the register open now. */
   'pos:resolve': { input: z.strictObject({ ref, action: z.enum(['retry', 'drop']), session_id: z.number().int().positive().optional() }), session: true, rate: 5, sensitive: true },
   'pos:printSettings': { input: none, session: true },
@@ -686,6 +732,8 @@ export interface PosOutputs {
   'pos:pair': { status: PosTillStatus; message: string };
   'pos:forget': PosTillStatus;
   'pos:catalogue': PosCatalogue | null;
+  'pos:tillSettings': PosTillSettings;
+  'pos:tillSettingsSet': PosTillSettings;
   'pos:catalogueRefresh': PosCatalogue;
   'pos:sell': PosSellOutcome;
   'pos:sales': PosSale[];

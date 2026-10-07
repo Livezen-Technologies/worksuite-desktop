@@ -103,7 +103,9 @@ export default function Tender({
   const [approval, setApproval] = useState<Approval | null>(extras.approval ?? null);
   const [balances, setBalances] = useState<Balances>({ vouchers: {}, credit: null });
   const [checking, setChecking] = useState(false);
-  const tenders = useMemo(() => allowedTenders(!till.offline, offered), [till.offline, offered]);
+  // Offline: cash, and a card only where the till's setting allows it (worksuite-desktop#296).
+  const cardOffline = !!till.settings?.card_offline;
+  const tenders = useMemo(() => allowedTenders(!till.offline, offered, cardOffline), [till.offline, offered, cardOffline]);
   const methods = useMemo(() => tenders.map((x) => x.kind), [tenders]);
   const denominations = useMemo(() => till.options?.denominations?.[currency] ?? session.denominations ?? [], [till.options, currency, session.denominations]);
   const s = settle(total, tendersOf(rows));
@@ -128,7 +130,7 @@ export default function Tender({
 
   const quick = useMemo(() => (row.method === 'cash' ? quickCash(remaining(total, rows, cur), denominations) : []), [total, rows, cur, row.method, denominations]);
   const label = (m: PosTenderMethod) => tenderLabel(t, m, offered);
-  const problem = tenderProblem(rows, { offered: tenders, customer, balances, online: !till.offline });
+  const problem = tenderProblem(rows, { offered: tenders, customer, balances, online: !till.offline, cardOffline });
 
   /** A voucher's balance, before it is taken: the amount becomes what it covers. */
   async function checkVoucher(i: number) {
@@ -188,7 +190,7 @@ export default function Tender({
   }
 
   async function complete(using = rows, approved: Approval | null = approval) {
-    const why = tenderProblem(using, { offered: tenders, customer, balances, online: !till.offline });
+    const why = tenderProblem(using, { offered: tenders, customer, balances, online: !till.offline, cardOffline });
     if (why) {
       setError(why);
       return;
@@ -363,7 +365,7 @@ export default function Tender({
             </button>
           ))}
         </div>
-        {till.offline ? <p className="-mt-2 text-[12px] text-ink-3">{t('pos.pay.offlineTenders')}</p> : null}
+        {till.offline ? <p className="-mt-2 text-[12px] text-ink-3">{t(cardOffline ? 'pos.pay.offlineTenders' : 'pos.pay.offlineCash')}</p> : null}
         <div className="flex min-h-0 flex-1 gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-2.5">
             <div className="text-[13px] font-bold text-ink-2">{row.method === 'cash' ? t('pos.pay.cashReceived') : t('pos.pay.amountOf', { method: label(row.method) })}</div>

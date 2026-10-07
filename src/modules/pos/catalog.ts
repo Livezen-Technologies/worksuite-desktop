@@ -75,3 +75,11 @@ export function favouritesOf(products: PosProduct[], favourites: number[] | unde
 export function imageUrl(p: Pick<PosProduct, 'id' | 'image'>, org: number | null | undefined): string | null {
   return p.image ? apiUrl(`/api/pos/products/${p.id}/image`, org ? { org } : undefined) : null;
 }
+
+/**
+ * A product's small picture kept on this computer for offline (worksuite-desktop#296): served by the app itself
+ * (`/__local/pos-thumb/<id>`, the current till's only). Null when none is kept: the live picture, online.
+ */
+export function thumbUrl(p: Pick<PosProduct, 'id' | 'thumb'>): string | null {
+  return p.thumb ? `/__local/pos-thumb/${p.id}` : null;
+}

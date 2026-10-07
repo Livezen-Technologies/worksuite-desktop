@@ -39,6 +39,10 @@ const DOOR = new RegExp(
       'heartbeat',
       'sales',
       'catalogue',
+      // worksuite-desktop#296: the copy a page at a time, search while it is not there, a product's small picture.
+      'catalogue\\/changes',
+      'products\\/search',
+      'products\\/\\d{1,12}\\/image',
       'products\\/lookup',
       'price',
       'sales\\/[A-Za-z0-9%._:-]{1,120}\\/(receipt|refund|void|email)',
@@ -254,9 +258,27 @@ export class PosDesk {
     return { status: res.status, body: json };
   }
 
-  /** Tell WorkSuite the till is alive and how much waits; learn its current name, branch and warehouse. */
-  async heartbeat(pending: number): Promise<DeviceAnswer> {
-    const a = await this.device('heartbeat', { app_version: `desktop ${this.d.appVersion}`.slice(0, 32), pending_count: pending });
+  /**
+   * A picture through the door (`products/{id}/image?size=thumb`), as bytes: the answer's status, its type and, when
+   * it is an image no bigger than `max`, its bytes (worksuite-desktop#296).
+   */
+  async bytes(path: string, query: Record<string, string | number | undefined>, max = 2 * 1024 * 1024): Promise<{ status: number; type: string | null; bytes: Buffer | null }> {
+    if (!DOOR.test(path)) throw new DesktopError('INTERNAL', 'Not a call of the till’s door.');
+    const s = this.read();
+    if (!s?.token) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
+    const res = await this.d.http.raw('GET', this.d.http.url(`/api/pos/device/${path}`, query), { auth: false, headers: { Authorization: `Bearer ${s.token}`, Accept: 'image/*' }, timeoutMs: 20_000 });
+    const type = (res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase() || null;
+    if (!res.ok || !type?.startsWith('image/')) return { status: res.status, type, bytes: null };
+    const buf = Buffer.from(await res.arrayBuffer());
+    return { status: res.status, type, bytes: buf.length > 0 && buf.length <= max ? buf : null };
+  }
+
+  /**
+   * Tell WorkSuite the till is alive and how much waits; learn its current name, branch and warehouse. `extra`: the
+   * catalogue copy it holds (worksuite-desktop#296), for the Tills screen.
+   */
+  async heartbeat(pending: number, extra?: { catalogue_version?: string; catalogue_synced_at?: string }): Promise<DeviceAnswer> {
+    const a = await this.device('heartbeat', { app_version: `desktop ${this.d.appVersion}`.slice(0, 32), pending_count: pending, ...(extra ?? {}) });
     const terminal = a.status === 200 ? terminalOf(a.body?.terminal) : null;
     const s = this.read();
     if (terminal && s && terminal.id === s.terminal.id) this.write({ ...s, terminal });

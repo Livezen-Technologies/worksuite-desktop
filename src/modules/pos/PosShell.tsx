@@ -4,7 +4,7 @@ import { Toasts } from '../../app/overlays/Toasts';
 import { Button, Spinner, cx } from '../../components/ui';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import type { ModuleProps } from '../registry';
-import { discountRights, fetchOptions, fetchRegisters, PK, unreachable, useTill, usePosChanged } from './api';
+import { discountRights, fetchOptions, fetchRegisters, PK, syncNow, unreachable, useTill, useTillSettings, usePosChanged } from './api';
 import { useKeptCarts } from './cart';
 import Connect from './Connect';
 import { useT, type PosKey } from './i18n';
@@ -55,7 +55,15 @@ function Counter({ active }: { active: boolean }) {
   usePosChanged();
 
   const till = useTill();
+  const settings = useTillSettings();
   const paired = !!till.data?.till && till.data.till.state !== 'revoked';
+  // The till opened: its sales sent and its catalogue brought up to date now, not at the next interval (worksuite-desktop#296).
+  const opened = useRef(false);
+  useEffect(() => {
+    if (!paired || opened.current) return;
+    opened.current = true;
+    void syncNow({ catalogue: true }).catch(() => undefined);
+  }, [paired]);
   const options = useQuery({ queryKey: PK.options, queryFn: ({ signal }) => fetchOptions(signal), enabled: paired, staleTime: 60_000 });
   const registers = useQuery({ queryKey: PK.registers, queryFn: ({ signal }) => fetchRegisters(signal), enabled: paired, refetchInterval: 60_000 });
   // The open and held sales, as the main process keeps them for this till.
@@ -110,6 +118,8 @@ function Counter({ active }: { active: boolean }) {
     discount: discountRights(company?.can),
     params: query,
     go: (v, params) => goRoute(posRoute(v, params)),
+    ...(settings.data ? { settings: settings.data } : {}),
+    openSync: () => setSyncOpen(true),
   };
 
   return (
