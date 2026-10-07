@@ -953,6 +953,19 @@ export function receiptOf(v: unknown): PosServerReceipt | null {
     ...(Array.isArray(r.promotions) ? { promotions: list(r.promotions).map((p) => ({ label: str(p.label) ?? '', amount: num(p.amount) })).filter((p) => p.label && p.amount) } : {}),
     ...('loyalty' in r ? { loyalty: receiptLoyalty(r.loyalty) } : {}),
     ...('template' in r ? { template: receiptTemplateOf(r.template) } : {}),
+    // #293, additive: the cashier's discount and the coupon, where the sale kept them.
+    ...('adjustments' in r ? { adjustments: receiptAdjustments(r.adjustments) } : {}),
+  };
+}
+
+function receiptAdjustments(v: unknown): PosServerReceipt['adjustments'] {
+  if (!v || typeof v !== 'object') return null;
+  const a = v as Record<string, unknown>;
+  const d = a.discount && typeof a.discount === 'object' ? (a.discount as Record<string, unknown>) : null;
+  const c = a.coupon && typeof a.coupon === 'object' ? (a.coupon as Record<string, unknown>) : null;
+  return {
+    discount: d && num(d.amount) > 0 ? { type: d.type === 'amount' ? 'amount' : 'pct', value: num(d.value), amount: num(d.amount), reason: str(d.reason) } : null,
+    coupon: c && str(c.code) && num(c.amount) > 0 ? { code: str(c.code)!, amount: num(c.amount) } : null,
   };
 }
 

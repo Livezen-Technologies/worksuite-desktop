@@ -1,6 +1,6 @@
 import qrcode from 'qrcode-generator';
 import { code128Encodable, code128Svg } from '@shared/code128';
-import { saleFlags, vatRows, type PosPrintOutcome, type PosPrintPatch, type PosPrintSettings, type PosReceiptBlock, type PosReceiptTemplate, type PosReport, type PosSale, type PosServerReceipt } from '@shared/pos';
+import { saleFlags, saleReductions, serverReductions, vatRows, type PosPrintOutcome, type PosReduction, type PosPrintPatch, type PosPrintSettings, type PosReceiptBlock, type PosReceiptTemplate, type PosReport, type PosSale, type PosServerReceipt } from '@shared/pos';
 import { DesktopError } from '../main/errors';
 import { drawerPulse, printInWindow, sendRaw, type PrintJob, type PrintResult } from './salon-print';
 
@@ -110,13 +110,8 @@ export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 
   }
   rows.push({ kind: 'rule' });
   rows.push({ kind: 'pair', left: 'Subtotal', right: money(sale.totals.subtotal) });
-  // Phase 2: the promotions and the points, each its own line; the cashier's discount is what is left of the deduction.
-  const promos = sale.promotions ?? [];
-  const pointsOff = sale.points?.discount ?? 0;
-  for (const p of promos) rows.push({ kind: 'pair', left: p.label, right: `-${money(p.amount)}` });
-  if (pointsOff) rows.push({ kind: 'pair', left: `Points (${sale.points!.redeemed})`, right: `-${money(pointsOff)}` });
-  const cashierOff = promos.length || pointsOff ? Math.round((sale.totals.discount - promos.reduce((a, p) => a + p.amount, 0) - pointsOff) * 100) / 100 : sale.totals.discount;
-  if (cashierOff > 0.004) rows.push({ kind: 'pair', left: `Discount${sale.discount_pct ? ` ${sale.discount_pct}%` : ''}`, right: `-${money(cashierOff)}` });
+  // The coupon, the promotions, the points and the cashier's discount (with its reason), each its own line (#293).
+  pushReductions(rows, saleReductions(sale));
   // The tax by rate ("VAT 18%"), from the lines WorkSuite (or the preview) priced.
   for (const v of vatRows(sale.lines, sale.totals.tax)) rows.push({ kind: 'pair', left: v.label, right: money(v.amount) });
   rows.push({ kind: 'pair', left: 'TOTAL', right: money(sale.totals.total, sale.currency), bold: true });
@@ -138,6 +133,14 @@ export function receiptRows(sale: PosSale, s: Pick<PosPrintSettings, 'header' | 
   for (const l of foot) rows.push({ kind: 'text', text: l, align: 'center' });
   if (code128Encodable(sale.ref)) rows.push({ kind: 'barcode', text: sale.ref });
   return rows;
+}
+
+/** The discount lines under the subtotal: each with its amount, a reason on the line below. */
+function pushReductions(rows: ReceiptRow[], list: PosReduction[]): void {
+  for (const x of list) {
+    rows.push({ kind: 'pair', left: x.label, right: `-${money(x.amount)}` });
+    if (x.note) rows.push({ kind: 'text', text: `  ${x.note}` });
+  }
 }
 
 const STATUS: Record<string, string> = { payment_missing: '*** PAYMENT MISSING ***', voided: '*** VOIDED ***', refunded: '*** REFUNDED ***', part_refunded: '*** PART REFUNDED ***' };
@@ -167,8 +170,7 @@ export function serverReceiptRows(r: PosServerReceipt, s: Pick<PosPrintSettings,
   }
   rows.push({ kind: 'rule' });
   rows.push({ kind: 'pair', left: 'Subtotal', right: money(r.totals.subtotal) });
-  if (r.totals.discount) rows.push({ kind: 'pair', left: 'Discount', right: `-${money(r.totals.discount)}` });
-  for (const p of r.promotions ?? []) rows.push({ kind: 'pair', left: `  ${p.label}`, right: `-${money(p.amount)}` });
+  pushReductions(rows, serverReductions(r));
   if (r.taxes.length) for (const t of r.taxes) rows.push({ kind: 'pair', left: `Tax ${t.name}`, right: money(t.amount) });
   else rows.push({ kind: 'pair', left: 'Tax', right: money(r.totals.tax) });
   rows.push({ kind: 'pair', left: 'TOTAL', right: money(r.totals.total, r.currency), bold: true });
@@ -210,6 +212,8 @@ export interface ReceiptDoc {
   lines: Array<{ description: string; quantity: number; unit_price: number; discount_pct: number; amount: number }>;
   totals: { subtotal: number; discount: number; tax: number; total: number };
   promotions: Array<{ label: string; amount: number }>;
+  /** What came off, line by line (#293): the coupon, promotions, points, the cashier's discount and its reason. */
+  reductions: PosReduction[];
   taxes: Array<{ label: string; amount: number }>;
   tenders: Array<{ label: string; amount: number; reference: string | null }>;
   tendered: number;
@@ -238,6 +242,8 @@ export function docOfSale(sale: PosSale, o: { company: string | null; header: st
     lines: sale.lines.map((l) => ({ description: l.name, quantity: l.quantity, unit_price: l.unit_price, discount_pct: l.discount_pct, amount: l.net })),
     totals: sale.totals,
     promotions: sale.promotions ?? [],
+    // A sale that kept no parts (#293) prints by a template as it always did: one "Discount", its promotions under it.
+    reductions: sale.coupon || sale.discount_type || sale.discount_reason ? saleReductions(sale) : serverReductions({ totals: sale.totals, promotions: sale.promotions }),
     taxes: vatRows(sale.lines, sale.totals.tax),
     tenders: sale.tenders.map((t) => ({ label: METHOD[t.method] ?? t.method, amount: t.method === 'cash' ? Math.max(0, Math.round((t.amount - sale.change_given) * 100) / 100) : t.amount, reference: t.reference ?? null })),
     tendered: Math.round(sale.tenders.reduce((a, t) => a + t.amount, 0) * 100) / 100,
@@ -265,6 +271,7 @@ export function docOfServer(r: PosServerReceipt): ReceiptDoc {
     lines: r.lines.map((l) => ({ description: l.description, quantity: l.quantity, unit_price: l.unit_price, discount_pct: l.discount_pct, amount: l.amount })),
     totals: r.totals,
     promotions: r.promotions ?? [],
+    reductions: serverReductions(r),
     taxes: r.taxes.map((t) => ({ label: t.name, amount: t.amount })),
     tenders: r.tenders,
     tendered: r.tendered ?? r.tenders.reduce((a, t) => a + t.amount, 0) + r.change,
@@ -365,8 +372,7 @@ export function templateRows(d: ReceiptDoc, tpl: PosReceiptTemplate, o: { reprin
       case 'totals':
         rows.push({ kind: 'rule' });
         rows.push({ kind: 'pair', left: 'Subtotal', right: money(d.totals.subtotal) });
-        if (d.totals.discount > 0) rows.push({ kind: 'pair', left: 'Discount', right: `-${money(d.totals.discount)}` });
-        for (const p of d.promotions) rows.push({ kind: 'pair', left: `  ${p.label}`, right: `-${money(p.amount)}` });
+        pushReductions(rows, d.reductions);
         rows.push({ kind: 'pair', left: `TOTAL ${d.currency}`, right: money(d.totals.total), bold: true });
         break;
       case 'taxes':

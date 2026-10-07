@@ -98,12 +98,15 @@ export function saleBody(s: PosSale): Record<string, unknown> {
     // discount is the whole deduction (promotions, points too), so the percentage is said outright.
     ...(phase2(s) ? { discount_pct: s.discount_pct } : {}),
     ...(s.approval_id ? { approval_id: s.approval_id } : {}),
+    // #293: a fixed amount off (`discount_pct` above is the share it came to, for a server that reads only that), and its reason.
+    ...(s.discount_type === 'amount' && s.discount_value ? { discount_type: 'amount', discount_value: s.discount_value } : {}),
+    ...(s.discount_reason ? { discount_reason: s.discount_reason } : {}),
   };
 }
 
 /** Whether the sale carries any of Phase 2's pricing (an older till's sale carries none). */
 function phase2(s: PosSale): boolean {
-  return !!(s.customer_id || s.apply_promotions || s.promotion_ids || s.coupon_code || s.redeem_points || s.approval_id || s.promotions?.length || s.points);
+  return !!(s.customer_id || s.apply_promotions || s.promotion_ids || s.coupon_code || s.redeem_points || s.approval_id || s.promotions?.length || s.points || s.discount_type || s.discount_reason);
 }
 
 /**
