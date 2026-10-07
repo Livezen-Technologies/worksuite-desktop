@@ -329,8 +329,12 @@ A computer paired as a POS till holds a credential of its own (`Pos\Libraries\De
   only where `options` says the person may, online only. Cashiers change by signing out and in; "Lock the till" is the app
   lock (password or PIN). A remote wipe, or signing out with "remove WorkSuite's data", removes the credential, the
   catalogue, every sale (sent or not), the receipt counters and the printer settings.
-- **At rest** — the catalogue (`pos_catalogue`) and each sale (`pos_sales`: lines, customer, tenders) are AES-256-GCM
-  under the database key; only the receipt number, state, session and times are in the clear, for ordering. The
+- **At rest** — the catalogue (its head in `pos_catalogue`, each product a row of `pos_products`) and each sale
+  (`pos_sales`: lines, customer, tenders) are AES-256-GCM under the database key; only the receipt number, state,
+  session and times are in the clear, for ordering, and a product's barcode, code and category id, for a scan's
+  lookup (they are printed on the goods; its name, price, tax and stock are sealed). The products' small pictures
+  (`pos-thumbs/`, `pos_thumbs`) are plain files under the profile, kept only where the policy allows data offline,
+  within their quota, and removed with the till, the catalogue and in a wipe. The
   catalogue is written to disk only where the desktop policy allows data offline (in memory otherwise); a sale is
   always kept once money was taken, and while WorkSuite is known to be out of reach a till whose policy forbids
   queued changes does not sell.

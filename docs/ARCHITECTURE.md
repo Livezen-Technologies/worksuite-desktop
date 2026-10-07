@@ -412,8 +412,11 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   process holds the till: `pos-desk.ts` pairs it (`POST api/pos/terminals/{id}/pair`, the `wsp_` credential into the
   OS keystore) and calls the till's own door with that credential (`/api/pos/device/heartbeat` every minute,
   `/api/pos/device/sales`, and — `PosDesk.door` — the catalogue, a sale's receipt, refund, void and e-mail);
-  `pos-till.ts` keeps the catalogue copy (POS's own: through the door every half hour with nobody signed in, on the
-  staff API when a person refreshes it; Inventory's product list only on an older server; sealed in `pos_catalogue`), numbers each sale (a prefix per pairing and a
+  `pos-till.ts` keeps the catalogue copy (POS's own: through the door with nobody signed in — every
+  `catalogue_minutes`, on reconnect, when the till opens, on Sync now — and on the staff API when a person refreshes
+  it, a page at a time and then only what changed since (`catalogue/changes`, worksuite-desktop#296); Inventory's
+  product list only on an older server; a product a sealed row, `pos-catalogue.ts`, its pictures for offline in
+  `pos-thumbs.ts`), numbers each sale (a prefix per pairing and a
   counter that only goes up, `pos_counters`), seals it into `pos_sales` before the cashier is answered and sends
   the waiting ones in order, 25 a request, keyed by the receipt number so a resend is the same sale
   (`pos-outbox.ts`: created and already-had are done, refused keep WorkSuite's reason, 401 stops for a new pairing,
