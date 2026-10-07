@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.64.0 — 2026-10-07
+
+**Changed**
+
+- website chats — Convert to ticket in the visitor panel, hidden where the desk does not convert chats; a converted chat shows its ticket reference in the thread header and the panel, with View ticket (#298)
+
 ## 1.63.0 — 2026-10-07
 
 **Added**

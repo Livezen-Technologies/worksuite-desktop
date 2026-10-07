@@ -5,6 +5,52 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.200 — 2026-10-07
+
+- **Support: raise a ticket, and turn emails and chats into tickets (#298, support 1.2.0, mail 1.25.0, chat
+  1.64.0).**
+  - **New ticket:** press **C**, use the button beside the filters, or choose Create ticket in ⌘K. The form has:
+    - the requester, found in Contacts or added new;
+    - the organization, subject, a formatted description and files;
+    - priority, type, category, assignee or team, tags and a due date;
+    - Manual, Phone or Walk-in as the channel.
+
+    The requester is emailed the reference unless you untick it. The ticket opens in the reading pane and appears in
+    its lists at once.
+  - **Mail › Convert to ticket:** on any message, to start a new ticket or add to an existing one. The message then
+    shows its ticket's reference. The Apps pane's helpdesk ticket and the quick step now convert the email, linked
+    and threaded, instead of copying its text.
+  - **Website chats:** Convert to ticket asks for the visitor's email when there is none, and lists the chat's
+    files. A converted chat shows its ticket and offers View ticket.
+  - **The thread:** every message says its channel, and a ticket links back to the email or chat it came from. The
+    list can be filtered by channel.
+  - **Where it bites:** converting emails, linked mail and the new fields need the server's Support 1.2.0 and Mail
+    1.18.0. An older server keeps the old unlinked helpdesk ticket in Mail.
+- **Your own sidebar (settings 1.27.0).**
+  - **Pin and remove:** right-click an app in the sidebar, or press and hold on a touch screen, to pin it to a new
+    Pinned section at the top, unpin it, or remove it from your sidebar. Removing never changes what you may open.
+  - **Reorder:** drag apps within Pinned or their own section (or use Alt+↑/↓). The order saves at once.
+  - **Settings › Sidebar** (or Customize sidebar in the sidebar's footer) brings removed apps back, unpins, or resets
+    to default.
+  - **Where it follows you:** your sidebar follows you between devices, per organisation, and new apps appear in
+    their default place.
+  - **The launcher:** "Pin to the sidebar" now puts the app in Pinned. Apps pinned from the launcher before move
+    over once.
+  - **Where it bites:** the server's Core 1.3.0 keeps the arrangement. On an older server, and in guest mode, it
+    stays on this computer.
+- **The launcher's full screen, redesigned.**
+  - **Layout:**
+    - the search with its settings and close beside it;
+    - Pinned and Recent in one row;
+    - the categories in a sidebar on the left, with their counts;
+    - each category under its heading with its count;
+    - larger tiles;
+    - the footer along the bottom with Customise.
+  - **The sidebar is a setting:** Settings › App launcher › Categories in a sidebar, on by default. Off, or in a
+    narrow window, the categories are chips above the apps as before.
+- **How it was checked:** GitHub Actions still wasn't starting jobs for the repository, so it was verified locally:
+  typecheck, lint, the module version check, the security audit, all unit tests and the production build.
+
 ## 0.2.199 — 2026-10-07
 
 - **A returning visitor reaches somebody again (#291, chat 1.63.0, notifications 1.12.1).** A visitor who wrote in a

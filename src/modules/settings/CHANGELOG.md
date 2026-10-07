@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.27.0 — 2026-10-07
+
+**Added**
+
+- Settings › Sidebar — apps removed from the sidebar with Restore, pinned apps with Unpin, and Reset to default; also opened from Customize sidebar in the sidebar's footer and its right-click menu
+- Settings › App launcher › Categories in a sidebar, for full screen (on by default)
+
 ## 1.26.3 — 2026-10-07
 
 **Changed**

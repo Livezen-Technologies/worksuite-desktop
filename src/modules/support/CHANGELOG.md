@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-07
+
+**Added**
+
+- New ticket (C, or Create ticket in ⌘K) — the requester found in Contacts or added new, organization, subject, a formatted description, files, priority, type, category, assignee or team, tags, due date, and Manual, Phone or Walk-in as the channel; the requester emailed the reference unless unticked; the ticket opens in the reading pane and joins the lists it belongs in at once (#298)
+- a Channel filter in the ticket list, every message of a thread labelled with its channel (notes read Internal note), and From email / From web chat linking a ticket to where it came from (#298)
+- Convert email to ticket — a new ticket or added to an existing one — for Mail; the chat conversion asks for the visitor's email when there is none, lists the chat's files, and says View ticket for a chat already converted (#298)
+
 ## 1.1.0 — 2026-10-06
 
 **Added**
