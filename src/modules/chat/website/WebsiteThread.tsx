@@ -299,6 +299,8 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
         ) : null}
         <div ref={scroller} className={cx('min-h-0 flex-1 overflow-y-auto py-3 scroll-thin', mini ? 'px-3' : 'px-4')}>
           {c.started_at ? <div className="mb-1 text-center text-[11px] text-ink-3">Started a chat on {c.website ?? c.widget ?? 'the website'}{data.journey?.[0]?.url ? pathOf(data.journey[0].url) : ''} · {timeLabel(c.started_at)}</div> : null}
+          {/* A returning visitor's new chat after the reopen window (#291): the one before it, a click away. */}
+          {c.previous_conversation_id ? <PreviousChat id={c.previous_conversation_id} at={(data.history ?? []).find((h) => h.id === c.previous_conversation_id)?.started_at ?? null} /> : null}
           {data.messages.length === 0 ? <Empty icon="chat" title="No messages yet" hint="The visitor has opened the chat but not written anything." /> : null}
           {/* The shared chat kit (C-02, RDC-11, LIVE-12; #229): Team Chat's bubbles, meta, ticks and attachments, with what a visitor cannot receive turned off. */}
           <MessageList items={items} caps={{ ...WEBSITE_CAPS, deleteForVisitorMinutes: data.delete_window_minutes ?? 15, saveToDrive: data.can_save_to_drive === true }} look="page" handlers={handlers} />
@@ -378,6 +380,22 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       ) : null}
       {dialog === 'invite' ? <InviteDialog conversationId={c.id} me={me} owner={t?.my_role === 'owner'} onClose={() => setDialog(null)} onDone={refresh} /> : null}
       {dialog === 'transfer' ? <TransferDialog conversationId={c.id} me={me} onClose={() => setDialog(null)} onDone={refresh} /> : null}
+    </div>
+  );
+}
+
+/**
+ * The visitor's chat before this one (worksuite-desktop#291): a returning visitor who wrote after the reopen window has
+ * a new chat on the same profile, and the last one is under Previous chats — read back there, never joined by a look.
+ */
+function PreviousChat({ id, at }: { id: number; at: string | null }) {
+  const { go } = useTab();
+  return (
+    <div className="mb-1 flex justify-center">
+      <button type="button" onClick={() => go(`/chat?view=website&section=closed&website=${id}`)} title={text('Open the visitor’s chat before this one')} className="flex items-center gap-1.5 rounded-full border border-line bg-surface px-2.5 py-1 text-[11.5px] font-semibold text-primary hover:bg-subtle">
+        <Icon name="history" size={12} className="shrink-0" />
+        {at ? text('Previous chats · {date}', { date: dateLabel(at) }) : text('Previous chats')}
+      </button>
     </div>
   );
 }

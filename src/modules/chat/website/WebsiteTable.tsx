@@ -2,6 +2,7 @@ import { useRef, useState, type KeyboardEvent as ReactKeyboardEvent, type MouseE
 import type { WebchatRingChat } from '@shared/types';
 import { text } from '../../../core/i18n';
 import { Checkbox } from '../../../components/Checkbox';
+import { RowLead } from '../../../components/RowLead';
 import { ContextMenu } from '../../../components/ContextMenu';
 import { Icon } from '../../../components/Icon';
 import { Menu, type MenuSection } from '../../../components/Menu';
@@ -10,7 +11,7 @@ import { BulkBar, BulkButton } from '../BulkBar';
 import { websiteBulkMenu } from '../menus';
 import { useMultiSelect } from '../selection';
 import { BULK_LIMIT, PRIORITIES, useAgents, useWebsiteBulk, waitingSince, type WebsiteBulkAction, type WebsiteBulkExtra, type WebsiteRow } from './api';
-import { CallLine, ROW_PICKED, ROW_SILENCED, RingBell, rowPreview, SilencedStatus, Tag, TABLE_FRAME, TABLE_HEAD, WaitClock } from './rowParts';
+import { CallLine, ReopenedTag, ROW_PICKED, ROW_SILENCED, RingBell, rowPreview, SilencedStatus, Tag, TABLE_FRAME, TABLE_HEAD, WaitClock } from './rowParts';
 
 /**
  * The list views as one table (C-03, UX-LIST-01/02): Live chats, Unassigned, Assigned to me, Awaiting reply and
@@ -124,7 +125,7 @@ export function WebsiteTable({ title, subtitle, filters, rows, placeholder, foot
       ) : null}
       <div role="grid" aria-label={text(title)} aria-rowcount={rows.length + 1} className={TABLE_FRAME}>
         <div role="row" className={cx(GRID, TABLE_HEAD)}>
-          <span role="columnheader" className="flex">
+          <span role="columnheader" className="flex w-7 justify-center">
             <Checkbox aria-label={text('Select all')} checked={sel.state === 'all'} indeterminate={sel.state === 'some'} disabled={!rows.length} onChange={sel.toggleAll} />
           </span>
           {['Visitor', 'Site', 'Status', 'Priority', 'Owner', 'Waiting'].map((h) => <span key={h} role="columnheader">{text(h)}</span>)}
@@ -174,8 +175,9 @@ function TableRow({ r, me, myName, ring, typing, picked, onPick, onClick, onMenu
       onKeyDown={onKeyDown}
       className={cx(GRID, 'cursor-default border-b border-line px-4 py-3 outline-none last:border-b-0 focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? ROW_PICKED : ring?.silenced ? ROW_SILENCED : 'hover:bg-subtle')}
     >
+      {/* The lead column every list shares (worksuite-desktop#290); a table shows its boxes all the time. */}
       <span role="gridcell" className="flex">
-        <Checkbox aria-label={text('Select {name}', { name })} checked={picked} onChange={onPick} />
+        <RowLead checked={picked} selecting onPick={onPick} label={text('Select {name}', { name })} />
       </span>
       <span role="gridcell" className="flex min-w-0 items-center gap-2.5">
         <Avatar name={name} size={32} presence={closed ? null : r.online ? 'online' : 'away'} />
@@ -184,6 +186,7 @@ function TableRow({ r, me, myName, ring, typing, picked, onPick, onClick, onMenu
             <b className="truncate font-bold text-ink">{name}{r.email && r.visitor_name ? <span className="font-normal text-ink-3"> · {r.email}</span> : null}</b>
             {ring ? <RingBell ring={ring} /> : null}
             {r.is_starred ? <Icon name="star" size={11} className="shrink-0 text-warning" label={text('Starred')} /> : null}
+            <ReopenedTag r={r} />
           </span>
           {r.call && !closed ? <CallLine call={r.call} /> : typing && !closed ? (
             <span className="truncate text-[12px] font-semibold text-primary">{text('Typing…')}</span>

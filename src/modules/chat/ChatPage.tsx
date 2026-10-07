@@ -10,6 +10,7 @@ import { listStamp, parseTs } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { ContextMenu } from '../../components/ContextMenu';
 import { Icon } from '../../components/Icon';
+import { RowLead } from '../../components/RowLead';
 import { Avatar, Empty, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
 import { UserAvatar } from '../../components/UserAvatar';
 import type { ModuleProps } from '../registry';
@@ -525,7 +526,7 @@ function Rail({ rooms, loading, error, offline, retry, check, checkedAt, selecte
                 <div key={title}>
                   <div className="px-3.5 pt-2 pb-1 text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase">{title}</div>
                   {list.map((r) => (
-                    <RoomRow key={r.id} r={r} mark={refresh.rowProps(String(r.id))} markClass={refresh.freshClass(String(r.id))} active={String(r.id) === selected} picked={picked.includes(r.id)} selecting={selecting} status={r.other_user_id ? presenceOf(r.other_user_id) : undefined} onClick={(e) => click(r, e)} onMenu={(e) => contextMenu(r, e)} />
+                    <RoomRow key={r.id} r={r} mark={refresh.rowProps(String(r.id))} markClass={refresh.freshClass(String(r.id))} active={String(r.id) === selected} picked={picked.includes(r.id)} selecting={selecting || picked.length > 0} status={r.other_user_id ? presenceOf(r.other_user_id) : undefined} onClick={(e) => click(r, e)} onMenu={(e) => contextMenu(r, e)} />
                   ))}
                 </div>
               ) : null,
@@ -578,6 +579,8 @@ function Rail({ rooms, loading, error, offline, retry, check, checkedAt, selecte
 /**
  * A conversation in the list: pinned ones carry a pin, muted ones a struck bell and a grey count (they are not in
  * the total either), and one marked unread by hand a dot with nothing new in it (worksuite-desktop#183).
+ * The dot and, while conversations are picked, the tick share the lead column every list has (worksuite-desktop#290);
+ * the row is the button that picks, so the tick is a mark, not a second control.
  */
 function RoomRow({ r, active, picked, selecting, status, onClick, onMenu, mark, markClass }: { r: Room; active: boolean; picked: boolean; selecting: boolean; status: string | undefined; onClick: (e: ReactMouseEvent) => void; onMenu: (e: ReactMouseEvent) => void; mark?: { 'data-refresh-key': string; 'data-fresh'?: '' }; markClass?: string }) {
   const st = status ? PRESENCE[status] : undefined;
@@ -594,9 +597,9 @@ function RoomRow({ r, active, picked, selecting, status, onClick, onMenu, mark, 
       aria-pressed={selecting || picked ? picked : undefined}
       onClick={onClick}
       onContextMenu={onMenu}
-      className={cx('flex w-full items-center gap-2.5 px-3.5 py-[7px] text-left outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? 'bg-selection ring-1 ring-primary ring-inset' : active ? 'bg-selection' : 'hover:bg-subtle', markClass)}
+      className={cx('flex w-full items-center gap-2.5 py-[7px] pr-3.5 pl-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? 'bg-selection ring-1 ring-primary ring-inset' : active ? 'bg-selection' : 'hover:bg-subtle', markClass)}
     >
-      {selecting ? <span aria-hidden className={cx('flex h-4 w-4 shrink-0 items-center justify-center rounded-full border', picked ? 'border-primary bg-primary text-white' : 'border-line')}>{picked ? <Icon name="check" size={11} /> : null}</span> : null}
+      <RowLead unread={dot} dotLabel="Marked unread" checked={picked} selecting={selecting} className="-mr-2.5 self-start" />
       <span className="relative shrink-0">
         <UserAvatar userId={roomPerson(r)} name={r.avatar_name || r.name} size={34} className={group ? '!rounded-[9px]' : ''} />
         {st ? <span className={cx('absolute -right-px -bottom-px h-[10px] w-[10px] rounded-full border-2 border-surface', st.dot)} aria-label={st.label} title={st.label} /> : null}
@@ -612,7 +615,6 @@ function RoomRow({ r, active, picked, selecting, status, onClick, onMenu, mark, 
           {r.pinned ? <span title="Pinned" aria-label="Pinned" className="flex shrink-0"><Icon name="pin" size={12} /></span> : null}
         </span>
       </span>
-      {dot ? <span className="h-2.5 w-2.5 shrink-0 rounded-full bg-primary" aria-label="Marked unread" title="Marked unread" /> : null}
       {badge ? <span className={cx('flex h-5 min-w-5 items-center justify-center rounded-full px-1.5 text-[10.5px] font-bold text-white', badge.cls)} aria-label={r.muted && !r.mentions ? `${badge.text} unread, muted` : undefined}>{badge.text}</span> : null}
     </button>
   );

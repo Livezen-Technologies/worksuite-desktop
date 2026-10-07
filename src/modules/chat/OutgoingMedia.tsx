@@ -2,8 +2,13 @@ import { useEffect } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
-import { bytes } from '../../core/time';
-import { FileBadge } from '../../components/ui';
+import { bytes, timeLabel } from '../../core/time';
+import { Icon } from '../../components/Icon';
+import { FileBadge, cx } from '../../components/ui';
+import { bubbleTone } from './kit/MessageBubble';
+import type { Look } from './kit/MessageAttachment';
+import { knownVoice } from './kit/voice';
+import { VoiceMessage, type VoiceUpload } from './kit/VoiceMessage';
 import { acknowledgeMedia, cancelMedia, outgoing, outgoingForRoom, retryMedia, type MediaPhase, type OutgoingMedia } from './outgoing';
 import type { ChatMessage } from './types';
 import { errorMessage } from '../../core/bridge';
@@ -24,10 +29,11 @@ export function OutgoingMediaBubbles({ roomId, messages }: { roomId: string; mes
   const jobs = useOutgoingMedia(roomId, messages);
   return <>{jobs.map((j) => <OutgoingMediaBubble key={j.id} job={j} />)}</>;
 }
-export function OutgoingMediaBubble({ job: j }: { job: OutgoingMedia }) {
+export function OutgoingMediaBubble({ job: j, look = 'page' }: { job: OutgoingMedia; look?: Look }) {
+  if (j.target.voice) return <OutgoingVoice job={j} look={look} />;
   return <div className="mt-3 flex flex-col items-end gap-1" aria-label={`Outgoing ${j.name}`}>
     <div className="max-w-[84%] rounded-[12px] border border-line bg-selection p-2 text-ink">
-      {j.preview ? (j.target.voice || /^audio\//.test(j.mime) ? <audio src={j.preview} controls preload="metadata" /> : /^video\//.test(j.mime) ? <video src={j.preview} muted preload="metadata" className="max-h-48 max-w-64 rounded" /> : <img src={j.preview} alt={j.name} className="max-h-48 max-w-64 rounded" />) : <FileBadge name={j.name} />}
+      {j.preview ? (/^audio\//.test(j.mime) ? <audio src={j.preview} controls preload="metadata" /> : /^video\//.test(j.mime) ? <video src={j.preview} muted preload="metadata" className="max-h-48 max-w-64 rounded" /> : <img src={j.preview} alt={j.name} className="max-h-48 max-w-64 rounded" />) : <FileBadge name={j.name} />}
       <p className="m-0 text-[12px] font-semibold">{j.name} · {bytes(j.size)}</p>
       {j.target.caption ? <p className="m-0 whitespace-pre-wrap text-[13px]">{j.target.caption}</p> : null}
       <div role="status" className="flex items-center gap-1 text-[11px]">
@@ -40,6 +46,46 @@ export function OutgoingMediaBubble({ job: j }: { job: OutgoingMedia }) {
       {!['sent', 'failed', 'cancelled'].includes(j.phase) ? <button type="button" onClick={() => void cancelMedia(j).catch((e) => toast('error', errorMessage(e)))} className="text-[12px] font-semibold text-primary">Cancel</button> : null}
     </div>
   </div>;
+}
+
+/**
+ * A voice message on its way (#285): the voice player at once, with the length and loudness measured while it was
+ * recorded, playing its copy on this computer. The ring on the play button says how sending goes, and ✕ on it stops
+ * it; a red ring with Retry says it did not go, and the message stays where it is. No file name, size or "Processing…".
+ */
+function OutgoingVoice({ job: j, look }: { job: OutgoingMedia; look: Look }) {
+  const failed = j.phase === 'failed' || j.phase === 'cancelled';
+  const fail = (e: unknown) => toast('error', errorMessage(e));
+  const upload: VoiceUpload = {
+    progress: j.phase === 'uploading' ? j.progress : null,
+    failed,
+    error: j.error,
+    onRetry: () => void retryMedia(j).catch(fail),
+    onCancel: failed || j.phase === 'sent' ? undefined : () => void cancelMedia(j).catch(fail),
+  };
+  const known = knownVoice(j.id);
+  const file = { url: null, download_url: null, size: j.size, duration_ms: j.target.durationMs ?? known?.ms ?? null, waveform: j.target.waveform ?? known?.peaks ?? null };
+  const player = <VoiceMessage file={file} own look={look} src={j.preview ?? null} upload={upload} />;
+  const meta = (
+    <span className="inline-flex items-center gap-1 text-[11px] text-ink-3">
+      {failed ? <b className="font-semibold text-danger" title={j.error ?? undefined}>{j.phase === 'cancelled' ? 'Cancelled' : 'Not sent'}</b> : null}
+      {timeLabel(j.createdAt)}
+      {failed ? null : <Icon name="clock" size={11} label="Sending" />}
+    </span>
+  );
+  return look === 'drawer' ? (
+    <div data-outgoing-voice className="mt-2.5 flex justify-end">
+      <div className={cx('flex max-w-[84%] flex-col items-end rounded-[10px] p-1 text-[13px] text-ink shadow-[0_1px_1px_rgb(var(--ws-shadow-rgb)/.1)]', bubbleTone({ own: true, author: { role: 'self' } }, 'drawer'))}>
+        {player}
+        <span className="px-1.5 pb-0.5">{meta}</span>
+      </div>
+    </div>
+  ) : (
+    <div data-outgoing-voice className="mt-3 flex flex-col items-end gap-1">
+      {player}
+      {meta}
+    </div>
+  );
 }
 
 /** Lives above modules/drawers: transfers continue and confirmation refreshes even after switching screens. */

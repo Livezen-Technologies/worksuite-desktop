@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { SubmitResult } from '@shared/ipc/contract';
 import { FOLLOW_UP_DEFAULTS, type RingTestNotice, type RingTestStep, type WebchatCall, type WebchatFollowUp, type WebchatFollowUpPrefs, type WebchatHandoff, type WebchatJoined, type WebchatMic, type WebchatRingChat, type WebchatRingOutcome, type WebchatRingPrefs, type WebchatRingState } from '@shared/types';
+import { returningPayload, returnVisitOf, type ReturningPayload } from '@shared/website-returning';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -222,7 +223,11 @@ export interface WaitingContext {
   country?: string | null;
   device?: string | null;
   browser?: string | null;
-  returning?: boolean;
+  /**
+   * Whether the browser has been here before; from a server with returning visitors (worksuite-desktop#291), the
+   * visitor's last chat — reopened, or a new one on their profile — or null.
+   */
+  returning?: boolean | ReturningPayload | null;
   /** How many times they have visited (R-01 "3rd visit"); absent on an older server. */
   visits?: number | null;
   priority?: string | null;
@@ -260,6 +265,8 @@ function fromContext(c: WaitingContext, prev: WebchatRingChat | undefined): Webc
   const cid = id(c.conversation_id);
   if (!cid) return null;
   const priority = PRIORITIES.has(String(c.priority)) ? (String(c.priority) as WebchatRingChat['priority']) : 'normal';
+  // A returning visitor's last chat (#291): what the ring said, kept while it rings when a later read does not say it.
+  const back = returnVisitOf(c.returning) ?? prev?.returnVisit ?? null;
   return {
     id: cid,
     visitor: text(c.visitor, 120) ?? prev?.visitor ?? 'A visitor',
@@ -267,7 +274,7 @@ function fromContext(c: WaitingContext, prev: WebchatRingChat | undefined): Webc
     page: text(c.page, 200) ?? prev?.page ?? null,
     place: [text(c.city, 80), text(c.country, 80)].filter(Boolean).join(', ') || prev?.place || null,
     device: [text(c.device, 40), text(c.browser, 40)].filter(Boolean).join(' · ') || prev?.device || null,
-    returning: c.returning ?? prev?.returning ?? false,
+    returning: typeof c.returning === 'boolean' ? c.returning : back ? true : (prev?.returning ?? false),
     visits: count(c.visits) ?? prev?.visits ?? null,
     preview: text(c.preview, 280) ?? prev?.preview ?? null,
     priority,
@@ -279,6 +286,7 @@ function fromContext(c: WaitingContext, prev: WebchatRingChat | undefined): Webc
     by: null,
     silenced: prev?.silenced ?? false,
     othersRinging: prev?.othersRinging ?? null,
+    ...(back ? { returnVisit: back } : {}),
   };
 }
 
@@ -513,17 +521,21 @@ export interface JoinSendOptions {
 /**
  * The realtime event a chat found by reading the list is announced as (worksuite-desktop#251; TRN-34: the system
  * notification while no realtime connection is up). Its `event_id` names the ring by its start, so a chat that stops
- * ringing and rings again later is announced again: the notification service shows one banner per id, for good.
+ * ringing and rings again later is announced again: the notification service shows one banner per id, for good. A
+ * returning visitor's ring (#291) is named by their last chat as well, so the same conversation reopened rings anew
+ * even where the server kept its old waiting stamp.
  */
 export function announceEvent(c: WebchatRingChat): RealtimeEvent {
+  const back = c.returnVisit ?? null;
   return {
     type: c.mine ? 'chat.assigned' : 'chat.incoming',
-    event_id: `list-${c.id}-${c.since}`,
+    event_id: `list-${c.id}-${c.since}${back ? `-back-${back.previousAt ?? ''}` : ''}`,
     conversation_id: c.id,
     visitor: c.visitor,
     site: c.site,
     preview: c.preview,
     at: c.since,
+    ...(back ? { returning: returningPayload(back) } : {}),
   };
 }
 
@@ -662,7 +674,9 @@ export class WebchatRinger {
   }
 
   state(): WebchatRingState {
-    const chats = orderChats([...this.chats.values()]);
+    const me = this.deps.me();
+    // A returning visitor's last chat was with me, or not (#291): "last chat with you on 16 Aug".
+    const chats = orderChats([...this.chats.values()]).map((c) => (c.returnVisit ? { ...c, returnVisit: { ...c.returnVisit, withYou: me !== null && c.returnVisit.previousAgentId === me } } : c));
     const followUps = this.shownFollowUps();
     const prefs = this.deps.prefs();
     const hidden = this.deps.locked();
@@ -671,7 +685,8 @@ export class WebchatRinger {
     const handoffs = [...this.handoffs.values()].filter((h) => (handoffEnds(h) ?? Infinity) > now).sort((a, b) => a.id - b.id);
     const calls = [...this.calls.values()].sort((a, b) => a.id - b.id);
     return {
-      chats: hidden ? chats.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, device: null, preview: null, by: null })) : chats,
+      // Behind the lock, nothing of who the visitor is, nor whose their last chat was (#291).
+      chats: hidden ? chats.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, device: null, preview: null, by: null, ...(c.returnVisit ? { returnVisit: null } : {}) })) : chats,
       handoffs: hidden ? handoffs.map((h) => ({ ...h, visitor: 'A visitor', page: null, note: null, from: null })) : handoffs,
       calls: hidden ? calls.map((c) => ({ ...c, visitor: 'A visitor', page: null, place: null, preview: null, owner: null, email: null, phone: null })) : calls,
       answerShortcut: this.answerShortcut,
@@ -1099,8 +1114,10 @@ export class WebchatRinger {
       }
       case 'chat.incoming': {
         this.announced.add(cid);
-        const c = fromContext(ev as unknown as WaitingContext, this.chats.get(cid));
-        if (c) this.chats.set(cid, { ...c, mine: this.chats.get(cid)?.mine ?? false, by: this.chats.get(cid)?.by ?? null });
+        const before = this.chats.get(cid);
+        const c = fromContext(ev as unknown as WaitingContext, before);
+        if (c) this.chats.set(cid, { ...c, mine: before?.mine ?? false, by: before?.by ?? null });
+        if (c && !before) this.ringsAnew(cid);
         this.changed();
         this.reconcileSoon();
         break;
@@ -1108,8 +1125,9 @@ export class WebchatRinger {
       case 'chat.assigned': {
         this.announced.add(cid);
         const before = this.chats.get(cid);
-        const base = before ?? fromContext({ conversation_id: cid, visitor: text(ev.visitor), site: text(ev.site), at: text(ev.at) }, undefined);
+        const base = before ?? fromContext({ conversation_id: cid, visitor: text(ev.visitor), site: text(ev.site), at: text(ev.at), returning: ev.returning as WaitingContext['returning'] }, undefined);
         if (base) this.chats.set(cid, { ...base, mine: true, by: text(ev.by, 120) });
+        if (base && !before) this.ringsAnew(cid);
         this.changed();
         this.reconcileSoon();
         break;
@@ -1150,6 +1168,16 @@ export class WebchatRinger {
       default:
         break;
     }
+  }
+
+  /**
+   * A chat starts ringing — new, or one that rang before and rings again, as a returning visitor's reopened chat does
+   * (worksuite-desktop#291). The card minimised while it last rang does not stay away for it (minimising is for what
+   * was ringing then, and the conversation's id is the same), and its ringing card takes the place of a follow-up card.
+   */
+  private ringsAnew(cid: number): void {
+    if (this.minimisedFor?.split(',').includes(`c${cid}`)) this.minimisedFor = null;
+    if (this.followUps.delete(cid)) this.snoozed.delete(cid);
   }
 
   /**
@@ -1434,6 +1462,7 @@ export class WebchatRinger {
       const fresh = next.filter((c) => !this.announced.has(c.id));
       for (const c of fresh) this.announced.add(c.id);
       for (const c of fresh) if (!c.silenced) this.deps.announce?.(c);
+      for (const c of next) if (!this.chats.has(c.id)) this.ringsAnew(c.id);
       this.chats = new Map(next.map((c) => [c.id, c]));
       for (const cid of this.announced) if (!this.chats.has(cid)) this.announced.delete(cid);
       for (const cid of this.drafts.keys()) if (!this.chats.has(cid)) this.drafts.delete(cid);

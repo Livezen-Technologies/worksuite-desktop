@@ -5,7 +5,7 @@ import { listStamp } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Avatar, cx } from '../../../components/ui';
 import type { WebsiteRow } from './api';
-import { AssigneeFaces, CallLine, PRIORITY_TAG, ROW_SILENCED, RingBell, rowPreview, StatusPill } from './rowParts';
+import { AssigneeFaces, CallLine, PRIORITY_TAG, ReopenedTag, ROW_SILENCED, RingBell, rowPreview, StatusPill } from './rowParts';
 import { returningBadge } from './identity';
 
 /**
@@ -14,8 +14,9 @@ import { returningBadge } from './identity';
  *
  * 1. the visitor, with the time on the right;
  * 2. what was said last — "Typing…" in the accent while they type, the call while one is on — and the unread count;
- * 3. small and muted, the site and ONE status pill (Waiting, else Unread), "Returning · 3rd visit" for somebody who has
- *    been here before (#222), and who has the chat on the right.
+ * 3. small and muted, the site and ONE status pill (Waiting, else Unread), "Reopened" on a chat a returning visitor
+ *    wrote in again after it closed (#291), "Returning · 3rd visit" for somebody who has been here before (#222), and
+ *    who has the chat on the right.
  *
  * Whether they are on the site is the avatar's dot alone: green while there, grey once gone. A chat ringing here shows
  * a bell; one silenced for me (on all my devices) is amber, with the bell struck through (R-04, RING-UI-04). Priority,
@@ -72,6 +73,7 @@ export function ConversationRow({ r, me, myName, ring, typing = false, active, o
         <span className="flex h-4 min-w-0 items-center gap-1.5 text-[11px]">
           <span className="min-w-0 truncate text-ink-3">{r.site ?? r.widget ?? text('Website')}</span>
           <StatusPill r={r} unread={unread} />
+          <ReopenedTag r={r} />
           {returning ? <span className="shrink-0 truncate rounded-[5px] bg-subtle px-1.5 font-semibold text-ink-2" title={text(returning)}>{text(returning)}</span> : null}
           <span className="ml-auto flex shrink-0 pl-1">
             <AssigneeFaces r={r} me={me} />

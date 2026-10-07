@@ -193,6 +193,8 @@ export function ClosedDetail({ id, row, onReopened }: { id: string; row?: Websit
         {data.can?.manage && v && !v.is_blocked ? <Button size="sm" onClick={() => setBlocking(true)}>{text('Block visitor')}</Button> : null}
         {v?.is_blocked ? <Chip tone="danger">{text('Blocked')}</Chip> : null}
         {canReply && closed ? <Button size="sm" variant="primary" loading={busy} onClick={reopen}>{text('Reopen')}</Button> : null}
+        {/* Open again while it is read here — the visitor came back and wrote (#291): to the open thread, to answer. */}
+        {!closed ? <Button size="sm" variant="primary" onClick={onReopened}>{text('Open chat')}</Button> : null}
       </header>
       <div className="flex min-h-0 flex-1">
         <section aria-label={text('Transcript')} className="flex min-h-0 min-w-0 flex-1 flex-col gap-2.5 overflow-y-auto px-[22px] py-[18px] scroll-thin">

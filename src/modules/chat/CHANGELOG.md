@@ -4,6 +4,23 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.63.0 — 2026-10-07
+
+**Added**
+
+- voice messages play in the app's own player in Team Chat, WhatsApp and website chats — play/pause, the recording's waveform (tap or drag to jump), the real length counting down, 1×/1.5×/2×; others' notes show their avatar with a mic badge and a dot until played (#285)
+- sending a voice message shows it at once with an upload ring, ✕ to cancel and Retry if it fails; recording has Cancel, Pause, Resume and Preview and records Opus where it can, with the length and waveform measured on this computer (#285)
+- website chats — a returning visitor's chat rings again with 'Returning visitor · last chat with you on 16 Aug', leaves Closed for the top of Inbox and Awaiting reply marked Reopened, and a new chat after the reopen window links to the previous one (#291)
+
+**Changed**
+
+- the conversation list's Select-mode tick and Marked-unread dot share one lead column on the left; the Website chats table's checkboxes use the same column (#290)
+
+**Fixed**
+
+- a .webm voice message is never drawn as an empty video, a file name or 'Processing…', and its length is read from the recording when the file has none (#285)
+- a ringing card minimised during a chat's last ring no longer stays hidden when that chat rings again (#291)
+
 ## 1.62.0 — 2026-10-07
 
 **Changed**

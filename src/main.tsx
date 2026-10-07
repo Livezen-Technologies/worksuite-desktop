@@ -12,6 +12,7 @@ import { App } from './app/App';
 import { AppBoundary } from './app/Boundaries';
 import { initAppState } from './core/app-state';
 import { wireSessionCache } from './core/session';
+import { wireTooltips } from './core/tooltips';
 import { wireUpdatePrepare } from './core/update-restart';
 import { queryClient, wireQueryInvalidation } from './core/query';
 
@@ -22,6 +23,9 @@ if (!isGuestMeetingHash(window.location.hash)) void initAppState().then(() => {
   // Before an update's restart: drafts and tabs are written now (worksuite-desktop#205).
   wireUpdatePrepare();
 });
+
+// Every `title` is shown as the app's own tooltip, which never stays on screen (worksuite-desktop#285).
+wireTooltips();
 
 createRoot(document.getElementById('root')!).render(
   <StrictMode>

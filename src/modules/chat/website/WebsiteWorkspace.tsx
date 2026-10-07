@@ -13,7 +13,7 @@ import { listStamp } from '../../../core/time';
 import { Icon } from '../../../components/Icon';
 import { Button, Empty, ErrorNote, Kbd, Spinner, cx } from '../../../components/ui';
 import { useNow } from '../../calls/parts';
-import { followUpsFirst, isMine as mineFor, longestWaiting, PRIORITIES, sectionRows, sortWebsiteRows, stepRow, useCallbacks, CLOSED_PAGE, useWebsiteClosed, useWebsiteInbox, useWebsiteSearch, waitingSummary, waitsLive, WEBSITE, WEBSITE_SORTS, type CallbackOutcome, type Section, type WebsiteCallback, type WebsitePriority, type WebsiteRow, type WebsiteSort } from './api';
+import { followUpsFirst, isMine as mineFor, longestWaiting, PRIORITIES, sectionRows, sortWebsiteRows, stepRow, useCallbacks, CLOSED_PAGE, useReturningVisitors, useWebsiteClosed, useWebsiteInbox, useWebsiteSearch, waitingSummary, waitsLive, WEBSITE, WEBSITE_SORTS, type CallbackOutcome, type Section, type WebsiteCallback, type WebsitePriority, type WebsiteRow, type WebsiteSort } from './api';
 import { renderedAfter } from './timings';
 import { VirtualList } from '../../../components/VirtualList';
 import { CallbackCard, useCallbackCounts, useCallbackList } from './Callbacks';
@@ -155,6 +155,8 @@ export function WebsiteWorkspace() {
     return () => clearTimeout(t);
   }, [q]);
   const open = useWebsiteInbox(false);
+  // A returning visitor's chat leaves Closed for the top of the open lists as it reopens (#291).
+  useReturningVisitors();
   // The same answer the Live dashboard reads, from its saved copy at first (#248), so the two counts always agree.
   const online = useLiveVisitors(30_000);
   const visitorsOnline = online.data?.visitors.length ?? 0;

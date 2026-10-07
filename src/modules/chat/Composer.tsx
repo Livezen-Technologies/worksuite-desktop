@@ -520,11 +520,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
     }
   };
 
-  const sendVoice = (blob: Blob, ms: number) => {
+  // Its length and loudness, measured while it was recorded, go with it: the bubble shows both at once (#285).
+  const sendVoice = (blob: Blob, ms: number, waveform: number[]) => {
     setRecording(false);
     if (channel) { stageBlob(blob, `Voice message.${blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'}`); return; }
     const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
-    queueMedia(roomId, [{ key: crypto.randomUUID(), kind: 'blob', blob, name: `Voice message.${ext}`, state: 'ready', progress: 0, error: null, extra: null }], { voice: true, durationMs: Math.round(ms), ...(reply ? { replyTo: reply.id } : {}) }, true);
+    queueMedia(roomId, [{ key: crypto.randomUUID(), kind: 'blob', blob, name: `Voice message.${ext}`, state: 'ready', progress: 0, error: null, extra: null }], { voice: true, durationMs: Math.round(ms), waveform, ...(reply ? { replyTo: reply.id } : {}) }, true);
     onClearReply();
   };
 
@@ -1006,7 +1007,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
             {trayEl}
             <div className="flex items-end gap-0.5">
               {recording ? (
-                <VoiceRecorder compact onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
+                <VoiceRecorder compact onDone={sendVoice} onCancel={() => setRecording(false)} />
               ) : (
                 <>
                   {emojiBtn}
@@ -1079,7 +1080,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
         {channel && !channel.plain ? <div className="flex gap-1" aria-label="Message formatting">{[{ label: 'Bold', mark: '*' }, { label: 'Italic', mark: '_' }, { label: 'Strikethrough', mark: '~' }, { label: 'Monospace', mark: '```' }].map(({ label, mark }) => <button key={label} type="button" className="rounded px-2 text-[11px] text-ink-2 hover:bg-subtle" onClick={() => { const el = input.current; const start = el?.selectionStart ?? text.length; const end = el?.selectionEnd ?? start; setText(`${text.slice(0, start)}${mark}${text.slice(start, end)}${mark}${text.slice(end)}`); focus(start + mark.length); }}>{label}</button>)}</div> : null}
         <div className="flex items-end gap-1">
           {recording ? (
-            <VoiceRecorder compact={compact} onDone={(b, ms) => void sendVoice(b, ms)} onCancel={() => setRecording(false)} />
+            <VoiceRecorder compact={compact} onDone={sendVoice} onCancel={() => setRecording(false)} />
           ) : (
             // P-04: attach, emoji, the box, then @, a voice message and urgent (Team Chat), or saved replies and the
             // writing assistant (website), and send.

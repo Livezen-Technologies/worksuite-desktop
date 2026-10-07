@@ -305,8 +305,11 @@ export const uploadTargetSchema = z.discriminatedUnion('kind', [
     replaceFileId: z.string().regex(/^\d{1,12}$/).optional(),
     name: z.string().min(1).max(255).regex(/^[^/\\]+$/).optional(),
   }),
-  /** A chat attachment; the caption and the reply go with it (the first of several files carries them). */
-  z.object({ kind: z.literal('chat'), roomId: z.string().max(64), caption: z.string().max(4000).optional(), replyTo: z.number().int().positive().optional(), clientMessageId: z.string().regex(/^desktop-[a-zA-Z0-9-]{1,80}$/).optional(), voice: z.boolean().optional(), durationMs: z.number().int().min(0).max(86400000).optional(), submittedAt: z.string().datetime().optional() }),
+  /**
+   * A chat attachment; the caption and the reply go with it (the first of several files carries them). A voice
+   * message carries its length and its loudness, 64 steps of 0–100, as they were measured while recording (#285).
+   */
+  z.object({ kind: z.literal('chat'), roomId: z.string().max(64), caption: z.string().max(4000).optional(), replyTo: z.number().int().positive().optional(), clientMessageId: z.string().regex(/^desktop-[a-zA-Z0-9-]{1,80}$/).optional(), voice: z.boolean().optional(), durationMs: z.number().int().min(0).max(86400000).optional(), waveform: z.array(z.number().int().min(0).max(100)).max(256).optional(), submittedAt: z.string().datetime().optional() }),
   /** A task's attachment (or a comment's, with its id): stored in Drive, then linked to the task. */
   z.object({ kind: z.literal('task'), taskId: z.number().int().positive(), commentId: z.number().int().positive().optional() }),
   /**

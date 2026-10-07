@@ -18,6 +18,7 @@ import { MessageAttachments, type Look } from './MessageAttachment';
 import { MessageMeta } from './MessageMeta';
 import { MessageText } from './MessageText';
 import type { KitMessage, KitRole } from './model';
+import type { VoiceOf } from './VoiceMessage';
 
 /**
  * One message's bubble (C-02, RDC-11; worksuite-desktop#229) — the same component for Team Chat and website chats.
@@ -145,6 +146,20 @@ function Reactions({ m, look, enabled, onReact }: { m: KitMessage; look: Look; e
   );
 }
 
+/**
+ * What a voice message in `m` is known by (#285): its key, the client id its sender's measurements wait under, whether
+ * this person has played it, where playing is noted, and the other side's avatar for its microphone badge.
+ */
+function voiceOf(m: KitMessage, caps: ChannelCaps): VoiceOf {
+  return {
+    key: m.key,
+    alias: m.chat?.client_message_id ?? null,
+    listened: m.listened,
+    listenedPath: caps.listenedPath ? caps.listenedPath.replace('{id}', String(m.id)) : null,
+    avatar: m.own ? null : <KitAvatar author={m.author} size={30} />,
+  };
+}
+
 /** Record links in the text, and the words a share card shows (its sharer's own note only). */
 function useShownText(m: KitMessage): { named: boolean; shown: string | null } {
   const origin = useStore(app, (x) => x.auth?.server?.origin);
@@ -197,7 +212,7 @@ function PageBubble({ m, position, caps, handlers: h, renderers, cardContinuatio
   const colleague = isColleague(m);
   const files = !m.deleted ? (m.files ?? []) : [];
   const accent = accentOf(m, 'page');
-  const attachment = files.length ? <MessageAttachments files={files} at={m.at} look="page" own={own} voice={caps.voice || m.chat?.type === 'voice'} seed={m.id} accent={accent} /> : null;
+  const attachment = files.length ? <MessageAttachments files={files} at={m.at} look="page" own={own} voice={caps.voice || m.chat?.type === 'voice'} of={voiceOf(m, caps)} accent={accent} /> : null;
   // On hover, in the message's top-right corner: react, reply, star and the rest (worksuite-desktop#266).
   const actions = !m.deleted ? <MessageToolbar look="page" m={m} own={own} caps={caps} handlers={h} items={items} onMoreReactions={() => setPicker(true)} /> : null;
   const inBubble = !!shown && !m.deleted && !carded;
@@ -255,7 +270,7 @@ function DrawerBubble({ m, position, caps, handlers: h, renderers, group = false
   const carded = named || (!!card && !m.deleted);
   const accent = accentOf(m, 'drawer');
   const items = messageActionItems(m, caps, h, 'drawer', setDeleting);
-  const attachment = media ? <MessageAttachments files={files} at={m.at} look="drawer" own={own} voice={caps.voice || m.chat?.type === 'voice'} seed={m.id} accent={accent} /> : null;
+  const attachment = media ? <MessageAttachments files={files} at={m.at} look="drawer" own={own} voice={caps.voice || m.chat?.type === 'voice'} of={voiceOf(m, caps)} accent={accent} /> : null;
   const actions = !m.deleted ? <MessageToolbar m={m} own={own} caps={caps} handlers={h} items={items} onMoreReactions={() => setPicker(true)} /> : null;
   const padded = media || !!card;
   const named_ = ((group && !own) || !!m.signed) && first && m.author.role !== 'bot';

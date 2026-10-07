@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.5 — 2026-10-07
+
+**Changed**
+
+- the list view's row checkboxes use the shared lead column with a 32px click area, Select all lined up above them (#290)
+
 ## 1.8.4 — 2026-10-06
 
 **Security**

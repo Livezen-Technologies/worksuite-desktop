@@ -1,9 +1,10 @@
-import { localize } from '@shared/localization';
+import { localeForLanguage, localize, normalizeLanguage } from '@shared/localization';
 import { meetingNoticeActions, type MeetingNoticeActions } from '@shared/meeting-invitations';
 import { inDnd } from '@shared/notification-block';
 import { mailAlertFor, type FocusContext } from '@shared/mail-focus';
 import { socialNoticeActions, type SocialNotice } from '@shared/social-notices';
 import { reminderAction } from '@shared/task-reminders';
+import { returningWords, returnVisitOf } from '@shared/website-returning';
 import { Notification, app, clipboard, nativeImage } from 'electron';
 import { join } from 'node:path';
 import type { SubmitResult } from '@shared/ipc/contract';
@@ -161,6 +162,22 @@ export function notReachingNotice(e: Record<string, unknown>, me: number): Incom
     critical: true,
     website: { conversationId: id, visitor },
   };
+}
+
+/**
+ * A returning visitor's line on a ringing chat's banner (worksuite-desktop#291): "Returning visitor · last chat with
+ * you on 16 Aug", the day on this computer's calendar, in its own date format (in the app's language when that is not
+ * English). Null for a first chat, and from a server that does not say.
+ */
+export function returningNote(e: Record<string, unknown>, me: number | null, language = 'en'): string | null {
+  const back = returnVisitOf(e.returning);
+  if (!back) return null;
+  const locale = normalizeLanguage(language) === 'en' ? [] : localeForLanguage(language);
+  const day = (stamp: string): string => {
+    const t = Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(stamp) ? stamp : `${stamp.replace(' ', 'T')}Z`);
+    return Number.isFinite(t) ? new Date(t).toLocaleDateString(locale, { day: 'numeric', month: 'short' }) : '';
+  };
+  return returningWords(back, me !== null && Number.isFinite(me) && me > 0 ? me : null, day, (source, vars) => localize(source, language, vars));
 }
 
 export function replyText(details: { reply?: unknown } | null | undefined, legacy?: unknown): string | null {
@@ -720,11 +737,13 @@ export class NotificationService {
         const visitor = String(e.visitor_label ?? e.visitor ?? 'A visitor');
         const site = e.site ? String(e.site) : 'your website';
         const id = Number(conv);
+        // A returning visitor's chat rings as a new one does, and says whose the last chat was (#291).
+        const back = e.type === 'chat.incoming' ? returningNote(e, Number(this.userId), this.prefs().language) : null;
         this.notify({
           id: `webchat:${conv}:${String(e.event_id ?? Date.now())}`,
           module: 'chat',
           title: e.type === 'chat.at_risk' ? `${visitor} is still waiting · ${site}` : `Website chat · ${site}`,
-          body: e.type === 'chat.at_risk' ? 'Nobody has replied yet.' : `${visitor}${e.preview ? `: ${String(e.preview)}` : ' started a chat'}`,
+          body: e.type === 'chat.at_risk' ? 'Nobody has replied yet.' : `${visitor}${e.preview ? `: ${String(e.preview)}` : back ? ' is back' : ' started a chat'}${back ? `\n${back}` : ''}`,
           sender: visitor,
           link: `/chat?website=${conv}`,
           critical: true,
@@ -794,11 +813,12 @@ export class NotificationService {
       case 'chat.assigned': {
         if (this.ringerShowing()) break;
         const conv = String(e.conversation_id ?? '');
+        const back = returningNote(e, Number(this.userId), this.prefs().language);
         this.notify({
           id: `webchat-assigned:${conv}:${String(e.at ?? Date.now())}`,
           module: 'chat',
           title: 'A website chat was assigned to you',
-          body: `${String(e.visitor ?? 'A visitor')}${e.site ? ` · ${String(e.site)}` : ''}`,
+          body: `${String(e.visitor ?? 'A visitor')}${e.site ? ` · ${String(e.site)}` : ''}${back ? `\n${back}` : ''}`,
           sender: null,
           link: `/chat?website=${conv}`,
           critical: false,

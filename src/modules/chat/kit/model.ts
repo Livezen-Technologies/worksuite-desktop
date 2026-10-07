@@ -21,7 +21,12 @@ export type KitFile = Attachment & {
   by?: string;
   /** `processing` while the server still prepares a video or voice note. */
   status?: string;
+  /** What the server says it is: `voice` for a voice message, whatever its type (#285). */
+  kind?: string;
   duration_ms?: number | null;
+  /** A voice message's loudness (64 steps of 0–100) and its AAC copy, where the server has them (#285). */
+  waveform?: number[] | null;
+  m4a_url?: string | null;
 };
 
 export interface KitReaction {
@@ -70,6 +75,8 @@ export interface KitMessage {
   pinned?: boolean;
   urgent?: boolean;
   pending?: boolean;
+  /** This person has played its voice message, as the server says (#285); absent from an older server. */
+  listened?: boolean;
   /** What this person may do with it, as the server says. */
   can?: MessageCan;
   /**
@@ -115,6 +122,7 @@ export function fromChatMessage(m: TeamChatMessage, me: string | number | null |
     starred: !!m.starred,
     pinned: !!m.pinned,
     urgent: !!m.urgent,
+    listened: m.listened,
     can: m.can ?? {},
     card: kind === 'text' && !m.deleted && (!!m.card || recordsIn(m.message, origin).length > 0),
     chat: m,
@@ -160,7 +168,7 @@ export function fromWebsiteMessage(m: WebsiteMessage, ctx: WebsiteContext): KitM
     body: m.body,
     files:
       m.file && file && !m.deleted
-        ? [{ filename: m.file.name ?? m.file.filename, mime: m.file.mime, size: m.file.size, is_image: m.file.is_image, url: m.file.preview_url ? websiteFileUrl(m.file.preview_url) : file, download_url: file, thumb_url: m.file.thumb_url ? websiteFileUrl(m.file.thumb_url) : null, width: m.file.width ?? null, height: m.file.height ?? null, by: author.name }]
+        ? [{ filename: m.file.name ?? m.file.filename, mime: m.file.mime, size: m.file.size, is_image: m.file.is_image, kind: m.file.kind, url: m.file.preview_url ? websiteFileUrl(m.file.preview_url) : file, download_url: file, thumb_url: m.file.thumb_url ? websiteFileUrl(m.file.thumb_url) : null, width: m.file.width ?? null, height: m.file.height ?? null, by: author.name }]
         : [],
     deleted: m.deleted,
     reply: q ? { author: quoteAuthor(q, ctx.visitor), snippet: q.body ?? (q.file ? `📎 ${q.file}` : text('A removed message')) } : null,

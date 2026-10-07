@@ -5,6 +5,50 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.199 — 2026-10-07
+
+- **A returning visitor reaches somebody again (#291, chat 1.63.0, notifications 1.12.1).** A visitor who wrote in a
+  closed chat got no answer: nobody was rung, and the chat stayed under Closed.
+  - **On the server's side:** the server now reopens the chat and rings again. The previous agent is rung first, then
+    the team.
+  - **On the ringing card and in the notification:** "Returning visitor · last chat with you on 16 Aug" (or the
+    colleague's name), with the visitor's new message, Join chat and Send & join.
+  - **In the lists:** the chat leaves Closed for the top of Inbox and Awaiting reply as soon as the visitor writes,
+    marked Reopened, and counts on the Web Chat badge.
+  - **After the reopen window:** the visitor's new chat links to "Previous chats".
+  - **Fixed:** a ringing card minimised during a chat's last ring no longer stays hidden when that chat rings again.
+  - **Where it bites:** the server's Communication 1.56.0 does the reopening and ringing. With an older server the
+    desktop behaves as before.
+- **Voice messages in WorkSuite's own player (#285, chat 1.63.0).** Voice messages in Team Chat, WhatsApp and website
+  chats have:
+  - play and pause;
+  - the recording's waveform, which you tap or drag to jump;
+  - the real length, counting down while playing;
+  - 1×, 1.5× and 2× speed.
+
+  Other people's notes show their avatar with a mic badge, and a dot until you play them. A `.webm` recording is never
+  drawn as an empty video, a file name or "Processing…".
+  - **Sending:** the message appears at once with an upload ring, ✕ to cancel, and Retry if it fails. Recording has
+    Cancel, Pause, Resume and Preview.
+  - **Not yet:** a voice note recorded in a WhatsApp chat still goes through the file tray first.
+  - **Where it bites:** the waveform and played dot come from the server's Communication 1.56.0. With an older server
+    the desktop works them out itself and remembers what you played on this computer.
+- **Tooltips never stay on screen (#285).** Tooltips across the app are now drawn by WorkSuite instead of the system.
+  They go when the pointer leaves, and on scroll, click or a key, so the "Emoji" tooltip that stayed over a
+  conversation is gone. Text being edited (a mail, a document) keeps the system's tooltips.
+- **The Mail list's dot or checkbox (#290, mail 1.24.0).** The unread dot and the checkbox no longer overlap. One
+  column holds the dot, or the checkbox on hover and while anything is selected, with even padding from the edge.
+  - **Selecting:**
+    - Select all above the list;
+    - Shift-click picks a range, and Ctrl/⌘-click toggles a row;
+    - Esc clears the selection;
+    - selected unread mail stays bold.
+  - **The selection bar** reads "N selected · Archive · Delete · Move · Mark read · ⋯ · Clear".
+  - **The same column elsewhere:** Chat's conversation list, the Website chats table and the Files list (files 1.8.5,
+    settings 1.26.3). In Chat, avatars sit a little further right to make room for it.
+- **How it was checked:** GitHub Actions still wasn't starting jobs for the repository, so it was verified locally:
+  typecheck, lint, the module version check, the security audit, all 5,812 unit tests and the production build.
+
 ## 0.2.198 — 2026-10-07
 
 - **Emails in dark mode (#287, mail 1.23.0).** Each email is darkened in the way that suits it. Plain text takes the

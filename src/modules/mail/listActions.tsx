@@ -568,42 +568,46 @@ function linkItem(targets: Target[], c: MenuContext): MenuItem {
   };
 }
 
+/** The bar's own short words, where the menu's are longer. */
+const BAR_LABEL: Partial<Record<ListActionId, string>> = { move: 'Move', read: 'Mark read', unread: 'Mark unread' };
+
 /**
- * Over the list while messages are selected: what applies to all of them —
- * "Archive 12", "Delete 12", read, star — and More with the rest of the menu.
+ * Over the list while messages are selected (worksuite-desktop#290): "3 selected · Archive · Delete · Move · Mark read
+ * · ⋯ · Clear" — the folder's own actions (Restore and Delete permanently in Deleted Items, Not junk in Junk), read or
+ * unread, and ⋯ with the rest of the menu (star, flag, snooze, categories, rules…). Select all is the box over the
+ * list's lead column, not a button here.
  */
-export function SelectionBar({ targets, total, run, more, onSelectAll, onClear }: { targets: Target[]; total: number; run: (id: ListActionId, targets: Target[]) => void; more: (x: number, y: number) => void; onSelectAll: () => void; onClear: () => void }) {
+export function SelectionBar({ targets, run, more, onClear }: { targets: Target[]; run: (id: ListActionId, targets: Target[]) => void; more: (x: number, y: number) => void; onClear: () => void }) {
   const n = targets.length;
-  const ids = [...organiseIds(targets).filter((id) => id !== 'move' && id !== 'junk'), ...statusIds(targets)];
+  const ids = [...organiseIds(targets).filter((id) => id !== 'junk'), statusIds(targets)[0]!];
+  // Move goes to one account's folders, as in the menu: messages from several accounts are moved account by account.
+  const oneAccount = new Set(targets.map((t) => t.mailbox ?? '')).size === 1;
+  const noMove = !oneAccount ? text('Pick messages from one account to move them together.') : !targets[0]?.mailbox ? text('Only mail in a connected mailbox can be moved from here.') : null;
   return (
-    <div role="toolbar" aria-label={text('{n} selected', { n })} className="flex flex-wrap items-center gap-1 border-t border-line bg-selection px-3 py-1.5 text-[12.5px]">
+    <div role="toolbar" aria-label={text('{n} selected', { n })} className="flex flex-wrap items-center gap-1 border-t border-line bg-selection py-1.5 pr-3 pl-4 text-[12.5px]">
       <span className="mr-1 font-semibold text-ink">{text('{n} selected', { n })}</span>
       {ids.map((id) => (
-        <button key={id} type="button" onClick={() => run(id, targets)} className={cx('inline-flex h-7 items-center gap-1 rounded-[6px] px-2 font-semibold hover:bg-surface', LIST_ACTIONS[id].danger ? 'text-danger' : 'text-ink')}>
+        <button key={id} type="button" data-bar-action={id} disabled={id === 'move' && !!noMove} title={id === 'move' ? (noMove ?? undefined) : undefined} onClick={() => run(id, targets)} className={cx('inline-flex h-7 items-center gap-1 rounded-[6px] px-2 font-semibold hover:bg-surface disabled:opacity-45 disabled:hover:bg-transparent', LIST_ACTIONS[id].danger ? 'text-danger' : 'text-ink')}>
           <Icon name={LIST_ACTIONS[id].icon} size={14} />
-          {actionLabel(id, n)}
+          {text(BAR_LABEL[id] ?? LIST_ACTIONS[id].label)}
         </button>
       ))}
       <button
         type="button"
         aria-haspopup="menu"
+        aria-label={text('More actions')}
+        title={text('More actions')}
         onClick={(e) => {
           const r = e.currentTarget.getBoundingClientRect();
           more(r.left, r.bottom);
         }}
-        className="inline-flex h-7 items-center gap-1 rounded-[6px] px-2 font-semibold text-ink hover:bg-surface"
+        className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-ink hover:bg-surface"
       >
         <Icon name="more" size={14} />
-        {text('More')}
       </button>
       <span className="flex-1" />
-      {n < total ? (
-        <button type="button" onClick={onSelectAll} className="h-7 rounded-[6px] px-2 font-semibold text-primary hover:bg-surface">
-          {text('Select all {n}', { n: total })}
-        </button>
-      ) : null}
-      <button type="button" onClick={onClear} aria-label={text('Clear selection')} title={text('Clear selection')} className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-2 hover:bg-surface hover:text-ink">
-        <Icon name="x" size={14} />
+      <button type="button" onClick={onClear} aria-label={text('Clear selection')} title={text('Clear selection')} className="h-7 rounded-[6px] px-2 font-semibold text-primary hover:bg-surface">
+        {text('Clear')}
       </button>
     </div>
   );

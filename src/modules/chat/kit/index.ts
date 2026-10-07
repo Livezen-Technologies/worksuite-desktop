@@ -11,5 +11,6 @@ export { MessageBubble, nameColour, type KitRenderers } from './MessageBubble';
 export { MessageMeta, MessageStatus } from './MessageMeta';
 export { DeleteDialog, MessageToolbar, messageActionItems, type MenuItem, type MessageHandlers } from './MessageActions';
 export { AttachmentGrid, FileCard, MessageAttachment, MessageAttachments, readableName } from './MessageAttachment';
+export { VoiceMessage, type VoiceOf, type VoiceUpload } from './VoiceMessage';
 export { LinkPreview, shortUrl, type LinkPreviewData } from './LinkPreview';
 export { SharedFiles, sharedFilesOf, type SharedFile } from './SharedFiles';

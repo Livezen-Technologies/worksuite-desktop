@@ -2,7 +2,7 @@ import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient, type Quer
 import { useEffect, useMemo } from 'react';
 import { ApiError, apiGet, request } from '../../../core/api';
 import { useLocalFirstQuery } from '../../../core/local-first-query';
-import { call, errorMessage } from '../../../core/bridge';
+import { call, errorMessage, on } from '../../../core/bridge';
 import { app } from '../../../core/app-state';
 import { createStore, useStore } from '../../../core/store';
 import { toast } from '../../../core/toasts';
@@ -93,16 +93,36 @@ export interface WebsiteRow {
   visitor_id?: number;
   visits?: number;
   identity?: 'signed' | 'verified' | 'returning' | 'new';
+  /** When the team last wrote: a reopened chat answered since is no longer one nobody has picked up (#291). */
+  last_agent_at?: string | null;
+  /**
+   * The visitor came back and wrote in this chat after it closed, and it reopened then (worksuite-desktop#291); null
+   * or absent when it never closed, and on a server without it.
+   */
+  reopened_at?: string | null;
+  /** The chat before this one on the visitor's profile, when this is a new chat after the reopen window (#291). */
+  previous_conversation_id?: number | null;
 }
 
 /**
- * A visitor who wrote again in one of my chats and waits (worksuite-desktop#230) goes to the top of the list, the
- * longest waiting first; the rest keep their order.
+ * A returning visitor's chat that reopened (worksuite-desktop#291) and that nobody has answered since: it needs somebody
+ * as a new chat does. Never on a server that does not say when a chat reopened.
+ */
+export function reopenedWaiting(r: Pick<WebsiteRow, 'reopened_at' | 'awaiting_reply' | 'status' | 'last_agent_at'>): boolean {
+  if (!r.reopened_at || !r.awaiting_reply || r.status === 'closed') return false;
+  return !r.last_agent_at || parseTs(r.last_agent_at).getTime() < parseTs(r.reopened_at).getTime();
+}
+
+/**
+ * A visitor who wrote again in one of my chats and waits (worksuite-desktop#230), and a returning visitor whose closed
+ * chat reopened and is not answered yet (#291), go to the top of the list, the longest waiting first; the rest keep
+ * their order.
  */
 export function followUpsFirst(rows: WebsiteRow[], mine: (r: WebsiteRow) => boolean): WebsiteRow[] {
-  const waiting = (r: WebsiteRow) => !!r.reply_waiting_since && r.awaiting_reply && mine(r);
-  const top = rows.filter(waiting).sort((a, b) => a.reply_waiting_since!.localeCompare(b.reply_waiting_since!));
-  return top.length ? [...top, ...rows.filter((r) => !waiting(r))] : rows;
+  const since = (r: WebsiteRow): string | null => (r.reply_waiting_since && r.awaiting_reply && mine(r) ? r.reply_waiting_since : reopenedWaiting(r) ? r.reopened_at! : null);
+  const at = (r: WebsiteRow) => parseTs(since(r)!).getTime() || 0;
+  const top = rows.filter((r) => since(r) !== null).sort((a, b) => at(a) - at(b));
+  return top.length ? [...top, ...rows.filter((r) => since(r) === null)] : rows;
 }
 
 /** The wait clock's colour (#223): amber at the callback threshold, red after it; red throughout where there is none. */
@@ -384,6 +404,10 @@ export interface WebsiteConversation {
     max_upload_kb?: number;
     /** Its widget: the composer offers the saved replies for every widget and this one's (CAN-01, S-09); absent on an older server. */
     widget_id?: number;
+    /** When the visitor came back and it reopened (worksuite-desktop#291); null or absent otherwise. */
+    reopened_at?: string | null;
+    /** The visitor's chat before this one, when this is a new chat after the reopen window (#291). */
+    previous_conversation_id?: number | null;
   };
   visitor: WebsiteVisitor | null;
   messages: WebsiteMessage[];
@@ -722,6 +746,91 @@ export function useWebsiteInbox(closed: boolean, enabled = true) {
     refetchInterval: (query) => (deniedOrGone(query.state.error) ? false : 15_000),
     retry: (n, e) => !deniedOrGone(e) && n < 2,
   });
+}
+
+/** A realtime event about a website chat, as far as the lists read it. */
+interface ListEvent {
+  type: string;
+  conversation_id?: unknown;
+  from?: unknown;
+  preview?: unknown;
+  message_id?: unknown;
+  at?: unknown;
+  returning?: unknown;
+  [k: string]: unknown;
+}
+
+/** Now as the server writes a stamp: true UTC, no zone. */
+const serverNow = (): string => new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+/** The rows a cached list holds: a list, or the Closed list's pages. */
+function cachedRows(data: unknown): WebsiteRow[] {
+  const d = data as { conversations?: WebsiteRow[]; pages?: Array<{ conversations?: WebsiteRow[] } | null> } | undefined;
+  if (Array.isArray(d?.conversations)) return d.conversations;
+  return Array.isArray(d?.pages) ? d.pages.flatMap((p) => p?.conversations ?? []) : [];
+}
+
+/**
+ * A returning visitor writes in a closed chat and it reopens (worksuite-desktop#291): the lists say so now, not at
+ * their next read. The row leaves Closed and goes to the top of the open list — open, waiting on us, with the visitor's
+ * new words — so it is in Inbox and Awaiting reply and on the badge at once; the read the same event asks for then
+ * brings the server's own row. What moves it, for a chat this computer holds as closed: a visitor's message
+ * (`chat.widget.message`), a ring (`chat.incoming`), or a returning visitor's chat given to somebody (`chat.assigned`
+ * with `returning`). True when a list changed. A chat no list holds as closed is left to the read, a new one too.
+ */
+export function reopenInLists(qc: QueryClient, e: ListEvent): boolean {
+  const reopens = e.type === 'chat.incoming' || (e.type === 'chat.widget.message' && e.from !== 'agent' && e.from !== 'bot') || (e.type === 'chat.assigned' && !!e.returning && typeof e.returning === 'object');
+  const id = Number(e.conversation_id);
+  if (!reopens || !Number.isSafeInteger(id) || id <= 0) return false;
+  const lists = qc.getQueriesData<unknown>({ queryKey: ['website', 'inbox'] });
+  const was = lists.flatMap(([, data]) => cachedRows(data)).find((r) => r.id === id && r.status === 'closed');
+  if (!was) return false;
+  const at = typeof e.at === 'string' && e.at.trim() ? e.at : serverNow();
+  const said = typeof e.preview === 'string' && e.preview.trim() ? e.preview : null;
+  const back: WebsiteRow = {
+    ...was,
+    status: 'open',
+    closed_at: null,
+    closed_reason: null,
+    closed_by: null,
+    inactive: false,
+    online: true,
+    last_seen: at,
+    awaiting_reply: true,
+    waiting_since: at,
+    last_visitor_at: at,
+    updated_at: at,
+    reopened_at: at,
+    unread: (was.unread ?? 0) + 1,
+    last_message: said ? { id: Number(e.message_id) || 0, body: said, from: 'visitor', agent: null, file: null, at } : (was.last_message ?? null),
+  };
+  const without = (rows: WebsiteRow[]) => rows.filter((r) => r.id !== id);
+  const moved = (key: QueryKey, old: unknown): unknown => {
+    const [, , list, scope] = key as unknown[];
+    const d = old as { conversations?: WebsiteRow[]; pages?: Array<{ conversations?: WebsiteRow[] } | null> } | undefined;
+    if (list !== 'open' && !cachedRows(old).some((r) => r.id === id)) return old;
+    // Closed, and a search of closed chats: it is not there any more.
+    if (list === 'closed' || (list === 'search' && scope === 'closed')) {
+      if (Array.isArray(d?.pages)) return { ...d, pages: d.pages.map((p) => (p && Array.isArray(p.conversations) ? { ...p, conversations: without(p.conversations) } : p)) };
+      return Array.isArray(d?.conversations) ? { ...d, conversations: without(d.conversations) } : old;
+    }
+    if (!Array.isArray(d?.conversations)) return old;
+    // The open list: at the top. A search of every chat: open, where it was.
+    if (list === 'open') return { ...d, conversations: [back, ...without(d.conversations)] };
+    return { ...d, conversations: d.conversations.map((r) => (r.id === id ? back : r)) };
+  };
+  for (const [key, data] of lists) {
+    const next = moved(key, data);
+    // Read when it was, still: this is not an answer from the server.
+    if (next !== data) qc.setQueryData(key, next, { updatedAt: qc.getQueryState(key)?.dataUpdatedAt });
+  }
+  return true;
+}
+
+/** The lists follow a returning visitor's reopened chat as it happens (#291): see {@link reopenInLists}. */
+export function useReturningVisitors(enabled = true): void {
+  const qc = useQueryClient();
+  useEffect(() => (enabled ? on<ListEvent>('realtime:event', (e) => void reopenInLists(qc, e)) : undefined), [qc, enabled]);
 }
 
 /** How many closed chats a page of the Closed list holds (#252). */

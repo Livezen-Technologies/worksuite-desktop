@@ -4,6 +4,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { frequentEmoji, noteEmojiUsed, searchEmoji } from './emoji';
+import { levelsToWaveform } from './kit/waveform';
 
 /** Reactions offered on hover; the full set is in the picker. */
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -76,33 +77,50 @@ export function EmojiPicker({ onPick, onClose, className }: { onPick: (e: string
 
 /** Bars kept for the live level meter while recording. */
 const LEVELS = 36;
+/** Opus where the system records it, in WebM and then Ogg; MP4 (AAC) otherwise (#285). */
+const RECORD_TYPES = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'];
+/** The longest voice message the server keeps. */
+const MOST = 10 * 60_000;
 
 /**
  * A voice note, recorded in place of the message box and sent as a chat
  * attachment with `voice: true` (the server keeps up to ten minutes). The
- * microphone is asked for when the person presses record, never before. Stop
- * keeps the recording to send or throw away; send stops and sends at once.
+ * microphone is asked for when the person presses record, never before.
+ * While it records: a red dot, the time, the live level, ✕ to throw it away
+ * and Send; Pause holds it, to listen to what is there (Preview) and then go
+ * on or send (#285). Its length is counted here, pauses left out, and its
+ * loudness kept as the waveform sent with it, so the message shows both the
+ * moment it is sent.
  */
-export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Blob, ms: number) => void; onCancel: () => void; compact?: boolean }) {
-  const [state, setState] = useState<'starting' | 'recording' | 'stopped' | 'failed'>('starting');
+export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Blob, ms: number, waveform: number[]) => void; onCancel: () => void; compact?: boolean }) {
+  const [state, setState] = useState<'starting' | 'recording' | 'paused' | 'stopped' | 'failed'>('starting');
   const [elapsed, setElapsed] = useState(0);
   const [levels, setLevels] = useState<number[]>(() => Array.from({ length: LEVELS }, () => 0));
+  // The recording so far, while Preview plays it.
+  const [hearing, setHearing] = useState<string | null>(null);
   const rec = useRef<MediaRecorder | null>(null);
   const chunks = useRef<Blob[]>([]);
-  const started = useRef(0);
+  // Every level read, for the waveform.
+  const read = useRef<number[]>([]);
+  // What was recorded before this stretch, and when this stretch began: a pause ends one.
+  const before = useRef(0);
+  const since = useRef(0);
+  const paused = useRef(false);
   const took = useRef(0);
   const result = useRef<Blob | null>(null);
   const after = useRef<'keep' | 'send' | 'discard'>('keep');
+  // What waits for the recorder to hand over what it holds (Preview while paused).
+  const flushed = useRef<(() => void) | null>(null);
+  const recorded = () => before.current + (paused.current ? 0 : Date.now() - since.current);
+  const finish = (blob: Blob) => onDone(blob, took.current, levelsToWaveform(read.current));
 
   useEffect(() => {
     let stream: MediaStream | null = null;
     let audio: AudioContext | null = null;
     let tick: ReturnType<typeof setInterval> | null = null;
-    let limit: ReturnType<typeof setTimeout> | null = null;
     const halt = () => {
       if (tick) clearInterval(tick);
-      if (limit) clearTimeout(limit);
-      tick = limit = null;
+      tick = null;
       stream?.getTracks().forEach((t) => t.stop());
       void audio?.close().catch(() => undefined);
       audio = null;
@@ -113,18 +131,23 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
         if (!granted) throw new Error('WorkSuite is not allowed to use the microphone. Allow it in System Settings → Privacy & Security → Microphone.');
         stream = await navigator.mediaDevices.getUserMedia({ audio: true });
         if (after.current === 'discard') return halt();
-        const mime = ['audio/webm;codecs=opus', 'audio/mp4', 'audio/ogg;codecs=opus'].find((m) => MediaRecorder.isTypeSupported(m));
+        const mime = RECORD_TYPES.find((m) => MediaRecorder.isTypeSupported(m));
         const r = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
-        r.ondataavailable = (e) => e.data.size && chunks.current.push(e.data);
+        r.ondataavailable = (e) => {
+          if (e.data.size) chunks.current.push(e.data);
+          const then = flushed.current;
+          flushed.current = null;
+          then?.();
+        };
         r.onstop = () => {
-          took.current = Date.now() - started.current;
+          took.current = recorded();
           halt();
           if (after.current === 'discard' || !chunks.current.length) return;
           result.current = new Blob(chunks.current, { type: r.mimeType || 'audio/webm' });
-          if (after.current === 'send') onDone(result.current, took.current);
+          if (after.current === 'send') finish(result.current);
           else setState('stopped');
         };
-        // The live level: the loudest moment of the last ~40 ms, read every tenth of a second.
+        // The live level: the loudest moment of the last ~40 ms, read every tenth of a second while recording.
         audio = new AudioContext();
         void audio.resume().catch(() => undefined);
         const analyser = audio.createAnalyser();
@@ -132,19 +155,21 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
         audio.createMediaStreamSource(stream).connect(analyser);
         const buf = new Uint8Array(analyser.fftSize);
         rec.current = r;
-        started.current = Date.now();
+        since.current = Date.now();
         r.start(250);
         setState('recording');
         tick = setInterval(() => {
-          setElapsed(Date.now() - started.current);
+          if (paused.current) return;
+          setElapsed(recorded());
           analyser.getByteTimeDomainData(buf);
           let peak = 0;
           for (const v of buf) peak = Math.max(peak, Math.abs(v - 128) / 128);
           // A square root, as loudness is heard: quiet speech still moves the bars; the room's hiss does not.
           const level = Math.min(1, Math.sqrt(peak) * 1.3);
+          read.current.push(level);
           setLevels((l) => [...l.slice(1), level]);
+          if (recorded() >= MOST && r.state === 'recording') r.stop();
         }, 100);
-        limit = setTimeout(() => r.state === 'recording' && r.stop(), 10 * 60_000);
       } catch (e) {
         halt();
         setState('failed');
@@ -154,35 +179,74 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
     })();
     return () => {
       after.current = 'discard';
-      if (rec.current?.state === 'recording') rec.current.stop();
+      if (rec.current && rec.current.state !== 'inactive') rec.current.stop();
       halt();
     };
     // Mount once: a new recording is a new recorder.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+  // A preview's address goes with it.
+  useEffect(
+    () => () => {
+      if (hearing) URL.revokeObjectURL(hearing);
+    },
+    [hearing],
+  );
 
-  const stop = () => {
-    after.current = 'keep';
-    if (rec.current?.state === 'recording') rec.current.stop();
+  const pause = () => {
+    const r = rec.current;
+    if (r?.state !== 'recording') return;
+    r.pause();
+    before.current += Date.now() - since.current;
+    paused.current = true;
+    setElapsed(before.current);
+    setState('paused');
+  };
+  const resume = () => {
+    const r = rec.current;
+    if (r?.state !== 'paused') return;
+    setHearing(null);
+    since.current = Date.now();
+    paused.current = false;
+    r.resume();
+    setState('recording');
+  };
+  /** Preview: what is recorded so far, from the start. */
+  const listen = () => {
+    if (hearing) return setHearing(null);
+    const r = rec.current;
+    const play = () => {
+      const blob = result.current ?? new Blob(chunks.current, { type: r?.mimeType || 'audio/webm' });
+      if (blob.size) setHearing(URL.createObjectURL(blob));
+    };
+    // What the recorder still holds comes out first.
+    if (r?.state === 'paused') {
+      flushed.current = play;
+      r.requestData();
+    } else play();
   };
   const send = () => {
-    if (state === 'stopped' && result.current) return onDone(result.current, took.current);
+    setHearing(null);
+    if (state === 'stopped' && result.current) return finish(result.current);
     after.current = 'send';
-    if (rec.current?.state === 'recording') rec.current.stop();
+    if (rec.current && rec.current.state !== 'inactive') rec.current.stop();
   };
   const discard = () => {
+    setHearing(null);
     after.current = 'discard';
-    if (rec.current?.state === 'recording') rec.current.stop();
+    if (rec.current && rec.current.state !== 'inactive') rec.current.stop();
     onCancel();
   };
   const btn = compact ? 'h-7 w-7' : 'h-8 w-8';
+  const tool = cx('flex shrink-0 items-center justify-center rounded-[8px] border border-line text-ink hover:bg-subtle', btn);
+  const held = state === 'paused' || state === 'stopped';
 
   return (
     <div className={cx('flex flex-1 items-center', compact ? 'gap-1.5' : 'gap-2.5')} role="group" aria-label="Recording a voice message">
-      <button type="button" aria-label="Delete the voice message" title="Delete" onClick={discard} className={cx('flex shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-danger', btn)}>
-        <Icon name="trash" size={compact ? 15 : 16} />
+      <button type="button" aria-label="Cancel the voice message" title="Cancel" onClick={discard} className={cx('flex shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle hover:text-danger', btn)}>
+        <Icon name="x" size={compact ? 15 : 16} />
       </button>
-      <span className={cx('h-2.5 w-2.5 shrink-0 rounded-full', state === 'recording' ? 'animate-pulse bg-danger' : state === 'stopped' ? 'bg-ink-3' : 'bg-line')} aria-hidden />
+      <span className={cx('h-2.5 w-2.5 shrink-0 rounded-full', state === 'recording' ? 'animate-pulse bg-danger' : held ? 'bg-ink-3' : 'bg-line')} aria-hidden />
       <span className="w-10 shrink-0 font-mono text-[13px] text-ink tabular" aria-label="Recorded">{formatClock(elapsed / 1000)}</span>
       <div className="flex h-7 min-w-0 flex-1 items-center gap-[2px] overflow-hidden" aria-hidden>
         {state === 'starting' ? (
@@ -191,64 +255,24 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
           levels.map((v, i) => <span key={i} data-level={v.toFixed(2)} className={cx('w-[3px] shrink-0 rounded-full', state === 'recording' ? 'bg-danger' : 'bg-ink-3')} style={{ height: `${Math.max(12, v * 100)}%` }} />)
         )}
       </div>
-      {state === 'recording' ? (
-        <button type="button" aria-label="Stop recording" title="Stop" onClick={stop} className={cx('flex shrink-0 items-center justify-center rounded-[8px] border border-line text-ink hover:bg-subtle', btn)}>
-          <Icon name="stop" size={13} className="fill-current" />
+      {held ? (
+        <button type="button" aria-label={hearing ? 'Stop listening' : 'Listen to the recording'} title="Preview" onClick={listen} className={tool}>
+          <Icon name={hearing ? 'pause' : 'play'} size={13} className={hearing ? undefined : 'fill-current'} />
         </button>
       ) : null}
-      <button type="button" aria-label="Send the voice message" title="Send" onClick={send} disabled={state !== 'recording' && state !== 'stopped'} className={cx('flex shrink-0 items-center justify-center rounded-[9px] bg-primary text-white hover:bg-primary-hover disabled:opacity-50', btn)}>
+      {state === 'recording' ? (
+        <button type="button" aria-label="Pause recording" title="Pause" onClick={pause} className={tool}>
+          <Icon name="pause" size={13} />
+        </button>
+      ) : state === 'paused' ? (
+        <button type="button" aria-label="Resume recording" title="Resume" onClick={resume} className={cx(tool, 'text-danger')}>
+          <Icon name="mic" size={14} />
+        </button>
+      ) : null}
+      <button type="button" aria-label="Send the voice message" title="Send" onClick={send} disabled={state !== 'recording' && !held} className={cx('flex shrink-0 items-center justify-center rounded-[9px] bg-primary text-white hover:bg-primary-hover disabled:opacity-50', btn)}>
         <Icon name="send" size={compact ? 14 : 15} />
       </button>
-    </div>
-  );
-}
-
-/**
- * A voice note's player. The bars are a picture, not the recording's real
- * levels: reading the audio would mean fetching it outside the page's media
- * rules. They are the same for a note every time it is shown.
- */
-export function VoicePlayer({ src, ms, seed, own, bare }: { src: string; ms: number | null; seed: number; own: boolean; /** Inside a bubble (the chat drawer): no box of its own, a solid play button. */ bare?: boolean }) {
-  const audio = useRef<HTMLAudioElement>(null);
-  const [playing, setPlaying] = useState(false);
-  const [pos, setPos] = useState(0);
-  const [total, setTotal] = useState((ms ?? 0) / 1000);
-  const bars = Array.from({ length: 28 }, (_, i) => 30 + (((seed * 9301 + i * 49297) % 233280) / 233280) * 70);
-  const done = total > 0 ? pos / total : 0;
-  return (
-    <div className={cx('flex items-center gap-2.5', bare ? 'w-[230px] px-1 py-0.5 text-ink' : cx('w-[260px] rounded-[14px] px-3 py-2', own ? 'bg-primary text-white' : 'border border-line bg-surface text-ink'))}>
-      <button
-        type="button"
-        aria-label={playing ? 'Pause the voice note' : 'Play the voice note'}
-        onClick={() => {
-          const a = audio.current;
-          if (!a) return;
-          if (a.paused) void a.play();
-          else a.pause();
-        }}
-        className={cx('flex shrink-0 items-center justify-center rounded-full', bare ? 'h-[34px] w-[34px] bg-primary text-white' : cx('h-8 w-8', own ? 'bg-white/20' : 'bg-subtle'))}
-      >
-        <Icon name={playing ? 'pause' : 'play'} size={15} />
-      </button>
-      <div className="flex h-7 flex-1 items-center gap-[2px]" aria-hidden>
-        {bars.map((h, i) => (
-          <span key={i} className={cx('w-[3px] rounded-full', done > 0 && i / bars.length < done ? (own && !bare ? 'bg-white' : cx('bg-primary', own && 'dark:bg-[#B4C3FF]')) : own && !bare ? 'bg-white/40' : 'bg-[#9AA6D6] dark:bg-white/25')} style={{ height: `${h}%` }} />
-        ))}
-      </div>
-      <span className="font-mono text-[11.5px] tabular opacity-80">{formatClock(playing || pos ? pos : total)}</span>
-      <audio
-        ref={audio}
-        src={src}
-        preload="metadata"
-        onPlay={() => setPlaying(true)}
-        onPause={() => setPlaying(false)}
-        onEnded={() => {
-          setPlaying(false);
-          setPos(0);
-        }}
-        onTimeUpdate={(e) => setPos(e.currentTarget.currentTime)}
-        onLoadedMetadata={(e) => Number.isFinite(e.currentTarget.duration) && setTotal(e.currentTarget.duration)}
-      />
+      {hearing ? <audio src={hearing} autoPlay className="hidden" onEnded={() => setHearing(null)} /> : null}
     </div>
   );
 }

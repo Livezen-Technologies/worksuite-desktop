@@ -277,6 +277,35 @@ specific to the desktop:
     allow): `GET /api/ai/speech/status` and `POST /api/ai/speech/transcribe`
     (multipart `audio` WAV, `language`) return segments with `uncertain`.
 
+### Voice messages (worksuite-desktop#285)
+
+Team Chat, website chats and WhatsApp play a voice message in the app's own
+player. What the desktop sends and reads:
+
+- **Sending.** `POST /api/chat/messages/attachments {room_id, upload_id,
+  client_message_id, reply_to?, voice: true, duration_ms, waveform}`.
+  `duration_ms` is counted while recording, pauses left out. `waveform` is
+  64 whole numbers 0–100: the loudest moment of each equal slice of the
+  recording, as a share of the loudest slice. A server that does not know
+  `waveform` ignores it.
+- **The message.** The voice message's file keeps `kind: 'voice'` and
+  `preview: 'audio'`; the desktop goes by these, or by an `audio/*` type,
+  never by the name — a recording made in a browser is `.webm` and may be
+  sniffed as `video/webm`. Beside `duration_ms` the file may carry:
+  - `waveform: number[] | null` — the 64 steps above;
+  - `m4a_url: string | null` — an AAC copy, played when the original
+    (Opus) cannot be.
+  The message may carry `listened: boolean`, whether this person has played
+  it. Absent, as from an older server, the desktop remembers what was played
+  on the computer.
+- **Played.** `POST /api/chat/messages/{id}/listened` (no body) → `{ok: true}`,
+  sent once, the first time somebody plays another person's voice message.
+  A 404 changes nothing: the "not played yet" dot goes on that computer.
+- **Without a length or waveform** (an older message, a WhatsApp voice note,
+  a visitor's recording) the desktop reads the recording once, through the
+  API proxy, for both. A WebM made in a browser has no length its player
+  can tell, so this is the only way to show it before it is played.
+
 ### What the server has: `GET /api/capabilities` (worksuite-desktop#259)
 
 The app can be newer than the server: Beta may run ahead of it. So that
@@ -391,6 +420,50 @@ three routes under `/api/chat/widget-admin`. Until it has them:
     its first number (`manual`, labelled "WhatsApp").
   - On an older server, the app still saves that one number, converted to
     E.164: "0769 136 424" becomes `+94769136424`.
+
+### Website chats: returning visitors (worksuite-desktop#291)
+
+A visitor who writes in a closed chat reopens it, or starts a new chat on the
+same profile once the reopen window has passed. Staff are rung as for a new
+chat: the agent of the last chat first, then the team. The app reads these
+fields, and works as before without them.
+
+- **The ring** (`chat.incoming`, `chat.assigned`, and the `ringing` and
+  `waiting` entries of `GET assignments/pending`) carries `returning`:
+  `{reopened, previous_at, previous_agent_id, previous_agent_name,
+  previous_conversation_id}`, or null.
+  - The ringing card and the system notification say "Returning visitor ·
+    last chat with you on 16 Aug". When `previous_agent_id` is someone else,
+    they name that person by first name. When it is null, they say "· last
+    chat on 16 Aug". Without `previous_at`, they say "Returning visitor".
+  - `previous_at` is a server stamp: true UTC without a zone.
+  - An older server sends `returning: true|false` (whether the browser has
+    been here before), or nothing. The app reads that as no returning visit,
+    and only shows the "Returning" chip as before.
+  - What a ring said is kept while the chat rings, so a later list read
+    without `returning` does not drop it.
+  - A ring for a conversation that rang before is a new ring. The card comes
+    back even if it was minimised the last time that conversation rang. Each
+    `chat.incoming` needs a new `event_id`: the app shows one notification
+    per id.
+- **The lists** (`GET conversations`) read `reopened_at` (null until the
+  chat reopens), `previous_conversation_id` and `last_agent_at` on each row.
+  - A row with `reopened_at`, waiting, and no `last_agent_at` after it goes
+    to the top of the Inbox and Awaiting reply, and is marked "Reopened".
+  - On `chat.widget.message`, `chat.incoming`, or `chat.assigned` with
+    `returning`, for a chat the app holds as closed, it moves the row out of
+    Closed straight away. The row goes to the top of the open list as open
+    and waiting, with the event's `preview`, `message_id` and `at`. The read
+    the same event triggers then replaces it with the server's row.
+- **The conversation** (`GET conversations/{id}`) reads
+  `conversation.reopened_at` and `conversation.previous_conversation_id`.
+  With `previous_conversation_id`, the thread links that chat, which opens
+  under Closed (`review=1`, so it is never joined). Its date comes from
+  `history`.
+- **The notes:** each reopen and routing step is a `system` message, for
+  example "Visitor returned · conversation reopened", "Ringing Nuwan Silva
+  (previous agent)", "Ringing the team" or "No one available · offered
+  callback". Notes sent as `internal` show as staff-only lines with a lock.
 
 ### Garage
 

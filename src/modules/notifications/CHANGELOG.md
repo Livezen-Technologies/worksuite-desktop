@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.1 — 2026-10-07
+
+**Fixed**
+
+- a returning visitor's website chat notifies again with 'Returning visitor · last chat with …' and the new message, instead of being taken for one already shown (#291)
+
 ## 1.12.0 — 2026-10-06
 
 **Added**

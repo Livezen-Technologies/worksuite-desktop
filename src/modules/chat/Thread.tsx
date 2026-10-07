@@ -185,7 +185,7 @@ export function Thread({
   // The conversation through the kit: each message as the kit has it, uploads on their way in their place (#229).
   // The pictures for ‹ › in the preview are the list's own (#38).
   const items: KitItem[] = timeline.map((entry) =>
-    entry.job ? { slot: true as const, key: `job-${entry.job.id}`, time: entry.time, node: <OutgoingMediaBubble job={entry.job} /> } : fromChatMessage(entry.message!, me, cardOrigin),
+    entry.job ? { slot: true as const, key: `job-${entry.job.id}`, time: entry.time, node: <OutgoingMediaBubble job={entry.job} look={drawer ? 'drawer' : 'page'} /> } : fromChatMessage(entry.message!, me, cardOrigin),
   );
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: ['chat', 'messages', roomId] });
