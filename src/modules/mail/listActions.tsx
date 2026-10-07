@@ -490,6 +490,10 @@ export interface MenuContext {
   saveAttachments?: (t: Target) => void;
   /** Link to tender, customer or deal… — one message or all those selected. */
   linkRecord?: (targets: Target[]) => void;
+  /** Convert to ticket… (#298): where Support takes email and the person may convert it. */
+  ticket?: (t: Target) => void;
+  /** View ticket: a message already made a ticket, for somebody with Support. */
+  viewTicket?: (ticketId: number) => void;
   window?: (t: Target) => void;
   copyLink?: (t: Target) => void;
   source?: (t: Target) => void;
@@ -542,6 +546,9 @@ export function listMenuSections(targets: Target[], c: MenuContext): MenuSection
     if (c.calendar) ws.push({ id: 'calendar', label: text('Add to calendar'), icon: 'calendar-plus', disabled: c.offline, reason: text('Available when you are back online.'), onSelect: () => c.calendar!(one) });
     if (c.saveAttachments && one.row.has_attachment && one.mailbox) ws.push({ id: 'attachments', label: text('Save attachments to Files'), icon: 'paperclip', disabled: c.offline, reason: text('Available when you are back online.'), onSelect: () => c.saveAttachments!(one) });
     if (c.linkRecord) ws.push(linkItem(targets, c));
+    const linked = one.row.support_ticket;
+    if (linked && c.viewTicket) ws.push({ id: 'ticket', label: text('View ticket {ref}', { ref: linked.reference }), icon: 'life-buoy', onSelect: () => c.viewTicket!(linked.id) });
+    else if (!linked && c.ticket) ws.push({ id: 'ticket', label: text('Convert to ticket…'), icon: 'life-buoy', disabled: c.offline, reason: text('Available when you are back online.'), onSelect: () => c.ticket!(one) });
     if (ws.length) sections.push({ id: 'worksuite', label: text('WorkSuite'), items: ws });
     const other: MenuItem[] = [];
     if (c.window) other.push({ id: 'window', label: text('Open in new window'), icon: 'app-window', shortcut: c.keyFor('openWindow'), onSelect: () => c.window!(one) });

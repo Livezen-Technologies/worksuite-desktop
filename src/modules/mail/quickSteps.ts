@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
 import { text } from '../../core/i18n';
 import { addDays, todayInZone } from '../../core/time';
+import { alreadyConverted, conversionOffer, type ConversionOffer } from '../support/api';
 import { messageAction, moveMessage, stateAction } from './api';
 import { messageLink, taskDescription } from './MessageTask';
 import { plainText } from './model';
@@ -146,6 +147,9 @@ export async function runQuickStep(step: QuickStep, targets: Target[], run: Runn
   const report: RunReport = { done: 0, failed: 0, errors: [], compose: [] };
   const flagDates = Object.fromEntries(flagChoices().map((c) => [c.id, c.dates]));
   const snoozeAt = Object.fromEntries(snoozeChoices().map((c) => [c.id, c.at]));
+  // Whether Support takes email here (#298): asked once a run, and only for a step that makes tickets.
+  let offer: Promise<ConversionOffer> | null = null;
+  const ticketOffer = () => (offer ??= run.get<unknown>('/api/support/v1/meta').then((m) => conversionOffer(m, 'email'), () => 'unknown' as const));
   for (const t of targets) {
     const ref = { uid: String(t.row.id), folder: t.folder, mailbox: t.mailbox };
     const item = stateItem(t.row, t.mailbox, t.folder);
@@ -220,6 +224,13 @@ export async function runQuickStep(step: QuickStep, targets: Target[], run: Runn
             await logInCrm(t, messageLink(ref), run);
             break;
           case 'create_ticket': {
+            const how = await ticketOffer();
+            if (how === 'no') throw new Error(text('Making tickets from email is not available to you.'));
+            if (how === 'yes') {
+              await ticketFromEmail(t, run);
+              break;
+            }
+            // A server from before email conversion: the text in a ticket of its own, as before.
             const detail = await run.get<MessageDetail>(`/api/mail/messages/${t.row.id}`, { folder: t.folder, ...(t.mailbox ? { mailbox: t.mailbox } : {}) });
             const link = messageLink(ref);
             await run.post('/api/tickets', {
@@ -246,6 +257,19 @@ export async function runQuickStep(step: QuickStep, targets: Target[], run: Runn
     }
   }
   return report;
+}
+
+/**
+ * Create a helpdesk ticket where Support converts email (#298): the message itself becomes the ticket — the sender
+ * the requester, its attachments kept, the message linked to it — in the organization the server files it under. An
+ * email that is a ticket already has nothing left to do.
+ */
+async function ticketFromEmail(t: Target, run: Runner): Promise<void> {
+  try {
+    await run.post('/api/support/v1/conversions/email', { mail_message_id: Number(t.row.id), folder: t.folder, ...(t.mailbox ? { mailbox: t.mailbox } : {}), target: 'new' });
+  } catch (e) {
+    if (!alreadyConverted(e)) throw e;
+  }
 }
 
 /** A Quick Step task's due day (DMO-TSK-05), on the person's calendar. */

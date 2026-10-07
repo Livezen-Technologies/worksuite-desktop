@@ -11,6 +11,7 @@ import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { searchFold } from '@shared/localization';
+import { ticketRoute } from '@shared/support';
 import { Icon } from '../../components/Icon';
 import { SidePanel } from '../../components/SidePanel';
 import { Button, Empty, cx } from '../../components/ui';
@@ -40,6 +41,9 @@ import { MessageList, type ListRow, type RowAction } from './MessageList';
 import { MessageView, SourceDialog, windowRoute, type ViewControls } from './MessageView';
 import { LIST_ACTIONS, MoveDialog, SelectionBar, actionLabel, hoverIds, listMenuSections, placeOf, useListActions, type ListActionId } from './listActions';
 import { TaskFromMessage, messageLink } from './MessageTask';
+import { ConvertEmailSheet } from '../support/ConvertEmailSheet';
+import { useConversionOffer } from '../support/ConvertSheet';
+import { emailToConvert, markTicket } from './ticketLinks';
 import { applyFilters, filtersFor, serverFilters, folderName, folderViewPatch, groupRows, queueKey, queuedByMessage, rowMailbox, smartView, sortRows, step, withFolderView, type ChipId } from './model';
 import { sendAfterUndoWindow, useOutgoing, undoSend } from './outgoing';
 import { needsAsking, removesMessages, runQuickStep, saveAnswers, useQuickSteps, type QuickStep } from './quickSteps';
@@ -379,6 +383,10 @@ function MailWorkspace({ active }: ModuleProps) {
   const [linkFor, setLinkFor] = useState<Target[] | null>(null);
   // Link to tender, customer or deal: offered to people who can open Tenders or the CRM; the server says which kinds.
   const canLinkRecords = canOpen('tenders') || canOpen('crm');
+  // Convert to ticket (#298): for somebody with Support, where the server converts email and lets them.
+  const [ticketFor, setTicketFor] = useState<Target | null>(null);
+  const supportApp = canOpen('support');
+  const ticketOffer = useConversionOffer('email', supportApp);
   const [sourceOf, setSourceOf] = useState<MessageRef | null>(null);
   const keyFor = (command: string) => {
     const k = keyMap[command]?.[0];
@@ -961,6 +969,8 @@ function MailWorkspace({ active }: ModuleProps) {
       calendar: canOpen('calendar') ? (t) => void addToCalendar(t) : undefined,
       saveAttachments: canOpen('files') ? (t) => void saveAttachments(t) : undefined,
       linkRecord: canLinkRecords ? (ts) => setLinkFor(ts) : undefined,
+      ticket: ticketOffer === 'yes' ? (t) => setTicketFor(t) : undefined,
+      viewTicket: supportApp ? (id) => navigate(ticketRoute(id)) : undefined,
       window: (t) => openInWindow(windowRoute(refOfTarget(t)), t.row.subject),
       copyLink,
       source: (t) => setSourceOf(refOfTarget(t)),
@@ -1289,6 +1299,7 @@ function MailWorkspace({ active }: ModuleProps) {
       ) : null}
       {linkFor ? <LinkRecordDialog items={linkFor.map((t) => stateItem(t.row, t.mailbox, t.folder))} onClose={() => setLinkFor(null)} /> : null}
       {taskFor ? <TaskFromMessage message={taskFor.row} msgRef={refOfTarget(taskFor)} onClose={() => setTaskFor(null)} /> : null}
+      {ticketFor ? <ConvertEmailSheet email={emailToConvert(refOfTarget(ticketFor), ticketFor.row)} onClose={() => setTicketFor(null)} onDone={(t) => markTicket(qc, refOfTarget(ticketFor), t)} /> : null}
       {sourceOf ? <SourceDialog msgRef={sourceOf} onClose={() => setSourceOf(null)} /> : null}
       {listActs.dialog}
       {custom?.what === 'categories' ? <CategoriesDialog cats={cats.data ?? []} onClose={() => setCustom(null)} /> : null}

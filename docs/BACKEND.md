@@ -465,6 +465,42 @@ fields, and works as before without them.
   (previous agent)", "Ringing the team" or "No one available · offered
   callback". Notes sent as `internal` show as staff-only lines with a lock.
 
+### Support: email and website chat → ticket (worksuite-desktop#298)
+
+Mail and website chats convert to Support tickets through `/api/support/v1`. The app reads these fields and works as
+before without them.
+
+- **What the server converts:** `GET /api/support/v1/meta` → `capabilities: {convert_chat, convert_email,
+  mail_intake}` (the company has Support, and Chat or Email, switched on) and `can: {create, convert_chat,
+  convert_email}` (the person's rights; `can.create` counts when a `convert_*` right is not named).
+  - A capability or right that is `false` hides that Convert to ticket: in Mail (the header's ⋯, the reader's More,
+    the list's right-click menu, the Apps pane) or in the website chat's panel. A person without the Support app sees
+    none of it.
+  - Without `capabilities` (an older server) the app does what it did before: website chats keep Convert to ticket,
+    and Mail keeps only the Apps pane's "Create a helpdesk ticket", which copies the text into an unlinked ticket
+    (`POST /api/tickets`).
+- **An email:** `POST /api/support/v1/conversions/email {mail_message_id, folder, mailbox?, target: 'new' | ticket
+  id, subject?, organization_id?}`.
+  - `mail_message_id` is the message's `id` in the Mail API (its uid); `folder` and `mailbox` are sent with it, as
+    every Mail route takes them. `subject` and `organization_id` go with a new ticket only; `organization_id: null`
+    leaves the filing to the server ("Needs organization").
+  - The answer is the ticket (`id`, `reference`, `status`), alone or as `{ticket, appended, existing}`.
+  - `409` with code `already_converted` and `{ticket: {id, reference, status}}` in `errors` (or `existing: true` on
+    a `200`) means the email is a ticket already; the app shows "Already ticket …" with View ticket.
+  - "Add to an existing ticket" searches `GET /api/support/v1/tickets?view=all&q=` and leaves out closed tickets.
+  - The Quick Step "Create a helpdesk ticket" sends `{mail_message_id, folder, mailbox?, target: 'new'}` for each
+    message, and treats `already_converted` as done.
+- **The message's ticket:** Mail's message JSON, in lists and for one message, carries `support_ticket: {id,
+  reference, status} | null`. The reading pane shows it as a chip ("CFX-001042 · Open") that opens the ticket's tab,
+  and the list row shows a small marker with the reference.
+- **A website chat:** `POST /api/support/v1/conversions` also takes `requester_email`.
+  - The sheet asks for the address, as a required field, when `GET conversions/{id}` gives the visitor no `email`.
+  - A `422` with code `requester_email_required` brings that field up, focused, with "Ask the visitor for an email
+    address so follow-ups can reach them".
+  - The chat's link to its ticket is the preview's `ticket` (`{id, reference, status}`). It shows as a chip in the
+    thread's header, and the panel offers View ticket in place of Convert to ticket.
+  - The transcript's `files` are listed in the sheet. An answer's `files_refused` above zero is said in a toast.
+
 ### Garage
 
 The Garage tab uses the server's Garage API, `/api/garage/v1` (`app/Modules/Garage`), the same one the web's
