@@ -66,3 +66,12 @@ export const Checkbox = forwardRef<HTMLInputElement, CheckboxProps>(function Che
     />
   );
 });
+
+/**
+ * The checkbox's look with no control behind it (worksuite-desktop#290): for a row that is itself a button and picks
+ * on its own click (Chat's Select mode), where a real checkbox would be a control inside a control. It is hidden from
+ * screen readers; the row says whether it is picked (`aria-pressed`, `aria-selected`).
+ */
+export function CheckboxMark({ checked = false, indeterminate = false, className }: { checked?: boolean; indeterminate?: boolean; className?: string }) {
+  return <span aria-hidden data-state={indeterminate ? 'mixed' : checked ? 'checked' : 'unchecked'} className={cx('ws-checkbox pointer-events-none', className)} />;
+}

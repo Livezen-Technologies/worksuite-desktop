@@ -4,6 +4,8 @@ import { bytes } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Menu, type MenuSection } from '../../components/Menu';
 import { Checkbox } from '../../components/Checkbox';
+import { RowLead } from '../../components/RowLead';
+import { pickOf, type PickHow, type SelectState } from '../../components/useListSelection';
 import { Avatar, Empty, ErrorNote, cx } from '../../components/ui';
 import { VirtualList } from '../../components/VirtualList';
 import type { ListRefresh } from '../../components/PullToRefresh';
@@ -80,10 +82,12 @@ export interface MessageListProps {
   onRowMenu?: (r: ListRow, x: number, y: number) => void;
   /** Rows selected besides the open one (DMO-INB-15). */
   selection?: ReadonlySet<string>;
-  onSelect?: (r: ListRow, how: 'toggle' | 'range') => void;
+  onSelect?: (r: ListRow, how: PickHow) => void;
+  /** The Select-all box over the list (worksuite-desktop#290): none, some or all of the rows listed are picked. */
+  selectAll?: { state: SelectState; onToggle: () => void };
   /** The row's hover buttons, in place of its time (worksuite-desktop#161). */
   rowActions?: (r: ListRow) => RowAction[];
-  /** Over the rows while some are selected: "Archive 12", Select all… */
+  /** Over the rows while some are selected: "3 selected · Archive · Delete · Move · Mark read · ⋯ · Clear". */
   toolbar?: ReactNode;
   /** The View menu's link to Settings › Mail › Appearance & reading. */
   onViewSettings?: () => void;
@@ -271,26 +275,34 @@ export function MessageList(p: MessageListProps) {
             ) : null}
           </div>
         ) : null}
-        <div className="mt-2 flex items-center gap-1.5" role="group" aria-label="Quick filters">
-          {CHIPS.map((c) => {
-            const on = p.chips.includes(c.id);
-            return (
-              <button key={c.id} type="button" aria-pressed={on} data-chip={c.id} onClick={() => p.onChips(on ? p.chips.filter((x) => x !== c.id) : [...p.chips, c.id])} className={cx('inline-flex h-[26px] shrink-0 items-center gap-1 rounded-full border px-2.5 text-[12.5px] font-semibold', on ? 'border-primary bg-primary text-white' : 'border-line text-ink hover:bg-subtle')}>
-                {on ? <Icon name="check" size={12} /> : null}
-                {c.label}
-              </button>
-            );
-          })}
-          {p.onClearFilters ? (
-            <button type="button" onClick={p.onClearFilters} className="shrink-0 px-1 text-[12.5px] font-semibold text-primary hover:underline">
-              {text('Clear filters')}
-            </button>
+        <div className="mt-2 flex items-center">
+          {/* Select all (#290): in the rows' lead column, so it lines up with their checkboxes. */}
+          {p.selectAll ? (
+            <span className="-mr-1.5 -ml-1 flex w-7 shrink-0 items-center justify-center">
+              <Checkbox aria-label={text('Select all')} title={text('Select all')} checked={p.selectAll.state === 'all'} indeterminate={p.selectAll.state === 'some'} disabled={flat.length === 0} onChange={p.selectAll.onToggle} />
+            </span>
           ) : null}
-          <span className="flex-1" />
-          <button ref={sortChip} type="button" aria-haspopup="menu" aria-expanded={menu === 'sort' && sortAt === 'chip'} onClick={() => toggleSort('chip')} title={text('Sort and group')} className={cx('inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1 text-[12.5px] text-ink-3 hover:bg-subtle hover:text-ink', menu === 'sort' && sortAt === 'chip' && 'bg-subtle text-ink')}>
-            <Icon name="transfers" size={13} />
-            <span className="truncate">{sortLabel(p.prefs)}</span>
-          </button>
+          <div className="flex min-w-0 flex-1 items-center gap-1.5" role="group" aria-label="Quick filters">
+            {CHIPS.map((c) => {
+              const on = p.chips.includes(c.id);
+              return (
+                <button key={c.id} type="button" aria-pressed={on} data-chip={c.id} onClick={() => p.onChips(on ? p.chips.filter((x) => x !== c.id) : [...p.chips, c.id])} className={cx('inline-flex h-[26px] shrink-0 items-center gap-1 rounded-full border px-2.5 text-[12.5px] font-semibold', on ? 'border-primary bg-primary text-white' : 'border-line text-ink hover:bg-subtle')}>
+                  {on ? <Icon name="check" size={12} /> : null}
+                  {c.label}
+                </button>
+              );
+            })}
+            {p.onClearFilters ? (
+              <button type="button" onClick={p.onClearFilters} className="shrink-0 px-1 text-[12.5px] font-semibold text-primary hover:underline">
+                {text('Clear filters')}
+              </button>
+            ) : null}
+            <span className="flex-1" />
+            <button ref={sortChip} type="button" aria-haspopup="menu" aria-expanded={menu === 'sort' && sortAt === 'chip'} onClick={() => toggleSort('chip')} title={text('Sort and group')} className={cx('inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1 text-[12.5px] text-ink-3 hover:bg-subtle hover:text-ink', menu === 'sort' && sortAt === 'chip' && 'bg-subtle text-ink')}>
+              <Icon name="transfers" size={13} />
+              <span className="truncate">{sortLabel(p.prefs)}</span>
+            </button>
+          </div>
         </div>
         {p.notice ? <p className="mt-1.5 text-[12px] text-ink-3">{p.notice}</p> : null}
       </div>
@@ -388,15 +400,21 @@ function GroupHead({ g }: { g: RowGroup & { items: ListRow[] } }) {
   );
 }
 
+/** The Full list's columns, after the lead: star, from, subject, (mailbox,) size, received. */
+const tableColumns = (unified: boolean) => (unified ? '20px 220px 1fr 170px 64px 70px' : '20px 220px 1fr 64px 70px');
+
 function TableHead({ unified }: { unified: boolean }) {
   return (
-    <div role="presentation" className="grid h-7 items-center gap-3 border-t border-line px-4 text-[11.5px] font-semibold text-ink-3" style={{ gridTemplateColumns: unified ? '20px 220px 1fr 170px 64px 70px' : '20px 220px 1fr 64px 70px' }}>
-      <span />
-      <span>From</span>
-      <span>Subject</span>
-      {unified ? <span>Mailbox</span> : null}
-      <span className="text-right">Size</span>
-      <span className="text-right">Received</span>
+    <div role="presentation" className="flex h-7 items-center border-t border-line pr-4 pl-3 text-[11.5px] font-semibold text-ink-3">
+      <span className="w-7 shrink-0" />
+      <span className="grid min-w-0 flex-1 items-center gap-3" style={{ gridTemplateColumns: tableColumns(unified) }}>
+        <span />
+        <span>From</span>
+        <span>Subject</span>
+        {unified ? <span>Mailbox</span> : null}
+        <span className="text-right">Size</span>
+        <span className="text-right">Received</span>
+      </span>
     </div>
   );
 }
@@ -452,36 +470,30 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, mailboxId, prefs, 
   // The time makes room for the hover buttons.
   const stampCls = actions.length ? 'group-hover:invisible group-focus-within:invisible' : undefined;
   const middle = view === 'super' || view === 'table';
-  const extras = (
-    <>
-      {onSelect ? (
-        <span className={cx('absolute left-[3px] flex items-center', middle ? 'top-1/2 -translate-y-1/2' : 'top-2.5', picked || (selection?.size ?? 0) > 0 ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
-          <Checkbox checked={picked} onChange={() => onSelect(r, 'toggle')} aria-label={text('Select “{subject}”', { subject })} />
-        </span>
-      ) : null}
-      {actions.length ? (
-        <span role="group" aria-label={text('Actions for “{subject}”', { subject })} className={cx('absolute right-2 z-[1] hidden items-center gap-0.5 rounded-[8px] border border-line bg-surface px-0.5 shadow-sm group-hover:flex group-focus-within:flex', middle ? 'top-1/2 -translate-y-1/2' : 'top-1')}>
-          {actions.map((a) => (
-            <button
-              key={a.id}
-              type="button"
-              aria-label={a.label}
-              title={a.label}
-              aria-pressed={a.pressed}
-              data-row-action={a.id}
-              onClick={(e) => {
-                e.stopPropagation();
-                a.onSelect(e.currentTarget);
-              }}
-              className={cx('inline-flex h-7 w-7 items-center justify-center rounded-[6px] hover:bg-subtle', a.pressed ? 'text-warning' : 'text-ink-2 hover:text-ink')}
-            >
-              <Icon name={a.icon} size={15} className={a.pressed ? 'fill-current' : undefined} />
-            </button>
-          ))}
-        </span>
-      ) : null}
-    </>
-  );
+  // The lead column (#290): the unread dot, or the checkbox in its place under the mouse and on every row while any
+  // is picked; centred on the sender's line (classic rows are taller, so it sits at their top).
+  const lead = <RowLead unread={unread} checked={picked} selecting={(selection?.size ?? 0) > 0} onPick={onSelect ? (how) => onSelect(r, how) : undefined} label={text('Select “{subject}”', { subject })} className={view === 'classic' ? 'self-start' : undefined} />;
+  const extras = actions.length ? (
+    <span role="group" aria-label={text('Actions for “{subject}”', { subject })} className={cx('absolute right-2 z-[1] hidden items-center gap-0.5 rounded-[8px] border border-line bg-surface px-0.5 shadow-sm group-hover:flex group-focus-within:flex', middle ? 'top-1/2 -translate-y-1/2' : 'top-1')}>
+      {actions.map((a) => (
+        <button
+          key={a.id}
+          type="button"
+          aria-label={a.label}
+          title={a.label}
+          aria-pressed={a.pressed}
+          data-row-action={a.id}
+          onClick={(e) => {
+            e.stopPropagation();
+            a.onSelect(e.currentTarget);
+          }}
+          className={cx('inline-flex h-7 w-7 items-center justify-center rounded-[6px] hover:bg-subtle', a.pressed ? 'text-warning' : 'text-ink-2 hover:text-ink')}
+        >
+          <Icon name={a.icon} size={15} className={a.pressed ? 'fill-current' : undefined} />
+        </button>
+      ))}
+    </span>
+  ) : null;
   const common = {
     id: `mail-row-${r.key}`,
     role: 'option',
@@ -496,9 +508,9 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, mailboxId, prefs, 
       e.dataTransfer.effectAllowed = 'copy';
     },
     onClick: (e: React.MouseEvent) => {
-      // Ctrl/⌘-click adds to the selection, Shift-click selects a range (DMO-INB-15).
-      if (onSelect && (e.ctrlKey || e.metaKey)) return onSelect(r, 'toggle');
-      if (onSelect && e.shiftKey) return onSelect(r, 'range');
+      // Ctrl/⌘-click adds to the selection, Shift-click selects a range (DMO-INB-15); a plain click opens.
+      const how = onSelect ? pickOf(e) : null;
+      if (how) return onSelect!(r, how);
       onOpen(r);
     },
     onContextMenu: onRowMenu
@@ -507,105 +519,115 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, mailboxId, prefs, 
           onRowMenu(r, e.clientX, e.clientY);
         }
       : undefined,
-    className: cx('group relative w-full cursor-default border-b border-line text-left', selected ? 'bg-selection' : 'hover:bg-subtle', r.queued && r.queued !== 'read' && r.queued !== 'star' && r.queued !== 'unstar' && 'opacity-60', refresh?.freshClass(r.key)),
+    // An even 12px on the left, so the lead column never meets the list's edge (#290).
+    className: cx('group relative w-full cursor-default border-b border-line pr-4 pl-3 text-left', selected ? 'bg-selection' : 'hover:bg-subtle', r.queued && r.queued !== 'read' && r.queued !== 'star' && r.queued !== 'unstar' && 'opacity-60', refresh?.freshClass(r.key)),
   } as const;
-  const dot = <span aria-hidden className={cx('h-[7px] w-[7px] shrink-0 rounded-full', unread ? 'bg-primary' : 'bg-transparent')} />;
   const count = m.count && m.count > 1 ? <span className="shrink-0 text-[12px] font-semibold text-ink-3">{m.count}</span> : null;
   const label = text(unread ? '{sender}, {subject}, unread, {time}' : '{sender}, {subject}, {time}', { sender, subject, time: stamp });
 
   if (view === 'table') {
     return (
-      <div {...common} aria-label={label} className={cx(common.className, 'grid h-[36px] items-center gap-3 px-4 text-[13px]')} style={{ gridTemplateColumns: unified ? '20px 220px 1fr 170px 64px 70px' : '20px 220px 1fr 64px 70px' }}>
+      <div {...common} aria-label={label} className={cx(common.className, 'flex h-[36px] items-center text-[13px]')}>
         {extras}
-        <button
-          type="button"
-          onClick={(e) => {
-            e.stopPropagation();
-            onStar(r);
-          }}
-          aria-label={m.is_starred ? 'Unstar' : 'Star'}
-          aria-pressed={m.is_starred}
-          className={m.is_starred ? 'text-warning' : 'text-ink-3 hover:text-ink'}
-        >
-          <Icon name="star" size={15} className={m.is_starred ? 'fill-current' : undefined} />
-        </button>
-        <span className={cx('truncate', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
-        <span className="flex min-w-0 items-center gap-2 truncate">
-          {queued}
-          <StateMarks m={m} />
-          <span className={cx('truncate', strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
-          {preview ? <span className="truncate text-ink-3">— {preview}</span> : null}
-          {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
-        </span>
-        {unified ? (m.mailbox ? (
-          <span className="flex min-w-0 items-center gap-1.5" title={m.mailbox.email}>
-            {badge}
-            <span className="truncate text-[12px] text-ink-3">{m.mailbox.email}</span>
+        {lead}
+        <span className="grid min-w-0 flex-1 items-center gap-3" style={{ gridTemplateColumns: tableColumns(unified) }}>
+          <button
+            type="button"
+            onClick={(e) => {
+              e.stopPropagation();
+              onStar(r);
+            }}
+            aria-label={m.is_starred ? 'Unstar' : 'Star'}
+            aria-pressed={m.is_starred}
+            className={m.is_starred ? 'text-warning' : 'text-ink-3 hover:text-ink'}
+          >
+            <Icon name="star" size={15} className={m.is_starred ? 'fill-current' : undefined} />
+          </button>
+          <span className={cx('truncate', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
+          <span className="flex min-w-0 items-center gap-2 truncate">
+            {queued}
+            <StateMarks m={m} />
+            <span className={cx('truncate', strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
+            {preview ? <span className="truncate text-ink-3">— {preview}</span> : null}
+            {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
           </span>
-        ) : <span />) : null}
-        <span className="text-right font-mono text-[12px] text-ink-2 tabular">{m.size ? bytes(m.size) : ''}</span>
-        <span className={cx('text-right text-[12px] text-ink-3', stampCls)}>{stamp}</span>
+          {unified ? (m.mailbox ? (
+            <span className="flex min-w-0 items-center gap-1.5" title={m.mailbox.email}>
+              {badge}
+              <span className="truncate text-[12px] text-ink-3">{m.mailbox.email}</span>
+            </span>
+          ) : <span />) : null}
+          <span className="text-right font-mono text-[12px] text-ink-2 tabular">{m.size ? bytes(m.size) : ''}</span>
+          <span className={cx('text-right text-[12px] text-ink-3', stampCls)}>{stamp}</span>
+        </span>
       </div>
     );
   }
   if (view === 'super') {
     return (
-      <div {...common} aria-label={label} className={cx(common.className, 'flex h-[34px] items-center gap-2.5 px-4 text-[13px]')}>
+      <div {...common} aria-label={label} className={cx(common.className, 'flex h-[34px] items-center text-[13px]')}>
         {extras}
-        {dot}
-        <span className={cx('w-[34%] shrink-0 truncate', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
-        {count}
-        <span className="min-w-0 flex-1 truncate">
-          <span className={cx(strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
-          {preview ? <span className="text-ink-3"> — {preview}</span> : null}
+        {lead}
+        <span className="flex min-w-0 flex-1 items-center gap-2.5">
+          <span className={cx('w-[34%] shrink-0 truncate', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
+          {count}
+          <span className="min-w-0 flex-1 truncate">
+            <span className={cx(strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
+            {preview ? <span className="text-ink-3"> — {preview}</span> : null}
+          </span>
+          {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
+          <StateMarks m={m} />
+          {queued}
+          {badge}
+          <span className={cx('shrink-0 text-[12px] text-ink-3', stampCls)}>{stamp}</span>
         </span>
-        {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
-        <StateMarks m={m} />
-        {queued}
-        {badge}
-        <span className={cx('shrink-0 text-[12px] text-ink-3', stampCls)}>{stamp}</span>
       </div>
     );
   }
   if (view === 'classic') {
     return (
-      <div {...common} aria-label={label} className={cx(common.className, 'flex gap-3 px-4 py-2.5')}>
+      <div {...common} aria-label={label} className={cx(common.className, 'flex py-2.5')}>
         {extras}
-        <Avatar name={sender} size={36} className="mt-0.5" />
-        <span className="flex min-w-0 flex-1 flex-col">
-          <span className="flex items-center gap-2">
-            <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{sender}</span>
-            {count}
-            {queued}
-            {badge}
-            <span className={cx('shrink-0 text-[12px] text-ink-3', stampCls)}>{stamp}</span>
-          </span>
-          <span className={cx('truncate text-[13.5px]', strong ? cx('font-bold', ink) : ink)}>{subject}</span>
-          <span className="flex items-center gap-2">
-            <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-3">{preview}</span>
-            {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
-            {m.is_starred ? <Icon name="star" size={13} className="shrink-0 fill-current text-warning" label="Starred" /> : null}
-            <StateMarks m={m} />
-            {team}
+        {lead}
+        <span className="flex min-w-0 flex-1 gap-3">
+          <Avatar name={sender} size={36} className="mt-0.5" />
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="flex items-center gap-2">
+              <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{sender}</span>
+              {count}
+              {queued}
+              {badge}
+              <span className={cx('shrink-0 text-[12px] text-ink-3', stampCls)}>{stamp}</span>
+            </span>
+            <span className={cx('truncate text-[13.5px]', strong ? cx('font-bold', ink) : ink)}>{subject}</span>
+            <span className="flex items-center gap-2">
+              <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink-3">{preview}</span>
+              {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
+              {m.is_starred ? <Icon name="star" size={13} className="shrink-0 fill-current text-warning" label="Starred" /> : null}
+              <StateMarks m={m} />
+              {team}
+            </span>
           </span>
         </span>
       </div>
     );
   }
   return (
-    <div {...common} aria-label={label} className={cx(common.className, 'flex flex-col gap-0.5 px-4 py-2')}>
+    <div {...common} aria-label={label} className={cx(common.className, 'flex flex-col gap-0.5 py-2')}>
       {extras}
-      <span className="flex items-center gap-2">
-        {dot}
-        <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
-        {count}
-        {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
-        {m.is_starred ? <Icon name="star" size={13} className="shrink-0 fill-current text-warning" label="Starred" /> : null}
-        {queued}
-        {badge}
-        <span className={cx('shrink-0 text-[12px] text-ink-3', stampCls)}>{stamp}</span>
+      <span className="flex items-center">
+        {lead}
+        <span className="flex min-w-0 flex-1 items-center gap-2">
+          <span className={cx('min-w-0 flex-1 truncate text-[13.5px]', strong ? cx('font-bold', ink) : ink)}>{sender}</span>
+          {count}
+          {m.has_attachment ? <Icon name="paperclip" size={13} className="shrink-0 text-ink-3" label="Has attachments" /> : null}
+          {m.is_starred ? <Icon name="star" size={13} className="shrink-0 fill-current text-warning" label="Starred" /> : null}
+          {queued}
+          {badge}
+          <span className={cx('shrink-0 text-[12px] text-ink-3', stampCls)}>{stamp}</span>
+        </span>
       </span>
-      <span className="flex items-center gap-2 pl-[15px]">
+      <span className="flex items-center gap-2 pl-7">
         <span className="min-w-0 flex-1 truncate text-[13px]">
           <span className={cx(strong ? cx('font-bold', ink) : cx('font-semibold', ink))}>{subject}</span>
           {preview ? <span className="text-ink-3"> — {preview}</span> : null}

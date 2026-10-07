@@ -235,7 +235,8 @@ describe('bulk delete: one request per folder', () => {
     for (const s of ['Invoice', 'Budget', 'Lunch\\?', 'Minutes']) fireEvent.click(within(list).getByRole('checkbox', { name: new RegExp(`Select “${s}”`) }));
     const bar = screen.getByRole('toolbar', { name: '4 selected' });
     timers();
-    fireEvent.click(within(bar).getByRole('button', { name: 'Delete 4' }));
+    // The bar names the count once, in "4 selected"; its buttons are the plain actions (worksuite-desktop#290).
+    fireEvent.click(within(bar).getByRole('button', { name: 'Delete' }));
     expect(shown()).toHaveLength(1);
     expect(shown()[0]!.text).toBe('4 messages deleted');
     wait(5_000);
@@ -311,7 +312,7 @@ describe('already gone, and real failures', () => {
     await within(list).findByText('Budget');
     for (const s of ['Invoice', 'Minutes']) fireEvent.click(within(list).getByRole('checkbox', { name: new RegExp(`Select “${s}”`) }));
     timers();
-    fireEvent.click(within(screen.getByRole('toolbar', { name: '2 selected' })).getByRole('button', { name: 'Delete 2' }));
+    fireEvent.click(within(screen.getByRole('toolbar', { name: '2 selected' })).getByRole('button', { name: 'Delete' }));
     wait(5_000);
     done();
     await waitFor(() => expect(shown().filter((t) => t.kind === 'error')).toHaveLength(1));

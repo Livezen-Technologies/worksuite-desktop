@@ -21,6 +21,7 @@ import { Select } from '../../components/Select';
 import { SYNC_WORDS, useSyncAvailable, useSyncLookup } from './sync';
 import type { SyncItemState } from '@shared/types';
 import { Checkbox } from '../../components/Checkbox';
+import { RowLead } from '../../components/RowLead';
 
 type Layout = 'list' | 'grid';
 const LAYOUT_KEY = 'files.layout';
@@ -419,7 +420,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
           {items.length && layout === 'list' ? (
             <div role="table" aria-label="Files" className="text-[13px]">
               <div role="row" className={cx('sticky top-0 z-[1] grid items-center border-y border-line bg-ground px-6 py-[7px] text-[11px] font-bold tracking-[0.4px] text-ink-2', cols)}>
-                <span>
+                <span className="flex w-7 justify-center">
                   <Checkbox aria-label="Select all" checked={items.length > 0 && selected.size === items.length} indeterminate={selected.size > 0 && selected.size < items.length} onChange={(e) => setSelected(e.target.checked ? new Set(items_()) : new Set())} />
                 </span>
                 <span role="columnheader">NAME</span>
@@ -447,8 +448,9 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                     {...(isFolder ? dropOn(item.f) : {})}
                     className={cx('grid cursor-default items-center border-b border-line/70 px-6 py-1.5 select-none', cols, on ? 'bg-selection' : 'hover:bg-ground', isFolder && dragOver === item.f.id && 'outline-2 -outline-offset-2 outline-primary')}
                   >
+                    {/* The lead column every list shares (worksuite-desktop#290); the list shows its boxes all the time. */}
                     <span onClick={(e) => e.stopPropagation()}>
-                      <Checkbox aria-label={`Select ${item.f.name}`} checked={on} onChange={() => toggle(item)} />
+                      <RowLead checked={on} selecting onPick={() => toggle(item)} label={`Select ${item.f.name}`} />
                     </span>
                     <span role="cell" className="flex min-w-0 items-center gap-2.5">
                       {isFolder ? <FolderIcon color={item.f.color} locked={item.f.is_locked} /> : <FileIcon f={item.f} />}

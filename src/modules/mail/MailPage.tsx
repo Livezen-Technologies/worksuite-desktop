@@ -15,6 +15,7 @@ import { Icon } from '../../components/Icon';
 import { SidePanel } from '../../components/SidePanel';
 import { Button, Empty, cx } from '../../components/ui';
 import { refreshWords, useListRefresh } from '../../components/PullToRefresh';
+import { useListSelection, type PickHow } from '../../components/useListSelection';
 import { useVips } from './PeopleCard';
 import { TodoPane, nextSlot } from './TodoPane';
 import type { ModuleProps } from '../registry';
@@ -318,21 +319,10 @@ function MailWorkspace({ active }: ModuleProps) {
   const focusSplit = focusOn ? decorated.reduce((n, m) => (classifyFocus(m, focusCtx.data).focus === 'focused' ? { ...n, focused: n.focused + 1 } : { ...n, other: n.other + 1 }), { focused: 0, other: 0 }) : null;
 
   // Several selected (Ctrl/Shift-click, Ctrl+A): every action applies to each, in its own account (DMO-INB-15).
-  const [selection, setSelection] = useState<ReadonlySet<string>>(new Set());
-  const [anchorKey, setAnchorKey] = useState<string | null>(null);
-  const selectRow = (r: ListRow, how: 'toggle' | 'range') => {
-    setSelection((s) => {
-      const next = new Set(s);
-      if (how === 'range' && anchorKey) {
-        const a = flat.findIndex((x) => x.key === anchorKey);
-        const b = flat.findIndex((x) => x.key === r.key);
-        if (a >= 0 && b >= 0) for (const x of flat.slice(Math.min(a, b), Math.max(a, b) + 1)) next.add(x.key);
-      } else if (next.has(r.key)) next.delete(r.key);
-      else next.add(r.key);
-      return next;
-    });
-    setAnchorKey(r.key);
-  };
+  // The list's shared gestures (#290): a range runs from the last row ticked, else from the open message; Esc clears.
+  const sel = useListSelection(flat.map((r) => r.key));
+  const { selected: selection, setSelected: setSelection } = sel;
+  const selectRow = (r: ListRow, how: PickHow) => sel.pick(r.key, how, currentKey);
   const stateActs = useStateActions();
   // Quick Steps (DMO-QS, WF-DO03): run on the selection with one Undo; asked values asked once.
   const quickSteps = useQuickSteps(active);
@@ -394,7 +384,7 @@ function MailWorkspace({ active }: ModuleProps) {
     const k = keyMap[command]?.[0];
     return k ? keyLabel(k, isMac) : undefined;
   };
-  const selectFolder = () => setSelection(new Set(flat.map((r) => r.key)));
+  const selectFolder = sel.selectAll;
   const rowActions = (r: ListRow): RowAction[] => {
     const t = targetOf(r);
     return hoverIds(t).map((id) =>
@@ -530,7 +520,7 @@ function MailWorkspace({ active }: ModuleProps) {
     const inLayer = !!t && typeof t.closest === 'function' && !!t.closest('[role="dialog"], [role="menu"]');
     if (key === 'Escape') {
       if (inLayer || typing) return;
-      if (selection.size) return e.preventDefault(), setSelection(new Set());
+      if (sel.escape(e)) return e.preventDefault();
       if (focus) return e.preventDefault(), setFocus(false);
       if (current) return e.preventDefault(), closeMessage();
       return;
@@ -808,16 +798,15 @@ function MailWorkspace({ active }: ModuleProps) {
         }}
         selection={selection}
         onSelect={selectRow}
+        selectAll={{ state: sel.state, onToggle: sel.toggleAll }}
         rowActions={rowActions}
         toolbar={
           selection.size ? (
             <SelectionBar
               targets={selectedTargets()}
-              total={flat.length}
               run={(id, ts) => (id === 'move' ? setMoving(ts) : void listActs.run(id, ts))}
               more={(x, y) => setRowMenu({ targets: selectedTargets(), x, y })}
-              onSelectAll={selectFolder}
-              onClear={() => setSelection(new Set())}
+              onClear={sel.clear}
             />
           ) : null
         }

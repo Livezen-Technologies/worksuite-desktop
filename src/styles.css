@@ -521,7 +521,9 @@ html[data-contrast='more'] :focus-visible {
  * The shared checkbox (components/Checkbox.tsx, issue #58). In the components
  * layer, so a utility on the element (a margin, opacity) still wins.
  * The box stays 16px so compact rows keep their height; ::before widens what
- * a click hits by 6px all round without taking any room.
+ * a click hits by 6px all round without taking any room. A <span> with
+ * `data-state` (CheckboxMark, worksuite-desktop#290) draws the same box with
+ * no control behind it, for a row that is itself a button.
  */
 :root {
   /* Borders meet 3:1 against the surface in both themes. */
@@ -599,7 +601,9 @@ html[data-contrast='more'] :focus-visible {
     border-color: var(--ws-cb-border-hover);
   }
   .ws-checkbox:checked,
-  .ws-checkbox:indeterminate {
+  .ws-checkbox:indeterminate,
+  .ws-checkbox[data-state='checked'],
+  .ws-checkbox[data-state='mixed'] {
     border-color: var(--ws-cb-accent);
     background-color: var(--ws-cb-accent);
   }
@@ -608,10 +612,12 @@ html[data-contrast='more'] :focus-visible {
     border-color: var(--ws-cb-accent);
     background-color: color-mix(in srgb, var(--ws-cb-accent) 86%, var(--ws-ink));
   }
-  .ws-checkbox:checked::after {
+  .ws-checkbox:checked::after,
+  .ws-checkbox[data-state='checked']::after {
     transform: scale(1);
   }
-  .ws-checkbox:indeterminate::after {
+  .ws-checkbox:indeterminate::after,
+  .ws-checkbox[data-state='mixed']::after {
     -webkit-mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5h6' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
     mask-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 10 10'%3E%3Cpath d='M2 5h6' stroke='%23000' stroke-width='1.8' stroke-linecap='round'/%3E%3C/svg%3E");
     transform: scale(1);

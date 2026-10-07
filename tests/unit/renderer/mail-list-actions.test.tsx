@@ -286,7 +286,8 @@ describe('several selected', () => {
     fireEvent.click(within(list).getByRole('checkbox', { name: 'Select “Lunch?”' }));
     const bar = screen.getByRole('toolbar', { name: '2 selected' });
     timers();
-    fireEvent.click(within(bar).getByRole('button', { name: 'Archive 2' }));
+    // The bar says how many once; its buttons are the plain actions (worksuite-desktop#290).
+    fireEvent.click(within(bar).getByRole('button', { name: 'Archive' }));
     expect(within(list).queryByText('Lunch?')).toBeNull();
     expect(within(list).queryByText('Transaction alert 1')).toBeNull();
     later();
@@ -298,8 +299,11 @@ describe('several selected', () => {
     const list = await screen.findByRole('listbox', { name: 'Messages' });
     fireEvent.contextMenu(await within(list).findByText('Transaction alert 1'));
     fireEvent.click(within(await screen.findByRole('menu', { name: 'Message actions' })).getByRole('menuitem', { name: /Select all from this sender/ }));
-    const bar = await screen.findByRole('toolbar', { name: '2 selected' });
-    fireEvent.click(within(bar).getByRole('button', { name: 'Select all 4' }));
+    await screen.findByRole('toolbar', { name: '2 selected' });
+    // Select all is the box over the list's lead column (worksuite-desktop#290), mixed while some are picked.
+    const all = screen.getByRole('checkbox', { name: 'Select all' }) as HTMLInputElement;
+    expect(all.indeterminate).toBe(true);
+    fireEvent.click(all);
     expect(await screen.findByRole('toolbar', { name: '4 selected' })).toBeTruthy();
   });
 
