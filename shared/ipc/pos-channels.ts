@@ -9,6 +9,8 @@ export const POS_INVOKE_CHANNELS = [
   'pos:forget',
   'pos:catalogue',
   'pos:catalogueRefresh',
+  'pos:tillSettings',
+  'pos:tillSettingsSet',
   'pos:sell',
   'pos:sales',
   'pos:sale',
@@ -30,6 +32,7 @@ export const POS_INVOKE_CHANNELS = [
   'pos:desk',
   'pos:approve',
   'pos:rename',
+  'pos:displayMedia',
 ] as const;
 
 export const POS_EVENT_CHANNELS = ['pos:changed'] as const;

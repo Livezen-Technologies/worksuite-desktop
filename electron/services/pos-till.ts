@@ -19,14 +19,20 @@ import {
   type PosSellInput,
   type PosServerReceipt,
   type PosStockState,
+  type PosTillSettings,
+  type PosTillSettingsPatch,
   type PosTillStatus,
+  POS_TILL_SETTINGS_DEFAULT,
+  posTillSettingsPatchSchema,
 } from '@shared/pos';
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import type { HttpClient } from './http';
+import { categoriesOf, PosCatalogueStore, type CatalogueHead } from './pos-catalogue';
 import type { DeviceAnswer, PosDesk } from './pos-desk';
 import { apply, batch, flagsOf, loyaltyOf, nextSequence, POS_OFF, readAnswer, saleBody, sequenceOf, type Queued } from './pos-outbox';
+import type { PosThumbs } from './pos-thumbs';
 import type { Vault } from './vault';
 
 const log = logger('pos-till');
@@ -38,14 +44,18 @@ const log = logger('pos-till');
  * THE CATALOGUE
  * ─────────────────────────────────────────────────────────────────────────────
  *
- * The products the till sells, with their barcodes and one-unit prices, are WorkSuite's till catalogue
- * (`catalogue?since_version=`, answered `{version, unchanged: true}` when the copy is current): read through the
- * till's own door in the background (`/api/pos/device/catalogue`, every half hour, with nobody signed in), and with
- * the signed-in person's session when they ask (`/api/pos/catalogue`, `pos.access` — no Inventory permission).
- * Only an older server without it (404, or `capabilities.catalogue` false) has Inventory's product list stand in,
- * for people who may read it. The copy is kept sealed (AES-256-GCM, `pos_catalogue`) where the desktop policy lets
- * this computer keep data offline, in memory otherwise. It is a preview: the screens show WorkSuite's price for the
- * cart whenever it answers.
+ * The products the till sells, with their barcodes and one-unit prices, are WorkSuite's till catalogue, kept here a
+ * product a row (pos-catalogue.ts, worksuite-desktop#296): read whole the first time — a page at a time
+ * (`catalogue/changes`) — then only what changed since the cursor WorkSuite gave with the last page: products edited,
+ * archived or deleted, prices, categories. Through the till's own door in the background (`/api/pos/device/…`, every
+ * `catalogue_minutes`, at once when WorkSuite answers again after being out of reach, on Sync now and when the till is
+ * opened — nobody need be signed in), and with the signed-in person's session when they ask (`/api/pos/…`,
+ * `pos.access` — no Inventory permission). A server without `catalogue/changes` is read whole, as before
+ * (`catalogue?since_version=`, `{version, unchanged: true}`); only one without a till catalogue at all (404, or
+ * `capabilities.catalogue` false) has Inventory's product list stand in, for people who may read it. The copy is kept
+ * sealed (AES-256-GCM) where the desktop policy lets this computer keep data offline, in memory otherwise, and its
+ * products' small pictures beside it (pos-thumbs.ts). It is a preview: the screens show WorkSuite's price for the cart
+ * whenever it answers.
  *
  * ─────────────────────────────────────────────────────────────────────────────
  * THE SALES
@@ -69,10 +79,16 @@ const TICK_MS = 30_000;
 const BEAT_MS = 60_000;
 const MAX_ROUNDS = 20;
 const KEEP_SENT_DAYS = 90;
+/** Inventory's list, read as a stand-in on a server without a till catalogue: at most this many products. */
 const CATALOGUE_LIMIT = 2000;
-/** How often the till's door is asked for the catalogue in the background (an unchanged one costs one short answer). */
-const CATALOGUE_MS = 30 * 60_000;
 const INVENTORY_PAGE = 100;
+/** A page of `catalogue/changes`, and the most pages one sync reads (100,000 products). */
+const CHANGES_PAGE = 500;
+const MAX_PAGES = 200;
+/** A background catalogue sync that failed is tried again this soon, not after the whole interval. */
+const RETRY_CATALOGUE_MS = 2 * 60_000;
+/** The till's own settings (card offline, the catalogue's interval, the pictures' room), in the config table. */
+const SETTINGS_KEY = 'pos-till-settings';
 /** The company's receipt template, asked for with the catalogue (and kept, as the printer's layout, per till). */
 const TEMPLATE_KEY = 'pos-receipt-template';
 
@@ -89,6 +105,8 @@ export interface PosTillDeps {
   caps: () => { offlineCache: boolean; offlineQueue: 'allowed' | 'drafts_only' | 'disabled' };
   changed: () => void;
   now?: () => number;
+  /** The products' pictures kept for offline (pos-thumbs.ts); none: the screens load them live. */
+  thumbs?: Pick<PosThumbs, 'ids' | 'usage' | 'fill' | 'evict' | 'forget' | 'forgetAll'>;
 }
 
 interface Scope {
@@ -162,6 +180,8 @@ export class PosTill {
   private timer: NodeJS.Timeout | null = null;
   private running: Promise<void> | null = null;
   private again = false;
+  /** The next run brings the catalogue up to date whatever its interval says. */
+  private forceCatalogue = false;
   private reachable = true;
   private lastContact: string | null = null;
   private lastSync: string | null = null;
@@ -169,14 +189,25 @@ export class PosTill {
   private problem: string | null = null;
   /** WorkSuite's own sentence the last time it said POS is switched off (503), shown while it stays off. */
   private offMessage: string | null = null;
-  /** The catalogue, when the policy does not let it be kept on disk. */
-  private memory = new Map<string, PosCatalogue>();
-  /** When the door was last asked for the catalogue (0: not yet since start-up). */
+  /** The catalogue copy, a product a row (pos-catalogue.ts). */
+  readonly store: PosCatalogueStore;
+  /** When the door was last asked for the catalogue in the background (0: not yet since start-up). */
   private lastCatalogue = 0;
+  /** A catalogue sync under way (single-flight), and how far it has got. */
+  private pulling: Promise<PosCatalogue | null> | null = null;
+  private progress: { done: number; total: number | null; full: boolean } | null = null;
+  /** Why the last catalogue sync did not finish. */
+  private catalogueError: string | null = null;
+  /** Servers (and doors) found without `catalogue/changes`: read whole, as before, until the app restarts. */
+  private wholeOnly = new Set<string>();
   /** The receipt template, when the policy does not let it be kept (or no config is given). */
   private templates = new Map<string, PosReceiptTemplate | null>();
+  /** The till's own settings, when no config is given (tests). */
+  private ownSettings: PosTillSettings = { ...POS_TILL_SETTINGS_DEFAULT };
 
-  constructor(private readonly d: PosTillDeps) {}
+  constructor(private readonly d: PosTillDeps) {
+    this.store = new PosCatalogueStore({ db: d.db, vault: d.vault, keep: () => this.caps().keep, thumbs: (s) => d.thumbs?.ids(s) ?? new Set() });
+  }
 
   private now(): number {
     return this.d.now?.() ?? Date.now();
@@ -201,6 +232,29 @@ export class PosTill {
     }
   }
 
+  /* ── The till's own settings (worksuite-desktop#296) ─────────────── */
+
+  settings(): PosTillSettings {
+    const kept = this.d.config?.getConfig<Partial<PosTillSettings>>(SETTINGS_KEY) ?? this.ownSettings;
+    const parsed = posTillSettingsPatchSchema.safeParse(kept ?? {});
+    return { ...POS_TILL_SETTINGS_DEFAULT, ...(parsed.success ? parsed.data : {}) };
+  }
+
+  setSettings(patch: PosTillSettingsPatch): PosTillSettings {
+    const next = { ...this.settings(), ...posTillSettingsPatchSchema.parse(patch) };
+    if (this.d.config) this.d.config.setConfig(SETTINGS_KEY, next);
+    else this.ownSettings = next;
+    // Less room for the pictures: the least recently shown go now.
+    const s = this.scope();
+    if (s) void this.d.thumbs?.evict(next.thumbs_mb).then(() => this.store.touch(s));
+    this.d.changed();
+    return next;
+  }
+
+  private catalogueMs(): number {
+    return Math.max(5, this.settings().catalogue_minutes) * 60_000;
+  }
+
   /* ── Status ───────────────────────────────────────────────────────── */
 
   pending(): number {
@@ -216,11 +270,13 @@ export class PosTill {
       ? this.d.db.all<{ state: string; n: number }>('SELECT state, COUNT(*) AS n FROM pos_sales WHERE origin = ? AND terminal_id = ? GROUP BY state', s.origin, s.terminal)
       : [];
     const count = (st: string) => counts.find((c) => c.state === st)?.n ?? 0;
-    const cat = this.catalogue();
+    // The copy's head and a count of its rows: no product is decrypted for a status (worksuite-desktop#296).
+    const head = s ? this.store.head(s) : null;
     const caps = this.caps();
     let problem = this.problem;
     if (p?.state === 'revoked') problem = 'WorkSuite no longer accepts this till. Pair this computer again; its sales wait here until then.';
     else if (p?.state === 'pos_off') problem = `${this.offMessage ?? POS_OFF} Sales wait here until it is on again.`;
+    const fetched = head ? Date.parse(head.fetched_at) : NaN;
     return {
       till: p ? { terminal: p.terminal, paired_at: p.paired_at, state: p.state, prefix: p.prefix } : null,
       waiting: count('waiting'),
@@ -231,7 +287,20 @@ export class PosTill {
       problem,
       can_queue: caps.queue,
       can_keep: caps.keep,
-      catalogue: cat ? { version: cat.version, fetched_at: cat.fetched_at, products: cat.products.length, source: cat.source, truncated: cat.truncated } : null,
+      catalogue:
+        head && s
+          ? {
+              version: head.version,
+              fetched_at: head.fetched_at,
+              products: this.store.count(s),
+              source: head.source,
+              truncated: head.truncated,
+              stale: !Number.isFinite(fetched) || this.now() - fetched > 2 * this.catalogueMs(),
+              error: this.catalogueError,
+              ...(this.d.thumbs ? { thumbs: this.d.thumbs.usage(s) } : {}),
+            }
+          : null,
+      syncing: this.progress,
     };
   }
 
@@ -239,29 +308,7 @@ export class PosTill {
 
   catalogue(): PosCatalogue | null {
     const s = this.scope();
-    if (!s) return null;
-    const mem = this.memory.get(`${s.origin}|${s.terminal}`);
-    if (mem) return mem;
-    const row = this.d.db.get<{ payload: string }>('SELECT payload FROM pos_catalogue WHERE origin = ? AND terminal_id = ?', s.origin, s.terminal);
-    return row ? (this.d.vault().decrypt<PosCatalogue>(row.payload) ?? null) : null;
-  }
-
-  private keepCatalogue(s: Scope, c: PosCatalogue): void {
-    const key = `${s.origin}|${s.terminal}`;
-    if (this.caps().keep) {
-      this.memory.delete(key);
-      this.d.db.run(
-        'INSERT INTO pos_catalogue (origin, terminal_id, version, payload, fetched_at) VALUES (?, ?, ?, ?, ?) ON CONFLICT(origin, terminal_id) DO UPDATE SET version = excluded.version, payload = excluded.payload, fetched_at = excluded.fetched_at',
-        s.origin,
-        s.terminal,
-        c.version,
-        this.d.vault().encrypt(c),
-        c.fetched_at,
-      );
-    } else {
-      this.d.db.run('DELETE FROM pos_catalogue WHERE origin = ? AND terminal_id = ?', s.origin, s.terminal);
-      this.memory.set(key, c);
-    }
+    return s ? this.store.read(s) : null;
   }
 
   /**
@@ -271,20 +318,18 @@ export class PosTill {
   async refreshCatalogue(capable?: boolean): Promise<PosCatalogue> {
     const s = this.scope();
     if (!s) throw new DesktopError('NOT_FOUND', 'This computer is not a paired till. Pair it in POS.');
-    const have = this.catalogue();
     void this.refreshTemplate();
-    const c = await this.fetchCatalogue(have, capable);
-    this.keepCatalogue(s, c);
-    this.d.changed();
+    const c = await this.pull(s, 'staff', capable);
+    if (!c) throw new DesktopError('SERVER_ERROR', 'WorkSuite answered, but not with a till catalogue this app can read.');
     return c;
   }
 
   /** The tenders a heartbeat (or the door's `tenders`) named, onto the catalogue copy: they go with it, offline too. */
   private keepTenders(s: Scope, v: unknown): void {
     const tenders = tenderOptionsOf(v);
-    const have = this.catalogue();
-    if (!tenders || !have || JSON.stringify(have.tenders ?? null) === JSON.stringify(tenders)) return;
-    this.keepCatalogue(s, { ...have, tenders });
+    const head = this.store.head(s);
+    if (!tenders || !head || JSON.stringify(head.tenders ?? null) === JSON.stringify(tenders)) return;
+    this.store.setHead(s, { ...head, tenders });
     this.d.changed();
   }
 
@@ -333,40 +378,181 @@ export class PosTill {
     return this.template();
   }
 
-  /** The door's catalogue, in the background: nobody need be signed in. An older server without it is left alone. */
-  private async catalogueInBackground(s: Scope): Promise<void> {
-    if (this.now() - this.lastCatalogue < CATALOGUE_MS) return;
+  /**
+   * The door's catalogue, in the background: nobody need be signed in. Every `catalogue_minutes` (30 by default), at
+   * once when WorkSuite answers again after being out of reach, when the till is opened and on Sync now (`force`).
+   * An older server without it is left alone; one that fails is asked again in two minutes, not half an hour.
+   */
+  private async catalogueInBackground(s: Scope, force = false): Promise<void> {
+    if (!force && this.now() - this.lastCatalogue < this.catalogueMs()) return;
     this.lastCatalogue = this.now();
     void this.refreshTemplate();
-    const have = this.catalogue();
-    let a: DeviceAnswer;
     try {
-      a = await this.d.desk.door('GET', 'catalogue', { query: { since_version: have?.source === 'pos' ? have.version : undefined } });
+      await this.pull(s, 'door');
     } catch (e) {
+      this.lastCatalogue = this.now() - this.catalogueMs() + RETRY_CATALOGUE_MS;
       log.info('pos catalogue not refreshed', { error: String((e as Error)?.message ?? e) });
-      return;
     }
-    if (a.status !== 200 || !a.body) return;
-    const c = catalogueOf(a.body, have, this.stamp());
-    if (!c) return;
-    this.keepCatalogue(s, withTenders(c, a.body));
-    this.d.changed();
   }
 
-  private async fetchCatalogue(have: PosCatalogue | null, capable?: boolean): Promise<PosCatalogue> {
-    const fetched_at = this.stamp();
+  /**
+   * Bring the copy up to date (single-flight): what changed since its cursor, a page at a time — or the whole of it,
+   * paged, the first time, after a `reset`, or when the products it holds no longer add up to WorkSuite's count. A
+   * server without `catalogue/changes` is read whole, as before. Answers the catalogue, or null when the door has none.
+   */
+  private pull(s: Scope, via: 'door' | 'staff', capable?: boolean): Promise<PosCatalogue | null> {
+    if (this.pulling) return this.pulling;
+    this.pulling = this.pullNow(s, via, capable)
+      .then((c) => {
+        this.catalogueError = null;
+        return c;
+      })
+      .catch((e: unknown) => {
+        this.catalogueError = String((e as Error)?.message ?? e).slice(0, 300);
+        throw e;
+      })
+      .finally(() => {
+        this.pulling = null;
+        this.progress = null;
+        this.d.changed();
+      });
+    return this.pulling;
+  }
+
+  private async pullNow(s: Scope, via: 'door' | 'staff', capable?: boolean): Promise<PosCatalogue | null> {
+    const whole = `${s.origin}|${via}`;
+    if (capable !== false && !this.wholeOnly.has(whole)) {
+      const done = await this.pullChanges(s, via);
+      if (done !== null) {
+        void this.fillThumbs(s);
+        return done;
+      }
+      this.wholeOnly.add(whole);
+    }
+    const c = via === 'door' ? await this.wholeFromDoor(s) : await this.wholeFromStaff(s, capable);
+    if (c) void this.fillThumbs(s);
+    return c;
+  }
+
+  /** One page of `catalogue/changes`, or null where the server has none (404, or an answer that is not one). */
+  private async changesPage(via: 'door' | 'staff', since: string | undefined): Promise<Record<string, unknown> | null> {
+    const query = { since, limit: CHANGES_PAGE };
+    let body: Record<string, unknown> | null;
+    if (via === 'door') {
+      const a = await this.d.desk.door('GET', 'catalogue/changes', { query });
+      if (a.status === 404) return null;
+      if (a.status !== 200) throw doorError(a, 'WorkSuite did not send the catalogue.');
+      if (a.status === 200) this.reached();
+      body = a.body;
+    } else {
+      try {
+        body = (await this.d.http.request<Record<string, unknown>>('GET', '/api/pos/catalogue/changes', { query: { org: this.d.desk.pairing()?.terminal.org_id, ...query } })) ?? null;
+      } catch (e) {
+        if (isDesktopError(e) && e.code === 'NOT_FOUND') return null;
+        throw e;
+      }
+    }
+    return body && Array.isArray(body.products) && typeof body.next === 'string' && typeof body.has_more === 'boolean' ? body : null;
+  }
+
+  private async pullChanges(s: Scope, via: 'door' | 'staff', again = false): Promise<PosCatalogue | null> {
+    const head = this.store.head(s);
+    const at = this.stamp();
+    let cursor = head?.source === 'pos' && head.cursor && !again ? head.cursor : undefined;
+    let full = !cursor;
+    let gen = full ? this.store.begin(s) : (head?.gen ?? 1);
+    let last: Record<string, unknown> | null = null;
+    this.progress = { done: 0, total: head?.total ?? null, full };
+    for (let page = 0; ; page++) {
+      if (page >= MAX_PAGES) throw new DesktopError('SERVER_ERROR', 'WorkSuite’s catalogue did not end. Try again later.');
+      const body = await this.changesPage(via, cursor);
+      if (!body) {
+        if (page === 0) return null;
+        throw new DesktopError('SERVER_ERROR', 'WorkSuite stopped sending the catalogue half way. The till keeps its copy; it tries again.');
+      }
+      // WorkSuite cannot continue from the cursor (another price list, a cursor it did not give): the copy, whole.
+      if (page === 0 && body.mode === 'full' && !full) {
+        full = true;
+        gen = this.store.begin(s);
+      }
+      const products = (body.products as Array<Record<string, unknown>>).map((p) => productFromPos(p, new Map(), true)).filter((p): p is PosProduct => !!p);
+      const deleted = Array.isArray(body.deleted) ? (body.deleted as unknown[]).map((x) => num(x)).filter((x) => Number.isInteger(x) && x > 0) : [];
+      this.store.upsert(s, gen, products, full ? [] : deleted, at);
+      cursor = body.next as string;
+      this.progress = { done: (this.progress?.done ?? 0) + products.length, total: typeof body.total === 'number' ? body.total : (this.progress?.total ?? null), full };
+      if (body.has_more !== true) {
+        last = body;
+        break;
+      }
+      this.d.changed();
+    }
+    if (!last) throw new DesktopError('SERVER_ERROR', 'WorkSuite’s catalogue did not end. Try again later.');
+    const prev = full ? null : head;
+    const tree = 'category_tree' in last ? categoryTreeOf(last.category_tree) : null;
+    const favourites = Array.isArray(last.favourites) ? (last.favourites as unknown[]).map((x) => num(x)).filter((x) => Number.isInteger(x) && x > 0).slice(0, 200) : (prev?.favourites ?? head?.favourites);
+    const next: CatalogueHead = {
+      version: str(last.version) ?? head?.version ?? 'changes',
+      fetched_at: at,
+      currency: str(last.currency) ?? head?.currency ?? null,
+      source: 'pos',
+      truncated: false,
+      ...(tree ? (tree.length ? { category_tree: tree } : {}) : head?.category_tree ? { category_tree: head.category_tree } : {}),
+      ...(favourites ? { favourites } : {}),
+      ...((tenderOptionsOf(last.tenders) ?? head?.tenders) ? { tenders: tenderOptionsOf(last.tenders) ?? head?.tenders } : {}),
+      cursor,
+      total: typeof last.total === 'number' ? last.total : null,
+    };
+    this.store.finish(s, next, full ? gen : null);
+    // A product removed outright leaves no change to see: a copy that no longer adds up is read whole, once.
+    if (typeof last.total === 'number' && this.store.count(s) !== last.total && !full && !again) {
+      log.info('pos catalogue count differs, reading it whole', { have: this.store.count(s), total: last.total });
+      return this.pullChanges(s, via, true);
+    }
+    this.d.changed();
+    return this.store.read(s);
+  }
+
+  /** An older server's door: the catalogue in one answer, or "unchanged". */
+  private async wholeFromDoor(s: Scope): Promise<PosCatalogue | null> {
+    const head = this.store.head(s);
+    const a = await this.d.desk.door('GET', 'catalogue', { query: { since_version: head?.source === 'pos' ? head.version : undefined } });
+    if (a.status !== 200 || !a.body) return null;
+    this.reached();
+    return this.keepWhole(s, a.body);
+  }
+
+  private keepWhole(s: Scope, data: Record<string, unknown>): PosCatalogue | null {
+    const at = this.stamp();
+    const head = this.store.head(s);
+    if (data.unchanged === true) {
+      if (!head || head.source !== 'pos') return null;
+      const tenders = tenderOptionsOf(data.tenders);
+      this.store.setHead(s, { ...head, fetched_at: at, ...(tenders ? { tenders } : {}) });
+      this.d.changed();
+      return this.store.read(s);
+    }
+    const c = catalogueOf(data, null, at);
+    if (!c) return null;
+    this.store.replace(s, withTenders(c, data), { cursor: null, total: null });
+    this.d.changed();
+    return this.store.read(s);
+  }
+
+  private async wholeFromStaff(s: Scope, capable?: boolean): Promise<PosCatalogue> {
+    const head = this.store.head(s);
     const org = this.d.desk.pairing()?.terminal.org_id;
     if (capable !== false) {
       try {
-        const data = await this.d.http.request<Record<string, unknown>>('GET', '/api/pos/catalogue', { query: { org, since_version: have?.source === 'pos' ? have.version : undefined } });
-        const c = catalogueOf(data ?? {}, have, fetched_at);
-        if (c) return withTenders(c, data ?? {});
+        const data = await this.d.http.request<Record<string, unknown>>('GET', '/api/pos/catalogue', { query: { org, since_version: head?.source === 'pos' ? head.version : undefined } });
+        const c = this.keepWhole(s, data ?? {});
+        if (c) return c;
         throw new DesktopError('SERVER_ERROR', 'WorkSuite answered, but not with a till catalogue this app can read.');
       } catch (e) {
         // No till catalogue on this (older) server: Inventory's list stands in, for people who may read it.
         if (!isDesktopError(e) || e.code !== 'NOT_FOUND' || capable === true) throw e;
       }
     }
+    const fetched_at = this.stamp();
     const products: PosProduct[] = [];
     let truncated = false;
     for (let page = 1; page <= CATALOGUE_LIMIT / INVENTORY_PAGE; page++) {
@@ -388,15 +574,26 @@ export class PosTill {
       if (rows.length < INVENTORY_PAGE || page * INVENTORY_PAGE >= total) break;
       if (page === CATALOGUE_LIMIT / INVENTORY_PAGE) truncated = true;
     }
-    return {
-      version: hashOf(products),
-      fetched_at,
-      currency: null,
-      source: 'inventory',
-      categories: [...new Set(products.map((p) => p.category).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b)),
-      products,
-      truncated,
-    };
+    this.store.replace(s, { version: hashOf(products), fetched_at, currency: null, source: 'inventory', categories: categoriesOf(products), products, truncated }, { cursor: null, total: null });
+    this.d.changed();
+    return this.store.read(s)!;
+  }
+
+  /* ── Pictures for offline (worksuite-desktop#296) ─────────────────── */
+
+  /** Fetch the pictures the copy lacks, in the background, where the policy keeps data and the room allows. */
+  private async fillThumbs(s: Scope): Promise<void> {
+    const thumbs = this.d.thumbs;
+    if (!thumbs || !this.caps().keep || !s.usable) return;
+    try {
+      const n = await thumbs.fill(s, this.store.rows(s), this.settings().thumbs_mb);
+      if (n > 0) {
+        this.store.touch(s);
+        this.d.changed();
+      }
+    } catch (e) {
+      log.info('pos thumbnails not fetched', { error: String((e as Error)?.message ?? e) });
+    }
   }
 
   /* ── Sales ────────────────────────────────────────────────────────── */
@@ -685,14 +882,20 @@ export class PosTill {
     this.timer = null;
   }
 
-  /** Call in and send what waits (single-flight: a call while one runs waits for it and runs once more). */
-  async sync(beat = true): Promise<PosTillStatus> {
+  /**
+   * Call in and send what waits (single-flight: a call while one runs waits for it and runs once more). `catalogue`:
+   * bring the catalogue copy up to date as well, now — Sync now, and the till being opened (worksuite-desktop#296).
+   */
+  async sync(beat = true, o: { catalogue?: boolean } = {}): Promise<PosTillStatus> {
+    if (o.catalogue) this.forceCatalogue = true;
     if (this.running) {
       this.again = true;
       await this.running;
       return this.status();
     }
-    this.running = this.run(beat)
+    const force = this.forceCatalogue;
+    this.forceCatalogue = false;
+    this.running = this.run(beat, force)
       .catch((e) => log.warn('pos sync failed', { error: String((e as Error)?.message ?? e) }))
       .finally(() => {
         this.running = null;
@@ -710,13 +913,15 @@ export class PosTill {
     this.problem = isDesktopError(e) && e.code !== 'NETWORK_UNREACHABLE' ? e.message : null;
   }
 
-  private async run(beat: boolean): Promise<void> {
+  private async run(beat: boolean, force = false): Promise<void> {
     const s = this.scope();
     if (!s || !s.usable) return;
     const before = this.reachable;
     if (beat && this.now() - this.lastBeat >= BEAT_MS) {
       try {
-        const a = await this.d.desk.heartbeat(this.pending());
+        // The copy this till holds, for the Tills screen (worksuite-desktop#296; an older server ignores it).
+        const head = this.store.head(s);
+        const a = await this.d.desk.heartbeat(this.pending(), head?.source === 'pos' ? { catalogue_version: head.version, catalogue_synced_at: head.fetched_at } : undefined);
         this.lastBeat = this.now();
         this.reachable = true;
         this.lastContact = this.stamp();
@@ -734,6 +939,8 @@ export class PosTill {
       }
     }
     let progressed = false;
+    // Whether every sale waiting was answered: only then is the sync stamped (worksuite-desktop#296).
+    let failed = false;
     for (let round = 0; round < MAX_ROUNDS; round++) {
       const send = batch(this.rows(s, "AND state = 'waiting'"));
       if (send.length === 0) break;
@@ -742,6 +949,7 @@ export class PosTill {
         answer = await this.d.desk.device('sales', { sales: send.map((q) => saleBody(q.sale)) });
       } catch (e) {
         this.unreachable(e);
+        failed = true;
         break;
       }
       this.reachable = true;
@@ -751,6 +959,7 @@ export class PosTill {
         this.problem = v.kind === 'reauth' || v.kind === 'off' ? null : v.message;
         if (v.kind === 'off') this.offMessage = v.message.slice(0, 300);
         if (v.kind === 'bad' || v.kind === 'retry') for (const q of send) this.save(s, { ...q, sale: { ...q.sale, attempts: q.sale.attempts + 1 } });
+        failed = true;
         break;
       }
       this.problem = null;
@@ -761,10 +970,12 @@ export class PosTill {
       progressed = true;
       if (done.created + done.duplicates + done.refused.length === 0) break;
     }
-    if (beat && this.reachable) await this.catalogueInBackground(s);
+    // The catalogue on its interval — at once when WorkSuite answers again after being out of reach, or when asked.
+    const back = !before && this.reachable;
+    if ((beat || force) && this.reachable) await this.catalogueInBackground(s, force || back);
     const cutoff = new Date(this.now() - KEEP_SENT_DAYS * 86_400_000).toISOString();
     this.d.db.run("DELETE FROM pos_sales WHERE origin = ? AND terminal_id = ? AND state = 'sent' AND created_at < ?", s.origin, s.terminal, cutoff);
-    this.lastSync = this.stamp();
+    if (!failed && this.reachable) this.lastSync = this.stamp();
     if (progressed || before !== this.reachable) this.d.changed();
   }
 
@@ -773,8 +984,8 @@ export class PosTill {
   /** What this till kept on this server (the pairing is forgotten, or another till is paired). */
   forgetTill(origin: string, terminalId: number): void {
     this.d.db.run('DELETE FROM pos_sales WHERE origin = ? AND terminal_id = ?', origin, terminalId);
-    this.d.db.run('DELETE FROM pos_catalogue WHERE origin = ? AND terminal_id = ?', origin, terminalId);
-    this.memory.delete(`${origin}|${terminalId}`);
+    this.store.forget(origin, terminalId);
+    this.d.thumbs?.forget(origin, terminalId);
     const key = `${origin}|${terminalId}`;
     this.templates.delete(key);
     const kept = this.d.config?.getConfig<Record<string, unknown>>(TEMPLATE_KEY);
@@ -788,9 +999,9 @@ export class PosTill {
   /** Every till's copy, sales and counters (a wipe). */
   forgetAll(): void {
     this.d.db.run('DELETE FROM pos_sales');
-    this.d.db.run('DELETE FROM pos_catalogue');
+    this.store.forgetAll();
+    this.d.thumbs?.forgetAll();
     this.d.db.run('DELETE FROM pos_counters');
-    this.memory.clear();
     this.templates.clear();
     this.d.config?.deleteConfig(TEMPLATE_KEY);
   }
@@ -872,6 +1083,8 @@ export function deskCall(op: PosDeskOp, cashier: () => number): { method: 'GET' 
       return { method: 'GET', path: 'customers', query: { q: op.q } };
     case 'customer':
       return { method: 'GET', path: `customers/${op.id}` };
+    case 'byPhone':
+      return { method: 'GET', path: 'customers/by-phone', query: { phone: op.phone } };
     case 'customerCreate': {
       const { op: _op, ...rest } = op;
       return { method: 'POST', path: 'customers', body: { cashier_id: cashier(), ...rest } };
@@ -953,6 +1166,19 @@ export function receiptOf(v: unknown): PosServerReceipt | null {
     ...(Array.isArray(r.promotions) ? { promotions: list(r.promotions).map((p) => ({ label: str(p.label) ?? '', amount: num(p.amount) })).filter((p) => p.label && p.amount) } : {}),
     ...('loyalty' in r ? { loyalty: receiptLoyalty(r.loyalty) } : {}),
     ...('template' in r ? { template: receiptTemplateOf(r.template) } : {}),
+    // #293, additive: the cashier's discount and the coupon, where the sale kept them.
+    ...('adjustments' in r ? { adjustments: receiptAdjustments(r.adjustments) } : {}),
+  };
+}
+
+function receiptAdjustments(v: unknown): PosServerReceipt['adjustments'] {
+  if (!v || typeof v !== 'object') return null;
+  const a = v as Record<string, unknown>;
+  const d = a.discount && typeof a.discount === 'object' ? (a.discount as Record<string, unknown>) : null;
+  const c = a.coupon && typeof a.coupon === 'object' ? (a.coupon as Record<string, unknown>) : null;
+  return {
+    discount: d && num(d.amount) > 0 ? { type: d.type === 'amount' ? 'amount' : 'pct', value: num(d.value), amount: num(d.amount), reason: str(d.reason) } : null,
+    coupon: c && str(c.code) && num(c.amount) > 0 ? { code: str(c.code)!, amount: num(c.amount) } : null,
   };
 }
 

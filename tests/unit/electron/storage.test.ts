@@ -31,7 +31,7 @@ describe('vault (NFR-SEC-03)', () => {
 describe('database', () => {
   it('migrates and keeps config', () => {
     const db = new Database(':memory:');
-    expect(db.version).toBe(6);
+    expect(db.version).toBe(8);
     db.setConfig('server', { origin: 'https://x' });
     expect(db.getConfig<{ origin: string }>('server')?.origin).toBe('https://x');
     expect(db.integrityCheck()).toBe('ok');

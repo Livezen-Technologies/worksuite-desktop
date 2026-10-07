@@ -46,8 +46,46 @@ export interface PosTillStatus {
   /** What the company's desktop policy lets this computer do. */
   can_queue: boolean;
   can_keep: boolean;
-  catalogue: { version: string; fetched_at: string; products: number; source: PosCatalogueSource; truncated: boolean } | null;
+  catalogue: {
+    version: string;
+    /** When the copy was last brought up to date (a sync that finished, unchanged or not). */
+    fetched_at: string;
+    products: number;
+    source: PosCatalogueSource;
+    truncated: boolean;
+    /* worksuite-desktop#296, each absent on an older app's status. */
+    /** Older than two refresh intervals (`PosTillSettings.catalogue_minutes`), or never synced: "Online · synced" waits for it. */
+    stale?: boolean;
+    /** Why the last catalogue sync did not finish, when it did not. */
+    error?: string | null;
+    /** Pictures kept for offline, and the bytes they take. */
+    thumbs?: { count: number; bytes: number };
+  } | null;
+  /** A catalogue sync under way (worksuite-desktop#296): the products read so far, of how many when WorkSuite said. */
+  syncing?: { done: number; total: number | null; full: boolean } | null;
 }
+
+/**
+ * The till's own settings on this computer (worksuite-desktop#296), kept with its other settings (not secrets):
+ * whether a card may be taken while WorkSuite is out of reach — recorded only, nothing verifies it, so off unless the
+ * shop says so; how often the catalogue is brought up to date; how much room its offline pictures may take.
+ */
+export interface PosTillSettings {
+  card_offline: boolean;
+  catalogue_minutes: number;
+  thumbs_mb: number;
+}
+
+export const POS_TILL_SETTINGS_DEFAULT: PosTillSettings = { card_offline: false, catalogue_minutes: 30, thumbs_mb: 200 };
+
+export const posTillSettingsPatchSchema = z
+  .strictObject({
+    card_offline: z.boolean(),
+    catalogue_minutes: z.number().int().min(5).max(24 * 60),
+    thumbs_mb: z.number().int().min(0).max(4096),
+  })
+  .partial();
+export type PosTillSettingsPatch = z.infer<typeof posTillSettingsPatchSchema>;
 
 /* ── The catalogue ────────────────────────────────────────────────────────── */
 
@@ -77,6 +115,8 @@ export interface PosProduct {
   /** The first promotion that targets the product ("3 for 1,200"). */
   promo_label?: string | null;
   favourite?: boolean;
+  /** worksuite-desktop#296: a small picture of it is kept on this computer (`/__local/pos-thumb/<id>`), for offline. */
+  thumb?: boolean;
 }
 
 export type PosStockState = 'in_stock' | 'low' | 'out' | 'untracked';
@@ -154,6 +194,10 @@ export function tenderOptionsOf(v: unknown): PosTenderOption[] | null {
   return out.length ? out : null;
 }
 
+/** How the cashier's discount is stated (#293): a percentage, or a fixed amount of money. */
+export const POS_DISCOUNT_TYPES = ['pct', 'amount'] as const;
+export type PosDiscountType = (typeof POS_DISCOUNT_TYPES)[number];
+
 const money = z.number().finite().min(-1_000_000_000).max(1_000_000_000);
 const pct = z.number().finite().min(0).max(100);
 /** A manager's approval token (`Approvals::mint`: `apv_` and hex). */
@@ -222,8 +266,53 @@ export const posSellSchema = z.strictObject({
   promotions: z.array(z.strictObject({ label: z.string().max(80), amount: money })).max(50).optional(),
   /** Points spent, and what they took off. */
   points: z.strictObject({ redeemed: z.number().int().min(0), discount: money }).optional(),
+  /* #293, all optional (`capabilities.discount_amount`): the cashier's discount as given — a fixed amount (`discount_pct`
+     then says the share it came to), and a reason; and the coupon with what it took off, for the receipt. */
+  discount_type: z.enum(POS_DISCOUNT_TYPES).optional(),
+  discount_value: z.number().finite().min(0).max(1_000_000_000).optional(),
+  discount_reason: z.string().trim().max(200).optional(),
+  coupon: z.strictObject({ code: z.string().trim().regex(/^[A-Za-z0-9_-]{3,40}$/), amount: money }).optional(),
 });
 export type PosSellInput = z.infer<typeof posSellSchema>;
+
+/**
+ * What came off a sale, line by line, as the receipt prints it (#293): the coupon (`Coupon CODE`), the promotions, the
+ * points, and the cashier's discount — its percentage, or "Discount" for an amount — with its reason under it. The
+ * cashier's part is what is left of the order's discount after the others, as WorkSuite takes it.
+ */
+export interface PosReduction {
+  label: string;
+  amount: number;
+  note: string | null;
+}
+
+export function saleReductions(s: Pick<PosSale, 'totals' | 'promotions' | 'points' | 'discount_pct' | 'discount_type' | 'discount_reason' | 'coupon'>): PosReduction[] {
+  const out: PosReduction[] = [];
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  if (s.coupon && s.coupon.amount > 0) out.push({ label: `Coupon ${s.coupon.code}`, amount: s.coupon.amount, note: null });
+  for (const p of s.promotions ?? []) out.push({ label: p.label, amount: p.amount, note: null });
+  if (s.points?.discount) out.push({ label: `Points (${s.points.redeemed})`, amount: s.points.discount, note: null });
+  const mine = r2(s.totals.discount - out.reduce((a, x) => a + x.amount, 0));
+  if (mine > 0.004) {
+    const pct = Math.round((s.discount_pct || 0) * 100) / 100;
+    out.push({ label: s.discount_type === 'amount' || !pct ? 'Discount' : `Discount ${pct}%`, amount: mine, note: s.discount_reason?.trim() || null });
+  }
+  return out;
+}
+
+/** WorkSuite's receipt's discount lines (`Receipt::reductions`): the parts where the sale kept them, else the one "Discount" and its promotions. */
+export function serverReductions(r: Pick<PosServerReceipt, 'totals' | 'promotions' | 'adjustments'>): PosReduction[] {
+  const a = r.adjustments;
+  const promos = (r.promotions ?? []).map((p) => ({ label: p.label, amount: p.amount, note: null }));
+  if (!a || (!a.coupon && !a.discount)) return [...(r.totals.discount > 0 ? [{ label: 'Discount', amount: r.totals.discount, note: null }] : []), ...promos.map((p) => ({ ...p, label: `  ${p.label}` }))];
+  const out: PosReduction[] = [];
+  if (a.coupon) out.push({ label: `Coupon ${a.coupon.code}`, amount: a.coupon.amount, note: null });
+  if (a.discount) out.push({ label: a.discount.type === 'amount' ? 'Discount' : `Discount ${Math.round(a.discount.value * 100) / 100}%`, amount: a.discount.amount, note: a.discount.reason });
+  out.push(...promos);
+  const rest = Math.round((r.totals.discount - out.reduce((x, y) => x + y.amount, 0)) * 100) / 100;
+  if (rest > 0.004) out.push({ label: 'Other discounts', amount: rest, note: null });
+  return out;
+}
 
 /**
  * A sale rung up at this till, as it keeps it (sealed, `pos_sales`): what was sold, who sold it and where it stands.
@@ -309,11 +398,13 @@ export interface PosApprovalNeed {
 }
 
 /**
- * Why WorkSuite flagged a sale for review (`pos_sale_books.flags`): it priced it differently (`price_differs`), the till
- * sent no tenders so it is recorded unpaid (`payment_missing`), or it was sold while a register that has since closed
- * was open (`late`). A flag is never a refusal: the sale stands.
+ * Why WorkSuite flagged a sale for review (`pos_sale_books.flags`): it priced it differently (`price_differs` — for a
+ * sale made offline, the till's price was kept and differs from WorkSuite's now), the till sent no tenders so it is
+ * recorded unpaid (`payment_missing`), it was sold while a register that has since closed was open (`late`), a product
+ * it sold offline is no longer sold (`product_archived`), or it took stock below zero (`negative_stock`). A flag is
+ * never a refusal: the sale stands.
  */
-export const POS_SALE_FLAGS = ['price_differs', 'payment_missing', 'late'] as const;
+export const POS_SALE_FLAGS = ['price_differs', 'payment_missing', 'late', 'product_archived', 'negative_stock'] as const;
 export type PosSaleFlag = (typeof POS_SALE_FLAGS)[number];
 
 /** The flags WorkSuite put on a sale; an older server said only `review`, which meant the price differed. */
@@ -380,6 +471,11 @@ export interface PosServerReceipt {
   loyalty?: { tier: string | null; earned: number; redeemed: number; balance: number | null } | null;
   /** The company's published receipt template (`capabilities.receipt_templates`): absent, the receipt is today's. */
   template?: PosReceiptTemplate | null;
+  /** #293: what the discount was made of, where the sale kept it — the cashier's discount and the coupon. */
+  adjustments?: {
+    discount: { type: PosDiscountType; value: number; amount: number; reason: string | null } | null;
+    coupon: { code: string; amount: number } | null;
+  } | null;
 }
 
 /* ── The receipt template (Phase 2 S3) ────────────────────────────────── */
@@ -479,6 +575,11 @@ export interface PosPrintSettings {
   /** Lines above and below every receipt (the shop's name and address, a returns policy). */
   header: string;
   footer: string;
+  /**
+   * Whether the customer display's screen takes touch (worksuite-desktop#294): `auto` asks the system about the monitor
+   * it is on; `yes`/`no` say so where the system cannot tell. Without touch the display offers no phone entry.
+   */
+  display_touch?: 'auto' | 'yes' | 'no';
 }
 
 export interface PosPrintOutcome {
@@ -500,6 +601,7 @@ export const posPrintPatchSchema = z
     drawer_pin: z.union([z.literal(2), z.literal(5)]),
     header: text(400),
     footer: text(400),
+    display_touch: z.enum(['auto', 'yes', 'no']),
   })
   .partial();
 export type PosPrintPatch = z.infer<typeof posPrintPatchSchema>;
@@ -530,10 +632,13 @@ export const POS_HOLD_TTL_MS = 24 * 60 * 60 * 1000;
 const cartSchema = z.strictObject({
   lines: z.array(z.strictObject({ product_id: z.number().int().positive(), quantity: z.number().finite().positive().max(100_000) })).max(300),
   customer: posCustomerSchema.nullable(),
-  discount: z.string().max(8),
+  discount: z.string().max(16),
   /** Phase 2: points the customer spends on it, as typed, and a coupon code. */
   redeem: z.string().max(10).optional(),
   coupon: z.string().max(40).optional(),
+  /** #293: the discount is a fixed amount (`discount` the money), not a percentage; and the reason given for it. */
+  discount_type: z.literal('amount').optional(),
+  discount_reason: z.string().max(200).optional(),
 });
 const saleId = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/);
 const stamp = z.string().datetime();
@@ -614,6 +719,8 @@ export const posDeskSchema = z.discriminatedUnion('op', [
   z.strictObject({ op: z.literal('cancel'), id }),
   z.strictObject({ op: z.literal('customers'), q: z.string().trim().min(2).max(80) }),
   z.strictObject({ op: z.literal('customer'), id }),
+  /** A phone number the customer typed on the customer display, in E.164: WorkSuite answers `{items: [{id, masked}]}`. */
+  z.strictObject({ op: z.literal('byPhone'), phone: z.string().regex(/^\+[1-9]\d{6,14}$/) }),
   z.strictObject({
     op: z.literal('customerCreate'),
     name: z.string().trim().min(1).max(150),
@@ -646,6 +753,9 @@ export const posContract = {
   /** `unpair`: hand the till back on the server too (`capabilities.device_unpair`), not only forget it here. */
   'pos:forget': { input: z.strictObject({ discard: z.boolean().optional(), unpair: z.boolean().optional() }).optional(), session: true, rate: 2, sensitive: true },
   'pos:catalogue': { input: none, session: true, rate: 10 },
+  /** The till's own settings (worksuite-desktop#296): card offline, the catalogue's refresh, the pictures' room. */
+  'pos:tillSettings': { input: none, session: true },
+  'pos:tillSettingsSet': { input: posTillSettingsPatchSchema, session: true, rate: 5 },
   /** `capable`: what `options.capabilities.catalogue` said — false goes straight to Inventory's list (an older server). */
   'pos:catalogueRefresh': { input: z.strictObject({ capable: z.boolean().optional() }).optional().or(z.null()), session: true, rate: 1 },
   'pos:sell': { input: posSellSchema, session: true, rate: 4, sensitive: true },
@@ -655,7 +765,8 @@ export const posContract = {
     rate: 20,
   },
   'pos:sale': { input: z.strictObject({ ref }), session: true, rate: 20 },
-  'pos:syncNow': { input: none, session: true, rate: 2 },
+  /** `catalogue`: bring the catalogue copy up to date as well, now (Sync now, the till opened). */
+  'pos:syncNow': { input: z.strictObject({ catalogue: z.boolean().optional() }).optional().or(z.null()), session: true, rate: 2 },
   /** `session_id`: a sale refused for its drawer (`POS_DRAWER_REFUSALS`) is sent again into the register open now. */
   'pos:resolve': { input: z.strictObject({ ref, action: z.enum(['retry', 'drop']), session_id: z.number().int().positive().optional() }), session: true, rate: 5, sensitive: true },
   'pos:printSettings': { input: none, session: true },
@@ -675,7 +786,28 @@ export const posContract = {
   'pos:desk': { input: posDeskSchema, session: true, rate: 10 },
   'pos:approve': { input: posApproveSchema, session: true, rate: 2, sensitive: true },
   'pos:rename': { input: z.strictObject({ device_name: z.string().trim().min(1).max(120) }), session: true, rate: 2, sensitive: true },
+  /**
+   * The customer display's promotions and the company's logo, as kept by this till, and whether its screen takes touch
+   * (worksuite-desktop#294). Answered only to the customer display's own window (`/pos/display`).
+   */
+  'pos:displayMedia': { input: none, session: true, rate: 20 },
 };
+
+/** What the customer display shows beside the cart (worksuite-desktop#294): pictures as data URLs, kept on this computer. */
+export interface PosDisplayMedia {
+  slides: Array<{ id: number; src: string; title: string | null }>;
+  /** The company's logo, or null: the display shows the app's mark. */
+  logo: string | null;
+  company: string | null;
+  /** The company's brand colour (`#rrggbb`), or null. */
+  accent: string | null;
+  /** Seconds each picture stays. */
+  interval: number;
+  transition: 'fade' | 'slide';
+  /** Whether the display's screen takes touch (the till's setting, else what the system says of the monitor). */
+  touch: boolean;
+  version: string | null;
+}
 
 /** A sale WorkSuite would take only with a manager's approval: nothing was sold; what to ask for. */
 export type PosSellOutcome = { sale: PosSale; queued: boolean; printed: PosPrintOutcome | null } | { needs: PosApprovalNeed };
@@ -686,6 +818,8 @@ export interface PosOutputs {
   'pos:pair': { status: PosTillStatus; message: string };
   'pos:forget': PosTillStatus;
   'pos:catalogue': PosCatalogue | null;
+  'pos:tillSettings': PosTillSettings;
+  'pos:tillSettingsSet': PosTillSettings;
   'pos:catalogueRefresh': PosCatalogue;
   'pos:sell': PosSellOutcome;
   'pos:sales': PosSale[];
@@ -708,6 +842,7 @@ export interface PosOutputs {
   'pos:desk': PosDeskAnswer;
   'pos:approve': PosDeskAnswer;
   'pos:rename': { device_name: string; message: string };
+  'pos:displayMedia': PosDisplayMedia;
 }
 
 /**

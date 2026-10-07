@@ -307,9 +307,12 @@ describe('POS till: the catalogue', () => {
     expect(JSON.stringify(s.db.all('SELECT * FROM pos_catalogue'))).not.toContain('Ceylon');
     s.tick(60_000);
     const again = await s.till.refreshCatalogue();
-    // The till's company, and the version it holds; POS's own catalogue needs no Inventory permission.
-    expect(request.mock.calls[0]![2]).toEqual({ query: { org: 3, since_version: undefined } });
-    expect(request.mock.calls[1]![2]).toEqual({ query: { org: 3, since_version: 'abc' } });
+    // The till's company, and the version it holds; POS's own catalogue needs no Inventory permission. A server that
+    // does not answer `catalogue/changes` (worksuite-desktop#296) is read whole from then on.
+    expect(request.mock.calls.map((c) => c[1])).toEqual(['/api/pos/catalogue/changes', '/api/pos/catalogue', '/api/pos/catalogue']);
+    expect(request.mock.calls[0]![2]).toEqual({ query: { org: 3, since: undefined, limit: 500 } });
+    expect(request.mock.calls[1]![2]).toEqual({ query: { org: 3, since_version: undefined } });
+    expect(request.mock.calls[2]![2]).toEqual({ query: { org: 3, since_version: 'abc' } });
     expect(again.products).toHaveLength(1);
     expect(again.fetched_at).toBe('2026-09-30T08:01:00.000Z');
   });

@@ -329,8 +329,12 @@ A computer paired as a POS till holds a credential of its own (`Pos\Libraries\De
   only where `options` says the person may, online only. Cashiers change by signing out and in; "Lock the till" is the app
   lock (password or PIN). A remote wipe, or signing out with "remove WorkSuite's data", removes the credential, the
   catalogue, every sale (sent or not), the receipt counters and the printer settings.
-- **At rest** — the catalogue (`pos_catalogue`) and each sale (`pos_sales`: lines, customer, tenders) are AES-256-GCM
-  under the database key; only the receipt number, state, session and times are in the clear, for ordering. The
+- **At rest** — the catalogue (its head in `pos_catalogue`, each product a row of `pos_products`) and each sale
+  (`pos_sales`: lines, customer, tenders) are AES-256-GCM under the database key; only the receipt number, state,
+  session and times are in the clear, for ordering, and a product's barcode, code and category id, for a scan's
+  lookup (they are printed on the goods; its name, price, tax and stock are sealed). The products' small pictures
+  (`pos-thumbs/`, `pos_thumbs`) are plain files under the profile, kept only where the policy allows data offline,
+  within their quota, and removed with the till, the catalogue and in a wipe. The
   catalogue is written to disk only where the desktop policy allows data offline (in memory otherwise); a sale is
   always kept once money was taken, and while WorkSuite is known to be out of reach a till whose policy forbids
   queued changes does not sell.
@@ -339,7 +343,14 @@ A computer paired as a POS till holds a credential of its own (`Pos\Libraries\De
   preload, no script and no network (`pos-print.ts`, `salon-print.ts`). Text is reduced to printable ASCII first, so
   nothing on a receipt can be read by the printer as a command.
 - **The customer display** is an ordinary sandboxed window of the shell; it reads only what the register posts on a
-  same-origin `BroadcastChannel` (lines, totals, change) — no cashier, customer or drawer figures.
+  same-origin `BroadcastChannel` (lines, totals, the payment, change) — no cashier or drawer figures — and the
+  promotions this till keeps (`pos:displayMedia`, answered only to a window whose route is `/pos/display`: pictures as
+  data URLs, the interval, whether its screen takes touch). **A customer is only ever named there masked**
+  ("Has*****a M."): `publish()` masks any name it is handed, the phone lookup (`GET device/customers/by-phone`) answers
+  WorkSuite's masked names and ids only — at most five, the exact number, ten lookups a minute per till — and the
+  register, not the display, makes that call through the main process and checks that a confirmed id is one it sent for
+  that number before it reads the customer's card. The display never sees a whole name, an e-mail, an address or a
+  purchase (worksuite-desktop#294). Its numpad clears itself after 30 s untouched.
 
 ## Hotel PMS door locks (PMS-KEY-002, PMS-DSK-002)
 

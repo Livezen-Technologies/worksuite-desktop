@@ -3,28 +3,31 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { tenderOptionsOf, type PosApprovalNeed, type PosProduct } from '@shared/pos';
 import { Menu, type MenuSection } from '../../components/Menu';
 import { Button, TextField } from '../../components/ui';
+import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
-import { customerOf, findInCatalogue, lookupProduct, openDrawer, PK, refreshCatalogue, useCartPrice, useCatalogue, useSales } from './api';
+import { customerOf, findInCatalogue, lookupProduct, openDrawer, PK, refreshCatalogue, searchProducts, useCartPrice, useCatalogue, useSales } from './api';
 import { useBarcodeScanner } from './barcode';
 import CartPane from './CartPane';
 import CashMove from './CashMove';
-import { approvalActions, discountNeedsApproval, saleDiscount, useSaleApproval } from './approval';
-import { activeSale, cartActions, discountPct, MAX_OPEN, redeemOf, useCart, useCarts, type CartState } from './cart';
+import { discountNeed, draftOf } from './adjust';
+import { approvalActions, covers, saleDiscount, useSaleApproval } from './approval';
+import { activeSale, cartActions, discountAmount, discountPct, MAX_OPEN, redeemOf, useCart, useCarts, type CartState } from './cart';
 import { categoryLabel, FAVOURITES, inCategory } from './catalog';
 import CategoryPicker from './CategoryPicker';
-import CustomerDialog from './CustomerDialog';
-import { stockLevels, topSellersToday } from './desk';
-import { publish } from './display';
+import CustomerDialog, { saleCustomerOf } from './CustomerDialog';
+import { customersByPhone, readCustomer, stockLevels, topSellersToday } from './desk';
+import { displayCart, displayTouch, onDisplay, publish, tellDisplay } from './display';
+import { createDisplayDesk, type DisplayNotice } from './displayDesk';
 import { useT } from './i18n';
-import { BigAmount, Keypad } from './Keypad';
-import { press } from './numpad';
+import { CouponDialog, DiscountDialog } from './DiscountEditor';
 import { HeldDialog, HoldDialog, OpenSalesDialog, useServerHeld } from './OpenSales';
 import Override from './Override';
 import { clampPage, GRID_PAGE, LIST_PAGE, pushRecent } from './paging';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';
-import { deductionOf, estimateCart } from './pricing';
+import { discountBase, estimateCart, formatMoney, shareOf } from './pricing';
 import ProductGrid, { type GridView, type QuickAction } from './ProductGrid';
 import ReturnDialog from './ReturnDialog';
+import { buildIndex, exact, search as searchIndex, SEARCH_DEBOUNCE_MS } from './search';
 import Tender from './TenderPanel';
 
 /**
@@ -64,7 +67,7 @@ function keep(key: string, v: unknown): void {
   }
 }
 
-type Dialog = 'customer' | 'discount' | 'category' | 'open' | 'held' | 'hold' | 'cash' | 'return' | 'override' | null;
+type Dialog = 'customer' | 'discount' | 'coupon' | 'category' | 'open' | 'held' | 'hold' | 'cash' | 'return' | 'override' | null;
 
 export default function Register({ active }: { active: boolean }) {
   const t = useT();
@@ -74,6 +77,14 @@ export default function Register({ active }: { active: boolean }) {
   const cart = useCart();
   const all = useCarts();
   const [q, setQ] = useState('');
+  // What the grid is searched by: what was typed, once the cashier pauses (worksuite-desktop#296).
+  const [settled, setSettled] = useState('');
+  useEffect(() => {
+    const h = setTimeout(() => setSettled(q), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(h);
+  }, [q]);
+  // Cleared at once; typed, once the cashier pauses.
+  const dq = q.trim() ? settled : '';
   const [category, setCategory] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>(() => stored<string[]>(RECENT_KEY, []));
   const [view, setView] = useState<GridView>(() => (stored<string>(VIEW_KEY, 'grid') === 'list' ? 'list' : 'grid'));
@@ -100,6 +111,8 @@ export default function Register({ active }: { active: boolean }) {
       return l ? { ...p, stock_state: l.state, stock_available: l.available } : p;
     });
   }, [catalogue.data, stock.data]);
+  // The search index, built once per catalogue copy: names, codes, barcodes and categories, a barcode by a map.
+  const index = useMemo(() => buildIndex(catalogue.data?.products ?? []), [catalogue.data]);
   const byId = useMemo(() => {
     const m = new Map(products.map((p) => [p.id, p] as const));
     for (const [id, p] of extras) if (!m.has(id)) m.set(id, p);
@@ -109,7 +122,10 @@ export default function Register({ active }: { active: boolean }) {
   const approval = useSaleApproval(sale.id);
   // A discount past the cashier's rights waits for a manager's approval (online, `capabilities.approvals`).
   const approvalsOn = !!caps.approvals && online;
-  const disc = saleDiscount(cart, till.discount, approvalsOn, approval);
+  // What the cashier's discount comes off (the goods after list discounts and promotions), as the cart was last priced:
+  // a fixed amount (#293) is measured against it for the cashier's rights and a manager's approval.
+  const [base, setBase] = useState<number | null>(null);
+  const disc = saleDiscount(cart, till.discount, approvalsOn, approval, undefined, base);
   const pct = disc.pct;
   const currency = till.currency || catalogue.data?.currency || '';
   const org = till.company?.id ?? null;
@@ -121,7 +137,10 @@ export default function Register({ active }: { active: boolean }) {
     }),
     [caps.customers, caps.coupons, caps.loyalty, cart],
   );
-  const price = useCartPrice(cart.lines, pct, byId, currency, till.discount.ceiling, caps, online, org, counter, disc.approved);
+  const price = useCartPrice(cart.lines, pct, byId, currency, till.discount.ceiling, caps, online, org, counter, disc.approved, disc.amount ?? null);
+  const pricedBase = price.cart ? discountBase(price.cart) : null;
+  // Kept as the cart is priced (it does not depend on the cashier's discount): adjusted while rendering, not in an effect.
+  if (pricedBase !== null && pricedBase !== base) setBase(pricedBase);
   const heldOnServer = !!caps.held && online;
   const serverHeld = useServerHeld(heldOnServer && active);
   const offered = useMemo(() => tenderOptionsOf(till.company?.tenders) ?? catalogue.data?.tenders ?? null, [till.company, catalogue.data]);
@@ -138,7 +157,7 @@ export default function Register({ active }: { active: boolean }) {
 
   /** What a sale not on screen comes to: the catalogue's preview. */
   const totalOf = useCallback(
-    (c: CartState) => (c.lines.length ? estimateCart(c.lines, byId, discountPct(c, till.discount.allowed, till.discount.ceiling), till.discount.ceiling, currency).cart.total : 0),
+    (c: CartState) => (c.lines.length ? estimateCart(c.lines, byId, discountPct(c, till.discount.allowed, till.discount.ceiling), till.discount.ceiling, currency, till.discount.allowed ? discountAmount(c) : null).cart.total : 0),
     [byId, till.discount.allowed, till.discount.ceiling, currency],
   );
 
@@ -184,7 +203,7 @@ export default function Register({ active }: { active: boolean }) {
         toast('warning', t('pos.noDrawerShort'));
         return;
       }
-      const hit = findInCatalogue([...byId.values()], code);
+      const hit = exact(index, code) ?? findInCatalogue([...extras.values()], code);
       if (hit) {
         add(hit.id);
         return;
@@ -205,13 +224,15 @@ export default function Register({ active }: { active: boolean }) {
         toast('error', e instanceof Error ? e.message : 'WorkSuite could not look that code up.');
       }
     },
-    [byId, till.offline, till.caps, org, session, add, t],
+    [index, extras, till.offline, till.caps, org, session, add, t],
   );
   useBarcodeScanner(active && !paying && !dialog, (code) => void onScan(code));
 
-  // The customer display follows the sale on screen: with a CRM customer, a greeting, their tier and points.
+  // The customer display follows the sale on screen: with a CRM customer, a greeting (their name masked — publish masks
+  // it), their tier and points; and, where WorkSuite looks numbers up and answers now, the customer's phone entry (#294).
   const shop = till.company?.name ?? null;
   const who = cart.customer;
+  const phoneOn = !!caps.display_phone && !!caps.customers && online;
   useEffect(() => {
     if (paying) return;
     const c = price.cart;
@@ -221,24 +242,64 @@ export default function Register({ active }: { active: boolean }) {
         kind: 'cart',
         shop,
         currency,
-        lines: c.lines.map((l) => ({ name: l.name, quantity: l.quantity, total: l.total })),
-        discount: deductionOf(c),
-        tax: c.tax,
-        total: c.total,
+        ...displayCart(c),
         provisional: price.source === 'estimate',
+        phone: phoneOn,
         ...(who?.id && who.name ? { customer: who.name } : {}),
         ...(who?.id && who.tier ? { tier: who.tier } : {}),
         ...(who?.id && caps.loyalty && typeof who.points === 'number' ? { points: who.points } : {}),
       });
-  }, [price.cart, price.source, cart.lines.length, currency, shop, paying, who, caps.loyalty]);
+  }, [price.cart, price.source, cart.lines.length, currency, shop, paying, who, caps.loyalty, phoneOn]);
 
+  // What the customer does at the display (#294): this register looks the number up and puts them on the sale.
+  const touch = useStore(displayTouch, (x) => x.touch);
+  const [notice, setNotice] = useState<DisplayNotice | null>(null);
+  const [newPhone, setNewPhone] = useState<string | undefined>(undefined);
+  const live = useRef({ phoneOn, hasCustomer: !!cart.customer });
+  useEffect(() => {
+    live.current = { phoneOn, hasCustomer: !!cart.customer };
+  }, [phoneOn, cart.customer]);
+  useEffect(() => {
+    if (!active) return;
+    const handle = createDisplayDesk({
+      enabled: () => live.current.phoneOn,
+      lookup: customersByPhone,
+      read: readCustomer,
+      attach: (c) => {
+        cartActions.customer(saleCustomerOf(c, c.tier));
+        cartActions.redeem('');
+      },
+      detach: () => {
+        if (!live.current.hasCustomer) return false;
+        cartActions.customer(null);
+        return true;
+      },
+      reply: tellDisplay,
+      notice: (n) => {
+        if (n.kind === 'notMe') {
+          setNotice(null);
+          toast('info', t('pos.dp.notMe'));
+        } else setNotice(n);
+      },
+    });
+    return onDisplay((m) => void handle(m));
+  }, [active, t]);
+  const mayAsk = phoneOn && touch && cart.lines.length > 0 && !cart.customer;
+
+  // Searched on the till's own copy, never WorkSuite (worksuite-desktop#296) — except while that copy is empty or still
+  // loading and WorkSuite answers: then its own search stands in.
+  const copyEmpty = !catalogue.data?.products.length;
+  const fallback = copyEmpty && online && !!caps.product_search && dq.trim().length >= 2;
+  const server = useQuery({ queryKey: ['pos', 'search', dq.trim(), org], queryFn: ({ signal }) => searchProducts(dq.trim(), org, signal), enabled: active && fallback, staleTime: 30_000, retry: false });
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return products.filter((p) => inCategory(p, category, tree, favourites) && (!needle || p.name.toLowerCase().includes(needle) || p.code?.toLowerCase().includes(needle) || p.barcode?.includes(needle)));
-  }, [products, q, category, tree, favourites]);
+    if (fallback) return server.data ?? [];
+    const levels = stock.data;
+    const found = dq.trim() ? searchIndex(index, dq).map((p) => (levels?.get(p.id) ? { ...p, stock_state: levels.get(p.id)!.state, stock_available: levels.get(p.id)!.available } : p)) : products;
+    return category ? found.filter((p) => inCategory(p, category, tree, favourites)) : found;
+  }, [fallback, server.data, index, dq, products, stock.data, category, tree, favourites]);
   const nameOfCategory = useCallback((c: string) => categoryLabel(c, tree, t('pos.cat.favourites')) ?? c, [tree, t]);
   const size = view === 'grid' ? GRID_PAGE : LIST_PAGE;
-  const where = JSON.stringify([q, category, view]);
+  const where = JSON.stringify([dq, category, view]);
   const shownPage = clampPage(paged.where === where ? paged.page : 0, filtered.length, size);
   const setPage = useCallback((p: number | ((p: number) => number)) => setPaged((x) => ({ where, page: Math.max(0, typeof p === 'function' ? p(x.where === where ? x.page : 0) : p) })), [where]);
 
@@ -258,12 +319,10 @@ export default function Register({ active }: { active: boolean }) {
 
   const canSell = !!till.company?.can.sell;
   const payable = !!session && canSell && !!price.cart && !price.error && !price.pending && cart.lines.length > 0 && !disc.needs;
-  const typedPct = Math.max(0, Math.min(100, Number(cart.discount) || 0));
-  const discountNeed: PosApprovalNeed = {
-    code: 'approval_required',
-    message: t('pos.ovr.discountAsk', { n: typedPct, max: till.discount.allowed ? (till.discount.ceiling ?? 100) : 0 }),
-    ask: { action: 'discount', amount: typedPct, threshold: till.discount.allowed ? till.discount.ceiling : 0, subject: null },
-  };
+  // What the manager approves: the percentage typed, or the share a fixed amount comes to (#293).
+  const typedAmount = discountAmount(cart);
+  const typedPct = typedAmount !== null ? shareOf(typedAmount, base ?? 0) : Math.max(0, Math.min(100, Number(cart.discount) || 0));
+  const askDiscount: PosApprovalNeed = discountNeed(t, { pct: typedPct, amount: typedAmount }, till.discount, (n) => formatMoney(n, currency));
 
   // ?new=1 is the shell's "New" (⌘N / Ctrl+N from the menu): another sale.
   const newAsked = till.params.get('new') === '1';
@@ -328,6 +387,8 @@ export default function Register({ active }: { active: boolean }) {
         { id: 'new', label: t('pos.newSale'), icon: 'plus', shortcut: 'Ctrl+N', onSelect: () => void (cartActions.newSale() || toast('warning', t('pos.open.full', { n: MAX_OPEN }))) },
         { id: 'open', label: t('pos.open.all'), icon: 'grid', onSelect: () => setDialog('open') },
         { id: 'clear', label: t('pos.clearSale'), icon: 'trash', danger: true, disabled: !cart.lines.length && !cart.customer, onSelect: () => cartActions.clear() },
+        // #294: the customer gives their number at the display, on its numpad.
+        ...(caps.display_phone ? [{ id: 'askPhone', label: t('pos.dp.ask'), icon: 'phone', disabled: !mayAsk, onSelect: () => tellDisplay({ type: 'ask' }) }] : []),
       ],
     },
     {
@@ -340,7 +401,15 @@ export default function Register({ active }: { active: boolean }) {
     },
   ];
 
-  const empty = !catalogue.data ? (
+  const empty = fallback && server.isFetching && !filtered.length ? (
+    <div className="flex-1">
+      <Note>{t('pos.search.server')}</Note>
+    </div>
+  ) : fallback && !filtered.length ? (
+    <div className="flex-1">
+      <Note>{t('pos.search.serverNone')}</Note>
+    </div>
+  ) : !catalogue.data && !fallback ? (
     <div className="flex-1">
       <Note action={<Button size="sm" loading={refreshing} disabled={till.offline} onClick={() => void refresh()}>{t('pos.refreshCatalogue')}</Button>}>{t('pos.noCatalogue')}</Note>
     </div>
@@ -358,9 +427,9 @@ export default function Register({ active }: { active: boolean }) {
         onQ={setQ}
         onSearchKey={(e) => {
           if (e.key === 'Enter' && q.trim()) {
-            const exact = findInCatalogue(products, q);
-            const only = filtered.length === 1 ? filtered[0] : null;
-            const hit = exact ?? only;
+            // The exact code or barcode at once; else the one product the search (as typed now) found.
+            const only = q === dq && filtered.length === 1 ? filtered[0] : null;
+            const hit = exact(index, q) ?? only;
             if (hit) {
               if (add(hit.id)) setQ('');
             } else void onScan(q.trim()).then(() => setQ(''));
@@ -428,6 +497,7 @@ export default function Register({ active }: { active: boolean }) {
             saleId: sale.id,
             approval: disc.approved !== null ? approval : null,
           }}
+          pricing={{ pending: price.pending, error: price.error }}
           onClose={() => setPaying(null)}
           onDone={() => {
             cartActions.paid();
@@ -439,21 +509,81 @@ export default function Register({ active }: { active: boolean }) {
       {dialog === 'return' ? <ReturnDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'cash' && session ? <CashMove session={session} onClose={() => setDialog(null)} /> : null}
       {dialog === 'customer' ? (
-        caps.customers && online ? <CustomerDialog payable={price.cart?.total ?? 0} currency={currency} onClose={() => setDialog(null)} /> : <CustomerForm onClose={() => setDialog(null)} />
+        caps.customers && online ? (
+          <CustomerDialog
+            payable={price.cart?.total ?? 0}
+            currency={currency}
+            newPhone={newPhone}
+            onClose={() => {
+              setDialog(null);
+              setNewPhone(undefined);
+            }}
+          />
+        ) : (
+          <CustomerForm onClose={() => setDialog(null)} />
+        )
+      ) : null}
+      {notice ? (
+        <DisplayNoticeBar
+          notice={notice}
+          onDismiss={() => setNotice(null)}
+          onChange={() => {
+            setNotice(null);
+            setDialog('customer');
+          }}
+          onCreate={(phone) => {
+            setNotice(null);
+            setNewPhone(phone);
+            setDialog('customer');
+          }}
+        />
       ) : null}
       {dialog === 'discount' ? (
         <DiscountDialog
+          initial={draftOf(cart)}
+          base={base ?? (price.cart ? discountBase(price.cart) : 0)}
+          currency={currency}
+          amountOn={!!caps.discount_amount}
+          rights={till.discount}
           approvals={approvalsOn}
-          onClose={(typed) => {
+          onCancel={() => setDialog(null)}
+          onApply={(r) => {
             setDialog(null);
+            // The same editor as the payment screen's Add discount (#293): the same result either way.
+            if (till.discount.allowed || approvalsOn) cartActions.applyDiscount({ type: r.draft.type, value: r.draft.value, reason: r.draft.reason }, approvalsOn ? null : till.discount.ceiling);
             // Past the cashier's own rights: a manager approves it now (it shows as asked until then).
-            if (typed !== null && approvalsOn && discountNeedsApproval(typed, till.discount) && !(approval && approval.amount >= typed)) setDialog('override');
+            if (r.needsApproval && !covers(approval, 'discount', r.pct)) setDialog('override');
+          }}
+        >
+          {caps.coupons && online ? (
+            caps.coupon_validate ? (
+              <PosButton className="h-touch self-start px-4 text-[14px]" onClick={() => setDialog('coupon')}>
+                {cart.coupon ? t('pos.adj.coupon', { code: cart.coupon }) : t('pos.adj.addCoupon')}
+              </PosButton>
+            ) : (
+              <CouponField />
+            )
+          ) : null}
+        </DiscountDialog>
+      ) : null}
+      {dialog === 'coupon' ? (
+        <CouponDialog
+          current={cart.coupon ?? null}
+          lines={cart.lines}
+          org={org}
+          customerId={cart.customer?.id ?? null}
+          offline={!online}
+          onClose={() => setDialog(null)}
+          onApplied={(code) => {
+            cartActions.coupon(code);
+            setDialog(null);
           }}
         />
       ) : null}
       {dialog === 'override' ? (
         <Override
-          need={discountNeed}
+          need={askDiscount}
+          reason={cart.discount_reason}
           currency={currency}
           onClose={() => setDialog(null)}
           onApproved={(a) => {
@@ -475,6 +605,7 @@ export default function Register({ active }: { active: boolean }) {
           favourites={favourites}
           serverTop={top.data ?? null}
           onPick={pickCategory}
+          onPoint={setCategory}
           onAdd={(p) => add(p.id)}
           onClose={() => setDialog(null)}
         />
@@ -484,67 +615,61 @@ export default function Register({ active }: { active: boolean }) {
 }
 
 /**
- * The cashier's discount on the sale on screen, in percent, typed on the pad — never past their ceiling; where the
- * server takes a manager's approval (`approvals`), past it too, and the override follows (`onClose` says what was set).
+ * What the customer did at the customer display, for the cashier (#294): they confirmed their number — accept, or
+ * change the customer — or gave a number WorkSuite does not have — create them, the number filled in.
  */
-function DiscountDialog({ onClose, approvals = false }: { onClose: (typed: number | null) => void; approvals?: boolean }) {
+function DisplayNoticeBar({ notice, onDismiss, onChange, onCreate }: { notice: DisplayNotice; onDismiss: () => void; onChange: () => void; onCreate: (phone: string) => void }) {
   const t = useT();
-  const till = useTillContext();
-  const cart = useCart();
-  const [typed, setTyped] = useState(cart.discount);
-  const [coupon, setCoupon] = useState(cart.coupon ?? '');
-  const coupons = !!till.caps.coupons && !till.offline;
-  const ceiling = approvals ? null : till.discount.ceiling;
-  const own = till.discount.allowed ? till.discount.ceiling : 0;
-  const apply = () => {
-    if (till.discount.allowed || approvals) cartActions.discount(typed, ceiling);
-    // A coupon (`capabilities.coupons`): WorkSuite checks it when it prices the cart, and says when it does not apply.
-    if (coupons) cartActions.coupon(coupon);
-    onClose(Math.min(100, Number(typed) || 0));
-  };
+  if (notice.kind === 'notMe') return null;
+  const text = notice.kind === 'confirmed' ? t('pos.dp.confirmed', { name: notice.masked }) : notice.kind === 'new' ? t('pos.dp.newNumber', { phone: notice.phone }) : t('pos.dp.readFailed', { message: notice.message });
   return (
-    <PosDialog label={t('pos.discountTitle')} onClose={() => onClose(null)} width={640} className="gap-4 p-7">
-      <div>
-        <h2 className="text-[20px] font-extrabold">{t('pos.discountTitle')}</h2>
-        <p className="text-[13px] text-ink-3">{approvals ? (own === 0 ? t('pos.discountAllApproved') : own ? t('pos.discountPastApproved', { n: own }) : t('pos.discountHint')) : ceiling ? t('pos.discountMax', { n: ceiling }) : t('pos.discountHint')}</p>
-      </div>
-      <div className="flex gap-4">
-        <div className="flex flex-1 flex-col gap-3">
-          <BigAmount autoFocus value={typed} onChange={(v) => setTyped(v)} rules={{ decimals: 2, digits: 3 }} aria-label={t('pos.discount')} placeholder="0" />
-          <div className="flex flex-wrap gap-2">
-            {[5, 10, 15, 20].filter((n) => !ceiling || n <= ceiling).map((n) => (
-              <PosButton key={n} className="h-touch-md flex-1 text-[16px]" onClick={() => setTyped(String(n))}>
-                {n}%
-              </PosButton>
-            ))}
-          </div>
-          <PosButton tone="danger" className="h-touch-md" onClick={() => setTyped('')}>
-            {t('pos.discountNone')}
+    <div role="status" className="fixed start-1/2 top-4 z-40 flex max-w-[min(720px,calc(100%-32px))] -translate-x-1/2 items-center gap-3 rounded-pos bg-navy px-4 py-3 text-white shadow-lg rtl:translate-x-1/2">
+      <span className="min-w-0 flex-1 text-[14px] font-semibold">{text}</span>
+      {notice.kind === 'confirmed' ? (
+        <>
+          <PosButton className="h-touch px-4 text-[14px]" onClick={onChange}>
+            {t('pos.dp.change')}
           </PosButton>
-        </div>
-        <Keypad className="w-[260px]" keys={['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', 'back']} onKey={(k) => setTyped((v) => press(v, k, { decimals: 2, digits: 3 }))} />
-      </div>
-      {coupons ? (
-        <label className="flex items-center gap-3">
-          <span className="text-[13px] font-bold text-ink-2">{t('pos.coupon')}</span>
-          <input
-            value={coupon}
-            maxLength={40}
-            onChange={(e) => setCoupon(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 40))}
-            placeholder={t('pos.couponHint')}
-            className="h-touch min-w-0 flex-1 rounded-[10px] bg-pos-panel px-3 font-mono text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none"
-          />
-        </label>
-      ) : null}
-      <div className="flex gap-2.5">
-        <PosButton className="h-touch-lg w-40" onClick={() => onClose(null)}>
-          {t('pos.cancel')}
+          <PosButton tone="primary" className="h-touch px-4 text-[14px]" onClick={onDismiss}>
+            {t('pos.dp.accept')}
+          </PosButton>
+        </>
+      ) : notice.kind === 'new' ? (
+        <>
+          <PosButton className="h-touch px-4 text-[14px]" onClick={onDismiss}>
+            {t('pos.dp.dismiss')}
+          </PosButton>
+          <PosButton tone="primary" className="h-touch px-4 text-[14px]" onClick={() => onCreate(notice.phone)}>
+            {t('pos.dp.create')}
+          </PosButton>
+        </>
+      ) : (
+        <PosButton className="h-touch px-4 text-[14px]" onClick={onDismiss}>
+          {t('pos.dp.dismiss')}
         </PosButton>
-        <PosButton tone="primary" className="h-touch-lg flex-1 text-[16px]" onClick={apply}>
-          {t('pos.discountApply', { n: Math.min(Number(typed) || 0, ceiling ?? 100) })}
-        </PosButton>
-      </div>
-    </PosDialog>
+      )}
+    </div>
+  );
+}
+
+/**
+ * The coupon on the sale, typed, for a server that checks it only when it prices the cart (no `coupon_validate`): as it
+ * always was. Where WorkSuite checks a coupon on the cart, the bottom bar opens the coupon dialog instead (#293).
+ */
+function CouponField() {
+  const t = useT();
+  const cart = useCart();
+  return (
+    <label className="flex items-center gap-3">
+      <span className="text-[13px] font-bold text-ink-2">{t('pos.coupon')}</span>
+      <input
+        defaultValue={cart.coupon ?? ''}
+        maxLength={40}
+        onChange={(e) => cartActions.coupon(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 40))}
+        placeholder={t('pos.couponHint')}
+        className="h-touch min-w-0 flex-1 rounded-[10px] bg-pos-panel px-3 font-mono text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none"
+      />
+    </label>
   );
 }
 

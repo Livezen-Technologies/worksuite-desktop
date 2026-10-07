@@ -19,6 +19,9 @@ export interface CartState {
   /** Phase 2: points the named customer spends on it, as typed (`capabilities.loyalty`), and a coupon code. */
   redeem?: string;
   coupon?: string;
+  /** #293: `discount` is a fixed amount of money (`capabilities.discount_amount`), not a percentage; and why it was given. */
+  discount_type?: 'amount';
+  discount_reason?: string;
 }
 
 export const EMPTY_CART: CartState = { lines: [], customer: null, discount: '' };
@@ -94,12 +97,52 @@ export function setDiscount(s: CartState, typed: string, ceiling: number | null 
   d = d.slice(0, 6);
   const max = ceiling != null && ceiling > 0 ? Math.min(100, ceiling) : 100;
   if (Number(d) > max) d = String(max);
-  return { ...s, discount: d };
+  const { discount_type: _t, ...rest } = s;
+  return { ...rest, discount: d };
 }
 
-/** The percentage off this sale carries: none where the cashier may give none, never past their ceiling. */
+/** The money typed for a fixed discount: digits and one point, two decimals, nine whole digits. */
+export function cleanAmount(typed: string): string {
+  let d = typed.replace(/,/g, '').replace(/[^\d.]/g, '');
+  const dot = d.indexOf('.');
+  if (dot >= 0) d = d.slice(0, dot + 1) + d.slice(dot + 1).replace(/\./g, '').slice(0, 2);
+  const [whole = '', cents] = d.split('.');
+  return cents === undefined ? whole.slice(0, 9) : `${whole.slice(0, 9)}.${cents}`;
+}
+
+/**
+ * The cashier's discount as the shared editor gives it (#293): a percentage (as `setDiscount` takes it, never past the
+ * ceiling) or a fixed amount, and an optional reason. Nothing — or nothing worth anything — takes the discount off.
+ */
+export function applyDiscount(s: CartState, d: { type: 'pct' | 'amount'; value: string; reason?: string }, ceiling: number | null = null): CartState {
+  const { discount_type: _t, discount_reason: _r, ...rest } = s;
+  const reason = (d.reason ?? '').trim().slice(0, 200);
+  if (d.type === 'amount') {
+    const v = cleanAmount(d.value);
+    if (!(Number(v) > 0)) return { ...rest, discount: '' };
+    return { ...rest, discount: v, discount_type: 'amount', ...(reason ? { discount_reason: reason } : {}) };
+  }
+  const pct = setDiscount(rest, d.value, ceiling);
+  if (!(Number(pct.discount) > 0)) return { ...pct, discount: '' };
+  return reason ? { ...pct, discount_reason: reason } : pct;
+}
+
+/** The discount taken off the sale (the × on its line): no percentage, no amount, no reason. */
+export function clearDiscount(s: CartState): CartState {
+  const { discount_type: _t, discount_reason: _r, ...rest } = s;
+  return { ...rest, discount: '' };
+}
+
+/** The fixed amount this sale's discount is, or null when it is a percentage (or none). */
+export function discountAmount(s: Pick<CartState, 'discount' | 'discount_type'>): number | null {
+  if (s.discount_type !== 'amount') return null;
+  const v = Number(s.discount);
+  return Number.isFinite(v) && v > 0 ? Math.round(v * 100) / 100 : null;
+}
+
+/** The percentage off this sale carries: none where the cashier may give none, never past their ceiling. A fixed amount is not a percentage: 0. */
 export function discountPct(s: CartState, allowed: boolean, ceiling: number | null = null): number {
-  if (!allowed) return 0;
+  if (!allowed || s.discount_type === 'amount') return 0;
   const max = ceiling != null && ceiling > 0 ? Math.min(100, ceiling) : 100;
   return Math.min(max, Number(s.discount) || 0);
 }
@@ -246,6 +289,9 @@ export const cartActions = {
     return true;
   },
   discount: (d: string, ceiling: number | null = null) => onActive((c) => setDiscount(c, d, ceiling)),
+  /** #293: the discount as the shared editor gives it (a percentage or an amount, and a reason). */
+  applyDiscount: (d: { type: 'pct' | 'amount'; value: string; reason?: string }, ceiling: number | null = null) => onActive((c) => applyDiscount(c, d, ceiling)),
+  clearDiscount: () => onActive((c) => clearDiscount(c)),
   /** Empty the sale on screen (it stays open). */
   clear: () => onActive(() => EMPTY_CART),
   /** The sale on screen was paid: it goes, and the next comes on screen. */

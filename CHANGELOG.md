@@ -5,6 +5,48 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.201 — 2026-10-07
+
+- **Point of Sale: discount, coupon and gift voucher on Take payment, the customer display redrawn, the till works
+  from its own catalogue copy, and the category filter fixed (#293, #294, #295, #296; pos 1.2.1 → 1.5.0).** The new
+  features need the server's **Pos 1.5.0**; each turns on only when the server offers it, so against an older server
+  the till works as in 0.2.200 (with the category fix).
+  - **The category picker narrows the grid at once (#295).** Clicking a category filtered nothing until "Show all"
+    was pressed, so it looked broken. Now the grid behind the picker follows the category you point at, Enter
+    applies it, and the counts beside each group are the till's own products, matching what the grid then shows.
+  - **Take payment (#293):** under the total, the sale's adjustments — Subtotal, promotions, Discount −, Coupon −,
+    points — each with × to remove, plus **Add discount** and **Add coupon**. The total, Still to pay and Change
+    update at once.
+    - The discount is a percentage or a **fixed amount**, with an optional reason. Past the cashier's limit a
+      manager's PIN approves it. The bottom bar's Discount button uses the same editor, so both give the same result.
+    - A coupon is typed or scanned and checked on the cart. When WorkSuite refuses it, the till says why: expired,
+      used up, minimum spend not met, not valid for these items, and so on. One coupon per sale.
+    - The **Gift voucher** tile now shows wherever WorkSuite takes vouchers, even when the company never set up its
+      tenders, with the voucher's balance and expiry. It pays part or all of the sale, alongside other tenders.
+    - Receipts print the coupon, the discount and its reason as separate lines.
+  - **The customer display (#294):** promotions on one half (a picture or a slider set in WorkSuite, or the
+    company logo), the live cart on the other (quantity, name, unit price, line total, newest line in view) with
+    Subtotal, Discount, Tax and **You pay** fixed underneath. Idle shows the promotions full screen; while paying it
+    shows what is due, paid and the change; after the sale it thanks the customer.
+    - **Customers can add themselves by phone number** on a touch display: they see their name masked
+      ("Has\*\*\*\*\*a M."), confirm, and the cashier accepts or changes it. An unknown number goes to the cashier
+      to create the customer. The cashier can also ask from More → Ask customer for phone number.
+    - **Where it bites:** the display used to greet a customer by their real first name. It now only ever shows
+      masked names. Phone entry is hidden on displays without touch (This till → Devices sets it) and when offline.
+  - **Offline and search (#296):** the till keeps its catalogue one product at a time and, after the first
+    download, fetches only what changed — there is no longer a 2,000-product limit. It refreshes on reconnect, when
+    the till opens, every 30 minutes and on Sync now; the till bar shows progress and when it last synced, and
+    "Online · synced" means both the sales and the catalogue are up to date. Search runs on the till's own copy,
+    ranked (exact code or barcode, then the start of a word), in about 11 ms at 20,000 products. Product pictures
+    are kept for offline use within 200 MB.
+    - **Where it bites:** offline, the till now takes **cash only** unless This till → **Accept card offline** is
+      switched on. Coupons and vouchers wait for the connection; a discount still works.
+    - **Where it bites:** the register **does not close while sales are waiting or were refused**, online too; a
+      manager may close anyway after confirming.
+    - Sales has a **Needs review** filter for sales WorkSuite flagged — sold offline at a price that differs from
+      today's, a product archived since, or stock taken below zero.
+  - Not yet tried against a server with Pos 1.5.0 deployed, or on a till with a touch customer display.
+
 ## 0.2.200 — 2026-10-07
 
 - **Support: raise a ticket, and turn emails and chats into tickets (#298, support 1.2.0, mail 1.25.0, chat

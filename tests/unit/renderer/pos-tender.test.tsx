@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import type { PosSellInput } from '@shared/pos';
+import type { PosSellInput, PosTillSettings } from '@shared/pos';
 import type { PosSession } from '../../../src/modules/pos/api';
 import { TillContext, type Till } from '../../../src/modules/pos/parts';
 import { estimateCart } from '../../../src/modules/pos/pricing';
@@ -53,7 +53,7 @@ function till(offline = false): Till {
 
 const cart = estimateCart([{ product_id: 9, quantity: 2 }], new Map([[9, { id: 9, code: 'TEA', barcode: null, name: 'Ceylon tea', unit: null, category: null, price: 450, discount_pct: 0, tax_rate: 0 }]]), 0, null, 'LKR').cart;
 
-function mount(offline = false, exact = false) {
+function mount(offline = false, exact = false, settings?: PosTillSettings) {
   const sell = vi.fn(async (input: PosSellInput) => ({
     sale: { ...input, ref: 'T1-AAAAAA-000001', created_at: '2026-09-30T08:00:00Z', terminal_id: 7, cashier_id: 5, cashier_name: 'Kasun', state: offline ? 'waiting' : 'sent', number: offline ? null : 'SO-9', message: null, attempts: 1, sent_at: null },
     queued: offline,
@@ -63,7 +63,7 @@ function mount(offline = false, exact = false) {
   const onDone = vi.fn();
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <TillContext.Provider value={till(offline)}>
+      <TillContext.Provider value={{ ...till(offline), ...(settings ? { settings } : {}) }}>
         <Tender cart={cart} source={offline ? 'estimate' : 'server'} currency="LKR" session={session} customer={null} catalogueVersion="v1" exact={exact} onClose={() => undefined} onDone={onDone} />
       </TillContext.Provider>
     </QueryClientProvider>,
@@ -126,12 +126,19 @@ describe('taking the money', () => {
     expect(sell.mock.calls[0]![0].tenders).toEqual([{ method: 'card', amount: 900 }]);
   });
 
-  it('offers only cash and card with WorkSuite out of reach, and says the sale waits', async () => {
+  it('offers only cash with WorkSuite out of reach, and says the sale waits (worksuite-desktop#296)', async () => {
     mount(true);
     expect(screen.queryByRole('radio', { name: 'Bank transfer' })).toBeNull();
-    expect(screen.getAllByRole('radio', { name: 'Card' }).length).toBe(1);
+    expect(screen.queryByRole('radio', { name: 'Card' })).toBeNull();
+    expect(screen.getByText(/cash and a discount only/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /^Complete sale$/ }));
     expect(await screen.findAllByText(/kept on this till/)).not.toHaveLength(0);
+  });
+
+  it('offers a card offline too where the till accepts one (recorded only)', () => {
+    mount(true, false, { card_offline: true, catalogue_minutes: 30, thumbs_mb: 200 });
+    expect(screen.getAllByRole('radio', { name: 'Card' }).length).toBe(1);
+    expect(screen.queryByRole('radio', { name: 'Bank transfer' })).toBeNull();
   });
 
   it('completes the total in cash at once for Cash exact', async () => {
@@ -139,5 +146,26 @@ describe('taking the money', () => {
     await waitFor(() => expect(sell).toHaveBeenCalledTimes(1));
     expect(sell.mock.calls[0]![0]).toMatchObject({ tenders: [{ method: 'cash', amount: 900 }], change_given: 0 });
     expect(await screen.findByText('No change to give')).toBeTruthy();
+  });
+});
+
+describe('the customer display while paying (#294)', () => {
+  it('follows the tenders as they are taken: due, paid, change — then the sale complete', async () => {
+    const heard: Array<{ type: string; state?: Record<string, unknown> }> = [];
+    const ch = new BroadcastChannel('worksuite-pos-display');
+    ch.onmessage = (e: MessageEvent<{ type: string; state?: Record<string, unknown> }>) => heard.push(e.data);
+    try {
+      const { sell } = mount();
+      const states = () => heard.filter((m) => m.type === 'state').map((m) => m.state!);
+      await waitFor(() => expect(states().at(-1)).toMatchObject({ kind: 'pay', total: 900, paid: 900, due: 0, change: 0 }));
+      expect(states().at(-1)!.lines).toEqual([{ name: 'Ceylon tea', quantity: 2, price: 450, total: 900 }]);
+      fireEvent.click(screen.getByRole('button', { name: '1,000.00' }));
+      await waitFor(() => expect(states().at(-1)).toMatchObject({ kind: 'pay', paid: 1000, due: 0, change: 100 }));
+      fireEvent.click(screen.getByRole('button', { name: /Complete sale/ }));
+      await waitFor(() => expect(sell).toHaveBeenCalled());
+      await waitFor(() => expect(states().at(-1)).toMatchObject({ kind: 'paid', total: 900, change: 100 }));
+    } finally {
+      ch.close();
+    }
   });
 });

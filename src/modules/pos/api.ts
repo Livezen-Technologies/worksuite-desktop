@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import type { PosCatalogue, PosCustomer, PosGiveBack, PosPrintPatch, PosPrintSettings, PosProduct, PosReport, PosSale, PosSellInput, PosTillStatus } from '@shared/pos';
+import type { PosCatalogue, PosCustomer, PosGiveBack, PosPrintPatch, PosPrintSettings, PosProduct, PosReport, PosSale, PosSellInput, PosTillSettings, PosTillSettingsPatch, PosTillStatus } from '@shared/pos';
 import { apiGet, ApiError, request } from '../../core/api';
 import { call, on } from '../../core/bridge';
 import { estimateCart, withDiscount, type CartLineInput, type PricedCart } from './pricing';
@@ -27,6 +27,7 @@ export const PK = {
   till: ['pos', 'till'] as const,
   catalogue: ['pos', 'catalogue'] as const,
   options: ['pos', 'options'] as const,
+  tillSettings: ['pos', 'tillSettings'] as const,
   registers: ['pos', 'registers'] as const,
   session: (id: number) => ['pos', 'session', id] as const,
   sales: (f: unknown) => ['pos', 'sales', f] as const,
@@ -56,6 +57,8 @@ export interface PosCan {
   discount_override?: boolean;
   /** The most they may take off, in percent: null no ceiling, 0 none. */
   max_discount_pct?: number | null;
+  /** #293: `pos.sale.voucher.accept` — may take a gift voucher as payment (absent on an older server: as before, yes). */
+  voucher?: boolean;
 }
 
 /** How a drawer closes in the company (the POS settings). */
@@ -136,6 +139,26 @@ export interface PosCapabilities {
   receipt_templates?: boolean;
   device_unpair?: boolean;
   device_rename?: boolean;
+  /* #293: discount, coupon and gift voucher on the payment screen. */
+  /** A fixed amount off with a reason (`discount_type: amount`). */
+  discount_amount?: boolean;
+  /** `POST coupons/validate`, and `coupon_report` on the price. */
+  coupon_validate?: boolean;
+  /** Gift vouchers on by default and their own right (`can.voucher`). */
+  voucher_accept?: boolean;
+  /** A void or full refund gives a coupon's use back. */
+  coupon_restore?: boolean;
+  /** The sale keeps its discount and coupon (`adjustments` on the receipt). */
+  sale_adjustments?: boolean;
+  /* worksuite-desktop#294: the customer display's promotions, and a phone number typed there looked up masked. */
+  display_slides?: boolean;
+  display_phone?: boolean;
+  /* worksuite-desktop#296: the catalogue a page at a time and what changed since, search on the server, small
+     pictures, an offline sale kept at the till's price. */
+  catalogue_changes?: boolean;
+  product_search?: boolean;
+  thumbnails?: boolean;
+  offline_prices?: boolean;
 }
 
 export interface PosOptions {
@@ -269,7 +292,10 @@ export const refreshCatalogue = (capable?: boolean) => call('pos:catalogueRefres
 export const sell = (input: PosSellInput) => call('pos:sell', input);
 export const listSales = (f: { session_id?: number; since?: string; limit?: number } = {}) => call('pos:sales', f);
 export const readSale = (ref: string) => call('pos:sale', { ref });
-export const syncNow = () => call('pos:syncNow');
+/** Send what waits; `catalogue`: bring the catalogue copy up to date as well (Sync now, the till opened). */
+export const syncNow = (o: { catalogue?: boolean } = {}) => call('pos:syncNow', o.catalogue ? { catalogue: true } : {});
+export const tillSettings = () => call('pos:tillSettings');
+export const setTillSettings = (p: PosTillSettingsPatch) => call('pos:tillSettingsSet', p);
 /** Send a refused sale again (into `sessionId`, the register open now, when it was refused for its drawer), or drop it. */
 export const resolveSale = (ref: string, action: 'retry' | 'drop', sessionId?: number) => call('pos:resolve', { ref, action, ...(sessionId ? { session_id: sessionId } : {}) });
 export const printSettings = () => call('pos:printSettings');
@@ -283,6 +309,8 @@ export const printTest = () => call('pos:printTest');
 export const openDrawer = () => call('pos:openDrawer');
 export const openDisplay = () => call('pos:displayOpen');
 export const closeDisplay = () => call('pos:displayClose');
+/** The customer display's own window: the promotions and logo this till keeps, and whether its screen takes touch (#294). */
+export const displayMedia = () => call('pos:displayMedia');
 export const listPrinters = () => call('print:printers', undefined);
 
 /* IPC, not the network: these answer with the line down. */
@@ -292,12 +320,23 @@ export function useTill() {
   return useQuery<PosTillStatus>({ queryKey: PK.till, queryFn: tillStatus, ...LOCAL, refetchInterval: 20_000 });
 }
 
+/**
+ * The catalogue copy, read again only when it changed — its version, when it was brought up to date, its pictures —
+ * not on every word from the main process: at 20,000 products each read is a large copy (worksuite-desktop#296).
+ */
 export function useCatalogue(enabled = true) {
-  return useQuery<PosCatalogue | null>({ queryKey: PK.catalogue, queryFn: readCatalogue, ...LOCAL, enabled });
+  const till = useTill();
+  const c = till.data?.catalogue;
+  const stamp = c ? `${c.version}|${c.fetched_at}|${c.products}|${c.thumbs?.count ?? 0}` : String(till.data?.till?.terminal.id ?? '');
+  return useQuery<PosCatalogue | null>({ queryKey: [...PK.catalogue, stamp], queryFn: readCatalogue, ...LOCAL, enabled, placeholderData: (prev) => prev });
 }
 
 export function useSales(f: { session_id?: number; since?: string }, enabled = true) {
   return useQuery<PosSale[]>({ queryKey: PK.sales(f), queryFn: () => listSales(f), ...LOCAL, enabled });
+}
+
+export function useTillSettings() {
+  return useQuery<PosTillSettings>({ queryKey: PK.tillSettings, queryFn: tillSettings, ...LOCAL });
 }
 
 export function usePrintSettings() {
@@ -311,7 +350,7 @@ export function usePosChanged(): void {
     () =>
       on('pos:changed', () => {
         void qc.invalidateQueries({ queryKey: PK.till });
-        void qc.invalidateQueries({ queryKey: PK.catalogue });
+        // The catalogue follows the till's status (`useCatalogue`): read again when its copy changed.
         void qc.invalidateQueries({ queryKey: ['pos', 'sales'] });
       }),
     [qc],
@@ -334,6 +373,17 @@ export function findInCatalogue(products: PosProduct[], code: string): PosProduc
 
 const n = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const s = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v : null);
+
+/**
+ * WorkSuite's own search (`GET api/pos/products/search`, `capabilities.product_search`): only while the till's copy is
+ * empty or still loading — otherwise the counter searches its copy and asks nobody (worksuite-desktop#296).
+ */
+export async function searchProducts(q: string, org?: number | null, signal?: AbortSignal): Promise<PosProduct[]> {
+  const r = await apiGet<{ items?: Array<Record<string, unknown>> }>(`${BASE}/products/search`, { q, limit: 30, ...(org ? { org } : {}) }, signal);
+  return (r.items ?? [])
+    .map((p) => ({ id: n(p.id), code: s(p.code), barcode: s(p.barcode), name: s(p.name) ?? '', unit: s(p.unit), category: s(p.category), price: n(p.price), discount_pct: n(p.discount_pct), tax_rate: n(p.tax_rate), ...(s(p.image_url) ? { image: true } : {}) }))
+    .filter((p) => Number.isInteger(p.id) && p.id > 0);
+}
 
 export async function lookupProduct(code: string, caps: PosCapabilities | undefined, org?: number | null): Promise<PosProduct | null> {
   if (caps?.lookup) {
@@ -389,7 +439,11 @@ export function pricingBody(caps: PosCapabilities | undefined, p: CounterPricing
   const out: Record<string, unknown> = {};
   if (caps?.promotions) out.apply_promotions = true;
   if (caps?.customers && p.customer_id) out.customer_id = p.customer_id;
-  if (caps?.coupons && p.coupon_code) out.coupon_code = p.coupon_code;
+  if (caps?.coupons && p.coupon_code) {
+    out.coupon_code = p.coupon_code;
+    // #293: a coupon that does not apply is said in `coupon`, and the cart priced without it, rather than refusing the price.
+    if (caps.coupon_validate) out.coupon_report = true;
+  }
   if (caps?.loyalty && p.customer_id && p.redeem_points && p.redeem_points > 0) out.redeem_points = Math.floor(p.redeem_points);
   return out;
 }
@@ -423,25 +477,77 @@ export function pricedOf(d: Record<string, unknown>, currency: string, discountP
   if ('points_redeemed' in d) out.points_redeemed = Math.floor(n(d.points_redeemed));
   if (Array.isArray(d.promotions)) {
     out.promotions = (d.promotions as Array<Record<string, unknown>>)
-      .map((p) => ({ id: n(p.id), label: s(p.label) ?? s(p.name) ?? '', amount: n(p.amount) }))
+      .map((p) => ({ id: n(p.id), label: s(p.label) ?? s(p.name) ?? '', amount: n(p.amount), ...(p.coupon === true ? { coupon: true } : {}) }))
       .filter((p) => Number.isInteger(p.id) && p.id > 0 && p.amount > 0);
+  }
+  // #293, each only where the server sent it.
+  if (d.discount_type === 'amount') {
+    out.discount_type = 'amount';
+    out.discount_value = n(d.discount_value);
+  }
+  if ('coupon_discount' in d) out.coupon_discount = n(d.coupon_discount);
+  if (d.coupon && typeof d.coupon === 'object') {
+    const c = d.coupon as Record<string, unknown>;
+    const code = s(c.code);
+    if (code) out.coupon = { code, amount: n(c.amount), valid: c.valid !== false, reason: s(c.reason), message: s(c.message) };
   }
   if (Array.isArray(d.pricing_notes)) out.notes = (d.pricing_notes as unknown[]).map((x) => s(x)).filter((x): x is string => !!x).slice(0, 5);
   return out;
 }
 
-export async function priceCart(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, caps: PosCapabilities | undefined, org?: number | null, counter: CounterPricing = {}, approvedPct: number | null = null): Promise<PricedCart> {
-  if (caps?.price) {
-    // A discount a manager approved past the cashier's rights: priced without it here, the percentage taken locally (`withDiscount`).
-    const asked = approvedPct !== null ? 0 : discountPct;
-    const c = await request<Record<string, unknown>>('POST', `${BASE}/price`, { body: { lines, discount_pct: asked, ...(org ? { org_id: org } : {}), ...pricingBody(caps, counter) } });
-    const priced = pricedOf(c.data, currency, asked);
-    return approvedPct !== null ? withDiscount(priced, approvedPct) : priced;
-  }
-  return legacyPrice(lines, discountPct, products, currency, ceiling);
+/** How the cashier's discount goes to the price door: a fixed amount where the server takes one (#293), else the percentage. */
+export function discountBody(caps: PosCapabilities | undefined, pct: number, amount: number | null): Record<string, unknown> {
+  return amount !== null && amount > 0 && caps?.discount_amount ? { discount_type: 'amount', discount_value: amount } : { discount_pct: pct };
 }
 
-async function legacyPrice(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null): Promise<PricedCart> {
+export async function priceCart(
+  lines: CartLineInput[],
+  discountPct: number,
+  products: Map<number, PosProduct>,
+  currency: string,
+  ceiling: number | null,
+  caps: PosCapabilities | undefined,
+  org?: number | null,
+  counter: CounterPricing = {},
+  approvedPct: number | null = null,
+  /** The cashier's discount as a fixed amount (#293), with `discountPct` the share it comes to. */
+  amount: number | null = null,
+): Promise<PricedCart> {
+  if (caps?.price) {
+    // A discount a manager approved past the cashier's rights: priced without it here, taken locally (`withDiscount`).
+    const approved = approvedPct !== null;
+    const c = await request<Record<string, unknown>>('POST', `${BASE}/price`, {
+      body: { lines, ...(approved ? { discount_pct: 0 } : discountBody(caps, discountPct, amount)), ...(org ? { org_id: org } : {}), ...pricingBody(caps, counter) },
+    });
+    const priced = pricedOf(c.data, currency, approved ? 0 : discountPct);
+    return approved ? withDiscount(priced, approvedPct, caps.discount_amount ? amount : null) : priced;
+  }
+  return legacyPrice(lines, discountPct, products, currency, ceiling, amount);
+}
+
+/**
+ * Whether a coupon may be used on this cart and what it takes off (`POST coupons/validate`, `capabilities.coupon_validate`,
+ * #293): WorkSuite runs its promotions on the cart and writes nothing. `reason` names why not (`not_found`, `expired`,
+ * `min_spend` …), `message` says it in WorkSuite's words.
+ */
+export interface CouponCheck {
+  valid: boolean;
+  code: string;
+  reason: string | null;
+  message: string;
+  amount: number;
+  promotion: string | null;
+}
+
+export async function validateCoupon(code: string, lines: CartLineInput[], o: { org?: number | null; customer_id?: number } = {}): Promise<CouponCheck> {
+  const r = await request<Record<string, unknown>>('POST', `${BASE}/coupons/validate`, {
+    body: { coupon_code: code, lines, ...(o.org ? { org_id: o.org } : {}), ...(o.customer_id ? { customer_id: o.customer_id } : {}) },
+  });
+  const d = r.data ?? {};
+  return { valid: d.valid === true, code: s(d.code) ?? code, reason: s(d.reason), message: s(d.message) ?? r.message ?? '', amount: n(d.amount), promotion: s(d.promotion) };
+}
+
+async function legacyPrice(lines: CartLineInput[], discountPct: number, products: Map<number, PosProduct>, currency: string, ceiling: number | null, amount: number | null = null): Promise<PricedCart> {
   if (inventoryPriceRefused) throw new ApiError(403, 'Inventory prices are not readable here.', null);
   const priced = new Map(products);
   await Promise.all(
@@ -456,7 +562,7 @@ async function legacyPrice(lines: CartLineInput[], discountPct: number, products
       priced.set(l.product_id, { ...p, price: n(r.price, p.price), discount_pct: n(r.discount_pct, p.discount_pct), tax_rate: n(r.tax_rate, p.tax_rate) });
     }),
   );
-  const e = estimateCart(lines, priced, discountPct, ceiling, currency);
+  const e = estimateCart(lines, priced, discountPct, ceiling, currency, amount);
   if (e.error) throw new ApiError(422, e.error, 'validation_failed');
   return e.cart;
 }
@@ -473,10 +579,12 @@ export function useCartPrice(
   counter: CounterPricing = {},
   /** The discount a manager approved (its percentage), past the cashier's own ceiling. */
   approvedPct: number | null = null,
+  /** The cashier's discount as a fixed amount (#293); `discountPct` is then the share it comes to. */
+  amount: number | null = null,
 ): CartPrice {
   // Offline (and while WorkSuite is asked) the preview takes no promotion: the sale says so (`promotion_ids: []`).
-  const estimate = useMemo(() => estimateCart(lines, products, discountPct, approvedPct !== null ? null : ceiling, currency), [lines, products, discountPct, ceiling, currency, approvedPct]);
-  const signature = JSON.stringify([lines, discountPct, counter.customer_id ?? null, counter.coupon_code ?? null, counter.redeem_points ?? null, approvedPct]);
+  const estimate = useMemo(() => estimateCart(lines, products, discountPct, approvedPct !== null ? null : ceiling, currency, amount), [lines, products, discountPct, ceiling, currency, approvedPct, amount]);
+  const signature = JSON.stringify([lines, discountPct, counter.customer_id ?? null, counter.coupon_code ?? null, counter.redeem_points ?? null, approvedPct, amount]);
   const [debounced, setDebounced] = useState(signature);
   useEffect(() => {
     const t = setTimeout(() => setDebounced(signature), 250);
@@ -486,8 +594,8 @@ export function useCartPrice(
   const server = useQuery<PricedCart, Error>({
     queryKey: ['pos', 'price', debounced, currency, !!caps?.price, !!caps?.promotions, org ?? null],
     queryFn: () => {
-      const [l, d, customer_id, coupon_code, redeem_points, approved] = JSON.parse(debounced) as [CartLineInput[], number, number | null, string | null, number | null, number | null];
-      return priceCart(l, d, products, currency, ceiling, caps, org, { ...(customer_id ? { customer_id } : {}), ...(coupon_code ? { coupon_code } : {}), ...(redeem_points ? { redeem_points } : {}) }, approved);
+      const [l, d, customer_id, coupon_code, redeem_points, approved, fixed] = JSON.parse(debounced) as [CartLineInput[], number, number | null, string | null, number | null, number | null, number | null];
+      return priceCart(l, d, products, currency, ceiling, caps, org, { ...(customer_id ? { customer_id } : {}), ...(coupon_code ? { coupon_code } : {}), ...(redeem_points ? { redeem_points } : {}) }, approved, fixed);
     },
     enabled: online && lines.length > 0 && settled,
     staleTime: 60_000,

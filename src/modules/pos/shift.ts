@@ -12,14 +12,29 @@ import { countBody, formatMoney, parseAmount, type CountLine } from './pricing';
  * Which sales the history shows, as WorkSuite's review filter (`GET sales?review=1|price_differs|payment_missing|late`)
  * reads them — here from this till's own record: every sale, those flagged at all, or those with one flag.
  */
-export type ReviewFilter = 'all' | 'review' | PosSaleFlag;
+export type ReviewFilter = 'all' | 'review' | 'needs' | PosSaleFlag;
 
+/**
+ * `needs` (worksuite-desktop#296): what a person should look at — a sale WorkSuite flagged (a price kept that differs,
+ * a product archived since, stock below zero, a payment missing, a late sale) or one it refused.
+ */
 export function filterSales(sales: PosSale[], f: ReviewFilter): PosSale[] {
   if (f === 'all') return sales;
   return sales.filter((s) => {
     const flags = saleFlags(s);
+    if (f === 'needs') return flags.length > 0 || s.state === 'refused';
     return f === 'review' ? flags.length > 0 : flags.includes(f);
   });
+}
+
+/**
+ * Whether the register may close (worksuite-desktop#296): not while sales are still to reach WorkSuite, or were
+ * refused — online too — since the count WorkSuite expects is short of them. A manager (`pos.register.view_all`) may
+ * close anyway, once they confirm.
+ */
+export function closeGuard(status: { waiting: number; refused: number }, can: { view_all?: boolean } | null | undefined): { pending: number; blocked: boolean; override: boolean } {
+  const pending = Math.max(0, status.waiting) + Math.max(0, status.refused);
+  return { pending, blocked: pending > 0, override: pending > 0 && !!can?.view_all };
 }
 
 /** What closing sends: the notes and coins counted, or one figure (not where the company counts note by note), and why it is different when it is. */

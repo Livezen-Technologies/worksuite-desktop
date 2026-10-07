@@ -298,7 +298,7 @@ describe('the till’s devices', () => {
 });
 
 describe('the customer display', () => {
-  it('shows the sale on screen, what they pay and what the discount saved them, then the change', async () => {
+  it('shows the sale on screen — each line’s unit price, what they pay and the discount — then the change', async () => {
     mount(
       <TabProvider tabId="d" route="/pos/display" active onGo={() => undefined}>
         <CustomerDisplay />
@@ -306,10 +306,13 @@ describe('the customer display', () => {
       till(),
     );
     expect(screen.getByText('Welcome')).toBeTruthy();
-    publish({ kind: 'cart', shop: 'Acme', currency: 'LKR', lines: [{ name: 'Ceylon tea', quantity: 2, total: 900 }], discount: 90, tax: 0, total: 810, provisional: false });
-    expect(await screen.findByText('2 × Ceylon tea')).toBeTruthy();
+    publish({ kind: 'cart', shop: 'Acme', currency: 'LKR', lines: [{ name: 'Ceylon tea', quantity: 2, price: 450, total: 900 }], subtotal: 900, discount: 90, tax: 0, total: 810, provisional: false });
+    expect(await screen.findByText('Ceylon tea')).toBeTruthy();
+    expect(screen.getByText('2×')).toBeTruthy();
+    expect(screen.getByText('450.00 each')).toBeTruthy();
     expect(screen.getByText('You pay')).toBeTruthy();
-    expect(screen.getByText('LKR · you saved 90.00')).toBeTruthy();
+    expect(screen.getByText('−90.00')).toBeTruthy();
+    expect(screen.getByText('LKR 810.00')).toBeTruthy();
     publish({ kind: 'paid', shop: 'Acme', currency: 'LKR', total: 810, paid: 1000, change: 190 });
     expect(await screen.findByText('Your change')).toBeTruthy();
     expect(screen.getByText('190.00')).toBeTruthy();

@@ -2,7 +2,7 @@ import { useMemo, useState } from 'react';
 import type { PosCategoryNode, PosProduct, PosSale } from '@shared/pos';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
-import { categoryLabel, FAVOURITES, favouritesOf, findNode, inCategory, nodeKey, trailOf } from './catalog';
+import { categoryLabel, FAVOURITES, favouritesOf, findNode, groupCounts, inCategory, nodeKey, trailOf } from './catalog';
 import { useT } from './i18n';
 import { ON, tintOf } from './look';
 import { categoryCounts, topSellers } from './paging';
@@ -26,6 +26,7 @@ export default function CategoryPicker({
   favourites,
   serverTop,
   onPick,
+  onPoint,
   onAdd,
   onClose,
 }: {
@@ -39,6 +40,8 @@ export default function CategoryPicker({
   /** Today's top sellers at the branch, from WorkSuite (by product id and quantity); null: this till's own record. */
   serverTop?: Array<{ product_id: number; quantity: number }> | null;
   onPick: (c: string | null) => void;
+  /** The grid behind follows the category pointed at, at once; "Show all" (or Enter) then closes the dialog (#295). */
+  onPoint?: (c: string | null) => void;
   onAdd: (p: PosProduct) => void;
   onClose: () => void;
 }) {
@@ -48,6 +51,11 @@ export default function CategoryPicker({
   const grouped = !!tree?.length;
   const favs = useMemo(() => favouritesOf(products, favourites), [products, favourites]);
   const counts = useMemo(() => categoryCounts(categories, products), [categories, products]);
+  const owned = useMemo(() => groupCounts(tree, products), [tree, products]);
+  const point = (key: string | null) => {
+    setPointed(key);
+    onPoint?.(key);
+  };
   const needle = find.trim().toLowerCase();
   const inside = useMemo(() => (pointed === FAVOURITES ? favs : products.filter((p) => inCategory(p, pointed, tree, favourites))), [products, pointed, tree, favourites, favs]);
   const top = useMemo(() => {
@@ -86,8 +94,14 @@ export default function CategoryPicker({
         key={key ?? '*'}
         type="button"
         aria-pressed={on}
-        onClick={() => setPointed(key)}
+        onClick={() => point(key)}
         onDoubleClick={() => onPick(key)}
+        onKeyDown={(e) => {
+          if (e.key === 'Enter') {
+            e.preventDefault();
+            onPick(key);
+          }
+        }}
         className={cx('flex h-12 w-full shrink-0 items-center gap-3 rounded-[12px] px-2.5 text-left text-[14px] text-ink', on ? `${ON} font-extrabold` : 'font-semibold hover:bg-pos-key')}
       >
         <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-[9px]', on ? 'bg-primary text-white' : key && key !== FAVOURITES ? tintOf(name) : 'bg-pos-panel text-ink-2 shadow-[inset_0_0_0_1px_var(--pos-line)]')}>
@@ -116,7 +130,7 @@ export default function CategoryPicker({
           {!needle ? row(null, t('pos.allProducts'), products.length) : null}
           {!needle && favs.length ? row(FAVOURITES, t('pos.cat.favourites'), favs.length, 'star') : null}
           {!needle && (groups.length || flat.length) ? <div className="mx-1.5 my-1.5 h-px shrink-0 bg-pos-line" /> : null}
-          {grouped ? groups.map((g) => row(nodeKey(g), g.name, g.product_count)) : flat.map((c) => row(c.name, c.name, c.count))}
+          {grouped ? groups.map((g) => row(nodeKey(g), g.name, owned.get(g.id) ?? 0)) : flat.map((c) => row(c.name, c.name, c.count))}
           {needle && !groups.length && !flat.length ? <p className="px-2 py-3 text-[13px] text-ink-3">{t('pos.cat.none')}</p> : null}
         </nav>
         <section className="flex min-w-0 flex-1 flex-col gap-3.5 px-5 py-[18px]">
@@ -132,9 +146,9 @@ export default function CategoryPicker({
           {node?.children.length ? (
             <div className="flex flex-wrap gap-2" aria-label={t('pos.cat.groups')}>
               {node.children.map((c) => (
-                <button key={c.id} type="button" onClick={() => setPointed(nodeKey(c))} onDoubleClick={() => onPick(nodeKey(c))} className="flex h-touch items-center gap-2 rounded-full bg-pos-key px-3.5 text-[13px] font-semibold hover:brightness-95">
+                <button key={c.id} type="button" onClick={() => point(nodeKey(c))} onDoubleClick={() => onPick(nodeKey(c))} className="flex h-touch items-center gap-2 rounded-full bg-pos-key px-3.5 text-[13px] font-semibold hover:brightness-95">
                   {c.name}
-                  <span className="text-[12px] text-ink-3">{c.product_count}</span>
+                  <span className="text-[12px] text-ink-3">{owned.get(c.id) ?? 0}</span>
                 </button>
               ))}
             </div>

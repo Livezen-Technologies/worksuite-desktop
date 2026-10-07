@@ -34,7 +34,8 @@ describe('capability gating', () => {
     expect(allowedMethods(true, null)).toEqual(['cash', 'card', 'bank_transfer', 'wallet']);
     const configured = [opt('cash'), opt('qr', { name: 'LankaQR' }), opt('voucher'), opt('card'), opt('account')];
     expect(allowedMethods(true, configured)).toEqual(['cash', 'qr', 'voucher', 'card', 'account']);
-    expect(allowedMethods(false, configured)).toEqual(['cash', 'card']);
+    expect(allowedMethods(false, configured), 'offline: cash only (worksuite-desktop#296)').toEqual(['cash']);
+    expect(allowedMethods(false, configured, true), 'a card too, where the till accepts one offline').toEqual(['cash', 'card']);
     expect(allowedTenders(true, configured)[1]!.name).toBe('LankaQR');
   });
 
@@ -107,7 +108,10 @@ describe('tenders', () => {
     expect(p([row('store_credit', '300')])).toBeNull();
     expect(p([row('store_credit', '301')])).toMatch(/300.00 in store credit/);
     expect(p([row('account', '900')], null)).toMatch(/attach the customer/);
-    expect(p([row('qr', '900')], named, false)).toMatch(/Only cash and card/);
+    expect(p([row('qr', '900')], named, false)).toMatch(/Only cash is taken/);
+    expect(p([row('card', '900')], named, false), 'a card offline only where the till accepts one').toMatch(/Only cash is taken/);
+    expect(tenderProblem([row('card', '900')], { offered, customer: named, balances, online: false, cardOffline: true })).toBeNull();
+    expect(tenderProblem([row('qr', '900')], { offered, customer: named, balances, online: false, cardOffline: true })).toMatch(/Only cash and card/);
     expect(tenderProblem([row('qr', '900')], { offered: [opt('cash')], customer: null, balances, online: true })).toMatch(/not taken here/);
   });
 
