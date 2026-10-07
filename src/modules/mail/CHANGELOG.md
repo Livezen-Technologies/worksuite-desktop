@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.23.0 — 2026-10-07
+
+**Added**
+
+- Settings › Mail › Accounts → Folders lists each folder's sync state with a switch to sync or skip it; non-mail folders are skipped by default (#286)
+
+**Changed**
+
+- the first sync shows real progress and time left ('First sync · headers 12 of 21 folders · started 1:20 · about 4 min left'), the sync log groups folders by state (errors, downloading N of M, waiting, up to date and skipped folded), and 'Syncing headers…' stops once sync is done (#286, #287)
+
 ## 1.22.0 — 2026-10-05
 
 - Attachments upload in parts with progress and Retry (#249)
