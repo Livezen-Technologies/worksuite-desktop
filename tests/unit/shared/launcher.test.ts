@@ -8,8 +8,10 @@ import {
   fitGridHeight,
   FULL_COLUMN,
   FULL_SEARCH,
+  FULL_SIDEBAR,
   fullscreenChrome,
   fullscreenRect,
+  fullscreenSidebar,
   GRID_GAP_PX,
   GRID_PAD,
   gridStep,
@@ -159,24 +161,46 @@ describe('launcher size and place (worksuite-desktop#206)', () => {
     expect([at('fullscreen', 'compact'), at('fullscreen', 'comfortable'), at('fullscreen', 'large')]).toEqual([52, 56, 72]);
   });
 
-  it('puts full screen under the top bar, in one centred column of at most 1080px with 104px tiles', () => {
-    // [width, height] → columns.
-    const cols: Record<string, number> = { '1024x700': 8, '1280x800': 9, '1440x900': 9, '1728x1117': 9, '2560x1440': 9 };
+  it('puts full screen under the top bar, in one centred column of at most 1160px with 116px tiles and the categories in a sidebar', () => {
+    // [width, height] → columns, with the sidebar (240px and 32px of gap) taking its share of the column.
+    const cols: Record<string, number> = { '1024x700': 5, '1280x800': 6, '1440x900': 6, '1728x1117': 6, '2560x1440': 6 };
     for (const [w, h] of SIZES) {
       const l = launcherLayout(win(w, h), full(w, h), { mode: 'fullscreen', size: 'comfortable' }, parts);
       // Never over the top bar, and so never over the traffic lights or the window buttons in it.
-      expect(l).toMatchObject({ kind: 'fullscreen', left: 0, top: TOP_BAR_PX, width: w, height: h - TOP_BAR_PX, icon: 56, tileMin: 104, rowHeight: 96 });
-      expect(l.column!.width).toBe(Math.min(1080, w));
+      expect(l).toMatchObject({ kind: 'fullscreen', left: 0, top: TOP_BAR_PX, width: w, height: h - TOP_BAR_PX, icon: 56, tileMin: 116, gap: 8, rowHeight: 116, sidebar: true });
+      expect(l.column!.width).toBe(Math.min(1160, w));
       expect(l.columns).toBe(cols[`${w}x${h}`]);
-      expect(l.column!.gridRoom).toBe(h - TOP_BAR_PX - fullscreenChrome(parts));
+      expect(l.column!.gridRoom).toBe(h - TOP_BAR_PX - fullscreenChrome(parts, true));
     }
     expect(TOP_BAR_PX).toBeGreaterThanOrEqual(52);
-    // Nothing under the footer: it is attached to the bottom (worksuite-desktop#233).
-    expect(FULL_COLUMN).toEqual({ maxWidth: 1080, padTop: 48, padSide: 32, padBottom: 0 });
-    expect(FULL_SEARCH).toEqual({ maxWidth: 640, height: 52 });
-    expect(fullscreenChrome(parts)).toBe(48 + 68 + 40 + 1 + 40);
+    // Nothing under the column: the footer runs along the bottom of the window (worksuite-desktop#233).
+    expect(FULL_COLUMN).toEqual({ maxWidth: 1160, padTop: 40, padSide: 24, padBottom: 0 });
+    expect(FULL_SEARCH).toEqual({ height: 56 });
+    expect(FULL_SIDEBAR).toEqual({ width: 240, gap: 32, minColumn: 760 });
+    // The search row, the footer; the chips only when the categories are not in the sidebar; Pinned and Recent share a row.
+    expect(fullscreenChrome(parts, true)).toBe(40 + 72 + 64);
+    expect(fullscreenChrome(parts)).toBe(40 + 72 + 40 + 64);
+    expect(fullscreenChrome({ pinned: true, recent: true, chips: true }, true)).toBe(40 + 72 + 68 + 64);
     // Under a menu bar or a work area that starts lower: lower too.
     expect(fullscreenRect(win(1280, 800), { left: 0, top: 70, width: 1280, height: 730 }).top).toBe(70);
+  });
+
+  it('puts the categories back as chips when the sidebar is off, there are none, or the column is too narrow for it', () => {
+    const at = (w: number, sidebar: boolean | undefined, chips = true) => launcherLayout(win(w, 800), full(w, 800), { mode: 'fullscreen', size: 'compact', toggles: { sidebar } }, { ...parts, chips });
+    expect(at(1280, true)).toMatchObject({ sidebar: true, columns: 6 });
+    // Asked for by default.
+    expect(at(1280, undefined).sidebar).toBe(true);
+    // Off: the whole column for the apps.
+    expect(at(1280, false)).toMatchObject({ sidebar: false, columns: 9 });
+    // No categories (grouping off): nothing to list.
+    expect(at(1280, true, false).sidebar).toBe(false);
+    // 808px of window: a 760px column inside the padding, just enough; one less, chips.
+    expect(at(808, true).sidebar).toBe(true);
+    expect(at(807, true).sidebar).toBe(false);
+    expect(fullscreenSidebar(808, true, true)).toBe(true);
+    // The popover and the sheet never have one.
+    expect(launcherLayout(win(1280, 800), full(1280, 800), { mode: 'popover', size: 'compact', toggles: { sidebar: true } }, parts).sidebar).toBe(false);
+    expect(launcherLayout(win(420, 800), full(420, 800), { mode: 'fullscreen', size: 'compact', toggles: { sidebar: true } }, parts).sidebar).toBe(false);
   });
 
   it('fits full screen\'s grid to its content, or to the whole rows and headings that fit', () => {
@@ -435,7 +459,7 @@ describe('the person\'s preferences', () => {
     expect(p.sort).toBe('mine');
     expect(p.openIn).toBe('window');
     expect(p.shortcut).toBe('Mod+Shift+K');
-    expect(p.toggles).toEqual({ recent: false, badges: true, browserMark: true, names: true });
+    expect(p.toggles).toEqual({ recent: false, badges: true, browserMark: true, names: true, sidebar: true });
     expect(p.usage).toEqual({ mail: 3 });
     expect(p.updatedAt).toBe(0);
     expect(normaliseStored(null)).toEqual(defaultStoredPrefs());

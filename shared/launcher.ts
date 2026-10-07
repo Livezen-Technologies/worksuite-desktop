@@ -30,6 +30,8 @@ const ID = /^[a-z][a-z0-9_-]{0,39}$/;
 export const ICON_PX: Record<LauncherSize, number> = { compact: 44, comfortable: 52, large: 64 };
 /** Full screen draws every size one step larger (worksuite-desktop#206). */
 export const FULL_ICON_PX: Record<LauncherSize, number> = { compact: 52, comfortable: 56, large: 72 };
+/** Full screen's tiles have room round the icon and a 14px name: 112px tall for a 52px icon. */
+export const FULL_TILE_ROOM = { names: 60, bare: 28 } as const;
 export const SHEET_ICON_PX = 48;
 export const SHEET_COLUMNS = 4;
 /** Narrower than this, the launcher is a bottom sheet. */
@@ -37,9 +39,9 @@ export const SHEET_BELOW = 480;
 /** The popover grid's `repeat(auto-fill, minmax(88px, 1fr))`. */
 export const TILE_MIN_PX = 88;
 export const GRID_GAP_PX = 2;
-/** Full screen's `repeat(auto-fill, minmax(104px, 1fr))`. */
-export const FULL_TILE_MIN_PX = 104;
-export const FULL_GRID_GAP_PX = 4;
+/** Full screen's `repeat(auto-fill, minmax(116px, 1fr))`, 8px apart. */
+export const FULL_TILE_MIN_PX = 116;
+export const FULL_GRID_GAP_PX = 8;
 /** The popover: `width: min(880px, 100vw - 48px)`, `max-height: min(640px, 100vh - 96px)`. */
 export const POPOVER_MAX = { width: 880, height: 640 } as const;
 export const POPOVER_GUTTER = { x: 48, y: 96 } as const;
@@ -50,11 +52,17 @@ export const POPOVER_TOP_FRACTION = 0.12;
 /** The shell's top bar (layouts/TitleBar), which holds the window controls: the traffic lights on macOS. */
 export const TOP_BAR_PX = 52;
 /**
- * Full screen's column: `max-width: 1080px; margin: 0 auto`, 48px above, 32px each side, and nothing below: the
- * footer is attached to the bottom of the window (worksuite-desktop#233).
+ * Full screen's column: `max-width: 1160px; margin: 0 auto`, 40px above, 24px each side, and nothing below: the
+ * footer runs along the bottom of the window (worksuite-desktop#233), across all of it.
  */
-export const FULL_COLUMN = { maxWidth: 1080, padTop: 48, padSide: 32, padBottom: 0 } as const;
-export const FULL_SEARCH = { maxWidth: 640, height: 52 } as const;
+export const FULL_COLUMN = { maxWidth: 1160, padTop: 40, padSide: 24, padBottom: 0 } as const;
+/** Full screen's search: the column's width, less its settings and close buttons beside it, 56px tall. */
+export const FULL_SEARCH = { height: 56 } as const;
+/**
+ * Full screen's categories in a sidebar: a list 240px wide on the left, 32px from the apps. Only where the column
+ * keeps at least `minColumn` px for it and the apps; narrower, the categories are chips above the apps again.
+ */
+export const FULL_SIDEBAR = { width: 240, gap: 32, minColumn: 760 } as const;
 /** Never more of the window than this (the bottom sheet). */
 export const MAX_FRACTION = 0.9;
 
@@ -67,14 +75,18 @@ export const LAUNCHER_PARTS = {
   border: 2,
   /** The popover's search row. */
   header: 66,
-  /** Full screen's search row: 52px, and 16px under it. */
-  fullHeader: 68,
+  /** Full screen's search row: 56px, and 16px under it. */
+  fullHeader: 72,
+  /** Full screen's one row of Pinned and Recent: 44px chips, and 24px under them. */
+  fullRow: 68,
   /** The Pinned and the Recent rows, each. */
   row: 40,
   /** The category chips. */
   chips: 40,
   divider: 1,
   footer: 40,
+  /** Full screen's footer: 44px buttons with 10px above and below. */
+  fullFooter: 64,
   /** A category heading in full screen. */
   heading: 32,
 } as const;
@@ -108,6 +120,8 @@ export interface LauncherToggles {
   browserMark: boolean;
   /** App names under the icons; off, an icon-only grid. */
   names: boolean;
+  /** Full screen: the categories in a list on the left, with their counts; off, chips above the apps. */
+  sidebar: boolean;
 }
 
 /**
@@ -144,7 +158,7 @@ export interface LauncherOrgDefaults {
   order?: readonly string[] | null;
 }
 
-export const DEFAULT_TOGGLES: LauncherToggles = { recent: true, badges: true, browserMark: true, names: true };
+export const DEFAULT_TOGGLES: LauncherToggles = { recent: true, badges: true, browserMark: true, names: true, sidebar: true };
 
 export function defaultStoredPrefs(): StoredLauncherPrefs {
   return {
@@ -232,7 +246,7 @@ export function normaliseStored(raw: unknown): StoredLauncherPrefs {
     sort: pick(o.sort, LAUNCHER_SORTS, d.sort),
     openIn: pick(o.openIn, LAUNCHER_OPEN_IN, d.openIn),
     shortcut: isUsableShortcut(o.shortcut) ? o.shortcut : d.shortcut,
-    toggles: { recent: flag('recent'), badges: flag('badges'), browserMark: flag('browserMark'), names: flag('names') },
+    toggles: { recent: flag('recent'), badges: flag('badges'), browserMark: flag('browserMark'), names: flag('names'), sidebar: flag('sidebar') },
     usage,
     updatedAt: typeof o.updatedAt === 'number' && Number.isFinite(o.updatedAt) && o.updatedAt > 0 ? o.updatedAt : 0,
   };
@@ -502,6 +516,11 @@ export function tileHeight(icon: number, names: boolean): number {
   return names ? icon + 40 : icon + 20;
 }
 
+/** A full screen tile's height: more room round the icon, and a larger name (`FULL_TILE_ROOM`). */
+export function fullTileHeight(icon: number, names: boolean): number {
+  return icon + (names ? FULL_TILE_ROOM.names : FULL_TILE_ROOM.bare);
+}
+
 /** The grid's scroller: as many whole rows as fit in `available`, never a row cut through. At least one row. */
 export function wholeRows(available: number, rowHeight: number, gap: number, pad: { top: number; bottom: number } = GRID_PAD): { rows: number; height: number } {
   const rows = Math.max(1, Math.floor((available - pad.top - pad.bottom + gap) / (rowHeight + gap)));
@@ -521,10 +540,18 @@ export function popoverChrome(p: LauncherParts): number {
   return P.border + P.header + (p.pinned ? P.row : 0) + (p.recent ? P.row : 0) + (p.chips ? P.chips : 0) + P.divider + P.footer;
 }
 
-/** The height of everything in full screen's column but the grid, its padding included. */
-export function fullscreenChrome(p: LauncherParts): number {
+/**
+ * The height of everything in full screen but the grid, the column's padding included: the search row, one row for
+ * Pinned and Recent together, the category chips when they are not in the sidebar, and the footer.
+ */
+export function fullscreenChrome(p: LauncherParts, sidebar = false): number {
   const P = LAUNCHER_PARTS;
-  return FULL_COLUMN.padTop + P.fullHeader + (p.pinned ? P.row : 0) + (p.recent ? P.row : 0) + (p.chips ? P.chips : 0) + P.divider + P.footer + FULL_COLUMN.padBottom;
+  return FULL_COLUMN.padTop + P.fullHeader + (p.pinned || p.recent ? P.fullRow : 0) + (p.chips && !sidebar ? P.chips : 0) + P.fullFooter + FULL_COLUMN.padBottom;
+}
+
+/** Whether full screen shows its categories in the sidebar: asked for, there are categories, and the column has room. */
+export function fullscreenSidebar(column: number, asked: boolean, chips: boolean): boolean {
+  return asked && chips && column - 2 * FULL_COLUMN.padSide >= FULL_SIDEBAR.minColumn;
 }
 
 export interface LauncherLayout {
@@ -549,6 +576,8 @@ export interface LauncherLayout {
   grid: { height: number; rows: number } | null;
   /** Full screen: its centred column's width, and the most of it the grid may take. */
   column: { width: number; gridRoom: number } | null;
+  /** Full screen: the categories are in a sidebar on the left (`fullscreenSidebar`). */
+  sidebar: boolean;
 }
 
 /** The size of the window's content, in CSS px. */
@@ -600,17 +629,19 @@ export function fullscreenRect(win: WindowSize, area: Rect): Rect & { column: nu
 export function launcherLayout(
   win: WindowSize,
   area: Rect,
-  prefs: Pick<LauncherPrefs, 'mode' | 'size'> & { toggles?: Pick<LauncherToggles, 'names'> },
+  prefs: Pick<LauncherPrefs, 'mode' | 'size'> & { toggles?: Partial<Pick<LauncherToggles, 'names' | 'sidebar'>> },
   parts: LauncherParts = { pinned: false, recent: false, chips: true },
 ): LauncherLayout {
   const names = prefs.toggles?.names ?? true;
   if (win.width < SHEET_BELOW) {
     const height = Math.floor(area.height * MAX_FRACTION);
-    return { kind: 'sheet', left: area.left, top: area.top + area.height - height, width: area.width, height, icon: SHEET_ICON_PX, rowHeight: tileHeight(SHEET_ICON_PX, names), tileMin: 0, gap: GRID_GAP_PX, fixedColumns: SHEET_COLUMNS, columns: SHEET_COLUMNS, grid: null, column: null };
+    return { kind: 'sheet', left: area.left, top: area.top + area.height - height, width: area.width, height, icon: SHEET_ICON_PX, rowHeight: tileHeight(SHEET_ICON_PX, names), tileMin: 0, gap: GRID_GAP_PX, fixedColumns: SHEET_COLUMNS, columns: SHEET_COLUMNS, grid: null, column: null, sidebar: false };
   }
   if (prefs.mode === 'fullscreen') {
     const icon = FULL_ICON_PX[prefs.size];
     const r = fullscreenRect(win, area);
+    const sidebar = fullscreenSidebar(r.column, prefs.toggles?.sidebar ?? DEFAULT_TOGGLES.sidebar, parts.chips);
+    const gridWidth = r.column - 2 * FULL_COLUMN.padSide - (sidebar ? FULL_SIDEBAR.width + FULL_SIDEBAR.gap : 0);
     return {
       kind: 'fullscreen',
       left: r.left,
@@ -618,13 +649,14 @@ export function launcherLayout(
       width: r.width,
       height: r.height,
       icon,
-      rowHeight: tileHeight(icon, names),
+      rowHeight: fullTileHeight(icon, names),
       tileMin: FULL_TILE_MIN_PX,
       gap: FULL_GRID_GAP_PX,
       fixedColumns: null,
-      columns: columnsFor(r.column - 2 * FULL_COLUMN.padSide, FULL_TILE_MIN_PX, FULL_GRID_GAP_PX),
+      columns: columnsFor(gridWidth, FULL_TILE_MIN_PX, FULL_GRID_GAP_PX),
       grid: null,
-      column: { width: r.column, gridRoom: Math.max(0, r.height - fullscreenChrome(parts)) },
+      column: { width: r.column, gridRoom: Math.max(0, r.height - fullscreenChrome(parts, sidebar)) },
+      sidebar,
     };
   }
   const icon = ICON_PX[prefs.size];
@@ -644,6 +676,7 @@ export function launcherLayout(
     columns: columnsFor(p.width - LAUNCHER_PARTS.border - 2 * GRID_PAD.x),
     grid: p.grid,
     column: null,
+    sidebar: false,
   };
 }
 

@@ -126,9 +126,9 @@ describe('when the fades show (worksuite-desktop#233)', () => {
     expect(bottom.style.background).toContain('linear-gradient(to bottom, transparent, var(--launcher-bg))');
     expect(bottom.className).toContain('pointer-events-none');
     expect(fade('top')!.style.background).toContain('linear-gradient(to top, transparent, var(--launcher-bg))');
-    // In the column (at most 1080px), not across the window.
+    // In the column (at most 1160px), not across the window.
     const column = dialog().querySelector<HTMLElement>('[data-column]')!;
-    expect(column.style.maxWidth).toBe('1080px');
+    expect(column.style.maxWidth).toBe('1160px');
     expect(column.contains(bottom)).toBe(true);
     expect(bottom.className).toContain('inset-x-0');
     expect(bottom.parentElement!.hasAttribute('data-grid-area')).toBe(true);
@@ -138,16 +138,19 @@ describe('when the fades show (worksuite-desktop#233)', () => {
 });
 
 describe('the footer (worksuite-desktop#233)', () => {
-  it('is attached to the bottom of the column, with one soft hairline and the launcher\'s background', () => {
+  it('runs along the bottom of the window, with one soft hairline and the launcher\'s background, its words in the column', () => {
     render(<Launcher />);
     const column = dialog().querySelector<HTMLElement>('[data-column]')!;
-    expect(column.lastElementChild).toBe(footer());
+    expect(dialog().lastElementChild).toBe(footer());
     expect(column.style.paddingBottom).toBe('0px');
     expect(footer().className).toContain('border-t');
     expect(footer().className).toContain('border-launcher-line');
     expect(footer().className).not.toContain('border-line ');
     expect(footer().className).toContain('bg-launcher');
-    expect(footer().className).toContain('px-3');
+    // Its words line up with the column above: as wide, as far in.
+    const inner = hints().parentElement!;
+    expect(inner.style.maxWidth).toBe('1160px');
+    expect(inner.style.paddingLeft).toBe('24px');
     expect(dialog().className).toContain('bg-launcher');
     // No second edge: the grid area draws no border of its own.
     expect(dialog().querySelector<HTMLElement>('[data-grid-area]')!.className).not.toMatch(/border/);
@@ -157,7 +160,9 @@ describe('the footer (worksuite-desktop#233)', () => {
     render(<Launcher />);
     expect(hints().textContent).toBe('13 apps · ↑↓←→ move · ↵ open · ⌘↵ new window · Esc close');
     expect(Array.from(hints().querySelectorAll('kbd')).map((k) => k.textContent)).toEqual(['↑', '↓', '←', '→', '↵', '⌘', '↵', 'Esc']);
-    expect(footer().lastElementChild!.textContent).toBe('Customise');
+    const customise = hints().parentElement!.lastElementChild!;
+    expect(customise.textContent).toBe('Customise');
+    expect(customise.className).toContain('h-11');
   });
 
   it('says only the count and Esc to close when it is narrow', () => {
@@ -187,14 +192,14 @@ describe('the footer (worksuite-desktop#233)', () => {
 });
 
 describe('section headings (worksuite-desktop#233)', () => {
-  it('are 11px, letter-spaced and muted, 24px above and 8px below, and stick while their section scrolls by', () => {
+  it('are 12px in full screen, letter-spaced and muted, 24px above and 8px below, and stick while their section scrolls by', () => {
     render(<Launcher />);
     const headings = Array.from(grid().querySelectorAll<HTMLElement>('[data-heading]'));
     expect(headings.length).toBeGreaterThan(1);
     for (const h of headings) {
       expect(h.className).toEqual(expect.stringContaining('sticky'));
       expect(h.className).toContain('top-0');
-      expect(h.className).toContain('text-[11px]');
+      expect(h.className).toContain('text-[12px]');
       expect(h.className).toMatch(/tracking-/);
       expect(h.className).toContain('text-ink-3');
       expect(h.className).toContain('bg-launcher');

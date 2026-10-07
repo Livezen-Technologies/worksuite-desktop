@@ -155,6 +155,11 @@ export function LauncherSettings() {
         <Line label="Open as" hint="Popover sits centred over the app and sizes itself to the window. Full screen fills the window under the top bar, with larger tiles.">
           <Segmented<LauncherMode> label="Open as" value={prefs.mode} options={[{ value: 'popover', label: 'Popover' }, { value: 'fullscreen', label: 'Full screen' }]} onChange={(v) => set((p) => ({ ...p, mode: v }))} />
         </Line>
+        {prefs.mode === 'fullscreen' ? (
+          <Line label="Categories in a sidebar" hint="Full screen lists the categories on the left, with how many apps each has. Off, they are chips above the apps.">
+            <Switch label="Categories in a sidebar" checked={prefs.toggles.sidebar} onChange={(v) => set((p) => ({ ...p, toggles: { ...p.toggles, sidebar: v } }))} />
+          </Line>
+        ) : null}
         {TOGGLES.map(([k, label, hint]) => (
           <Line key={k} label={label} hint={hint}>
             <Switch label={label} checked={prefs.toggles[k]} onChange={(v) => set((p) => ({ ...p, toggles: { ...p.toggles, [k]: v } }))} />
