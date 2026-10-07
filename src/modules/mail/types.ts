@@ -129,6 +129,15 @@ export interface MessageRow {
   /** sha1 of the lower-cased Message-ID, from a mirrored list (which keeps no raw header). */
   message_id_hash?: string | null;
   uidvalidity?: number | null;
+  /** The Support ticket this message was made into or added to (#298); null or absent when none, or on an older server. */
+  support_ticket?: SupportTicketLink | null;
+}
+
+/** A message's ticket in Support, as the Mail API names it (`support_ticket`): it opens the ticket's tab. */
+export interface SupportTicketLink {
+  id: number;
+  reference: string;
+  status: string | null;
 }
 
 export interface MessagePage {
@@ -178,6 +187,8 @@ export interface MessageDetail {
   labels?: Array<{ id: number; name: string; color: string | null }>;
   conversation_key?: string;
   team?: TeamState;
+  /** The Support ticket this message was made into or added to (#298); null or absent when none. */
+  support_ticket?: SupportTicketLink | null;
 }
 
 /** SPF, DKIM and DMARC as the receiving server recorded them (GET messages/{id}/context). */

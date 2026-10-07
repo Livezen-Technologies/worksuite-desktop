@@ -1,11 +1,12 @@
+import { useQuery } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
-import { PRIORITY_LABEL, SUPPORT_API, statusLabel, type KbSuggestion, type Ticket } from '@shared/support';
+import { PRIORITY_LABEL, SUPPORT_API, statusLabel, type KbSuggestion, type Meta, type Ticket } from '@shared/support';
 import { ApiError, request } from '../../core/api';
 import { isMac } from '../../core/bridge';
 import { registerCommand, type Command } from '../../core/commands';
 import { text } from '../../core/i18n';
 import { toast } from '../../core/toasts';
-import { listTickets, openQuickReply, ticketArticles } from './api';
+import { K, listTickets, meta, openQuickReply, ticketArticles } from './api';
 
 /**
  * Support in the command palette (WS-SUPPORT-SRS-001 D-08, FR-SRC-01/04, FR-WSP-06, FR-DSK-05).
@@ -20,7 +21,26 @@ import { listTickets, openQuickReply, ticketArticles } from './api';
  *  - Knowledge (D-10): the KB & AI panel (⌘J) and "Insert KB link…" are the ticket's commands too, and the search
  *    finds articles — for the ticket in front, ranked for it, and ↵ puts one into its composer (a public article's
  *    link, an internal one's text); with no ticket in front, published articles, opened on the web.
+ *  - Create ticket (#298): among ⌘K's things to create, for whoever has Support and may raise a ticket there; it opens
+ *    the inbox on the New ticket form (`/support?new=1`).
  */
+
+/** Where Create ticket goes: the inbox, with the New ticket form open (Inbox.tsx). */
+export const NEW_TICKET_ROUTE = '/support?new=1';
+
+/**
+ * Whether New ticket is offered (#298): unless the desk says I may not (`GET meta`'s `can.create`). A server that
+ * says nothing — no `can`, an older one, or one not reached — is asked anyway, and its refusal is shown.
+ */
+export function mayCreateTicket(m: Pick<Meta, 'can'> | null | undefined): boolean {
+  return m?.can?.create !== false;
+}
+
+/** The same, from the desk's vocabulary (asked once, shared with the inbox); false until it has answered or failed. */
+export function useMayCreateTicket(enabled = true): boolean {
+  const q = useQuery({ queryKey: K.meta, queryFn: ({ signal }) => meta(signal), staleTime: 5 * 60_000, enabled });
+  return enabled && (q.isSuccess || q.isError) && mayCreateTicket(q.data);
+}
 
 /** A ticket's deep link: opening it focuses the desktop app on that ticket (FR-DSK-05). */
 export function ticketDeepLink(id: number): string {

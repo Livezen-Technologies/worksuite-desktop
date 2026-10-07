@@ -6,21 +6,32 @@ import { Icon } from '../../components/Icon';
 import { Menu, type MenuSection } from '../../components/Menu';
 import { Select } from '../../components/Select';
 import { VirtualList } from '../../components/VirtualList';
-import { Empty, ErrorNote, Spinner, cx } from '../../components/ui';
-import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusDot, requesterLine } from './parts';
+import { Button, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
+import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusDot, channelIcon, channelLabel, requesterLine } from './parts';
 
 /**
  * The inbox's list (D-01, FR-WSP-05): compact rows — the status dot, the channel's icon, the reference in monospace,
  * the subject, the requester and the SLA chip — unread in bold with a blue edge. A page of fifty at a time, the next
  * asked for as the list nears its end (`next_cursor`), drawn only where it shows, so a long view scrolls as a short
- * one does.
+ * one does. Filtered by status, priority and channel (`source=`, #298); New ticket (C) beside the filters for
+ * whoever may raise one.
  */
 export interface ListFilters {
   status: string[];
   priority: string[];
+  /** The channels (`source`), #298. */
+  source: string[];
 }
 
-export const NO_FILTERS: ListFilters = { status: [], priority: [] };
+export const NO_FILTERS: ListFilters = { status: [], priority: [], source: [] };
+
+/** The channels the filter offers, in this order, of those the server knows (`GET meta`'s `sources`). */
+export const CHANNEL_FILTERS = ['email', 'chat', 'phone', 'walk_in', 'manual', 'portal', 'form', 'widget_offline', 'whatsapp', 'api'] as const;
+
+/** The channels to filter by: the desk's own, as far as this server has them (all of them when it says nothing). */
+export function channelChoices(sources: readonly string[] | null | undefined): string[] {
+  return sources?.length ? CHANNEL_FILTERS.filter((c) => sources.includes(c)) : [...CHANNEL_FILTERS];
+}
 
 export function TicketList({
   title,
@@ -44,6 +55,8 @@ export function TicketList({
   onSort,
   filters,
   onFilters,
+  channels = CHANNEL_FILTERS,
+  onNew,
   searchRef,
   now,
 }: {
@@ -68,12 +81,16 @@ export function TicketList({
   onSort: (s: SupportSort) => void;
   filters: ListFilters;
   onFilters: (f: ListFilters) => void;
+  /** The channels the filter offers (`channelChoices`). */
+  channels?: readonly string[];
+  /** New ticket (C, #298); none for somebody who may not raise one. */
+  onNew?: (() => void) | null;
   searchRef: RefObject<HTMLInputElement | null>;
   now: number;
 }) {
   const [menu, setMenu] = useState(false);
   const filterButton = useRef<HTMLButtonElement>(null);
-  const filtered = filters.status.length + filters.priority.length;
+  const filtered = filters.status.length + filters.priority.length + filters.source.length;
   const toggle = (key: keyof ListFilters, v: string) => {
     const has = filters[key].includes(v);
     onFilters({ ...filters, [key]: has ? filters[key].filter((x) => x !== v) : [...filters[key], v] });
@@ -81,6 +98,11 @@ export function TicketList({
   const sections: MenuSection[] = [
     { id: 'status', label: text('Status'), items: STATUSES.map((s) => ({ id: `s-${s}`, label: text(statusLabel(s)), checked: filters.status.includes(s), onToggle: () => toggle('status', s), onSelect: () => toggle('status', s) })) },
     { id: 'priority', label: text('Priority'), items: PRIORITIES.map((p) => ({ id: `p-${p}`, label: text(PRIORITY_LABEL[p]), checked: filters.priority.includes(p), onToggle: () => toggle('priority', p), onSelect: () => toggle('priority', p) })) },
+    {
+      id: 'source',
+      label: text('Channel'),
+      items: channels.map((c) => ({ id: `c-${c}`, label: channelLabel(c), icon: channelIcon(c), checked: filters.source.includes(c), onToggle: () => toggle('source', c), onSelect: () => toggle('source', c) })),
+    },
   ];
   const sortChoices = (SORTS as readonly string[]).filter((s) => sorts.includes(s)) as SupportSort[];
 
@@ -135,6 +157,11 @@ export function TicketList({
             <Icon name="filter" size={14} />
             {filtered ? <span className="absolute -top-1 -right-1 flex h-4 min-w-4 items-center justify-center rounded-full bg-primary px-1 text-[10px] font-bold text-white">{filtered}</span> : null}
           </button>
+          {onNew ? (
+            <Button variant="primary" size="sm" icon="plus" onClick={onNew} aria-keyshortcuts="C" title={text('New ticket (C)')} className="h-8 shrink-0">
+              {text('New ticket')}
+            </Button>
+          ) : null}
         </div>
         <div className="flex items-center gap-2 text-[12px] text-ink-3">
           {sortChoices.length > 1 ? (

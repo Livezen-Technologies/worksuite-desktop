@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
-import { PRIORITY_LABEL, SLA_TARGET_LABEL, SOURCE_LABEL, statusLabel, type Sla, type SlaTarget, type SupportPriority, type SupportSource, type SupportStatus } from '@shared/support';
+import { PRIORITY_LABEL, SLA_TARGET_LABEL, SOURCE_LABEL, statusLabel, type Sla, type SlaTarget, type SupportPriority, type SupportSource, type SupportStatus, type TicketOrigin } from '@shared/support';
+import { canOpenDesktopRoute, refuse } from '../../core/access';
 import { parseTs } from '../../core/time';
+import { navigate } from '../../core/tabs';
 import { text } from '../../core/i18n';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
@@ -108,19 +110,76 @@ const SOURCE_ICON: Record<string, string> = {
   portal: 'globe',
   whatsapp: 'phone',
   phone: 'phone',
+  walk_in: 'door',
   api: 'code',
   module: 'box',
   desktop: 'monitor',
 };
 
+/** A channel's icon, by the name the API gives it (a ticket's `source`, a message's `channel`). */
+export function channelIcon(source: string): string {
+  return SOURCE_ICON[source] ?? 'life-buoy';
+}
+
+/** A channel's name, in words: "Email", "Phone", "Walk-in"… */
+export function channelLabel(source: string): string {
+  return text(SOURCE_LABEL[source as SupportSource] ?? source.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()));
+}
+
 /** Where the ticket came from, as an icon with its name (FR-CRT-06). */
 export function ChannelIcon({ source, size = 13, className }: { source: SupportSource | string | null | undefined; size?: number; className?: string }) {
   const s = source ?? 'manual';
-  const label = text(SOURCE_LABEL[s as SupportSource] ?? s);
+  const label = channelLabel(s);
   return (
     <span role="img" aria-label={label} title={label} className={cx('inline-flex shrink-0 text-ink-3', className)}>
-      <Icon name={SOURCE_ICON[s] ?? 'life-buoy'} size={size} />
+      <Icon name={channelIcon(s)} size={size} />
     </span>
+  );
+}
+
+/** Where a ticket's origin opens in the app (#298): the email in Mail, the website chat in Chat; null when nowhere. */
+export function originRoute(origin: TicketOrigin | null | undefined): string | null {
+  if (origin?.type === 'email') {
+    if (!origin.mail_message_id) return null;
+    // The message's own mailbox and folder, as Mail's reminders link to it (`mbx`, `mf`): a uid alone is only a guess.
+    const q = new URLSearchParams({ msg: String(origin.mail_message_id) });
+    if (origin.mailbox_id) q.set('mbx', String(origin.mailbox_id));
+    if (origin.folder) q.set('mf', origin.folder);
+    return `/mail?${q.toString()}`;
+  }
+  if (origin?.type === 'chat') return origin.conversation_id ? `/chat?view=website&website=${origin.conversation_id}` : null;
+  return null;
+}
+
+/** Opens a ticket's origin in its app, as the person may (the email in Mail, the chat in Chat), or says no. */
+export function openOrigin(route: string): void {
+  if (!canOpenDesktopRoute(route)) return refuse(route);
+  navigate(route);
+}
+
+/**
+ * "From email" or "From web chat" in a ticket's header (#298), when the server says what it was raised from: a link
+ * to that email or chat where there is one to open, else the words alone.
+ */
+export function OriginLink({ origin, onOpen = openOrigin, className }: { origin: TicketOrigin | null | undefined; onOpen?: (route: string) => void; className?: string }) {
+  if (origin?.type !== 'email' && origin?.type !== 'chat') return null;
+  const label = origin.type === 'email' ? text('From email') : text('From web chat');
+  const route = originRoute(origin);
+  const look = cx('inline-flex shrink-0 items-center gap-1 text-[12px]', className);
+  const icon = <Icon name={origin.type === 'email' ? 'mail' : 'message-circle'} size={12} />;
+  if (!route) {
+    return (
+      <span data-origin={origin.type} className={cx(look, 'text-ink-3')}>
+        {icon}
+        {label}
+      </span>
+    );
+  }
+  return (
+    <button type="button" data-origin={origin.type} onClick={() => onOpen(route)} title={origin.type === 'email' ? text('Open the email in Mail') : text('Open the chat')} className={cx(look, 'font-semibold text-primary hover:underline')}>
+      {icon}
+      {label}
+    </button>
   );
 }
 

@@ -465,6 +465,42 @@ fields, and works as before without them.
   (previous agent)", "Ringing the team" or "No one available · offered
   callback". Notes sent as `internal` show as staff-only lines with a lock.
 
+### Support: email and website chat → ticket (worksuite-desktop#298)
+
+Mail and website chats convert to Support tickets through `/api/support/v1`. The app reads these fields and works as
+before without them.
+
+- **What the server converts:** `GET /api/support/v1/meta` → `capabilities: {convert_chat, convert_email,
+  mail_intake}` (the company has Support, and Chat or Email, switched on) and `can: {create, convert_chat,
+  convert_email}` (the person's rights; `can.create` counts when a `convert_*` right is not named).
+  - A capability or right that is `false` hides that Convert to ticket: in Mail (the header's ⋯, the reader's More,
+    the list's right-click menu, the Apps pane) or in the website chat's panel. A person without the Support app sees
+    none of it.
+  - Without `capabilities` (an older server) the app does what it did before: website chats keep Convert to ticket,
+    and Mail keeps only the Apps pane's "Create a helpdesk ticket", which copies the text into an unlinked ticket
+    (`POST /api/tickets`).
+- **An email:** `POST /api/support/v1/conversions/email {mail_message_id, folder, mailbox?, target: 'new' | ticket
+  id, subject?, organization_id?}`.
+  - `mail_message_id` is the message's `id` in the Mail API (its uid); `folder` and `mailbox` are sent with it, as
+    every Mail route takes them. `subject` and `organization_id` go with a new ticket only; `organization_id: null`
+    leaves the filing to the server ("Needs organization").
+  - The answer is the ticket (`id`, `reference`, `status`), alone or as `{ticket, appended, existing}`.
+  - `409` with code `already_converted` and `{ticket: {id, reference, status}}` in `errors` (or `existing: true` on
+    a `200`) means the email is a ticket already; the app shows "Already ticket …" with View ticket.
+  - "Add to an existing ticket" searches `GET /api/support/v1/tickets?view=all&q=` and leaves out closed tickets.
+  - The Quick Step "Create a helpdesk ticket" sends `{mail_message_id, folder, mailbox?, target: 'new'}` for each
+    message, and treats `already_converted` as done.
+- **The message's ticket:** Mail's message JSON, in lists and for one message, carries `support_ticket: {id,
+  reference, status} | null`. The reading pane shows it as a chip ("CFX-001042 · Open") that opens the ticket's tab,
+  and the list row shows a small marker with the reference.
+- **A website chat:** `POST /api/support/v1/conversions` also takes `requester_email`.
+  - The sheet asks for the address, as a required field, when `GET conversions/{id}` gives the visitor no `email`.
+  - A `422` with code `requester_email_required` brings that field up, focused, with "Ask the visitor for an email
+    address so follow-ups can reach them".
+  - The chat's link to its ticket is the preview's `ticket` (`{id, reference, status}`). It shows as a chip in the
+    thread's header, and the panel offers View ticket in place of Convert to ticket.
+  - The transcript's `files` are listed in the sheet. An answer's `files_refused` above zero is said in a toast.
+
 ### Garage
 
 The Garage tab uses the server's Garage API, `/api/garage/v1` (`app/Modules/Garage`), the same one the web's
@@ -1124,6 +1160,30 @@ and offers to copy a support request instead of sending it.
   - It is not the company helpdesk (`/api/tickets`), which needs the "Reply to tickets" permission and serves the
     company's own customers.
 
+## Support desk: tickets raised by hand, channels and origin (worksuite-desktop#298)
+
+The Support module (`src/modules/support`) works through `/api/support/v1` (the server's `docs/SUPPORT_API.md`). For a
+ticket raised by hand it reads and sends the following; every field is optional on the way in, so an older server
+still works.
+
+- **`GET meta`**: `can.create` hides New ticket (C) and ⌘K's Create ticket when false; `organizations[].can.create`
+  narrows the form's organizations. No `can` (an older server) is "allowed": the server's refusal is then shown.
+  `capabilities {convert_chat, convert_email, mail_intake}` is typed but not read by this screen. `sources` limits the
+  list's Channel filter.
+- **`POST attachments`** (multipart `file`): the form's files, before the ticket exists. `{attachment}`.
+- **`POST tickets`** with an `Idempotency-Key`: `{subject, description, description_html, requester: {name, email,
+  phone, contact_id}, organization_id, source: manual|phone|walk_in, priority, type, category_id, team_id,
+  assigned_to, tags, due_at, attachment_ids, notify_requester}`. `attachments` repeats `attachment_ids` for a server
+  from before #298; `description_html` is the formatted copy for a server that keeps a message's HTML. Answers
+  `{ticket}` in full (a bare ticket is read too). Not queued offline: the form says so and keeps the draft.
+- **`GET tickets?source=email,phone`**: the Channel filter. A server without v1 is filtered on the desktop.
+- **Ticket** `source` (icon and name: `manual`, `email`, `chat`, `phone`, `walk_in`…) and `origin`: `{type: 'email',
+  mail_message_id}` opens `/mail?msg={id}` (no link when null), `{type: 'chat', conversation_id}` opens the website
+  chat. **Message** `channel` labels each entry of the thread (the first falls back to the ticket's `source`; notes
+  are "Internal note"; `agent`, `reply` and `note` say nothing of the channel).
+- The requester search is Contacts' `GET /api/contacts/lookup?q=&kinds=contact,customer,employee&limit=8`; a
+  contact found is sent as `contact_id`.
+
 ## Connection strength and the speed test (worksuite-desktop#254, #265)
 
 The status bar shows two things apart: **your connection** (the network delay, its stability, the speed test) and
@@ -1242,6 +1302,55 @@ is said plainly ("isn't on this WorkSuite server yet"), never filled in.
 - **Notifications.** `event` `social.*`, `category` `social_media`, link `/social-media/posts|approvals|inbox/<id>`;
   a manual reminder may carry `actions: [{copy}]`. Realtime events named `social.*` (ids only) refresh the screens.
 - **Offline.** `GET posts`, `accounts`, `brands` are kept in the encrypted READ_CACHE; nothing is written from it.
+
+## Sidebar preferences
+
+Each person's own sidebar: apps pinned to a Pinned section at its top, apps removed from it, and the order of each
+list. Per person **and organisation**: every call carries `?org=<id>` for the organisation open in the desktop, and
+none for All organizations (one layout per person there); an organisation the person is not in answers 403. The
+desktop reads the state again whenever the person switches organisation. Every call is authenticated.
+
+`data` is always the whole state, and only rows that differ from the default are in it:
+
+```json
+{ "items": [ { "key": "crm", "parent": null, "pinned": true, "hidden": false, "position": null,
+               "pinned_position": 0, "section": null } ],
+  "updated_at": "2026-10-07T09:00:00+00:00" }
+```
+
+| Call | Body | What it does |
+| --- | --- | --- |
+| `GET /api/sidebar/prefs` | | The state. |
+| `PUT /api/sidebar/prefs/pin` | `{key, pinned}` | Pin: to the end of Pinned, and shown again if it was removed. Unpin: back to its own place. |
+| `PUT /api/sidebar/prefs/hide` | `{key, hidden}` | Remove from the sidebar (this person only; also unpins, keeps its position), or bring back. |
+| `PUT /api/sidebar/prefs/order` | `{scope: "pinned", keys}` or `{scope: "section", section: "work"\|"business", keys}` | Pinned's whole order, or the whole visible order of one section, as positions 0…n−1 (the section is stored with each). |
+| `DELETE /api/sidebar/prefs` | | Reset to default: `{items: [], updated_at}`. |
+
+What the desktop relies on:
+
+- `key` is the app's id (`AppDefinition.id` in `shared/apps.ts`: `mail`, `crm`, `social-media`…), never its label.
+  The desktop's sidebar has no submenus: it sends no `parent` and reads only rows whose `parent` is null.
+- `pinned`, `hidden` as booleans (`1`/`"1"` are read as true), `position` and `pinned_position` as numbers or null,
+  `section` as the section a position was saved in, or null.
+- The sections are the desktop's own: `work` above the divider, `business` below it. A top-level position saved in
+  another section than the app is in now is not used (`SidebarPrefs::apply`'s rule, mirrored in
+  `shared/sidebar-prefs.ts`), so the web's blocks never move the desktop's apps. A browser app or a channel (WhatsApp,
+  for someone without Chat) is in the sidebar only while pinned; the launcher's "Pin to the sidebar" is this same pin.
+- The rows never decide what the person may open: the desktop lays them over the apps already through the access
+  gates (`/desktop/v1` apps or the bootstrap's grants). A row for an app the person cannot open is ignored, and an app
+  they are newly given shows in its default place.
+- A change shows at once. When the server refuses it (403, 409, 422, any other error) or cannot be reached (the
+  desktop's own 503s carry a `code`), the desktop takes it back and says so.
+
+**Without it**, the sidebar's preferences are kept on that computer alone, per person, server and organisation, in
+the same shape, and nothing more is sent: when `GET` answers 404 (an older server), when a server answers a change
+with its own 503 (its tables are not made yet; such an answer carries no `code`), and in guest mode. Nothing is said
+about it beyond "Saved on this computer" in Settings › Sidebar.
+
+**From before:** the sidebar used to show the browser apps pinned in the launcher from a setting of the computer
+(`pinnedApps`). The first time a person's sidebar is read with no rows (in each organisation), the desktop pins
+those (`PUT …/pin`, in their order), once; the setting stays in the settings file but the sidebar no longer reads it.
+The server's own one-time import of the web's `shell.sidebar` pins runs first, so where the web had pins, those stand.
 
 ## Not provided yet
 

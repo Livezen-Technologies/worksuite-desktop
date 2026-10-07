@@ -106,12 +106,12 @@ describe('the sheet', () => {
     expect(toast).toHaveBeenCalledWith('success', 'Added to CFX-001248.');
   });
 
-  it('a chat already a ticket opens that ticket', async () => {
+  it('a chat already a ticket offers View ticket, which opens it', async () => {
     serve({ 'GET /api/support/v1/conversions/77': { ...PREVIEW, ticket: { id: 1279, reference: 'CFX-001279', status: 'new' }, candidates: [] } });
     renderSheet();
     const dialog = await screen.findByRole('dialog');
     expect(await within(dialog).findByText('CFX-001279')).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Open' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'View ticket' }));
     expect(tabs.navigate).toHaveBeenCalledWith('/support/ticket/1279');
   });
 

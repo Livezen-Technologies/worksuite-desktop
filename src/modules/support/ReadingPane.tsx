@@ -8,12 +8,12 @@ import { toast } from '../../core/toasts';
 import { useStore } from '../../core/store';
 import { useNow } from '../../core/use-now';
 import { Avatar, Button, Empty, ErrorNote, IconButton, Spinner } from '../../components/ui';
-import { SOURCE_LABEL, type SupportSource, type TicketShow } from '@shared/support';
+import type { TicketShow } from '@shared/support';
 import { K, errorText, getTicket, openQuickReply, take } from './api';
 import { Composer, type ComposerMode } from './Composer';
 import { openAttachment } from './files';
 import { usePollInterval } from './live';
-import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusChip } from './parts';
+import { ChannelIcon, OriginLink, PriorityChip, Reference, SlaChip, StatusChip, channelLabel } from './parts';
 import { Collision, useTicketPresence } from './presence';
 import { useMarkRead } from './reading';
 import { Thread } from './Thread';
@@ -88,10 +88,11 @@ export function ReadingPane({
           <Reference className="font-semibold text-ink">{t.reference}</Reference>
           <ChannelIcon source={t.source} />
           <span className="min-w-0 truncate">
-            {[text(SOURCE_LABEL[t.source as SupportSource] ?? t.source), t.opened_at || t.created_at ? text('opened {when}', { when: `${stampDayLabel((t.opened_at ?? t.created_at)!, 'short')}, ${timeLabel(t.opened_at ?? t.created_at)}` }) : null, t.category?.name]
+            {[channelLabel(t.source), t.opened_at || t.created_at ? text('opened {when}', { when: `${stampDayLabel((t.opened_at ?? t.created_at)!, 'short')}, ${timeLabel(t.opened_at ?? t.created_at)}` }) : null, t.category?.name]
               .filter(Boolean)
               .join(' · ')}
           </span>
+          <OriginLink origin={t.origin} />
           <Collision present={present} className="ml-auto" />
         </div>
         <h2 className="text-[17px] leading-snug font-extrabold text-ink">{t.subject}</h2>
@@ -135,7 +136,7 @@ export function ReadingPane({
         ) : null}
       </header>
       <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3 scroll-thin">
-        <Thread compact messages={show.messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} onOpenAttachment={(a) => void openAttachment(a)} />
+        <Thread compact messages={show.messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} source={show.has_earlier ? null : t.source} onOpenAttachment={(a) => void openAttachment(a)} />
         {show.legacy ? <p className="pt-3 text-center text-[11.5px] text-ink-3">{text('Your WorkSuite server is older: read markers, files and who else is here show once it is updated.')}</p> : null}
       </div>
       {!t.merged_into && !t.deleted_at ? <Composer compact ticket={t} can={show.can} transitions={show.transitions} legacy={show.legacy === true} focusRequest={focusRequest} onTyping={setTyping} /> : null}

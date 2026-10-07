@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
+import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type DragEvent, type ReactNode } from 'react';
 import { appRoute, navApps, type AppDefinition } from '@shared/apps';
 import {
   ALL_CATEGORY,
@@ -9,6 +9,7 @@ import {
   FULL_COLUMN,
   FULL_GRID,
   FULL_SEARCH,
+  FULL_SIDEBAR,
   GRID_PAD,
   LAUNCHER_PARTS,
   launcherLayout,
@@ -30,13 +31,14 @@ import {
   type Rect,
   type WindowSize,
 } from '@shared/launcher';
-import { app, updatePrefs } from '../../core/app-state';
+import { app } from '../../core/app-state';
 import { appColour } from '../../core/app-look';
 import { call, isMac } from '../../core/bridge';
 import { prettyAccelerator } from '../../core/commands';
 import { appLabel } from '../../core/i18n';
 import { syncLauncherPrefsIfStale, updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
 import { noteRecentApp, readRecentApps } from '../../core/recent-apps';
+import { pinSidebarItem, useSidebarPinnedKeys } from '../../core/sidebar-prefs';
 import { useStore } from '../../core/store';
 import { activeTab, navigate, openTab, setRoute } from '../../core/tabs';
 import { toast } from '../../core/toasts';
@@ -55,8 +57,11 @@ import { cx } from '../../components/ui';
  *    app. Its height is the fixed parts plus whole rows of tiles, never a row cut through; only the grid scrolls,
  *    with a fade at the bottom while there is more;
  *  - full screen: the window below the top bar (never over the traffic lights or the window buttons), the app's
- *    dark, with one centred column at most 1080px wide, larger tiles and, under All apps, each category under its
- *    sticky heading; the grid takes what the column has left, and the footer is attached to the window's bottom;
+ *    dark, in one centred column at most 1160px wide: the search with its settings and close beside it, Pinned and
+ *    Recent in one row, the categories in a sidebar on the left with their counts (or as chips above the apps, as
+ *    the person chooses, and always where the window is too narrow for a sidebar), and the apps as larger tiles,
+ *    each category under its sticky heading with its count and a rule; the grid takes what the column has left,
+ *    and the footer runs along the window's bottom;
  *  - a bottom sheet in a window narrower than 480px.
  * Geometry is `launcherLayout` (shared/launcher), worked out again whenever the window is resized or moved.
  * One background, `--launcher-bg`, under the grid, the headings, the scroll fades and the footer, and one soft
@@ -69,7 +74,6 @@ import { cx } from '../../components/ui';
  * (`app.apps` is through the gates). It fades and scales in and out over 120ms, not at all for reduced motion.
  */
 
-const EMPTY: string[] = [];
 const DRAG_TYPE = 'application/x-worksuite-app';
 /** How long the launcher takes to close: its fade out. */
 export const LAUNCHER_CLOSE_MS = 120;
@@ -126,7 +130,7 @@ type OpenHow = 'window' | 'new-tab' | 'current-tab';
 
 export function Launcher() {
   const apps = useStore(app, (s) => s.apps);
-  const sidebarPins = useStore(app, (s) => s.prefs?.pinnedApps ?? EMPTY);
+  const sidebarPins = useSidebarPinnedKeys();
   const status = useStore(app, (s) => s.status);
   const userId = useStore(app, (s) => s.auth?.user?.id ?? null);
   const prefs = useLauncherPrefs();
@@ -144,6 +148,10 @@ export function Launcher() {
   const [recentIds] = useState(() => readRecentApps(userId));
   const { win, area } = useWindowArea();
   const reduced = useReducedMotion();
+  const sidebarHeading = useId();
+  // Full screen's Pinned and Recent share a row; once Recent wraps under Pinned, the rule between them goes.
+  const recentGroup = useRef<HTMLDivElement>(null);
+  const [recentWrapped, setRecentWrapped] = useState(false);
 
   useEffect(() => syncLauncherPrefsIfStale(), []);
   // Closing: gone once it has faded out. Unmounted sooner (another overlay opened), nothing is closed.
@@ -170,8 +178,9 @@ export function Launcher() {
   const layout = launcherLayout(win, area, prefs, { pinned: showPinned, recent: showRecent, chips: hasChips });
   const sheet = layout.kind === 'sheet';
   const full = layout.kind === 'fullscreen';
-  // Under All apps, with nothing searched, full screen and the sheet read category by category, each under its name.
-  const sections = launcherSections(view, prefs, !searching && view.current === ALL_CATEGORY && hasChips && layout.kind !== 'popover');
+  // Under All apps, with nothing searched, full screen and the sheet read category by category, each under its name;
+  // with the categories in the sidebar, one category is under its name too, as the sidebar says which it is.
+  const sections = launcherSections(view, prefs, !searching && hasChips && layout.kind !== 'popover' && (view.current === ALL_CATEGORY || layout.sidebar));
   // The columns the grid really has, when the browser says (a scrollbar can take one); else as worked out.
   const columns = measuredColumns ?? layout.columns;
   const selected = Math.min(sel, Math.max(0, list.length - 1));
@@ -196,6 +205,12 @@ export function Launcher() {
     updateFades();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [list.length, cat, query, layout.kind, layout.width, layout.height, layout.rowHeight, showPinned, showRecent, measuredColumns, !!dragging]);
+
+  useLayoutEffect(() => {
+    const el = recentGroup.current;
+    const first = el?.parentElement?.firstElementChild as HTMLElement | null | undefined;
+    setRecentWrapped(!!el && !!first && first !== el && el.offsetTop > first.offsetTop);
+  }, [layout.width, showPinned, showRecent, view.pinned.length, recent.length, searching]);
 
   // The scroller or what is in it changes size without a render (fonts, images, the window): look again.
   useEffect(() => {
@@ -252,7 +267,7 @@ export function Launcher() {
       const made = addGroup(p, name);
       return made ? { ...moveToGroup(made.prefs, a.id, made.id), groupBy: 'mine' } : null;
     }, 'That group could not be made.');
-  const toggleSidebarPin = (a: AppDefinition) => void updatePrefs({ pinnedApps: sidebarPins.includes(a.id) ? sidebarPins.filter((p) => p !== a.id) : [...sidebarPins, a.id] });
+  const toggleSidebarPin = (a: AppDefinition) => void pinSidebarItem(a.id, !sidebarPins.includes(a.id));
 
   /** Settings › App launcher: the settings button by the search, and Customise in the footer. */
   const customise = () => {
@@ -382,9 +397,10 @@ export function Launcher() {
         {...dropZone(`tile:${a.id}`, dropOnTile(a))}
         style={{ height: layout.rowHeight }}
         className={cx(
-          'relative flex min-w-0 flex-col items-center gap-1.5 overflow-hidden rounded-[12px] px-1 text-ink outline-none',
-          names ? 'pt-2.5 pb-2' : 'py-2.5',
-          sel ? 'bg-selection shadow-[inset_0_0_0_2px_var(--color-primary)]' : 'hover:bg-subtle',
+          'relative flex min-w-0 flex-col items-center overflow-hidden text-ink outline-none',
+          full ? 'gap-2.5 rounded-[14px] border border-transparent px-2' : 'gap-1.5 rounded-[12px] px-1',
+          full ? (names ? 'pt-3.5 pb-3' : 'py-3.5') : names ? 'pt-2.5 pb-2' : 'py-2.5',
+          sel ? 'bg-selection shadow-[inset_0_0_0_2px_var(--color-primary)]' : full ? 'hover:border-launcher-line hover:bg-subtle' : 'hover:bg-subtle',
           over === `tile:${a.id}` && dragging !== a.id && 'shadow-[inset_3px_0_0_var(--color-primary)]',
           dragging === a.id && 'opacity-40',
         )}
@@ -402,7 +418,7 @@ export function Launcher() {
             </span>
           ) : null}
         </span>
-        <span data-name className={cx('block max-w-full truncate text-[12px] leading-4 font-medium', full && 'text-[12.5px]', !names && 'sr-only')}>
+        <span data-name className={cx('block max-w-full truncate font-medium', full ? 'text-[14px] leading-[18px]' : 'text-[12px] leading-4', !names && 'sr-only')}>
           {name}
         </span>
       </button>
@@ -440,6 +456,93 @@ export function Launcher() {
       ) : null}
     </div>
   );
+
+  /** Full screen's chip: the app's name after a dot in its colour, 44px tall (worksuite-desktop launcher design). */
+  const fullChip = (a: AppDefinition, opts: { pinned?: boolean } = {}) => (
+    <button
+      key={a.id}
+      type="button"
+      aria-label={`Open ${appLabel(a)}`}
+      title={appLabel(a)}
+      onClick={() => open(a)}
+      onContextMenu={(e) => {
+        e.preventDefault();
+        setMenu({ id: a.id, x: e.clientX, y: e.clientY });
+      }}
+      {...dragProps(a)}
+      {...(opts.pinned ? dropZone(`pin:${a.id}`, dropOnPinned(a.id)) : {})}
+      className={cx(
+        'flex h-11 max-w-[200px] shrink-0 items-center gap-2 rounded-[10px] border px-3.5 text-[14px] hover:bg-subtle',
+        opts.pinned ? 'border-launcher-line bg-surface text-ink' : 'border-launcher-line text-ink-2 hover:text-ink',
+        over === `pin:${a.id}` && 'border-primary',
+      )}
+    >
+      <span aria-hidden className="h-2 w-2 shrink-0 rounded-[3px] bg-[color-mix(in_srgb,var(--dot)_55%,white)]" style={{ '--dot': appColour(a.id) } as CSSProperties} />
+      <span className="min-w-0 truncate">{appLabel(a)}</span>
+    </button>
+  );
+  const rowLabel = (label: string) => <span className="me-0.5 shrink-0 text-[12px] font-semibold tracking-[0.08em] text-ink-3 uppercase">{label}</span>;
+  // Full screen: Pinned and Recent in one row, a rule between them, wrapping onto a second line rather than scrolling.
+  const recentsRow =
+    showPinned || showRecent ? (
+      <div data-recents style={{ minHeight: LAUNCHER_PARTS.fullRow }} className="flex shrink-0 flex-wrap content-start items-center gap-x-2.5 gap-y-2 pb-6">
+        {showPinned ? (
+          <div className="flex flex-wrap items-center gap-x-2.5 gap-y-2" {...dropZone('pinned', dropOnPinned(null))}>
+            {rowLabel('Pinned')}
+            {view.pinned.map((a) => fullChip(a, { pinned: true }))}
+            {dragging && !view.pinned.some((a) => a.id === dragging) ? (
+              <span className={cx('flex h-11 shrink-0 items-center rounded-[10px] border border-dashed px-3.5 text-[13px] text-ink-3', over === 'pinned' ? 'border-primary text-primary' : 'border-launcher-line')}>Drop here to pin</span>
+            ) : null}
+          </div>
+        ) : null}
+        {showPinned && showRecent ? <span aria-hidden data-rule className={cx('mx-1.5 h-6 w-px shrink-0 bg-launcher-line', recentWrapped && 'hidden')} /> : null}
+        {showRecent ? (
+          <div ref={recentGroup} className="flex flex-wrap items-center gap-x-2.5 gap-y-2">
+            {rowLabel('Recent')}
+            {recent.map((a) => fullChip(a))}
+          </div>
+        ) : null}
+      </div>
+    ) : null;
+
+  // Full screen's categories in a sidebar: a list on the left with each one's count, the one shown filled in.
+  const sidebar = layout.sidebar ? (
+    // Its heading on the same line as the first category's heading beside it.
+    <nav
+      aria-labelledby={sidebarHeading}
+      data-sidebar
+      className="flex shrink-0 flex-col overflow-y-auto pb-6 scroll-thin"
+      style={{ width: FULL_SIDEBAR.width, paddingTop: FULL_GRID.headingMargin + FULL_GRID.headingPad }}
+    >
+      <h2 id={sidebarHeading} className="mb-2 px-3 text-[12px] leading-4 font-semibold tracking-[0.08em] text-ink-3 uppercase">
+        Categories
+      </h2>
+      <div role="tablist" aria-orientation="vertical" aria-labelledby={sidebarHeading} className="flex flex-col gap-1">
+        {view.categories.map((c) => {
+          const on = c.id === view.current;
+          return (
+            <button
+              key={c.id}
+              type="button"
+              role="tab"
+              aria-selected={on}
+              title={c.label}
+              onClick={() => (setCat(c.id), setSel(0))}
+              {...dropZone(`cat:${c.id}`, dropOnCategory(c.id))}
+              className={cx(
+                'flex h-11 w-full shrink-0 items-center gap-2 rounded-[10px] border px-3 text-start text-[14px] font-medium',
+                on ? 'border-primary bg-primary text-white' : 'border-transparent text-ink-2 hover:border-launcher-line hover:text-ink',
+                over === `cat:${c.id}` && prefs.groupBy === 'mine' && c.id !== ALL_CATEGORY && 'ring-2 ring-primary',
+              )}
+            >
+              <span className="min-w-0 flex-1 truncate">{c.label}</span>
+              <span className="shrink-0 text-[12px] opacity-75">{c.count}</span>
+            </button>
+          );
+        })}
+      </div>
+    </nav>
+  ) : null;
 
   const chips = hasChips ? (
     <div role="tablist" aria-label="Categories" style={{ height: LAUNCHER_PARTS.chips }} className={cx('flex shrink-0 items-start gap-1.5 overflow-x-auto scroll-thin', padX, full && 'justify-center')}>
@@ -502,7 +605,7 @@ export function Launcher() {
   );
 
   const body = (
-    <div data-grid-area className={cx('relative min-h-0', sheet || full ? 'flex-1' : 'shrink-0')} style={layout.grid ? { height: layout.grid.height } : undefined}>
+    <div data-grid-area className={cx('relative min-h-0', sheet || full ? 'min-w-0 flex-1' : 'shrink-0')} style={layout.grid ? { height: layout.grid.height } : undefined}>
       <div
         ref={grid}
         role="listbox"
@@ -517,9 +620,19 @@ export function Launcher() {
               <div
                 data-heading
                 style={{ marginTop: FULL_GRID.headingMargin, paddingTop: FULL_GRID.headingPad, paddingBottom: FULL_GRID.headingPad }}
-                className="sticky top-0 z-[1] flex bg-launcher px-2 text-[11px] leading-4 font-semibold tracking-[0.08em] text-ink-3 uppercase"
+                className={cx('sticky top-0 z-[1] flex items-center bg-launcher font-semibold tracking-[0.08em] text-ink-3 uppercase', full ? 'gap-3 text-[12px] leading-4' : 'px-2 text-[11px] leading-4')}
               >
-                <span className="truncate">{s.label}</span>
+                <span data-heading-label className="truncate">
+                  {s.label}
+                </span>
+                {full ? (
+                  <>
+                    <span data-heading-count className="shrink-0 font-normal tracking-normal">
+                      {s.items.length}
+                    </span>
+                    <span aria-hidden className="h-px min-w-6 flex-1 bg-launcher-line" />
+                  </>
+                ) : null}
               </div>
             ) : null}
             <div role="presentation" data-grid className="grid" style={gridStyle}>
@@ -539,6 +652,15 @@ export function Launcher() {
   const footerWidth = full ? Math.min(layout.column?.width ?? layout.width, layout.width) - 2 * FULL_COLUMN.padSide : layout.width;
   const narrow = footerNarrow(footerWidth, sheet);
   const count = `${list.length} ${list.length === 1 ? 'app' : 'apps'}`;
+  const hints = (
+    <>
+      {count} · <Key k="↑" />
+      <Key k="↓" />
+      <Key k="←" />
+      <Key k="→" /> move · <Key k="↵" /> open · <Key k={isMac ? '⌘' : 'Ctrl'} />
+      <Key k="↵" /> new window · <Key k="Esc" /> close
+    </>
+  );
 
   const footer =
     dragging && draggedApp ? (
@@ -551,21 +673,24 @@ export function Launcher() {
         onPin={() => togglePin(draggedApp)}
         onHide={() => toggleHidden(draggedApp)}
         onWindow={() => open(draggedApp, 'window')}
+        height={full ? LAUNCHER_PARTS.fullFooter : LAUNCHER_PARTS.footer}
       />
+    ) : full ? (
+      // Full screen: along the bottom of the window, its words in the column above it.
+      <div data-footer style={{ height: LAUNCHER_PARTS.fullFooter }} className="flex shrink-0 justify-center border-t border-launcher-line bg-launcher">
+        <div className="flex w-full min-w-0 items-center gap-4 text-[12.5px] text-ink-3" style={{ maxWidth: FULL_COLUMN.maxWidth, paddingLeft: FULL_COLUMN.padSide, paddingRight: FULL_COLUMN.padSide }}>
+          <span data-hints data-narrow={narrow || undefined} className="min-w-0 flex-1 truncate">
+            {narrow ? `${count} · Esc to close` : hints}
+          </span>
+          <button type="button" onClick={customise} className="h-11 shrink-0 rounded-[10px] border border-launcher-line px-3.5 text-[14px] font-medium text-primary hover:bg-subtle">
+            Customise
+          </button>
+        </div>
+      </div>
     ) : (
       <div data-footer style={{ height: LAUNCHER_PARTS.footer }} className="flex shrink-0 items-center justify-between gap-3 border-t border-launcher-line bg-launcher px-3 text-[11px] text-ink-3">
         <span data-hints data-narrow={narrow || undefined} className="min-w-0 truncate">
-          {narrow ? (
-            `${count} · Esc to close`
-          ) : (
-            <>
-              {count} · <Key k="↑" />
-              <Key k="↓" />
-              <Key k="←" />
-              <Key k="→" /> move · <Key k="↵" /> open · <Key k={isMac ? '⌘' : 'Ctrl'} />
-              <Key k="↵" /> new window · <Key k="Esc" /> close
-            </>
-          )}
+          {narrow ? `${count} · Esc to close` : hints}
         </span>
         <button type="button" onClick={customise} className="shrink-0 font-semibold text-primary hover:underline">
           Customise
@@ -575,10 +700,15 @@ export function Launcher() {
 
   const search = (
     <label
-      className={cx('flex min-w-0 flex-1 items-center gap-2.5 rounded-[11px] border bg-well px-3 text-ink-3', sheet ? 'h-11 border-line' : 'border-primary', !sheet && !full && 'h-[42px]')}
-      style={full ? { height: FULL_SEARCH.height, maxWidth: FULL_SEARCH.maxWidth } : undefined}
+      className={cx(
+        'flex min-w-0 flex-1 items-center gap-2.5 border bg-well text-ink-3',
+        sheet ? 'h-11 rounded-[11px] border-line px-3' : 'border-primary',
+        !sheet && !full && 'h-[42px] rounded-[11px] px-3',
+        full && 'gap-3 rounded-[14px] px-[18px] shadow-[0_0_0_4px_color-mix(in_srgb,var(--color-primary)_18%,transparent)]',
+      )}
+      style={full ? { height: FULL_SEARCH.height } : undefined}
     >
-      <Icon name="search" size={full ? 19 : 17} />
+      <Icon name="search" size={full ? 20 : 17} />
       <input
         ref={input}
         autoFocus
@@ -589,7 +719,7 @@ export function Launcher() {
         }}
         placeholder="Find an app"
         aria-label="Find an app"
-        className={cx('bare-focus min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-3', full ? 'text-[16px]' : 'text-[14px]')}
+        className={cx('bare-focus min-w-0 flex-1 bg-transparent text-ink outline-none placeholder:text-ink-3', full ? 'text-[18px]' : 'text-[14px]')}
       />
       {sheet ? null : (
         <span className="shrink-0 rounded-[6px] border border-line px-1.5 py-0.5 font-mono text-[11px] text-ink-3" title="Opens and closes the launcher">
@@ -604,9 +734,12 @@ export function Launcher() {
       aria-label={label}
       title={label}
       onClick={onClick}
-      className={cx('flex shrink-0 items-center justify-center rounded-[11px] bg-subtle text-ink-2 hover:text-ink', sheet ? 'h-11 w-11' : full ? 'h-[52px] w-[52px]' : 'h-[42px] w-[42px]')}
+      className={cx(
+        'flex shrink-0 items-center justify-center bg-subtle text-ink-2 hover:text-ink',
+        sheet ? 'h-11 w-11 rounded-[11px]' : full ? 'h-14 w-14 rounded-[14px] border border-launcher-line' : 'h-[42px] w-[42px] rounded-[11px]',
+      )}
     >
-      <Icon name={icon} size={icon === 'x' ? 16 : 18} />
+      <Icon name={icon} size={full ? (icon === 'x' ? 18 : 20) : icon === 'x' ? 16 : 18} />
     </button>
   );
   const settingsButton = squareButton('App launcher settings', 'settings', customise);
@@ -648,33 +781,35 @@ export function Launcher() {
           aria-modal="true"
           data-layout="fullscreen"
           data-size={prefs.size}
+          data-categories={layout.sidebar ? 'sidebar' : 'chips'}
           // The app's own dark, whichever theme is on: everything in it is drawn in the dark theme's colours.
           data-theme="dark"
-          className={cx('absolute flex justify-center overflow-hidden bg-launcher text-ink', motion)}
+          className={cx('absolute flex flex-col overflow-hidden bg-launcher text-ink', motion)}
           style={frame}
           onMouseDown={(e) => {
             if (menu) setMenu(null);
             outside(e);
           }}
         >
-          <div className="absolute top-4 right-4">{closeButton}</div>
           <div
             data-column
-            className="flex h-full w-full min-w-0 flex-col"
+            className="mx-auto flex min-h-0 w-full min-w-0 flex-1 flex-col"
             style={{ maxWidth: FULL_COLUMN.maxWidth, paddingTop: FULL_COLUMN.padTop, paddingLeft: FULL_COLUMN.padSide, paddingRight: FULL_COLUMN.padSide, paddingBottom: FULL_COLUMN.padBottom }}
             onMouseDown={outside}
           >
-            <div style={{ height: LAUNCHER_PARTS.fullHeader }} className="flex shrink-0 items-start justify-center gap-2" onMouseDown={outside}>
+            <div style={{ height: LAUNCHER_PARTS.fullHeader }} className="flex shrink-0 items-start gap-3" onMouseDown={outside}>
               {search}
               {settingsButton}
+              {closeButton}
             </div>
-            {showPinned ? chipRow('Pinned', view.pinned, { pinned: true }) : null}
-            {showRecent ? chipRow('Recent', recent) : null}
-            {chips}
-            <div className="h-px shrink-0 bg-launcher-line" />
-            {body}
-            {footer}
+            {searching ? null : recentsRow}
+            {layout.sidebar ? null : chips}
+            <div data-content className="flex min-h-0 flex-1" style={{ gap: layout.sidebar ? FULL_SIDEBAR.gap : 0 }} onMouseDown={outside}>
+              {sidebar}
+              {body}
+            </div>
           </div>
+          {footer}
         </div>
         {menuEl}
       </div>
@@ -751,6 +886,7 @@ function DragActions(props: {
   onPin: () => void;
   onHide: () => void;
   onWindow: () => void;
+  height: number;
 }) {
   const target = (key: string, icon: string, label: string, run: () => void, show = true) =>
     show ? (
@@ -760,7 +896,7 @@ function DragActions(props: {
       </div>
     ) : null;
   return (
-    <div style={{ height: LAUNCHER_PARTS.footer }} className="flex shrink-0 items-center gap-2 border-t border-launcher-line bg-launcher px-3" aria-label={`Drop ${appLabel(props.app)} to`}>
+    <div style={{ height: props.height }} className="flex shrink-0 items-center gap-2 border-t border-launcher-line bg-launcher px-3" aria-label={`Drop ${appLabel(props.app)} to`}>
       {target('pin', props.pinned ? 'pin-off' : 'pin', props.pinned ? 'Unpin' : 'Pin', props.onPin)}
       {target('hide', props.hidden ? 'eye' : 'eye-off', props.hidden ? 'Show' : 'Hide', props.onHide)}
       {target('window', 'external', 'Open in new window', props.onWindow, props.app.surface === 'native')}

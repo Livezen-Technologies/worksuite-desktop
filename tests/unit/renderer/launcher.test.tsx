@@ -174,57 +174,123 @@ describe('full screen', () => {
     expect(scrim.contains(d)).toBe(false);
   });
 
-  it('is one centred column at most 1080px wide, 48px from the top and 32px from the sides', () => {
+  it('is one centred column at most 1160px wide, 40px from the top and 24px from the sides, the search with its settings and close beside it', () => {
     render(<Launcher />);
     const column = dialog().querySelector<HTMLElement>('[data-column]')!;
-    expect(column.style.maxWidth).toBe('1080px');
-    expect(column.style.paddingTop).toBe('48px');
-    expect(column.style.paddingLeft).toBe('32px');
-    expect(column.style.paddingRight).toBe('32px');
-    expect(dialog().className).toContain('justify-center');
+    expect(column.style.maxWidth).toBe('1160px');
+    expect(column.style.paddingTop).toBe('40px');
+    expect(column.style.paddingLeft).toBe('24px');
+    expect(column.style.paddingRight).toBe('24px');
+    expect(column.className).toContain('mx-auto');
     const field = search().closest('label')!;
-    expect(field.style.maxWidth).toBe('640px');
-    expect(field.style.height).toBe('52px');
+    expect(field.style.height).toBe('56px');
+    expect(field.style.maxWidth).toBe('');
+    expect(field.className).toContain('flex-1');
+    // The settings and the close buttons in the same row, after the search.
+    const row = field.parentElement!;
+    expect(Array.from(row.children).map((el) => el.getAttribute('aria-label') ?? el.tagName)).toEqual(['LABEL', 'App launcher settings', 'Close launcher']);
   });
 
-  it('draws larger tiles in 104px columns', () => {
+  it('draws larger tiles in 116px columns, 8px apart', () => {
     render(<Launcher />);
     const rows = within(grid()).getAllByRole('presentation').filter((el) => el.style.gridTemplateColumns);
-    expect(rows[0]!.style.gridTemplateColumns).toBe('repeat(auto-fill, minmax(104px, 1fr))');
+    expect(rows[0]!.style.gridTemplateColumns).toBe('repeat(auto-fill, minmax(116px, 1fr))');
+    expect(rows[0]!.style.gap).toBe('8px');
     const tile = within(grid()).getAllByRole('option')[0]!;
     expect((tile.querySelector('[aria-hidden]') as HTMLElement).style.width).toBe('56px');
-    expect(tile.style.height).toBe('96px');
+    expect(tile.style.height).toBe('116px');
+    expect(tile.querySelector('[data-name]')!.className).toContain('text-[14px]');
   });
 
-  it('shows All apps category by category, under each one\'s name', () => {
+  it('lists the categories in a sidebar on the left, with each one\'s count, the one shown filled in', () => {
     render(<Launcher />);
-    const headings = () => Array.from(grid().querySelectorAll('[role="presentation"] > div:first-child:not([data-grid])')).map((h) => h.textContent);
+    expect(dialog().dataset.categories).toBe('sidebar');
+    const nav = dialog().querySelector<HTMLElement>('[data-sidebar]')!;
+    expect(within(nav).getByRole('heading', { name: 'Categories' })).toBeTruthy();
+    const list = within(nav).getByRole('tablist', { name: 'Categories' });
+    expect(list.getAttribute('aria-orientation')).toBe('vertical');
+    // The only categories there are: no chips above the apps as well.
+    expect(screen.getAllByRole('tablist')).toHaveLength(1);
+    const all = within(list).getByRole('tab', { name: /All apps/ });
+    expect(all.getAttribute('aria-selected')).toBe('true');
+    expect(all.className).toContain('bg-primary');
+    expect(all.textContent).toMatch(/^All apps\d+$/);
+    // It sits beside the apps, on the left.
+    expect(nav.nextElementSibling).toBe(dialog().querySelector('[data-grid-area]'));
+    fireEvent.click(within(list).getByRole('tab', { name: /Work/ }));
+    expect(within(list).getByRole('tab', { name: /Work/ }).getAttribute('aria-selected')).toBe('true');
+    const shown = within(grid()).getAllByRole('option').map((o) => o.getAttribute('aria-label'));
+    expect(shown).toContain('Tasks');
+    expect(shown).not.toContain('Mail');
+  });
+
+  it('puts the categories back as chips above the apps when the sidebar is off, or the window is too narrow for it', () => {
+    updateLauncherPrefs((p) => ({ ...p, toggles: { ...p.toggles, sidebar: false } }));
+    render(<Launcher />);
+    expect(dialog().dataset.categories).toBe('chips');
+    expect(dialog().querySelector('[data-sidebar]')).toBeNull();
+    expect(screen.getByRole('tablist', { name: 'Categories' }).getAttribute('aria-orientation')).toBeNull();
+    cleanup();
+    updateLauncherPrefs((p) => ({ ...p, toggles: { ...p.toggles, sidebar: true } }));
+    setSize(800, 800);
+    render(<Launcher />);
+    expect(dialog().dataset.categories).toBe('chips');
+  });
+
+  it('has Pinned and Recent in one row of chips, each with a dot in the app\'s colour', () => {
+    updateLauncherPrefs((p) => ({ ...p, pinned: ['mail', 'tasks'] }));
+    render(<Launcher />);
+    const row = dialog().querySelector<HTMLElement>('[data-recents]')!;
+    expect(row.textContent).toContain('Pinned');
+    const chip = within(row).getByRole('button', { name: 'Open Mail' });
+    expect(chip.className).toContain('h-11');
+    expect(chip.querySelector('[aria-hidden]')!.className).toContain('rounded-[3px]');
+    // Searching: the row goes, as the results are what matters.
+    fireEvent.change(search(), { target: { value: 'mail' } });
+    expect(dialog().querySelector('[data-recents]')).toBeNull();
+  });
+
+  it('shows All apps category by category, under each one\'s name with its count and a rule; one category under its own name', () => {
+    render(<Launcher />);
+    const headings = () => Array.from(grid().querySelectorAll('[data-heading-label]')).map((h) => h.textContent);
     expect(headings()).toEqual(expect.arrayContaining(['Communication', 'Work', 'Business']));
     expect(headings()[0]).toBe('Communication');
-    // Communication's apps under it.
+    // Communication's apps under it, and how many.
     const first = grid().querySelector('[role="presentation"]')!;
     expect(within(first as HTMLElement).getAllByRole('option').map((o) => o.getAttribute('aria-label'))).toEqual(['Mail', 'Chat', 'Phone']);
-    // One category, or a search: no headings.
+    expect(first.querySelector('[data-heading-count]')!.textContent).toBe('3');
+    expect(first.querySelector('[data-heading] > [aria-hidden]')!.className).toContain('bg-launcher-line');
+    // One category from the sidebar: under its name; a search: no headings.
     fireEvent.click(screen.getByRole('tab', { name: /Work/ }));
-    expect(headings()).toEqual([]);
+    expect(headings()).toEqual(['Work']);
     fireEvent.click(screen.getByRole('tab', { name: /All apps/ }));
     fireEvent.change(search(), { target: { value: 'mail' } });
     expect(headings()).toEqual([]);
   });
 
-  it('keeps the footer attached to the bottom, with nothing under it; the grid takes what is left (worksuite-desktop#233)', () => {
+  it('with the categories as chips, one category reads without a heading, as before', () => {
+    updateLauncherPrefs((p) => ({ ...p, toggles: { ...p.toggles, sidebar: false } }));
+    render(<Launcher />);
+    const headings = () => Array.from(grid().querySelectorAll('[data-heading-label]')).map((h) => h.textContent);
+    expect(headings()[0]).toBe('Communication');
+    fireEvent.click(screen.getByRole('tab', { name: /Work/ }));
+    expect(headings()).toEqual([]);
+  });
+
+  it('keeps the footer along the bottom of the window, with nothing under it; the grid takes what is left (worksuite-desktop#233)', () => {
     setSize(1280, 1000);
     render(<Launcher />);
     const column = dialog().querySelector<HTMLElement>('[data-column]')!;
     const area = dialog().querySelector<HTMLElement>('[data-grid-area]')!;
     const footer = dialog().querySelector<HTMLElement>('[data-footer]')!;
-    // The column is as tall as the launcher; the grid grows into it, so the footer is its last child, at the bottom.
-    expect(column.className).toContain('h-full');
-    expect(column.className).not.toContain('self-start');
+    // The column grows into the launcher, the grid into the column; the footer is the launcher's last child, across it.
+    expect(column.className).toContain('flex-1');
     expect(column.style.paddingBottom).toBe('0px');
     expect(area.className).toContain('flex-1');
     expect(area.style.height).toBe('');
-    expect(column.lastElementChild).toBe(footer);
+    expect(dialog().lastElementChild).toBe(footer);
+    expect(column.contains(footer)).toBe(false);
+    expect(footer.style.height).toBe('64px');
     // 24px under the last section, before the footer.
     expect(grid().style.paddingBottom).toBe('24px');
   });

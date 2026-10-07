@@ -31,6 +31,7 @@ import {
   type MessageAnswer,
   type MessageInput,
   type Meta,
+  type NewTicketInput,
   type Present,
   type RewriteMode,
   type ServerDraft,
@@ -195,7 +196,7 @@ export function listTickets(p: ListParams, signal?: AbortSignal): Promise<Ticket
     async () => {
       const r = await getMeta<TicketPage>(
         `${BASE}/tickets`,
-        { ...(p.extra ?? {}), view: p.view, sort: p.sort, q: p.q?.trim() || undefined, status: list(p.status), priority: list(p.priority), organization: list(p.organization) ?? p.extra?.organization, assignee: p.assignee, limit: p.limit, cursor: p.cursor ?? undefined },
+        { ...(p.extra ?? {}), view: p.view, sort: p.sort, q: p.q?.trim() || undefined, status: list(p.status), priority: list(p.priority), source: list(p.source) ?? p.extra?.source, organization: list(p.organization) ?? p.extra?.organization, assignee: p.assignee, limit: p.limit, cursor: p.cursor ?? undefined },
         signal,
       );
       for (const t of r.data.items ?? []) references.set(t.id, t.reference);
@@ -206,6 +207,43 @@ export function listTickets(p: ListParams, signal?: AbortSignal): Promise<Ticket
       return fromLegacyList(await get<Record<string, unknown>>(LEGACY, query, signal), p, keep);
     },
   );
+}
+
+/**
+ * Raise a ticket by hand (FR-CRT-01/02, #298): the New ticket form's. `key` (Idempotency-Key) is kept by the form
+ * until it is done, so Create pressed again after a failure is one ticket. The answer is the ticket in full
+ * (`{ticket}`; a bare ticket is read too). A server without v1 refuses with `NEEDS_NEWER_SERVER`.
+ *
+ * Not queued offline, unlike a reply: the ticket is wanted at once (its reference, its place in the reading pane),
+ * its files are scanned on the way up first, and its retry key travels as a header the outbox does not keep. Offline
+ * the form says so and keeps what was typed.
+ */
+export async function createTicket(input: NewTicketInput, key: string): Promise<TicketFull> {
+  const a = await v1Only(() => send<{ ticket?: TicketFull } & Partial<TicketFull>>('POST', `${BASE}/tickets`, input, { 'Idempotency-Key': key }));
+  const t = (a?.ticket ?? a) as TicketFull;
+  if (!t || typeof t.id !== 'number') throw new ApiError(500, text('The server did not say which ticket it raised.'), 'BAD_ANSWER');
+  references.set(t.id, t.reference);
+  return t;
+}
+
+/** Somebody to raise a ticket for (#298): one of my contacts, a customer or a colleague, as Contacts' lookup finds them. */
+export interface RequesterHit {
+  kind: 'contact' | 'customer' | 'employee' | string;
+  id: number;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  subtitle: string | null;
+}
+
+/** The New ticket form's requester search: `GET /api/contacts/lookup`, the one place the product looks somebody up. */
+export async function findRequesters(q: string, signal?: AbortSignal): Promise<RequesterHit[]> {
+  const term = q.trim();
+  if (term.length < 2) return [];
+  const r = await get<{ results?: Array<Partial<RequesterHit> & { id: number | string }> }>('/api/contacts/lookup', { q: term, kinds: 'contact,customer,employee', limit: 8 }, signal);
+  return (r?.results ?? [])
+    .map((x) => ({ kind: String(x.kind ?? 'contact'), id: Number(x.id), name: x.name ?? null, email: x.email ?? null, phone: x.phone ?? null, subtitle: x.subtitle ?? null }))
+    .filter((x) => Number.isSafeInteger(x.id) && x.id > 0);
 }
 
 /**
@@ -344,11 +382,15 @@ export function markRead(id: number, messageId?: number): Promise<unknown> {
 export const MAX_FILES = 10;
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
-/** One file for the composer: scanned and kept, waiting for the message that carries it. */
-export async function uploadAttachment(ticketId: number, file: Blob, name: string): Promise<Attachment> {
+/**
+ * One file for the composer: scanned and kept, waiting for the message that carries it. With no ticket (null), one for
+ * the New ticket form (`POST attachments`), claimed by the ticket's first message when it is raised.
+ */
+export async function uploadAttachment(ticketId: number | null, file: Blob, name: string): Promise<Attachment> {
   const form = new FormData();
   form.append('file', file, name);
-  return (await v1Only(() => send<{ attachment: Attachment }>('POST', `${BASE}/tickets/${ticketId}/attachments`, form))).attachment;
+  const path = ticketId === null ? `${BASE}/attachments` : `${BASE}/tickets/${ticketId}/attachments`;
+  return (await v1Only(() => send<{ attachment: Attachment }>('POST', path, form))).attachment;
 }
 
 /** Take back an upload that was not sent (the composer's ×). */
@@ -453,11 +495,68 @@ export function convertChat(input: ConvertInput, key: string): Promise<{ id: num
   );
 }
 
-/** A chat that is a ticket already (`ALREADY_CONVERTED`): that ticket. */
+/** A chat or an email that is a ticket already (`ALREADY_CONVERTED`, `already_converted`): that ticket. */
 export function alreadyConverted(e: unknown): { id: number; reference: string; status: string | null } | null {
-  if (!(e instanceof ApiError) || e.code !== 'ALREADY_CONVERTED') return null;
+  if (!(e instanceof ApiError) || e.code?.toUpperCase() !== 'ALREADY_CONVERTED') return null;
   const t = (e.data as { ticket?: { id?: unknown; reference?: unknown; status?: unknown } } | null)?.ticket;
   return t && typeof t.id === 'number' ? { id: t.id, reference: String(t.reference ?? ''), status: typeof t.status === 'string' ? t.status : null } : null;
+}
+
+/** The visitor left no email address, and the ticket needs one to reach them (`422 requester_email_required`). */
+export function requesterEmailRequired(e: unknown): boolean {
+  return e instanceof ApiError && e.status === 422 && e.code?.toLowerCase() === 'requester_email_required';
+}
+
+/* ── what this server converts, and email → ticket (worksuite-desktop#298) ── */
+
+/** Whether a conversion is offered: yes, no (off for the company, or not mine to do), or not said — an older server. */
+export type ConversionOffer = 'yes' | 'no' | 'unknown';
+
+/**
+ * What `GET meta` says about converting a website chat or an email: `capabilities.convert_chat|convert_email` (the
+ * company has Support, and Chat or Email, switched on) and `can.convert_chat|convert_email` (my right; `can.create`
+ * where the server names no separate one). A server from before them says neither: 'unknown', and the screens keep
+ * what they did before.
+ */
+export function conversionOffer(m: unknown, kind: 'chat' | 'email'): ConversionOffer {
+  const d = (m ?? null) as { capabilities?: Record<string, unknown> | null; can?: Record<string, unknown> | null } | null;
+  const on = d?.capabilities?.[`convert_${kind}`];
+  if (typeof on !== 'boolean') return 'unknown';
+  if (!on) return 'no';
+  return (d?.can?.[`convert_${kind}`] ?? d?.can?.create) === false ? 'no' : 'yes';
+}
+
+/** `POST conversions/email`: the message as Mail names it (its uid, in its folder and mailbox) and what it becomes. */
+export interface EmailConvertInput {
+  mail_message_id: number;
+  folder?: string;
+  mailbox?: string;
+  /** A new ticket, or the id of one to add the email to. */
+  target: 'new' | number;
+  subject?: string;
+  /** Null: the server files it under my only organization, or in Needs organization. */
+  organization_id?: number | null;
+}
+
+/** The ticket an email became or joined. `existing`: it was one already, so nothing new was made. */
+export interface EmailConvertAnswer {
+  id: number;
+  reference: string;
+  status: TicketFull['status'] | null;
+  appended: boolean;
+  existing: boolean;
+}
+
+/**
+ * An email made a ticket, or added to one (FR-EML-07): the requester is the sender, the email the first message, its
+ * files kept. The same email twice is one ticket — `409 already_converted` with that ticket (`alreadyConverted`),
+ * or an answer marked `existing`. Read either way the server sends the ticket: alone, or as `{ticket, appended}`.
+ */
+export async function convertEmail(input: EmailConvertInput): Promise<EmailConvertAnswer> {
+  const a = await v1Only(() => send<Record<string, unknown>>('POST', `${BASE}/conversions/email`, input));
+  const t = (a.ticket && typeof a.ticket === 'object' ? a.ticket : a) as { id?: unknown; reference?: unknown; status?: unknown };
+  if (typeof t.id === 'number' && typeof t.reference === 'string') references.set(t.id, t.reference);
+  return { id: Number(t.id), reference: String(t.reference ?? ''), status: typeof t.status === 'string' ? (t.status as TicketFull['status']) : null, appended: a.appended === true, existing: a.existing === true };
 }
 
 /* ── knowledge and AI in a ticket (D-10) ────────────────────────────────── */
@@ -570,6 +669,7 @@ export const K = {
   presence: (id: number) => ['support', 'presence', id] as const,
   links: (id: number) => ['support', 'links', id] as const,
   requester: (email: string) => ['support', 'requester', email.toLowerCase()] as const,
+  lookup: (q: string) => ['support', 'lookup', q.trim().toLowerCase()] as const,
   conversion: (conversationId: number) => ['support', 'conversion', conversationId] as const,
   kb: (ticketId: number, q: string) => ['support', 'kb', ticketId, q] as const,
   summary: (ticketId: number) => ['support', 'ai-summary', ticketId] as const,
