@@ -110,7 +110,10 @@ export function ReadingPane({ tabs, activeKey, onActivate, onClose, children, em
                     onClose(t.key);
                   }}
                   aria-label={text('Close {subject}', { subject: t.subject || text('(no subject)') })}
-                  className="inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-ink-3 opacity-70 hover:bg-subtle hover:text-ink group-hover:opacity-100"
+                  title={text('Close')}
+                  data-tab-close
+                  // On the open tab, and on any other while the pointer is over it or the keyboard is on it (#287).
+                  className={cx('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px] text-ink-3 hover:bg-subtle hover:text-ink focus-visible:opacity-100 group-hover:opacity-100 group-focus-within:opacity-100', on ? 'opacity-100' : 'opacity-0')}
                 >
                   <Icon name="x" size={12} />
                 </button>
@@ -118,7 +121,7 @@ export function ReadingPane({ tabs, activeKey, onActivate, onClose, children, em
             );
           })}
           {hidden.length ? (
-            <button ref={more} type="button" onClick={() => setOverflowOpen(true)} aria-haspopup="menu" aria-label={text('{n} more open messages', { n: hidden.length })} className="mb-1 inline-flex h-7 shrink-0 items-center gap-0.5 rounded-[6px] px-2 text-[12.5px] font-semibold text-ink-2 hover:bg-surface">
+            <button ref={more} type="button" onClick={() => setOverflowOpen(true)} aria-haspopup="menu" aria-expanded={overflowOpen} aria-label={text('{n} more open messages', { n: hidden.length })} title={text('All open messages')} className="mb-1 inline-flex h-7 shrink-0 items-center gap-0.5 rounded-[6px] px-2 text-[12.5px] font-semibold text-ink-2 hover:bg-surface">
               +{hidden.length}
               <Icon name="chevron-down" size={12} />
             </button>
@@ -133,7 +136,8 @@ export function ReadingPane({ tabs, activeKey, onActivate, onClose, children, em
           prefer="bottom"
           align="end"
           onClose={() => setOverflowOpen(false)}
-          sections={[{ id: 'tabs', items: hidden.map((t) => ({ id: t.key, label: t.subject || text('(no subject)'), description: t.from, onSelect: () => onActivate(t) })) }]}
+          // The full list (#287): every open message, the one showing ticked.
+          sections={[{ id: 'tabs', items: tabs.map((t) => ({ id: t.key, label: t.subject || text('(no subject)'), description: t.from, checked: t.key === activeKey, onSelect: () => onActivate(t) })) }]}
         />
       ) : null}
     </section>

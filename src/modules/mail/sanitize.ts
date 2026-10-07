@@ -6,6 +6,7 @@
  * remote images, which are how senders learn you opened a message.
  */
 import { safeLinkHref } from '@shared/mail-files';
+import type { BodyKind, FrameColours } from './bodyLook';
 
 const DROP = ['script', 'iframe', 'frame', 'frameset', 'object', 'embed', 'applet', 'form', 'input', 'button', 'textarea', 'select', 'meta', 'link', 'base', 'svg', 'math', 'template', 'noscript', 'audio', 'video'];
 
@@ -16,6 +17,11 @@ export interface SanitizedMail {
   remoteImages: string[];
   /** Tracking pixels removed — never loaded, even when pictures are allowed (#163). */
   trackers: number;
+  /**
+   * The stylesheets the email put in its <head>, cleaned like the rest — left out of `html`, and used only to draw an
+   * email that has dark styles of its own (worksuite-desktop#287).
+   */
+  styles: string;
 }
 
 /** An empty picture: what a held-back image shows instead of a broken-picture icon, sized as the email asked. */
@@ -96,11 +102,13 @@ function placeholder(img: Element): void {
 export function sanitizeMailHtml(input: string, { safeLinks = true }: { safeLinks?: boolean } = {}): SanitizedMail {
   const doc = new DOMParser().parseFromString(input || '', 'text/html');
   for (const tag of DROP) doc.querySelectorAll(tag).forEach((el) => el.remove());
-  // A sender's own markers mean nothing here.
-  doc.querySelectorAll('[data-ws-img],[data-ws-ph],[data-ws-style]').forEach((el) => {
+  // A sender's own markers mean nothing here (the reader's own: pictures held back, a logo's plate, a fold).
+  doc.querySelectorAll('[data-ws-img],[data-ws-ph],[data-ws-style],[data-ws-plate],[data-ws-slot]').forEach((el) => {
     el.removeAttribute('data-ws-img');
     el.removeAttribute('data-ws-ph');
     el.removeAttribute('data-ws-style');
+    el.removeAttribute('data-ws-plate');
+    el.removeAttribute('data-ws-slot');
   });
   let blockedImages = 0;
   let trackers = 0;
@@ -111,7 +119,7 @@ export function sanitizeMailHtml(input: string, { safeLinks = true }: { safeLink
       const value = attr.value.trim();
       if (name.startsWith('on') || name === 'srcdoc' || name === 'formaction' || name === 'ping') el.removeAttribute(attr.name);
       else if ((name === 'href' || name === 'src' || name === 'action' || name === 'xlink:href' || name === 'background') && /^\s*(javascript|vbscript|data:text\/html)/i.test(value)) el.removeAttribute(attr.name);
-      else if (name === 'style' && /expression\(|url\(\s*['"]?\s*(https?:|\/\/)/i.test(value)) el.setAttribute('style', value.replace(/url\([^)]*\)/gi, 'none'));
+      else if (name === 'style' && /expression\(|url\(\s*['"]?\s*(https?:|\/\/)|image-set\(/i.test(value)) el.setAttribute('style', value.replace(/url\([^)]*\)/gi, 'none').replace(/(?:-webkit-)?image-set\([^)]*\)/gi, 'none'));
     }
   });
   doc.querySelectorAll('img').forEach((img) => {
@@ -148,40 +156,98 @@ export function sanitizeMailHtml(input: string, { safeLinks = true }: { safeLink
     a.setAttribute('rel', 'noopener noreferrer');
   });
   doc.querySelectorAll('style').forEach((s) => {
-    s.textContent = (s.textContent ?? '').replace(/@import[^;]+;/gi, '').replace(/url\([^)]*\)/gi, 'none');
+    s.textContent = (s.textContent ?? '').replace(/@import[^;]+;/gi, '').replace(/url\([^)]*\)/gi, 'none').replace(/(?:-webkit-)?image-set\([^)]*\)/gi, 'none');
   });
-  return { html: doc.body.innerHTML, blockedImages, remoteImages, trackers };
+  const styles = [...doc.head.querySelectorAll('style')]
+    .map((s) => s.textContent ?? '')
+    .join('\n')
+    .slice(0, 200_000);
+  return { html: doc.body.innerHTML, blockedImages, remoteImages, trackers, styles };
 }
 
 /**
  * An email designed with its own colours — a background, coloured text, a
- * coloured table — rather than plain words. Turning such a message dark would
- * leave dark logos on a dark page, so it keeps a light card (design D10).
+ * coloured table — rather than plain words. In the dark theme such a message
+ * is darkened element by element, or kept light on a soft card when that
+ * would read badly (bodyLook.ts, #287).
  */
 export function isDesignedMail(html: string): boolean {
   return /\bbgcolor\s*=|\bbackground(-color)?\s*:|<font[^>]+color\s*=|(^|[\s;"'])color\s*:/i.test(html || '');
 }
 
+/** How the frame draws a body (worksuite-desktop#287; bodyLook.ts decides it). */
+export interface FrameLook {
+  /** light: the email's own colours; dark: the app's (plain words, or darkened); native: its own dark styles. */
+  scheme: 'light' | 'dark' | 'native';
+  /** The colours the email is drawn in, from the app's tokens. */
+  colours: FrameColours;
+  /** The reading pane's colour round it: when it is not the email's, the email sits on a rounded card. */
+  outer: string;
+  /** Plain and simple words read in the app's font at 15px, in a 720px column; a designed email keeps its own width. */
+  kind: BodyKind;
+  /** A designed email's own fixed width (a 600px newsletter). */
+  width?: number | null;
+  /** The email's own stylesheets, sanitised, with its colour-scheme media queries switched for `scheme`. */
+  css?: string;
+}
+
+/** What the frame looked like before #287: white, or dark for plain words; kept for the boolean callers. */
+const LEGACY: Record<'light' | 'dark', FrameLook> = {
+  light: { scheme: 'light', colours: { surface: '#fff', ink: '#151A2D', ink2: '#4A5168', ink3: '#5B6275', link: '#23349E', line: '#E3E6EE', subtle: '#EEF0F6' }, outer: '#fff', kind: 'designed' },
+  dark: { scheme: 'dark', colours: { surface: '#171E33', ink: '#E7EAF3', ink2: '#B4BCD0', ink3: '#9AA3BD', link: '#9DB2FF', line: '#33405F', subtle: '#26304A' }, outer: '#171E33', kind: 'designed' },
+};
+
+const APP_FONT = "'Plus Jakarta Sans Variable',system-ui,sans-serif";
+
 /**
- * The frame document: readable defaults and the reader's zoom (75–200 %).
- * Light, as mail expects — unless the reader asked for dark email content
- * (Settings › Reading) while the app is dark and the message is plain words;
- * a designed email stays on its light card so it remains readable.
+ * The frame document: readable defaults, the reader's zoom (75–200 %), and the look bodyLook.ts chose — the app's
+ * colours or the email's own, the reading column (about 720px for words, a newsletter's own width), the card when the
+ * email is not in the pane's colours, and the folds for quoted text and long signatures. Everything here is static CSS
+ * written by the app; the frame runs no script. `look` may still be a boolean: light, or dark for plain words.
  */
-export function mailFrameDoc(bodyHtml: string, zoom = 100, dark = false): string {
+export function mailFrameDoc(bodyHtml: string, zoom = 100, look: boolean | FrameLook = false): string {
   const z = Math.max(50, Math.min(300, Math.round(Number.isFinite(zoom) ? zoom : 100)));
-  const c = dark ? { bg: '#171E33', ink: '#E7EAF3', link: '#9DB2FF', quote: '#33405F', quoteInk: '#B4BCD0' } : { bg: '#fff', ink: '#151A2D', link: '#23349E', quote: '#E3E6EE', quoteInk: '#4A5168' };
+  const l = typeof look === 'boolean' ? LEGACY[look ? 'dark' : 'light'] : look;
+  const c = l.colours;
+  const dark = l.scheme !== 'light';
+  const card = l.outer.toLowerCase() !== c.surface.toLowerCase();
+  const words = l.kind === 'plain' || l.kind === 'simple';
+  const column = (words ? 720 : l.width ? l.width + 32 : 720) + (card ? 48 : 0);
+  // The email's own stylesheet can never close the frame's <style>.
+  const own = (l.css ?? '').replace(/<\/style/gi, '<\\/style');
   return `<!doctype html><html><head><meta charset="utf-8">${dark ? '<meta name="color-scheme" content="dark">' : ''}<style>
-    html,body{margin:0;padding:0;background:${c.bg};color:${c.ink};font:14px/1.55 'Plus Jakarta Sans Variable',system-ui,sans-serif;word-wrap:break-word}
+    html{color-scheme:${dark ? 'dark' : 'light'}}
+    html,body{margin:0;padding:0;background:${l.outer};color:${c.ink};font:14px/1.55 ${APP_FONT};word-wrap:break-word}
     body{zoom:${z}%}
     body{padding:4px 2px 24px}
+    .ws-col{box-sizing:border-box;max-width:min(100%,${column}px);margin:0 auto;color:${c.ink}}
+    .ws-card{background:${c.surface};border-radius:12px;padding:20px 24px;margin:6px auto 12px;box-shadow:0 0 0 1px ${c.line}}
+    .ws-read{font-size:15px;line-height:1.6}
+    .ws-plain>div,.ws-plain>blockquote,.ws-plain>details,.ws-q>div{margin:0 0 .9em}
+    .ws-q>div:last-child{margin-bottom:0}
     img{max-width:100%;height:auto}
-    img[data-ws-ph]{background:${dark ? '#26304A' : '#ECEFF5'};border-radius:4px;vertical-align:middle}
+    img[data-ws-ph]{background:${dark ? c.subtle : '#ECEFF5'};border-radius:4px;vertical-align:middle}
+    img[data-ws-plate]:not([data-ws-ph]){background-color:#f3f4f7;border-radius:4px}
     a{color:${c.link}}
-    blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${c.quote};color:${c.quoteInk}}
+    a.ws-img{display:inline-block;max-width:100%;cursor:zoom-in}
+    blockquote{margin:8px 0;padding-left:12px;border-left:3px solid ${c.line};color:${c.ink2}}
     table{max-width:100%}
     pre{white-space:pre-wrap}
-  </style></head><body>${bodyHtml}</body></html>`;
+    details>summary{list-style:none;cursor:pointer;user-select:none}
+    details>summary::-webkit-details-marker{display:none}
+    details:not([open])>summary .ws-opened,details[open]>summary .ws-closed{display:none}
+    summary:focus-visible{outline:2px solid ${c.link};outline-offset:2px}
+    details.ws-quote{margin:14px 0}
+    details.ws-quote>summary{display:inline-flex;align-items:center;height:24px;padding:0 10px;border:1px solid ${c.line};border-radius:12px;background:${c.subtle};color:${c.ink2};font:600 12.5px/1 ${APP_FONT}}
+    details.ws-quote>summary:hover{color:${c.ink}}
+    details.ws-quote[open]>summary{margin-bottom:10px}
+    .ws-attr{color:${c.ink3};margin:0 0 6px}
+    .ws-sig-short,details.ws-sig{margin-top:.9em;color:${c.ink2}}
+    .ws-sig-line{color:${c.ink3}}
+    details.ws-sig{display:flex;flex-direction:column}
+    details.ws-sig>summary{order:2;align-self:flex-start;margin-top:2px;color:${c.link};font:600 13px/1.5 ${APP_FONT}}
+    details.ws-sig:not([open])::details-content{content-visibility:visible;display:block;max-height:6.2em;overflow:hidden;-webkit-mask-image:linear-gradient(#000 30%,transparent);mask-image:linear-gradient(#000 30%,transparent)}
+  </style>${own ? `<style>${own}</style>` : ''}</head><body><div class="ws-col ws-${l.kind}${words ? ' ws-read' : ''}${card ? ' ws-card' : ''}">${bodyHtml}</div></body></html>`;
 }
 
 export function escapeHtml(s: string): string {

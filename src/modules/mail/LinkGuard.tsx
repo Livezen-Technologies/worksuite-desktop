@@ -1,15 +1,19 @@
 import { useEffect, useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { apiPost } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage, on } from '../../core/bridge';
 import { text } from '../../core/i18n';
+import { formatPhone, toE164, waDigits } from '../../core/phone';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Modal } from '../../components/ui';
+import { whatsappRoute } from '@shared/channels';
 import { checkLink, shownHost, type LinkVerdict, type MailLinkClick } from '@shared/mail-files';
 import { mailtoRoute, parseMailto } from '@shared/mailto';
+import { IMAGE_LINK } from './readable';
 import { openWorkSuiteLinkFromMail } from './worksuiteLinks';
 
 /**
@@ -78,10 +82,13 @@ export function reasonWords(reason: string, j: Pick<LinkJudgement, 'host' | 'tex
 export function MailLinkGuard() {
   const online = useStore(app, (s) => s.status?.network !== 'OFFLINE');
   const [pending, setPending] = useState<LinkJudgement | null>(null);
+  const [phone, setPhone] = useState<string | null>(null);
 
   useEffect(
     () =>
       on<MailLinkClick>('mail:link', (link) => {
+        // A picture in the body: the reader it is in opens it in the image viewer (#287).
+        if (link.url.startsWith(IMAGE_LINK)) return;
         if (/^mailto:/i.test(link.url)) {
           const fields = parseMailto(link.url);
           if (fields) navigate(mailtoRoute(fields));
@@ -90,7 +97,16 @@ export function MailLinkGuard() {
         // A WorkSuite link opens in a tab here, not the browser (#170).
         if (openWorkSuiteLinkFromMail(link.url)) return;
         if (/^tel:/i.test(link.url)) {
-          void call('app:openExternal', { url: link.url }).catch(() => undefined);
+          // Call or WhatsApp, as Contacts offers a number (#287); the number as core/phone.ts reads it.
+          let number = link.url.slice(4);
+          try {
+            number = decodeURIComponent(number);
+          } catch {
+            // As written.
+          }
+          const e164 = toE164(number);
+          if (e164) setPhone(e164);
+          else void call('app:openExternal', { url: link.url }).catch(() => undefined);
           return;
         }
         void judgeLink(link, online).then((j) => {
@@ -101,6 +117,7 @@ export function MailLinkGuard() {
     [online],
   );
 
+  if (phone) return <PhoneChoice e164={phone} onClose={() => setPhone(null)} />;
   if (!pending) return null;
   const blocked = pending.verdict === 'blocked';
   const close = () => setPending(null);
@@ -137,6 +154,48 @@ export function MailLinkGuard() {
           <p className="mt-0.5 rounded-[8px] bg-subtle px-2 py-1.5 font-mono text-[12px] break-all selectable">{pending.url}</p>
         </div>
         {!online ? <p className="text-[12px] text-ink-3">Offline: checked on this computer only, not against your organisation’s list.</p> : null}
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * A phone number clicked in a message (#287): the ways WorkSuite has to reach it, as Contacts offers a number — the
+ * WorkSuite phone, the WhatsApp conversation, another app on this computer — and Copy. Nothing is dialled until one is
+ * chosen.
+ */
+export function PhoneChoice({ e164, onClose }: { e164: string; onClose: () => void }) {
+  const phoneApp = useCanOpen('phone');
+  const whatsapp = useCanOpen('whatsapp');
+  const shown = formatPhone(e164);
+  const choose = (run: () => void) => () => {
+    onClose();
+    run();
+  };
+  const item = 'flex h-10 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13px] font-semibold text-ink hover:bg-subtle';
+  return (
+    <Modal title={shown} labelledBy="mail-phone-title" width={360} onClose={onClose}>
+      <div role="menu" aria-label={text('Call or message {number}', { number: shown })} className="-mx-2 flex flex-col">
+        {phoneApp ? (
+          <button type="button" role="menuitem" autoFocus className={item} onClick={choose(() => void import('../phone/dial').then(({ placeCall }) => placeCall(e164)).catch((e) => toast('error', errorMessage(e))))}>
+            <Icon name="phone" size={15} className="text-success" />
+            {text('Call on my WorkSuite phone')}
+          </button>
+        ) : null}
+        {whatsapp ? (
+          <button type="button" role="menuitem" autoFocus={!phoneApp} className={item} onClick={choose(() => navigate(whatsappRoute({ to: waDigits(e164) })))}>
+            <Icon name="message-circle" size={15} className="text-success" />
+            {text('Open the WhatsApp conversation')}
+          </button>
+        ) : null}
+        <button type="button" role="menuitem" autoFocus={!phoneApp && !whatsapp} className={item} onClick={choose(() => void call('app:openExternal', { url: `tel:${e164}` }).catch((e) => toast('error', errorMessage(e))))}>
+          <Icon name="phone" size={15} className="text-ink-2" />
+          {phoneApp ? text('Call with another app') : text('Call')}
+        </button>
+        <button type="button" role="menuitem" className={item} onClick={choose(() => void navigator.clipboard?.writeText(e164).then(() => toast('success', text('Number copied.')), () => toast('error', text('Could not copy.'))))}>
+          <Icon name="copy" size={15} className="text-ink-2" />
+          {text('Copy number')}
+        </button>
       </div>
     </Modal>
   );

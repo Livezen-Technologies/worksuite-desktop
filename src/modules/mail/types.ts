@@ -439,10 +439,15 @@ export interface MailPrefs {
   zoom?: number;
   /** Group into conversations, per folder. */
   conversations?: Record<string, boolean>;
-  /** Reading (D10): open messages in tabs, previews in the list, dark mode for email content. */
+  /** Reading (D10): open messages in tabs, previews in the list. */
   tabs?: boolean;
   previews?: boolean;
+  /** The old on/off for dark email content (D10); `bodyTheme` decides now (#287). */
   darkBody?: boolean;
+  /** Show emails in dark mode (#287): Automatic (the default) follows the theme and each email; or always light, always dark. */
+  bodyTheme?: 'auto' | 'light' | 'dark';
+  /** The header's ☀ View in light / 🌙 View in dark, remembered per sender (lower-case address). */
+  bodyThemeSenders?: Record<string, 'light' | 'dark'>;
   /** Warn when an account has not synced successfully for this many minutes (DMO-SYN-06; 15…1440). */
   staleMinutes?: number;
   /** Show a desktop notification when an account's sync fails. */

@@ -307,8 +307,9 @@ describe('settings › mail on this computer (D04, D09, D10)', () => {
 
   it('keeps the reading options with the account', async () => {
     wrap(<MailSettings query={new URLSearchParams('tab=layout')} />);
-    fireEvent.click(await screen.findByRole('checkbox', { name: 'Dark mode for email content too' }));
-    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { darkBody: true }));
+    // Show emails in dark mode (#287) took the place of the old "Dark mode for email content too" checkbox.
+    fireEvent.click(within(await screen.findByRole('radiogroup', { name: 'Show emails in dark mode' })).getByRole('radio', { name: 'Always dark' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { bodyTheme: 'dark' }));
     fireEvent.click(screen.getByRole('checkbox', { name: 'Show message previews in the list' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { previews: false }));
   });

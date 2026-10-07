@@ -14,8 +14,9 @@ import type { Mailbox, MessageContext, MessageDetail } from './types';
  * The reading pane's header (worksuite-desktop#212): the subject with the folder and External badges on
  * its right; the sender on one line — name, address (a click copies it) and the verification shield —
  * with "to me ▾" under it, which opens the whole set of headers; the short date, Star and More on the
- * right. Three layouts follow the Mail density setting: Super compact (one line), Compact (the default)
- * and Classic (roomier). A narrow pane puts the badges under the subject and the date under the sender.
+ * right, and in the dark theme ☀ / 🌙 to see this sender's email light or dark (#287). Three layouts
+ * follow the Mail density setting: Super compact (one line), Compact (the default) and Classic
+ * (roomier). A narrow pane puts the badges under the subject and the date under the sender.
  * Scrolled away, MessageView shows `CollapsedHeader` in its place.
  */
 
@@ -49,6 +50,8 @@ export interface MessageHeaderProps {
   person: PersonActions;
   onCopyAddress: () => void;
   onStar: () => void;
+  /** ☀ View in light / 🌙 View in dark for this email, remembered for its sender (#287); absent in the light theme unless the email is dark. */
+  bodyTheme?: { dark: boolean; onToggle: () => void };
   /** More of the actions as buttons, when the person asked for them (Settings › Mail › Reading). */
   extraTools?: HeaderTool[];
   moreSections: MenuSection[];
@@ -120,6 +123,7 @@ export function MessageHeader(p: MessageHeaderProps) {
       {(p.extraTools ?? []).map((t) => (
         <HeaderButton key={t.id} icon={t.icon} label={t.label} onClick={t.onClick} disabled={t.disabled} />
       ))}
+      {p.bodyTheme ? <HeaderButton icon={p.bodyTheme.dark ? 'sun' : 'moon'} label={p.bodyTheme.dark ? text('View in light') : text('View in dark')} onClick={p.bodyTheme.onToggle} /> : null}
       <HeaderButton icon="star" label={m.is_starred ? text('Unstar (S)') : text('Star (S)')} onClick={p.onStar} active={m.is_starred} />
       <HeaderButton ref={moreBtn} icon="more" label={text('More actions for this email')} onClick={() => setMenu((x) => !x)} expanded={menu} />
     </div>

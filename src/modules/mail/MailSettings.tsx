@@ -651,13 +651,9 @@ function Layout() {
           <Checkbox checked={prefs.headerIcons === 'more'} onChange={(e) => set({ headerIcons: e.target.checked ? 'more' : 'few' })} />
           {text('Show more buttons in the message header')}
         </label>
-        <label className="flex items-center gap-2.5">
-          <Checkbox checked={prefs.darkBody === true} onChange={(e) => set({ darkBody: e.target.checked })} aria-describedby="mail-dark-body-hint" />
-          Dark mode for email content too
-        </label>
-        <p id="mail-dark-body-hint" className="pl-[26px] text-[12px] leading-relaxed text-ink-3">
-          Emails designed with their own colours are shown on a light card so logos and tables stay readable.
-        </p>
+        {/* Emails in dark mode (#287): decided per email under Automatic; ☀ / 🌙 in a message's header overrides it for its sender. */}
+        {seg('bodyTheme', prefs.bodyTheme, 'auto', [['auto', 'Automatic'], ['light', 'Always light'], ['dark', 'Always dark']], 'Show emails in dark mode')}
+        <p className="-mt-2 text-[12px] leading-relaxed text-ink-3">{text('Automatic follows the theme: plain emails take the app’s colours, designed ones their own dark style or a careful darkening, and an email that would not read well stays light on a soft card. ☀ or 🌙 above a message changes it for that sender.')}</p>
         {seg('markRead', prefs.markRead, 'open', [['open', 'When opened'], ['delay', 'After a few seconds'], ['change', 'When I move on'], ['never', 'Never']], 'Mark as read')}
         {prefs.markRead === 'delay' ? seg('markReadDelay', prefs.markReadDelay, 5, [[0, '0 s'], [5, '5 s'], [10, '10 s'], [30, '30 s']], 'After') : null}
         {seg('openIn', prefs.openIn, 'tabs', [['tabs', 'Tabs'], ['windows', 'Windows'], ['both', 'Both']], 'Open messages in')}
