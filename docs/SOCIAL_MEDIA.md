@@ -35,9 +35,11 @@ is a different thing (SRS Q-01/Q-02) and is untouched. Built now, in `src/module
 
 **Honest degradation (NFR-10, the Phone's rule).** Every call goes through `optional()`. A server without the module
 answers 404 everywhere: the rail and every screen still draw, a banner says *Social Media Manager isn't on this
-WorkSuite server yet*, and each panel says the same where its data would be — nothing is invented. A super-admin
-(`apps: '*'`) sees the app; anyone else sees it once the server lists the `social-media` app for them and grants
-`social.view`.
+WorkSuite server yet*, and each panel says the same where its data would be — nothing is invented. The app is
+shown to everyone signed in, like the Phone (0.2.197): a gate on the server's `social-media` app row and
+`social.view` hid it from everybody while no server has the module. Without the module every screen opens to look at;
+with it, each screen follows the `social.*` permissions the server sends. Once servers carry the app row, the gate can
+come back in `shared/apps.ts`.
 
 **Never on the desktop:** network tokens or app secrets (NFR-04: the server keeps them in CoreSecretService; the
 desktop only sees what was granted, in words); publishing (C3: the server's scheduler publishes, so a post goes out

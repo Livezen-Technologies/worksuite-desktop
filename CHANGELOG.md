@@ -5,6 +5,16 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.197 — 2026-10-06
+
+- **Social Media is in the launcher.** The app was hidden from everyone: it waited for the server to list the Social
+  Media app and grant `social.view`, and no server has that module yet. It now shows to everyone signed in, under
+  Business, like the Phone. Until the server has the module, every screen opens so you can look around, and says
+  plainly that this server doesn't offer it yet. (social-media 1.0.1)
+  - Once the server has the module, each screen follows the `social.*` permissions it sends again.
+  - **How it was checked:** GitHub Actions still wasn't starting jobs for the repository (#280), so it was verified
+    locally: typecheck, lint, all 5,647 unit tests and the production build.
+
 ## 0.2.196 — 2026-10-06
 
 - **Point of Sale, phase 2 at the counter (pos 1.2.0).** The till uses the new POS features of WorkSuite. **It needs

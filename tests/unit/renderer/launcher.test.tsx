@@ -361,7 +361,7 @@ describe('finding an app', () => {
     fireEvent.click(comms);
     expect(names()).toEqual(['Mail', 'Chat', 'Phone']);
     fireEvent.click(screen.getByRole('tab', { name: /All apps/ }));
-    expect(names()).toHaveLength(12);
+    expect(names()).toHaveLength(13);
   });
 
   it('searches as soon as a key is typed, wherever the focus is', () => {
@@ -489,7 +489,7 @@ describe('tiles', () => {
 
   it('has a footer with the count, the keys and Customise', () => {
     render(<Launcher />);
-    expect(dialog().textContent).toContain('12 apps · ↑↓←→ move · ↵ open · ⌘↵ new window · Esc close');
+    expect(dialog().textContent).toContain('13 apps · ↑↓←→ move · ↵ open · ⌘↵ new window · Esc close');
     fireEvent.click(screen.getByRole('button', { name: 'Customise' }));
     expect(ui.get().overlay).toBeNull();
     expect(tabsStore.get().tabs.some((t) => t.route === '/settings/launcher')).toBe(true);

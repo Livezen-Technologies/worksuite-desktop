@@ -25,8 +25,9 @@ describe('what a bootstrap allows', () => {
   it('is the everyday apps, HR, the Phone and Home for somebody not set up — nothing else', () => {
     // PDF Studio needs no app: a PDF from this computer is anyone's to read (a Drive file is still the server's to allow).
     // Office is a part of Files: its tile shows with the Drive. The Phone has no app slug on the server yet (G-13), like
-    // the web's: it asks the server what the person may do (no extension, no PBX) and says so.
-    expect([...everyday].sort()).toEqual(['calendar', 'chat', 'files', 'home', 'hr', 'mail', 'notes', 'office', 'pdf', 'phone', 'tasks']);
+    // the web's: it asks the server what the person may do (no extension, no PBX) and says so. Social Media Manager
+    // likewise, until a server has its module and app row (WS-SMM-SRS-001).
+    expect([...everyday].sort()).toEqual(['calendar', 'chat', 'files', 'home', 'hr', 'mail', 'notes', 'office', 'pdf', 'phone', 'social-media', 'tasks']);
     expect(visibleAppIds(null).size).toBe(0);
   });
 
