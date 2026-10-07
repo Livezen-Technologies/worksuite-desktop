@@ -49,7 +49,7 @@ person who has to live with the change — what it does, and where it bites.
   - **The sidebar is a setting:** Settings › App launcher › Categories in a sidebar, on by default. Off, or in a
     narrow window, the categories are chips above the apps as before.
 - **How it was checked:** GitHub Actions still wasn't starting jobs for the repository, so it was verified locally:
-  typecheck, lint, the module version check, the security audit, all unit tests and the production build.
+  typecheck, lint, the module version check, the security audit, all 5,937 unit tests and the production build.
 
 ## 0.2.199 — 2026-10-07
 
