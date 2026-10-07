@@ -31,6 +31,7 @@ import {
   type MessageAnswer,
   type MessageInput,
   type Meta,
+  type NewTicketInput,
   type Present,
   type RewriteMode,
   type ServerDraft,
@@ -195,7 +196,7 @@ export function listTickets(p: ListParams, signal?: AbortSignal): Promise<Ticket
     async () => {
       const r = await getMeta<TicketPage>(
         `${BASE}/tickets`,
-        { ...(p.extra ?? {}), view: p.view, sort: p.sort, q: p.q?.trim() || undefined, status: list(p.status), priority: list(p.priority), organization: list(p.organization) ?? p.extra?.organization, assignee: p.assignee, limit: p.limit, cursor: p.cursor ?? undefined },
+        { ...(p.extra ?? {}), view: p.view, sort: p.sort, q: p.q?.trim() || undefined, status: list(p.status), priority: list(p.priority), source: list(p.source) ?? p.extra?.source, organization: list(p.organization) ?? p.extra?.organization, assignee: p.assignee, limit: p.limit, cursor: p.cursor ?? undefined },
         signal,
       );
       for (const t of r.data.items ?? []) references.set(t.id, t.reference);
@@ -206,6 +207,43 @@ export function listTickets(p: ListParams, signal?: AbortSignal): Promise<Ticket
       return fromLegacyList(await get<Record<string, unknown>>(LEGACY, query, signal), p, keep);
     },
   );
+}
+
+/**
+ * Raise a ticket by hand (FR-CRT-01/02, #298): the New ticket form's. `key` (Idempotency-Key) is kept by the form
+ * until it is done, so Create pressed again after a failure is one ticket. The answer is the ticket in full
+ * (`{ticket}`; a bare ticket is read too). A server without v1 refuses with `NEEDS_NEWER_SERVER`.
+ *
+ * Not queued offline, unlike a reply: the ticket is wanted at once (its reference, its place in the reading pane),
+ * its files are scanned on the way up first, and its retry key travels as a header the outbox does not keep. Offline
+ * the form says so and keeps what was typed.
+ */
+export async function createTicket(input: NewTicketInput, key: string): Promise<TicketFull> {
+  const a = await v1Only(() => send<{ ticket?: TicketFull } & Partial<TicketFull>>('POST', `${BASE}/tickets`, input, { 'Idempotency-Key': key }));
+  const t = (a?.ticket ?? a) as TicketFull;
+  if (!t || typeof t.id !== 'number') throw new ApiError(500, text('The server did not say which ticket it raised.'), 'BAD_ANSWER');
+  references.set(t.id, t.reference);
+  return t;
+}
+
+/** Somebody to raise a ticket for (#298): one of my contacts, a customer or a colleague, as Contacts' lookup finds them. */
+export interface RequesterHit {
+  kind: 'contact' | 'customer' | 'employee' | string;
+  id: number;
+  name: string | null;
+  email: string | null;
+  phone: string | null;
+  subtitle: string | null;
+}
+
+/** The New ticket form's requester search: `GET /api/contacts/lookup`, the one place the product looks somebody up. */
+export async function findRequesters(q: string, signal?: AbortSignal): Promise<RequesterHit[]> {
+  const term = q.trim();
+  if (term.length < 2) return [];
+  const r = await get<{ results?: Array<Partial<RequesterHit> & { id: number | string }> }>('/api/contacts/lookup', { q: term, kinds: 'contact,customer,employee', limit: 8 }, signal);
+  return (r?.results ?? [])
+    .map((x) => ({ kind: String(x.kind ?? 'contact'), id: Number(x.id), name: x.name ?? null, email: x.email ?? null, phone: x.phone ?? null, subtitle: x.subtitle ?? null }))
+    .filter((x) => Number.isSafeInteger(x.id) && x.id > 0);
 }
 
 /**
@@ -344,11 +382,15 @@ export function markRead(id: number, messageId?: number): Promise<unknown> {
 export const MAX_FILES = 10;
 export const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
-/** One file for the composer: scanned and kept, waiting for the message that carries it. */
-export async function uploadAttachment(ticketId: number, file: Blob, name: string): Promise<Attachment> {
+/**
+ * One file for the composer: scanned and kept, waiting for the message that carries it. With no ticket (null), one for
+ * the New ticket form (`POST attachments`), claimed by the ticket's first message when it is raised.
+ */
+export async function uploadAttachment(ticketId: number | null, file: Blob, name: string): Promise<Attachment> {
   const form = new FormData();
   form.append('file', file, name);
-  return (await v1Only(() => send<{ attachment: Attachment }>('POST', `${BASE}/tickets/${ticketId}/attachments`, form))).attachment;
+  const path = ticketId === null ? `${BASE}/attachments` : `${BASE}/tickets/${ticketId}/attachments`;
+  return (await v1Only(() => send<{ attachment: Attachment }>('POST', path, form))).attachment;
 }
 
 /** Take back an upload that was not sent (the composer's ×). */
@@ -570,6 +612,7 @@ export const K = {
   presence: (id: number) => ['support', 'presence', id] as const,
   links: (id: number) => ['support', 'links', id] as const,
   requester: (email: string) => ['support', 'requester', email.toLowerCase()] as const,
+  lookup: (q: string) => ['support', 'lookup', q.trim().toLowerCase()] as const,
   conversion: (conversationId: number) => ['support', 'conversion', conversationId] as const,
   kb: (ticketId: number, q: string) => ['support', 'kb', ticketId, q] as const,
   summary: (ticketId: number) => ['support', 'ai-summary', ticketId] as const,

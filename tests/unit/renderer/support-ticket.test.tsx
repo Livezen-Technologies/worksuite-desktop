@@ -261,7 +261,7 @@ describe('the ticket tab', () => {
     const thread = screen.getByRole('list', { name: 'Conversation' });
     const items = Array.from(thread.children).filter((li) => !li.getAttribute('aria-hidden')).map((li) => (li.hasAttribute('data-new-since') ? 'divider' : li.getAttribute('data-message')));
     expect(items).toEqual(['1', '2', '3', 'divider', '4']);
-    expect(within(thread).getByText('Internal')).toBeTruthy();
+    expect(within(thread).getByText('Internal note')).toBeTruthy();
     expect(within(thread).getByText(/Delivered/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Support' }));
     expect(nav.navigate).toHaveBeenCalledWith('/support');

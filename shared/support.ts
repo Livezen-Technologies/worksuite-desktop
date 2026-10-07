@@ -83,12 +83,13 @@ export const PRIORITY_LABEL: Record<SupportPriority, string> = { low: 'Low', nor
 
 export const TYPES = ['question', 'incident', 'problem', 'request', 'complaint'] as const;
 export type SupportType = (typeof TYPES)[number];
+export const TYPE_LABEL: Record<SupportType, string> = { question: 'Question', incident: 'Incident', problem: 'Problem', request: 'Request', complaint: 'Complaint' };
 
-/** Where a ticket came from (`TicketService::SOURCES`). */
-export const SOURCES = ['manual', 'email', 'chat', 'widget_offline', 'form', 'portal', 'whatsapp', 'phone', 'api', 'module', 'desktop'] as const;
+/** Where a ticket came from (`TicketService::SOURCES`; `walk_in` since worksuite-desktop#298). */
+export const SOURCES = ['manual', 'email', 'chat', 'widget_offline', 'form', 'portal', 'whatsapp', 'phone', 'walk_in', 'api', 'module', 'desktop'] as const;
 export type SupportSource = (typeof SOURCES)[number];
 export const SOURCE_LABEL: Record<SupportSource, string> = {
-  manual: 'Added by staff',
+  manual: 'Manual',
   email: 'Email',
   chat: 'Website chat',
   widget_offline: 'Website form',
@@ -96,10 +97,15 @@ export const SOURCE_LABEL: Record<SupportSource, string> = {
   portal: 'Portal',
   whatsapp: 'WhatsApp',
   phone: 'Phone',
+  walk_in: 'Walk-in',
   api: 'API',
   module: 'WorkSuite',
   desktop: 'WorkSuite Desktop',
 };
+
+/** The channels a ticket raised by hand can say it came by (#298): Manual unless the requester rang or walked in. */
+export const MANUAL_SOURCES = ['manual', 'phone', 'walk_in'] as const;
+export type ManualSource = (typeof MANUAL_SOURCES)[number];
 
 /** `none`: no SLA policy applies to the ticket. */
 export type SlaState = 'ok' | 'at_risk' | 'breached' | 'met' | 'paused' | 'none';
@@ -231,7 +237,12 @@ export interface Ticket {
   created_at: string | null;
   updated_at: string | null;
   deleted_at: string | null;
+  /** What it was raised from, when that is something the desktop can open (#298): absent from an older server. */
+  origin?: TicketOrigin | null;
 }
+
+/** An email in Mail (`mail_message_id`: null when the message is not one the server can point to), or a website chat. */
+export type TicketOrigin = { type: 'email'; mail_message_id: number | null } | { type: 'chat'; conversation_id: number };
 
 /** One ticket in full (`GET tickets/{id}`, and every write's answer). */
 export interface TicketFull extends Ticket {
@@ -420,7 +431,10 @@ export interface Meta {
   teams: Array<{ id: number; name: string; organization_id: number | null; department_id: number | null; tier: number }>;
   categories: Array<{ id: number; name: string; organization_id: number | null; parent_id: number | null }>;
   tags: Array<{ name: string; organization_id: number | null }>;
-  can: Caps;
+  /** What I may do anywhere at the desk; `create` raises a ticket by hand (#298). An older server may send none. */
+  can?: Caps & { convert_chat?: boolean; convert_email?: boolean };
+  /** What this server can do at all (#298); absent from an older one. */
+  capabilities?: { convert_chat?: boolean; convert_email?: boolean; mail_intake?: boolean };
   /** Built here for a server without the v1 API. */
   legacy?: boolean;
 }
@@ -525,8 +539,36 @@ export interface ListParams {
   assignee?: string;
   limit?: number;
   cursor?: string | null;
+  /** The channels it came by (`source=`, #298). */
+  source?: string[];
   /** A saved view's other filters (team, department, category, tag, sla, dates…), as the server keeps them. */
   extra?: Record<string, string>;
+}
+
+/**
+ * `POST tickets` from the New ticket form (FR-CRT-01/02, #298). The requester is a contact found (`contact_id`) or
+ * somebody new by name, email and phone; the description is the thread's first message, with the files uploaded for
+ * it (`POST attachments`). `attachments` repeats `attachment_ids` for a server from before #298, which reads that.
+ */
+export interface NewTicketInput {
+  subject: string;
+  description?: string;
+  /** The description as formatted, for a server that keeps a message's HTML. */
+  description_html?: string;
+  requester: { name?: string | null; email?: string | null; phone?: string | null; contact_id?: number | null; company_id?: number | null };
+  organization_id?: number | null;
+  source: ManualSource;
+  priority: SupportPriority;
+  type?: SupportType | null;
+  category_id?: number | null;
+  team_id?: number | null;
+  assigned_to?: number | null;
+  tags?: string[];
+  due_at?: string | null;
+  attachment_ids?: number[];
+  attachments?: number[];
+  /** Email the requester that the ticket is open, with its reference. */
+  notify_requester: boolean;
 }
 
 /* ── website chat → ticket (FR-LCH-01…08, D-06) ─────────────────────────── */
@@ -1007,6 +1049,12 @@ export function legacyListQuery(p: ListParams): { query: Record<string, string>;
     const set = new Set(p.priority);
     const before = keep;
     keep = (t) => before(t) && set.has(t.priority);
+  }
+  if (p.source?.length) {
+    // The as-built list has no channel filter: the rows are kept here by theirs.
+    const set = new Set(p.source);
+    const before = keep;
+    keep = (t) => before(t) && set.has(t.source);
   }
   if (p.q?.trim()) query.search = p.q.trim();
   return { query, keep };

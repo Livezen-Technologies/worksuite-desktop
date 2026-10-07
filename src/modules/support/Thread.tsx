@@ -4,11 +4,13 @@ import { bytes, timeLabel, stampDayLabel } from '../../core/time';
 import { text } from '../../core/i18n';
 import { Icon } from '../../components/Icon';
 import { Avatar, FileBadge, cx } from '../../components/ui';
+import { channelIcon, channelLabel } from './parts';
 
 /**
  * A ticket's conversation (FR-COM-10): every message, oldest first — the requester's, the replies they were sent and
- * the internal notes, which are amber and labelled Internal on every message (§19.2, the as-built rule), so a note
- * is never mistaken for something the customer saw.
+ * the internal notes, which are amber and labelled Internal note on every message (§19.2, the as-built rule), so a
+ * note is never mistaken for something the customer saw. Every other message says the channel it came or went by
+ * (#298): email, website chat, phone, walk-in…
  *
  * "New since you last viewed" sits above the first message after my read marker that somebody else wrote. A ticket
  * never opened has no marker and no line: all of it is new.
@@ -21,12 +23,23 @@ export function newSinceIndex(messages: Message[], lastRead: number, me: number 
 /** What a message is, in words: who wrote it and to whom. */
 export function messageKind(m: Message): string {
   if (m.internal) return text('Internal note');
-  if (m.from === 'requester') return m.channel && m.channel !== 'agent' ? text('via {channel}', { channel: channelWords(m.channel) }) : text('Requester');
+  if (m.from === 'requester') return text('Requester');
   return text('Replied to requester');
 }
 
-function channelWords(c: string): string {
-  return ({ email: text('email'), chat: text('website chat'), whatsapp: 'WhatsApp', phone: text('phone'), portal: text('portal'), form: text('form'), widget_offline: text('website form') } as Record<string, string>)[c] ?? c;
+/** Channels that say only who wrote a message (the as-built `agent`, v1's defaults), not how it came. */
+const NO_CHANNEL = new Set(['agent', 'staff', 'reply', 'note']);
+
+/**
+ * The channel a message came or went by (#298), as the API names it: `note` for an internal note; else its own
+ * `channel`, or for a staff reply how it went out (`delivery_channel`); and for the thread's first message, which has
+ * none on a server from before messages kept one, the ticket's `source` — how it arrived. Null: nothing to say.
+ */
+export function messageChannel(m: Message, first: boolean, source?: string | null): string | null {
+  if (m.internal) return 'note';
+  if (m.channel && !NO_CHANNEL.has(m.channel)) return m.channel;
+  if (m.from === 'staff' && m.delivery_channel && !NO_CHANNEL.has(m.delivery_channel)) return m.delivery_channel;
+  return first && source ? source : null;
 }
 
 /** Where a public reply got to (G-01): not sent until delivery exists on the server, then emailed and delivered. */
@@ -43,6 +56,7 @@ export function Thread({
   attachments = [],
   lastRead = 0,
   me = null,
+  source = null,
   compact = false,
   onOpenAttachment,
   className,
@@ -51,6 +65,8 @@ export function Thread({
   attachments?: Attachment[];
   lastRead?: number;
   me?: number | null;
+  /** The ticket's source: the first message's channel when it says none. Given only when the thread starts here. */
+  source?: string | null;
   /** The reading pane's denser form. */
   compact?: boolean;
   onOpenAttachment?: (a: Attachment) => void;
@@ -75,6 +91,7 @@ export function Thread({
         const files = filesOf.get(m.id) ?? [];
         const who = m.author?.name ?? m.author_name ?? (m.from === 'requester' ? text('Requester') : text('Staff'));
         const sent = delivery(m);
+        const channel = messageChannel(m, i === 0, source);
         // A server that sends no copy list sends no copies.
         const cc = m.cc ?? [];
         return (
@@ -104,12 +121,21 @@ export function Thread({
                 <Avatar name={who} size={compact ? 20 : 24} />
                 <b className="truncate text-ink">{who}</b>
                 {m.internal ? (
-                  <span className="inline-flex shrink-0 items-center gap-1 rounded-[5px] bg-warning-bg px-1.5 text-[11px] font-semibold text-warning-ink">
+                  <span data-channel="note" className="inline-flex shrink-0 items-center gap-1 rounded-[5px] bg-warning-bg px-1.5 text-[11px] font-semibold text-warning-ink">
                     <Icon name="lock" size={11} />
-                    {text('Internal')}
+                    {text('Internal note')}
                   </span>
                 ) : (
-                  <span className="truncate text-ink-3">{messageKind(m)}</span>
+                  <>
+                    {channel ? (
+                      <span data-channel={channel} className="inline-flex shrink-0 items-center gap-1 rounded-[5px] bg-subtle px-1.5 text-[11px] font-semibold text-ink-3">
+                        <Icon name={channelIcon(channel)} size={11} />
+                        {channelLabel(channel)}
+                      </span>
+                    ) : null}
+                    {/* The channel says how a requester's message came; a reply still says it went to them. */}
+                    {m.from === 'staff' || !channel ? <span className="truncate text-ink-3">{messageKind(m)}</span> : null}
+                  </>
                 )}
                 {cc.length && !m.internal ? <span className="truncate text-ink-3">· {text('CC {list}', { list: cc.join(', ') })}</span> : null}
                 <span className="ml-auto shrink-0 text-ink-3" title={m.created_at ? stampDayLabel(m.created_at, 'long') : undefined}>

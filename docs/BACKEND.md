@@ -1094,6 +1094,30 @@ and offers to copy a support request instead of sending it.
   - It is not the company helpdesk (`/api/tickets`), which needs the "Reply to tickets" permission and serves the
     company's own customers.
 
+## Support desk: tickets raised by hand, channels and origin (worksuite-desktop#298)
+
+The Support module (`src/modules/support`) works through `/api/support/v1` (the server's `docs/SUPPORT_API.md`). For a
+ticket raised by hand it reads and sends the following; every field is optional on the way in, so an older server
+still works.
+
+- **`GET meta`**: `can.create` hides New ticket (C) and ⌘K's Create ticket when false; `organizations[].can.create`
+  narrows the form's organizations. No `can` (an older server) is "allowed": the server's refusal is then shown.
+  `capabilities {convert_chat, convert_email, mail_intake}` is typed but not read by this screen. `sources` limits the
+  list's Channel filter.
+- **`POST attachments`** (multipart `file`): the form's files, before the ticket exists. `{attachment}`.
+- **`POST tickets`** with an `Idempotency-Key`: `{subject, description, description_html, requester: {name, email,
+  phone, contact_id}, organization_id, source: manual|phone|walk_in, priority, type, category_id, team_id,
+  assigned_to, tags, due_at, attachment_ids, notify_requester}`. `attachments` repeats `attachment_ids` for a server
+  from before #298; `description_html` is the formatted copy for a server that keeps a message's HTML. Answers
+  `{ticket}` in full (a bare ticket is read too). Not queued offline: the form says so and keeps the draft.
+- **`GET tickets?source=email,phone`**: the Channel filter. A server without v1 is filtered on the desktop.
+- **Ticket** `source` (icon and name: `manual`, `email`, `chat`, `phone`, `walk_in`…) and `origin`: `{type: 'email',
+  mail_message_id}` opens `/mail?msg={id}` (no link when null), `{type: 'chat', conversation_id}` opens the website
+  chat. **Message** `channel` labels each entry of the thread (the first falls back to the ticket's `source`; notes
+  are "Internal note"; `agent`, `reply` and `note` say nothing of the channel).
+- The requester search is Contacts' `GET /api/contacts/lookup?q=&kinds=contact,customer,employee&limit=8`; a
+  contact found is sent as `contact_id`.
+
 ## Connection strength and the speed test (worksuite-desktop#254, #265)
 
 The status bar shows two things apart: **your connection** (the network delay, its stability, the speed test) and
