@@ -136,6 +136,9 @@ export interface PosCapabilities {
   receipt_templates?: boolean;
   device_unpair?: boolean;
   device_rename?: boolean;
+  /* worksuite-desktop#294: the customer display's promotions, and a phone number typed there looked up masked. */
+  display_slides?: boolean;
+  display_phone?: boolean;
 }
 
 export interface PosOptions {
@@ -283,6 +286,8 @@ export const printTest = () => call('pos:printTest');
 export const openDrawer = () => call('pos:openDrawer');
 export const openDisplay = () => call('pos:displayOpen');
 export const closeDisplay = () => call('pos:displayClose');
+/** The customer display's own window: the promotions and logo this till keeps, and whether its screen takes touch (#294). */
+export const displayMedia = () => call('pos:displayMedia');
 export const listPrinters = () => call('print:printers', undefined);
 
 /* IPC, not the network: these answer with the line down. */

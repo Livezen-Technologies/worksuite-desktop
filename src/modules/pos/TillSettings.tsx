@@ -1,10 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
-import { listPrinters, openDrawer, PK, printTest, usePrintSettings } from './api';
+import { listPrinters, openDrawer, PK, printTest, setPrintSettings, usePrintSettings } from './api';
 import { useBarcodeScanner } from './barcode';
 import { displayWindow, toggleCustomerDisplay } from './display';
 import { useT, type PosKey } from './i18n';
@@ -150,6 +150,61 @@ function Devices() {
         action={display ? t('pos.close') : t('pos.hw.openIt')}
         onAction={() => void toggleCustomerDisplay()}
       />
+      <DisplayTouch value={s?.display_touch ?? 'auto'} />
+    </div>
+  );
+}
+
+const TOUCH: Array<{ id: 'auto' | 'yes' | 'no'; label: PosKey }> = [
+  { id: 'auto', label: 'pos.hw.touchAuto' },
+  { id: 'yes', label: 'pos.hw.touchYes' },
+  { id: 'no', label: 'pos.hw.touchNo' },
+];
+
+/**
+ * Whether the customer display's screen takes touch (#294): automatic (what the system says of the monitor), yes or
+ * no. With touch the customer can give their phone number at the display; without, the button is not shown there.
+ */
+function DisplayTouch({ value }: { value: 'auto' | 'yes' | 'no' }) {
+  const t = useT();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState(false);
+  async function pick(v: 'auto' | 'yes' | 'no') {
+    if (v === value) return;
+    setBusy(true);
+    try {
+      await setPrintSettings({ display_touch: v });
+      await qc.invalidateQueries({ queryKey: PK.print });
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : 'That did not work.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="flex items-center gap-4 rounded-[18px] bg-pos-panel px-[18px] py-4 shadow-[inset_0_0_0_1px_var(--pos-line)]">
+      <span className="flex h-12 w-12 shrink-0 items-center justify-center rounded-pos bg-pos-key text-ink-3">
+        <Icon name="phone" size={24} />
+      </span>
+      <div className="min-w-0 flex-1">
+        <div className="text-[16px] font-bold">{t('pos.hw.touch')}</div>
+        <div className="text-[13px] text-ink-3">{t('pos.hw.touchHint')}</div>
+      </div>
+      <div role="radiogroup" aria-label={t('pos.hw.touch')} className="flex shrink-0 gap-1 rounded-[12px] bg-pos-key p-1">
+        {TOUCH.map((x) => (
+          <button
+            key={x.id}
+            type="button"
+            role="radio"
+            aria-checked={value === x.id}
+            disabled={busy}
+            onClick={() => void pick(x.id)}
+            className={cx('h-10 rounded-[10px] px-3.5 text-[14px] font-bold', value === x.id ? 'bg-pos-panel text-primary shadow-sm' : 'text-ink-2')}
+          >
+            {t(x.label)}
+          </button>
+        ))}
+      </div>
     </div>
   );
 }

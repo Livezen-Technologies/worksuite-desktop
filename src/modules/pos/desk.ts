@@ -308,6 +308,27 @@ export async function readCustomer(id: number): Promise<CustomerCard> {
   return c;
 }
 
+/**
+ * The customers whose phone IS the number the customer typed on the customer display (worksuite-desktop#294,
+ * `capabilities.display_phone`): WorkSuite answers at most five, each an id and a masked name, and nothing else is
+ * read from the answer. `throttled` past ten numbers a minute at this till.
+ */
+export async function customersByPhone(phone: string): Promise<{ items: Array<{ id: number; masked: string }> } | { refused: 'throttled' | 'bad_phone' }> {
+  const a = await call('pos:desk', { op: 'byPhone', phone });
+  if (a.status === 429) return { refused: 'throttled' };
+  if (a.status === 422) return { refused: 'bad_phone' };
+  if (a.status !== 200) throw deskFailure(a, 'The number could not be looked up.');
+  return {
+    items: list(a.body?.items)
+      .slice(0, 5)
+      .flatMap((x) => {
+        const id = n(x.id);
+        const masked = s(x.masked);
+        return Number.isInteger(id) && id > 0 && masked ? [{ id, masked: masked.slice(0, 40) }] : [];
+      }),
+  };
+}
+
 /** A new CRM customer — or, when WorkSuite already has one like it (409 `customer_exists`), the candidates to pick from. */
 export async function createCustomer(p: { name: string; phone?: string; email?: string }): Promise<{ customer: CrmCustomer } | { candidates: CrmCustomer[]; message: string }> {
   const a = await call('pos:desk', { op: 'customerCreate', name: p.name.trim().slice(0, 150), ...(p.phone?.trim() ? { phone: p.phone.trim().slice(0, 40) } : {}), ...(p.email?.trim() ? { email: p.email.trim().slice(0, 150) } : {}) });

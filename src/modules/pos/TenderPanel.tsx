@@ -7,7 +7,7 @@ import { toast } from '../../core/toasts';
 import { emailReceipt, openDrawer, PK, printReceipt, sell, type PosSession } from './api';
 import { approvalActions } from './approval';
 import { lookupVoucher, storeCredit, type Approval } from './desk';
-import { publish } from './display';
+import { displayCart, publish } from './display';
 import { useT, type PosKey } from './i18n';
 import { BigAmount, Keypad } from './Keypad';
 import { press, typedOf } from './numpad';
@@ -109,6 +109,13 @@ export default function Tender({
   const s = settle(total, tendersOf(rows));
   const shop = till.company?.name ?? null;
   const row = rows[cur] ?? rows[0]!;
+
+  // The customer display follows the payment as the tenders are taken (#294): due, paid, change.
+  const shownName = customer?.id && customer.name ? customer.name : null;
+  useEffect(() => {
+    if (done) return;
+    publish({ kind: 'pay', shop, currency, ...displayCart(cart), paid: s.paid + s.change, due: s.due, change: s.change, ...(shownName ? { customer: shownName } : {}) });
+  }, [done, shop, currency, cart, s.paid, s.due, s.change, shownName]);
 
   useEffect(() => {
     if (done) {

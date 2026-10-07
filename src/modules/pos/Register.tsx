@@ -3,6 +3,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { tenderOptionsOf, type PosApprovalNeed, type PosProduct } from '@shared/pos';
 import { Menu, type MenuSection } from '../../components/Menu';
 import { Button, TextField } from '../../components/ui';
+import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
 import { customerOf, findInCatalogue, lookupProduct, openDrawer, PK, refreshCatalogue, useCartPrice, useCatalogue, useSales } from './api';
 import { useBarcodeScanner } from './barcode';
@@ -12,9 +13,10 @@ import { approvalActions, discountNeedsApproval, saleDiscount, useSaleApproval }
 import { activeSale, cartActions, discountPct, MAX_OPEN, redeemOf, useCart, useCarts, type CartState } from './cart';
 import { categoryLabel, FAVOURITES, inCategory } from './catalog';
 import CategoryPicker from './CategoryPicker';
-import CustomerDialog from './CustomerDialog';
-import { stockLevels, topSellersToday } from './desk';
-import { publish } from './display';
+import CustomerDialog, { saleCustomerOf } from './CustomerDialog';
+import { customersByPhone, readCustomer, stockLevels, topSellersToday } from './desk';
+import { displayCart, displayTouch, onDisplay, publish, tellDisplay } from './display';
+import { createDisplayDesk, type DisplayNotice } from './displayDesk';
 import { useT } from './i18n';
 import { BigAmount, Keypad } from './Keypad';
 import { press } from './numpad';
@@ -22,7 +24,7 @@ import { HeldDialog, HoldDialog, OpenSalesDialog, useServerHeld } from './OpenSa
 import Override from './Override';
 import { clampPage, GRID_PAGE, LIST_PAGE, pushRecent } from './paging';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';
-import { deductionOf, estimateCart } from './pricing';
+import { estimateCart } from './pricing';
 import ProductGrid, { type GridView, type QuickAction } from './ProductGrid';
 import ReturnDialog from './ReturnDialog';
 import Tender from './TenderPanel';
@@ -209,9 +211,11 @@ export default function Register({ active }: { active: boolean }) {
   );
   useBarcodeScanner(active && !paying && !dialog, (code) => void onScan(code));
 
-  // The customer display follows the sale on screen: with a CRM customer, a greeting, their tier and points.
+  // The customer display follows the sale on screen: with a CRM customer, a greeting (their name masked — publish masks
+  // it), their tier and points; and, where WorkSuite looks numbers up and answers now, the customer's phone entry (#294).
   const shop = till.company?.name ?? null;
   const who = cart.customer;
+  const phoneOn = !!caps.display_phone && !!caps.customers && online;
   useEffect(() => {
     if (paying) return;
     const c = price.cart;
@@ -221,16 +225,49 @@ export default function Register({ active }: { active: boolean }) {
         kind: 'cart',
         shop,
         currency,
-        lines: c.lines.map((l) => ({ name: l.name, quantity: l.quantity, total: l.total })),
-        discount: deductionOf(c),
-        tax: c.tax,
-        total: c.total,
+        ...displayCart(c),
         provisional: price.source === 'estimate',
+        phone: phoneOn,
         ...(who?.id && who.name ? { customer: who.name } : {}),
         ...(who?.id && who.tier ? { tier: who.tier } : {}),
         ...(who?.id && caps.loyalty && typeof who.points === 'number' ? { points: who.points } : {}),
       });
-  }, [price.cart, price.source, cart.lines.length, currency, shop, paying, who, caps.loyalty]);
+  }, [price.cart, price.source, cart.lines.length, currency, shop, paying, who, caps.loyalty, phoneOn]);
+
+  // What the customer does at the display (#294): this register looks the number up and puts them on the sale.
+  const touch = useStore(displayTouch, (x) => x.touch);
+  const [notice, setNotice] = useState<DisplayNotice | null>(null);
+  const [newPhone, setNewPhone] = useState<string | undefined>(undefined);
+  const live = useRef({ phoneOn, hasCustomer: !!cart.customer });
+  useEffect(() => {
+    live.current = { phoneOn, hasCustomer: !!cart.customer };
+  }, [phoneOn, cart.customer]);
+  useEffect(() => {
+    if (!active) return;
+    const handle = createDisplayDesk({
+      enabled: () => live.current.phoneOn,
+      lookup: customersByPhone,
+      read: readCustomer,
+      attach: (c) => {
+        cartActions.customer(saleCustomerOf(c, c.tier));
+        cartActions.redeem('');
+      },
+      detach: () => {
+        if (!live.current.hasCustomer) return false;
+        cartActions.customer(null);
+        return true;
+      },
+      reply: tellDisplay,
+      notice: (n) => {
+        if (n.kind === 'notMe') {
+          setNotice(null);
+          toast('info', t('pos.dp.notMe'));
+        } else setNotice(n);
+      },
+    });
+    return onDisplay((m) => void handle(m));
+  }, [active, t]);
+  const mayAsk = phoneOn && touch && cart.lines.length > 0 && !cart.customer;
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -328,6 +365,8 @@ export default function Register({ active }: { active: boolean }) {
         { id: 'new', label: t('pos.newSale'), icon: 'plus', shortcut: 'Ctrl+N', onSelect: () => void (cartActions.newSale() || toast('warning', t('pos.open.full', { n: MAX_OPEN }))) },
         { id: 'open', label: t('pos.open.all'), icon: 'grid', onSelect: () => setDialog('open') },
         { id: 'clear', label: t('pos.clearSale'), icon: 'trash', danger: true, disabled: !cart.lines.length && !cart.customer, onSelect: () => cartActions.clear() },
+        // #294: the customer gives their number at the display, on its numpad.
+        ...(caps.display_phone ? [{ id: 'askPhone', label: t('pos.dp.ask'), icon: 'phone', disabled: !mayAsk, onSelect: () => tellDisplay({ type: 'ask' }) }] : []),
       ],
     },
     {
@@ -439,7 +478,34 @@ export default function Register({ active }: { active: boolean }) {
       {dialog === 'return' ? <ReturnDialog onClose={() => setDialog(null)} /> : null}
       {dialog === 'cash' && session ? <CashMove session={session} onClose={() => setDialog(null)} /> : null}
       {dialog === 'customer' ? (
-        caps.customers && online ? <CustomerDialog payable={price.cart?.total ?? 0} currency={currency} onClose={() => setDialog(null)} /> : <CustomerForm onClose={() => setDialog(null)} />
+        caps.customers && online ? (
+          <CustomerDialog
+            payable={price.cart?.total ?? 0}
+            currency={currency}
+            newPhone={newPhone}
+            onClose={() => {
+              setDialog(null);
+              setNewPhone(undefined);
+            }}
+          />
+        ) : (
+          <CustomerForm onClose={() => setDialog(null)} />
+        )
+      ) : null}
+      {notice ? (
+        <DisplayNoticeBar
+          notice={notice}
+          onDismiss={() => setNotice(null)}
+          onChange={() => {
+            setNotice(null);
+            setDialog('customer');
+          }}
+          onCreate={(phone) => {
+            setNotice(null);
+            setNewPhone(phone);
+            setDialog('customer');
+          }}
+        />
       ) : null}
       {dialog === 'discount' ? (
         <DiscountDialog
@@ -479,6 +545,44 @@ export default function Register({ active }: { active: boolean }) {
           onClose={() => setDialog(null)}
         />
       ) : null}
+    </div>
+  );
+}
+
+/**
+ * What the customer did at the customer display, for the cashier (#294): they confirmed their number — accept, or
+ * change the customer — or gave a number WorkSuite does not have — create them, the number filled in.
+ */
+function DisplayNoticeBar({ notice, onDismiss, onChange, onCreate }: { notice: DisplayNotice; onDismiss: () => void; onChange: () => void; onCreate: (phone: string) => void }) {
+  const t = useT();
+  if (notice.kind === 'notMe') return null;
+  const text = notice.kind === 'confirmed' ? t('pos.dp.confirmed', { name: notice.masked }) : notice.kind === 'new' ? t('pos.dp.newNumber', { phone: notice.phone }) : t('pos.dp.readFailed', { message: notice.message });
+  return (
+    <div role="status" className="fixed start-1/2 top-4 z-40 flex max-w-[min(720px,calc(100%-32px))] -translate-x-1/2 items-center gap-3 rounded-pos bg-navy px-4 py-3 text-white shadow-lg rtl:translate-x-1/2">
+      <span className="min-w-0 flex-1 text-[14px] font-semibold">{text}</span>
+      {notice.kind === 'confirmed' ? (
+        <>
+          <PosButton className="h-touch px-4 text-[14px]" onClick={onChange}>
+            {t('pos.dp.change')}
+          </PosButton>
+          <PosButton tone="primary" className="h-touch px-4 text-[14px]" onClick={onDismiss}>
+            {t('pos.dp.accept')}
+          </PosButton>
+        </>
+      ) : notice.kind === 'new' ? (
+        <>
+          <PosButton className="h-touch px-4 text-[14px]" onClick={onDismiss}>
+            {t('pos.dp.dismiss')}
+          </PosButton>
+          <PosButton tone="primary" className="h-touch px-4 text-[14px]" onClick={() => onCreate(notice.phone)}>
+            {t('pos.dp.create')}
+          </PosButton>
+        </>
+      ) : (
+        <PosButton className="h-touch px-4 text-[14px]" onClick={onDismiss}>
+          {t('pos.dp.dismiss')}
+        </PosButton>
+      )}
     </div>
   );
 }
