@@ -139,7 +139,14 @@ export function ChannelIcon({ source, size = 13, className }: { source: SupportS
 
 /** Where a ticket's origin opens in the app (#298): the email in Mail, the website chat in Chat; null when nowhere. */
 export function originRoute(origin: TicketOrigin | null | undefined): string | null {
-  if (origin?.type === 'email') return origin.mail_message_id ? `/mail?msg=${origin.mail_message_id}` : null;
+  if (origin?.type === 'email') {
+    if (!origin.mail_message_id) return null;
+    // The message's own mailbox and folder, as Mail's reminders link to it (`mbx`, `mf`): a uid alone is only a guess.
+    const q = new URLSearchParams({ msg: String(origin.mail_message_id) });
+    if (origin.mailbox_id) q.set('mbx', String(origin.mailbox_id));
+    if (origin.folder) q.set('mf', origin.folder);
+    return `/mail?${q.toString()}`;
+  }
   if (origin?.type === 'chat') return origin.conversation_id ? `/chat?view=website&website=${origin.conversation_id}` : null;
   return null;
 }

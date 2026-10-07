@@ -241,8 +241,13 @@ export interface Ticket {
   origin?: TicketOrigin | null;
 }
 
-/** An email in Mail (`mail_message_id`: null when the message is not one the server can point to), or a website chat. */
-export type TicketOrigin = { type: 'email'; mail_message_id: number | null } | { type: 'chat'; conversation_id: number };
+/**
+ * An email in Mail (`mail_message_id`: its uid, null when the message is not one the server can point to; the server
+ * says in which mailbox and folder, since a uid is only unique there), or a website chat.
+ */
+export type TicketOrigin =
+  | { type: 'email'; mail_message_id: number | null; mailbox_id?: number | null; folder?: string | null }
+  | { type: 'chat'; conversation_id: number };
 
 /** One ticket in full (`GET tickets/{id}`, and every write's answer). */
 export interface TicketFull extends Ticket {

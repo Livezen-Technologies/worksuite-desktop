@@ -366,6 +366,9 @@ describe('the channel', () => {
     expect(open).toHaveBeenCalledWith('/mail?msg=55');
     expect(originRoute({ type: 'chat', conversation_id: 9 })).toBe('/chat?view=website&website=9');
     expect(originRoute({ type: 'email', mail_message_id: null })).toBeNull();
+    // The server says which mailbox and folder the uid is in: Mail opens that message, not a guess.
+    expect(originRoute({ type: 'email', mail_message_id: 55, mailbox_id: 4, folder: 'INBOX/Support' })).toBe('/mail?msg=55&mbx=4&mf=INBOX%2FSupport');
+    expect(originRoute({ type: 'email', mail_message_id: 55 })).toBe('/mail?msg=55');
     cleanup();
     render(<OriginLink origin={{ type: 'email', mail_message_id: null }} />);
     expect(screen.getByText('From email')).toBeTruthy();
