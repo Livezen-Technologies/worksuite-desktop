@@ -205,6 +205,19 @@ export function WaitPill({ r, since }: { r: Pick<WebsiteRow, 'at_risk' | 'wait_r
   );
 }
 
+/**
+ * "Reopened" on a returning visitor's chat (worksuite-desktop#291): it closed, and they came back and wrote in it again.
+ * Nothing on a closed chat, or from a server that does not say.
+ */
+export function ReopenedTag({ r }: { r: Pick<WebsiteRow, 'reopened_at' | 'status'> }) {
+  if (!r.reopened_at || r.status === 'closed') return null;
+  return (
+    <span title={text('The visitor came back and wrote again, so the chat reopened')} className="flex shrink-0">
+      <Tag tone="indigo">{text('Reopened')}</Tag>
+    </span>
+  );
+}
+
 /** A list row's one status pill (worksuite-desktop#239): waiting, else unread, else none — or Closed on a closed chat. */
 export function StatusPill({ r, unread }: { r: WebsiteRow; unread: number }) {
   if (r.status === 'closed') return <Tag tone="muted">{text('Closed')}</Tag>;

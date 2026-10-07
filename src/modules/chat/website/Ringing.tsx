@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import type { WebchatCall, WebchatHandoff, WebchatMic, WebchatRingChat, WebchatRingState } from '@shared/types';
+import type { WebchatCall, WebchatHandoff, WebchatMic, WebchatReturnVisit, WebchatRingChat, WebchatRingState } from '@shared/types';
+import { returningWords } from '@shared/website-returning';
 import { call, errorMessage, isMac, on } from '../../../core/bridge';
-import { parseTs } from '../../../core/time';
+import { parseTs, stampDayLabel } from '../../../core/time';
 import { text } from '../../../core/i18n';
 import { toast } from '../../../core/toasts';
 import { cx } from '../../../components/ui';
@@ -117,6 +118,15 @@ export function visitLabel(visits: number | null | undefined): string | null {
   const tens = visits % 100;
   const suffix = tens >= 11 && tens <= 13 ? 'th' : visits % 10 === 1 ? 'st' : visits % 10 === 2 ? 'nd' : visits % 10 === 3 ? 'rd' : 'th';
   return text('{n} visit', { n: `${visits}${suffix}` });
+}
+
+/**
+ * A returning visitor's line on the ringing card (worksuite-desktop#291): "Returning visitor · last chat with you on
+ * 16 Aug" — with a colleague by first name, or only "· last chat on 16 Aug" when nobody had it. The ringer has said
+ * whether the last chat was mine (`withYou`).
+ */
+export function returningLine(r: WebchatReturnVisit): string {
+  return returningWords(r, null, (stamp) => stampDayLabel(stamp, 'short'), text);
 }
 
 /**

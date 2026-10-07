@@ -8,7 +8,7 @@ import { write, writerProblem, useWriter } from '../../ai/writer';
 import { useCanned } from './api';
 import { text } from '../../../core/i18n';
 import { markdownText } from '../../../core/markdown';
-import { clock, firstName, handoverIn, ringsFor, silencedFor, stageLabel, stepLabel, visitLabel, waited, youJoinedLine } from './Ringing';
+import { clock, firstName, handoverIn, returningLine, ringsFor, silencedFor, stageLabel, stepLabel, visitLabel, waited, youJoinedLine } from './Ringing';
 
 /**
  * The website chat ringing card (worksuite-desktop#225), in the call window over other apps:
@@ -164,6 +164,17 @@ function Visitor({ c, now, hidden, joined, pulse, chips }: { c: Pick<WebchatRing
         <span className="text-[10px] text-[#8C92B5]">{joined ? 'waited' : 'waiting'}</span>
       </span>
     </div>
+  );
+}
+
+/** "Returning visitor · last chat with you on 16 Aug" (worksuite-desktop#291), on a ringing card. */
+export function ReturningLine({ r, className }: { r: NonNullable<WebchatRingChat['returnVisit']>; className?: string }) {
+  const words = returningLine(r);
+  return (
+    <p className={cx('flex min-w-0 items-center gap-1.5 text-[11.5px] font-semibold text-[#B3C0FF]', className)} title={words}>
+      <Icon name="history" size={12} className="shrink-0" />
+      <span className="truncate">{words}</span>
+    </p>
   );
 }
 
@@ -403,6 +414,8 @@ export function RingCard({ s, c, now, after }: { s: WebchatRingState; c: Webchat
         </span>
       </div>
       {c.mine && c.by && !s.hidden ? <p className="px-[18px] text-[11.5px] text-[#AEB3D1]">Assigned to you by {c.by}</p> : null}
+      {/* A returning visitor (#291): whose their last chat was, and when; their new message is under it. */}
+      {c.returnVisit && !s.hidden ? <ReturningLine r={c.returnVisit} className="px-[18px]" /> : null}
       {!s.hidden && c.preview ? <p className="mx-[18px] mt-1.5 rounded-[10px] border border-[#24306A] bg-[#1A2550] px-3 py-2.5 text-[13px] leading-[1.45] break-words whitespace-pre-wrap">{c.preview}</p> : null}
       {!s.hidden ? (
         <>
@@ -558,6 +571,7 @@ function StackRow({ s, c, now }: { s: WebchatRingState; c: WebchatRingChat; now:
             ) : null}
           </span>
           <span className="truncate text-[13px] text-[#C9CDE6]">{s.hidden ? 'Unlock WorkSuite to see who.' : (c.preview ?? (c.page ? `Reading ${c.page}` : 'Waiting for someone'))}</span>
+          {c.returnVisit && !s.hidden ? <ReturningLine r={c.returnVisit} /> : null}
         </span>
         <span className={cx('shrink-0 font-mono text-[13px] font-bold tabular-nums', kind === 'risk' ? 'text-[#FF8A73]' : kind === 'mine' ? 'text-white' : 'text-[#F2B77E]')}>{waited(c.since, now)}</span>
       </div>

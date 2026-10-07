@@ -630,6 +630,27 @@ export interface WebchatRingChat {
   visits?: number | null;
   /** How many colleagues it rings for besides me, for "2 others ringing" (R-01); null where the server does not say. */
   othersRinging?: number | null;
+  /**
+   * A returning visitor (worksuite-desktop#291): their closed chat reopened when they wrote again, or a new one on the
+   * same profile, and who had the last one when. Absent for a first chat, and from a server without it.
+   */
+  returnVisit?: WebchatReturnVisit | null;
+}
+
+/**
+ * A visitor back after a closed chat (worksuite-desktop#291), as the ring says it: "Returning visitor · last chat with
+ * you on 16 Aug". The server routes it to the agent of the last chat first, then the team.
+ */
+export interface WebchatReturnVisit {
+  /** The closed conversation was reopened; false: a new one, linked to the last. */
+  reopened: boolean;
+  /** When the last chat was, a server stamp; null where it is not known. */
+  previousAt: string | null;
+  previousAgentId: number | null;
+  previousAgentName: string | null;
+  previousConversationId: number | null;
+  /** The last chat was with me, as the ringer knows who I am. */
+  withYou?: boolean;
 }
 
 /**

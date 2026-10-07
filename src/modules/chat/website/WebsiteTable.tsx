@@ -11,7 +11,7 @@ import { BulkBar, BulkButton } from '../BulkBar';
 import { websiteBulkMenu } from '../menus';
 import { useMultiSelect } from '../selection';
 import { BULK_LIMIT, PRIORITIES, useAgents, useWebsiteBulk, waitingSince, type WebsiteBulkAction, type WebsiteBulkExtra, type WebsiteRow } from './api';
-import { CallLine, ROW_PICKED, ROW_SILENCED, RingBell, rowPreview, SilencedStatus, Tag, TABLE_FRAME, TABLE_HEAD, WaitClock } from './rowParts';
+import { CallLine, ReopenedTag, ROW_PICKED, ROW_SILENCED, RingBell, rowPreview, SilencedStatus, Tag, TABLE_FRAME, TABLE_HEAD, WaitClock } from './rowParts';
 
 /**
  * The list views as one table (C-03, UX-LIST-01/02): Live chats, Unassigned, Assigned to me, Awaiting reply and
@@ -186,6 +186,7 @@ function TableRow({ r, me, myName, ring, typing, picked, onPick, onClick, onMenu
             <b className="truncate font-bold text-ink">{name}{r.email && r.visitor_name ? <span className="font-normal text-ink-3"> · {r.email}</span> : null}</b>
             {ring ? <RingBell ring={ring} /> : null}
             {r.is_starred ? <Icon name="star" size={11} className="shrink-0 text-warning" label={text('Starred')} /> : null}
+            <ReopenedTag r={r} />
           </span>
           {r.call && !closed ? <CallLine call={r.call} /> : typing && !closed ? (
             <span className="truncate text-[12px] font-semibold text-primary">{text('Typing…')}</span>
