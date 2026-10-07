@@ -4,8 +4,11 @@ import type { PosApprovalNeed, PosCustomer, PosPrintOutcome, PosSale, PosTenderM
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
+import { couponMessage, discountNeed, draftOf, expiryOf, tenderTiles } from './adjust';
 import { emailReceipt, openDrawer, PK, printReceipt, sell, type PosSession } from './api';
 import { approvalActions } from './approval';
+import { cartActions, discountAmount, useCart } from './cart';
+import { CouponDialog, DiscountDialog } from './DiscountEditor';
 import { lookupVoucher, storeCredit, type Approval } from './desk';
 import { publish } from './display';
 import { useT, type PosKey } from './i18n';
@@ -14,7 +17,7 @@ import { press, typedOf } from './numpad';
 import { ON, OFF } from './look';
 import Override from './Override';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';
-import { allowedTenders, formatMoney, quickCash, settle, type PricedCart } from './pricing';
+import { discountBase, formatMoney, quickCash, settle, type PricedCart } from './pricing';
 import ReceiptPreview from './ReceiptPreview';
 import { buildSale, remaining, tenderProblem, tendersOf, type Balances, type TenderRow } from './tender';
 
@@ -32,6 +35,14 @@ import { buildSale, remaining, tenderProblem, tendersOf, type Balances, type Ten
  * is checked for its balance first; store credit is read for the named customer; neither, nor an account, is offered
  * offline. A sale WorkSuite would take only with a manager's approval opens the override, and is sent again with it.
  * The sale-complete screen shows the points the customer earned and their balance.
+ *
+ * #293: under the total, the sale's adjustments — Subtotal, the promotions, Discount (−), Coupon (−), points — each with
+ * its × to take it off, and Add discount / Add coupon. A discount is given in the same editor as the bottom bar's
+ * (`DiscountEditor`: percentage or fixed amount, a reason, the cashier's limit, a manager's PIN past it); a coupon is
+ * typed or scanned and checked by WorkSuite on the cart. Both change the sale on the counter (`cartActions`), so the
+ * cart is priced again and the total, still to pay and the change follow at once; going back to the sale keeps them.
+ * A gift voucher shows its balance and expiry. Offline, coupons and vouchers wait (they need WorkSuite); a discount
+ * still works.
  */
 const HINT: Record<PosTenderMethod, PosKey> = {
   cash: 'pos.pay.cashHint',
@@ -72,6 +83,7 @@ export default function Tender({
   exact = false,
   offered = null,
   extras = {},
+  pricing = { pending: false, error: null },
   onClose,
   onDone,
 }: {
@@ -86,6 +98,8 @@ export default function Tender({
   /** The company's configured tenders (`capabilities.tenders`); null: the four every server takes. */
   offered?: PosTenderOption[] | null;
   extras?: SaleExtras;
+  /** The cart being priced again after an adjustment (`pending`), or WorkSuite's refusal of it (`error`). */
+  pricing?: { pending: boolean; error: string | null };
   onClose: () => void;
   onDone: () => void;
 }) {
@@ -103,7 +117,17 @@ export default function Tender({
   const [approval, setApproval] = useState<Approval | null>(extras.approval ?? null);
   const [balances, setBalances] = useState<Balances>({ vouchers: {}, credit: null });
   const [checking, setChecking] = useState(false);
-  const tenders = useMemo(() => allowedTenders(!till.offline, offered), [till.offline, offered]);
+  const [panel, setPanel] = useState<'discount' | 'coupon' | null>(null);
+  const [discountAsk, setDiscountAsk] = useState<{ need: PosApprovalNeed; reason: string } | null>(null);
+  const state = useCart();
+  const online = !till.offline;
+  const caps = till.caps;
+  const approvalsOn = !!caps.approvals && online;
+  const tenders = useMemo(() => tenderTiles(online, offered, caps, till.company?.can), [online, offered, caps, till.company]);
+  /** What the cashier's discount comes off: the goods after their list discounts and the promotions. */
+  const base = discountBase(cart);
+  /** A coupon on the sale that WorkSuite no longer takes (the cart changed, it ran out): the sale waits until it goes. */
+  const couponOff = !!(extras.coupon && cart.coupon && !cart.coupon.valid);
   const methods = useMemo(() => tenders.map((x) => x.kind), [tenders]);
   const denominations = useMemo(() => till.options?.denominations?.[currency] ?? session.denominations ?? [], [till.options, currency, session.denominations]);
   const s = settle(total, tendersOf(rows));
@@ -126,6 +150,13 @@ export default function Tender({
     }
   }, [done, shop, currency, s.paid, s.change]);
 
+  // The total moved (a discount or a coupon added or taken off): the one payment nobody has typed follows it.
+  const [seenTotal, setSeenTotal] = useState(total);
+  if (seenTotal !== total) {
+    setSeenTotal(total);
+    if (!touched && rows.length === 1) setRows([{ ...rows[0]!, amount: typedOf(total) }]);
+  }
+
   const quick = useMemo(() => (row.method === 'cash' ? quickCash(remaining(total, rows, cur), denominations) : []), [total, rows, cur, row.method, denominations]);
   const label = (m: PosTenderMethod) => tenderLabel(t, m, offered);
   const problem = tenderProblem(rows, { offered: tenders, customer, balances, online: !till.offline });
@@ -138,7 +169,7 @@ export default function Tender({
     setError(null);
     try {
       const v = await lookupVoucher(code);
-      setBalances((b) => ({ ...b, vouchers: { ...b.vouchers, [code]: v ? { balance: v.balance, usable: v.usable } : null } }));
+      setBalances((b) => ({ ...b, vouchers: { ...b.vouchers, [code]: v ? { balance: v.balance, usable: v.usable, expires_on: v.expires_on, problem: v.problem ?? null } : null } }));
       if (v?.usable) set(i, { reference: code, amount: typedOf(Math.min(v.balance, remaining(total, rows, i))) });
     } catch (e) {
       setError(e instanceof Error ? e.message : t('pos.pay.voucherFailed'));
@@ -188,6 +219,11 @@ export default function Tender({
   }
 
   async function complete(using = rows, approved: Approval | null = approval) {
+    if (pricing.pending) return;
+    if (pricing.error || couponOff) {
+      setError(pricing.error ?? t('pos.adj.couponFix'));
+      return;
+    }
     const why = tenderProblem(using, { offered: tenders, customer, balances, online: !till.offline });
     if (why) {
       setError(why);
@@ -206,6 +242,7 @@ export default function Tender({
         coupon: extras.coupon,
         redeem: extras.redeem,
         approval_id: approved && approved.action === 'discount' ? approved.id : null,
+        discount: discountAmount(state) !== null ? { type: 'amount', value: discountAmount(state)!, reason: state.discount_reason } : state.discount_reason ? { type: 'pct', value: cart.discount_pct, reason: state.discount_reason } : undefined,
       },
       using,
     );
@@ -249,6 +286,60 @@ export default function Tender({
   }, [exact]);
 
   if (done) return <Complete done={done} currency={currency} onDone={onDone} />;
+  if (discountAsk) {
+    // A discount past the cashier's rights, from Add discount: a manager approves it, and it stays on the sale.
+    return (
+      <Override
+        need={discountAsk.need}
+        currency={currency}
+        reason={discountAsk.reason || undefined}
+        onClose={() => setDiscountAsk(null)}
+        onApproved={(a) => {
+          setDiscountAsk(null);
+          setApproval(a);
+          if (extras.saleId) approvalActions.set(extras.saleId, a);
+        }}
+      />
+    );
+  }
+  if (panel === 'discount') {
+    return (
+      <DiscountDialog
+        initial={draftOf(state)}
+        base={base}
+        currency={currency}
+        amountOn={!!caps.discount_amount}
+        rights={till.discount}
+        approvals={approvalsOn}
+        onCancel={() => setPanel(null)}
+        onApply={(r) => {
+          setPanel(null);
+          cartActions.applyDiscount({ type: r.draft.type, value: r.draft.value, reason: r.draft.reason }, approvalsOn ? null : till.discount.ceiling);
+          // Past the cashier's own rights: a manager approves it now, unless one already approved as much.
+          if (r.needsApproval && !(approval && approval.action === 'discount' && approval.amount + 0.0001 >= r.pct)) {
+            setDiscountAsk({ need: discountNeed(t, r, till.discount, (n) => formatMoney(n, currency)), reason: r.draft.reason });
+          }
+        }}
+      />
+    );
+  }
+  if (panel === 'coupon') {
+    return (
+      <CouponDialog
+        current={state.coupon ?? null}
+        lines={state.lines}
+        org={till.company?.id ?? null}
+        customerId={customer?.id ?? null}
+        offline={till.offline}
+        onClose={() => setPanel(null)}
+        onApplied={(code) => {
+          setPanel(null);
+          setError(null);
+          cartActions.coupon(code);
+        }}
+      />
+    );
+  }
   if (need) {
     return (
       <Override
@@ -269,6 +360,7 @@ export default function Tender({
   }
 
   const who = customer?.name || customer?.email || customer?.phone || t('pos.walkIn');
+  const couponCode = extras.coupon ?? null;
   const cta = s.overCharged ? t('pos.pay.overCharged') : s.due > 0 ? t('pos.pay.stillDue', { n: formatMoney(s.due) }) : s.change > 0 ? t('pos.pay.completeChange', { n: formatMoney(s.change) }) : t('pos.complete');
 
   return (
@@ -279,22 +371,24 @@ export default function Tender({
           <div className="text-[13px] text-[#cbd5e1]">{t('pos.total')}</div>
           <div className="font-mono text-[34px] font-bold tabular-nums">{formatMoney(total, currency)}</div>
         </div>
-        {cart.promotions?.length || cart.points_discount ? (
-          <div className="flex flex-col gap-0.5 text-[12px] text-pos-bar-ink">
-            {cart.promotions?.map((p) => (
-              <div key={p.id} className="flex justify-between gap-2">
-                <span className="truncate">{p.label}</span>
-                <span className="font-mono">−{formatMoney(p.amount)}</span>
-              </div>
-            ))}
-            {cart.points_discount ? (
-              <div className="flex justify-between gap-2">
-                <span>{t('pos.pay.points', { n: cart.points_redeemed ?? 0 })}</span>
-                <span className="font-mono">−{formatMoney(cart.points_discount)}</span>
-              </div>
-            ) : null}
-          </div>
-        ) : null}
+        <Adjustments
+          cart={cart}
+          coupon={couponCode}
+          discountReason={state.discount_reason ?? null}
+          discountTyped={Number(state.discount) > 0}
+          offline={till.offline}
+          mayDiscount={till.discount.allowed || approvalsOn}
+          mayCoupon={!!caps.coupons}
+          busy={busy}
+          repricing={pricing.pending}
+          onAddDiscount={() => setPanel('discount')}
+          onAddCoupon={() => setPanel('coupon')}
+          onRemoveDiscount={() => cartActions.clearDiscount()}
+          onRemoveCoupon={() => {
+            cartActions.coupon('');
+            setError(null);
+          }}
+        />
         <div className="h-px bg-white/[.14]" />
         <div className="text-[12px] font-bold tracking-[.06em] text-pos-bar-ink uppercase">{t('pos.pay.paidSoFar')}</div>
         {rows.map((r, i) => {
@@ -364,6 +458,7 @@ export default function Tender({
           ))}
         </div>
         {till.offline ? <p className="-mt-2 text-[12px] text-ink-3">{t('pos.pay.offlineTenders')}</p> : null}
+        {pricing.error ? <Note tone="danger">{pricing.error}</Note> : null}
         <div className="flex min-h-0 flex-1 gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-2.5">
             <div className="text-[13px] font-bold text-ink-2">{row.method === 'cash' ? t('pos.pay.cashReceived') : t('pos.pay.amountOf', { method: label(row.method) })}</div>
@@ -399,13 +494,7 @@ export default function Tender({
                     {t('pos.pay.voucherCheck')}
                   </PosButton>
                 </div>
-                {row.reference.trim().toUpperCase() in balances.vouchers ? (
-                  <p className="text-[13px] text-ink-2">
-                    {balances.vouchers[row.reference.trim().toUpperCase()]
-                      ? t('pos.pay.voucherBalance', { n: formatMoney(balances.vouchers[row.reference.trim().toUpperCase()]!.balance, currency) })
-                      : t('pos.pay.voucherNone')}
-                  </p>
-                ) : null}
+                {row.reference.trim().toUpperCase() in balances.vouchers ? <VoucherLine v={balances.vouchers[row.reference.trim().toUpperCase()] ?? null} currency={currency} /> : null}
               </div>
             ) : row.method === 'store_credit' || row.method === 'account' ? (
               <p className="rounded-[12px] bg-pos-key px-3.5 py-3 text-[13px] text-ink-2">
@@ -434,13 +523,120 @@ export default function Tender({
           </div>
           <Keypad className="w-[300px] shrink-0 content-start max-lg:w-[240px]" keys={['7', '8', '9', '4', '5', '6', '1', '2', '3', '00', '0', 'back']} onKey={(k) => set(cur, { amount: press(row.amount, k) })} />
         </div>
-        <PosButton tone="primary" className="h-[68px] shrink-0 rounded-pos-lg text-[19px] font-extrabold" disabled={busy || s.due > 0 || s.overCharged} onClick={() => void complete()}>
-          {busy ? <Icon name="spinner" size={20} className="animate-spin" /> : <Icon name="check" size={20} />}
-          {cta}
+        <PosButton tone="primary" className="h-[68px] shrink-0 rounded-pos-lg text-[19px] font-extrabold" disabled={busy || pricing.pending || !!pricing.error || couponOff || s.due > 0 || s.overCharged} onClick={() => void complete()}>
+          {busy || pricing.pending ? <Icon name="spinner" size={20} className="animate-spin" /> : <Icon name="check" size={20} />}
+          {pricing.pending ? t('pos.adj.repricing') : cta}
         </PosButton>
       </div>
     </PosDialog>
   );
+}
+
+/**
+ * The sale's adjustments under the total (#293): the subtotal, the promotions, the coupon and the cashier's discount
+ * (each with its × to take it off, the reason under the discount), the points, and Add discount / Add coupon. A coupon
+ * WorkSuite no longer takes says why; offline, coupons wait.
+ */
+function Adjustments({
+  cart,
+  coupon,
+  discountReason,
+  discountTyped,
+  offline,
+  mayDiscount,
+  mayCoupon,
+  busy,
+  repricing,
+  onAddDiscount,
+  onAddCoupon,
+  onRemoveDiscount,
+  onRemoveCoupon,
+}: {
+  cart: PricedCart;
+  coupon: string | null;
+  discountReason: string | null;
+  discountTyped: boolean;
+  offline: boolean;
+  mayDiscount: boolean;
+  mayCoupon: boolean;
+  busy: boolean;
+  repricing: boolean;
+  onAddDiscount: () => void;
+  onAddCoupon: () => void;
+  onRemoveDiscount: () => void;
+  onRemoveCoupon: () => void;
+}) {
+  const t = useT();
+  const promos = (cart.promotions ?? []).filter((p) => !(coupon && p.coupon));
+  const couponOff = cart.coupon_discount ?? (cart.promotions ?? []).filter((p) => p.coupon).reduce((a, p) => a + p.amount, 0);
+  const pct = Math.round((cart.discount_pct || 0) * 100) / 100;
+  const line = (key: string, label: string, amount: number, o: { remove?: () => void; what?: string; note?: string | null; tone?: string } = {}) => (
+    <div key={key} className={cx('flex items-start gap-2', o.tone)}>
+      <span className="min-w-0 flex-1">
+        <span className="block truncate">{label}</span>
+        {o.note ? <span className="block truncate text-[11px] opacity-80">{o.note}</span> : null}
+      </span>
+      <span className="font-mono tabular-nums">−{formatMoney(amount)}</span>
+      {o.remove ? (
+        <button type="button" aria-label={t('pos.adj.remove', { what: o.what ?? label })} disabled={busy} onClick={o.remove} className="-my-0.5 flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-white/70 hover:bg-white/10">
+          <Icon name="x" size={14} />
+        </button>
+      ) : null}
+    </div>
+  );
+  return (
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-col gap-1 text-[13px] text-pos-bar-ink" aria-label={t('pos.discounts')}>
+        <div className="flex justify-between gap-2">
+          <span>{t('pos.subtotal')}</span>
+          <span className="font-mono tabular-nums">{formatMoney(cart.subtotal)}</span>
+        </div>
+        {promos.map((p) => line(`p${p.id}`, p.label, p.amount))}
+        {coupon
+          ? cart.coupon && !cart.coupon.valid
+            ? (
+                <div className="flex items-start gap-2 text-[#fca5a5]">
+                  <span className="min-w-0 flex-1">
+                    <span className="block truncate">{t('pos.adj.couponOff', { code: coupon })}</span>
+                    <span className="block text-[11px]">{couponMessage(t, cart.coupon.reason, cart.coupon.message)}</span>
+                  </span>
+                  <button type="button" aria-label={t('pos.adj.remove', { what: t('pos.adj.coupon', { code: coupon }) })} disabled={busy} onClick={onRemoveCoupon} className="flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-white/70 hover:bg-white/10">
+                    <Icon name="x" size={14} />
+                  </button>
+                </div>
+              )
+            : line('coupon', t('pos.adj.coupon', { code: coupon }), couponOff, { remove: onRemoveCoupon })
+          : null}
+        {discountTyped && cart.discount > 0
+          ? line('discount', cart.discount_type === 'amount' || !pct ? t('pos.adj.discount') : t('pos.adj.discountPct', { n: pct }), cart.discount, { remove: onRemoveDiscount, what: t('pos.adj.discount'), note: discountReason })
+          : null}
+        {cart.points_discount ? line('points', t('pos.pay.points', { n: cart.points_redeemed ?? 0 }), cart.points_discount) : null}
+        {repricing ? <span className="text-[11px] opacity-80">{t('pos.adj.repricing')}</span> : null}
+      </div>
+      <div className="flex gap-2">
+        <button type="button" disabled={busy || !mayDiscount} title={mayDiscount ? undefined : t('pos.adj.noDiscount')} onClick={onAddDiscount} className="flex h-touch flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-white/[.08] text-[13px] font-bold hover:bg-white/[.14] disabled:opacity-45">
+          <Icon name="tag" size={15} />
+          {t('pos.adj.addDiscount')}
+        </button>
+        {mayCoupon ? (
+          <button type="button" disabled={busy || offline} title={offline ? t('pos.adj.offline') : undefined} onClick={onAddCoupon} className="flex h-touch flex-1 items-center justify-center gap-1.5 rounded-[10px] bg-white/[.08] text-[13px] font-bold hover:bg-white/[.14] disabled:opacity-45">
+            <Icon name="ticket" size={15} />
+            {t('pos.adj.addCoupon')}
+          </button>
+        ) : null}
+      </div>
+      {offline && mayCoupon ? <p className="text-[11px] text-pos-bar-ink">{t('pos.adj.offline')}</p> : null}
+    </div>
+  );
+}
+
+/** A gift voucher's balance as WorkSuite answered it: with its expiry, or why it cannot be used. */
+function VoucherLine({ v, currency }: { v: Balances['vouchers'][string]; currency: string }) {
+  const t = useT();
+  if (!v) return <p className="text-[13px] text-ink-2">{t('pos.pay.voucherNone')}</p>;
+  if (!v.usable) return <p className="text-[13px] text-danger">{t('pos.pay.voucherUnusable', { why: v.problem ?? t('pos.pay.voucherSpent') })}</p>;
+  const until = expiryOf(v.expires_on);
+  return <p className="text-[13px] text-ink-2">{until ? t('pos.pay.voucherBalanceUntil', { n: formatMoney(v.balance, currency), date: until }) : t('pos.pay.voucherBalance', { n: formatMoney(v.balance, currency) })}</p>;
 }
 
 /**

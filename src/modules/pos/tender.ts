@@ -35,7 +35,7 @@ export function remaining(total: number, rows: TenderRow[], except?: number): nu
 /** What the till knows of the balances a payment would spend (looked up through the till's door). */
 export interface Balances {
   /** A voucher by its code: its balance, or null when WorkSuite has none by that code. */
-  vouchers: Record<string, { balance: number; usable: boolean } | null>;
+  vouchers: Record<string, { balance: number; usable: boolean; expires_on?: string | null; problem?: string | null } | null>;
   /** The named customer's store credit, when read. */
   credit: number | null;
 }
@@ -80,6 +80,8 @@ export interface SaleContext {
   coupon?: string | null;
   redeem?: number;
   approval_id?: string | null;
+  /** #293: the cashier's discount as given — a fixed amount (`value` the money), or a percentage with a reason. */
+  discount?: { type: 'pct' | 'amount'; value: number; reason?: string };
 }
 
 /**
@@ -98,7 +100,11 @@ export function phase2Of(c: SaleContext): Partial<PosSellInput> {
     if (c.redeem && c.redeem > 0 && c.customer?.id) out.redeem_points = c.redeem;
   }
   if (c.approval_id) out.approval_id = c.approval_id;
-  if (c.cart.promotions?.length) out.promotions = c.cart.promotions.map((p) => ({ label: p.label.slice(0, 80), amount: p.amount }));
+  // #293: a coupon WorkSuite applied prints as its own line (`Coupon CODE`), not again among the promotions.
+  const coupon = c.source !== 'estimate' && c.coupon && c.cart.coupon?.valid && (c.cart.coupon_discount ?? c.cart.coupon.amount) > 0 ? { code: c.coupon, amount: c.cart.coupon_discount ?? c.cart.coupon.amount } : null;
+  const promos = (c.cart.promotions ?? []).filter((p) => !(coupon && p.coupon));
+  if (promos.length) out.promotions = promos.map((p) => ({ label: p.label.slice(0, 80), amount: p.amount }));
+  if (coupon) out.coupon = coupon;
   if (c.cart.points_redeemed && c.cart.points_discount) out.points = { redeemed: c.cart.points_redeemed, discount: c.cart.points_discount };
   return out;
 }
@@ -127,5 +133,19 @@ export function buildSale(c: SaleContext, rows: TenderRow[]): PosSellInput | { e
     catalogue_version: c.catalogue_version,
     ...(c.note?.trim() ? { note: c.note.trim().slice(0, 200) } : {}),
     ...phase2Of(c),
+    ...discountOf(c),
+  };
+}
+
+/**
+ * The cashier's discount as the sale states it (#293): a fixed amount (`discount_pct` then the share WorkSuite or the
+ * preview said it came to), and its reason — only where some discount was given. None: nothing, as before.
+ */
+export function discountOf(c: Pick<SaleContext, 'discount' | 'cart'>): Partial<PosSellInput> {
+  if (!c.discount || !(c.cart.discount > 0)) return {};
+  const reason = c.discount.reason?.trim().slice(0, 200);
+  return {
+    ...(c.discount.type === 'amount' && c.discount.value > 0 ? { discount_type: 'amount' as const, discount_value: Math.round(c.discount.value * 100) / 100 } : {}),
+    ...(reason ? { discount_reason: reason } : {}),
   };
 }

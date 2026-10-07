@@ -26,9 +26,17 @@ export interface PricedCart {
   tax: number;
   total: number;
   /* Phase 2, the counter's pricing (`apply_promotions`, `customer_id`, `coupon_code`, `redeem_points`): absent otherwise. */
-  /** What promotions took off, each (`promotions`), and in all. */
-  promotions?: Array<{ id: number; label: string; amount: number }>;
+  /** What promotions took off, each (`promotions`), and in all; `coupon` marks the one a coupon unlocked. */
+  promotions?: Array<{ id: number; label: string; amount: number; coupon?: boolean }>;
   promotion_discount?: number;
+  /* #293 (`capabilities.discount_amount`, `coupon_validate`): absent on an older server. */
+  /** The cashier's discount was a fixed amount (`discount_value`); `discount_pct` is then the share it came to. */
+  discount_type?: 'pct' | 'amount';
+  discount_value?: number;
+  /** What the coupon's promotion took off (part of `promotion_discount`). */
+  coupon_discount?: number;
+  /** The coupon the cart names: what it took off, or why it took nothing (`reason`, `message`). */
+  coupon?: { code: string; amount: number; valid: boolean; reason: string | null; message: string | null } | null;
   points_discount?: number;
   points_redeemed?: number;
   /** Promotions + the cashier's discount + points: the order's discount. */
@@ -68,16 +76,37 @@ export function ceilingMessage(taken: number, ceiling: number): string {
 
 export type Estimate = { cart: PricedCart; error: string | null };
 
-/** The cart as WorkSuite would price it from this catalogue (quantity bands aside: the catalogue carries one unit). */
-export function estimateCart(lines: CartLineInput[], products: Map<number, PosProduct>, discountPct: number, ceiling: number | null, currency: string): Estimate {
+/** What the cashier's discount comes off: the goods after their list discounts and the promotions (a coupon is one). */
+export function discountBase(c: Pick<PricedCart, 'subtotal' | 'promotion_discount'>): number {
+  return Math.max(0, Math.round((c.subtotal - (c.promotion_discount ?? 0)) * 100) / 100);
+}
+
+/** The percentage a fixed amount comes to, of what it comes off, to four places; all of it past that or of nothing. */
+export function shareOf(amount: number, base: number): number {
+  if (!(amount > 0)) return 0;
+  if (!(base > 0) || amount >= base) return 100;
+  return Math.round((amount / base) * 100 * 10_000) / 10_000;
+}
+
+/** The message WorkSuite gives for an amount past what is left of the sale. */
+export function overMessage(base: number): string {
+  return `A discount cannot be more than the sale comes to (${base.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}).`;
+}
+
+/**
+ * The cart as WorkSuite would price it from this catalogue (quantity bands aside: the catalogue carries one unit).
+ * `amount`: the cashier's discount as a fixed amount (#293) rather than `discountPct`.
+ */
+export function estimateCart(lines: CartLineInput[], products: Map<number, PosProduct>, discountPct: number, ceiling: number | null, currency: string, amount: number | null = null): Estimate {
   const known = lines.map((l) => ({ l, p: products.get(l.product_id) })).filter((x): x is { l: CartLineInput; p: PosProduct } => !!x.p && x.l.quantity > 0);
   const gross = known.map(({ l, p }) => Math.round(l.quantity * p.price * 100 + 1e-7));
   const lineOff = known.map(({ p }, i) => percentOf(gross[i]!, p.discount_pct));
   const nets = gross.map((g, i) => g - lineOff[i]!);
   const subtotal = nets.reduce((a, x) => a + x, 0);
   const lineOffTotal = lineOff.reduce((a, x) => a + x, 0);
-  const pct = Math.max(0, Math.min(100, discountPct || 0));
-  const off = pct > 0 ? percentOf(subtotal, pct) : 0;
+  const fixed = amount !== null && amount > 0 ? Math.round(amount * 100) : null;
+  const pct = fixed !== null ? shareOf(fixed / 100, subtotal / 100) : Math.max(0, Math.min(100, discountPct || 0));
+  const off = fixed !== null ? Math.min(fixed, subtotal) : pct > 0 ? percentOf(subtotal, pct) : 0;
   const spread = off > 0 && subtotal > 0 ? allocate(Math.min(off, subtotal), nets) : nets.map(() => 0);
   const out = known.map(({ l, p }, i) => {
     const taxable = nets[i]! - spread[i]!;
@@ -95,7 +124,9 @@ export function estimateCart(lines: CartLineInput[], products: Map<number, PosPr
     discount: money(deduction),
     tax: money(taxTotal),
     total: money(subtotal - deduction + taxTotal),
+    ...(fixed !== null ? { discount_type: 'amount' as const, discount_value: money(fixed) } : {}),
   };
+  if (fixed !== null && fixed > subtotal) return { cart, error: overMessage(money(subtotal)) };
   const grossTotal = subtotal + lineOffTotal;
   if (ceiling && ceiling > 0 && off > 0 && grossTotal > 0 && ((lineOffTotal + off) / grossTotal) * 100 > ceiling + 0.0001) {
     return { cart, error: ceilingMessage(((lineOffTotal + off) / grossTotal) * 100, ceiling) };
@@ -169,14 +200,15 @@ export function allowedMethods(online: boolean, configured?: PosTenderOption[] |
  * after their list discounts and promotions, spread over the lines by largest remainder before the tax, points after.
  * A preview: the sale is priced again by WorkSuite.
  */
-export function withDiscount(c: PricedCart, pct: number): PricedCart {
+export function withDiscount(c: PricedCart, pct: number, amount: number | null = null): PricedCart {
   const p = Math.max(0, Math.min(100, pct || 0));
-  if (p <= 0 || !c.lines.length) return c;
+  if ((p <= 0 && !(amount && amount > 0)) || !c.lines.length) return c;
   const nets = c.lines.map((l) => Math.round(l.net * 100));
   const goods = nets.reduce((a, x) => a + x, 0);
   const promo = Math.min(Math.round((c.promotion_discount ?? 0) * 100), goods);
   const points = Math.round((c.points_discount ?? 0) * 100);
-  const off = percentOf(goods - promo, p);
+  // A fixed amount (#293) comes off where the percentage would, never more than is left.
+  const off = amount && amount > 0 ? Math.min(Math.round(amount * 100), goods - promo) : percentOf(goods - promo, p);
   const deduction = Math.min(goods, promo + off + points);
   const spread = allocate(deduction, nets);
   let tax = 0;
@@ -186,7 +218,16 @@ export function withDiscount(c: PricedCart, pct: number): PricedCart {
     tax += t;
     return { ...l, tax: money(t), total: money(taxable + t) };
   });
-  return { ...c, lines, discount_pct: p, discount: money(off), tax: money(tax), total: money(goods - deduction + tax), ...(c.deduction !== undefined || promo || points ? { deduction: money(deduction) } : {}) };
+  return {
+    ...c,
+    lines,
+    discount_pct: amount && amount > 0 ? shareOf(off / 100, (goods - promo) / 100) : p,
+    discount: money(off),
+    tax: money(tax),
+    total: money(goods - deduction + tax),
+    ...(c.deduction !== undefined || promo || points ? { deduction: money(deduction) } : {}),
+    ...(amount && amount > 0 ? { discount_type: 'amount' as const, discount_value: amount } : {}),
+  };
 }
 
 /* ── Counting the drawer ─────────────────────────────────────────────── */

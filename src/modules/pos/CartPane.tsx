@@ -199,7 +199,7 @@ export default function CartPane({
         {hint ? <div className={cx('mx-2 my-1.5 rounded-[10px] px-3 py-2 text-[12px]', HINT[hint.tone])}>{hint.text}</div> : null}
         {needsApproval ? (
           <div className="mx-2 my-1.5 flex items-center gap-3 rounded-[10px] bg-warning-bg px-3 py-2 text-[12px] text-warning-ink">
-            <span className="flex-1">{t('pos.ovr.discountWaits', { n: Number(cart.discount) || 0 })}</span>
+            <span className="flex-1">{cart.discount_type === 'amount' ? t('pos.ovr.amountWaits', { n: formatMoney(Number(cart.discount) || 0) }) : t('pos.ovr.discountWaits', { n: Number(cart.discount) || 0 })}</span>
             <button type="button" className="font-bold underline" onClick={onApproval}>
               {t('pos.ovr.askManager')}
             </button>
@@ -225,7 +225,7 @@ export default function CartPane({
       <div className="flex flex-col gap-1 border-t border-pos-line/60 px-5 pt-2.5 pb-3.5">
         <Line label={t('pos.subtotal')} value={formatMoney(c?.subtotal ?? 0)} />
         {promos.map((p) => (
-          <Line key={p.id} label={p.label || t('pos.promotion')} value={`− ${formatMoney(p.amount)}`} tone="text-success" />
+          <Line key={p.id} label={p.coupon && cart.coupon ? t('pos.adj.coupon', { code: cart.coupon }) : p.label || t('pos.promotion')} value={`− ${formatMoney(p.amount)}`} tone="text-success" />
         ))}
         {c?.points_discount ? <Line label={t('pos.pay.points', { n: c.points_redeemed ?? 0 })} value={`− ${formatMoney(c.points_discount)}`} tone="text-primary" /> : null}
         {promos.length || c?.points_discount ? (

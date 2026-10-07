@@ -154,6 +154,10 @@ export function tenderOptionsOf(v: unknown): PosTenderOption[] | null {
   return out.length ? out : null;
 }
 
+/** How the cashier's discount is stated (#293): a percentage, or a fixed amount of money. */
+export const POS_DISCOUNT_TYPES = ['pct', 'amount'] as const;
+export type PosDiscountType = (typeof POS_DISCOUNT_TYPES)[number];
+
 const money = z.number().finite().min(-1_000_000_000).max(1_000_000_000);
 const pct = z.number().finite().min(0).max(100);
 /** A manager's approval token (`Approvals::mint`: `apv_` and hex). */
@@ -222,8 +226,53 @@ export const posSellSchema = z.strictObject({
   promotions: z.array(z.strictObject({ label: z.string().max(80), amount: money })).max(50).optional(),
   /** Points spent, and what they took off. */
   points: z.strictObject({ redeemed: z.number().int().min(0), discount: money }).optional(),
+  /* #293, all optional (`capabilities.discount_amount`): the cashier's discount as given — a fixed amount (`discount_pct`
+     then says the share it came to), and a reason; and the coupon with what it took off, for the receipt. */
+  discount_type: z.enum(POS_DISCOUNT_TYPES).optional(),
+  discount_value: z.number().finite().min(0).max(1_000_000_000).optional(),
+  discount_reason: z.string().trim().max(200).optional(),
+  coupon: z.strictObject({ code: z.string().trim().regex(/^[A-Za-z0-9_-]{3,40}$/), amount: money }).optional(),
 });
 export type PosSellInput = z.infer<typeof posSellSchema>;
+
+/**
+ * What came off a sale, line by line, as the receipt prints it (#293): the coupon (`Coupon CODE`), the promotions, the
+ * points, and the cashier's discount — its percentage, or "Discount" for an amount — with its reason under it. The
+ * cashier's part is what is left of the order's discount after the others, as WorkSuite takes it.
+ */
+export interface PosReduction {
+  label: string;
+  amount: number;
+  note: string | null;
+}
+
+export function saleReductions(s: Pick<PosSale, 'totals' | 'promotions' | 'points' | 'discount_pct' | 'discount_type' | 'discount_reason' | 'coupon'>): PosReduction[] {
+  const out: PosReduction[] = [];
+  const r2 = (n: number) => Math.round(n * 100) / 100;
+  if (s.coupon && s.coupon.amount > 0) out.push({ label: `Coupon ${s.coupon.code}`, amount: s.coupon.amount, note: null });
+  for (const p of s.promotions ?? []) out.push({ label: p.label, amount: p.amount, note: null });
+  if (s.points?.discount) out.push({ label: `Points (${s.points.redeemed})`, amount: s.points.discount, note: null });
+  const mine = r2(s.totals.discount - out.reduce((a, x) => a + x.amount, 0));
+  if (mine > 0.004) {
+    const pct = Math.round((s.discount_pct || 0) * 100) / 100;
+    out.push({ label: s.discount_type === 'amount' || !pct ? 'Discount' : `Discount ${pct}%`, amount: mine, note: s.discount_reason?.trim() || null });
+  }
+  return out;
+}
+
+/** WorkSuite's receipt's discount lines (`Receipt::reductions`): the parts where the sale kept them, else the one "Discount" and its promotions. */
+export function serverReductions(r: Pick<PosServerReceipt, 'totals' | 'promotions' | 'adjustments'>): PosReduction[] {
+  const a = r.adjustments;
+  const promos = (r.promotions ?? []).map((p) => ({ label: p.label, amount: p.amount, note: null }));
+  if (!a || (!a.coupon && !a.discount)) return [...(r.totals.discount > 0 ? [{ label: 'Discount', amount: r.totals.discount, note: null }] : []), ...promos.map((p) => ({ ...p, label: `  ${p.label}` }))];
+  const out: PosReduction[] = [];
+  if (a.coupon) out.push({ label: `Coupon ${a.coupon.code}`, amount: a.coupon.amount, note: null });
+  if (a.discount) out.push({ label: a.discount.type === 'amount' ? 'Discount' : `Discount ${Math.round(a.discount.value * 100) / 100}%`, amount: a.discount.amount, note: a.discount.reason });
+  out.push(...promos);
+  const rest = Math.round((r.totals.discount - out.reduce((x, y) => x + y.amount, 0)) * 100) / 100;
+  if (rest > 0.004) out.push({ label: 'Other discounts', amount: rest, note: null });
+  return out;
+}
 
 /**
  * A sale rung up at this till, as it keeps it (sealed, `pos_sales`): what was sold, who sold it and where it stands.
@@ -380,6 +429,11 @@ export interface PosServerReceipt {
   loyalty?: { tier: string | null; earned: number; redeemed: number; balance: number | null } | null;
   /** The company's published receipt template (`capabilities.receipt_templates`): absent, the receipt is today's. */
   template?: PosReceiptTemplate | null;
+  /** #293: what the discount was made of, where the sale kept it — the cashier's discount and the coupon. */
+  adjustments?: {
+    discount: { type: PosDiscountType; value: number; amount: number; reason: string | null } | null;
+    coupon: { code: string; amount: number } | null;
+  } | null;
 }
 
 /* ── The receipt template (Phase 2 S3) ────────────────────────────────── */
@@ -530,10 +584,13 @@ export const POS_HOLD_TTL_MS = 24 * 60 * 60 * 1000;
 const cartSchema = z.strictObject({
   lines: z.array(z.strictObject({ product_id: z.number().int().positive(), quantity: z.number().finite().positive().max(100_000) })).max(300),
   customer: posCustomerSchema.nullable(),
-  discount: z.string().max(8),
+  discount: z.string().max(16),
   /** Phase 2: points the customer spends on it, as typed, and a coupon code. */
   redeem: z.string().max(10).optional(),
   coupon: z.string().max(40).optional(),
+  /** #293: the discount is a fixed amount (`discount` the money), not a percentage; and the reason given for it. */
+  discount_type: z.literal('amount').optional(),
+  discount_reason: z.string().max(200).optional(),
 });
 const saleId = z.string().regex(/^[A-Za-z0-9_-]{1,40}$/);
 const stamp = z.string().datetime();

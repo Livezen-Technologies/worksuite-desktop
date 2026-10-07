@@ -4,6 +4,20 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-07
+
+**Added**
+
+- discount, coupon and gift voucher on Take payment (#293) — under the total the sale's adjustments (subtotal, promotions, discount, coupon, points, each with × to take it off) and Add discount / Add coupon; the payment re-prices live, Back to the sale keeps them
+- one discount editor for the bottom bar and the payment screen — a percentage or a fixed amount on the pad, an optional reason, the cashier's ceiling, a manager's PIN past it (discount_type, discount_value, discount_reason where capabilities.discount_amount)
+- a coupon typed or scanned and checked on the cart (POST coupons/validate, coupon_report on the price) with the specific reason it is refused; one coupon per sale; a coupon WorkSuite no longer takes holds Complete until it is removed
+- the gift voucher tile where WorkSuite takes vouchers but lists no tenders (capabilities.vouchers, voucher_accept; not without can.voucher), its balance shown with its expiry
+- receipts (the till's, WorkSuite's and by template) print Coupon CODE, the discount and its reason as separate lines (saleReductions, serverReductions, Receipt adjustments)
+
+**Changed**
+
+- offline, coupons and vouchers wait with a message naming them; a discount still works. Open sales keep a fixed amount and its reason (pos:carts accepts discount_type and discount_reason; an older version drops such a cart)
+
 ## 1.2.1 — 2026-10-07
 
 - the category picker narrows the grid behind it as soon as a category is pointed at, Enter applies it, and its counts are the till's own products, so they match what Show all puts in the grid (#295)

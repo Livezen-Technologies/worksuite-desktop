@@ -8,21 +8,21 @@ import { customerOf, findInCatalogue, lookupProduct, openDrawer, PK, refreshCata
 import { useBarcodeScanner } from './barcode';
 import CartPane from './CartPane';
 import CashMove from './CashMove';
-import { approvalActions, discountNeedsApproval, saleDiscount, useSaleApproval } from './approval';
-import { activeSale, cartActions, discountPct, MAX_OPEN, redeemOf, useCart, useCarts, type CartState } from './cart';
+import { discountNeed, draftOf } from './adjust';
+import { approvalActions, covers, saleDiscount, useSaleApproval } from './approval';
+import { activeSale, cartActions, discountAmount, discountPct, MAX_OPEN, redeemOf, useCart, useCarts, type CartState } from './cart';
 import { categoryLabel, FAVOURITES, inCategory } from './catalog';
 import CategoryPicker from './CategoryPicker';
 import CustomerDialog from './CustomerDialog';
 import { stockLevels, topSellersToday } from './desk';
 import { publish } from './display';
 import { useT } from './i18n';
-import { BigAmount, Keypad } from './Keypad';
-import { press } from './numpad';
+import { CouponDialog, DiscountDialog } from './DiscountEditor';
 import { HeldDialog, HoldDialog, OpenSalesDialog, useServerHeld } from './OpenSales';
 import Override from './Override';
 import { clampPage, GRID_PAGE, LIST_PAGE, pushRecent } from './paging';
 import { Note, PosButton, PosDialog, useTillContext } from './parts';
-import { deductionOf, estimateCart } from './pricing';
+import { deductionOf, discountBase, estimateCart, formatMoney, shareOf } from './pricing';
 import ProductGrid, { type GridView, type QuickAction } from './ProductGrid';
 import ReturnDialog from './ReturnDialog';
 import Tender from './TenderPanel';
@@ -64,7 +64,7 @@ function keep(key: string, v: unknown): void {
   }
 }
 
-type Dialog = 'customer' | 'discount' | 'category' | 'open' | 'held' | 'hold' | 'cash' | 'return' | 'override' | null;
+type Dialog = 'customer' | 'discount' | 'coupon' | 'category' | 'open' | 'held' | 'hold' | 'cash' | 'return' | 'override' | null;
 
 export default function Register({ active }: { active: boolean }) {
   const t = useT();
@@ -109,7 +109,10 @@ export default function Register({ active }: { active: boolean }) {
   const approval = useSaleApproval(sale.id);
   // A discount past the cashier's rights waits for a manager's approval (online, `capabilities.approvals`).
   const approvalsOn = !!caps.approvals && online;
-  const disc = saleDiscount(cart, till.discount, approvalsOn, approval);
+  // What the cashier's discount comes off (the goods after list discounts and promotions), as the cart was last priced:
+  // a fixed amount (#293) is measured against it for the cashier's rights and a manager's approval.
+  const [base, setBase] = useState<number | null>(null);
+  const disc = saleDiscount(cart, till.discount, approvalsOn, approval, undefined, base);
   const pct = disc.pct;
   const currency = till.currency || catalogue.data?.currency || '';
   const org = till.company?.id ?? null;
@@ -121,7 +124,10 @@ export default function Register({ active }: { active: boolean }) {
     }),
     [caps.customers, caps.coupons, caps.loyalty, cart],
   );
-  const price = useCartPrice(cart.lines, pct, byId, currency, till.discount.ceiling, caps, online, org, counter, disc.approved);
+  const price = useCartPrice(cart.lines, pct, byId, currency, till.discount.ceiling, caps, online, org, counter, disc.approved, disc.amount ?? null);
+  const pricedBase = price.cart ? discountBase(price.cart) : null;
+  // Kept as the cart is priced (it does not depend on the cashier's discount): adjusted while rendering, not in an effect.
+  if (pricedBase !== null && pricedBase !== base) setBase(pricedBase);
   const heldOnServer = !!caps.held && online;
   const serverHeld = useServerHeld(heldOnServer && active);
   const offered = useMemo(() => tenderOptionsOf(till.company?.tenders) ?? catalogue.data?.tenders ?? null, [till.company, catalogue.data]);
@@ -138,7 +144,7 @@ export default function Register({ active }: { active: boolean }) {
 
   /** What a sale not on screen comes to: the catalogue's preview. */
   const totalOf = useCallback(
-    (c: CartState) => (c.lines.length ? estimateCart(c.lines, byId, discountPct(c, till.discount.allowed, till.discount.ceiling), till.discount.ceiling, currency).cart.total : 0),
+    (c: CartState) => (c.lines.length ? estimateCart(c.lines, byId, discountPct(c, till.discount.allowed, till.discount.ceiling), till.discount.ceiling, currency, till.discount.allowed ? discountAmount(c) : null).cart.total : 0),
     [byId, till.discount.allowed, till.discount.ceiling, currency],
   );
 
@@ -258,12 +264,10 @@ export default function Register({ active }: { active: boolean }) {
 
   const canSell = !!till.company?.can.sell;
   const payable = !!session && canSell && !!price.cart && !price.error && !price.pending && cart.lines.length > 0 && !disc.needs;
-  const typedPct = Math.max(0, Math.min(100, Number(cart.discount) || 0));
-  const discountNeed: PosApprovalNeed = {
-    code: 'approval_required',
-    message: t('pos.ovr.discountAsk', { n: typedPct, max: till.discount.allowed ? (till.discount.ceiling ?? 100) : 0 }),
-    ask: { action: 'discount', amount: typedPct, threshold: till.discount.allowed ? till.discount.ceiling : 0, subject: null },
-  };
+  // What the manager approves: the percentage typed, or the share a fixed amount comes to (#293).
+  const typedAmount = discountAmount(cart);
+  const typedPct = typedAmount !== null ? shareOf(typedAmount, base ?? 0) : Math.max(0, Math.min(100, Number(cart.discount) || 0));
+  const askDiscount: PosApprovalNeed = discountNeed(t, { pct: typedPct, amount: typedAmount }, till.discount, (n) => formatMoney(n, currency));
 
   // ?new=1 is the shell's "New" (⌘N / Ctrl+N from the menu): another sale.
   const newAsked = till.params.get('new') === '1';
@@ -428,6 +432,7 @@ export default function Register({ active }: { active: boolean }) {
             saleId: sale.id,
             approval: disc.approved !== null ? approval : null,
           }}
+          pricing={{ pending: price.pending, error: price.error }}
           onClose={() => setPaying(null)}
           onDone={() => {
             cartActions.paid();
@@ -443,17 +448,50 @@ export default function Register({ active }: { active: boolean }) {
       ) : null}
       {dialog === 'discount' ? (
         <DiscountDialog
+          initial={draftOf(cart)}
+          base={base ?? (price.cart ? discountBase(price.cart) : 0)}
+          currency={currency}
+          amountOn={!!caps.discount_amount}
+          rights={till.discount}
           approvals={approvalsOn}
-          onClose={(typed) => {
+          onCancel={() => setDialog(null)}
+          onApply={(r) => {
             setDialog(null);
+            // The same editor as the payment screen's Add discount (#293): the same result either way.
+            if (till.discount.allowed || approvalsOn) cartActions.applyDiscount({ type: r.draft.type, value: r.draft.value, reason: r.draft.reason }, approvalsOn ? null : till.discount.ceiling);
             // Past the cashier's own rights: a manager approves it now (it shows as asked until then).
-            if (typed !== null && approvalsOn && discountNeedsApproval(typed, till.discount) && !(approval && approval.amount >= typed)) setDialog('override');
+            if (r.needsApproval && !covers(approval, 'discount', r.pct)) setDialog('override');
+          }}
+        >
+          {caps.coupons && online ? (
+            caps.coupon_validate ? (
+              <PosButton className="h-touch self-start px-4 text-[14px]" onClick={() => setDialog('coupon')}>
+                {cart.coupon ? t('pos.adj.coupon', { code: cart.coupon }) : t('pos.adj.addCoupon')}
+              </PosButton>
+            ) : (
+              <CouponField />
+            )
+          ) : null}
+        </DiscountDialog>
+      ) : null}
+      {dialog === 'coupon' ? (
+        <CouponDialog
+          current={cart.coupon ?? null}
+          lines={cart.lines}
+          org={org}
+          customerId={cart.customer?.id ?? null}
+          offline={!online}
+          onClose={() => setDialog(null)}
+          onApplied={(code) => {
+            cartActions.coupon(code);
+            setDialog(null);
           }}
         />
       ) : null}
       {dialog === 'override' ? (
         <Override
-          need={discountNeed}
+          need={askDiscount}
+          reason={cart.discount_reason}
           currency={currency}
           onClose={() => setDialog(null)}
           onApproved={(a) => {
@@ -485,67 +523,23 @@ export default function Register({ active }: { active: boolean }) {
 }
 
 /**
- * The cashier's discount on the sale on screen, in percent, typed on the pad — never past their ceiling; where the
- * server takes a manager's approval (`approvals`), past it too, and the override follows (`onClose` says what was set).
+ * The coupon on the sale, typed, for a server that checks it only when it prices the cart (no `coupon_validate`): as it
+ * always was. Where WorkSuite checks a coupon on the cart, the bottom bar opens the coupon dialog instead (#293).
  */
-function DiscountDialog({ onClose, approvals = false }: { onClose: (typed: number | null) => void; approvals?: boolean }) {
+function CouponField() {
   const t = useT();
-  const till = useTillContext();
   const cart = useCart();
-  const [typed, setTyped] = useState(cart.discount);
-  const [coupon, setCoupon] = useState(cart.coupon ?? '');
-  const coupons = !!till.caps.coupons && !till.offline;
-  const ceiling = approvals ? null : till.discount.ceiling;
-  const own = till.discount.allowed ? till.discount.ceiling : 0;
-  const apply = () => {
-    if (till.discount.allowed || approvals) cartActions.discount(typed, ceiling);
-    // A coupon (`capabilities.coupons`): WorkSuite checks it when it prices the cart, and says when it does not apply.
-    if (coupons) cartActions.coupon(coupon);
-    onClose(Math.min(100, Number(typed) || 0));
-  };
   return (
-    <PosDialog label={t('pos.discountTitle')} onClose={() => onClose(null)} width={640} className="gap-4 p-7">
-      <div>
-        <h2 className="text-[20px] font-extrabold">{t('pos.discountTitle')}</h2>
-        <p className="text-[13px] text-ink-3">{approvals ? (own === 0 ? t('pos.discountAllApproved') : own ? t('pos.discountPastApproved', { n: own }) : t('pos.discountHint')) : ceiling ? t('pos.discountMax', { n: ceiling }) : t('pos.discountHint')}</p>
-      </div>
-      <div className="flex gap-4">
-        <div className="flex flex-1 flex-col gap-3">
-          <BigAmount autoFocus value={typed} onChange={(v) => setTyped(v)} rules={{ decimals: 2, digits: 3 }} aria-label={t('pos.discount')} placeholder="0" />
-          <div className="flex flex-wrap gap-2">
-            {[5, 10, 15, 20].filter((n) => !ceiling || n <= ceiling).map((n) => (
-              <PosButton key={n} className="h-touch-md flex-1 text-[16px]" onClick={() => setTyped(String(n))}>
-                {n}%
-              </PosButton>
-            ))}
-          </div>
-          <PosButton tone="danger" className="h-touch-md" onClick={() => setTyped('')}>
-            {t('pos.discountNone')}
-          </PosButton>
-        </div>
-        <Keypad className="w-[260px]" keys={['7', '8', '9', '4', '5', '6', '1', '2', '3', '.', '0', 'back']} onKey={(k) => setTyped((v) => press(v, k, { decimals: 2, digits: 3 }))} />
-      </div>
-      {coupons ? (
-        <label className="flex items-center gap-3">
-          <span className="text-[13px] font-bold text-ink-2">{t('pos.coupon')}</span>
-          <input
-            value={coupon}
-            maxLength={40}
-            onChange={(e) => setCoupon(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 40))}
-            placeholder={t('pos.couponHint')}
-            className="h-touch min-w-0 flex-1 rounded-[10px] bg-pos-panel px-3 font-mono text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none"
-          />
-        </label>
-      ) : null}
-      <div className="flex gap-2.5">
-        <PosButton className="h-touch-lg w-40" onClick={() => onClose(null)}>
-          {t('pos.cancel')}
-        </PosButton>
-        <PosButton tone="primary" className="h-touch-lg flex-1 text-[16px]" onClick={apply}>
-          {t('pos.discountApply', { n: Math.min(Number(typed) || 0, ceiling ?? 100) })}
-        </PosButton>
-      </div>
-    </PosDialog>
+    <label className="flex items-center gap-3">
+      <span className="text-[13px] font-bold text-ink-2">{t('pos.coupon')}</span>
+      <input
+        defaultValue={cart.coupon ?? ''}
+        maxLength={40}
+        onChange={(e) => cartActions.coupon(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, '').slice(0, 40))}
+        placeholder={t('pos.couponHint')}
+        className="h-touch min-w-0 flex-1 rounded-[10px] bg-pos-panel px-3 font-mono text-[15px] shadow-[inset_0_0_0_1px_#cbd5e1] outline-none"
+      />
+    </label>
   );
 }
 

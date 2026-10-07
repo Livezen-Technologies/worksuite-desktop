@@ -826,6 +826,20 @@ requests. The door's Phase 2 calls go through `pos:desk` (`shared/pos.ts posDesk
 | Receipt template (`receipt_templates`) | `GET device/receipt-template` → `{template \| null}` with the catalogue (every 30 min) and on refresh, kept per till; a reprint follows the receipt's own `template`. ESC/POS walks its blocks at its paper (58/80 mm; A4 keeps the printer's roll), QR by `GS ( k`; no template → the old receipt byte for byte |
 | The device (`device_rename`, `device_unpair`) | Pairing sends `device_name` (the person's, else the computer's) and `platform` (`windows`, `macos`, `linux`); `POST device/name {device_name}` from This till; *Forget this till* calls `POST device/unpair` first (its failure does not stop the forgetting) |
 
+**Discount, coupon and gift voucher on the payment screen (pos 1.3.0, #293).** Each lit only by its capability, online;
+a server without them gets the 1.2.0 requests (a percentage discount, the coupon checked only when the cart is priced,
+the voucher tile only where the company's tenders list it).
+
+| Need (capability) | Calls |
+|---|---|
+| A fixed amount off (`discount_amount`) | `POST api/pos/price` takes `discount_type: amount, discount_value` instead of `discount_pct` → the cart adds `discount_type`, `discount_value` and the share it came to as `discount_pct`. WorkSuite takes it after the line discounts and the promotions (a coupon is one), before points and tax; never past what is left (422 "A discount cannot be more than the sale comes to (…)"); the cashier's rights, Orders' ceiling and a manager's approval are measured as that share (the approval `amount` is the share). The device sale sends `discount_type`, `discount_value`, `discount_reason` beside `discount_pct` (the share, for a server that reads only that). A reason goes with a percentage too (`discount_reason`) |
+| A coupon checked on the cart (`coupon_validate`) | `POST api/pos/coupons/validate {org_id, coupon_code, lines, customer_id?}` → `{valid, code, reason, message, amount, promotion_id, promotion, cart}` (`reason`: `not_found`, `paused`, `expired`, `not_yet`, `used_up`, `customer_limit`, `needs_customer`, `min_spend`, `not_applicable`; shown in the till's words, WorkSuite's sentence where it carries a figure). The price then sends `coupon_report: true`: an unusable coupon no longer refuses the price — the cart comes without it and `coupon {code, amount, valid, reason, message}` says why (the payment screen holds Complete until it is taken off or valid again). Every priced cart answers `coupon_discount` and marks the coupon's promotion `coupon: true`; the sale keeps `coupon {code, amount}` for its receipt and leaves that promotion out of `promotions`. One coupon per sale |
+| Gift vouchers (`vouchers`, `voucher_accept`) | A company that never saved its tenders now lists the voucher; where the server sends no list the till adds the tile itself. `can.voucher` false (`pos.sale.voucher.accept` not held): no tile. `GET device/vouchers/{code}` → `voucher.expires_on` and `problem` shown with the balance |
+| What the receipt prints (`sale_adjustments`) | `Receipt::data` adds `adjustments {discount {type, value, amount, reason}, coupon {code, amount}}`; the till prints `Coupon CODE −x`, the discount (its percentage, or "Discount" for an amount) with the reason under it, and the promotions, each on its own line (`shared/pos.ts saleReductions`, `serverReductions`) |
+
+Offline, coupons and vouchers wait (they need WorkSuite: the payment screen says so); a discount still works and goes
+with the sale. A fixed amount is not carried by a sale held on WorkSuite (`POST device/held` keeps only a percentage).
+
 Seen in the server's code and worth fixing there: the template's `points` block prints `loyalty.earned` /
 `loyalty.points`, but a receipt's `loyalty` carries `points_earned` / `points_balance` (`Receipt::designed`); the till
 reads both. `Customer.store_credit` is always `null` — the till reads `device/store-credit/{id}` instead.

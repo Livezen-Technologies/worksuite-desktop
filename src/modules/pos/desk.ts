@@ -114,13 +114,15 @@ export interface Voucher {
   usable: boolean;
   status: string;
   expires_on: string | null;
+  /** Why it cannot be spent, in WorkSuite's words (#293), when it said. */
+  problem?: string | null;
 }
 
 export function voucherOf(v: unknown): Voucher | null {
   const x = obj(v);
   const code = s(x?.code);
   if (!x || !code) return null;
-  return { code, balance: n(x.balance), currency: s(x.currency), usable: x.usable !== false && (s(x.status) ?? 'active') === 'active', status: s(x.status) ?? 'active', expires_on: s(x.expires_on) };
+  return { code, balance: n(x.balance), currency: s(x.currency), usable: x.usable !== false && (s(x.status) ?? 'active') === 'active', status: s(x.status) ?? 'active', expires_on: s(x.expires_on), ...(s(x.problem) ? { problem: s(x.problem) } : {}) };
 }
 
 export async function lookupVoucher(code: string): Promise<Voucher | null> {
