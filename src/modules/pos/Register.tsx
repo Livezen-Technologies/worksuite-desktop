@@ -475,6 +475,7 @@ export default function Register({ active }: { active: boolean }) {
           favourites={favourites}
           serverTop={top.data ?? null}
           onPick={pickCategory}
+          onPoint={setCategory}
           onAdd={(p) => add(p.id)}
           onClose={() => setDialog(null)}
         />

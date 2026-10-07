@@ -106,6 +106,43 @@ describe('the counter', () => {
     expect(screen.queryByRole('button', { name: /Product 01/ })).toBeNull();
   });
 
+  it('narrows the grid behind the picker as soon as a category is pointed at, and Enter applies it (#295)', async () => {
+    mount(true, many);
+    fireEvent.click(await screen.findByRole('button', { name: /Category/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Choose a category' });
+    fireEvent.click(within(dialog).getByRole('button', { name: /Spices/ }));
+    // The dialog stays open on the category's preview; the grid behind already shows its eight.
+    expect(screen.getByRole('dialog', { name: 'Choose a category' })).toBeTruthy();
+    expect(screen.getByText('Showing 1–8 of 8 · swipe or use the arrows')).toBeTruthy();
+    fireEvent.keyDown(within(dialog).getByRole('button', { name: /Tea/ }), { key: 'Enter' });
+    expect(screen.queryByRole('dialog', { name: 'Choose a category' })).toBeNull();
+    expect(screen.getByText('Showing 1–12 of 12 · swipe or use the arrows')).toBeTruthy();
+    // Esc in the search clears it.
+    fireEvent.keyDown(screen.getByPlaceholderText(/Search products/), { key: 'Escape' });
+    expect(screen.getByText('Showing 1–15 of 20 · swipe or use the arrows')).toBeTruthy();
+  });
+
+  it('counts a group of the tree from the till\'s own products, and narrows to everything below it (#295)', async () => {
+    mount(true, {
+      ...many,
+      category_tree: [
+        // The server counts all of Inventory (40); the till holds three of them.
+        { id: '10', name: 'Antivirus & Security', parent_id: null, product_count: 40, children: [{ id: '11', name: 'Kaspersky', parent_id: '10', product_count: 30, children: [] }] },
+        { id: '20', name: 'Office', parent_id: null, product_count: 99, children: [] },
+      ],
+      products: many.products.map((p, i) => ({ ...p, category_id: i === 0 ? '10' : i < 3 ? '11' : '20' })),
+    });
+    fireEvent.click(await screen.findByRole('button', { name: /Category/ }));
+    const dialog = screen.getByRole('dialog', { name: 'Choose a category' });
+    const group = within(dialog).getByRole('button', { name: /Antivirus/ });
+    expect(group.textContent).toContain('3');
+    expect(group.textContent).not.toContain('40');
+    fireEvent.click(group);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Show all 3' }));
+    expect(screen.getByText('Showing 1–3 of 3 · swipe or use the arrows')).toBeTruthy();
+    expect(screen.queryByRole('button', { name: /Product 04/ })).toBeNull();
+  });
+
   it('rings up two sales side by side, and holds one', async () => {
     mount(true, many);
     fireEvent.click(await screen.findByRole('button', { name: /Product 01/ }));

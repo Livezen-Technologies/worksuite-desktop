@@ -60,6 +60,25 @@ export function inCategory(p: PosProduct, c: string | null, tree: PosCategoryNod
   return p.category === c;
 }
 
+/**
+ * How many of the till's own products each group of the tree holds, everything below it counted: the counts beside
+ * the groups match what "Show all" puts in the grid. The server's `product_count` counts the whole of Inventory,
+ * which can differ from the till's catalogue copy (#295).
+ */
+export function groupCounts(tree: PosCategoryNode[] | undefined, products: PosProduct[]): Map<string, number> {
+  const own = new Map<string, number>();
+  for (const p of products) if (p.category_id) own.set(p.category_id, (own.get(p.category_id) ?? 0) + 1);
+  const out = new Map<string, number>();
+  const walk = (n: PosCategoryNode): number => {
+    let sum = own.get(n.id) ?? 0;
+    for (const c of n.children) sum += walk(c);
+    out.set(n.id, sum);
+    return sum;
+  };
+  for (const n of tree ?? []) walk(n);
+  return out;
+}
+
 /** The favourites, in the company's order (`favourites`), then any product marked so. */
 export function favouritesOf(products: PosProduct[], favourites: number[] | undefined): PosProduct[] {
   const by = new Map(products.map((p) => [p.id, p] as const));

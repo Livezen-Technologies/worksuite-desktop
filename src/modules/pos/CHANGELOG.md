@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.1 — 2026-10-07
+
+- the category picker narrows the grid behind it as soon as a category is pointed at, Enter applies it, and its counts are the till's own products, so they match what Show all puts in the grid (#295)
+
 ## 1.2.0 — 2026-10-06
 
 **Added**
