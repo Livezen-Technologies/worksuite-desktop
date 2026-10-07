@@ -42,8 +42,7 @@ import { useRingState, youJoinedLine } from './Ringing';
 import { MergeDialog, ProfileCards } from './IdentityCard';
 import { ConnectionWarning } from '../../../components/ConnectionWarning';
 import { ticketRoute } from '@shared/support';
-import { ConvertSheet, useConversion } from '../../support/ConvertSheet';
-import { StatusChip } from '../../support/parts';
+import { ConvertSheet, TicketChip, useConversion, useConversionOffer } from '../../support/ConvertSheet';
 
 // Kept importable from here, where the drawer first had it.
 export { visitorLocalTime } from './panelCards';
@@ -102,6 +101,10 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   const realtimeLive = useRealtimeLive();
   const count = data?.messages.length ?? 0;
   useTabTitle(data ? `Website · ${data.visitor?.name || data.visitor?.label || 'Visitor'}` : row ? `Website · ${row.visitor_name || row.label}` : 'Website chats');
+  // The ticket this chat became (FR-LCH-08, #298): its chip in the header opens it. Support's preview, as the panel reads it.
+  const support = useCanOpen('support');
+  const converted = useConversion(Number(id), support && !!data);
+  const ticket = support ? (converted.data?.ticket ?? null) : null;
 
   useEffect(() => {
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
@@ -274,6 +277,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
                 <Icon name="phone" size={13} /> Offer call
               </button>
             ) : null}
+            {ticket && !mini ? <TicketChip ticket={ticket} onOpen={() => navigate(ticketRoute(ticket.id))} /> : null}
             <Controls data={data} row={row} me={me} canReply={canReply} onDone={refresh} compact={mini} />
             {!mini ? (
               <button type="button" aria-label="Open in new window" title="Open in new window" onClick={() => void openWebsiteChatWindow(c.id, name)} className="flex h-[30px] w-[30px] items-center justify-center rounded-[7px] border border-line bg-surface text-ink hover:bg-subtle">
@@ -556,11 +560,14 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
     else void call('app:openExternal', { url: `mailto:${v.email}` });
   };
 
-  // Raise ticket opens Support's sheet here, not the browser (WS-SUPPORT-SRS-001 D-06, FR-DSK-08); a chat that is a
-  // ticket already shows it, with its status, and opens its tab (FR-LCH-08).
+  // Convert to ticket opens Support's sheet here, not the browser (WS-SUPPORT-SRS-001 D-06, FR-DSK-08); a chat that is
+  // a ticket already offers View ticket instead, never a second conversion (FR-LCH-03/08, #298). Where the server says
+  // the company has Support's chat conversion off, or it is not mine to do, there is no Convert (an older server says
+  // nothing, and keeps it).
   const [raising, setRaising] = useState(false);
   const converted = useConversion(c.id, support);
   const linked = converted.data?.ticket ?? null;
+  const offer = useConversionOffer('chat', support);
 
   const action = 'flex h-[30px] flex-1 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface text-[11.5px] font-semibold text-ink hover:bg-subtle';
   return (
@@ -653,11 +660,19 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
         />
         <div className="mt-auto flex flex-col gap-1.5 pt-2">
           {support && linked ? (
-            <button type="button" onClick={() => navigate(ticketRoute(linked.id))} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle" title={text('Open the ticket in WorkSuite')}>
-              <Icon name="life-buoy" size={13} className="text-ink-2" /> {text('Ticket {ref}', { ref: linked.reference })} · <StatusChip status={linked.status} />
+            <>
+              <span className="flex flex-wrap items-center justify-center gap-1.5 text-[11.5px] text-ink-3">
+                {text('This chat is ticket')}
+                <TicketChip ticket={linked} />
+              </span>
+              <button type="button" onClick={() => navigate(ticketRoute(linked.id))} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle" title={text('Open ticket {ref}', { ref: linked.reference })}>
+                <Icon name="life-buoy" size={13} className="text-ink-2" /> {text('View ticket')}
+              </button>
+            </>
+          ) : support && offer !== 'no' ? (
+            <button type="button" onClick={() => setRaising(true)} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle">
+              <Icon name="life-buoy" size={13} className="text-ink-2" /> {text('Convert to ticket')}
             </button>
-          ) : support ? (
-            <button type="button" onClick={() => setRaising(true)} className="h-8 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle">Raise a support ticket from this chat</button>
           ) : null}
           {raising ? <ConvertSheet conversationId={c.id} onClose={() => setRaising(false)} /> : null}
           {/* Leave chat, with the owner's warning, at the panel's foot (C-08, TEAM-06). */}

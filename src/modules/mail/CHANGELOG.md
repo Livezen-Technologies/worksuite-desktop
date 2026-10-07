@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.25.0 — 2026-10-07
+
+**Added**
+
+- Convert to ticket on any message (header ⋯, the reader's More, the list's right-click), with a ticket chip on the message and a marker in the list once it is one; View ticket instead of Convert after that (#298)
+
+**Changed**
+
+- the Apps pane's helpdesk ticket and the Create a helpdesk ticket quick step convert the email, linked and threaded, where the server can; the old unlinked copy only on older servers (#298)
+
 ## 1.24.0 — 2026-10-07
 
 **Added**

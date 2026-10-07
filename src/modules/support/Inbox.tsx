@@ -1,9 +1,12 @@
-import { useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { VIEW_LABEL, isView, parseSupportRoute, ticketRoute, type SavedView, type SupportSort, type Ticket, type TicketShow } from '@shared/support';
+import { app } from '../../core/app-state';
 import { useOrgSelection } from '../../core/org-prefs';
+import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { text } from '../../core/i18n';
+import { toast } from '../../core/toasts';
 import { useNow } from '../../core/use-now';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import { SidePanel } from '../../components/SidePanel';
@@ -12,11 +15,14 @@ import { K, listTickets, meta, views } from './api';
 import { Availability } from './Availability';
 import type { ComposerMode } from './Composer';
 import { usePollInterval, useRealtimeLive, useSupportLive } from './live';
+import { NewTicketSheet } from './NewTicket';
+import { showCreated } from './newTicketForm';
+import { mayCreateTicket } from './palette';
 import { Rail } from './Rail';
 import { ReadingPane } from './ReadingPane';
 import { OutboxBar } from './Outbox';
 import { ResolveDialog } from './ResolveDialog';
-import { NO_FILTERS, TicketList, type ListFilters } from './TicketList';
+import { NO_FILTERS, TicketList, channelChoices, type ListFilters } from './TicketList';
 import { WallboardChooser, mayReadReports } from './Wallboard';
 import { isMac } from '../../core/bridge';
 import { Button } from '../../components/ui';
@@ -24,10 +30,12 @@ import { Button } from '../../components/ui';
 /**
  * The support inbox (D-01): three panes — the views rail with live counts, the view's tickets, and the reading pane —
  * kept current by the realtime gateway (live.ts), with the keyboard of FR-WSP-06: j/k move, Enter opens the ticket's
- * tab, R replies, N writes a note, E resolves, / searches, ⌘↵ sends from the reading pane.
+ * tab, R replies, N writes a note, E resolves, / searches, ⌘↵ sends from the reading pane — and C raises a new ticket
+ * (#298).
  *
  * The view and its search live in the route (`/support?view=unassigned&q=…`), so the quick actions, a deep link and a
- * restored tab open on them; the filters, the sort and the ticket being read are this tab's own.
+ * restored tab open on them; the filters, the sort and the ticket being read are this tab's own. `?new=1` (⌘K's Create
+ * ticket, ⌘N here) opens the New ticket form and is taken off the route again.
  */
 const PAGE = 50;
 
@@ -62,6 +70,8 @@ function savedParams(s: SavedView): { view: string; extra: Record<string, string
 export function Inbox({ route, active }: { route: string; active: boolean }) {
   useTabTitle(text('Support'));
   useSupportLive();
+  const qc = useQueryClient();
+  const me = Number(useStore(app, (s) => s.auth?.user?.id ?? 0)) || null;
   const { go, navigate } = useTab();
   const r = parseSupportRoute(route);
   const routeView = r.kind === 'inbox' ? r.view : null;
@@ -89,6 +99,7 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
     q: q || base?.q || undefined,
     status: filters.status.length ? filters.status : base?.status,
     priority: filters.priority.length ? filters.priority : base?.priority,
+    source: filters.source.length ? filters.source : undefined,
     organization: base?.extra.organization ? undefined : orgs,
     extra: base?.extra,
     limit: PAGE,
@@ -117,6 +128,10 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   const select = (id: number | null) => setSel(id === null ? null : { key: listKey, id });
   const [focusRequest, setFocusRequest] = useState<{ mode: ComposerMode; n: number } | null>(null);
   const [resolving, setResolving] = useState<TicketShow['ticket'] | null>(null);
+  // New ticket (#298): for whoever may raise one, once the desk has said (or could not be asked).
+  const [creating, setCreating] = useState(false);
+  const metaKnown = metaQ.isSuccess || metaQ.isError;
+  const canCreate = metaKnown && mayCreateTicket(metaQ.data);
   const searchRef = useRef<HTMLInputElement>(null);
   const width = useResizableWidth('support.list', { defaultWidth: 380, min: 300, max: () => Math.max(300, window.innerWidth - 760) });
 
@@ -154,9 +169,29 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
       } else if (k === '/') {
         e.preventDefault();
         searchRef.current?.focus();
+      } else if ((k === 'c' || k === 'C') && canCreate) {
+        e.preventDefault();
+        setCreating(true);
       }
     };
   });
+
+  // `?new=1` (⌘K's Create ticket, ⌘N): the form, once the desk has said whether I may — and the route without it.
+  const askedNew = new URLSearchParams(route.split('?')[1] ?? '').get('new') === '1';
+  const [seenNew, setSeenNew] = useState(false);
+  if (metaKnown && askedNew !== seenNew) {
+    setSeenNew(askedNew);
+    if (askedNew && canCreate) setCreating(true);
+  }
+  useEffect(() => {
+    if (!askedNew || !metaKnown) return;
+    if (!canCreate) toast('error', text('You do not have permission to create tickets.'));
+    const rest = new URLSearchParams(route.split('?')[1] ?? '');
+    rest.delete('new');
+    go(rest.size ? `/support?${rest.toString()}` : '/support');
+    // Once per ask: the route changing back must not ask again.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [askedNew, metaKnown]);
   useEffect(() => {
     if (!active) return;
     const onKey = (e: KeyboardEvent) => keys.current(e);
@@ -234,6 +269,8 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
               onSort={setSort}
               filters={filters}
               onFilters={setFilters}
+              channels={channelChoices(metaQ.data?.sources)}
+              onNew={canCreate ? () => setCreating(true) : null}
               searchRef={searchRef}
               now={now}
             />
@@ -244,11 +281,27 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
           {selectedId !== null ? (
             <ReadingPane key={selectedId} ticketId={selectedId} active={active} focusRequest={focusRequest} onOpenTab={openTab} onResolve={(s) => setResolving(s.ticket)} />
           ) : (
-            <Empty icon="life-buoy" title={text('Choose a ticket to read it here')} hint={text('j and k move down and up the list; Enter opens the ticket in a tab of its own.')} />
+            <Empty
+              icon="life-buoy"
+              title={text('Choose a ticket to read it here')}
+              hint={canCreate ? text('j and k move down and up the list; Enter opens the ticket in a tab of its own; c raises a new one.') : text('j and k move down and up the list; Enter opens the ticket in a tab of its own.')}
+            />
           )}
         </div>
       </div>
       {resolving ? <ResolveDialog ticket={resolving} onClose={() => setResolving(null)} /> : null}
+      {creating ? (
+        <NewTicketSheet
+          meta={metaQ.data}
+          selectedOrganization={orgs.length === 1 ? Number(orgs[0]) : null}
+          onClose={() => setCreating(false)}
+          onCreated={(t) => {
+            // In the lists it belongs in at once, and in the reading pane (#298).
+            showCreated(qc, t, me);
+            select(t.id);
+          }}
+        />
+      ) : null}
       {wallOpen ? <WallboardChooser onClose={() => setWallOpen(false)} /> : null}
     </div>
   );

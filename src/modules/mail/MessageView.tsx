@@ -8,6 +8,7 @@ import { text } from '../../core/i18n';
 import { isOfficeFile, openInOffice } from '../../core/open-document';
 import { useStore } from '../../core/store';
 import { attachmentRisk } from '@shared/attachments';
+import { ticketRoute } from '@shared/support';
 import { useTab } from '../../core/tab-context';
 import { bytes, dateLabel, dayKey, parseTs, timeLabel, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -23,6 +24,9 @@ import type { TextTask } from '../ai/textTools';
 import { openPdf } from '../pdf/open';
 import { createTask } from '../tasks/actions';
 import { createMeeting, invitation, openMeeting } from '../meet/api';
+import { ConvertEmailSheet } from '../support/ConvertEmailSheet';
+import { TicketChip, useConversionOffer } from '../support/ConvertSheet';
+import { emailToConvert, markTicket } from './ticketLinks';
 import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
 import { messageKey, seedMessage } from './localFirst';
 import { authFailed, folderName, headerDensity, plainText, securityVerdict } from './model';
@@ -126,8 +130,11 @@ export function MessageView(p: MessageViewProps) {
   const [ai, setAi] = useState<{ task: TextTask; title: string; lang?: string } | null>(null);
   const [source, setSource] = useState(false);
   const [linking, setLinking] = useState(false);
-  // Report phishing or junk, and recall (ENH-MAIL-03 DMO-SEC-02, DMO-CMP-10).
-  const [extra, setExtra] = useState<'phishing' | 'junk' | 'recall' | 'task' | null>(null);
+  // Report phishing or junk, recall (ENH-MAIL-03 DMO-SEC-02, DMO-CMP-10), and Convert to ticket (#298).
+  const [extra, setExtra] = useState<'phishing' | 'junk' | 'recall' | 'task' | 'ticket' | null>(null);
+  // Convert to ticket: for somebody with Support, where the server converts email and lets them (#298).
+  const supportApp = canOpen('support');
+  const ticketOffer = useConversionOffer('email', supportApp);
   const [contactGuess, setContactGuess] = useState<SignatureGuess | null>(null);
   const [receiptAnswered, setReceiptAnswered] = useState<string | null>(null);
   const [menu, setMenu] = useState<'top' | 'bottom' | 'move' | 'label' | 'translate' | 'states' | null>(null);
@@ -488,6 +495,15 @@ export function MessageView(p: MessageViewProps) {
   if (!m || !clean) return null;
 
   const fromCache = !!q.data?.offline;
+  // The ticket this email became (#298): its chip opens it, and the actions say View ticket instead of Convert.
+  const ticket = m.support_ticket ?? null;
+  const openTicket = supportApp && ticket ? () => navigate(ticketRoute(ticket.id)) : undefined;
+  const ticketItem = (): MenuItem | null =>
+    ticket && openTicket
+      ? { id: 'ticket', label: text('View ticket {ref}', { ref: ticket.reference }), icon: 'life-buoy', onSelect: openTicket }
+      : !ticket && ticketOffer === 'yes'
+        ? { id: 'ticket', label: text('Convert to ticket…'), description: text('A Support ticket from this email'), icon: 'life-buoy', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => setExtra('ticket') }
+        : null;
   const linkItem: LinkItem = { mailbox: ref.mailbox ? Number(ref.mailbox) : 0, folder: ref.folder, uid: String(ref.uid), subject: m.subject, from_name: m.from_name ?? undefined, from_email: m.from_email, received_at: m.created_at, ...(m.message_id ? { message_id: m.message_id } : {}) };
   // ☀ View in light / 🌙 View in dark (#287): while the app is dark, or this email is; remembered for the sender.
   const bodyDark = !!reading && reading.look.scheme !== 'light';
@@ -505,6 +521,8 @@ export function MessageView(p: MessageViewProps) {
     const keep: MenuItem[] = [];
     if (canOpen('calendar')) keep.push({ id: 'meeting', label: text('Reply with meeting'), description: text('A Calendar event with everyone on this email'), icon: 'calendar', disabled: p.offline, onSelect: () => navigate(meetingRoute(m, p.account?.email ?? null, messageLink(ref))) });
     if (canOpen('tasks')) keep.push({ id: 'task', label: text('Create task…'), description: text('With assignee, list and due date'), icon: 'list-todo', onSelect: () => setExtra('task') });
+    const toTicket = ticketItem();
+    if (toTicket) keep.push(toTicket);
     if (where === 'bottom' && canOpen('tasks')) keep.push({ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() });
     if (canOpen('tenders') || canOpen('crm')) keep.push({ id: 'link-record', label: text('Link to tender, customer or deal…'), icon: 'link', disabled: p.offline, reason: text('Available when you are back online.'), onSelect: () => setLinking(true) });
     if (canOpen('notes')) keep.push({ id: 'note', label: text('Save as note'), icon: 'file-text', onSelect: () => void saveNote() });
@@ -564,6 +582,7 @@ export function MessageView(p: MessageViewProps) {
         ...(canOpen('tasks') ? [{ id: 'remind', label: text('Remind me about this'), description: text('A task for tomorrow'), icon: 'bell', onSelect: () => void remind() }] : []),
         ...(p.stateMenu ? [{ id: 'flag', label: text('Flag, pin or snooze…'), icon: 'flag', onSelect: () => setMenu('states') }] : []),
         ...(p.localStore ? [{ id: 'important', label: m.is_important ? text('Not important') : text('Mark important'), icon: 'flag', onSelect: () => void act(m.is_important ? 'unimportant' : 'important') }] : []),
+        ...[ticketItem()].filter((x): x is MenuItem => x !== null),
       ],
     },
     {
@@ -626,6 +645,7 @@ export function MessageView(p: MessageViewProps) {
       {p.marks?.categories?.map((c) => <CategoryChip key={c.id} name={c.name} colour={c.colour} />)}
       {m.labels?.map((l) => <Chip key={l.id}>{l.name}</Chip>)}
       {canOpen('tenders') || canOpen('crm') ? <LinkedRecordChips item={linkItem} navigate={navigate} offline={p.offline} /> : null}
+      {ticket ? <TicketChip ticket={ticket} onOpen={openTicket} /> : null}
     </>
   );
   const moveSections: MenuSection[] = [
@@ -827,7 +847,19 @@ export function MessageView(p: MessageViewProps) {
         {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
         {m.team && ref.mailbox && m.conversation_key ? <TeamWork msgRef={ref} m={m} account={p.account} offline={p.offline} /> : null}
       </div>
-      {p.prefs.appsPane ? <AppsPane m={m} link={messageLink(ref)} context={context.data} offline={p.offline} navigate={navigate} onCreateTask={() => setExtra('task')} onSaveNote={() => void saveNote()} onClose={() => p.onPrefs({ appsPane: false })} /> : null}
+      {p.prefs.appsPane ? (
+        <AppsPane
+          m={m}
+          link={messageLink(ref)}
+          context={context.data}
+          offline={p.offline}
+          navigate={navigate}
+          onCreateTask={() => setExtra('task')}
+          onSaveNote={() => void saveNote()}
+          onConvertTicket={() => setExtra('ticket')}
+          onClose={() => p.onPrefs({ appsPane: false })}
+        />
+      ) : null}
       </div>
       <ActionBar style={toolbarStyle} onReply={reply} onArchive={() => void act('archive')} onDelete={() => void act('trash')} moreRef={bottomMore} onMore={() => setMenu('bottom')} onMove={() => setMenu('move')} onUnread={() => void act('unread')} onStar={() => void act(m.is_starred ? 'unstar' : 'star')} starred={m.is_starred} canMove={!!ref.mailbox || p.localStore} onOpenInWorkSuite={wsMail?.verified ? () => openFromMail(wsMail.link, 'open', undefined) : undefined} />
       {menu === 'top' ? <Menu sections={moreItems('top')} label={text('More')} anchor={topMore} prefer="bottom" align="end" onClose={() => setMenu(null)} /> : null}
@@ -873,6 +905,7 @@ export function MessageView(p: MessageViewProps) {
       {viewing !== null && framed.pictures[viewing] ? <MailImageViewer pictures={framed.pictures} start={viewing} onClose={() => setViewing(null)} /> : null}
       {immersive ? <ImmersiveReader subject={m.subject} from={m.from_name ? `${m.from_name} <${m.from_email}>` : m.from_email} plain={plainBody} prefs={p.prefs.immersive ?? {}} onPrefs={(v) => p.onPrefs({ immersive: v })} onClose={() => setImmersive(false)} /> : null}
       {extra === 'task' ? <TaskFromMessage message={m} msgRef={ref} onClose={() => setExtra(null)} /> : null}
+      {extra === 'ticket' ? <ConvertEmailSheet email={emailToConvert(ref, m, context.data?.sender?.company)} onClose={() => setExtra(null)} onDone={(t) => markTicket(qc, ref, t)} /> : null}
       {linking ? <LinkRecordDialog items={[linkItem]} onClose={() => setLinking(false)} /> : null}
     </article>
   );

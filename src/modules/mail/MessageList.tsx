@@ -431,11 +431,17 @@ const QUEUED_LABEL: Record<QueuedAction, string> = {
   send: 'Send queued',
 };
 
-/** Pin, flag, snooze and categories on a row: icons with names, never colour alone (DMO-ACC-03). */
+/** Pin, flag, snooze, categories and the message's Support ticket on a row: icons with names, never colour alone (DMO-ACC-03). */
 function StateMarks({ m }: { m: MessageRow }) {
   const due = m.flag?.due_at ? text('Due {when}', { when: rowStamp(m.flag.due_at) }) : text('Flagged');
   return (
     <>
+      {m.support_ticket ? (
+        <span data-ticket-marker title={text('Ticket {ref}', { ref: m.support_ticket.reference })} className="flex shrink-0 items-center gap-0.5 text-ink-3">
+          <Icon name="life-buoy" size={13} label={text('Ticket {ref}', { ref: m.support_ticket.reference })} />
+          <span aria-hidden className="font-mono text-[11px]">{m.support_ticket.reference}</span>
+        </span>
+      ) : null}
       {m.pinned ? <Icon name="pin" size={13} className="shrink-0 text-primary" label={text('Pinned')} /> : null}
       {m.snoozed_until ? <span className="flex shrink-0 items-center gap-1 text-[11.5px] font-semibold text-warning" title={text('Snoozed until {when}', { when: rowStamp(m.snoozed_until) })}><Icon name="snooze" size={13} />{rowStamp(m.snoozed_until)}</span> : null}
       {m.flag ? (m.flag.completed_at ? <Icon name="check" size={13} className="shrink-0 text-success" label={text('Flag complete')} /> : <Icon name="flag" size={13} className="shrink-0 fill-current text-danger" label={due} />) : null}

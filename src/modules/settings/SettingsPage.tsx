@@ -40,6 +40,7 @@ import { useGuest } from '../../core/session';
 import { LinksSettings } from './LinksSettings';
 import { CustomTimeoutRow, MAX_LOCK_MINUTES } from './CustomTimeout';
 import { LauncherSettings, ShortcutRecorder } from './LauncherSettings';
+import { SidebarSettings } from './SidebarSettings';
 import { updateLauncherPrefs, useLauncherPrefs } from '../../core/launcher-prefs';
 import { setOrgSelectionShared, useOrgPrefs } from '../../core/org-prefs';
 import { DEFAULT_LAUNCHER_SHORTCUT } from '@shared/launcher';
@@ -59,6 +60,8 @@ const SECTIONS = [
   { id: 'notifications', label: 'Notifications & calls', icon: 'bell', group: 'Account' },
   // The app launcher's look, apps, groups, order and shortcut (worksuite-desktop#201).
   { id: 'launcher', label: 'App launcher', icon: 'grid', group: 'Account' },
+  // The person's own sidebar: pinned apps, apps removed from it, Reset to default.
+  { id: 'sidebar', label: 'Sidebar', icon: 'sliders', group: 'Account' },
   { id: 'security', label: 'Security', icon: 'lock', group: 'Account' },
   { id: 'devices', label: 'Devices', icon: 'laptop', group: 'Account' },
   { id: 'desktop', label: 'Desktop', icon: 'monitor', group: 'Desktop' },
@@ -85,7 +88,7 @@ const SECTIONS = [
 ] as ReadonlyArray<{ id: string; label: string; icon: string; group: string }>;
 
 /** What a guest's Settings show: what applies to this computer and the Local Profile, nothing that needs an account. */
-const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'launcher', 'updates', 'update-diagnostics', 'local-profile', 'local-data', 'about']);
+const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'launcher', 'sidebar', 'updates', 'update-diagnostics', 'local-profile', 'local-data', 'about']);
 const LOCAL_SECTIONS: ReadonlySet<string> = new Set(['local-profile', 'local-data']);
 
 /**
@@ -152,6 +155,7 @@ function SettingsSections(_props: ModuleProps) {
           {section === 'preferences' ? <PreferencesSection prefs={prefs} /> : null}
           {section === 'notifications' ? <NotificationsSection prefs={prefs} /> : null}
           {section === 'launcher' ? <LauncherSettings /> : null}
+          {section === 'sidebar' ? <SidebarSettings /> : null}
           {section === 'security' ? <SecuritySection prefs={prefs} /> : null}
           {section === 'devices' ? <Devices /> : null}
           {section === 'desktop' ? <DesktopSection prefs={prefs} /> : null}

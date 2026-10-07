@@ -213,7 +213,7 @@ describe('the reading pane', () => {
     const thread = within(pane).getByRole('list', { name: 'Conversation' });
     const items = Array.from(thread.children).map((li) => (li.hasAttribute('data-new-since') ? 'divider' : li.getAttribute('data-message')));
     expect(items).toEqual(['1', '2', 'divider', '3']);
-    expect(within(thread).getByText('Internal')).toBeTruthy();
+    expect(within(thread).getByText('Internal note')).toBeTruthy();
     expect(within(thread).getByText('roshan-mac.png')).toBeTruthy();
     // Peeked: reading it is said once it has been shown for a moment.
     expect(calls('GET', '/api/support/v1/tickets/1284')[0]!.query).toEqual({ peek: 1 });

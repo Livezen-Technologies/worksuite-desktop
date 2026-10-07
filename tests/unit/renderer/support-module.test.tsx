@@ -107,7 +107,7 @@ describe('the Support module', () => {
     // The status, in its chip and in the properties beside the conversation (T20).
     expect(screen.getAllByText('Open')).toHaveLength(2);
     const thread = screen.getByRole('list', { name: 'Conversation' });
-    expect(within(thread).getByText('Internal')).toBeTruthy();
+    expect(within(thread).getByText('Internal note')).toBeTruthy();
     expect(vi.mocked(request)).toHaveBeenCalledWith('GET', '/api/support/v1/tickets/1284', expect.objectContaining({ query: { peek: 1 } }));
   });
 

@@ -1,5 +1,6 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
+import { ticketRoute } from '@shared/support';
 import { canOpen } from '../../core/access';
 import { apiGet, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
@@ -8,6 +9,8 @@ import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button } from '../../components/ui';
+import { K, conversionOffer, meta } from '../support/api';
+import { TicketChip, useConversionOffer } from '../support/ConvertSheet';
 import { plainText } from './model';
 import { crmActivity, findCrmRecord } from './quickSteps';
 import type { MessageContext, MessageDetail } from './types';
@@ -19,6 +22,11 @@ import type { MessageContext, MessageDetail } from './types';
  * ticket, a note. Each section shows only for someone who has that app, and
  * everything goes through WorkSuite's own APIs and permissions; there are no
  * Outlook add-in manifests (DMO-INT-02).
+ *
+ * The helpdesk ticket (#298): where Support converts email, Convert to ticket
+ * opens Support's sheet and the message is linked to its ticket, shown here
+ * once it is; a server from before that copies the text into a ticket of its
+ * own, as it always did; Support off for the company, nothing.
  */
 
 interface AccountDetail {
@@ -38,8 +46,32 @@ function Section({ title, icon, children }: { title: string; icon: string; child
   );
 }
 
-export function AppsPane({ m, link, context, offline, navigate, onCreateTask, onSaveNote, onClose }: { m: MessageDetail; link: string; context: MessageContext | null | undefined; offline: boolean; navigate: (route: string) => void; onCreateTask: () => void; onSaveNote: () => void; onClose: () => void }) {
+export function AppsPane({
+  m,
+  link,
+  context,
+  offline,
+  navigate,
+  onCreateTask,
+  onSaveNote,
+  onConvertTicket,
+  onClose,
+}: {
+  m: MessageDetail;
+  link: string;
+  context: MessageContext | null | undefined;
+  offline: boolean;
+  navigate: (route: string) => void;
+  onCreateTask: () => void;
+  onSaveNote: () => void;
+  /** Support's Convert to ticket sheet for this message (#298), where the server converts email. */
+  onConvertTicket?: () => void;
+  onClose: () => void;
+}) {
+  const qc = useQueryClient();
   const crm = canOpen('crm');
+  const support = canOpen('support');
+  const ticketOffer = useConversionOffer('email', support);
   const found = useQuery({
     queryKey: ['mail', 'apps', 'crm', m.from_email.toLowerCase()],
     queryFn: () => findCrmRecord(m.from_email),
@@ -71,12 +103,21 @@ export function AppsPane({ m, link, context, offline, navigate, onCreateTask, on
     if (!f) return;
     void run('crm', () => apiPost(`/api/crm/${f.kind === 'lead' ? 'leads' : 'accounts'}/${f.record.id}/activity`, crmActivity({ subject: m.subject, preview: plainText(m.body_html).slice(0, 500) }, link)), text('Logged in CRM.'));
   };
-  const ticket = () =>
+  const ticket = async () => {
+    // Asked again on the click: the desk read a moment late must not make an unlinked copy on a server that converts.
+    setBusy('ticket');
+    const desk = await qc.fetchQuery({ queryKey: K.meta, queryFn: ({ signal }) => meta(signal), staleTime: 5 * 60_000 }).catch(() => null);
+    setBusy(null);
+    const how = conversionOffer(desk, 'email');
+    if (how === 'yes' && onConvertTicket) return onConvertTicket();
+    if (how === 'no') return toast('info', text('Making tickets from email is not available to you.'));
     void run(
       'ticket',
       () => apiPost('/api/tickets', { subject: (m.subject || text('(no subject)')).slice(0, 255), requester_name: m.from_name || null, requester_email: m.from_email, body: `${plainText(m.body_html).slice(0, 20_000)}${link ? `\n\n${text('From the email: {link}', { link })}` : ''}` }),
       text('Helpdesk ticket raised.'),
     );
+  };
+  const linked = m.support_ticket ?? null;
   const tasks = context?.related?.tasks ?? [];
   const meetings = context?.related?.meetings ?? [];
   const open = (account.data?.deals ?? []).filter((d) => d.stage_kind === 'open');
@@ -157,11 +198,24 @@ export function AppsPane({ m, link, context, offline, navigate, onCreateTask, on
           </ul>
         </Section>
       ) : null}
-      <Section title={text('Helpdesk')} icon="life-buoy">
-        <Button size="sm" icon="plus" loading={busy === 'ticket'} disabled={offline} onClick={ticket}>
-          {text('Create a helpdesk ticket')}
-        </Button>
-      </Section>
+      {support && (linked || ticketOffer !== 'no') ? (
+        <Section title={text('Helpdesk')} icon="life-buoy">
+          {linked ? (
+            <div className="flex flex-wrap items-center gap-2 text-[12.5px] text-ink-3">
+              {text('This email is ticket')}
+              <TicketChip ticket={linked} onOpen={() => navigate(ticketRoute(linked.id))} />
+            </div>
+          ) : ticketOffer === 'yes' && onConvertTicket ? (
+            <Button size="sm" icon="life-buoy" disabled={offline} onClick={onConvertTicket}>
+              {text('Convert to ticket…')}
+            </Button>
+          ) : (
+            <Button size="sm" icon="plus" loading={busy === 'ticket'} disabled={offline} onClick={() => void ticket()}>
+              {text('Create a helpdesk ticket')}
+            </Button>
+          )}
+        </Section>
+      ) : null}
       {canOpen('notes') ? (
         <Section title={text('Notes')} icon="file-text">
           <Button size="sm" icon="plus" onClick={onSaveNote}>

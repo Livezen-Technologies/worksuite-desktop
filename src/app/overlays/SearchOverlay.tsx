@@ -22,7 +22,7 @@ import { AppTile } from '../../components/AppTile';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { extOf, kindOf } from '../../modules/files/api';
-import { articleSubtitle, searchArticles, searchTickets, ticketDeepLink, ticketInFront, ticketSubtitle } from '../../modules/support/palette';
+import { NEW_TICKET_ROUTE, articleSubtitle, searchArticles, searchTickets, ticketDeepLink, ticketInFront, ticketSubtitle, useMayCreateTicket } from '../../modules/support/palette';
 import { ticketIdOfLink, ticketRoute } from '@shared/support';
 import { Button, cx, DATA_TEXT, Kbd as KeyChip } from '../../components/ui';
 
@@ -157,6 +157,8 @@ function noteRecentSearch(user: string | number | null | undefined, q: string): 
 const CREATE: Array<{ id: string; label: string; app: string; route: string; icon: string }> = [
   { id: 'new-email', label: 'New mail', app: 'mail', route: '/mail?compose=1', icon: 'mail' },
   { id: 'new-task', label: 'New task', app: 'tasks', route: '/tasks?new=1', icon: 'tasks' },
+  // Support (worksuite-desktop#298): only for whoever may raise a ticket there (below).
+  { id: 'new-ticket', label: 'Create ticket', app: 'support', route: NEW_TICKET_ROUTE, icon: 'life-buoy' },
   { id: 'new-event', label: 'New event', app: 'calendar', route: '/calendar?new=1', icon: 'calendar' },
   { id: 'new-note', label: 'New note', app: 'notes', route: '/notes?new=1', icon: 'notebook' },
   { id: 'upload', label: 'Upload file', app: 'files', route: '/files?upload=1', icon: 'upload' },
@@ -298,7 +300,9 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
   const companies = companyList.identity === companyIdentity ? companyList.companies : [];
 
   const allowed = idsOf(apps);
-  const create = CREATE.filter((c) => allowed.has(c.app));
+  // Create ticket needs the desk's create right too (`GET meta`'s `can.create`); an older server's silence allows it.
+  const ticketsAllowed = useMayCreateTicket(supportOn);
+  const create = CREATE.filter((c) => allowed.has(c.app) && (c.app !== 'support' || ticketsAllowed));
 
   const openApp = (a: (typeof apps)[number]) => {
     noteRecentApp(user, a.id);
@@ -346,12 +350,12 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
         out.push({
           key: `new:${c.id}`,
           group: 'Actions',
-          title: c.label,
+          title: text(c.label),
           colour: appColour(c.app),
           icon: c.icon,
           action: true,
           hint: shortcuts[c.id] ? prettyAccelerator(shortcuts[c.id]!) : undefined,
-          kv: [['Creates', c.label.replace(/^New |^Upload /, '')]],
+          kv: [['Creates', c.label.replace(/^New |^Upload |^Create /, '')]],
           verb: `Run “${c.label}”`,
           run: () => navigate(c.route),
         });
@@ -740,7 +744,7 @@ export function SearchOverlay({ mode }: { mode: 'search' | 'palette' }) {
                           className="flex h-10 items-center gap-[9px] rounded-[10px] border border-line bg-well px-3 text-[12.5px] font-semibold text-ink-2 hover:border-primary/40 hover:text-ink"
                         >
                           <AppTile icon={c.icon} colour={appColour(c.app)} size={26} radius={8} iconSize={14} />
-                          {c.label}
+                          {text(c.label)}
                         </button>
                       ))}
                     </div>

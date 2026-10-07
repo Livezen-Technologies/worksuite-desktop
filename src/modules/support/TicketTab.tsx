@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
-import { SOURCE_LABEL, ticketIdOf, ticketRoute, type Message, type SupportSource, type TicketLink, type TicketShow } from '@shared/support';
+import { ticketIdOf, ticketRoute, type Message, type TicketLink, type TicketShow } from '@shared/support';
 import { ApiError } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage, isMac } from '../../core/bridge';
@@ -20,7 +20,7 @@ import { Assist, kbInsertText, type AssistTab } from './Assist';
 import { Composer, type ComposerMode, type InsertRequest } from './Composer';
 import { openAttachment } from './files';
 import { usePollInterval, useSupportLive } from './live';
-import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusChip } from './parts';
+import { ChannelIcon, OriginLink, PriorityChip, Reference, SlaChip, StatusChip, channelLabel } from './parts';
 import { Collision, useTicketPresence } from './presence';
 import { Properties } from './Properties';
 import { useMarkRead } from './reading';
@@ -233,8 +233,9 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
             <Reference className="font-semibold text-ink">{t.reference}</Reference>
             <ChannelIcon source={t.source} />
             <span className="min-w-0 truncate">
-              {[text(SOURCE_LABEL[t.source as SupportSource] ?? t.source), opened ? text('opened {when}', { when: `${stampDayLabel(opened, 'short')}, ${timeLabel(opened)}` }) : null, t.organization?.name].filter(Boolean).join(' · ')}
+              {[channelLabel(t.source), opened ? text('opened {when}', { when: `${stampDayLabel(opened, 'short')}, ${timeLabel(opened)}` }) : null, t.organization?.name].filter(Boolean).join(' · ')}
             </span>
+            <OriginLink origin={t.origin} />
             <Collision present={present} className="ml-auto" />
           </div>
           <h1 className="text-[19px] leading-snug font-extrabold text-ink">{t.subject}</h1>
@@ -333,7 +334,7 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
                       </Button>
                     </div>
                   ) : null}
-                  <Thread messages={messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} onOpenAttachment={(a) => void openAttachment(a)} />
+                  <Thread messages={messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} source={(hasEarlier ?? show.has_earlier) ? null : t.source} onOpenAttachment={(a) => void openAttachment(a)} />
                   {legacy ? <p className="pt-3 text-center text-[11.5px] text-ink-3">{text('Your WorkSuite server is older: read markers, files and who else is here show once it is updated.')}</p> : null}
                 </>
               ) : view === 'activity' ? (

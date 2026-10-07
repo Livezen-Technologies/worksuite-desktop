@@ -51,7 +51,17 @@ describe('Settings › App launcher', () => {
   it('switches recent apps, badges, the browser mark and names', () => {
     render(<LauncherSettings />);
     for (const label of ['Show recent apps', 'Show unread badges', 'Mark apps that open in the browser', 'Show app names']) fireEvent.click(screen.getByRole('switch', { name: label }));
-    expect(currentLauncherPrefs().toggles).toEqual({ recent: false, badges: false, browserMark: false, names: false });
+    expect(currentLauncherPrefs().toggles).toEqual({ recent: false, badges: false, browserMark: false, names: false, sidebar: true });
+  });
+
+  it('offers the categories in a sidebar only for full screen, and switches it', () => {
+    render(<LauncherSettings />);
+    expect(screen.queryByRole('switch', { name: 'Categories in a sidebar' })).toBeNull();
+    fireEvent.click(within(screen.getByRole('radiogroup', { name: 'Open as' })).getByRole('radio', { name: 'Full screen' }));
+    const sidebar = screen.getByRole('switch', { name: 'Categories in a sidebar' });
+    expect(sidebar.getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(sidebar);
+    expect(currentLauncherPrefs().toggles.sidebar).toBe(false);
   });
 
   it('hides and shows each app, and says how many are shown', () => {
