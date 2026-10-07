@@ -47,7 +47,7 @@ person who has to live with the change — what it does, and where it bites.
   - **The same column elsewhere:** Chat's conversation list, the Website chats table and the Files list (files 1.8.5,
     settings 1.26.3). In Chat, avatars sit a little further right to make room for it.
 - **How it was checked:** GitHub Actions still wasn't starting jobs for the repository, so it was verified locally:
-  typecheck, lint, the module version check, all unit tests and the production build.
+  typecheck, lint, the module version check, the security audit, all 5,812 unit tests and the production build.
 
 ## 0.2.198 — 2026-10-07
 
