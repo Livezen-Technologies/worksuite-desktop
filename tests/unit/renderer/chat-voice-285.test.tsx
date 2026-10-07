@@ -12,7 +12,7 @@ import type * as AttachmentViewer from '../../../src/modules/chat/AttachmentView
  * loudness, its length counting down, speed, seeking, Space and a screen reader's words — for Team Chat, website
  * chats and WhatsApp; a voice message decided by its type and never shown as a video, a file name or "Processing…";
  * sent with its length and loudness measured here, its bubble there at once with a ring on the play button; a dot
- * until it is first played.
+ * until it is first played; and tooltips that never stay on screen.
  */
 const net = vi.hoisted(() => ({ call: vi.fn(), post: vi.fn() }));
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(async () => ({})), apiPost: net.post, request: vi.fn() }));
@@ -23,6 +23,7 @@ vi.mock('../../../src/modules/chat/AttachmentViewer', async (orig) => ({ ...(awa
 
 import { ApiError } from '../../../src/core/api';
 import { app } from '../../../src/core/app-state';
+import { TOOLTIP_DELAY, wireTooltips } from '../../../src/core/tooltips';
 import { previewKind } from '../../../src/modules/chat/AttachmentViewer';
 import { TEAM_CAPS, WEBSITE_CAPS } from '../../../src/modules/chat/kit/caps';
 import { MessageList } from '../../../src/modules/chat/kit/MessageList';
@@ -467,5 +468,90 @@ describe('recording', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Cancel the voice message' }));
     expect(onCancel).toHaveBeenCalled();
     expect(onDone).not.toHaveBeenCalled();
+  });
+});
+
+describe('tooltips never stay on screen', () => {
+  let unwire: () => void = () => undefined;
+  const setUp = () => {
+    vi.useFakeTimers();
+    unwire = wireTooltips();
+    const { container, unmount } = render(
+      <div>
+        <button type="button" aria-label="Emoji" title="Emoji">
+          ☺
+        </button>
+        <span title="Only a title" />
+        <div data-testid="scroller" />
+      </div>,
+    );
+    return { button: container.querySelector('button')!, unmount };
+  };
+  const shown = () => document.querySelector('[role="tooltip"]');
+  afterEach(() => unwire());
+
+  it('shows the title as the app’s own tooltip, and the system’s cannot show as well', () => {
+    const { button } = setUp();
+    fireEvent.mouseOver(button, { clientX: 20, clientY: 30 });
+    expect(button.hasAttribute('title')).toBe(false);
+    act(() => void vi.advanceTimersByTime(TOOLTIP_DELAY));
+    expect(shown()!.textContent).toBe('Emoji');
+    fireEvent.mouseOut(button, { relatedTarget: document.body });
+    expect(shown()).toBeNull();
+    expect(button.getAttribute('title')).toBe('Emoji');
+  });
+
+  it('goes on a scroll, a click or a key, and stays gone while the pointer is still there', () => {
+    const { button } = setUp();
+    for (const go of [() => fireEvent.scroll(window), () => fireEvent.scroll(screen.getByTestId('scroller')), () => fireEvent.click(button), () => fireEvent.keyDown(document.body, { key: 'a' }), () => fireEvent.wheel(document.body)]) {
+      fireEvent.mouseOver(button);
+      act(() => void vi.advanceTimersByTime(TOOLTIP_DELAY));
+      expect(shown()).toBeTruthy();
+      go();
+      expect(shown()).toBeNull();
+      act(() => void vi.advanceTimersByTime(TOOLTIP_DELAY * 2));
+      expect(shown()).toBeNull();
+      fireEvent.mouseOut(button, { relatedTarget: document.body });
+    }
+  });
+
+  it('goes when the element leaves the page under the pointer', async () => {
+    const { button, unmount } = setUp();
+    fireEvent.mouseOver(button);
+    act(() => void vi.advanceTimersByTime(TOOLTIP_DELAY));
+    expect(shown()).toBeTruthy();
+    unmount();
+    await act(async () => undefined);
+    expect(shown()).toBeNull();
+  });
+
+  it('leaves text being edited exactly as it is', () => {
+    vi.useFakeTimers();
+    unwire = wireTooltips();
+    const { container } = render(
+      <div contentEditable suppressContentEditableWarning>
+        <a href="https://example.test" title="A link in a mail">
+          link
+        </a>
+      </div>,
+    );
+    const a = container.querySelector('a')!;
+    fireEvent.mouseOver(a);
+    act(() => void vi.advanceTimersByTime(TOOLTIP_DELAY));
+    expect(a.getAttribute('title')).toBe('A link in a mail');
+    expect(shown()).toBeNull();
+  });
+
+  it('goes when the window loses focus, and keeps an element named only by its title named', () => {
+    setUp();
+    const only = document.querySelector('span[title]')!;
+    fireEvent.mouseOver(only);
+    expect(only.getAttribute('aria-label')).toBe('Only a title');
+    act(() => void vi.advanceTimersByTime(TOOLTIP_DELAY));
+    expect(shown()).toBeTruthy();
+    fireEvent.blur(window);
+    expect(shown()).toBeNull();
+    expect(only.getAttribute('title')).toBe('Only a title');
+    expect(only.hasAttribute('aria-label')).toBe(false);
   });
 });
