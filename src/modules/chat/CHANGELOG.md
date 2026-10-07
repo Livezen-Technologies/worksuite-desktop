@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.62.0 — 2026-10-07
+
+**Changed**
+
+- Website chats › Live dashboard: the map follows the app theme — dark land, the card as its sea and a brighter-for-more accent scale in dark mode, also on Full map, the Live map window and the tray; places named only with the count in the dot, colliding names hidden until zoom or hover; the ≈ dashed ring shows on dark land; Wall mode brighter dots and larger names; legend 'darker/brighter = more' by theme (#284)
+
+**Fixed**
+
+- 'Waiting on us · longest' counts only chats waiting now and reads in days ('22 days', not 532:00:52) (#284)
+
 ## 1.61.0 — 2026-10-06
 
 **Changed**

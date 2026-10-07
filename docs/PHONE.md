@@ -23,6 +23,7 @@ Built now, in `src/modules/phone` (module `phone` 1.0.0) with its main-process s
 | Administer | A02 Extensions (+HR provisioning, CSV import/export), A03 secret shown once + QR, A04 servers & mappings, A05 editor & test, A06 trunks/gateways/SIMs/routes + tester, A07 inbound & IVR builder, A08 queues & ring groups, A09 short codes + config diff + apply, A12 settings & sync runs, cloud FreePBX wizard | EXT-01…10, SRV-01…08, TRK-01…05, IVR-01…04, DP-01…06, ADM-02/03, SYN-01…03, DEP-01/03/05 |
 | D01 | `CompactPhone.tsx` in an always-on-top `phone` window; global shortcuts Alt+Cmd/Ctrl+A/H/M | DEV-01 |
 | G-07 | `CallButton` / `placeCall` — Contacts' phone menu calls through the Phone with `contact_id` | SP-08 |
+| Status (#288) | `StatusMenu.tsx` (the pill and the shared `Menu` in W01's header), `status.ts` (one status with the top bar, calls' own, Do not disturb for a while, the switch), `lib/callstatus.ts`; the engine rings loud (Available), silent (Busy) or not here (Do not disturb, Away → 486, missed call to Calls and the bell) | FWD-05, NOT-01 |
 
 **Calls are placed the SRS way (WF-05):** `POST /api/voip/call` (the switch rings this phone, then the number); the
 engine answers its own ring-back (matched on this extension's own caller ID within 20 s), so every desktop call writes
@@ -41,7 +42,7 @@ this computer).
 |---|---|
 | The page CSP blocked `wss://pbx…` | `phone:prepare` — main asks `GET /api/voip/softphone` for `ws_uri`, keeps only its origin (`phone_servers`), adds it to `connect-src` via `cspSources().media`. A page never names an origin. First time: the main window restarts once (the policy is fixed per load). |
 | No renderer global shortcuts | `phone:shortcuts` — Alt+CmdOrCtrl+A/H/M held while registered, released on sign-out / app removed; presses arrive as `phone:shortcut` |
-| No renderer notifications | `phone:notify` — strict schema, `module: 'phone'`, `category: 'voip'`, link `/phone` or `/phone/calls` |
+| No renderer notifications | `phone:notify` — strict schema, `module: 'phone'`, `category: 'voip'`, link `/phone` or `/phone/calls`; `delivery: 'silent'` (Busy: no sound) or `'bell'` (turned away by Do not disturb or Away: the bell only, no banner) |
 | A compact always-on-top window | `WindowKind 'phone'` (360×640, pinnable) |
 | CSV export (downloads are blocked) | `files:saveText` also takes `.csv` (8 MB) |
 | Catalogue | `phone` app (no server slug, like the web's — G-13), sidebar *work*, deep links `worksuite://phone`, `phone/calls/:id`; `voip` notifications visible with Phone or Chat |
@@ -72,6 +73,7 @@ The desktop calls these; until they land the screens say so. Contract: [BACKEND.
 | G-14 | Medium | no org_id scoping | Reports pass `org_id` when the person has several companies |
 | G-17 | High | recordings read from local spool | A11 explains; ARI fetch is server work |
 | G-18 | Medium | no gateway adapters | A06 "Read status" calls `POST gateways/{id}/poll` |
+| #288 | Medium | no Busy/Away modes, DND end time or per-channel status on the switch; no end time on Chat's presence | Status works on this computer (Busy silent, DND/Away → 486); `PUT me/dnd` sends `dnd` plus `status`/`until`; the desktop ends a timed DND itself; Away's forwarding read from the "When busy" rule |
 
 Proposed new endpoints the desktop already uses: `me`, `me/dnd`, `me/caller-id`, `speed-dials`, `registrations`,
 `wrapup-codes`, `calls/{id}/wrapup`, `calls/{id}/events`, `voicemail/{id}/heard|forward`, `DELETE recordings/{id}`,
@@ -79,7 +81,8 @@ Proposed new endpoints the desktop already uses: `me`, `me/dnd`, `me/caller-id`,
 `gateways` (+`poll`), `sim-cards`, `sms`, `inbound-routes`, `ivr-flows`, `queues` (+`agents`), `ring-groups`,
 `mappings`, `extensions/{id}/provisioning|setup-email`, `extensions/import`, `extensions/provision-hr`,
 `PUT forwards/{id}`. Optional fields read when present: `ScreenPop`-linked `contact`/`linked` on history rows,
-`config.applied`/`pending`, `volume.heat`, `softphone.server`/`ice_expires_at`.
+`config.applied`/`pending`, `volume.heat`, `softphone.server`/`ice_expires_at`, `me.away_forward_to`, and
+`status`/`until` in the answer to `PUT me/dnd` (#288).
 
 ## 4. Not in this change
 

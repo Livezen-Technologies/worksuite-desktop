@@ -157,11 +157,12 @@ describe('L-02 · the full map zoomed to a country', () => {
     expect(within(screen.getByRole('group', { name: 'Zoom to' })).getByRole('button', { name: 'Sri Lanka' }).getAttribute('aria-pressed')).toBe('true');
     const away = within(within(mapCard()).getByRole('list', { name: 'Outside this view' })).getAllByRole('listitem').map((i) => i.textContent);
     expect(away).toContain('↖ India · 1 outside this view');
-    expect(within(mapCard()).getByText('Sri Lanka ≈ 1 · timezone only')).toBeTruthy();
-    expect(within(mapCard()).getByText('Colombo 3')).toBeTruthy();
-    expect(within(mapCard()).getByText('Kandy 1')).toBeTruthy();
-    // Past a region's zoom, Sri Lanka's 1:10m outline replaces the world's (MAP-09).
+    // Each place by its name alone, its count in its disc (#284); the country-only ring is the country's name.
     const svg = within(mapCard()).getByRole('img');
+    expect(within(svg).getByText('Sri Lanka')).toBeTruthy();
+    expect(within(svg).getByText('Colombo')).toBeTruthy();
+    expect(within(svg).getByText('Kandy')).toBeTruthy();
+    // Past a region's zoom, Sri Lanka's 1:10m outline replaces the world's (MAP-09).
     await waitFor(() => expect(svg.querySelector('[data-detail="LK"]')).toBeTruthy());
     // The busiest place is picked, with a dashed ring.
     expect(svg.querySelector('[data-place="Sri Lanka|Colombo|6.9|79.9"] [data-picked]')?.getAttribute('stroke-dasharray')).toBeTruthy();

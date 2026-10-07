@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-07
+
+**Added**
+
+- calls share one status with the top bar unless given their own; Busy rings silently, Do not disturb and Away send callers to voicemail or forwarding, the missed call kept in Calls and the bell (#288)
+
+**Changed**
+
+- the Phone's Status is a pill and the shared menu instead of the system dropdown — Available, Busy, Do not disturb and Away with dots and descriptions, Do not disturb for a set time with its end on the pill, and Call settings (#288)
+
 ## 1.0.0 — 2026-10-06
 
 **Added**

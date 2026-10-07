@@ -7,10 +7,88 @@ import { CountBadge, cx } from '../../components/ui';
 import { aiWidget, openAssistant, ui, useAiDisplay } from '../../core/ui';
 import { answerPreview, assistantSession, phaseLabel } from '../../modules/ai/session';
 import { aiNotice, AssistantBody, unreadLabel, useAssistantActivity } from './AiDock';
-import { AI_ASSISTANT_ATTR, aiMinimized, restoreAssistant } from './aiMinimize';
+import { AI_ASSISTANT_ATTR, AI_WORKSPACE_ATTR, aiMinimized, restoreAssistant } from './aiMinimize';
 
 /** Spread on the assistant's own surfaces: a press on one is using the assistant, not carrying on with work (#126). */
 const OWN = { [AI_ASSISTANT_ATTR]: '' };
+
+/** How far the launcher stands in from the workspace's right and bottom edges (Tailwind's 4). */
+export const LAUNCHER_GAP = 16;
+/** A bar along the bottom of the workspace whose buttons the launcher must never cover — Mail's reply and action bar (#287). */
+export const LAUNCHER_LIFT_ATTR = 'data-ai-launcher-lift';
+
+export interface Box {
+  left: number;
+  top: number;
+  right: number;
+  bottom: number;
+}
+
+/**
+ * The launcher's distance from the workspace's bottom edge (worksuite-desktop#287): 16px, or 8px clear above any bar
+ * marked `data-ai-launcher-lift` that runs under the corner it stands in — `width` wide (the button, Stop beside it,
+ * or a notice) and 48px tall. A bar elsewhere along the bottom leaves it where it is, and so does every other screen.
+ */
+export function launcherBottom(workspace: Box, bars: Box[], width = 48): number {
+  const left = workspace.right - LAUNCHER_GAP - width;
+  const right = workspace.right - LAUNCHER_GAP;
+  const top = workspace.bottom - LAUNCHER_GAP - 48;
+  let bottom = LAUNCHER_GAP;
+  for (const b of bars) {
+    if (b.right <= b.left || b.bottom <= b.top) continue;
+    if (b.right <= left || b.left >= right || b.bottom <= top || b.top >= workspace.bottom) continue;
+    bottom = Math.max(bottom, workspace.bottom - b.top + 8);
+  }
+  return Math.round(bottom);
+}
+
+/**
+ * `launcherBottom` kept up to date: measured when bars come and go (Mail opening a message), when the workspace or a
+ * bar changes size (the window, the reading pane), once a frame at most.
+ */
+export function useLauncherBottom(width: number, enabled = true): number {
+  const [bottom, setBottom] = useState(LAUNCHER_GAP);
+  useEffect(() => {
+    if (!enabled) return;
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame : (cb: () => void) => window.setTimeout(cb, 16);
+    const caf = typeof cancelAnimationFrame === 'function' ? cancelAnimationFrame : (id: number) => window.clearTimeout(id);
+    const watched = new Set<Element>();
+    let frame = 0;
+    const later = () => {
+      if (!frame) frame = raf(measure);
+    };
+    const resize = typeof ResizeObserver !== 'undefined' ? new ResizeObserver(later) : null;
+    function measure() {
+      frame = 0;
+      const workspace = document.querySelector(`[${AI_WORKSPACE_ATTR}]`);
+      const bars = Array.from(document.querySelectorAll(`[${LAUNCHER_LIFT_ATTR}]`)).filter((el) => el.getClientRects().length > 0);
+      for (const el of workspace ? [workspace, ...bars] : bars) {
+        if (!watched.has(el)) {
+          watched.add(el);
+          resize?.observe(el);
+        }
+      }
+      for (const el of watched) {
+        if (!el.isConnected) {
+          watched.delete(el);
+          resize?.unobserve(el);
+        }
+      }
+      setBottom(workspace && bars.length ? launcherBottom(workspace.getBoundingClientRect(), bars.map((b) => b.getBoundingClientRect()), width) : LAUNCHER_GAP);
+    }
+    measure();
+    const mutations = new MutationObserver(later);
+    mutations.observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['class', 'hidden'] });
+    window.addEventListener('resize', later);
+    return () => {
+      mutations.disconnect();
+      resize?.disconnect();
+      window.removeEventListener('resize', later);
+      if (frame) caf(frame);
+    };
+  }, [width, enabled]);
+  return enabled ? bottom : LAUNCHER_GAP;
+}
 
 /**
  * The floating AI widget (#61; Settings › AI Assistant › Display mode › Floating chat widget).
@@ -91,7 +169,8 @@ export function AiWidget() {
  * while it is minimised. While a question is on its way a ring turns round it and its tooltip says Thinking…; under
  * reduced motion the ring stands still and a dot says it instead. Done, the motion stops and the answer waits,
  * counted, with its preview above. Needs your input and a failure are still marks, never a motion that asks for
- * attention. Stop processing sits beside it while it works. It never opens the assistant by itself.
+ * attention. Stop processing sits beside it while it works. It never opens the assistant by itself. Where a bar of
+ * buttons runs under its corner (Mail's reply and action bar), it stands above it (#287).
  *
  * `always`: the widget's launcher, there whether or not anything is waiting. Otherwise it stands only while there is
  * something to wait for or to see.
@@ -107,6 +186,8 @@ function AiBubble({ always, buttonRef }: { always?: boolean; buttonRef?: Ref<HTM
     return () => observer.disconnect();
   }, []);
   const { busy, unread, phase, engine } = useAssistantActivity();
+  // Above Mail's reply and action bar, never over its buttons (#287); Stop beside it makes it wider while it works.
+  const bottom = useLauncherBottom(busy ? 96 : 48);
   const notice = useStore(aiNotice, (s) => s.kind);
   const failed = phase === 'failed';
   const waiting = phase === 'needsInput';
@@ -120,7 +201,7 @@ function AiBubble({ always, buttonRef }: { always?: boolean; buttonRef?: Ref<HTM
     else openAssistant();
   };
   return (
-    <div {...OWN} data-native-reserve-space className="pointer-events-none absolute right-4 bottom-4 z-20 flex flex-col items-end gap-2">
+    <div {...OWN} data-native-reserve-space data-launcher-bottom={bottom} style={bottom !== LAUNCHER_GAP ? { bottom } : undefined} className="pointer-events-none absolute right-4 bottom-4 z-20 flex flex-col items-end gap-2">
       <AiNotice />
       <div className="flex items-center gap-2">
         {busy ? (
@@ -183,9 +264,11 @@ export function AiNotice() {
   const canRetry = kind === 'failed' && !!entries.at(-1)?.retry;
   // Above the floating button; with the drawer and no button, in the corner on its own.
   const alone = display !== 'widget' && !minimized;
+  // On its own in the corner, it too stands above Mail's action bar (#287).
+  const bottom = useLauncherBottom(300, alone && shown);
   const action = 'h-7 shrink-0 rounded-[7px] px-2 text-[12px] font-semibold';
   return (
-    <div role="status" aria-live="polite" {...OWN} className={cx('pointer-events-none', alone && 'absolute right-4 bottom-4 z-20')}>
+    <div role="status" aria-live="polite" {...OWN} style={alone && bottom !== LAUNCHER_GAP ? { bottom } : undefined} className={cx('pointer-events-none', alone && 'absolute right-4 bottom-4 z-20')}>
       {shown ? (
         <div data-native-reserve-space data-testid="ai-notice" className="pointer-events-auto flex w-[300px] max-w-[calc(100vw-2rem)] flex-col gap-1.5 rounded-[12px] border border-line bg-surface px-3 py-2.5 text-[12.5px] text-ink shadow-[0_8px_20px_rgb(var(--ws-shadow-rgb)/.18)] motion-safe:animate-[ws-fade-in_.14s_ease-out]">
           <div className="flex items-center gap-2">

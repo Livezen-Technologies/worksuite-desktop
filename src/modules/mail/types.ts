@@ -281,6 +281,57 @@ export interface SyncAccount {
   bodies?: number;
   /** When the pass going now began (#228): "Syncing · headers 2 of 27 folders · started 11:20". */
   running_since?: string | null;
+  /**
+   * Folders the server leaves alone (#286): not mail (Calendar, Contacts, Tasks, Notes…) or turned off in
+   * Settings › Mail › Accounts › Folders. `folders` and `folders_done` count only the folders it downloads.
+   */
+  folders_skipped?: number;
+  /** The first full sync while it runs; null once it has finished. Absent from an older server (#286). */
+  first_sync?: FirstSync | null;
+}
+
+/** A first full sync under way (#286): "First sync · headers 12 of 21 folders · started 1:20 · about 4 min left". */
+export interface FirstSync {
+  started_at: string;
+  /** Folders it downloads, and those whose headers (their offline window) are all in. */
+  folders: number;
+  folders_done: number;
+  /** Headers held, and the messages in the folders' windows. */
+  have: number;
+  want: number;
+  /** Time left at the rate so far; null until there is a rate to go by. */
+  eta_seconds: number | null;
+}
+
+/** A folder's real state (#286): its window is in, filling, waiting for its turn, failing, or not synced at all. */
+export type FolderSyncState = 'up_to_date' | 'downloading' | 'waiting' | 'error' | 'skipped';
+
+/** One folder in Settings › Mail › Accounts › Folders (GET mailboxes/{id}/sync-folders, #286). */
+export interface SyncFolder {
+  path: string;
+  name: string;
+  role: string | null;
+  /** What it holds when it is not mail: calendar, contacts, tasks, notes, journal, rss, conversation_history, sync_issues, outbox. */
+  kind: string | null;
+  /** Downloaded by the server's sync. */
+  sync: boolean;
+  /** The owner's choice: true sync it, false skip it, null as its kind decides. */
+  choice: boolean | null;
+  state: FolderSyncState | string;
+  /** Headers held of its window, and the messages in it (null before the window is worked out). */
+  have: number;
+  want: number | null;
+  /** The folder's count on the server — the whole folder, not its window. */
+  total: number;
+  /** Why it is skipped (not_mail, off) or the error. */
+  reason: string | null;
+}
+
+export interface SyncFoldersAnswer {
+  mailbox: number;
+  folders: SyncFolder[];
+  /** This person may change which folders are synced. */
+  can_choose?: boolean;
 }
 
 /** Messages that could not be opened, grouped by why (GET mailboxes/{id}/sync-log, #228). */
@@ -333,6 +384,8 @@ export interface SyncRun {
   errors?: number;
   /** One entry per folder, in the order the run took them (#190). */
   details?: SyncRunFolder[];
+  /** A batch of the account's first sync, or an update after it (#286); absent or null from an older server. */
+  phase?: 'first_sync' | 'update' | null;
 }
 
 /** One folder's part in a sync run (GET mailboxes/{id}/sync-log, #190). */
@@ -340,8 +393,8 @@ export interface SyncRunFolder {
   folder: string;
   path: string;
   role: string | null;
-  /** ok · pending (more to fetch next run) · not_reached (out of time) · error. */
-  status: 'ok' | 'pending' | 'not_reached' | 'error' | string;
+  /** ok · pending (more to fetch next run) · not_reached (out of time) · error · skipped (#286). */
+  status: 'ok' | 'pending' | 'not_reached' | 'error' | 'skipped' | string;
   added: number;
   changed: number;
   removed: number;
@@ -349,6 +402,14 @@ export interface SyncRunFolder {
   error?: string;
   /** "unchanged": the server said nothing had moved. */
   note?: string;
+  /** Its state after the run (#286; absent from older servers, which the log then shows as before). */
+  state?: FolderSyncState | string;
+  /** Downloading N of M: headers held of its window, and the messages in it. */
+  have?: number;
+  want?: number | null;
+  /** Skipped because it is not mail (`not_mail`, with its `kind`) or was turned off (`off`). */
+  reason?: string;
+  kind?: string | null;
 }
 
 /** The All Accounts folders (DMO-ALL-01), in the order the pane lists them. */
@@ -378,10 +439,15 @@ export interface MailPrefs {
   zoom?: number;
   /** Group into conversations, per folder. */
   conversations?: Record<string, boolean>;
-  /** Reading (D10): open messages in tabs, previews in the list, dark mode for email content. */
+  /** Reading (D10): open messages in tabs, previews in the list. */
   tabs?: boolean;
   previews?: boolean;
+  /** The old on/off for dark email content (D10); `bodyTheme` decides now (#287). */
   darkBody?: boolean;
+  /** Show emails in dark mode (#287): Automatic (the default) follows the theme and each email; or always light, always dark. */
+  bodyTheme?: 'auto' | 'light' | 'dark';
+  /** The header's ☀ View in light / 🌙 View in dark, remembered per sender (lower-case address). */
+  bodyThemeSenders?: Record<string, 'light' | 'dark'>;
   /** Warn when an account has not synced successfully for this many minutes (DMO-SYN-06; 15…1440). */
   staleMinutes?: number;
   /** Show a desktop notification when an account's sync fails. */

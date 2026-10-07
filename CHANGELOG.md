@@ -5,6 +5,46 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.198 — 2026-10-07
+
+- **Emails in dark mode (#287, mail 1.23.0).** Each email is darkened in the way that suits it. Plain text takes the
+  app's colours, an email that has its own dark styles uses them, and other emails are darkened element by element,
+  keeping brand colours, buttons and pictures. An email that can't be darkened safely sits on a soft light card.
+  - **Settings › Mail › Appearance & reading › Show emails in dark mode:** Automatic, Always light or Always dark. A
+    ☀/🌙 button on an email keeps that sender light or dark.
+  - **Reading:** a centred 720px column. Quoted text and long signatures fold. A picture opens in an image viewer. A
+    phone number offers the WorkSuite phone, WhatsApp or another app, and never dials by itself.
+  - **Also:** a one-line breadcrumb, a tab's close button on hover, +N lists every open message, and the floating AI
+    button sits above the action bar instead of over it.
+- **Mail's first sync finishes, and says how far it has got (#286, mail 1.23.0).** While an account's first sync
+  runs, the folder pane, the status bar and Settings show "First sync · headers 12 of 21 folders · started 1:20 ·
+  about 4 min left". "Syncing headers…" stops once sync is done. The sync log groups folders by state: errors first,
+  then downloading, then waiting, with up-to-date and skipped folders folded.
+  - **Settings › Mail › Accounts › Folders** lists every folder's sync state with a switch to sync or skip it.
+    Folders that aren't mail (an Exchange account's Calendar or Contacts) are skipped unless you turn them on.
+  - **Where it bites:** the sync fix and the Folders screen need the server's Mail 1.17.0. On an older server the
+    Folders screen says the server doesn't report folder states yet, and the first-sync line doesn't show.
+- **One status for calls and chat (#288, phone 1.1.0).** The Phone's status is a pill with the same menu as the top
+  bar: Available, Busy, Do not disturb and Away, each with a dot and a line on what it does, plus Do not disturb for
+  a set time (its end shows on the pill) and Call settings. Calls follow the top bar's status unless you give them
+  their own.
+  - **What each does to a call:** Available rings. Busy rings silently. Do not disturb and Away send the caller to
+    voicemail or your forwarding, and the missed call stays in Calls and the bell.
+  - **Where it bites:** the switch has no Busy or Away of its own yet. It is told Away as Do not disturb, and Busy
+    as Available, so Busy's silent ringing works only while the desktop is open. The switch can't end a timed Do
+    not disturb either. The desktop ends it, so the desktop has to be running when the time is up.
+- **The live dashboard's map in dark mode (#284, chat 1.62.0, settings 1.26.2).** Website chats › Live dashboard's
+  map follows the app's theme: dark land, the card as its sea, and an accent that gets brighter where there are more
+  visitors. This applies on Full map, the Live map window and the tray too. Places show only their count in the dot,
+  and names that would overlap stay hidden until you zoom in or hover. Wall mode has brighter dots and larger names.
+  - **Fixed:** "Waiting on us · longest" counts only chats waiting now, and reads in days ("22 days", not
+    532:00:52).
+- **Missing from earlier notes:** the fixes merged in #268 went out from 0.2.191. They were the item links and page
+  cards in Chat (#266), the docked chat drawer, leave approvals, website chats, widget settings and the connection
+  indicator (#259–#265), and the sign-in that sometimes bounced back to the login screen (LOGIN-001).
+- **How it was checked:** GitHub Actions still wasn't starting jobs for the repository, so it was verified locally:
+  typecheck, lint, the module version check, all unit tests and the production build.
+
 ## 0.2.197 — 2026-10-06
 
 - **Social Media is in the launcher.** The app was hidden from everyone: it waited for the server to list the Social

@@ -218,7 +218,7 @@ function TrayDashboard({ s, desk }: { s: WebchatRingState; desk: ReturnType<type
           <DeskTiles d={d} last="reply" />
         </div>
         <div className="mx-2.5 h-[150px] overflow-hidden rounded-[10px] border border-line">
-          <LiveMap places={places} box={region} edges={false} label="Map of visitors on the site now" className="h-full w-full bg-[#f8f9fc] dark:bg-ground" />
+          <LiveMap places={places} box={region} edges={false} label="Map of visitors on the site now" className="h-full w-full" />
         </div>
         <div className="pt-1">
           <DeskHeading title="Needs you" n={needs.length} tone="red" />

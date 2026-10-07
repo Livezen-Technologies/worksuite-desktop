@@ -10,6 +10,7 @@ import { PK, phoneApi, useExtensions, useHistory, useMe, useRecordings, useScree
 import { placeCall } from '../dial';
 import { clock, dialable, isDialable, isMissed, isoDay, KEYPAD, otherParty, prettyNumber, talkTime, when } from '../lib/format';
 import { DirectionGlyph, Kpi, Mono, PageBody, PageHeader, Panel, PbxBanner, Pills } from '../parts';
+import { StatusMenu } from '../StatusMenu';
 import { liveLines } from '../softphone/engine';
 import { runPhone, usePhaseLabel, usePhoneState } from '../softphone/client';
 import InCall from './InCall';
@@ -33,7 +34,6 @@ function DialPad() {
   const status = useStatus();
   const phase = usePhoneState((s) => s.phase);
   const message = usePhoneState((s) => s.message);
-  const dnd = usePhoneState((s) => s.dnd);
   const chip = usePhaseLabel();
   const pbxDown = status.data ? !status.data.pbx.ok : false;
   const [number, setNumber] = useState('');
@@ -51,18 +51,7 @@ function DialPad() {
                 Compact phone
               </Button>
             ) : null}
-            <label className="flex items-center gap-2 text-[12.5px] text-ink-2">
-              Status
-              <select
-                aria-label="Phone status"
-                value={dnd ? 'dnd' : 'available'}
-                onChange={(e) => void setDnd(e.target.value === 'dnd')}
-                className="h-8 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink"
-              >
-                <option value="available">Available</option>
-                <option value="dnd">Do not disturb</option>
-              </select>
-            </label>
+            <StatusMenu />
           </>
         }
       />
@@ -82,17 +71,6 @@ function DialPad() {
       </PageBody>
     </div>
   );
-}
-
-/** DND on the switch when the server offers it (VOIP-FWD-05), and on this computer always. */
-async function setDnd(on: boolean) {
-  await runPhone({ cmd: 'dnd', on });
-  try {
-    await phoneApi.setDnd(on);
-    toast('success', on ? 'Do not disturb is on. Callers go to voicemail.' : 'Do not disturb is off.');
-  } catch {
-    toast('info', on ? 'Calls won’t ring on this computer. This server can’t set Do not disturb on the switch yet, so your other phones still ring.' : 'Calls ring on this computer again.');
-  }
 }
 
 /** Why the phone on this computer is not ready, said plainly with what to do. */

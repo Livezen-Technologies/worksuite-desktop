@@ -12,11 +12,12 @@ import { Select } from '../../components/Select';
 import { Button, Chip, Spinner, cx } from '../../components/ui';
 import { mailboxLetter } from './model';
 import { AccountAvatar } from './parts';
-import { accountName, accountState, includedIds, modeWords, runSync, syncAgo, syncAt, syncSummary, useSharedSync, type SyncSummary } from './sync';
+import { accountName, accountState, firstSyncLine, includedIds, modeWords, runSync, syncAgo, syncAt, syncSummary, useSharedSync, type SyncSummary } from './sync';
 import type { MailPrefs, Mailbox, SyncAccount } from './types';
 import type { MailBodiesProgress, MailStoreStats } from '@shared/types';
 import { SyncButton } from '../../components/SyncButton';
 import { SyncLog } from './SyncLog';
+import { SyncFolders } from './SyncFolders';
 import { useMailStats } from './api';
 
 /**
@@ -64,11 +65,13 @@ export function sizeWords(bytes: number): string {
  * An account's progress in one line (#190): "Headers 12 of 27 folders ·
  * Bodies 340 of 1,200 · 18.2 MB on this computer". Headers come from the
  * server's sync; bodies and size are what this computer has downloaded for
- * reading offline.
+ * reading offline. Folders the server leaves alone — not mail, or turned off
+ * — are counted apart (#286): "Headers: all 16 folders · 11 not synced".
  */
-export function progressWords(a: Pick<SyncAccount, 'folders' | 'folders_done' | 'mirror'> | null, bodies: MailBodiesProgress | undefined, bytes: number | undefined): string {
+export function progressWords(a: Pick<SyncAccount, 'folders' | 'folders_done' | 'mirror' | 'folders_skipped'> | null, bodies: MailBodiesProgress | undefined, bytes: number | undefined): string {
   const parts: string[] = [];
   if (a?.mirror && a.folders > 0) parts.push(a.folders_done >= a.folders ? text('Headers: all {n} folders', { n: a.folders.toLocaleString() }) : text('Headers {done} of {n} folders', { done: a.folders_done.toLocaleString(), n: a.folders.toLocaleString() }));
+  if (a?.mirror && a.folders_skipped) parts.push(text('{n} not synced', { n: a.folders_skipped.toLocaleString() }));
   if (bodies && bodies.wanted > 0) parts.push(text('Bodies {done} of {n}', { done: Math.min(bodies.stored, bodies.wanted).toLocaleString(), n: bodies.wanted.toLocaleString() }));
   else if (bodies && bodies.running) parts.push(text('Bodies: looking for new mail…'));
   if (bytes !== undefined) parts.push(text('{size} on this computer', { size: sizeWords(bytes) }));
@@ -86,9 +89,12 @@ function okWords(stamp: string | null): string {
   return `${syncAt(stamp)} (${syncAgo(stamp)})`;
 }
 
-/** "08:47 · Success", "In progress · 2 of 9 folders", "08:40 · Failed — Google sign-in expired". */
+/**
+ * "08:47 · Success", "In progress · 2 of 9 folders", "08:40 · Failed — Google sign-in expired" — and while the
+ * first sync runs, "First sync · headers 12 of 21 folders · started 1:20 · about 4 min left" (#286).
+ */
 export function attemptWords(a: SyncAccount): { label: string; tone: 'success' | 'danger' | 'muted' } {
-  if (a.running) return { label: a.folders ? text('In progress · {done} of {n} folders', { done: a.folders_done, n: a.folders }) : text('In progress'), tone: 'muted' };
+  if (a.running) return { label: firstSyncLine(a) ?? (a.folders ? text('In progress · {done} of {n} folders', { done: a.folders_done, n: a.folders }) : text('In progress')), tone: 'muted' };
   const at = a.last_attempt_at ? timeLabel(a.last_attempt_at) : '';
   if (a.last_result === 'failed') return { label: `${at} · ${text('Failed — {why}', { why: a.error ?? text('the sync did not finish') })}`, tone: 'danger' };
   if (a.last_result === 'partial') return { label: `${at} · ${text('Partly synced')}`, tone: 'muted' };
@@ -104,6 +110,7 @@ export function AccountsSync({ boxes, prefs, onPrefs, onRepair, onManage }: { bo
   // What this computer keeps, per account, kept current while it downloads (#190).
   const stats = useMailStats(true, true);
   const [log, setLog] = useState<Mailbox | null>(null);
+  const [folders, setFolders] = useState<Mailbox | null>(null);
   const summary = syncSummary(shared.status, { offline, running: shared.running, boxes, staleMinutes: prefs.staleMinutes });
   const accounts = shared.status?.accounts ?? null;
   const done = () => {
@@ -139,7 +146,7 @@ export function AccountsSync({ boxes, prefs, onPrefs, onRepair, onManage }: { bo
                   <span className="block truncate text-[14px] font-bold text-ink">{a ? accountName(a, b) : b.email}</span>
                   <span className="block truncate text-[12.5px] text-ink-3">{b.email}</span>
                 </span>
-                <Chip tone={failed ? 'danger' : running ? 'indigo' : a?.paused || behind ? 'warning' : 'success'}>{failed ? text('Sync failed') : running ? text('Syncing…') : a?.paused ? text('Paused') : behind ? text('Partly synced') : text('Up to date')}</Chip>
+                <Chip tone={failed ? 'danger' : running ? 'indigo' : a?.paused || behind ? 'warning' : 'success'}>{failed ? text('Sync failed') : running ? (a?.first_sync ? text('First sync') : text('Syncing…')) : a?.paused ? text('Paused') : behind ? text('Partly synced') : text('Up to date')}</Chip>
                 {failed && b.auth_state === 'problem' ? (
                   <Button variant="danger" onClick={() => onRepair(b)}>
                     {text('Sign in again')}
@@ -156,6 +163,8 @@ export function AccountsSync({ boxes, prefs, onPrefs, onRepair, onManage }: { bo
                   }}
                 />
                 <Button onClick={() => setLog(b)}>{text('View sync log')}</Button>
+                {/* Which folders are synced, and how far each has got — from a server that says (#286). */}
+                {a?.mirror && a.first_sync !== undefined ? <Button onClick={() => setFolders(b)}>{text('Folders')}</Button> : null}
                 {onManage ? <Button onClick={() => onManage(b)}>{text('Manage')}</Button> : null}
               </div>
               {progress ? (
@@ -207,6 +216,7 @@ export function AccountsSync({ boxes, prefs, onPrefs, onRepair, onManage }: { bo
         </div>
       </section>
       {log ? <SyncLog box={log} account={accounts?.find((x) => x.mailbox === log.id) ?? null} onClose={() => setLog(null)} onRepair={() => onRepair(log)} /> : null}
+      {folders ? <SyncFolders box={folders} onClose={() => setFolders(null)} /> : null}
     </section>
   );
 }

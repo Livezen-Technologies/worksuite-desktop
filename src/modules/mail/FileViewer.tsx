@@ -1,9 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo } from 'react';
-import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
-import { useStore } from '../../core/store';
 import { useTabTitle } from '../../core/tab-context';
 import { navigate } from '../../core/tabs';
 import { dateLabel, timeLabel } from '../../core/time';
@@ -11,9 +9,12 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, Chip, ErrorNote, FileBadge, Spinner } from '../../components/ui';
 import type { MailFileView } from '@shared/mail-files';
-import { useMailboxes } from './api';
+import { useMailPrefs, useMailboxes } from './api';
+import { readingBody } from './bodyLook';
 import { plainText } from './model';
+import { plainBodyText } from './readable';
 import { mailFrameDoc, sanitizeMailHtml, textToHtml } from './sanitize';
+import { useAppColours } from './useAppColours';
 
 /**
  * An .eml or .msg file, opened to read (ENH-MAIL-03 DMO-DAT-04): from the
@@ -43,7 +44,6 @@ export function fileReplyRoute(v: MailFileView, mode: 'reply' | 'reply_all' | 'f
 }
 
 export function MailFileViewer({ handle }: { handle: string }) {
-  const darkTheme = useStore(app, (s) => s.resolvedTheme === 'dark');
   const boxes = useMailboxes();
   const me = (boxes.data?.mailboxes ?? []).find((b) => b.is_default)?.email ?? null;
   const q = useQuery({ queryKey: ['mail', 'file', handle], queryFn: () => call('mailfile:view', { handle }), retry: false, staleTime: Infinity });
@@ -51,10 +51,18 @@ export function MailFileViewer({ handle }: { handle: string }) {
   useTabTitle(v?.subject || text('Email file'));
   useEffect(() => () => void call('mailfile:close', { handle }).catch(() => undefined), [handle]);
   const clean = useMemo(() => (v ? sanitizeMailHtml(v.html || textToHtml(v.text)) : null), [v]);
+  // Drawn as a message in Mail is (#287): readable, and dark with the theme as Show emails in dark mode says.
+  const colours = useAppColours();
+  const { prefs } = useMailPrefs();
+  const sender = (v?.from && prefs.bodyThemeSenders?.[v.from.email.toLowerCase()]) || null;
+  const reading = useMemo(
+    () => (v && clean ? readingBody({ raw: v.html || '', html: clean.html, styles: clean.styles, remoteImages: clean.remoteImages, plain: plainBodyText(clean.html), appDark: colours.appDark, setting: prefs.bodyTheme ?? 'auto', sender, light: colours.light, dark: colours.dark }) : null),
+    [v, clean, colours, prefs.bodyTheme, sender],
+  );
 
   if (q.isLoading) return <Spinner />;
   if (q.error) return <div className="p-6"><ErrorNote error={q.error} /></div>;
-  if (!v || !clean) return null;
+  if (!v || !clean || !reading) return null;
   const body = v.text || plainText(clean.html);
   const save = (index: number) => void call('mailfile:saveAttachment', { handle, index }).then((ok) => (ok ? toast('success', text('Saved.')) : undefined), (e) => toast('error', errorMessage(e)));
 
@@ -83,7 +91,7 @@ export function MailFileViewer({ handle }: { handle: string }) {
         </div>
         {clean.blockedImages > 0 ? <p className="mt-2 text-[12px] text-ink-3">{text(clean.blockedImages === 1 ? '1 remote image was blocked to protect your privacy.' : '{n} remote images were blocked to protect your privacy.', { n: clean.blockedImages })}</p> : null}
       </header>
-      <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(clean.html, 100, false)} className={`mx-5 mt-3 min-h-[120px] flex-1 rounded-[8px] border-0 bg-white ${darkTheme ? 'p-2' : ''}`} />
+      <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(reading.html, 100, reading.frame)} style={{ colorScheme: reading.look.scheme === 'light' ? 'light' : 'dark' }} className="mx-5 mt-3 min-h-[120px] flex-1 border-0 bg-surface" />
       {v.attachments.length ? (
         <div className="flex max-h-[30%] shrink-0 flex-col gap-2 overflow-y-auto border-t border-line px-6 py-3 scroll-thin">
           <p className="text-[12px] text-ink-3">Forwarding from a file sends the text only — save an attachment first to send it on.</p>

@@ -779,6 +779,59 @@ html[data-contrast='more'] :focus-visible {
   [class~="hover:border-[#3B4E85]"]:hover
 ) { border-color: var(--ws-line); }
 
+/*
+ * The Live dashboard's map (src/modules/chat/website/live; worksuite-desktop#284), on the dashboard, Full map, Wall
+ * mode, the Live map window and the tray: the sea, the land, the borders, the scale a country is shaded on by how many
+ * visitors are there (few → many), the names and the outline round them, the halo a marker sits in (its disc and rim)
+ * and the dashed ring of a country-only place, and the five states as the map draws them — each state 3:1 against the
+ * halo, each name 4.5:1 against the land, the sea and its outline. Variables, so switching theme repaints the map at
+ * once. On dark the sea is the card the map sits in, the land a step above it, and the scale brightens for more.
+ */
+:root {
+  --map-ocean: #eef1f8;
+  --map-land: #ffffff;
+  --map-border: rgba(18, 22, 51, 0.12);
+  --map-shade-1: #dce1ff;
+  --map-shade-2: #b5c3fe;
+  --map-shade-3: #90a3fa;
+  --map-shade-4: #6e83f5;
+  --map-shade-5: #4f5fef;
+  --map-label: #121633;
+  --map-halo: #ffffff;
+  --map-approx: #5b6275;
+  --map-browsing: #7385e6;
+  --map-chatting: #273498;
+  --map-waiting: #b3741c;
+  --map-at-risk: #c2392d;
+  --map-on-call: #2f9e67;
+}
+[data-theme='dark'] {
+  --map-ocean: var(--ws-surface);
+  --map-land: #1e2552;
+  --map-border: rgba(255, 255, 255, 0.08);
+  --map-shade-1: #2c3780;
+  --map-shade-2: #3a469e;
+  --map-shade-3: #4855bd;
+  --map-shade-4: #5766de;
+  --map-shade-5: #6676ff;
+  --map-label: #e6e8f5;
+  --map-halo: #0c1029;
+  --map-approx: #aab3d9;
+  --map-browsing: #a5b3ff;
+  --map-chatting: #5c7cfa;
+  --map-waiting: #f0a64a;
+  --map-at-risk: #ff6b5e;
+  --map-on-call: #43b581;
+}
+/* Wall mode (MAP-UI-03): the same dark map, its dots a step brighter for a screen across a room. */
+[data-theme='dark'] [data-map-wall] {
+  --map-browsing: #b7c5ff;
+  --map-chatting: #6f8bff;
+  --map-waiting: #ffb95e;
+  --map-at-risk: #ff7a6c;
+  --map-on-call: #4fd08f;
+}
+
 /* Sinhala and Tamil glyphs and combining marks use bundled fonts, including while offline. */
 html:lang(si) { --font-sans: 'Noto Sans Sinhala', 'Plus Jakarta Sans Variable', system-ui, sans-serif; }
 html:lang(ta) { --font-sans: 'Noto Sans Tamil', 'Plus Jakarta Sans Variable', system-ui, sans-serif; }

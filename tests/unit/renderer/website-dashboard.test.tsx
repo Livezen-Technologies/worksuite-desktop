@@ -214,12 +214,14 @@ describe('the map', () => {
     expect(within(map()).getByText(/^City dots come from your CDN or the server's GeoIP database\./)).toBeTruthy();
     // The timezone-only visitor is a dashed ring on their country, never a city: Colombo's place has five on it.
     const svg = within(map()).getByRole('img');
-    expect(svg.querySelector('[data-place="Sri Lanka|≈"] circle')?.getAttribute('stroke-dasharray')).toBeTruthy();
+    expect(svg.querySelector('[data-place="Sri Lanka|≈"] [data-approx]')?.getAttribute('stroke-dasharray')).toBeTruthy();
     // At world scale Colombo, Kandy and Galle would overlap: one marker for Sri Lanka, its ring an arc per state, worst first.
     const arcs = (key: string) => [...svg.querySelectorAll(`[data-place="${key}"] [data-arc]`)].map((x) => x.getAttribute('data-arc'));
     const colombo = 'Sri Lanka|Colombo|6.9|79.9';
     expect(arcs(`${colombo}||Sri Lanka|Kandy|7.3|80.6||Sri Lanka|Galle|6|80.2`)).toEqual(['at_risk', 'waiting', 'on_call', 'chatting', 'browsing']);
-    expect(within(map()).getByText('Sri Lanka 5')).toBeTruthy();
+    // Named, and only named: the count is in the disc (#284); the country-only ring beside it is not named twice.
+    expect(within(svg).getAllByText('Sri Lanka')).toHaveLength(1);
+    expect(within(svg).queryByText(/Sri Lanka \d|≈/)).toBeNull();
     // Zooms: the world, the region most of them are in, and their country.
     expect(within(within(map()).getByRole('group', { name: 'Zoom to' })).getAllByRole('button').map((b) => b.textContent)).toEqual(['World', 'Asia', 'Sri Lanka']);
     fireEvent.click(within(map()).getByRole('button', { name: 'Sri Lanka' }));
@@ -230,7 +232,7 @@ describe('the map', () => {
     expect(away).toHaveLength(3);
     // Close in, they part: Colombo has somebody waiting, somebody in a chat and somebody browsing.
     expect(arcs(colombo)).toEqual(['waiting', 'chatting', 'browsing']);
-    expect(within(map()).getByText('Colombo 3')).toBeTruthy();
+    expect(within(within(map()).getByRole('img')).getByText('Colombo')).toBeTruthy();
     fireEvent.click(within(map()).getByRole('button', { name: 'Zoom out' }));
     expect(within(map()).getByRole('button', { name: 'Sri Lanka' }).getAttribute('aria-pressed')).toBe('false');
   });

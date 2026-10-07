@@ -4,6 +4,7 @@ import { call, hasDesktop } from '../../../core/bridge';
 import { createStore, useStore, type Store } from '../../../core/store';
 import { playOnce, playTone, ringVolume } from '../../calls/tones';
 import { phoneApi, type ScreenPop, type SoftphoneCredentials } from '../api';
+import { CALL_STATUS, ringOf, type CallStatus } from '../lib/callstatus';
 import { dialable, isDialable } from '../lib/format';
 import { mos as mosOf, qualityLabel, sampleFromStats, type QualityLabel } from '../lib/mos';
 
@@ -91,7 +92,12 @@ export interface PhoneState {
   lines: Line[];
   /** The line the in-call screen shows. */
   focused: string | null;
-  /** Not answering on this computer (DND here; the switch's own DND is the server's). */
+  /**
+   * The status calls are in (worksuite-desktop#288), handed in by PhoneHost from the status menu and the WorkSuite
+   * status: Available rings, Busy rings without a sound, Do not disturb and Away do not ring here.
+   */
+  status: CallStatus;
+  /** Not answering on this computer (Do not disturb or Away here; the switch's own is the server's). */
   dnd: boolean;
   media: MediaChoice;
   /** Calls missed on this computer since it started (cleared when Recents is opened). */
@@ -102,7 +108,6 @@ export interface PhoneState {
 }
 
 const MEDIA_KEY = 'ws.phone.media';
-const DND_KEY = 'ws.phone.dnd';
 
 function readMedia(): MediaChoice {
   try {
@@ -110,14 +115,6 @@ function readMedia(): MediaChoice {
     return { mic: typeof v.mic === 'string' ? v.mic : '', speaker: typeof v.speaker === 'string' ? v.speaker : '', ringer: typeof v.ringer === 'string' ? v.ringer : '' };
   } catch {
     return { mic: '', speaker: '', ringer: '' };
-  }
-}
-
-function readDnd(): boolean {
-  try {
-    return localStorage.getItem(DND_KEY) === '1';
-  } catch {
-    return false;
   }
 }
 
@@ -130,6 +127,7 @@ export const INITIAL: PhoneState = {
   server: null,
   lines: [],
   focused: null,
+  status: 'available',
   dnd: false,
   media: { mic: '', speaker: '', ringer: '' },
   missed: [],
@@ -155,7 +153,6 @@ export type Command =
   | { cmd: 'record'; id?: string; action: 'pause' | 'resume' | 'start' | 'stop' }
   | { cmd: 'focus'; id: string }
   | { cmd: 'note'; id: string; text: string }
-  | { cmd: 'dnd'; on: boolean }
   | { cmd: 'media'; patch: Partial<MediaChoice> }
   | { cmd: 'dismissEnded' }
   | { cmd: 'clearMissed' }
@@ -212,8 +209,11 @@ export class PhoneEngine {
   private attempt = 0;
   private wanted = false;
   private onCspViolation: ((e: SecurityPolicyViolationEvent) => void) | null = null;
-  /** Hooks the host fills in: OS notifications and the global shortcuts (main process). */
-  notify: (n: { kind: 'incoming' | 'missed'; id: string; title: string; body: string }) => void = () => undefined;
+  /**
+   * Hooks the host fills in: OS notifications and the global shortcuts (main process). A notification is a banner
+   * with the app's sound, a `silent` banner (Busy), or only an entry in the bell (a call turned away by Do not disturb).
+   */
+  notify: (n: { kind: 'incoming' | 'missed'; id: string; title: string; body: string; delivery?: 'silent' | 'bell' }) => void = () => undefined;
   shortcuts: (on: boolean) => void = () => undefined;
 
   get state(): PhoneState {
@@ -241,7 +241,7 @@ export class PhoneEngine {
   async start(): Promise<void> {
     if (this.wanted && this.ua) return;
     this.wanted = true;
-    this.patch({ phase: 'starting', message: null, media: readMedia(), dnd: readDnd() });
+    this.patch({ phase: 'starting', message: null, media: readMedia() });
     let creds: SoftphoneCredentials;
     try {
       creds = await phoneApi.softphone();
@@ -394,7 +394,8 @@ export class PhoneEngine {
     this.creds = null;
     if (this.onCspViolation && typeof document !== 'undefined') document.removeEventListener('securitypolicyviolation', this.onCspViolation);
     this.onCspViolation = null;
-    this.patch({ ...INITIAL, phase: 'stopped' });
+    // The status is PhoneHost's to set: kept, so a stop that finishes after the next start does not undo it.
+    this.patch((s) => ({ ...INITIAL, phase: 'stopped', status: s.status, dnd: s.dnd }));
   }
 
   async retry(): Promise<void> {
@@ -428,13 +429,20 @@ export class PhoneEngine {
       return;
     }
     const busy = this.state.lines.some((l) => l.state === 'connected' || l.state === 'ringing');
-    // Do not disturb here, or locked: the caller goes where the switch sends a busy line (voicemail, forwarding).
-    if (this.state.dnd || this.state.locked) {
+    const status = this.state.status;
+    const ring = ringOf(status);
+    // Do not disturb or Away here, or locked: the caller goes where the switch sends a busy line — voicemail, the next
+    // person in the queue or ring group, the "When busy" forwarding. Still a missed call, in Calls; with Do not disturb
+    // or Away it goes to the bell without a banner, since nothing is to pop up while they asked not to be disturbed.
+    if (ring === 'off' || this.state.locked) {
       void inv.reject({ statusCode: 486 }).catch(() => undefined);
       this.patch((s) => ({ missed: [{ remote, name, at: Date.now() }, ...s.missed].slice(0, 50) }));
       if (this.state.locked) this.notify({ kind: 'missed', id: `phone-missed:${id}`, title: 'Missed call while WorkSuite was locked', body: name ?? remote });
+      else this.notify({ kind: 'missed', id: `phone-missed:${id}`, title: `Missed call from ${name ?? remote}`, body: [remote, via, `${CALL_STATUS[status].label}: ${status === 'away' ? 'sent to your forwarding or voicemail' : 'sent to voicemail'}`].filter(Boolean).join(' · '), delivery: 'bell' });
       return;
     }
+    // Busy: it rings on screen only — no ring tone, a silent banner.
+    const quiet = ring === 'quiet' ? ({ delivery: 'silent' } as const) : {};
     this.sessions.set(id, inv);
     this.add({ id, direction: 'inbound', remote, remoteName: name, via, state: 'ringing' });
     this.watch(id, inv);
@@ -443,7 +451,7 @@ export class PhoneEngine {
         const reason = cancel.request.getHeader('Reason');
         if (!answeredElsewhere(reason)) {
           this.patch((s) => ({ missed: [{ remote, name, at: Date.now() }, ...s.missed].slice(0, 50) }));
-          this.notify({ kind: 'missed', id: `phone-missed:${id}`, title: `Missed call from ${name ?? remote}`, body: via ? `${remote} · ${via}` : remote });
+          this.notify({ kind: 'missed', id: `phone-missed:${id}`, title: `Missed call from ${name ?? remote}`, body: via ? `${remote} · ${via}` : remote, ...quiet });
         }
       },
     };
@@ -452,7 +460,7 @@ export class PhoneEngine {
       (ctx) => this.patchLine(id, { context: ctx, remoteName: this.line(id)?.remoteName ?? ctx.contact?.name ?? ctx.account?.name ?? ctx.lead?.name ?? null }),
       () => undefined,
     );
-    this.notify({ kind: 'incoming', id: `phone-ring:${id}`, title: `Incoming call from ${name ?? remote}`, body: via ? `${remote} · ${via}` : remote });
+    this.notify({ kind: 'incoming', id: `phone-ring:${id}`, title: `Incoming call from ${name ?? remote}`, body: via ? `${remote} · ${via}` : remote, ...quiet });
     this.updateRinging();
   }
 
@@ -576,10 +584,12 @@ export class PhoneEngine {
     const s = this.state;
     const ringing = s.lines.some((l) => l.state === 'ringing');
     const talking = s.lines.some((l) => l.state === 'connected');
-    if (ringing && !talking) {
+    // Out loud only while Available: Busy rings on screen alone, without the ring tone or the call-waiting beep.
+    const loud = ringOf(s.status) === 'loud';
+    if (ringing && !talking && loud) {
       if (!this.ring) this.ring = playTone('ring', ringVolume());
     } else this.stopRing();
-    if (ringing && talking) {
+    if (ringing && talking && loud) {
       // Call waiting (VOIP-CTL-05): a short beep in the ear, not the ringer over the conversation.
       if (!this.waitingBeep) {
         playOnce('hand', Math.min(0.5, ringVolume()));
@@ -715,13 +725,19 @@ export class PhoneEngine {
     }
   }
 
+  /**
+   * How calls reach this computer (status.ts keeps it, PhoneHost hands it in). A call ringing now goes quiet unless
+   * the status is Available, and stays on screen to be answered or turned away by hand.
+   */
+  setStatus(status: CallStatus): void {
+    if (this.state.status === status) return;
+    this.patch({ status, dnd: ringOf(status) === 'off' });
+    this.updateRinging();
+  }
+
+  /** Do not disturb on this computer, or Available: the status's two ends. */
   setDnd(on: boolean): void {
-    try {
-      localStorage.setItem(DND_KEY, on ? '1' : '0');
-    } catch {
-      /* this session only */
-    }
-    this.patch({ dnd: on });
+    this.setStatus(on ? 'dnd' : 'available');
   }
 
   /* ==================================================================== *
@@ -1082,9 +1098,6 @@ export class PhoneEngine {
         return { ok: true };
       case 'note':
         this.setNote(c.id, c.text);
-        return { ok: true };
-      case 'dnd':
-        this.setDnd(c.on);
         return { ok: true };
       case 'media':
         this.setMedia(c.patch);

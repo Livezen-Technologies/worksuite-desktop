@@ -3,7 +3,7 @@ import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { canOpen } from '../../core/access';
 import { apiGet, apiGetMeta, apiPost, withMailbox } from '../../core/api';
 import { app } from '../../core/app-state';
-import { call, errorMessage } from '../../core/bridge';
+import { call, errorMessage, on } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { isOfficeFile, openInOffice } from '../../core/open-document';
 import { useStore } from '../../core/store';
@@ -26,7 +26,12 @@ import { createMeeting, invitation, openMeeting } from '../meet/api';
 import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
 import { messageKey, seedMessage } from './localFirst';
 import { authFailed, folderName, headerDensity, plainText, securityVerdict } from './model';
-import { blockedImageUrls, escapeHtml, highlightText, isDesignedMail, mailFrameDoc, sanitizeMailHtml, withLoadedImages, withProxiedImages } from './sanitize';
+import { blockedImageUrls, escapeHtml, highlightText, mailFrameDoc, sanitizeMailHtml, withLoadedImages, withProxiedImages } from './sanitize';
+import { readingBody, withSenderTheme } from './bodyLook';
+import { linkPictures, parsePictureLink, plainBodyText } from './readable';
+import { useAppColours } from './useAppColours';
+import { MailImageViewer } from './ImageViewer';
+import type { MailLinkClick } from '@shared/mail-files';
 import { emailDomain, imageVerdict, isJunkFolder, ownDomains, readableName, trustedBy, withTrusted } from './images';
 import { ImageNotice } from './ImageNotice';
 import { attachmentKind } from '@shared/mail-media';
@@ -136,6 +141,8 @@ export function MessageView(p: MessageViewProps) {
   const translateBtn = useRef<HTMLButtonElement>(null);
   // The header (#212): narrow under 560px of pane; a 48px bar once scrolled away.
   const [narrow, measureColumn] = useNarrow(560);
+  // The toolbar too tight for the folder's name beside its buttons: just ← (#287).
+  const [tightBar, measureBar] = useNarrow(720);
   const scroller = useRef<HTMLDivElement>(null);
   const headerBox = useRef<HTMLDivElement>(null);
   const [collapsed, setCollapsed] = useState(false);
@@ -153,7 +160,8 @@ export function MessageView(p: MessageViewProps) {
   };
   const me =useStore(app, (s) => s.bootstrap?.user ?? null);
   const origin = useStore(app, (s) => s.auth?.server?.origin ?? '');
-  const darkTheme = useStore(app, (s) => s.resolvedTheme === 'dark');
+  // The app's colours, light and dark, read again when the theme or the colour profile changes (#287).
+  const colours = useAppColours();
   // Mark as read (DMO-INB-12): when opened (the server does it), after N seconds, when moving on, or never.
   const markRead = p.prefs.markRead ?? 'open';
   // Retry runs the whole lookup at the server — by Message-ID in this folder, then the account's others — not the same request (#209).
@@ -197,7 +205,21 @@ export function MessageView(p: MessageViewProps) {
   const plainOn = plainAsked ?? plainSender;
   const plainBody = useMemo(() => (clean ? plainText(clean.html) : ''), [clean]);
   const [immersive, setImmersive] = useState(false);
-  const found = useMemo(() => highlightText(plainOn ? `<div style="white-space:pre-wrap">${escapeHtml(plainBody)}</div>` : (clean?.html ?? ''), find ?? ''), [clean, find, plainOn, plainBody]);
+  /*
+   * Read comfortably, and dark when the app is (#287): plain text as paragraphs with its links, quoted replies and
+   * long signatures folded, and the look decided for this email — Settings › Mail › Appearance & reading › Show emails
+   * in dark mode, or the sender's ☀ / 🌙 in the header.
+   */
+  const bodySetting = p.prefs.bodyTheme ?? 'auto';
+  const senderTheme = (m && p.prefs.bodyThemeSenders?.[m.from_email.toLowerCase()]) || null;
+  const reading = useMemo(
+    () =>
+      m && clean
+        ? readingBody({ raw: m.body_html, html: clean.html, styles: clean.styles, remoteImages: clean.remoteImages, plain: plainOn ? plainBody : plainBodyText(clean.html), appDark: colours.appDark, setting: bodySetting, sender: senderTheme, light: colours.light, dark: colours.dark })
+        : null,
+    [m, clean, plainOn, plainBody, colours, bodySetting, senderTheme],
+  );
+  const found = useMemo(() => highlightText(reading?.html ?? '', find ?? ''), [reading, find]);
   const context = useMessageContext(ref, m?.from_email ?? null, !!m && !p.offline);
   /*
    * Pictures from the web (DMO-SEC-07, DMO-RD-02, #163): Settings › Mail › Images & media decides — Always, Ask,
@@ -238,6 +260,18 @@ export function MessageView(p: MessageViewProps) {
     const kept = withLoadedImages(found.html, clean.remoteImages, pictures.data.images);
     return origin ? withProxiedImages(kept, clean.remoteImages, pictures.data.links, origin) : kept;
   }, [pictures.data, found.html, origin, clean, plainOn]);
+  // Pictures shown in the body open in the image viewer (#287): the frame hands a click back by this reader's id.
+  const [frameId] = useState(() => (globalThis.crypto?.randomUUID?.() ?? `${Math.random()}${Date.now()}`).replace(/[^a-z0-9]/gi, '').slice(0, 16));
+  const framed = useMemo(() => linkPictures(shownHtml, frameId, origin), [shownHtml, frameId, origin]);
+  const [viewing, setViewing] = useState<number | null>(null);
+  useEffect(
+    () =>
+      on<MailLinkClick>('mail:link', (link) => {
+        const hit = parsePictureLink(link.url);
+        if (hit && hit.frame === frameId) setViewing(hit.index);
+      }),
+    [frameId],
+  );
   const folders = useFolders(Number(ref.mailbox ?? 0), !!ref.mailbox && menu === 'move');
   const labels = useLabels(p.localStore && menu === 'label');
   // Opening a message reads it: the list's dot and the counts follow.
@@ -455,8 +489,12 @@ export function MessageView(p: MessageViewProps) {
 
   const fromCache = !!q.data?.offline;
   const linkItem: LinkItem = { mailbox: ref.mailbox ? Number(ref.mailbox) : 0, folder: ref.folder, uid: String(ref.uid), subject: m.subject, from_name: m.from_name ?? undefined, from_email: m.from_email, received_at: m.created_at, ...(m.message_id ? { message_id: m.message_id } : {}) };
-  // Dark email content (Settings › Reading) in the dark theme — but a designed email keeps its light card (D10).
-  const darkBody = darkTheme && p.prefs.darkBody === true && !isDesignedMail(clean.html);
+  // ☀ View in light / 🌙 View in dark (#287): while the app is dark, or this email is; remembered for the sender.
+  const bodyDark = !!reading && reading.look.scheme !== 'light';
+  const bodySwitch =
+    reading && (colours.appDark || bodyDark)
+      ? { dark: bodyDark, onToggle: () => p.onPrefs({ bodyThemeSenders: withSenderTheme(p.prefs.bodyThemeSenders, m.from_email, bodyDark ? 'light' : 'dark', reading.automatic) }) }
+      : undefined;
   const security = securityVerdict(context.data?.security);
   const outsider = senderNotice(m.from_email, p.account?.email ?? null, context.data ?? null);
   // A WorkSuite notification email's item (#170): a card above the body, and Open in WorkSuite by Reply — verified mail only.
@@ -636,10 +674,18 @@ export function MessageView(p: MessageViewProps) {
 
   return (
     <article aria-label={m.subject || text('(no subject)')} className="flex h-full min-h-0 flex-col bg-surface">
-      <div role="toolbar" aria-label="Message" className="flex h-11 shrink-0 items-center gap-0.5 border-b border-line px-3">
-        <button type="button" onClick={p.onBack} className="mr-2 inline-flex h-8 items-center gap-1.5 rounded-[8px] px-2 text-[13px] font-semibold text-ink hover:bg-subtle" title={text('Back to {folder} (Esc)', { folder: p.backLabel })}>
-          <Icon name="back" size={16} />
-          {p.backLabel}
+      <div ref={measureBar} role="toolbar" aria-label="Message" className="flex h-11 shrink-0 items-center gap-0.5 border-b border-line px-3">
+        {/* "← All Accounts · Inbox" on one line, cut short with … as the pane narrows; tight, just ← with the name as its tooltip (#287). */}
+        <button
+          type="button"
+          onClick={p.onBack}
+          data-breadcrumb={tightBar ? 'icon' : 'label'}
+          aria-label={text('Back to {folder}', { folder: p.backLabel })}
+          title={text('Back to {folder} (Esc)', { folder: p.backLabel })}
+          className={cx('mr-2 inline-flex h-8 items-center gap-1.5 whitespace-nowrap rounded-[8px] px-2 text-[13px] font-semibold text-ink hover:bg-subtle', tightBar ? 'shrink-0' : 'min-w-[44px] max-w-[260px] shrink')}
+        >
+          <Icon name="back" size={16} className="shrink-0" />
+          {tightBar ? null : <span className="min-w-0 truncate">{p.backLabel}</span>}
         </button>
         <Tool icon="archive" label="Archive (E)" onClick={() => void act('archive')} />
         <Tool icon="mail" label="Mark as unread (U)" onClick={() => void act('unread')} />
@@ -701,6 +747,7 @@ export function MessageView(p: MessageViewProps) {
             }}
             onCopyAddress={() => copy(m.from_email, text('Address copied.'))}
             onStar={() => void act(m.is_starred ? 'unstar' : 'star')}
+            bodyTheme={bodySwitch}
             extraTools={extraTools}
             moreSections={headerMore}
           />
@@ -758,9 +805,23 @@ export function MessageView(p: MessageViewProps) {
         ) : null}
         {hasInvite(m) ? <InviteCard msgRef={ref} offline={p.offline} /> : null}
         {wsMail ? <WorkSuiteCard mail={wsMail} offline={p.offline} /> : null}
-        {/* The body fills the pane under the 48px bar once the header has scrolled away (#212). */}
+        {/*
+          The body fills the pane under the 48px bar once the header has scrolled away (#212). The frame is drawn in the
+          pane's colour; a light email in the dark theme (or a dark one in the light theme) sits on a card inside it (#287).
+        */}
         <div className="h-[calc(100%-48px)] min-h-[240px] px-5 pt-3 pb-2">
-          <iframe title={text('Message')} sandbox="allow-popups allow-popups-to-escape-sandbox" srcDoc={mailFrameDoc(shownHtml, zoom, darkBody)} className={cx('block h-full w-full rounded-[8px] border-0', darkBody ? 'bg-surface' : 'bg-white', darkTheme && !darkBody && 'p-2')} />
+          {reading ? (
+            <iframe
+              title={text('Message')}
+              sandbox="allow-popups allow-popups-to-escape-sandbox"
+              srcDoc={mailFrameDoc(framed.html, zoom, reading.frame)}
+              data-body-kind={reading.kind}
+              data-body-scheme={reading.look.scheme}
+              data-body-fallback={reading.look.fallback ? 'true' : undefined}
+              style={{ colorScheme: reading.look.scheme === 'light' ? 'light' : 'dark' }}
+              className="block h-full w-full border-0 bg-surface"
+            />
+          ) : null}
         </div>
         </div>
         {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
@@ -809,6 +870,7 @@ export function MessageView(p: MessageViewProps) {
           onClose={() => setContactGuess(null)}
         />
       ) : null}
+      {viewing !== null && framed.pictures[viewing] ? <MailImageViewer pictures={framed.pictures} start={viewing} onClose={() => setViewing(null)} /> : null}
       {immersive ? <ImmersiveReader subject={m.subject} from={m.from_name ? `${m.from_name} <${m.from_email}>` : m.from_email} plain={plainBody} prefs={p.prefs.immersive ?? {}} onPrefs={(v) => p.onPrefs({ immersive: v })} onClose={() => setImmersive(false)} /> : null}
       {extra === 'task' ? <TaskFromMessage message={m} msgRef={ref} onClose={() => setExtra(null)} /> : null}
       {linking ? <LinkRecordDialog items={[linkItem]} onClose={() => setLinking(false)} /> : null}
@@ -904,7 +966,7 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
   if (style === 'floating') {
     return (
       <div className="pointer-events-none relative h-0">
-        <div role="toolbar" aria-label="Reply and actions" className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-line bg-surface px-1.5 py-1 shadow-[0_6px_24px_rgb(var(--ws-shadow-rgb)/0.16)]">
+        <div role="toolbar" aria-label="Reply and actions" data-ai-launcher-lift className="pointer-events-auto absolute bottom-3 left-1/2 flex -translate-x-1/2 items-center gap-0.5 rounded-full border border-line bg-surface px-1.5 py-1 shadow-[0_6px_24px_rgb(var(--ws-shadow-rgb)/0.16)]">
           {reply}
           {openItem}
           {btn('reply-all', text('Reply all'), () => onReply('reply_all'))}
@@ -918,8 +980,9 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
       </div>
     );
   }
+  // The floating AI button stands above this bar, never over its buttons (data-ai-launcher-lift, AiWidget; #287).
   return (
-    <div role="toolbar" aria-label="Reply and actions" className="flex h-[54px] shrink-0 items-center gap-0.5 border-t border-line px-3">
+    <div role="toolbar" aria-label="Reply and actions" data-ai-launcher-lift className="flex h-[54px] shrink-0 items-center gap-0.5 border-t border-line px-3">
       {reply}
       {openItem}
       {btn('reply-all', text('Reply all'), () => onReply('reply_all'))}

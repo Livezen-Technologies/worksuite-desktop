@@ -60,6 +60,31 @@ export function syncAt(stamp: string | null | undefined): string {
   return `${dateLabel(stamp)} ${timeLabel(stamp)}`;
 }
 
+/** "about 4 min left", "about 1 h 10 min left"; null before there is a rate to go by (#286). */
+export function etaWords(seconds: number | null | undefined): string | null {
+  if (seconds === null || seconds === undefined || Number.isNaN(seconds)) return null;
+  if (seconds < 60) return text('less than a minute left');
+  const min = Math.round(seconds / 60);
+  if (min < 60) return text('about {n} min left', { n: min });
+  const h = Math.floor(min / 60);
+  const m = min % 60;
+  return m ? text('about {h} h {m} min left', { h, m }) : text('about {h} h left', { h });
+}
+
+/**
+ * "First sync · headers 12 of 21 folders · started 1:20 AM · about 4 min left" while an account's first full sync
+ * runs (#286); null when none is going, or the server is too old to say.
+ */
+export function firstSyncLine(a: Pick<SyncAccount, 'first_sync'>, opts: { started?: boolean } = {}): string | null {
+  const f = a.first_sync;
+  if (!f) return null;
+  const parts = [text('First sync'), text('headers {done} of {n} folders', { done: f.folders_done, n: f.folders })];
+  if (opts.started !== false && f.started_at) parts.push(text('started {time}', { time: timeLabel(f.started_at) }));
+  const eta = etaWords(f.eta_seconds);
+  if (eta) parts.push(eta);
+  return parts.join(' · ');
+}
+
 /** "3 h", "45 min" — for the stale warning. */
 function sinceWords(stamp: string | null, now: number): string {
   if (!stamp) return text('a while');
@@ -110,7 +135,10 @@ export function syncSummary(status: SyncStatus | null | undefined, opts: { offli
     return { ...base, state: 'paused', headline: text('Sync paused'), detail: lastOk ? text('Last successful sync {ago}', { ago: syncAgo(lastOk, now) }) : '', tone: 'muted' };
   }
   if (syncing > 0) {
-    return { ...base, state: 'syncing', headline: text('Syncing {n} of {total} accounts…', { n: syncing, total: active.length }), detail: lastOk ? text('Last full sync {ago}', { ago: syncAgo(lastOk, now) }) : '', tone: 'muted' };
+    // One account on its first sync: how far it has got and how long is left, rather than "Syncing 1 of 1" for an hour (#286).
+    const syncingNow = active.filter((a) => a.running);
+    const first = syncingNow.length === 1 ? firstSyncLine(syncingNow[0]!, { started: false }) : null;
+    return { ...base, state: 'syncing', headline: first ?? text('Syncing {n} of {total} accounts…', { n: syncing, total: active.length }), detail: lastOk ? text('Last full sync {ago}', { ago: syncAgo(lastOk, now) }) : '', tone: 'muted' };
   }
   if (failed.length || stale.length) {
     const first = failed[0] ?? stale[0]!;
@@ -131,7 +159,7 @@ export function syncSummary(status: SyncStatus | null | undefined, opts: { offli
 /** One account's state in words, for its row and the Sync all tooltip (DMO-SYN-03/04). */
 export function accountState(a: SyncAccount, now = Date.now()): { label: string; tone: 'success' | 'danger' | 'muted' | 'warning' } {
   if (a.paused) return { label: text('Paused'), tone: 'warning' };
-  if (a.running) return { label: a.folders > 0 ? text('Syncing {done} of {n} folders…', { done: a.folders_done, n: a.folders }) : text('Syncing…'), tone: 'muted' };
+  if (a.running) return { label: firstSyncLine(a, { started: false }) ?? (a.folders > 0 ? text('Syncing {done} of {n} folders…', { done: a.folders_done, n: a.folders }) : text('Syncing…')), tone: 'muted' };
   if (a.last_result === 'failed') return { label: text('Failed {time} — {why}', { time: a.last_attempt_at ? timeLabel(a.last_attempt_at) : '', why: a.error ?? text('the sync did not finish') }), tone: 'danger' };
   if (a.last_result === 'never' && !a.last_ok_at) return { label: text('Not synced yet'), tone: 'muted' };
   return { label: syncAgo(a.last_ok_at, now), tone: 'success' };
@@ -229,7 +257,12 @@ export function useSharedSync(enabled: boolean) {
     queryFn: () => apiGet<SyncStatus>('/api/mail/sync/status'),
     enabled,
     staleTime: 15_000,
-    refetchInterval: (query) => (running.size > 0 || (query.state.data?.accounts ?? []).some((a) => a.running) ? 2_000 : 30_000),
+    // Quickly while a sync runs; a first sync, which can take a while, every five seconds (#286).
+    refetchInterval: (query) => {
+      const rows = query.state.data?.accounts ?? [];
+      if (running.size > 0 || rows.some((a) => a.running && !a.first_sync)) return 2_000;
+      return rows.some((a) => a.running) ? 5_000 : 30_000;
+    },
   });
   // While syncing, the lists and counts follow along; when it stops, once more.
   const busy = running.size > 0;
