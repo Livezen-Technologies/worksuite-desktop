@@ -123,7 +123,9 @@ export default function Tender({
   const online = !till.offline;
   const caps = till.caps;
   const approvalsOn = !!caps.approvals && online;
-  const tenders = useMemo(() => tenderTiles(online, offered, caps, till.company?.can), [online, offered, caps, till.company]);
+  // Offline: cash, and a card only where the till's setting allows it (worksuite-desktop#296).
+  const cardOffline = !!till.settings?.card_offline;
+  const tenders = useMemo(() => tenderTiles(online, offered, caps, till.company?.can, cardOffline), [online, offered, caps, till.company, cardOffline]);
   /** What the cashier's discount comes off: the goods after their list discounts and the promotions. */
   const base = discountBase(cart);
   /** A coupon on the sale that WorkSuite no longer takes (the cart changed, it ran out): the sale waits until it goes. */
@@ -166,7 +168,7 @@ export default function Tender({
 
   const quick = useMemo(() => (row.method === 'cash' ? quickCash(remaining(total, rows, cur), denominations) : []), [total, rows, cur, row.method, denominations]);
   const label = (m: PosTenderMethod) => tenderLabel(t, m, offered);
-  const problem = tenderProblem(rows, { offered: tenders, customer, balances, online: !till.offline });
+  const problem = tenderProblem(rows, { offered: tenders, customer, balances, online: !till.offline, cardOffline });
 
   /** A voucher's balance, before it is taken: the amount becomes what it covers. */
   async function checkVoucher(i: number) {
@@ -231,7 +233,7 @@ export default function Tender({
       setError(pricing.error ?? t('pos.adj.couponFix'));
       return;
     }
-    const why = tenderProblem(using, { offered: tenders, customer, balances, online: !till.offline });
+    const why = tenderProblem(using, { offered: tenders, customer, balances, online: !till.offline, cardOffline });
     if (why) {
       setError(why);
       return;
@@ -464,7 +466,7 @@ export default function Tender({
             </button>
           ))}
         </div>
-        {till.offline ? <p className="-mt-2 text-[12px] text-ink-3">{t('pos.pay.offlineTenders')}</p> : null}
+        {till.offline ? <p className="-mt-2 text-[12px] text-ink-3">{t(cardOffline ? 'pos.pay.offlineTenders' : 'pos.pay.offlineCash')}</p> : null}
         {pricing.error ? <Note tone="danger">{pricing.error}</Note> : null}
         <div className="flex min-h-0 flex-1 gap-4">
           <div className="flex min-w-0 flex-1 flex-col gap-2.5">

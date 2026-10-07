@@ -5,7 +5,7 @@ import { Menu, type MenuSection } from '../../components/Menu';
 import { Button, TextField } from '../../components/ui';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
-import { customerOf, findInCatalogue, lookupProduct, openDrawer, PK, refreshCatalogue, useCartPrice, useCatalogue, useSales } from './api';
+import { customerOf, findInCatalogue, lookupProduct, openDrawer, PK, refreshCatalogue, searchProducts, useCartPrice, useCatalogue, useSales } from './api';
 import { useBarcodeScanner } from './barcode';
 import CartPane from './CartPane';
 import CashMove from './CashMove';
@@ -27,6 +27,7 @@ import { Note, PosButton, PosDialog, useTillContext } from './parts';
 import { discountBase, estimateCart, formatMoney, shareOf } from './pricing';
 import ProductGrid, { type GridView, type QuickAction } from './ProductGrid';
 import ReturnDialog from './ReturnDialog';
+import { buildIndex, exact, search as searchIndex, SEARCH_DEBOUNCE_MS } from './search';
 import Tender from './TenderPanel';
 
 /**
@@ -76,6 +77,14 @@ export default function Register({ active }: { active: boolean }) {
   const cart = useCart();
   const all = useCarts();
   const [q, setQ] = useState('');
+  // What the grid is searched by: what was typed, once the cashier pauses (worksuite-desktop#296).
+  const [settled, setSettled] = useState('');
+  useEffect(() => {
+    const h = setTimeout(() => setSettled(q), SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(h);
+  }, [q]);
+  // Cleared at once; typed, once the cashier pauses.
+  const dq = q.trim() ? settled : '';
   const [category, setCategory] = useState<string | null>(null);
   const [recent, setRecent] = useState<string[]>(() => stored<string[]>(RECENT_KEY, []));
   const [view, setView] = useState<GridView>(() => (stored<string>(VIEW_KEY, 'grid') === 'list' ? 'list' : 'grid'));
@@ -102,6 +111,8 @@ export default function Register({ active }: { active: boolean }) {
       return l ? { ...p, stock_state: l.state, stock_available: l.available } : p;
     });
   }, [catalogue.data, stock.data]);
+  // The search index, built once per catalogue copy: names, codes, barcodes and categories, a barcode by a map.
+  const index = useMemo(() => buildIndex(catalogue.data?.products ?? []), [catalogue.data]);
   const byId = useMemo(() => {
     const m = new Map(products.map((p) => [p.id, p] as const));
     for (const [id, p] of extras) if (!m.has(id)) m.set(id, p);
@@ -192,7 +203,7 @@ export default function Register({ active }: { active: boolean }) {
         toast('warning', t('pos.noDrawerShort'));
         return;
       }
-      const hit = findInCatalogue([...byId.values()], code);
+      const hit = exact(index, code) ?? findInCatalogue([...extras.values()], code);
       if (hit) {
         add(hit.id);
         return;
@@ -213,7 +224,7 @@ export default function Register({ active }: { active: boolean }) {
         toast('error', e instanceof Error ? e.message : 'WorkSuite could not look that code up.');
       }
     },
-    [byId, till.offline, till.caps, org, session, add, t],
+    [index, extras, till.offline, till.caps, org, session, add, t],
   );
   useBarcodeScanner(active && !paying && !dialog, (code) => void onScan(code));
 
@@ -275,13 +286,20 @@ export default function Register({ active }: { active: boolean }) {
   }, [active, t]);
   const mayAsk = phoneOn && touch && cart.lines.length > 0 && !cart.customer;
 
+  // Searched on the till's own copy, never WorkSuite (worksuite-desktop#296) — except while that copy is empty or still
+  // loading and WorkSuite answers: then its own search stands in.
+  const copyEmpty = !catalogue.data?.products.length;
+  const fallback = copyEmpty && online && !!caps.product_search && dq.trim().length >= 2;
+  const server = useQuery({ queryKey: ['pos', 'search', dq.trim(), org], queryFn: ({ signal }) => searchProducts(dq.trim(), org, signal), enabled: active && fallback, staleTime: 30_000, retry: false });
   const filtered = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    return products.filter((p) => inCategory(p, category, tree, favourites) && (!needle || p.name.toLowerCase().includes(needle) || p.code?.toLowerCase().includes(needle) || p.barcode?.includes(needle)));
-  }, [products, q, category, tree, favourites]);
+    if (fallback) return server.data ?? [];
+    const levels = stock.data;
+    const found = dq.trim() ? searchIndex(index, dq).map((p) => (levels?.get(p.id) ? { ...p, stock_state: levels.get(p.id)!.state, stock_available: levels.get(p.id)!.available } : p)) : products;
+    return category ? found.filter((p) => inCategory(p, category, tree, favourites)) : found;
+  }, [fallback, server.data, index, dq, products, stock.data, category, tree, favourites]);
   const nameOfCategory = useCallback((c: string) => categoryLabel(c, tree, t('pos.cat.favourites')) ?? c, [tree, t]);
   const size = view === 'grid' ? GRID_PAGE : LIST_PAGE;
-  const where = JSON.stringify([q, category, view]);
+  const where = JSON.stringify([dq, category, view]);
   const shownPage = clampPage(paged.where === where ? paged.page : 0, filtered.length, size);
   const setPage = useCallback((p: number | ((p: number) => number)) => setPaged((x) => ({ where, page: Math.max(0, typeof p === 'function' ? p(x.where === where ? x.page : 0) : p) })), [where]);
 
@@ -383,7 +401,15 @@ export default function Register({ active }: { active: boolean }) {
     },
   ];
 
-  const empty = !catalogue.data ? (
+  const empty = fallback && server.isFetching && !filtered.length ? (
+    <div className="flex-1">
+      <Note>{t('pos.search.server')}</Note>
+    </div>
+  ) : fallback && !filtered.length ? (
+    <div className="flex-1">
+      <Note>{t('pos.search.serverNone')}</Note>
+    </div>
+  ) : !catalogue.data && !fallback ? (
     <div className="flex-1">
       <Note action={<Button size="sm" loading={refreshing} disabled={till.offline} onClick={() => void refresh()}>{t('pos.refreshCatalogue')}</Button>}>{t('pos.noCatalogue')}</Note>
     </div>
@@ -401,9 +427,9 @@ export default function Register({ active }: { active: boolean }) {
         onQ={setQ}
         onSearchKey={(e) => {
           if (e.key === 'Enter' && q.trim()) {
-            const exact = findInCatalogue(products, q);
-            const only = filtered.length === 1 ? filtered[0] : null;
-            const hit = exact ?? only;
+            // The exact code or barcode at once; else the one product the search (as typed now) found.
+            const only = q === dq && filtered.length === 1 ? filtered[0] : null;
+            const hit = exact(index, q) ?? only;
             if (hit) {
               if (add(hit.id)) setQ('');
             } else void onScan(q.trim()).then(() => setQ(''));

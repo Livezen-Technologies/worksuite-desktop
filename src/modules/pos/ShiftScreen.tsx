@@ -14,7 +14,7 @@ import { press } from './numpad';
 import { BADGE } from './look';
 import { Failed, Note, PosButton, PosDialog, timeOf, useTillContext } from './parts';
 import { countBody, countTotal, formatMoney, parseAmount, variance } from './pricing';
-import { closeBody, needsReason, salesSummary, xReport, zReport } from './shift';
+import { closeBody, closeGuard, needsReason, salesSummary, xReport, zReport } from './shift';
 
 /**
  * The drawer's shift, WorkSuite's own (`/api/pos/sessions`), on two panes each way. Opening a register: the float
@@ -270,7 +270,10 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
   const others = Object.entries(sum.byTender).filter(([m, v]) => m !== 'cash' && v);
   const card = sum.byTender.card ?? 0;
   const open = openWithLines(carts);
-  const blocked = open.length + carts.held.length > 0;
+  // Sales not yet in WorkSuite, or refused: the register waits for them, unless a manager closes it anyway (#296).
+  const guard = closeGuard(till.status, can);
+  const [anyway, setAnyway] = useState(false);
+  const blocked = open.length + carts.held.length > 0 || (guard.blocked && !anyway);
 
   async function close() {
     const body = closeBody(byNotes ? toCounts(c.counts) : [], byNotes ? '' : c.typed, why, { count_to_close: mustNotes });
@@ -410,7 +413,20 @@ function OpenedShift({ session, onClosed }: { session: PosSession; onClosed: (id
             {t('pos.reg.blocked', { open: open.length, held: carts.held.length })}
           </Note>
         ) : null}
-        {sum.waiting ? <Note tone="warning">{t('pos.waiting', { n: sum.waiting })}: WorkSuite counts them in the drawer once they arrive.</Note> : null}
+        {guard.blocked ? (
+          <Note tone={anyway ? 'warning' : 'danger'} action={till.openSync ? <PosButton className="h-touch px-3 text-[13px]" onClick={() => till.openSync?.()}>{t('pos.closeWaitsLink')}</PosButton> : null}>
+            {t('pos.closeWaits', { n: guard.pending })}
+            {guard.override ? (
+              <label className="mt-2 flex items-center gap-2 text-[13px] font-semibold">
+                <Checkbox checked={anyway} onChange={(e) => setAnyway(e.target.checked)} />
+                {t('pos.closeAnyway')}
+              </label>
+            ) : null}
+            {anyway ? <span className="mt-1 block text-[12px]">{t('pos.closeAnywayConfirm', { n: guard.pending })}</span> : null}
+          </Note>
+        ) : sum.waiting ? (
+          <Note tone="warning">{t('pos.waiting', { n: sum.waiting })}: WorkSuite counts them in the drawer once they arrive.</Note>
+        ) : null}
         <input
           value={why}
           onChange={(e) => setWhy(e.target.value.slice(0, 300))}

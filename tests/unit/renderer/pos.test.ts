@@ -100,7 +100,8 @@ describe('the tender', () => {
 
   it('takes only cash and the shop’s own card machine with WorkSuite out of reach', () => {
     expect(allowedMethods(true)).toEqual(['cash', 'card', 'bank_transfer', 'wallet']);
-    expect(allowedMethods(false)).toEqual(['cash', 'card']);
+    expect(allowedMethods(false)).toEqual(['cash']);
+    expect(allowedMethods(false, null, true)).toEqual(['cash', 'card']);
   });
 
   it('builds the sale from WorkSuite’s cart and the payments, with the change', () => {

@@ -179,18 +179,25 @@ export function quickCash(total: number, denominations: number[]): number[] {
 
 /**
  * Which tenders may be taken now: the company's configured ones (`capabilities.tenders`), else the four every server
- * takes — all online; offline only those that may be (cash and the shop's own card machine).
+ * takes — all online. Offline, cash only (worksuite-desktop#296: offline card payments are out of scope — nothing can
+ * verify one); a card on the shop's own machine as well only where the till's setting says so (`cardOffline`, "Accept
+ * card offline (recorded only, no verification)").
  */
-export function allowedTenders(online: boolean, configured?: PosTenderOption[] | null): PosTenderOption[] {
+export function allowedTenders(online: boolean, configured?: PosTenderOption[] | null, cardOffline = false): PosTenderOption[] {
   const list: PosTenderOption[] = configured?.length
     ? configured
     : LEGACY_TENDERS.map((k) => ({ kind: k, name: '', opens_drawer: k === 'cash', offline: OFFLINE_TENDERS.has(k), needs_customer: false, needs_reference: false }));
-  return list.filter((t) => online || (t.offline && OFFLINE_TENDERS.has(t.kind)));
+  return list.filter((t) => online || (t.offline && offlineTender(t.kind, cardOffline)));
+}
+
+/** Whether a tender may be taken while WorkSuite is out of reach: cash; a card only where the till's setting allows it. */
+export function offlineTender(kind: PosTenderMethod, cardOffline = false): boolean {
+  return kind === 'cash' || (cardOffline && kind === 'card' && OFFLINE_TENDERS.has(kind));
 }
 
 /** The kinds only (the screens' older shape). */
-export function allowedMethods(online: boolean, configured?: PosTenderOption[] | null): PosTenderMethod[] {
-  return allowedTenders(online, configured).map((t) => t.kind);
+export function allowedMethods(online: boolean, configured?: PosTenderOption[] | null, cardOffline = false): PosTenderMethod[] {
+  return allowedTenders(online, configured, cardOffline).map((t) => t.kind);
 }
 
 /**

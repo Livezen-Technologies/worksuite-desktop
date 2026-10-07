@@ -126,7 +126,9 @@ describe('the gift voucher', () => {
   it('follows the company’s own list, and is not offered to somebody who may not take one, nor offline', () => {
     expect(tenderTiles(true, [opt('cash'), opt('card')], caps, null).map((x) => x.kind)).toEqual(['cash', 'card']);
     expect(tenderTiles(true, [opt('cash'), opt('voucher')], caps, { voucher: false }).map((x) => x.kind)).toEqual(['cash']);
-    expect(tenderTiles(false, null, caps, null).map((x) => x.kind)).toEqual(['cash', 'card']);
+    // Offline: cash only, unless the till accepts a card offline (#296); never a voucher.
+    expect(tenderTiles(false, null, caps, null).map((x) => x.kind)).toEqual(['cash']);
+    expect(tenderTiles(false, [opt('cash'), opt('card'), opt('voucher')], caps, null, true).map((x) => x.kind)).toEqual(['cash', 'card']);
   });
 
   it('shows its expiry, and is not taken for more than it holds', () => {

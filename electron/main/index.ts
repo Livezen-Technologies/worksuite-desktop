@@ -650,6 +650,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('pos:changed');
       emitStatus();
     },
+    // The products' small pictures, kept for the till's grid offline (worksuite-desktop#296).
+    thumbsDir: join(paths().profile, 'pos-thumbs'),
   });
 
   // The Phone (WS-VOIP-SRS-001): its switch's WebSocket in the page policy, the compact phone's global shortcuts and
@@ -2489,6 +2491,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         ? (sessionCtl.isReady() ? transfers.serveMediaPreview(request, path) : Promise.resolve(new Response('Not found', { status: 404 })))
         : path.startsWith('/elearning/')
         ? elearning.serve(request, path)
+        : // A till's product pictures kept for offline (worksuite-desktop#296).
+          path.startsWith('/pos-thumb/')
+          ? pos.serveThumb(path)
         : // The speech model, for the speech page only (worksuite-desktop#81).
           path === '/speech/model.bin'
           ? speech.serveModel()

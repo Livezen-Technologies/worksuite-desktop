@@ -3,7 +3,7 @@ import type { PosProduct } from '@shared/pos';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { useT } from './i18n';
-import { imageUrl } from './catalog';
+import { imageUrl, thumbUrl } from './catalog';
 import { BADGE, OFF, tintOf } from './look';
 import { dots, GRID_PAGE, LIST_PAGE, pageCount, pageOf, shown } from './paging';
 import { formatMoney } from './pricing';
@@ -24,12 +24,16 @@ export function stockBadge(p: Pick<PosProduct, 'stock_state' | 'stock_available'
   return null;
 }
 
-/** The product's picture, or the category's tint and a box when it has none (or it does not load). */
+/**
+ * The product's picture — the small copy kept on this computer first (offline too, worksuite-desktop#296), then the
+ * live one — or the category's tint and a box when it has none (or neither loads).
+ */
 function Picture({ p, org, size }: { p: PosProduct; org: number | null; size: number }) {
-  const [failed, setFailed] = useState(false);
-  const src = failed ? null : imageUrl(p, org);
+  const [failed, setFailed] = useState(0);
+  const sources = [thumbUrl(p), imageUrl(p, org)].filter((x): x is string => !!x);
+  const src = sources[failed] ?? null;
   if (!src) return <Icon name="package" size={size} strokeWidth={1.4} />;
-  return <img src={src} alt="" loading="lazy" draggable={false} onError={() => setFailed(true)} className="h-full w-full object-cover" />;
+  return <img src={src} alt="" loading="lazy" draggable={false} onError={() => setFailed((n) => n + 1)} className="h-full w-full object-cover" />;
 }
 export type GridView = 'grid' | 'list';
 

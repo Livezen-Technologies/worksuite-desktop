@@ -1,14 +1,16 @@
 {
     "module": "pos",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "paths": [
         "electron/services/pos-carts.ts",
+        "electron/services/pos-catalogue.ts",
         "electron/services/pos-desk.ts",
         "electron/services/pos-display.ts",
         "electron/services/pos-display-media.ts",
         "electron/services/pos-ipc.ts",
         "electron/services/pos-outbox.ts",
         "electron/services/pos-print.ts",
+        "electron/services/pos-thumbs.ts",
         "electron/services/pos-till.ts"
     ]
 }

@@ -4,6 +4,24 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-07
+
+**Added**
+
+- the catalogue copy a product a row (pos_products, pos-catalogue.ts) — read whole a page at a time, then only what changed since (catalogue/changes: edits, deletions, prices, categories); a download that stops half way leaves the copy the till had; a copy kept as one blob split into rows on first read; the status counts rows and decrypts no product (worksuite-desktop#296)
+- the catalogue brought up to date every catalogue_minutes (30 by default), at once on reconnect, when the till opens and on Sync now (sales and catalogue both); its progress, last sync and errors in the till bar's pill and tooltip, the sync drawer and This till; Online · synced only when sales and catalogue both are
+- search on the till's own copy (search.ts) — an index per catalogue version, word starts above the middle of a word, the exact code or barcode first, a scan by map, 150 ms debounce (11 ms worst at 20,000 products); WorkSuite's products/search only while the copy is empty or loading
+- product pictures kept for offline (pos-thumbs.ts, /__local/pos-thumb/<id>) within a quota (200 MB), the least recently shown dropped first, all of them when the disk runs low; cleared with the till and in a wipe
+- the till's own settings (pos:tillSettings) — Accept card offline (recorded only, no verification), the catalogue's interval, the pictures' room; Sales' Needs review filter and the product_archived and negative_stock flags
+
+**Changed**
+
+- offline the till takes cash (and a discount) only unless Accept card offline is on — coupons and vouchers still wait (#293); the register does not close while sales wait or were refused (online too) — a manager (pos.register.view_all) may close anyway once they confirm
+
+**Fixed**
+
+- the last sync time is stamped only when the sync went through, and a background catalogue refresh that failed is tried again in two minutes, not half an hour
+
 ## 1.4.0 — 2026-10-07
 
 **Added**

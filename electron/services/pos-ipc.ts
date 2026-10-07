@@ -11,6 +11,7 @@ import { PosDesk } from './pos-desk';
 import { closeDisplay, displayTouchSupport, isDisplayWindow, openDisplay, touchOf } from './pos-display';
 import { mediaFor, PosDisplayMediaStore } from './pos-display-media';
 import { PosPrint } from './pos-print';
+import { PosThumbs } from './pos-thumbs';
 import { PosTill } from './pos-till';
 import { listPrinters } from './print';
 import type { SecureStore } from './secure-store';
@@ -39,11 +40,15 @@ export interface PosDeps {
   device: () => { name: string; info: string };
   appVersion: string;
   changed: () => void;
+  /** Where the products' pictures are kept for offline (the profile's `pos-thumbs`); none: they load live. */
+  thumbsDir?: string;
 }
 
 export function createPos(d: PosDeps) {
   const desk = new PosDesk({ secrets: d.secrets, http: d.http, origin: d.origin, installId: d.installId, device: d.device, appVersion: d.appVersion });
-  const till = new PosTill({ db: d.db, vault: d.vault, http: d.http, desk, origin: d.origin, caps: d.caps, changed: d.changed, config: d.db });
+  // worksuite-desktop#296: the products' small pictures, for the grid offline.
+  const thumbs = new PosThumbs({ db: d.db, dir: () => d.thumbsDir ?? null, fetch: (id) => desk.thumbBytes(`products/${id}/image`, { size: 'thumb' }) });
+  const till = new PosTill({ db: d.db, vault: d.vault, http: d.http, desk, origin: d.origin, caps: d.caps, changed: d.changed, config: d.db, thumbs });
   // The company's receipt template (the till's door), when one is published: ESC/POS follows it.
   const print = new PosPrint({ config: d.db, origin: d.origin, template: () => till.template() });
   const scopeOf = (origin: string | null, terminal: number | null | undefined) => (origin && terminal ? `${origin}|${terminal}` : null);
@@ -108,6 +113,11 @@ export function createPos(d: PosDeps) {
       guard();
       return till.catalogue();
     });
+    router.handle('pos:tillSettings', () => till.settings());
+    router.handle('pos:tillSettingsSet', (input) => {
+      guard();
+      return till.setSettings(input);
+    });
     router.handle('pos:catalogueRefresh', (input) => {
       guard();
       // The display's promotions are read again with the catalogue (#294).
@@ -135,7 +145,7 @@ export function createPos(d: PosDeps) {
     });
     router.handle('pos:sales', (input) => till.sales(input ?? {}));
     router.handle('pos:sale', (input) => till.sale(input.ref));
-    router.handle('pos:syncNow', () => till.sync());
+    router.handle('pos:syncNow', (input) => till.sync(true, { catalogue: input?.catalogue === true }));
     router.handle('pos:resolve', (input) => {
       guard();
       return till.resolve(input.ref, input.action, input.session_id);
@@ -227,6 +237,12 @@ export function createPos(d: PosDeps) {
     stop: () => till.stop(),
     sync: () => void till.sync(),
     pending: () => till.pending(),
+    /** `/__local/pos-thumb/<id>`: a product's picture kept for offline, the current till's only. */
+    serveThumb: (path: string) => {
+      const origin = d.origin();
+      const p = desk.pairing();
+      return thumbs.serve(origin && p && d.allowed() ? { origin, terminal: p.terminal.id } : null, path);
+    },
     /** A wipe: the till's credential, its copy, its sales and its printer settings. */
     forgetAll: () => {
       desk.forgetAll();

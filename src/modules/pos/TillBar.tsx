@@ -12,6 +12,7 @@ import { forgetTill, PK } from './api';
 import { displayWindow, toggleCustomerDisplay } from './display';
 import { useT, type PosKey } from './i18n';
 import { Mark, type PosView, type Till } from './parts';
+import { clockOf, tillPill } from './syncstate';
 
 /**
  * The till bar (64px, navy): which till and register this is, whether WorkSuite answers, the time, the cashier,
@@ -38,9 +39,12 @@ export default function TillBar({ till, view, full, onFull, onSync }: { till: Ti
   const s = till.status;
   const terminal = s.till!.terminal;
   const pending = s.waiting + s.refused;
-  const online = !till.offline && s.reachable;
   const place = [till.company?.name ?? terminal.org_name, terminal.branch_name].filter(Boolean).join(' · ');
-  const net = online ? (s.waiting ? t('pos.bar.sending', { n: s.waiting }) : t('pos.bar.online')) : t('pos.bar.offline', { n: s.waiting });
+  // Online, offline, sending, the catalogue syncing or out of date (worksuite-desktop#296): sales and catalogue both.
+  const pill = tillPill(s, till.offline);
+  const online = pill.tone !== 'offline';
+  const net = t(pill.key, pill.vars);
+  const when = t('pos.bar.title', { sales: clockOf(s.last_sync) ?? t('pos.bar.never'), cat: clockOf(s.catalogue?.fetched_at) ?? t('pos.bar.never') });
 
   async function forget(discard: boolean) {
     try {
@@ -103,9 +107,10 @@ export default function TillBar({ till, view, full, onFull, onSync }: { till: Ti
       <button
         type="button"
         onClick={onSync}
+        title={when}
         className={`flex shrink-0 items-center gap-2 rounded-full px-3 py-1.5 text-[12px] font-semibold ${online ? 'bg-pos-online text-pos-online-ink' : 'bg-pos-offline text-pos-offline-ink'}`}
       >
-        <span className={`h-2 w-2 rounded-full ${online ? 'bg-[#34d399]' : 'bg-[#fbbf24]'}`} />
+        <span className={`h-2 w-2 rounded-full ${pill.tone === 'online' ? 'bg-[#34d399]' : pill.tone === 'busy' ? 'bg-[#60a5fa]' : 'bg-[#fbbf24]'}`} />
         {net}
         {s.refused ? <span className="rounded-full bg-danger px-1.5 text-[11px] text-white">{s.refused}</span> : null}
       </button>

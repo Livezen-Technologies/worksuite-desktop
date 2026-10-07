@@ -801,7 +801,9 @@ not reachable: its `mobile` filter takes only mobile access tokens (`aud=mobile`
 | Pairing (main process) | `GET api/pos/setup` → `{terminals: [{id, code, name, org_id, org_name, branch_name, warehouse_id, warehouse_name, in_use, device_name}]}`; `POST api/pos/terminals/{id}/pair {device_name, device_info, app_version, take_over}` → `{token, expires_at, terminal}` (409 `in_use` without `take_over`) |
 | The till's door (main process, till credential) | `POST api/pos/device/heartbeat {app_version, pending_count}` every minute → `{terminal, server_time}`; `POST api/pos/device/sales {sales: [...]}`, at most 25 → `{results: [{ref, status: created\|duplicate\|rejected, number, message, code?, total?, review?, flags?}]}` (`code`: `drawer_closed`, `session_not_here`; `flags`: `price_differs`, `payment_missing`, `late`); 401 `reauth` → pair again, 503 → POS off, wait (the server's sentence shown; without one, "an administrator turns it on in Admin Centre → Apps → POS") |
 | Shell and shift | `GET api/pos/options` (`capabilities`, incl. `drawer_required`, `late_sales`, `payment_missing`, `flags`; per company `can` — incl. `refund`, `void`, `discount`, `discount_override`, `max_discount_pct` — and `rules {count_to_close, blind_close, variance_tolerance}`), `GET api/pos/registers`, `GET api/pos/sessions/{id}`, `POST api/pos/sessions {register_id, opening_float, denominations?, note?}`, `POST api/pos/sessions/{id}/cash {direction, amount, reason, reference?}`, `POST api/pos/sessions/{id}/close {denominations? \| counted_cash, variance_reason?}` — READ_CACHE keeps `options`, `registers`, `sessions` and `setup` |
-| Catalogue | In the background (main process, till credential, every 30 min, nobody need be signed in): `GET api/pos/device/catalogue?since_version=`; on request (the person's session): `GET api/pos/catalogue?org=&since_version=` — `{version, unchanged: true}` when current. Only where `capabilities.catalogue` is false or the call answers 404 (an older server): Inventory's `GET api/inventory/products?page=&per_page=100&include_variants=1` (needs `inventory.view`) |
+| Catalogue | A page at a time (worksuite-desktop#296): in the background (main process, till credential, nobody need be signed in — every `catalogue_minutes`, 30 by default; at once when WorkSuite answers again after being out of reach; when the till is opened; on Sync now) `GET api/pos/device/catalogue/changes?since=<cursor>&limit=500`; on request (the person's session) `GET api/pos/catalogue/changes?org=&since=&limit=500` → `{mode: full\|delta, reset, version, currency, products, deleted, next, has_more}` and on the last page `total`, `tenders` (door) and, when changed, `categories`, `category_tree`, `favourites`, `promotions`. No cursor (first run, after a forget) or `reset`: the whole copy, paged, under a new generation that replaces the old one when it finishes; a copy whose row count then disagrees with `total` is read whole once. A server without it (404, or an answer that is not one) is read whole as before: `GET api/pos/device/catalogue?since_version=`, `GET api/pos/catalogue?org=&since_version=` — `{version, unchanged: true}` when current. Only where `capabilities.catalogue` is false or that answers 404 (an older server): Inventory's `GET api/inventory/products?page=&per_page=100&include_variants=1` (needs `inventory.view`). The heartbeat also sends `catalogue_version`, `catalogue_synced_at` (the Tills screen's "Catalogue") |
+| Search while the copy is empty or loading | `GET api/pos/products/search?org=&q=&limit=30` → `{items}` (`capabilities.product_search`), only then and online; otherwise the counter searches its own copy (`src/modules/pos/search.ts`) and asks nobody per keystroke |
+| Pictures for offline | After a catalogue sync, where the policy keeps data: `GET api/pos/device/products/{id}/image?size=thumb` (at most 256 px; `capabilities.thumbnails`) per product with `image_url`, four at a time, kept in the profile's `pos-thumbs/` within `thumbs_mb` (200 MB by default), the least recently shown dropped first, all of them when the disk has under 512 MB free; served to the grid as `/__local/pos-thumb/<id>`, the live picture otherwise |
 | The cart's price | `POST api/pos/price {org_id, lines: [{product_id, quantity}], discount_pct}` (`pos.sale.create`, the discount the person's to give) where `capabilities.price`; on an older server `GET api/inventory/price?product_id=&qty=&kind=sell` per line; otherwise the catalogue's preview (marked provisional) |
 | A code not in the catalogue | `GET api/pos/products/lookup?org=&code=` where `capabilities.lookup`; on an older server `GET api/inventory/products/lookup?q=` (exact match) |
 | Refund, void (main process, till credential) | `POST api/pos/device/sales/{ref}/refund {ref: <receipt>-R<n>, cashier_id, reason, lines?: [{product_id, quantity}], restock?}`, `POST …/void {ref: <receipt>-V, cashier_id, reason}` → `{refund: {ref, kind, amount, cash_out, tenders, lines, credit_note, …}, sale}` (201; 200 when the same `ref` was had) — where `capabilities.refund` / `.void` and `can.refund` / `.void` |
@@ -814,7 +816,7 @@ requests. The door's Phase 2 calls go through `pos:desk` (`shared/pos.ts posDesk
 
 | Need (capability) | Calls |
 |---|---|
-| Configured tenders (`tenders`) | `options.companies[].tenders`; on the door `tenders` beside `GET device/catalogue` (also when unchanged) and `POST device/heartbeat`, kept on the catalogue copy for offline (cash and card only). A sale's tender sends the kind as `method` (`qr`, `voucher` with the code as `reference`, `store_credit`, `account`); none configured → the old four |
+| Configured tenders (`tenders`) | `options.companies[].tenders`; on the door `tenders` beside `GET device/catalogue` (also when unchanged) and `POST device/heartbeat`, kept on the catalogue copy for offline (cash only; card too where the till accepts it offline, #296). A sale's tender sends the kind as `method` (`qr`, `voucher` with the code as `reference`, `store_credit`, `account`); none configured → the old four |
 | Gift voucher, store credit (`vouchers`, `store_credit`) | `GET device/vouchers/{code}` → `{voucher}` (404 none), `GET device/store-credit/{client_id}` → `{balance, currency}` before taking them |
 | Held sales on the server (`held`) | `GET device/held` → `{items, expiry_hours}`; `POST device/held {cashier_id, lines [{product_id, quantity, name}], discount_pct?, customer {name, phone, email, client_id}?, note?, label?, total?}`; `POST device/held/{id}/recall {cashier_id}` → `{held, cart, cart_problem}`; `POST …/discard`. `409 gone` / `too_many` shown; offline, or refused, the sale is held on this till as before |
 | Manager approval (`approvals`, `remote_approvals`) | `GET device/approvers` → `{items [{id, name, initials, has_pin}]}`; `POST device/approvals {cashier_id, approver_id, pin, action, amount, subject?, reason?}` → `{approval_id, expires_at, approver}` (`pin_wrong`, `pin_locked`, `approver_unknown`, `self_approval`); `POST device/approval-requests {cashier_id, action, amount, subject?, reason?}` → `{request}`, polled every 3 s at `GET device/approval-requests/{id}?cashier_id=` until `approved` (with `approval_id`) / `denied` / `expired`, `POST …/{id}/cancel` when the cashier gives up. The approval is sent as `approval_id` on the device sale (discount; no `subject`, the retry is numbered afresh), `device/sales/{ref}/refund\|void` (the same `<receipt>-R<n>` / `-V`) and the staff `POST api/pos/sessions/{id}/cash` (cash out). Asked first where the till knows the rule (`can.max_discount_pct`, `companies[].approvals.manager_above_amount`), else when WorkSuite answers `approval_required` (device `results[].code` + `approval`, `403 {code, approval}`; staff `403 errors.code`, `errors.approval`) |
@@ -839,7 +841,7 @@ the voucher tile only where the company's tenders list it).
 | Gift vouchers (`vouchers`, `voucher_accept`) | A company that never saved its tenders now lists the voucher; where the server sends no list the till adds the tile itself. `can.voucher` false (`pos.sale.voucher.accept` not held): no tile. `GET device/vouchers/{code}` → `voucher.expires_on` and `problem` shown with the balance |
 | What the receipt prints (`sale_adjustments`) | `Receipt::data` adds `adjustments {discount {type, value, amount, reason}, coupon {code, amount}}`; the till prints `Coupon CODE −x`, the discount (its percentage, or "Discount" for an amount) with the reason under it, and the promotions, each on its own line (`shared/pos.ts saleReductions`, `serverReductions`) |
 
-Offline, coupons and vouchers wait (they need WorkSuite: the payment screen says so); a discount still works and goes
+Offline, coupons and vouchers wait (they need WorkSuite: the payment screen says so); cash (card only with the till's *Accept card offline*, #296) and a discount still work and go
 with the sale. A fixed amount is not carried by a sale held on WorkSuite (`POST device/held` keeps only a percentage).
 
 Seen in the server's code and worth fixing there: the template's `points` block prints `loyalty.earned` /
@@ -852,7 +854,9 @@ reads both. `Customer.store_credit` is always `null` — the till reads `device/
 `discount`, `tax`, `total`, `cashier_id`, `note`, `session_id`, `register_id`, `tenders [{method, amount, reference?}]`,
 `change_given`, `offline` (priced from the catalogue, WorkSuite out of reach), `expected_total`, `catalogue_version`.
 WorkSuite prices it again from `product_id` and records it in the named session's drawer; a total that differs is
-answered as `total` with a `review` note, kept on the sale and shown in Sales. A sale refused while the cashier waits is
+answered as `total` with a `review` note, kept on the sale and shown in Sales. An `offline` sale (server Pos 1.5.0,
+`capabilities.offline_prices`) is kept at the till's figures instead, flagged `price_differs` when WorkSuite's price now
+differs; a product archived since stays on it (`product_archived`); stock it took below zero is `negative_stock`. A sale refused while the cashier waits is
 removed from the till (nothing was sold); one refused later stays with the reason, to send again or drop.
 
 **No drawer, no sale** (`Pos\Libraries\Sales::admit`). WorkSuite takes a sale only into an open register session; the
@@ -865,7 +869,14 @@ that code and the sentence; *Send again* sends it into the register open now (`p
 `session_id` changed on this computer) and is not offered without one; *Drop* removes it. The till always sends
 tenders, so its own sales are never `payment_missing`; a sale flagged so on the server (a till that sent none) shows
 the flag and prints "Payment missing". Sales history shows each sale's `flags` and filters them as the web's `review`
-filter does (all, to review, price differs, payment missing, late) — from the till's own record.
+filter does (all, needs review — flagged or refused —, to review, price differs, payment missing, late, product archived,
+stock below zero) — from the till's own record.
+
+**Closing the register** waits while any of this till's sales have not reached WorkSuite or were refused (online too),
+with the way to the sync status; a person with `pos.register.view_all` may close anyway once they confirm (the sales
+arrive late and are flagged). **Offline tenders**: cash only, unless the till's setting *Accept card offline (recorded
+only, no verification)* is on (`pos:tillSettings`, off by default); transfers, wallets, vouchers, store credit and
+accounts always wait for WorkSuite.
 
 What the desktop asked of the server, now there (`claude/sweet-hamilton-46vqu8`):
 
@@ -891,6 +902,9 @@ Still open:
   (`journal`, `export`, `overview`, `reports`) are the web's, not the till's.
 - Offline the till applies no promotion (`promotion_ids: []`): `PromoEngine` (`promotion_engine: 1`) is not ported to
   the desktop yet, so an offline sale is priced without promotions and WorkSuite keeps that price.
+- The catalogue's cursor cannot see a product removed outright, or a variant archived with its template (Inventory
+  does not touch its `updated_at`): the till reads the copy whole when its count disagrees with `total`. Adding a
+  product to the default price list (or taking one off) also reads the copy whole (`reset`).
 - A template's logo is not printed (ESC/POS would need it rastered).
 
 ### Restaurant Manager — till, kitchen screen, print agent

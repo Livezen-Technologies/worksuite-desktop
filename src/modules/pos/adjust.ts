@@ -1,10 +1,9 @@
 import type { PosApprovalNeed, PosTenderOption } from '@shared/pos';
-import { OFFLINE_TENDERS } from '@shared/pos';
 import type { PosCan, PosCapabilities } from './api';
 import { discountNeedsApproval, type DiscountRights } from './approval';
 import type { CartState } from './cart';
 import type { PosKey } from './i18n';
-import { allowedTenders, ceilingMessage, overMessage, shareOf } from './pricing';
+import { allowedTenders, ceilingMessage, offlineTender, overMessage, shareOf } from './pricing';
 
 /**
  * The payment screen's adjustments (#293), as rules with no screen in them: the cashier's discount — a percentage or a
@@ -104,13 +103,14 @@ export function couponCode(typed: string): string {
  * one but sent no list (`capabilities.vouchers` and `voucher_accept`, online). A company that listed its tenders without
  * a voucher does not take one (WorkSuite would refuse it), and a person without `can.voucher` is not offered it.
  */
-export function tenderTiles(online: boolean, configured: PosTenderOption[] | null | undefined, caps: PosCapabilities, can: Pick<PosCan, 'voucher'> | null | undefined): PosTenderOption[] {
-  let list = allowedTenders(online, configured);
+export function tenderTiles(online: boolean, configured: PosTenderOption[] | null | undefined, caps: PosCapabilities, can: Pick<PosCan, 'voucher'> | null | undefined, cardOffline = false): PosTenderOption[] {
+  // Offline: cash, and a card only where the till accepts one offline (#296); never a voucher (#293).
+  let list = allowedTenders(online, configured, cardOffline);
   if (online && !configured?.length && caps.vouchers && caps.voucher_accept && !list.some((x) => x.kind === 'voucher')) {
     list = [...list, { kind: 'voucher', name: '', opens_drawer: false, offline: false, needs_customer: false, needs_reference: true }];
   }
   if (can?.voucher === false) list = list.filter((x) => x.kind !== 'voucher');
-  return list.filter((x) => online || OFFLINE_TENDERS.has(x.kind));
+  return list.filter((x) => online || offlineTender(x.kind, cardOffline));
 }
 
 /** A voucher's expiry as the till shows it ("31 Dec 2026"), or null. */

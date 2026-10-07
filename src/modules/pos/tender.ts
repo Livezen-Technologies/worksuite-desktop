@@ -45,11 +45,14 @@ export interface Balances {
  * a voucher without its code or not checked, or for more than it holds, store credit or an account without a named
  * customer, or credit for more than the customer has.
  */
-export function tenderProblem(rows: TenderRow[], o: { offered: PosTenderOption[]; customer: PosCustomer | null; balances: Balances; online: boolean }): string | null {
+export function tenderProblem(rows: TenderRow[], o: { offered: PosTenderOption[]; customer: PosCustomer | null; balances: Balances; online: boolean; cardOffline?: boolean }): string | null {
+  // Offline: cash, and a card only where the till's setting allows it (worksuite-desktop#296).
+  const offlineOnly = o.cardOffline ? 'Only cash and card are taken while WorkSuite is out of reach.' : 'Only cash is taken while WorkSuite is out of reach.';
+  const offlineOk = (m: PosTenderMethod) => m === 'cash' || (!!o.cardOffline && OFFLINE_TENDERS.has(m));
   for (const t of tendersOf(rows)) {
     const opt = o.offered.find((x) => x.kind === t.method);
-    if (!opt) return o.online || OFFLINE_TENDERS.has(t.method) ? 'That payment is not taken here.' : 'Only cash and card are taken while WorkSuite is out of reach.';
-    if (!o.online && !OFFLINE_TENDERS.has(t.method)) return 'Only cash and card are taken while WorkSuite is out of reach.';
+    if (!opt) return o.online || offlineOk(t.method) ? 'That payment is not taken here.' : offlineOnly;
+    if (!o.online && !offlineOk(t.method)) return offlineOnly;
     if (opt.needs_customer && !o.customer?.id) return `${opt.name || t.method}: attach the customer first (not a walk-in).`;
     if (t.method === 'voucher') {
       const code = (t.reference ?? '').toUpperCase();

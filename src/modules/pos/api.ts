@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState } from 'react';
-import type { PosCatalogue, PosCustomer, PosGiveBack, PosPrintPatch, PosPrintSettings, PosProduct, PosReport, PosSale, PosSellInput, PosTillStatus } from '@shared/pos';
+import type { PosCatalogue, PosCustomer, PosGiveBack, PosPrintPatch, PosPrintSettings, PosProduct, PosReport, PosSale, PosSellInput, PosTillSettings, PosTillSettingsPatch, PosTillStatus } from '@shared/pos';
 import { apiGet, ApiError, request } from '../../core/api';
 import { call, on } from '../../core/bridge';
 import { estimateCart, withDiscount, type CartLineInput, type PricedCart } from './pricing';
@@ -27,6 +27,7 @@ export const PK = {
   till: ['pos', 'till'] as const,
   catalogue: ['pos', 'catalogue'] as const,
   options: ['pos', 'options'] as const,
+  tillSettings: ['pos', 'tillSettings'] as const,
   registers: ['pos', 'registers'] as const,
   session: (id: number) => ['pos', 'session', id] as const,
   sales: (f: unknown) => ['pos', 'sales', f] as const,
@@ -152,6 +153,12 @@ export interface PosCapabilities {
   /* worksuite-desktop#294: the customer display's promotions, and a phone number typed there looked up masked. */
   display_slides?: boolean;
   display_phone?: boolean;
+  /* worksuite-desktop#296: the catalogue a page at a time and what changed since, search on the server, small
+     pictures, an offline sale kept at the till's price. */
+  catalogue_changes?: boolean;
+  product_search?: boolean;
+  thumbnails?: boolean;
+  offline_prices?: boolean;
 }
 
 export interface PosOptions {
@@ -285,7 +292,10 @@ export const refreshCatalogue = (capable?: boolean) => call('pos:catalogueRefres
 export const sell = (input: PosSellInput) => call('pos:sell', input);
 export const listSales = (f: { session_id?: number; since?: string; limit?: number } = {}) => call('pos:sales', f);
 export const readSale = (ref: string) => call('pos:sale', { ref });
-export const syncNow = () => call('pos:syncNow');
+/** Send what waits; `catalogue`: bring the catalogue copy up to date as well (Sync now, the till opened). */
+export const syncNow = (o: { catalogue?: boolean } = {}) => call('pos:syncNow', o.catalogue ? { catalogue: true } : {});
+export const tillSettings = () => call('pos:tillSettings');
+export const setTillSettings = (p: PosTillSettingsPatch) => call('pos:tillSettingsSet', p);
 /** Send a refused sale again (into `sessionId`, the register open now, when it was refused for its drawer), or drop it. */
 export const resolveSale = (ref: string, action: 'retry' | 'drop', sessionId?: number) => call('pos:resolve', { ref, action, ...(sessionId ? { session_id: sessionId } : {}) });
 export const printSettings = () => call('pos:printSettings');
@@ -310,12 +320,23 @@ export function useTill() {
   return useQuery<PosTillStatus>({ queryKey: PK.till, queryFn: tillStatus, ...LOCAL, refetchInterval: 20_000 });
 }
 
+/**
+ * The catalogue copy, read again only when it changed — its version, when it was brought up to date, its pictures —
+ * not on every word from the main process: at 20,000 products each read is a large copy (worksuite-desktop#296).
+ */
 export function useCatalogue(enabled = true) {
-  return useQuery<PosCatalogue | null>({ queryKey: PK.catalogue, queryFn: readCatalogue, ...LOCAL, enabled });
+  const till = useTill();
+  const c = till.data?.catalogue;
+  const stamp = c ? `${c.version}|${c.fetched_at}|${c.products}|${c.thumbs?.count ?? 0}` : String(till.data?.till?.terminal.id ?? '');
+  return useQuery<PosCatalogue | null>({ queryKey: [...PK.catalogue, stamp], queryFn: readCatalogue, ...LOCAL, enabled, placeholderData: (prev) => prev });
 }
 
 export function useSales(f: { session_id?: number; since?: string }, enabled = true) {
   return useQuery<PosSale[]>({ queryKey: PK.sales(f), queryFn: () => listSales(f), ...LOCAL, enabled });
+}
+
+export function useTillSettings() {
+  return useQuery<PosTillSettings>({ queryKey: PK.tillSettings, queryFn: tillSettings, ...LOCAL });
 }
 
 export function usePrintSettings() {
@@ -329,7 +350,7 @@ export function usePosChanged(): void {
     () =>
       on('pos:changed', () => {
         void qc.invalidateQueries({ queryKey: PK.till });
-        void qc.invalidateQueries({ queryKey: PK.catalogue });
+        // The catalogue follows the till's status (`useCatalogue`): read again when its copy changed.
         void qc.invalidateQueries({ queryKey: ['pos', 'sales'] });
       }),
     [qc],
@@ -352,6 +373,17 @@ export function findInCatalogue(products: PosProduct[], code: string): PosProduc
 
 const n = (v: unknown, d = 0) => (typeof v === 'number' && Number.isFinite(v) ? v : typeof v === 'string' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : d);
 const s = (v: unknown) => (typeof v === 'string' && v.trim() !== '' ? v : null);
+
+/**
+ * WorkSuite's own search (`GET api/pos/products/search`, `capabilities.product_search`): only while the till's copy is
+ * empty or still loading — otherwise the counter searches its copy and asks nobody (worksuite-desktop#296).
+ */
+export async function searchProducts(q: string, org?: number | null, signal?: AbortSignal): Promise<PosProduct[]> {
+  const r = await apiGet<{ items?: Array<Record<string, unknown>> }>(`${BASE}/products/search`, { q, limit: 30, ...(org ? { org } : {}) }, signal);
+  return (r.items ?? [])
+    .map((p) => ({ id: n(p.id), code: s(p.code), barcode: s(p.barcode), name: s(p.name) ?? '', unit: s(p.unit), category: s(p.category), price: n(p.price), discount_pct: n(p.discount_pct), tax_rate: n(p.tax_rate), ...(s(p.image_url) ? { image: true } : {}) }))
+    .filter((p) => Number.isInteger(p.id) && p.id > 0);
+}
 
 export async function lookupProduct(code: string, caps: PosCapabilities | undefined, org?: number | null): Promise<PosProduct | null> {
   if (caps?.lookup) {
