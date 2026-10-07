@@ -4,6 +4,20 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-07
+
+**Added**
+
+- the customer display redesigned (worksuite-desktop#294): the company's promotions on the start half — one picture or a slider, fading or sliding at the interval set in WorkSuite, each filling the panel without distortion (cropped at its edges, never stretched), the logo on the brand colour when there are none — and the live cart on the end half: quantity, name in two lines at most, unit price and line total, scrolled to the newest line, with Subtotal, Discount, Tax and You pay fixed under it; a welcome when empty
+- the sale's states on the display — idle (promotions full screen), in progress, payment (amount due, paid, still to pay or change, as the cashier takes each tender) and complete (thank you, back to idle after six seconds); start/end layout for right-to-left, every string in pos.cd.*
+- the customer's phone number at the display: on a touch screen, online, where WorkSuite announces display_phone, "Enter your phone number" opens a numpad (checked as a Sri Lankan or international number, cleared after 30 s untouched). The register looks it up through the till's door (pos:desk byPhone → GET device/customers/by-phone) and the display shows only masked matches ("Has*****a M.") to confirm or pick; a confirmed customer is put on the sale and the cashier can accept or change them; an unknown number asks the cashier to create the customer with it filled in; "Not you?" takes them off. The cashier can open it too: More → Ask customer for phone number
+- promotions and the company logo kept on the till for offline (pos-display-media.ts, GET device/display, display/slides/{id}/image, display/logo; sealed in the new pos_display_media table, in memory where the policy keeps no data; refreshed every 30 min and with the catalogue; forgotten with the till) and served to the display over pos:displayMedia, which answers only the /pos/display window
+- This till → Devices → Touch screen on the customer display: automatic (the monitor's touchSupport), yes or no
+
+**Security**
+
+- the customer display never receives a whole name — publish() masks every customer name it is handed (this also fixes the greeting, which showed the customer's real first name), lookups answer masked names and ids only, and a confirmed id must be one the register sent for that number
+
 ## 1.2.0 — 2026-10-06
 
 **Added**

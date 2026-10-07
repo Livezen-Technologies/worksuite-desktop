@@ -105,7 +105,8 @@ schedules on a calendar or queue, answers a unified inbox and measures the resul
 OS keystore, the drawer's shift over WorkSuite's POS API, selling from a sealed catalogue copy with a keyboard-wedge
 scanner — offline too, sales numbered here and sent in order through the till's own door — thermal receipts and the
 drawer kick (a reprint is WorkSuite's own receipt), e-mailed receipts, refunds and voids from the sales history, and a
-customer display on a second monitor. The catalogue, prices and discount rights are POS's own (no Inventory
+customer display on a second monitor — the company's promotions beside the live cart, and, on a touch screen, the
+customer's own phone number to put them on the sale (shown back only masked). The catalogue, prices and discount rights are POS's own (no Inventory
 permission needed). What it uses on the server is in [docs/BACKEND.md](docs/BACKEND.md#pos--the-till).
 
 ## What is deliberately not here yet
