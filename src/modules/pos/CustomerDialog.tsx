@@ -33,16 +33,20 @@ export function saleCustomerOf(c: CrmCustomer, tier: string | null): PosCustomer
   };
 }
 
-export default function CustomerDialog({ payable, currency, onClose }: { payable: number; currency: string; onClose: () => void }) {
+/**
+ * `newPhone`: a number the customer gave at the customer display that WorkSuite does not have (#294) — the dialog
+ * opens on "New customer" with it filled in.
+ */
+export default function CustomerDialog({ payable, currency, onClose, newPhone }: { payable: number; currency: string; onClose: () => void; newPhone?: string }) {
   const t = useT();
   const till = useTillContext();
   const cart = useCart();
   const [q, setQ] = useState('');
   const [debounced, setDebounced] = useState('');
   const [picked, setPicked] = useState<number | null>(cart.customer?.id ?? null);
-  const [creating, setCreating] = useState(false);
+  const [creating, setCreating] = useState(!!newPhone);
   const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [phone, setPhone] = useState(newPhone ?? '');
   const [email, setEmail] = useState('');
   const [candidates, setCandidates] = useState<{ list: CrmCustomer[]; message: string } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -102,7 +106,7 @@ export default function CustomerDialog({ payable, currency, onClose }: { payable
         <h2 className="text-[20px] font-extrabold">{t('pos.cust.title')}</h2>
         <label className="flex h-touch-md items-center gap-2.5 rounded-[12px] border-2 border-primary bg-pos-panel px-3.5">
           <Icon name="search" size={20} className="text-primary" />
-          <input autoFocus value={q} onChange={(e) => setQ(e.target.value.slice(0, 80))} placeholder={t('pos.cust.find')} aria-label={t('pos.cust.find')} className="bare-focus min-w-0 flex-1 bg-transparent text-[15px] outline-none" />
+          <input autoFocus={!newPhone} value={q} onChange={(e) => setQ(e.target.value.slice(0, 80))} placeholder={t('pos.cust.find')} aria-label={t('pos.cust.find')} className="bare-focus min-w-0 flex-1 bg-transparent text-[15px] outline-none" />
         </label>
         <p className="text-[12px] text-ink-3">{t('pos.cust.findHint')}</p>
         {found.isFetching ? <p className="text-[13px] text-ink-3">{t('pos.cust.searching')}</p> : null}
@@ -112,7 +116,7 @@ export default function CustomerDialog({ payable, currency, onClose }: { payable
         {creating ? (
           <div className="flex flex-col gap-2 rounded-pos bg-pos-key p-3.5">
             <div className="text-[14px] font-bold">{t('pos.cust.new')}</div>
-            <input value={name} onChange={(e) => setName(e.target.value.slice(0, 150))} placeholder={t('pos.cust.name')} aria-label={t('pos.cust.name')} className="h-touch rounded-[10px] bg-pos-panel px-3 text-[14px] outline-none" />
+            <input value={name} autoFocus={!!newPhone} onChange={(e) => setName(e.target.value.slice(0, 150))} placeholder={t('pos.cust.name')} aria-label={t('pos.cust.name')} className="h-touch rounded-[10px] bg-pos-panel px-3 text-[14px] outline-none" />
             <input value={phone} onChange={(e) => setPhone(e.target.value.slice(0, 40))} placeholder={t('pos.cust.mobile')} aria-label={t('pos.cust.mobile')} inputMode="tel" className="h-touch rounded-[10px] bg-pos-panel px-3 text-[14px] outline-none" />
             <input value={email} onChange={(e) => setEmail(e.target.value.slice(0, 150))} placeholder={t('pos.cust.email')} aria-label={t('pos.cust.email')} inputMode="email" className="h-touch rounded-[10px] bg-pos-panel px-3 text-[14px] outline-none" />
             {badEmail ? <p className="text-[12px] text-danger">{t('pos.cust.badEmail')}</p> : null}

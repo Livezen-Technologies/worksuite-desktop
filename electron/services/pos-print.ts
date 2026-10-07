@@ -53,6 +53,7 @@ export const DEFAULT_POS_PRINT: PosPrintSettings = {
   drawer_pin: 2,
   header: '',
   footer: 'Thank you',
+  display_touch: 'auto',
 };
 
 /** Characters on a line in the printer's Font A: 576 dots on an 80 mm roll, 384 on 58 mm. */

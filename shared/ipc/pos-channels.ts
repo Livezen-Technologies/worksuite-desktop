@@ -30,6 +30,7 @@ export const POS_INVOKE_CHANNELS = [
   'pos:desk',
   'pos:approve',
   'pos:rename',
+  'pos:displayMedia',
 ] as const;
 
 export const POS_EVENT_CHANNELS = ['pos:changed'] as const;

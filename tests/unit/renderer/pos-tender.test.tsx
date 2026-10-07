@@ -141,3 +141,24 @@ describe('taking the money', () => {
     expect(await screen.findByText('No change to give')).toBeTruthy();
   });
 });
+
+describe('the customer display while paying (#294)', () => {
+  it('follows the tenders as they are taken: due, paid, change — then the sale complete', async () => {
+    const heard: Array<{ type: string; state?: Record<string, unknown> }> = [];
+    const ch = new BroadcastChannel('worksuite-pos-display');
+    ch.onmessage = (e: MessageEvent<{ type: string; state?: Record<string, unknown> }>) => heard.push(e.data);
+    try {
+      const { sell } = mount();
+      const states = () => heard.filter((m) => m.type === 'state').map((m) => m.state!);
+      await waitFor(() => expect(states().at(-1)).toMatchObject({ kind: 'pay', total: 900, paid: 900, due: 0, change: 0 }));
+      expect(states().at(-1)!.lines).toEqual([{ name: 'Ceylon tea', quantity: 2, price: 450, total: 900 }]);
+      fireEvent.click(screen.getByRole('button', { name: '1,000.00' }));
+      await waitFor(() => expect(states().at(-1)).toMatchObject({ kind: 'pay', paid: 1000, due: 0, change: 100 }));
+      fireEvent.click(screen.getByRole('button', { name: /Complete sale/ }));
+      await waitFor(() => expect(sell).toHaveBeenCalled());
+      await waitFor(() => expect(states().at(-1)).toMatchObject({ kind: 'paid', total: 900, change: 100 }));
+    } finally {
+      ch.close();
+    }
+  });
+});

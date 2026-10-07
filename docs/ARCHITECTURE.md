@@ -433,7 +433,12 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   kept on the sale (`Sales.tsx`, `returns.ts`, `pos-till.ts: giveBack`), Printers and This till. Discounts follow
   `options` `can.discount` / `max_discount_pct` / `discount_override` (`discountRights`); the close follows the
   company's `rules` (note by note, blind, the variance tolerance). The customer display (`/pos/display`, `CustomerDisplay.tsx`) is a window of
-  the shell on the second monitor; the register tells it what to show over a same-origin `BroadcastChannel`.
+  the shell on the second monitor; the register tells it what to show over a same-origin `BroadcastChannel`
+  (`display.ts`: idle, the cart with unit prices, the payment as the tenders are taken, complete). Since #294 the channel
+  goes both ways: the display passes on a phone number the customer typed, the masked match they confirmed, "not me" or
+  a new number, and the register (`displayDesk.ts`) looks it up through `pos:desk` and answers with masked names only.
+  Its promotions come from `pos-display-media.ts` (the door's `display`, pictures sealed in `pos_display_media`) over
+  `pos:displayMedia`, which only the display's window may call.
   Offline the drawer's screens read the last `/api/pos/options`, `registers` and `sessions` from READ_CACHE and wait
   for WorkSuite to open, move cash or close; selling goes on.
   Phase 2 (pos 1.2.0) is lit per `options.capabilities` flag and only online: the counter's Phase 2 calls go through

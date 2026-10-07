@@ -490,6 +490,7 @@ const api = {
     desk: call('pos:desk'),
     approve: call('pos:approve'),
     rename: call('pos:rename'),
+    displayMedia: call('pos:displayMedia'),
   },
   // The Phone (phone-channels.ts): its switch in the page policy, global shortcuts, call notifications.
   phone: {

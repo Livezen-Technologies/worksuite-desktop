@@ -872,6 +872,8 @@ export function deskCall(op: PosDeskOp, cashier: () => number): { method: 'GET' 
       return { method: 'GET', path: 'customers', query: { q: op.q } };
     case 'customer':
       return { method: 'GET', path: `customers/${op.id}` };
+    case 'byPhone':
+      return { method: 'GET', path: 'customers/by-phone', query: { phone: op.phone } };
     case 'customerCreate': {
       const { op: _op, ...rest } = op;
       return { method: 'POST', path: 'customers', body: { cashier_id: cashier(), ...rest } };
