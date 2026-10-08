@@ -5,6 +5,7 @@ import { text } from '../../core/i18n';
 import { addDays, currentZone, dayKey, dayWords, parseTs, timeLabel, todayInZone, wallTimeLabel } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
+import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import type { CalendarEvent } from '../calendar/api';
 import type { Task } from '../tasks/api';
 import type { MessageStates } from './states';
@@ -34,6 +35,8 @@ export function nextSlot(now = new Date()): { date: string; start: string; end: 
 }
 
 export function TodoPane({ onOpenFlag, onDropMail, onClose, canCalendar, canTasks }: { onOpenFlag: (f: { mailbox: number; folder: string; uid: string }) => void; onDropMail: (rowKey: string, to: 'event' | 'task') => void; onClose: () => void; canCalendar: boolean; canTasks: boolean }) {
+  // 300px to start; never so wide that the mail beside it is squeezed out.
+  const size = useResizableWidth('mail.todoPane', { defaultWidth: 300, min: 240, max: () => Math.max(240, Math.min(560, window.innerWidth - 880)) });
   const today = todayInZone();
   const week = addDays(today, 6);
   const events = useQuery({
@@ -78,7 +81,9 @@ export function TodoPane({ onOpenFlag, onDropMail, onClose, canCalendar, canTask
     .slice(0, 10);
 
   return (
-    <aside aria-label={text('My Day')} className="flex w-[300px] shrink-0 flex-col border-l border-line bg-surface">
+    <aside aria-label={text('My Day')} className="relative flex shrink-0 flex-col border-l border-line bg-surface" style={{ width: size.width }}>
+      {/* Its width is the person's: drag its left edge, remembered on this computer (#304). */}
+      <ResizeDivider state={size} side="left" label={text('Resize My Day')} />
       <div className="flex h-11 shrink-0 items-center justify-between border-b border-line px-3">
         <h2 className="text-[14px] font-bold text-ink">{text('My Day')}</h2>
         <button type="button" aria-label={text('Close My Day')} onClick={onClose} className="inline-flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle hover:text-ink">

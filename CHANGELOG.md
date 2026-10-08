@@ -5,6 +5,16 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.204 — 2026-10-08
+
+- **Mail: resize the message list and My Day by dragging their edges (mail 1.26.0).** Drag the line between the
+  message list and the reading pane, or the left edge of My Day, to make either wider or narrower.
+  - You can also focus the edge and use ← →, with Shift for bigger steps, or Home and End.
+  - A double-click puts it back to its default.
+  - Each width is remembered on this computer.
+  - The message list goes from 300 to 760px, and My Day from 240 to 560px. Neither can grow so wide that the
+    message you are reading is squeezed out.
+
 ## 0.2.203 — 2026-10-08
 
 - **Support › New ticket: the company picker is fixed (support 1.2.1).** In a company with more than one

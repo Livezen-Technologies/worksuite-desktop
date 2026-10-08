@@ -1,3 +1,4 @@
+import { ResizeDivider, type ResizableWidth } from '../../components/ResizeDivider';
 import { useMemo, useRef, useState, type ReactNode } from 'react';
 import { text } from '../../core/i18n';
 import { bytes } from '../../core/time';
@@ -32,6 +33,8 @@ export interface ListRow {
 }
 
 export interface MessageListProps {
+  /** Its width beside the reading pane, dragged by its edge (left out: a fixed 420px). */
+  resize?: ResizableWidth;
   title: string;
   /** Right of the title: "26 unread · 4 mailboxes", or the mailbox's kind. */
   aside?: string | null;
@@ -186,7 +189,9 @@ export function MessageList(p: MessageListProps) {
 
   const densitySections = viewMenuSections(p);
   return (
-    <section aria-label="Messages" className={cx('flex min-h-0 flex-col bg-surface', p.fill ? 'min-w-0 flex-1' : 'w-[420px] shrink-0 border-r border-line')}>
+    <section aria-label="Messages" className={cx('relative flex min-h-0 flex-col bg-surface', p.fill ? 'min-w-0 flex-1' : cx('shrink-0 border-r border-line', !p.resize && 'w-[420px]'))} style={!p.fill && p.resize ? { width: p.resize.width } : undefined}>
+      {/* Beside the reading pane, its width is the person's: drag the edge (#304). */}
+      {!p.fill && p.resize ? <ResizeDivider state={p.resize} label={text('Resize the message list')} /> : null}
       <div className="px-4 pt-3 pb-2">
         <div className="flex items-center gap-2">
           <h1 className="min-w-0 flex-1 truncate text-[19px] font-bold text-ink selectable" title={p.aside ? `${p.title} · ${p.aside}` : p.title}>
