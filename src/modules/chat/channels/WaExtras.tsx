@@ -16,7 +16,12 @@ import type { WaMessage } from './whatsapp';
 
 const WA = '/api/whatsapp';
 const FIELD = 'h-9 w-full rounded-[8px] border border-line bg-surface px-2.5 text-[13px] text-ink outline-none focus:border-primary';
-const CHIP = 'inline-flex h-7 items-center gap-1 rounded-full border border-line px-2.5 text-[12px] font-semibold text-ink-2 hover:bg-subtle disabled:opacity-50';
+/** A quick action above the reply box: a quiet label with a tinted icon, lifting on hover, like the reply box's own tools. */
+const CHIP = 'group/x inline-flex h-[26px] items-center gap-1.5 rounded-[7px] pr-2 pl-1 text-[12px] font-medium text-ink-2 transition-colors hover:bg-subtle hover:text-ink focus-visible:outline-2 focus-visible:outline-primary disabled:pointer-events-none disabled:opacity-45';
+const TILE = 'flex h-[18px] w-[18px] items-center justify-center rounded-[5px]';
+/** Each kind keeps one colour, as WhatsApp's own attach menu does. */
+const TINT = { poll: 'bg-amber-500/15 text-amber-500', location: 'bg-emerald-500/15 text-emerald-500', contact: 'bg-sky-500/15 text-sky-500', sticker: 'bg-violet-500/15 text-violet-400' } as const;
+const chip = (kind: keyof typeof TINT, icon: string, label: string) => <><span className={cx(TILE, TINT[kind])}><Icon name={icon} size={12} /></span>{label}</>;
 const openOut = (url: string) => void call('app:openInBrowser', { path: url });
 
 type Extra = 'poll' | 'location' | 'contact';
@@ -42,13 +47,13 @@ export function WaExtrasBar({ chatId, webJs, disabled, onSent }: { chatId: numbe
   };
 
   return (
-    <div role="group" aria-label="Send something else" className="flex flex-wrap items-center gap-1.5 px-4 pt-2">
-      {webJs ? <button type="button" className={CHIP} disabled={disabled} onClick={() => setOpen('poll')}><Icon name="chart" size={13} />Poll</button> : null}
-      <button type="button" className={CHIP} disabled={disabled} onClick={() => setOpen('location')}><Icon name="map-pin" size={13} />Location</button>
-      {webJs ? <button type="button" className={CHIP} disabled={disabled} onClick={() => setOpen('contact')}><Icon name="contact" size={13} />Contact card</button> : null}
+    <div role="group" aria-label="Send something else" className="-mx-1 -mb-1 flex flex-wrap items-center gap-0.5">
+      {webJs ? <button type="button" className={CHIP} disabled={disabled} onClick={() => setOpen('poll')}>{chip('poll', 'chart', 'Poll')}</button> : null}
+      <button type="button" className={CHIP} disabled={disabled} onClick={() => setOpen('location')}>{chip('location', 'map-pin', 'Location')}</button>
+      {webJs ? <button type="button" className={CHIP} disabled={disabled} onClick={() => setOpen('contact')}>{chip('contact', 'contact', 'Contact card')}</button> : null}
       {webJs ? (
         <>
-          <button type="button" className={CHIP} disabled={disabled} onClick={() => picker.current?.click()}><Icon name="smile" size={13} />Sticker</button>
+          <button type="button" className={CHIP} disabled={disabled} onClick={() => picker.current?.click()}>{chip('sticker', 'smile', 'Sticker')}</button>
           <input ref={picker} type="file" hidden accept="image/png,image/jpeg,image/webp,image/gif" aria-label="Choose a picture to send as a sticker" onChange={(e) => { const f = e.target.files?.[0]; if (f) sticker(f); e.target.value = ''; }} />
         </>
       ) : null}

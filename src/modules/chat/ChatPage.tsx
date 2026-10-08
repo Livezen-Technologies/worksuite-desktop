@@ -268,7 +268,6 @@ export default function ChatPage({ tabId }: ModuleProps) {
           accounts={waAccounts}
           loading={wa.isLoading}
           onConnect={connect ? () => (setSettings(false), connect()) : null}
-          onRelink={(a) => (setSettings(false), setAdding({ at: 'link', accountId: a.id, name: a.name }))}
           onClose={() => setSettings(false)}
         />
       ) : null}

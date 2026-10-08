@@ -74,8 +74,9 @@ export function LinkPhone({ accountId, onLinked }: { accountId: number; onLinked
             <b className="text-[14px] text-ink">Linked</b>
             <span className="text-[12px] text-ink-3">{qr.data?.status_note ?? 'Loading your conversations…'}</span>
           </>
-        ) : qr.data?.state === 'authenticated' ? (
-          <Spinner label="Scanned. Loading your conversations…" />
+        ) : qr.data?.state === 'authenticated' || qr.data?.state === 'authenticating' ? (
+          // The bridge's own progress ("Loading your conversations — 63%"), so a long first load does not look stuck.
+          <Spinner label={qr.data.status_note?.trim() || 'Scanned. Loading your conversations…'} />
         ) : qr.data?.qr ? (
           <>
             <QrCode text={qr.data.qr} />
@@ -83,6 +84,8 @@ export function LinkPhone({ accountId, onLinked }: { accountId: number; onLinked
           </>
         ) : qr.data?.state === 'auth_failure' ? (
           <p className="max-w-sm text-[12.5px] text-ink-2">The phone unlinked this device. Scan the next code to link it again.</p>
+        ) : qr.data?.status_note && !qr.data.qr ? (
+          <Spinner label={qr.data.status_note} />
         ) : qr.error ? (
           <p role="alert" className="max-w-sm rounded-[8px] bg-danger-bg p-3 text-[12.5px] text-danger">{errorMessage(qr.error)}</p>
         ) : (

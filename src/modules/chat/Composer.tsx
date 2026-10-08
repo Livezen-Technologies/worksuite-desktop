@@ -57,6 +57,8 @@ export interface ComposerChannel {
   voice: boolean;
   attachChoices?: AttachChoice[];
   notice?: ReactNode;
+  /** Quick actions shown at the top of the reply box, on its surface (WhatsApp's poll, place, contact card, sticker). */
+  toolbar?: ReactNode;
   context: () => Turn[];
   refuseFile: (file: File) => string | null;
   /** `canned`: the saved reply the words started from, counted as a use once sent (RDC-03). */
@@ -1046,6 +1048,7 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   return (
     <div ref={root} data-chat-composer onDragOver={(e) => { if (channel && e.dataTransfer.types.includes('Files')) e.preventDefault(); }} onDrop={(e) => { if (!channel) return; e.preventDefault(); for (const f of Array.from(e.dataTransfer.files)) stageBlob(f, f.name); }} className={cx('relative flex shrink-0 flex-col border-t border-line bg-surface', compact ? 'gap-1.5 px-2.5 pt-2 pb-2.5' : 'gap-2 px-4 pt-2.5 pb-3')}>
       {extras}
+      {channel?.toolbar}
       {channel?.notice}
       {channel ? <input ref={fileInput} type="file" multiple hidden onChange={(e) => { for (const f of Array.from(e.target.files ?? [])) stageBlob(f, f.name); e.target.value = ''; }} /> : null}
       {lineEl}

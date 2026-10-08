@@ -547,8 +547,8 @@ describe('WhatsApp in Chat', () => {
 });
 
 describe('WhatsApp channel settings', () => {
-  const settings = (accounts: WaAccount[], o: { onConnect?: (() => void) | null; onRelink?: (a: WaAccount) => void } = {}) =>
-    wrap(<WhatsappSettings accounts={accounts} loading={false} onConnect={o.onConnect ?? null} onRelink={o.onRelink ?? (() => undefined)} onClose={() => undefined} />);
+  const settings = (accounts: WaAccount[], o: { onConnect?: (() => void) | null } = {}) =>
+    wrap(<WhatsappSettings accounts={accounts} loading={false} onConnect={o.onConnect ?? null} onClose={() => undefined} />);
 
   it('lists the numbers and where each stands, with what this person may do', () => {
     settings([account({ role: 'owner', provider_label: 'WhatsApp Web' }), account({ id: 2, name: 'Support', is_default: false, status: 'error', status_note: 'The phone unlinked this device.', can_connect: false, role: 'agent' })]);
@@ -568,12 +568,12 @@ describe('WhatsApp channel settings', () => {
     expect(screen.queryByRole('button', { name: 'Connect a number' })).toBeNull();
   });
 
-  it('checks a connection, makes a number the default, links one again and unlinks one after asking', async () => {
+  it('checks a connection, makes a number the default, links one again in its own card and unlinks one after asking', async () => {
     vi.mocked(apiPost).mockResolvedValue({ ok: true, error: null } as never);
-    const onRelink = vi.fn();
+    vi.mocked(apiGet).mockResolvedValue({ ok: true, qr: null, state: 'authenticated', linked: false, status_note: 'Loading your conversations — 63%', error: null } as never);
     const onConnect = vi.fn();
     const down = account({ id: 2, name: 'Support', is_default: false, status: 'disconnected' });
-    settings([account({}), down], { onRelink, onConnect });
+    settings([account({}), down], { onConnect });
     const sales = screen.getByRole('listitem', { name: 'Sales' });
     fireEvent.click(within(sales).getByRole('button', { name: 'Check connection' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/1/check'));
@@ -581,7 +581,11 @@ describe('WhatsApp channel settings', () => {
     fireEvent.click(within(support).getByRole('button', { name: 'Make default' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/2/default'));
     fireEvent.click(within(support).getByRole('button', { name: 'Link again' }));
-    expect(onRelink).toHaveBeenCalledWith(down);
+    // The code and the progress open where Link again was pressed, not in another screen.
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/2/link'));
+    expect(await within(support).findByText('Loading your conversations — 63%')).toBeTruthy();
+    fireEvent.click(within(support).getByRole('button', { name: 'Hide the code' }));
+    expect(within(support).queryByText('Loading your conversations — 63%')).toBeNull();
     fireEvent.click(within(sales).getByRole('button', { name: 'More actions for Sales' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Unlink from phone' }));
     expect(within(sales).getByRole('alert').textContent).toContain('Unlink Sales from the phone? Its conversations stay here.');
