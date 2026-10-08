@@ -22,13 +22,14 @@ import { Avatar, Button, Empty, ErrorNote, Modal, Spinner, cx } from '../../../c
 import { openChatAttachment, previewKind, type Attachment } from '../AttachmentViewer';
 import { VoiceMessage } from '../kit/VoiceMessage';
 import { mediaUrl } from '../types';
+import { QUICK_REACTIONS } from '../parts';
 import { ConversationMenu } from '../ConversationMenu';
 import { LIST_WIDTH, badgeText, rememberWhatsapp } from './channels';
 import { LinkPhone } from './LinkPhone';
 import { fullName, previewParts, whoIs, whoSent, withMentionNames, type WaWho } from './wa-names';
 import { AddToContacts, ContactPanel, LinkToContact, WaAvatar, contactRoute, waContactMenuItems } from './WaContact';
 import {
-  fileRefusal, isConnected, isConnecting, messageText, readWa, sendWa, sendWaFiles, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaTemplates, useWaThread, waAttachment, waLimits, waNumber, WA_SCOPES,
+  fileRefusal, isConnected, isConnecting, messageText, reactWa, readWa, refetchWaMedia, sendWa, sendWaFiles, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaTemplates, useWaThread, waAttachment, waLimits, waNumber, WA_SCOPES,
   type WaAccount, type WaChat, type WaMessage, type WaScope, type WaTemplate,
 } from './whatsapp';
 
@@ -532,7 +533,8 @@ function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id:
             const author = group && m.direction === 'in' ? whoSent(m, index) : null;
             // Their avatar beside a voice note of theirs (#285): the contact's, or the group member's initials.
             const avatar = m.direction === 'in' ? (group ? <Avatar name={author?.name ?? who.name} size={30} /> : <WaAvatar who={who} size={30} />) : null;
-            return <Bubble key={m.id} m={m} author={author?.name ?? null} avatar={avatar} index={index} gallery={gallery} onReply={() => setReply({ id: m.id, sender_name: m.direction === 'out' ? (m.sender_name ?? 'You') : (author?.name ?? who.name), snippet: messageText(m).slice(0, 120) })} />;
+            const quotedBy = m.quoted ? (m.quoted.direction === 'out' ? (m.quoted.sender_name ?? 'You') : group ? (whoSent({ ...m, direction: 'in', from_wa_id: m.quoted.from_wa_id, author_name: null } as WaMessage, index)?.name ?? m.quoted.from_wa_id ?? who.name) : who.name) : null;
+            return <Bubble key={m.id} m={m} author={author?.name ?? null} avatar={avatar} index={index} gallery={gallery} quotedBy={quotedBy} canSend={!refusal} onChanged={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} onJump={(id) => document.querySelector<HTMLElement>(`[data-wa-message="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })} onReply={() => setReply({ id: m.id, sender_name: m.direction === 'out' ? (m.sender_name ?? 'You') : (author?.name ?? who.name), snippet: messageText(m).slice(0, 120) })} />;
           })}
         </div>
         <WhatsappComposer chatId={chat.id} accountId={chat.account_id} name={who.name} messages={shown} reply={reply} onClearReply={() => setReply(null)} reconnect={down ? () => onRelink(chat.account) : undefined} refusal={refusal} templates={!blocked} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
@@ -572,34 +574,93 @@ const VOICE_KINDS = new Set(['audio', 'voice', 'ptt']);
  * A message: its words, and its attachment — a picture shown, a voice note played in place with the shared voice player
  * (#285), anything else by its name — opened in the shared preview.
  */
-function Bubble({ m, author, avatar, index, gallery, onReply }: { m: WaMessage; author: string | null; avatar?: ReactNode; index: PhoneIndex | undefined; gallery: Attachment[]; onReply: () => void }) {
+function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend, onReply, onJump, onChanged }: { m: WaMessage; author: string | null; avatar?: ReactNode; index: PhoneIndex | undefined; gallery: Attachment[]; quotedBy: string | null; canSend: boolean; onReply: () => void; onJump: (id: number) => void; onChanged: () => void }) {
   const ours = m.direction === 'out';
   const file = waAttachment(m);
   // What it is comes from its type, never its name: a phone's voice note is `audio/ogg`.
   const voice = !!file && VOICE_KINDS.has(m.kind) && previewKind(file) === 'audio';
+  const [picking, setPicking] = useState(false);
+  const [busy, setBusy] = useState(false);
+  const reactions = m.reactions ?? [];
+  const mine = reactions.find((r) => r.mine)?.emoji ?? null;
+  const reactable = canSend && !!m.external_id;
+  // A picture, video or file WhatsApp sent that was not kept yet: fetched again on request.
+  const missing = !file && !!m.media_status && m.media_status !== 'stored' && m.media_status !== 'skipped' && m.kind !== 'text' && m.kind !== 'template';
+
+  const react = (emoji: string) => {
+    setPicking(false);
+    void reactWa(m.id, emoji === mine ? '' : emoji).then(onChanged, (e) => toast('error', errorMessage(e)));
+  };
+  const copy = () => void navigator.clipboard?.writeText(messageText(m)).then(() => toast('success', 'Copied'), () => toast('error', 'Could not copy'));
+  const fetchAgain = () => {
+    setBusy(true);
+    void refetchWaMedia(m.id).then(onChanged, (e) => toast('error', errorMessage(e))).finally(() => setBusy(false));
+  };
+
   return (
-    <div className={cx('flex max-w-[75%] flex-col gap-0.5', ours ? 'items-end self-end' : 'items-start self-start')}>
+    <div data-wa-message={m.id} className={cx('group/wa relative flex max-w-[75%] flex-col gap-0.5', ours ? 'items-end self-end' : 'items-start self-start')}>
       {author ? <span className="px-1 text-[11.5px] font-semibold text-primary">{author}</span> : null}
-      <div className={cx('text-[13px] whitespace-pre-wrap break-words text-ink', voice ? 'p-1' : 'px-3 py-2', ours ? 'rounded-[12px_4px_12px_12px] bg-selection' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface')}>
-        {voice ? (
-          <VoiceMessage file={file} own={ours} look="drawer" of={{ key: `wa${m.id}`, avatar }} />
-        ) : file && previewKind(file) === 'image' ? (
-          <button type="button" aria-label={`${l10n('Open')} ${file.filename}`} onClick={() => openChatAttachment(file, linkOut, gallery)} className="mb-1 block overflow-hidden rounded-[8px]">
-            <img src={mediaUrl(file.url) ?? undefined} alt={file.filename} loading="lazy" className="max-h-[240px] max-w-[280px] object-cover" />
-          </button>
-        ) : file ? (
-          <button type="button" aria-label={`${l10n('Open')} ${file.filename}`} onClick={() => openChatAttachment(file, linkOut, gallery)} className="mb-1 flex max-w-full items-center gap-2 rounded-[8px] border border-line bg-surface px-2.5 py-2 text-left hover:bg-subtle">
-            <Icon name="file-text" size={16} className="shrink-0 text-ink-3" />
-            <span className="min-w-0 truncate font-semibold">{file.filename}</span>
-          </button>
-        ) : m.kind !== 'text' && m.kind !== 'template' ? (
-          <Icon name={MEDIA_ICON[m.kind] ?? 'paperclip'} size={13} className="mr-1 inline text-ink-3" />
-        ) : null}
-        {voice ? ((m.caption ?? '').trim() ? <span className="block px-2 pb-1">{withMentionNames(m.caption ?? '', index)}</span> : null) : withMentionNames(file ? (m.caption ?? '') : messageText(m), index)}
-        {!file && m.media_note ? <span className="block text-[11.5px] text-ink-3">{m.media_note}</span> : null}
+      <div className={cx('flex items-center gap-1', ours ? 'flex-row-reverse' : 'flex-row')}>
+        <div className={cx('min-w-0 text-[13px] whitespace-pre-wrap break-words text-ink', voice ? 'p-1' : 'px-3 py-2', ours ? 'rounded-[12px_4px_12px_12px] bg-selection' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface')}>
+          {m.quoted ? (
+            <button type="button" onClick={() => onJump(m.quoted!.id)} aria-label={`Replying to ${quotedBy ?? ''}: ${m.quoted.text}`} className="mb-1.5 block w-full max-w-[320px] rounded-[7px] border-l-[3px] border-primary bg-subtle px-2 py-1 text-left hover:bg-line/40">
+              <span className="block truncate text-[11.5px] font-semibold text-primary">{quotedBy}</span>
+              <span className="block truncate text-[12px] text-ink-2">{m.quoted.text}</span>
+            </button>
+          ) : null}
+          {voice ? (
+            <VoiceMessage file={file} own={ours} look="drawer" of={{ key: `wa${m.id}`, avatar }} />
+          ) : file && previewKind(file) === 'image' ? (
+            <button type="button" aria-label={`${l10n('Open')} ${file.filename}`} onClick={() => openChatAttachment(file, linkOut, gallery)} className="mb-1 block overflow-hidden rounded-[8px]">
+              <img src={mediaUrl(file.url) ?? undefined} alt={file.filename} loading="lazy" className="max-h-[240px] max-w-[280px] object-cover" />
+            </button>
+          ) : file && previewKind(file) === 'video' ? (
+            <button type="button" aria-label={`${l10n('Open')} ${file.filename}`} onClick={() => openChatAttachment(file, linkOut, gallery)} className="relative mb-1 block overflow-hidden rounded-[8px] bg-black">
+              <video src={mediaUrl(file.url) ?? undefined} preload="metadata" muted className="max-h-[240px] max-w-[280px]" />
+              <span className="absolute inset-0 flex items-center justify-center text-white"><Icon name="play" size={28} /></span>
+            </button>
+          ) : file ? (
+            <button type="button" aria-label={`${l10n('Open')} ${file.filename}`} onClick={() => openChatAttachment(file, linkOut, gallery)} className="mb-1 flex max-w-full items-center gap-2 rounded-[8px] border border-line bg-surface px-2.5 py-2 text-left hover:bg-subtle">
+              <Icon name="file-text" size={16} className="shrink-0 text-ink-3" />
+              <span className="min-w-0 truncate font-semibold">{file.filename}</span>
+            </button>
+          ) : missing ? (
+            <button type="button" onClick={fetchAgain} disabled={busy} className="mb-1 flex h-[120px] w-[220px] flex-col items-center justify-center gap-1.5 rounded-[8px] border border-dashed border-line bg-subtle text-[12px] text-ink-2 hover:bg-line/40 disabled:opacity-60">
+              <Icon name={MEDIA_ICON[m.kind] ?? 'paperclip'} size={22} className="text-ink-3" />
+              <span className="font-semibold">{busy ? 'Loading…' : m.kind === 'image' || m.kind === 'sticker' ? 'Load picture' : m.kind === 'video' ? 'Load video' : 'Load attachment'}</span>
+            </button>
+          ) : m.kind !== 'text' && m.kind !== 'template' ? (
+            <Icon name={MEDIA_ICON[m.kind] ?? 'paperclip'} size={13} className="mr-1 inline text-ink-3" />
+          ) : null}
+          {voice ? ((m.caption ?? '').trim() ? <span className="block px-2 pb-1">{withMentionNames(m.caption ?? '', index)}</span> : null) : withMentionNames(file || missing ? (m.caption ?? '') : messageText(m), index)}
+          {!file && m.media_note ? <span className="block text-[11.5px] text-ink-3">{m.media_note}</span> : null}
+        </div>
+        {/* What you can do to it, under the mouse: react, reply, copy. */}
+        <div className="flex shrink-0 items-center gap-0.5 opacity-0 transition-opacity group-hover/wa:opacity-100 focus-within:opacity-100">
+          {reactable ? <button type="button" aria-label="React" title="React" aria-expanded={picking} onClick={() => setPicking((v) => !v)} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink"><Icon name="smile" size={15} /></button> : null}
+          {canSend ? <button type="button" aria-label="Reply" title="Reply" onClick={onReply} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink"><Icon name="reply" size={15} /></button> : null}
+          <button type="button" aria-label="Copy text" title="Copy text" onClick={copy} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink"><Icon name="copy" size={14} /></button>
+        </div>
       </div>
+      {picking ? (
+        <div role="menu" aria-label="Reactions" className={cx('absolute z-10 flex gap-0.5 rounded-full border border-line bg-surface px-1.5 py-1 shadow-lg', ours ? 'right-0' : 'left-0', author ? 'top-5' : '-top-10')} onKeyDown={(e) => e.key === 'Escape' && setPicking(false)}>
+          {QUICK_REACTIONS.map((e) => (
+            <button key={e} type="button" role="menuitem" aria-label={`React ${e}`} onClick={() => react(e)} className={cx('flex h-8 w-8 items-center justify-center rounded-full text-[18px] transition-transform hover:scale-125 hover:bg-subtle', mine === e && 'bg-selection')}>{e}</button>
+          ))}
+        </div>
+      ) : null}
+      {reactions.length ? (
+        <div className={cx('-mt-1.5 flex flex-wrap gap-1', ours ? 'justify-end pr-2' : 'pl-2')}>
+          {reactions.map((r) => (
+            <button key={r.emoji} type="button" disabled={!reactable} onClick={() => react(r.emoji)} aria-pressed={r.mine} aria-label={`${r.emoji} ${r.count}${r.mine ? ', yours' : ''}`} title={r.mine ? 'Yours — click to take it away' : 'React with this too'}
+              className={cx('flex h-[22px] items-center gap-1 rounded-full border px-1.5 text-[12px] shadow-sm', r.mine ? 'border-primary bg-selection text-primary' : 'border-line bg-surface text-ink-2', reactable && 'hover:border-primary')}>
+              <span>{r.emoji}</span>{r.count > 1 ? <span className="tabular-nums">{r.count}</span> : null}
+            </button>
+          ))}
+        </div>
+      ) : null}
       <span className={cx('text-[11px]', m.status === 'failed' ? 'font-semibold text-danger' : 'text-ink-3')}>
-        <button type="button" aria-label="Reply to message" onClick={onReply} className="mr-2 text-primary hover:underline">Reply</button>
+        {canSend ? <button type="button" aria-label="Reply to message" onClick={onReply} className="mr-2 text-primary hover:underline">Reply</button> : null}
         {ours && m.sender_name ? `${m.sender_name} · ` : ''}
         {sentAt(m.sent_at ?? m.created_at)}
         {ours && m.status ? ` · ${TICKS[m.status] ?? m.status}` : ''}

@@ -5,6 +5,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.207 — 2026-10-08
+
+- **WhatsApp: react, see what a reply answers, and load pictures (chat 1.69.0).**
+  - Point at a message for **React**, **Reply** and **Copy** beside it. React offers 👍 ❤️ 😂 😮 😢 🙏, sent as the
+    number like a phone.
+  - Reactions show as chips under the message, yours highlighted; click yours to take it away.
+  - A reply shows the message it answers above its words; click it to jump there.
+  - A picture that was not kept (the download failed, or the phone was offline) shows **Load picture**, which
+    fetches it again. Videos now show a preview frame too.
+  - Needs WorkSuite with Whatsapp 1.3.0 (Livezen-Technologies/worksuite#132).
+
 ## 0.2.206 — 2026-10-08
 
 - **Chat: picking several conversations is easier, and the toolbar does more (chat 1.68.0).**
