@@ -373,7 +373,8 @@ describe('WhatsApp in Chat', () => {
     const { container } = mount();
     const box = await screen.findByRole('textbox', { name: 'Message Nimal Perera on WhatsApp' });
     await waitFor(() => expect(apiGet).toHaveBeenCalledWith('/api/whatsapp/settings', undefined, expect.anything()));
-    const input = container.querySelector('input[type="file"]') as HTMLInputElement;
+    // The composer's own picker: the bar above it has a picker of its own, for stickers (a single picture).
+    const input = container.querySelector('input[type="file"][multiple]') as HTMLInputElement;
     const pdf = new File(['%PDF'], 'quote.pdf', { type: 'application/pdf' });
     const clip = new File(['x'], 'clip.mp4', { type: 'video/mp4' });
     // The workspace's settings have arrived: videos are switched off.
