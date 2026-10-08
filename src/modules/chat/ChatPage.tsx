@@ -376,6 +376,11 @@ function Rail({ rooms, loading, error, offline, retry, check, checkedAt, selecte
     if (a !== 'delete') endSelect();
   };
   const click = (r: Room, e: ReactMouseEvent) => {
+    // The box in the row's lead picks it without opening it, as in Mail and Files; Shift picks the run to it.
+    if ((e.target as HTMLElement).closest('[data-row-lead]')) {
+      if (!(e.shiftKey && sel.onRowClick(e, r.id))) sel.toggle(r.id);
+      return;
+    }
     if (sel.onRowClick(e, r.id)) return;
     go(`/chat?room=${r.id}`);
   };
@@ -479,14 +484,8 @@ function Rail({ rooms, loading, error, offline, retry, check, checkedAt, selecte
         {offline ? <OfflineNote cachedAt={offline} /> : null}
         {picked.length || selecting ? (
           <BulkBar tone="rail" label="Selected conversations" count={picked.length} onClear={endSelect}>
-            {(
-              [
-                ['read', 'Mark read', 'check'],
-                ['archive', 'Archive', 'archive'],
-                ['mute', 'Mute', 'bell-off'],
-                ['delete', 'Delete', 'trash'],
-              ] as Array<[BulkAction, string, string]>
-            ).map(([a, label, icon]) => (
+            <BulkIconButton label={sel.state === 'all' ? 'Select none' : 'Select all'} icon={sel.state === 'all' ? 'minus' : 'check-check'} onClick={sel.toggleAll} />
+            {bulkActions(pickedRooms).map(([a, label, icon]) => (
               <BulkIconButton key={a} label={label} icon={icon} disabled={!picked.length} onClick={() => runBulk(pickedRooms, a)} />
             ))}
           </BulkBar>
@@ -577,6 +576,23 @@ function Rail({ rooms, loading, error, offline, retry, check, checkedAt, selecte
 }
 
 /**
+ * The rail's toolbar while conversations are picked: what fits all of them, as the right-click menu decides it —
+ * Mark read or unread, Archive or Unarchive, Mute or Unmute, and Delete when any of them can be deleted.
+ */
+function bulkActions(rooms: Room[]): Array<[BulkAction, string, string]> {
+  const anyUnread = rooms.some((r) => r.unread > 0 || r.marked_unread);
+  const allArchived = rooms.length > 0 && rooms.every((r) => r.archived);
+  const allMuted = rooms.length > 0 && rooms.every((r) => r.muted);
+  const deletable = rooms.length === 0 || rooms.some((r) => r.type !== 'system' && r.type !== 'meeting');
+  return [
+    anyUnread || rooms.length === 0 ? ['read', 'Mark read', 'check'] : ['unread', 'Mark unread', 'mail'],
+    allArchived ? ['unarchive', 'Unarchive', 'archive'] : ['archive', 'Archive', 'archive'],
+    allMuted ? ['unmute', 'Unmute', 'bell'] : ['mute', 'Mute', 'bell-off'],
+    ...(deletable ? [['delete', 'Delete', 'trash'] as [BulkAction, string, string]] : []),
+  ];
+}
+
+/**
  * A conversation in the list: pinned ones carry a pin, muted ones a struck bell and a grey count (they are not in
  * the total either), and one marked unread by hand a dot with nothing new in it (worksuite-desktop#183).
  * The dot and, while conversations are picked, the tick share the lead column every list has (worksuite-desktop#290);
@@ -597,9 +613,9 @@ function RoomRow({ r, active, picked, selecting, status, onClick, onMenu, mark, 
       aria-pressed={selecting || picked ? picked : undefined}
       onClick={onClick}
       onContextMenu={onMenu}
-      className={cx('flex w-full items-center gap-2.5 py-[7px] pr-3.5 pl-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? 'bg-selection ring-1 ring-primary ring-inset' : active ? 'bg-selection' : 'hover:bg-subtle', markClass)}
+      className={cx('group flex w-full items-center gap-2.5 py-[7px] pr-3.5 pl-3 text-left outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-inset', picked ? 'bg-selection ring-1 ring-primary ring-inset' : active ? 'bg-selection' : 'hover:bg-subtle', markClass)}
     >
-      <RowLead unread={dot} dotLabel="Marked unread" checked={picked} selecting={selecting} className="-mr-2.5 self-start" />
+      <RowLead unread={dot} dotLabel="Marked unread" checked={picked} selecting={selecting} hoverBox className="-mr-2.5 self-start" />
       <span className="relative shrink-0">
         <UserAvatar userId={roomPerson(r)} name={r.avatar_name || r.name} size={34} className={group ? '!rounded-[9px]' : ''} />
         {st ? <span className={cx('absolute -right-px -bottom-px h-[10px] w-[10px] rounded-full border-2 border-surface', st.dot)} aria-label={st.label} title={st.label} /> : null}

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.68.0 — 2026-10-08
+
+- Chat: the details drawer laid out as the web chat's (header with Close, presence, Call/Video/Mute/Add/More, one row of tabs with counts); a checkbox in each conversation's row picks it without opening it, Select all, and the multi-select toolbar offers what fits (Mark read/unread, Archive/Unarchive, Mute/Unmute, Delete)
+
 ## 1.67.0 — 2026-10-08
 
 - website chats — reactions: staff react to the visitor's and the team's messages with the same bar as Team Chat, the visitor's own reactions show (they add them in the widget), and the thread redraws on chat.widget.reaction (needs server Communication 1.60.0; an older server sends none and none are offered)
