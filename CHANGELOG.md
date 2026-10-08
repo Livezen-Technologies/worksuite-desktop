@@ -5,6 +5,27 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.202 — 2026-10-08
+
+- **Pasted screenshots send again.** In Chat, pasting a screenshot (or any picture larger than about 120 KB) and
+  pressing Send ended in **Failed — The request was not valid.**, and Retry failed the same way. The app's own
+  safety check between the window and the background process measured the picture as text, where it is about ten
+  times its real size, and refused it as too large. It now leaves the picture's bytes to their own limit (100 MB for
+  a pasted file), so a 376 KB screenshot goes through. The same check could refuse the other things that cross as bytes once they passed
+  that size (a meeting-recording piece, audio for transcription, a locally opened document); it no longer does. Files picked from
+  disk were never affected.
+- **Website chats: send the visitor a contact form (chat 1.65.0).** Beside **Reply to visitor / Internal note**
+  there is now **Contact form**. Pick what to ask for (name, email, phone number, company), change the message if
+  you like, and send. The visitor gets the form in their chat window. What they fill in goes on their profile (the
+  PROFILE panel stops saying "Nothing is known about this visitor yet"), and the chat carries on. While the form
+  waits, a line above the composer says so, with **Withdraw**. Needs the server's **Communication 1.58.0**; against
+  an older server the button is not shown.
+- **Website chats: edit the visitor's details and save them to Contacts (chat 1.66.0).** The visitor card now
+  has **Edit details**, for name, email, phone number and company. **Also save to Contacts**, on by default, writes
+  them to the visitor's WorkSuite contact and links the visitor to it. That is the contact they are linked to, or
+  one with the same email, or a new one. Needs the server's **Communication 1.59.0**; older servers save the visitor
+  only and do not save the company.
+
 ## 0.2.201 — 2026-10-07
 
 - **Point of Sale: discount, coupon and gift voucher on Take payment, the customer display redrawn, the till works

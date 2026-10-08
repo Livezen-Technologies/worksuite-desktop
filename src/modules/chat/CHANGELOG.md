@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.66.0 — 2026-10-08
+
+- website chats — Edit details on the visitor card: name, email, phone number and company, saved to the visitor and (Also save to Contacts, on by default) to their WorkSuite contact, which links them (needs server Communication 1.59.0)
+
+## 1.65.0 — 2026-10-08
+
+- website chats — Contact form beside Reply to visitor / Internal note: pick name, email, phone number or company and the visitor fills it in in the chat; what they give goes on their profile; while it waits the thread says so, with Withdraw (needs server Communication 1.58.0; hidden against an older server)
+
 ## 1.64.0 — 2026-10-07
 
 **Changed**

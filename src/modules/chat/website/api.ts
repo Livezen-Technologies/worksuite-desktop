@@ -376,6 +376,16 @@ export interface WebsiteVisitor {
 /** Why a chat closed (IDL-03): an agent finished it, the visitor ended it, or it went quiet and closed itself. */
 export type ClosedReason = 'agent' | 'visitor' | 'idle';
 
+/** A contact details form sent into a website chat (`ContactForm::forStaff`). */
+export interface ContactFormState {
+  asked_at: string;
+  asked_by: string | null;
+  fields: Array<'name' | 'email' | 'phone' | 'company'>;
+  open: boolean;
+  done_at: string | null;
+  outcome: 'shared' | 'skipped' | 'withdrawn' | null;
+}
+
 export interface WebsiteConversation {
   conversation: {
     id: number;
@@ -409,6 +419,8 @@ export interface WebsiteConversation {
     /** The visitor's chat before this one, when this is a new chat after the reopen window (#291). */
     previous_conversation_id?: number | null;
   };
+  /** The contact details form sent to the visitor, and how it ended (server Communication 1.58.0; absent before). */
+  contact_form?: ContactFormState | null;
   visitor: WebsiteVisitor | null;
   messages: WebsiteMessage[];
   journey?: Array<{ url: string | null; title: string | null; at: string }>;
