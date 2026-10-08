@@ -27,6 +27,7 @@ import { ConversationMenu } from '../ConversationMenu';
 import { LIST_WIDTH, badgeText, rememberWhatsapp } from './channels';
 import { LinkPhone } from './LinkPhone';
 import { ContactCards, JoinGroup, LocationCard, PollCard, WaExtrasBar } from './WaExtras';
+import { WaChannels } from './WaChannels';
 import { fullName, previewParts, whoIs, whoSent, withMentionNames, type WaWho } from './wa-names';
 import { AddToContacts, ContactPanel, LinkToContact, WaAvatar, contactRoute, waContactMenuItems } from './WaContact';
 import {
@@ -56,6 +57,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   const fresh = query.get('new') === '1';
   const [starting, setStarting] = useState(false);
   const [joining, setJoining] = useState(false);
+  const [channelsOpen, setChannelsOpen] = useState(false);
   const listQc = useQueryClient();
   // Numbers that can join a group by link: linked WhatsApp Web numbers this person may send on.
   const joinable = accounts.filter((a) => a.provider === 'web_js' && a.status === 'connected' && a.can_send !== false);
@@ -191,6 +193,11 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
                   <Icon name="settings" size={15} />
                 </button>
               ) : null}
+              {accounts.some((a) => a.provider === 'web_js') ? (
+                <button type="button" aria-label={l10n('WhatsApp channels')} title={l10n('WhatsApp channels')} onClick={() => setChannelsOpen(true)} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 outline-none hover:bg-subtle focus-visible:ring-2 focus-visible:ring-primary">
+                  <Icon name="megaphone" size={15} />
+                </button>
+              ) : null}
               {joinable.length ? (
                 <button type="button" aria-label={l10n('Join a group by link')} title={l10n('Join a group by link')} onClick={() => setJoining(true)} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 outline-none hover:bg-subtle focus-visible:ring-2 focus-visible:ring-primary">
                   <Icon name="users" size={15} />
@@ -233,6 +240,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
       ) : null}
       {action?.kind === 'add' ? <AddToContacts who={action.who} onClose={() => setAction(null)} /> : null}
       {action?.kind === 'link' ? <LinkToContact who={action.who} onClose={() => setAction(null)} /> : null}
+      {channelsOpen ? <WaChannels accounts={accounts} onClose={() => setChannelsOpen(false)} /> : null}
       {joining ? <JoinGroup accounts={joinable} onClose={() => setJoining(false)} onJoined={(id) => { setJoining(false); void listQc.invalidateQueries({ queryKey: ['whatsapp'] }); if (id) go(`/chat?channel=whatsapp&wa=${id}`); }} /> : null}
       {(starting || (fresh && canStart) || (to && !selected)) && !loading ? (
         <StartConversation
