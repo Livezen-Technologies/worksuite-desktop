@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.70.0 — 2026-10-08
+
+- WhatsApp: polls (create, vote, tallies), sending a location, contact cards and stickers from the row above the reply box; places and contact cards drawn in the conversation; the person's picture and about line with Block/Unblock, a group's invite link and settings in the contact panel; Join a group by link
+
 ## 1.69.0 — 2026-10-08
 
 - WhatsApp: react to messages (picker beside a message, chips under it), the message a reply answers shown above it, Copy, and Load picture for a picture that was not kept

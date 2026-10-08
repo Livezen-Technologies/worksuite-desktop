@@ -26,6 +26,7 @@ import { QUICK_REACTIONS } from '../parts';
 import { ConversationMenu } from '../ConversationMenu';
 import { LIST_WIDTH, badgeText, rememberWhatsapp } from './channels';
 import { LinkPhone } from './LinkPhone';
+import { ContactCards, JoinGroup, LocationCard, PollCard, WaExtrasBar } from './WaExtras';
 import { fullName, previewParts, whoIs, whoSent, withMentionNames, type WaWho } from './wa-names';
 import { AddToContacts, ContactPanel, LinkToContact, WaAvatar, contactRoute, waContactMenuItems } from './WaContact';
 import {
@@ -54,6 +55,10 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   const to = query.get('to');
   const fresh = query.get('new') === '1';
   const [starting, setStarting] = useState(false);
+  const [joining, setJoining] = useState(false);
+  const listQc = useQueryClient();
+  // Numbers that can join a group by link: linked WhatsApp Web numbers this person may send on.
+  const joinable = accounts.filter((a) => a.provider === 'web_js' && a.status === 'connected' && a.can_send !== false);
   const senders = accounts.filter((a) => a.can_send !== false && isConnected(a));
   // The number chosen on the channel rail or in the header (#155); one no longer shared reads as all of them.
   const chosen = useStore(waNumber, (s) => s.id);
@@ -186,6 +191,11 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
                   <Icon name="settings" size={15} />
                 </button>
               ) : null}
+              {joinable.length ? (
+                <button type="button" aria-label={l10n('Join a group by link')} title={l10n('Join a group by link')} onClick={() => setJoining(true)} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 outline-none hover:bg-subtle focus-visible:ring-2 focus-visible:ring-primary">
+                  <Icon name="users" size={15} />
+                </button>
+              ) : null}
               {canStart ? (
                 <button type="button" aria-label={l10n('New WhatsApp conversation')} title={`${l10n('New WhatsApp conversation')} (${NEW_KEY})`} onClick={() => setStarting(true)} className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-white outline-none hover:bg-primary-hover focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1">
                   <Icon name="plus" size={17} />
@@ -223,6 +233,7 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
       ) : null}
       {action?.kind === 'add' ? <AddToContacts who={action.who} onClose={() => setAction(null)} /> : null}
       {action?.kind === 'link' ? <LinkToContact who={action.who} onClose={() => setAction(null)} /> : null}
+      {joining ? <JoinGroup accounts={joinable} onClose={() => setJoining(false)} onJoined={(id) => { setJoining(false); void listQc.invalidateQueries({ queryKey: ['whatsapp'] }); if (id) go(`/chat?channel=whatsapp&wa=${id}`); }} /> : null}
       {(starting || (fresh && canStart) || (to && !selected)) && !loading ? (
         <StartConversation
           accounts={senders}
@@ -537,6 +548,7 @@ function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id:
             return <Bubble key={m.id} m={m} author={author?.name ?? null} avatar={avatar} index={index} gallery={gallery} quotedBy={quotedBy} canSend={!refusal} onChanged={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} onJump={(id) => document.querySelector<HTMLElement>(`[data-wa-message="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })} onReply={() => setReply({ id: m.id, sender_name: m.direction === 'out' ? (m.sender_name ?? 'You') : (author?.name ?? who.name), snippet: messageText(m).slice(0, 120) })} />;
           })}
         </div>
+        {!refusal ? <WaExtrasBar chatId={chat.id} webJs={chat.account?.provider === 'web_js'} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} /> : null}
         <WhatsappComposer chatId={chat.id} accountId={chat.account_id} name={who.name} messages={shown} reply={reply} onClearReply={() => setReply(null)} reconnect={down ? () => onRelink(chat.account) : undefined} refusal={refusal} templates={!blocked} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
       </section>
       {panel ? <ContactPanel who={who} chatId={chat.id} onClose={() => setPanel(false)} onPick={onPick} onAdd={() => onAction('add', who)} onLink={() => onAction('link', who)} /> : null}
@@ -585,7 +597,7 @@ function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend, onReply,
   const mine = reactions.find((r) => r.mine)?.emoji ?? null;
   const reactable = canSend && !!m.external_id;
   // A picture, video or file WhatsApp sent that was not kept yet: fetched again on request.
-  const missing = !file && !!m.media_status && m.media_status !== 'stored' && m.media_status !== 'skipped' && m.kind !== 'text' && m.kind !== 'template';
+  const missing = !file && !!m.media_status && m.media_status !== 'stored' && m.media_status !== 'skipped' && !['text', 'template', 'poll', 'contacts', 'location'].includes(m.kind);
 
   const react = (emoji: string) => {
     setPicking(false);
@@ -608,7 +620,13 @@ function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend, onReply,
               <span className="block truncate text-[12px] text-ink-2">{m.quoted.text}</span>
             </button>
           ) : null}
-          {voice ? (
+          {m.kind === 'poll' && m.poll ? (
+            <PollCard m={m} canVote={canSend && !!m.external_id} onVoted={onChanged} />
+          ) : m.kind === 'contacts' && (m.meta as { contacts?: unknown[] } | null)?.contacts?.length ? (
+            <ContactCards m={m} />
+          ) : m.kind === 'location' && typeof (m.meta as { latitude?: unknown } | null)?.latitude === 'number' ? (
+            <LocationCard m={m} />
+          ) : voice ? (
             <VoiceMessage file={file} own={ours} look="drawer" of={{ key: `wa${m.id}`, avatar }} />
           ) : file && previewKind(file) === 'image' ? (
             <button type="button" aria-label={`${l10n('Open')} ${file.filename}`} onClick={() => openChatAttachment(file, linkOut, gallery)} className="mb-1 block overflow-hidden rounded-[8px]">
@@ -632,7 +650,7 @@ function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend, onReply,
           ) : m.kind !== 'text' && m.kind !== 'template' ? (
             <Icon name={MEDIA_ICON[m.kind] ?? 'paperclip'} size={13} className="mr-1 inline text-ink-3" />
           ) : null}
-          {voice ? ((m.caption ?? '').trim() ? <span className="block px-2 pb-1">{withMentionNames(m.caption ?? '', index)}</span> : null) : withMentionNames(file || missing ? (m.caption ?? '') : messageText(m), index)}
+          {m.kind === 'poll' || m.kind === 'contacts' || m.kind === 'location' ? null : voice ? ((m.caption ?? '').trim() ? <span className="block px-2 pb-1">{withMentionNames(m.caption ?? '', index)}</span> : null) : withMentionNames(file || missing ? (m.caption ?? '') : messageText(m), index)}
           {!file && m.media_note ? <span className="block text-[11.5px] text-ink-3">{m.media_note}</span> : null}
         </div>
         {/* What you can do to it, under the mouse: react, reply, copy. */}

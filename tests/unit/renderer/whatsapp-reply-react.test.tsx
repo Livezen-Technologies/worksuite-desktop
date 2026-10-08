@@ -39,6 +39,7 @@ beforeEach(() => {
     if (path === '/api/whatsapp/chats') return { chats: [chat], total: 1 };
     if (path === '/api/contacts/phone-index') return { region: 'LK', contacts: [] };
     if (path === '/api/whatsapp/settings') return { settings: {}, can_edit: false };
+    if (path === '/api/whatsapp/chats/7/profile') return { available: false };
     if (path === '/api/whatsapp/chats/7') {
       return {
         chat: { ...chat, window: { allowed: true, reason: null }, account }, has_more: false, can_send: true,
@@ -46,6 +47,8 @@ beforeEach(() => {
           { ...base, id: 1, external_id: 'w1', direction: 'in', kind: 'text', body: 'What is the license validity?', reactions: [{ emoji: '👍', count: 1, mine: true }] },
           { ...base, id: 2, external_id: 'w2', direction: 'out', kind: 'text', body: 'One year', sender_name: 'Hasarinda', reply_to: 'w1', quoted: { id: 1, direction: 'in', kind: 'text', text: 'What is the license validity?', sender_name: null, from_wa_id: '94767793692' } },
           { ...base, id: 3, external_id: 'w3', direction: 'in', kind: 'image', body: null, media_status: 'failed', media_note: 'The download failed.' },
+          { ...base, id: 4, external_id: 'w4', direction: 'in', kind: 'poll', body: 'Which day?', poll: { name: 'Which day?', options: ['Tuesday', 'Friday'], multiple: false, counts: { Friday: 1 }, mine: [], voters: 1 } },
+          { ...base, id: 5, external_id: 'w5', direction: 'in', kind: 'location', body: 'Office', meta: { latitude: 6.9271, longitude: 79.8612, name: 'Office', address: 'Colombo' } },
         ],
       };
     }
@@ -83,5 +86,23 @@ describe('WhatsApp reply, react and pictures', () => {
     mount();
     fireEvent.click(await screen.findByRole('button', { name: 'Load picture' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/messages/3/media', {}));
+  });
+
+  it('votes on a poll, shows a place, and sends a poll from the row above the reply box', async () => {
+    mount();
+    const poll = await screen.findByRole('group', { name: 'Poll: Which day?' });
+    expect(within(poll).getByText('Choose one · 1 voted')).toBeTruthy();
+    fireEvent.click(within(poll).getByRole('button', { name: /Tuesday/ }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/messages/4/vote', { options: ['Tuesday'] }));
+    expect(screen.getByText('Colombo')).toBeTruthy();
+
+    fireEvent.click(within(screen.getByRole('group', { name: 'Send something else' })).getByRole('button', { name: 'Poll' }));
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByText('Create a poll')).toBeTruthy();
+    fireEvent.change(within(dialog).getByPlaceholderText('Ask a question'), { target: { value: 'Lunch?' } });
+    fireEvent.change(within(dialog).getByLabelText('Answer 1'), { target: { value: 'Yes' } });
+    fireEvent.change(within(dialog).getByLabelText('Answer 2'), { target: { value: 'No' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Send poll' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/chats/7/messages', { kind: 'poll', question: 'Lunch?', options: ['Yes', 'No'], multiple: false }));
   });
 });

@@ -94,6 +94,10 @@ export interface WaMessage {
   quoted?: { id: number; direction: 'in' | 'out'; kind: string; text: string; sender_name: string | null; from_wa_id: string | null } | null;
   /** Reactions on it, by emoji; `mine` is this number's own. */
   reactions?: Array<{ emoji: string; count: number; mine: boolean }>;
+  /** A place, a contact card or a template: what the message carries besides its words. */
+  meta?: Record<string, unknown> | null;
+  /** A poll: its question and answers, the votes on each, and ours. */
+  poll?: { name: string; options: string[]; multiple: boolean; counts?: Record<string, number>; mine?: string[]; voters?: number } | null;
 }
 
 export interface WaThread {
