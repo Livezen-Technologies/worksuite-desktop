@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { MANUAL_SOURCES, PRIORITIES, PRIORITY_LABEL, TYPES, TYPE_LABEL, type Meta, type SupportType, type TicketFull } from '@shared/support';
 import { ApiError } from '../../core/api';
 import { app } from '../../core/app-state';
@@ -231,18 +231,19 @@ export function NewTicketSheet({ meta, selectedOrganization = null, onClose, onC
             </p>
           ) : null}
           <RequesterField value={f.requester} onChange={setRequester} error={shown('requester')} emailError={shown('email')} />
-          <div className={cx('grid gap-2.5', choices.length > 1 ? 'grid-cols-[1fr_220px]' : 'grid-cols-1')}>
+          <div className={cx('grid items-start gap-2.5', choices.length > 1 ? 'grid-cols-[minmax(0,1fr)_minmax(0,280px)]' : 'grid-cols-1')}>
             <TextField label={text('Subject')} value={f.subject} onChange={(e) => set({ subject: e.target.value })} error={shown('subject')} placeholder={text('What it is about, in a few words')} />
             {choices.length > 1 ? (
-              <div className="flex flex-col gap-1">
+              <Labeled label={text('Company')} error={shown('organization')}>
                 <Select
-                  label={text('Organization')}
+                  label={text('Company')}
+                  className="w-full"
+                  searchable={choices.length > 6}
                   value={org === null ? '' : String(org)}
                   options={opt(choices, text('Choose…'))}
                   onValueChange={(v) => set({ organization: v ? Number(v) : null, team: null, category: null, assignee: me })}
                 />
-                {shown('organization') ? <span className="text-[12px] text-danger">{shown('organization')}</span> : null}
-              </div>
+              </Labeled>
             ) : null}
           </div>
           <div className="flex flex-col gap-1">
@@ -355,16 +356,25 @@ export function NewTicketSheet({ meta, selectedOrganization = null, onClose, onC
                 ))}
               </div>
             </div>
-            <Select label={text('Type')} value={f.type ?? ''} options={[{ value: '', label: text('No type') }, ...types.map((t) => ({ value: t, label: text(TYPE_LABEL[t]) }))]} onValueChange={(v) => set({ type: (v || null) as SupportType | null })} />
-            <Select label={text('Category')} value={f.category === null ? '' : String(f.category)} options={opt(inOrg(meta?.categories), text('No category'))} onValueChange={(v) => set({ category: v ? Number(v) : null })} />
-            <Select
-              label={text('Assignee')}
-              value={f.assignee === null ? '' : String(f.assignee)}
-              searchable={(people.data ?? []).length > 6}
-              options={[{ value: '', label: text('Unassigned') }, ...(me ? [{ value: String(me), label: text('Me') }] : []), ...(mayAssign ? (people.data ?? []).filter((x) => x.id !== me).map((x) => ({ value: String(x.id), label: x.name })) : [])]}
-              onValueChange={(v) => set({ assignee: v ? Number(v) : null })}
-            />
-            <Select label={text('Team')} value={f.team === null ? '' : String(f.team)} options={opt(inOrg(meta?.teams), text('No team'))} onValueChange={(v) => set({ team: v ? Number(v) : null })} />
+            <Labeled label={text('Type')}>
+              <Select label={text('Type')} className="w-full" value={f.type ?? ''} options={[{ value: '', label: text('No type') }, ...types.map((t) => ({ value: t, label: text(TYPE_LABEL[t]) }))]} onValueChange={(v) => set({ type: (v || null) as SupportType | null })} />
+            </Labeled>
+            <Labeled label={text('Category')}>
+              <Select label={text('Category')} className="w-full" value={f.category === null ? '' : String(f.category)} options={opt(inOrg(meta?.categories), text('No category'))} onValueChange={(v) => set({ category: v ? Number(v) : null })} />
+            </Labeled>
+            <Labeled label={text('Assignee')}>
+              <Select
+                label={text('Assignee')}
+                className="w-full"
+                value={f.assignee === null ? '' : String(f.assignee)}
+                searchable={(people.data ?? []).length > 6}
+                options={[{ value: '', label: text('Unassigned') }, ...(me ? [{ value: String(me), label: text('Me') }] : []), ...(mayAssign ? (people.data ?? []).filter((x) => x.id !== me).map((x) => ({ value: String(x.id), label: x.name })) : [])]}
+                onValueChange={(v) => set({ assignee: v ? Number(v) : null })}
+              />
+            </Labeled>
+            <Labeled label={text('Team')}>
+              <Select label={text('Team')} className="w-full" value={f.team === null ? '' : String(f.team)} options={opt(inOrg(meta?.teams), text('No team'))} onValueChange={(v) => set({ team: v ? Number(v) : null })} />
+            </Labeled>
             <label className="flex flex-col gap-1">
               <span className="text-[12.5px] font-semibold text-ink-2">{text('Due')}</span>
               <input type="datetime-local" aria-label={text('Due')} value={f.due} onChange={(e) => set({ due: e.target.value })} className={FIELD} />
@@ -533,5 +543,19 @@ function RequesterField({ value, onChange, error, emailError }: { value: Request
       )}
       {error ? <span className="text-[12px] text-danger">{error}</span> : null}
     </fieldset>
+  );
+}
+
+/**
+ * A field's name above it, as TextField draws its own. `Select`'s `label` names the list for a screen reader only, so
+ * without this the selects here had no visible name, and the company picker sat beside Subject's name, not its box.
+ */
+function Labeled({ label, error, children }: { label: string; error?: string | false | null; children: ReactNode }) {
+  return (
+    <div className="flex min-w-0 flex-col gap-1">
+      <span className="text-[12.5px] font-semibold text-ink-2">{label}</span>
+      {children}
+      {error ? <span className="text-[12px] text-danger">{error}</span> : null}
+    </div>
   );
 }

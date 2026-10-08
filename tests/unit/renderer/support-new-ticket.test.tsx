@@ -178,7 +178,17 @@ describe('the form', () => {
     fireEvent.change(within(dialog()).getByRole('textbox', { name: 'Email' }), { target: { value: 'saman@acme' } });
     expect(within(dialog()).getByText('That is not an email address.')).toBeTruthy();
     expect(posted()).toHaveLength(0);
-    expect(validate(emptyForm(null, 1), { organizations: 2 })).toMatchObject({ subject: expect.any(String), requester: expect.any(String), organization: 'Choose the organization.' });
+    expect(validate(emptyForm(null, 1), { organizations: 2 })).toMatchObject({ subject: expect.any(String), requester: expect.any(String), organization: 'Choose the company.' });
+  });
+
+  it('names each list above it, the company picker beside Subject in line with its box', () => {
+    renderSheet({ ...META, organizations: [...META.organizations, { id: 11, name: 'Livezen Technologies Pvt Ltd', prefix: 'LZT', can: { create: true, assign: true } }] });
+    const d = within(dialog());
+    for (const name of ['Company', 'Type', 'Category', 'Assignee', 'Team']) {
+      const picker = d.getByRole('combobox', { name });
+      // The visible name sits right above the picker, as Subject's sits above its box.
+      expect(picker.parentElement?.firstElementChild?.textContent).toBe(name);
+    }
   });
 
   it('sends a contact found as the requester, with an Idempotency-Key, mine, by hand, confirming by email', async () => {

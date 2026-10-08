@@ -125,6 +125,23 @@ describe('adapters', () => {
     expect(fromWebsiteMessage(web({ id: 7, body: 'x', reply_to: 2 }), ctx).replyRemoved).toBe(true);
   });
 
+  it('lets staff react to what the visitor can see, on a server that sends reactions (Communication 1.60.0)', async () => {
+    const rx = [{ emoji: '👍', count: 1, mine: false, names: ['Visitor 4F2A'] }];
+    const m = fromWebsiteMessage(web({ id: 8, body: 'Thanks', reactions: rx }), ctx);
+    expect(m).toMatchObject({ reactions: rx, can: { react: true } });
+    // Not a note, not a deleted message, not without the right to reply.
+    expect(fromWebsiteMessage(web({ id: 9, from: 'agent', agent_id: 3, body: 'n', visibility: 'internal', reactions: [] }), ctx).can?.react).toBe(false);
+    expect(fromWebsiteMessage(web({ id: 10, body: 'x', deleted: true, reactions: [] }), ctx).can?.react).toBe(false);
+    expect(fromWebsiteMessage(web({ id: 11, body: 'x', reactions: [] }), { ...ctx, canReply: false }).can?.react).toBe(false);
+
+    // Drawn under the message, and a chip sends the same emoji back.
+    const onReact = vi.fn();
+    list([m], WEBSITE_CAPS, { onReact });
+    const chip = await screen.findByRole('button', { name: /👍/ });
+    fireEvent.click(chip);
+    expect(onReact).toHaveBeenCalledWith(expect.objectContaining({ id: 8 }), '👍');
+  });
+
   it('turns a page visit into an activity line, keeps this visit\'s events, and orders everything by time', () => {
     const events = [
       { id: 1, kind: 'page_view', url: 'https://x.lk/old', title: null, at: at(-3000), seconds: null, new_visit: true },

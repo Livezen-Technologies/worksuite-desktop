@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.67.0 — 2026-10-08
+
+- website chats — reactions: staff react to the visitor's and the team's messages with the same bar as Team Chat, the visitor's own reactions show (they add them in the widget), and the thread redraws on chat.widget.reaction (needs server Communication 1.60.0; an older server sends none and none are offered)
+
 ## 1.66.0 — 2026-10-08
 
 - website chats — Edit details on the visitor card: name, email, phone number and company, saved to the visitor and (Also save to Contacts, on by default) to their WorkSuite contact, which links them (needs server Communication 1.59.0)

@@ -5,6 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.203 — 2026-10-08
+
+- **Support › New ticket: the company picker is fixed (support 1.2.1).** In a company with more than one
+  organisation, the picker beside Subject used to sit out of line with it: it had no name of its own, so it lined
+  up with the word "Subject" instead of the box, and it was too narrow, cutting the company to "Livezen Technologies
+  Pvt L…".
+  - It is now called **Company**, with its name above it like every field, and it lines up with Subject's box.
+  - It is wider, and you can search it when there are more than six companies.
+  - Type, Category, Assignee and Team, which also had no visible name, now show theirs.
+- **Website chats: reactions (chat 1.67.0).** You can now react to messages in a website chat, the visitor's and the
+  team's, with the same reaction bar as Team Chat. The visitor sees your reaction in the widget and can add their own,
+  which shows in the thread at once. You see who reacted when you point at a reaction. Internal notes take no
+  reactions. Needs the server's **Communication 1.60.0**. Against an older server, reactions are not offered.
+
 ## 0.2.202 — 2026-10-08
 
 - **Pasted screenshots send again.** In Chat, pasting a screenshot (or any picture larger than about 120 KB) and

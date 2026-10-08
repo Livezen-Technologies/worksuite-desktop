@@ -121,7 +121,7 @@ export function validate(f: NewTicketForm, opts: { organizations: number }): For
     if (!r.name.trim() && !r.email.trim() && !r.phone.trim()) out.requester = text('Give the requester a name, an email address or a phone number.');
     if (r.email.trim() && !EMAIL.test(r.email.trim())) out.email = text('That is not an email address.');
   }
-  if (opts.organizations > 1 && f.organization === null) out.organization = text('Choose the organization.');
+  if (opts.organizations > 1 && f.organization === null) out.organization = text('Choose the company.');
   if (f.files.length && !descriptionText(f.html)) out.description = text('Describe the problem: the files go with the description.');
   return out;
 }
