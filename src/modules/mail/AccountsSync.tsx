@@ -128,6 +128,12 @@ export function AccountsSync({ boxes, prefs, onPrefs, onRepair, onManage }: { bo
   return (
     <section aria-label={text('Accounts & sync')}>
       <SummaryBanner summary={summary} onSyncAll={() => void runSync(includedIds(shared.status, boxes), { all: true, offline, onDone: done })} offline={offline} running={shared.all} />
+      {shared.status?.enabled && shared.status.background && !shared.status.background.worker ? (
+        <p role="status" className="mb-3 rounded-[8px] border border-warning/40 bg-warning/10 px-3 py-2 text-[12.5px] text-ink-2">
+          <span className="font-semibold text-ink">{text('The server’s mail sync service isn’t running.')}</span>{' '}
+          {text('While WorkSuite is open, it syncs your accounts in the background itself, one every half a minute. So that mail also arrives while WorkSuite is closed, ask your administrator to start the service.')}
+        </p>
+      ) : null}
       {shared.status === null ? <Spinner /> : null}
       {accounts === null && shared.status ? <p className="mb-3 text-[12.5px] text-ink-3">{text('This WorkSuite server does not report sync details yet.')}</p> : null}
       <ul role="list" className="flex flex-col gap-3">

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.27.0 — 2026-10-08
+
+- Mail keeps syncing in the background while the server's sync service is not running: the app asks for a step every half a minute (POST /api/mail/sync/step), and Settings › Mail › Accounts & sync says when the service is off
+
 ## 1.26.0 — 2026-10-08
 
 - The message list and My Day are resized by dragging their edges (or the arrow keys, Home/End; double-click resets), each width remembered on this computer: the list 300–760px beside the reading pane, My Day 240–560px, neither leaving the mail too little room
