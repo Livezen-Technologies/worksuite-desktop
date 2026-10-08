@@ -19,6 +19,8 @@ export function useLocalFirstQuery<T>(options: {
   keepPrevious?: boolean;
   /** Wraps the live request, to time it (worksuite-desktop#252); it must still call `fetch`. */
   wrapFetch?: (fetch: () => Promise<T>) => Promise<T>;
+  /** Replaces the plain GET, given what is held now: to ask only for what changed and merge it in (Whatsapp 1.6.0). */
+  fetch?: (signal: AbortSignal, held: T | undefined) => Promise<T>;
 }) {
   const qc = useQueryClient();
   const scope = useStore(app, (s) => `${s.auth?.server?.origin ?? ''}:${s.bootstrap?.user?.id ?? ''}:${s.bootstrap?.user?.organizationId ?? ''}`);
@@ -29,7 +31,10 @@ export function useLocalFirstQuery<T>(options: {
   const accept = options.accept;
   const query = useQuery<T>({
     queryKey: key,
-    queryFn: ({ signal }) => (options.wrapFetch ? options.wrapFetch(() => apiGet<T>(path, options.params, signal)) : apiGet<T>(path, options.params, signal)),
+    queryFn: ({ signal }) => {
+      const run = () => (options.fetch ? options.fetch(signal, qc.getQueryData<T>(key)) : apiGet<T>(path, options.params, signal));
+      return options.wrapFetch ? options.wrapFetch(run) : run();
+    },
     enabled: options.enabled,
     staleTime: 30_000,
     gcTime: options.gcTime ?? 10 * 60_000,

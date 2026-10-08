@@ -12,6 +12,7 @@ import { text as l10n } from '../../../core/i18n';
 import { useTab, useTabTitle } from '../../../core/tab-context';
 import { conversationStamp, dateLabel, dayKey, parseTs, timeLabel, todayInZone } from '../../../core/time';
 import { useStore } from '../../../core/store';
+import { app } from '../../../core/app-state';
 import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { ResizeDivider, useResizableWidth } from '../../../components/ResizeDivider';
@@ -31,7 +32,7 @@ import { WaChannels } from './WaChannels';
 import { fullName, previewParts, whoIs, whoSent, withMentionNames, type WaWho } from './wa-names';
 import { AddToContacts, ContactPanel, LinkToContact, WaAvatar, contactRoute, waContactMenuItems } from './WaContact';
 import {
-  fileRefusal, isConnected, isConnecting, messageText, reactWa, readWa, refetchWaMedia, sendWa, sendWaFiles, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaTemplates, useWaThread, waAttachment, waLimits, waNumber, WA_SCOPES,
+  fileRefusal, isConnected, isConnecting, loadOlderWa, messageText, reactWa, readWa, refetchWaMedia, sendWaFiles, sendWaNow, sendWaTemplate, startWa, useWaChats, useWaSettings, useWaLive, useWaTemplates, useWaThread, waAttachment, waLimits, waNumber, WA_SCOPES,
   type WaAccount, type WaChat, type WaMessage, type WaScope, type WaTemplate,
 } from './whatsapp';
 
@@ -68,6 +69,8 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
   const [scope, setScope] = useState<WaScope>('all');
   const [q, setQ] = useState('');
   const chats = useWaChats({ account, scope, q }, accounts.length > 0);
+  // Messages, ticks and connections as they happen, instead of every few seconds.
+  useWaLive(accounts.length > 0);
   const rows = chats.data?.chats ?? [];
   // Names come from Contacts, kept here and re-read whenever a contact changes (#176).
   const index = usePhoneIndex(useCanOpen('contacts') && accounts.length > 0).data;
@@ -492,6 +495,21 @@ function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id:
   const firstScroll = useRef(true);
   const atBottom = useRef(true);
   const unread = data?.chat.unread ?? 0;
+  const [older, setOlder] = useState(false);
+  // An older page goes in front without moving what is being read: the scroll keeps its distance from the bottom.
+  const earlier = async () => {
+    const el = scroller.current;
+    const fromBottom = el ? el.scrollHeight - el.scrollTop : 0;
+    setOlder(true);
+    try {
+      await loadOlderWa(qc, id);
+      requestAnimationFrame(() => { if (el) el.scrollTop = el.scrollHeight - fromBottom; });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setOlder(false);
+    }
+  };
 
   // Reading a conversation reads it: the list, the toolbar badge and the customer's ticks follow. Not while the
   // window is in the background, where a message that arrives has not been seen.
@@ -546,14 +564,16 @@ function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id:
           <Button size="sm" icon="external" onClick={() => void call('app:openInBrowser', { path: `/whatsapp?chat=${chat.id}` })}>Open on the web</Button>
         </header>
         <div ref={scroller} onScroll={() => { const el = scroller.current; if (el) atBottom.current = el.scrollHeight - el.scrollTop - el.clientHeight < 80; }} className="flex min-h-0 flex-1 flex-col gap-[9px] overflow-y-auto px-4 py-3 scroll-thin">
-          {data.has_more ? <div className="self-center text-[11px] text-ink-3">Earlier messages are on the web.</div> : null}
+          {data.has_more ? (
+            data.next_before ? <Button size="sm" className="self-center" loading={older} onClick={() => void earlier()}>Load earlier messages</Button> : <div className="self-center text-[11px] text-ink-3">Earlier messages are on the web.</div>
+          ) : null}
           {!shown.length ? <Empty icon="phone" title="No messages yet" /> : null}
           {shown.map((m) => {
             const author = group && m.direction === 'in' ? whoSent(m, index) : null;
             // Their avatar beside a voice note of theirs (#285): the contact's, or the group member's initials.
             const avatar = m.direction === 'in' ? (group ? <Avatar name={author?.name ?? who.name} size={30} /> : <WaAvatar who={who} size={30} />) : null;
             const quotedBy = m.quoted ? (m.quoted.direction === 'out' ? (m.quoted.sender_name ?? 'You') : group ? (whoSent({ ...m, direction: 'in', from_wa_id: m.quoted.from_wa_id, author_name: null } as WaMessage, index)?.name ?? m.quoted.from_wa_id ?? who.name) : who.name) : null;
-            return <Bubble key={m.id} m={m} author={author?.name ?? null} avatar={avatar} index={index} gallery={gallery} quotedBy={quotedBy} canSend={!refusal} onChanged={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} onJump={(id) => document.querySelector<HTMLElement>(`[data-wa-message="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })} onReply={() => setReply({ id: m.id, sender_name: m.direction === 'out' ? (m.sender_name ?? 'You') : (author?.name ?? who.name), snippet: messageText(m).slice(0, 120) })} />;
+            return <Bubble key={m.client_message_id ?? m.id} m={m} onRetry={m.id < 0 && m.pending ? () => void sendWaNow(qc, chat.id, m.pending!.text, m.pending!.replyTo, m.sender_name, m.client_message_id ?? undefined) : undefined} author={author?.name ?? null} avatar={avatar} index={index} gallery={gallery} quotedBy={quotedBy} canSend={!refusal} onChanged={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} onJump={(id) => document.querySelector<HTMLElement>(`[data-wa-message="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })} onReply={() => setReply({ id: m.id, sender_name: m.direction === 'out' ? (m.sender_name ?? 'You') : (author?.name ?? who.name), snippet: messageText(m).slice(0, 120) })} />;
           })}
         </div>
         {!refusal ? <WaExtrasBar chatId={chat.id} webJs={chat.account?.provider === 'web_js'} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} /> : null}
@@ -594,8 +614,10 @@ const VOICE_KINDS = new Set(['audio', 'voice', 'ptt']);
  * A message: its words, and its attachment — a picture shown, a voice note played in place with the shared voice player
  * (#285), anything else by its name — opened in the shared preview.
  */
-function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend, onReply, onJump, onChanged }: { m: WaMessage; author: string | null; avatar?: ReactNode; index: PhoneIndex | undefined; gallery: Attachment[]; quotedBy: string | null; canSend: boolean; onReply: () => void; onJump: (id: number) => void; onChanged: () => void }) {
+function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend: canAct, onReply, onJump, onChanged, onRetry }: { m: WaMessage; author: string | null; avatar?: ReactNode; index: PhoneIndex | undefined; gallery: Attachment[]; quotedBy: string | null; canSend: boolean; onReply: () => void; onJump: (id: number) => void; onChanged: () => void; onRetry?: () => void }) {
   const ours = m.direction === 'out';
+  // One still on its way, or not sent, is not answered or reacted to: WhatsApp has no id for it yet.
+  const canSend = canAct && m.id > 0;
   const file = waAttachment(m);
   // What it is comes from its type, never its name: a phone's voice note is `audio/ogg`.
   const voice = !!file && VOICE_KINDS.has(m.kind) && previewKind(file) === 'audio';
@@ -618,7 +640,8 @@ function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend, onReply,
   };
 
   return (
-    <div data-wa-message={m.id} className={cx('group/wa relative flex max-w-[75%] flex-col gap-0.5', ours ? 'items-end self-end' : 'items-start self-start')}>
+    // Off-screen messages are not laid out or painted, so a long conversation stays quick to scroll.
+    <div data-wa-message={m.id} style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 64px' }} className={cx('group/wa relative flex max-w-[75%] flex-col gap-0.5', ours ? 'items-end self-end' : 'items-start self-start')}>
       {author ? <span className="px-1 text-[11.5px] font-semibold text-primary">{author}</span> : null}
       <div className={cx('flex items-center gap-1', ours ? 'flex-row-reverse' : 'flex-row')}>
         <div className={cx('min-w-0 text-[13px] whitespace-pre-wrap break-words text-ink', voice ? 'p-1' : 'px-3 py-2', ours ? 'rounded-[12px_4px_12px_12px] bg-selection' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface')}>
@@ -691,6 +714,7 @@ function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend, onReply,
         {sentAt(m.sent_at ?? m.created_at)}
         {ours && m.status ? ` · ${TICKS[m.status] ?? m.status}` : ''}
         {m.status === 'failed' && m.error_text ? ` — ${m.error_text}` : ''}
+        {onRetry && m.status === 'failed' ? <button type="button" onClick={onRetry} className="ml-2 font-semibold text-danger underline">Retry</button> : null}
       </span>
     </div>
   );
@@ -703,6 +727,8 @@ function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend, onReply,
  */
 function WhatsappComposer({ chatId, accountId, name, messages, reply, onClearReply, reconnect, refusal, templates, onSent }: { chatId: number; accountId: number; name: string; messages: WaMessage[]; reply: ReplyTarget | null; onClearReply: () => void; reconnect?: () => void; refusal: string | null; templates: boolean; onSent: () => void }) {
   const [picking, setPicking] = useState(false);
+  const qc = useQueryClient();
+  const me = useStore(app, (s) => s.bootstrap?.user?.name ?? null);
   const blockedDraft = useDraft<boolean>('whatsapp', `blocked-drafting:${chatId}`, true);
   const settings = useWaSettings(true);
   const limits = waLimits(settings.data?.settings);
@@ -720,9 +746,8 @@ function WhatsappComposer({ chatId, accountId, name, messages, reply, onClearRep
           onSent();
           if (r.failed) { toast('error', `${r.sent} sent, ${r.failed} refused. ${r.results.find((x) => !x.ok)?.error ?? ''}`); return false; }
         } else {
-          const r = await sendWa(chatId, text, messages.find((m) => m.id === reply?.id)?.external_id ?? undefined);
-          if (r.ok === false) { toast('error', `Not sent. ${r.error ?? ''} Your message is kept.`.trim()); return false; }
-          onSent();
+          // Shown at once as "Sending"; a failure stays in the conversation with a retry that cannot send it twice.
+          void sendWaNow(qc, chatId, text, messages.find((m) => m.id === reply?.id)?.external_id ?? undefined, me);
         }
         return true;
       },
