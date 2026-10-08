@@ -372,6 +372,8 @@ export interface SyncStatus {
   /** An older server sends neither. */
   accounts?: SyncAccount[];
   overall?: SyncOverall;
+  /** Is the server's sync service running; while it is not, the app takes background steps (an older server sends neither). */
+  background?: { worker: boolean; step: boolean };
 }
 
 /** One run in an account's sync log (GET mailboxes/{id}/sync-log). */

@@ -5,6 +5,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.205 — 2026-10-08
+
+- **Mail keeps syncing in the background (mail 1.27.0).** On a server where the mail sync service isn't running,
+  mail used to move only when you pressed Sync. An account could sit on "Headers 8 of 27 folders" for a day, every
+  run said "Partial", and new mail (and its desktop notification) only came after a click.
+  - Now, while the app is open, it syncs your accounts in the background itself. One account gets a pass every
+    half a minute, and sooner while a first sync still has folders to go. This happens on every screen, not only
+    in Mail, and the lists update as mail arrives.
+  - The server's own service, once it runs, takes over and the app stops asking. The two never sync one account at
+    the same time.
+  - **Settings › Mail › Accounts & sync** says when the server's sync service isn't running.
+  - Desktop notifications for new mail work the same as before. Switch them on or off under **Settings › Mail ›
+    Desktop notifications for new mail**, and per account under **Notify me about new mail**. They now arrive
+    without a click, because mail now syncs on its own.
+  - Needs WorkSuite with Mail 1.19.0 (Livezen-Technologies/worksuite#131). With an older server nothing changes.
+
 ## 0.2.204 — 2026-10-08
 
 - **Mail: resize the message list and My Day by dragging their edges (mail 1.26.0).** Drag the line between the
