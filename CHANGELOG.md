@@ -20,6 +20,11 @@ person who has to live with the change — what it does, and where it bites.
   PROFILE panel stops saying "Nothing is known about this visitor yet"), and the chat carries on. While the form
   waits, a line above the composer says so, with **Withdraw**. Needs the server's **Communication 1.58.0**; against
   an older server the button is not shown.
+- **Website chats: edit the visitor's details and save them to Contacts (chat 1.66.0).** The visitor card now
+  has **Edit details**, for name, email, phone number and company. **Also save to Contacts**, on by default, writes
+  them to the visitor's WorkSuite contact and links the visitor to it. That is the contact they are linked to, or
+  one with the same email, or a new one. Needs the server's **Communication 1.59.0**; older servers save the visitor
+  only and do not save the company.
 
 ## 0.2.201 — 2026-10-07
 

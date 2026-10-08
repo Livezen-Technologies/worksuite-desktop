@@ -5,9 +5,10 @@ import { toast } from '../../../core/toasts';
 import { Icon } from '../../../components/Icon';
 import { Select } from '../../../components/Select';
 import { Button, Modal, TextField } from '../../../components/ui';
+import { Checkbox } from '../../../components/Checkbox';
 import { SharedFiles, type SharedFile } from '../kit/SharedFiles';
 import { useNow } from '../../calls/parts';
-import { apiPost } from '../../../core/api';
+import { ApiError, apiPatch, apiPost } from '../../../core/api';
 import { tagList, websiteAction, WEBSITE, type WebsiteVisitor } from './api';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING } from './rowParts';
 
@@ -178,6 +179,67 @@ export function BlockDialog({ conversationId, visitorId, name, onClose, onDone }
           onValueChange={(v) => setBlockFor(String(v))}
         />
         <TextField label="Reason" placeholder="Spam, abuse…" maxLength={190} value={blockWhy} onChange={(e) => setBlockWhy(e.target.value)} />
+      </div>
+    </Modal>
+  );
+}
+
+/**
+ * Edit the visitor's details — name, email, phone and company — from the visitor card, and save them to their WorkSuite
+ * contact too (the linked one, one with the same email in your book, or a new one), which links the visitor to it.
+ */
+export function VisitorDetailsDialog({ v, onClose, onDone }: { v: WebsiteVisitor; onClose: () => void; onDone: () => void }) {
+  const [name, setName] = useState(v.name ?? '');
+  const [email, setEmail] = useState(v.email ?? '');
+  const [phone, setPhone] = useState(v.phone ?? '');
+  const [company, setCompany] = useState(v.company ?? '');
+  const [toContacts, setToContacts] = useState(true);
+  const [busy, setBusy] = useState(false);
+  const [errors, setErrors] = useState<Record<string, string>>({});
+
+  const save = async () => {
+    setBusy(true);
+    setErrors({});
+    try {
+      const r = await apiPatch<{ contact: { id: number; name: string; created: boolean } | null }>(`${WEBSITE}/visitors/${v.id}`, {
+        name: name.trim(), email: email.trim(), phone: phone.trim(), company: company.trim(), ...(toContacts ? { save_contact: true } : {}),
+      });
+      toast('success', r.contact ? (r.contact.created ? text('Saved as a new contact: {name}.', { name: r.contact.name }) : text('Saved to {name} in Contacts.', { name: r.contact.name })) : text('Visitor details saved.'));
+      onClose();
+      onDone();
+    } catch (e) {
+      const fields = e instanceof ApiError && e.data && typeof e.data === 'object' ? (e.data as Record<string, string>) : {};
+      setErrors(fields);
+      if (!Object.keys(fields).length) toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  return (
+    <Modal
+      title="Visitor details"
+      onClose={onClose}
+      width={420}
+      footer={
+        <>
+          <Button onClick={onClose}>Cancel</Button>
+          <Button variant="primary" loading={busy} onClick={() => void save()}>Save</Button>
+        </>
+      }
+    >
+      <div className="grid gap-3">
+        <TextField label="Name" autoFocus maxLength={120} value={name} onChange={(e) => setName(e.target.value)} />
+        <TextField label="Email" type="email" maxLength={190} value={email} onChange={(e) => setEmail(e.target.value)} error={errors.email} />
+        <TextField label="Phone number" type="tel" maxLength={40} value={phone} onChange={(e) => setPhone(e.target.value)} error={errors.phone} />
+        <TextField label="Company" maxLength={190} value={company} onChange={(e) => setCompany(e.target.value)} />
+        <label className="flex cursor-pointer items-start gap-2 text-[13px] text-ink">
+          <Checkbox checked={toContacts} onChange={(e) => setToContacts(e.target.checked)} className="mt-0.5" />
+          <span>
+            Also save to Contacts
+            <span className="block text-[12px] text-ink-3">Updates the visitor&apos;s contact, or one with the same email, or adds a new one.</span>
+          </span>
+        </label>
       </div>
     </Modal>
   );

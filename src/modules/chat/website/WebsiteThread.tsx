@@ -36,7 +36,7 @@ import { DeclinedNotice, InThisChat, InviteDialog, LeaveChat, MessageTypeTabs, T
 import { CallBar, CallNotes, callNotice } from './CallBar';
 import { CallbackCard, isPending } from './Callbacks';
 import { PANEL_CARD as CARD, PANEL_HEADING as HEADING, hostOf } from './rowParts';
-import { BlockDialog, ContactCard, SharedFilesCard, TagsCard } from './panelCards';
+import { BlockDialog, ContactCard, SharedFilesCard, TagsCard, VisitorDetailsDialog } from './panelCards';
 import { ClosedNotice } from './Closed';
 import { ThreadFailed, ThreadPlaceholder, type PaneHead } from './ThreadPlaceholder';
 import { useRingState, youJoinedLine } from './Ringing';
@@ -533,6 +533,7 @@ interface Stop {
  */
 function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, peopleFirst = false, foot }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; top?: ReactNode; people?: ReactNode; peopleFirst?: boolean; foot?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
+  const [editing, setEditing] = useState(false);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
   const support = useCanOpen('support');
   const mail = useCanOpen('mail');
@@ -596,8 +597,13 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
             <span className={cx('h-1.5 w-1.5 rounded-full', online ? 'bg-success' : 'bg-ink-3')} />
             {online ? (onSite ? text('On the site · {time}', { time: onSite }) : text('On the site')) : text('Left the site')}
           </span>
-          {v?.email || (data.can?.manage && v && !v.is_blocked) ? (
-            <div className="mt-0.5 flex gap-1.5 self-stretch">
+          {v?.email || (canReply && v) || (data.can?.manage && v && !v.is_blocked) ? (
+            <div className="mt-0.5 flex flex-wrap gap-1.5 self-stretch">
+              {canReply && v ? (
+                <button type="button" onClick={() => setEditing(true)} className={action} title={text('Name, email, phone and company — and save them to Contacts')}>
+                  <Icon name="pen" size={13} className="text-ink-2" /> {text('Edit details')}
+                </button>
+              ) : null}
               {v?.email ? (
                 <button type="button" onClick={email} className={action} title={text('Write to {email}', { email: v.email })}>
                   <Icon name="mail" size={13} className="text-ink-2" /> {text('Email')}
@@ -687,6 +693,7 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
           {foot}
         </div>
         {blocking ? <BlockDialog conversationId={c.id} name={v?.name || v?.label || 'This visitor'} onClose={() => setBlocking(false)} onDone={onDone} /> : null}
+        {editing && v ? <VisitorDetailsDialog v={v} onClose={() => setEditing(false)} onDone={onDone} /> : null}
       </aside>
     </SidePanel>
   );
