@@ -281,21 +281,25 @@ describe('WhatsApp in Chat', () => {
     expect(call).toHaveBeenCalledWith('offline:getDraft', { module: 'whatsapp', context: 'chat:7' });
     fireEvent.change(box, { target: { value: 'Ready at 4pm' } });
     fireEvent.keyDown(box, { key: 'Enter' });
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/chats/7/messages', { kind: 'text', text: 'Ready at 4pm' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/chats/7/messages', { kind: 'text', text: 'Ready at 4pm', client_message_id: expect.any(String) }));
     await waitFor(() => expect((box as HTMLTextAreaElement).value).toBe(''));
     expect(call).toHaveBeenCalledWith('offline:deleteDraft', { module: 'whatsapp', context: 'chat:7' });
   });
 
-  it('keeps the words when the send fails', async () => {
+  it('keeps a message that was not sent in the conversation, with a retry that reuses its id', async () => {
     tab.route = '/chat?channel=whatsapp&wa=7';
     serve();
-    vi.mocked(apiPost).mockResolvedValue({ ok: false, error: 'The phone is offline.' } as never);
+    vi.mocked(apiPost).mockImplementation((async (path: string) => (path.endsWith('/messages') ? { ok: false, error: 'The phone is offline.' } : { ok: true })) as never);
     wrap(<WhatsappChannel accounts={[account({})]} loading={false} error={null} retry={() => undefined} onConnect={null} />);
     const box = await screen.findByRole('textbox', { name: 'Message Nimal Perera on WhatsApp' });
     fireEvent.change(box, { target: { value: 'Ready at 4pm' } });
     fireEvent.click(screen.getByRole('button', { name: 'Send' }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('error', 'Not sent. The phone is offline. Your message is kept.'));
-    expect((box as HTMLTextAreaElement).value).toBe('Ready at 4pm');
+    expect(await screen.findByText(/Not sent — The phone is offline\./)).toBeTruthy();
+    expect(screen.getByText('Ready at 4pm')).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(vi.mocked(apiPost).mock.calls.filter(([path]) => path === '/api/whatsapp/chats/7/messages')).toHaveLength(2));
+    const ids = vi.mocked(apiPost).mock.calls.filter(([path]) => path === '/api/whatsapp/chats/7/messages').map((c) => (c[1] as { client_message_id: string }).client_message_id);
+    expect(ids[0]).toBe(ids[1]);
   });
 
   it('says why a reply cannot be sent', async () => {

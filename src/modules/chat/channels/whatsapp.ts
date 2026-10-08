@@ -1,5 +1,10 @@
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type QueryClient } from '@tanstack/react-query';
+import { useEffect, useRef } from 'react';
+import { WA_DELTA_LIMIT, mergeWaThread, prependWaPage } from '@shared/wa-thread';
+import { app } from '../../../core/app-state';
+import { on } from '../../../core/bridge';
 import { useLocalFirstQuery } from '../../../core/local-first-query';
+import { useStore } from '../../../core/store';
 import { ApiError, apiGet, apiPost } from '../../../core/api';
 import { formatPhone, toE164 } from '../../../core/phone';
 import { createStore } from '../../../core/store';
@@ -98,6 +103,10 @@ export interface WaMessage {
   meta?: Record<string, unknown> | null;
   /** A poll: its question and answers, the votes on each, and ours. */
   poll?: { name: string; options: string[]; multiple: boolean; counts?: Record<string, number>; mine?: string[]; voters?: number } | null;
+  /** The id this app gave a message it sent, so a retry is never sent twice (Whatsapp 1.6.0). */
+  client_message_id?: string | null;
+  /** Shown before the server has it: a negative id, `queued` while on its way, `failed` with `retry` when it was not sent. */
+  pending?: { text: string; replyTo?: string } | null;
 }
 
 export interface WaThread {
@@ -120,6 +129,10 @@ export interface WaThread {
   messages: WaMessage[];
   has_more: boolean;
   can_send: boolean;
+  /** Older messages: `before=next_before`. What changed from now on: `since=cursor` (Whatsapp 1.6.0). */
+  next_before?: number | null;
+  cursor?: string | null;
+  delta?: boolean;
 }
 
 export type WaScope = 'all' | 'unread' | 'waiting' | 'mine';
@@ -185,25 +198,130 @@ export const waNumber = createStore<{ id: number }>({ id: 0 });
 /** A refusal is an answer, not a fault: somebody without WhatsApp is not asked again every few seconds. */
 const refused = (e: unknown) => e instanceof ApiError && (e.forbidden || e.status === 404);
 
+/** While pushed changes arrive, the checks behind them only catch what a push missed. */
+const LIVE_POLL_MS = 60_000;
+
+/** Whether the realtime socket is up, so WhatsApp changes arrive as they happen. */
+export function useWaPushed(): boolean {
+  return useStore(app, (s) => s.status?.realtime === 'connected');
+}
+
 export function useWaAccounts(enabled: boolean) {
-  return useLocalFirstQuery<{ accounts: WaAccount[]; default_id: number | null }>({ queryKey: ['whatsapp', 'accounts'], path: `${WA}/accounts`, enabled, interval: 30_000 });
+  const pushed = useWaPushed();
+  return useLocalFirstQuery<{ accounts: WaAccount[]; default_id: number | null }>({ queryKey: ['whatsapp', 'accounts'], path: `${WA}/accounts`, enabled, interval: pushed ? LIVE_POLL_MS : 30_000 });
 }
 
 export function useWaChats(params: { account: number; scope: WaScope; q: string }, enabled: boolean) {
+  const pushed = useWaPushed();
   const q = params.q.trim();
   return useLocalFirstQuery<{ chats: WaChat[]; total: number }>({
     queryKey: ['whatsapp', 'chats', params.account, params.scope, q], path: `${WA}/chats`,
     params: { scope: params.scope, per_page: '60', ...(params.account ? { account_id: String(params.account) } : {}), ...(q ? { q } : {}) },
-    enabled, interval: 15_000,
+    enabled, interval: pushed ? LIVE_POLL_MS : 15_000,
   });
 }
 
-export function useWaThread(id: string) {
-  return useLocalFirstQuery<WaThread>({ queryKey: ['whatsapp', 'chat', id], path: `${WA}/chats/${id}`, interval: 5_000 });
+/** One conversation: what is held, then only what changed since (`since=`), merged in. */
+export async function fetchWaThread(id: string, held: WaThread | undefined, signal?: AbortSignal): Promise<WaThread> {
+  const path = `${WA}/chats/${id}`;
+  if (held?.cursor) {
+    const delta = await apiGet<WaThread>(path, { since: held.cursor }, signal);
+    // A delta that may have been cut short is not trusted: the conversation is loaded in full.
+    if (!delta.delta || delta.messages.length < WA_DELTA_LIMIT) return mergeWaThread(held, delta);
+  }
+  return mergeWaThread(held, await apiGet<WaThread>(path, undefined, signal));
 }
 
-export function sendWa(chatId: number | string, text: string, replyTo?: string) {
-  return apiPost<{ ok: boolean; error?: string }>(`${WA}/chats/${chatId}/messages`, { kind: 'text', text, ...(replyTo ? { reply_to: replyTo } : {}) });
+export function useWaThread(id: string) {
+  const pushed = useWaPushed();
+  return useLocalFirstQuery<WaThread>({ queryKey: ['whatsapp', 'chat', id], path: `${WA}/chats/${id}`, interval: pushed ? LIVE_POLL_MS : 5_000, fetch: (signal, held) => fetchWaThread(id, held, signal) });
+}
+
+/** The page of messages before the earliest one held, put in front of the conversation. */
+export async function loadOlderWa(qc: QueryClient, id: string): Promise<void> {
+  const [entry] = qc.getQueriesData<WaThread>({ queryKey: ['whatsapp', 'chat', id] });
+  const held = entry?.[1];
+  if (!entry || !held?.next_before) return;
+  const page = await apiGet<WaThread>(`${WA}/chats/${id}`, { before: String(held.next_before) });
+  qc.setQueryData<WaThread>(entry[0], (d) => (d ? prependWaPage(d, page) : d));
+}
+
+interface WaPush { type?: string; event?: string; account_id?: number; chat_id?: number }
+
+/**
+ * WhatsApp changes pushed over the realtime socket (the main process passes each on as `realtime:event`): a message
+ * refreshes its conversation at once — only what changed — and the list a moment later; a number's connection
+ * refreshes the numbers. When the socket comes back, everything catches up, since pushes may have been missed.
+ */
+export function useWaLive(enabled: boolean): void {
+  const qc = useQueryClient();
+  const pushed = useWaPushed();
+  const was = useRef(pushed);
+  useEffect(() => {
+    if (!enabled) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const lists = () => {
+      if (timer) return;
+      timer = setTimeout(() => { timer = null; void qc.invalidateQueries({ queryKey: ['whatsapp', 'chats'] }); }, 400);
+    };
+    const off = on<WaPush>('realtime:event', (e) => {
+      if (e?.type !== 'whatsapp' || typeof e.event !== 'string') return;
+      if (e.event.startsWith('whatsapp.connection.')) { void qc.invalidateQueries({ queryKey: ['whatsapp', 'accounts'] }); return; }
+      if (e.chat_id) void qc.invalidateQueries({ queryKey: ['whatsapp', 'chat', String(e.chat_id)] });
+      lists();
+    });
+    return () => { off(); if (timer) clearTimeout(timer); };
+  }, [enabled, qc]);
+  useEffect(() => {
+    if (enabled && pushed && !was.current) void qc.invalidateQueries({ queryKey: ['whatsapp'] });
+    was.current = pushed;
+  }, [enabled, pushed, qc]);
+}
+
+/** A new id for a message about to be sent. */
+export function newClientId(): string {
+  try { return crypto.randomUUID(); } catch { return `c${Date.now().toString(36)}${Math.random().toString(36).slice(2)}`; }
+}
+
+export function sendWa(chatId: number | string, text: string, replyTo?: string, clientId?: string) {
+  return apiPost<{ ok: boolean; error?: string; message?: WaMessage; duplicate?: boolean }>(`${WA}/chats/${chatId}/messages`, { kind: 'text', text, ...(replyTo ? { reply_to: replyTo } : {}), ...(clientId ? { client_message_id: clientId } : {}) });
+}
+
+const now = () => new Date().toISOString().slice(0, 19).replace('T', ' ');
+
+/**
+ * A message shown the moment it is sent: it appears as "Sending", becomes the server's copy when that lands, or
+ * stays as "Not sent" with a retry that reuses its id, so the server never sends it twice.
+ */
+export async function sendWaNow(qc: QueryClient, chatId: number | string, text: string, replyTo: string | undefined, senderName: string | null, clientId = newClientId()): Promise<boolean> {
+  const key = { queryKey: ['whatsapp', 'chat', String(chatId)] };
+  const update = (fn: (messages: WaMessage[]) => WaMessage[]) => qc.setQueriesData<WaThread>(key, (d) => (d ? { ...d, messages: fn(d.messages) } : d));
+  const mine = (m: WaMessage) => m.id < 0 && m.client_message_id === clientId;
+  // A check already on its way would answer without this message and wipe it from the screen.
+  await qc.cancelQueries(key);
+  const existing = qc.getQueriesData<WaThread>(key).some(([, d]) => d?.messages.some(mine));
+  if (existing) update((ms) => ms.map((m) => (mine(m) ? { ...m, status: 'queued', error_text: null } : m)));
+  else {
+    const stamp = now();
+    update((ms) => [...ms, {
+      id: -Date.now(), external_id: null, direction: 'out', kind: 'text', body: text, caption: null, status: 'queued', error_text: null, sender_name: senderName,
+      filename: null, created_at: stamp, sent_at: stamp, reply_to: replyTo ?? null, client_message_id: clientId, pending: { text, replyTo },
+    }]);
+  }
+  try {
+    const r = await sendWa(chatId, text, replyTo, clientId);
+    if (r.ok === false && !r.message) throw new Error(r.error ?? 'Not sent.');
+    if (r.message) {
+      const landed = { ...r.message, client_message_id: clientId };
+      update((ms) => mergeWaThread({ messages: ms }, { messages: [landed], delta: true }).messages);
+    }
+    void qc.invalidateQueries({ queryKey: ['whatsapp', 'chats'] });
+    return r.ok !== false;
+  } catch (e) {
+    const why = e instanceof Error ? e.message : String(e);
+    update((ms) => ms.map((m) => (mine(m) ? { ...m, status: 'failed', error_text: why } : m)));
+    return false;
+  }
 }
 
 /** React to a message as this number (an empty emoji takes the reaction away). */

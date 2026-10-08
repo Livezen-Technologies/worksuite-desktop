@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { normalizeContentDisposition, safeHeaderValue } from '@shared/http-headers';
 import { restaurantMainOnly } from '@shared/restaurant';
+import { mergeWaThread, trimWaThread, type WaThreadShape } from '@shared/wa-thread';
 import { UNREACHABLE_MESSAGE, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { HttpClient } from './http';
@@ -177,9 +178,14 @@ export function createApiProxy(deps: ProxyDeps) {
 
     const cacheModule = method === 'GET' ? deps.cacheModuleFor(apiPath) : null;
     const isMailBody = /^\/api\/mail\/messages\/\d+/.test(apiPath);
-    const cacheable = cacheModule !== null && (isMailBody ? deps.mailBodiesCached(apiPath) : (deps.mailListCached?.(apiPath) ?? true));
-
     const whatsapp = /^\/api\/whatsapp(?:\/|\?|$)/.test(apiPath);
+    // A conversation's changes (`since=`) and its older pages (`before=`) are never saved under their own address:
+    // the changes are merged into the saved conversation instead (Whatsapp 1.6.0), and older pages are not kept.
+    const waThread = whatsapp ? /^(\/api\/whatsapp\/chats\/\d+)\?(.*)$/.exec(apiPath) : null;
+    const waQuery = waThread ? new URLSearchParams(waThread[2]) : null;
+    const waDelta = !!waQuery?.get('since');
+    const waPartial = waDelta || !!waQuery?.get('before');
+    const cacheable = cacheModule !== null && !waPartial && (isMailBody ? deps.mailBodiesCached(apiPath) : (deps.mailListCached?.(apiPath) ?? true));
     const scope = whatsapp ? (deps.cacheScope?.() ?? deps.http.url('/')) : '';
     const namespace = whatsapp ? `/scope/${createHash('sha256').update(scope).digest('hex')}` : '';
     const cachePath = `${namespace}${apiPath}`;
@@ -221,6 +227,12 @@ export function createApiProxy(deps: ProxyDeps) {
     }
 
     const type = upstream.headers.get('content-type') ?? '';
+    if (waDelta && cacheModule && upstream.status === 200 && type.includes('json') && deps.cacheLimits().enabled) {
+      const text = await upstream.text();
+      mergeSavedThread(deps, userId, cacheModule, `${namespace}${waThread![1]}`, text);
+      out.delete('content-length');
+      return new Response(text, { status: 200, headers: out });
+    }
     if (cacheable && upstream.status === 200 && type.includes('json')) {
       const text = await upstream.text();
       try {
@@ -233,4 +245,19 @@ export function createApiProxy(deps: ProxyDeps) {
     }
     return new Response(upstream.body, { status: upstream.status, statusText: upstream.statusText, headers: out });
   };
+}
+
+/** A conversation's changes folded into its saved copy, so the copy stays current without the whole history again. */
+function mergeSavedThread(deps: ProxyDeps, userId: string, module: string, path: string, deltaText: string): void {
+  try {
+    const hit = deps.cache.get(userId, path);
+    if (!hit) return;
+    const saved = JSON.parse(hit.body) as { data?: WaThreadShape };
+    const delta = JSON.parse(deltaText) as { data?: WaThreadShape };
+    if (!saved.data?.messages || !delta.data?.messages) return;
+    const merged = trimWaThread({ ...mergeWaThread(saved.data, delta.data), delta: false });
+    deps.cache.put(userId, module, path, { status: 200, contentType: hit.contentType, body: JSON.stringify({ ...delta, data: merged }) }, deps.cacheLimits());
+  } catch (e) {
+    log.warn('cache merge failed', { error: String(e) });
+  }
 }

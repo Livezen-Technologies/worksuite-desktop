@@ -15,7 +15,7 @@ function fixture() {
   const proxy = createApiProxy({ http: { raw, url: (p: string) => `https://one.test${p}` } as unknown as HttpClient, cache, userId: () => user, cacheScope: () => scope, cacheModuleFor: () => allowed ? 'chat' : null, cacheLimits: () => ({ enabled, maxBytes: 1024 * 1024 }), mailBodiesCached: () => false });
   const path = '/api/whatsapp/chats/7';
   const read = (local = false) => proxy(new Request(`https://app.test${path}`, { headers: local ? { 'X-WS-Local-Read': '1' } : {} }), path);
-  return { db, cache, raw, read, setUser: (v: string) => { user = v; }, setScope: (v: string) => { scope = v; }, disable: () => { enabled = false; }, revoke: () => { allowed = false; } };
+  return { db, cache, raw, read, proxyFor: (p: string) => proxy(new Request(`https://app.test${p}`), p), setUser: (v: string) => { user = v; }, setScope: (v: string) => { scope = v; }, disable: () => { enabled = false; }, revoke: () => { allowed = false; } };
 }
 describe('encrypted local-first WhatsApp reads (#158)', () => {
   it('serves a saved conversation without waiting for the network and stores ciphertext', async () => {
@@ -41,5 +41,22 @@ describe('encrypted local-first WhatsApp reads (#158)', () => {
     f.raw.mockImplementationOnce(async () => new Response('{}', { status: 403 }));
     expect((await f.read()).status).toBe(403); expect((await f.read(true)).status).toBe(404);
     await f.read(); f.cache.clearUser('u1'); expect((await f.read(true)).status).toBe(404);
+  });
+});
+
+describe('a conversation kept current by its changes (Whatsapp 1.6.0)', () => {
+  it('merges a since= answer into the saved conversation and never saves it, or an older page, on its own', async () => {
+    const f = fixture();
+    await f.read();
+    f.raw.mockImplementationOnce(async () => new Response(JSON.stringify({ data: { messages: [{ id: 2, body: 'new message' }], delta: true, cursor: 'c2' } }), { headers: { 'Content-Type': 'application/json' } }));
+    const proxy = (path: string) => f.proxyFor(path);
+    expect((await proxy('/api/whatsapp/chats/7?since=2026-10-08+10%3A00%3A00')).status).toBe(200);
+    f.raw.mockImplementationOnce(async () => new Response(JSON.stringify({ data: { messages: [{ id: 0, body: 'older page' }] } }), { headers: { 'Content-Type': 'application/json' } }));
+    await proxy('/api/whatsapp/chats/7?before=1');
+    const saved = JSON.parse(await (await f.read(true)).text()) as { data: { messages: Array<{ id: number }>; cursor: string; delta: boolean } };
+    expect(saved.data.messages.map((m) => m.id)).toEqual([1, 2]);
+    expect(saved.data.cursor).toBe('c2');
+    expect(saved.data.delta).toBe(false);
+    expect(f.db.get<{ n: number }>('SELECT COUNT(*) AS n FROM cached_records')?.n).toBe(1);
   });
 });

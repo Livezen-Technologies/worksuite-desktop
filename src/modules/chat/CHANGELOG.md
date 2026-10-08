@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.72.0 — 2026-10-08
+
+- WhatsApp live and fast: pushed updates, only-what-changed refreshes, earlier messages, instant sends with retry
+
 ## 1.71.0 — 2026-10-08
 
 - WhatsApp Channels: the megaphone button in the WhatsApp list opens the channels each number follows or runs — follow by link, leave, read the latest posts, post, create

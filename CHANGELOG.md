@@ -5,6 +5,20 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.210 — 2026-10-08
+
+- **WhatsApp, live and fast (chat 1.72.0).**
+  - **Live:** new messages, ticks, reactions and a number's connection arrive as they happen. While the live connection
+    is up, the checks every 5–15 seconds slow to once a minute; when it comes back, everything catches up.
+  - **Only what changed:** an open conversation asks the server for what changed since it last looked, never the whole
+    history again. The encrypted copy kept on this computer is updated the same way and holds the latest 200 messages.
+  - **Earlier messages:** **Load earlier messages** at the top of a conversation brings the page before it, without
+    moving what you are reading.
+  - **Instant sends:** a message shows as "Sending" the moment you send it. If it is not sent, it stays in the
+    conversation as "Not sent" with **Retry**; the retry carries the same id, so the server never sends it twice.
+  - **Long conversations:** messages off the screen are not drawn, so scrolling stays quick.
+  - Needs WorkSuite with Whatsapp 1.6.0; with an older server, conversations load in full as before.
+
 ## 0.2.209 — 2026-10-08
 
 - **WhatsApp Channels (chat 1.71.0).** The **megaphone** button at the top of the WhatsApp list opens the channels
