@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.69.0 — 2026-10-08
+
+- WhatsApp: react to messages (picker beside a message, chips under it), the message a reply answers shown above it, Copy, and Load picture for a picture that was not kept
+
 ## 1.68.0 — 2026-10-08
 
 - Chat: the details drawer laid out as the web chat's (header with Close, presence, Call/Video/Mute/Add/More, one row of tabs with counts); a checkbox in each conversation's row picks it without opening it, Select all, and the multi-select toolbar offers what fits (Mark read/unread, Archive/Unarchive, Mute/Unmute, Delete)

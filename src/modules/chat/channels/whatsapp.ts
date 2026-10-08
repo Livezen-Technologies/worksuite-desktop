@@ -88,6 +88,12 @@ export interface WaMessage {
   author_name?: string | null;
   author_e164?: string | null;
   author_contact_id?: number | null;
+  /** The WhatsApp id of the message this one answers. */
+  reply_to?: string | null;
+  /** The message this one answers, when it is in the conversation: a line of it, and who wrote it. */
+  quoted?: { id: number; direction: 'in' | 'out'; kind: string; text: string; sender_name: string | null; from_wa_id: string | null } | null;
+  /** Reactions on it, by emoji; `mine` is this number's own. */
+  reactions?: Array<{ emoji: string; count: number; mine: boolean }>;
 }
 
 export interface WaThread {
@@ -194,6 +200,16 @@ export function useWaThread(id: string) {
 
 export function sendWa(chatId: number | string, text: string, replyTo?: string) {
   return apiPost<{ ok: boolean; error?: string }>(`${WA}/chats/${chatId}/messages`, { kind: 'text', text, ...(replyTo ? { reply_to: replyTo } : {}) });
+}
+
+/** React to a message as this number (an empty emoji takes the reaction away). */
+export function reactWa(messageId: number, emoji: string) {
+  return apiPost<{ reactions: NonNullable<WaMessage['reactions']> }>(`${WA}/messages/${messageId}/react`, { emoji });
+}
+
+/** Fetch a message's picture, video or file again when it was not kept the first time. */
+export function refetchWaMedia(messageId: number) {
+  return apiPost<{ media_status: string; file_id: number }>(`${WA}/messages/${messageId}/media`, {});
 }
 
 /** An approved template, with its placeholders filled in order: what may be sent once the 24-hour window has closed. */
