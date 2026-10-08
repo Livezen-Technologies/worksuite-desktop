@@ -14,6 +14,12 @@ person who has to live with the change — what it does, and where it bites.
   a pasted file), so a 376 KB screenshot goes through. The same check could refuse the other things that cross as bytes once they passed
   that size (a meeting-recording piece, audio for transcription, a locally opened document); it no longer does. Files picked from
   disk were never affected.
+- **Website chats: send the visitor a contact form (chat 1.65.0).** Beside **Reply to visitor / Internal note**
+  there is now **Contact form**. Pick what to ask for (name, email, phone number, company), change the message if
+  you like, and send. The visitor gets the form in their chat window. What they fill in goes on their profile (the
+  PROFILE panel stops saying "Nothing is known about this visitor yet"), and the chat carries on. While the form
+  waits, a line above the composer says so, with **Withdraw**. Needs the server's **Communication 1.58.0**; against
+  an older server the button is not shown.
 
 ## 0.2.201 — 2026-10-07
 

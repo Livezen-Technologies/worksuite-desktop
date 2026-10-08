@@ -21,6 +21,7 @@ import { usePageVisible, useLiveStatus } from './live';
 import { useRealtimeLive, useWebsiteSync } from './sync';
 import { bySeq, weave } from '@shared/chat-seq';
 import { useViewing } from './viewing';
+import { ContactFormButton, ContactFormWaiting } from './ContactForm';
 import type { ReplyTarget } from '../Thread';
 import { Select } from '../../../components/Select';
 import { SidePanel } from '../../../components/SidePanel';
@@ -350,6 +351,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           // Above it, while connection strength is Poor or Offline (#254), a small warning.
           <>
             <ConnectionWarning />
+            {data.contact_form?.open ? <ContactFormWaiting conversationId={c.id} form={data.contact_form} onDone={refresh} /> : null}
             <Composer
               key={noting ? 'note' : 'reply'}
               ref={composer}
@@ -359,7 +361,13 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
               group={false}
               reply={noting ? null : reply}
               onClearReply={() => setReply(null)}
-              extras={t?.can.note ? <MessageTypeTabs value={noting ? 'note' : 'reply'} onChange={setTab} /> : undefined}
+              extras={
+                // Reply to visitor / Internal note, and Contact form beside them (server Communication 1.58.0).
+                <div className="flex items-center gap-1">
+                  {t?.can.note ? <MessageTypeTabs value={noting ? 'note' : 'reply'} onChange={setTab} /> : null}
+                  {data.contact_form !== undefined ? <ContactFormButton conversationId={c.id} waiting={!!data.contact_form?.open} disabled={noting} onDone={refresh} /> : null}
+                </div>
+              }
               website={{ conversationId: c.id, replies: canned.data?.responses ?? [], maxUploadKb: c.max_upload_kb, note: noting }}
             />
           </>
