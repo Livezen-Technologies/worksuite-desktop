@@ -7,7 +7,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ## 0.2.210 — 2026-10-08
 
-- **WhatsApp, live and fast (chat 1.72.0).**
+- **WhatsApp, live and fast (chat 1.72.0, files 1.8.6).**
   - **Live:** new messages, ticks, reactions and a number's connection arrive as they happen. While the live connection
     is up, the checks every 5–15 seconds slow to once a minute; when it comes back, everything catches up.
   - **Only what changed:** an open conversation asks the server for what changed since it last looked, never the whole
