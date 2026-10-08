@@ -320,6 +320,32 @@ describe('automatic replies (DMO-OOF-01/02, AC-DMO-09)', () => {
     );
   }
 
+  it('My Day and the message list are resized by dragging their edges, and keep their widths (#304)', async () => {
+    localStorage.clear();
+    // jsdom has no PointerEvent: one with the mouse's coordinates, as the divider's own test does.
+    vi.stubGlobal('PointerEvent', class extends MouseEvent { pointerId = 1; });
+    Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1600 });
+    vi.mocked(apiGetMeta).mockReset().mockImplementation((async (path: string) => { throw new ApiError(404, path, null); }) as never);
+    vi.mocked(apiGet).mockReset().mockImplementation((async () => ({ pins: {}, snoozed: {}, returned: {}, focus: {}, categories: {}, flags: {} })) as never);
+    wrap(<TodoPane canCalendar canTasks onClose={vi.fn()} onOpenFlag={vi.fn()} onDropMail={vi.fn()} />);
+    const pane = screen.getByRole('complementary', { name: 'My Day' });
+    expect(pane.style.width).toBe('300px');
+    const edge = screen.getByRole('separator', { name: 'Resize My Day' });
+    // Its left edge: dragged leftwards (or ←) it grows.
+    fireEvent.pointerDown(edge, { button: 0, clientX: 1300, pointerId: 1 });
+    fireEvent.pointerMove(edge, { clientX: 1220, pointerId: 1 });
+    fireEvent.pointerUp(edge, { clientX: 1220, pointerId: 1 });
+    expect(pane.style.width).toBe('380px');
+    fireEvent.keyDown(edge, { key: 'ArrowLeft' });
+    expect(Number.parseInt(pane.style.width, 10)).toBeGreaterThan(380);
+    // Never wider than leaves the mail its room, and back to 300 on a double-click.
+    fireEvent.keyDown(edge, { key: 'End' });
+    expect(pane.style.width).toBe('560px');
+    fireEvent.doubleClick(edge);
+    expect(pane.style.width).toBe('300px');
+    vi.unstubAllGlobals();
+  });
+
   it('shows a banner in Mail while they are on, with Turn off; My Day opens from the edge', async () => {
     app.set({ status: { network: 'ONLINE' } as never, prefs: { mailCacheDays: 30, moduleNotifications: {}, badgeCount: true, theme: 'light' } as never, bootstrap: { user: { id: '9', name: 'Me', email: 'me@example.test' } } as never, apps: [] });
     vi.mocked(apiGet).mockReset().mockImplementation((async (path: string) => {
@@ -342,6 +368,8 @@ describe('automatic replies (DMO-OOF-01/02, AC-DMO-09)', () => {
     fireEvent.click(within(banner.closest('[role="status"]') as HTMLElement).getByRole('button', { name: 'Turn off' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/rules/vacation', expect.objectContaining({ enabled: false, subject: 'Away' })));
 
+    // Beside the reading pane, the list's own edge resizes it (#304).
+    expect(screen.getByRole('separator', { name: 'Resize the message list' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Open My Day' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/prefs', { todoPane: true }));
     await act(async () => undefined);

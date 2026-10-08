@@ -1,6 +1,7 @@
 import { useInfiniteQuery, useQueryClient, type QueryKey } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { apiGetMeta, apiPost, apiPut, setDefaultMailbox, withMailbox } from '../../core/api';
+import { useResizableWidth } from '../../components/ResizeDivider';
 import { canOpen } from '../../core/access';
 import { dayWords, parseTs, todayInZone } from '../../core/time';
 import { app } from '../../core/app-state';
@@ -721,6 +722,8 @@ function MailWorkspace({ active }: ModuleProps) {
           ? text('No {folder} folder in {list}.', { folder: allRole ? allFolderLabel(allRole) : folder, list: unavailable.map((u) => u.email).join(', ') })
           : null;
   const pane = prefs.pane ?? 'right';
+  // The message list's width beside the reading pane, dragged by its edge and remembered on this computer (#304).
+  const listSize = useResizableWidth('mail.list', { defaultWidth: 420, min: 300, max: () => Math.max(300, Math.min(760, window.innerWidth - 620)) });
   const mailPending = (pending.data ?? []).filter((m) => m.state !== 'DONE');
   const account = current?.mailbox ? (boxes.find((b) => String(b.id) === current.mailbox) ?? null) : null;
 
@@ -759,6 +762,7 @@ function MailWorkspace({ active }: ModuleProps) {
       <ScheduledList active={active} />
     ) : (
       <MessageList
+        resize={listSize}
         refresh={refresh}
         title={title}
         aside={aside}
