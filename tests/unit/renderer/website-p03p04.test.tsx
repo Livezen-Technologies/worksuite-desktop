@@ -214,8 +214,9 @@ describe('P-04 · one composer, two channel profiles (RDC-02)', () => {
     const hidden = (Object.keys(TEAM_COMPOSER) as Array<keyof typeof TEAM_COMPOSER>).filter((k) => TEAM_COMPOSER[k] === true && WEBSITE_COMPOSER[k] === false);
     expect(hidden).toEqual(['mentions', 'voice', 'urgent', 'shareRecords']);
     expect([WEBSITE_COMPOSER.savedReplies, WEBSITE_COMPOSER.assistant, WEBSITE_COMPOSER.driveCopy, TEAM_COMPOSER.driveCopy]).toEqual([true, true, true, false]);
-    // And the messages' (RDC-12): reactions, forward and pin hidden.
-    expect([WEBSITE_CAPS.reactions, WEBSITE_CAPS.forward, WEBSITE_CAPS.pin, WEBSITE_CAPS.saveToDrive]).toEqual([false, false, false, true]);
+    // And the messages' (RDC-12): forward and pin hidden. Reactions are on: the visitor's widget shows them and adds its
+    // own (server Communication 1.60.0); each message says whether it takes one.
+    expect([WEBSITE_CAPS.reactions, WEBSITE_CAPS.forward, WEBSITE_CAPS.pin, WEBSITE_CAPS.saveToDrive]).toEqual([true, false, false, true]);
     expect([TEAM_CAPS.reactions, TEAM_CAPS.forward, TEAM_CAPS.pin]).toEqual([true, true, true]);
   });
 

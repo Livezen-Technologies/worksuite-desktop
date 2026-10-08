@@ -180,9 +180,11 @@ export function fromWebsiteMessage(m: WebsiteMessage, ctx: WebsiteContext): KitM
     at: m.at,
     time: ms(m.at),
     timed: m.from === 'system',
-    // Reactions are never added in a website chat (RDC-12); a quote goes to the visitor, so never of a note.
+    // Reactions, by staff and the visitor alike, on what the visitor can see (server Communication 1.60.0; an older one
+    // sends none, and none are offered). A quote goes to the visitor, so never of a note.
     // Deleting reaches the visitor too, for what I wrote, within the server's window (#229); the server has the last word.
-    can: { reply: ctx.canReply && m.from !== 'system' && !internal && !m.deleted, react: false, copy: !m.deleted, delete_everyone: m.from === 'agent' && !m.deleted && author.role === 'self' && (ctx.deleteMinutes === 0 || Date.now() - ms(m.at) < (ctx.deleteMinutes ?? 15) * 60_000) },
+    reactions: m.reactions ?? [],
+    can: { reply: ctx.canReply && m.from !== 'system' && !internal && !m.deleted, react: ctx.canReply && m.reactions !== undefined && m.from !== 'system' && !internal && !m.deleted, copy: !m.deleted, delete_everyone: m.from === 'agent' && !m.deleted && author.role === 'self' && (ctx.deleteMinutes === 0 || Date.now() - ms(m.at) < (ctx.deleteMinutes ?? 15) * 60_000) },
   };
 }
 

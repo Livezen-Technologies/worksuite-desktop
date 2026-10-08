@@ -64,7 +64,8 @@ export const TEAM_CAPS: ChannelCaps = {
  * visitor within the server's window. A thread sets the window the server gives it; left null, Delete is not shown.
  */
 export const WEBSITE_CAPS: ChannelCaps = {
-  reactions: false,
+  // The visitor's widget shows reactions and adds its own (server Communication 1.60.0); each message says if it may.
+  reactions: true,
   forward: false,
   pin: false,
   star: false,

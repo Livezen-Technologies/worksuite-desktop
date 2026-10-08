@@ -313,6 +313,8 @@ export interface WebsiteMessage {
   reply_to?: number | null;
   reply?: WebsiteQuote | null;
   /** Its place in the conversation (DLV-05): the thread is drawn in this order. Absent from an older server. */
+  /** Its reactions, staff's and the visitor's (server Communication 1.60.0; absent before). */
+  reactions?: Array<{ emoji: string; count: number; mine: boolean; names?: string[] }>;
   seq?: number | null;
   /** The id the sending device gave it (DLV-01): my reply on its way gives way to the copy carrying this. */
   client_id?: string | null;

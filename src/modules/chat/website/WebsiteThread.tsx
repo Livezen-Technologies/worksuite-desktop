@@ -111,6 +111,15 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
     scroller.current?.scrollTo({ top: scroller.current.scrollHeight });
   }, [count, live.visitorTyping, waiting.length, sending.length]);
 
+  // A reaction added or taken back, by a colleague or the visitor: the thread redraws it at once.
+  useEffect(
+    () =>
+      on<{ type: string; conversation_id?: number }>('realtime:event', (e) => {
+        if (e.type === 'chat.widget.reaction' && e.conversation_id === Number(id)) void qc.invalidateQueries({ queryKey: ['website', 'conversation', String(id)] });
+      }),
+    [id, qc],
+  );
+
   // Removed from the chat by its owner or a supervisor (TEAM-07): what I was writing to the visitor goes too.
   useEffect(
     () =>
@@ -196,6 +205,13 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
           (e) => toast('error', errorMessage(e)),
         );
       }
+    },
+    // React, as the visitor's widget does; the same emoji again takes it back.
+    onReact: (k, emoji) => {
+      void apiPost(`${WEBSITE}/conversations/${c.id}/messages/${k.id}/react`, { emoji }).then(
+        () => void qc.invalidateQueries({ queryKey: ['website', 'conversation', String(c.id)] }),
+        (e) => toast('error', errorMessage(e)),
+      );
     },
     // Delete for the visitor too, within the window (#229).
     onDelete: (k) => {
