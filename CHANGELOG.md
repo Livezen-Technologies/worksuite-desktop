@@ -5,6 +5,16 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.209 — 2026-10-08
+
+- **WhatsApp Channels (chat 1.71.0).** The **megaphone** button at the top of the WhatsApp list opens the channels
+  (one-way broadcasts) your numbers follow or run.
+  - **Follow** a channel by its link, or **Leave** one.
+  - **Read** a channel's latest posts.
+  - **Post** to a channel your number runs.
+  - **Create** a new channel.
+  - Needs a number linked through WhatsApp Web, and WorkSuite with Whatsapp 1.5.0.
+
 ## 0.2.208 — 2026-10-08
 
 - **WhatsApp: polls, places, contact cards, stickers, groups and profiles (chat 1.70.0).**

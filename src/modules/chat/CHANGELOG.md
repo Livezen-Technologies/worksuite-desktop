@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.71.0 — 2026-10-08
+
+- WhatsApp Channels: the megaphone button in the WhatsApp list opens the channels each number follows or runs — follow by link, leave, read the latest posts, post, create
+
 ## 1.70.0 — 2026-10-08
 
 - WhatsApp: polls (create, vote, tallies), sending a location, contact cards and stickers from the row above the reply box; places and contact cards drawn in the conversation; the person's picture and about line with Block/Unblock, a group's invite link and settings in the contact panel; Join a group by link
