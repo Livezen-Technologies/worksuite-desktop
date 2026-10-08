@@ -5,6 +5,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.208 — 2026-10-08
+
+- **WhatsApp: polls, places, contact cards, stickers, groups and profiles (chat 1.70.0).**
+  - **New row above the reply box:** **Poll**, **Location**, **Contact card** and **Sticker**.
+    - A poll shows each answer's votes, with yours ticked. Click an answer to vote or change your vote.
+    - A place shows as a card that opens the map.
+    - A contact card shows each person's name and number.
+  - **The contact panel** shows the person's WhatsApp **picture** and **about** line, with **Block** and
+    **Unblock**.
+  - **For a group, the contact panel** has its **invite link** (show, copy, reset) and its settings: only admins
+    send, and only admins edit the details.
+  - **Join a group by link** from the people button beside **New conversation**.
+  - **Only for numbers linked through WhatsApp Web:** polls, contact cards, stickers and the group tools. A number
+    on the Business Platform can send places only.
+  - Needs WorkSuite with Whatsapp 1.4.0.
+
 ## 0.2.207 — 2026-10-08
 
 - **WhatsApp: react, see what a reply answers, and load pictures (chat 1.69.0).**

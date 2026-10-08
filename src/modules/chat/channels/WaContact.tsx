@@ -1,3 +1,4 @@
+import { WaProfile } from './WaExtras';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { ApiError, apiGet } from '../../../core/api';
@@ -199,6 +200,7 @@ export function ContactPanel({ who, chatId, onClose, onPick, onAdd, onLink }: { 
           {who.phoneDisplay ? <span className="text-ink-2">{who.phoneDisplay}</span> : null}
           {d ? <span className={cx('rounded-full px-2 py-px text-[11px] font-bold', typeOf(d.contact.type).tone)}>{pillOf(d.contact.type)}</span> : null}
         </div>
+        <WaProfile chatId={chatId} group={!!who.group} canManage />
         {who.candidates.length > 1 ? (
           <section aria-label="Contacts with this number" className="rounded-[10px] border border-line p-2">
             <p className="mb-1 px-1 font-semibold text-ink">{who.candidates.length} contacts have this number</p>
