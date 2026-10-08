@@ -31,10 +31,15 @@ export interface RowLeadProps {
   label?: string;
   /** The dot's name where nothing else on the row says it is unread ("Marked unread"); otherwise it is not read out. */
   dotLabel?: string;
+  /**
+   * Without `onPick`: show the box as a mark under the mouse too, for a row that is itself a button and picks when
+   * its lead is clicked (Chat's conversations).
+   */
+  hoverBox?: boolean;
   className?: string;
 }
 
-export function RowLead({ unread = false, checked = false, selecting = false, onPick, label, dotLabel, className }: RowLeadProps) {
+export function RowLead({ unread = false, checked = false, selecting = false, onPick, label, dotLabel, hoverBox = false, className }: RowLeadProps) {
   const boxed = selecting || checked;
   // The square around the box: a click beside the 16px box picks too, and never reaches the row.
   const around = (e: MouseEvent<HTMLSpanElement>) => {
@@ -50,7 +55,7 @@ export function RowLead({ unread = false, checked = false, selecting = false, on
           aria-label={dotLabel}
           aria-hidden={dotLabel ? undefined : true}
           title={dotLabel}
-          className={cx('h-2 w-2 rounded-full bg-primary', onPick && 'group-hover:invisible group-focus-within:invisible')}
+          className={cx('h-2 w-2 rounded-full bg-primary', (onPick || hoverBox) && 'group-hover:invisible group-focus-within:invisible')}
         />
       ) : null}
       {onPick ? (
@@ -64,6 +69,10 @@ export function RowLead({ unread = false, checked = false, selecting = false, on
         </span>
       ) : boxed ? (
         <CheckboxMark checked={checked} />
+      ) : hoverBox ? (
+        <span className="absolute inset-0 flex items-center justify-center opacity-0 group-hover:opacity-100 group-focus-visible:opacity-100">
+          <CheckboxMark />
+        </span>
       ) : null}
     </span>
   );

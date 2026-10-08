@@ -273,6 +273,31 @@ describe('the chat list', () => {
     expect(screen.queryByRole('toolbar', { name: 'Selected conversations' })).toBeNull();
   });
 
+  it('the box in a row picks it without opening it; Select all, and the toolbar offers what fits the picked ones', async () => {
+    renderPage();
+    await waitFor(() => expect(row('Kasun')).toBeTruthy());
+    tab.go.mockClear();
+    const lead = (name: string) => row(name).querySelector('[data-row-lead]') as HTMLElement;
+    fireEvent.click(lead('Nimal'));
+    expect(tab.go).not.toHaveBeenCalled();
+    const bar = screen.getByRole('toolbar', { name: 'Selected conversations' });
+    expect(within(bar).getByText('1 selected')).toBeTruthy();
+    // Nimal has nothing unread: Mark unread, not Mark read.
+    expect(within(bar).getByRole('button', { name: 'Mark unread' })).toBeTruthy();
+    // Unticking the last one ends the selection.
+    fireEvent.click(lead('Nimal'));
+    expect(screen.queryByRole('toolbar', { name: 'Selected conversations' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Select conversations' }));
+    const bar2 = screen.getByRole('toolbar', { name: 'Selected conversations' });
+    fireEvent.click(within(bar2).getByRole('button', { name: 'Select all' }));
+    const all = screen.getAllByRole('button', { pressed: true }).filter((b) => b.hasAttribute('data-room-row')).length;
+    expect(all).toBeGreaterThan(2);
+    expect(within(bar2).getByText(`${all} selected`)).toBeTruthy();
+    expect(within(bar2).getByRole('button', { name: 'Mark read' })).toBeTruthy();
+    fireEvent.click(within(bar2).getByRole('button', { name: 'Select none' }));
+    expect(within(bar2).getByText('0 selected')).toBeTruthy();
+  });
+
   it('Select mode: clicking picks instead of opening, and right-click acts on the picked ones', async () => {
     renderPage();
     await waitFor(() => expect(row('Kasun')).toBeTruthy());

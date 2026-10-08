@@ -5,6 +5,25 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.206 — 2026-10-08
+
+- **Chat: picking several conversations is easier, and the toolbar does more (chat 1.68.0).**
+  - Point at a conversation and a checkbox appears where the unread dot sits, as in Mail and Files. Clicking it
+    picks the conversation without opening it, and Shift-click picks everything in between. Ctrl/⌘-click and
+    **Select conversations** work as before.
+  - The toolbar above the list has **Select all** (and **Select none**).
+  - Its actions now fit what you picked: **Mark read** or **Mark unread**, **Archive** or **Unarchive**, **Mute**
+    or **Unmute**, and **Delete**.
+  - Unticking the last conversation ends the selection.
+- **Chat: the details drawer looks like the web chat's.**
+  - A header names it **Contact info** or **Group info**, with a proper Close button.
+  - The person's picture shows their presence, with "Away · Direct message" under the name.
+  - Round quick actions sit under the name: **Call**, **Video**, **Mute** or **Unmute**, and for a group **Add**
+    and **More**.
+  - The tabs (Members, Media, Files, Links, Audio, Pinned, Notifications) are one scrolling row, each with its
+    count.
+  - Members show "(you)" and their role as a chip.
+
 ## 0.2.205 — 2026-10-08
 
 - **Mail keeps syncing in the background (mail 1.27.0).** On a server where the mail sync service isn't running,
