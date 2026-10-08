@@ -49,6 +49,11 @@ function failure(code: DesktopErrorCode, message: string): IpcFailure {
   return { __wsError: true, code, message };
 }
 
+/** For the size guard: binary values count as nothing, their schema caps them. */
+function withoutBytes(_key: string, value: unknown): unknown {
+  return ArrayBuffer.isView(value) || value instanceof ArrayBuffer ? '' : value;
+}
+
 export class IpcRouter {
   private handlers = new Map<InvokeChannel, Handler<InvokeChannel>>();
   private rate = new Map<string, number[]>();
@@ -115,9 +120,12 @@ export class IpcRouter {
 
     if (this.deps.isGuestSender?.(event.sender.id) && !GUEST_CHANNELS.has(channel)) return failure('PERMISSION_DENIED', 'Guests can only use their meeting.');
 
-    // Structured-clone size guard: files cross IPC by reference, never bytes.
+    // Structured-clone size guard: files cross IPC by reference, never bytes. The few channels that do take bytes (a
+    // pasted screenshot, a recording's piece, a document) declare them as Uint8Array with their own cap in the
+    // contract, so bytes are measured there and not here: as JSON every byte becomes "123," and a 120 KB screenshot
+    // already read as over 1 MB here — "The request was not valid." on sending it.
     try {
-      if (payload !== undefined && JSON.stringify(payload).length > 1_048_576 && !channel.startsWith('print:')) {
+      if (payload !== undefined && JSON.stringify(payload, withoutBytes).length > 1_048_576 && !channel.startsWith('print:')) {
         return this.violation(event, channel, 'IPC_VALIDATION_FAILED', 'Payload too large.');
       }
     } catch {

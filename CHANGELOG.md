@@ -5,6 +5,16 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.202 — 2026-10-08
+
+- **Pasted screenshots send again.** In Chat, pasting a screenshot (or any picture larger than about 120 KB) and
+  pressing Send ended in **Failed — The request was not valid.**, and Retry failed the same way. The app's own
+  safety check between the window and the background process measured the picture as text, where it is about ten
+  times its real size, and refused it as too large. It now leaves the picture's bytes to their own limit (100 MB for
+  a pasted file), so a 376 KB screenshot goes through. The same check could refuse the other things that cross as bytes once they passed
+  that size (a meeting-recording piece, audio for transcription, a locally opened document); it no longer does. Files picked from
+  disk were never affected.
+
 ## 0.2.201 — 2026-10-07
 
 - **Point of Sale: discount, coupon and gift voucher on Take payment, the customer display redrawn, the till works
