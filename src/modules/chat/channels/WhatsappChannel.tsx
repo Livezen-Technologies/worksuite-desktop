@@ -576,8 +576,7 @@ function WhatsappThread({ id, onRelink, index, picked, onPick, onAction }: { id:
             return <Bubble key={m.client_message_id ?? m.id} m={m} onRetry={m.id < 0 && m.pending ? () => void sendWaNow(qc, chat.id, m.pending!.text, m.pending!.replyTo, m.sender_name, m.client_message_id ?? undefined) : undefined} author={author?.name ?? null} avatar={avatar} index={index} gallery={gallery} quotedBy={quotedBy} canSend={!refusal} onChanged={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} onJump={(id) => document.querySelector<HTMLElement>(`[data-wa-message="${id}"]`)?.scrollIntoView({ block: 'center', behavior: 'smooth' })} onReply={() => setReply({ id: m.id, sender_name: m.direction === 'out' ? (m.sender_name ?? 'You') : (author?.name ?? who.name), snippet: messageText(m).slice(0, 120) })} />;
           })}
         </div>
-        {!refusal ? <WaExtrasBar chatId={chat.id} webJs={chat.account?.provider === 'web_js'} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} /> : null}
-        <WhatsappComposer chatId={chat.id} accountId={chat.account_id} name={who.name} messages={shown} reply={reply} onClearReply={() => setReply(null)} reconnect={down ? () => onRelink(chat.account) : undefined} refusal={refusal} templates={!blocked} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
+        <WhatsappComposer chatId={chat.id} accountId={chat.account_id} name={who.name} messages={shown} reply={reply} onClearReply={() => setReply(null)} reconnect={down ? () => onRelink(chat.account) : undefined} refusal={refusal} templates={!blocked} extras={!refusal ? <WaExtrasBar chatId={chat.id} webJs={chat.account?.provider === 'web_js'} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} /> : null} onSent={() => void qc.invalidateQueries({ queryKey: ['whatsapp'] })} />
       </section>
       {panel ? <ContactPanel who={who} chatId={chat.id} onClose={() => setPanel(false)} onPick={onPick} onAdd={() => onAction('add', who)} onLink={() => onAction('link', who)} /> : null}
     </div>
@@ -640,8 +639,9 @@ function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend: canAct, 
   };
 
   return (
-    // Off-screen messages are not laid out or painted, so a long conversation stays quick to scroll.
-    <div data-wa-message={m.id} style={{ contentVisibility: 'auto', containIntrinsicSize: 'auto 64px' }} className={cx('group/wa relative flex max-w-[75%] flex-col gap-0.5', ours ? 'items-end self-end' : 'items-start self-start')}>
+    // Off-screen messages are not laid out or painted, so a long conversation stays quick to scroll; that also clips
+    // what overflows, so a message whose reaction picker is open is painted in full.
+    <div data-wa-message={m.id} style={picking ? undefined : { contentVisibility: 'auto', containIntrinsicSize: 'auto 64px' }} className={cx('group/wa relative flex max-w-[75%] flex-col gap-0.5', ours ? 'items-end self-end' : 'items-start self-start')}>
       {author ? <span className="px-1 text-[11.5px] font-semibold text-primary">{author}</span> : null}
       <div className={cx('flex items-center gap-1', ours ? 'flex-row-reverse' : 'flex-row')}>
         <div className={cx('min-w-0 text-[13px] whitespace-pre-wrap break-words text-ink', voice ? 'p-1' : 'px-3 py-2', ours ? 'rounded-[12px_4px_12px_12px] bg-selection' : 'rounded-[4px_12px_12px_12px] border border-line bg-surface')}>
@@ -725,7 +725,7 @@ function Bubble({ m, author, avatar, index, gallery, quotedBy, canSend: canAct, 
  * from this computer go with the words as their caption, within what the workspace allows; once the 24-hour window
  * has closed, an approved template is what can be sent (`templates`: this person may send on the number).
  */
-function WhatsappComposer({ chatId, accountId, name, messages, reply, onClearReply, reconnect, refusal, templates, onSent }: { chatId: number; accountId: number; name: string; messages: WaMessage[]; reply: ReplyTarget | null; onClearReply: () => void; reconnect?: () => void; refusal: string | null; templates: boolean; onSent: () => void }) {
+function WhatsappComposer({ chatId, accountId, name, messages, reply, onClearReply, reconnect, refusal, templates, extras, onSent }: { chatId: number; accountId: number; name: string; messages: WaMessage[]; reply: ReplyTarget | null; onClearReply: () => void; reconnect?: () => void; refusal: string | null; templates: boolean; extras?: ReactNode; onSent: () => void }) {
   const [picking, setPicking] = useState(false);
   const qc = useQueryClient();
   const me = useStore(app, (s) => s.bootstrap?.user?.name ?? null);
@@ -734,7 +734,7 @@ function WhatsappComposer({ chatId, accountId, name, messages, reply, onClearRep
   const limits = waLimits(settings.data?.settings);
   return <>
     <Composer roomId={`whatsapp:${chatId}`} roomName={name} group={false} reply={reply} onClearReply={onClearReply} channel={{
-      inputLabel: `Message ${name} on WhatsApp`, draftModule: 'whatsapp', draftContext: `chat:${chatId}`, refusal, allowBlockedDraft: blockedDraft.value, maxLength: 4000, maxCaptionLength: reply ? Math.max(1, 900 - reply.sender_name.length - reply.snippet.length - 5) : 900, voice: limits.kinds.audio,
+      inputLabel: `Message ${name} on WhatsApp`, toolbar: extras, draftModule: 'whatsapp', draftContext: `chat:${chatId}`, refusal, allowBlockedDraft: blockedDraft.value, maxLength: 4000, maxCaptionLength: reply ? Math.max(1, 900 - reply.sender_name.length - reply.snippet.length - 5) : 900, voice: limits.kinds.audio,
       attachChoices: [...(limits.kinds.document ? ['document' as const] : []), ...(limits.kinds.image ? ['image' as const, 'camera' as const] : []), ...(limits.kinds.video ? ['video' as const] : []), ...(limits.kinds.audio ? ['audio' as const, 'voice' as const] : []), 'drive'],
       context: () => messages.map((m) => ({ mine: m.direction === 'out', name: m.direction === 'out' ? (m.sender_name ?? 'Me') : name, text: messageText(m) })),
       refuseFile: (f) => fileRefusal(f, limits),

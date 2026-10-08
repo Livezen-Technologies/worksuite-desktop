@@ -7,7 +7,8 @@ import { timeLabel } from '../../../core/time';
 import { Menu } from '../../../components/Menu';
 import { Icon } from '../../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../../components/ui';
-import { checkWa, confirmedWaPhone, formatWaPhone, isConnected, makeDefaultWa, unlinkWa, type WaAccount } from './whatsapp';
+import { LinkPhone } from './LinkPhone';
+import { checkWa, confirmedWaPhone, formatWaPhone, isConnected, makeDefaultWa, numberState, unlinkWa, type WaAccount } from './whatsapp';
 
 const ROLES: Record<string, string> = { owner: 'Owner', admin: 'Admin', agent: 'Agent', viewer: 'Viewer' };
 
@@ -18,11 +19,10 @@ const ROLES: Record<string, string> = { owner: 'Owner', admin: 'Admin', agent: '
  * offered only where the server says this person may (`can_connect`) and it checks again. Sharing a number,
  * broadcasts, editing templates and business hours are on the web.
  */
-export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClose }: {
+export function WhatsappSettings({ accounts, loading, onConnect, onClose }: {
   accounts: WaAccount[];
   loading: boolean;
   onConnect: (() => void) | null;
-  onRelink: (a: WaAccount) => void;
   onClose: () => void;
 }) {
   const qc = useQueryClient();
@@ -32,6 +32,8 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
   const [results, setResults] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState<string | null>(null);
   const [unlinking, setUnlinking] = useState<number | null>(null);
+  // "Link again" opens the code and its progress inside the number's own card, where it was pressed.
+  const [linking, setLinking] = useState<number | null>(null);
   const web = (path: string) => void call('app:openInBrowser', { path });
 
   const act = async (key: string, run: () => Promise<unknown>, done: string) => {
@@ -79,6 +81,7 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
         <ul className="flex flex-col gap-2" aria-label={text('Your numbers')}>
           {accounts.map((a) => {
             const up = isConnected(a);
+            const where = numberState(a);
             const phone = confirmedWaPhone(a);
             const may = a.can_connect === true;
             return (
@@ -88,7 +91,7 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
                   <span className="min-w-0 flex-1">
                     <span className="flex flex-wrap items-center gap-1.5">
                       <b className="text-[13.5px] text-ink">{a.name}</b>
-                      <span className={cx('rounded-full px-2 py-px text-[11px] font-semibold', up ? 'bg-success-bg text-success' : 'bg-warning-bg text-warning-ink')}>{up ? text('Connected') : text('Not connected')}</span>
+                      <span className={cx('rounded-full px-2 py-px text-[11px] font-semibold', where.tone === 'connected' ? 'bg-success-bg text-success' : where.tone === 'waiting' ? 'bg-subtle text-ink-2' : 'bg-warning-bg text-warning-ink')}>{text(where.label)}</span>
                       {a.is_default ? <span className="rounded-full bg-subtle px-2 py-px text-[11px] font-semibold text-ink-2">{text('Default')}</span> : null}
                     </span>
                     <span className="block text-ink-3">
@@ -97,7 +100,7 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
                     {a.connected_at ? <span className="block text-ink-3">{text('Last connected: {time}', { time: timeLabel(a.connected_at) })}</span> : null}
                     {a.device_label ? <span className="block text-ink-3">{text('Connected on: {device}', { device: a.device_label })}</span> : null}
                     {results[a.id] ? <span role="status" className="block text-ink-2">{results[a.id]}</span> : null}
-                    {!up && a.status_note ? <span className="mt-0.5 block text-ink-2">{a.status_note}</span> : null}
+                    {!up && a.status_note && linking !== a.id ? <span className="mt-0.5 block text-ink-2">{a.status_note}</span> : null}
                   </span>
                 </div>
                 {may ? (
@@ -110,11 +113,16 @@ export function WhatsappSettings({ accounts, loading, onConnect, onRelink, onClo
                   ) : (
                     <div className="flex flex-wrap gap-1.5">
                       <Button disabled={busy !== null} size="sm" icon="refresh" loading={busy === `check:${a.id}`} onClick={() => void act(`check:${a.id}`, () => checkWa(a.id), text('{name} was checked.', { name: a.name }))}>{text('Check connection')}</Button>
-                      {a.provider === 'web_js' && !up ? <Button size="sm" onClick={() => onRelink(a)}>{text('Link again')}</Button> : null}
+                      {a.provider === 'web_js' && !up ? <Button size="sm" icon="qr-code" aria-expanded={linking === a.id} onClick={() => setLinking(linking === a.id ? null : a.id)}>{linking === a.id ? text('Hide the code') : text('Link again')}</Button> : null}
                       {!a.is_default ? <Button disabled={busy !== null} size="sm" loading={busy === `default:${a.id}`} onClick={() => void act(`default:${a.id}`, () => makeDefaultWa(a.id), text('{name} is the default number now.', { name: a.name }))}>{text('Make default')}</Button> : null}
                       {a.provider === 'web_js' && up ? <><button ref={menu === a.id ? anchor : undefined} type="button" aria-label={`More actions for ${a.name}`} aria-haspopup="menu" aria-expanded={menu === a.id} disabled={busy !== null} onClick={(e) => { anchor.current = e.currentTarget; setMenu(menu === a.id ? null : a.id); }} className="rounded px-2 text-ink-2 hover:bg-subtle"><Icon name="more" size={16} /></button>{menu === a.id ? <Menu label={`Actions for ${a.name}`} anchor={anchor} onClose={() => setMenu(null)} sections={[{ id: 'number', items: [{ id: 'unlink', label: text('Unlink from phone'), danger: true, onSelect: () => { setMenu(null); setUnlinking(a.id); } }] }]} /> : null}</> : null}
                     </div>
                   )
+                ) : null}
+                {may && linking === a.id && !up ? (
+                  <div className="rounded-[10px] border border-line bg-surface p-3">
+                    <LinkPhone accountId={a.id} onLinked={() => { setLinking(null); toast('success', text('{name} is linked.', { name: a.name })); }} />
+                  </div>
                 ) : null}
               </li>
             );

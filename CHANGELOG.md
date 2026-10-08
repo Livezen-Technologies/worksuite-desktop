@@ -5,6 +5,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.211 — 2026-10-08
+
+- **WhatsApp polish and fixes (chat 1.73.0).**
+  - **Quick actions:** Poll, Location, Contact card and Sticker now sit inside the reply box, as small tinted actions,
+    instead of a separate row of large buttons.
+  - **Reactions:** the emoji picker was cut off by the 0.2.210 speed-up, which skips drawing messages off the screen.
+    A message with its picker open is now drawn in full.
+  - **Link again in settings:** the code to scan and the progress ("Loading your conversations — 63%") now open
+    inside the number's own card, instead of closing settings and opening another screen. The badge also says
+    *Connecting* or *Waiting for scan* rather than *Not connected* while a number is on its way up.
+  - With WorkSuite Whatsapp 1.6.1, Link again on a number that logged out brings up a fresh code at once. An
+    out-of-date WhatsApp bridge on the server is named on the number's card.
+
 ## 0.2.210 — 2026-10-08
 
 - **WhatsApp, live and fast (chat 1.72.0, files 1.8.6).**
