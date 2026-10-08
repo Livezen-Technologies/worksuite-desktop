@@ -5,6 +5,16 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.203 — 2026-10-08
+
+- **Support › New ticket: the company picker is fixed (support 1.2.1).** In a company with more than one
+  organisation, the picker beside Subject used to sit out of line with it: it had no name of its own, so it lined
+  up with the word "Subject" instead of the box, and it was too narrow, cutting the company to "Livezen Technologies
+  Pvt L…".
+  - It is now called **Company**, with its name above it like every field, and it lines up with Subject's box.
+  - It is wider, and you can search it when there are more than six companies.
+  - Type, Category, Assignee and Team, which also had no visible name, now show theirs.
+
 ## 0.2.202 — 2026-10-08
 
 - **Pasted screenshots send again.** In Chat, pasting a screenshot (or any picture larger than about 120 KB) and
