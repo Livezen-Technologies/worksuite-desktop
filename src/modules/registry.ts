@@ -134,6 +134,24 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./tasks/TasksPage'),
   },
   {
+    // WorkSuite Projects (WS-PROJECT-SRS-001 PRJ-DSK-01..04): the project switcher, the board with its keyboard, a task's
+    // detail, My work, my time, change decisions; the tray timer and its mini window (electron/services/projects).
+    // Offline the pinned boards, my work and my last 30 days of time are the last copy; moves, comments and time wait in
+    // the outbox and go in order; approvals, budget and change decisions wait for a connection.
+    input: defineDesktopManifest({
+      id: 'projects', name: 'Projects', icon: 'kanban', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'PARTIAL_WRITE', entities: ['task', 'comment', 'time_entry'], cache: ['/api/projects'] },
+      native: ['notifications'],
+      windows: [{ id: 'projects-timer', route: '/projects/timer', alwaysOnTop: true }, { id: 'projects-board', route: '/projects/:id' }],
+      quickActions: [
+        { id: 'projects-my-work', label: 'My work (Projects)', route: '/projects/my-work' },
+        { id: 'projects-time', label: 'My time (Projects)', route: '/projects/time' },
+      ],
+      deepLinks: ['projects', 'projects/:id', 'projects/:id/tasks/:task'],
+    }),
+    load: () => import('./projects/ProjectsPage'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'notes', name: 'Notes', icon: 'notebook', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', cache: ['/api/notes', '/api/notebooks', '/api/note-sections'] },

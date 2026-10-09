@@ -104,6 +104,7 @@ import { ElearningOffline } from '../services/elearning-offline';
 import { EventDesk } from '../services/event-desk';
 import { EventDeskPrint } from '../services/event-desk-print';
 import { createRestaurant } from '../services/restaurant';
+import { createProjects } from '../services/projects';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
@@ -1277,7 +1278,28 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
     tray.update({ supportShortcut: supportKeyHeld ? SUPPORT_QUICK_SHORTCUT : null });
   };
-  notifications.claim = (n) => supportNotices.claim(n);
+  // WorkSuite Projects (PRJ-DSK-02..04): the tray timer and its idle prompt, the offline outbox, banners with buttons.
+  const projects = createProjects({
+    db,
+    vault: getVault,
+    http,
+    origin: () => auth.getServer()?.origin ?? null,
+    user: () => (sessionCtl.isReady() && canOpenApp('projects', sessionCtl.visibleApps()) ? sessionCtl.userId() : null),
+    notify: (n) => notifications.notify(n),
+    markRead: (ids) => notifications.markRead(ids),
+    open: (route) => navigate({ route, source: 'notification' }),
+    openMini: () => {
+      if (lock.isLocked() || !sessionCtl.isReady() || !canOpenApp('projects', sessionCtl.visibleApps())) return;
+      windows.open('timer', '/projects/timer', 'Timer', true);
+    },
+    idleSeconds: () => powerMonitor.getSystemIdleTime(),
+    changed: (c) => {
+      broadcast('projects:changed', c);
+      if (c.outbox) emitStatus();
+    },
+    tray: (t) => tray.update({ projectTimer: t }),
+  });
+  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n);
   notifications.onRefresh = () => void supportNotices.refreshBadges();
 
   // ── status ─────────────────────────────────────────────────────────────
@@ -1300,7 +1322,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
       connection: connection.stats(),
-      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() : 0,
+      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() + projects.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
       notificationsSupported: notifications.supported(),
@@ -1567,6 +1589,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     supportQuickLatest: () => quickLatest(),
     supportPresence: (status) => void supportDesk.setPresence(status),
     marketingNextContact: () => openNextContact('tray'),
+    projectTimerStop: () => void projects.timer.end().catch((e) => broadcast('toast', { kind: 'error', text: String((e as Error).message ?? e) })),
+    projectTimerSwitch: (t) => void projects.timer.switchTo(t).catch((e) => broadcast('toast', { kind: 'error', text: String((e as Error).message ?? e) })),
+    projectTimerResume: () => void projects.timer.resume().catch((e) => broadcast('toast', { kind: 'error', text: String((e as Error).message ?? e) })),
+    projectTimerWindow: () => {
+      if (lock.isLocked() || !sessionCtl.isReady()) return;
+      windows.open('timer', '/projects/timer', 'Timer', true);
+    },
   });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
@@ -1984,6 +2013,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/social-media/brands', 'social-media'],
     ['/api/tasks', 'tasks'],
     ['/api/task-lists', 'tasks'],
+    // WorkSuite Projects (PRJ-DSK-04): the boards opened (the pinned ones are fetched ahead by the screens), my work,
+    // my time for the last 30 days, the list and the counts, so the app opens offline as it was last seen.
+    ['/api/projects', 'projects'],
     ['/api/crm/leads', 'crm'],
     ['/api/hr/attendance/me', 'hr'],
     ['/api/hr/leave', 'hr'],
@@ -2105,6 +2137,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     salonSync.start();
     eventDesk.start();
     restaurant.start();
+    projects.start();
     // Courses kept offline: the ones whose learning ended, or whose licence ran out, go.
     void elearning.validate().catch((e) => log.warn('offline courses not checked', { error: String(e) }));
     void audit.flush();
@@ -2131,6 +2164,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   const stopServices = (): void => {
     mailBodies.stop();
+    projects.stop();
     void remoteControl.shutdown('logout');
     webchat.stop();
     livePulse.stop();
@@ -2207,6 +2241,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       db.run('DELETE FROM tab_sessions WHERE user_id = ?', uid);
       if (scope !== 'tokens') {
         queue.wipeUser(uid, includeDrafts);
+        // Projects' outbox and snoozed banners, as the offline queue's (PRJ-DSK-04: cleared on sign-out).
+        projects.wipeUser(uid);
         transfers.wipe(uid);
         // Copies opened in other apps are no longer watched; the files stay the person's.
         officeLocal.forgetUser(uid);
@@ -2360,6 +2396,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void eventDesk.sync();
     pos.sync();
     void restaurant.sync.sync();
+    void projects.reconnected();
     void elearning.validate().catch(() => undefined);
     broadcast('realtime:resync');
   }
@@ -2625,6 +2662,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   pmsLocks.register(router);
   contactSync.register(router);
   restaurant.register(router);
+  projects.register(router);
   localAI.register(router);
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
   router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));
@@ -2881,6 +2919,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void eventDesk.sync();
     pos.sync();
     void restaurant.sync.sync();
+    void projects.reconnected();
     // Callback reminders set again from the clock as it is now; the tray's counts asked again.
     callbackReminders.resume();
     marketingPulse.poke();

@@ -5,6 +5,41 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.216 — 2026-10-09
+
+- **Projects is a desktop app (projects 1.1.0, WS-PROJECT-SRS-001 PRJ-DSK-01..04).** It used to open the web page in
+  your browser. Now it opens in a tab:
+  - On the left: Projects and New (the New project form is still the web's), Jump to project (⌘P / Ctrl+P),
+    Dashboard, My work and Time & approvals with what waits in them, your pinned projects (pin from a project's
+    row or its board) and the recent ones.
+  - A project's board: "PRJ-0018 · Sprint 7 · day 4 of 9", the columns To do, In progress, In review, Testing and
+    Completed with their counts, and cards with the task's number, title, assignee, due date or how late, and
+    Blocked. The keyboard moves you about: J / K down and up, ← / → across the columns, Shift+← / → moves the card,
+    Enter opens the task, T starts its timer, L logs time, N makes a task, ⌘F filters; ⌘2 opens the timeline on the
+    web and ⌥⌘O (Ctrl+Alt+O) the project in a window of its own.
+  - A task opens beside the board: move it, add a note, start or stop its timer, log time.
+  - My work: your open tasks across projects, overdue, today and this week by your own calendar, with a box to
+    complete each and ▶ to start its timer; today's time on a line with the total by project, and what waits on you
+    (time to approve, reviews, change requests to decide).
+- **The Projects timer in the tray (PRJ-DSK-02, PRJ-TIM-05).** While a timer runs the title bar shows it
+  ("TSK-0412 1:12:48") and the tray menu shows what runs, Stop, Switch to (one click stops the timer and starts the
+  other), today's and this week's totals and Open timesheet. Show mini timer opens a small always-on-top window with
+  the time, pause, stop and the entry's note. After 15 minutes without keyboard or mouse a notification asks "Still
+  working on TSK-…?": Keep 15 min changes nothing; Drop idle time ends the timer when you went idle — one entry, never
+  two.
+- **Projects' notifications have buttons (PRJ-DSK-03).** A change request waiting for you: Review. An overdue task:
+  Open task and Snooze 1 day. They open in the Projects app, and the new Projects switch (Settings › Notifications ›
+  By app; settings 1.28.0) silences them with the timer's prompt.
+- **Projects offline (PRJ-DSK-04).** Pinned projects' boards, your tasks and the last 30 days of your time are kept on
+  this computer. Offline, a banner says so; moves, notes and time go to an Outbox and are sent in the order you made
+  them, once each, when the connection returns ("Move waiting" on the card meanwhile). If someone else moved the task
+  while you were offline, nothing is overwritten: you choose to keep theirs or apply yours. Approvals, budget changes
+  and change-request decisions wait for a connection. Signing out clears what was kept.
+- **Links to projects open in the app (G-12, acceptance #9).** `worksuite://projects/{id}`,
+  `worksuite://projects/{id}/tasks/{task}`, and the web's project and task links from Calendar, Mail, notifications
+  and search now open the project or task here. Screens the desktop does not have (timeline, sprints, budget, risks,
+  reports, settings) still open on the web.
+
 ## 0.2.215 — 2026-10-09
 
 - **Acknowledged announcements leave Home (home 1.7.0).** Once you acknowledge an announcement, it no longer takes a

@@ -484,6 +484,27 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   `realtime:event`; `parts.tsx: useLive` refreshes what each entity touches) with `live?after=` behind them as the
   catch-up — every few seconds without the socket, every 30 s with it; offline they read the copy and keep new orders
   and lines in the outbox, and everything with money, a void, a booking or a table move is disabled.
+- WorkSuite Projects (`modules/projects`, main process `electron/services/projects/`, rules in `shared/projects.ts`;
+  WS-PROJECT-SRS-001 PRJ-DSK-01..04, PRJ-TIM-05, NFR-09): native since 0.2.216 (it was a browser surface). The tab
+  (`ProjectsPage.tsx`) has the project switcher (⌘P), the views (Dashboard, My work, Time & approvals, change
+  requests waiting), pinned projects (kept per server and person in `localStorage`, a view preference) and recent
+  ones on the left; a project's board (`Board.tsx` — the columns, J/K, ←/→, Shift+←/→ moves the card, Enter opens,
+  T timer, L log time, N new task, ⌘F filter, ⌘2 the web's timeline, ⌥⌘O a window of its own; the keys are caught
+  in the capture phase while the tab is in front, so ⌘2 is not the shell's "tab 2" here), a task's panel
+  (`TaskPanel.tsx`), My work grouped by the reader's own day (`logic.ts: groupMyWork`) and the day's time line. Its
+  addresses are the web's (`routes.ts`: `/projects/<id>`, `/projects/<id>/tasks/<task>`, `?project=`, `?task=`); the
+  web screens it does not draw (timeline, sprints, budget, risks, reports…) are `BROWSER_PAGES` in `shared/links.ts`.
+  The main process keeps the timer (`timer.ts`: `GET time/running` and this week's entries every minute, start, stop,
+  Switch to, pause; the tray's lines, the title bar's pill and the always-on-top mini timer window `/projects/timer`,
+  kind `timer`), the idle prompt (powerMonitor's idle time read every 30 s; after 15 minutes one banner, Keep 15 min
+  or Drop idle time — the running entry removed and the time up to the idle start logged, so one entry), the outbox
+  (`outbox.ts`, its own sealed table `projects_outbox`: moves, comments, time logs and offline stops, each with an
+  `Idempotency-Key`, sent in order on reconnect, wake, sign-in and Try now; a move reads the task first and, when its
+  `updated_at` is not the one it was made from, waits for the person's choice instead of overwriting) and the
+  banners with buttons (`notices.ts`: `project.change_waiting` → Review, `project.task_overdue` → Open task / Snooze
+  1 day, claimed from the notification service as Support's are). READ_CACHE keeps `/api/projects` answers; the
+  screens read the pinned boards, my work and five weeks of my time ahead (`desk.ts: keepOffline`). Sign-out clears
+  the cache and the outbox with the rest. Approvals, budget and change decisions are online only.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.

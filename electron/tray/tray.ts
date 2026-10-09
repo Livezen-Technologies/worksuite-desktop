@@ -6,6 +6,7 @@ import { liveTitle } from '../services/live-desk';
 import type { SupportPulseFigures } from '../services/support-desk';
 import type { TrayMarketing } from '../services/marketing-pulse';
 import { NEXT_CONTACT_LABEL } from '../services/marketing-shortcut';
+import { clockOf, hhmm as hm, stampMs, targetLabel, type ProjectTimerState, type TimerTarget } from '@shared/projects';
 
 const log = logger('tray');
 
@@ -69,6 +70,11 @@ export interface TrayModel {
    * sending now. Null for anybody with nothing to show, or before the server answers. Optional for older callers.
    */
   marketing?: TrayMarketing | null;
+  /**
+   * The Projects timer (PRJ-DSK-02, D02): what runs, Switch to, today's and this week's totals. Null or unavailable
+   * for anybody without Projects. Optional for older callers.
+   */
+  projectTimer?: ProjectTimerState | null;
 }
 
 export interface TrayUpdate {
@@ -147,6 +153,49 @@ export interface TrayActions {
   supportPresence?: (status: 'available' | 'away') => void;
   /** Marketing's Next contact (⌘⇧N / Ctrl+Shift+N from other apps): My call queue's workspace, on the next contact. */
   marketingNextContact?: () => void;
+  /** The Projects timer's Stop, Switch to (one click: what runs stops, the other starts), Resume and the mini timer. */
+  projectTimerStop?: () => void;
+  projectTimerSwitch?: (t: TimerTarget) => void;
+  projectTimerResume?: () => void;
+  projectTimerWindow?: () => void;
+}
+
+/**
+ * The Projects timer's lines (D02): "● TSK-0412 · Bidder KYC document upload — 1:12", Stop, Show mini timer, Switch to
+ * (each a click: the running timer stops and that one starts), "Today 6:40 · This week 31:15" and Open timesheet.
+ * With nothing running: Resume (after a pause) and Start timer on… the same recent work. Only for somebody with
+ * Projects whose server answered. The menu is rebuilt each minute, so the time here moves a minute at a time; the
+ * mini timer and the title bar show the seconds.
+ */
+export function trayProjectItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'projectTimer'>, a: Pick<TrayActions, 'openRoute' | 'projectTimerStop' | 'projectTimerSwitch' | 'projectTimerResume' | 'projectTimerWindow'>, now = Date.now()): MenuItemConstructorOptions[] {
+  const t = m.projectTimer;
+  if (!m.signedIn || !m.apps.includes('projects') || !t?.available || !a.projectTimerSwitch) return [];
+  const items: MenuItemConstructorOptions[] = [];
+  const short = (s: string) => (s.length > 46 ? `${s.slice(0, 45)}…` : s);
+  const r = t.running;
+  const ran = (x: { startedAt: string }) => Math.max(0, Math.floor((now - (stampMs(x.startedAt) ?? now)) / 1000));
+  if (r) {
+    const label = targetLabel(r);
+    items.push({ label: `Timer running${r.billable ? ' · billable' : ''}`, enabled: false });
+    items.push({ label: `● ${short(label)} — ${clockOf(ran(r)).replace(/:\d\d$/, '')}`, sublabel: r.task && r.project ? [r.projectCode, r.project].filter(Boolean).join(' ') : undefined, click: () => a.projectTimerWindow?.() });
+    if (a.projectTimerStop) items.push({ label: 'Stop timer', click: a.projectTimerStop });
+    if (a.projectTimerWindow) items.push({ label: 'Show mini timer', click: a.projectTimerWindow });
+  } else if (t.paused && a.projectTimerResume) {
+    items.push({ label: `Resume — ${short(t.paused.label)}`, click: a.projectTimerResume });
+  }
+  if (t.recent.length) {
+    const sw = a.projectTimerSwitch;
+    items.push({
+      label: r ? 'Switch to' : 'Start timer on',
+      enabled: !t.offline,
+      submenu: t.recent.map((x) => ({ label: `${x.number ? `${x.number} ` : ''}${short(x.title)}${x.minutes ? `  ${hm(x.minutes)}` : ''}`, click: () => sw({ taskId: x.taskId, projectId: x.projectId }) })),
+    });
+  }
+  const running = r ? Math.floor(ran(r) / 60) : 0;
+  items.push({ label: `Today ${hm(t.todayMinutes + running)} · This week ${hm(t.weekMinutes + running)}`, enabled: false });
+  items.push({ label: 'Open timesheet', click: () => a.openRoute('/projects/time') });
+  items.push({ type: 'separator' });
+  return items;
 }
 
 /**
@@ -306,7 +355,9 @@ export class TrayService {
       }),
     );
     // "18 · 2 waiting" for website staff (MAP-UI-04): on the sites, and waiting on me as the badge counts them (MAP-25).
-    if (process.platform === 'darwin') this.tray.setTitle(live ? ` ${liveTitle(live.online, ringingCount(m))}` : ringing ? ` ${ringing} ringing` : '');
+    // The Projects timer while it runs (D02's menu bar "1:12"), after what rings and the Live figures.
+    const timer = m.signedIn && m.apps.includes('projects') && m.projectTimer?.running ? clockOf(Math.max(0, (Date.now() - (stampMs(m.projectTimer.running.startedAt) ?? Date.now())) / 1000)).replace(/:\d\d$/, '') : '';
+    if (process.platform === 'darwin') this.tray.setTitle(live ? ` ${liveTitle(live.online, ringingCount(m))}` : ringing ? ` ${ringing} ringing` : timer ? ` ${timer}` : '');
     if (live && !ringing) this.tray.setToolTip(`WorkSuite — ${live.online === 1 ? '1 visitor' : `${live.online} visitors`} on your sites${live.atRisk ? ' · somebody is at risk' : ''}`);
     if (ringing) this.tray.setToolTip(m.webchatCalls?.length ? 'WorkSuite — a website visitor is calling' : `WorkSuite — ${ringing === 1 ? 'a website chat is' : `${ringing} website chats are`} ringing`);
     else if (m.signedIn && hasChat && m.webchatOnCall) this.tray.setToolTip(`WorkSuite — on a call with ${m.webchatOnCall.label}${m.webchatOnCall.held ? ' (on hold)' : ''}`);
@@ -374,6 +425,7 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
   }
   items.push(...trayUpdateItems(m.update, a));
   items.push(...trayMarketingItems(m, a));
+  items.push(...trayProjectItems(m, a));
   items.push({ label: 'Open WorkSuite', click: a.open });
   if (m.signedIn && m.quickAsk && has('ai')) items.push({ label: 'Quick Ask', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
   if (m.signedIn && m.aiChanges > 0 && has('ai')) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant is waiting' : `${m.aiChanges} changes from the assistant are waiting`, click: a.aiChanges });

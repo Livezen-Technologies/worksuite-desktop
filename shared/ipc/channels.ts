@@ -7,6 +7,7 @@ import { CONTACT_SYNC_INVOKE_CHANNELS } from './contact-sync-channels';
 import { PMS_LOCKS_INVOKE_CHANNELS } from './pms-locks-channels';
 import { PHONE_EVENT_CHANNELS, PHONE_INVOKE_CHANNELS } from './phone-channels';
 import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
+import { PROJECTS_EVENT_CHANNELS, PROJECTS_INVOKE_CHANNELS } from './projects-channels';
 
 export const INVOKE_CHANNELS = [
   'app:info',
@@ -425,6 +426,8 @@ export const INVOKE_CHANNELS = [
   ...PMS_LOCKS_INVOKE_CHANNELS,
   // Contact sync: iCloud, CardDAV and Mac Contacts on this computer (contact-sync-channels.ts).
   ...CONTACT_SYNC_INVOKE_CHANNELS,
+  // WorkSuite Projects: the tray timer, the mini timer window and the offline outbox (projects-channels.ts).
+  ...PROJECTS_INVOKE_CHANNELS,
 ] as const;
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
@@ -481,6 +484,7 @@ export const EVENT_CHANNELS = [
   'mail:link',
   ...POS_EVENT_CHANNELS,
   ...PHONE_EVENT_CHANNELS,
+  ...PROJECTS_EVENT_CHANNELS,
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

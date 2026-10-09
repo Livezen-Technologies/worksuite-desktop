@@ -445,6 +445,8 @@ const MODULE_TOGGLES = [
   ['ai', 'AI Assistant'],
   // Campaign notices (a campaign paused by the bounce guard) and callback reminders (MKT-DSK-01, MKT-CAL-12).
   ['marketing', 'Marketing'],
+  // The Projects timer's idle prompt and Projects' banners with buttons (PRJ-DSK-02/03).
+  ['projects', 'Projects timer and alerts'],
   ['system', 'System alerts'],
 ] as const;
 

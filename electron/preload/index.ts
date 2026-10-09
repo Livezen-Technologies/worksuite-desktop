@@ -454,6 +454,23 @@ const api = {
     run: call('pmsLocks:run'),
     status: call('pmsLocks:status'),
   },
+  // WorkSuite Projects (projects-channels.ts): the tray timer, the mini timer window and the offline outbox.
+  projects: {
+    timer: call('projects:timer'),
+    timerRefresh: call('projects:timerRefresh'),
+    timerStart: call('projects:timerStart'),
+    timerStop: call('projects:timerStop'),
+    timerSwitch: call('projects:timerSwitch'),
+    timerPause: call('projects:timerPause'),
+    timerResume: call('projects:timerResume'),
+    timerNote: call('projects:timerNote'),
+    timerWindow: call('projects:timerWindow'),
+    outbox: call('projects:outbox'),
+    submit: call('projects:submit'),
+    resolve: call('projects:resolve'),
+    discard: call('projects:discard'),
+    replay: call('projects:replay'),
+  },
   // Contact sync (contact-sync-channels.ts): iCloud, CardDAV and Mac Contacts on this computer; passwords never come back.
   contactSync: {
     status: call('contactSync:status'),

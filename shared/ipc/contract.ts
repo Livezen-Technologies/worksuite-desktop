@@ -63,6 +63,7 @@ import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, offi
 import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
 import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
+import { projectsContract, type ProjectsOutputs } from '../projects';
 import { phoneContract, type PhoneOutputs } from '../phone';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
@@ -1383,6 +1384,8 @@ export const contract = {
   ...phoneContract,
   ...pmsLocksContract,
   ...contactSyncContract,
+  // WorkSuite Projects: the tray timer and the offline outbox (shared/projects.ts, electron/services/projects).
+  ...projectsContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
 
 export type Contract = typeof contract;
@@ -1454,7 +1457,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;

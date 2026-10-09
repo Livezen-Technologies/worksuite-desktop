@@ -481,24 +481,31 @@ describe('the keyboard', () => {
 });
 
 describe('tiles', () => {
+  // Projects became a desktop app (WS-PROJECT-SRS-001 G-13): Social stands for the apps that still open on the web.
+  const withSocial = () => app.set({ apps: visibleApps({ apps: ['mail', 'chat', 'tasks', 'calendar', 'billing', 'projects', 'social', 'drive', 'notes'], permissions: ['billing.view'] }) });
+
   it('shows unread badges and the browser mark, each of which can be switched off', () => {
+    withSocial();
     render(<Launcher />);
     const mail = within(grid()).getByRole('option', { name: 'Mail' });
     expect(mail.querySelector('[data-badge]')?.textContent).toBe('5');
-    const projects = within(grid()).getByRole('option', { name: 'Projects' });
-    expect(projects.querySelector('[title="Opens in your browser"]')).toBeTruthy();
+    const social = within(grid()).getByRole('option', { name: 'Social' });
+    expect(social.querySelector('[title="Opens in your browser"]')).toBeTruthy();
+    // Projects is a desktop app now (WS-PROJECT-SRS-001 G-13): no browser mark.
+    expect(within(grid()).getByRole('option', { name: 'Projects' }).querySelector('[title="Opens in your browser"]')).toBeNull();
     cleanup();
     updateLauncherPrefs((p) => ({ ...p, toggles: { ...p.toggles, badges: false, browserMark: false, names: false } }));
     render(<Launcher />);
     expect(within(grid()).getByRole('option', { name: 'Mail' }).querySelector('[data-badge]')).toBeNull();
-    expect(within(grid()).getByRole('option', { name: 'Projects' }).querySelector('[title="Opens in your browser"]')).toBeNull();
+    expect(within(grid()).getByRole('option', { name: 'Social' }).querySelector('[title="Opens in your browser"]')).toBeNull();
     expect(within(grid()).getByRole('option', { name: 'Mail' }).querySelector('.sr-only')?.textContent).toBe('Mail');
   });
 
   it('opens a browser app in the browser', () => {
+    withSocial();
     render(<Launcher />);
-    fireEvent.click(within(grid()).getByRole('option', { name: 'Projects' }));
-    expect(openInBrowser).toHaveBeenCalledWith({ path: '/projects' });
+    fireEvent.click(within(grid()).getByRole('option', { name: 'Social' }));
+    expect(openInBrowser).toHaveBeenCalledWith({ path: '/social' });
   });
 
   it('pins, hides and groups from a tile\'s menu', () => {

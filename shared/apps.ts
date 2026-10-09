@@ -133,7 +133,12 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'social-media', label: 'Social Media', group: 'business', icon: 'send', webPath: '/social-media', surface: 'native', sidebar: 'business', order: 167, keywords: 'social media manager facebook instagram linkedin x twitter youtube tiktok threads pinterest google business post schedule publish queue calendar inbox comments approvals campaigns analytics' },
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
-  { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'browser', order: 170, guest: 'locked', guestLabel: 'Shared workspaces' },
+
+  // WorkSuite Projects (WS-PROJECT-SRS-001 PRJ-DSK-01..04): native since 0.2.216 — the board with its keyboard, My work,
+  // the tray timer and an offline outbox. `/projects/<id>`, `/projects/<id>/tasks/<task>`, `/projects?project=<id>` and
+  // `?task=<id>` (Mail, Calendar, notifications, search) open here; the screens not built here (timeline, sprints,
+  // budget, risks, reports, settings…) open on the web (shared/links.ts BROWSER_PAGES).
+  { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'native', order: 170, keywords: 'projects project board kanban sprint tasks my work timer time tracking timesheet milestones change requests', guest: 'locked', guestLabel: 'Shared workspaces' },
   // `/tenders?open=<id>` (notifications, search, the stream) opens that tender here.
   { id: 'tenders', label: 'Tenders', group: 'business', icon: 'file-text', app: 'tender', perm: 'tender.view', webPath: '/tenders', surface: 'native', sidebar: 'business', order: 129, keywords: 'tenders bids bid rfq rfp procurement pipeline award' },
   { id: 'notes', label: 'Notes', group: 'work', icon: 'notebook', app: 'notes', webPath: '/notes', surface: 'native', order: 190, keywords: 'notebook journal meeting notes', guest: 'local' },

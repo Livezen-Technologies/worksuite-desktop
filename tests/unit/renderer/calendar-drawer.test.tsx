@@ -114,12 +114,13 @@ describe('Calendar › an entry from another module (#64)', () => {
     await waitFor(() => expect(net.navigate).toHaveBeenCalledWith('/tasks?task=12'));
   });
 
-  it('opens a project on the web, at that project', async () => {
+  it('opens a project in the Projects app, at that project (WS-PROJECT-SRS-001 acceptance #9)', async () => {
     const m: CalendarEvent = { ...task, source: 'project_milestone', id: 3, project_id: 21, link: '/projects?project=21', status: undefined };
     net.apiGetMeta.mockResolvedValue({ data: { events: [m] }, offline: false, cachedAt: null });
     show(m);
-    fireEvent.click(screen.getByRole('button', { name: 'Open Project ↗' }));
-    await waitFor(() => expect(net.call).toHaveBeenCalledWith('app:openInBrowser', { path: '/projects?project=21' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Open Project' }));
+    await waitFor(() => expect(net.navigate).toHaveBeenCalledWith('/projects?project=21'));
+    expect(net.call).not.toHaveBeenCalledWith('app:openInBrowser', expect.anything());
   });
 
   it('closes on Escape', () => {
