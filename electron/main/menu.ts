@@ -11,7 +11,7 @@ export interface MenuOptions {
   ai: boolean;
 }
 
-type MenuActions = { checkUpdates: () => void; diagnostics: () => void; quit: () => void };
+type MenuActions = { checkUpdates: () => void; diagnostics: () => void; reportProblem: () => void; quit: () => void };
 
 export function buildMenu(send: (command: string, arg?: number) => void, actions: MenuActions, opts: MenuOptions = { ai: false }): void {
   Menu.setApplicationMenu(Menu.buildFromTemplate(menuTemplate(send, actions, opts)));
@@ -113,6 +113,7 @@ export function menuTemplate(send: (command: string, arg?: number) => void, acti
     role: 'help',
     submenu: [
       { label: 'Diagnostics', accelerator: 'F1', click: actions.diagnostics, ...r },
+      { label: 'Report a Problem…', click: actions.reportProblem },
       ...(mac ? [] : [{ label: 'Check for Updates…', click: actions.checkUpdates }, { label: 'Lock WorkSuite', accelerator: 'Ctrl+L', click: cmd('lock'), ...r }]),
     ],
   });

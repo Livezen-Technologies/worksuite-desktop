@@ -211,3 +211,12 @@ export function acceptUpdateResponse(
   if (!Number.isFinite(expires) || expires < now - grace || !Number.isFinite(issued) || issued > now + grace) return { ok: false, reason: 'expired' };
   return { ok: true, response: r };
 }
+
+/**
+ * The Update Center's public Report-a-problem form, pre-filled for this app (Help › Report a problem). It needs no
+ * project key and no sign-in, so it works in every build.
+ */
+export function reportProblemUrl(version: string, base: string = UPDATE_CENTER_URL): string {
+  const q = new URLSearchParams({ app: 'lk.worksuite.desktop', version, platform: 'desktop' });
+  return `${base.replace(/\/+$/, '')}/report-a-problem?${q.toString()}`;
+}
