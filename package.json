@@ -1,7 +1,7 @@
 {
   "name": "worksuite-desktop",
   "productName": "WorkSuite",
-  "version": "0.2.214",
+  "version": "0.2.215",
   "description": "WorkSuite Desktop — the native desktop client for the WorkSuite platform (Windows, macOS, Linux).",
   "author": "Livezen Technologies",
   "license": "UNLICENSED",

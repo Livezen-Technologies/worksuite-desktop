@@ -26,7 +26,7 @@ import { isJunkFile } from '../files/api';
 import type { Room } from '../chat/types';
 import { assistantSession } from '../ai/session';
 import { aiDock } from '../../app/overlays/AiDock';
-import { AllAnnouncements, AnnouncementReader, AnnouncementRows, current, forCompany, ranked, toAcknowledge, useMyAnnouncements } from './Announcements';
+import { AllAnnouncements, AnnouncementReader, AnnouncementRows, current, forCompany, onHome, ranked, toAcknowledge, useMyAnnouncements } from './Announcements';
 import { Agenda } from './Agenda';
 import { MoreButton, PopMenu, type MenuAction } from './Menu';
 import { TodaysWork } from './TodaysWork';
@@ -300,15 +300,15 @@ export default function HomePage(_props: ModuleProps) {
       <Widget
         {...common('announcements')}
         title={t('home.announcements')}
-        count={notices.filter((a) => !a.read).length}
+        count={onHome(notices).filter((a) => !a.read).length}
         countTone="indigo"
         action={notices.length ? <HeaderLink label="See all announcements" onClick={() => go('/home?announcements=all')}>See all</HeaderLink> : null}
         loading={announcements.isLoading}
         error={announcements.error}
         onRetry={() => void announcements.refetch()}
-        empty={notices.length === 0 ? <><Icon name="megaphone" size={15} /> No announcements.</> : null}
+        empty={notices.length === 0 ? <><Icon name="megaphone" size={15} /> No announcements.</> : onHome(notices).length === 0 ? <><Icon name="check" size={15} /> You’re all caught up.</> : null}
       >
-        <AnnouncementRows items={notices} onOpen={(id) => go(`/home?announcement=${id}`)} limit={3} />
+        <AnnouncementRows items={onHome(notices)} onOpen={(id) => go(`/home?announcement=${id}`)} limit={3} />
       </Widget>
     ),
     activity: () => (

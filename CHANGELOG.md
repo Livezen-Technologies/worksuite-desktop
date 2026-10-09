@@ -5,6 +5,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.215 — 2026-10-09
+
+- **Acknowledged announcements leave Home (home 1.7.0).** Once you acknowledge an announcement, it no longer takes a
+  place in the Announcements widget; See all still lists it, marked Acknowledged. With nothing left to read or
+  acknowledge, the widget says "You're all caught up."
+
 ## 0.2.214 — 2026-10-09
 
 - **Sending a file is quicker, and shows how it goes (chat 1.75.0).** A sent file sat at "Processing…" with a spinner
