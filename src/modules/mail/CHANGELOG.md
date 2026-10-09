@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.27.1 — 2026-10-09
+
+- Signature for each account: the table fits its card
+
 ## 1.27.0 — 2026-10-08
 
 - Mail keeps syncing in the background while the server's sync service is not running: the app asks for a step every half a minute (POST /api/mail/sync/step), and Settings › Mail › Accounts & sync says when the service is off

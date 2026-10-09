@@ -223,34 +223,35 @@ function AccountChoices({ signatures, settings, boxes, onSaved, legacy }: { sign
     const change = (patch: Partial<SignatureSetting>) => void put({ ...r, ...patch, mailbox: box });
     return (
       <tr key={box ?? 'all'} className="border-b border-line last:border-b-0">
-        <th scope="row" className="px-3 py-2 text-left text-[13px] font-semibold text-ink">
-          {label}
+        <th scope="row" className="min-w-0 px-3 py-2 text-left text-[13px] font-semibold text-ink">
+          <span className="block truncate" title={label}>{label}</span>
           {box !== null && !own ? <span className="block text-[11.5px] font-normal text-ink-3">{text('Same as every account')}</span> : null}
+          {box !== null && own ? (
+            // Under the account, not in a column of its own: a fifth column for one button on some rows is what pushed
+            // the table past the card's edge.
+            <button type="button" onClick={() => void reset(box)} className="mt-0.5 text-[11.5px] font-semibold text-primary hover:underline">
+              {text('Use every-account choice')}
+            </button>
+          ) : null}
         </th>
         <td className="px-2 py-2">
-          <Select aria-label={text('New messages for {account}', { account: label })} value={r.new_id === null ? '' : String(r.new_id)} options={options} onValueChange={(v) => change({ new_id: v === '' ? null : Number(v) })} className="h-8 w-[180px]" />
+          <Select aria-label={text('New messages for {account}', { account: label })} value={r.new_id === null ? '' : String(r.new_id)} options={options} onValueChange={(v) => change({ new_id: v === '' ? null : Number(v) })} className="h-8 w-full min-w-0" />
         </td>
         <td className="px-2 py-2">
-          <Select aria-label={text('Replies and forwards for {account}', { account: label })} value={r.reply_id === null ? '' : String(r.reply_id)} options={options} onValueChange={(v) => change({ reply_id: v === '' ? null : Number(v) })} className="h-8 w-[180px]" />
+          <Select aria-label={text('Replies and forwards for {account}', { account: label })} value={r.reply_id === null ? '' : String(r.reply_id)} options={options} onValueChange={(v) => change({ reply_id: v === '' ? null : Number(v) })} className="h-8 w-full min-w-0" />
         </td>
         <td className="px-2 py-2">
           <Select
             aria-label={text('Where it goes in a reply for {account}', { account: label })}
             value={r.placement}
             options={[
-              { value: 'above_quote', label: text('Below my reply, above the quoted message') },
-              { value: 'below_quote', label: text('At the end, below the quoted message') },
+              // Short enough to read whole in the column; the heading says it is about replies.
+              { value: 'above_quote', label: text('Above the quoted message') },
+              { value: 'below_quote', label: text('Below the quoted message') },
             ]}
             onValueChange={(v) => change({ placement: v === 'below_quote' ? 'below_quote' : 'above_quote' })}
-            className="h-8 w-[260px]"
+            className="h-8 w-full min-w-0"
           />
-        </td>
-        <td className="px-2 py-2">
-          {box !== null && own ? (
-            <Button size="sm" variant="ghost" onClick={() => void reset(box)}>
-              {text('Use every-account choice')}
-            </Button>
-          ) : null}
         </td>
       </tr>
     );
@@ -260,14 +261,24 @@ function AccountChoices({ signatures, settings, boxes, onSaved, legacy }: { sign
       <h3 className="border-b border-line px-4 py-3 text-[15px] font-bold text-ink">{text('Signature for each account')}</h3>
       {legacy ? <p className="px-4 py-3 text-[12.5px] text-warning">{text('Choosing per account needs the latest WorkSuite server.')}</p> : null}
       <div className="overflow-x-auto">
-        <table className="w-full min-w-[760px]">
+        {/*
+          * The columns share the card's width (a fixed layout, each dropdown filling its column) rather than adding up
+          * fixed widths: 180 + 180 + 260 and a column for the reset button ran past the card's edge, cutting off
+          * "Below my reply, above th…". It scrolls sideways only below 640px.
+          */}
+        <table className="w-full min-w-[640px] table-fixed">
+          <colgroup>
+            <col className="w-[30%]" />
+            <col className="w-[22%]" />
+            <col className="w-[22%]" />
+            <col className="w-[26%]" />
+          </colgroup>
           <thead>
             <tr className="border-b border-line text-left text-[12px] text-ink-3">
               <th className="px-3 py-2 font-semibold">{text('Account')}</th>
               <th className="px-2 py-2 font-semibold">{text('New messages')}</th>
               <th className="px-2 py-2 font-semibold">{text('Replies and forwards')}</th>
               <th className="px-2 py-2 font-semibold">{text('Where it goes in a reply')}</th>
-              <th />
             </tr>
           </thead>
           <tbody>{[row(text('Every account'), null), ...boxes.map((b) => row(b.email, b.id))]}</tbody>
