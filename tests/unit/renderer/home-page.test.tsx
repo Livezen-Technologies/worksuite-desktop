@@ -22,7 +22,7 @@ import { aiWidget, ui } from '../../../src/core/ui';
 import { visibleApps } from '../../../shared/apps';
 import { resolveWebLink } from '../../../shared/links';
 import HomePage from '../../../src/modules/home/HomePage';
-import { current, ranked, type MyAnnouncement } from '../../../src/modules/home/Announcements';
+import { current, onHome, ranked, type MyAnnouncement } from '../../../src/modules/home/Announcements';
 import { touchesAnnouncements } from '../../../src/core/query';
 import { assistantSession } from '../../../src/modules/ai/session';
 import { compactCount, taskBuckets } from '../../../src/modules/home/today';
@@ -443,6 +443,20 @@ describe('Announcements on Home (#98, #104)', () => {
 
     fireEvent.click(within(box).getByRole('button', { name: 'Acknowledge' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/hr/announcements/mine/11/ack', {}));
+  });
+
+  it('one you have acknowledged leaves Home, and See all still has it', async () => {
+    const acked = { ...NOTICES[1], acknowledged: true, read: true } as MyAnnouncement;
+    expect(onHome([NOTICES[0] as MyAnnouncement, acked]).map((n) => n.id)).toEqual([10]);
+    vi.mocked(apiGet).mockImplementation((async (path: string) => {
+      if (path === '/api/hr/announcements/mine') return { items: [acked] };
+      return { items: [], invitations: [], count: 0, total: 0, digest: { text: null, reason: null } };
+    }) as never);
+    show();
+    const box = await screen.findByRole('region', { name: 'Announcements' });
+    expect(await within(box).findByText('You’re all caught up.')).toBeTruthy();
+    expect(within(box).queryByText('New security policy')).toBeNull();
+    expect(within(box).getByRole('button', { name: 'See all announcements' })).toBeTruthy();
   });
 
   it('opens one to read, and marks it read', async () => {

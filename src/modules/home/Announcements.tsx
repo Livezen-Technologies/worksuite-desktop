@@ -74,6 +74,11 @@ export function useMyAnnouncements(enabled = true) {
   });
 }
 
+/** What the Home widget shows: one you have acknowledged has done its job and leaves it ("See all" still lists it). */
+export function onHome(items: MyAnnouncement[]): MyAnnouncement[] {
+  return items.filter((a) => !(a.requires_ack && a.acknowledged));
+}
+
 /** Still waiting for your acknowledgement — what Waiting for Me counts. */
 export function toAcknowledge(items: MyAnnouncement[]): MyAnnouncement[] {
   return items.filter((a) => a.requires_ack && !a.acknowledged);

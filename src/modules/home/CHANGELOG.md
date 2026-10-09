@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.0 — 2026-10-09
+
+- Announcements on Home: one you have acknowledged leaves the widget (See all still lists it); with nothing left it reads 'You're all caught up.'
+
 ## 1.6.0 — 2026-10-06
 
 **Added**

@@ -4,7 +4,7 @@ import { useEffect, useRef, useState } from 'react';
 import { apiGet, apiPost } from '../../../core/api';
 import { errorMessage } from '../../../core/bridge';
 import { Icon } from '../../../components/Icon';
-import { Spinner } from '../../../components/ui';
+import { Button, Spinner } from '../../../components/ui';
 import { WA } from './whatsapp';
 
 export interface LinkProgressData {
@@ -88,6 +88,14 @@ export function LinkPhone({ accountId, onLinked }: { accountId: number; onLinked
   const [started, setStarted] = useState(false);
   const [failed, setFailed] = useState<string | null>(null);
   const done = useRef(false);
+  // Scan again starts the link over: the server throws away a login WhatsApp refused, so a fresh code comes up.
+  const [attempt, setAttempt] = useState(0);
+  const again = () => {
+    setFailed(null);
+    setStarted(false);
+    qc.removeQueries({ queryKey: ['whatsapp', 'qr', accountId] });
+    setAttempt((n) => n + 1);
+  };
 
   useEffect(() => {
     let alive = true;
@@ -98,7 +106,7 @@ export function LinkPhone({ accountId, onLinked }: { accountId: number; onLinked
     return () => {
       alive = false;
     };
-  }, [accountId]);
+  }, [accountId, attempt]);
 
   const importing = useRef(false);
   const [waited, setWaited] = useState(false);
@@ -170,7 +178,14 @@ export function LinkPhone({ accountId, onLinked }: { accountId: number; onLinked
             <span className="text-[11.5px] text-ink-3">The code changes every few seconds. That is normal.</span>
           </>
         ) : qr.data?.state === 'auth_failure' ? (
-          <p className="max-w-sm text-[12.5px] text-ink-2">The phone unlinked this device. Scan the next code to link it again.</p>
+          <>
+            <Icon name="warning" size={36} className="text-danger" />
+            <b className="text-[14px] text-ink">WhatsApp rejected the saved login</b>
+            <p className="m-0 max-w-sm text-[12.5px] text-ink-2">The phone has unlinked this device. Scanning again will link a fresh one.</p>
+            <Button variant="primary" onClick={again}>
+              <Icon name="refresh" size={14} /> Scan again
+            </Button>
+          </>
         ) : qr.data?.status_note && !qr.data.qr ? (
           <Spinner label={qr.data.status_note} />
         ) : qr.error ? (
@@ -179,7 +194,7 @@ export function LinkPhone({ accountId, onLinked }: { accountId: number; onLinked
           <Spinner label="Waiting for a code…" />
         )}
       </div>
-      {!linked && !scanned && !failed ? (
+      {!linked && !scanned && !failed && qr.data?.state !== 'auth_failure' ? (
         <ol className="flex flex-col gap-1 rounded-[8px] bg-subtle p-3 text-[12px] text-ink-2">
           <li>1. Open WhatsApp on the phone that owns this number.</li>
           <li>2. Settings → Linked devices → Link a device.</li>

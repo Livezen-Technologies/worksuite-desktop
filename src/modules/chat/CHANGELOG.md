@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.75.1 — 2026-10-09
+
+- WhatsApp link: a login WhatsApp refused shows Scan again, which starts the link over for a fresh code, instead of waiting for a code that never came.
+
 ## 1.75.0 — 2026-10-09
 
 - Sending a file: one progress bar that fills once from Preparing to Posting, with bytes sent, of the total, and speed; the server's check reads 'Checking the file…' and shimmers; Cancel is an ✕ beside it; the corner pill shows the overall percentage. Files up to 8 MB go up in one request instead of four.
