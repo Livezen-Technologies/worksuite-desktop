@@ -7,6 +7,16 @@ person who has to live with the change — what it does, and where it bites.
 
 ## 0.2.214 — 2026-10-09
 
+- **Sending a file is quicker, and shows how it goes (chat 1.75.0).** A sent file sat at "Processing…" with a spinner
+  and no sense of how long.
+  - One bar now fills once, from Preparing to Posting. While the bytes go it shows how many have gone, of the
+    total, and how fast. The server's check reads "Checking the file…" and shimmers. Cancel is the ✕ beside it.
+  - The corner pill shows the overall percentage across every file being sent.
+  - Files up to 8 MB go up in one request instead of four.
+  - On the server, Security 1.2.0 scans through the ClamAV daemon when it runs (milliseconds), instead of
+    `clamscan` loading its signatures again for every file (10–40 s each). Install `clamav-daemon` on the server
+    to get this.
+
 - **Checklist sections you can manage (tenders 1.6.0).** Adding or editing a checklist line now offers the tender's
   sections in a list; pick one, choose "No section", or choose "New section…" to type a new name.
   - Each section heading has Rename and Delete buttons. Renaming changes it on every line in the section; a name

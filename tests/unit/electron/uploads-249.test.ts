@@ -127,10 +127,10 @@ describe('the cause: a timeout read as "The request was cancelled."', () => {
 });
 
 describe('parts and limits', () => {
-  it('sends a file over 8 MB in 8 MB parts; small files keep their small parts', () => {
+  it('sends a file over 8 MB in 8 MB parts; a smaller one in a single part', () => {
     expect(chunkSizeFor(50 * MB)).toBe(CHUNK_BYTES);
     expect(chunkSizeFor(1024 * MB)).toBe(8 * MB);
-    expect(chunkSizeFor(2 * MB)).toBe(256 * 1024);
+    expect(chunkSizeFor(2 * MB)).toBe(2 * MB);
     expect(PARALLEL_PARTS).toBeGreaterThanOrEqual(2);
     expect(PARALLEL_PARTS).toBeLessThanOrEqual(4);
   });
