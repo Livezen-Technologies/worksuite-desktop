@@ -248,7 +248,7 @@ describe('the tray and the menu', () => {
   });
 
   it('puts View › AI Assistant in the menu only for whoever has the AI app', () => {
-    const view = (ai: boolean) => (menuTemplate(() => undefined, { checkUpdates: () => undefined, diagnostics: () => undefined, quit: () => undefined }, { ai }).find((m) => m.label === 'View')!.submenu as Array<{ label?: string }>).map((i) => i.label);
+    const view = (ai: boolean) => (menuTemplate(() => undefined, { checkUpdates: () => undefined, diagnostics: () => undefined, reportProblem: () => undefined, quit: () => undefined }, { ai }).find((m) => m.label === 'View')!.submenu as Array<{ label?: string }>).map((i) => i.label);
     expect(view(true)).toContain('AI Assistant');
     expect(view(false)).not.toContain('AI Assistant');
   });
