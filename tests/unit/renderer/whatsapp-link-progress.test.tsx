@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
@@ -45,5 +45,17 @@ describe('linking progress', () => {
     expect(await screen.findByText('Syncing chats · 2 of 8', undefined, { timeout: 4000 })).toBeTruthy();
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/4/import', { background: true }));
     expect(screen.getByRole('button', { name: 'Continue in the background' })).toBeTruthy();
+  });
+
+  it('a login WhatsApp refused offers Scan again, which starts the link over for a fresh code', async () => {
+    vi.mocked(apiGet)
+      .mockResolvedValueOnce({ ok: true, qr: null, state: 'auth_failure', linked: false, status_note: null, error: null } as never)
+      .mockResolvedValue({ ok: true, qr: '2@fresh', state: 'qr', linked: false, status_note: null, error: null } as never);
+    render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><LinkPhone accountId={4} onLinked={() => undefined} /></QueryClientProvider>);
+    expect(await screen.findByText('WhatsApp rejected the saved login')).toBeTruthy();
+    expect(screen.queryByText(/Point the camera/)).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Scan again' }));
+    await waitFor(() => expect(vi.mocked(apiPost).mock.calls.filter((c) => String(c[0]).endsWith('/accounts/4/link'))).toHaveLength(2));
+    expect(await screen.findByText('The code changes every few seconds. That is normal.')).toBeTruthy();
   });
 });
