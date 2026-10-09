@@ -12,6 +12,9 @@ person who has to live with the change — what it does, and where it bites.
   - Each section heading has Rename and Delete buttons. Renaming changes it on every line in the section; a name
     that already exists merges the two.
   - Deleting asks whether to keep the section's lines (they move to Other) or delete them with it.
+  - **Import sections…** copies sections from an earlier tender: find the tender, tick the sections you want, and
+    their lines are added in the same order. Files and review status are not copied, and lines already on the
+    checklist are skipped.
 
 ## 0.2.213 — 2026-10-09
 

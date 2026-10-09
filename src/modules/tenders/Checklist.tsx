@@ -10,11 +10,11 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
-import { K, useOwners, type DocAccess } from './api';
+import { BLANK, fetchList, K, useOwners, type DocAccess } from './api';
 import { ReviewScreen } from './Review';
 import { notifiedNote, reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
 import { AttachMenu, saveTenderFile, UploadBar, Uploading, uploadsFor, useDropZone, useTenderUploads, type LiveUpload } from './files';
-import { addLine, applyPack, attachToLine, bulkLines, fetchChecklist, filterLines, K2, LINE_STATUS, lineChanges, lineDraft, removeLine, reviewLine, sectionsOf, updateLine, type Line, type LineDraft, type LineFilter } from './work';
+import { addLine, applyPack, attachToLine, bulkLines, fetchChecklist, filterLines, importPlan, K2, LINE_STATUS, lineChanges, lineDraft, removeLine, reviewLine, sectionsOf, sectionTemplates, updateLine, type Line, type LineDraft, type LineFilter } from './work';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -48,6 +48,7 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
   const [editing, setEditing] = useState<Line | 'new' | null>(null);
   const [sending, setSending] = useState<Line | null>(null);
   const [packs, setPacks] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [history, setHistory] = useState<number | null>(null);
   const [reviewing, setReviewing] = useState<number | null>(null);
@@ -109,6 +110,9 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
                 <Icon name="list-todo" size={15} /> Add a standard pack…
               </button>
             ) : null}
+            <button type="button" className={btn} onClick={() => setImporting(true)}>
+              <Icon name="history" size={15} /> Import sections…
+            </button>
             <button type="button" className={btnPrimary} onClick={() => setEditing('new')}>
               <Icon name="plus" size={15} /> Add a line
             </button>
@@ -233,6 +237,7 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
       {sectioning ? <SectionSheet tenderId={id} name={sectioning.name} mode={sectioning.mode} lines={c.items.filter((l) => (l.section ?? null) === sectioning.name)} taken={sectionNames(c.items)} onClose={() => setSectioning(null)} onSaved={refresh} /> : null}
       {sending ? <SendBackSheet tenderId={id} line={sending} nameOf={nameOf} serverTells={c.notifies} onClose={() => setSending(null)} onSaved={refresh} /> : null}
       {reviewing !== null ? <ReviewScreen tenderId={id} lines={c.items} startId={reviewing} canApprove={canApprove} canDownload={can.download} serverTells={c.notifies} onClose={() => setReviewing(null)} onChanged={refresh} /> : null}
+      {importing ? <ImportSheet tenderId={id} org={org} existing={c.items} onClose={() => setImporting(false)} onSaved={refresh} /> : null}
       {packs ? <PackSheet tenderId={id} packs={c.packs} onClose={() => setPacks(false)} onSaved={refresh} /> : null}
     </div>
   );
@@ -702,6 +707,107 @@ function PackSheet({ tenderId, packs, onClose, onSaved }: { tenderId: number; pa
           </button>
         </div>
       ))}
+    </Sheet>
+  );
+}
+
+/** Sections copied from an earlier tender: pick the tender, tick its sections, and their lines are added here. */
+export function ImportSheet({ tenderId, org, existing, onClose, onSaved }: { tenderId: number; org: string; existing: Line[]; onClose: () => void; onSaved: () => void }) {
+  const [q, setQ] = useState('');
+  const [from, setFrom] = useState<{ id: number; title: string } | null>(null);
+  const [chosen, setChosen] = useState<Array<string | null> | null>(null);
+  const [busy, setBusy] = useState<{ done: number; of: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const list = useQuery({
+    queryKey: ['tenders', 'import-from', org, q.trim()],
+    queryFn: ({ signal }) => fetchList(org, { ...BLANK, q: q.trim(), sort: 'updated', dir: 'desc' }, signal),
+    enabled: !from,
+  });
+  const old = useQuery({ queryKey: K2.checklist(from?.id ?? 0), queryFn: ({ signal }) => fetchChecklist(from!.id, signal), enabled: !!from });
+  const templates = old.data ? sectionTemplates(old.data.items) : [];
+  const picked = chosen ?? templates.map((t) => t.name);
+  const plan = old.data ? importPlan(old.data.items, picked, existing) : { add: [], skipped: 0 };
+  const go = async () => {
+    setError(null);
+    setBusy({ done: 0, of: plan.add.length });
+    try {
+      // One at a time, so the lines keep the earlier tender's order.
+      for (const [i, body] of plan.add.entries()) {
+        await addLine(tenderId, body);
+        setBusy({ done: i + 1, of: plan.add.length });
+      }
+      toast('success', `${plan.add.length} ${plan.add.length === 1 ? 'line' : 'lines'} imported.${plan.skipped ? ` ${plan.skipped} already on the list.` : ''}`);
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+      onSaved();
+    } finally {
+      setBusy(null);
+    }
+  };
+  const toggle = (name: string | null) => setChosen(picked.includes(name) ? picked.filter((x) => x !== name) : [...picked, name]);
+  return (
+    <Sheet
+      title="Import sections from a tender"
+      width={520}
+      onClose={onClose}
+      footer={
+        <>
+          {from ? (
+            <button type="button" className={btn} disabled={!!busy} onClick={() => (setFrom(null), setChosen(null))}>
+              Back
+            </button>
+          ) : null}
+          <button type="button" className={btn} onClick={onClose}>
+            Cancel
+          </button>
+          {from ? (
+            <button type="button" className={btnPrimary} disabled={!!busy || !plan.add.length} onClick={() => void go()}>
+              {busy ? `Importing ${busy.done} of ${busy.of}…` : `Import ${plan.add.length} ${plan.add.length === 1 ? 'line' : 'lines'}`}
+            </button>
+          ) : null}
+        </>
+      }
+    >
+      {!from ? (
+        <>
+          <input aria-label="Find a tender" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title, reference or buyer" className={input} />
+          {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
+          <div className="flex flex-col gap-1.5" role="list" aria-label="Tenders">
+            {(list.data?.items ?? [])
+              .filter((t) => t.id !== tenderId)
+              .map((t) => (
+                <button key={t.id} type="button" role="listitem" className="flex flex-col items-start rounded-[10px] border border-line px-3 py-2 text-left hover:bg-subtle" onClick={() => setFrom({ id: t.id, title: t.title })}>
+                  <b className="text-[13px] text-ink">{t.title}</b>
+                  <span className="text-[12px] text-ink-3">{[t.reference, t.organization ?? t.client_name, t.stage_label].filter(Boolean).join(' · ')}</span>
+                </button>
+              ))}
+            {list.data && !list.data.items.some((t) => t.id !== tenderId) ? <p className="text-[12.5px] text-ink-3">No other tender matches.</p> : null}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="m-0 text-[13px] text-ink-2">
+            From <b className="text-ink">{from.title}</b>. Requirements, sections, details and whether each is required are copied; files and review status are not.
+          </p>
+          {old.isLoading ? <Spinner /> : old.error ? <ErrorNote error={old.error} onRetry={() => void old.refetch()} /> : null}
+          {old.data && !templates.length ? <p className="text-[12.5px] text-ink-3">That tender has no checklist yet.</p> : null}
+          <div className="flex flex-col gap-1.5">
+            {templates.map((t) => (
+              <label key={t.name ?? ''} className="flex items-center gap-2.5 rounded-[10px] border border-line px-3 py-2">
+                <Checkbox aria-label={`Import ${t.name ?? 'Other'}`} checked={picked.includes(t.name)} onChange={() => toggle(t.name)} />
+                <span className="min-w-0 flex-1 text-[13px] text-ink">{t.name ?? 'Other'}</span>
+                <span className="text-[12px] text-ink-3 tabular-nums">
+                  {t.count} {t.count === 1 ? 'line' : 'lines'}
+                </span>
+              </label>
+            ))}
+          </div>
+          {plan.skipped ? <p className="text-[12px] text-ink-3">{`${plan.skipped} ${plan.skipped === 1 ? 'line is' : 'lines are'} already on this checklist and will be left as they are.`}</p> : null}
+        </>
+      )}
+      {error ? <p role="alert" className="text-[12.5px] text-danger">{error}</p> : null}
     </Sheet>
   );
 }
