@@ -9,12 +9,13 @@ import { bubbleTone } from './kit/MessageBubble';
 import type { Look } from './kit/MessageAttachment';
 import { knownVoice } from './kit/voice';
 import { VoiceMessage, type VoiceUpload } from './kit/VoiceMessage';
-import { acknowledgeMedia, cancelMedia, outgoing, outgoingForRoom, retryMedia, type MediaPhase, type OutgoingMedia } from './outgoing';
+import { acknowledgeMedia, cancelMedia, outgoing, outgoingForRoom, retryMedia, sendShare, type MediaPhase, type OutgoingMedia } from './outgoing';
 import type { ChatMessage } from './types';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 
-const labels: Record<MediaPhase, string> = { preparing: 'Preparing…', queued: 'Queued…', uploading: 'Uploading…', processing: 'Processing…', sending: 'Sending…', sent: 'Sent', failed: 'Failed', cancelled: 'Cancelled' };
+// What each step is called on the bubble: the server's check reads as what it is, not a bare "Processing".
+const labels: Record<MediaPhase, string> = { preparing: 'Preparing…', queued: 'Waiting to send…', uploading: 'Uploading', processing: 'Checking the file…', sending: 'Posting…', sent: 'Sent', failed: 'Failed', cancelled: 'Cancelled' };
 export function useOutgoingMedia(roomId: string, messages: ChatMessage[]) {
   const transfers = useStore(app, (s) => s.transfers);
   useStore(outgoing, (s) => s.jobs);
@@ -36,16 +37,36 @@ export function OutgoingMediaBubble({ job: j, look = 'page' }: { job: OutgoingMe
       {j.preview ? (/^audio\//.test(j.mime) ? <audio src={j.preview} controls preload="metadata" /> : /^video\//.test(j.mime) ? <video src={j.preview} muted preload="metadata" className="max-h-48 max-w-64 rounded" /> : <img src={j.preview} alt={j.name} className="max-h-48 max-w-64 rounded" />) : <FileBadge name={j.name} />}
       <p className="m-0 text-[12px] font-semibold">{j.name} · {bytes(j.size)}</p>
       {j.target.caption ? <p className="m-0 whitespace-pre-wrap text-[13px]">{j.target.caption}</p> : null}
-      <div role="status" className="flex items-center gap-1 text-[11px]">
-        {['preparing', 'processing', 'sending'].includes(j.phase) ? <span aria-hidden="true" className="h-3 w-3 animate-spin rounded-full border-2 border-primary border-t-transparent" /> : null}
-        {labels[j.phase]}{j.phase === 'uploading' && j.progress !== null ? ` ${Math.round(j.progress * 100)}%` : ''}
-      </div>
-      {j.phase === 'uploading' && j.progress !== null ? <progress aria-label={`Upload ${j.name}`} max={1} value={j.progress} className="w-full" /> : null}
+      {['sent', 'failed', 'cancelled'].includes(j.phase) ? <div role="status" className="text-[11px]">{labels[j.phase]}</div> : <SendProgress job={j} />}
       {j.error ? <p role="alert" className="m-0 text-[12px] text-danger">{j.error}</p> : null}
       {['failed', 'cancelled'].includes(j.phase) ? <button type="button" onClick={() => void retryMedia(j).catch((e) => toast('error', errorMessage(e)))} className="mr-2 text-[12px] font-semibold text-primary">Retry</button> : null}
-      {!['sent', 'failed', 'cancelled'].includes(j.phase) ? <button type="button" onClick={() => void cancelMedia(j).catch((e) => toast('error', errorMessage(e)))} className="text-[12px] font-semibold text-primary">Cancel</button> : null}
     </div>
   </div>;
+}
+
+/**
+ * How sending goes, as one bar that fills once from Preparing to Posting (sendShare): the bytes fill most of it with
+ * how much has gone and how fast, and a step with no measure of its own (the server checking the file) shimmers.
+ */
+function SendProgress({ job: j }: { job: OutgoingMedia }) {
+  const { share, moving } = sendShare(j.phase, j.progress);
+  const counting = j.phase === 'uploading' && j.progress !== null;
+  const detail = counting ? [`${bytes(j.sent ?? Math.round((j.progress ?? 0) * j.size))} of ${bytes(j.size)}`, j.speed ? `${bytes(j.speed)}/s` : null].filter(Boolean).join(' · ') : null;
+  return (
+    <div className="mt-1 flex min-w-[200px] flex-col gap-1">
+      <div className="flex items-center gap-2 text-[11.5px]">
+        <span role="status" className="shrink-0 font-medium">{labels[j.phase]}{counting ? ` ${Math.round(j.progress! * 100)}%` : ''}</span>
+        <span className="ml-auto min-w-0 truncate text-ink-3 tabular-nums">{detail}</span>
+        <button type="button" aria-label="Cancel" title="Cancel sending" onClick={() => void cancelMedia(j).catch((e) => toast('error', errorMessage(e)))} className="grid h-5 w-5 shrink-0 place-items-center rounded-full text-ink-3 hover:bg-primary/10 hover:text-ink">
+          <Icon name="x" size={12} />
+        </button>
+      </div>
+      <span role="progressbar" aria-label={`Sending ${j.name}`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round(share * 100)} aria-valuetext={labels[j.phase]} className="relative h-1.5 overflow-hidden rounded-full bg-primary/15">
+        <span className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width] duration-300 ease-out" style={{ width: `${share * 100}%` }} />
+        {moving ? null : <span aria-hidden="true" className="absolute inset-y-0 w-1/3 rounded-full bg-gradient-to-r from-transparent via-white/50 to-transparent motion-safe:animate-[ws-indeterminate_1.2s_ease-in-out_infinite]" />}
+      </span>
+    </div>
+  );
 }
 
 /**
@@ -105,5 +126,21 @@ export function ChatSendingStatus() {
   const jobs = [...new Set([...rooms, ...localRooms])].flatMap((room) => outgoingForRoom(room, transfers));
   const active = jobs.filter((j) => !['sent', 'cancelled', 'failed'].includes(j.phase));
   if (!active.length) return null;
-  return <div role="status" aria-label="Chat sending status" className="no-drag fixed right-4 bottom-3 z-40 rounded-full border border-line bg-surface px-3 py-1 text-[11px] text-ink shadow">Sending… {active.length} attachment{active.length === 1 ? '' : 's'}</div>;
+  // The bar sums every file by its size, so a large one weighs as much as it takes.
+  const total = active.reduce((n, j) => n + Math.max(1, j.size), 0);
+  const share = active.reduce((n, j) => n + sendShare(j.phase, j.progress).share * Math.max(1, j.size), 0) / total;
+  const pct = Math.round(share * 100);
+  const checking = active.every((j) => j.phase === 'processing' || j.phase === 'sending');
+  return (
+    <div role="status" aria-label="Chat sending status" className="no-drag fixed right-4 bottom-3 z-40 flex items-center gap-2 rounded-full border border-line bg-surface py-1 pr-3 pl-2.5 text-[11px] text-ink shadow">
+      <span aria-hidden="true" className="h-3 w-3 shrink-0 animate-spin rounded-full border-2 border-primary border-t-transparent" />
+      <span>
+        {checking ? 'Finishing' : 'Sending'} {active.length} attachment{active.length === 1 ? '' : 's'}
+      </span>
+      <span className="relative h-1 w-14 overflow-hidden rounded-full bg-primary/15">
+        <span className="absolute inset-y-0 left-0 rounded-full bg-primary transition-[width] duration-300 ease-out" style={{ width: `${pct}%` }} />
+      </span>
+      <span className="w-7 text-right text-ink-3 tabular-nums">{pct}%</span>
+    </div>
+  );
 }

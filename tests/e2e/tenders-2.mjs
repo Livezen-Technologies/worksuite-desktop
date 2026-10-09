@@ -129,7 +129,12 @@ try {
   t.check('a standard pack adds its twelve lines', true);
   await press('main', 'Add a line');
   await typeInto('[role="dialog"] input[aria-label="What the buyer asks for"]', `E2E Performance history ${tag}`);
-  await typeInto('[role="dialog"] input[aria-label="Section"]', 'E2E section');
+  // A new section from the picker: "New section…" turns it into a name field.
+  await t.evaluate(`document.querySelector('[role="dialog"] button[role="combobox"][aria-label="Section"]').click()`);
+  await t.waitFor(`[...document.querySelectorAll('[role="listbox"][aria-label="Section"] [role="option"]')].some(o => o.textContent.includes('New section'))`, 'the section list');
+  await t.evaluate(`[...document.querySelectorAll('[role="listbox"][aria-label="Section"] [role="option"]')].find(o => o.textContent.includes('New section')).click()`);
+  await t.waitFor(`!!document.querySelector('[role="dialog"] input[aria-label="New section name"]')`, 'the new section name');
+  await typeInto('[role="dialog"] input[aria-label="New section name"]', 'E2E section');
   await press('[role="dialog"]', 'Add');
   const own = await until(async () => lineBy(id, `E2E Performance history ${tag}`), 'the line added');
   t.check('a line is added, required, in its section', own.mandatory === '1' || own.mandatory === 1 ? own.section === 'E2E section' : false, js({ mandatory: own.mandatory, section: own.section }));

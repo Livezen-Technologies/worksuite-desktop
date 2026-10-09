@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.0 — 2026-10-09
+
+- Checklist sections: pick one already there or make a new one when adding a line; rename a section on all its lines (or merge into another); delete a section, keeping its lines or removing them with it.
+- Import sections from an earlier tender: pick the tender, tick its sections, and their lines are copied here (no files or status), skipping lines already on the checklist.
+
 ## 1.5.0 — 2026-10-05
 
 - Documents show uploads as they move, Uploading 42%, with Retry that resumes (#249)

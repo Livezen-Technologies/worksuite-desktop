@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.75.0 — 2026-10-09
+
+- Sending a file: one progress bar that fills once from Preparing to Posting, with bytes sent, of the total, and speed; the server's check reads 'Checking the file…' and shimmers; Cancel is an ✕ beside it; the corner pill shows the overall percentage. Files up to 8 MB go up in one request instead of four.
+
 ## 1.74.0 — 2026-10-09
 
 - WhatsApp: a progress bar after the QR scan (signed in, loading %, chats syncing), and an engine for each number

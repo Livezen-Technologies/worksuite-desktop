@@ -59,12 +59,19 @@ describe('Instant chat media previews (#83)', () => {
     const id = outgoing.get().jobs[0]!.id;
     act(() => app.set({ transfers: [transfer(id)] }));
     show(<OutgoingMediaBubbles roomId="12" messages={[]} />);
-    expect(screen.getByText('Uploading… 50%')).toBeTruthy();
-    expect(screen.getByRole('progressbar').getAttribute('value')).toBe('0.5');
+    expect(screen.getByText('Uploading 50%')).toBeTruthy();
+    expect(screen.getByText('50 B of 100 B')).toBeTruthy();
+    const bar = () => Number(screen.getByRole('progressbar', { name: 'Sending large.mp4' }).getAttribute('aria-valuenow'));
+    expect(bar()).toBe(47);
+    act(() => app.set({ transfers: [{ ...transfer(id), bytes: 100, speed: 2048, phase: 'uploading' }] }));
+    expect(screen.getByText('100 B of 100 B · 2.0 KB/s')).toBeTruthy();
+    const uploaded = bar();
     act(() => app.set({ transfers: [{ ...transfer(id), phase: 'processing' }] }));
-    expect(screen.getByText('Processing…')).toBeTruthy(); expect(screen.queryByText('Sent')).toBeNull();
+    expect(screen.getByText('Checking the file…')).toBeTruthy(); expect(screen.queryByText('Sent')).toBeNull();
+    // One bar across every step: the server's check never reads as less done than the bytes were.
+    expect(bar()).toBeGreaterThanOrEqual(uploaded);
     act(() => app.set({ transfers: [{ ...transfer(id), phase: 'sending' }] }));
-    expect(screen.getByText('Sending…')).toBeTruthy(); expect(screen.queryByText('Sent')).toBeNull();
+    expect(screen.getByText('Posting…')).toBeTruthy(); expect(screen.queryByText('Sent')).toBeNull();
     act(() => app.set({ transfers: [transfer(id, 'done')] }));
     expect(screen.getByText('Sent')).toBeTruthy(); expect(screen.queryByText('Delivered')).toBeNull(); expect(screen.queryByText('Read')).toBeNull();
   });
@@ -126,4 +133,27 @@ describe('Instant chat media previews (#83)', () => {
     await waitFor(() => expect(busySending()).toBe(0));
   });
 
+});
+
+describe('one progress bar across every step', () => {
+  it('fills once from Preparing to Posting, never running backwards', async () => {
+    const { sendShare } = await import('../../../src/modules/chat/outgoing');
+    const steps = [sendShare('preparing', null), sendShare('queued', null), sendShare('uploading', 0), sendShare('uploading', 0.5), sendShare('uploading', 1), sendShare('processing', null), sendShare('sending', null), sendShare('sent', null)].map((s) => s.share);
+    expect(steps).toEqual([...steps].sort((a, b) => a - b));
+    expect(steps.at(-1)).toBe(1);
+    // A step with no measure of its own shimmers; the bytes are measured.
+    expect(sendShare('processing', null).moving).toBe(false);
+    expect(sendShare('uploading', 0.3).moving).toBe(true);
+  });
+  it('sums the attachments in the corner by size', () => {
+    queueMedia('12', [disk('a.pdf'), disk('b.pdf')], {});
+    const [a, b] = outgoing.get().jobs;
+    act(() => app.set({ transfers: [
+      { ...transfer(a!.id), id: 't-a', name: 'a.pdf', bytes: 100, total: 100, phase: 'processing' },
+      { ...transfer(b!.id), id: 't-b', name: 'b.pdf', bytes: 0, total: 100, phase: 'uploading' },
+    ] }));
+    outgoing.set({ jobs: outgoing.get().jobs.map((j, i) => ({ ...j, transferId: i ? 't-b' : 't-a', size: 100 })) });
+    show(<ChatSendingStatus />);
+    expect(screen.getByLabelText('Chat sending status').textContent).toMatch(/Sending 2 attachments\s*48%/);
+  });
 });

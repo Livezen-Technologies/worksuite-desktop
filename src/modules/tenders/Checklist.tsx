@@ -10,11 +10,11 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
-import { K, useOwners, type DocAccess } from './api';
+import { BLANK, fetchList, K, useOwners, type DocAccess } from './api';
 import { ReviewScreen } from './Review';
 import { notifiedNote, reviewMessage, reviewRecipients, tellInChat, usePeople } from './people';
 import { AttachMenu, saveTenderFile, UploadBar, Uploading, uploadsFor, useDropZone, useTenderUploads, type LiveUpload } from './files';
-import { addLine, applyPack, attachToLine, bulkLines, fetchChecklist, filterLines, K2, LINE_STATUS, lineChanges, lineDraft, removeLine, reviewLine, sectionsOf, updateLine, type Line, type LineDraft, type LineFilter } from './work';
+import { addLine, applyPack, attachToLine, bulkLines, fetchChecklist, filterLines, importPlan, K2, LINE_STATUS, lineChanges, lineDraft, removeLine, reviewLine, sectionsOf, sectionTemplates, updateLine, type Line, type LineDraft, type LineFilter } from './work';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -48,9 +48,12 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
   const [editing, setEditing] = useState<Line | 'new' | null>(null);
   const [sending, setSending] = useState<Line | null>(null);
   const [packs, setPacks] = useState(false);
+  const [importing, setImporting] = useState(false);
   const [busy, setBusy] = useState<string | null>(null);
   const [history, setHistory] = useState<number | null>(null);
   const [reviewing, setReviewing] = useState<number | null>(null);
+  // A section renamed or deleted from its heading: sections are the name the lines carry, so both act on every line in it.
+  const [sectioning, setSectioning] = useState<{ name: string | null; mode: 'rename' | 'delete' } | null>(null);
   const nameOf = usePeople();
   const refresh = () => {
     void qc.invalidateQueries({ queryKey: K2.checklist(id) });
@@ -107,6 +110,9 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
                 <Icon name="list-todo" size={15} /> Add a standard pack…
               </button>
             ) : null}
+            <button type="button" className={btn} onClick={() => setImporting(true)}>
+              <Icon name="history" size={15} /> Import sections…
+            </button>
             <button type="button" className={btnPrimary} onClick={() => setEditing('new')}>
               <Icon name="plus" size={15} /> Add a line
             </button>
@@ -182,7 +188,19 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
                   onChange={(e) => setPicked((p) => (e.target.checked ? [...new Set([...p, ...s.lines.map((l) => l.id)])] : p.filter((x) => !s.lines.some((l) => l.id === x))))}
                 />
               ) : null}
-              <b className="text-[11.5px] font-bold tracking-[.4px] text-ink-3 uppercase">{s.name}</b>
+              <b className="min-w-0 flex-1 truncate text-[11.5px] font-bold tracking-[.4px] text-ink-3 uppercase">{s.name}</b>
+              {canManage ? (
+                <span className="flex shrink-0 items-center gap-0.5">
+                  <button type="button" aria-label={`Rename section ${s.name}`} title="Rename section" onClick={() => setSectioning({ name: s.lines[0]?.section ?? null, mode: 'rename' })} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle hover:text-ink">
+                    <Icon name="compose" size={13} />
+                  </button>
+                  {s.lines[0]?.section ? (
+                    <button type="button" aria-label={`Delete section ${s.name}`} title="Delete section" onClick={() => setSectioning({ name: s.lines[0]?.section ?? null, mode: 'delete' })} className="flex h-7 w-7 items-center justify-center rounded-[6px] text-ink-3 hover:bg-danger-bg hover:text-danger">
+                      <Icon name="trash" size={13} />
+                    </button>
+                  ) : null}
+                </span>
+              ) : null}
             </div>
             {s.lines.map((l) => (
               <LineRow
@@ -215,9 +233,11 @@ export default function Checklist({ id, org, canManage, canApprove, can }: { id:
         ))
       )}
 
-      {editing ? <LineSheet tenderId={id} org={org} line={editing === 'new' ? null : editing} onClose={() => setEditing(null)} onSaved={refresh} /> : null}
+      {editing ? <LineSheet tenderId={id} org={org} line={editing === 'new' ? null : editing} sections={sectionNames(c.items)} onClose={() => setEditing(null)} onSaved={refresh} /> : null}
+      {sectioning ? <SectionSheet tenderId={id} name={sectioning.name} mode={sectioning.mode} lines={c.items.filter((l) => (l.section ?? null) === sectioning.name)} taken={sectionNames(c.items)} onClose={() => setSectioning(null)} onSaved={refresh} /> : null}
       {sending ? <SendBackSheet tenderId={id} line={sending} nameOf={nameOf} serverTells={c.notifies} onClose={() => setSending(null)} onSaved={refresh} /> : null}
       {reviewing !== null ? <ReviewScreen tenderId={id} lines={c.items} startId={reviewing} canApprove={canApprove} canDownload={can.download} serverTells={c.notifies} onClose={() => setReviewing(null)} onChanged={refresh} /> : null}
+      {importing ? <ImportSheet tenderId={id} org={org} existing={c.items} onClose={() => setImporting(false)} onSaved={refresh} /> : null}
       {packs ? <PackSheet tenderId={id} packs={c.packs} onClose={() => setPacks(false)} onSaved={refresh} /> : null}
     </div>
   );
@@ -385,7 +405,113 @@ function LineRow({
   );
 }
 
-function LineSheet({ tenderId, org, line, onClose, onSaved }: { tenderId: number; org: string; line: Line | null; onClose: () => void; onSaved: () => void }) {
+/** The sections this tender's lines are in, in the order they first appear. */
+function sectionNames(lines: Line[]): string[] {
+  return [...new Set(lines.map((l) => l.section).filter((x): x is string => !!x && !!x.trim()))];
+}
+
+const NEW_SECTION = '\u0000new';
+
+/**
+ * A line's section: one this tender already has, none, or a new one named here. It was a free text box, so the same
+ * section typed twice a little differently ("B. Eligibility" and "B Eligibility") split the checklist in two.
+ */
+export function SectionPicker({ value, sections, onChange }: { value: string; sections: string[]; onChange: (v: string) => void }) {
+  const known = !value || sections.includes(value);
+  const [typing, setTyping] = useState(!known);
+  if (typing) {
+    return (
+      <div className="flex gap-1.5">
+        <input aria-label="New section name" autoFocus value={value} onChange={(e) => onChange(e.target.value)} maxLength={120} placeholder="B. Eligibility" className={cx(input, 'min-w-0 flex-1')} />
+        {sections.length ? (
+          <button type="button" className={btnSmall} onClick={() => { setTyping(false); onChange(''); }}>
+            Pick one
+          </button>
+        ) : null}
+      </div>
+    );
+  }
+  return (
+    <Select<string>
+      aria-label="Section"
+      value={value}
+      onValueChange={(v) => (v === NEW_SECTION ? (setTyping(true), onChange('')) : onChange(v))}
+      options={[{ value: '', label: 'No section' }, ...sections.map((x) => ({ value: x, label: x })), { value: NEW_SECTION, label: 'New section…' }]}
+      className={input}
+    />
+  );
+}
+
+/** Rename a section (every line in it), or delete it: its lines kept without a section, or removed with it. */
+export function SectionSheet({ tenderId, name, mode, lines, taken, onClose, onSaved }: { tenderId: number; name: string | null; mode: 'rename' | 'delete'; lines: Line[]; taken: string[]; onClose: () => void; onSaved: () => void }) {
+  const [next, setNext] = useState(name ?? '');
+  const [busy, setBusy] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const label = name ?? 'Other';
+  const n = lines.length;
+  const run = async (key: string, fn: () => Promise<unknown>, done: string) => {
+    setBusy(key);
+    setError(null);
+    try {
+      await fn();
+      toast('success', done);
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
+  const moveAll = (section: string) => Promise.all(lines.map((l) => updateLine(l.id, { section })));
+  const clash = mode === 'rename' && next.trim() !== (name ?? '') && taken.includes(next.trim());
+  if (mode === 'rename') {
+    return (
+      <Sheet
+        title="Rename section"
+        width={440}
+        onClose={onClose}
+        footer={
+          <>
+            <button type="button" className={btn} onClick={onClose}>Cancel</button>
+            <button type="button" className={btnPrimary} disabled={busy !== null || !next.trim() || next.trim() === (name ?? '')} onClick={() => void run('rename', () => moveAll(next.trim()), clash ? `Moved into ${next.trim()}.` : 'Section renamed.')}>
+              {busy ? 'Saving…' : clash ? 'Merge' : 'Rename'}
+            </button>
+          </>
+        }
+      >
+        <Field label="Section name">
+          <input aria-label="Section name" autoFocus value={next} onChange={(e) => setNext(e.target.value)} maxLength={120} className={input} />
+        </Field>
+        <p className="text-[12px] text-ink-3">
+          {clash ? `A section called ${next.trim()} already exists: its ${n} line${n === 1 ? '' : 's'} will join it.` : `Renames it on ${n === 1 ? 'its line' : `all ${n} of its lines`}.`}
+        </p>
+        {error ? <p role="alert" className="text-[12.5px] text-danger">{error}</p> : null}
+      </Sheet>
+    );
+  }
+  return (
+    <Sheet
+      title={`Delete section ${label}?`}
+      width={460}
+      onClose={onClose}
+      footer={<button type="button" className={btn} onClick={onClose}>Cancel</button>}
+    >
+      <p className="text-[12.5px] text-ink-2">{`It has ${n} line${n === 1 ? '' : 's'}. Keep ${n === 1 ? 'it' : 'them'} on the checklist without a section, or delete ${n === 1 ? 'it' : 'them'} with the section.`}</p>
+      <div className="flex flex-col gap-2">
+        <button type="button" className={btn} disabled={busy !== null} onClick={() => void run('keep', () => moveAll(''), 'Section deleted; its lines are kept.')}>
+          {busy === 'keep' ? 'Saving…' : `Keep the ${n === 1 ? 'line' : `${n} lines`}, without a section`}
+        </button>
+        <button type="button" className={cx(btn, 'border-danger text-danger hover:bg-danger-bg')} disabled={busy !== null} onClick={() => void run('remove', () => bulkLines(tenderId, 'remove', lines.map((l) => l.id)), 'Section and its lines deleted.')}>
+          {busy === 'remove' ? 'Deleting…' : `Delete the section and its ${n === 1 ? 'line' : `${n} lines`}`}
+        </button>
+      </div>
+      {error ? <p role="alert" className="text-[12.5px] text-danger">{error}</p> : null}
+    </Sheet>
+  );
+}
+
+function LineSheet({ tenderId, org, line, sections, onClose, onSaved }: { tenderId: number; org: string; line: Line | null; sections: string[]; onClose: () => void; onSaved: () => void }) {
   const before: LineDraft = line ? lineDraft(line) : { label: '', section: '', detail: '', note: '', mandatory: true, owner: '', issued_on: '', expires_on: '' };
   const [d, setD] = useState<LineDraft>(before);
   const [busy, setBusy] = useState(false);
@@ -433,7 +559,7 @@ function LineSheet({ tenderId, org, line, onClose, onSaved }: { tenderId: number
       </Field>
       <div className="grid grid-cols-2 gap-2.5">
         <Field label="Section">
-          <input aria-label="Section" value={d.section} onChange={set('section')} maxLength={120} placeholder="B. Eligibility" className={input} />
+          <SectionPicker value={d.section} sections={sections} onChange={(v) => setD({ ...d, section: v })} />
         </Field>
         <label className="flex items-center gap-2 pt-5 text-[12.5px] font-semibold text-ink">
           <Checkbox checked={d.mandatory} onChange={(e) => setD({ ...d, mandatory: e.target.checked })} />
@@ -581,6 +707,107 @@ function PackSheet({ tenderId, packs, onClose, onSaved }: { tenderId: number; pa
           </button>
         </div>
       ))}
+    </Sheet>
+  );
+}
+
+/** Sections copied from an earlier tender: pick the tender, tick its sections, and their lines are added here. */
+export function ImportSheet({ tenderId, org, existing, onClose, onSaved }: { tenderId: number; org: string; existing: Line[]; onClose: () => void; onSaved: () => void }) {
+  const [q, setQ] = useState('');
+  const [from, setFrom] = useState<{ id: number; title: string } | null>(null);
+  const [chosen, setChosen] = useState<Array<string | null> | null>(null);
+  const [busy, setBusy] = useState<{ done: number; of: number } | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const list = useQuery({
+    queryKey: ['tenders', 'import-from', org, q.trim()],
+    queryFn: ({ signal }) => fetchList(org, { ...BLANK, q: q.trim(), sort: 'updated', dir: 'desc' }, signal),
+    enabled: !from,
+  });
+  const old = useQuery({ queryKey: K2.checklist(from?.id ?? 0), queryFn: ({ signal }) => fetchChecklist(from!.id, signal), enabled: !!from });
+  const templates = old.data ? sectionTemplates(old.data.items) : [];
+  const picked = chosen ?? templates.map((t) => t.name);
+  const plan = old.data ? importPlan(old.data.items, picked, existing) : { add: [], skipped: 0 };
+  const go = async () => {
+    setError(null);
+    setBusy({ done: 0, of: plan.add.length });
+    try {
+      // One at a time, so the lines keep the earlier tender's order.
+      for (const [i, body] of plan.add.entries()) {
+        await addLine(tenderId, body);
+        setBusy({ done: i + 1, of: plan.add.length });
+      }
+      toast('success', `${plan.add.length} ${plan.add.length === 1 ? 'line' : 'lines'} imported.${plan.skipped ? ` ${plan.skipped} already on the list.` : ''}`);
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError(errorMessage(e));
+      onSaved();
+    } finally {
+      setBusy(null);
+    }
+  };
+  const toggle = (name: string | null) => setChosen(picked.includes(name) ? picked.filter((x) => x !== name) : [...picked, name]);
+  return (
+    <Sheet
+      title="Import sections from a tender"
+      width={520}
+      onClose={onClose}
+      footer={
+        <>
+          {from ? (
+            <button type="button" className={btn} disabled={!!busy} onClick={() => (setFrom(null), setChosen(null))}>
+              Back
+            </button>
+          ) : null}
+          <button type="button" className={btn} onClick={onClose}>
+            Cancel
+          </button>
+          {from ? (
+            <button type="button" className={btnPrimary} disabled={!!busy || !plan.add.length} onClick={() => void go()}>
+              {busy ? `Importing ${busy.done} of ${busy.of}…` : `Import ${plan.add.length} ${plan.add.length === 1 ? 'line' : 'lines'}`}
+            </button>
+          ) : null}
+        </>
+      }
+    >
+      {!from ? (
+        <>
+          <input aria-label="Find a tender" autoFocus value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search by title, reference or buyer" className={input} />
+          {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
+          <div className="flex flex-col gap-1.5" role="list" aria-label="Tenders">
+            {(list.data?.items ?? [])
+              .filter((t) => t.id !== tenderId)
+              .map((t) => (
+                <button key={t.id} type="button" role="listitem" className="flex flex-col items-start rounded-[10px] border border-line px-3 py-2 text-left hover:bg-subtle" onClick={() => setFrom({ id: t.id, title: t.title })}>
+                  <b className="text-[13px] text-ink">{t.title}</b>
+                  <span className="text-[12px] text-ink-3">{[t.reference, t.organization ?? t.client_name, t.stage_label].filter(Boolean).join(' · ')}</span>
+                </button>
+              ))}
+            {list.data && !list.data.items.some((t) => t.id !== tenderId) ? <p className="text-[12.5px] text-ink-3">No other tender matches.</p> : null}
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="m-0 text-[13px] text-ink-2">
+            From <b className="text-ink">{from.title}</b>. Requirements, sections, details and whether each is required are copied; files and review status are not.
+          </p>
+          {old.isLoading ? <Spinner /> : old.error ? <ErrorNote error={old.error} onRetry={() => void old.refetch()} /> : null}
+          {old.data && !templates.length ? <p className="text-[12.5px] text-ink-3">That tender has no checklist yet.</p> : null}
+          <div className="flex flex-col gap-1.5">
+            {templates.map((t) => (
+              <label key={t.name ?? ''} className="flex items-center gap-2.5 rounded-[10px] border border-line px-3 py-2">
+                <Checkbox aria-label={`Import ${t.name ?? 'Other'}`} checked={picked.includes(t.name)} onChange={() => toggle(t.name)} />
+                <span className="min-w-0 flex-1 text-[13px] text-ink">{t.name ?? 'Other'}</span>
+                <span className="text-[12px] text-ink-3 tabular-nums">
+                  {t.count} {t.count === 1 ? 'line' : 'lines'}
+                </span>
+              </label>
+            ))}
+          </div>
+          {plan.skipped ? <p className="text-[12px] text-ink-3">{`${plan.skipped} ${plan.skipped === 1 ? 'line is' : 'lines are'} already on this checklist and will be left as they are.`}</p> : null}
+        </>
+      )}
+      {error ? <p role="alert" className="text-[12.5px] text-danger">{error}</p> : null}
     </Sheet>
   );
 }

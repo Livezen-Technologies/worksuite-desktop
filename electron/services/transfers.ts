@@ -320,16 +320,17 @@ const CHUNK = CHUNK_BYTES;
 const MIN_CHUNK = 256 * 1024;
 
 /**
- * The size of each part an upload is sent in. A small file goes in parts of
- * about a twentieth of it (at least 256 KB), so a document shows its way up
- * instead of jumping from nothing to finished. A large one (over 8 MB, #249)
- * goes in full 8 MB parts, several at a time: fewer requests, each one short
+ * The size of each part an upload is sent in. A file up to 8 MB goes in one
+ * part: every part is its own request (and its own round trip), and a
+ * document split into twentieths sent them one after another, so a 1 MB PDF
+ * took four trips where one would do. Its progress still moves as the bytes
+ * go (multipartPart reports every 64 KB). A large one (over 8 MB, #249) goes
+ * in full 8 MB parts, several at a time: fewer requests, each one short
  * enough to try again cheaply.
  */
 export function chunkSizeFor(size: number): number {
   if (size > CHUNKED_FROM) return CHUNK;
-  const twentieth = Math.ceil(Math.max(0, size) / 20);
-  return Math.min(CHUNK, Math.max(MIN_CHUNK, Math.ceil(twentieth / MIN_CHUNK) * MIN_CHUNK));
+  return Math.min(CHUNK, Math.max(MIN_CHUNK, Math.ceil(Math.max(0, size) / MIN_CHUNK) * MIN_CHUNK));
 }
 /** The largest file offered in a remote-control session: it goes in one request. */
 const REMOTE_MAX = 512 * 1024 * 1024;

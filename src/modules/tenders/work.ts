@@ -145,6 +145,34 @@ export function sectionsOf(lines: Line[]): Array<{ name: string; lines: Line[] }
   return out;
 }
 
+/** An earlier tender's sections, each once, in the order they first appear, with how many lines each holds. */
+export function sectionTemplates(lines: Line[]): Array<{ name: string | null; count: number }> {
+  const out = new Map<string | null, number>();
+  for (const l of lines) out.set(l.section ?? null, (out.get(l.section ?? null) ?? 0) + 1);
+  return [...out].map(([name, count]) => ({ name, count }));
+}
+
+const lineKey = (section: string | null, label: string) => `${(section ?? '').trim().toLowerCase()}\u0000${label.trim().toLowerCase()}`;
+
+/**
+ * The lines to copy from an earlier tender's chosen sections, in its order: requirement, section, detail and whether
+ * it is required, never its files or status. A line this checklist already has in the same section is skipped.
+ */
+export function importPlan(from: Line[], sections: Array<string | null>, existing: Line[]): { add: Array<{ label: string; section?: string; detail?: string; mandatory: boolean }>; skipped: number } {
+  const want = new Set(sections);
+  const have = new Set(existing.map((l) => lineKey(l.section, l.label)));
+  const add: Array<{ label: string; section?: string; detail?: string; mandatory: boolean }> = [];
+  let skipped = 0;
+  for (const l of from) {
+    if (!want.has(l.section ?? null)) continue;
+    const k = lineKey(l.section, l.label);
+    if (have.has(k)) { skipped++; continue; }
+    have.add(k);
+    add.push({ label: l.label, ...(l.section ? { section: l.section } : {}), ...(l.detail ? { detail: l.detail } : {}), mandatory: l.mandatory });
+  }
+  return { add, skipped };
+}
+
 export type LineFilter = 'all' | 'outstanding' | 'required' | 'optional' | LineStatus;
 
 export function filterLines(lines: Line[], f: LineFilter): Line[] {

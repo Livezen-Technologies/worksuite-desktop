@@ -23,6 +23,9 @@ export interface OutgoingMedia {
   target: Extract<UploadTarget, { kind: 'chat' }>;
   phase: MediaPhase;
   progress: number | null;
+  /** While its bytes go: how many have gone, and how fast (bytes a second). */
+  sent?: number;
+  speed?: number;
   error: string | null;
   createdAt: string;
 }
@@ -39,16 +42,33 @@ export function transferPhase(t: Transfer): MediaPhase {
   return t.phase === 'preparing' ? 'preparing' : t.phase === 'processing' ? 'processing' : t.phase === 'sending' ? 'sending' : 'uploading';
 }
 
+/**
+ * How far along sending is, 0–1, across every step, so one bar fills once and never runs backwards: getting ready
+ * and waiting for a slot take the first few percent, the bytes most of the bar, then the server's check and the post.
+ * `moving` is false while a step has no measure of its own (the bar shimmers there instead).
+ */
+export function sendShare(phase: MediaPhase, progress: number | null): { share: number; moving: boolean } {
+  switch (phase) {
+    case 'preparing': return { share: 0.02, moving: false };
+    case 'queued': return { share: 0.04, moving: false };
+    case 'uploading': return { share: 0.05 + 0.83 * Math.min(1, Math.max(0, progress ?? 0)), moving: progress !== null };
+    case 'processing': return { share: 0.9, moving: false };
+    case 'sending': return { share: 0.96, moving: false };
+    case 'sent': return { share: 1, moving: true };
+    default: return { share: 0, moving: true };
+  }
+}
+
 /** Durable native transfers also reconstruct outgoing bubbles in a freshly opened window. */
 export function outgoingForRoom(roomId: string, transfers: Transfer[]): OutgoingMedia[] {
   const local = outgoing.get().jobs.filter((j) => j.roomId === roomId && j.owner === owner());
   const result = local.map((j) => {
     const t = transfers.find((t) => t.id === j.transferId || t.chat?.clientMessageId === j.id);
-    return t ? { ...j, transferId: t.id, phase: transferPhase(t), progress: t.phase === 'uploading' && t.total > 0 ? t.bytes / t.total : null, error: t.error } : j;
+    return t ? { ...j, transferId: t.id, phase: transferPhase(t), progress: t.phase === 'uploading' && t.total > 0 ? t.bytes / t.total : null, sent: t.bytes, speed: t.speed, error: t.error } : j;
   });
   for (const t of transfers) {
     if (t.chat?.roomId !== roomId || result.some((j) => j.id === t.chat!.clientMessageId)) continue;
-    result.push({ id: t.chat.clientMessageId, owner: owner(), roomId, name: t.name, size: t.total, mime: '', target: { kind: 'chat', ...t.chat }, transferId: t.id, phase: transferPhase(t), progress: t.total > 0 && t.phase === 'uploading' ? t.bytes / t.total : null, error: t.error, createdAt: t.createdAt });
+    result.push({ id: t.chat.clientMessageId, owner: owner(), roomId, name: t.name, size: t.total, mime: '', target: { kind: 'chat', ...t.chat }, transferId: t.id, phase: transferPhase(t), progress: t.total > 0 && t.phase === 'uploading' ? t.bytes / t.total : null, sent: t.bytes, speed: t.speed, error: t.error, createdAt: t.createdAt });
   }
   return result.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
