@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.214 — 2026-10-09
+
+- **Checklist sections you can manage (tenders 1.6.0).** Adding or editing a checklist line now offers the tender's
+  sections in a list; pick one, choose "No section", or choose "New section…" to type a new name.
+  - Each section heading has Rename and Delete buttons. Renaming changes it on every line in the section; a name
+    that already exists merges the two.
+  - Deleting asks whether to keep the section's lines (they move to Other) or delete them with it.
+
 ## 0.2.213 — 2026-10-09
 
 - **Signature for each account fits its card (mail 1.27.1).** In Mail settings, the per-account signature table ran
