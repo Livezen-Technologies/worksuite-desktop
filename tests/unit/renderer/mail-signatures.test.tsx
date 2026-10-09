@@ -80,7 +80,7 @@ describe('the signatures list', () => {
   it('sets where the signature goes in a reply, per account', async () => {
     wrap(<Signatures />);
     fireEvent.click(await screen.findByRole('combobox', { name: 'Where it goes in a reply for me@livezen.lk' }));
-    fireEvent.click(await screen.findByRole('option', { name: 'At the end, below the quoted message' }));
+    fireEvent.click(await screen.findByRole('option', { name: 'Below the quoted message' }));
     await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/mail/signature-settings', { mailbox: 4, new_id: 1, reply_id: 1, placement: 'below_quote' }));
     // An account with its own choice can go back to the one for every account.
     fireEvent.click(screen.getByRole('button', { name: 'Use every-account choice' }));

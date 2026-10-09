@@ -5,6 +5,14 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.213 — 2026-10-09
+
+- **Signature for each account fits its card (mail 1.27.1).** In Mail settings, the per-account signature table ran
+  past the card's edge, cutting off the reply position ("Below my reply, above th…").
+  - The columns now share the card's width, and each dropdown fills its column.
+  - The reply positions read *Above the quoted message* and *Below the quoted message*.
+  - *Use every-account choice* sits under the account it applies to, instead of in a column of its own.
+
 ## 0.2.212 — 2026-10-09
 
 - **WhatsApp: linking progress, and an engine for each number (chat 1.74.0).**
