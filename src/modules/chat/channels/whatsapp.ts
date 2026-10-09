@@ -22,6 +22,8 @@ export interface WaAccount {
   name: string;
   provider: 'cloud_api' | 'web_js' | 'simulator' | string;
   provider_label?: string;
+  /** WhatsApp Web numbers: the engine it runs on (null: the server's default bridge). */
+  engine?: string | null;
   is_live?: boolean;
   phone: string | null;
   connected_at?: string | null;
@@ -419,6 +421,22 @@ export function useWaTemplates(accountId: number, enabled: boolean) {
     select: (d) => d.templates.filter((t) => t.kind === 'template' && (t.account_id === null || Number(t.account_id) === accountId)),
   });
 }
+
+export interface WaEngines { default: string | null; engines: Array<{ id: string; label: string; available: boolean }> }
+
+/** The engines a WhatsApp Web number can run on here: whatsapp-web.js (a browser) or Baileys (no browser). */
+export function useWaEngines(enabled: boolean) {
+  return useQuery({
+    queryKey: ['whatsapp', 'engines'],
+    queryFn: ({ signal }) => apiGet<WaEngines>(`${WA}/engines`, undefined, signal),
+    enabled,
+    staleTime: 5 * 60_000,
+    retry: (n, e) => !refused(e) && n < 1,
+  });
+}
+
+/** Move a number to the other engine: unlinked from the one it leaves, it is linked once more on the new one. */
+export const moveWaEngine = (id: number, engine: string) => apiPost<{ ok: boolean; changed: boolean }>(`${WA}/accounts/${id}/engine`, { engine });
 
 /** A number's connection, asked again; making it the default; unlinking it from the phone (the history stays). */
 export const checkWa = (id: number) => apiPost<{ status?: string }>(`${WA}/accounts/${id}/check`);

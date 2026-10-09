@@ -8,7 +8,7 @@ import { Menu } from '../../../components/Menu';
 import { Icon } from '../../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../../components/ui';
 import { LinkPhone } from './LinkPhone';
-import { checkWa, confirmedWaPhone, formatWaPhone, isConnected, makeDefaultWa, numberState, unlinkWa, type WaAccount } from './whatsapp';
+import { checkWa, confirmedWaPhone, formatWaPhone, isConnected, makeDefaultWa, moveWaEngine, numberState, unlinkWa, useWaEngines, type WaAccount } from './whatsapp';
 
 const ROLES: Record<string, string> = { owner: 'Owner', admin: 'Admin', agent: 'Agent', viewer: 'Viewer' };
 
@@ -34,6 +34,11 @@ export function WhatsappSettings({ accounts, loading, onConnect, onClose }: {
   const [unlinking, setUnlinking] = useState<number | null>(null);
   // "Link again" opens the code and its progress inside the number's own card, where it was pressed.
   const [linking, setLinking] = useState<number | null>(null);
+  // Moving a number to the other engine, waiting for a yes: unlinked from the one it leaves, linked again on the new one.
+  const [moving, setMoving] = useState<{ id: number; engine: string } | null>(null);
+  const engines = useWaEngines(accounts.some((a) => a.provider === 'web_js' && a.can_connect === true));
+  const running = (engines.data?.engines ?? []).filter((e) => e.available);
+  const engineLabel = (id: string) => engines.data?.engines.find((e) => e.id === id)?.label ?? id;
   const web = (path: string) => void call('app:openInBrowser', { path });
 
   const act = async (key: string, run: () => Promise<unknown>, done: string) => {
@@ -101,8 +106,23 @@ export function WhatsappSettings({ accounts, loading, onConnect, onClose }: {
                     {a.device_label ? <span className="block text-ink-3">{text('Connected on: {device}', { device: a.device_label })}</span> : null}
                     {results[a.id] ? <span role="status" className="block text-ink-2">{results[a.id]}</span> : null}
                     {!up && a.status_note && linking !== a.id ? <span className="mt-0.5 block text-ink-2">{a.status_note}</span> : null}
+                    {a.provider === 'web_js' && may && running.length > 1 ? (
+                      <label className="mt-1.5 flex items-center gap-2 text-[12px] text-ink-3">
+                        {text('Engine')}
+                        <select aria-label={`Engine for ${a.name}`} value={a.engine || engines.data?.default || ''} disabled={busy !== null} onChange={(e) => setMoving({ id: a.id, engine: e.target.value })} className="h-7 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink outline-none focus:border-primary">
+                          {running.map((e) => <option key={e.id} value={e.id}>{e.label}</option>)}
+                        </select>
+                      </label>
+                    ) : a.provider === 'web_js' && (a.engine || engines.data?.default) ? <span className="block text-[11.5px] text-ink-3">{text('Engine: {engine}', { engine: engineLabel(a.engine || engines.data?.default || '') })}</span> : null}
                   </span>
                 </div>
+                {may && moving?.id === a.id ? (
+                  <div role="alert" className="flex flex-wrap items-center gap-2 rounded-[8px] bg-subtle p-2 text-ink-2">
+                    <span className="flex-1">{text('Move {name} to {engine}? It is unlinked from the engine it leaves and the phone scans a new code once. Its conversations stay.', { name: a.name, engine: engineLabel(moving.engine) })}</span>
+                    <Button size="sm" onClick={() => setMoving(null)}>{text('Cancel')}</Button>
+                    <Button size="sm" variant="primary" loading={busy === `engine:${a.id}`} onClick={() => void act(`engine:${a.id}`, () => moveWaEngine(a.id, moving.engine), text('{name} moved to {engine}. Scan the code to link it.', { name: a.name, engine: engineLabel(moving.engine) })).then(() => { setMoving(null); setLinking(a.id); })}>{text('Move and link')}</Button>
+                  </div>
+                ) : null}
                 {may ? (
                   unlinking === a.id ? (
                     <div role="alert" className="flex flex-wrap items-center gap-2 rounded-[8px] bg-danger-bg p-2 text-danger">

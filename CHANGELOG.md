@@ -5,6 +5,18 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.212 — 2026-10-09
+
+- **WhatsApp: linking progress, and an engine for each number (chat 1.74.0).**
+  - **Progress after the scan:** the link screen used to stop at a spinner. It now shows a bar and three steps:
+    scanned and signed in, *Loading WhatsApp · 63%* (WhatsApp's own figure), then *Syncing chats · 12 of 40*. The
+    chats already on the phone are brought in automatically once it links, and it finishes on *Linked and synced*.
+    *Continue in the background* closes it early.
+  - **Engine per number:** where the server runs both bridges, each number's card in WhatsApp settings has an
+    **Engine** choice, *whatsapp-web.js (browser)* or *Baileys (no browser, lighter)*. Moving a number unlinks it from
+    the old engine and opens its new code in the card; its conversations stay.
+  - Needs WorkSuite with Whatsapp 1.7.0 and bridge 1.3.0.
+
 ## 0.2.211 — 2026-10-08
 
 - **WhatsApp polish and fixes (chat 1.73.0).**

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.74.0 — 2026-10-09
+
+- WhatsApp: a progress bar after the QR scan (signed in, loading %, chats syncing), and an engine for each number
+
 ## 1.73.0 — 2026-10-08
 
 - WhatsApp: quick actions inside the reply box, reactions no longer clipped, Link again with its code and progress in the number's card
