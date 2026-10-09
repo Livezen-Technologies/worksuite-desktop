@@ -7,7 +7,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ## 0.2.216 — 2026-10-09
 
-- **Help › Report a Problem…** opens the WorkSuite Update Center's public report form
+- **Help › Report a Problem… (#316)** opens the WorkSuite Update Center's public report form
   (download.worksuitecloud.com/report-a-problem), pre-filled with this app and version and the Desktop app chosen.
   It needs no sign-in, so it works even when WorkSuite itself will not start a session.
 
