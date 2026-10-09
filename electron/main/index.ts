@@ -121,7 +121,7 @@ import { DEFAULT_PDF_POLICY } from '../services/pdf/service';
 import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
-import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl } from '../updater/update-center';
+import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl, reportProblemUrl } from '../updater/update-center';
 import { announce, noticeText } from '../updater/notice';
 import { runUpdateDiagnostics } from '../updater/diagnostics';
 import type { TrayUpdate } from '../tray/tray';
@@ -2068,6 +2068,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       {
         checkUpdates: () => void updater.check().then(() => navigate({ route: '/settings/updates', source: 'menu' })),
         diagnostics: () => navigate({ route: '/diagnostics', source: 'menu' }),
+        reportProblem: () => void shell.openExternal(reportProblemUrl(app.getVersion())),
         quit,
       },
       { ai: canOpenApp('ai', visible) },

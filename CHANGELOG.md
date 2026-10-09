@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.216 — 2026-10-09
+## 0.2.217 — 2026-10-09
 
 - **Projects is a desktop app (projects 1.1.0, WS-PROJECT-SRS-001 PRJ-DSK-01..04).** It used to open the web page in
   your browser. Now it opens in a tab:
@@ -39,6 +39,12 @@ person who has to live with the change — what it does, and where it bites.
   `worksuite://projects/{id}/tasks/{task}`, and the web's project and task links from Calendar, Mail, notifications
   and search now open the project or task here. Screens the desktop does not have (timeline, sprints, budget, risks,
   reports, settings) still open on the web.
+
+## 0.2.216 — 2026-10-09
+
+- **Help › Report a Problem…** opens the WorkSuite Update Center's public report form
+  (download.worksuitecloud.com/report-a-problem), pre-filled with this app and version and the Desktop app chosen.
+  It needs no sign-in, so it works even when WorkSuite itself will not start a session.
 
 ## 0.2.215 — 2026-10-09
 

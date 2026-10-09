@@ -43,7 +43,7 @@ describe('the main window and the usable area (#221)', () => {
 describe('the Window menu', () => {
   const real = process.platform;
   afterEach(() => Object.defineProperty(process, 'platform', { value: real }));
-  const actions = { checkUpdates: () => undefined, diagnostics: () => undefined, quit: () => undefined };
+  const actions = { checkUpdates: () => undefined, diagnostics: () => undefined, reportProblem: () => undefined, quit: () => undefined };
 
   it('on a Mac: Minimise, Zoom, Enter Full Screen and Bring All to Front', () => {
     Object.defineProperty(process, 'platform', { value: 'darwin' });
@@ -55,5 +55,17 @@ describe('the Window menu', () => {
   it('elsewhere the platform\'s own', () => {
     Object.defineProperty(process, 'platform', { value: 'win32' });
     expect(menuTemplate(() => undefined, actions, { ai: false }).some((m) => m.role === 'windowMenu')).toBe(true);
+  });
+});
+
+describe('Help › Report a Problem', () => {
+  it('is in the Help menu and opens the Update Center form for this app', async () => {
+    const { reportProblemUrl } = await import('../../../electron/updater/update-center');
+    let opened = false;
+    const help = menuTemplate(() => undefined, { checkUpdates: () => undefined, diagnostics: () => undefined, reportProblem: () => (opened = true), quit: () => undefined }, { ai: false }).find((m) => m.role === 'help')!;
+    const item = (help.submenu as Array<{ label?: string; click?: () => void }>).find((i) => i.label === 'Report a Problem…')!;
+    item.click!();
+    expect(opened).toBe(true);
+    expect(reportProblemUrl('0.2.215')).toBe('https://download.worksuitecloud.com/report-a-problem?app=lk.worksuite.desktop&version=0.2.215&platform=desktop');
   });
 });
