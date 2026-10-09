@@ -570,7 +570,7 @@ describe('WhatsApp channel settings', () => {
 
   it('checks a connection, makes a number the default, links one again in its own card and unlinks one after asking', async () => {
     vi.mocked(apiPost).mockResolvedValue({ ok: true, error: null } as never);
-    vi.mocked(apiGet).mockResolvedValue({ ok: true, qr: null, state: 'authenticated', linked: false, status_note: 'Loading your conversations — 63%', error: null } as never);
+    vi.mocked(apiGet).mockResolvedValue({ ok: true, qr: null, state: 'authenticated', linked: false, status_note: 'Loading your conversations — 63%', error: null, progress: { loading: { percent: 63, message: 'Loading your chats' }, sync: null, engine: 'wwebjs' } } as never);
     const onConnect = vi.fn();
     const down = account({ id: 2, name: 'Support', is_default: false, status: 'disconnected' });
     settings([account({}), down], { onConnect });
@@ -583,9 +583,10 @@ describe('WhatsApp channel settings', () => {
     fireEvent.click(within(support).getByRole('button', { name: 'Link again' }));
     // The code and the progress open where Link again was pressed, not in another screen.
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/2/link'));
-    expect(await within(support).findByText('Loading your conversations — 63%')).toBeTruthy();
+    expect(await within(support).findByText('Loading WhatsApp · 63%')).toBeTruthy();
+    expect(within(support).getByRole('progressbar', { name: 'Linking progress' })).toBeTruthy();
     fireEvent.click(within(support).getByRole('button', { name: 'Hide the code' }));
-    expect(within(support).queryByText('Loading your conversations — 63%')).toBeNull();
+    expect(within(support).queryByText('Loading WhatsApp · 63%')).toBeNull();
     fireEvent.click(within(sales).getByRole('button', { name: 'More actions for Sales' }));
     fireEvent.click(screen.getByRole('menuitem', { name: 'Unlink from phone' }));
     expect(within(sales).getByRole('alert').textContent).toContain('Unlink Sales from the phone? Its conversations stay here.');
@@ -596,6 +597,23 @@ describe('WhatsApp channel settings', () => {
     expect(onConnect).toHaveBeenCalled();
     fireEvent.click(screen.getByRole('button', { name: 'More on the web' }));
     expect(call).toHaveBeenCalledWith('app:openInBrowser', { path: '/whatsapp' });
+  });
+
+  it('moves a number to the other engine after asking, then opens its code in the card', async () => {
+    vi.mocked(apiGet).mockImplementation((async (path: string) => {
+      if (path === '/api/whatsapp/engines') return { default: 'wwebjs', engines: [{ id: 'wwebjs', label: 'whatsapp-web.js (browser)', available: true }, { id: 'baileys', label: 'Baileys (no browser, lighter)', available: true }] };
+      return { ok: true, qr: null, state: 'starting', linked: false, status_note: null, error: null };
+    }) as never);
+    vi.mocked(apiPost).mockResolvedValue({ ok: true, changed: true } as never);
+    settings([account({ id: 2, name: 'Support', status: 'disconnected', engine: null })]);
+    const support = screen.getByRole('listitem', { name: 'Support' });
+    const select = await within(support).findByLabelText('Engine for Support');
+    expect((select as HTMLSelectElement).value).toBe('wwebjs');
+    fireEvent.change(select, { target: { value: 'baileys' } });
+    expect(within(support).getByRole('alert').textContent).toContain('Move Support to Baileys (no browser, lighter)?');
+    fireEvent.click(within(support).getByRole('button', { name: 'Move and link' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/2/engine', { engine: 'baileys' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/2/link'));
   });
 
   it('does not display an unconfirmed phone while a QR scan is pending (#157)', () => {
@@ -653,7 +671,7 @@ describe('Add a channel', () => {
       return { ok: true };
     }) as never);
     vi.mocked(apiGet).mockImplementation((async (path: string) => {
-      if (path === '/api/whatsapp/accounts/9/qr') return scans++ === 0 ? { ok: true, qr: '2@abc,def', state: 'qr', linked: false, status_note: null, error: null } : { ok: true, qr: null, state: 'ready', linked: true, status_note: 'Linked to +94 77 123 4567', error: null };
+      if (path === '/api/whatsapp/accounts/9/qr') return scans++ === 0 ? { ok: true, qr: '2@abc,def', state: 'qr', linked: false, status_note: null, error: null } : { ok: true, qr: null, state: 'ready', linked: true, status_note: 'Linked to +94 77 123 4567', error: null, progress: { loading: null, sync: { state: 'done', percent: null, chats_done: 12, chats_total: 12, messages: 240, error: null }, engine: 'wwebjs' } };
       throw new Error(`unexpected ${path}`);
     }) as never);
     const onConnected = vi.fn();
@@ -672,8 +690,14 @@ describe('Add a channel', () => {
       await act(async () => {
         await vi.advanceTimersByTimeAsync(3_100);
       });
-      expect(await screen.findByText('Linked')).toBeTruthy();
+      // Linked: the chats on the phone come in behind the bar, then it says linked and synced.
+      expect(await screen.findByText('Linked and synced')).toBeTruthy();
+      expect(screen.getByText('12 chats synced · 240 messages')).toBeTruthy();
       await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/9/check'));
+      await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/whatsapp/accounts/9/import', { background: true }));
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(2_100);
+      });
       await waitFor(() => expect(onConnected).toHaveBeenCalledWith('whatsapp'));
     } finally {
       vi.useRealTimers();
