@@ -1,0 +1,9 @@
+{
+    "module": "projects",
+    "version": "1.1.0",
+    "paths": [
+        "electron/services/projects",
+        "shared/projects.ts",
+        "shared/ipc/projects-channels.ts"
+    ]
+}

@@ -11,8 +11,15 @@ export type LinkTarget = { kind: 'tab'; route: string; app: string } | { kind: '
 
 const PATH = /^\/[A-Za-z0-9/_\-.?=&%:,]*$/;
 const ACCOUNT_TABS = ['general', 'preferences', 'notifications', 'security', 'pictures'];
-/** Pages of a native app that are the web's own, standalone: Finance's printable report and its public shared link. */
-const BROWSER_PAGES = [/^\/finance\/(print|shared)\//];
+/** Pages of a native app that are the web's own: Finance's printable report and its public shared link, Projects' screens not built here. */
+const BROWSER_PAGES = [
+  /^\/finance\/(print|shared)\//,
+  // Projects' screens the desktop does not draw (PRJ-DSK-01 builds the board, My work, time and change decisions):
+  // the portfolio lists, timeline, sprints, milestones, workload, budget, risks, reports, activity and settings, and
+  // a project's own tabs other than its board and tasks, open on the web.
+  /^\/projects\/(all|templates|clients|board|timeline|milestones|sprints|workload|budget|risks|reports|activity|settings)(?:[/?#]|$)/,
+  /^\/projects\/\d+\/(?!tasks\/|board(?:[/?#]|$))[a-z]/,
+];
 
 /**
  * Paths under another app's that are everyone's own, and where the desktop

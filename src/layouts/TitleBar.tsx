@@ -17,6 +17,7 @@ import { UserPicture, useMe } from '../components/UserPicture';
 import { unreadLabel, useAssistantActivity } from '../app/overlays/AiDock';
 import { phaseLabel } from '../modules/ai/session';
 import { useGuest } from '../core/session';
+import { TimerPill } from '../modules/projects/Timer';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
@@ -85,6 +86,8 @@ export function TitleBar() {
       {hasChat ? <RingAlertPill /> : null}
       <ActiveCalls />
       <ClockControl />
+      {/* The Projects timer while it runs (PRJ-DSK-02, D01): opens the mini timer. */}
+      {guest ? null : <TimerPill />}
 
       <button type="button" className={cx('no-drag flex h-8 items-center gap-2 rounded-full px-3 text-[12.5px] font-semibold', pill.tone)} onClick={() => openOverlay('network')} aria-label={`Connection: ${pill.text}`}>
         <span className={cx('h-2 w-2 rounded-full', pill.dot)} />

@@ -26,7 +26,8 @@ const CALL_KINDS = new Set<WindowKind>(['call', 'video-call']);
 const SIZES: Record<WindowKind, { width: number; height: number; minWidth: number; minHeight: number }> = {
   main: { width: 1440, height: 900, minWidth: 1024, minHeight: 640 },
   'chat-mini': { width: 380, height: 560, minWidth: 320, minHeight: 360 },
-  timer: { width: 340, height: 150, minWidth: 300, minHeight: 130 },
+  // The Projects mini timer (D02): the time, pause and stop, the task, and the entry's note under the title bar.
+  timer: { width: 340, height: 190, minWidth: 300, minHeight: 170 },
   record: { width: 1100, height: 800, minWidth: 720, minHeight: 520 },
   call: { width: 340, height: 600, minWidth: 320, minHeight: 520 },
   'video-call': { width: 1180, height: 760, minWidth: 720, minHeight: 480 },

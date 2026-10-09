@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.28.0 — 2026-10-09
+
+**Added**
+
+- a Projects switch under Notifications › By app, for the Projects timer's idle prompt and Projects' banners
+
 ## 1.27.0 — 2026-10-07
 
 **Added**
