@@ -90,7 +90,7 @@ it('hides for a toast marker and ignores an already hidden menu', async () => {
   act(() => toast.remove());
   await waitFor(() => expect(ui.queryByAltText('snapshot')).toBeNull());
 });
-it('reserves space for the persistent AI launcher instead of hiding the editor indefinitely', async () => {
+it('reserves space for an AI notice over the editor instead of hiding the editor indefinitely', async () => {
   const rect = (top: number, height: number) => ({ x: 0, y: top, left: 0, top, right: 800, bottom: top + height, width: 800, height, toJSON: () => ({}) });
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (this: HTMLElement) {
     return this.hasAttribute('data-native-reserve-space') ? rect(600, 64) : rect(80, 600);

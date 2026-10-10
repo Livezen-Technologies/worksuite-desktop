@@ -292,6 +292,8 @@ export interface Preferences {
   mailtoHandler?: boolean;
   /** Settings › Desktop › Links (#170); unset fields take DEFAULT_LINK_PREFS (shared/link-prefs.ts). */
   links?: Partial<LinkPrefs>;
+  /** Settings › Files › "Open Office files in", per kind (worksuite-desktop#322); unset kinds take DEFAULT_OFFICE_OPEN_PREFS (shared/office-open.ts). */
+  officeOpen?: Partial<Record<'doc' | 'sheet' | 'slides', 'builtin' | 'worksuite-office' | 'ask' | 'system'>>;
   /** Per mailbox, how long its mail is kept on this computer (D09), overriding `mailCacheDays`. */
   mailCacheDaysByMailbox?: Record<string, 7 | 30 | 90 | 0>;
   /** Per folder ("<mailbox>:<folder>"), what this computer keeps (ENH-MAIL-03 DMO-OFF-01); unset folders follow the defaults. */
@@ -1152,7 +1154,7 @@ export interface AppInfo {
   restoredFromCrash: boolean;
 }
 
-export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'phone' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask' | 'live-map' | 'wall' | 'wall-sheet' | 'support-quick' | 'support-ring' | 'support-wall';
+export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'phone' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'webchat-ring' | 'ring-tray' | 'quick-ask' | 'live-map' | 'wall' | 'wall-sheet' | 'support-quick' | 'support-ring' | 'support-wall' | 'slideshow' | 'presenter';
 
 /** Screens and windows offered for sharing (FR-COM-05), and whether the OS lets us capture them. */
 export interface ScreenSources {

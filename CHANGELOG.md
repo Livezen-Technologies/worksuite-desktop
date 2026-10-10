@@ -5,6 +5,41 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.221 — 2026-10-10
+
+- **Office: the editor fills the tab, with one header (office 1.2.0, #326).** The white strip under the editor came
+  from the AI button: the editor stopped short of it across its whole width. The AI button now steps aside while an
+  Office editor is on screen (open the assistant from the command palette), and the editor fills everything between
+  the file header and the status bar. Around and behind it is the app's own grey in light and dark, not white.
+  ONLYOFFICE's second header (name, Editing, Share) and its feature tips are gone; the editor opens in the app's theme
+  (needs WorkSuite Server with EuroOffice 1.3.0; older Document Servers ignore the newer settings).
+- **Presentations: a real slide viewer and Present (office 1.2.0, #321).** A .pptx in Files (Preview / Space), chat,
+  Mail and Tenders opens in a slide viewer: sharp slides fitted to the window and re-fitted on resize, thumbnails down
+  the left, ‹ Slide 1 of 8 ›, zoom (Fit slide, Fit width, 50–200%, ⌘+ ⌘− ⌘0), Download and Open in WorkSuite Office;
+  ← → Space Page Up/Down Home End move through the deck.
+  - **Present ▶** (⌘⏎ or F5; ⇧⌘⏎ from the current slide) fills the screen in black with no app around it. Click, →
+    or Space for next, ← back, B blanks, Esc ends; moving the mouse shows prev/next, the slide number, a laser pointer
+    and exit, fading after 2 seconds. With a second display the slides go there and this screen shows the presenter
+    view: current and next slide, speaker notes, a timer and the clock. Present is in the editor's header too.
+  - Slides are drawn here, so they work offline. Transitions and animations do not play yet; Present from the editor
+    shows the last saved version. "Present in meeting" is not built — pick the "Slideshow" window in Meet's picker.
+- **Open with WorkSuite Office (files 1.10.0, settings 1.30.0, #322).** Word, Excel and PowerPoint files have **Open
+  with ▸** — WorkSuite Office, WorkSuite (in the app), the default app here, and Word/Excel/PowerPoint where installed
+  — in Files' menu and as a button on Mail attachments, chat files and tender documents. **Settings › Files & Sync ›
+  Office files** picks, per Documents / Spreadsheets / Presentations, where Open and double-click go: Built-in editor
+  (the default, as before), WorkSuite Office, Ask every time, or Default app. A Drive file opens in WorkSuite Office
+  through a `worksuiteoffice://open` link and saves back as a new version; a file not in Drive asks "Save to Drive
+  first?"; without WorkSuite Office installed it offers Download. WorkSuite Office itself must handle the new link,
+  and registering as a Finder / Explorer "Open With" app belongs to that app.
+- **Mail: Microsoft 365 sign-in says what went wrong (mail 1.29.0, #324).** Adding a Microsoft 365 mailbox now shows
+  each step — sign-in, token, IMAP, SMTP — as it happens, and a failure says why in plain words with Microsoft's code,
+  **Copy details** and, when an administrator must approve the app, the approval link to send them. An optional email
+  field picks the right account. Needs WorkSuite Server with Mail 1.26.0; against an older server it works as before.
+- **WhatsApp: numbers link reliably (chat 1.76.0, diagnostics 1.2.0, #323).** **Scan again** starts a clean session
+  and shows a new QR code that refreshes itself, with a countdown; **Link with phone number instead** gives a pairing
+  code. One error shows, not several, with what to do and "Details for admin"; a link that does not start in 60
+  seconds says so. Help › Diagnostics › WhatsApp linking lists each attempt. Needs WorkSuite Server with Whatsapp 1.8.0.
+
 ## 0.2.220 — 2026-10-10
 
 - **Projects: the whole portfolio in the app (projects 1.2.0).** All projects, Templates, Clients, New project, a

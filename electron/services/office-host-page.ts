@@ -11,13 +11,20 @@
  * (shared/office.ts `parseEditorEvent`).
  */
 
+/**
+ * What shows behind and around the editor while it loads or resizes (worksuite-desktop#326): the light and dark
+ * greys of the editor's own themes, never white in dark mode. The view's native background is the same
+ * (office-editor.ts), so a gap of a pixel or two while a window is resized is not seen.
+ */
+export const OFFICE_BACKGROUND = { light: '#f4f4f4', dark: '#333333' } as const;
+
 export const OFFICE_HOST_HTML = `<!doctype html>
 <html lang="en">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Office editor</title>
-<style>html,body{margin:0;height:100%;overflow:hidden;background:#fff}#box{position:absolute;inset:0}#box>*{width:100%;height:100%;border:0}</style>
+<style>html,body{margin:0;height:100%;overflow:hidden;background:${OFFICE_BACKGROUND.light}}html.dark,html.dark body{background:${OFFICE_BACKGROUND.dark};color-scheme:dark}#box{position:absolute;inset:0}#box>*{width:100%;height:100%;border:0}</style>
 </head>
 <body>
 <div id="box"></div>
@@ -108,6 +115,11 @@ export const OFFICE_HOST_JS = `(function () {
     document.head.appendChild(s);
   }
 
+  // The view follows its placeholder (setBounds), which resizes this window: the editor is told, where it can be (#326).
+  window.addEventListener('resize', function () {
+    if (editor && typeof editor.resize === 'function') { try { editor.resize(); } catch (e) { /* not ready yet */ } }
+  });
+
   bridge.onCommand(function (cmd) {
     if (!cmd || typeof cmd !== 'object') return;
     switch (cmd.type) {
@@ -120,6 +132,8 @@ export const OFFICE_HOST_JS = `(function () {
       case 'setUsers': if (editor && typeof editor.setUsers === 'function') editor.setUsers({ c: cmd.c, users: cmd.users }); break;
       case 'denyEditingRights': if (editor && typeof editor.denyEditingRights === 'function') editor.denyEditingRights(cmd.message); break;
       case 'showMessage': if (editor && typeof editor.showMessage === 'function') editor.showMessage(cmd.message); break;
+      // The app's light or dark mode, for the page behind the editor (#326); the editor's own theme is in its signed config.
+      case 'theme': document.documentElement.className = cmd.dark ? 'dark' : ''; break;
       case 'destroy': if (editor) { try { editor.destroyEditor(); } catch (e) { /* already gone */ } editor = null; } break;
     }
   });

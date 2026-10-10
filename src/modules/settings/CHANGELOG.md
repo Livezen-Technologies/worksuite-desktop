@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.30.0 — 2026-10-10
+
+**Added**
+
+- Open Office files in — Built-in editor, WorkSuite Office, Ask every time or Default app per kind (#322)
+
 ## 1.29.0 — 2026-10-10
 
 **Added**

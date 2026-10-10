@@ -3,6 +3,7 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { apiUrl } from '../core/api';
 import { Icon } from './Icon';
 import { IconButton, Spinner, cx } from './ui';
+import { SlidesViewer } from '../modules/office/slides/SlidesViewer';
 
 /**
  * A file shown inside WorkSuite (the tender reviewer's viewer): PDFs drawn by
@@ -10,7 +11,7 @@ import { IconButton, Spinner, cx } from './ui';
  * script, links or forms run — pictures as they are, text as text. Anything
  * else (Word, Excel) says so and offers to open it in its own app.
  */
-export type ViewKind = 'pdf' | 'image' | 'text' | 'other';
+export type ViewKind = 'pdf' | 'image' | 'text' | 'slides' | 'other';
 
 const IMAGE = /\.(png|jpe?g|gif|webp|bmp)$/i;
 const TEXT = /\.(txt|csv|md|json|xml|log)$/i;
@@ -20,6 +21,8 @@ export function viewKind(name: string, mime: string | null): ViewKind {
   if (m === 'application/pdf' || /\.pdf$/i.test(name)) return 'pdf';
   if (/^image\/(png|jpe?g|gif|webp|bmp)$/.test(m) || IMAGE.test(name)) return 'image';
   if (m.startsWith('text/') || m === 'application/json' || TEXT.test(name)) return 'text';
+  // A presentation: the slide viewer (#321), drawn by the Slides engine — slides, thumbnails, zoom and Present.
+  if (m === 'application/vnd.openxmlformats-officedocument.presentationml.presentation' || /\.pptx$/i.test(name)) return 'slides';
   return 'other';
 }
 
@@ -101,6 +104,7 @@ export function FileViewer({ path, name, onOpen, onSave, url: source, onPage }: 
   if (file.kind === 'pdf') return <PdfView blob={file.blob} name={name} onPage={onPage} />;
   if (file.kind === 'image') return <ImageView url={file.url} name={name} />;
   if (file.kind === 'text') return <TextView blob={file.blob} />;
+  if (file.kind === 'slides') return <SlidesViewer name={name} load={async () => new Uint8Array(await file.blob.arrayBuffer())} onDownload={onSave} onOpenInOffice={onOpen} />;
   return <Unshown icon="file" title={`${name} can't be shown inside WorkSuite`} hint="Word, Excel and other files open in the app they belong to." onOpen={onOpen} onSave={onSave} />;
 }
 

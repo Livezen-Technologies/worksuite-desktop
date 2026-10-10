@@ -1,4 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
+import { OpenWithButton } from '../../office/open-with';
 import type { ReactNode } from 'react';
 import { useCanOpen } from '../../../core/access';
 import { ApiError, apiGet } from '../../../core/api';
@@ -366,6 +367,8 @@ function FileCard({ f, id, open }: { f: Rec; id: number; open: () => void }) {
           </Sub>
           {str(f.folder_name) ? <Sub>In {str(f.folder_name)}</Sub> : null}
         </span>
+        {/* A Drive file: Open with ▸ WorkSuite Office saves back to it as versions (#322). */}
+        <OpenWithButton doc={{ name, extension: str(f.extension), driveId: id }} />
       </div>
     </CardFrame>
   );

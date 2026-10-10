@@ -127,7 +127,8 @@ export function WhatsappChannel({ accounts, loading, error, retry, onConnect, on
     />
   ) : (
     <>
-      {down.map((a) => (
+      {/* One error display (worksuite-desktop#323): a number being linked says what is wrong in its link pane, not here too. */}
+      {down.filter((a) => a.id !== linking?.id).map((a) => (
         <div key={a.id} role="status" className="mx-3 mb-2 flex items-start gap-2 rounded-[8px] bg-warning-bg p-2.5 text-[12px] text-warning-ink">
           <Icon name="wifi-off" size={14} className="mt-px shrink-0" />
           <span className="min-w-0 flex-1">

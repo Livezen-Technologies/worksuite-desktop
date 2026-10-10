@@ -134,7 +134,7 @@ export function ReviewScreen({
         </b>
         {canDownload ? (
           <>
-            <button type="button" className={cx(btn, 'no-drag border border-line text-ink hover:bg-subtle')} onClick={() => void saveTenderFile({ tenderLine: { line: line.id, ...(older ? { version: shown.id } : {}) } }, fileName, true)}>
+            <button type="button" className={cx(btn, 'no-drag border border-line text-ink hover:bg-subtle')} onClick={() => void saveTenderFile({ tenderLine: { line: line.id, ...(older ? { version: shown.id } : {}) } }, fileName, true, 'office')}>
               Open in its app
             </button>
             <button type="button" className={cx(btn, 'no-drag border border-line text-ink hover:bg-subtle')} onClick={() => void saveTenderFile({ tenderLine: { line: line.id, ...(older ? { version: shown.id } : {}) } }, fileName)}>
@@ -151,7 +151,7 @@ export function ReviewScreen({
               key={path}
               path={path}
               name={fileName}
-              onOpen={() => void saveTenderFile({ tenderLine: { line: line.id, ...(older ? { version: shown.id } : {}) } }, fileName, true)}
+              onOpen={() => void saveTenderFile({ tenderLine: { line: line.id, ...(older ? { version: shown.id } : {}) } }, fileName, true, 'office')}
               onSave={() => void saveTenderFile({ tenderLine: { line: line.id, ...(older ? { version: shown.id } : {}) } }, fileName)}
             />
           ) : (

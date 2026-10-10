@@ -6,6 +6,9 @@ import { call } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { officeActions, officeTypes } from '../office/api';
+import { knownApps } from '../office/local';
+import type { OfficeDoc } from '../office/open-with';
+import type { ExternalAppId } from '@shared/office';
 import { extOf, type DriveFile } from './api';
 
 /**
@@ -74,4 +77,24 @@ export function prefetchOfficeActions(id: number): void {
     .then((a) => actions.set(id, { at: Date.now(), a }))
     .catch(() => undefined)
     .finally(() => asking.delete(id));
+}
+
+// ── Open with (worksuite-desktop#322) ────────────────────────────────────
+
+/**
+ * A Drive file as "Open with" takes it: WorkSuite Office on the Drive file itself (saves are its versions), the
+ * built-in editor as Files opens it (its tab, the one already open if it is), the default app through the watched
+ * copy (OO-DSK-050), and Microsoft Word & co. where they are installed.
+ */
+export function driveOfficeDoc(f: DriveFile, d: { office: (f: DriveFile) => void; openIn: (f: DriveFile, app: ExternalAppId) => void }): OfficeDoc {
+  return {
+    name: f.name,
+    extension: f.extension,
+    driveId: f.id,
+    openBuiltin: () => d.office(f),
+    openSystem: () => d.openIn(f, 'default'),
+    more: knownApps(extOf(f.name, f.extension))
+      .filter((x) => x.id !== 'default')
+      .map((x) => ({ label: x.label, icon: 'laptop', run: () => d.openIn(f, x.id) })),
+  };
 }

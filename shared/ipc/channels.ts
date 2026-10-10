@@ -323,6 +323,8 @@ export const INVOKE_CHANNELS = [
   'office:focusFile',
   'office:externalApps',
   'office:openExternal',
+  'office:desktopApp',
+  'office:openInDesktopApp',
   'office:localCopies',
   'office:uploadLocal',
   'office:forgetLocal',
@@ -370,6 +372,9 @@ export const INVOKE_CHANNELS = [
   'support:displays',
   'support:wall',
   'support:wallClose',
+  // A presentation's slideshow (#321): full screen on the right screen, the presenter view on the other; and ending it.
+  'slides:present',
+  'slides:close',
   'help:capture',
   'help:logs',
   'offline:submit',

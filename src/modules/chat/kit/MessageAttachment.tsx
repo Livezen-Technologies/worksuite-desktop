@@ -3,7 +3,9 @@ import { useTab } from '../../../core/tab-context';
 import { text } from '../../../core/i18n';
 import { FileBadge, cx } from '../../../components/ui';
 import { openChatAttachment, previewKind, useAttachmentGallery, type Attachment } from '../AttachmentViewer';
-import { mediaUrl } from '../types';
+import { chatOfficeDoc, mediaUrl } from '../types';
+import { officeOpenKind } from '@shared/office-open';
+import { OpenWithButton } from '../../office/open-with';
 import type { KitFile } from './model';
 import { isVoiceFile } from './voice';
 import { VoiceMessage, type VoiceOf } from './VoiceMessage';
@@ -95,6 +97,8 @@ function Processing() {
 /** A file that is not drawn inline: its badge, a readable name, its size, and Open. */
 export function FileCard({ file, at, look, accent = 'text-primary', onOpen }: { file: KitFile; at: string; look: Look; accent?: string; onOpen: () => void }) {
   const name = readableName(file, at);
+  // Open with ▸ for a Word, Excel or PowerPoint file (#322).
+  const office = officeOpenKind(file.filename) ? chatOfficeDoc(file) : null;
   return (
     <div data-file-card className={look === 'drawer' ? 'flex w-[250px] max-w-full items-center gap-2.5 rounded-[8px] bg-surface/70 px-2 py-2 dark:bg-white/5' : 'flex w-[280px] max-w-full items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5'}>
       <FileBadge name={/\.[A-Za-z0-9]{1,8}$/.test(name) ? name : file.filename} size={look === 'drawer' ? 32 : 34} />
@@ -108,6 +112,7 @@ export function FileCard({ file, at, look, accent = 'text-primary', onOpen }: { 
       <button type="button" onClick={onOpen} className={cx('text-[12px] font-semibold hover:underline', accent)}>
         Open
       </button>
+      {office ? <OpenWithButton doc={office} className="-ml-1.5 inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle" /> : null}
     </div>
   );
 }

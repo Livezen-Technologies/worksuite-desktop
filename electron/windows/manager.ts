@@ -5,6 +5,7 @@ import type { Database } from '../services/db';
 import { APP_ORIGIN, devOrigin } from '../security/hardening';
 import { logger } from '../main/log';
 import { guestWindowIds } from '../main/events';
+import { showHash } from '../services/slideshow';
 
 const log = logger('windows');
 
@@ -53,6 +54,9 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'support-ring': { width: 460, height: 440, minWidth: 460, minHeight: 360 },
   // The support wallboard (D-12): the whole screen it is on; this is only its size before it goes full screen.
   'support-wall': { width: 1280, height: 720, minWidth: 640, minHeight: 360 },
+  // A presentation's slideshow and its presenter view (#321): the whole screen each is on; sizes before full screen.
+  slideshow: { width: 1280, height: 720, minWidth: 640, minHeight: 360 },
+  presenter: { width: 1280, height: 800, minWidth: 900, minHeight: 560 },
 };
 /** Cards that ring: no window controls, no place remembered, on top of everything. */
 const RINGS = new Set<WindowKind>(['ring', 'support-ring']);
@@ -62,7 +66,7 @@ const RINGS = new Set<WindowKind>(['ring', 'support-ring']);
  */
 const ONE_AT_A_TIME = new Set<WindowKind>(['ring', 'support-quick', 'support-ring']);
 /** Remote control's own windows: placed by remote control, never remembered. */
-const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall', 'wall-sheet', 'support-wall']);
+const REMOTE = new Set<WindowKind>(['rc-consent', 'rc-indicator', 'rc-pointer', 'webchat-ring', 'ring-tray', 'quick-ask', 'wall', 'wall-sheet', 'support-wall', 'slideshow', 'presenter']);
 
 /**
  * The tray's ringing menu's place (R-06, RING-UI-07): under the menu-bar icon on macOS (or a tray at the top), over it
@@ -685,6 +689,70 @@ export class WindowManager {
 
   supportWallOpen(): boolean {
     return !!this.supportWall && !this.supportWall.isDestroyed();
+  }
+
+  private show: { id: string; windows: BrowserWindow[]; awake: number } | null = null;
+
+  /**
+   * A presentation's slideshow (#321): the slides full screen, black round them and no app chrome, on the screen
+   * `plan` chose; with a second screen the presenter view full screen on the other. Starting another show ends the one
+   * that is up. Closing either window, or its screen being unplugged, ends the show — both windows go.
+   */
+  showSlideshow(id: string, plan: { slides: number; presenter: number | null }): void {
+    this.closeSlideshow();
+    const displays = screen.getAllDisplays();
+    const at = (displayId: number) => displays.find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
+    const open = (kind: 'slideshow' | 'presenter', displayId: number) => {
+      const display = at(displayId);
+      const win = new BrowserWindow({
+        ...display.bounds,
+        show: false,
+        frame: false,
+        fullscreen: true,
+        autoHideMenuBar: true,
+        title: kind === 'slideshow' ? 'Slideshow' : 'Presenter view',
+        backgroundColor: kind === 'slideshow' ? '#000000' : '#111214',
+        webPreferences: this.webPreferences(),
+      });
+      this.kinds.set(win.id, kind);
+      const wid = win.id;
+      win.on('closed', () => {
+        this.kinds.delete(wid);
+        // One window gone ends the show: the other goes with it.
+        if (this.show?.windows.includes(win)) this.closeSlideshow();
+      });
+      win.once('ready-to-show', () => {
+        if (win.isDestroyed()) return;
+        win.show();
+        if (kind === 'slideshow') win.focus();
+      });
+      win.webContents.on('render-process-gone', () => !win.isDestroyed() && win.close());
+      void win.loadURL(this.url(showHash(kind, id)));
+      return win;
+    };
+    const windows = [open('slideshow', plan.slides)];
+    if (plan.presenter !== null && plan.presenter !== plan.slides) windows.push(open('presenter', plan.presenter));
+    const shown = new Set([plan.slides, plan.presenter]);
+    const unplugged = (_e: unknown, d: { id: number }) => {
+      if (shown.has(d.id)) this.closeSlideshow();
+    };
+    screen.on('display-removed', unplugged);
+    windows[0]!.once('closed', () => screen.removeListener('display-removed', unplugged));
+    this.show = { id, windows, awake: powerSaveBlocker.start('prevent-display-sleep') };
+  }
+
+  /** Ends the show that is up: whether one was. */
+  closeSlideshow(): boolean {
+    const show = this.show;
+    if (!show) return false;
+    this.show = null;
+    if (powerSaveBlocker.isStarted(show.awake)) powerSaveBlocker.stop(show.awake);
+    for (const w of show.windows) if (!w.isDestroyed()) w.close();
+    return true;
+  }
+
+  slideshowOpen(): string | null {
+    return this.show?.id ?? null;
   }
 
   /** The screen WorkSuite's main window is on ("this window" in the sheet), or null while it is closed. */

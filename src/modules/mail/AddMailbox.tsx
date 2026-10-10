@@ -2,7 +2,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { ApiError, apiGet, apiPost } from '../../core/api';
 import { app, updatePrefs } from '../../core/app-state';
-import { call, errorMessage } from '../../core/bridge';
+import { errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { toast } from '../../core/toasts';
@@ -11,6 +11,7 @@ import { Select } from '../../components/Select';
 import { Button, ErrorNote, Modal, Spinner, TextField, cx, initials } from '../../components/ui';
 import type { Preferences } from '@shared/types';
 import { useLocalMailboxes, useOAuthProviders } from './api';
+import { OAuthProgress, useOAuthSignIn } from './OAuthSignIn';
 import { accountBg } from './parts';
 import type { LocalMailbox } from './types';
 
@@ -170,38 +171,32 @@ function LocalPane() {
 
 function OAuthPane({ provider }: { provider: 'microsoft' | 'google' }) {
   const providers = useOAuthProviders(true);
-  const [busy, setBusy] = useState(false);
-  const [started, setStarted] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  const signIn = useOAuthSignIn(provider);
+  const [email, setEmail] = useState('');
   const ready = providers.data?.providers.includes(provider) ?? false;
   const name = provider === 'microsoft' ? 'Microsoft' : 'Google';
-  const start = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await apiPost<{ url: string }>(`/api/mail/oauth/${provider}/start`);
-      await call('app:openExternal', { url: r.url });
-      setStarted(true);
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+  const busy = signIn.phase === 'starting';
   return (
     <div>
       <p className="text-[13.5px] text-ink-2">{text('Sign in with {name} in your browser. WorkSuite never sees your password; it keeps a token you can revoke from your {name} account.', { name })}</p>
       {providers.isLoading ? <Spinner /> : null}
       {!providers.isLoading && !ready ? <p className="mt-4 rounded-[10px] bg-warning-bg px-3 py-2 text-[13px] text-warning">{text('Your administrator has not set up signing in with {name} yet. You can still add the account with IMAP / SMTP and an app password.', { name })}</p> : null}
       {ready ? (
-        <div className="mt-4 flex items-center gap-3">
-          <Button variant="primary" icon="external" loading={busy} onClick={() => void start()}>
-            {text('Sign in with {name}', { name })}
-          </Button>
-          {started ? <span className="text-[12.5px] text-ink-3">Finish in your browser. The mailbox appears here when you are done.</span> : null}
-        </div>
+        <>
+          {provider === 'microsoft' ? (
+            <div className="mt-4 max-w-[360px]">
+              <TextField label={text('Email address (optional)')} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" hint={text('Picks the account at Microsoft, and lets WorkSuite name your organisation if an admin has to approve it.')} />
+            </div>
+          ) : null}
+          <div className="mt-4 flex items-center gap-3">
+            <Button variant="primary" icon="external" loading={busy} disabled={signIn.phase === 'waiting'} onClick={() => void signIn.start(email)}>
+              {text('Sign in with {name}', { name })}
+            </Button>
+          </div>
+          <OAuthProgress phase={signIn.phase} attempt={signIn.attempt} onRetry={() => void signIn.start(email)} />
+        </>
       ) : null}
-      {error ? <div className="mt-3"><ErrorNote error={error} /></div> : null}
+      {signIn.error ? <div className="mt-3"><ErrorNote error={signIn.error} /></div> : null}
     </div>
   );
 }

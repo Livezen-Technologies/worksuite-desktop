@@ -37,6 +37,7 @@ import type { EventDesk } from '../services/event-desk';
 import type { EventDeskPrint } from '../services/event-desk-print';
 import type { OfficeEditorHost } from '../services/office-editor';
 import type { OfficeExternal } from '../services/office-external';
+import type { OfficeApp } from '../services/office-app';
 import type { TrayService } from '../tray/tray';
 import type { UpdaterService } from '../updater/updater';
 
@@ -70,6 +71,8 @@ export interface AppContext {
   /** Office documents: the editor views in tabs (office-editor.ts) and copies opened in other apps (office-external.ts). */
   office: OfficeEditorHost;
   officeLocal: OfficeExternal;
+  /** WorkSuite Office, the desktop editor (#322). */
+  officeApp: OfficeApp;
   /** Office files on this computer opened in WorkSuite DOC / Sheet / Slides tabs (office-local.ts). */
   officeFiles: OfficeLocalFiles;
   /** The image editor's offline edits, library cache and drag-out (Drive ENH-03). */

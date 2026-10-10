@@ -17,6 +17,7 @@ import { Home } from './Home';
 import { lockPassword } from './locks';
 import type { MenuItem } from './Menu';
 import { Preview } from './Preview';
+import { isSlidesFile } from '../office/slides/overlay';
 import { openPdf } from '../pdf/open';
 import { Rail, type Place } from './Rail';
 import { CodeEditor } from './CodeEditor';
@@ -33,7 +34,8 @@ import { Companies, Duplicates, Links, Notifications, Storage, Trash } from './V
 import { SyncDevices } from './SyncDevices';
 import { UploadConflicts, autoChoices, type ConflictChoice, type UploadConflict } from './UploadConflicts';
 import { DriveSettings } from './DriveSettings';
-import { officeOpenWay, openOfficeTab, useOfficeRouting } from './office';
+import { cachedOfficeActions, driveOfficeDoc, officeOpenWay, openOfficeTab, useOfficeRouting } from './office';
+import { openOfficeDoc } from '../office/open-with';
 import { TemplateDialog } from './Templates';
 import { createDocument } from '../office/api';
 import { LocalCopiesTray, externalApps, openInApp } from '../office/local';
@@ -265,7 +267,18 @@ export default function FilesPage(_props: ModuleProps) {
       // Office files go where the server routes them (web-api §6): their tab, the code editor, or the web's preview.
       const office = officeOpenWay(f, officeRouting);
       if (office === 'code') return setEditor({ kind: 'code', file: f });
-      if (office === 'office') return d.office(f);
+      // Where Settings › Files says for its kind (#322): the built-in editor, WorkSuite Office, the default app, or ask.
+      // A file the server keeps out of other apps opens in its tab, as before.
+      if (office === 'office') {
+        const oa = cachedOfficeActions(f.id);
+        if (oa ? !oa.actions.open_in_external_app : !can(f.access, 'download')) return d.office(f);
+        return void openOfficeDoc(driveOfficeDoc(f, d)).then((done) => done || d.office(f));
+      }
+      // A presentation set to "Preview" opens in the slide viewer (#321), with the presentations around it for ‹ ›.
+      if (office === 'preview' && isSlidesFile(f.name)) {
+        const all = (list ?? [f]).filter((x) => isSlidesFile(x.name));
+        return setPreview({ files: all.length ? all : [f], index: Math.max(0, all.findIndex((x) => x.id === f.id)) });
+      }
       // A preview-only file opens read-only in the installed app; the browser only when it cannot be downloaded.
       if (office === 'preview') return can(f.access, 'download') ? d.download([f], true) : d.inBrowser(f);
       void apiPost(`/api/drive/opened/${f.id}`, { action: 'opened' }).catch(() => undefined);

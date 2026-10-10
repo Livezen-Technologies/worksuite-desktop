@@ -5,7 +5,8 @@ import { DesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import { setNavigationRule } from '../security/hardening';
 import { OFFICE_HOST, OFFICE_PAGE, OFFICE_SCHEME, menuKeepsShortcut, officeHostCsp, officeNavigationAllowed, officePartition, officeRequestAllowed, type OfficeOrigins } from '../security/office-policy';
-import { OFFICE_HOST_HTML, OFFICE_HOST_JS } from './office-host-page';
+import { isSlidesConfig, presentKey } from './slideshow';
+import { OFFICE_BACKGROUND, OFFICE_HOST_HTML, OFFICE_HOST_JS } from './office-host-page';
 
 const log = logger('office');
 
@@ -33,6 +34,8 @@ export interface OfficeHostDeps {
   endSession: (fileId: number, sessionId: string) => void;
   /** The enterprise proxy, as the app's own sessions have it. */
   configureSession?: (ses: Session) => void;
+  /** Whether the app is in dark mode now (nativeTheme follows the app's own mode); `setTheme` tells the views of a change. */
+  dark?: () => boolean;
 }
 
 interface Live {
@@ -231,19 +234,31 @@ export class OfficeEditorHost {
     const wc = view.webContents;
     setNavigationRule(wc, (url, mainFrame) => officeNavigationAllowed(url, mainFrame, l.origins));
     // The app menu's shortcuts belong to the editor while it has the keyboard, except closing and opening tabs.
-    wc.on('before-input-event', (_e, input) => {
-      if (input.type === 'keyDown') wc.setIgnoreMenuShortcuts(!menuKeepsShortcut(input, this.deps.platform));
+    // A presentation's Present keys (⌘⏎ / F5, ⇧ for the current slide) start WorkSuite's slideshow (#321).
+    const slides = isSlidesConfig(spec.config);
+    wc.on('before-input-event', (e, input) => {
+      if (input.type !== 'keyDown') return;
+      const present = slides ? presentKey(input, this.deps.platform) : null;
+      if (present) {
+        e.preventDefault();
+        this.tell(l, 'present', present);
+        return;
+      }
+      wc.setIgnoreMenuShortcuts(!menuKeepsShortcut(input, this.deps.platform));
     });
     wc.on('render-process-gone', (_e, details) => {
       log.error('office editor gone', { reason: details.reason });
       this.tell(l, 'crashed', { reason: details.reason });
       this.destroy(l, false);
     });
-    view.setBackgroundColor('#FFFFFF');
+    // Behind the editor, the app's light or dark grey rather than white (worksuite-desktop#326).
+    const dark = this.deps.dark?.() ?? false;
+    view.setBackgroundColor(dark ? OFFICE_BACKGROUND.dark : OFFICE_BACKGROUND.light);
     view.setVisible(false);
     win.contentView.addChildView(view);
     this.watch(owner, win);
     this.post(l, { type: 'init', apiUrl: ds.apiUrl, events: spec.events });
+    this.post(l, { type: 'theme', dark });
     this.post(l, { type: 'start', config: spec.config });
     void wc.loadURL(`${OFFICE_PAGE}?v=${token}`).catch((e: unknown) => log.warn('office editor page did not load', { error: String(e) }));
     log.info('office editor opened', { file: spec.fileId, partition });
@@ -307,6 +322,15 @@ export class OfficeEditorHost {
     if (sessionId) l.sessionId = sessionId;
     this.post(l, cmd);
     return true;
+  }
+
+  /** The app went light or dark: every editor's background follows (its own theme comes with its next configuration). */
+  setTheme(dark: boolean): void {
+    for (const l of this.lives.values()) {
+      if (l.view.webContents.isDestroyed()) continue;
+      l.view.setBackgroundColor(dark ? OFFICE_BACKGROUND.dark : OFFICE_BACKGROUND.light);
+      this.post(l, { type: 'theme', dark });
+    }
   }
 
   close(owner: WebContents, viewId: string): boolean {
