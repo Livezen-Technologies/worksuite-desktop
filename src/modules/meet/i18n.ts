@@ -104,6 +104,16 @@ const en = {
   'lobby.passcode': 'Meeting passcode',
   'lobby.joinNow': 'Join now',
   'lobby.askToJoin': 'Ask to join',
+  // The other ways in (WS-MEET-ENH-01 D08). Each overrides this screen's
+  // switches for one join; what is remembered stays as it was.
+  'lobby.joinMuted': 'Join muted',
+  'lobby.audioOnly': 'Audio only',
+  'lobby.present': 'Present',
+  'lobby.check': 'Device check',
+  'lobby.checkReady': 'Ready',
+  'lobby.checkAttention': 'Worth a look',
+  'lobby.checkChecking': 'Checking…',
+  'lobby.remember': 'Remember these devices for next time',
   'lobby.joining': 'Joining…',
   'lobby.waiting': 'Waiting for the host to let you in…',
   'lobby.waitingForHost': 'Waiting for the host to start the meeting…',

@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.16.0 — 2026-10-10
+
+- The pre-join offers Join muted, Audio only and Present beside Join now; each overrides this screen's switches for one join, and what is remembered stays as it was. Present opens the share picker on arrival, if the host allows presenting.
+- A device check on the pre-join: what the camera is really sending, what the microphone was actually opened with, and whether a share of this screen could be controlled. Remembering the chosen devices can now be turned off, and turning it off forgets what was kept.
+
 ## 1.15.0 — 2026-10-10
 
 - The sharing bar: a strip at the top of the screen you are sharing, with what is being shared, how long for, mute, the camera, the chat, Pause and Stop sharing. The call window is behind whatever you are showing, so stopping a share used to mean finding it again.

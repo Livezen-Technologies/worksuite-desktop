@@ -4,7 +4,7 @@ import { useStore } from '../../core/store';
 import { timeLabel } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
-import { DeviceSettings, Preview, useMeetDevices } from './devices';
+import { DeviceCheck, DeviceSettings, Preview, useMeetDevices } from './devices';
 import { useMeetT } from './i18n';
 import { meet } from './session';
 import { useTab } from '../../core/tab-context';
@@ -34,11 +34,27 @@ export function MeetLobby() {
   const busy = joining || sent;
   const blocked = busy || waiting || (info.needs_passcode && !passcode.trim());
 
-  const join = () => {
+  /**
+   * Join, as asked (WS-MEET-ENH-01 D08).
+   *
+   * `muted` and `audioOnly` override this screen's switches for this join only
+   * — what is remembered stays as it was, because the next meeting is not this
+   * one. `present` opens the share picker as soon as the room is up, which is
+   * what somebody pressing Present meant.
+   */
+  const join = (how: { muted?: boolean; audioOnly?: boolean; present?: boolean } = {}) => {
     if (blocked) return;
     setSent(true);
     void meet
-      .join({ mic: d.prefs.mic, cam: d.prefs.cam, micId: d.prefs.micId || undefined, camId: d.prefs.camId || undefined, speakerId: d.prefs.speakerId || undefined, passcode: passcode.trim() || undefined })
+      .join({
+        mic: how.muted ? false : d.prefs.mic,
+        cam: how.audioOnly ? false : d.prefs.cam,
+        micId: d.prefs.micId || undefined,
+        camId: d.prefs.camId || undefined,
+        speakerId: d.prefs.speakerId || undefined,
+        passcode: passcode.trim() || undefined,
+        present: how.present === true,
+      })
       .finally(() => setSent(false));
   };
 
@@ -114,6 +130,22 @@ export function MeetLobby() {
               {!busy ? <Icon name="arrow-right" size={17} /> : null}
             </button>
           )}
+          {!waiting ? (
+            <div className="flex flex-wrap gap-2">
+              <button type="button" disabled={blocked} onClick={() => join({ muted: true })} className="h-10 flex-1 rounded-[10px] border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-subtle disabled:opacity-60">
+                {t('lobby.joinMuted')}
+              </button>
+              {info.mode !== 'audio' ? (
+                <button type="button" disabled={blocked} onClick={() => join({ audioOnly: true })} className="h-10 flex-1 rounded-[10px] border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-subtle disabled:opacity-60">
+                  {t('lobby.audioOnly')}
+                </button>
+              ) : null}
+              <button type="button" disabled={blocked} onClick={() => join({ present: true })} className="h-10 flex-1 rounded-[10px] border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-subtle disabled:opacity-60">
+                {t('lobby.present')}
+              </button>
+            </div>
+          ) : null}
+          <DeviceCheck d={d} />
           <span className="text-[12px] text-ink-3">{t('lobby.settingsUsed')} {info.is_host ? t('lobby.hostNote') : t('lobby.guestNote')}</span>
           {info.is_host ? (
             <span className="mt-1 flex items-center justify-center gap-1.5 border-t border-line pt-3 text-[12.5px] text-primary">

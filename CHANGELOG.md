@@ -5,6 +5,31 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.225 — 2026-10-10
+
+- **The pre-join screen: three more ways in, and a device check (meet 1.16.0).**
+  - **Join muted**, **Audio only** and **Present** sit beside Join now. Each overrides this screen's switches for
+    that join only — what is remembered stays as it was, because the next meeting is not this one. Present opens
+    the share picker the moment you arrive, and only if the host allows presenting: a button cannot grant what the
+    meeting's own settings refuse.
+  - **A device check** that reports what the hardware **gave**, not what was asked for: the camera's real size and
+    frame rate, and whether the microphone actually opened with noise cancellation. A camera asked for 720p and
+    handing back 480 reads 480, and a 540-line picture reads 540p rather than being rounded down to a familiar
+    name — the point of a check is to find out before everybody is watching. A device switched off reads *Off* or
+    *Muted* rather than as a fault, and one still starting says so instead of claiming a figure.
+  - **Remote control** is in the check too, said in terms of what it costs — *your screen can be seen, not
+    controlled* — rather than naming a permission. The person reading it is about to join a meeting, not about to
+    fix a Mac.
+  - **Remembering the chosen devices can be turned off**, and turning it off forgets what was already kept:
+    leaving yesterday's choice behind while promising not to remember would be the worst of both.
+  - **Three things the artboard draws are not built, and why.** The **network row** ("42 ms · 28 Mbps") is a
+    measurement of the path to the media server, and nothing in this app measures that; the nearest number — a
+    round trip to the API — is a different thing wearing the same label, and a reassuring 40 ms there says nothing
+    about whether video will arrive. **Blur** needs the background-effects pipeline, which the desktop app does
+    not have at all. **Use phone for audio** needs dial-in, which the server does not offer.
+
+---
+
 ## 0.2.224 — 2026-10-10
 
 - **The sharing bar (meet 1.15.0).** While you share a screen, a strip sits at the top of it: what is being shared,

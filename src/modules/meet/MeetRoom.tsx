@@ -61,7 +61,11 @@ export function MeetRoom() {
   useSyncExternalStore(remote.subscribe, remote.snapshot);
   const ui = useSyncExternalStore(callUi.subscribe, callUi.get);
   const t = useMeetT();
-  const [picking, setPicking] = useState<'start' | 'change' | null>(null);
+  // Pressed Present on the pre-join (D08): the picker is open on arrival, and
+  // only if the host allows presenting — a button cannot grant what the
+  // meeting's settings refuse. Read as the first state rather than set in an
+  // effect, so it happens once however many times React renders.
+  const [picking, setPicking] = useState<'start' | 'change' | null>(() => (meet.wantsPresent && meet.mayPresent ? 'start' : null));
   const [ending, setEnding] = useState(false);
   const [sharingDocument, setSharingDocument] = useState(false);
   const [leaving, setLeaving] = useState(false);

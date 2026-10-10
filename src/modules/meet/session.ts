@@ -174,6 +174,8 @@ export class MeetSession {
   private listeners = new Set<() => void>();
   private audio = new Set<HTMLMediaElement>();
   private wants = { mic: true, cam: true };
+  /** Open the share picker on arrival (D08's Present). Read and cleared by the room. */
+  private presentOnJoin = false;
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
   private offRoles: (() => void) | null = null;
   /** Bumped when the meeting's invitations change, so the list is read again. */
@@ -331,11 +333,15 @@ export class MeetSession {
   }
 
   /** Into the meeting, with the devices chosen in the lobby. */
-  async join(opts: { mic: boolean; cam: boolean; micId?: string; camId?: string; speakerId?: string; passcode?: string }): Promise<void> {
+  async join(opts: { mic: boolean; cam: boolean; micId?: string; camId?: string; speakerId?: string; passcode?: string; present?: boolean }): Promise<void> {
     if (this.phase === 'joining' || this.phase === 'in' || this.phase === 'waiting') return;
     this.phase = 'joining';
     this.error = null;
     this.wants = { mic: opts.mic, cam: opts.cam };
+    // Pressed Present on the pre-join (D08): the share picker opens as soon as
+    // the room is up, which is what that button meant. Read once by the room
+    // and cleared, so a later rejoin does not reopen it.
+    this.presentOnJoin = opts.present === true;
     this.changed();
     let sfu: Sfu;
     try {
@@ -1017,6 +1023,20 @@ export class MeetSession {
   sharePoll = (id: number, shared: boolean) => this.actPost(`polls/${id}/share`, { shared });
   deletePoll = (id: number) => this.activity(() => apiDelete<MeetActivities>(`/api/meet/${this.uuid}/polls/${id}`));
   votePoll = (id: number, choices: number[]) => this.actPost(`polls/${id}/vote`, { choices });
+  /**
+   * Whether Present was pressed on the pre-join, so the share picker should
+   * open on arrival (D08).
+   *
+   * Reading it does not clear it: the room reads it while computing its first
+   * state, which React may do more than once, and a flag that cleared itself
+   * on the first read would make the behaviour depend on how many times that
+   * happened. Every `join` sets it, and leaving clears it, so a rejoin is
+   * never mistaken for that press.
+   */
+  get wantsPresent(): boolean {
+    return this.presentOnJoin;
+  }
+
   /** Raise or lower my hand. Only the hand: the microphone stays as it is. */
   raiseHand = (up: boolean) => this.actPost(up ? 'hands/raise' : 'hands/lower');
   /** A host or co-host lowering somebody's hand. */
@@ -1063,6 +1083,8 @@ export class MeetSession {
   }
 
   async leave(): Promise<void> {
+    // A rejoin from here is not the Present press that got us in (D08).
+    this.presentOnJoin = false;
     this.farewell = 'You left the meeting.';
     this.teardown();
     this.phase = 'left';

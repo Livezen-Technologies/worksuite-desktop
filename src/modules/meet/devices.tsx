@@ -1,3 +1,5 @@
+import { Checkbox } from '../../components/Checkbox';
+import { checkSummary, deviceCheck } from './precheck';
 import { useEffect, useRef, useState } from 'react';
 import { createLocalAudioTrack, createLocalVideoTrack, Room, type LocalAudioTrack, type LocalVideoTrack } from 'livekit-client';
 import { call } from '../../core/bridge';
@@ -42,7 +44,36 @@ export function readPrefs(): DevicePrefs {
   }
 }
 
+/**
+ * Whether the devices chosen here are kept for next time (WS-MEET-ENH-01 D08).
+ *
+ * On by default, because it always behaved that way and nobody wants to pick
+ * their headset every morning. Turned off, what is already remembered is
+ * forgotten at once — leaving yesterday's choice behind while promising not to
+ * remember would be the worst of both.
+ */
+const REMEMBER_KEY = 'ws.meet.devices.remember';
+
+export function remembering(): boolean {
+  try {
+    return localStorage.getItem(REMEMBER_KEY) !== '0';
+  } catch {
+    return true;
+  }
+}
+
+export function setRemembering(on: boolean): void {
+  try {
+    localStorage.setItem(REMEMBER_KEY, on ? '1' : '0');
+    if (!on) localStorage.removeItem(KEY);
+  } catch {
+    /* only a convenience */
+  }
+}
+
 export function savePrefs(p: DevicePrefs): void {
+  if (!remembering()) return;
+
   try {
     localStorage.setItem(KEY, JSON.stringify(p));
   } catch {
@@ -84,6 +115,7 @@ export function useMeetDevices(active: boolean, opts: { camAllowed?: boolean; st
   const [devices, setDevices] = useState<Devices>({ audioinput: [], videoinput: [], audiooutput: [] });
   const [video, setVideo] = useState<LocalVideoTrack | null>(null);
   const [level, setLevel] = useState(0);
+  const [audioSettings, setAudioSettings] = useState<{ noiseSuppression?: boolean; echoCancellation?: boolean } | null>(null);
   const [trouble, setTrouble] = useState<DeviceTrouble | null>(null);
   const [attempt, setAttempt] = useState(0);
   const update = (patch: Partial<DevicePrefs>) =>
@@ -151,6 +183,15 @@ export function useMeetDevices(active: boolean, opts: { camAllowed?: boolean; st
         if (gone) return t.stop();
         track = t;
         setTrouble((x) => (x?.what === 'microphone' ? null : x));
+        // What the device actually gave us, not what was asked for: the point
+        // of a check is to find out before everybody is listening (D08).
+        try {
+          const got = t.mediaStreamTrack.getSettings();
+
+          setAudioSettings({ noiseSuppression: got.noiseSuppression, echoCancellation: got.echoCancellation });
+        } catch {
+          setAudioSettings(null);
+        }
         ctx = new AudioContext();
         const an = ctx.createAnalyser();
         an.fftSize = 256;
@@ -176,7 +217,7 @@ export function useMeetDevices(active: boolean, opts: { camAllowed?: boolean; st
     };
   }, [active, prefs.mic, micId, attempt]);
 
-  return { prefs: { ...prefs, camId, micId, speakerId }, update, devices, video, level, trouble, retry: () => (setTrouble(null), setAttempt((n) => n + 1)) };
+  return { prefs: { ...prefs, camId, micId, speakerId }, update, devices, video, level, trouble, audioSettings, retry: () => (setTrouble(null), setAttempt((n) => n + 1)) };
 }
 
 export type MeetDevices = ReturnType<typeof useMeetDevices>;
@@ -300,5 +341,82 @@ export function DeviceSettings({ d }: { d: MeetDevices }) {
         </div>
       ) : null}
     </section>
+  );
+}
+
+/**
+ * The device check on the pre-join screen (WS-MEET-ENH-01 D08): what the
+ * camera is actually sending, what the microphone was actually opened with,
+ * and whether a share of this screen could be controlled.
+ *
+ * The design's network row is absent, and `precheck.ts` says why: it draws a
+ * measurement of the path to the media server, and nothing here measures that.
+ */
+export function DeviceCheck({ d }: { d: MeetDevices }) {
+  const t = useMeetT();
+  const [keep, setKeep] = useState(remembering);
+  /*
+   * Asked for directly rather than through react-query: the pre-join is also
+   * drawn in a guest window, which has no query client, and a device check
+   * must not be the reason a screen needs a provider it otherwise does without.
+   */
+  const [remote, setRemote] = useState<{ available?: boolean; accessibility?: string | null } | null>(null);
+
+  useEffect(() => {
+    let gone = false;
+
+    void call('rc:state')
+      .then((r) => {
+        if (!gone) setRemote({ available: r.support?.available, accessibility: r.support?.accessibility ?? null });
+      })
+      // No answer is "checking", not "denied": the row says so.
+      .catch(() => undefined);
+
+    return () => {
+      gone = true;
+    };
+  }, []);
+  const camera = (() => {
+    try {
+      return d.video?.mediaStreamTrack.getSettings() ?? null;
+    } catch {
+      return null;
+    }
+  })();
+  const rows = deviceCheck({
+    cameraOn: d.prefs.cam,
+    camera,
+    micOn: d.prefs.mic,
+    audio: d.prefs.mic ? d.audioSettings : null,
+    remote,
+  });
+  const summary = checkSummary(rows);
+
+  return (
+    <div className="rounded-[10px] border border-line bg-surface px-3 py-2.5">
+      <div className="mb-1.5 flex items-center gap-2">
+        <b className="text-[12.5px] text-ink">{t('lobby.check')}</b>
+        <span
+          className={cx(
+            'rounded-[5px] px-1.5 py-px text-[11px] font-semibold',
+            summary === 'ok' ? 'bg-success-bg text-success' : summary === 'warn' ? 'bg-warning-bg text-warning' : 'bg-subtle text-ink-3',
+          )}
+        >
+          {summary === 'ok' ? t('lobby.checkReady') : summary === 'warn' ? t('lobby.checkAttention') : t('lobby.checkChecking')}
+        </span>
+      </div>
+      <dl className="m-0 flex flex-col gap-1">
+        {rows.map((r) => (
+          <div key={r.id} className="flex items-baseline gap-2 text-[12px]">
+            <dt className="w-[108px] shrink-0 text-ink-3">{r.label}</dt>
+            <dd className={cx('m-0 min-w-0 flex-1', r.state === 'warn' ? 'font-semibold text-warning' : 'text-ink-2')}>{r.value}</dd>
+          </div>
+        ))}
+      </dl>
+      <label className="mt-2 flex items-center gap-2 border-t border-line pt-2 text-[12px] text-ink-2">
+        <Checkbox checked={keep} onChange={(e) => (setRemembering(e.target.checked), setKeep(e.target.checked))} />
+        {t('lobby.remember')}
+      </label>
+    </div>
   );
 }
