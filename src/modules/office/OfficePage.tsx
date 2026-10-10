@@ -2,7 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState } from 'react';
 import { OFFICE_KIND_LABELS, officeDocRoute, officeExportToken, officeKind, officeRoute, parseOfficeDocRoute, parseOfficeRoute, type OfficeDocSource, type ExternalApp, type OfficeCollaborator, type OfficeLocalCopy, type OfficeMode } from '@shared/office';
 import { app, organizationName } from '../../core/app-state';
-import { call, errorMessage, on } from '../../core/bridge';
+import { call, errorMessage, isMac, on } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTabTitle } from '../../core/tab-context';
 import { activate, closeTab, detachTab, navigate, recordKey, setCloseGuard, setRoute, tabsStore, takeCloseReason } from '../../core/tabs';
@@ -25,6 +25,11 @@ import { driveCopy, linkedLocal, writeBack, writeBackLater } from './copies';
 import { useOfficeRouting } from '../files/office';
 import { ConflictDialog, LocalCopyRow, externalApps, openInApp, useLocalCopies } from './local';
 import { OfficeSession, type OfficeState } from './session';
+import { apiUrl } from '../../core/api';
+import { presentShortcut } from './slides/keys';
+import { present } from './slides/present';
+import { fetchBytes } from './slides/render';
+import { SlidesViewer } from './slides/SlidesViewer';
 
 /**
  * An Office document in a WorkSuite tab (OO-DSK-001/002): the header — the
@@ -167,6 +172,10 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
   const [shareAsked, setShareAsked] = useState(0);
   const [apps, setApps] = useState<ExternalApp[]>([]);
   const [orgId] = useState(() => app.get().organizationId);
+  // A presentation's Present (#321): from the header, the keys in the editor, or ⌘⏎ / F5 here.
+  const presentRef = useRef<(() => void) | null>(null);
+  const [presentAsked, setPresentAsked] = useState(0);
+  const [slidesHere, setSlidesHere] = useState(false);
   const [session] = useState(
     () =>
       new OfficeSession(fileId, requested, {
@@ -175,6 +184,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
         notice: (kind, text, action) => toast(kind, text, action),
         isOffline: () => app.get().status?.network === 'OFFLINE',
         focus: () => activate(tabId),
+        present: () => setPresentAsked((n) => n + 1),
       }),
   );
   const s = useStore(session.store, (x) => x);
@@ -224,7 +234,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
   const p = boot?.permissions;
   const line = saveLine(s);
   const others = s.collaborators.filter((c) => String(c.user.id) !== String(me));
-  const editorShown = active && !covered && !dialog && !conflict && !menu && !modeMenu && !s.convertAsk && !s.closing && s.phase === 'open' && !s.editorProblem;
+  const editorShown = active && !slidesHere && !covered && !dialog && !conflict && !menu && !modeMenu && !s.convertAsk && !s.closing && s.phase === 'open' && !s.editorProblem;
   // Only a tab in this window's strip can move to a window of its own; a window already is one.
   const inStrip = useStore(tabsStore, (x) => x.tabs.some((t) => t.id === tabId));
 
@@ -313,6 +323,39 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
       toast('error', errorMessage(e));
     }
   };
+  const isSlides = officeKind(name) === 'slides';
+  const canPresent = isSlides && !!boot && (p ? p.download : false);
+  /**
+   * The slideshow shows the file as the Drive has it — the last save. The Document Server keeps changes until it
+   * saves them back, so changes made a moment ago may not be in it yet; the editor reports no slide number, so the
+   * show starts at the first slide.
+   */
+  const presentDeck = async () => {
+    if (!canPresent) return;
+    if (s.mode !== 'VIEW' && (s.dirty || s.changed)) toast('info', 'Presenting the last saved version. Your latest changes appear once the document is saved.');
+    try {
+      const bytes = await fetchBytes(apiUrl(`/api/files/${fileId}/download`));
+      await present({ name, bytes, start: 0 });
+    } catch (e) {
+      toast('error', `The slideshow could not start: ${errorMessage(e)}`);
+    }
+  };
+  useEffect(() => {
+    presentRef.current = () => void presentDeck();
+  });
+  useEffect(() => {
+    if (presentAsked) presentRef.current?.();
+  }, [presentAsked]);
+  useEffect(() => {
+    if (!active || !canPresent) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || !presentShortcut(e, isMac)) return;
+      e.preventDefault();
+      presentRef.current?.();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [active, canPresent]);
   const openIn = (a: ExternalApp) => void openInApp({ id: fileId, name, folderId: null, version: boot?.file.version ?? 0 }, a.id);
 
   const menuItems: MenuItem[] = [];
@@ -375,6 +418,11 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
         ) : s.mode ? (
           <span className="rounded-[8px] border border-line px-2.5 py-1 text-[12.5px] font-semibold text-ink-2">{MODE_LABELS[s.mode]}</span>
         ) : null}
+        {canPresent && (s.phase === 'open' || slidesHere) ? (
+          <Button size="sm" icon="play" aria-label="Present" title={`Present (${isMac ? '⌘⏎' : 'Ctrl+Enter'} or F5)`} className="shrink-0" onClick={() => void presentDeck()}>
+            <span className="max-lg:hidden">Present</span>
+          </Button>
+        ) : null}
         {p?.share ? (
           <Button size="sm" variant="primary" icon="users" aria-label="Share" title="Share" className="shrink-0" onClick={() => showDialog('share')}>
             <span className="max-lg:hidden">Share</span>
@@ -404,6 +452,12 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
       {s.phase === 'open' ? <Banners s={s} session={session} copies={copies} onConflict={setConflict} /> : null}
 
       <div className="relative flex min-h-0 flex-1">
+        {slidesHere ? (
+          // The editor could not load: the slides, drawn here from the saved file (#321).
+          <div className="absolute inset-0 z-[5] flex bg-surface">
+            <SlidesViewer name={name} active={active} load={(signal) => fetchBytes(apiUrl(`/api/files/${fileId}/download`), signal)} onDownload={p?.download ? download : undefined} onOpenInOffice={() => (setSlidesHere(false), session.reloadEditor())} />
+          </div>
+        ) : null}
         {s.phase === 'opening' ? <Spinner label="Opening the document…" /> : null}
         {s.phase === 'offline' ? <OfflinePanel fileId={fileId} onRetry={() => void session.open()} /> : null}
         {s.phase === 'refused' || s.phase === 'ended' ? (
@@ -418,6 +472,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
             onVersions={() => setPanel('versions')}
             onBrowser={() => void call('app:openInBrowser', { path: `/files?file=${fileId}` }).catch((e) => toast('error', errorMessage(e)))}
             onClose={() => closeTab(tabId)}
+            onSlides={isSlides && (!p || p.download) ? () => setSlidesHere(true) : undefined}
           />
         ) : null}
         {s.phase === 'open' ? (
@@ -428,6 +483,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
                   <Icon name="alert" size={28} className="text-warning" />
                   <p className="text-[13.5px] font-semibold text-ink">{s.editorProblem}</p>
                   <Button variant="primary" icon="refresh" onClick={() => session.reloadEditor()}>Reload the editor</Button>
+                  {isSlides && p?.download ? <Button icon="eye" onClick={() => setSlidesHere(true)}>Show the slides here</Button> : null}
                 </div>
               </div>
             ) : null}
@@ -590,6 +646,8 @@ function RefusalPanel(props: {
   onVersions: () => void;
   onBrowser: () => void;
   onClose: () => void;
+  /** A presentation that cannot open in the editor: its slides, drawn here (#321). */
+  onSlides?: () => void;
 }) {
   const r = props.refusal;
   const actions = new Set(r?.actions ?? []);
@@ -607,6 +665,7 @@ function RefusalPanel(props: {
           {actions.has('open_external') ? props.onApps.map((a) => <Button key={a.id} icon="laptop" onClick={() => props.onOpenIn(a)}>Open in {a.label}</Button>) : null}
           {actions.has('restore_previous_version') ? <Button icon="history" onClick={props.onVersions}>Version history</Button> : null}
           {actions.has('preview') ? <Button icon="globe" onClick={props.onBrowser}>Open in the browser</Button> : null}
+          {props.onSlides && (actions.has('download') || actions.has('preview') || props.ended) ? <Button icon="eye" onClick={props.onSlides}>Show the slides</Button> : null}
           <Button onClick={props.onClose}>Close</Button>
         </div>
       </div>

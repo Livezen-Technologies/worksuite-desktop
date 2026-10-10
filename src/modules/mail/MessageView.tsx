@@ -1,13 +1,14 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { canOpen } from '../../core/access';
-import { apiGet, apiGetMeta, apiPost, withMailbox } from '../../core/api';
+import { apiGet, apiGetMeta, apiPost, apiUrl, withMailbox } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage, on } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { isOfficeFile, openInOffice } from '../../core/open-document';
 import { officeOpenKind } from '@shared/office-open';
 import { OpenWithButton, openOfficeDoc, type OfficeDoc } from '../office/open-with';
+import { isSlidesFile, openSlidesViewer } from '../office/slides/overlay';
 import { useStore } from '../../core/store';
 import { attachmentRisk } from '@shared/attachments';
 import { ticketRoute } from '@shared/support';
@@ -1273,6 +1274,13 @@ function Attachments({ m, msgRef, offline, gate, pending }: { m: MessageDetail; 
                       .catch((e) => toast('error', errorMessage(e)))
                   : !local && isPdf(a)
                     ? openPdf({ kind: 'mail', uid: String(uid), ref: a.ref, folder, mailbox: mailbox ?? null, name: a.name }, a.name)
+                    : !local && isSlidesFile(a.name)
+                      ? openSlidesViewer({
+                          name: a.name,
+                          url: apiUrl(`/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, dl: '1', ...(mailbox ? { mailbox } : {}) })}`),
+                          onDownload: () => void download(a, false),
+                          onOpenInOffice: () => void openOfficeDoc(officeDoc(a), 'worksuite-office'),
+                        })
                     : !local && officeOpenKind(a.name)
                       ? // Where Settings › Files says (#322): a WorkSuite DOC / Sheet / Slides tab, WorkSuite Office, or the app here.
                         void openOfficeDoc(officeDoc(a))

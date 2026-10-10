@@ -1,12 +1,15 @@
 import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { apiGet } from '../../core/api';
+import { apiGet, apiUrl } from '../../core/api';
 import { bytes, duration } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Button, Spinner, cx } from '../../components/ui';
 import { IMAGE_EDIT_EXTS, TEXT_EXTS, can, extOf, kindOf, mediaUrl, opened, tagOf, type DriveFile, type Preview as PreviewInfo } from './api';
 import { useDrive } from './ctx';
 import { FileIcon } from './Thumb';
+import { isSlidesFile } from '../office/slides/overlay';
+import { fetchBytes } from '../office/slides/render';
+import { SlidesViewer } from '../office/slides/SlidesViewer';
 
 /**
  * The viewer (DriveMedia): the file as big as it goes — a picture, a video,
@@ -18,6 +21,8 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
   const [i, setI] = useState(start);
   const [zoom, setZoom] = useState<'fit' | 'full'>('fit');
   const f = files[i]!;
+  // A presentation: the slide viewer (#321) — its own ← → change slides; ‹ › above still go through the files.
+  const slides = isSlidesFile(f.name);
   const info = useQuery({ queryKey: ['files', 'preview', f.id], queryFn: ({ signal }) => apiGet<PreviewInfo>(`/api/drive/preview/${f.id}`, undefined, signal) });
   const p = info.data;
   // A file stored without a media type (as the app's uploads were before 0.2.7)
@@ -45,15 +50,15 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
     const onKey = (e: KeyboardEvent) => {
       if ((e.target as HTMLElement | null)?.tagName === 'TEXTAREA') return;
       if (e.key === 'Escape') onClose();
-      else if (e.key === 'ArrowRight' && i < files.length - 1) setI(i + 1);
-      else if (e.key === 'ArrowLeft' && i > 0) setI(i - 1);
+      else if (!slides && e.key === 'ArrowRight' && i < files.length - 1) setI(i + 1);
+      else if (!slides && e.key === 'ArrowLeft' && i > 0) setI(i - 1);
       else return;
       e.preventDefault();
       e.stopPropagation();
     };
     window.addEventListener('keydown', onKey, true);
     return () => window.removeEventListener('keydown', onKey, true);
-  }, [i, files.length, onClose]);
+  }, [i, files.length, onClose, slides]);
 
   const facts: Array<[string, string]> = [
     ['Type', `${(f.extension ?? '').toUpperCase() || 'File'}${p?.kind ? ` · ${p.kind}` : ''}`],
@@ -91,7 +96,18 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
       </div>
       <div className="flex min-h-0 flex-1">
         <div className="flex min-w-0 flex-1 flex-col">
-          <div className={cx('relative flex min-h-0 flex-1 items-center justify-center p-6', zoom === 'full' && 'overflow-auto')}>
+          {slides && p?.status !== 'blocked' ? (
+            <div className="flex min-h-0 flex-1 bg-surface text-ink">
+              <SlidesViewer
+                key={f.id}
+                name={f.name}
+                load={(signal) => fetchBytes(apiUrl(`/api/files/${f.id}/download`), signal)}
+                onDownload={can(f.access, 'download') ? () => d.download([f]) : undefined}
+                onOpenInOffice={() => (onClose(), d.office(f, 'VIEW'))}
+              />
+            </div>
+          ) : null}
+          <div className={cx('relative flex min-h-0 flex-1 items-center justify-center p-6', zoom === 'full' && 'overflow-auto', slides && p?.status !== 'blocked' && 'hidden')}>
             {info.isLoading ? <Spinner /> : null}
             {p && p.status !== 'ready' ? (
               <Unavailable f={f} why={p.status === 'blocked' ? 'This file was held back by the virus check.' : 'This file can’t be shown here.'} />
@@ -135,7 +151,7 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
             </div>
           ) : null}
         </div>
-        <aside aria-label="Details" className="flex w-[300px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-[#1E2C57] bg-[#0F1B3D] p-4 text-[12.5px]">
+        <aside aria-label="Details" className={cx(slides && 'hidden', 'flex w-[300px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-[#1E2C57] bg-[#0F1B3D] p-4 text-[12.5px]')}>
           <h2 className="text-[13px] font-bold">Details</h2>
           {facts.map(([k, v]) => (
             <div key={k} className="flex gap-2.5">

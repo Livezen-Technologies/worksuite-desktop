@@ -5,6 +5,7 @@ import { DesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import { setNavigationRule } from '../security/hardening';
 import { OFFICE_HOST, OFFICE_PAGE, OFFICE_SCHEME, menuKeepsShortcut, officeHostCsp, officeNavigationAllowed, officePartition, officeRequestAllowed, type OfficeOrigins } from '../security/office-policy';
+import { isSlidesConfig, presentKey } from './slideshow';
 import { OFFICE_BACKGROUND, OFFICE_HOST_HTML, OFFICE_HOST_JS } from './office-host-page';
 
 const log = logger('office');
@@ -233,8 +234,17 @@ export class OfficeEditorHost {
     const wc = view.webContents;
     setNavigationRule(wc, (url, mainFrame) => officeNavigationAllowed(url, mainFrame, l.origins));
     // The app menu's shortcuts belong to the editor while it has the keyboard, except closing and opening tabs.
-    wc.on('before-input-event', (_e, input) => {
-      if (input.type === 'keyDown') wc.setIgnoreMenuShortcuts(!menuKeepsShortcut(input, this.deps.platform));
+    // A presentation's Present keys (⌘⏎ / F5, ⇧ for the current slide) start WorkSuite's slideshow (#321).
+    const slides = isSlidesConfig(spec.config);
+    wc.on('before-input-event', (e, input) => {
+      if (input.type !== 'keyDown') return;
+      const present = slides ? presentKey(input, this.deps.platform) : null;
+      if (present) {
+        e.preventDefault();
+        this.tell(l, 'present', present);
+        return;
+      }
+      wc.setIgnoreMenuShortcuts(!menuKeepsShortcut(input, this.deps.platform));
     });
     wc.on('render-process-gone', (_e, details) => {
       log.error('office editor gone', { reason: details.reason });

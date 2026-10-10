@@ -1,8 +1,10 @@
 import { app } from '../../core/app-state';
 import { apiUrl } from '../../core/api';
+import { call } from '../../core/bridge';
 import { isOfficeFile, mediaToken, openDocument, openInOffice } from '../../core/open-document';
 import { officeOpenKind } from '@shared/office-open';
 import { openOfficeDoc, type OfficeDoc } from '../office/open-with';
+import { isSlidesFile, openSlidesViewer } from '../office/slides/overlay';
 
 /** Chat shapes, as `/api/chat/rooms` and `/api/chat/messages` return them. Stamps are UTC without a zone. */
 export interface Room {
@@ -141,9 +143,12 @@ export function mediaUrl(u: string | null | undefined): string | null {
 export function openAttachment(f: Pick<ChatFile, 'download_url' | 'filename'>, link: (url: string) => void): void {
   const token = mediaToken(f.download_url);
   const doc = chatOfficeDoc(f);
-  // A Word, Excel or PowerPoint file opens where Settings › Files says (#322): a WorkSuite DOC / Sheet / Slides tab
-  // by default, WorkSuite Office, or the app on this computer.
-  if (doc && officeOpenKind(f.filename)) void openOfficeDoc(doc);
+  // A presentation opens in the slide viewer (#321), whose Open in WorkSuite Office goes the #322 way; any other Word,
+  // Excel or PowerPoint file opens where Settings › Files says (#322): a WorkSuite DOC / Sheet / Slides tab by
+  // default, WorkSuite Office, or the app on this computer.
+  if (doc && token && isSlidesFile(f.filename)) {
+    openSlidesViewer({ name: f.filename, url: apiUrl(`/media/${token}`), onDownload: () => void call('transfers:download', { chatMedia: token, name: f.filename, open: false }).catch(() => undefined), onOpenInOffice: () => void openOfficeDoc(doc, 'worksuite-office') });
+  } else if (doc && officeOpenKind(f.filename)) void openOfficeDoc(doc);
   else if (token) void openDocument({ chatMedia: token }, f.filename);
   else if (f.download_url) link(f.download_url);
 }

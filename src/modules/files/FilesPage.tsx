@@ -17,6 +17,7 @@ import { Home } from './Home';
 import { lockPassword } from './locks';
 import type { MenuItem } from './Menu';
 import { Preview } from './Preview';
+import { isSlidesFile } from '../office/slides/overlay';
 import { openPdf } from '../pdf/open';
 import { Rail, type Place } from './Rail';
 import { CodeEditor } from './CodeEditor';
@@ -272,6 +273,11 @@ export default function FilesPage(_props: ModuleProps) {
         const oa = cachedOfficeActions(f.id);
         if (oa ? !oa.actions.open_in_external_app : !can(f.access, 'download')) return d.office(f);
         return void openOfficeDoc(driveOfficeDoc(f, d)).then((done) => done || d.office(f));
+      }
+      // A presentation set to "Preview" opens in the slide viewer (#321), with the presentations around it for ‹ ›.
+      if (office === 'preview' && isSlidesFile(f.name)) {
+        const all = (list ?? [f]).filter((x) => isSlidesFile(x.name));
+        return setPreview({ files: all.length ? all : [f], index: Math.max(0, all.findIndex((x) => x.id === f.id)) });
       }
       // A preview-only file opens read-only in the installed app; the browser only when it cannot be downloaded.
       if (office === 'preview') return can(f.access, 'download') ? d.download([f], true) : d.inBrowser(f);

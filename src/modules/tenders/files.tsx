@@ -1,6 +1,8 @@
 import { isOfficeFile, openInOffice } from '../../core/open-document';
 import { officeOpenKind } from '@shared/office-open';
 import { openOfficeDoc, type OfficeDoc } from '../office/open-with';
+import { apiUrl } from '../../core/api';
+import { isSlidesFile, openSlidesViewer } from '../office/slides/overlay';
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { UploadTarget } from '@shared/ipc/contract';
 import type { Transfer } from '@shared/types';
@@ -204,7 +206,11 @@ export function tenderFilePath(source: Source): string {
  * Downloads a tender's file through the transfer manager, and opens it when asked: a Word, Excel or PowerPoint
  * file in a WorkSuite DOC / Sheet / Slides tab, anything else as the download manager opens it (PDFs in PDF Studio).
  */
-export async function saveTenderFile(source: Source, name: string, open = false) {
+export async function saveTenderFile(source: Source, name: string, open = false, how: 'view' | 'office' = 'view') {
+  // A presentation opens in the slide viewer (#321) — Present and Open in WorkSuite Office (#322) from there.
+  if (open && how === 'view' && isSlidesFile(name)) {
+    return openSlidesViewer({ name, url: apiUrl(tenderFilePath(source)), onDownload: () => void saveTenderFile(source, name), onOpenInOffice: () => void openOfficeDoc(tenderOfficeDoc(source, name), 'worksuite-office') });
+  }
   // Word, Excel and PowerPoint files where Settings › Files says (#322): a WorkSuite tab by default.
   if (open && officeOpenKind(name)) return void openOfficeDoc(tenderOfficeDoc(source, name));
   return downloadTenderFile(source, name, open);

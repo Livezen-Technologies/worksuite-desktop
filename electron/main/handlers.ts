@@ -1,6 +1,7 @@
 import { verifyLockChange } from '../services/lock-verification';
 import { app, BrowserWindow, clipboard, dialog, nativeImage, screen, shell, systemPreferences, type WebContents } from 'electron';
 import { wallDisplays } from '../services/live-desk';
+import { planShow } from '../services/slideshow';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { writeAtomically } from '../services/pdf/host';
@@ -1035,6 +1036,16 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('support:displays', () => ({ displays: wallDisplays(screen.getAllDisplays(), ctx.windows.mainDisplayId()), open: ctx.windows.supportWallOpen() }));
   router.handle('support:wall', (input) => void ctx.windows.showSupportWall(input.displayId));
   router.handle('support:wallClose', () => void ctx.windows.closeSupportWall());
+  // A presentation's slideshow (#321): the slides on another screen when there is one, the presenter view on this one.
+  router.handle('slides:present', (input, c) => {
+    const from = winOf(c.sender);
+    const here = from && !from.isDestroyed() ? screen.getDisplayMatching(from.getBounds()).id : null;
+    const plan = planShow(screen.getAllDisplays(), here, screen.getPrimaryDisplay().id, input.presenter !== false);
+    if (!plan) throw new DesktopError('UNSUPPORTED', 'There is no screen to present on.');
+    ctx.windows.showSlideshow(input.id, plan);
+    return { presenter: plan.presenter !== null };
+  });
+  router.handle('slides:close', () => void ctx.windows.closeSlideshow());
   // Contact Support (D-11): the asking window's own pixels, and the last day's log (redacted as it was written).
   router.handle('help:capture', async (_i, c) => {
     const w = winOf(c.sender);

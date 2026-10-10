@@ -74,6 +74,8 @@ export interface OfficeSessionHooks {
   isOffline(): boolean;
   /** The document was asked for again from another window: bring this tab forward (OO-DSK-004). */
   focus?(): void;
+  /** A presentation's Present keys were pressed in the editor (#321). */
+  present?(fromCurrent: boolean): void;
 }
 
 export type OfficeApi = Pick<typeof officeApi, 'openSession' | 'renewSession' | 'switchMode' | 'heartbeat' | 'endSession' | 'forceSave' | 'retrySave' | 'mentionable' | 'mention' | 'renameFile' | 'refreshTitle' | 'takeLock' | 'releaseLock'>;
@@ -473,6 +475,9 @@ export class OfficeSession {
         return;
       case 'focus':
         this.hooks.focus?.();
+        return;
+      case 'present':
+        this.hooks.present?.(!!(ev.data && typeof ev.data === 'object' && (ev.data as { fromCurrent?: unknown }).fromCurrent === true));
         return;
       case 'hostReady':
         return;

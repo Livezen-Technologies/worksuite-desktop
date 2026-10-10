@@ -171,6 +171,17 @@ describe('opening a document (web-api §1)', () => {
   });
 });
 
+describe('Present keys in a presentation’s editor (#321)', () => {
+  it('reach the tab as a request to present', () => {
+    const { s } = make();
+    const present = vi.fn();
+    (s as unknown as { hooks: { present?: (fromCurrent: boolean) => void } }).hooks.present = present;
+    s.onViewEvent({ viewId: 'v', type: 'present', data: { fromCurrent: true } });
+    s.onViewEvent({ viewId: 'v', type: 'present', data: null });
+    expect(present.mock.calls).toEqual([[true], [false]]);
+  });
+});
+
 describe('heartbeats, renewal and reloads (web-api §1, §12)', () => {
   it('reports the time to ready on the first heartbeat after the editor is ready', async () => {
     const { s, api } = make();
@@ -685,6 +696,32 @@ describe('the Office tab', () => {
     expect(await screen.findByText("You're offline")).toBeTruthy();
     expect(screen.getByText(/not on this computer/)).toBeTruthy();
     expect(apiPost).not.toHaveBeenCalled();
+  });
+
+  it('a presentation has Present (#321): the saved deck goes to a full-screen slideshow', async () => {
+    const deckBytes = new Uint8Array([80, 75, 3, 4]);
+    const fetchMock = vi.fn(async () => new Response(deckBytes, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.mocked(apiPost).mockImplementation(async (path: string) => (path.endsWith('/office/session') ? boot({ document_type: 'slide', config: { document: { key: 'f42v7-a' }, documentType: 'slide', token: 'eyJ' }, file: { id: 42, name: 'Q3 review.pptx', extension: 'pptx', type: 'PRESENTATION', version: 7, size: 1000 } }) : beat()));
+    vi.mocked(call).mockImplementation((async (ch: string) => (ch === 'office:open' ? { viewId: '5f9c3a2e-5b1f-4c7e-9a41-2f1d7c9b8e10' } : ch === 'slides:present' ? { presenter: false } : ch === 'office:localCopies' || ch === 'office:externalApps' ? [] : null)) as never);
+    mount('/office/42?name=Q3%20review.pptx');
+    const presentButton = await screen.findByRole('button', { name: 'Present' });
+    fireEvent.click(presentButton);
+    await waitFor(() => expect(vi.mocked(call).mock.calls.some(([ch]) => ch === 'slides:present')).toBe(true));
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('/api/files/42/download');
+    const input = vi.mocked(call).mock.calls.find(([ch]) => ch === 'slides:present')![1] as { id: string; presenter: boolean };
+    expect(input.presenter).toBe(true);
+    expect(input.id).toMatch(/^[A-Za-z0-9-]{8,64}$/);
+    vi.unstubAllGlobals();
+  });
+
+  it('a document has no Present', async () => {
+    vi.mocked(apiPost).mockImplementation(async (path: string) => (path.endsWith('/office/session') ? boot() : beat()));
+    vi.mocked(call).mockImplementation((async (ch: string) => (ch === 'office:open' ? { viewId: '5f9c3a2e-5b1f-4c7e-9a41-2f1d7c9b8e10' } : ch === 'office:localCopies' || ch === 'office:externalApps' ? [] : null)) as never);
+    mount('/office/42?name=Proposal.docx');
+    expect(await screen.findByRole('heading', { name: 'Proposal.docx' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved/));
+    expect(screen.queryByRole('button', { name: 'Present' })).toBeNull();
   });
 
   it('a Document Server outage never stops Drive: the server’s sentence and what it offers (OO-ERR-001)', async () => {

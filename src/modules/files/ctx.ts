@@ -144,7 +144,8 @@ export function folderMenu(f: DriveFolder, d: Drive): MenuItem[] {
   return tidy(out);
 }
 
-const PREVIEWABLE = (e: string) => PREVIEW_EXTS.includes(e);
+// A presentation previews in the slide viewer (#321).
+const PREVIEWABLE = (e: string) => PREVIEW_EXTS.includes(e) || e === 'pptx';
 
 /** No separator first, last, or twice in a row. */
 function tidy(list: Array<MenuItem | null>): MenuItem[] {

@@ -10,6 +10,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
 import { chatOfficeDoc, mediaUrl, openAttachment, type ChatFile } from './types';
+import { isSlidesFile, openSlidesViewer } from '../office/slides/overlay';
 
 /** An attachment as Chat, Web Chat and WhatsApp have it. A WhatsApp one is a Drive file (`driveFile`), downloaded by its id. */
 export type Attachment = Pick<ChatFile, 'filename' | 'mime' | 'size' | 'url' | 'download_url'> & Partial<Pick<ChatFile, 'id' | 'preview' | 'is_image' | 'poster_url'>> & { driveFile?: number };
@@ -62,8 +63,13 @@ export function openChatAttachment(f: Attachment, link: (url: string) => void, g
   const kind = previewKind(f);
   // A Drive file (a WhatsApp attachment) with no preview here: a Word, Excel or PowerPoint file in a WorkSuite tab, a
   // PDF in PDF Studio and the rest in its app on this computer.
-  // Word, Excel and PowerPoint files where Settings › Files says (#322).
   const doc = officeOpenKind(f.filename) && (f.driveFile || kind === 'office') ? chatOfficeDoc(f) : null;
+  if (doc && f.driveFile && isSlidesFile(f.filename)) {
+    // A presentation opens in the slide viewer (#321), with Present and Open in WorkSuite Office (#322).
+    openSlidesViewer({ name: f.filename, url: apiUrl(`/api/files/${f.driveFile}/download`), onDownload: () => download(f, link), onOpenInOffice: () => void openOfficeDoc(doc, 'worksuite-office') });
+    return;
+  }
+  // Word, Excel and PowerPoint files where Settings › Files says (#322).
   if (doc) {
     void openOfficeDoc(doc);
     return;

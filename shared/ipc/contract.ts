@@ -1325,6 +1325,8 @@ export const contract = {
   'support:displays': ch(none, { session: true }),
   'support:wall': ch(z.object({ displayId: z.number().int().nullable() }), { session: true, rate: 10 }),
   'support:wallClose': ch(none, { session: true }),
+  'slides:present': ch(z.object({ id: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), presenter: z.boolean().optional() }), { session: true, rate: 5 }),
+  'slides:close': ch(none, { session: true }),
   'help:capture': ch(none, { session: true, rate: 5 }),
   'help:logs': ch(none, { session: true, rate: 10 }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
@@ -1861,6 +1863,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'support:displays': { displays: WallDisplay[]; open: boolean };
   'support:wall': void;
   'support:wallClose': void;
+  'slides:present': { presenter: boolean };
+  'slides:close': void;
   'help:capture': { name: string; data: string; width: number; height: number };
   'help:logs': { text: string; lines: number; bytes: number };
   'offline:submit': SubmitResult;

@@ -561,6 +561,10 @@ const api = {
     wall: call('support:wall'),
     wallClose: call('support:wallClose'),
   },
+  slides: {
+    present: call('slides:present'),
+    close: call('slides:close'),
+  },
   help: {
     capture: call('help:capture'),
     logs: call('help:logs'),
