@@ -289,6 +289,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     };
     const dev = device?.current();
     if (dev) h['X-WS-Device'] = dev.id;
+    // The remembered computer (worksuite-desktop#301): the server marks it as this one in the account's devices.
+    Object.assign(h, auth.deviceHeader());
     return h;
   };
 

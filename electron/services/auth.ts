@@ -1,10 +1,11 @@
 import { createHash, randomBytes, timingSafeEqual } from 'node:crypto';
-import type { ServerApi, ServerInfo, UserSummary } from '@shared/types';
+import type { DeviceCodeStep, ServerApi, ServerInfo, UserSummary } from '@shared/types';
 import { DesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import { classifyNetworkError, errorFromResponse, type FetchLike } from './http';
 import type { SecureStore } from './secure-store';
+import { challengeIsNewDevice, deviceStepFrom, gateFrom, isDeviceToken, SignInGateError } from './sign-in-gate';
 
 const log = logger('auth');
 
@@ -47,11 +48,18 @@ export interface SignInPayload {
   tokens: Tokens;
   password_expired?: boolean;
   mfa_enrollment_required?: boolean;
+  /** A computer this sign-in verified (worksuite-desktop#301): sent back as X-Device-Token from now on. */
+  device_token?: string;
 }
 
-export type SignInOutcome = { kind: 'mfa' } | { kind: 'signed-in'; payload: SignInPayload };
+export type SignInOutcome =
+  | { kind: 'mfa'; newDevice: boolean }
+  | { kind: 'device-code'; step: DeviceCodeStep }
+  | { kind: 'signed-in'; payload: SignInPayload };
 
 const REFRESH_KEY = 'auth:refresh';
+/** Remembered-computer tokens, one per server and account (`auth:device:<hash>`), in OS secure storage. */
+const DEVICE_PREFIX = 'auth:device:';
 /** How long the app waits for the browser to come back from a passkey sign-in. */
 const PASSKEY_WINDOW_MS = 5 * 60_000;
 
@@ -171,7 +179,11 @@ export async function probeServer(origin: string, fetch: FetchLike): Promise<Omi
 
 export class AuthService {
   private access: { token: string; expiresAt: number } | null = null;
-  private challenge: { token: string; email: string; expiresAt: number } | null = null;
+  private challenge: { token: string; email: string; expiresAt: number; newDevice: boolean } | null = null;
+  /** A new computer's emailed-code step (worksuite-desktop#301): the server's challenge, and what the screen shows. */
+  private deviceChallenge: { token: string; email: string; step: DeviceCodeStep } | null = null;
+  /** A solved CAPTCHA, for the next password attempt only. */
+  private captcha: { token: string; email: string | null; expiresAt: number } | null = null;
   /** A passkey sign-in started in the browser: the PKCE verifier and state, kept only in memory. */
   private passkeyPending: { verifier: string; state: string; expiresAt: number } | null = null;
   private refreshing: Promise<'ok' | 'offline' | 'lost'> | null = null;
@@ -219,8 +231,8 @@ export class AuthService {
     return this.server.origin;
   }
 
-  private async post(path: string, body: unknown, bearer?: string): Promise<{ res: Response; json: Record<string, unknown> | null }> {
-    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json', ...this.clientHeaders() };
+  private async post(path: string, body: unknown, bearer?: string, extra: Record<string, string> = {}): Promise<{ res: Response; json: Record<string, unknown> | null }> {
+    const headers: Record<string, string> = { 'Content-Type': 'application/json', Accept: 'application/json', ...this.clientHeaders(), ...extra };
     if (bearer) headers.Authorization = `Bearer ${bearer}`;
     let res: Response;
     try {
@@ -237,18 +249,111 @@ export class AuthService {
     return { res, json: await jsonOrNull(res) };
   }
 
+  // ── remembered computers (worksuite-desktop#301) ─────────────────────
+
+  private deviceKey(email: string): string | null {
+    if (!this.server || !email.trim()) return null;
+    return DEVICE_PREFIX + createHash('sha256').update(`${this.server.origin}\n${email.trim().toLowerCase()}`).digest('hex').slice(0, 40);
+  }
+
+  /** This computer's token for that account on this server, once it has been verified there. */
+  private deviceTokenFor(email: string): string | null {
+    const key = this.deviceKey(email);
+    const token = key ? this.secrets.get(key) : null;
+    return isDeviceToken(token) ? token : null;
+  }
+
+  private keepDeviceToken(email: string, token: unknown, remember: boolean): void {
+    const key = this.deviceKey(email);
+    if (!key) return;
+    try {
+      if (remember && isDeviceToken(token)) this.secrets.set(key, token);
+      // Not remembered: the next sign-in here is verified again.
+      else if (!remember) this.secrets.delete(key);
+    } catch (e) {
+      log.warn('remembered-computer token not saved', { error: String((e as Error)?.message ?? e) });
+    }
+    if (remember) this.db.setConfig('device_email', email.trim().toLowerCase());
+  }
+
+  /**
+   * `X-Device-Token` for the account signed in on this computer, so the server can say which remembered device is
+   * this one (the account's Security page). Only ever sent to the configured server.
+   */
+  deviceHeader(): Record<string, string> {
+    const email = this.db.getConfig<string>('device_email');
+    const token = email ? this.deviceTokenFor(email) : null;
+    return token ? { 'X-Device-Token': token } : {};
+  }
+
+  /** Forget every remembered-computer token (a wipe): the next sign-in on each account is verified again. */
+  forgetDevices(): void {
+    try {
+      this.secrets.deletePrefix(DEVICE_PREFIX);
+    } catch (e) {
+      // A wipe goes on whatever the OS store says.
+      log.warn('remembered-computer tokens not removed', { error: String((e as Error)?.message ?? e) });
+    }
+    this.db.deleteConfig('device_email');
+  }
+
+  // ── sign-in ─────────────────────────────────────────────────────────────
+
+  /** A solved CAPTCHA's token, sent with the next password attempt (and only that one). */
+  setCaptchaToken(token: string, email: string | null): void {
+    this.captcha = { token, email: email ? email.trim().toLowerCase() : null, expiresAt: Date.now() + 2 * 60_000 };
+  }
+
+  hasCaptchaToken(): boolean {
+    return this.captcha !== null && this.captcha.expiresAt > Date.now();
+  }
+
+  private takeCaptcha(email: string): string | null {
+    const c = this.captcha;
+    this.captcha = null;
+    if (!c || c.expiresAt < Date.now()) return null;
+    return c.email === null || c.email === email.trim().toLowerCase() ? c.token : null;
+  }
+
+  /** A password post with this computer's remembered-device token, so a known computer is not asked to verify again. */
+  private withDevice(email: string, body: Record<string, string>): [Record<string, string>, undefined, Record<string, string>] {
+    const device = this.deviceTokenFor(email);
+    return device ? [{ ...body, device_token: device }, undefined, { 'X-Device-Token': device }] : [body, undefined, {}];
+  }
+
+  /**
+   * The password step. A wrong password throws INVALID_CREDENTIALS; a CAPTCHA, a wait or a block throws a
+   * `SignInGateError` the session shows instead; two-factor or a new computer's emailed code is the next step.
+   */
   async signIn(email: string, password: string): Promise<SignInOutcome> {
-    const { res, json } = await this.post('/api/auth/login', { email, password });
+    const device = this.deviceTokenFor(email);
+    const captcha = this.takeCaptcha(email);
+    const [body, , headers] = this.withDevice(email, captcha ? { email, password, captcha_token: captcha } : { email, password });
+    const { res, json } = await this.post('/api/auth/login', body, undefined, headers);
     if (!res.ok) {
+      const gate = gateFrom(res.status, json, email, res.headers.get('retry-after'));
+      if (gate) throw new SignInGateError(gate);
       if (res.status === 401) throw new DesktopError('INVALID_CREDENTIALS', 'That email and password don’t match.');
       throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
     }
     const data = (json?.data ?? {}) as Record<string, unknown>;
     if (data.mfa_required === true && typeof data.challenge === 'string') {
-      this.challenge = { token: data.challenge, email, expiresAt: Date.now() + 5 * 60_000 };
-      return { kind: 'mfa' };
+      const newDevice = challengeIsNewDevice(data.challenge);
+      this.challenge = { token: data.challenge, email, expiresAt: Date.now() + 5 * 60_000, newDevice };
+      this.deviceChallenge = null;
+      return { kind: 'mfa', newDevice };
     }
-    return { kind: 'signed-in', payload: this.accept(data) };
+    const step = deviceStepFrom(data);
+    if (step) {
+      this.deviceChallenge = { token: step.challenge, email, step: step.step };
+      this.challenge = null;
+      return { kind: 'device-code', step: step.step };
+    }
+    const payload = this.accept(data);
+    // Signed in on a computer the server already knows (or with the check off): it may have issued a token anyway.
+    if (payload.device_token) this.keepDeviceToken(email, payload.device_token, true);
+    else if (device) this.db.setConfig('device_email', email.trim().toLowerCase());
+    return { kind: 'signed-in', payload };
   }
 
   hasPendingChallenge(): boolean {
@@ -257,24 +362,117 @@ export class AuthService {
 
   cancelChallenge(): void {
     this.challenge = null;
+    this.deviceChallenge = null;
   }
 
-  async verifyMfa(code: string): Promise<SignInPayload> {
+  async verifyMfa(code: string, remember = true): Promise<SignInPayload> {
     if (!this.challenge || this.challenge.expiresAt < Date.now()) {
       this.challenge = null;
       throw new DesktopError('MFA_INVALID', 'That sign-in attempt expired. Start again.');
     }
-    const { res, json } = await this.post('/api/auth/mfa', { challenge: this.challenge.token, code });
+    const { email } = this.challenge;
+    const { res, json } = await this.post('/api/auth/mfa', ...this.withDevice(email, { challenge: this.challenge.token, code }));
     if (!res.ok) {
+      const gate = gateFrom(res.status, json, email, res.headers.get('retry-after'));
+      if (gate) {
+        this.challenge = null;
+        throw new SignInGateError(gate);
+      }
       const message = typeof json?.message === 'string' ? json.message : 'That code is not valid.';
       if (res.status === 401) {
         if (/expired/i.test(message)) this.challenge = null;
         throw new DesktopError('MFA_INVALID', message);
       }
+      // Too many codes for this challenge (MfaChallenge): this attempt is over.
+      if (res.status === 429) {
+        this.challenge = null;
+        throw new DesktopError('MFA_INVALID', message);
+      }
       throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
     }
     this.challenge = null;
-    return this.accept((json?.data ?? {}) as Record<string, unknown>);
+    const payload = this.accept((json?.data ?? {}) as Record<string, unknown>);
+    if (payload.device_token || !remember) this.keepDeviceToken(email, payload.device_token, remember);
+    return payload;
+  }
+
+  // ── a new computer's emailed code ──────────────────────────────────────
+
+  deviceStep(): DeviceCodeStep | null {
+    const d = this.deviceChallenge;
+    return d && d.step.expiresAt > Date.now() ? { ...d.step } : null;
+  }
+
+  hasDeviceChallenge(): boolean {
+    return this.deviceStep() !== null;
+  }
+
+  /**
+   * The emailed code. A wrong one throws MFA_INVALID with the tries left and keeps the step; an expired or spent
+   * code ends it (`hasDeviceChallenge()` is false afterwards: sign in again for a new one); a wait or a block throws
+   * a `SignInGateError`.
+   */
+  async verifyDevice(code: string, remember: boolean): Promise<SignInPayload> {
+    const d = this.deviceChallenge;
+    if (!d || d.step.expiresAt < Date.now()) {
+      this.deviceChallenge = null;
+      throw new DesktopError('MFA_INVALID', 'That code has expired. Sign in again to get a new one.');
+    }
+    const { res, json } = await this.post('/api/auth/device', { challenge: d.token, code });
+    if (!res.ok) {
+      const gate = gateFrom(res.status, json, d.email, res.headers.get('retry-after'));
+      if (gate) {
+        this.deviceChallenge = null;
+        throw new SignInGateError(gate);
+      }
+      const message = typeof json?.message === 'string' ? json.message : 'That code is not right.';
+      const errors = json?.errors && typeof json.errors === 'object' ? (json.errors as Record<string, unknown>) : {};
+      if (res.status === 401 && !/expired/i.test(message)) {
+        const left = Math.max(0, d.step.attemptsLeft - 1);
+        d.step = { ...d.step, attemptsLeft: left };
+        if (left === 0) this.deviceChallenge = null;
+        throw new DesktopError('MFA_INVALID', left > 0 ? `${message} ${left === 1 ? 'One try' : `${left} tries`} left.` : message);
+      }
+      if (res.status === 401 || errors.code === 'code_spent' || res.status === 429) {
+        this.deviceChallenge = null;
+        throw new DesktopError('MFA_INVALID', message);
+      }
+      throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
+    }
+    this.deviceChallenge = null;
+    const payload = this.accept((json?.data ?? {}) as Record<string, unknown>);
+    this.keepDeviceToken(d.email, payload.device_token, remember);
+    return payload;
+  }
+
+  /** Another code for the same step: at most one a minute and five an hour, which the server enforces and says. */
+  async resendDevice(): Promise<DeviceCodeStep> {
+    const d = this.deviceChallenge;
+    if (!d || d.step.expiresAt < Date.now()) {
+      this.deviceChallenge = null;
+      throw new DesktopError('MFA_INVALID', 'That sign-in attempt expired. Start again.');
+    }
+    const { res, json } = await this.post('/api/auth/device/resend', { challenge: d.token });
+    const message = typeof json?.message === 'string' ? json.message : null;
+    if (!res.ok) {
+      if (res.status === 401) {
+        this.deviceChallenge = null;
+        throw new DesktopError('MFA_INVALID', message ?? 'That sign-in attempt expired. Start again.');
+      }
+      if (res.status === 429) throw new DesktopError('RATE_LIMITED', message ?? 'Wait a moment before asking for another code.');
+      throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
+    }
+    const now = Date.now();
+    // A new code is good for ten minutes, and five more tries.
+    d.step = { ...d.step, sent: true, message, resendAt: now + 60_000, expiresAt: now + 10 * 60_000, attemptsLeft: 5 };
+    return { ...d.step };
+  }
+
+  /** "Email me an unblock link" on the blocked screen. The same answer whatever happened, as the server's. */
+  async requestUnblock(email: string): Promise<string> {
+    const { res, json } = await this.post('/api/auth/unblock/request', { email });
+    if (!res.ok && res.status !== 404) throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
+    return typeof json?.message === 'string' && res.ok ? json.message : 'If this account can be unblocked by email, a link is on its way.';
   }
 
   /**
@@ -435,7 +633,7 @@ export class AuthService {
    * replacing: it was only locked, not ended.
    */
   async verifyPassword(email: string, password: string): Promise<boolean> {
-    const { res, json } = await this.post('/api/auth/login', { email, password });
+    const { res, json } = await this.post('/api/auth/login', ...this.withDevice(email, { email, password }));
     if (res.status === 401) return false;
     if (!res.ok) throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
     const data = (json?.data ?? {}) as Record<string, unknown>;
@@ -517,11 +715,11 @@ export class AuthService {
    * code challenge back instead ('mfa') and stays held; `renewMfa` finishes.
    */
   async renew(email: string, password: string): Promise<'renewed' | 'mfa'> {
-    const { res, json } = await this.post('/api/auth/login', { email, password });
+    const { res, json } = await this.post('/api/auth/login', ...this.withDevice(email, { email, password }));
     if (!res.ok) throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
     const data = (json?.data ?? {}) as Record<string, unknown>;
     if (data.mfa_required === true && typeof data.challenge === 'string') {
-      this.challenge = { token: data.challenge, email, expiresAt: Date.now() + 5 * 60_000 };
+      this.challenge = { token: data.challenge, email, expiresAt: Date.now() + 5 * 60_000, newDevice: false };
       return 'mfa';
     }
     this.accept(data);
@@ -553,6 +751,8 @@ export class AuthService {
     this.secrets.delete(REFRESH_KEY);
     this.access = null;
     this.challenge = null;
+    this.deviceChallenge = null;
+    this.captcha = null;
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = null;
   }

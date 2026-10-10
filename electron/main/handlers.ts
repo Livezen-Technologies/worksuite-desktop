@@ -33,6 +33,7 @@ import { restartForAccessibility } from '../services/remote-control/accessibilit
 import { createZip } from '../services/zip';
 import { listConflicts, resolveConflict } from '../services/sync/conflicts';
 import { openExternalSafely } from '../security/hardening';
+import { solveCaptcha } from '../services/captcha-window';
 import { answerNotice } from '../services/ai-pending';
 import { notificationSettingsUrl } from '../services/locked-notifications';
 import { broadcast } from './events';
@@ -213,8 +214,19 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return true;
   });
   router.handle('auth:signIn', (input) => ctx.session.signIn(input.email, input.password));
-  router.handle('auth:verifyMfa', (input) => ctx.session.verifyMfa(input.code));
+  router.handle('auth:verifyMfa', (input) => ctx.session.verifyMfa(input.code, input.remember ?? true));
   router.handle('auth:cancelMfa', () => ctx.session.cancelMfa());
+  // A new computer, a CAPTCHA, a block (worksuite-desktop#301).
+  router.handle('auth:verifyDevice', (input) => ctx.session.verifyDevice(input.code, input.remember));
+  router.handle('auth:resendDevice', () => ctx.session.resendDevice());
+  router.handle('auth:solveCaptcha', async (_input, c) => {
+    const origin = ctx.auth.getServer()?.origin;
+    if (!origin) throw new DesktopError('NOT_WORKSUITE', 'Choose a WorkSuite server first.');
+    const token = await solveCaptcha(origin, { parent: winOf(c.sender), devTools: !app.isPackaged });
+    return token ? ctx.session.captchaSolved(token) : ctx.session.get();
+  });
+  router.handle('auth:requestUnblock', async (input) => ({ message: await ctx.auth.requestUnblock(input.email.trim()) }));
+  router.handle('auth:clearGate', () => ctx.session.clearGate());
   router.handle('auth:passkeyStart', async () => {
     const url = ctx.session.startPasskey(os.hostname());
     const origin = ctx.auth.getServer()?.origin;

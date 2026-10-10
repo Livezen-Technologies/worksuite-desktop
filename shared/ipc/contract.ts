@@ -422,8 +422,14 @@ export const contract = {
   'auth:state': ch(none, { whileLocked: true }),
   'auth:setServer': ch(z.object({ url: z.string().min(3).max(512) }), { rate: 2 }),
   'auth:signIn': ch(z.object({ email: z.string().min(1).max(254), password: z.string().min(1).max(512) }), { rate: 2 }),
-  'auth:verifyMfa': ch(z.object({ code: z.string().regex(/^[A-Za-z0-9-]{4,32}$/) }), { rate: 2 }),
+  'auth:verifyMfa': ch(z.object({ code: z.string().regex(/^[A-Za-z0-9-]{4,32}$/), remember: z.boolean().optional() }), { rate: 2 }),
   'auth:cancelMfa': ch(none),
+  // A new computer's emailed code, another code, the CAPTCHA window, the emailed unblock link (worksuite-desktop#301).
+  'auth:verifyDevice': ch(z.object({ code: z.string().regex(/^\d{6}$/), remember: z.boolean() }), { rate: 2 }),
+  'auth:resendDevice': ch(none, { rate: 2 }),
+  'auth:solveCaptcha': ch(none, { rate: 2 }),
+  'auth:requestUnblock': ch(z.object({ email: z.string().min(1).max(254) }), { rate: 2 }),
+  'auth:clearGate': ch(none),
   // Opens the server's passkey page in the browser; the result returns through worksuite://auth/callback.
   'auth:passkeyStart': ch(none, { rate: 2 }),
   'auth:passkeyCancel': ch(none),
@@ -1547,6 +1553,11 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'auth:signIn': AuthState;
   'auth:verifyMfa': AuthState;
   'auth:cancelMfa': AuthState;
+  'auth:verifyDevice': AuthState;
+  'auth:resendDevice': AuthState;
+  'auth:solveCaptcha': AuthState;
+  'auth:requestUnblock': { message: string };
+  'auth:clearGate': AuthState;
   'auth:passkeyStart': AuthState;
   'auth:passkeyCancel': AuthState;
   'auth:openPage': boolean;
