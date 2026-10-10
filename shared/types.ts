@@ -969,7 +969,8 @@ export interface Transfer {
   state: TransferState;
   /** Chat upload lifecycle; completion means the attachment message was confirmed. */
   phase?: 'preparing' | 'uploading' | 'processing' | 'waiting' | 'sending';
-  chat?: { roomId: string; clientMessageId: string; caption?: string; voice?: boolean; durationMs?: number; waveform?: number[] };
+  /** `preview`: a voice message's recording on this computer, playable until the server's copy is in — also after a restart (#300). */
+  chat?: { roomId: string; clientMessageId: string; caption?: string; voice?: boolean; durationMs?: number; waveform?: number[]; preview?: string };
   speed: number;
   error: string | null;
   createdAt: string;

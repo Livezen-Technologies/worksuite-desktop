@@ -26,6 +26,7 @@ import { caretPoint } from './caret';
 import { PRESENCE } from './Details';
 import { mentionQuery } from './mentions';
 import { EmojiPicker, VoiceRecorder } from './parts';
+import { voiceExtension } from './kit/recording';
 import { typingLine } from './typing';
 import type { ReplyTarget } from './Thread';
 import type { ChatMessage } from './types';
@@ -523,11 +524,12 @@ export function Composer({ roomId, roomName, group, reply, onClearReply, typing 
   };
 
   // Its length and loudness, measured while it was recorded, go with it: the bubble shows both at once (#285).
-  const sendVoice = (blob: Blob, ms: number, waveform: number[]) => {
+  // Sent exactly as recorded (Opus, or AAC where Opus can't be), timed from Send to its bubble and its "Sent" (#300).
+  const sendVoice = (blob: Blob, ms: number, waveform: number[], pressedAt?: number) => {
     setRecording(false);
-    if (channel) { stageBlob(blob, `Voice message.${blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm'}`); return; }
-    const ext = blob.type.includes('mp4') ? 'm4a' : blob.type.includes('ogg') ? 'ogg' : 'webm';
-    queueMedia(roomId, [{ key: crypto.randomUUID(), kind: 'blob', blob, name: `Voice message.${ext}`, state: 'ready', progress: 0, error: null, extra: null }], { voice: true, durationMs: Math.round(ms), waveform, ...(reply ? { replyTo: reply.id } : {}) }, true);
+    const ext = voiceExtension(blob.type);
+    if (channel) { stageBlob(blob, `Voice message.${ext}`); return; }
+    queueMedia(roomId, [{ key: crypto.randomUUID(), kind: 'blob', blob, name: `Voice message.${ext}`, state: 'ready', progress: 0, error: null, extra: null }], { voice: true, durationMs: Math.round(ms), waveform, ...(reply ? { replyTo: reply.id } : {}) }, true, { pressedAt });
     onClearReply();
   };
 

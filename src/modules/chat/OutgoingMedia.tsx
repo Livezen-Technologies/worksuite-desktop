@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
@@ -8,6 +8,7 @@ import { FileBadge, cx } from '../../components/ui';
 import { bubbleTone } from './kit/MessageBubble';
 import type { Look } from './kit/MessageAttachment';
 import { knownVoice } from './kit/voice';
+import { voiceBubbleShown } from './kit/voiceMetrics';
 import { VoiceMessage, type VoiceUpload } from './kit/VoiceMessage';
 import { acknowledgeMedia, cancelMedia, outgoing, outgoingForRoom, retryMedia, sendShare, type MediaPhase, type OutgoingMedia } from './outgoing';
 import type { ChatMessage } from './types';
@@ -70,13 +71,21 @@ function SendProgress({ job: j }: { job: OutgoingMedia }) {
 }
 
 /**
- * A voice message on its way (#285): the voice player at once, with the length and loudness measured while it was
- * recorded, playing its copy on this computer. The ring on the play button says how sending goes, and ✕ on it stops
- * it; a red ring with Retry says it did not go, and the message stays where it is. No file name, size or "Processing…".
+ * A voice message on its way (#285, #300): the voice player at once, with the length and loudness measured while it
+ * was recorded, playing its copy on this computer. Under it, how sending goes in words — "Sending…" (with how much
+ * has gone), "Retrying in 15 s" between automatic tries, and "Sent" only once the server has confirmed it — and the
+ * ring on the play button says the same, with ✕ on it to stop. When it did not go: "Not sent", Retry on the ring and
+ * Cancel beside it, which takes the bubble and the recording away. No file name, size or "Processing…".
  */
 function OutgoingVoice({ job: j, look }: { job: OutgoingMedia; look: Look }) {
   const failed = j.phase === 'failed' || j.phase === 'cancelled';
   const fail = (e: unknown) => toast('error', errorMessage(e));
+  // Painted: the Send → bubble time (#300).
+  useEffect(() => {
+    const id = j.id;
+    const raf = typeof requestAnimationFrame === 'function' ? requestAnimationFrame(() => voiceBubbleShown(id)) : (voiceBubbleShown(id), 0);
+    return () => { if (raf && typeof cancelAnimationFrame === 'function') cancelAnimationFrame(raf); };
+  }, [j.id]);
   const upload: VoiceUpload = {
     progress: j.phase === 'uploading' ? j.progress : null,
     failed,
@@ -89,9 +98,20 @@ function OutgoingVoice({ job: j, look }: { job: OutgoingMedia; look: Look }) {
   const player = <VoiceMessage file={file} own look={look} src={j.preview ?? null} upload={upload} />;
   const meta = (
     <span className="inline-flex items-center gap-1 text-[11px] text-ink-3">
-      {failed ? <b className="font-semibold text-danger" title={j.error ?? undefined}>{j.phase === 'cancelled' ? 'Cancelled' : 'Not sent'}</b> : null}
+      {failed ? (
+        <>
+          <b className="font-semibold text-danger" title={j.error ?? undefined}>{j.phase === 'cancelled' ? 'Cancelled' : 'Not sent'}</b>
+          <button type="button" aria-label="Discard the voice message" title="Cancel: remove this voice message" onClick={() => void cancelMedia(j).catch(fail)} className="font-semibold text-ink-2 hover:text-danger hover:underline">
+            Cancel
+          </button>
+        </>
+      ) : (
+        <span role="status" data-voice-status={j.phase === 'sent' ? 'sent' : 'sending'}>
+          <VoiceStatus job={j} />
+        </span>
+      )}
       {timeLabel(j.createdAt)}
-      {failed ? null : <Icon name="clock" size={11} label="Sending" />}
+      {failed ? null : j.phase === 'sent' ? <Icon name="check" size={11} label="Sent" /> : <Icon name="clock" size={11} label="Sending" />}
     </span>
   );
   return look === 'drawer' ? (
@@ -107,6 +127,28 @@ function OutgoingVoice({ job: j, look }: { job: OutgoingMedia; look: Look }) {
       {meta}
     </div>
   );
+}
+
+/** "Sending…", "Sending… 40%", "Retrying in 15 s", "Sent" (#300). */
+export function voiceStatusText(j: Pick<OutgoingMedia, 'phase' | 'progress' | 'retryAt'>, now = Date.now()): string {
+  if (j.phase === 'sent') return 'Sent';
+  if (j.retryAt) {
+    const s = Math.max(1, Math.ceil((Date.parse(j.retryAt) - now) / 1000));
+    if (Number.isFinite(s)) return `Retrying in ${s} s`;
+  }
+  if (j.phase === 'uploading' && j.progress !== null) return `Sending… ${Math.round(Math.min(1, Math.max(0, j.progress)) * 100)}%`;
+  return 'Sending…';
+}
+
+function VoiceStatus({ job: j }: { job: OutgoingMedia }) {
+  // The retry countdown moves once a second; nothing else needs a clock.
+  const [, tick] = useState(0);
+  useEffect(() => {
+    if (!j.retryAt) return;
+    const t = setInterval(() => tick((n) => n + 1), 1000);
+    return () => clearInterval(t);
+  }, [j.retryAt]);
+  return <>{voiceStatusText(j)}</>;
 }
 
 /** Lives above modules/drawers: transfers continue and confirmation refreshes even after switching screens. */

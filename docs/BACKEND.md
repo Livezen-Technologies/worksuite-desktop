@@ -323,6 +323,43 @@ player. What the desktop sends and reads:
   API proxy, for both. A WebM made in a browser has no length its player
   can tell, so this is the only way to show it before it is played.
 
+### Fast voice messages (worksuite-desktop#300)
+
+- **Recording.** Opus, mono, 32 kbit/s (`audio/webm;codecs=opus`, then
+  `audio/ogg;codecs=opus`); AAC in MP4 (`audio/mp4;codecs=mp4a.40.2`) at the
+  same rate where Opus can't be recorded. Uploaded exactly as recorded. About
+  240 KB a minute.
+- **Upload.** The chunked uploader, as for any chat file:
+  `POST /api/uploads/init {filename, total_size, chunk_size, sha256,
+  mime_type, purpose: 'chat', room_id, client_key, voice?: true}`.
+  `client_key` is the message's `client_message_id`: asked again with the same
+  key (the answer lost, the session forgotten, the app restarted) the server
+  answers `200` with the upload it already has — `{upload_id, chunk_size,
+  total_chunks, received_chunks, status}` and, once complete, `file_id` — and
+  never starts a second one. `voice: true` has the type and size checked
+  before any byte is sent. A recording of 1 MB or less goes in one part;
+  above that in 512 KB parts, each resumed from the server's list of parts.
+- **Post.** `POST /api/chat/messages/attachments` as above. A repeat with the
+  same `client_message_id` answers `200 "Already sent"` with the message the
+  server already has; the first `201 "Sent"`. The bubble says "Sent" only on
+  one of those answers.
+- **Refusals** (`422`/`413`, not retried): not a sound recording in a
+  recorder's container (WebM, Ogg, MP4/M4A, AAC, and the phones' 3GP, AMR,
+  CAF, WAV, MP3, FLAC); longer than 10 minutes (`duration_ms` over 600 000
+  plus 5 s grace); larger than 20 MB. Checked at `init` with `voice: true`,
+  before any byte is sent, and again at the post.
+- **Retries.** A temporary failure (no connection, 408/429/5xx) is tried
+  again after 2 s, 5 s, 15 s, 30 s and 60 s with the same ids, then waits for
+  Retry or Cancel; it goes by itself when the connection returns and when the
+  app next starts. Cancel posts `/api/uploads/{upload_id}/abort`.
+- **Order.** Each person's chat files are posted in the order they were sent,
+  in each conversation, whatever order their bytes finish in.
+- **After delivery.** The waveform and length the server measures, and the
+  AAC copy (`m4a_url`) for players without Opus, are made by the media worker
+  after the message is posted, and announced with `chat.attachment
+  {room_id, message_ids, change: 'media'}`. One format is stored; the copy is
+  made in the background.
+
 ### What the server has: `GET /api/capabilities` (worksuite-desktop#259)
 
 The app can be newer than the server: Beta may run ahead of it. So that

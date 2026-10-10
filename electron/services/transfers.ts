@@ -17,7 +17,7 @@ import type { Database } from './db';
 import type { HttpClient } from './http';
 import type { Vault } from './vault';
 import { TokenBucket } from './throttle';
-import { CHUNK_BYTES, CHUNKED_FROM, CONNECTION_LOST, MAX_MAIL_ATTACHMENT_BYTES, MAX_UPLOAD_BYTES, PARALLEL_PARTS, PART_ATTEMPTS, STALL_MS, STALLED, refusalMessage, uploadRefusal } from '@shared/uploads';
+import { CHAT_RETRY_MS, CHUNK_BYTES, CHUNKED_FROM, CONNECTION_LOST, VOICE_CHUNKED_FROM, VOICE_CHUNK_BYTES, MAX_MAIL_ATTACHMENT_BYTES, MAX_UPLOAD_BYTES, PARALLEL_PARTS, PART_ATTEMPTS, STALL_MS, STALLED, refusalMessage, uploadRefusal } from '@shared/uploads';
 
 const log = logger('transfers');
 
@@ -328,7 +328,9 @@ const MIN_CHUNK = 256 * 1024;
  * in full 8 MB parts, several at a time: fewer requests, each one short
  * enough to try again cheaply.
  */
-export function chunkSizeFor(size: number): number {
+export function chunkSizeFor(size: number, target?: UploadTarget | null): number {
+  // A voice message above 1 MB goes in small parts, so a dropped connection costs one part, not the recording (#300).
+  if (target?.kind === 'chat' && target.voice) return size > VOICE_CHUNKED_FROM ? VOICE_CHUNK_BYTES : Math.max(MIN_CHUNK, Math.ceil(Math.max(0, size) / MIN_CHUNK) * MIN_CHUNK);
   if (size > CHUNKED_FROM) return CHUNK;
   return Math.min(CHUNK, Math.max(MIN_CHUNK, Math.ceil(Math.max(0, size) / MIN_CHUNK) * MIN_CHUNK));
 }
@@ -582,13 +584,25 @@ export class TransferManager {
       movedAt: l.t.state === 'running' && l.movedAt ? new Date(l.movedAt).toISOString() : null,
       held,
       phase: l.meta.phase,
-      ...(l.meta.target?.kind === 'chat' ? { chat: this.chatInfo(l.t.id, l.meta.target) } : {}),
+      ...(l.meta.target?.kind === 'chat' ? { chat: this.chatInfo(l.t.id, l.meta.target, l.meta) } : {}),
       ...uploadExtras(l.meta),
     };
   }
 
-  private chatInfo(id: string, target: Extract<UploadTarget, { kind: 'chat' }>): NonNullable<Transfer['chat']> {
-    return { roomId: target.roomId, clientMessageId: target.clientMessageId ?? `desktop-${id}`, caption: target.caption, voice: target.voice, durationMs: target.durationMs, waveform: target.waveform };
+  private chatInfo(id: string, target: Extract<UploadTarget, { kind: 'chat' }>, meta?: Meta | null): NonNullable<Transfer['chat']> {
+    return { roomId: target.roomId, clientMessageId: target.clientMessageId ?? `desktop-${id}`, caption: target.caption, voice: target.voice, durationMs: target.durationMs, waveform: target.waveform, ...this.voicePreview(id, target, meta) };
+  }
+
+  /**
+   * A voice message's recording on this computer, played in its bubble until the server's copy is in (#300) — also in
+   * another window, and after a restart, when the address the composer had is gone. The same capability-scoped
+   * `chat-media` address as a fresh preview, named by the transfer, for this person only.
+   */
+  private voicePreview(id: string, target: Extract<UploadTarget, { kind: 'chat' }>, meta?: Meta | null): { preview?: string } {
+    const uid = this.deps.userId();
+    if (!target.voice || !meta?.ownedSource || !meta.path || !uid || !/^[a-f0-9-]{36}$/.test(id)) return {};
+    if (!this.previewPaths.has(id)) this.previewPaths.set(id, { path: meta.path, owner: uid, mime: mimeFor(meta.path) ?? 'audio/webm' });
+    return { preview: `app://bundle/__local/chat-media/${id}` };
   }
 
   private phase(l: Live, phase: NonNullable<Transfer['phase']>): void {
@@ -624,7 +638,7 @@ export class TransferManager {
         retryAt: null,
         attempts: m?.attempts ?? 0,
         phase: m?.phase,
-        ...(m?.target?.kind === 'chat' ? { chat: this.chatInfo(r.id, m.target) } : {}),
+        ...(m?.target?.kind === 'chat' ? { chat: this.chatInfo(r.id, m.target, m) } : {}),
         ...(m ? uploadExtras(m) : {}),
       };
     });
@@ -732,14 +746,22 @@ export class TransferManager {
       l.meta.temporary = false;
     }
     // An upload the connection interrupted waits for it however long it is gone (#249): a minute apart at most.
-    if (state === 'failed' && temporary && this.cfg.autoRetry && (patient || (l.meta.attempts ?? 0) < MAX_AUTO_RETRIES)) return this.retryLater(l, error);
+    // A chat message goes 2 s, 5 s, 15 s, 30 s, 60 s apart, then stops for its bubble's Retry and Cancel (#300); the
+    // connection coming back, and the next start, try it again by themselves.
+    const chat = l.meta.target?.kind === 'chat';
+    const most = chat ? CHAT_RETRY_MS.length : MAX_AUTO_RETRIES;
+    if (state === 'failed' && temporary && this.cfg.autoRetry && ((patient && !chat) || (l.meta.attempts ?? 0) < most)) return this.retryLater(l, error);
     this.finish(l, state, error);
   }
 
   private retryLater(l: Live, error: string | null): void {
     const attempt = l.meta.attempts ?? 0;
     l.meta.attempts = attempt + 1;
-    const delay = this.deps.retryDelay ? this.deps.retryDelay(attempt) : backoffDelay(attempt, { baseMs: 2000, maxMs: 60_000, jitter: 0.5 });
+    const delay = this.deps.retryDelay
+      ? this.deps.retryDelay(attempt)
+      : l.meta.target?.kind === 'chat'
+        ? CHAT_RETRY_MS[Math.min(attempt, CHAT_RETRY_MS.length - 1)]!
+        : backoffDelay(attempt, { baseMs: 2000, maxMs: 60_000, jitter: 0.5 });
     l.meta.retryAt = new Date(Date.now() + delay).toISOString();
     l.t.state = 'queued';
     l.t.error = error;
@@ -1261,12 +1283,15 @@ export class TransferManager {
       received = new Set();
       const filename = (target.kind === 'files' && target.name) || basename(path);
       const replacing = target.kind === 'files' && target.replaceFileId ? Number(target.replaceFileId) : null;
-      let init: { upload_id: string; chunk_size: number; total_chunks: number; replaces?: number | string };
+      let init: { upload_id: string; chunk_size: number; total_chunks: number; replaces?: number | string; received_chunks?: number[]; status?: string; file_id?: number | string | null };
       try {
         init = await this.deps.http.post<typeof init>('/api/uploads/init', {
           filename,
           total_size: size,
-          chunk_size: chunkSizeFor(size),
+          chunk_size: chunkSizeFor(size, target),
+          // The message's own id (#300): asked again — the answer lost, or the session forgotten — the server carries on
+          // with the upload it already has instead of starting a second one.
+          ...(target.kind === 'chat' && target.clientMessageId ? { client_key: target.clientMessageId } : {}),
           sha256: meta.sha256,
           mime_type: mimeFor(filename) ?? undefined,
           ...(replacing ? { replace_file_id: replacing } : {}),
@@ -1285,8 +1310,17 @@ export class TransferManager {
         throw new DesktopError('SERVER_ERROR', 'This WorkSuite server cannot replace a file by uploading yet. Upload it again and choose Keep both.');
       }
       meta.uploadId = init.upload_id;
-      meta.chunkSize = Number(init.chunk_size) || chunkSizeFor(size);
+      meta.chunkSize = Number(init.chunk_size) || chunkSizeFor(size, target);
       meta.totalChunks = Number(init.total_chunks) || Math.max(1, Math.ceil(size / meta.chunkSize));
+      // The same upload resumed by its client key (#300): finished already, or with some parts in.
+      if ((init.status === 'completed' || init.status === 'complete') && init.file_id !== undefined && init.file_id !== null) {
+        meta.fileId = String(init.file_id);
+        meta.completed = true;
+        this.persist(l);
+        this.progress(l, size);
+        return;
+      }
+      received = new Set((init.received_chunks ?? []).map(Number));
       this.persist(l);
     }
     const part = meta.chunkSize ?? CHUNK;
@@ -1619,6 +1653,11 @@ export class TransferManager {
     if (l.t.direction === 'upload' && l.meta.uploadId && !l.meta.completed) {
       void this.deps.http.post(`/api/uploads/${l.meta.uploadId}/abort`, {}).catch(() => undefined);
     }
+    // A chat message cancelled is discarded (#300): its recording or copy made here goes too.
+    if (l.meta.target?.kind === 'chat' && l.meta.ownedSource && l.meta.path) {
+      await unlink(l.meta.path).catch(() => undefined);
+      this.previewPaths.delete(id);
+    }
     this.finish(l, 'cancelled');
   }
 
@@ -1669,9 +1708,12 @@ export class TransferManager {
     if (!uid) return;
     for (const r of this.rows("state IN ('done', 'cancelled', 'failed')")) {
       const m = this.deps.vault().decrypt<Meta>(r.meta);
+      // A chat message that did not go is not history: it stays, recording and all, until it is sent or its bubble's
+      // Cancel discards it (#300).
+      if (r.state === 'failed' && m?.target?.kind === 'chat') continue;
       if (m?.ownedSource && m.path) void unlink(m.path).catch(() => undefined);
+      this.deps.db.run('DELETE FROM transfers WHERE user_id = ? AND id = ?', uid, r.id);
     }
-    this.deps.db.run("DELETE FROM transfers WHERE user_id = ? AND state IN ('done', 'cancelled', 'failed')", uid);
     this.emit();
   }
 
@@ -1696,6 +1738,20 @@ export class TransferManager {
         this.persist(l);
         continue;
       }
+      back.push(l);
+    }
+    // A chat message that stopped on a temporary failure (its retries spent, or the connection gone) goes again at start (#300).
+    for (const r of this.rows("state = 'failed' AND direction = 'upload'")) {
+      if (this.live.has(r.id)) continue;
+      let l: Live;
+      try {
+        l = this.liveOrLoad(r.id);
+      } catch {
+        continue;
+      }
+      if (l.meta.target?.kind !== 'chat' || !l.meta.temporary) continue;
+      l.t.error = null;
+      l.meta.attempts = 0;
       back.push(l);
     }
     back.sort((a, b) => (a.meta.queuedAt ?? a.t.createdAt).localeCompare(b.meta.queuedAt ?? b.t.createdAt));

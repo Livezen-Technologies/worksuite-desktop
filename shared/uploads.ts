@@ -25,6 +25,20 @@ export const CHUNK_BYTES = 8 * 1024 * 1024;
 export const PARALLEL_PARTS = 3;
 /** Tries for one part before the upload waits and is tried again later. */
 export const PART_ATTEMPTS = 5;
+/**
+ * A voice message above this goes in `VOICE_CHUNK_BYTES` parts (worksuite-desktop#300), so an interrupted one carries
+ * on from the last part the server has instead of starting again; below it, one request does it.
+ */
+export const VOICE_CHUNKED_FROM = 1024 * 1024;
+/** One part of a voice message above `VOICE_CHUNKED_FROM` (the server takes no part under 256 KB). */
+export const VOICE_CHUNK_BYTES = 512 * 1024;
+/**
+ * A chat message's automatic retries after a temporary failure (#300): 2 s, 5 s, 15 s, 30 s, 60 s, then it stops
+ * and its bubble offers Retry and Cancel. It is tried again by itself when the connection comes back and when
+ * WorkSuite next starts.
+ */
+export const CHAT_RETRY_MS = [2_000, 5_000, 15_000, 30_000, 60_000] as const;
+
 /** No bytes moved and no answer for this long: the request is given up as stalled, and tried again. */
 export const STALL_MS = 60_000;
 
