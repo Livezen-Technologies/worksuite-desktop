@@ -41,6 +41,9 @@ export interface DriveFile {
   last_action?: string | null;
   last_at?: string | null;
   access?: ItemAccess | null;
+  /** Pictures (ENH-03): a recipe is saved with the current version, and the stars given. */
+  edited?: boolean;
+  rating?: { mine: number | null; average: number | null } | null;
   /* Shared with me only. */
   org?: { id: number; name: string } | null;
   shared_at?: string | null;

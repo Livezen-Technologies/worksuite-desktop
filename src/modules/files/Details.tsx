@@ -64,7 +64,7 @@ export function Details({ item, list, onClose, tab: firstTab }: { item: Item; li
           ) : (
             <button type="button" onClick={() => d.openFolder(item.f.id)} className="flex h-[30px] items-center rounded-[7px] bg-primary px-2.5 text-[12px] font-bold text-white hover:bg-primary-hover">Open</button>
           )}
-          {isFile && IMAGE_EDIT_EXTS.includes(extOf(item.f.name, item.f.extension)) && can(f.access, 'upload_version') ? <button type="button" onClick={() => d.editImage(item.f)} className="h-[30px] rounded-[7px] border border-line px-2.5 text-[12px] font-semibold text-ink hover:bg-subtle">Edit image</button> : null}
+          {isFile && IMAGE_EDIT_EXTS.includes(extOf(item.f.name, item.f.extension)) && can(f.access, 'upload_version') ? <button type="button" onClick={() => d.editImage(item.f)} className="h-[30px] rounded-[7px] border border-line px-2.5 text-[12px] font-semibold text-ink hover:bg-subtle">Edit photo</button> : null}
           {can(f.access, 'share') ? <button type="button" onClick={() => d.share(item)} className="h-[30px] rounded-[7px] border border-line px-2.5 text-[12px] font-semibold text-ink hover:bg-subtle">Share…</button> : null}
           {isFile && can(f.access, 'download') ? <button type="button" onClick={() => d.download([item.f], true)} className="h-[30px] rounded-[7px] border border-line px-2.5 text-[12px] font-semibold text-ink hover:bg-subtle">Open locally</button> : null}
           <button type="button" aria-label="More actions" onClick={(e) => setMenu(below(e.currentTarget, 'right'))} className="h-[30px] w-[30px] rounded-[7px] border border-line text-[15px] font-bold text-ink-2 hover:bg-subtle">⋯</button>

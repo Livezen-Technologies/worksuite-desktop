@@ -30,6 +30,7 @@ import { accessibility } from '../services/remote-control/host';
 import { stopProbes } from '../services/remote-control/accessibility';
 import { restartForAccessibility } from '../services/remote-control/accessibility-watch';
 import { createZip } from '../services/zip';
+import { listConflicts, resolveConflict } from '../services/sync/conflicts';
 import { openExternalSafely } from '../security/hardening';
 import { answerNotice } from '../services/ai-pending';
 import { notificationSettingsUrl } from '../services/locked-notifications';
@@ -864,6 +865,36 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     await ctx.device.reenrol(uid(), server?.api ?? 'core');
     ctx.sync.start(uid());
     return ctx.sync.status();
+  });
+
+  router.handle('sync:conflicts', () => listConflicts(ctx.http));
+  router.handle('sync:resolveConflict', async (input) => {
+    const r = await resolveConflict(ctx.http, input.id, input.resolution);
+    ctx.sync.kick('conflict resolved');
+    return r;
+  });
+
+  // ── the image editor on this computer (Drive ENH-03 DSK-02…06) ─────────
+  router.handle('image:localInfo', (input) => ctx.imageLocal.info(input.fileId));
+  router.handle('image:localRead', (input) => ctx.imageLocal.read(input.fileId));
+  router.handle('image:localSave', (input) => ctx.imageLocal.save({ ...input, copyName: input.copyName ?? null }));
+  router.handle('image:openSystem', (input) => ctx.imageLocal.openSystem(input.fileId));
+  router.handle('image:prepareDrag', async (input) => ({ token: await ctx.imageLocal.prepareDrag(input.bytes, input.name) }));
+  router.handle('image:startDrag', (input, c) => {
+    const file = ctx.imageLocal.dragFile(input.token);
+    const icon = nativeImage.createFromPath(file);
+    c.sender.startDrag({ file, icon: icon.isEmpty() ? nativeImage.createEmpty() : icon.resize({ width: 96 }) });
+    return true;
+  });
+  router.handle('image:cacheGet', (input) => ctx.imageLocal.cacheGet(input.key));
+  router.handle('image:cachePut', (input) => ctx.imageLocal.cachePut(input.key, input.bytes, input.type));
+  router.handle('image:saveAs', async (input, c) => {
+    const win = BrowserWindow.fromWebContents(c.sender);
+    const opts: Electron.SaveDialogOptions = { title: 'Save the picture', defaultPath: input.name };
+    const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts);
+    if (res.canceled || !res.filePath) return null;
+    await writeAtomically(res.filePath, input.bytes);
+    return { name: basename(res.filePath) };
   });
 
   // ── notifications ──────────────────────────────────────────────────────

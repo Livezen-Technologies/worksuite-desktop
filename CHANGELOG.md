@@ -5,7 +5,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.219 — 2026-10-10
+## 0.2.220 — 2026-10-10
 
 - **Projects: the whole portfolio in the app (projects 1.2.0).** All projects, Templates, Clients, New project, a
   project's own page, the Activity log and Module settings open in the Projects tab instead of the browser — every
@@ -83,6 +83,33 @@ person who has to live with the change — what it does, and where it bites.
   Sprints, Milestones, Team, Budget, Risks, Changes, Files, Activity, Settings) and they stay on top of its board,
   timeline, milestones, sprints, budget, risks and change requests; **Board** in the rail opens the project you last
   worked in. The one Projects page still on the web is a project's own Time tab (Time & approvals is here).
+
+## 0.2.219 — 2026-10-10
+
+- **A much better photo viewer (ENH-03).** In Drive › Files you can now:
+  - rate photos (Alt+0–5) and tag them, then filter the Images view by your rating or a tag; edited photos show "Edited · vN";
+  - compare two versions (split, side by side or toggle), use the loupe (Z), and draw a box to comment on one spot;
+  - see where a photo was taken, and **Remove location**;
+  - rotate it and save that as a new version;
+  - play animated GIF/WebP with a pause button, and press `?` for all shortcuts.
+- **A new photo editor** that opens in the same tab:
+  - **Layout:** a labelled tool rail, an options panel, and the folder's photos along the bottom.
+  - **Looks:** filter strength, your own and your organisation's looks, and before/after.
+  - **Geometry:** straighten, more crop ratios and rounded corners.
+  - **Adding things:** text presets with brand fonts and effects; shapes, a built-in sticker set plus brand stickers and logos, and frames.
+  - Everything stays editable after you save. Photos over 40 MP are edited on a preview and saved full size.
+- **One Save to Drive dialog:**
+  - choose a new version, a copy (only into folders you can upload to) or a download;
+  - add a version note, pick the format and quality, and keep editable layers or remove GPS;
+  - if someone saved a newer version meanwhile, it tells you who and when and lets you save as the next version, save a copy or compare, instead of overwriting.
+- **Edit offline:** a synced photo can be edited with no connection. It shows "Offline · will upload as vN" and uploads with its layers when you're back online. If the file changed meanwhile, the new **Sync conflicts** card in Files › Sync devices lets you keep yours, keep Drive's or keep both.
+- **On the desktop:**
+  - drag a picture from Finder or Explorer onto the canvas to add it as a layer, or drag the canvas out as a PNG;
+  - **Open with › System editor** edits the synced file in your usual app;
+  - brand libraries and fonts stay available offline.
+- **Batch edit** up to 500 photos (resize, look, watermark, frame, convert, remove GPS, rename) as a background job you can pause or cancel. **Create image** in social and print sizes from New.
+- **AI assistant** where your organisation's AI allows it. It suggests edits that you see as a preview before applying, and writes alt text, captions and smart crops. Nothing is sent until you ask.
+- Needs the server's Files 1.7.0.
 
 ## 0.2.218 — 2026-10-10
 

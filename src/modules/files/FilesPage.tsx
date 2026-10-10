@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState, type DragEvent } from 'react';
+import { Suspense, lazy, useEffect, useRef, useState, type DragEvent } from 'react';
 import type { PickedFile } from '@shared/ipc/contract';
 import { app } from '../../core/app-state';
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
@@ -9,7 +9,7 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { useNow } from '../calls/parts';
 import type { ModuleProps } from '../registry';
-import { ALL_VIEWS, TITLES, TONE, can, openWay, pathTo, splitKeys, tree as loadTree, type DriveFile, type DriveFolder, type Key, type TreeNode, type View } from './api';
+import { ALL_VIEWS, TITLES, TONE, can, kindOf, openWay, pathTo, splitKeys, tree as loadTree, type DriveFile, type DriveFolder, type Key, type TreeNode, type View } from './api';
 import { DriveCtx, type Drive, type Item } from './ctx';
 import { ArchiveDialog, ConfirmDialog, FolderPicker, LinkDialog, LockDialog, NameDialog, SecureLinkDialog, SendToChatDialog } from './Dialogs';
 import { Explorer } from './Explorer';
@@ -20,7 +20,11 @@ import { Preview } from './Preview';
 import { openPdf } from '../pdf/open';
 import { Rail, type Place } from './Rail';
 import { CodeEditor } from './CodeEditor';
-import { ImageEditor } from './ImageEditor';
+import { ImageViewer } from './image/Viewer';
+import { BatchDialog, BatchTray } from './image/Batch';
+import { CreateImageDialog, IMAGE_SIZES } from './image/NewImage';
+import type { NewImageSpec } from './image/Editor';
+import { Spinner } from '../../components/ui';
 import { MediaViewer } from './MediaViewer';
 import { ShareDialog } from './Share';
 import { UploadTray, UrlDownloads } from './Trays';
@@ -35,6 +39,9 @@ import { createDocument } from '../office/api';
 import { LocalCopiesTray, externalApps, openInApp } from '../office/local';
 import { SidePanel } from '../../components/SidePanel';
 
+/** The photo editor loads only when a picture is edited (EDT-E-14). */
+const PhotoEditor = lazy(() => import('./image/Editor'));
+
 type Dialog =
   | { kind: 'name'; title: string; initial: string; action: string; save: (name: string) => Promise<void> }
   | { kind: 'confirm'; title: string; body: string; action: string; run: () => void }
@@ -45,7 +52,9 @@ type Dialog =
   | { kind: 'secure'; file: DriveFile }
   | { kind: 'link'; item: Item }
   | { kind: 'chat'; item: Item; discuss?: boolean }
-  | { kind: 'templates' };
+  | { kind: 'templates' }
+  | { kind: 'batch'; files: DriveFile[] }
+  | { kind: 'new-image'; preset: number | null };
 
 const DOCS: Array<[string, string, string, string]> = [
   ['docx', 'DOC', 'Document', 'Untitled document'],
@@ -85,10 +94,13 @@ export default function FilesPage(_props: ModuleProps) {
   const qc = useQueryClient();
   const { query, go, navigate, active } = useTab();
   const place = placeFrom(query);
-  useTabTitle(place.view === 'home' ? 'Files' : `Files · ${TITLES[place.view]}`);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [preview, setPreview] = useState<{ files: DriveFile[]; index: number } | null>(null);
-  const [editor, setEditor] = useState<{ kind: 'code' | 'image'; file: DriveFile } | { kind: 'media'; files: DriveFile[]; index: number } | null>(null);
+  const [editor, setEditor] = useState<{ kind: 'code'; file: DriveFile } | { kind: 'image'; file: DriveFile | null; blank?: NewImageSpec; version?: number | null; list?: DriveFile[] } | { kind: 'media'; files: DriveFile[]; index: number } | { kind: 'viewer'; files: DriveFile[]; index: number } | null>(null);
+  const [batchJobs, setBatchJobs] = useState<Array<{ id: number | string; label: string; total: number }>>([]);
+  // The viewer and editor live in this tab, and name it (DSK-01).
+  const editing = editor?.kind === 'image' ? (editor.file?.name ?? editor.blank?.name ?? null) : editor?.kind === 'viewer' ? (editor.files[editor.index]?.name ?? null) : null;
+  useTabTitle(editing ? `Files · ${editing}` : place.view === 'home' ? 'Files' : `Files · ${TITLES[place.view]}`);
   const [urlTray, setUrlTray] = useState(false);
   const [clash, setClash] = useState<{ picked: PickedFile[]; conflicts: UploadConflict[]; folder: number | null } | null>(null);
   const [detailsAsk, setDetailsAsk] = useState<{ key: Key; tab?: string; n: number } | null>(null);
@@ -236,6 +248,11 @@ export default function FilesPage(_props: ModuleProps) {
       if (item.type === 'folder') return onPlace({ view: 'folder', folder: item.f.id });
       const f = item.f;
       const way = openWay(f);
+      if (way === 'preview' && kindOf(f.name, f.extension) === 'image') {
+        // Pictures open in the photo viewer (VWR-E), with the folder's other pictures in its filmstrip.
+        const all = (list ?? [f]).filter((x) => openWay(x) === 'preview' && kindOf(x.name, x.extension) === 'image');
+        return setEditor({ kind: 'viewer', files: all.length ? all : [f], index: Math.max(0, all.findIndex((x) => x.id === f.id)) });
+      }
       if (way === 'preview') {
         const all = (list ?? [f]).filter((x) => openWay(x) === 'preview');
         return setPreview({ files: all.length ? all : [f], index: Math.max(0, all.findIndex((x) => x.id === f.id)) });
@@ -345,7 +362,8 @@ export default function FilesPage(_props: ModuleProps) {
     openIn: (f, appId) => void openInApp({ id: f.id, name: f.name, folderId: f.folder_id, version: f.version ?? 0 }, appId),
     officeRouting,
     editText: (f) => setEditor({ kind: 'code', file: f }),
-    editImage: (f) => (setPreview(null), setEditor({ kind: 'image', file: f })),
+    editImage: (f, version, list) => (setPreview(null), setEditor({ kind: 'image', file: f, version: version ?? null, list })),
+    batchEdit: (files) => setDialog({ kind: 'batch', files }),
     play: (files, index) => setEditor({ kind: 'media', files, index }),
     inBrowser: (f) => void call('app:openInBrowser', { path: `/files?file=${f.id}` }),
     syncFolder: (f) => go(`/files?view=devices&sync=${f.id}`),
@@ -423,6 +441,9 @@ export default function FilesPage(_props: ModuleProps) {
         }),
     })),
     ...(serverOffice ? [{ label: 'From a template…', hint: 'Office', tag: { text: 'TPL', tone: TONE.document! }, run: () => setDialog({ kind: 'templates' }) }] : []),
+    { sep: true },
+    // New › Create image (NEW-01): a blank canvas in the editor, made in this folder on its first save.
+    ...IMAGE_SIZES.map((x, i) => ({ label: x.label, hint: x.width ? `${x.width} × ${x.height}` : '', tag: { text: 'IMG', tone: TONE.image! }, run: () => setDialog({ kind: 'new-image', preset: i }) })),
   ];
 
   // Quick actions and links: /files?upload=1, ?new=folder.
@@ -488,6 +509,7 @@ export default function FilesPage(_props: ModuleProps) {
 
   return (
     <DriveCtx.Provider value={d}>
+      <div className="relative h-full">
       <div className="flex h-full bg-ground text-[13px]">
         <SidePanel id="files" label="the Drive menu">
           <Rail
@@ -514,11 +536,31 @@ export default function FilesPage(_props: ModuleProps) {
         {view === 'notifications' ? <Notifications /> : null}
         {view === 'companies' ? <Companies /> : null}
         {view === 'settings' ? <DriveSettings /> : null}
-        {view === 'devices' ? <SyncDevices tree={tree} ask={syncAsk} onAsked={() => go('/files?view=devices')} /> : null}
+        {view === 'devices' ? <SyncDevices tree={tree} ask={syncAsk} conflicts={query.get('conflicts') === '1'} onAsked={() => go('/files?view=devices')} /> : null}
       </div>
       {preview ? <Preview files={preview.files} start={preview.index} onClose={() => setPreview(null)} /> : null}
       {editor?.kind === 'code' ? <CodeEditor key={editor.file.id} file={editor.file} onClose={() => (setEditor(null), refresh())} /> : null}
-      {editor?.kind === 'image' ? <ImageEditor key={editor.file.id} file={editor.file} onClose={() => (setEditor(null), refresh())} /> : null}
+      {editor?.kind === 'viewer' ? <ImageViewer files={editor.files} start={editor.index} onClose={() => (setEditor(null), refresh())} onEdit={(f, version) => setEditor({ kind: 'image', file: f, version: version ?? null, list: editor.files })} /> : null}
+      {editor?.kind === 'image' ? (
+        <Suspense fallback={<div className="absolute inset-0 z-30 flex items-center justify-center bg-[#0B1120]"><Spinner label="Opening the photo editor…" /></div>}>
+          <PhotoEditor
+            key={`${editor.file?.id ?? 'new'}:${editor.version ?? ''}`}
+            file={editor.file}
+            blank={editor.blank ?? null}
+            folderFiles={editor.list}
+            reopenVersion={editor.version ?? null}
+            onClose={() => (setEditor(null), refresh())}
+            onSwitch={(x) => {
+              const f = editor.list?.find((y) => y.id === x.id);
+              if (f) setEditor({ ...editor, file: f, version: null });
+              else void apiGet<DriveFile>(`/api/files/${x.id}`).then((g) => setEditor({ kind: 'image', file: g, version: null, list: editor.list }), (e: unknown) => toast('error', errorMessage(e)));
+            }}
+            onCreated={(id) => void apiGet<DriveFile>(`/api/files/${id}`).then((g) => (refresh(), setEditor({ kind: 'image', file: g, version: null })), () => refresh())}
+            onReopenVersion={(v) => editor.file && setEditor({ ...editor, version: v })}
+            onOpenConflicts={() => (setEditor(null), go('/files?view=devices&conflicts=1'))}
+          />
+        </Suspense>
+      ) : null}
       {editor?.kind === 'media' ? <MediaViewer files={editor.files} start={editor.index} onClose={() => (setEditor(null), refresh())} /> : null}
       <div className="pointer-events-none fixed right-5 bottom-10 z-40 flex flex-col items-end gap-2.5 [&>*]:pointer-events-auto">
         {clash ? (
@@ -534,6 +576,9 @@ export default function FilesPage(_props: ModuleProps) {
           />
         ) : null}
         {urlTray ? <UrlDownloads folderId={folderId} folderName={folderId ? (nameIn(tree, folderId) ?? 'this folder') : 'My Drive'} onClose={() => setUrlTray(false)} onOpenFolder={(id) => onPlace({ view: 'folder', folder: id })} /> : null}
+        {batchJobs.map((j) => (
+          <BatchTray key={String(j.id)} job={j} onClose={() => (setBatchJobs((all) => all.filter((x) => x.id !== j.id)), refresh())} />
+        ))}
         {!editor && !preview ? <UploadTray /> : null}
         {/* Office files edited in another app here, waiting for a decision (OO-OFF-030). */}
         {!editor && !preview ? <LocalCopiesTray onReview={(c) => void openOfficeTab({ id: c.fileId, name: c.name }, 'VIEW')} /> : null}
@@ -557,7 +602,17 @@ export default function FilesPage(_props: ModuleProps) {
       {dialog?.kind === 'templates' ? (
         <TemplateDialog folderName={folderId ? (nameIn(tree, folderId) ?? 'this folder') : 'My Drive'} onClose={() => setDialog(null)} onPick={(t) => newOffice({ template_id: t.id })} />
       ) : null}
+      {dialog?.kind === 'batch' ? <BatchDialog files={dialog.files} folderName={folderId ? (nameIn(tree, folderId) ?? 'this folder') : TITLES[place.view]} onClose={() => setDialog(null)} onStarted={(j) => setBatchJobs((all) => [...all, j])} /> : null}
+      {dialog?.kind === 'new-image' ? (
+        <CreateImageDialog
+          preset={dialog.preset}
+          folderName={folderId ? (nameIn(tree, folderId) ?? 'this folder') : 'My Drive'}
+          onClose={() => setDialog(null)}
+          onCreate={(spec) => (setDialog(null), setEditor({ kind: 'image', file: null, blank: { ...spec, folderId, folderName: folderId ? (nameIn(tree, folderId) ?? 'this folder') : 'My Drive' } }))}
+        />
+      ) : null}
       {dialog?.kind === 'chat' ? <SendToChatDialog item={dialog.item} discuss={dialog.discuss} onClose={() => setDialog(null)} onOpenChat={(room) => navigate(`/chat?room=${room}`)} /> : null}
+      </div>
     </DriveCtx.Provider>
   );
 }
