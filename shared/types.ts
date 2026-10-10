@@ -1173,6 +1173,13 @@ export interface AppInfo {
   isPackaged: boolean;
   locale: string;
   restoredFromCrash: boolean;
+  /**
+   * Whether the GPU is actually being used for this run (WS-MEET-ENH-01 D02's
+   * pill), which is not the same as the preference: turning it off takes a
+   * restart, so the preference can say one thing while this run does another.
+   * Read from the boot configuration the run started with.
+   */
+  hardwareAcceleration: boolean;
 }
 
 export type WindowKind = 'main' | 'chat-mini' | 'timer' | 'record' | 'call' | 'video-call' | 'ring' | 'meet' | 'phone' | 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'share-bar' | 'webchat-ring' | 'ring-tray' | 'quick-ask' | 'live-map' | 'wall' | 'wall-sheet' | 'support-quick' | 'support-ring' | 'support-wall';

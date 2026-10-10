@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.17.0 — 2026-10-10
+
+- The call bar says it is encrypted in transit and names the mute and camera keys, and warns when this run is not using the GPU.
+- After the emergency stop, the notice says nobody can use your mouse or keyboard and — while a share is still live — that your screen is still visible, with where to stop it.
+
 ## 1.16.0 — 2026-10-10
 
 - The pre-join offers Join muted, Audio only and Present beside Join now; each overrides this screen's switches for one join, and what is remembered stays as it was. Present opens the share picker on arrival, if the host allows presenting.

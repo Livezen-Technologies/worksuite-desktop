@@ -80,6 +80,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     isPackaged: app.isPackaged,
     locale: app.getLocale(),
     restoredFromCrash: ctx.boot.uncleanExit,
+    // What this run is doing, not what the preference says (D02).
+    hardwareAcceleration: ctx.boot.hardwareAcceleration !== false,
   }));
   router.handle('app:quit', () => ctx.quit());
   router.handle('app:relaunch', () => ctx.relaunch(false));

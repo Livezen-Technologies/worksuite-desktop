@@ -5,6 +5,30 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.226 — 2026-10-10
+
+- **The call bar's two facts, and what the emergency stop says afterwards (meet 1.17.0).**
+  - **"Encrypted in transit"**, not the artboard's "Encrypted". Media is encrypted on every hop — WebRTC gives no
+    choice about that — but the meeting server decrypts it to mix and forward, so it is not end-to-end. Beside a
+    meeting people might discuss salaries in, "Encrypted" is a claim we cannot keep; the pill says what is true and
+    its tooltip says the rest.
+  - **Hardware acceleration off** appears when **this run** is not using the GPU. It reads the boot configuration
+    the app actually started with, not the preference: turning it off takes a restart, so the preference can say
+    one thing while the running app does another — and a pill reporting the preference would be wrong exactly when
+    somebody is working out why video is slow. Nothing is shown when the GPU is in use.
+  - **The mute and camera keys** are printed in the bar, read from the person's own shortcuts, so anybody who
+    changed them sees what they actually press.
+  - **After the emergency stop**, the notice now says nobody can use your mouse or keyboard, and — only while a
+    share is still live — that your screen is still shared and where to stop it. The chord ends control, not the
+    share; a notice that said only "Remote control stopped" left somebody who pressed it in a hurry believing they
+    were private. The artboard puts a Stop sharing button on that notice: it is not repeated, because the sharing
+    bar is already on screen with that button whenever a share is live.
+  - **The quit guard the same artboard asks for was already built** and is reached by ⌘Q, the menu, the tray and
+    the last window closing — it lives in the quit path rather than in a `will-quit` handler, which is why an
+    earlier audit of this app missed it.
+
+---
+
 ## 0.2.225 — 2026-10-10
 
 - **The pre-join screen: three more ways in, and a device check (meet 1.16.0).**

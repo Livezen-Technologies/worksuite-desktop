@@ -938,7 +938,17 @@ export class RemoteControlService {
     for (const a of this.chords) {
       const ok = this.deps.shortcuts.register(a, () => {
         log.warn('emergency stop');
-        this.deps.ui.notify('Remote control stopped.');
+        /*
+         * What the chord actually did, in those terms (WS-MEET-ENH-01 RC15):
+         * it ends control, and it does **not** end the share — somebody who
+         * pressed it in a hurry needs to know their screen is still visible.
+         *
+         * The artboard puts a Stop sharing button on this notice. There is no
+         * need: while a share is live the sharing bar is on screen with that
+         * button on it (D03), and a second one here would be a second thing to
+         * keep in step with the first.
+         */
+        this.deps.ui.notify(this.isSharing() ? 'Remote control stopped. Nobody can use your mouse or keyboard. Your screen is still shared — stop it from the sharing bar.' : 'Remote control stopped. Nobody can use your mouse or keyboard.');
         void this.stopAll('emergency_stop');
       });
       if (!ok) this.chordOk = false;

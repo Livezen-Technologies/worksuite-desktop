@@ -33,6 +33,7 @@ import { AddPeopleDialog, Invitations } from './InvitePeople';
 import { MeetNotes } from './MeetNotes';
 import { RecordingSettings } from './RecordingSettings';
 import { StartTranscriptionDialog } from './TranscriptControls';
+import { effectiveShortcuts, prettyAccelerator } from '../../core/commands';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { Whiteboard } from './Whiteboard';
@@ -46,6 +47,69 @@ import { MeetingFiles, ShareMeetingDocument } from './MeetingFiles';
 export function hms(ms: number): string {
   const s = Math.max(0, Math.floor(ms / 1000));
   return [Math.floor(s / 3600), Math.floor((s % 3600) / 60), s % 60].map((n) => String(n).padStart(2, '0')).join(':');
+}
+
+/**
+ * The two facts D02 puts in the call bar.
+ *
+ * **"Encrypted in transit", not "Encrypted."** The artboard says the latter,
+ * and it would be read as end-to-end — which this is not: media is encrypted
+ * on every hop (WebRTC gives no choice about that) and the media server
+ * decrypts it to mix and forward. Saying "Encrypted" beside a meeting people
+ * might discuss salaries in is a claim we cannot keep, so the pill says what
+ * is true and its tooltip says the rest.
+ *
+ * **Hardware acceleration is the state of this run**, not of the preference:
+ * turning it off takes a restart, so the preference can say one thing while
+ * the running app does another, and a pill that reported the preference would
+ * be wrong exactly when somebody is trying to work out why video is slow. It
+ * shows only when it is off, which is the case worth knowing.
+ */
+function CallFactBadges() {
+  const [info, setInfo] = useState<{ hardwareAcceleration?: boolean } | null>(null);
+  const keys = effectiveShortcuts(useStore(app, (st) => st.prefs?.shortcuts));
+
+  useEffect(() => {
+    let gone = false;
+
+    void call('app:info')
+      .then((i) => {
+        if (!gone) setInfo(i);
+      })
+      .catch(() => undefined);
+
+    return () => {
+      gone = true;
+    };
+  }, []);
+
+  return (
+    <>
+      <span
+        title="Encrypted on every hop (DTLS-SRTP). The meeting server decrypts it to mix and forward, so this is not end-to-end encryption."
+        className="flex items-center gap-1 rounded-full bg-[#1F3A2E] px-2 py-0.5 text-[11.5px] font-semibold text-[#A7E3C4]"
+      >
+        <Icon name="shield" size={12} />
+        Encrypted in transit
+      </span>
+      {/*
+        * The two keys D02 prints in the bar, read from the person's own
+        * shortcuts rather than hard-coded: anybody who changed them in
+        * Settings sees what they actually pressed, and somebody who turned the
+        * global keys off is not told about keys that are not held.
+        */}
+      <span className="hidden items-center gap-1.5 font-mono text-[11px] text-[#8FA3C8] lg:flex" aria-hidden>
+        <span>{prettyAccelerator(keys['meet-mute'] ?? '')} mute</span>
+        <span>·</span>
+        <span>{prettyAccelerator(keys['meet-camera'] ?? '')} camera</span>
+      </span>
+      {info && info.hardwareAcceleration === false ? (
+        <span title="This run of WorkSuite is not using the GPU, so video costs more processor. Settings › General › Hardware acceleration, then restart." className="rounded-full bg-[#3A2A10] px-2 py-0.5 text-[11.5px] font-semibold text-[#F6C77A]">
+          Hardware acceleration off
+        </span>
+      ) : null}
+    </>
+  );
 }
 
 /**
@@ -287,6 +351,7 @@ export function MeetRoom() {
               </span>
             ) : null}
             {meet.locked ? <span className="rounded-full bg-[#2A3A66] px-2 py-0.5 text-[11.5px] font-semibold">Locked</span> : null}
+            <CallFactBadges />
             {/* Poor or Offline connection strength (#254): said in the call bar too. */}
             <ConnectionWarning tone="dark" />
           </>
