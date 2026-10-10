@@ -1,3 +1,4 @@
+import { meetShortcutDefaults } from '@shared/shortcuts';
 import { isMac } from './bridge';
 
 /**
@@ -45,6 +46,9 @@ export const DEFAULT_SHORTCUTS: Record<string, string> = {
   // Marketing's Next contact inside WorkSuite (MKT-DSK-01). From other apps it is ⌘⇧N / Ctrl+Shift+N, held by the main
   // process only while WorkSuite is not in front: in here those keys are Move tab to new window.
   'marketing-claim-next': isMac ? 'Mod+Ctrl+N' : 'Mod+Alt+N',
+  // Meet's nine keys and why four of them are not the design's (WS-MEET-ENH-01 D06):
+  // the main process holds five, so they live in shared/shortcuts.ts.
+  ...meetShortcutDefaults(isMac),
   // The app launcher (worksuite-desktop#201); the person's own choice is kept with the launcher's preferences.
   launcher: 'Mod+Shift+K',
   lock: 'Mod+L',
@@ -131,6 +135,54 @@ export function accelerator(e: Pick<KeyboardEvent, 'key' | 'metaKey' | 'ctrlKey'
 export function effectiveShortcuts(overrides: Record<string, string> | undefined): Record<string, string> {
   return { ...DEFAULT_SHORTCUTS, ...(overrides ?? {}) };
 }
+
+/**
+ * Where a shortcut works (D06's Scope column).
+ *
+ * `global` means the main process holds the key, so it works with WorkSuite in
+ * the background — which is the whole point of a mute key you press while
+ * sharing your screen from another app. A global key is held only while it can
+ * do something (`electron/services/meet-keys.ts`): nothing should own ⌘⇧M
+ * system-wide when you are not in a call.
+ *
+ * `app` keys are the renderer's, answered while a WorkSuite window is in front.
+ */
+export type ShortcutScope = 'global' | 'app';
+
+/** The keys the main process holds for the whole computer. */
+const GLOBAL_SHORTCUTS = new Set([
+  'meet-mute',
+  'meet-camera',
+  'meet-join-next',
+  'meet-share-screen',
+  'meet-new',
+  // Held only while no WorkSuite window is in front; see marketing-shortcut.ts.
+  'marketing-claim-next',
+  // The remote-control emergency stop, held by its own service for as long as
+  // somebody can control this computer.
+  'rc-emergency-stop',
+]);
+
+const AREAS: Array<[RegExp, string]> = [
+  [/^(meet-action-item|meet-decision)$/, 'Notes'],
+  [/^meet-/, 'Meet'],
+  [/^rc-/, 'Remote control'],
+  [/^pdf-/, 'PDF Studio'],
+  [/^marketing-/, 'Marketing'],
+  [/^ai(-|$)/, 'AI Assistant'],
+  [/^support-/, 'Support'],
+  [/^(tab-|org-|next-tab|prev-tab|close-tab|restore-tab|move-tab|dock-tab|new-tab)/, 'Tabs'],
+];
+
+/** A shortcut's area and scope, for the shortcuts page and the key holder. */
+export function shortcutMeta(id: string): { area: string; scope: ShortcutScope } {
+  return {
+    area: AREAS.find(([re]) => re.test(id))?.[1] ?? 'WorkSuite',
+    scope: GLOBAL_SHORTCUTS.has(id) ? 'global' : 'app',
+  };
+}
+
+export const isGlobalShortcut = (id: string): boolean => GLOBAL_SHORTCUTS.has(id);
 
 /** Accelerators bound to more than one command. */
 export function conflicts(map: Record<string, string>): Array<{ accelerator: string; commands: string[] }> {

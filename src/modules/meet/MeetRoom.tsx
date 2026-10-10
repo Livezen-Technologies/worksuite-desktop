@@ -25,6 +25,7 @@ import { remote } from './remote/controller';
 import { RemoteControlLayer } from './remote/ControllerSurface';
 import { PointerLayer } from './remote/PointerLayer';
 import { pointers } from './remote/pointers';
+import { useCallShortcuts } from './shortcuts';
 import { isGuest, meet, roleOf, userIdOf } from './session';
 import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } from './RoomRoles';
 import { HostControlsDrawer, cameraControl, hostControlsControl, micControl, reactControl } from './HostControls';
@@ -172,6 +173,17 @@ export function MeetRoom() {
     // Host controls (#91): the host and co-hosts only.
     ...hostControlsControl(hostControls, () => setHostControls(!hostControls)),
   ];
+  /*
+   * The keys (WS-MEET-ENH-01 D06). Each one runs the button above it rather
+   * than its own copy of the action, so a key cannot mute a microphone the
+   * host has locked or raise a hand where hands are off: the button is already
+   * disabled, and the key does nothing.
+   */
+  useCallShortcuts({
+    buttons,
+    openPanel: (tab) => callUi.togglePanel(tab),
+    popOut: () => callUi.float(!ui.floating),
+  });
   // More (#124): Meeting Tools and Host Controls, with the reason beside what cannot be used; the workspace adds View & Layout.
   const more = meetMoreSections(
     {

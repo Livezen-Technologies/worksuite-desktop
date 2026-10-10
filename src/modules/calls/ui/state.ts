@@ -10,6 +10,7 @@
  * localStorage: the panel's width (`call_side_panel_width`), where the PiP
  * sits and how big, the layout they chose, self view, mirroring and fit.
  */
+import { call } from '../../../core/bridge';
 export type LayoutMode = 'auto' | 'focus' | 'side' | 'grid';
 export type PipCorner = 'tl' | 'tr' | 'bl' | 'br';
 export type Fit = 'fill' | 'fit';
@@ -120,6 +121,24 @@ class CallUIStore {
     if (patch.mirror !== undefined) write(KEYS.mirror, next.mirror ? '1' : '0');
     if (patch.fit !== undefined) write(KEYS.fit, next.fit);
     for (const fn of this.listeners) fn();
+  }
+
+  /**
+   * Shrink the call to a card that floats over other apps, or put it back —
+   * the design's "Pop out" (WS-MEET-ENH-01 D02), which the call header has had
+   * as the floating card and D06 gave a key.
+   *
+   * One implementation, because the window and this store have to agree: the
+   * main process decides whether the window could be shrunk and answers with
+   * what it did, and that answer is what is stored. Full screen and a floating
+   * card are mutually exclusive, so full screen goes first.
+   */
+  float(value: boolean): void {
+    if (value && typeof document !== 'undefined' && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
+    void call('windows:setCompact', { value, shape: 'card' }).then(
+      (v) => this.set({ floating: typeof v === 'boolean' ? v : value }),
+      () => undefined,
+    );
   }
 
   /** Open the panel on a tab, or close it when that tab is already showing. */

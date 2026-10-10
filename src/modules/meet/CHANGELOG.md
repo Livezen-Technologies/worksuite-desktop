@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.0 — 2026-10-10
+
+- Meet's keyboard shortcuts: mute, camera, join the next meeting, share a screen, start a meeting, raise a hand, float the call, and the two notes keys. The first five are held for the whole computer so they work with WorkSuite behind whatever you are presenting.
+- Four of the design's eleven keys were already WorkSuite's own, so they keep the design's letter and take the free modifier instead: the shortcuts page shows every clash rather than one key quietly losing.
+
 ## 1.11.1 — 2026-10-05
 
 - Connection warning in the call bar (#254)

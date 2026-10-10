@@ -21,6 +21,7 @@ import { DeviceSettings, Preview, useMeetDevices } from './devices';
 import { transferAct, useLocalRecordings, useRecordingDownloads, useTransfers } from './recordings';
 import { DownloadStatusView } from './RecordingStatus';
 import { InfoTip, RecordingCard, recordingItems, type MainAction, type RecordingItem } from './RecordingCard';
+import { useHomeAction } from './shortcuts';
 import { byDay, checkMeetingInput, dayHeading, historyJoinable, lengthLabel, meetingMinutes, scheduledMinutes, upcomingJoinable } from './home';
 import { useMeetT, type MKey } from './i18n';
 
@@ -33,7 +34,7 @@ import { useMeetT, type MKey } from './i18n';
 export function MeetHome() {
   const t = useMeetT();
   useTabTitle('Meet');
-  const { navigate } = useTab();
+  const { navigate, query } = useTab();
   const me = useStore(app, (s) => s.auth?.user?.name ?? null);
   const perms = useStore(app, (s) => s.bootstrap?.permissions ?? []);
   // Meetings (details, scheduling) and Chat (a meeting's conversation) are other apps: offered only to whoever has them.
@@ -94,6 +95,26 @@ export function MeetHome() {
   };
 
   const liveIds = new Set((history.data?.meetings ?? []).filter((h) => h.status === 'live').map((h) => h.uuid));
+
+  /*
+   * A global key pressed while WorkSuite was behind something else
+   * (WS-MEET-ENH-01 D06). The main process cannot start a meeting itself, so
+   * it brings this page forward with `?do=…` and the action runs here.
+   *
+   * `share` only opens this page: sharing a screen without a meeting is the
+   * Meet home card that D01 adds, and a key that quietly started a meeting to
+   * share from would be a surprise, not a shortcut.
+   */
+  useHomeAction(query, (action) => {
+    if (action === 'new') return instant();
+    if (action !== 'join-next') return;
+
+    const next = (upcoming.data?.meetings ?? []).find((u) => upcomingJoinable(u, Date.now(), liveIds.has(u.uuid)));
+
+    if (!next) return toast('info', upcoming.isLoading ? 'Looking for your next meeting…' : 'Nothing to join just now.');
+
+    void openMeeting(next.uuid, next.title);
+  });
   const newItems: MenuItem[] = [
     { label: t('home.startNow'), hint: t('home.startNowHint'), icon: 'video', run: () => void instant() },
     { label: t('home.later'), hint: t('home.laterHint'), icon: 'link', run: () => void later() },

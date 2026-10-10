@@ -26,12 +26,12 @@ import { pmsCached } from '@shared/pms-cache';
 import { eventsCached } from '@shared/event-desk';
 import { redactUrl } from '@shared/redact';
 import { SUPPORT_QUICK_SHORTCUT, quickRoute, ringRoute, supportNoticePrefs } from '@shared/support';
-import { FOLLOW_UP_DEFAULTS, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
+import { FOLLOW_UP_DEFAULTS, type ActiveCall, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
 import { applyAutostart, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
 import type { AppContext, ClockExtra } from './context';
-import { broadcast, guestWindowIds } from './events';
+import { broadcast, guestWindowIds, sendTo } from './events';
 import { installAppearance } from '../windows/appearance';
 import { AppearanceSync } from '../services/appearance-sync';
 import { registerHandlers } from './handlers';
@@ -82,6 +82,8 @@ import { AI_ANSWER_LINK, AI_CHANGES_LINK, AiPendingWatcher } from '../services/a
 import { MarketingPulse } from '../services/marketing-pulse';
 import { CallbackReminders } from '../services/marketing-reminders';
 import { NextContactKey, nextContactRoute } from '../services/marketing-shortcut';
+import { MeetKeys } from '../services/meet-keys';
+import { MEET_GLOBAL_IDS, meetShortcutDefaults, type MeetGlobalKey } from '@shared/shortcuts';
 import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
@@ -1990,6 +1992,67 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   app.on('browser-window-focus', () => nextContactKey.sync());
   app.on('browser-window-blur', () => setImmediate(() => nextContactKey.sync()));
+
+  /*
+   * Meet's global keys (WS-MEET-ENH-01 D06): mute, camera, join the next
+   * meeting, share a screen, start a meeting.
+   *
+   * Unlike Marketing's key these are not given back on focus — ⌘⇧M is not the
+   * shell's anything, and muting yourself while WorkSuite is in front is the
+   * ordinary case. They are held only while they can act: mute and camera
+   * while a meeting is live on this computer, none of them while locked or
+   * signed out.
+   */
+  const liveMeetWindow = (): BrowserWindow | null => {
+    const live = calls.list().find((c) => c.kind === 'meet');
+    const win = live ? BrowserWindow.fromId(live.windowId) : null;
+
+    return win && !win.isDestroyed() ? win : null;
+  };
+  const meetKeys = new MeetKeys({
+    register: (acc, fn) => globalShortcut.register(acc, fn),
+    unregister: (acc) => globalShortcut.unregister(acc),
+    state: () => ({
+      signedIn: sessionCtl.isReady(),
+      locked: lock.isLocked(),
+      meet: canOpenApp('meet', sessionCtl.visibleApps()),
+      inCall: !!liveMeetWindow(),
+    }),
+    accelerators: () => {
+      const defaults = meetShortcutDefaults(process.platform === 'darwin');
+      const overrides = settings.effective().shortcuts ?? {};
+
+      return Object.fromEntries(MEET_GLOBAL_IDS.map((id) => [id, overrides[id] ?? defaults[id]!])) as Partial<Record<MeetGlobalKey, string>>;
+    },
+    press: (id) => {
+      const win = liveMeetWindow();
+
+      // In a meeting, all three of these belong to its own window: muting the
+      // call you are in is never the main window's business.
+      if (win && (id === 'meet-mute' || id === 'meet-camera' || id === 'meet-share-screen')) {
+        sendTo(win, 'meet:shortcut', { id });
+
+        return;
+      }
+      // Without a meeting, mute and camera have nothing to act on. Doing
+      // nothing is right: these keys are only held while a call is live, so
+      // arriving here at all means the call ended between press and delivery.
+      if (id === 'meet-mute' || id === 'meet-camera') return;
+
+      // The rest start something, which only the workspace can do, so it is
+      // brought forward with the action in the route (D06).
+      const action = id === 'meet-new' ? 'new' : id === 'meet-join-next' ? 'join-next' : 'share';
+
+      navigate({ route: `/meet?do=${action}&n=${Date.now()}`, source: 'shortcut' });
+    },
+    warn: (message, detail) => log.warn(message, detail),
+  });
+  // A meeting starting or ending decides whether mute and camera are held.
+  calls.onListChanged = ((previous) => (list: ActiveCall[]) => {
+    previous(list);
+    meetKeys.sync();
+  })(calls.onListChanged);
+  settings.onChange(() => meetKeys.sync());
   const callbackReminders = new CallbackReminders({
     get: (path, query) => http.get(path, { query }),
     notify: (n) => notifications.notify(n),
@@ -2109,6 +2172,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     marketingPulse.poke();
     callbackReminders.poke();
     nextContactKey.sync();
+    meetKeys.sync();
     if (b) {
       const closed = windows.closeWhere((route) => !canOpenRoute(route, visible));
       if (closed) log.info('windows closed: app no longer available', { closed });
@@ -2201,6 +2265,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     marketingPulse.stop();
     callbackReminders.stop();
     nextContactKey.release();
+    meetKeys.releaseAll();
     windows.hideQuickAsk();
     tray.update({ quickAsk: null });
     // Torn-off windows show the person's data: they close, and come back at their next sign-in.
@@ -2383,6 +2448,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Locked, an urgent ticket's card comes down; unlocked, the desk is looked at again.
     void supportUrgent.check();
     nextContactKey.sync();
+    meetKeys.sync();
     if (s.locked) {
       windows.hideQuickAsk();
       if (!settings.effective().lockedShowCallerDetails) for (const win of BrowserWindow.getAllWindows()) {
@@ -2896,6 +2962,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     quickAsk.release();
     if (supportKeyHeld) globalShortcut.unregister(SUPPORT_QUICK_SHORTCUT);
     nextContactKey.release();
+    meetKeys.releaseAll();
     marketingPulse.stop();
     callbackReminders.stop();
     void askHelper?.then((h) => h?.stop());

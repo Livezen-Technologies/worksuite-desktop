@@ -157,10 +157,8 @@ export function CallWorkspace(props: WorkspaceProps) {
   );
 
   const floating = ui.floating;
-  const setFloating = (value: boolean) => {
-    if (value && document.fullscreenElement) void document.exitFullscreen().catch(() => undefined);
-    void call('windows:setCompact', { value, shape: 'card' }).then((v) => callUi.set({ floating: v }), () => undefined);
-  };
+  // One implementation, in the store: the Meet call's ⌘⌥P runs the same thing.
+  const setFloating = (value: boolean) => callUi.float(value);
 
   const people = props.people;
   const self = people.find((p) => p.self) ?? null;

@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.30.0 — 2026-10-10
+
+- Keyboard shortcuts are grouped by area with a Global or In app badge, a search box, and one Reset to defaults beside the per-row ones. A clash now says which key does nothing until one of them is changed.
+- The remote-control emergency stop is listed, read-only, with where it is changed and why it cannot be removed.
+
 ## 1.29.0 — 2026-10-10
 
 **Added**

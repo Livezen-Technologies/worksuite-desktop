@@ -5,6 +5,35 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.221 — 2026-10-10
+
+- **Meet has keyboard shortcuts (meet 1.12.0, settings 1.30.0, calls 1.7.1).** Nine of them, in Settings ›
+  Keyboard shortcuts with the rest: mute, the camera, Join next meeting, Share screen, Start instant meeting,
+  Raise or lower hand, Float the call over other apps, and the two notes keys. Until now Meet had none at all.
+  - **Five are global**, held by the app itself so they work with WorkSuite behind whatever you are presenting —
+    which is the only reason a mute key is worth having. Mute and the camera are held only while a meeting is
+    live on this computer, and none of them while WorkSuite is locked or signed out: a locked computer must not
+    answer a key that turns a microphone on.
+  - **Four of the design's eleven keys were already WorkSuite's own** — ⌘⇧N is Move tab to new window (and
+    Marketing's Next contact from another app), ⌘⇧P the command palette, ⌘⇧A the assistant, ⌘⇧D Dock tab beside.
+    Those four keep the design's letter and take ⌘⌥ instead of ⌘⇧. Moving a key nobody has yet is a better answer
+    than taking one away from somebody who already uses it, and the page shows every clash, so anybody who would
+    rather have it the other way round can swap the two.
+  - **An in-call key does exactly what the call's own button does**, by running that button. A key cannot mute a
+    microphone the host has locked, or raise a hand in a meeting where hands are off: the button is already
+    disabled and the key does nothing, rather than a second copy of the rule disagreeing with the first.
+  - **If another app already holds a global key**, WorkSuite does without that one and takes it back when the
+    other app lets go. Nothing is silently reassigned.
+  - **The shortcuts page** now groups by area, badges each row Global or In app, has a search box and one Reset to
+    defaults, and lists the remote-control emergency stop read-only with where it is changed and why it cannot be
+    removed.
+  - **Float the call over other apps** is the design's "Pop out": the call header has always had it as the
+    floating card, and it now has a key as well. One implementation in the call UI store, so the two cannot drift.
+  - The two notes keys open Notes & Minutes rather than writing a line into them: the minutes are a shared
+    document with its own editor, and a key that silently appends to somebody else's paragraph is not a feature.
+
+---
+
 ## 0.2.220 — 2026-10-10
 
 - **Projects: the whole portfolio in the app (projects 1.2.0).** All projects, Templates, Clients, New project, a

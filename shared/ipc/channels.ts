@@ -471,6 +471,9 @@ export const EVENT_CHANNELS = [
   'window:fullscreen',
   'calls:changed',
   'meetrec:changed',
+  // A global Meet key was pressed (WS-MEET-ENH-01 D06): the id, to the window
+  // that can act on it — mute and camera to the meeting, the rest to the main window.
+  'meet:shortcut',
   'speech:job',
   'sync:changed',
   'rc:changed',
