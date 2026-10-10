@@ -37,6 +37,9 @@ import { RecipientField, addressOf, domainOf } from './Recipients';
 import { unquote } from './quote';
 import { escapeHtml, parseAddresses } from './sanitize';
 import type { ComposeSeed, Mailbox, Signature, Template } from './types';
+import { SendBlockedNote } from './protection/SendBlocked';
+import { sendBlockOf } from './protection/verdicts';
+import type { SendBlock } from './protection/types';
 
 /**
  * Writing an email, in the page's own tab (UI-07): From, To, Cc and Bcc, the
@@ -122,6 +125,7 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
   const seedQuote = seed.quote ?? '';
   const draft = useDraft<ComposeDraft>('mail', context, { to: seed.to ?? '', cc: seed.cc ?? '', bcc: seed.bcc ?? '', subject: seed.subject ?? '', html: seed.body ? textToComposeHtml(seed.body) : '', quote: seedQuote, from: seed.mailbox ?? defaultBox ?? '', attachments: [], v: 2 });
   const [error, setError] = useState<string | null>(null);
+  const [blocked, setBlocked] = useState<SendBlock | null>(seed.sendBlock ?? null);
   const [showCc, setShowCc] = useState<boolean | 'opened'>(!!seed.cc);
   const [showBcc, setShowBcc] = useState<boolean | 'opened'>(!!seed.bcc);
   const [edited, setEdited] = useState(false);
@@ -416,8 +420,10 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
           if (source) await messageAction(source, 'archive', seed.subject ?? '').catch((e) => toast('error', errorMessage(e)));
           toast(outcome === 'queued' ? 'info' : 'success', outcome === 'queued' ? text('Offline — “{subject}” sends when you reconnect.', { subject }) : text('Sent.'));
         } catch (e) {
-          toast('error', text('“{subject}” was not sent: {reason} It is still in your drafts.', { subject, reason: errorMessage(e) }));
-          onReopen(seed);
+          // Refused by mail protection (P-UI-15): reopened with why — a file with malware, or sending paused — the draft kept.
+          const block = sendBlockOf(e);
+          toast('error', block?.kind === 'malware' ? text('“{subject}” was not sent: an attachment contains a virus. It is still in your drafts.', { subject }) : block?.kind === 'paused' ? text('“{subject}” was not sent: sending is paused for this mailbox. It is still in your drafts.', { subject }) : text('“{subject}” was not sent: {reason} It is still in your drafts.', { subject, reason: errorMessage(e) }));
+          onReopen(block ? { ...seed, sendBlock: block } : seed);
         }
       },
       () => onReopen(seed),
@@ -438,7 +444,9 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
       toast('success', text('Scheduled for {time}.', { time: new Date(at).toLocaleString(undefined, { weekday: 'short', hour: '2-digit', minute: '2-digit' }) }));
       onClose();
     } catch (e) {
-      setError(errorMessage(e));
+      const block = sendBlockOf(e);
+      if (block) setBlocked(block);
+      else setError(errorMessage(e));
     } finally {
       setBusy(false);
     }
@@ -774,6 +782,18 @@ export function Compose({ seed, boxes, defaultBox, offline, onClose, onReopen, o
           <p role="status" className={cx('mx-4 mt-2 shrink-0 rounded-[8px] px-3 py-2 text-[12.5px]', totalBytes > MESSAGE_MAX_BYTES ? 'bg-danger-bg text-danger' : 'bg-warning-bg text-warning')}>
             {text('This message is {size} with its pictures and attachments — most mail servers refuse messages over 25 MB. Send big files as a cloud link instead.', { size: bytes(totalBytes) })}
           </p>
+        ) : null}
+        {blocked ? (
+          <SendBlockedNote
+            block={blocked}
+            attachmentPresent={blocked.kind === 'malware' && !!blocked.attachment && (v.attachments ?? []).some((a) => a.name === blocked.attachment)}
+            onRemove={() => {
+              const name = blocked.kind === 'malware' ? blocked.attachment : null;
+              set({ attachments: (latest.current.attachments ?? []).filter((a) => a.name !== name) });
+              setBlocked(null);
+            }}
+            onDismiss={() => setBlocked(null)}
+          />
         ) : null}
         {error ? <div className="shrink-0 px-4 pt-2"><ErrorNote error={error} /></div> : null}
         {(v.attachments?.length ?? 0) > 0 || uploading.length ? (

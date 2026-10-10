@@ -27,7 +27,12 @@ import { createMeeting, invitation, openMeeting } from '../meet/api';
 import { ConvertEmailSheet } from '../support/ConvertEmailSheet';
 import { TicketChip, useConversionOffer } from '../support/ConvertSheet';
 import { emailToConvert, markTicket } from './ticketLinks';
-import { messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
+import { junkMessage, messageAction, moveMessage, setLabel, useFolders, useLabels, useMessageContext, type MessageActionName } from './api';
+import { scanAttachment, useMessageProtection, protectionKeys } from './protection/api';
+import { attachmentGate, bannerFor, protectionView, type AttachmentAccess } from './protection/verdicts';
+import { VerdictBanner } from './protection/VerdictBanner';
+import { LockedAttachment, ScanChip } from './protection/AttachmentChip';
+import { registerReaderLinks, tagLinkFrames } from './protection/linkContext';
 import { messageKey, seedMessage } from './localFirst';
 import { authFailed, folderName, headerDensity, plainText, securityVerdict } from './model';
 import { blockedImageUrls, escapeHtml, highlightText, mailFrameDoc, sanitizeMailHtml, withLoadedImages, withProxiedImages } from './sanitize';
@@ -229,6 +234,16 @@ export function MessageView(p: MessageViewProps) {
   const found = useMemo(() => highlightText(reading?.html ?? '', find ?? ''), [reading, find]);
   const context = useMessageContext(ref, m?.from_email ?? null, !!m && !p.offline);
   /*
+   * Mail protection (ENH-MAIL-04): the message's verdict, its banner and each attachment's scan. Offline, a message
+   * this computer has no verdict for shows Checking with its files locked until online; a clean verdict kept here
+   * keeps working (MPR-UX-07). A server without the protection service: nothing changes.
+   */
+  const prot = useMessageProtection(ref, !!m);
+  const offlineNow = p.offline || networkOffline;
+  const pv = protectionView(prot.data, { offline: offlineNow, failed: !!prot.error });
+  // Asked and not answered yet, online: no banner (it would flicker), but nothing opens before the answer either.
+  const protPending = prot.isPending && !offlineNow;
+  /*
    * Pictures from the web (DMO-SEC-07, DMO-RD-02, #163): Settings › Mail › Images & media decides — Always, Ask,
    * Only from trusted senders, Never — and they never load on their own in Junk or in mail that failed its
    * authentication checks. Allowed pictures come through WorkSuite's image proxy into the local mail store, so
@@ -241,7 +256,8 @@ export function MessageView(p: MessageViewProps) {
     mode: p.prefs.remoteImages ?? 'ask',
     remote: clean?.blockedImages ?? 0,
     trusted: m ? trustedBy(m.from_email, p.prefs, own) : null,
-    junk: isJunkFolder(ref.folder),
+    // Junk, Phish and Spoof keep their pictures blocked, whatever the setting (MPR-UX-03).
+    junk: isJunkFolder(ref.folder) || !!pv.protection?.images_blocked,
     authFailed: authFailed(context.data?.security),
     pending: !p.offline && !context.isFetched,
     asked: picturesAsked,
@@ -269,7 +285,15 @@ export function MessageView(p: MessageViewProps) {
   }, [pictures.data, found.html, origin, clean, plainOn]);
   // Pictures shown in the body open in the image viewer (#287): the frame hands a click back by this reader's id.
   const [frameId] = useState(() => (globalThis.crypto?.randomUUID?.() ?? `${Math.random()}${Date.now()}`).replace(/[^a-z0-9]/gi, '').slice(0, 16));
-  const framed = useMemo(() => linkPictures(shownHtml, frameId, origin), [shownHtml, frameId, origin]);
+  const framed = useMemo(() => {
+    const f = linkPictures(shownHtml, frameId, origin);
+    // Each link names this reader, so the click-time check knows its message (P-UI-12).
+    return { ...f, html: tagLinkFrames(f.html, frameId) };
+  }, [shownHtml, frameId, origin]);
+  // Links in Junk, Phish and Spoof mail are shown as text: every click stops on the warning first (MPR-UX-04).
+  const linksAsText = !!pv.protection?.links_as_text;
+  const linkVerdict = pv.protection?.verdict ?? null;
+  useEffect(() => registerReaderLinks(frameId, { message: ref.uid, linksAsText, verdict: linkVerdict }), [frameId, ref.uid, linksAsText, linkVerdict]);
   const [viewing, setViewing] = useState<number | null>(null);
   useEffect(
     () =>
@@ -327,14 +351,34 @@ export function MessageView(p: MessageViewProps) {
       if (to === null) return;
       if (to !== 'default') return void move(to.slug, to.name);
     }
+    // Junk and Not junk teach the filter (MPR-UX-06, MPR-TRN): the protection calls, the plain move on an older server.
+    if (action === 'spam' || (action === 'inbox' && isJunkFolder(ref.folder))) return markJunk(action === 'spam' ? 'junk' : 'not_junk');
     try {
       const outcome = await messageAction(ref, action, m.subject);
       void qc.invalidateQueries({ queryKey: ['mail'] });
       void qc.invalidateQueries({ queryKey: ['offline'] });
-      const leaves = action === 'archive' || action === 'trash' || action === 'spam' || action === 'inbox';
+      const leaves = action === 'archive' || action === 'trash' || action === 'inbox';
       if (outcome === 'queued') toast('info', text('Offline — this happens when you reconnect. Undo it in Waiting to send.'));
-      else toast('success', action === 'archive' ? text('Archived.') : action === 'trash' ? text('Moved to Trash.') : action === 'spam' ? text('Reported as spam.') : action === 'unread' ? text('Marked as unread.') : text('Done.'));
+      else toast('success', action === 'archive' ? text('Archived.') : action === 'trash' ? text('Moved to Trash.') : action === 'unread' ? text('Marked as unread.') : text('Done.'));
       if (leaves || action === 'unread') p.onGone();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
+  const markJunk = async (kind: 'junk' | 'not_junk') => {
+    if (!m) return;
+    try {
+      const r = await junkMessage(ref, kind, m.subject);
+      void qc.invalidateQueries({ queryKey: ['mail'] });
+      void qc.invalidateQueries({ queryKey: ['offline'] });
+      const trust = () =>
+        void apiPost('/api/mail/protection/lists/me', { kind: 'allow', value: m.from_email.toLowerCase() })
+          .then(() => toast('success', text('{email} is on your safe senders. Viruses and phishing are still checked.', { email: m.from_email })))
+          .catch((e) => toast('error', errorMessage(e)));
+      if (r.outcome === 'queued') toast('info', text('Offline — this happens when you reconnect. Undo it in Waiting to send.'));
+      else if (kind === 'not_junk' && r.offerTrust) toast('success', text('Moved to the Inbox.'), { label: text('Always trust sender'), run: trust });
+      else toast('success', kind === 'junk' ? text('Moved to Junk. The filter learns from it.') : text('Moved to the Inbox.'));
+      p.onGone();
     } catch (e) {
       toast('error', errorMessage(e));
     }
@@ -512,6 +556,11 @@ export function MessageView(p: MessageViewProps) {
       ? { dark: bodyDark, onToggle: () => p.onPrefs({ bodyThemeSenders: withSenderTheme(p.prefs.bodyThemeSenders, m.from_email, bodyDark ? 'light' : 'dark', reading.automatic) }) }
       : undefined;
   const security = securityVerdict(context.data?.security);
+  // The verdict banner (P-UI-10) and what each attachment may do (P-UI-11).
+  const banner = pv.protection && !pv.unavailable && (!protPending || offlineNow) ? bannerFor(pv.protection, { name: m.from_name || null, email: m.from_email }) : null;
+  const gate = pv.unavailable ? null : attachmentGate(pv.protection, m.attachments, pv.waitingOnline);
+  const scannable = gate ? m.attachments.flatMap((a) => (gate.get(a.ref)?.status === 'unscanned' ? [{ ref: a.ref, access: gate.get(a.ref)! }] : [])) : [];
+  const inJunk = isJunkFolder(ref.folder);
   const outsider = senderNotice(m.from_email, p.account?.email ?? null, context.data ?? null);
   // A WorkSuite notification email's item (#170): a card above the body, and Open in WorkSuite by Reply — verified mail only.
   const wsMail = workSuiteMailItem(m.from_email, context.data);
@@ -710,7 +759,7 @@ export function MessageView(p: MessageViewProps) {
         <Tool icon="archive" label="Archive (E)" onClick={() => void act('archive')} />
         <Tool icon="mail" label="Mark as unread (U)" onClick={() => void act('unread')} />
         <Tool icon="trash" label="Delete (#)" onClick={() => void act('trash')} />
-        <Tool icon="spam" label="Report spam (!)" onClick={() => void act('spam')} disabled={ref.folder === 'spam'} />
+        {inJunk ? <Tool icon="inbox" label={text('Not junk (!)')} onClick={() => void markJunk('not_junk')} /> : <Tool icon="spam" label={text('Junk (!)')} onClick={() => void markJunk('junk')} />}
         <Tool ref={moveBtn} icon="folder-input" label="Move to (V)" onClick={() => setMenu('move')} disabled={!ref.mailbox && !p.localStore} />
         {p.localStore ? <Tool ref={labelBtn} icon="tag" label="Label" onClick={() => setMenu('label')} /> : null}
         {p.stateMenu ? <Tool ref={statesBtn} icon="snooze" label={text('Pin, snooze, flag or categorize')} onClick={() => setMenu('states')} /> : null}
@@ -730,7 +779,7 @@ export function MessageView(p: MessageViewProps) {
         <ClassicBar
           groups={[
             { id: 'new', label: text('New'), items: [{ id: 'new', icon: 'compose', label: text('New email'), run: () => p.onReply({ mode: 'new' }) }] },
-            { id: 'delete', label: text('Delete'), items: [{ id: 'trash', icon: 'trash', label: text('Delete'), run: () => void act('trash') }, { id: 'archive', icon: 'archive', label: text('Archive'), run: () => void act('archive') }, { id: 'spam', icon: 'spam', label: text('Junk'), run: () => void act('spam'), disabled: ref.folder === 'spam' }] },
+            { id: 'delete', label: text('Delete'), items: [{ id: 'trash', icon: 'trash', label: text('Delete'), run: () => void act('trash') }, { id: 'archive', icon: 'archive', label: text('Archive'), run: () => void act('archive') }, inJunk ? { id: 'notjunk', icon: 'inbox', label: text('Not junk'), run: () => void markJunk('not_junk') } : { id: 'spam', icon: 'spam', label: text('Junk'), run: () => void markJunk('junk') }] },
             { id: 'respond', label: text('Respond'), items: [{ id: 'reply', icon: 'reply', label: text('Reply'), run: () => reply('reply') }, { id: 'all', icon: 'reply-all', label: text('Reply all'), run: () => reply('reply_all') }, { id: 'fwd', icon: 'forward', label: text('Forward'), run: () => reply('forward') }] },
             ...(p.quickStepButtons?.length ? [{ id: 'qs', label: text('Quick Steps'), items: p.quickStepButtons.slice(0, 6).map((q) => ({ id: `qs${q.id}`, icon: q.icon, label: q.name, run: q.run })) }] : []),
             { id: 'move', label: text('Move'), items: [{ id: 'move', icon: 'folder-input', label: text('Move to'), run: () => setMenu('move'), disabled: !ref.mailbox && !p.localStore }] },
@@ -772,7 +821,22 @@ export function MessageView(p: MessageViewProps) {
             moreSections={headerMore}
           />
         </div>
-        {security?.state === 'fail' ? (
+        {banner && pv.protection ? (
+          <VerdictBanner
+            model={banner}
+            protection={pv.protection}
+            msgRef={ref}
+            from={{ name: m.from_name || null, email: m.from_email }}
+            subject={m.subject}
+            offline={offlineNow}
+            scannable={scannable}
+            onHeaders={() => setSource(true)}
+            onReportPhish={() => setExtra('phishing')}
+            onGone={p.onGone}
+            cachedNote={pv.fromCache && pv.waitingOnline ? text('Saved on this computer — checked again when you are back online.') : null}
+          />
+        ) : null}
+        {security?.state === 'fail' && banner?.kind !== 'phish' && banner?.kind !== 'spoof' ? (
           <div role="alert" data-auth-warning className="mx-5 mt-3 flex items-start gap-2 rounded-[8px] border border-line bg-danger-bg px-3 py-2 text-[12.5px] text-danger">
             <Icon name="shield-alert" size={15} className="mt-px shrink-0" />
             <span>
@@ -844,7 +908,7 @@ export function MessageView(p: MessageViewProps) {
           ) : null}
         </div>
         </div>
-        {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} /> : null}
+        {m.attachments.length ? <Attachments m={m} msgRef={ref} offline={p.offline} gate={gate} pending={protPending && !pv.unavailable} /> : null}
         {m.team && ref.mailbox && m.conversation_key ? <TeamWork msgRef={ref} m={m} account={p.account} offline={p.offline} /> : null}
       </div>
       {p.prefs.appsPane ? (
@@ -861,7 +925,7 @@ export function MessageView(p: MessageViewProps) {
         />
       ) : null}
       </div>
-      <ActionBar style={toolbarStyle} onReply={reply} onArchive={() => void act('archive')} onDelete={() => void act('trash')} moreRef={bottomMore} onMore={() => setMenu('bottom')} onMove={() => setMenu('move')} onUnread={() => void act('unread')} onStar={() => void act(m.is_starred ? 'unstar' : 'star')} starred={m.is_starred} canMove={!!ref.mailbox || p.localStore} onOpenInWorkSuite={wsMail?.verified ? () => openFromMail(wsMail.link, 'open', undefined) : undefined} />
+      <ActionBar style={toolbarStyle} junk={inJunk ? 'not_junk' : 'junk'} onJunk={(k) => void markJunk(k)} onReply={reply} onArchive={() => void act('archive')} onDelete={() => void act('trash')} moreRef={bottomMore} onMore={() => setMenu('bottom')} onMove={() => setMenu('move')} onUnread={() => void act('unread')} onStar={() => void act(m.is_starred ? 'unstar' : 'star')} starred={m.is_starred} canMove={!!ref.mailbox || p.localStore} onOpenInWorkSuite={wsMail?.verified ? () => openFromMail(wsMail.link, 'open', undefined) : undefined} />
       {menu === 'top' ? <Menu sections={moreItems('top')} label={text('More')} anchor={topMore} prefer="bottom" align="end" onClose={() => setMenu(null)} /> : null}
       {menu === 'bottom' ? <Menu sections={moreItems('bottom')} label={text('More')} anchor={bottomMore} prefer="top" align="end" onClose={() => setMenu(null)} /> : null}
       {menu === 'move' ? <Menu sections={moveSections} label={text('Move to')} anchor={moveBtn} prefer="bottom" align="start" onClose={() => setMenu(null)} /> : null}
@@ -972,13 +1036,13 @@ const AiChip = ({ ref, label, onClick }: { ref?: React.Ref<HTMLButtonElement>; l
   </button>
 );
 
-function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onStar, starred, onMore, moreRef, canMove, onOpenInWorkSuite }: { style: NonNullable<MailPrefs['toolbar']>; onReply: (mode: ComposeSeed['mode']) => void; onArchive: () => void; onDelete: () => void; onMove: () => void; onUnread: () => void; onStar: () => void; starred: boolean; onMore: () => void; moreRef: React.Ref<HTMLButtonElement>; canMove: boolean; onOpenInWorkSuite?: () => void }) {
+function ActionBar({ style, junk, onJunk, onReply, onArchive, onDelete, onMove, onUnread, onStar, starred, onMore, moreRef, canMove, onOpenInWorkSuite }: { style: NonNullable<MailPrefs['toolbar']>; junk: 'junk' | 'not_junk'; onJunk: (kind: 'junk' | 'not_junk') => void; onReply: (mode: ComposeSeed['mode']) => void; onArchive: () => void; onDelete: () => void; onMove: () => void; onUnread: () => void; onStar: () => void; starred: boolean; onMore: () => void; moreRef: React.Ref<HTMLButtonElement>; canMove: boolean; onOpenInWorkSuite?: () => void }) {
   const labelled = style === 'docked';
   const btn = (icon: string, label: string, run: () => void, show = true, extra?: string): ReactNode =>
     show ? (
       <button type="button" onClick={run} aria-label={label} title={label} className={cx('inline-flex h-9 shrink-0 items-center gap-1.5 rounded-[8px] px-2.5 text-[13.5px] font-semibold text-ink hover:bg-subtle', extra)}>
         <Icon name={icon} size={16} className={icon === 'star' && starred ? 'fill-current text-warning' : undefined} />
-        {labelled && ['reply-all', 'forward', 'archive', 'trash'].includes(icon) ? <span>{label}</span> : null}
+        {labelled && ['reply-all', 'forward', 'archive', 'trash', 'spam', 'inbox'].includes(icon) ? <span>{label}</span> : null}
       </button>
     ) : null;
   const reply = (
@@ -991,6 +1055,8 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
       {text('Open in WorkSuite')}
     </Button>
   ) : null;
+  // Junk and Not junk in the action bar too (MPR-UX-06).
+  const junkBtn = junk === 'junk' ? btn('spam', text('Junk'), () => onJunk('junk')) : btn('inbox', text('Not junk'), () => onJunk('not_junk'));
   const more = (
     <button ref={moreRef} type="button" onClick={onMore} aria-label="More actions" title="More actions" className="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle">
       <Icon name="more" size={17} />
@@ -1006,6 +1072,7 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
           {btn('forward', text('Forward'), () => onReply('forward'))}
           {btn('archive', text('Archive'), onArchive)}
           {btn('trash', text('Delete'), onDelete)}
+          {junkBtn}
           {btn('folder-input', text('Move to'), onMove, canMove)}
           {btn('star', starred ? text('Unstar') : text('Star'), onStar)}
           {more}
@@ -1025,6 +1092,7 @@ function ActionBar({ style, onReply, onArchive, onDelete, onMove, onUnread, onSt
           <span className="mx-1.5 h-5 w-px bg-line" />
           {btn('archive', text('Archive'), onArchive)}
           {btn('trash', text('Delete'), onDelete)}
+          {junkBtn}
           {btn('folder-input', text('Move to'), onMove, canMove)}
           {btn('mail', text('Mark as unread'), onUnread)}
           {btn('star', starred ? text('Unstar') : text('Star'), onStar)}
@@ -1057,27 +1125,50 @@ function useSecurityPolicy() {
  * One kept on this computer (downloaded ahead by Settings › Mail › Images & media, or opened before) opens at
  * once, also offline.
  */
-function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: MessageRef; offline: boolean }) {
+function Attachments({ m, msgRef, offline, gate, pending }: { m: MessageDetail; msgRef: MessageRef; offline: boolean; gate: Map<string, AttachmentAccess> | null; pending: boolean }) {
   const { uid, folder, mailbox } = msgRef;
+  const qc = useQueryClient();
   const policy = useSecurityPolicy();
   const extra = policy.data?.blocked_extensions ?? [];
   const items = useMemo(() => m.attachments.map((a, i) => ({ ...a, name: readableName(a.name, a.mime, i + 1) })), [m.attachments]);
+  /*
+   * Only a scanned file is opened, previewed, downloaded, saved to Files or dragged out (MPR-UX-02). While the verdict
+   * is being asked for, nothing opens; with no protection service at the server (gate null) the app works as before.
+   */
+  const openable = (ref: string) => !pending && (!gate || !!gate.get(ref)?.open);
+  const allowed = items.filter((a) => openable(a.ref));
+  const [scanning, setScanning] = useState<string | null>(null);
+  const scan = async (ref: string) => {
+    setScanning(ref);
+    try {
+      const r = await scanAttachment(msgRef, ref);
+      if (r.status === 'blocked') toast('error', r.reason ?? (r.threat ? text('A virus was found: {threat}', { threat: r.threat }) : text('Blocked by your organisation')));
+      else if (r.status === 'unscanned') toast('info', r.reason ?? text('It could not be checked. It stays locked.'));
+      void qc.invalidateQueries({ queryKey: protectionKeys.message(msgRef) });
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setScanning(null);
+    }
+  };
   const kept = useQuery({
-    queryKey: ['mail', 'kept-attachments', mailbox ?? null, folder, uid, items.map((a) => a.ref).join(','), offline],
+    queryKey: ['mail', 'kept-attachments', mailbox ?? null, folder, uid, allowed.map((a) => a.ref).join(','), offline],
     queryFn: async () => {
       try {
-        return new Set(await call('mail:keptAttachments', { uid: String(uid), folder, mailbox: mailbox ?? null, items: items.slice(0, 50).map((a) => ({ ref: a.ref, name: a.name, mime: a.mime || '', size: Math.max(0, Math.round(a.size || 0)) })), auto: !offline }));
+        // Only files that may be opened are fetched ahead or looked for here: a locked one never lands on this computer from the reader.
+        return new Set(await call('mail:keptAttachments', { uid: String(uid), folder, mailbox: mailbox ?? null, items: allowed.slice(0, 50).map((a) => ({ ref: a.ref, name: a.name, mime: a.mime || '', size: Math.max(0, Math.round(a.size || 0)) })), auto: !offline }));
       } catch {
         return new Set<string>();
       }
     },
+    enabled: allowed.length > 0,
     staleTime: 60_000,
   });
   const keptRefs = [...(kept.data ?? [])].join(',');
   const thumbs = useQuery({
     queryKey: ['mail', 'attachment-thumbs', mailbox ?? null, folder, uid, keptRefs],
     queryFn: async () => {
-      const pics = items.filter((a) => kept.data?.has(a.ref) && attachmentKind(a.name, a.mime) === 'images' && a.size <= 3 * 1024 * 1024).slice(0, 12);
+      const pics = items.filter((a) => openable(a.ref) && kept.data?.has(a.ref) && attachmentKind(a.name, a.mime) === 'images' && a.size <= 3 * 1024 * 1024).slice(0, 12);
       const out: Record<string, string> = {};
       if (!pics.length) return out;
       const path = (a: { ref: string }) => `/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, ...(mailbox ? { mailbox: String(mailbox) } : {}), local: '1' }).toString()}`;
@@ -1118,6 +1209,10 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
         const here = !!kept.data?.has(a.ref);
         const thumb = thumbs.data?.[a.ref];
         const badge = thumb ? <img src={thumb} alt="" className="h-9 w-9 shrink-0 rounded-[6px] object-cover" /> : <FileBadge name={a.name} />;
+        const access = gate?.get(a.ref) ?? null;
+        // Blocked, being checked, or not scanned: shown, never opened (P-UI-11).
+        if (access && !access.open) return <LockedAttachment key={a.ref} name={a.name} size={size} access={access} offline={offline} scanning={scanning === a.ref} onScan={() => void scan(a.ref)} />;
+        if (pending) return <LockedAttachment key={a.ref} name={a.name} size={size} access={{ status: 'checking', open: false, reason: text('Being checked for viruses'), threat: null, waitingOnline: false }} offline={offline} />;
         if (risk === 'blocked') {
           return (
             <div key={a.ref} className="flex w-full max-w-[520px] items-center gap-3 rounded-[10px] border border-line bg-subtle px-3 py-2 text-[13px]" title={text('WorkSuite blocks this kind of attachment: it can run as a program on your computer.')}>
@@ -1169,7 +1264,10 @@ function Attachments({ m, msgRef, offline }: { m: MessageDetail; msgRef: Message
             >
               {badge}
               <span className="min-w-0">
-                <span className="block truncate text-[13px] font-semibold text-ink">{a.name}</span>
+                <span className="flex min-w-0 items-center gap-2">
+                  <span className="truncate text-[13px] font-semibold text-ink">{a.name}</span>
+                  {access ? <ScanChip access={access} /> : null}
+                </span>
                 <span className="block text-[11.5px] text-ink-3">
                   {size} · {risk === 'macro' ? text('has macros — save only') : text('open')}
                   {here ? ` · ${text('on this computer')}` : ''}

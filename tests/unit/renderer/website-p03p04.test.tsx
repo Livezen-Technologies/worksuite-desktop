@@ -89,7 +89,8 @@ describe('P-03 · Admin Center › Chat › Ringing', () => {
     ringing();
     await screen.findByLabelText('Ring the rest of the priority agents after');
     const nav = screen.getByRole('navigation', { name: 'Admin sections' });
-    expect(nav.textContent).toBe('Admin CenterOrganizationsUsers & rolesMailChatGeneralRingingDriveSecurity');
+    // Mail › Protection (ENH-MAIL-04) is shown to whoever may see mail security; this admin holds every permission.
+    expect(nav.textContent).toBe('Admin CenterOrganizationsUsers & rolesMailProtectionChatGeneralRingingDriveSecurity');
     expect(within(nav).getByRole('button', { name: 'Ringing' }).getAttribute('aria-current')).toBe('page');
     expect(screen.getByRole('heading', { name: 'Website chat ringing' })).toBeTruthy();
     expect(screen.getByText('Who is rung, and when. Each person picks their own tone and device.')).toBeTruthy();

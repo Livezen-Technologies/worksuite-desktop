@@ -15,6 +15,9 @@ import { checkLink, shownHost, type LinkVerdict, type MailLinkClick } from '@sha
 import { mailtoRoute, parseMailto } from '@shared/mailto';
 import { IMAGE_LINK } from './readable';
 import { openWorkSuiteLinkFromMail } from './worksuiteLinks';
+import { readerLinks } from './protection/linkContext';
+import { linkVerdictOf } from './protection/verdicts';
+import type { LinkCheckResult } from './protection/types';
 
 /**
  * Safe links (ENH-MAIL-03 DMO-SEC-03, design O-UI-17): a link clicked in a
@@ -23,6 +26,12 @@ import { openWorkSuiteLinkFromMail } from './worksuiteLinks';
  * WorkSuite server (nothing goes to any outside service). A link with none of
  * those signs opens; anything else stops on a warning that shows the real
  * address and says what is wrong. A mailto: link starts a message here.
+ *
+ * Mail protection (ENH-MAIL-04 P-UI-12, MPR-UX-04): the server's click-time
+ * check (`POST links/check` with the message it came from) answers safe,
+ * suspicious, dangerous or unknown, with a reason in words and where the link
+ * really ends up. Dangerous is blocked — Go back only. In a Junk, Phish or
+ * Spoof message every link is shown as text and every click stops here first.
  */
 
 const RANK: Record<LinkVerdict, number> = { ok: 0, caution: 1, danger: 2, blocked: 3 };
@@ -33,23 +42,49 @@ export interface LinkJudgement {
   verdict: LinkVerdict;
   reasons: string[];
   host: string | null;
+  /** The server's reason in words (the click-time check), shown as it is. */
+  reasonText?: string | null;
+  /** Where the server found the link really ends up, when that is somewhere else. */
+  finalUrl?: string | null;
+  /** The message's links are shown as text (Junk, Phish, Spoof): it stops here whatever the checks say. */
+  asText?: string | null;
 }
 
+type ServerCheck = { verdict: LinkVerdict; reasons: string[] } | LinkCheckResult;
+
 /** The local verdict, made worse (never better) by the server's when it answers in time. */
-export async function judgeLink(link: MailLinkClick, online: boolean, ask = (u: string, t: string) => apiPost<{ verdict: LinkVerdict; reasons: string[] }>('/api/mail/links/check', { url: u, text: t })): Promise<LinkJudgement> {
+export async function judgeLink(link: MailLinkClick, online: boolean, ask = (u: string, t: string, message?: string) => apiPost<ServerCheck>('/api/mail/links/check', { url: u, text: t, ...(message ? { message } : {}) })): Promise<LinkJudgement> {
   const local = checkLink(link.url, link.text);
+  const reader = readerLinks(link.frame);
   let verdict = local.verdict;
   let reasons = local.reasons;
+  let reasonText: string | null = null;
+  let finalUrl: string | null = null;
   if (online && local.host) {
     try {
-      const server = await Promise.race([ask(link.url, link.text), new Promise<null>((r) => setTimeout(() => r(null), 2500))]);
+      const answer = await Promise.race([ask(link.url, link.text, reader?.message), new Promise<null>((r) => setTimeout(() => r(null), 2500))]);
+      const server = linkVerdictOf(answer);
       if (server && RANK[server.verdict] > RANK[verdict]) verdict = server.verdict;
-      if (server) reasons = [...new Set([...reasons, ...server.reasons])];
+      if (server) {
+        reasons = [...new Set([...reasons, ...server.reasons])];
+        reasonText = server.reasonText;
+        finalUrl = server.finalUrl && server.finalUrl !== link.url ? server.finalUrl : null;
+      }
     } catch {
       // The server could not say: the local check stands.
     }
   }
-  return { url: link.url, text: link.text, verdict, reasons, host: local.host };
+  const asText = reader?.linksAsText ? (reader.verdict ?? 'junk') : null;
+  // Shown as text: never opened straight away (MPR-UX-04).
+  if (asText && verdict === 'ok') verdict = 'caution';
+  return { url: link.url, text: link.text, verdict, reasons, host: local.host, reasonText, finalUrl, asText };
+}
+
+/** Why a message's links are shown as text, in words. */
+export function asTextWords(verdict: string): string {
+  if (verdict === 'PHISH') return text('This message looks like phishing, so its links are turned off. Open this one only if you are sure.');
+  if (verdict === 'SPOOF') return text('This message pretends to be from someone else, so its links are turned off. Open this one only if you are sure.');
+  return text('This message looks like spam, so its links are turned off. Open this one only if you are sure.');
 }
 
 /** What each sign means, in words. */
@@ -144,6 +179,8 @@ export function MailLinkGuard() {
         <div className="flex items-start gap-2">
           <Icon name="shield-alert" size={18} className={pending.verdict === 'caution' ? 'shrink-0 text-warning' : 'shrink-0 text-danger'} />
           <ul className="flex flex-col gap-1">
+            {pending.asText ? <li>{asTextWords(pending.asText)}</li> : null}
+            {pending.reasonText ? <li>{pending.reasonText}</li> : null}
             {pending.reasons.filter((r) => r !== 'not_encrypted' || pending.reasons.length === 1).map((r) => (
               <li key={r}>{reasonWords(r, pending)}</li>
             ))}
@@ -152,6 +189,12 @@ export function MailLinkGuard() {
         <div>
           <p className="text-[12px] font-semibold text-ink-3">It really goes to</p>
           <p className="mt-0.5 rounded-[8px] bg-subtle px-2 py-1.5 font-mono text-[12px] break-all selectable">{pending.url}</p>
+          {pending.finalUrl ? (
+            <>
+              <p className="mt-2 text-[12px] font-semibold text-ink-3">{text('…and ends up at')}</p>
+              <p data-final-url className="mt-0.5 rounded-[8px] bg-subtle px-2 py-1.5 font-mono text-[12px] break-all selectable">{pending.finalUrl}</p>
+            </>
+          ) : null}
         </div>
         {!online ? <p className="text-[12px] text-ink-3">Offline: checked on this computer only, not against your organisation’s list.</p> : null}
       </div>

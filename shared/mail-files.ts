@@ -77,6 +77,8 @@ export const MAIL_FILE_FILTERS = [
 export interface MailLinkClick {
   url: string;
   text: string;
+  /** The reader the link was clicked in (its frame id), so the click can be traced to its message (ENH-MAIL-04 P-UI-12). */
+  frame?: string;
 }
 
 /**
@@ -94,7 +96,9 @@ export function parseSafeLink(href: string): MailLinkClick | null {
   if (!href.startsWith(`${SAFE_LINK_PREFIX}?`)) return null;
   const q = new URLSearchParams(href.slice(SAFE_LINK_PREFIX.length + 1));
   const url = q.get('u');
-  return url ? { url: url.slice(0, 4096), text: (q.get('t') ?? '').slice(0, 300) } : null;
+  const frame = q.get('f');
+  if (!url) return null;
+  return { url: url.slice(0, 4096), text: (q.get('t') ?? '').slice(0, 300), ...(frame && /^[a-z0-9]{4,24}$/i.test(frame) ? { frame } : {}) };
 }
 
 export type LinkVerdict = 'ok' | 'caution' | 'danger' | 'blocked';

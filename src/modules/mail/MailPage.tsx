@@ -59,6 +59,9 @@ import { SearchView } from './SearchView';
 import { MailFileViewer } from './FileViewer';
 import { ExportDialog } from './DataFiles';
 import { MailSidebar, unreadOf, type Place } from './Sidebar';
+import { fetchProtection, useQuarantineCount } from './protection/api';
+import { QUARANTINE_ROUTE, QuarantinePage } from './protection/QuarantinePage';
+import { attachmentGate } from './protection/verdicts';
 import { StatusBar, WaitingPanel } from './StatusBar';
 import type { AllRole, ComposeSeed, Label, MailPrefs, Mailbox, MessageDetail, MessagePage, MessageRef, MessageRow } from './types';
 import { FIRST_PAGE, LIST_PAGE, emptyReason, needsFill, nextListParam, readFolder, seedListFromLocal, showFocusedHint, syncingLine, type ListPageParam } from './listLoading';
@@ -79,9 +82,11 @@ export { joinQuote, splitQuote, unquote } from './quote';
  * a reply all, f forward, n new email, / search.
  */
 export default function MailPage(props: ModuleProps) {
-  const { query } = useTab();
+  const { query, path } = useTab();
   // An .eml or .msg opened from the system or Import (ENH-MAIL-03 DMO-DAT-04): read-only, in a tab of its own.
   const file = query.get('file');
+  // Mail › Quarantine (ENH-MAIL-04 D20): what was held for the person, across every account.
+  if (path[1] === 'quarantine') return <QuarantinePage />;
   return file ? <MailFileViewer handle={file} /> : <MailWorkspace {...props} />;
 }
 
@@ -100,6 +105,8 @@ function MailWorkspace({ active }: ModuleProps) {
   const status = useStore(app, (s) => s.status);
   const cacheDays = useStore(app, (s) => s.prefs?.mailCacheDays ?? 30);
   const networkOffline = status?.network === 'OFFLINE';
+  // Mail › Quarantine in the rail (ENH-MAIL-04 D20): how many are held, or no entry where the server holds none.
+  const quarantineHeld = useQuarantineCount(active);
 
   const [chips, setChips] = useState<ChipId[]>([]);
   const [search, setSearch] = useState('');
@@ -875,8 +882,13 @@ function MailWorkspace({ active }: ModuleProps) {
   const saveAttachments = async (t: Target) => {
     try {
       const r = await apiGetMeta<MessageDetail>(`/api/mail/messages/${t.row.id}`, withMailbox({ folder: t.folder, peek: 1 }, t.mailbox));
-      const all = r.data.attachments ?? [];
-      if (!all.length) return void toast('info', text('This message has no attachments to save.'));
+      const listed = r.data.attachments ?? [];
+      if (!listed.length) return void toast('info', text('This message has no attachments to save.'));
+      // Only scanned files go to Files (ENH-MAIL-04 MPR-UX-02): blocked, unchecked and not-yet-scanned ones stay where they are.
+      const gate = attachmentGate(await fetchProtection(refOfTarget(t)), listed, false);
+      const all = gate ? listed.filter((a) => gate.get(a.ref)?.open) : listed;
+      if (all.length < listed.length) toast('info', listed.length - all.length === 1 ? text('1 attachment was not saved: it is blocked or has not been checked for viruses yet.') : text('{n} attachments were not saved: they are blocked or have not been checked for viruses yet.', { n: listed.length - all.length }));
+      if (!all.length) return;
       const box = t.mailbox ? { mailbox: t.mailbox } : {};
       const done = await Promise.allSettled(all.map((a) => apiPost(`/api/mail/messages/${t.row.id}/attachments/${encodeURIComponent(a.ref)}/save`, box, { folder: t.folder, mime: a.mime || 'application/octet-stream', ...box })));
       const saved = done.filter((d) => d.status === 'fulfilled').length;
@@ -1148,6 +1160,8 @@ function MailWorkspace({ active }: ModuleProps) {
               onSettings={() => navigate('/settings/mail')}
               favorites={globalPrefs.favorites ?? []}
               onFavorites={(next) => setGlobalPrefs({ favorites: next })}
+              quarantine={quarantineHeld}
+              onQuarantine={() => go(QUARANTINE_ROUTE)}
             />
           </SidePanel>
         ) : null}

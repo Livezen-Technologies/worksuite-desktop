@@ -30,6 +30,24 @@ export function ReportDialog({ kind, msgRef, from, subject, canBlock, onDone, on
   const send = async () => {
     setBusy(true);
     try {
+      // Mail protection (ENH-MAIL-04 MPR-TRN, WF-P06): phishing is reported to the protection service — held for the
+      // reporter, its links and fingerprint on the organisation's lists. An older server takes the plain report.
+      if (kind === 'phishing') {
+        const held = await apiPost(`/api/mail/messages/${msgRef.uid}/report-phish`, { folder: msgRef.folder, ...(msgRef.mailbox ? { mailbox: msgRef.mailbox } : {}) }).then(
+          () => true,
+          (e: unknown) => {
+            if (e instanceof ApiError && e.status === 404) return false;
+            throw e;
+          },
+        );
+        if (held) {
+          const blocked = block && canBlock ? await blockSender(from, msgRef.mailbox) : false;
+          void qc.invalidateQueries({ queryKey: ['mail'] });
+          toast('success', `${text('Reported — it is held in your quarantine, and its links are blocked for everyone in your organisation.')}${block ? ` ${blocked ? text('{email} is blocked.', { email: from }) : text('{email} could not be blocked from this mailbox.', { email: from })}` : ''}`);
+          onDone();
+          return;
+        }
+      }
       const r = await apiPost<{ moved_to: string | null; forwarded_to: string | null; security_mailbox: boolean }>(`/api/mail/messages/${msgRef.uid}/report`, { folder: msgRef.folder, kind, block, ...(msgRef.mailbox ? { mailbox: msgRef.mailbox } : {}) });
       let blocked = false;
       if (block && canBlock) {
@@ -72,6 +90,20 @@ export function ReportDialog({ kind, msgRef, from, subject, canBlock, onDone, on
         {!canBlock ? <p className="text-[12px] text-ink-3">Blocking needs a WorkSuite mailbox, which keeps its rules on the mail server.</p> : null}
       </div>
     </Modal>
+  );
+}
+
+/** Block a sender on the person's protection list; through the mail rules on a server without one. */
+async function blockSender(email: string, mailbox: string | null): Promise<boolean> {
+  try {
+    await apiPost('/api/mail/protection/lists/me', { kind: 'block', value: email.toLowerCase() });
+    return true;
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 404)) return false;
+  }
+  return apiPost('/api/mail/rules/sender', { email, action: 'block', ...(mailbox ? { mailbox } : {}) }).then(
+    () => true,
+    () => false,
   );
 }
 

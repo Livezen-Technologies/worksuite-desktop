@@ -9,6 +9,8 @@ import { plainText } from './model';
 import type { Target } from './MessageMenus';
 import { flagChoices, snoozeChoices, stateItem } from './states';
 import type { ComposeSeed, MessageDetail, MessageRow } from './types';
+import { attachmentGate } from './protection/verdicts';
+import type { MessageProtection } from './protection/types';
 
 /**
  * Quick Steps (ENH-MAIL-03 DMO-QS-01…06, WF-DO03): a named list of actions
@@ -243,7 +245,16 @@ export async function runQuickStep(step: QuickStep, targets: Target[], run: Runn
           }
           case 'save_attachments': {
             const detail = await run.get<MessageDetail>(`/api/mail/messages/${t.row.id}`, { folder: t.folder, ...(t.mailbox ? { mailbox: t.mailbox } : {}) });
-            for (const att of detail.attachments ?? []) await run.post(`/api/mail/messages/${t.row.id}/attachments/${encodeURIComponent(att.ref)}/save`, { folder: t.folder, ...(t.mailbox ? { mailbox: t.mailbox } : {}) });
+            // Only scanned files go to Files (ENH-MAIL-04 MPR-UX-02); a server without protection answers 404 and saves as before.
+            const protection = await run.get<MessageProtection>(`/api/mail/messages/${t.row.id}/protection`, { folder: t.folder, ...(t.mailbox ? { mailbox: t.mailbox } : {}) }).catch((e: unknown) => {
+              if (e instanceof ApiError && (e.status === 404 || e.status === 501)) return null;
+              throw e;
+            });
+            const listed = detail.attachments ?? [];
+            const gate = attachmentGate(protection, listed, false);
+            const allowed = gate ? listed.filter((att) => gate.get(att.ref)?.open) : listed;
+            for (const att of allowed) await run.post(`/api/mail/messages/${t.row.id}/attachments/${encodeURIComponent(att.ref)}/save`, { folder: t.folder, ...(t.mailbox ? { mailbox: t.mailbox } : {}) });
+            if (allowed.length < listed.length) throw new Error(text('{n} attachments were not saved: they are blocked or have not been checked for viruses yet.', { n: listed.length - allowed.length }));
             break;
           }
           default:

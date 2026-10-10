@@ -623,6 +623,8 @@ export interface MessageRef {
   uidvalidity?: number | null;
 }
 
+import type { SendBlock } from './protection/types';
+
 export interface ComposeSeed {
   mode: 'new' | 'reply' | 'reply_all' | 'forward';
   to?: string;
@@ -638,4 +640,6 @@ export interface ComposeSeed {
   templateId?: number;
   /** The message replied to, for Send and archive (worksuite-desktop#213). */
   source?: MessageRef;
+  /** The last send was refused by mail protection (P-UI-15): reopened with why, the draft as it was. */
+  sendBlock?: SendBlock;
 }

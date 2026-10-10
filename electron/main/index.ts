@@ -1993,6 +1993,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/mail/labels', 'mail'],
     ['/api/mail/prefs', 'mail'],
     ['/api/mail/sync/status', 'mail'],
+    // Mail protection (ENH-MAIL-04): the quarantine as last seen opens offline; releasing it waits for the connection.
+    ['/api/mail/quarantine', 'mail'],
     ['/api/whatsapp/accounts', 'chat'],
     ['/api/whatsapp/chats', 'chat'],
     ['/api/chat/rooms', 'chat'],

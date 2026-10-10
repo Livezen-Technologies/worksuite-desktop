@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.29.0 — 2026-10-10
+
+**Added**
+
+- Admin Center › Mail › Protection (ENH-MAIL-04) in the Admin Center rail for whoever holds mail.security.view, and the Admin Center footer for them too; the rail is one component shared with Chat › Ringing
+
 ## 1.28.0 — 2026-10-09
 
 **Added**

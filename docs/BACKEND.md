@@ -1003,6 +1003,28 @@ What the desktop cannot do because the server does not:
 - **Refunds go back to the tender they came from.** Another method needs a manager on the server; the till always
   sends the payment's own `method`.
 
+### Mail protection (ENH-MAIL-04)
+
+The reader, Mail › Quarantine, Settings › Mail › Spam & security and Admin Center › Mail › Protection use the Mail
+module's protection API (types in `src/modules/mail/protection/types.ts`). A server without it answers `404`: the
+reader shows no banner and gates nothing (as before), Junk / Not junk fall back to the plain move, Report phishing to
+`POST messages/{id}/report`, and the quarantine entry is not shown.
+
+| Need | Endpoint |
+|---|---|
+| A message's verdict, banner, attachment scans | `GET /api/mail/messages/{id}/protection?folder=&mailbox=` — cached offline under `/api/mail/messages` (MPR-UX-07) |
+| Scan one attachment now | `POST /api/mail/attachments/scan {mailbox, message, folder, part}` (`part` = the attachment's `ref`) |
+| Junk / Not junk with training | `POST /api/mail/messages/{id}/junk` · `/not-junk {folder, mailbox}` through the offline queue; `offer_trust_sender` |
+| Report phishing | `POST /api/mail/messages/{id}/report-phish {folder, mailbox}` |
+| Click-time link check | `POST /api/mail/links/check {url, text, message?}` — `verdict` (ok/caution/danger/blocked) ranks; `safety`, `reason`, `final_url` are shown |
+| Quarantine | `GET /api/mail/quarantine?state=&q=` (cached offline), `POST …/{id}/release {trust_sender?}`, `POST …/{id}/request {note?}` |
+| Own lists, settings | `GET/POST/DELETE /api/mail/protection/lists/me[/{id}]`, `GET/PUT /api/mail/protection/settings` |
+| Admin Center | `/api/admin/mail/protection/{overview, policies[/{id}[/preview, apply, rollback, versions]], lists[/import, export], attachments, engines[/test, update, restart], reports, search-remove}`, `/api/admin/mail/quarantine[/{id}[/content, release, delete, decide]]` |
+
+Send refusals: a `422` whose code (the envelope's, or `errors.code` / `errors.reason`) is one of `malware_attachment`
+(with `errors.attachment`, `errors.threat`) or `sending_paused` (with `errors.detail`) reopens the composer with the
+draft and says why (P-UI-15). Any other refusal is shown as before.
+
 ## The existing API (servers without `/desktop/v1`)
 
 | Need | Endpoint |

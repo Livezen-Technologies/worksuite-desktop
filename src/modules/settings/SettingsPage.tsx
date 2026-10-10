@@ -49,6 +49,8 @@ import { UpdatesRow } from './UpdatesCard';
 import { UpdateDiagnosticsPage, UpdatesPage } from './UpdatesPage';
 import { LicensePage } from './LicensePage';
 import { ADMIN_RINGING_ROUTE, AdminRinging } from './AdminRinging';
+import { ADMIN_PROTECTION_ROUTE, useHasPermission } from './AdminNav';
+import { AdminProtection } from '../mail/protection/admin/AdminProtection';
 
 /** Pages laid out in cards side by side get the wider column. */
 const WIDE: ReadonlySet<string> = new Set(['updates', 'update-diagnostics', 'license']);
@@ -92,12 +94,14 @@ const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', '
 const LOCAL_SECTIONS: ReadonlySet<string> = new Set(['local-profile', 'local-data']);
 
 /**
- * Settings, and under it the Admin Center's Chat › Ringing (P-03: the Settings rail, an "Admin Center" tab), which this
- * app draws itself; the Admin Center's other sections are the web app's.
+ * Settings, and under it the Admin Center's Chat › Ringing (P-03: the Settings rail, an "Admin Center" tab) and Mail ›
+ * Protection (ENH-MAIL-04 D21–D25), which this app draws itself; the Admin Center's other sections are the web app's.
  */
 export default function SettingsPage(props: ModuleProps) {
   const { path } = useTab();
-  return path[1] === 'admin' ? <AdminRinging /> : <SettingsSections {...props} />;
+  // Admin Center › Mail › Protection (ENH-MAIL-04 D21–D25) and › Chat › Ringing (P-03): this app's own screens.
+  if (path[1] === 'admin') return path[2] === 'mail' ? <AdminProtection /> : <AdminRinging />;
+  return <SettingsSections {...props} />;
 }
 
 /** Whether this person may set the organisation's website chat ringing (the Chat module's `chat.widget.manage`). */
@@ -114,6 +118,7 @@ function SettingsSections(_props: ModuleProps) {
   const hasContacts = useCanOpen('contacts');
   const hasChat = useCanOpen('chat');
   const managesRinging = useManagesRinging();
+  const seesProtection = useHasPermission('mail.security.view');
   const { ref: listRef, fades, onScroll: onListScroll } = useScrollFades<HTMLDivElement>();
   if (!prefs) return null;
   return (
@@ -141,9 +146,9 @@ function SettingsSections(_props: ModuleProps) {
           {fades.bottom ? <div aria-hidden data-fade="bottom" className="pointer-events-none absolute inset-x-0 bottom-0 h-8" style={{ background: 'linear-gradient(to bottom, transparent, var(--ws-surface))' }} /> : null}
         </div>
         {/* The organisation's ringing rules, for whoever manages website chats (P-03); it opens here, in the app. */}
-        {managesRinging && !guest ? (
+        {(managesRinging || seesProtection) && !guest ? (
           <div data-settings-footer className="shrink-0 border-t border-line px-3 py-2">
-            <button type="button" onClick={() => go(ADMIN_RINGING_ROUTE)} className="flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px] text-ink hover:bg-subtle">
+            <button type="button" onClick={() => go(managesRinging ? ADMIN_RINGING_ROUTE : ADMIN_PROTECTION_ROUTE)} className="flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px] text-ink hover:bg-subtle">
               <Icon name="shield-check" size={16} /> Admin Center
             </button>
           </div>
