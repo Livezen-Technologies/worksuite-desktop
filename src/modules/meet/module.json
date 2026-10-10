@@ -1,8 +1,9 @@
 {
     "module": "meet",
-    "version": "1.12.0",
+    "version": "1.13.0",
     "paths": [
         "electron/services/meet-keys.ts",
+        "electron/services/meet-next.ts",
         "shared/livestream.ts"
     ]
 }

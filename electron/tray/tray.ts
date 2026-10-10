@@ -5,6 +5,7 @@ import { logger } from '../main/log';
 import { liveTitle } from '../services/live-desk';
 import type { SupportPulseFigures } from '../services/support-desk';
 import type { TrayMarketing } from '../services/marketing-pulse';
+import type { TrayMeet } from '../services/meet-next';
 import { NEXT_CONTACT_LABEL } from '../services/marketing-shortcut';
 import { clockOf, hhmm as hm, stampMs, targetLabel, type ProjectTimerState, type TimerTarget } from '@shared/projects';
 
@@ -70,6 +71,10 @@ export interface TrayModel {
    * sending now. Null for anybody with nothing to show, or before the server answers. Optional for older callers.
    */
   marketing?: TrayMarketing | null;
+  /** Meet's lines (WS-MEET-ENH-01 D04): the next meeting to join, and whether this computer is in one. Null: no Meet lines. */
+  meet?: TrayMeet | null;
+  /** Each shortcut's key as a menu shows it, by command id: shown beside a line, never registered here. */
+  shortcutLabels?: Record<string, string>;
   /**
    * The Projects timer (PRJ-DSK-02, D02): what runs, Switch to, today's and this week's totals. Null or unavailable
    * for anybody without Projects. Optional for older callers.
@@ -111,6 +116,9 @@ export function trayUpdateItems(u: TrayUpdate | null | undefined, a: Pick<TrayAc
 }
 
 /** Quick Actions, each of its app: offered only to whoever may open that app. */
+/** A title that fits a menu line. */
+const short = (s: string): string => (s.length > 46 ? `${s.slice(0, 45)}…` : s);
+
 export const QUICK_ACTIONS: ReadonlyArray<{ app: string; label: string; route: string }> = [
   { app: 'tasks', label: 'New Task', route: '/tasks?new=1' },
   { app: 'mail', label: 'New Email', route: '/mail?compose=1' },
@@ -138,6 +146,13 @@ export interface TrayActions {
   answerWebchatCall?: (callId: number) => void;
   quickAsk: () => void;
   aiChanges: () => void;
+  /** Meet's tray lines (WS-MEET-ENH-01 D04). Optional for older callers. */
+  meetJoinNext?: () => void;
+  meetStart?: () => void;
+  meetShare?: () => void;
+  /** Mute or unmute, and the camera — the same actions the global keys press. */
+  meetMute?: () => void;
+  meetCamera?: () => void;
   ringingSettings: () => void;
   /**
    * The ringing menu with its reply box (R-06, UX-ALR-02), by the tray icon (`anchor`, or null where it is not known):
@@ -171,7 +186,6 @@ export function trayProjectItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'proje
   const t = m.projectTimer;
   if (!m.signedIn || !m.apps.includes('projects') || !t?.available || !a.projectTimerSwitch) return [];
   const items: MenuItemConstructorOptions[] = [];
-  const short = (s: string) => (s.length > 46 ? `${s.slice(0, 45)}…` : s);
   const r = t.running;
   const ran = (x: { startedAt: string }) => Math.max(0, Math.floor((now - (stampMs(x.startedAt) ?? now)) / 1000));
   if (r) {
@@ -213,6 +227,49 @@ export function trayMarketingItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'mar
   if (mk.sending) items.push({ label: `Sending now ${mk.sending.count} · ${mk.sending.pct}%`, enabled: false });
   if (mk.queueWaiting !== null && a.marketingNextContact) items.push({ label: 'Next contact', accelerator: NEXT_CONTACT_LABEL, registerAccelerator: false, click: a.marketingNextContact });
   if (items.length) items.push({ type: 'separator' });
+  return items;
+}
+
+/**
+ * Meet's lines (WS-MEET-ENH-01 D04, the tray the artboard draws).
+ *
+ * "Join next: Weekly design review" when there is something to join, Start
+ * instant meeting and Share screen always, and mute and the camera only while
+ * this computer is in a meeting — a mute line with nothing to mute is worse
+ * than no line. Each key is shown but not registered here: the main process
+ * holds the global ones and only while they can act (`meet-keys.ts`).
+ *
+ * The artboard also draws Do not disturb in this section. It is not repeated
+ * here: WorkSuite already has one, further down the same menu, and two
+ * switches for one setting is how they come to disagree.
+ */
+export function trayMeetItems(
+  m: Pick<TrayModel, 'signedIn' | 'apps' | 'meet'>,
+  a: Pick<TrayActions, 'openRoute' | 'meetJoinNext' | 'meetStart' | 'meetShare' | 'meetMute' | 'meetCamera'>,
+  keys: Record<string, string> = {},
+): MenuItemConstructorOptions[] {
+  const meet = m.meet;
+
+  if (!m.signedIn || !m.apps.includes('meet') || !meet) return [];
+
+  const items: MenuItemConstructorOptions[] = [];
+  const key = (id: string): Partial<MenuItemConstructorOptions> => (keys[id] ? { accelerator: keys[id], registerAccelerator: false } : {});
+
+  if (meet.next && a.meetJoinNext) items.push({ label: `Join next: ${short(meet.next.title)}`, ...key('meet-join-next'), click: a.meetJoinNext });
+  if (a.meetStart) items.push({ label: 'Start instant meeting', ...key('meet-new'), click: a.meetStart });
+  if (a.meetShare) items.push({ label: 'Share screen', ...key('meet-share-screen'), click: a.meetShare });
+
+  if (meet.inCall) {
+    items.push({ type: 'separator' });
+    if (a.meetMute) items.push({ label: 'Mute microphone', ...key('meet-mute'), click: a.meetMute });
+    if (a.meetCamera) items.push({ label: 'Turn camera on or off', ...key('meet-camera'), click: a.meetCamera });
+  }
+
+  if (items.length) {
+    items.push({ label: 'Meet settings…', click: () => a.openRoute('/settings?section=meet') });
+    items.push({ type: 'separator' });
+  }
+
   return items;
 }
 
@@ -424,6 +481,7 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
     items.push({ type: 'separator' });
   }
   items.push(...trayUpdateItems(m.update, a));
+  items.push(...trayMeetItems(m, a, m.shortcutLabels ?? {}));
   items.push(...trayMarketingItems(m, a));
   items.push(...trayProjectItems(m, a));
   items.push({ label: 'Open WorkSuite', click: a.open });

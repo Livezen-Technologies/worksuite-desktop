@@ -53,13 +53,22 @@ export function MeetRingScreen() {
     };
   }, [muted]);
 
-  const answer = async (accept: boolean) => {
+  /**
+   * Accept, Audio only, or Decline (WS-MEET-ENH-01 D04).
+   *
+   * Both ways of accepting are the same answer to the server — the invitation
+   * does not care which devices you use — and differ only in what the join
+   * screen starts with: Accept leaves both off, Audio only leaves the
+   * microphone as you last had it and the camera off. Neither is remembered:
+   * the next meeting is not this one.
+   */
+  const answer = async (accept: boolean, audioOnly = false) => {
     setBusy(true);
     tone.current?.stop();
     try {
       const r = await apiPost<{ state: string; uuid: string; title?: string }>(`/api/meet/rings/${ring}/answer`, { answer: accept ? 'accept' : 'decline' });
       // Answered here first, or on another device as accepted: open it. Declined anywhere: nothing to open.
-      if (accept && (r.state === 'accepted' || r.state === 'ringing')) await openMeeting(r.uuid || uuid, r.title ?? title, { quiet: true });
+      if (accept && (r.state === 'accepted' || r.state === 'ringing')) await openMeeting(r.uuid || uuid, r.title ?? title, { quiet: !audioOnly, audioOnly });
       close();
     } catch (e) {
       setBusy(false);
@@ -94,12 +103,22 @@ export function MeetRingScreen() {
             Accept
           </button>
         </div>
+        <button
+          type="button"
+          disabled={busy}
+          onClick={() => void answer(true, true)}
+          title="Join with your microphone and the camera off"
+          className="flex h-9 items-center justify-center gap-2 rounded-[10px] bg-white/10 text-[13px] font-semibold text-white hover:bg-white/16 disabled:opacity-60"
+        >
+          <Icon name="mic" size={15} />
+          Audio only
+        </button>
         {error ? (
           <p role="alert" className="text-[12px] text-[#FFB4A2]">
             {error}
           </p>
         ) : (
-          <p className="text-[11.5px] text-[#AFC0E8]">Accept opens the meeting with your microphone and camera off.</p>
+          <p className="text-[11.5px] text-[#AFC0E8]">Accept opens the meeting with your microphone and camera off; Audio only leaves your microphone as it was.</p>
         )}
         <button type="button" onClick={() => setMuted(!muted)} className="mt-auto self-center text-[12px] font-semibold text-[#AFC0E8] hover:text-white">
           {muted ? 'Ringtone on' : 'Mute the ringtone'}

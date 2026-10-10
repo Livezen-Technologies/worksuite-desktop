@@ -23,8 +23,11 @@ export function MeetLobby() {
   const joining = meet.phase === 'joining';
   // The devices are let go while joining, so the meeting can take them.
   // Joining from an accepted invitation (`?quiet=1`, worksuite-desktop#79): nothing switches on by itself.
-  const quiet = useTab().query.get('quiet') === '1';
-  const d = useMeetDevices(!waiting && !joining, { camAllowed: info.mode !== 'audio', startOff: quiet });
+  const query = useTab().query;
+  const quiet = query.get('quiet') === '1';
+  // Answered "Audio only" on the invitation (D04): the camera starts off.
+  const audioOnly = query.get('audio') === '1';
+  const d = useMeetDevices(!waiting && !joining, { camAllowed: info.mode !== 'audio', startOff: quiet, camOff: audioOnly });
   const [passcode, setPasscode] = useState('');
   const [sent, setSent] = useState(false);
   const others = info.joined_count;

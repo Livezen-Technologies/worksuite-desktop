@@ -83,7 +83,8 @@ import { MarketingPulse } from '../services/marketing-pulse';
 import { CallbackReminders } from '../services/marketing-reminders';
 import { NextContactKey, nextContactRoute } from '../services/marketing-shortcut';
 import { MeetKeys } from '../services/meet-keys';
-import { MEET_GLOBAL_IDS, meetShortcutDefaults, type MeetGlobalKey } from '@shared/shortcuts';
+import { MeetNext } from '../services/meet-next';
+import { MEET_GLOBAL_IDS, electronAccelerator, meetShortcutDefaults, type MeetGlobalKey } from '@shared/shortcuts';
 import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
 import { OfflineCache } from '../services/offline-cache';
@@ -1073,6 +1074,42 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   };
   // Marketing's Next contact (MKT-DSK-01): the global key and the tray's line — My call queue's workspace, on a new claim.
   const openNextContact = (source: 'shortcut' | 'tray'): void => navigate({ route: nextContactRoute(), source });
+
+  /** The meeting this computer is in, if any: whose window answers mute and the camera. */
+  const liveMeetWindow = (): BrowserWindow | null => {
+    const live = calls.list().find((c) => c.kind === 'meet');
+    const win = live ? BrowserWindow.fromId(live.windowId) : null;
+
+    return win && !win.isDestroyed() ? win : null;
+  };
+
+  /**
+   * One Meet action, however it was asked for (WS-MEET-ENH-01 D04, D06): a
+   * global key, or the tray's own line. One implementation, because a tray
+   * entry and a key that did subtly different things would be a bug nobody
+   * would think to look for.
+   */
+  const meetAction = (id: string, source: 'shortcut' | 'tray'): void => {
+    const win = liveMeetWindow();
+
+    // In a meeting, these belong to its own window: muting the call you are in
+    // is never the main window's business.
+    if (win && (id === 'meet-mute' || id === 'meet-camera' || id === 'meet-share-screen')) {
+      sendTo(win, 'meet:shortcut', { id });
+
+      return;
+    }
+    // Without a meeting, mute and camera have nothing to act on. The keys are
+    // held only while a call is live, so arriving here means it ended between
+    // the press and the delivery; the tray does not offer them at all.
+    if (id === 'meet-mute' || id === 'meet-camera') return;
+
+    // The rest start something, which only the workspace can do, so it comes
+    // forward with the action in the route.
+    const action = id === 'meet-new' ? 'new' : id === 'meet-join-next' ? 'join-next' : 'share';
+
+    navigate({ route: `/meet?do=${action}&n=${Date.now()}`, source });
+  };
   const flushNavigation = (): void => {
     if (!sessionCtl.isReady()) return;
     const w = windows.getMain();
@@ -1612,6 +1649,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     supportQuickLatest: () => quickLatest(),
     supportPresence: (status) => void supportDesk.setPresence(status),
     marketingNextContact: () => openNextContact('tray'),
+    meetJoinNext: () => meetAction('meet-join-next', 'tray'),
+    meetStart: () => meetAction('meet-new', 'tray'),
+    meetShare: () => meetAction('meet-share-screen', 'tray'),
+    meetMute: () => meetAction('meet-mute', 'tray'),
+    meetCamera: () => meetAction('meet-camera', 'tray'),
     projectTimerStop: () => void projects.timer.end().catch((e) => broadcast('toast', { kind: 'error', text: String((e as Error).message ?? e) })),
     projectTimerSwitch: (t) => void projects.timer.switchTo(t).catch((e) => broadcast('toast', { kind: 'error', text: String((e as Error).message ?? e) })),
     projectTimerResume: () => void projects.timer.resume().catch((e) => broadcast('toast', { kind: 'error', text: String((e as Error).message ?? e) })),
@@ -2003,12 +2045,6 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
    * while a meeting is live on this computer, none of them while locked or
    * signed out.
    */
-  const liveMeetWindow = (): BrowserWindow | null => {
-    const live = calls.list().find((c) => c.kind === 'meet');
-    const win = live ? BrowserWindow.fromId(live.windowId) : null;
-
-    return win && !win.isDestroyed() ? win : null;
-  };
   const meetKeys = new MeetKeys({
     register: (acc, fn) => globalShortcut.register(acc, fn),
     unregister: (acc) => globalShortcut.unregister(acc),
@@ -2024,35 +2060,44 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
       return Object.fromEntries(MEET_GLOBAL_IDS.map((id) => [id, overrides[id] ?? defaults[id]!])) as Partial<Record<MeetGlobalKey, string>>;
     },
-    press: (id) => {
-      const win = liveMeetWindow();
-
-      // In a meeting, all three of these belong to its own window: muting the
-      // call you are in is never the main window's business.
-      if (win && (id === 'meet-mute' || id === 'meet-camera' || id === 'meet-share-screen')) {
-        sendTo(win, 'meet:shortcut', { id });
-
-        return;
-      }
-      // Without a meeting, mute and camera have nothing to act on. Doing
-      // nothing is right: these keys are only held while a call is live, so
-      // arriving here at all means the call ended between press and delivery.
-      if (id === 'meet-mute' || id === 'meet-camera') return;
-
-      // The rest start something, which only the workspace can do, so it is
-      // brought forward with the action in the route (D06).
-      const action = id === 'meet-new' ? 'new' : id === 'meet-join-next' ? 'join-next' : 'share';
-
-      navigate({ route: `/meet?do=${action}&n=${Date.now()}`, source: 'shortcut' });
-    },
+    press: (id) => meetAction(id, 'shortcut'),
     warn: (message, detail) => log.warn(message, detail),
   });
+  /*
+   * What the tray shows for Meet (D04): the next meeting to join, and whether
+   * this computer is in one. Polled in the main process because the tray is
+   * read with every window closed — the same `GET /api/meet/upcoming` the Meet
+   * home asks, and the same idea of "joinable", so the two never disagree.
+   */
+  const meetNext = new MeetNext({
+    get: (path, query) => http.get(path, { query }),
+    allowed: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('meet', sessionCtl.visibleApps()),
+    inCall: () => !!liveMeetWindow(),
+    onChange: (meet) => tray.update({ meet, shortcutLabels: meetKeyLabels() }),
+  });
+  /** Each Meet key as a menu shows it, so a tray line can carry its shortcut without registering it. */
+  const meetKeyLabels = (): Record<string, string> => {
+    const defaults = meetShortcutDefaults(process.platform === 'darwin');
+    const overrides = settings.effective().shortcuts ?? {};
+
+    return Object.fromEntries(
+      Object.keys(defaults)
+        .map((id) => [id, electronAccelerator(overrides[id] ?? defaults[id])])
+        .filter((pair): pair is [string, string] => typeof pair[1] === 'string'),
+    );
+  };
   // A meeting starting or ending decides whether mute and camera are held.
   calls.onListChanged = ((previous) => (list: ActiveCall[]) => {
     previous(list);
     meetKeys.sync();
+    // In or out of a meeting changes both the keys held and the tray's lines.
+    meetNext.publish();
+    meetNext.poke();
   })(calls.onListChanged);
-  settings.onChange(() => meetKeys.sync());
+  settings.onChange(() => {
+    meetKeys.sync();
+    meetNext.publish();
+  });
   const callbackReminders = new CallbackReminders({
     get: (path, query) => http.get(path, { query }),
     notify: (n) => notifications.notify(n),
@@ -2173,6 +2218,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     callbackReminders.poke();
     nextContactKey.sync();
     meetKeys.sync();
+    meetNext.poke();
     if (b) {
       const closed = windows.closeWhere((route) => !canOpenRoute(route, visible));
       if (closed) log.info('windows closed: app no longer available', { closed });
@@ -2210,6 +2256,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       aiPending.start();
     });
     marketingPulse.start();
+    meetNext.start();
     callbackReminders.start();
     device.start();
     device.extras = () => {
@@ -2263,6 +2310,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ai.forget();
     aiPending.stop();
     marketingPulse.stop();
+    meetNext.stop();
     callbackReminders.stop();
     nextContactKey.release();
     meetKeys.releaseAll();
@@ -2449,6 +2497,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void supportUrgent.check();
     nextContactKey.sync();
     meetKeys.sync();
+    meetNext.publish();
     if (s.locked) {
       windows.hideQuickAsk();
       if (!settings.effective().lockedShowCallerDetails) for (const win of BrowserWindow.getAllWindows()) {
@@ -2964,6 +3013,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     nextContactKey.release();
     meetKeys.releaseAll();
     marketingPulse.stop();
+    meetNext.stop();
     callbackReminders.stop();
     void askHelper?.then((h) => h?.stop());
     // Windows' places are saved while the database is open; timers that read it stop first.

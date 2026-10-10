@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.13.0 — 2026-10-10
+
+- Meet in the tray: Join next with the meeting's name, Start instant meeting, Share screen, and — only while this computer is in a meeting — mute and the camera. Each line shows its key, and the main process reads the next meeting itself so the tray is right with every window closed.
+- Audio only on an invitation to a meeting: joins with your microphone as you last had it and the camera off, where Accept leaves both off.
+
 ## 1.12.0 — 2026-10-10
 
 - Meet's keyboard shortcuts: mute, camera, join the next meeting, share a screen, start a meeting, raise a hand, float the call, and the two notes keys. The first five are held for the whole computer so they work with WorkSuite behind whatever you are presenting.

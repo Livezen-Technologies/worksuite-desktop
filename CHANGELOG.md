@@ -5,6 +5,31 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.222 — 2026-10-10
+
+- **Meet in the tray, and Audio only on an invitation (meet 1.13.0).** The tray had no Meet lines at all.
+  - **Join next: <the meeting>** when there is something to join, **Start instant meeting** and **Share screen**
+    always, and **mute** and **the camera** only while this computer is in a meeting — a Mute line with nothing to
+    mute is worse than no line. Each one shows its keyboard shortcut beside it without taking the key: the app
+    already holds the global ones, and only while they can act.
+  - **The next meeting is read in the app itself**, once a minute while somebody who has Meet is signed in, so the
+    tray is right with every window closed. It asks the same endpoint the Meet home asks and uses the same idea of
+    "joinable" — from a quarter of an hour before the start until the end — so the tray and the page never
+    disagree about which meeting you are about to join. A server without that endpoint, or somebody whose role
+    does not include Meet, simply has no Meet lines; offline, the last answer stays, because a meeting that was in
+    ten minutes still is.
+  - **Audio only** on an invitation to a meeting, beside Accept and Decline: it joins with your microphone as you
+    last had it and the camera off, where Accept leaves both off. Neither is remembered — the next meeting is not
+    this one.
+  - **Do not disturb is deliberately not repeated** in the Meet section, though the design draws it there:
+    WorkSuite already has one further down the same menu, and two switches for one setting is how they come to
+    disagree.
+  - **Not built, and why:** the design's *Running late* answer on a meeting reminder. Telling the host you are on
+    your way needs somewhere on the server to send it, and there is nothing there yet — a button that quietly did
+    nothing would be worse than no button.
+
+---
+
 ## 0.2.221 — 2026-10-10
 
 - **Meet has keyboard shortcuts (meet 1.12.0, settings 1.30.0, calls 1.7.1).** Nine of them, in Settings ›
