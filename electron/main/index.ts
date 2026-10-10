@@ -2036,6 +2036,45 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   app.on('browser-window-blur', () => setImmediate(() => nextContactKey.sync()));
 
   /*
+   * "Pop out the call when I switch apps" (D05): the meeting shrinks to a card
+   * that floats over whatever you moved to, and goes back when you return.
+   *
+   * Only when no WorkSuite window is in front — moving between WorkSuite's own
+   * windows is not switching apps, and a meeting that shrank every time
+   * somebody clicked their inbox would be unusable. The same test the Next
+   * contact key uses, for the same reason.
+   */
+  let poppedOut = false;
+  const anyWindowFocused = (): boolean => BrowserWindow.getAllWindows().some((w) => !w.isDestroyed() && w.isFocused());
+  const syncPopOut = (): void => {
+    if (settings.effective().meetBehaviour?.popOutOnSwitch !== true) {
+      poppedOut = false;
+
+      return;
+    }
+
+    const win = liveMeetWindow();
+
+    if (!win) {
+      poppedOut = false;
+
+      return;
+    }
+
+    const away = !anyWindowFocused();
+
+    if (away === poppedOut) return;
+
+    poppedOut = away;
+    // Only ever undoes what it did: a card the person shrank themselves is
+    // left alone when they come back.
+    windows.setCompact(win, away, 'card');
+  };
+
+  app.on('browser-window-focus', () => syncPopOut());
+  app.on('browser-window-blur', () => setImmediate(() => syncPopOut()));
+
+  /*
    * Meet's global keys (WS-MEET-ENH-01 D06): mute, camera, join the next
    * meeting, share a screen, start a meeting.
    *
@@ -2053,6 +2092,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       locked: lock.isLocked(),
       meet: canOpenApp('meet', sessionCtl.visibleApps()),
       inCall: !!liveMeetWindow(),
+      globalKeys: settings.effective().meetBehaviour?.globalKeys !== false,
     }),
     accelerators: () => {
       const defaults = meetShortcutDefaults(process.platform === 'darwin');

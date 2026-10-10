@@ -5,6 +5,34 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.223 — 2026-10-10
+
+- **Settings › Meet: Behaviour, and what the system allows (meet 1.14.0, settings 1.31.0, calls 1.7.2).**
+  - **Pop out the call when I switch apps.** The meeting shrinks to a card that floats over whatever you move to
+    and goes back when you return. Only when no WorkSuite window is in front — moving between WorkSuite's own
+    windows is not switching apps, and a call that shrank every time you clicked your inbox would be unusable. It
+    only ever undoes what it did, so a card you shrank yourself is left alone.
+  - **Global mute and camera shortcuts** can be switched off, and then nothing is held for the whole computer —
+    the keys still work with a WorkSuite window in front. Somebody who wants ⌘⇧M back for another app can have it.
+  - **Share computer sound when presenting** sets what the share picker starts with; the picker still decides each
+    share on its own.
+  - **Video quality on battery** — Auto, 720p or 360p. Read as the call is built, because a capture resolution is
+    set at join: unplugging mid-call does not renegotiate everybody's video, which would cost more than it saves.
+  - **System permissions**, in one place: camera, microphone, screen recording, accessibility for remote control,
+    and notifications — each with Open System Settings where the operating system has a pane for it, and a count
+    of what is missing. **Read, never asked for:** opening a settings page must not pop a permission prompt, and
+    on macOS the asking happens once per app, so a page that asked would spend the one chance there is.
+    - **"Not asked for" is not "denied".** Only macOS gates the camera, microphone and screen capture; on Windows
+      and Linux the rows say the computer does not ask, rather than sending you hunting for a switch that does not
+      exist. A check that cannot run reads **Unable to verify**, which is its own answer — reporting it as a denial
+      is what sends people to reset permissions that were never the problem.
+  - **Three of the artboard's six switches are deliberately not here**, because WorkSuite already has them and two
+    settings for one thing is how they come to disagree: **hardware acceleration** is in General, and **opening
+    meeting links here instead of the browser** is in Links (it already covers meetings). Both are named on the
+    page, with a link, rather than left to be hunted for.
+
+---
+
 ## 0.2.222 — 2026-10-10
 
 - **Meet in the tray, and Audio only on an invitation (meet 1.13.0).** The tray had no Meet lines at all.

@@ -218,6 +218,9 @@ const api = {
     screenSources: call('media:screenSources'),
     screenPick: call('media:screenPick'),
     privacySettings: call('media:privacySettings'),
+    // Settings › Meet › System permissions, and what the camera sends on battery (D05).
+    permissions: call('media:permissions'),
+    power: call('media:power'),
   },
   calls: {
     active: call('calls:active'),

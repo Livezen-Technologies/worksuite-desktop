@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.14.0 — 2026-10-10
+
+- What the camera sends on battery follows Settings › Meet › Behaviour: Auto, 720p or 360p. Read as the room is built, since a capture resolution is set at join.
+
 ## 1.13.0 — 2026-10-10
 
 - Meet in the tray: Join next with the meeting's name, Start instant meeting, Share screen, and — only while this computer is in a meeting — mute and the camera. Each line shows its key, and the main process reads the next meeting itself so the tray is right with every window closed.

@@ -51,6 +51,31 @@ export interface Meta {
 }
 
 /** The reactions anybody may send (worksuite-desktop#91): a short, fixed set, so nothing else is shown. */
+/**
+ * What the camera sends (WS-MEET-ENH-01 D05).
+ *
+ * 720p on mains, and on battery whatever Settings › Meet › Behaviour › Video
+ * quality on battery says. Read once, as the room is built: LiveKit takes a
+ * capture resolution at join, so unplugging mid-call does not change it —
+ * renegotiating everybody's video because a charger came out would cost more
+ * than it saves.
+ */
+async function cameraResolution() {
+  const want = app.get().prefs?.meetBehaviour?.qualityOnBattery ?? 'auto';
+
+  if (want === 'auto') return VideoPresets.h720.resolution;
+
+  const onBattery = await call('media:power')
+    .then((r) => r.onBattery === true)
+    // Unanswered: treated as on mains. Lowering the camera for a computer that
+    // is plugged in is the wrong way to be wrong.
+    .catch(() => false);
+
+  if (!onBattery) return VideoPresets.h720.resolution;
+
+  return want === '360p' ? VideoPresets.h360.resolution : VideoPresets.h720.resolution;
+}
+
 export const REACTIONS = ['👍', '👏', '❤️', '😂', '😮', '🎉'] as const;
 
 /** A reaction on screen for a moment. */
@@ -331,7 +356,7 @@ export class MeetSession {
       adaptiveStream: true,
       dynacast: true,
       audioCaptureDefaults: { ...CLEAN_AUDIO, deviceId: opts.micId },
-      videoCaptureDefaults: { deviceId: opts.camId, resolution: VideoPresets.h720.resolution },
+      videoCaptureDefaults: { deviceId: opts.camId, resolution: await cameraResolution() },
       audioOutput: opts.speakerId ? { deviceId: opts.speakerId } : undefined,
     });
     this.room = room;

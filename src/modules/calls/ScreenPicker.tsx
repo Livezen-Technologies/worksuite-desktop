@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import type { ScreenSources } from '@shared/types';
 import { call, errorMessage, platform } from '../../core/bridge';
+import { app } from '../../core/app-state';
+import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
@@ -70,7 +72,10 @@ export function pickerView(q: { isLoading: boolean; error: unknown; data?: Scree
 export function ScreenPicker({ onPick, onClose, changing, control, inMeeting }: { onPick: (p: SharePick) => void; onClose: () => void; changing?: boolean; control?: PickerControl; inMeeting?: boolean }) {
   const [tab, setTab] = useState<'screen' | 'window'>('screen');
   const [picked, setPicked] = useState<string | null>(null);
-  const [audio, setAudio] = useState(false);
+  // Settings › Meet › Behaviour › Share computer sound when presenting (D05)
+  // is the default; this checkbox still decides each share.
+  const soundByDefault = useStore(app, (st) => st.prefs?.meetBehaviour?.shareComputerSound === true);
+  const [audio, setAudio] = useState(soundByDefault);
   const [quality, setQualityState] = useState<Quality>(savedQuality);
   // Until the person changes it, "let people ask" follows the saved default, which may arrive after the picker opens.
   const [allowRequests, setAllowRequests] = useState<boolean | null>(null);

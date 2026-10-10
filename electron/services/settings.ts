@@ -74,6 +74,9 @@ export function defaultPreferences(): Preferences {
     webchatFollowUps: { ...FOLLOW_UP_DEFAULTS },
     ai: { quickAsk: true, shortcut: process.platform === 'darwin' ? 'Alt+Space' : 'Control+Alt+Space', insert: true, dockAtStart: false, language: 'Sinhala', display: 'widget', sound: false, moduleAccess: { worksuite: {}, local: {} }, onlineFallback: true, autoMinimize: false, autoMinimizeWhenWorking: true },
     meetRecording: { method: 'cloud', quality: '720p', layout: 'grid', folder: 'Meeting Recordings', localFolder: join(videos, 'WorkSuite Recordings'), keepLocal: '7' },
+    // Settings › Meet › Behaviour (WS-MEET-ENH-01 D05). The global keys are on:
+    // a mute key that only works with the window in front is not worth having.
+    meetBehaviour: { popOutOnSwitch: false, globalKeys: true, shareComputerSound: false, qualityOnBattery: 'auto' },
     drive: defaultDrivePrefs(),
   };
 }
@@ -98,7 +101,7 @@ export class SettingsService {
     const savedLanguage = db.getConfig<unknown>('interface_language_default');
     this.defaultLanguage = normalizeLanguage(typeof savedLanguage === 'string' ? savedLanguage : stored.language);
     // The AI settings are one object: one saved before a field was added takes that field's default.
-    this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? (stored.appLockMinutes !== undefined && stored.appLockMinutes > 0), appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, drive: normalizeDrivePrefs(stored.drive), ...migrateUpdatePrefs(stored) };
+    this.prefs = { ...defaults, ...stored, appLockEnabled: stored.appLockEnabled ?? (stored.appLockMinutes !== undefined && stored.appLockMinutes > 0), appLockMinutes: stored.appLockMinutes === 0 && stored.appLockEnabled === undefined ? 15 : stored.appLockMinutes ?? defaults.appLockMinutes, darkColorProfile: normalizeDarkProfile(stored.darkColorProfile), ai: { ...defaults.ai, ...stored.ai, display: stored.ai?.display ?? defaults.ai.display }, meetRecording: { ...defaults.meetRecording, ...stored.meetRecording }, meetBehaviour: { ...defaults.meetBehaviour, ...stored.meetBehaviour }, drive: normalizeDrivePrefs(stored.drive), ...migrateUpdatePrefs(stored) };
     this.setAppearance(normalizeAppearance(stored.appearance, { theme: stored.theme, darkColorProfile: stored.darkColorProfile }), stored.theme);
   }
 

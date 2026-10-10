@@ -1,5 +1,5 @@
 import { verifyLockChange } from '../services/lock-verification';
-import { app, BrowserWindow, clipboard, dialog, nativeImage, screen, shell, systemPreferences, type WebContents } from 'electron';
+import { BrowserWindow, app, clipboard, dialog, nativeImage, powerMonitor, screen, shell, systemPreferences, type WebContents } from 'electron';
 import { wallDisplays } from '../services/live-desk';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -34,6 +34,7 @@ import { listConflicts, resolveConflict } from '../services/sync/conflicts';
 import { openExternalSafely } from '../security/hardening';
 import { answerNotice } from '../services/ai-pending';
 import { notificationSettingsUrl } from '../services/locked-notifications';
+import { meetPermissions } from '@shared/meet-permissions';
 import { broadcast } from './events';
 import { logger, recentLog } from './log';
 import { captureName, helpLogText } from '../services/ai-help';
@@ -132,6 +133,45 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('media:screenIndicator', (input, c) => ctx.screenShare.indicate(c.sender.id, input.active));
   router.handle('media:screenSources', () => ctx.screenShare.sources());
   router.handle('media:screenPick', (input, c) => ctx.screenShare.preparePick(c.sender.id, input.id, !!input.audio));
+  /*
+   * The five rows of Settings › Meet › System permissions (D05), read rather
+   * than asked for: opening a settings page must never pop an OS permission
+   * prompt, and on macOS asking is once-per-app, so a page that asked would
+   * spend the one chance the person gets.
+   */
+  router.handle('media:power', () => {
+    try {
+      return { onBattery: powerMonitor.isOnBatteryPower() };
+    } catch {
+      // A platform that will not say is treated as on mains: lowering a
+      // camera's quality for a machine that is plugged in is the wrong guess.
+      return { onBattery: false };
+    }
+  });
+  router.handle('media:permissions', () => {
+    const mac = process.platform === 'darwin';
+    const status = (kind: 'camera' | 'microphone' | 'screen'): string | null => {
+      if (!mac) return null;
+
+      try {
+        return systemPreferences.getMediaAccessStatus(kind);
+      } catch {
+        // A check that errors is not a denial; the row reads "unable to verify".
+        return null;
+      }
+    };
+
+    return {
+      rows: meetPermissions({
+        platform: process.platform,
+        camera: status('camera'),
+        microphone: status('microphone'),
+        screen: status('screen'),
+        accessibility: ctx.remoteControl.view().support?.accessibility ?? null,
+        notifications: ctx.notifications.permission().state,
+      }),
+    };
+  });
   router.handle('media:privacySettings', async (input) => {
     // Fixed addresses of the OS's own privacy panes; nothing from the page.
     const mac = { microphone: 'Privacy_Microphone', camera: 'Privacy_Camera', screen: 'Privacy_ScreenCapture', accessibility: 'Privacy_Accessibility' } as const;

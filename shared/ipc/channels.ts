@@ -125,6 +125,8 @@ export const INVOKE_CHANNELS = [
   'media:screenIndicator',
   'media:screenSources',
   'media:screenPick',
+  'media:permissions',
+  'media:power',
   'media:privacySettings',
   'calls:active',
   'calls:list',

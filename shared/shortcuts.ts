@@ -154,13 +154,20 @@ export interface MeetKeyState {
   meet: boolean;
   /** This computer is in a meeting right now. */
   inCall: boolean;
+  /**
+   * Settings › Meet › Behaviour › Global mute and camera shortcuts (D05).
+   * Off, the keys are the renderer's alone and nothing is held for the whole
+   * computer — somebody who wants ⌘⇧M back for another app can have it.
+   */
+  globalKeys?: boolean;
 }
 
 /** Which of Meet's global keys should be held as things are now. */
 export function wantedMeetKeys(s: MeetKeyState): MeetGlobalKey[] {
-  // Locked, signed out, or without Meet at all: none of them. A locked
-  // computer must not answer a key that unmutes a microphone.
-  if (!s.signedIn || s.locked || !s.meet) return [];
+  // Locked, signed out, without Meet at all, or with the global keys switched
+  // off: none of them. A locked computer must not answer a key that unmutes a
+  // microphone.
+  if (!s.signedIn || s.locked || !s.meet || s.globalKeys === false) return [];
 
   return MEET_GLOBAL_IDS.filter((id) => (MEET_GLOBAL_KEYS[id] === 'inCall' ? s.inCall : true));
 }

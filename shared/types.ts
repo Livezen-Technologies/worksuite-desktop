@@ -340,6 +340,8 @@ export interface Preferences {
   ai: AiPrefs;
   /** Meet › Recording (worksuite-desktop#68). */
   meetRecording: MeetRecordingPrefs;
+  /** Settings › Meet › Behaviour (WS-MEET-ENH-01 D05). */
+  meetBehaviour: MeetBehaviourPrefs;
   /** Drive › Settings: transfers, bandwidth and what this computer keeps (worksuite-desktop#95). */
   drive: DrivePrefs;
 }
@@ -382,6 +384,27 @@ export interface DrivePrefs {
   conflict: 'ask' | 'both' | 'skip' | 'replace';
   notifyComplete: boolean;
   notifyFailed: boolean;
+}
+
+/**
+ * How a meeting behaves on this computer (Settings › Meet › Behaviour,
+ * WS-MEET-ENH-01 D05).
+ *
+ * Three of the six switches that artboard draws are not here, because
+ * WorkSuite already has them and two settings for one thing is how they come
+ * to disagree: hardware acceleration is in General, and opening WorkSuite
+ * links — meetings among them — in the app rather than the browser is in
+ * Links.
+ */
+export interface MeetBehaviourPrefs {
+  /** Shrink the call to a floating card when you switch to another app, and put it back when you return. */
+  popOutOnSwitch: boolean;
+  /** Whether mute, the camera and the three starting keys are held for the whole computer. */
+  globalKeys: boolean;
+  /** Include this computer's own sound when you present, unless the picker says otherwise for one share. */
+  shareComputerSound: boolean;
+  /** What the camera sends while this computer runs on its battery. */
+  qualityOnBattery: 'auto' | '720p' | '360p';
 }
 
 /**

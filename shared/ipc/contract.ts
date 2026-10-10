@@ -5,6 +5,7 @@ import type { GuestMeetInfo, GuestMeetToken } from '../guest-meet';
 import type { DataFolder, ImportProgress, MailFileHandle, MailFileView } from '../mail-files';
 import type { SmimeVerdict } from '../smime';
 import type { ConnectionDetails, SpeedTestResult } from '../connection';
+import type { MeetPermissionRow } from '../meet-permissions';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -263,6 +264,13 @@ export const preferencesPatchSchema = z
       layout: z.enum(['grid', 'speaker', 'screen']),
       folder: z.string().min(1).max(120).regex(/^[^\\/\p{C}]+$/u),
       keepLocal: z.enum(['keep', 'delete', '7', '30']),
+    }).partial(),
+    // Settings › Meet › Behaviour (WS-MEET-ENH-01 D05).
+    meetBehaviour: z.object({
+      popOutOnSwitch: z.boolean(),
+      globalKeys: z.boolean(),
+      shareComputerSound: z.boolean(),
+      qualityOnBattery: z.enum(['auto', '720p', '360p']),
     }).partial(),
     // Drive › Settings (worksuite-desktop#95). The download folder is not here either: only its dialog sets it.
     drive: z.object({
@@ -582,6 +590,11 @@ export const contract = {
   'media:screenIndicator': ch(z.object({ active: z.boolean() }), { session: true, rate: 12 }),
   'media:screenSources': ch(none, { session: true, rate: 3 }),
   'media:screenPick': ch(z.object({ id: z.string().min(1).max(200), audio: z.boolean().optional() }), { session: true, rate: 6 }),
+  // Whether this computer runs on its battery (WS-MEET-ENH-01 D05): what the
+  // camera sends while it does is a preference.
+  'media:power': ch(none, { session: true, rate: 6 }),
+  // The five rows of Settings › Meet › System permissions (WS-MEET-ENH-01 D05).
+  'media:permissions': ch(none, { session: true, whileLocked: true, rate: 6 }),
   'media:privacySettings': ch(z.object({ pane: z.enum(['microphone', 'camera', 'screen', 'accessibility']) }), { session: true, rate: 2 }),
   'calls:active': ch(
     z.object({
@@ -1536,6 +1549,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'hr:clock': { ok: true };
   'hr:break': { ok: true };
   'media:access': { granted: boolean };
+  'media:permissions': { rows: MeetPermissionRow[] };
+  'media:power': { onBattery: boolean };
   'media:screenIndicator': void;
   'media:screenSources': ScreenSources;
   'media:screenPick': void;
