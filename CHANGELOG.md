@@ -5,6 +5,48 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.222 — 2026-10-10
+
+- **Sign-in: the app handles every protection the server asks for (settings 1.31.0, account 1.2.0, #301).** Until
+  now a CAPTCHA, a wait, a blocked account or a new-device code all came out as a plain failed sign-in.
+  - **CAPTCHA:** opens in a small window on your WorkSuite server's page (the provider only draws there), in its
+    own private session; the answer goes with the next attempt only.
+  - **New computer:** the code emailed to you — where it went, when it expires, tries left, Send another code — or,
+    if you use two-factor, your authenticator code, which verifies this computer too. **Remember this computer**
+    keeps it verified (the token is in the system's secure storage); untick it and the next sign-in asks again.
+  - **Too many attempts:** a live countdown, what the next failure costs, and when the account would be blocked.
+    **Blocked:** "Email me an unblock link".
+  - **My account › Security › Remembered computers:** this one marked; remove one or all.
+  - An app the server keeps from you offers **Ask for access** with a reason.
+  - Needs WorkSuite Server with Auth 2.3.0 for the CAPTCHA page.
+- **Voice messages send faster and survive a restart (chat 1.77.0, diagnostics 1.3.0, #300).** Recorded as Opus
+  mono at 32 kbit/s — about a quarter of the size. The bubble shows **Sending… 40%**, **Retrying in 15 s**, and
+  **Sent** only when the server has it; retries come after 2 s, 5 s, 15 s, 30 s and 60 s, then Retry and Cancel
+  (Cancel removes the bubble, the recording and the partial upload). A message that did not go is kept and resent
+  at the next launch, and "Clear finished" no longer throws it away. The recorder checks there is room first, counts
+  down the last 30 seconds, and keeps what it has if the microphone goes. Help › Diagnostics shows the timings
+  (send to bubble, send to Sent) as median and 95th percentile, with Clear for a new baseline.
+- **Files: menus on the sidebar's folders (files 1.11.0, #328).** Right-click a folder, use the ⋯ that appears on
+  hover, or press ⇧F10: Open (here, new tab, new window), New folder / Upload / New document inside, Share, Copy
+  link, Rename, Move to, Copy to, colour, Star, **Pin to top**, Available offline, Details, Activity, Download as
+  ZIP, Show in Finder, Move to Bin (saying how many files are inside). Shared folders offer **Leave folder** or
+  **Remove from my Drive** instead of Bin; folders WorkSuite made (Call recordings, Tenders) show a lock — "Created
+  by Tenders" — and can't be renamed, moved or deleted.
+  - My Drive, Recent and Starred have their own menus (Storage details, Clear recent, Unstar all); the Folders
+    header sorts by Name, Modified or Manual, shows starred first, or collapses all.
+  - **Rename in place** with F2. **Drag** files from the list onto a folder to move them (⌥ copies; a closed folder
+    opens after a second), drag folders to reorder or nest them, or drop files from Finder / Explorer to upload.
+  - **Undo** after Move, Rename and Bin. The tree works from the keyboard: arrows, → ←, Enter, F2, ⌘⌫.
+  - Sort and "starred first" are kept on this computer; pins follow you. Needs WorkSuite Server with Files 1.8.0.
+- **Files: the Share dialog, redesigned (files 1.11.0, ai 1.9.1, #329).** One search for people, teams, departments,
+  roles and companies, each result tagged with its type, in a list that floats instead of pushing everything down.
+  Payroll records without a WorkSuite sign-in show greyed out — "Can't share". The people you pick become chips;
+  **Share** waits for one. Permissions are a short menu with each level explained, now including **Can comment**.
+  Notify by **Chat** and/or **Email**, with a message, appears once someone is added. One **Who has access** list
+  with role pickers and the inherited access as a switch; **General access**: Restricted, Anyone at the company with
+  the link, Anyone with the link. Footer: Copy link, Send in chat, Done. "No download" is no longer offered.
+  Needs WorkSuite Server with Files 1.8.0.
+
 ## 0.2.221 — 2026-10-10
 
 - **Office: the editor fills the tab, with one header (office 1.2.0, #326).** The white strip under the editor came

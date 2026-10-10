@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.31.0 — 2026-10-10
+
+**Added**
+
+- sign-in protection screens — CAPTCHA, new-device code, wait countdown, locked account (#301)
+
 ## 1.30.0 — 2026-10-10
 
 **Added**

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.77.0 — 2026-10-10
+
+**Added**
+
+- voice messages record Opus 32 kbit/s, show Sending/Sent, retry 2 s→60 s and are kept until sent (#300); share cards know the Can comment level (#329)
+
 ## 1.76.0 — 2026-10-10
 
 **Added**
