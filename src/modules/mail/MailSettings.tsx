@@ -33,15 +33,17 @@ import type { MailStoreStats } from '@shared/types';
 import { SyncButton } from '../../components/SyncButton';
 import { pullPrefs, setPullEnabled } from '../../components/listRefresh';
 import { forgetMailbox } from './localFirst';
+import { SpamSecurity } from './protection/SpamSecurity';
 
 /**
  * Settings › Mail: the accounts and what this computer keeps (Accounts &
  * offline), how each mailbox syncs and what is stored where (Storage & sync),
  * pictures from the web and attachments kept ahead (Images & media, #163),
+ * spam and virus protection (Spam & security, ENH-MAIL-04 D19),
  * and how the Mail screen is laid out (Layout & reading).
  */
 
-type Tab = 'accounts' | 'storage' | 'media' | 'import' | 'signatures' | 'rules' | 'quicksteps' | 'layout';
+type Tab = 'accounts' | 'storage' | 'media' | 'import' | 'signatures' | 'rules' | 'security' | 'quicksteps' | 'layout';
 
 const TABS: Array<[Tab, string]> = [
   ['accounts', 'Accounts & offline'],
@@ -50,6 +52,8 @@ const TABS: Array<[Tab, string]> = [
   ['import', 'Import mail'],
   ['signatures', 'Signatures'],
   ['rules', 'Rules'],
+  // Mail protection (ENH-MAIL-04 D19, P-UI-14): accounts' protection, spam level, digest, own safe and blocked senders.
+  ['security', 'Spam & security'],
   ['quicksteps', 'Quick Steps'],
   ['layout', 'Appearance & reading'],
 ];
@@ -100,7 +104,7 @@ export function MailSettings({ query = new URLSearchParams() }: { query?: URLSea
           <Signatures />
           <SpellingSettings />
         </>
-      ) : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : tab === 'quicksteps' ? <QuickStepsSettings /> : <Layout />}
+      ) : tab === 'rules' ? <Rules mailbox={defaultBox ? String(defaultBox.id) : null} /> : tab === 'security' ? <SpamSecurity /> : tab === 'quicksteps' ? <QuickStepsSettings /> : <Layout />}
     </div>
   );
 }

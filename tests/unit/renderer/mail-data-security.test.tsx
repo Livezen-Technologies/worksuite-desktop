@@ -112,8 +112,23 @@ describe('safe links (DMO-SEC-03)', () => {
 });
 
 describe('report phishing (DMO-SEC-02, AC-DMO-13)', () => {
-  it('reports, says where the message went and that the security team has it, and blocks the sender when chosen', async () => {
-    vi.mocked(apiPost).mockImplementation((async (path: string) => (path.endsWith('/report') ? { moved_to: 'junk', forwarded_to: 'security@livezen.lk', security_mailbox: true } : {})) as never);
+  it('reports to mail protection: held in the reporter’s quarantine, links blocked, the sender on their block list (ENH-MAIL-04)', async () => {
+    vi.mocked(apiPost).mockResolvedValue({} as never);
+    const done = vi.fn();
+    wrap(<ReportDialog kind="phishing" msgRef={REF} from="It@Bad.example" subject="Password expires" canBlock onDone={done} onClose={() => undefined} />);
+    fireEvent.click(within(screen.getByRole('dialog', { name: 'Report phishing' })).getByRole('button', { name: 'Report phishing' }));
+    await waitFor(() => expect(done).toHaveBeenCalled());
+    expect(apiPost).toHaveBeenCalledWith('/api/mail/messages/7/report-phish', { folder: 'inbox', mailbox: '4' });
+    expect(apiPost).toHaveBeenCalledWith('/api/mail/protection/lists/me', { kind: 'block', value: 'it@bad.example' });
+    expect(apiPost).not.toHaveBeenCalledWith('/api/mail/messages/7/report', expect.anything());
+    expect(vi.mocked(toast).mock.calls[0]![1]).toBe('Reported — it is held in your quarantine, and its links are blocked for everyone in your organisation. It@Bad.example is blocked.');
+  });
+
+  it('on a server without mail protection, reports, says where the message went and that the security team has it, and blocks the sender when chosen', async () => {
+    vi.mocked(apiPost).mockImplementation((async (path: string) => {
+      if (path.endsWith('/report-phish')) throw new ApiError(404, 'Not found', null);
+      return path.endsWith('/report') ? { moved_to: 'junk', forwarded_to: 'security@livezen.lk', security_mailbox: true } : {};
+    }) as never);
     const done = vi.fn();
     wrap(<ReportDialog kind="phishing" msgRef={REF} from="it@bad.example" subject="Password expires" canBlock onDone={done} onClose={() => undefined} />);
     const dialog = screen.getByRole('dialog', { name: 'Report phishing' });

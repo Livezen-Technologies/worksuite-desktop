@@ -4,6 +4,23 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.28.0 — 2026-10-10
+
+**Added**
+
+- mail protection in the reader (ENH-MAIL-04 P-UI-10/11): a verdict banner for Junk, Phish, Spoof, Malware, Policy, Not scanned and Checking (GET messages/{id}/protection) with Junk, Not junk, Release, Request release, Report phishing, Trust sender, Block sender, Scan now and View headers — never a Release for malware
+- attachment chips Scanned, Checking, Blocked (with the reason) and Not scanned with Scan now (POST attachments/scan); a file that is not scanned cannot be opened, previewed, downloaded, dragged out, saved to Files (reader, list menu, Quick Step) or fetched ahead
+- offline, a message with no verdict on this computer shows Checking and keeps its files locked until online; a clean verdict kept here keeps working (MPR-UX-07)
+- Mail › Quarantine in the rail (D20, P-UI-13): held mail across all accounts with reasons, sender checks, expiry, Release / Release and trust sender for spam and Request release for phishing, spoofing and blocked files
+- Settings › Mail › Spam & security (D19, P-UI-14): protection per account, spam level, digest, own safe and blocked senders, link checking
+- Admin Center › Mail › Protection (D21–D25): Overview, Policies (preview, apply with self-test, versions and rollback), Quarantine (requests, content with a reason, headers), Allow & block lists (DMARC refusal, CSV), Attachments, Engines, Reports and Search and remove
+- a send refused for a malware attachment or a paused mailbox reopens the draft with why (P-UI-15)
+
+**Changed**
+
+- Junk and Not junk in the reader, action bar and list train the filter (POST messages/{id}/junk, /not-junk, with Always trust sender); Report phishing goes to POST report-phish; both fall back on an older server
+- the link check sends the message a link came from and reads the server's safety, reason and final address; every link of a Junk, Phish or Spoof message stops on the warning (P-UI-12, MPR-UX-04); pictures stay blocked in them (MPR-UX-03)
+
 ## 1.27.1 — 2026-10-09
 
 - Signature for each account: the table fits its card

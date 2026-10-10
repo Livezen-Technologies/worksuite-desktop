@@ -5,6 +5,33 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.218 — 2026-10-10
+
+- **Mail protection: spam, phishing and viruses (mail 1.28.0, settings 1.29.0, ENH-MAIL-04).** Needs the WorkSuite
+  server's mail protection; on a server without it Mail works as before.
+  - **A banner on every message that is not clean**, between the header and the body: This looks like spam, This
+    message may be trying to steal your password, This isn't from your CEO — the address is …, Dangerous attachment
+    removed, a blocked file, Not scanned and Checking. Each says why in plain words and offers what fits — Junk, Not
+    junk, Release, Request release, Report phishing, Trust sender, Block sender, Scan now, View headers. Malware never
+    has a Release.
+  - **Attachments say whether they were checked:** Scanned, Checking, Blocked (and why), or Not scanned with Scan
+    now. Only a scanned file opens, previews, downloads, drags out or goes to Files — from the reader, the list's
+    Save attachments to Files and the Quick Step alike.
+  - **Offline**, a message that arrived before its check shows Checking and its files stay locked until you are back
+    online; a message already checked clean keeps opening its files.
+  - **Links** are checked when clicked with the message they came from; the warning shows where the link really ends
+    up. In Junk, phishing and spoofed mail every link stops on the warning first, and pictures stay off.
+  - **Junk and Not junk** (reader toolbar, action bar, list) teach the filter; Not junk offers Always trust sender.
+  - **Mail › Quarantine** (in the rail): mail held for you across all your accounts, why, until when, with Release for
+    spam and Request release for the rest.
+  - **Settings › Mail › Spam & security:** how each account is protected, the spam level, the quarantine digest, your
+    safe and blocked senders, link checking.
+  - **Sending:** a message with an infected file is not sent — the draft reopens and says which file; a mailbox whose
+    sending was paused says so and keeps the draft.
+  - **Admin Center › Mail › Protection** for mail security admins: Overview, Policies (preview the last 7 days, apply
+    with a self-test, roll back), Quarantine (release requests, content with a reason), Allow & block lists,
+    Attachments, Engines, Reports and Search and remove.
+
 ## 0.2.217 — 2026-10-09
 
 - **Projects is a desktop app (projects 1.1.0, WS-PROJECT-SRS-001 PRJ-DSK-01..04).** It used to open the web page in

@@ -349,7 +349,8 @@ describe('folder-aware actions', () => {
     timers();
     fireEvent.click(within(menu).getByRole('menuitem', { name: /^Not junk/ }));
     later();
-    await waitFor(() => expect(submitted()).toEqual([expect.objectContaining({ entity: 'message.inbox', body: { action: 'inbox', folder: 'spam', mailbox: '2' } })]));
+    // Not junk teaches the filter (ENH-MAIL-04 MPR-UX-06): the protection call, through the change queue.
+    await waitFor(() => expect(submitted()).toEqual([expect.objectContaining({ entity: 'message.inbox', path: '/api/mail/messages/901/not-junk', body: { folder: 'spam', mailbox: '2' } })]));
   });
 });
 

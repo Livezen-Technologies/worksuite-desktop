@@ -6,7 +6,8 @@ import { dismissKey, toast } from '../../core/toasts';
 import type { MenuItem, MenuSection } from '../../components/Menu';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
-import { MailActionError, mailKeys, messageAction, moveMessage, removeItem, removeMessages, restoreMessages, undoQueued, useFolders, type FailReason, type MessageActionName, type Outcome, type RemoveAnswer } from './api';
+import { apiPost } from '../../core/api';
+import { MailActionError, junkMessage, mailKeys, messageAction, moveMessage, removeItem, removeMessages, restoreMessages, undoQueued, useFolders, type FailReason, type MessageActionName, type Outcome, type RemoveAnswer } from './api';
 import { slugRole } from './allAccounts';
 import type { Target } from './MessageMenus';
 import { folderName } from './model';
@@ -328,14 +329,32 @@ export function useListActions(o: ListActionsOptions): { run: (id: ListActionId,
   /** Each message in its own account and folder; what failed, and whether any waits offline. */
   const send = async (id: ListActionId, targets: Target[], dests: Map<Target, Dest>) => {
     const spec = LIST_ACTIONS[id];
+    // Not junk on a sender the person has not trusted yet offers "Always trust sender" (MPR-TRN, AC-MPR-10).
+    const offers = new Set<string>();
     const results = await Promise.allSettled(
       targets.map((t): Promise<Outcome> => {
         const ref = refOf(t);
         const to = dests.get(t);
         if (to) return ['archive', 'spam', 'inbox', 'trash'].includes(to.slug) ? messageAction(ref, to.slug as MessageActionName, t.row.subject) : moveMessage(ref, to.slug, to.name, t.row.subject);
+        // Junk and Not junk teach the filter (ENH-MAIL-04 MPR-UX-06): the protection calls, the plain move on an older server.
+        if (id === 'junk' || id === 'notJunk')
+          return junkMessage(ref, id === 'junk' ? 'junk' : 'not_junk', t.row.subject).then((r) => {
+            if (r.offerTrust && t.row.from_email) offers.add(t.row.from_email.toLowerCase());
+            return r.outcome;
+          });
         return messageAction(ref, spec.server, t.row.subject);
       }),
     );
+    if (offers.size === 1) {
+      const [email] = [...offers];
+      toast('info', text('Moved to the Inbox.'), {
+        label: text('Always trust sender'),
+        run: () =>
+          void apiPost('/api/mail/protection/lists/me', { kind: 'allow', value: email })
+            .then(() => toast('success', text('{email} is on your safe senders. Viruses and phishing are still checked.', { email: email! })))
+            .catch((e) => toast('error', errorMessage(e))),
+      });
+    }
     const failed = targets.filter((_, i) => results[i]!.status === 'rejected');
     const why = results.find((r): r is PromiseRejectedResult => r.status === 'rejected');
     const queued = results.some((r) => r.status === 'fulfilled' && r.value === 'queued');

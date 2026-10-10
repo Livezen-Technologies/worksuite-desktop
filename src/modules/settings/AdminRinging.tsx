@@ -1,8 +1,9 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiGet, apiPut } from '../../core/api';
-import { call, errorMessage } from '../../core/bridge';
-import { useTab, useTabTitle } from '../../core/tab-context';
+import { errorMessage } from '../../core/bridge';
+import { useTabTitle } from '../../core/tab-context';
+import { AdminNav } from './AdminNav';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import type { ModuleSettings } from '../../components/ModuleSettingsForm';
@@ -20,7 +21,7 @@ import { ErrorNote, NumberField, Spinner, cx } from '../../components/ui';
  * their own, in Settings › Notifications & calls (P-01, P-02).
  */
 
-export const ADMIN_RINGING_ROUTE = '/settings/admin/chat/ringing';
+export { ADMIN_RINGING_ROUTE } from './AdminNav';
 const SLUG = 'communication';
 const KEY = ['settings', 'admin', 'ringing'] as const;
 
@@ -44,18 +45,6 @@ const OFFLINE_OPTIONS = [
 ];
 const KEYS = [...LADDER.map((l) => l.key), GONE, OFFLINE];
 
-/** The Admin Center's sections as the design lists them; only Chat › Ringing is drawn here. */
-const NAV: Array<{ label: string; web?: string; sub?: boolean; here?: boolean; group?: boolean }> = [
-  { label: 'Organizations', web: '/organization' },
-  { label: 'Users & roles', web: '/users' },
-  { label: 'Mail', web: '/admin/mail' },
-  { label: 'Chat', group: true },
-  { label: 'General', web: '/module-settings?module=communication&section=general', sub: true },
-  { label: 'Ringing', sub: true, here: true },
-  { label: 'Drive', web: '/admin/drive/retention' },
-  { label: 'Security', web: '/security' },
-];
-
 /** A timing as the form holds it: whole seconds, 0–3600, or why not. */
 export function secondsProblem(v: string): string | null {
   return /^\d{1,4}$/.test(v.trim()) && Number(v) <= 3600 ? null : 'Enter whole seconds from 0 to 3600.';
@@ -77,7 +66,6 @@ export function settledNotes(v: Record<string, string>): Record<string, string> 
 
 export function AdminRinging() {
   useTabTitle('Admin Center');
-  const { go } = useTab();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: KEY, queryFn: ({ signal }) => apiGet<ModuleSettings>(`/api/module-settings/${SLUG}`, undefined, signal) });
   const [draft, setDraft] = useState<Record<string, string>>({});
@@ -111,32 +99,11 @@ export function AdminRinging() {
     }
   };
 
-  const open = (path: string) => void call('app:openInBrowser', { path }).catch((e: unknown) => toast('error', errorMessage(e)));
   const row = 'flex items-center gap-3 px-[18px] py-3';
 
   return (
     <div className="flex h-full min-h-0">
-      <nav aria-label="Admin sections" className="flex w-[220px] shrink-0 flex-col gap-px border-r border-line bg-surface px-2 py-4 text-[13px]">
-        <h1 className="px-2.5 pb-2.5 text-[16px] font-bold text-ink">Admin Center</h1>
-        {NAV.map((n) =>
-          n.group ? (
-            <div key={n.label} className="flex h-[30px] items-center px-2.5 font-bold text-ink">
-              {n.label}
-            </div>
-          ) : (
-            <button
-              key={n.label}
-              type="button"
-              aria-current={n.here ? 'page' : undefined}
-              title={n.web ? 'Opens in your browser' : undefined}
-              onClick={() => (n.web ? open(n.web) : go(ADMIN_RINGING_ROUTE))}
-              className={cx('flex h-[30px] items-center rounded-[8px] text-left', n.sub ? 'pr-2.5 pl-6' : 'px-2.5', n.here ? 'bg-selection font-bold text-primary' : 'text-ink-2 hover:bg-subtle hover:text-ink')}
-            >
-              {n.label}
-            </button>
-          ),
-        )}
-      </nav>
+      <AdminNav here="ringing" />
       <main className="min-w-0 flex-1 overflow-y-auto px-10 py-6 scroll-thin">
         <div className="flex max-w-[840px] flex-col gap-3.5">
           <div>

@@ -68,6 +68,9 @@ export interface SidebarProps {
   /** Favourites (DMO-NAV-01): "key|label" — "4:label:Clients|Clients", "all:inbox|Inbox", "view:unread|Unread". */
   favorites?: string[];
   onFavorites?: (next: string[]) => void;
+  /** Mail › Quarantine (ENH-MAIL-04 D20): held for the person across all accounts; null where the server holds none. */
+  quarantine?: number | null;
+  onQuarantine?: () => void;
 }
 
 /** A favourite's place in the pane. */
@@ -222,6 +225,14 @@ export function MailSidebar(p: SidebarProps) {
               </ul>
             ) : null}
           </>
+        ) : null}
+
+        {p.onQuarantine && p.quarantine !== null && p.quarantine !== undefined ? (
+          <ul role="list" aria-label={text('Protection')} className="mt-1">
+            <li>
+              <Row icon="shield" iconClass={p.quarantine ? 'text-warning' : undefined} label={text('Quarantine')} count={p.quarantine || null} countTitle={text('{n} held for you in all accounts', { n: p.quarantine })} active={false} onClick={p.onQuarantine} />
+            </li>
+          </ul>
         ) : null}
 
         <SectionHeading label={text('Accounts')} open={memory.accounts} onToggle={() => remember({ accounts: !memory.accounts })} onAdd={p.onAddMailbox} addLabel={text('Add a mailbox')}>

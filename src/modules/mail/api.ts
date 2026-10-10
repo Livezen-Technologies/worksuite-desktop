@@ -202,6 +202,9 @@ export class MailActionError extends Error {
     message: string,
     readonly reason: FailReason,
     readonly status: number | null,
+    /** The server's own code and answer, for a refusal that says more (a send blocked by protection, P-UI-15). */
+    readonly code: string | null = null,
+    readonly data: unknown = null,
   ) {
     super(message);
     this.name = 'MailActionError';
@@ -227,12 +230,12 @@ async function submitFull(input: { entity: string; entityId: string | null; labe
     try {
       return { outcome: 'done', data: await apiPost(input.path, input.body), queueId: null };
     } catch (err) {
-      if (err instanceof ApiError) throw new MailActionError(err.message, reasonOf(err.status, err.data, err.code), err.status);
+      if (err instanceof ApiError) throw new MailActionError(err.message, reasonOf(err.status, err.data, err.code), err.status, err.code, err.data);
       throw err;
     }
   }
   if (r.queued) return { outcome: 'queued', data: null, queueId: r.id };
-  if (!r.delivered) throw new MailActionError(r.error ?? text('The mail server did not make that change.'), reasonOf(r.status, r.data, r.code), r.status);
+  if (!r.delivered) throw new MailActionError(r.error ?? text('The mail server did not make that change.'), reasonOf(r.status, r.data, r.code), r.status, r.code, r.data);
   return { outcome: 'done', data: r.data, queueId: null };
 }
 
@@ -326,6 +329,29 @@ export async function restoreMessages(group: { mailbox: string | null; folder: s
   });
   const results = ((r.data as { results?: RemoveResult[] } | null)?.results ?? []).filter((x) => x && typeof x === 'object');
   return { outcome: r.outcome, results, queueId: r.queueId };
+}
+
+/**
+ * Junk or Not junk with training (ENH-MAIL-04 MPR-UX-06, MPR-TRN): `POST messages/{id}/junk` and `/not-junk` move
+ * the message in its own account and teach the filter. Through the offline queue like any move. An older server
+ * without them (404) gets the plain move it always had. Not junk answers whether to offer "Always trust sender";
+ * on malware or phishing the server refuses it (422 "Request review instead") and that refusal is thrown.
+ */
+export async function junkMessage(ref: MessageRef, kind: 'junk' | 'not_junk', subject: string): Promise<{ outcome: Outcome; offerTrust: boolean }> {
+  const what = subject || text('(no subject)');
+  try {
+    const r = await submitFull({
+      entity: kind === 'junk' ? 'message.spam' : 'message.inbox',
+      entityId: queueKey(ref.mailbox, ref.folder, ref.uid),
+      label: kind === 'junk' ? text('Mark “{subject}” as junk', { subject: what }) : text('Mark “{subject}” as not junk', { subject: what }),
+      path: `/api/mail/messages/${ref.uid}/${kind === 'junk' ? 'junk' : 'not-junk'}`,
+      body: { folder: ref.folder, ...(ref.mailbox ? { mailbox: ref.mailbox } : {}) },
+    });
+    return { outcome: r.outcome, offerTrust: !!(r.data as { offer_trust_sender?: boolean } | null)?.offer_trust_sender };
+  } catch (e) {
+    if (e instanceof MailActionError && e.status === 404) return { outcome: await messageAction(ref, kind === 'junk' ? 'spam' : 'inbox', subject), offerTrust: false };
+    throw e;
+  }
 }
 
 /** Move to a folder by its slug or path. */
