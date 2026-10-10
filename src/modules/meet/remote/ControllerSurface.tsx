@@ -31,13 +31,54 @@ export function RemoteControlLayer({ sharer }: { sharer: CallPerson }) {
   const track = session ? sharer.screen : null;
   useEffect(() => remote.watch(track), [track]);
 
+  // The session that just ended, for this share (RC07): shown until it is
+  // dismissed or control is asked for again, rather than as a toast that is
+  // gone before it has been read.
+  const ended = remote.ended && share && remote.ended.shareId === share.id ? remote.ended : null;
+
   return (
     <>
       {session ? <ControlSurface session={session} /> : null}
       <div className="absolute top-12 left-3 z-[3] flex max-w-[min(640px,70%)] flex-col items-start gap-2 text-[12.5px] text-[#E6ECFA]">
         {session ? <SessionBar session={session} share={share} /> : <RequestBar share={share} policyOff={policy === 'disabled'} />}
       </div>
+      {!session && ended ? <EndedCard ended={ended} canAsk={policy !== 'disabled' && !!share?.availability.can_request} /> : null}
     </>
+  );
+}
+
+/**
+ * How a control session ended, and what happens next (RC07).
+ *
+ * The screen is still shared when control ends — that is the whole point of
+ * the distinction — so the card says so, with how long the session lasted.
+ *
+ * It has one button. Dismissing it reveals the Request control bar that was
+ * always underneath, which is the only place that asks: it owns the reason
+ * and code prompts a company's policy may require, and a second ask path here
+ * would be a second set of those to keep in step. The card says where to go
+ * rather than becoming another way to go there.
+ */
+function EndedCard({ ended, canAsk }: { ended: NonNullable<typeof remote.ended>; canAsk: boolean }) {
+  return (
+    <div role="status" aria-live="polite" className="absolute inset-0 z-[4] flex items-center justify-center bg-[rgba(7,12,26,.6)] p-6">
+      <div className="max-w-md rounded-[12px] bg-[rgba(15,27,61,.95)] px-5 py-4 text-center shadow-xl">
+        <b className="text-[15px] text-white">Remote control ended by {ended.by}</b>
+        <p className="mt-1.5 text-[12.5px] text-[#C9D3EE]">
+          {ended.reason} {ended.sharer}&rsquo;s screen is still shared in the meeting.
+          {ended.length ? ` This session lasted ${ended.length}.` : ''}
+          {canAsk ? ' You can ask for control again from the bar above the screen.' : ''}
+        </p>
+        <button
+          type="button"
+          autoFocus
+          onClick={() => remote.clearEnded()}
+          className="mt-3 h-9 rounded-[9px] bg-[#3B5BDB] px-3.5 text-[13px] font-bold text-white hover:bg-[#2F4CC0]"
+        >
+          Back to the meeting
+        </button>
+      </div>
+    </div>
   );
 }
 

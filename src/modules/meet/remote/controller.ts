@@ -5,7 +5,7 @@ import { call, on } from '../../../core/bridge';
 import { toast } from '../../../core/toasts';
 import { callUi } from '../../calls/ui/state';
 import { meet } from '../session';
-import { connectionLabel, endedOf, failure, rc, type ConnectionLabel, type ControlSession, type ControlState, type RemoteFile, type Share } from './api';
+import { connectionLabel, endedOf, failure, rc, sessionLength, type ConnectionLabel, type ControlSession, type ControlState, type RemoteFile, type Share } from './api';
 import { MoveCoalescer, keyMessage, type ButtonName, type KeyLike, type KeyPayload, type Point } from './input';
 import { pointers } from './pointers';
 
@@ -277,6 +277,8 @@ export class MeetController {
 
   private begin(s: ControlSession): void {
     this.session = s;
+    // A new session: last time's card is not about this one.
+    this.ended = null;
     this.problem = null;
     this.confirmed = false;
     this.held = null;
@@ -286,7 +288,11 @@ export class MeetController {
     this.timers.stats = setInterval(() => void this.sample(), 2_000);
   }
 
-  /** The session left the live states, or its share ended: say how, as the web does. */
+  /**
+   * The session left the live states, or its share ended: say how, as the web
+   * does — and keep the summary, so RC07's card can offer asking again rather
+   * than a toast that is gone before the person has read it.
+   */
   private finish(): void {
     const s = this.session!;
     const label = this.label;
@@ -296,11 +302,27 @@ export class MeetController {
     void rc
       .session(s.id)
       .then(
-        (d) => endedOf(d, s.sharer.name),
-        () => endedOf(null, s.sharer.name),
+        // The record says when it ended; when it started is the session we were in.
+        (d) => ({ end: endedOf(d, s.sharer.name), length: sessionLength(s.started_at, d?.ended_at ?? null) }),
+        () => ({ end: endedOf(null, s.sharer.name), length: sessionLength(s.started_at, null) }),
       )
-      .then((e) => toast('info', `Remote control ended by ${e.by}. ${e.reason}`));
+      .then(({ end, length }) => {
+        this.ended = { shareId: s.share_id, sharer: s.sharer.name, by: end.by, reason: end.reason, length, at: this.now() };
+        this.changed();
+        toast('info', `Remote control ended by ${end.by}. ${end.reason}`);
+      });
     this.report(s.id, label);
+  }
+
+  /** The last session that ended, for the card over the share; cleared when it is dismissed or another starts. */
+  ended: { shareId: number; sharer: string; by: string; reason: string; length: string; at: number } | null = null;
+
+  /** The card was dismissed, or control was asked for again. */
+  clearEnded(): void {
+    if (!this.ended) return;
+
+    this.ended = null;
+    this.changed();
   }
 
   // ── the grant ─────────────────────────────────────────────────────────────

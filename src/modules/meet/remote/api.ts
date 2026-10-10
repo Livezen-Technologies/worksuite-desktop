@@ -221,6 +221,31 @@ export function connectionLabel(rttMs: number | null, lossPct: number | null): C
   return 'Poor';
 }
 
+/**
+ * How long a control session ran — "18m 42s" (RC07's ended card).
+ *
+ * Both date forms the server sends are accepted, and a clock that disagrees
+ * with itself never counts backwards: a negative duration on screen is worse
+ * than none.
+ */
+export function sessionLength(startedAt: string | null | undefined, endedAt: string | null | undefined, now = Date.now()): string {
+  const at = (v: string | null | undefined): number | null => {
+    if (typeof v !== 'string' || v === '') return null;
+
+    const ms = Date.parse(/^\d{4}-\d{2}-\d{2} /.test(v) ? `${v.replace(' ', 'T')}Z` : v);
+
+    return Number.isFinite(ms) ? ms : null;
+  };
+  const from = at(startedAt);
+
+  if (from === null) return '';
+
+  const total = Math.max(0, Math.round(((at(endedAt) ?? now) - from) / 1000));
+  const m = Math.floor(total / 60);
+
+  return m > 0 ? `${m}m ${total % 60}s` : `${total}s`;
+}
+
 /** "Remote control ended by Hasarinda (emergency stop)" and the line under it, from the session's record. */
 export function endedOf(d: SessionEnd | null, sharer: string): { by: string; reason: string } {
   if (!d) return { by: sharer, reason: 'Control has ended.' };

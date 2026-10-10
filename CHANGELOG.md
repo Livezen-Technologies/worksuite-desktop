@@ -5,6 +5,24 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.227 — 2026-10-10
+
+- **When remote control ends, the controller is told properly (meet 1.18.0).** It used to be a toast: who ended it
+  and when, gone a few seconds later. There is now a card over the shared screen with who ended it, that the other
+  person's screen **is still shared in the meeting** — which is the whole point of the distinction between ending
+  control and ending a share — and how long the session lasted.
+  - **One button.** Dismissing the card reveals the Request control bar that was always underneath, which is the
+    only place that asks for control: it owns the reason and code prompts a company's policy may require, and a
+    second way to ask from here would be a second set of those to keep in step. The card says where to go instead
+    of becoming another way to go there.
+  - The duration reads two clocks that can disagree — the server's and this computer's — and never counts
+    backwards: a negative number on screen is worse than none.
+  - **Most of what this artboard asks for was already built**, which is why this entry is small: the controller's
+    state card already explained paused, protected, connecting and resuming, with a sentence for each of the ten
+    pause reasons the server sends.
+
+---
+
 ## 0.2.226 — 2026-10-10
 
 - **The call bar's two facts, and what the emergency stop says afterwards (meet 1.17.0).**

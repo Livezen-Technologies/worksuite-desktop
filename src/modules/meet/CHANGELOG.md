@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.18.0 — 2026-10-10
+
+- When a control session ends, the controller gets a card saying who ended it, that the screen is still shared, and how long the session lasted — instead of a toast that is gone before it is read.
+
 ## 1.17.0 — 2026-10-10
 
 - The call bar says it is encrypted in transit and names the mute and camera keys, and warns when this run is not using the GPU.
