@@ -487,7 +487,7 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   and lines in the outbox, and everything with money, a void, a booking or a table move is disabled.
 - WorkSuite Projects (`modules/projects`, main process `electron/services/projects/`, rules in `shared/projects.ts`;
   WS-PROJECT-SRS-001 PRJ-DSK-01..04, PRJ-TIM-05, NFR-09): native since 0.2.216 (it was a browser surface), and since
-  0.2.219 (projects 1.2.0) every screen of the web's is drawn here. The tab (`ProjectsPage.tsx`) has the project
+  0.2.220 (projects 1.2.0) every screen of the web's is drawn here. The tab (`ProjectsPage.tsx`) has the project
   switcher (⌘P), the views in the web's groups (`Rail.tsx`: Portfolio, Work, Delivery, Governance, Administer, with
   the counts), pinned projects (kept per server and person in `localStorage`, a view preference) and recent ones on
   the left; a project's board (`Board.tsx` — the columns, J/K, ←/→, Shift+←/→ moves the card, Enter opens, T timer,
