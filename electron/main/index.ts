@@ -770,8 +770,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     configureSession: (ses) => {
       if (proxyConfig) void ses.setProxy(proxyConfig);
     },
+    dark: () => nativeTheme.shouldUseDarkColors,
   });
   office.install();
+  nativeTheme.on('updated', () => office.setTheme(nativeTheme.shouldUseDarkColors));
   // Office files on this computer for WorkSuite DOC / Sheet / Slides tabs (office-local.ts): handles, never paths.
   const officeFiles = new OfficeLocalFiles({ forbidden: () => [p.userData] });
   const officeLocal = new OfficeExternal({

@@ -114,11 +114,14 @@ const INITIAL: OfficeState = {
   busy: false,
 };
 
-/** The editor events a session wires: the base ones, and each feature only with the permission behind it. */
+/**
+ * The editor events a session wires: the base ones, and each feature only with the permission behind it. Never
+ * `onRequestSharingSettings`: with it the editor draws a Share button of its own, and the tab's header already has
+ * WorkSuite's (worksuite-desktop#326).
+ */
 export function editorEvents(boot: OfficeBootstrap): OfficeEditorEventName[] {
   const out: OfficeEditorEventName[] = [...OFFICE_BASE_EVENTS, 'onRequestRefreshFile'];
   if (boot.mode === 'VIEW' && boot.available_modes.includes('EDIT')) out.push('onRequestEditRights');
-  if (boot.permissions.share) out.push('onRequestSharingSettings');
   if (boot.permissions.rename) out.push('onRequestRename');
   if (boot.permissions.mention && boot.mode !== 'VIEW') out.push('onRequestUsers', 'onRequestSendNotify');
   return out;

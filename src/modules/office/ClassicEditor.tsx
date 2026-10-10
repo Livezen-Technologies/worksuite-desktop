@@ -136,7 +136,7 @@ export function ClassicEditor({ tabKey, fileId, routeName, active }: { tabKey: s
           Open in desktop app
         </Button>
       </header>
-      <div ref={ref} data-office-editor className="relative min-h-0 min-w-0 flex-1 bg-white">
+      <div ref={ref} data-office-editor data-hide-ai-launcher className="relative min-h-0 min-w-0 flex-1 bg-ground">
         {overlayStill ? <img src={overlayStill} alt="" aria-hidden draggable={false} className="pointer-events-none absolute inset-0 h-full w-full object-contain object-left-top select-none" /> : null}
       </div>
     </div>

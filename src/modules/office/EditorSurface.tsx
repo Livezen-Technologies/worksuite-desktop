@@ -108,8 +108,10 @@ export function EditorSurface({
     };
   }, [snapshotRef, viewId]);
 
+  // The whole space under the file header, in the app's background (#326). The AI launcher steps out of the
+  // native view's way rather than taking a strip off the bottom of it (it would only be covered).
   return (
-    <div ref={ref} data-office-editor className="relative min-h-0 min-w-0 flex-1 bg-white">
+    <div ref={ref} data-office-editor data-hide-ai-launcher className="relative min-h-0 min-w-0 flex-1 bg-ground">
       {(!visible && still) || overlayStill ? (
         <img
           src={overlayStill ?? still!}
@@ -182,7 +184,8 @@ export function useEditorPlacement(ref: RefObject<HTMLDivElement | null>, viewId
       }
       const shown = visible && (!covered || capturing) && !!r && r.width > 0 && r.height > 0 && document.visibilityState !== 'hidden';
       const bounds = r ? { x: r.left, y: r.top, width: r.width, height: r.height } : { x: 0, y: 0, width: 0, height: 0 };
-      // A persistent launcher must stay clickable without leaving the whole document hidden.
+      // A notice over the editor (an AI answer, with the drawer) must stay clickable without hiding the whole
+      // document. The persistent launcher is not one: it steps aside for the editor (data-hide-ai-launcher, #326).
       if (r)
         for (const reserve of document.querySelectorAll<HTMLElement>('[data-native-reserve-space]')) {
           const a = reserve.getBoundingClientRect();

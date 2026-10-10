@@ -29,19 +29,27 @@ function officeLang(): string {
   return /^[a-z]{2}(-[A-Za-z]{2})?$/.test(l) ? l : 'en';
 }
 
+/**
+ * The editor's theme follows the app's light or dark mode (worksuite-desktop#326; the theme's `data-theme` on the
+ * page). The server signs it into the configuration as `customization.uiTheme`, so it is asked for with each one.
+ */
+export function officeTheme(): 'dark' | 'light' {
+  return typeof document !== 'undefined' && document.documentElement.dataset.theme === 'dark' ? 'dark' : 'light';
+}
+
 const base = (fileId: number) => `/api/files/${fileId}/office`;
 
 export function openSession(fileId: number, mode: OfficeMode | null): Promise<OfficeBootstrap> {
-  return apiPost<OfficeBootstrap>(`${base(fileId)}/session`, { client_type: CLIENT_TYPE, layout: 'desktop', lang: officeLang(), ...(mode ? { mode_requested: mode } : {}) });
+  return apiPost<OfficeBootstrap>(`${base(fileId)}/session`, { client_type: CLIENT_TYPE, layout: 'desktop', lang: officeLang(), theme: officeTheme(), ...(mode ? { mode_requested: mode } : {}) });
 }
 
 /** The same session again: new tokens, the mode re-checked; a new session when the file changed underneath. */
 export function renewSession(fileId: number, sessionId: string): Promise<OfficeBootstrap> {
-  return apiGet<OfficeBootstrap>(`${base(fileId)}/config`, { session_id: sessionId, lang: officeLang(), layout: 'desktop' });
+  return apiGet<OfficeBootstrap>(`${base(fileId)}/config`, { session_id: sessionId, lang: officeLang(), layout: 'desktop', theme: officeTheme() });
 }
 
 export function switchMode(fileId: number, sessionId: string, mode: OfficeMode): Promise<OfficeBootstrap> {
-  return apiPost<OfficeBootstrap>(`${base(fileId)}/session/${sessionId}/mode`, { mode });
+  return apiPost<OfficeBootstrap>(`${base(fileId)}/session/${sessionId}/mode`, { mode, lang: officeLang(), layout: 'desktop', theme: officeTheme() });
 }
 
 export function heartbeat(fileId: number, sessionId: string, readyMs?: number): Promise<OfficeHeartbeat> {

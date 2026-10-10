@@ -56,7 +56,7 @@ const fake = vi.hoisted(() => {
   }
   let last: ReturnType<typeof makeSession> | null = null;
   const current = () => last!;
-  const views: Array<{ prefs: Record<string, unknown>; webContents: ReturnType<typeof makeContents>; bounds: unknown; visible: boolean }> = [];
+  const views: Array<{ prefs: Record<string, unknown>; webContents: ReturnType<typeof makeContents>; bounds: unknown; visible: boolean; background: string | null }> = [];
   function makeContents(id: number) {
     const handlers = new Map<string, Handler[]>();
     return {
@@ -122,7 +122,10 @@ const fake = vi.hoisted(() => {
     getVisible() {
       return this.visible;
     }
-    setBackgroundColor() {}
+    background: string | null = null;
+    setBackgroundColor(c: string) {
+      this.background = c;
+    }
   }
   const windows = new Map<unknown, { children: unknown[]; closed: Handler[]; focused: number; inUse: boolean; isFocused: () => boolean; contentView: { addChildView: (v: unknown) => void; removeChildView: (v: unknown) => void }; isDestroyed: () => boolean; isMinimized: () => boolean; restore: () => void; show: () => void; focus: () => void; once: (e: string, fn: Handler) => void }>();
   function windowFor(owner: unknown) {
@@ -358,7 +361,7 @@ describe('the editor host (OO-DSK-001/020/022)', () => {
     // Commands wait for the page: init (the checked script address and the events), then the configuration.
     expect(wc.sent).toEqual([]);
     fake.ipc.get('office-host:ready')!(fromPage(wc));
-    expect(wc.sent.map(([, c]) => (c as { type: string }).type)).toEqual(['init', 'start']);
+    expect(wc.sent.map(([, c]) => (c as { type: string }).type)).toEqual(['init', 'theme', 'start']);
     expect((wc.sent[0]![1] as { apiUrl: string }).apiUrl).toBe(`${DS}/web-apps/apps/api/documents/api.js`);
 
     fake.ipc.get('office-host:event')!(fromPage(wc), { type: 'onDocumentStateChange', data: true });
@@ -371,6 +374,26 @@ describe('the editor host (OO-DSK-001/020/022)', () => {
     expect(events.map((e) => e.type)).toEqual(['hostReady', 'onDocumentStateChange', 'onRequestSendNotify']);
     expect(events.every((e) => e.viewId === viewId)).toBe(true);
     expect(JSON.stringify(events)).not.toContain('secret comment');
+  });
+
+  it("puts the app's light or dark grey behind the editor, never white, and follows a change (#326)", () => {
+    let dark = true;
+    const themed = new OfficeEditorHost({ preload: '/p.js', serverOrigin: () => WS, allowInsecureLocal: false, devTools: false, platform: 'linux', endSession: () => undefined, dark: () => dark });
+    themed.install();
+    const w = owner();
+    themed.open(w as never, spec());
+    const v = lastView();
+    expect(v.background).toBe('#333333');
+    fake.ipc.get('office-host:ready')!(fromPage(v.webContents));
+    expect(v.webContents.sent.map(([, c]) => c)).toContainEqual({ type: 'theme', dark: true });
+    dark = false;
+    themed.setTheme(false);
+    expect(v.background).toBe('#f4f4f4');
+    expect(v.webContents.sent.at(-1)![1]).toEqual({ type: 'theme', dark: false });
+    // Without a theme source, the light grey.
+    host.install();
+    host.open(owner() as never, spec());
+    expect(lastView().background).toBe('#f4f4f4');
   });
 
   it('lays the view over its placeholder, scaled by the page zoom, and hides it with nothing to show', () => {
@@ -476,6 +499,11 @@ describe("the editor's page", () => {
     expect(OFFICE_HOST_HTML).not.toMatch(/<script>[^<]/);
     expect(OFFICE_HOST_JS).toContain('window.officeBridge');
     expect(OFFICE_HOST_JS).not.toContain('require(');
+    // No white page behind the editor (#326): a light grey, a dark grey with the theme command, and a resize hook.
+    expect(OFFICE_HOST_HTML).not.toMatch(/background:#fff\b/i);
+    expect(OFFICE_HOST_HTML).toContain('html.dark');
+    expect(OFFICE_HOST_JS).toContain("case 'theme'");
+    expect(OFFICE_HOST_JS).toContain("addEventListener('resize'");
   });
 });
 
