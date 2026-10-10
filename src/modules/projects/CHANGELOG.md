@@ -4,6 +4,20 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-10
+
+**Added**
+
+- Budget & cost natively (W12) — the portfolio's totals for one company in its reporting currency at Finance's rates, each project in its own currency, the projects Finance has no rate for named, how a budget moved and labour by person; one project's budget at /projects/<id>/budget; Export saves the budget report as CSV
+- Risks natively (W13) — the register by score with Open, Mitigating, Realised, Closed and All, the impact × probability heat map in words, Raise a risk, edit, delete (with project.manage), read-only otherwise; one project's at /projects/<id>/risks
+- Change requests in full (W14) — every request in reach with Waiting, Approved, Rejected and All and their counts, a project filter, Raise, Withdraw for the raiser, and the decision with what approval does (budget, end date and hours before and after, the health it would then have), a note required to reject, and moving the baseline with an agreed delay; one project's at /projects/<id>/changes
+- Reports natively (W15) — all ten reports at /projects/reports/<kind> with company, period and client filters, Export as CSV, Excel or PDF saved through the download manager (transfers:download projectsReport), Schedule email and the Scheduled emails list (Send now, Pause/Resume, Edit, Delete)
+- the company selector's shared module (company.tsx: useProjectCompany, withOrg); portfolio reads carry the chosen company
+
+**Changed**
+
+- links to /projects/budget, /projects/risks, /projects/reports and a project's budget, risks and changes open in the app; the rail has a Governance group; every governance write waits for a connection
+
 ## 1.1.0 — 2026-10-09
 
 **Added**

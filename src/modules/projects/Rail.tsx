@@ -80,7 +80,12 @@ export function Rail({ view, counts, projects, pins, recent, canCreate, onGo, on
       {viewRow('/projects', 'Dashboard', view.kind === 'dashboard', 'grid')}
       {viewRow('/projects/my-work', 'My work', view.kind === 'my-work', 'list-todo', counts?.my_work)}
       {viewRow('/projects/time', 'Time & approvals', view.kind === 'time', 'clock', counts?.time_waiting)}
-      {counts?.changes_waiting ? viewRow('/projects/changes', 'Change requests', view.kind === 'changes', 'git-branch', counts.changes_waiting) : null}
+      {/* ── governance (W12–W15) ── */}
+      {head('GOVERNANCE')}
+      {viewRow('/projects/budget', 'Budget & cost', view.kind === 'budget' && !view.projectId, 'banknote')}
+      {viewRow('/projects/risks', 'Risks', view.kind === 'risks' && !view.projectId, 'warning', counts?.risks_open)}
+      {viewRow('/projects/changes', 'Change requests', view.kind === 'changes' && !view.projectId, 'git-branch', counts?.changes_waiting)}
+      {viewRow('/projects/reports', 'Reports', view.kind === 'reports', 'chart')}
       {head('PINNED')}
       {pins.length ? pins.map((id) => projectRow(id, true)) : <span className="px-2 py-1 text-[12px] text-ink-3">Pin a project to keep it here, and offline.</span>}
       {current && !pins.includes(current) && !recentShown.includes(current) ? projectRow(current, false) : null}

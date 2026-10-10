@@ -5,6 +5,29 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.219 — 2026-10-10
+
+- **Projects: budget, risks, change requests and reports in the app (projects 1.2.0, W12–W15).** They used to open
+  the web page in your browser; now they open in the Projects tab, under Governance in its rail. "Open on the web"
+  stays on each one.
+  - **Budget & cost:** the live projects' totals for one company — "Company: ▾" picks it — in its reporting
+    currency at Finance's rates of the day named, each project in its own currency, used and at-completion bars,
+    the projects Finance has no rate for named under the table; pick a project for how its budget moved (baseline,
+    approved and waiting change requests, edits) and whose time the labour is. A project's own budget is at
+    /projects/<id>/budget. Export saves the budget report as a CSV.
+  - **Risks:** the register by score, Open / Mitigating / Realised / Closed / All with counts, the impact ×
+    probability heat map (every cell read out in words), Raise a risk, edit, close and delete for project managers;
+    everyone else sees a risk read-only.
+  - **Change requests:** every request, not only those waiting — Waiting / Approved / Rejected / All, a project
+    filter, Raise, Withdraw for whoever raised it, and the decision with what approval does: budget, end date and
+    hours before and after, the health the project would then have, moving the baseline with an agreed delay, a
+    note needed to reject. Whoever raised a request cannot decide it, and the screen says so.
+  - **Reports:** all ten reports, each at its own address, with the company, period and client; Export as CSV,
+    Excel or PDF saves the file to Downloads (or where you choose, with Ask where to save) and shows it in
+    Transfers; Schedule email, and the Scheduled emails list with Send now, Pause/Resume, Edit and Delete.
+  - **Offline**, what was last read is shown; raising, deciding, withdrawing, scheduling and exporting wait for a
+    connection.
+
 ## 0.2.218 — 2026-10-10
 
 - **Mail protection: spam, phishing and viruses (mail 1.28.0, settings 1.29.0, ENH-MAIL-04).** Needs the WorkSuite

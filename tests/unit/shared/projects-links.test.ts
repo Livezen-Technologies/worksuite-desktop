@@ -36,7 +36,9 @@ describe('Projects links land in the native app', () => {
     expect(resolveWebLink('/projects/my-work')).toEqual({ kind: 'tab', route: '/projects/my-work', app: 'projects' });
     expect(resolveWebLink('/projects/changes/7')).toEqual({ kind: 'tab', route: '/projects/changes/7', app: 'projects' });
     expect(resolveWebLink('/projects/18/timeline')).toEqual({ kind: 'browser', path: '/projects/18/timeline', app: 'projects' });
-    expect(resolveWebLink('/projects/budget')).toEqual({ kind: 'browser', path: '/projects/budget', app: 'projects' });
-    expect(resolveWebLink('/projects/risks?project_id=3')).toEqual({ kind: 'browser', path: '/projects/risks?project_id=3', app: 'projects' });
+    expect(resolveWebLink('/projects/sprints')).toEqual({ kind: 'browser', path: '/projects/sprints', app: 'projects' });
+    // Governance is native (W12–W15).
+    expect(resolveWebLink('/projects/budget')).toEqual({ kind: 'tab', route: '/projects/budget', app: 'projects' });
+    expect(resolveWebLink('/projects/risks?project_id=3')).toEqual({ kind: 'tab', route: '/projects/risks?project_id=3', app: 'projects' });
   });
 });

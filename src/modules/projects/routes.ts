@@ -12,16 +12,26 @@
  *   ?task=<id>                      A task, open over whatever view
  *   /projects/timer                 The mini timer window (D02)
  *
- * Anything else is a screen of the web's (timeline, sprints, budget…): shared/links.ts sends those links to the
+ * Governance (W12–W15):
+ *   /projects/budget, /projects/<id>/budget     Budget & cost, the portfolio's or one project's
+ *   /projects/risks, /projects/<id>/risks       The risk register
+ *   /projects/<id>/changes                      One project's change requests
+ *   /projects/reports[/<kind>]                  Reports, one address per report
+ *
+ * Anything else is a screen of the web's (timeline, sprints…): shared/links.ts sends those links to the
  * browser, and a route that still lands here says so and offers the web page.
  */
 export type ProjectsView =
   | { kind: 'dashboard' }
   | { kind: 'my-work' }
   | { kind: 'time' }
-  | { kind: 'changes'; id: number | null }
+  | { kind: 'changes'; id: number | null; projectId?: number | null }
   | { kind: 'board'; projectId: number }
   | { kind: 'timer' }
+  // ── governance (W12–W15) ──
+  | { kind: 'budget'; projectId: number | null }
+  | { kind: 'risks'; projectId: number | null }
+  | { kind: 'reports'; report: string | null }
   | { kind: 'web'; path: string };
 
 const num = (v: string | null | undefined): number | null => (v && /^\d{1,12}$/.test(v) ? Number(v) : null);
@@ -37,8 +47,13 @@ export function viewOf(path: readonly string[], query: URLSearchParams): { view:
   if (a === 'time') return { view: { kind: 'time' }, taskId };
   if (a === 'timer') return { view: { kind: 'timer' }, taskId: null };
   if (a === 'changes') return { view: { kind: 'changes', id: num(b) }, taskId };
+  // ── governance (W12–W15) ──
+  if ((a === 'budget' || a === 'risks') && !b) return { view: { kind: a, projectId: num(query.get('project_id')) }, taskId };
+  if (a === 'reports' && !c) return { view: { kind: 'reports', report: b ?? null }, taskId };
   const project = num(a);
   if (project && (!b || b === 'board' || b === 'tasks')) return { view: { kind: 'board', projectId: project }, taskId };
+  if (project && !c && (b === 'budget' || b === 'risks')) return { view: { kind: b, projectId: project }, taskId };
+  if (project && !c && b === 'changes') return { view: { kind: 'changes', id: null, projectId: project }, taskId };
   return { view: { kind: 'web', path: `/${path.join('/')}` }, taskId: null };
 }
 

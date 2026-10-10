@@ -294,3 +294,41 @@ export interface ProjectsChanged {
   timer?: ProjectTimerState;
   outbox?: ProjectsOutboxItem[];
 }
+
+// ── report exports (W15, PRJ-RPT) ──────────────────────────────────────────
+
+/** The Projects reports the server draws (`GET /api/projects/reports?kind=`), in the web's order. */
+export const PROJECT_REPORT_KINDS = ['summary', 'budget', 'tasks', 'time_by_person', 'time_by_project', 'workload', 'risks', 'velocity', 'milestone_billing', 'by_client'] as const;
+export type ProjectReportKind = (typeof PROJECT_REPORT_KINDS)[number];
+export const PROJECT_REPORT_FORMATS = ['csv', 'xlsx', 'pdf'] as const;
+export type ProjectReportFormat = (typeof PROJECT_REPORT_FORMATS)[number];
+
+const digits = z.string().regex(/^\d{1,10}$/);
+
+/**
+ * A Projects report exported as the server renders it, as the download manager takes it (`transfers:download` with
+ * `projectsReport`): by what it is, never by a path. The main process builds the address (`projectsReportPath`), so
+ * a page can only ask for one of these reports with the screen's own filters.
+ */
+export const projectsReportSchema = z.strictObject({
+  kind: z.enum(PROJECT_REPORT_KINDS),
+  format: z.enum(PROJECT_REPORT_FORMATS),
+  query: z
+    .strictObject({
+      from: ymd.optional(),
+      to: ymd.optional(),
+      client_id: digits.optional(),
+      project_id: digits.optional(),
+      org: digits.optional(),
+    })
+    .optional(),
+});
+export type ProjectsReportFile = z.infer<typeof projectsReportSchema>;
+
+/** The server's address for a report export: `/api/projects/reports?kind=…&format=…` with the filters given. */
+export function projectsReportPath(r: ProjectsReportFile): string {
+  const q = new URLSearchParams({ kind: r.kind });
+  for (const [k, v] of Object.entries(r.query ?? {})) if (v) q.set(k, v);
+  q.set('format', r.format);
+  return `${PROJECTS_API}/reports?${q.toString()}`;
+}

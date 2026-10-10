@@ -20,7 +20,13 @@ import { Rail } from './Rail';
 import { boardRoute, viewOf } from './routes';
 import { TaskPanel } from './TaskPanel';
 import { MiniTimer } from './Timer';
-import { ChangesView, DashboardView, TimeView } from './Views';
+import { DashboardView, TimeView } from './Views';
+// ── governance (W12–W15) ──
+import { BudgetScreen } from './screens/Budget';
+import { ChangesScreen } from './screens/Changes';
+import { governanceTitle } from './screens/gov-routes';
+import { ReportsScreen } from './screens/Reports';
+import { RisksScreen } from './screens/Risks';
 
 /**
  * WorkSuite Projects in a tab (WS-PROJECT-SRS-001 PRJ-DSK-01, D01–D04): the project switcher and views on the left, a
@@ -55,7 +61,7 @@ function Workspace() {
   const boardProject = view.kind === 'board' ? view.projectId : null;
   const current = boardProject ? (projects.get(boardProject) ?? null) : null;
 
-  useTabTitle(view.kind === 'board' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : view.kind === 'changes' ? 'Projects · Changes' : 'Projects');
+  useTabTitle(governanceTitle(view) ?? (view.kind === 'board' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : 'Projects'));
 
   useEffect(() => {
     if (boardProject) noteRecent(boardProject);
@@ -79,7 +85,7 @@ function Workspace() {
     go(`/${path.join('/')}${p.toString() ? `?${p}` : ''}`);
   }, [query, path, go]);
 
-  const onOffline = useCallback((o: boolean) => setCached(o), []);
+  const onOffline = useCallback((o: boolean) => setCached(o), [setCached]);
   const withTask = (id: number | null) => {
     const p = new URLSearchParams(query);
     if (id) p.set('task', String(id));
@@ -151,7 +157,13 @@ function Workspace() {
             ) : view.kind === 'time' ? (
               <TimeView today={today} waiting={counts.data?.data.time_waiting ?? 0} offline={offline} onLogTime={() => setLogFor({ task: null })} onOffline={onOffline} />
             ) : view.kind === 'changes' ? (
-              <ChangesView id={view.id} offline={offline} onGo={go} />
+              <ChangesScreen key={view.projectId ?? 'all'} id={view.id} projectId={view.projectId ?? null} offline={offline} onOffline={onOffline} onGo={go} />
+            ) : view.kind === 'budget' ? (
+              <BudgetScreen key={view.projectId ?? 'all'} projectId={view.projectId} offline={offline} onOffline={onOffline} onGo={go} />
+            ) : view.kind === 'risks' ? (
+              <RisksScreen key={view.projectId ?? 'all'} projectId={view.projectId} offline={offline} onOffline={onOffline} onGo={go} />
+            ) : view.kind === 'reports' ? (
+              <ReportsScreen kind={view.report} offline={offline} onOffline={onOffline} onGo={go} />
             ) : view.kind === 'dashboard' ? (
               <DashboardView onGo={go} onOffline={onOffline} />
             ) : (

@@ -308,7 +308,8 @@ Vault-sealed, so the database file alone gives nothing to guess against.
 - A module's documents leave through the download manager by what they are,
   never by a path: `transfers:download` takes a typed variant (Garage's
   `garageDoc` — a check-in sheet, an estimate, a work order sheet, a delivery
-  note or a report's CSV, `shared/garage-docs.ts`), and the main process
+  note or a report's CSV, `shared/garage-docs.ts`; Projects' `projectsReport`
+  — a report as CSV, Excel or PDF, `shared/projects.ts`), and the main process
   builds the address it fetches. Hotel PMS has a channel of its own,
   `pms:download` (`shared/pms-files.ts`), with the same shape and the
   `desktop.downloads` check repeated in its handler.
@@ -493,7 +494,13 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   in the capture phase while the tab is in front, so ⌘2 is not the shell's "tab 2" here), a task's panel
   (`TaskPanel.tsx`), My work grouped by the reader's own day (`logic.ts: groupMyWork`) and the day's time line. Its
   addresses are the web's (`routes.ts`: `/projects/<id>`, `/projects/<id>/tasks/<task>`, `?project=`, `?task=`); the
-  web screens it does not draw (timeline, sprints, budget, risks, reports…) are `BROWSER_PAGES` in `shared/links.ts`.
+  web screens it does not draw (timeline, sprints…) are `BROWSER_PAGES` in `shared/links.ts`. Governance (W12–W15) is
+  native in `screens/`: Budget & cost (`/projects/budget`, `/projects/<id>/budget`), Risks with the heat map
+  (`/projects/risks`, `/projects/<id>/risks`), Change requests — list, Raise, Withdraw and the decision with what
+  approval does (`/projects/changes[/<id>]`, `/projects/<id>/changes`) — and Reports (`/projects/reports[/<kind>]`)
+  with the scheduled emails. Portfolio reads carry the chosen company as `org` (`company.tsx`: `useProjectCompany`,
+  `withOrg`); a report's CSV, Excel or PDF leaves through the download manager (`transfers:download` with
+  `projectsReport`, `shared/projects.ts`).
   The main process keeps the timer (`timer.ts`: `GET time/running` and this week's entries every minute, start, stop,
   Switch to, pause; the tray's lines, the title bar's pill and the always-on-top mini timer window `/projects/timer`,
   kind `timer`), the idle prompt (powerMonitor's idle time read every 30 s; after 15 minutes one banner, Keep 15 min
@@ -504,7 +511,8 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   banners with buttons (`notices.ts`: `project.change_waiting` → Review, `project.task_overdue` → Open task / Snooze
   1 day, claimed from the notification service as Support's are). READ_CACHE keeps `/api/projects` answers; the
   screens read the pinned boards, my work and five weeks of my time ahead (`desk.ts: keepOffline`). Sign-out clears
-  the cache and the outbox with the rest. Approvals, budget and change decisions are online only.
+  the cache and the outbox with the rest. Approvals, budget and change decisions — and raising a risk or a change
+  request, withdrawing one, scheduling a report and exporting one — are online only.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.
