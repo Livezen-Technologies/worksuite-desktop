@@ -52,10 +52,12 @@ describe('linking progress', () => {
       .mockResolvedValueOnce({ ok: true, qr: null, state: 'auth_failure', linked: false, status_note: null, error: null } as never)
       .mockResolvedValue({ ok: true, qr: '2@fresh', state: 'qr', linked: false, status_note: null, error: null } as never);
     render(<QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}><LinkPhone accountId={4} onLinked={() => undefined} /></QueryClientProvider>);
-    expect(await screen.findByText('WhatsApp rejected the saved login')).toBeTruthy();
+    expect(await screen.findByText('Phone unlinked this device')).toBeTruthy();
     expect(screen.queryByText(/Point the camera/)).toBeNull();
     fireEvent.click(screen.getByRole('button', { name: 'Scan again' }));
     await waitFor(() => expect(vi.mocked(apiPost).mock.calls.filter((c) => String(c[0]).endsWith('/accounts/4/link'))).toHaveLength(2));
-    expect(await screen.findByText('The code changes every few seconds. That is normal.')).toBeTruthy();
+    // Scan again asks for a fresh link: the old login is cleared on the server, not offered again.
+    expect(vi.mocked(apiPost).mock.calls.filter((c) => String(c[0]).endsWith('/accounts/4/link'))[1]![1]).toEqual({ fresh: true });
+    expect(await screen.findByText(/New code in \d+s/)).toBeTruthy();
   });
 });
