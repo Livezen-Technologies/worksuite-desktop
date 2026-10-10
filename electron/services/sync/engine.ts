@@ -67,6 +67,16 @@ export interface DriveSyncDeps {
   /** Not to be synced into: the app's own data. */
   protectedPaths?: () => string[];
   settleMs?: number;
+  /**
+   * A file this computer sent reached Drive (a new version of `fileId`, or a new file): its bytes' hash, so whatever
+   * was waiting on those bytes — the image editor's recipe sidecar (ENH-03 DSK-02) — can follow them.
+   */
+  uploaded?: (e: { fileId: number; version: number; sha256: string; path: string }) => void;
+  /**
+   * Both copies were kept: `copyId` when the server kept this computer's bytes as its own conflicted copy, null when
+   * the copy was set aside here (it goes up later as a new file, and `uploaded` follows it then).
+   */
+  conflicted?: (e: { fileId: number | null; copyId: number | null; sha256: string | null; path: string }) => void;
 }
 
 interface Runtime {
@@ -1099,7 +1109,9 @@ export class DriveSync {
         result = await this.commitBlocks(path, h, { name, mime, fileId, baseVersion, folderId });
       } catch (e) {
         if (isDesktopError(e) && e.code === 'CONFLICT' && (e.data as { conflict?: boolean } | null)?.conflict) {
-          await this.serverKeptBoth(f, rel, l, (e.data as { copy_file_id?: number | null }).copy_file_id ?? null, stats);
+          const copyId = (e.data as { copy_file_id?: number | null }).copy_file_id ?? null;
+          await this.serverKeptBoth(f, rel, l, copyId, stats);
+          this.tell(() => this.deps.conflicted?.({ fileId, copyId, sha256: h.sha256, path }));
           return;
         }
         // The server could not assemble it (a large file, or its memory): the ordinary upload takes it.
@@ -1112,6 +1124,7 @@ export class DriveSync {
         const now = await this.deps.http.get<{ version?: number }>(`/api/files/${fileId}`).catch(() => null);
         if (now && baseVersion !== null && Number(now.version) !== baseVersion) {
           await this.setAside(f, rel, l, stats, 'Changed here and in Drive at the same time.');
+          this.tell(() => this.deps.conflicted?.({ fileId, copyId: null, sha256: h.sha256, path }));
           return;
         }
       }
@@ -1122,6 +1135,32 @@ export class DriveSync {
     stats.pushed++;
     stats.bytesUp += result.sent;
     this.note(f.id, 'uploaded', rel);
+    const done = result;
+    this.tell(() => this.deps.uploaded?.({ fileId: done.fileId, version: done.version, sha256: h.sha256, path }));
+  }
+
+  /** A listener's failure is its own: it never stops a pass. */
+  private tell(fn: () => void): void {
+    try {
+      fn();
+    } catch (e) {
+      log.warn('a sync listener failed', { error: (e as Error).message });
+    }
+  }
+
+  /**
+   * A synced Drive file on this computer (ENH-03 DSK-02): where it is, the version this computer last had in step,
+   * and whether its folder can send an edit up (two-way or upload-only, not paused).
+   */
+  localFile(fileId: number): { path: string; version: number; sha256: string | null; canUpload: boolean; paused: boolean } | null {
+    const uid = this.uid;
+    if (!uid) return null;
+    const at = this.store.located(uid, 'file', [fileId]).get(fileId);
+    if (!at) return null;
+    const f = this.store.folder(at.folder);
+    const e = this.store.entry(at.folder, at.rel);
+    if (!f || !e) return null;
+    return { path: this.abs(f, at.rel), version: e.version, sha256: e.sha256, canUpload: f.mode !== 'download_only', paused: f.paused };
   }
 
   /** have → block → commit: only the blocks Drive does not already hold travel. */
@@ -1223,6 +1262,7 @@ export class DriveSync {
   private async keepBoth(f: SyncFolderRow, rel: string, l: LocalItem, r: RemoteItem, stats: PassStats): Promise<void> {
     if (!(await this.unchanged(this.abs(f, rel), l))) return;
     const aside = await this.setAside(f, rel, l, stats, 'Changed here and in Drive.');
+    if (aside) this.tell(() => this.deps.conflicted?.({ fileId: r.id, copyId: null, sha256: l.sha256, path: this.abs(f, aside) }));
     if (aside) await this.download(f, rel, r, null, stats);
   }
 

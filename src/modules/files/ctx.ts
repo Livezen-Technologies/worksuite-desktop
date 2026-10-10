@@ -43,7 +43,10 @@ export interface Drive {
   officeRouting: OfficeRouting;
   /** The code editor, the image editor and the media player (Files part 2). */
   editText: (f: DriveFile) => void;
-  editImage: (f: DriveFile) => void;
+  /** The photo editor; `version` reopens that version's layers; `list` fills its strip. */
+  editImage: (f: DriveFile, version?: number | null, list?: DriveFile[]) => void;
+  /** Batch edit (BAT-01). */
+  batchEdit: (files: DriveFile[]) => void;
   play: (files: DriveFile[], index: number) => void;
   inBrowser: (f: DriveFile) => void;
   /** Keep a folder on this computer (Drive sync): opens Sync devices with the folder chosen. */
@@ -85,7 +88,7 @@ export function fileMenu(f: DriveFile, d: Drive, list?: DriveFile[]): MenuItem[]
   const out: Array<MenuItem | null> = [
     { label: 'Open', hint: 'Enter', strong: true, run: () => d.open(item, list) },
     way === 'preview' ? null : PREVIEWABLE(e) ? { label: 'Preview', hint: 'Space', run: () => d.preview(list ?? [f], Math.max(0, (list ?? [f]).indexOf(f))) } : null,
-    IMAGE_EDIT_EXTS.includes(e) && (can(a, 'upload_version') || can(a, 'download')) ? { label: 'Edit image', icon: 'compose', run: () => d.editImage(f) } : null,
+    IMAGE_EDIT_EXTS.includes(e) && (can(a, 'upload_version') || can(a, 'download')) ? { label: 'Edit photo', hint: 'E', icon: 'compose', run: () => d.editImage(f, null, list?.filter((x) => IMAGE_EDIT_EXTS.includes(extOf(x.name, x.extension)))) } : null,
     office && canEdit ? { label: 'Edit', icon: 'compose', run: () => d.office(f, 'EDIT') } : null,
     office && (oa ? oa.actions.open_read_only : true) ? { label: 'Open read-only', icon: 'eye', run: () => d.office(f, 'VIEW') } : null,
     r.legacy && OFFICE_EXTS.includes(e) && can(a, 'edit') ? { label: 'Edit in Office', icon: 'external', run: () => d.office(f) } : null,

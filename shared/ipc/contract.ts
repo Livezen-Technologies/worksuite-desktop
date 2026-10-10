@@ -105,6 +105,8 @@ import type {
   SyncLookup,
   SyncPolicy,
   SyncStatus,
+  DriveConflict,
+  LocalImageInfo,
   WebchatRingState,
   LiveDeskInfo,
   WallDisplay,
@@ -361,6 +363,8 @@ const localModelId = z.string().regex(/^[a-z0-9][a-z0-9._-]{1,63}$/);
 const coverId = z.string().regex(/^drive:\d{1,12}:[A-Za-z0-9:.-]{1,40}$/);
 
 /** An Office document's bytes from the editor (a ZIP package, an OLE file, RTF or CSV), at most the local limit. */
+/** A rendered picture: at most the server's render limit and a little over (60 MB). */
+const imageBytes = z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 64 * 1024 * 1024, 'The picture is empty or too large.');
 const officeBytes = z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= MAX_OFFICE_LOCAL_BYTES, 'The document is empty or too large.');
 
 const mailFileHandle = z.string().uuid();
@@ -906,6 +910,39 @@ export const contract = {
   'sync:lookup': ch(z.object({ files: z.array(driveId).max(500), folders: z.array(driveId).max(500), context: driveId.nullable() }), { session: true, rate: 30 }),
   /** Registers this computer for sync again after it was signed out from elsewhere. */
   'sync:reconnect': ch(none, { session: true, permission: 'desktop.files.sync', sensitive: true, rate: 1 }),
+  /** The sync conflicts the server holds open for me (Drive ENH-03 DSK-03), and deciding one. */
+  'sync:conflicts': ch(none, { session: true, rate: 5 }),
+  'sync:resolveConflict': ch(z.object({ id: driveId, resolution: z.enum(['keep_mine', 'keep_server', 'keep_both', 'dismiss']) }), { session: true, sensitive: true, rate: 5 }),
+
+  /*
+   * The image editor on this computer (Drive ENH-03). A synced picture is named by its Drive id; where it is on disk
+   * is the main process's to know. Edits saved offline wait beside it until sync sends them.
+   */
+  'image:localInfo': ch(z.object({ fileId: driveId }), { session: true, rate: 20 }),
+  'image:localRead': ch(z.object({ fileId: driveId }), { session: true, rate: 5 }),
+  'image:localSave': ch(
+    z.strictObject({
+      fileId: driveId,
+      bytes: imageBytes,
+      recipe: z.string().max(24 * 1024 * 1024),
+      summary: z.string().max(500),
+      note: z.string().max(500),
+      width: z.number().int().positive().max(100_000).nullable(),
+      height: z.number().int().positive().max(100_000).nullable(),
+      copyName: z.string().trim().min(1).max(200).regex(/^[^/\\]+$/).nullable().optional(),
+    }),
+    { session: true, sensitive: true, rate: 5 },
+  ),
+  /** Open with › System editor: the synced copy in the computer's default app. */
+  'image:openSystem': ch(z.object({ fileId: driveId }), { session: true, permission: 'desktop.files.open_external', rate: 3 }),
+  /** Dragging the canvas out as a PNG: written first, then handed to the system's drag from inside dragstart. */
+  'image:prepareDrag': ch(z.strictObject({ bytes: imageBytes, name: z.string().min(1).max(255) }), { session: true, rate: 10 }),
+  'image:startDrag': ch(z.object({ token: z.string().uuid() }), { session: true, rate: 10 }),
+  /** Brand libraries and fonts kept for offline use (DSK-04). */
+  'image:cacheGet': ch(z.object({ key: z.string().min(1).max(300) }), { session: true, rate: 200 }),
+  'image:cachePut': ch(z.strictObject({ key: z.string().min(1).max(300), bytes: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 32 * 1024 * 1024, 'A library item is at most 32 MB.'), type: z.string().min(1).max(100) }), { session: true, rate: 100 }),
+  /** Download only / Export: the rendered picture where the person chooses in the save dialog. */
+  'image:saveAs': ch(z.strictObject({ name: z.string().min(1).max(255).regex(/^[^/\\]+$/), bytes: imageBytes }), { session: true, rate: 10, sensitive: true }),
 
   'notifications:list': ch(none, { session: true }),
   'notifications:markRead': ch(z.object({ ids: z.array(idString).min(1).max(200) }), { session: true }),
@@ -1651,6 +1688,17 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'sync:reveal': boolean;
   'sync:lookup': SyncLookup;
   'sync:reconnect': SyncStatus;
+  'sync:conflicts': DriveConflict[];
+  'sync:resolveConflict': { message: string };
+  'image:localInfo': LocalImageInfo;
+  'image:localRead': Uint8Array;
+  'image:localSave': { willBe: number; name: string };
+  'image:openSystem': boolean;
+  'image:prepareDrag': { token: string };
+  'image:startDrag': boolean;
+  'image:cacheGet': { bytes: Uint8Array; type: string; savedAt: string } | null;
+  'image:cachePut': void;
+  'image:saveAs': { name: string } | null;
   'notifications:list': { items: NotificationItem[]; unread: number };
   'notifications:markRead': void;
   'notifications:markAllRead': void;

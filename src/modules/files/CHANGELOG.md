@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.9.0 — 2026-10-10
+
+- Photo viewer and editor (ENH-03): rating, tags, compare, loupe, region comments, location, slideshow options; a new editor shell with straighten, corners, text presets and effects, shapes, stickers, frames, filter strength and presets, before/after; one Save to Drive dialog with conflict handling; version compare; batch edit; Create image; AI panel; offline editing of synced photos with a recipe sidecar; a Sync conflicts card; drag in and out; Open with › System editor.
+
 ## 1.8.6 — 2026-10-08
 
 - Saved WhatsApp conversations take in only what changed (since=), and older pages are not saved

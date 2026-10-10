@@ -149,39 +149,46 @@ try {
   await t.evaluate(`document.querySelector('button[aria-label="Close editor"]').click()`);
   await t.waitFor(`!document.querySelector('textarea[aria-label="File contents"]')`, 'the editor closed');
 
-  // The image editor: brighter, saved as version 2.
+  // The photo viewer, then the editor (ENH-03): brighter, saved as version 2 from Save to Drive.
+  const canvas = `document.querySelector('canvas[aria-label="The picture, with your edits"]:not(.invisible)')`;
   await openRow(`picture-${tag}.png`);
-  await t.waitFor(`!!${button('Edit image')}`, 'the preview');
-  await t.evaluate(`${button('Edit image')}.click()`);
-  await t.waitFor(`document.querySelector('canvas[aria-label="Picture"]:not(.hidden)')?.width > 0`, 'the picture', 20_000);
+  await t.waitFor(`!!${button('Edit photo')}`, 'the viewer');
+  await t.evaluate(`${button('Edit photo')}.click()`);
+  await t.waitFor(`${canvas}?.width > 0`, 'the picture', 20_000);
   await t.evaluate(setValue('input[aria-label="Brightness"]', '40'));
-  await t.waitFor(`document.body.innerText.includes('Not saved')`, 'not saved');
-  await t.evaluate(`${button('Save as version 2')}.click()`);
-  await t.waitFor(`document.body.innerText.includes('Saved as version 2')`, 'saved', 30_000);
+  await t.waitFor(`document.body.innerText.includes('Unsaved changes')`, 'not saved');
+  await t.evaluate(`${button('Save to Drive')}.click()`);
+  await t.waitFor(`!!${button('Save as v2')}`, 'the save dialog');
+  await t.evaluate(`${button('Save as v2')}.click()`);
+  await t.waitFor(`document.body.innerText.includes('Saved as v2')`, 'saved', 30_000);
   let img = (await api('GET', `/api/drive/image/${pic}`)).data;
-  t.check('an adjusted picture saves as the next version of the file', img.file.version === 2, js({ version: img.file.version }));
+  t.check('an adjusted picture saves as the next version of the file, with its recipe', img.file.version === 2 && !!img.recipe, js({ version: img.file.version }));
 
   // Turn it, undo that, turn again, and save a copy.
-  await t.waitFor(`document.querySelector('canvas[aria-label="Picture"]:not(.hidden)')?.width > 0`, 'the new version', 20_000);
-  await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Tools"] button')].find(b => b.textContent.includes('Rotate')).click()`);
-  await t.evaluate(`${button('↻ Turn right')}.click()`);
-  await t.waitFor(`document.querySelector('canvas[aria-label="Picture"]').height > document.querySelector('canvas[aria-label="Picture"]').width`, 'turned');
-  await t.evaluate(`${button('Undo')}.click()`);
-  await t.waitFor(`document.querySelector('canvas[aria-label="Picture"]').width > document.querySelector('canvas[aria-label="Picture"]').height && !document.body.innerText.includes('Not saved')`, 'undone');
+  await t.evaluate(`[...document.querySelectorAll('nav[aria-label="Tools"] button')].find(b => b.textContent.includes('Crop')).click()`);
+  await t.evaluate(`${button('90° right')}.click()`);
+  await t.waitFor(`${canvas}.height > ${canvas}.width`, 'turned');
+  await t.evaluate(`document.querySelector('button[aria-label="Undo"]').click()`);
+  await t.waitFor(`${canvas}.width > ${canvas}.height`, 'undone');
   t.check('Undo takes back the last change', true);
-  await t.evaluate(`${button('↻ Turn right')}.click()`);
-  await t.evaluate(`${button('Save as copy')}.click()`);
+  await t.evaluate(`${button('90° right')}.click()`);
+  await t.evaluate(`document.querySelector('button[aria-label="More ways to save"]').click()`);
+  await t.waitFor(`!!document.querySelector('[role="menu"]')`, 'the save menu');
+  await t.evaluate(`[...document.querySelectorAll('[role="menu"] [role="menuitem"]')].find(b => b.textContent.includes('Save as copy')).click()`);
   await t.waitFor(`!!document.querySelector('input[aria-label="Name of the copy"]')`, 'the copy name');
-  await t.evaluate(setValue('input[aria-label="Name of the copy"]', `turned-${tag}.png`));
+  await t.evaluate(setValue('input[aria-label="Name of the copy"]', `turned-${tag}`));
   await t.evaluate(`${button('Save copy')}.click()`);
-  await t.waitFor(`document.body.innerText.includes(${js(`turned-${tag}.png`)}) && document.body.innerText.includes('next to the original')`, 'the copy', 30_000);
+  await t.waitFor(`document.body.innerText.includes(${js(`turned-${tag}.png`)})`, 'the copy', 30_000);
   const list = (await api('GET', `/api/drive/list?folder_id=${fid}&per_page=100&counts=0`)).data.files ?? [];
   const copy = list.find((f) => f.name === `turned-${tag}.png`);
   if (copy) made.files.add(copy.id);
   img = (await api('GET', `/api/drive/image/${pic}`)).data;
-  t.check('Save as copy puts the turned picture next to the original, which is unchanged', !!copy && img.file.version === 2);
-  await t.evaluate(`document.querySelector('button[aria-label="Close editor"]').click()`);
-  await t.waitFor(`!document.querySelector('canvas[aria-label="Picture"]')`, 'the image editor closed');
+  t.check('Save as copy puts the turned picture in the folder, and the original is unchanged', !!copy && img.file.version === 2);
+  await t.evaluate(`${button('Cancel')}.click()`);
+  await t.waitFor(`!!${button('Discard')} || !document.querySelector('canvas[aria-label="The picture, with your edits"]')`, 'leaving');
+  await t.evaluate(`${button('Discard')}?.click()`);
+  await t.waitFor(`!document.querySelector('canvas[aria-label="The picture, with your edits"]')`, 'the photo editor closed');
+  await t.evaluate(`document.querySelector('button[aria-label="Close viewer"]')?.click()`);
 
   // The media player: it plays; a comment at a moment; description and tags.
   await openRow(`standup-${tag}.wav`);
