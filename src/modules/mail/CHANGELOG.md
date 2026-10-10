@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.29.0 — 2026-10-10
+
+**Added**
+
+- Microsoft 365 sign-in shows each step, Microsoft's error explained, Copy details and the admin-consent link (#324); .pptx attachments open in the slide viewer and Office attachments have Open with (#321, #322)
+
 ## 1.28.0 — 2026-10-10
 
 **Added**

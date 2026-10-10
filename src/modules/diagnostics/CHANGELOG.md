@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-10
+
+**Added**
+
+- WhatsApp linking — each link attempt with its steps and error (#323)
+
 ## 1.1.0 — 2026-10-05
 
 - Screen timings in the report (timings.json) (#252)
