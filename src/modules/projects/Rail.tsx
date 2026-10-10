@@ -10,19 +10,22 @@ import type { ProjectsView } from './routes';
  * The Projects app's left pane (D01): Projects and New, the project switcher (⌘P), the views with what waits in
  * them, the pinned projects (kept on this computer, and kept for offline) and the recent ones.
  */
-export function Rail({ view, counts, projects, pins, recent, canCreate, onGo, onJump, onNew }: {
+export function Rail({ view, counts, projects, pins, recent, canCreate, mayCreate = true, maySettings = false, onGo, onJump, onNew }: {
   view: ProjectsView;
   counts: NavCounts | null;
   projects: Map<number, Project>;
   pins: number[];
   recent: number[];
   canCreate: boolean;
+  /** PORTFOLIO: New project for those who may create projects; Module settings for those who may see them. */
+  mayCreate?: boolean;
+  maySettings?: boolean;
   onGo: (route: string) => void;
   onJump: () => void;
   onNew: () => void;
 }) {
   const row = (active: boolean) => cx('flex h-[30px] w-full items-center gap-2 rounded-[7px] px-2 text-left text-[13px]', active ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle');
-  const current = view.kind === 'board' ? view.projectId : null;
+  const current = view.kind === 'board' || view.kind === 'project' ? view.projectId : null;
   const viewRow = (route: string, label: string, active: boolean, icon: string, count?: number) => (
     <button key={route} type="button" aria-current={active ? 'page' : undefined} onClick={() => onGo(route)} className={row(active)}>
       <Icon name={icon} size={14} className={active ? 'text-primary' : 'text-ink-3'} />
@@ -60,16 +63,18 @@ export function Rail({ view, counts, projects, pins, recent, canCreate, onGo, on
     <nav aria-label="Projects" className="flex w-[232px] shrink-0 flex-col gap-px overflow-y-auto border-r border-line bg-surface px-2.5 py-3.5 scroll-thin">
       <div className="mb-2 flex items-center gap-2 px-1">
         <h1 className="flex-1 text-[16px] font-bold text-ink">Projects</h1>
-        <button
-          type="button"
-          onClick={onNew}
-          disabled={!canCreate}
-          aria-label="New project"
-          title={canCreate ? 'New project — opens on the web' : 'New project needs a connection'}
-          className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-white hover:bg-primary-hover disabled:opacity-50"
-        >
-          <Icon name="plus" size={15} />
-        </button>
+        {mayCreate ? (
+          <button
+            type="button"
+            onClick={onNew}
+            disabled={!canCreate}
+            aria-label="New project"
+            title={canCreate ? 'New project' : 'New project needs a connection'}
+            className="flex h-7 w-7 items-center justify-center rounded-[8px] bg-primary text-white hover:bg-primary-hover disabled:opacity-50"
+          >
+            <Icon name="plus" size={15} />
+          </button>
+        ) : null}
       </div>
       <button type="button" onClick={onJump} aria-keyshortcuts="Meta+P Control+P" className="mb-1 flex h-[32px] items-center gap-2 rounded-[8px] border border-line bg-ground px-2.5 text-left text-[12.5px] text-ink-3 hover:border-primary/50">
         <Icon name="search" size={14} />
@@ -78,9 +83,18 @@ export function Rail({ view, counts, projects, pins, recent, canCreate, onGo, on
       </button>
       {head('VIEWS')}
       {viewRow('/projects', 'Dashboard', view.kind === 'dashboard', 'grid')}
+      {/* ── PORTFOLIO ── */}
+      {viewRow('/projects/all', 'All projects', view.kind === 'all', 'briefcase', counts?.projects)}
+      {viewRow('/projects/templates', 'Templates', view.kind === 'templates', 'copy')}
+      {viewRow('/projects/clients', 'Clients', view.kind === 'clients', 'users')}
+      {/* ── end PORTFOLIO ── */}
       {viewRow('/projects/my-work', 'My work', view.kind === 'my-work', 'list-todo', counts?.my_work)}
       {viewRow('/projects/time', 'Time & approvals', view.kind === 'time', 'clock', counts?.time_waiting)}
       {counts?.changes_waiting ? viewRow('/projects/changes', 'Change requests', view.kind === 'changes', 'git-branch', counts.changes_waiting) : null}
+      {/* ── PORTFOLIO ── */}
+      {viewRow('/projects/activity', 'Activity', view.kind === 'activity', 'activity')}
+      {maySettings ? viewRow('/projects/settings', 'Module settings', view.kind === 'settings', 'settings') : null}
+      {/* ── end PORTFOLIO ── */}
       {head('PINNED')}
       {pins.length ? pins.map((id) => projectRow(id, true)) : <span className="px-2 py-1 text-[12px] text-ink-3">Pin a project to keep it here, and offline.</span>}
       {current && !pins.includes(current) && !recentShown.includes(current) ? projectRow(current, false) : null}

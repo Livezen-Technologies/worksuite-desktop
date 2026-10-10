@@ -492,8 +492,16 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   T timer, L log time, N new task, ⌘F filter, ⌘2 the web's timeline, ⌥⌘O a window of its own; the keys are caught
   in the capture phase while the tab is in front, so ⌘2 is not the shell's "tab 2" here), a task's panel
   (`TaskPanel.tsx`), My work grouped by the reader's own day (`logic.ts: groupMyWork`) and the day's time line. Its
-  addresses are the web's (`routes.ts`: `/projects/<id>`, `/projects/<id>/tasks/<task>`, `?project=`, `?task=`); the
-  web screens it does not draw (timeline, sprints, budget, risks, reports…) are `BROWSER_PAGES` in `shared/links.ts`.
+  addresses are the web's (`routes.ts`: `/projects/<id>`, `/projects/<id>/board`, `/projects/<id>/tasks/<task>`,
+  `?project=`, `?task=`, `?new=`); the web screens it does not draw yet (timeline, sprints, budget, risks, reports…)
+  are `BROWSER_PAGES` in `shared/links.ts`. The portfolio (projects 1.2.0, `screens/`) is native too: All projects
+  (`/projects/all`, every filter in the query), Templates, Clients (`/projects/clients[/<id>]`), the New project
+  dialog (`?new=blank|<template>` over any view), a project's page (`/projects/<id>` overview and `/team`,
+  `/settings`, `/activity`, `/files`, with its board one tab of it), the Activity log and Module settings; its calls
+  and the web's contract types are `portfolio.ts`, and every write there is online only. `company.tsx` is the shared
+  company selector (G-01): `useProjectCompany()` and `withOrg()` mirror the web's, the choice is the organisation
+  filter's (`core/org-prefs`, app id `projects`), and portfolio-level reads carry it as `org` in the request and the
+  query key while one project's reads do not.
   The main process keeps the timer (`timer.ts`: `GET time/running` and this week's entries every minute, start, stop,
   Switch to, pause; the tray's lines, the title bar's pill and the always-on-top mini timer window `/projects/timer`,
   kind `timer`), the idle prompt (powerMonitor's idle time read every 30 s; after 15 minutes one banner, Keep 15 min

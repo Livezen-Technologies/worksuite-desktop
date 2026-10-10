@@ -4,6 +4,21 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-10
+
+**Added**
+
+- All projects natively (W02): status tabs with counts, search, Company, Client, Manager, Health and Priority filters in the address, table and cards, pages
+- Templates, and New project (W03) over any view — blank or from a template with the parts to copy, in the chosen company, with the next code and the end date as baseline
+- Clients (W16): list, detail with projects and money, add, edit, archive and restore; contact details hidden from people on none of the client's projects
+- a project's page (W04): overview, team and members with load by week, edit, re-add and remove (W05), settings with edit, baseline history and re-baseline, status moves with the server's confirmations, template, delete, activity and files; the board is its Board tab
+- the Activity log, Module settings (W17: numbering, money, planning, time, WIP limits, alerts, categories) and the full Dashboard (W01)
+- company.tsx, the shared company selector (useProjectCompany, withOrg) on the organisation filter
+
+**Changed**
+
+- /projects/{id} and ?project= open the project's overview (the web's); its board is /projects/{id}/board
+
 ## 1.1.0 — 2026-10-09
 
 **Added**

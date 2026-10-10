@@ -80,7 +80,7 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
       toast('error', errorMessage(e));
     }
   };
-  const newWindow = () => openRouteInWindow(`/projects/${projectId}`, project ? `${project.code} · ${project.name}` : 'Project');
+  const newWindow = () => openRouteInWindow(`/projects/${projectId}/board`, project ? `${project.code} · ${project.name}` : 'Project');
   const timeline = () => openWeb(`/projects/${projectId}/timeline`);
   const toggleFilter = (show?: boolean) => {
     setFilter((f) => (show ?? f === null ? (f ?? '') : null));

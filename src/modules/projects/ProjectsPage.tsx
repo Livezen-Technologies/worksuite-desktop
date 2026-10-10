@@ -1,5 +1,5 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { isMac } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { app } from '../../core/app-state';
@@ -20,7 +20,13 @@ import { Rail } from './Rail';
 import { boardRoute, viewOf } from './routes';
 import { TaskPanel } from './TaskPanel';
 import { MiniTimer } from './Timer';
-import { ChangesView, DashboardView, TimeView } from './Views';
+import { ChangesView, TimeView } from './Views';
+// ── PORTFOLIO ──
+import { PortfolioDashboard } from './screens/Dashboard';
+import { NewProjectDialog } from './screens/NewProject';
+import { PortfolioScreen, isPortfolio, portfolioTitle } from './screens/Portfolio';
+import { ProjectTabs } from './screens/ProjectPage';
+import { usePermission } from './portfolio';
 
 /**
  * WorkSuite Projects in a tab (WS-PROJECT-SRS-001 PRJ-DSK-01, D01–D04): the project switcher and views on the left, a
@@ -55,11 +61,13 @@ function Workspace() {
   const boardProject = view.kind === 'board' ? view.projectId : null;
   const current = boardProject ? (projects.get(boardProject) ?? null) : null;
 
-  useTabTitle(view.kind === 'board' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : view.kind === 'changes' ? 'Projects · Changes' : 'Projects');
+  useTabTitle(portfolioTitle(view, projects) ?? (view.kind === 'board' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : view.kind === 'changes' ? 'Projects · Changes' : 'Projects'));
+  const may = usePermission();
+  const pageProject = view.kind === 'project' ? view.projectId : boardProject;
 
   useEffect(() => {
-    if (boardProject) noteRecent(boardProject);
-  }, [boardProject]);
+    if (pageProject) noteRecent(pageProject);
+  }, [pageProject]);
   // A task opened from a link is the board's selection too.
   const [openedTask, setOpenedTask] = useState(taskId);
   if (openedTask !== taskId) {
@@ -70,16 +78,17 @@ function Workspace() {
   useEffect(() => {
     if (!offline) void keepOffline();
   }, [offline, pins.length]);
-  // `?new=1` (the web's New project): that dialog is the web's.
-  useEffect(() => {
-    if (query.get('new') !== '1') return;
-    openWeb('/projects?new=1');
+  // `?new=blank` or `?new={template}` (the web's New project): the dialog, over whatever view is open.
+  const newParam = query.get('new');
+  const setNew = (value: string | null) => {
     const p = new URLSearchParams(query);
-    p.delete('new');
+    if (value) p.set('new', value);
+    else p.delete('new');
     go(`/${path.join('/')}${p.toString() ? `?${p}` : ''}`);
-  }, [query, path, go]);
+  };
 
-  const onOffline = useCallback((o: boolean) => setCached(o), []);
+  // A state setter keeps its identity, so the screens' effects that report it do not re-run.
+  const onOffline = setCached;
   const withTask = (id: number | null) => {
     const p = new URLSearchParams(query);
     if (id) p.set('task', String(id));
@@ -123,13 +132,15 @@ function Workspace() {
   return (
     <div className="flex h-full bg-ground text-[13px]">
       <SidePanel id="projects" label="the Projects menu">
-        <Rail view={view} counts={counts.data?.data ?? null} projects={projects} pins={pins} recent={recent} canCreate={!offline} onGo={go} onJump={() => setJump(true)} onNew={() => openWeb('/projects?new=1')} />
+        <Rail view={view} counts={counts.data?.data ?? null} projects={projects} pins={pins} recent={recent} canCreate={!offline} mayCreate={may('project.manage')} maySettings={may('project.settings') || may('project.manage')} onGo={go} onJump={() => setJump(true)} onNew={() => setNew('blank')} />
       </SidePanel>
       <div className="flex min-w-0 flex-1 flex-col">
         {offline ? <OfflineBanner waiting={waiting} /> : null}
         <div className="flex min-h-0 flex-1">
           <main className="flex min-w-0 flex-1 flex-col bg-surface">
             {view.kind === 'board' ? (
+              <>
+              <ProjectTabs projectId={view.projectId} tab="board" onGo={go} />
               <Board
                 key={view.projectId}
                 projectId={view.projectId}
@@ -146,6 +157,7 @@ function Workspace() {
                 onLogTime={(t) => setLogFor({ task: t })}
                 onOffline={onOffline}
               />
+              </>
             ) : view.kind === 'my-work' ? (
               <MyWork me={me} today={today} offline={offline} outbox={outbox} onOpenTask={(t) => openTask(t.id, t.project_id)} onGo={go} onOffline={onOffline} />
             ) : view.kind === 'time' ? (
@@ -153,12 +165,14 @@ function Workspace() {
             ) : view.kind === 'changes' ? (
               <ChangesView id={view.id} offline={offline} onGo={go} />
             ) : view.kind === 'dashboard' ? (
-              <DashboardView onGo={go} onOffline={onOffline} />
+              <PortfolioDashboard offline={offline} mayCreate={may('project.manage')} onGo={go} onNew={() => setNew('blank')} onLogTime={() => setLogFor({ task: null })} onOffline={onOffline} />
+            ) : isPortfolio(view) ? (
+              <PortfolioScreen view={view} query={query} offline={offline} onGo={go} onNew={(t) => setNew(t ? String(t) : 'blank')} onOpenTask={(id) => openTask(id)} onOffline={onOffline} />
             ) : (
               <Empty
                 icon="external"
                 title="This page is on the web"
-                hint="The desktop app has the board, My work, time and change decisions. This screen opens in WorkSuite on the web."
+                hint="This screen opens in WorkSuite on the web."
                 action={
                   <Button variant="primary" icon="external" onClick={() => openWeb(view.kind === 'web' ? view.path : '/projects')}>
                     Open in the browser
@@ -173,6 +187,7 @@ function Workspace() {
       </div>
       {jump ? <JumpTo projects={[...projects.values()]} onClose={() => setJump(false)} onPick={(id) => (setJump(false), go(`/projects/${id}`))} /> : null}
       {logFor ? <LogTime task={logFor.task} project={current ? { id: current.id, code: current.code } : boardProject ? { id: boardProject } : null} onClose={() => setLogFor(null)} /> : null}
+      {newParam ? <NewProjectDialog templateId={Number(newParam) > 0 ? Number(newParam) : null} offline={offline} onClose={() => setNew(null)} onGo={go} /> : null}
       {newIn && boardProject ? <NewTask projectId={boardProject} status={newIn} me={me} onClose={() => setNewIn(null)} onCreated={(id) => (setNewIn(null), void qc.invalidateQueries({ queryKey: qk.tasks(boardProject) }), go(boardRoute(boardProject, id)))} /> : null}
     </div>
   );

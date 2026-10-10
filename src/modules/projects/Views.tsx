@@ -6,86 +6,15 @@ import { addDays, dayWords } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { useNow } from '../../core/use-now';
 import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
-import { HEALTH, qk, read, write, type ChangeRequest } from './api';
+import { qk, read, write, type ChangeRequest } from './api';
 import { elapsedOf, useProjectTimer } from './desk';
-import { HealthDot, SectionTitle, openWeb } from './parts';
+import { openWeb } from './parts';
 
 /**
- * The Projects app's lighter views: the Dashboard (the projects that need attention), my time this week with what
+ * The Projects app's lighter views: my time this week with what
  * waits for my approval, and the change requests waiting for a decision. Approvals and decisions need WorkSuite:
  * they are disabled offline and never kept (PRJ-DSK-04).
  */
-
-export function DashboardView({ onGo, onOffline }: { onGo: (route: string) => void; onOffline: (o: boolean) => void }) {
-  const q = useQuery({ queryKey: qk.dashboard, queryFn: ({ signal }) => read.dashboard({ signal }) });
-  const d = q.data?.data;
-  const fromCache = !!q.data?.offline;
-  useEffect(() => onOffline(fromCache), [fromCache, onOffline]);
-  const k = d?.kpi ?? {};
-  const tile = (label: string, value: number | undefined, tone?: 'danger' | 'warning') => (
-    <div className="flex flex-col gap-0.5 rounded-[12px] border border-line bg-surface px-3.5 py-2.5">
-      <span className="text-[11.5px] font-semibold text-ink-3">{label}</span>
-      <b className={cx('text-[20px]', tone === 'danger' && value ? 'text-danger' : tone === 'warning' && value ? 'text-warning-ink' : 'text-ink')}>{value ?? '—'}</b>
-    </div>
-  );
-  return (
-    <div className="flex min-h-0 flex-1 flex-col gap-3.5 overflow-y-auto px-5 py-4 scroll-thin">
-      <div className="flex items-center gap-2">
-        <h1 className="flex-1 text-[20px] font-bold text-ink">Dashboard</h1>
-        <Button size="sm" icon="external" onClick={() => openWeb('/projects')}>
-          Full dashboard on the web
-        </Button>
-      </div>
-      {q.isLoading ? <Spinner /> : null}
-      {q.error && !d ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
-      {d ? (
-        <>
-          <div className="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-2.5">
-            {tile('Live projects', k.live)}
-            {tile('At risk', k.at_risk, 'danger')}
-            {tile('Watch', k.watch, 'warning')}
-            {tile('Open tasks', k.tasks_open)}
-            {tile('Overdue tasks', k.tasks_overdue, 'danger')}
-            {tile('Milestones due', k.upcoming_milestones)}
-          </div>
-          <section className="rounded-[12px] border border-line bg-surface">
-            <div className="border-b border-line px-3.5 py-2">
-              <SectionTitle count={d.attention.length}>Needing attention</SectionTitle>
-            </div>
-            {d.attention.map((p) => (
-              <button key={p.id} type="button" onClick={() => onGo(`/projects/${p.id}`)} className="grid w-full grid-cols-[14px_76px_minmax(0,1.4fr)_minmax(0,1fr)_70px_70px] items-center gap-2 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
-                <HealthDot health={p.health} />
-                <span className="font-mono text-[11px] text-ink-3">{p.code}</span>
-                <span className="min-w-0">
-                  <b className="block truncate text-ink">{p.name}</b>
-                  <span className="block truncate text-[11.5px] text-ink-3">{HEALTH[p.health]?.label}{p.reasons.length ? ` · ${p.reasons.join(' · ')}` : ''}</span>
-                </span>
-                <span className="truncate text-ink-2">{p.manager ?? '—'}</span>
-                <span className="text-ink-2">{p.progress}% done</span>
-                <span className={cx(p.budget_used_percent >= 100 ? 'font-bold text-danger' : 'text-ink-2')}>{p.budget_used_percent}% budget</span>
-              </button>
-            ))}
-            {!d.attention.length ? <p className="px-3.5 py-3 text-ink-3">Every project is on track.</p> : null}
-          </section>
-          {d.upcoming_milestones?.length ? (
-            <section className="rounded-[12px] border border-line bg-surface">
-              <div className="border-b border-line px-3.5 py-2">
-                <SectionTitle count={d.upcoming_milestones.length}>Milestones coming up</SectionTitle>
-              </div>
-              {d.upcoming_milestones.slice(0, 8).map((m) => (
-                <button key={m.id} type="button" onClick={() => onGo(`/projects/${m.project_id}`)} className="flex w-full items-center gap-2 border-b border-line/60 px-3.5 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
-                  <span className="font-mono text-[11px] text-ink-3">{m.code}</span>
-                  <span className="min-w-0 flex-1 truncate text-ink">{m.name}</span>
-                  <span className={cx(m.days_left < 0 ? 'font-bold text-danger' : 'text-ink-2')}>{m.days_left < 0 ? `${-m.days_left} d late` : m.days_left === 0 ? 'Today' : `in ${m.days_left} d`}</span>
-                </button>
-              ))}
-            </section>
-          ) : null}
-        </>
-      ) : null}
-    </div>
-  );
-}
 
 /** My time this week (PRJ-TIM), the running timer with it, and the approvals waiting for me (on the web, online). */
 export function TimeView({ today, waiting, offline, onLogTime, onOffline }: { today: string; waiting: number; offline: boolean; onLogTime: () => void; onOffline: (o: boolean) => void }) {
