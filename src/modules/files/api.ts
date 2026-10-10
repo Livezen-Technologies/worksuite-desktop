@@ -6,7 +6,8 @@ import { apiGet, apiPost, apiUrl } from '../../core/api';
  * rule lives on the server (DriveGuard): a row carries `access`, and this
  * side only shows what that allows. Stamps are UTC without a zone.
  */
-export type Level = 'view' | 'edit' | 'full';
+/** `comment` (worksuite-desktop#329): open it and take part in its comments, without changing it. */
+export type Level = 'view' | 'comment' | 'edit' | 'full';
 
 export interface ItemAccess {
   level: Level | null;

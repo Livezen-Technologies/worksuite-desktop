@@ -1,16 +1,14 @@
 // @vitest-environment jsdom
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(async () => ({})), apiPut: vi.fn(async () => ({})), apiDelete: vi.fn(async () => ({})) }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => null), on: () => () => undefined, hasDesktop: () => true, errorMessage: (e: Error) => e.message, isMac: false, registerDropped: vi.fn() }));
 vi.mock('../../../src/core/access', () => ({ useCanOpen: () => true, useVisibleIds: () => new Set(['chat', 'drive', 'files']) }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
-import { apiGet, apiPost } from '../../../src/core/api';
+import { apiPost } from '../../../src/core/api';
 import { call } from '../../../src/core/bridge';
 import { FileShareCard, shareHeadline, type FileShareCardData } from '../../../src/modules/chat/cards/FileShareCard';
-import { ShareDialog } from '../../../src/modules/files/Share';
 import { FILE_ROWS, FilesNotifications, choice, withChoice } from '../../../src/modules/notifications/FilesPrefs';
 
 afterEach(() => {
@@ -80,57 +78,7 @@ describe('the share card in Chat (worksuite-desktop#164)', () => {
   });
 });
 
-describe('Share › Notify people (worksuite-desktop#164)', () => {
-  const access = (defaults: { chat: boolean; email: boolean }) => ({
-    item: { type: 'file', id: 9, name: 'Budget.xlsx', owner: null, company: null, inherits: true, shareable: true },
-    my_access: { level: 'full', owner: true, capabilities: ['share', 'chat_share'], reason: null },
-    may: { share: true, manage: true },
-    grants: [],
-    inherited: [],
-    public_links: null,
-    notify_defaults: defaults,
-  });
-
-  const mount = () =>
-    render(
-      <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-        <ShareDialog item={{ type: 'file', f: { id: 9, name: 'Budget.xlsx' } } as never} onClose={() => undefined} onSecureLink={() => undefined} onPublicLink={() => undefined} onSendToChat={() => undefined} />
-      </QueryClientProvider>,
-    );
-
-  it('is on by default with an optional message, and the chat and email choices start as the organisation set them', async () => {
-    vi.mocked(apiGet).mockImplementation(async (path: string) => (path.endsWith('/principals') ? { people: [{ type: 'user', id: 5, name: 'Samali Perera', detail: 'samali@example.com' }], teams: [], departments: [], roles: [], companies: [], shareable: true } : access({ chat: true, email: false })) as never);
-    mount();
-
-    const notify = (await screen.findByText('Notify people')).closest('label')!;
-    expect(within(notify).getByRole('checkbox')).toHaveProperty('checked', true);
-    expect(within(screen.getByText('Send a chat message').closest('label')!).getByRole('checkbox')).toHaveProperty('checked', true);
-    expect(within(screen.getByText('Send an email').closest('label')!).getByRole('checkbox')).toHaveProperty('checked', false);
-
-    fireEvent.change(screen.getByRole('textbox', { name: 'Message' }), { target: { value: 'For Monday' } });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search people' }), { target: { value: 'Sam' } });
-    fireEvent.click(await screen.findByText('Samali Perera'));
-    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
-
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/drive/access/file/9/grants', expect.objectContaining({ principal_id: 5, notify: true, message: 'For Monday', notify_chat: true, notify_email: false })));
-  });
-
-  it('shares without telling anybody when Notify people is unticked', async () => {
-    vi.mocked(apiGet).mockImplementation(async (path: string) => (path.endsWith('/principals') ? { people: [{ type: 'user', id: 5, name: 'Samali Perera', detail: null }], teams: [], departments: [], roles: [], companies: [], shareable: true } : access({ chat: true, email: true })) as never);
-    mount();
-
-    fireEvent.click(within((await screen.findByText('Notify people')).closest('label')!).getByRole('checkbox'));
-    expect(screen.queryByRole('textbox', { name: 'Message' })).toBeNull();
-    fireEvent.change(screen.getByRole('textbox', { name: 'Search people' }), { target: { value: 'Sam' } });
-    fireEvent.click(await screen.findByText('Samali Perera'));
-    fireEvent.click(screen.getByRole('button', { name: 'Share' }));
-
-    await waitFor(() => expect(apiPost).toHaveBeenCalled());
-    const body = vi.mocked(apiPost).mock.calls[0]![1] as Record<string, unknown>;
-    expect(body.notify).toBe(false);
-    expect(body).not.toHaveProperty('notify_chat');
-  });
-});
+// Share's own notify options (Chat, Email, a message) are tested with the dialog in files-share-dialog.test.tsx (#329).
 
 describe('Notification settings › Files (worksuite-desktop#164)', () => {
   it('shows the server defaults until something is chosen, and sets every event of a row', () => {

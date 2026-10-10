@@ -50,10 +50,10 @@ export const GUIDES: Guide[] = [
     steps: [
       { text: 'Open “Files” from the sidebar and find the file or folder.' },
       { text: 'Select it and click “Share…” on the toolbar — or right-click it and choose “Share…”.', target: 'files.share' },
-      { text: 'Pick the “People”, “Teams”, “Departments”, “Roles” or “Companies” tab and search for who to share with.' },
-      { text: 'Choose the “Access level” (“Can view”, “Can edit” or “Full access”); tick “No download” if they should only look.' },
+      { text: 'Type a name in the one search box: people, teams, departments, roles and companies all show, each tagged with what it is. Pick one or more; they become chips.' },
+      { text: 'Choose the permission (“Can view”, “Can comment”, “Can edit” or “Full access”), and whether to notify them by Chat, Email or both, with an optional message.' },
       { text: 'Click “Share”, then “Done”.' },
-      { text: 'For a link anyone can open, the owner chooses “Make a public link…” (a folder: “Get a link…”), then “Create link” and “Copy”.' },
+      { text: 'For a link anyone can open, the owner sets “General access” to “Anyone with the link” and creates the link there.' },
     ],
     tips: ['You can share an item only when your access to it allows sharing; only its owner makes a public link.'],
   },

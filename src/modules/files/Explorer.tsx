@@ -350,7 +350,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
               </button>
               {current?.is_locked ? <span className="ml-1.5 flex items-center gap-1 rounded-xl bg-warning-bg px-2 py-0.5 text-[11.5px] font-bold text-warning"><Icon name="lock" size={11} /> Password locked</span> : null}
               <span className="flex-1" />
-              {folderAccess && !folderAccess.owner ? <span className="shrink-0 text-[12px] text-ink-3">Shared with you · {folderAccess.level === 'full' ? 'Full access' : folderAccess.level === 'edit' ? 'Can edit' : 'Can view'}</span> : null}
+              {folderAccess && !folderAccess.owner ? <span className="shrink-0 text-[12px] text-ink-3">Shared with you · {folderAccess.level === 'full' ? 'Full access' : folderAccess.level === 'edit' ? 'Can edit' : folderAccess.level === 'comment' ? 'Can comment' : 'Can view'}</span> : null}
               {mayAdd ? (
                 <>
                   <button type="button" onClick={d.newFolder} className="h-9 shrink-0 rounded-[8px] border border-line bg-surface px-3 font-semibold whitespace-nowrap text-ink hover:bg-subtle">New folder</button>
