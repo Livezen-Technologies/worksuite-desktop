@@ -5,6 +5,85 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.220 — 2026-10-10
+
+- **Projects: the whole portfolio in the app (projects 1.2.0).** All projects, Templates, Clients, New project, a
+  project's own page, the Activity log and Module settings open in the Projects tab instead of the browser — every
+  link to them too, from Mail, Calendar, notifications and search. Open on the web stays as a secondary action.
+  - **All projects:** status tabs with their counts, search, and filters for company, client, manager, health and
+    priority, kept in the address so a filtered list is a link; a table or cards; health always in words.
+  - **Company: ▾** — the screens show one company's projects and totals at a time, the one picked in the app's
+    organisation filter (your own company until you pick another). Projects, Templates, Clients and the Dashboard
+    have it.
+  - **New project** (the + in the rail, or New project on a screen) opens over the screen you are on: blank or from
+    a template — choose which parts to copy; dates move to the new start — with the company, client, category,
+    manager, dates, budget, rate and how it starts. The end date becomes the baseline.
+  - **A project's page:** its overview (progress, tasks, hours, end against the baseline, budget used, why it is at
+    risk, budget vs actual, milestones, details, open risks, what is linked), Team (roles, capacity, rates, load by
+    week; add, edit, remove and re-add people), Settings (edit the project, the baseline history and Re-baseline),
+    Activity and Files; Start timer, Move to (a move WorkSuite needs confirmed asks with its reason first), mark or
+    save as a template, delete. The board is now the project's Board tab: `/projects/{id}` opens the overview, as on
+    the web.
+  - **Clients:** the list with live and total projects and CRM link, the client's projects and money, add, edit,
+    archive and restore. Contact details stay hidden from people who work on none of the client's projects.
+  - **Activity log** and **Module settings** (numbering, money, planning, time, WIP limits, alerts, categories) for
+    those who may see them; the other settings sections open on the web.
+  - **The Dashboard** has the web's eight figures, by status, upcoming milestones, team workload and recent activity.
+  - **Offline:** what was read stays readable; creating and changing projects, clients, members and settings waits
+    for a connection (the buttons say so).
+- **Projects: the delivery screens are in the app (projects 1.2.0, WS-PROJECT-SRS-001 W08–W11).** Timeline, milestones,
+  sprints, team workload and the approval queue used to open the web page in your browser. They now open in the
+  Projects tab, under **Delivery** on the left, with the same features as the web; "Open on the web" stays on each.
+  - **Timeline & Gantt** (`/projects/timeline`, or a project's `/projects/<id>/timeline`; ⌘2 on a board): the tasks
+    as bars on their calendar dates, the critical path and each task's slack in words, milestones, today, the
+    planned end against the baseline and the finish forecast, Days / Weeks / Months, Skip weekends, and the
+    dependencies with their kind and lag. A task's title opens it on the right.
+  - **Milestones & billing**: Open, Overdue, Achieved, Missed and All with their counts; New, Edit and Delete;
+    Mark achieved — when tasks are still open it asks "Mark achieved anyway?" and needs a reason, kept on the
+    record. **Ready to invoice** shows the total in the company's reporting currency and names the company; **Draft
+    invoices in Billing** (or a row's **Raise invoice**) hands them to Billing and lists the drafts as links, and
+    says which ones Billing could not take and why.
+  - **Sprints**: plan, edit, start, cancel or delete a sprint; committed at start, added since, done, remaining and
+    the forecast; the burndown and velocity charts (their figures are read out to screen readers); the sprint
+    backlog; **Complete sprint…** with a retrospective and where the unfinished tasks go — the next planned sprint
+    or the backlog.
+  - **Team workload**: each person's load by week (every cell prints its percentage) with their hours, capacity and
+    load, across the company's projects or one project.
+  - **Time & approvals**: My week now says why an entry was sent back or is locked, lets you delete one of your own,
+    and has **Start timer** for a project or a task. The **Approval queue** (`?tab=queue`, where "Review" now goes)
+    groups entries by person — Approve, **Approve all**, **Send back with a note** (the note is required), Mark
+    billable / non-billable — with filters for week, project, person and billing; running timers and your own time
+    are skipped and counted. The **Summary** totals time by project and by person for any range.
+  - **Offline**, these screens show what was last read; approvals, invoices and every milestone and sprint change
+    wait for a connection (the buttons say so). Logging time still works offline and is sent when you reconnect.
+  - Links to these screens from Mail, Calendar, notifications and search open in the app.
+- **Projects: budget, risks, change requests and reports in the app (projects 1.2.0, W12–W15).** They used to open
+  the web page in your browser; now they open in the Projects tab, under Governance in its rail. "Open on the web"
+  stays on each one.
+  - **Budget & cost:** the live projects' totals for one company — "Company: ▾" picks it — in its reporting
+    currency at Finance's rates of the day named, each project in its own currency, used and at-completion bars,
+    the projects Finance has no rate for named under the table; pick a project for how its budget moved (baseline,
+    approved and waiting change requests, edits) and whose time the labour is. A project's own budget is at
+    /projects/<id>/budget. Export saves the budget report as a CSV.
+  - **Risks:** the register by score, Open / Mitigating / Realised / Closed / All with counts, the impact ×
+    probability heat map (every cell read out in words), Raise a risk, edit, close and delete for project managers;
+    everyone else sees a risk read-only.
+  - **Change requests:** every request, not only those waiting — Waiting / Approved / Rejected / All, a project
+    filter, Raise, Withdraw for whoever raised it, and the decision with what approval does: budget, end date and
+    hours before and after, the health the project would then have, moving the baseline with an agreed delay, a
+    note needed to reject. Whoever raised a request cannot decide it, and the screen says so.
+  - **Reports:** all ten reports, each at its own address, with the company, period and client; Export as CSV,
+    Excel or PDF saves the file to Downloads (or where you choose, with Ask where to save) and shows it in
+    Transfers; Schedule email, and the Scheduled emails list with Send now, Pause/Resume, Edit and Delete.
+  - **Offline**, what was last read is shown; raising, deciding, withdrawing, scheduling and exporting wait for a
+    connection.
+- **Projects: one module, every screen native (projects 1.2.0).** The portfolio, delivery and governance screens
+  above arrive together: the Projects rail is grouped as on the web — Portfolio, Work, Delivery, Governance,
+  Administer — with every view and its count; a project's page has all of the web's tabs (Overview, Board, Timeline,
+  Sprints, Milestones, Team, Budget, Risks, Changes, Files, Activity, Settings) and they stay on top of its board,
+  timeline, milestones, sprints, budget, risks and change requests; **Board** in the rail opens the project you last
+  worked in. The one Projects page still on the web is a project's own Time tab (Time & approvals is here).
+
 ## 0.2.219 — 2026-10-10
 
 - **A much better photo viewer (ENH-03).** In Drive › Files you can now:

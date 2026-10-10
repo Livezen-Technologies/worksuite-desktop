@@ -18,7 +18,7 @@ vi.mock('../../../src/core/bridge', () => ({
 }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 
-const tab = vi.hoisted(() => ({ query: new URLSearchParams(), path: ['projects', '18'], go: (_r: string) => undefined as void }));
+const tab = vi.hoisted(() => ({ query: new URLSearchParams(), path: ['projects', '18', 'board'], go: (_r: string) => undefined as void }));
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ tabId: 't1', route: `/${tab.path.join('/')}?${tab.query}`, active: true, path: tab.path, query: tab.query, go: (r: string) => tab.go(r), navigate: () => undefined, openInNewTab: () => undefined, openInWindow: () => undefined, setTitle: () => undefined, openLink: () => undefined }),
   useTabTitle: () => undefined,
@@ -52,13 +52,13 @@ function answers(path: string): unknown {
 const show = () =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ProjectsPage tabId="t1" route="/projects/18" active />
+      <ProjectsPage tabId="t1" route="/projects/18/board" active />
     </QueryClientProvider>,
   );
 
 beforeEach(() => {
   offline = false;
-  tab.path = ['projects', '18'];
+  tab.path = ['projects', '18', 'board'];
   tab.query = new URLSearchParams();
   tab.go = vi.fn();
   vi.mocked(apiGetMeta).mockReset();
@@ -132,5 +132,48 @@ describe('Projects in a tab (D01)', () => {
     expect((within(outbox).getByRole('button', { name: 'Reopen to In review' }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(within(outbox).getByRole('button', { name: 'Keep Completed' }));
     await waitFor(() => expect(call).toHaveBeenCalledWith('projects:resolve', { id: 'a', choice: 'theirs' }));
+  });
+});
+
+describe('one Projects module (portfolio, delivery and governance together)', () => {
+  it('groups the rail as the web does', async () => {
+    show();
+    const rail = screen.getByRole('navigation', { name: 'Projects' });
+    await waitFor(() => expect(rail.textContent).toContain('My work7'));
+    const text = rail.textContent ?? '';
+    const order = ['PORTFOLIO', 'All projects', 'WORK', 'My work', 'Board', 'Timeline & Gantt', 'DELIVERY', 'Milestones', 'Sprints', 'Time & approvals', 'Team workload', 'GOVERNANCE', 'Budget & cost', 'Risks', 'Change requests', 'Reports'];
+    const at = order.map((w) => text.indexOf(w));
+    expect(at.every((i) => i >= 0)).toBe(true);
+    expect([...at].sort((a, b) => a - b)).toEqual(at);
+  });
+
+  it('keeps a project’s tab strip on the board, and on its Time tab, the one page still on the web', async () => {
+    show();
+    const tabs = await screen.findByRole('navigation', { name: 'Project sections' });
+    expect(within(tabs).getByRole('button', { name: 'Board' }).getAttribute('aria-current')).toBe('page');
+    fireEvent.click(within(tabs).getByRole('button', { name: 'Budget' }));
+    expect(tab.go).toHaveBeenCalledWith('/projects/18/budget');
+    cleanup();
+    tab.path = ['projects', '18', 'time'];
+    show();
+    expect(await screen.findByText('This page is on the web')).toBeTruthy();
+    const strip = screen.getByRole('navigation', { name: 'Project sections' });
+    expect(within(strip).getByRole('button', { name: 'Time' }).getAttribute('aria-current')).toBe('page');
+  });
+
+  it('the rail’s Board opens the project last worked in, and asks which one when there is none', async () => {
+    localStorage.clear();
+    tab.path = ['projects', 'board'];
+    show();
+    expect(await screen.findByText('Choose a project')).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Jump to project' })).toBeTruthy();
+    cleanup();
+    tab.path = ['projects', '18'];
+    show();
+    cleanup();
+    tab.path = ['projects', 'board'];
+    show();
+    expect(await screen.findByRole('grid', { name: 'Board' })).toBeTruthy();
+    expect(screen.getByText('e-Auction portal — Board')).toBeTruthy();
   });
 });

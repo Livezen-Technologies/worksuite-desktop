@@ -9,6 +9,7 @@ import { writeFile } from 'node:fs/promises';
 import { canOpenApp, notificationAllowed } from '@shared/access';
 import { tabRecordSchema, type TabRecord } from '@shared/ipc/contract';
 import { garageDocPath } from '@shared/garage-docs';
+import { projectsReportPath } from '@shared/projects';
 import { safeFileName } from '@shared/filename';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
@@ -625,6 +626,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/chat/rooms/${input.chatExport.room}/export?${new URLSearchParams({ format: input.chatExport.format, media: input.chatExport.media ? '1' : '0' })}`
       : input.garageDoc
       ? garageDocPath(input.garageDoc)
+      : input.projectsReport
+      ? projectsReportPath(input.projectsReport)
       : ef
       ? ef.kind === 'claim-receipt'
         ? `/api/expense/claims2/${ef.claim}/receipt`

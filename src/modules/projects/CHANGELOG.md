@@ -4,6 +4,35 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-10
+
+**Added**
+
+- All projects natively (W02): status tabs with counts, search, Company, Client, Manager, Health and Priority filters in the address, table and cards, pages
+- Templates, and New project (W03) over any view — blank or from a template with the parts to copy, in the chosen company, with the next code and the end date as baseline
+- Clients (W16): list, detail with projects and money, add, edit, archive and restore; contact details hidden from people on none of the client's projects
+- a project's page (W04): overview, team and members with load by week, edit, re-add and remove (W05), settings with edit, baseline history and re-baseline, status moves with the server's confirmations, template, delete, activity and files; the board is its Board tab
+- the Activity log, Module settings (W17: numbering, money, planning, time, WIP limits, alerts, categories) and the full Dashboard (W01)
+- company.tsx, the shared company selector (useProjectCompany, withOrg) on the organisation filter
+- Timeline & Gantt (W08) — a project's bars on its calendar, critical path and slack in words, milestones, today, planned end vs baseline and the finish forecast, Days/Weeks/Months, Skip weekends, and the dependencies with their lag
+- Milestones & billing (W10) — tabs with counts, New/Edit/Delete, Mark achieved (with Mark achieved anyway? and a reason when tasks are open), Ready to invoice in the company's currency, Draft invoices in Billing and Raise invoice, with links to the drafts and what Billing refused
+- Sprints (W09) — plan, edit, start, cancel, delete, the committed/added/done/remaining figures and forecast, burndown and velocity, the sprint backlog, and Complete sprint with a retrospective and where unfinished work is carried over
+- Team workload — each person's load by week with totals, across the company's projects or one project's
+- Time & approvals in full (W11) — the approval queue by person (Approve, Approve all, Send back with a note, Mark billable / non-billable, filters by week, project, person and billing), the Summary by project and by person, Start timer on a project or task, and my week's sent-back notes, lock reasons and Delete
+- Budget & cost natively (W12) — the portfolio's totals for one company in its reporting currency at Finance's rates, each project in its own currency, the projects Finance has no rate for named, how a budget moved and labour by person; one project's budget at /projects/<id>/budget; Export saves the budget report as CSV
+- Risks natively (W13) — the register by score with Open, Mitigating, Realised, Closed and All, the impact × probability heat map in words, Raise a risk, edit, delete (with project.manage), read-only otherwise; one project's at /projects/<id>/risks
+- Change requests in full (W14) — every request in reach with Waiting, Approved, Rejected and All and their counts, a project filter, Raise, Withdraw for the raiser, and the decision with what approval does (budget, end date and hours before and after, the health it would then have), a note required to reject, and moving the baseline with an agreed delay; one project's at /projects/<id>/changes
+- Reports natively (W15) — all ten reports at /projects/reports/<kind> with company, period and client filters, Export as CSV, Excel or PDF saved through the download manager (transfers:download projectsReport), Schedule email and the Scheduled emails list (Send now, Pause/Resume, Edit, Delete)
+- /projects/board opens the board of the project last worked in, and a project's page shows all of the web's tabs over its board, timeline, milestones, sprints, budget, risks and changes
+
+**Changed**
+
+- /projects/{id} and ?project= open the project's overview (the web's); its board is /projects/{id}/board
+- /projects[/<id>]/timeline, /milestones, /sprints[/<id>], /projects/workload and /projects/time?tab=queue|summary open in the app instead of the browser; the board's Timeline (⌘2) opens here; approvals and every delivery change wait for a connection offline
+- links to /projects/budget, /projects/risks, /projects/reports and a project's budget, risks and changes open in the app; the rail has a Governance group; every governance write waits for a connection
+- the rail is grouped as the web's (Portfolio, Work, Delivery, Governance, Administer); the one Projects page left on the web is a project's own Time tab
+- one kit for every screen (screens/kit.tsx); the governance screens use company.tsx's CompanySelect
+
 ## 1.1.0 — 2026-10-09
 
 **Added**

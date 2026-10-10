@@ -3,20 +3,20 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { TASK_STATUS_LABEL, type ProjectsOutboxItem } from '@shared/projects';
 import { call, errorMessage, isMac } from '../../core/bridge';
 import { prettyAccelerator } from '../../core/commands';
-import { openRouteInWindow } from '../../core/tab-context';
+import { openRouteInWindow, useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Kbd, Spinner, cx, initials } from '../../components/ui';
 import { qk, read, type Task, type TaskStatus } from './api';
 import { setTimerState, submit, togglePin, useProjectTimer } from './desk';
 import { activeSprint, boardKey, buildColumns, dueOf, isBlocked, lastChange, nextColumn, sprintDay, withPending, type BoardKey } from './logic';
-import { Ref, fieldClass, openWeb } from './parts';
+import { Ref, fieldClass } from './parts';
 
 /**
  * A project's board in a tab (PRJ-DSK-01, D01): "PRJ-0018 · Sprint 7 · day 4 of 9", the columns with their counts,
  * cards with their number, title, assignee, due or how late, blocked; and the keyboard — J/K down and up, ←/→ across
  * the columns, Shift+←/→ moves the card, Enter opens it, T starts its timer, L logs time, N a new task, ⌘F filter,
- * ⌘2 the timeline (on the web), ⌥⌘O this project in a window of its own.
+ * ⌘2 the timeline, ⌥⌘O this project in a window of its own.
  */
 export function Board({ projectId, selected, today, me, active, pinned, offline, outbox, onOpen, onSelect, onNewTask, onLogTime, onOffline }: {
   projectId: number;
@@ -35,6 +35,7 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
   onOffline: (offline: boolean) => void;
 }) {
   const qc = useQueryClient();
+  const { go } = useTab();
   const detail = useQuery({ queryKey: qk.detail(projectId), queryFn: ({ signal }) => read.detail(projectId, { signal }) });
   const list = useQuery({ queryKey: qk.tasks(projectId), queryFn: ({ signal }) => read.tasks(projectId, { signal }), refetchInterval: 30_000 });
   const timer = useProjectTimer();
@@ -80,8 +81,9 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
       toast('error', errorMessage(e));
     }
   };
-  const newWindow = () => openRouteInWindow(`/projects/${projectId}`, project ? `${project.code} · ${project.name}` : 'Project');
-  const timeline = () => openWeb(`/projects/${projectId}/timeline`);
+  const newWindow = () => openRouteInWindow(`/projects/${projectId}/board`, project ? `${project.code} · ${project.name}` : 'Project');
+  // DELIVERY: the timeline is drawn here now.
+  const timeline = () => go(`/projects/${projectId}/timeline`);
   const toggleFilter = (show?: boolean) => {
     setFilter((f) => (show ?? f === null ? (f ?? '') : null));
     setTimeout(() => filterRef.current?.focus(), 0);
@@ -163,7 +165,7 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
         </button>
         <Action label="New task" keys="N" onClick={() => onNewTask('todo')} disabled={offline} title={offline ? 'Creating a task needs a connection' : undefined} />
         <Action label="Filter" keys={prettyAccelerator('Mod+F')} onClick={() => toggleFilter()} />
-        <Action label="Timeline" keys={prettyAccelerator('Mod+2')} onClick={timeline} title="Opens the timeline on the web" />
+        <Action label="Timeline" keys={prettyAccelerator('Mod+2')} onClick={timeline} title="Opens the project’s timeline" />
         <Action label="New window" keys={prettyAccelerator('Mod+Alt+O')} onClick={newWindow} title="This project in a window of its own" />
       </div>
       {list.isLoading ? <Spinner /> : null}
