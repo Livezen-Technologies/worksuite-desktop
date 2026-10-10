@@ -31,6 +31,32 @@ person who has to live with the change — what it does, and where it bites.
   - **The Dashboard** has the web's eight figures, by status, upcoming milestones, team workload and recent activity.
   - **Offline:** what was read stays readable; creating and changing projects, clients, members and settings waits
     for a connection (the buttons say so).
+- **Projects: the delivery screens are in the app (projects 1.2.0, WS-PROJECT-SRS-001 W08–W11).** Timeline, milestones,
+  sprints, team workload and the approval queue used to open the web page in your browser. They now open in the
+  Projects tab, under **Delivery** on the left, with the same features as the web; "Open on the web" stays on each.
+  - **Timeline & Gantt** (`/projects/timeline`, or a project's `/projects/<id>/timeline`; ⌘2 on a board): the tasks
+    as bars on their calendar dates, the critical path and each task's slack in words, milestones, today, the
+    planned end against the baseline and the finish forecast, Days / Weeks / Months, Skip weekends, and the
+    dependencies with their kind and lag. A task's title opens it on the right.
+  - **Milestones & billing**: Open, Overdue, Achieved, Missed and All with their counts; New, Edit and Delete;
+    Mark achieved — when tasks are still open it asks "Mark achieved anyway?" and needs a reason, kept on the
+    record. **Ready to invoice** shows the total in the company's reporting currency and names the company; **Draft
+    invoices in Billing** (or a row's **Raise invoice**) hands them to Billing and lists the drafts as links, and
+    says which ones Billing could not take and why.
+  - **Sprints**: plan, edit, start, cancel or delete a sprint; committed at start, added since, done, remaining and
+    the forecast; the burndown and velocity charts (their figures are read out to screen readers); the sprint
+    backlog; **Complete sprint…** with a retrospective and where the unfinished tasks go — the next planned sprint
+    or the backlog.
+  - **Team workload**: each person's load by week (every cell prints its percentage) with their hours, capacity and
+    load, across the company's projects or one project.
+  - **Time & approvals**: My week now says why an entry was sent back or is locked, lets you delete one of your own,
+    and has **Start timer** for a project or a task. The **Approval queue** (`?tab=queue`, where "Review" now goes)
+    groups entries by person — Approve, **Approve all**, **Send back with a note** (the note is required), Mark
+    billable / non-billable — with filters for week, project, person and billing; running timers and your own time
+    are skipped and counted. The **Summary** totals time by project and by person for any range.
+  - **Offline**, these screens show what was last read; approvals, invoices and every milestone and sprint change
+    wait for a connection (the buttons say so). Logging time still works offline and is sent when you reconnect.
+  - Links to these screens from Mail, Calendar, notifications and search open in the app.
 
 ## 0.2.218 — 2026-10-10
 

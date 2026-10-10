@@ -493,15 +493,21 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   in the capture phase while the tab is in front, so ⌘2 is not the shell's "tab 2" here), a task's panel
   (`TaskPanel.tsx`), My work grouped by the reader's own day (`logic.ts: groupMyWork`) and the day's time line. Its
   addresses are the web's (`routes.ts`: `/projects/<id>`, `/projects/<id>/board`, `/projects/<id>/tasks/<task>`,
-  `?project=`, `?task=`, `?new=`); the web screens it does not draw yet (timeline, sprints, budget, risks, reports…)
-  are `BROWSER_PAGES` in `shared/links.ts`. The portfolio (projects 1.2.0, `screens/`) is native too: All projects
-  (`/projects/all`, every filter in the query), Templates, Clients (`/projects/clients[/<id>]`), the New project
-  dialog (`?new=blank|<template>` over any view), a project's page (`/projects/<id>` overview and `/team`,
-  `/settings`, `/activity`, `/files`, with its board one tab of it), the Activity log and Module settings; its calls
-  and the web's contract types are `portfolio.ts`, and every write there is online only. `company.tsx` is the shared
-  company selector (G-01): `useProjectCompany()` and `withOrg()` mirror the web's, the choice is the organisation
-  filter's (`core/org-prefs`, app id `projects`), and portfolio-level reads carry it as `org` in the request and the
-  query key while one project's reads do not.
+  `?project=`, `?task=`, `?new=`); the web screens it does not draw yet are `BROWSER_PAGES` in `shared/links.ts`.
+  The portfolio (projects 1.2.0, `screens/`) is native: All projects (`/projects/all`, every filter in the query),
+  Templates, Clients (`/projects/clients[/<id>]`), the New project dialog (`?new=blank|<template>` over any view), a
+  project's page (`/projects/<id>` overview and `/team`, `/settings`, `/activity`, `/files`, with its board one tab of
+  it — `ProjectTabs` is drawn over each of a project's own screens), the Activity log and Module settings; its calls
+  and the web's contract types are `portfolio.ts`. So are the delivery screens, with their calls and shapes in
+  `delivery.ts`: Timeline & Gantt (`/projects[/<id>]/timeline`, `GET <id>/schedule`), Milestones & billing
+  (`/projects[/<id>]/milestones`; achieve with the 409 → force + reason retry, `milestones/invoice` to Billing's
+  drafts, opened with `openLink('/billing?invoice=<id>')`), Sprints (`/projects[/<id>]/sprints[/<sprint>]`), Team
+  workload (`/projects/workload`) and Time & approvals' queue and summary (`/projects/time?tab=queue|summary`; my
+  week stays `Views.tsx: TimeView`). `/projects/board` opens the board of the project last worked in.
+  `screens/kit.tsx` is the screens' one kit. `company.tsx` is the shared company selector (G-01):
+  `useProjectCompany()` and `withOrg()` mirror the web's, the choice is the organisation filter's (`core/org-prefs`,
+  app id `projects`), and portfolio-level reads carry it as `org` in the request and the query key while one
+  project's reads do not. Every write on these screens is online only (disabled offline).
   The main process keeps the timer (`timer.ts`: `GET time/running` and this week's entries every minute, start, stop,
   Switch to, pause; the tray's lines, the title bar's pill and the always-on-top mini timer window `/projects/timer`,
   kind `timer`), the idle prompt (powerMonitor's idle time read every 30 s; after 15 minutes one banner, Keep 15 min

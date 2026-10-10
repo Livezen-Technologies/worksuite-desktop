@@ -17,8 +17,14 @@
  *   ?project=<id> | ?id=<id>        The older links to a project (G-12)
  *   ?task=<id>                      A task, open over whatever view
  *   /projects/timer                 The mini timer window (D02)
+ *   DELIVERY:
+ *   /projects[/<id>]/timeline       Timeline & Gantt (a project's, or the remembered one's)
+ *   /projects[/<id>]/milestones     Milestones & billing
+ *   /projects[/<id>]/sprints[/<s>]  Sprints, one open
+ *   /projects/workload              Team workload
+ *   /projects/time?tab=queue|summary  Time & approvals' approval queue and summary
  *
- * Anything else is a screen of the web's (timeline, sprints, budget…): shared/links.ts sends those links to the
+ * Anything else is a screen of the web's (budget, risks, reports…): shared/links.ts sends those links to the
  * browser, and a route that still lands here says so and offers the web page.
  */
 export type ProjectsView =
@@ -27,15 +33,21 @@ export type ProjectsView =
   | { kind: 'time' }
   | { kind: 'changes'; id: number | null }
   | { kind: 'board'; projectId: number }
+  /** `/projects/board`: the board of the project last worked in (the web's remembered project), else a choice. */
+  | { kind: 'board-home' }
   | { kind: 'timer' }
-  // ── PORTFOLIO (module/projects/desktop-portfolio) ──
+  // ── PORTFOLIO ──
   | { kind: 'all' }
   | { kind: 'templates' }
   | { kind: 'clients'; id: number | null }
   | { kind: 'project'; projectId: number; tab: ProjectTab }
   | { kind: 'activity' }
   | { kind: 'settings' }
-  // ── end PORTFOLIO ──
+  // ── DELIVERY ──
+  | { kind: 'timeline'; projectId: number | null }
+  | { kind: 'milestones'; projectId: number | null }
+  | { kind: 'sprints'; projectId: number | null; sprintId: number | null }
+  | { kind: 'workload' }
   | { kind: 'web'; path: string };
 
 /** A project's own sections drawn here (PORTFOLIO); its board is `board`. */
@@ -61,11 +73,21 @@ export function viewOf(path: readonly string[], query: URLSearchParams): { view:
   if (a === 'clients') return { view: { kind: 'clients', id: num(b) }, taskId };
   if (a === 'activity') return { view: { kind: 'activity' }, taskId };
   if (a === 'settings') return { view: { kind: 'settings' }, taskId };
-  // ── end PORTFOLIO ──
+  // ── DELIVERY: the timeline, milestones, sprints and workload, module-wide ──
+  if (a === 'timeline' && !b) return { view: { kind: 'timeline', projectId: null }, taskId };
+  if (a === 'milestones' && !b) return { view: { kind: 'milestones', projectId: null }, taskId };
+  if (a === 'sprints' && (!b || num(b)) && !c) return { view: { kind: 'sprints', projectId: null, sprintId: num(b) }, taskId };
+  if (a === 'workload' && !b) return { view: { kind: 'workload' }, taskId };
+  if (a === 'board' && !b) return { view: { kind: 'board-home' }, taskId };
+  // ── one project: its overview, board, own tabs (PORTFOLIO) and delivery screens (DELIVERY) ──
+  const [, , , , d] = path;
   const project = num(a);
   if (project && (b === 'board' || b === 'tasks')) return { view: { kind: 'board', projectId: project }, taskId };
   if (project && !b) return { view: { kind: 'project', projectId: project, tab: 'overview' }, taskId };
   if (project && b && PROJECT_TABS.includes(b) && !c) return { view: { kind: 'project', projectId: project, tab: b as ProjectTab }, taskId };
+  if (project && b === 'timeline' && !c) return { view: { kind: 'timeline', projectId: project }, taskId };
+  if (project && b === 'milestones' && !c) return { view: { kind: 'milestones', projectId: project }, taskId };
+  if (project && b === 'sprints' && (!c || num(c)) && !d) return { view: { kind: 'sprints', projectId: project, sprintId: num(c) }, taskId };
   return { view: { kind: 'web', path: `/${path.join('/')}` }, taskId: null };
 }
 

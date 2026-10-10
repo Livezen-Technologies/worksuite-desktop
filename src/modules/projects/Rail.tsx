@@ -25,7 +25,7 @@ export function Rail({ view, counts, projects, pins, recent, canCreate, mayCreat
   onNew: () => void;
 }) {
   const row = (active: boolean) => cx('flex h-[30px] w-full items-center gap-2 rounded-[7px] px-2 text-left text-[13px]', active ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle');
-  const current = view.kind === 'board' || view.kind === 'project' ? view.projectId : null;
+  const current = view.kind === 'board' || view.kind === 'project' ? view.projectId : 'projectId' in view ? (view.projectId ?? null) : null;
   const viewRow = (route: string, label: string, active: boolean, icon: string, count?: number) => (
     <button key={route} type="button" aria-current={active ? 'page' : undefined} onClick={() => onGo(route)} className={row(active)}>
       <Icon name={icon} size={14} className={active ? 'text-primary' : 'text-ink-3'} />
@@ -81,20 +81,26 @@ export function Rail({ view, counts, projects, pins, recent, canCreate, mayCreat
         <span className="flex-1">Jump to project</span>
         <Kbd tone="key">{prettyAccelerator('Mod+P')}</Kbd>
       </button>
-      {head('VIEWS')}
+      {/* The web's grouping (shell.tsx GROUPS): Portfolio, Work, Delivery, Governance, Administer. */}
+      {head('PORTFOLIO')}
       {viewRow('/projects', 'Dashboard', view.kind === 'dashboard', 'grid')}
-      {/* ── PORTFOLIO ── */}
       {viewRow('/projects/all', 'All projects', view.kind === 'all', 'briefcase', counts?.projects)}
       {viewRow('/projects/templates', 'Templates', view.kind === 'templates', 'copy')}
       {viewRow('/projects/clients', 'Clients', view.kind === 'clients', 'users')}
-      {/* ── end PORTFOLIO ── */}
-      {viewRow('/projects/my-work', 'My work', view.kind === 'my-work', 'list-todo', counts?.my_work)}
-      {viewRow('/projects/time', 'Time & approvals', view.kind === 'time', 'clock', counts?.time_waiting)}
-      {counts?.changes_waiting ? viewRow('/projects/changes', 'Change requests', view.kind === 'changes', 'git-branch', counts.changes_waiting) : null}
-      {/* ── PORTFOLIO ── */}
       {viewRow('/projects/activity', 'Activity', view.kind === 'activity', 'activity')}
+      {head('WORK')}
+      {viewRow('/projects/my-work', 'My work', view.kind === 'my-work', 'list-todo', counts?.my_work)}
+      {viewRow('/projects/board', 'Board', view.kind === 'board-home', 'kanban')}
+      {viewRow('/projects/timeline', 'Timeline & Gantt', view.kind === 'timeline' && !view.projectId, 'align-left')}
+      {head('DELIVERY')}
+      {viewRow('/projects/milestones', 'Milestones', view.kind === 'milestones' && !view.projectId, 'flag', counts?.milestones_due)}
+      {viewRow('/projects/sprints', 'Sprints', view.kind === 'sprints' && !view.projectId, 'repeat')}
+      {viewRow('/projects/time', 'Time & approvals', view.kind === 'time', 'clock', counts?.time_waiting)}
+      {viewRow('/projects/workload', 'Team workload', view.kind === 'workload', 'users')}
+      {head('GOVERNANCE')}
+      {viewRow('/projects/changes', 'Change requests', view.kind === 'changes', 'git-branch', counts?.changes_waiting)}
+      {maySettings ? head('ADMINISTER') : null}
       {maySettings ? viewRow('/projects/settings', 'Module settings', view.kind === 'settings', 'settings') : null}
-      {/* ── end PORTFOLIO ── */}
       {head('PINNED')}
       {pins.length ? pins.map((id) => projectRow(id, true)) : <span className="px-2 py-1 text-[12px] text-ink-3">Pin a project to keep it here, and offline.</span>}
       {current && !pins.includes(current) && !recentShown.includes(current) ? projectRow(current, false) : null}

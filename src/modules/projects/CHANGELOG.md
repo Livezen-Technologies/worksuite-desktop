@@ -14,10 +14,16 @@ the root CHANGELOG.md.
 - a project's page (W04): overview, team and members with load by week, edit, re-add and remove (W05), settings with edit, baseline history and re-baseline, status moves with the server's confirmations, template, delete, activity and files; the board is its Board tab
 - the Activity log, Module settings (W17: numbering, money, planning, time, WIP limits, alerts, categories) and the full Dashboard (W01)
 - company.tsx, the shared company selector (useProjectCompany, withOrg) on the organisation filter
+- Timeline & Gantt (W08) — a project's bars on its calendar, critical path and slack in words, milestones, today, planned end vs baseline and the finish forecast, Days/Weeks/Months, Skip weekends, and the dependencies with their lag
+- Milestones & billing (W10) — tabs with counts, New/Edit/Delete, Mark achieved (with Mark achieved anyway? and a reason when tasks are open), Ready to invoice in the company's currency, Draft invoices in Billing and Raise invoice, with links to the drafts and what Billing refused
+- Sprints (W09) — plan, edit, start, cancel, delete, the committed/added/done/remaining figures and forecast, burndown and velocity, the sprint backlog, and Complete sprint with a retrospective and where unfinished work is carried over
+- Team workload — each person's load by week with totals, across the company's projects or one project's
+- Time & approvals in full (W11) — the approval queue by person (Approve, Approve all, Send back with a note, Mark billable / non-billable, filters by week, project, person and billing), the Summary by project and by person, Start timer on a project or task, and my week's sent-back notes, lock reasons and Delete
 
 **Changed**
 
 - /projects/{id} and ?project= open the project's overview (the web's); its board is /projects/{id}/board
+- /projects[/<id>]/timeline, /milestones, /sprints[/<id>], /projects/workload and /projects/time?tab=queue|summary open in the app instead of the browser; the board's Timeline (⌘2) opens here; approvals and every delivery change wait for a connection offline
 
 ## 1.1.0 — 2026-10-09
 

@@ -14,12 +14,12 @@ const ACCOUNT_TABS = ['general', 'preferences', 'notifications', 'security', 'pi
 /** Pages of a native app that are the web's own: Finance's printable report and its public shared link, Projects' screens not built here. */
 const BROWSER_PAGES = [
   /^\/finance\/(print|shared)\//,
-  // Projects' screens the desktop does not draw yet (PRJ-DSK-01 builds the board, My work, time, change decisions and
+  // Projects' screens the desktop does not draw yet (PRJ-DSK-01 builds the board, My work, time and change decisions;
   // the portfolio — all projects, templates, clients, a project's overview, team, settings, activity and files, the
-  // activity log and module settings): the timeline, sprints, milestones, workload, budget, risks and reports, and a
-  // project's own tabs for them, open on the web.
-  /^\/projects\/(board|timeline|milestones|sprints|workload|budget|risks|reports)(?:[/?#]|$)/,
-  /^\/projects\/\d+\/(?!tasks\/|(?:board|team|settings|activity|files)(?:[/?#]|$))[a-z]/,
+  // activity log and module settings; delivery — the timeline, milestones, sprints, workload and the approval queue):
+  // budget, risks and reports, and a project's own tabs for them and its time, open on the web.
+  /^\/projects\/(budget|risks|reports)(?:[/?#]|$)/,
+  /^\/projects\/\d+\/(?!tasks\/|(?:board|team|settings|activity|files|timeline|milestones|sprints)(?:[/?#]|$))[a-z]/,
 ];
 
 /**

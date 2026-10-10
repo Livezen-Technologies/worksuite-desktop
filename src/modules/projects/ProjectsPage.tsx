@@ -20,13 +20,19 @@ import { Rail } from './Rail';
 import { boardRoute, viewOf } from './routes';
 import { TaskPanel } from './TaskPanel';
 import { MiniTimer } from './Timer';
-import { ChangesView, TimeView } from './Views';
+import { ChangesView } from './Views';
 // ── PORTFOLIO ──
 import { PortfolioDashboard } from './screens/Dashboard';
 import { NewProjectDialog } from './screens/NewProject';
 import { PortfolioScreen, isPortfolio, portfolioTitle } from './screens/Portfolio';
 import { ProjectTabs } from './screens/ProjectPage';
 import { usePermission } from './portfolio';
+// ── DELIVERY ──
+import { MilestonesScreen } from './screens/Milestones';
+import { SprintsScreen } from './screens/Sprints';
+import { TimeScreen } from './screens/Time';
+import { TimelineScreen } from './screens/Timeline';
+import { WorkloadScreen } from './screens/Workload';
 
 /**
  * WorkSuite Projects in a tab (WS-PROJECT-SRS-001 PRJ-DSK-01, D01–D04): the project switcher and views on the left, a
@@ -58,12 +64,17 @@ function Workspace() {
   const [logFor, setLogFor] = useState<{ task: Task | null } | null>(null);
   const [newIn, setNewIn] = useState<TaskStatus | null>(null);
   const projects = useMemo(() => new Map<number, Project>((list.data?.data.projects ?? []).map((p) => [p.id, p])), [list.data]);
-  const boardProject = view.kind === 'board' ? view.projectId : null;
+  // `/projects/board` (the web's Board) shows the board of the project last worked in: the most recent, else a pinned one.
+  const boardProject = view.kind === 'board' ? view.projectId : view.kind === 'board-home' ? (recent[0] ?? pins[0] ?? null) : null;
   const current = boardProject ? (projects.get(boardProject) ?? null) : null;
 
-  useTabTitle(portfolioTitle(view, projects) ?? (view.kind === 'board' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : view.kind === 'changes' ? 'Projects · Changes' : 'Projects'));
+  // DELIVERY titles: "PRJ-0018 · Timeline", or "Projects · Timeline" module-wide.
+  const deliveryTitle = view.kind === 'timeline' ? 'Timeline' : view.kind === 'milestones' ? 'Milestones' : view.kind === 'sprints' ? 'Sprints' : view.kind === 'workload' ? 'Team workload' : null;
+  const deliveryProject = 'projectId' in view && view.kind !== 'board' && view.projectId ? (projects.get(view.projectId)?.code ?? null) : null;
+  useTabTitle(portfolioTitle(view, projects) ?? (deliveryTitle ? `${deliveryProject ?? 'Projects'} · ${deliveryTitle}` : boardProject || view.kind === 'board-home' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : view.kind === 'changes' ? 'Projects · Changes' : 'Projects'));
   const may = usePermission();
-  const pageProject = view.kind === 'project' ? view.projectId : boardProject;
+  // The project this view is about (its page, board or one of its own screens): noted as recent, and its tabs shown.
+  const pageProject = view.kind === 'project' ? view.projectId : boardProject ?? ('projectId' in view ? (view.projectId ?? null) : null);
 
   useEffect(() => {
     if (pageProject) noteRecent(pageProject);
@@ -138,17 +149,17 @@ function Workspace() {
         {offline ? <OfflineBanner waiting={waiting} /> : null}
         <div className="flex min-h-0 flex-1">
           <main className="flex min-w-0 flex-1 flex-col bg-surface">
-            {view.kind === 'board' ? (
+            {boardProject ? (
               <>
-              <ProjectTabs projectId={view.projectId} tab="board" onGo={go} />
+              <ProjectTabs projectId={boardProject} tab="board" onGo={go} />
               <Board
-                key={view.projectId}
-                projectId={view.projectId}
+                key={boardProject}
+                projectId={boardProject}
                 selected={selected}
                 today={today}
                 me={me}
                 active={active && !jump && !logFor && !newIn}
-                pinned={pins.includes(view.projectId)}
+                pinned={pins.includes(boardProject)}
                 offline={offline}
                 outbox={outbox}
                 onOpen={(id) => openTask(id)}
@@ -158,10 +169,46 @@ function Workspace() {
                 onOffline={onOffline}
               />
               </>
+            ) : view.kind === 'board-home' ? (
+              <Empty
+                icon="kanban"
+                title="Choose a project"
+                hint="The board shows one project's tasks. Pick the project to open its board."
+                action={
+                  <Button variant="primary" icon="search" onClick={() => setJump(true)}>
+                    Jump to project
+                  </Button>
+                }
+              />
             ) : view.kind === 'my-work' ? (
               <MyWork me={me} today={today} offline={offline} outbox={outbox} onOpenTask={(t) => openTask(t.id, t.project_id)} onGo={go} onOffline={onOffline} />
             ) : view.kind === 'time' ? (
-              <TimeView today={today} waiting={counts.data?.data.time_waiting ?? 0} offline={offline} onLogTime={() => setLogFor({ task: null })} onOffline={onOffline} />
+              <TimeScreen
+                today={today}
+                waiting={counts.data?.data.time_waiting ?? 0}
+                offline={offline}
+                tab={query.get('tab')}
+                onTab={(t) => go(t === 'mine' ? '/projects/time' : `/projects/time?tab=${t}`)}
+                onLogTime={() => setLogFor({ task: null })}
+                onOffline={onOffline}
+              />
+            ) : view.kind === 'timeline' ? (
+              <>
+                {view.projectId ? <ProjectTabs projectId={view.projectId} tab="timeline" onGo={go} /> : null}
+                <TimelineScreen key={view.projectId ?? 0} projectId={view.projectId} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
+              </>
+            ) : view.kind === 'milestones' ? (
+              <>
+                {view.projectId ? <ProjectTabs projectId={view.projectId} tab="milestones" onGo={go} /> : null}
+                <MilestonesScreen key={view.projectId ?? 0} projectId={view.projectId} offline={offline} onOffline={onOffline} />
+              </>
+            ) : view.kind === 'sprints' ? (
+              <>
+                {view.projectId ? <ProjectTabs projectId={view.projectId} tab="sprints" onGo={go} /> : null}
+                <SprintsScreen key={view.projectId ?? 0} projectId={view.projectId} sprintId={view.sprintId} offline={offline} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
+              </>
+            ) : view.kind === 'workload' ? (
+              <WorkloadScreen onOffline={onOffline} />
             ) : view.kind === 'changes' ? (
               <ChangesView id={view.id} offline={offline} onGo={go} />
             ) : view.kind === 'dashboard' ? (
@@ -185,7 +232,7 @@ function Workspace() {
           {showOutbox ? <OutboxPanel items={outbox} offline={offline} /> : null}
         </div>
       </div>
-      {jump ? <JumpTo projects={[...projects.values()]} onClose={() => setJump(false)} onPick={(id) => (setJump(false), go(`/projects/${id}`))} /> : null}
+      {jump ? <JumpTo projects={[...projects.values()]} onClose={() => setJump(false)} onPick={(id) => (setJump(false), go(view.kind === 'board-home' ? `/projects/${id}/board` : `/projects/${id}`))} /> : null}
       {logFor ? <LogTime task={logFor.task} project={current ? { id: current.id, code: current.code } : boardProject ? { id: boardProject } : null} onClose={() => setLogFor(null)} /> : null}
       {newParam ? <NewProjectDialog templateId={Number(newParam) > 0 ? Number(newParam) : null} offline={offline} onClose={() => setNew(null)} onGo={go} /> : null}
       {newIn && boardProject ? <NewTask projectId={boardProject} status={newIn} me={me} onClose={() => setNewIn(null)} onCreated={(id) => (setNewIn(null), void qc.invalidateQueries({ queryKey: qk.tasks(boardProject) }), go(boardRoute(boardProject, id)))} /> : null}
