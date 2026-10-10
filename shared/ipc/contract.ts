@@ -6,6 +6,7 @@ import type { DataFolder, ImportProgress, MailFileHandle, MailFileView } from '.
 import type { SmimeVerdict } from '../smime';
 import type { ConnectionDetails, SpeedTestResult } from '../connection';
 import type { MeetPermissionRow } from '../meet-permissions';
+import type { ShareBarState } from '../share-bar';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -593,6 +594,24 @@ export const contract = {
   // Whether this computer runs on its battery (WS-MEET-ENH-01 D05): what the
   // camera sends while it does is a preference.
   'media:power': ch(none, { session: true, rate: 6 }),
+  /*
+   * The sharing bar (WS-MEET-ENH-01 D03). The meeting's own window says what
+   * the bar should show; the bar's window asks for the current state when it
+   * opens and sends back what was pressed, which main hands to the meeting.
+   */
+  'meet:barState': ch(
+    z.object({
+      label: z.string().max(200),
+      paused: z.boolean(),
+      micOn: z.boolean(),
+      cameraOn: z.boolean(),
+      unreadChat: z.number().int().min(0).max(999),
+      since: z.number().int().min(0),
+    }),
+    { session: true, rate: 8 },
+  ),
+  'meet:barRead': ch(none, { session: true, rate: 8 }),
+  'meet:barAction': ch(z.object({ id: z.enum(['meet-mute', 'meet-camera', 'meet-chat', 'meet-pause-share', 'meet-stop-share']) }), { session: true, rate: 12 }),
   // The five rows of Settings › Meet › System permissions (WS-MEET-ENH-01 D05).
   'media:permissions': ch(none, { session: true, whileLocked: true, rate: 6 }),
   'media:privacySettings': ch(z.object({ pane: z.enum(['microphone', 'camera', 'screen', 'accessibility']) }), { session: true, rate: 2 }),
@@ -1551,6 +1570,9 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'media:access': { granted: boolean };
   'media:permissions': { rows: MeetPermissionRow[] };
   'media:power': { onBattery: boolean };
+  'meet:barState': void;
+  'meet:barRead': { state: ShareBarState | null };
+  'meet:barAction': void;
   'media:screenIndicator': void;
   'media:screenSources': ScreenSources;
   'media:screenPick': void;

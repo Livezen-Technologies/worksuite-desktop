@@ -32,11 +32,22 @@ export class ScreenShare {
   /** The pages sharing their screen now: update notices wait until they stop (worksuite-desktop#205). */
   private sharing = new Set<number>();
   onSharingChanged: (sharing: boolean) => void = () => undefined;
+  /**
+   * A share started or stopped in this page, with the source when it started
+   * (WS-MEET-ENH-01 D03): the sharing bar is raised and dropped from here, in
+   * the one place that already knows which window is sharing what.
+   */
+  onShare: (webContentsId: number, source: GrantedSource | null) => void = () => undefined;
 
   indicate(webContentsId: number, active: boolean): void {
     const source = this.granted.get(webContentsId);
     if (active && source) this.outline.start(webContentsId, source);
     else this.outline.stop(webContentsId);
+    try {
+      this.onShare(webContentsId, active && source ? source : null);
+    } catch {
+      // The bar is a nicety; the share is not. Never let one break the other.
+    }
     const before = this.sharing.size > 0;
     if (active && !this.sharing.has(webContentsId)) {
       this.sharing.add(webContentsId);
@@ -172,6 +183,12 @@ export class ScreenShare {
 
   forget(webContentsId: number): void {
     this.outline.stop(webContentsId);
+    try {
+      // The page is gone: its bar goes with it.
+      this.onShare(webContentsId, null);
+    } catch {
+      /* as above */
+    }
     this.generations.set(webContentsId, (this.generations.get(webContentsId) ?? 0) + 1);
     this.picks.delete(webContentsId);
     this.granted.delete(webContentsId);

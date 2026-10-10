@@ -1,5 +1,5 @@
 import { verifyLockChange } from '../services/lock-verification';
-import { BrowserWindow, app, clipboard, dialog, nativeImage, powerMonitor, screen, shell, systemPreferences, type WebContents } from 'electron';
+import { BrowserWindow, app, clipboard, dialog, nativeImage, powerMonitor, screen, shell, systemPreferences, type WebContents, webContents } from 'electron';
 import { wallDisplays } from '../services/live-desk';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
@@ -35,6 +35,7 @@ import { openExternalSafely } from '../security/hardening';
 import { answerNotice } from '../services/ai-pending';
 import { notificationSettingsUrl } from '../services/locked-notifications';
 import { meetPermissions } from '@shared/meet-permissions';
+import { sendTo } from './events';
 import { broadcast } from './events';
 import { logger, recentLog } from './log';
 import { captureName, helpLogText } from '../services/ai-help';
@@ -139,6 +140,20 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
    * prompt, and on macOS asking is once-per-app, so a page that asked would
    * spend the one chance the person gets.
    */
+  /*
+   * The sharing bar (D03). The meeting's window reports; the bar's window
+   * reads and acts. Main is the only thing that knows both windows, and it
+   * checks that a report comes from the page that is actually sharing — a
+   * second meeting window must not redraw somebody else's bar.
+   */
+  router.handle('meet:barState', (input, c) => ctx.shareBar.update(c.sender.id, input));
+  router.handle('meet:barRead', () => ({ state: ctx.shareBar.current() }));
+  router.handle('meet:barAction', (input) => {
+    const sharer = ctx.shareBar.sharer();
+    const win = sharer === null ? null : BrowserWindow.fromWebContents(webContents.fromId(sharer) ?? (null as never));
+
+    if (win && !win.isDestroyed()) sendTo(win, 'meet:shortcut', { id: input.id });
+  });
   router.handle('media:power', () => {
     try {
       return { onBattery: powerMonitor.isOnBatteryPower() };

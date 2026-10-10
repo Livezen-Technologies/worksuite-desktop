@@ -17,7 +17,7 @@ const log = logger('windows');
  * fully visible on the primary display.
  */
 // The Live map window can be pinned on top of other apps (MAP-21, "📌 On top").
-const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map', 'phone', 'support-quick', 'support-ring']);
+const ALWAYS_ON_TOP_ALLOWED = new Set<WindowKind>(['chat-mini', 'timer', 'call', 'video-call', 'ring', 'meet', 'live-map', 'phone', 'support-quick', 'support-ring', 'share-bar']);
 /** Windows that can shrink to float over other apps while a call or meeting goes on. */
 const COMPACTABLE = new Set<WindowKind>(['call', 'video-call', 'meet']);
 /** One call at a time: a second "call" window focuses the one already open. */
@@ -38,6 +38,9 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
   'rc-consent': { width: 460, height: 560, minWidth: 460, minHeight: 560 },
   'rc-indicator': { width: 560, height: 52, minWidth: 560, minHeight: 52 },
   'rc-pointer': { width: 220, height: 30, minWidth: 220, minHeight: 30 },
+  // The sharing bar (WS-MEET-ENH-01 D03): a strip at the top of the screen you
+  // are sharing, over whatever you are showing.
+  'share-bar': { width: 620, height: 56, minWidth: 620, minHeight: 56 },
   'webchat-ring': { width: 420, height: 250, minWidth: 420, minHeight: 72 },
   'ring-tray': { width: 340, height: 360, minWidth: 340, minHeight: 120 },
   'quick-ask': { width: 600, height: 480, minWidth: 600, minHeight: 480 },
@@ -330,7 +333,17 @@ export class WindowManager {
    * The prompt takes focus; the bar never does; the name tag is not even
    * there for the mouse — clicks go through it to what is below.
    */
-  openRemote(kind: 'rc-consent' | 'rc-indicator' | 'rc-pointer', hash: string, bounds: Rectangle): BrowserWindow {
+  /**
+   * A small window that belongs to a share or a control session rather than to
+   * the app: the consent request, the "being controlled" indicator, the
+   * controller's name tag, and the sharing bar (D03).
+   *
+   * All of them are frameless, above everything including full-screen apps,
+   * and **content-protected**, which is the point: a bar or an outline that
+   * appeared inside the capture would be drawn over what the person is
+   * actually trying to show.
+   */
+  openRemote(kind: 'rc-consent' | 'rc-indicator' | 'rc-pointer' | 'share-bar', hash: string, bounds: Rectangle): BrowserWindow {
     const consent = kind === 'rc-consent';
     const tag = kind === 'rc-pointer';
     const win = new BrowserWindow({

@@ -1,5 +1,5 @@
 import { useEffect, useRef } from 'react';
-import { on } from '../../core/bridge';
+import { call, on } from '../../core/bridge';
 import { registerCommand } from '../../core/commands';
 
 /**
@@ -51,6 +51,10 @@ export function useCallShortcuts(target: {
   openPanel: (tab: string) => void;
   /** Shrink the call to a window that floats over other apps, or put it back. */
   popOut?: () => void;
+  /** Pause or resume the share, for the sharing bar (D03). */
+  pauseShare?: () => void;
+  /** Stop sharing, for the sharing bar. */
+  stopShare?: () => void;
 }): void {
   // The buttons are rebuilt on every render; a ref keeps the commands stable
   // while still running against what is on screen now. Written in an effect,
@@ -75,6 +79,11 @@ export function useCallShortcuts(target: {
         return;
       }
       if (id === 'meet-pop-out') latest.current.popOut?.();
+      // The sharing bar's own buttons (D03), which arrive the same way a
+      // global key does: it has no state of its own, so the call answers.
+      if (id === 'meet-chat') latest.current.openPanel('Chat');
+      if (id === 'meet-pause-share') latest.current.pauseShare?.();
+      if (id === 'meet-stop-share') latest.current.stopShare?.();
       // The notes keys open Notes & Minutes, where the line is written. They
       // do not insert one: the minutes are a shared document with its own
       // editor, and a key that silently appends to somebody else's paragraph
@@ -137,4 +146,40 @@ export function useHomeAction(query: URLSearchParams, run: (action: HomeAction) 
     done.current = key;
     latest.current(action);
   }, [query]);
+}
+
+/**
+ * Tells the main process what the sharing bar should show (D03), while this
+ * window is sharing and only then.
+ *
+ * The clock counts from when this window saw the share begin, which is the
+ * honest answer available here: the media server does not hand back a start
+ * time, and a bar that counted from the meeting's start would read as though
+ * the screen had been shared the whole time.
+ */
+export function useShareBarState(call_state: { sharing: boolean; paused: boolean; label: string | null; micOn: boolean; cameraOn: boolean }): void {
+  const since = useRef(0);
+  const { sharing, paused, label, micOn, cameraOn } = call_state;
+
+  useEffect(() => {
+    // Written here, not during render: a ref set while rendering is a bug
+    // waiting for a re-render that never commits.
+    if (!sharing) {
+      since.current = 0;
+
+      return;
+    }
+    if (since.current === 0) since.current = Date.now();
+
+    void call('meet:barState', {
+      label: (label ?? 'your screen').slice(0, 200),
+      paused,
+      micOn,
+      cameraOn,
+      // Unread chat is not counted in this window yet, so the bar shows no
+      // badge rather than a made-up one.
+      unreadChat: 0,
+      since: since.current || Date.now(),
+    }).catch(() => undefined);
+  }, [sharing, paused, label, micOn, cameraOn]);
 }

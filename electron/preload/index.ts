@@ -227,6 +227,12 @@ const api = {
     list: call('calls:list'),
     focus: call('calls:focus'),
   },
+  // The sharing bar (WS-MEET-ENH-01 D03): the meeting reports, the bar reads and acts.
+  meet: {
+    barState: call('meet:barState'),
+    barRead: call('meet:barRead'),
+    barAction: call('meet:barAction'),
+  },
   meetrec: {
     preflight: call('meetrec:preflight'),
     start: call('meetrec:start'),

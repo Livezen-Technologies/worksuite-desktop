@@ -127,6 +127,9 @@ export const INVOKE_CHANNELS = [
   'media:screenPick',
   'media:permissions',
   'media:power',
+  'meet:barState',
+  'meet:barRead',
+  'meet:barAction',
   'media:privacySettings',
   'calls:active',
   'calls:list',
@@ -476,6 +479,8 @@ export const EVENT_CHANNELS = [
   // A global Meet key was pressed (WS-MEET-ENH-01 D06): the id, to the window
   // that can act on it — mute and camera to the meeting, the rest to the main window.
   'meet:shortcut',
+  // The sharing bar's state, pushed to its own window (D03).
+  'meet:bar',
   'speech:job',
   'sync:changed',
   'rc:changed',

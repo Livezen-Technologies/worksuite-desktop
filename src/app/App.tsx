@@ -24,6 +24,7 @@ import { LockBoundary } from './Boundaries';
 import { ModulesLocked, useModulesLocked } from './screens/MandatoryUpdate';
 import { WindowRoot } from './WindowRoot';
 import { RemoteControlWindow } from './RemoteControlWindow';
+import { ShareBarWindow } from '../modules/meet/ShareBar';
 import { WebchatRingWindow } from '../modules/chat/website/Ringing';
 import { RingTrayWindow } from '../modules/chat/website/RingTray';
 import { LiveMapWindow, WallWindow } from '../modules/chat/website/live/LiveMapWindow';
@@ -73,6 +74,9 @@ export function App() {
   if (!ready || !auth) return <Spinner label="Starting WorkSuite…" className="h-full" />;
   // Remote control's prompt and bar: above everything else, and never behind the lock screen — stopping control must always work.
   if (hash.startsWith('#/rc/')) return <RemoteControlWindow hash={hash} />;
+  // The sharing bar over what is being shared (WS-MEET-ENH-01 D03): its own
+  // window, with no shell around it.
+  if (hash.startsWith('#/share/bar')) return <ShareBarWindow />;
   // The website-chat call window: above the lock screen too, saying only that a chat waits while locked (RING-40).
   if (hash.startsWith('#/window/webchat-ring')) return <WebchatRingWindow />;
   // The tray's ringing menu (R-06): what rings says nothing about who while locked, and main never opens it then.

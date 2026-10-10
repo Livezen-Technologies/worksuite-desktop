@@ -84,6 +84,7 @@ import { CallbackReminders } from '../services/marketing-reminders';
 import { NextContactKey, nextContactRoute } from '../services/marketing-shortcut';
 import { MeetKeys } from '../services/meet-keys';
 import { MeetNext } from '../services/meet-next';
+import { ShareBar } from '../services/share-bar';
 import { MEET_GLOBAL_IDS, electronAccelerator, meetShortcutDefaults, type MeetGlobalKey } from '@shared/shortcuts';
 import * as fsp from 'node:fs/promises';
 import { createInjector, type Injector } from '../services/remote-control/input';
@@ -392,6 +393,21 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('meet', sessionCtl.visibleApps()),
   );
   const screenShare = new ScreenShare(url => !lock.isLocked() && isTrustedShellUrl(url));
+  /*
+   * The sharing bar (WS-MEET-ENH-01 D03): the strip over what you are sharing.
+   * Raised and dropped by the screen-share service, which is the one place
+   * that already knows which window is sharing which source — the same signal
+   * the share outline follows.
+   */
+  const shareBar = new ShareBar({
+    open: (hash, bounds) => windows.openRemote('share-bar', hash, bounds),
+    send: (win, state) => sendTo(win, 'meet:bar', state),
+  });
+
+  screenShare.onShare = (webContentsId, source) => {
+    if (source) shareBar.start(webContentsId, source);
+    else shareBar.stop(webContentsId);
+  };
   screenShare.install(session.defaultSession);
   // Meet remote control on this computer (WS-MEET-ENH-01): the share, consent, grant and input live here.
   // A meeting, call, share or remote control started or ended: update notices wait for it (#205; set below).
@@ -2802,6 +2818,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     windows,
     calls,
     screenShare,
+    shareBar,
     remoteControl,
     tray,
     status: snapshot,

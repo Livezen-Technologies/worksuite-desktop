@@ -5,6 +5,27 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.224 — 2026-10-10
+
+- **The sharing bar (meet 1.15.0).** While you share a screen, a strip sits at the top of it: what is being shared,
+  how long for, mute, the camera, the chat, **Pause** and **Stop sharing**. The call window is behind whatever you
+  are presenting, so until now stopping a share meant finding that window again — and people solved that by not
+  sharing.
+  - **It never appears in the capture.** Its window is content-protected, like the green outline it sits with. A bar
+    drawn over the thing somebody is presenting would be worse than no bar at all.
+  - **It sits on the screen being shared**, not the main display: sharing the external monitor puts the bar there.
+  - **It keeps no state of its own.** The meeting's window reports what is true — the source's name, paused, the
+    microphone, the camera — and every button goes back the same way, so there is one answer to whether your
+    microphone is live. Before the meeting has said anything the bar shows no icons rather than guessing, and a bar
+    that cannot open never stops a share: every control it carries is still in the call window.
+  - **One bar at a time**, belonging to the window that is sharing. A second meeting cannot redraw or drive it.
+  - **Not built, and why:** the design's *Annotate* button. In this app the people watching point and draw over a
+    share, and the person sharing clears or turns that off from the call's own sharing menu — a button for a tool
+    the sharer does not have would be a promise, not a feature. The chat button shows no unread count yet, because
+    that window does not count one; a made-up badge is worse than none.
+
+---
+
 ## 0.2.223 — 2026-10-10
 
 - **Settings › Meet: Behaviour, and what the system allows (meet 1.14.0, settings 1.31.0, calls 1.7.2).**

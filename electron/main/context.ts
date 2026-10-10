@@ -10,6 +10,7 @@ import type { AuditService } from '../services/audit';
 import type { AuthService } from '../services/auth';
 import type { CallService } from '../services/calls';
 import type { ScreenShare } from '../services/screen-share';
+import type { ShareBar } from '../services/share-bar';
 import type { RemoteControlService } from '../services/remote-control/service';
 import type { BootstrapService } from '../services/bootstrap';
 import type { Database } from '../services/db';
@@ -103,6 +104,8 @@ export interface AppContext {
   windows: WindowManager;
   calls: CallService;
   screenShare: ScreenShare;
+  /** The sharing bar over what is being shared (WS-MEET-ENH-01 D03). */
+  shareBar: ShareBar;
   remoteControl: RemoteControlService;
   tray: TrayService;
   status: () => StatusSnapshot;

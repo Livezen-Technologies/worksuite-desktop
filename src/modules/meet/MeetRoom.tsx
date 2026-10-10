@@ -25,7 +25,7 @@ import { remote } from './remote/controller';
 import { RemoteControlLayer } from './remote/ControllerSurface';
 import { PointerLayer } from './remote/PointerLayer';
 import { pointers } from './remote/pointers';
-import { useCallShortcuts } from './shortcuts';
+import { useCallShortcuts, useShareBarState } from './shortcuts';
 import { isGuest, meet, roleOf, userIdOf } from './session';
 import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } from './RoomRoles';
 import { HostControlsDrawer, cameraControl, hostControlsControl, micControl, reactControl } from './HostControls';
@@ -183,7 +183,12 @@ export function MeetRoom() {
     buttons,
     openPanel: (tab) => callUi.togglePanel(tab),
     popOut: () => callUi.float(!ui.floating),
+    pauseShare: () => void meet.pauseShare(!paused),
+    stopShare: () => void meet.share(null),
   });
+  // What the sharing bar shows (D03). Reported from here because this window
+  // is where the truth is; the bar keeps none of its own.
+  useShareBarState({ sharing, paused, label: meet.shareLabel ?? null, micOn: !!lp.isMicrophoneEnabled, cameraOn: !!lp.isCameraEnabled });
   // More (#124): Meeting Tools and Host Controls, with the reason beside what cannot be used; the workspace adds View & Layout.
   const more = meetMoreSections(
     {

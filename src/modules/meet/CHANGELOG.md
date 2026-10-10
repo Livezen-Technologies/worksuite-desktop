@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.15.0 — 2026-10-10
+
+- The sharing bar: a strip at the top of the screen you are sharing, with what is being shared, how long for, mute, the camera, the chat, Pause and Stop sharing. The call window is behind whatever you are showing, so stopping a share used to mean finding it again.
+- The bar is its own window, content-protected so it never appears inside the capture, and it sits on the display being shared rather than the main one. It keeps no state: the meeting reports, and every button goes back the same way.
+
 ## 1.14.0 — 2026-10-10
 
 - What the camera sends on battery follows Settings › Meet › Behaviour: Auto, 720p or 360p. Read as the room is built, since a capture resolution is set at join.
