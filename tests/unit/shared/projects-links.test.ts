@@ -9,7 +9,7 @@ describe('Projects links land in the native app', () => {
     expect(findApp('projects')).toMatchObject({ surface: 'native', app: 'projects', webPath: '/projects' });
   });
 
-  it('worksuite://projects/{id} opens the project’s board', () => {
+  it('worksuite://projects/{id} opens the project (its overview)', () => {
     const r = parseDeepLink('worksuite://projects/18');
     expect(r).toMatchObject({ ok: true, link: { module: 'projects', pattern: 'projects/:id', route: '/projects/18', params: { id: '18' } } });
   });
@@ -36,6 +36,9 @@ describe('Projects links land in the native app', () => {
     expect(resolveWebLink('/projects/my-work')).toEqual({ kind: 'tab', route: '/projects/my-work', app: 'projects' });
     expect(resolveWebLink('/projects/changes/7')).toEqual({ kind: 'tab', route: '/projects/changes/7', app: 'projects' });
     expect(resolveWebLink('/projects/18/timeline')).toEqual({ kind: 'browser', path: '/projects/18/timeline', app: 'projects' });
+    // The portfolio is native (PORTFOLIO): the register, templates, clients, a project's own pages, activity, settings.
+    for (const path of ['/projects/all?status=active', '/projects/templates', '/projects/clients/5', '/projects/activity', '/projects/settings', '/projects/18/team', '/projects/18/settings', '/projects/18/activity', '/projects/18/files', '/projects/18/board'])
+      expect(resolveWebLink(path)).toEqual({ kind: 'tab', route: path, app: 'projects' });
     expect(resolveWebLink('/projects/budget')).toEqual({ kind: 'browser', path: '/projects/budget', app: 'projects' });
     expect(resolveWebLink('/projects/risks?project_id=3')).toEqual({ kind: 'browser', path: '/projects/risks?project_id=3', app: 'projects' });
   });

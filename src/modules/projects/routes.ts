@@ -6,8 +6,14 @@
  *   /projects/my-work               My work
  *   /projects/time                  Time & approvals (my week)
  *   /projects/changes[/<id>]        Change requests waiting for a decision
- *   /projects/<id>[/board]          A project's board
+ *   /projects/<id>                  A project's overview (PORTFOLIO)
+ *   /projects/<id>/board            A project's board
  *   /projects/<id>/tasks/<task>     A task, open over its project's board
+ *   /projects/<id>/<tab>            A project's team, settings, activity or files (PORTFOLIO)
+ *   /projects/all · /templates      The register and the templates (PORTFOLIO; filters in the query)
+ *   /projects/clients[/<id>]        Clients, one open on the right (PORTFOLIO)
+ *   /projects/activity · /settings  The activity log and Module settings (PORTFOLIO)
+ *   ?new=blank | ?new=<template>    The New project dialog, over any view (PORTFOLIO)
  *   ?project=<id> | ?id=<id>        The older links to a project (G-12)
  *   ?task=<id>                      A task, open over whatever view
  *   /projects/timer                 The mini timer window (D02)
@@ -22,7 +28,19 @@ export type ProjectsView =
   | { kind: 'changes'; id: number | null }
   | { kind: 'board'; projectId: number }
   | { kind: 'timer' }
+  // ── PORTFOLIO (module/projects/desktop-portfolio) ──
+  | { kind: 'all' }
+  | { kind: 'templates' }
+  | { kind: 'clients'; id: number | null }
+  | { kind: 'project'; projectId: number; tab: ProjectTab }
+  | { kind: 'activity' }
+  | { kind: 'settings' }
+  // ── end PORTFOLIO ──
   | { kind: 'web'; path: string };
+
+/** A project's own sections drawn here (PORTFOLIO); its board is `board`. */
+export type ProjectTab = 'overview' | 'team' | 'settings' | 'activity' | 'files';
+const PROJECT_TABS: readonly string[] = ['team', 'settings', 'activity', 'files'];
 
 const num = (v: string | null | undefined): number | null => (v && /^\d{1,12}$/.test(v) ? Number(v) : null);
 
@@ -31,15 +49,24 @@ export function viewOf(path: readonly string[], query: URLSearchParams): { view:
   const pathTask = b === 'tasks' ? num(c) : null;
   const taskId = num(query.get('task')) ?? pathTask;
   const legacy = num(query.get('project')) ?? num(query.get('id'));
-  if (legacy && !a) return { view: { kind: 'board', projectId: legacy }, taskId };
+  if (legacy && !a) return { view: { kind: 'project', projectId: legacy, tab: 'overview' }, taskId };
   if (!a) return { view: { kind: 'dashboard' }, taskId };
   if (a === 'my-work') return { view: { kind: 'my-work' }, taskId };
   if (a === 'time') return { view: { kind: 'time' }, taskId };
   if (a === 'timer') return { view: { kind: 'timer' }, taskId: null };
   if (a === 'changes') return { view: { kind: 'changes', id: num(b) }, taskId };
+  // ── PORTFOLIO ──
+  if (a === 'all') return { view: { kind: 'all' }, taskId };
+  if (a === 'templates') return { view: { kind: 'templates' }, taskId };
+  if (a === 'clients') return { view: { kind: 'clients', id: num(b) }, taskId };
+  if (a === 'activity') return { view: { kind: 'activity' }, taskId };
+  if (a === 'settings') return { view: { kind: 'settings' }, taskId };
+  // ── end PORTFOLIO ──
   const project = num(a);
-  if (project && (!b || b === 'board' || b === 'tasks')) return { view: { kind: 'board', projectId: project }, taskId };
+  if (project && (b === 'board' || b === 'tasks')) return { view: { kind: 'board', projectId: project }, taskId };
+  if (project && !b) return { view: { kind: 'project', projectId: project, tab: 'overview' }, taskId };
+  if (project && b && PROJECT_TABS.includes(b) && !c) return { view: { kind: 'project', projectId: project, tab: b as ProjectTab }, taskId };
   return { view: { kind: 'web', path: `/${path.join('/')}` }, taskId: null };
 }
 
-export const boardRoute = (projectId: number, taskId?: number | null): string => (taskId ? `/projects/${projectId}/tasks/${taskId}` : `/projects/${projectId}`);
+export const boardRoute = (projectId: number, taskId?: number | null): string => (taskId ? `/projects/${projectId}/tasks/${taskId}` : `/projects/${projectId}/board`);

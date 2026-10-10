@@ -5,6 +5,33 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.219 — 2026-10-10
+
+- **Projects: the whole portfolio in the app (projects 1.2.0).** All projects, Templates, Clients, New project, a
+  project's own page, the Activity log and Module settings open in the Projects tab instead of the browser — every
+  link to them too, from Mail, Calendar, notifications and search. Open on the web stays as a secondary action.
+  - **All projects:** status tabs with their counts, search, and filters for company, client, manager, health and
+    priority, kept in the address so a filtered list is a link; a table or cards; health always in words.
+  - **Company: ▾** — the screens show one company's projects and totals at a time, the one picked in the app's
+    organisation filter (your own company until you pick another). Projects, Templates, Clients and the Dashboard
+    have it.
+  - **New project** (the + in the rail, or New project on a screen) opens over the screen you are on: blank or from
+    a template — choose which parts to copy; dates move to the new start — with the company, client, category,
+    manager, dates, budget, rate and how it starts. The end date becomes the baseline.
+  - **A project's page:** its overview (progress, tasks, hours, end against the baseline, budget used, why it is at
+    risk, budget vs actual, milestones, details, open risks, what is linked), Team (roles, capacity, rates, load by
+    week; add, edit, remove and re-add people), Settings (edit the project, the baseline history and Re-baseline),
+    Activity and Files; Start timer, Move to (a move WorkSuite needs confirmed asks with its reason first), mark or
+    save as a template, delete. The board is now the project's Board tab: `/projects/{id}` opens the overview, as on
+    the web.
+  - **Clients:** the list with live and total projects and CRM link, the client's projects and money, add, edit,
+    archive and restore. Contact details stay hidden from people who work on none of the client's projects.
+  - **Activity log** and **Module settings** (numbering, money, planning, time, WIP limits, alerts, categories) for
+    those who may see them; the other settings sections open on the web.
+  - **The Dashboard** has the web's eight figures, by status, upcoming milestones, team workload and recent activity.
+  - **Offline:** what was read stays readable; creating and changing projects, clients, members and settings waits
+    for a connection (the buttons say so).
+
 ## 0.2.218 — 2026-10-10
 
 - **Mail protection: spam, phishing and viruses (mail 1.28.0, settings 1.29.0, ENH-MAIL-04).** Needs the WorkSuite

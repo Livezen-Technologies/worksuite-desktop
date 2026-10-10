@@ -18,7 +18,7 @@ vi.mock('../../../src/core/bridge', () => ({
 }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 
-const tab = vi.hoisted(() => ({ query: new URLSearchParams(), path: ['projects', '18'], go: (_r: string) => undefined as void }));
+const tab = vi.hoisted(() => ({ query: new URLSearchParams(), path: ['projects', '18', 'board'], go: (_r: string) => undefined as void }));
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ tabId: 't1', route: `/${tab.path.join('/')}?${tab.query}`, active: true, path: tab.path, query: tab.query, go: (r: string) => tab.go(r), navigate: () => undefined, openInNewTab: () => undefined, openInWindow: () => undefined, setTitle: () => undefined, openLink: () => undefined }),
   useTabTitle: () => undefined,
@@ -52,13 +52,13 @@ function answers(path: string): unknown {
 const show = () =>
   render(
     <QueryClientProvider client={new QueryClient({ defaultOptions: { queries: { retry: false } } })}>
-      <ProjectsPage tabId="t1" route="/projects/18" active />
+      <ProjectsPage tabId="t1" route="/projects/18/board" active />
     </QueryClientProvider>,
   );
 
 beforeEach(() => {
   offline = false;
-  tab.path = ['projects', '18'];
+  tab.path = ['projects', '18', 'board'];
   tab.query = new URLSearchParams();
   tab.go = vi.fn();
   vi.mocked(apiGetMeta).mockReset();
