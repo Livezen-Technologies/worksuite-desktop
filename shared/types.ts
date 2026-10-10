@@ -1287,6 +1287,39 @@ export interface SyncLookup {
   folders: Record<string, { state: SyncItemState; path: string | null; syncFolderId: string | null; root: boolean }>;
 }
 
+/** A sync conflict the server holds open (Drive ENH-03 DSK-03): both versions kept, one to be made current. */
+export interface DriveConflict {
+  id: number;
+  fileId: number;
+  fileName: string;
+  copyFileId: number | null;
+  copyName: string | null;
+  deviceName: string | null;
+  baseVersion: number;
+  serverVersion: number;
+  serverSize: number | null;
+  localSize: number | null;
+  serverUpdatedAt: string | null;
+  createdAt: string | null;
+}
+
+/** A synced picture on this computer, for the image editor (ENH-03 DSK-02). */
+export interface LocalImageInfo {
+  synced: boolean;
+  version: number | null;
+  canUpload: boolean;
+  paused: boolean;
+  pending: { baseVersion: number; savedAt: string; state: 'waiting' | 'conflict' | 'recipe-pending'; copyName: string | null; willBe: number } | null;
+}
+
+/** An offline edit's progress, as the image editor hears it. */
+export interface LocalImageEvent {
+  fileId: number;
+  state: 'uploaded' | 'conflict' | 'saved';
+  version?: number;
+  copyId?: number | null;
+}
+
 /** A sync device as `/api/sync/devices` lists it. */
 export interface SyncDevice {
   id: number;

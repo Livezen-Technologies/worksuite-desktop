@@ -168,6 +168,13 @@ export class SyncStore {
     );
   }
 
+  /** One path's index entry, or null. */
+  entry(folder: string, rel: string): BaseItem | null {
+    const r = this.db.get<EntryDbRow>('SELECT * FROM sync_entries WHERE folder = ? AND key = ?', folder, this.key(rel));
+    if (!r) return null;
+    return { rel: r.rel, kind: r.kind === 'dir' ? 'dir' : 'file', remoteId: Number(r.remote_id), version: Number(r.version), sha256: r.sha256, size: Number(r.size), mtimeMs: Number(r.mtime_ms), ino: r.ino };
+  }
+
   /** The Drive id of the synced file at `rel` in this folder, or null — never a folder's. */
   fileAt(folder: string, rel: string): number | null {
     const r = this.db.get<{ remote_id: number; kind: string }>('SELECT remote_id, kind FROM sync_entries WHERE folder = ? AND key = ?', folder, this.key(rel));

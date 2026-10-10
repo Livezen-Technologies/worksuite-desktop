@@ -14,6 +14,7 @@ import { ConfirmDialog, NameDialog } from './Dialogs';
 import { PopMenu, below, type MenuItem } from './Menu';
 import { computerWord, hereLabel, revealLabel, useSync } from './sync';
 import { SyncButton } from '../../components/SyncButton';
+import { SyncConflicts } from './SyncConflicts';
 
 /**
  * Sync devices (the Drive designs' "Sync devices"): the computers and phones
@@ -41,7 +42,7 @@ function run(fn: () => Promise<unknown>, done?: string): void {
   );
 }
 
-export function SyncDevices({ tree, ask, onAsked }: { tree: TreeNode[]; ask: number | 'all' | null; onAsked: () => void }) {
+export function SyncDevices({ tree, ask, onAsked, conflicts = false }: { tree: TreeNode[]; ask: number | 'all' | null; onAsked: () => void; conflicts?: boolean }) {
   const sync = useSync();
   const [adding, setAdding] = useState<{ preselect: number | 'all' | null } | null>(null);
   // A folder's "Keep on this computer" arrives as ?sync=<id>: opened once per ask.
@@ -69,6 +70,7 @@ export function SyncDevices({ tree, ask, onAsked }: { tree: TreeNode[]; ask: num
         <Devices sync={sync} />
         <PolicyCard />
       </div>
+      <SyncConflicts focus={conflicts} />
       <ThisComputer sync={sync} onChoose={() => setAdding({ preselect: null })} />
       {adding ? <ChooseFolders tree={tree} sync={sync} preselect={adding.preselect} onClose={close} /> : null}
     </main>

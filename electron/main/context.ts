@@ -1,4 +1,5 @@
 import type { OfficeLocalFiles } from '../services/office-local';
+import type { ImageLocal } from '../services/image-local';
 import type { MailBodies } from '../services/mail-bodies';
 import type { MailMedia } from '../services/mail-media';
 import type { QuickAsk } from '../services/quick-ask';
@@ -71,6 +72,8 @@ export interface AppContext {
   officeLocal: OfficeExternal;
   /** Office files on this computer opened in WorkSuite DOC / Sheet / Slides tabs (office-local.ts). */
   officeFiles: OfficeLocalFiles;
+  /** The image editor's offline edits, library cache and drag-out (Drive ENH-03). */
+  imageLocal: ImageLocal;
   settings: SettingsService;
   http: HttpClient;
   auth: AuthService;

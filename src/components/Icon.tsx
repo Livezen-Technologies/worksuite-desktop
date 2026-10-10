@@ -137,6 +137,18 @@ import {
   Gauge,
   Tv,
   Network,
+  Wand2,
+  Shapes,
+  Sticker,
+  Droplet,
+  Blend,
+  Layers,
+  FlipVertical2,
+  SquareDashed,
+  MessageSquarePlus,
+  Shuffle,
+  GripHorizontal,
+  SplitSquareHorizontal,
 } from 'lucide-react';
 
 /**
@@ -176,6 +188,8 @@ const ICONS: Record<string, LucideIcon> = {
   'phone-outgoing': PhoneOutgoing, 'phone-missed': PhoneMissed, 'phone-forwarded': PhoneForwarded, 'phone-call': PhoneCall, voicemail: Voicemail, radio: Radio, route: Route,
   'git-branch': GitBranch, keypad: Grid3x3, headphones: Headphones, ear: Ear, 'circle-dot': CircleDot, sim: CardSim, merge: Merge, parking: SquareParking, gauge: Gauge, tv: Tv, network: Network,
   'align-left': AlignLeft, 'align-center': AlignCenter, 'align-right': AlignRight, 'list-checks': ListChecks, 'line-spacing': UnfoldVertical, 'separator': SeparatorHorizontal, 'square-code': SquareCode, 'signature': Signature, 'image-plus': ImagePlus, 'smile-plus': SmilePlus, 'omega': Omega, 'paint-bucket': PaintBucket, 'cells-merge': TableCellsMerge, 'cells-split': TableCellsSplit, 'row-above': BetweenHorizontalStart, 'row-below': BetweenHorizontalEnd, 'col-left': BetweenVerticalStart, 'col-right': BetweenVerticalEnd, 'paintbrush': Paintbrush, 'text-size': ALargeSmall, 'pilcrow': Pilcrow, 'text-cursor': TextCursorInput, 'rounded': SquareRoundCorner, 'frame': Frame, 'panel-top': PanelTop, 'columns': Columns3, 'table-properties': TableProperties, 'clipboard-paste': ClipboardPaste,
+  // The photo editor (Drive ENH-03).
+  wand: Wand2, shapes: Shapes, sticker: Sticker, droplet: Droplet, blend: Blend, layers: Layers, 'flip-v': FlipVertical2, 'square-dashed': SquareDashed, 'message-square-plus': MessageSquarePlus, shuffle: Shuffle, 'grip-horizontal': GripHorizontal, 'split-square': SplitSquareHorizontal,
 };
 
 export function Icon({ name, size = 18, className, strokeWidth = 1.8, label }: { name: string; size?: number; className?: string; strokeWidth?: number; label?: string }) {

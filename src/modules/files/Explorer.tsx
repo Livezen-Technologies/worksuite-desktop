@@ -8,7 +8,7 @@ import { useTab } from '../../core/tab-context';
 import { bytes, listStamp } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui';
-import { EMPTY, GROUPS, TITLES, can, fileKey, folderKey, kindOf, type DriveFile, type DriveFolder, type DriveList, type Key, type View } from './api';
+import { EMPTY, GROUPS, IMAGE_EDIT_EXTS, TITLES, can, extOf, fileKey, folderKey, kindOf, type DriveFile, type DriveFolder, type DriveList, type Key, type View } from './api';
 import { fileMenu, folderMenu, keyOf, useDrive, type Item } from './ctx';
 import { Details } from './Details';
 import { lockPassword } from './locks';
@@ -205,7 +205,13 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
     setSelected(next);
     setAnchor(k);
   };
-  const menuFor = (item: Item): MenuItem[] => (item.type === 'file' ? fileMenu(item.f, d, files) : folderMenu(item.f, d));
+  const menuFor = (item: Item): MenuItem[] => {
+    if (item.type !== 'file') return folderMenu(item.f, d);
+    const base = fileMenu(item.f, d, files);
+    // Several photos selected: Batch edit them (BAT-01).
+    const photos = files.filter((f) => selected.has(fileKey(f.id)) && IMAGE_EDIT_EXTS.includes(extOf(f.name, f.extension)));
+    return photos.length > 1 && photos.some((f) => f.id === item.f.id) ? [{ label: `Batch edit ${photos.length} photos…`, icon: 'layers', run: () => d.batchEdit(photos) }, { sep: true }, ...base] : base;
+  };
   const openMenu = (item: Item, at: { x: number; y: number }) => {
     if (!selected.has(keyOf(item))) setSelected(new Set([keyOf(item)]));
     setMenu({ at, items: menuFor(item), label: `Actions — ${item.f.name}` });
@@ -571,6 +577,7 @@ function SelectionBar({ items, size, onClear }: { items: Item[]; size: number; o
   return (
     <div role="toolbar" aria-label="Selection" className="mx-6 mb-2 flex h-[42px] shrink-0 items-center gap-1 rounded-[10px] bg-[#0F1B3D] pr-2 pl-3.5 text-[12.5px] font-semibold text-white">
       <span className="mr-2.5">{items.length} selected{size ? ` · ${bytes(size)}` : ''}</span>
+      {files.length > 1 && files.length === items.length && files.every((f) => IMAGE_EDIT_EXTS.includes(extOf(f.name, f.extension))) ? <button type="button" className={cx(btn, 'bg-[#3B5BDB] hover:bg-[#4C6EF5]')} onClick={() => d.batchEdit(files)}>{`Batch edit ${files.length} photos`}</button> : null}
       {one && can(one.f.access, 'share') ? <button type="button" data-guide="files.share" className={btn} onClick={() => d.share(one)}>Share…</button> : null}
       {all('move') ? <button type="button" className={btn} onClick={() => d.move(items, 'move')}>Move…</button> : null}
       {files.length === items.length && all('download') ? <button type="button" className={btn} onClick={() => d.move(items, 'copy')}>Copy to…</button> : null}

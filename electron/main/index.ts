@@ -115,6 +115,8 @@ import { mailFilePathsInArgv } from '../services/mail-files/argv';
 import { createLocalAI } from '../services/local-ai/host';
 import { OcrService } from '../services/ocr';
 import { OfficeLocalFiles, officePathsInArgv } from '../services/office-local';
+import { ImageLocal } from '../services/image-local';
+import { writeAtomically as writeImageAtomically } from '../services/pdf/host';
 import { officeDocRoute } from '@shared/office';
 import { pdfPathsInArgv } from '../services/pdf/local-files';
 import { DEFAULT_PDF_POLICY } from '../services/pdf/service';
@@ -732,8 +734,27 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     info: () => ({ app_version: `WorkSuite Desktop ${app.getVersion()}`, os_version: `${os.type()} ${os.release()}`, hostname: os.hostname() }),
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
     protectedPaths: () => [p.userData],
+    uploaded: (e) => void imageLocal.uploaded(e).catch(() => undefined),
+    conflicted: (e) => void imageLocal.conflicted(e).catch(() => undefined),
   });
-  sync.onChanged = (s) => broadcast('sync:changed', s);
+  // The image editor on this computer (Drive ENH-03): offline edits wait in sidecars until sync sends their bytes.
+  const imageLocal = new ImageLocal({
+    root: () => join(p.userData, 'image-edits'),
+    tmp: () => os.tmpdir(),
+    userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    locate: (fileId) => sync.localFile(fileId),
+    kick: () => sync.kick('image-edit'),
+    postRecipe: async (fileId, body) => {
+      await http.post(`/api/drive/image/${fileId}/recipe`, body);
+    },
+    write: writeImageAtomically,
+    openPath: (path) => shell.openPath(path),
+    changed: (e) => broadcast('image:localChanged', e),
+  });
+  sync.onChanged = (s) => {
+    broadcast('sync:changed', s);
+    void imageLocal.retry().catch(() => undefined);
+  };
 
   // Office documents (WorkSuite Drive — ONLYOFFICE SRS §7): the editor in a tab, isolated in a partition of
   // its own, and copies opened in Word, Excel, PowerPoint or the default app, taken back only on request.
@@ -2649,6 +2670,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     office,
     officeLocal,
     officeFiles,
+    imageLocal,
     relaunch,
     quit,
     clockAttendance,
