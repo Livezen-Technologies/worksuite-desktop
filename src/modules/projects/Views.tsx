@@ -9,6 +9,9 @@ import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import { HEALTH, qk, read, write, type ChangeRequest } from './api';
 import { elapsedOf, useProjectTimer } from './desk';
 import { HealthDot, SectionTitle, openWeb } from './parts';
+// DELIVERY: my week's entries say why they are locked or sent back, and one of mine can be deleted (online).
+import { dwrite, fmtDay, type QueueEntry } from './delivery';
+import { Confirm, NEEDS_CONNECTION } from './screens/kit';
 
 /**
  * The Projects app's lighter views: the Dashboard (the projects that need attention), my time this week with what
@@ -73,7 +76,7 @@ export function DashboardView({ onGo, onOffline }: { onGo: (route: string) => vo
                 <SectionTitle count={d.upcoming_milestones.length}>Milestones coming up</SectionTitle>
               </div>
               {d.upcoming_milestones.slice(0, 8).map((m) => (
-                <button key={m.id} type="button" onClick={() => onGo(`/projects/${m.project_id}`)} className="flex w-full items-center gap-2 border-b border-line/60 px-3.5 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
+                <button key={m.id} type="button" onClick={() => onGo(`/projects/${m.project_id}/milestones`)} className="flex w-full items-center gap-2 border-b border-line/60 px-3.5 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
                   <span className="font-mono text-[11px] text-ink-3">{m.code}</span>
                   <span className="min-w-0 flex-1 truncate text-ink">{m.name}</span>
                   <span className={cx(m.days_left < 0 ? 'font-bold text-danger' : 'text-ink-2')}>{m.days_left < 0 ? `${-m.days_left} d late` : m.days_left === 0 ? 'Today' : `in ${m.days_left} d`}</span>
@@ -87,9 +90,25 @@ export function DashboardView({ onGo, onOffline }: { onGo: (route: string) => vo
   );
 }
 
-/** My time this week (PRJ-TIM), the running timer with it, and the approvals waiting for me (on the web, online). */
-export function TimeView({ today, waiting, offline, onLogTime, onOffline }: { today: string; waiting: number; offline: boolean; onLogTime: () => void; onOffline: (o: boolean) => void }) {
+/** My time this week (PRJ-TIM), the running timer with it, and the approvals waiting for me (the queue, online). */
+export function TimeView({ today, waiting, offline, onLogTime, onOffline, onReview }: { today: string; waiting: number; offline: boolean; onLogTime: () => void; onOffline: (o: boolean) => void; onReview?: () => void }) {
   const [day, setDay] = useState(today);
+  const qc = useQueryClient();
+  const [deleting, setDeleting] = useState<QueueEntry | null>(null);
+  const [busy, setBusy] = useState(false);
+  const remove = async (e: QueueEntry) => {
+    setBusy(true);
+    try {
+      await dwrite.deleteTime(e.id);
+      toast('success', 'Time deleted.');
+      setDeleting(null);
+      void qc.invalidateQueries({ queryKey: qk.all });
+    } catch (err) {
+      toast('error', errorMessage(err));
+    } finally {
+      setBusy(false);
+    }
+  };
   const q = useQuery({ queryKey: qk.week(mondayOf(day)), queryFn: ({ signal }) => read.week(mondayOf(day), { signal }) });
   const timer = useProjectTimer();
   const now = useNow(30_000).getTime();
@@ -129,8 +148,8 @@ export function TimeView({ today, waiting, offline, onLogTime, onOffline }: { to
           <b className="flex-1 text-ink">
             {waiting} time {waiting === 1 ? 'entry waits' : 'entries wait'} for your approval
           </b>
-          <Button size="sm" disabled={offline} title={offline ? 'Approvals wait for a connection' : 'Opens the approval queue on the web'} onClick={() => openWeb('/projects/time')}>
-            {offline ? 'Waits for a connection' : 'Review on the web'}
+          <Button size="sm" disabled={offline} title={offline ? 'Approvals wait for a connection' : onReview ? 'Opens the approval queue' : 'Opens the approval queue on the web'} onClick={() => (onReview ? onReview() : openWeb('/projects/time'))}>
+            {offline ? 'Waits for a connection' : onReview ? 'Review' : 'Review on the web'}
           </Button>
         </div>
       ) : null}
@@ -147,14 +166,23 @@ export function TimeView({ today, waiting, offline, onLogTime, onOffline }: { to
                 <b className={cx('flex-1 text-[12.5px]', d === today ? 'text-primary' : 'text-ink')}>{dayWords(d, { weekday: true })}</b>
                 <span className="font-mono text-[12px] font-bold text-ink">{hhmm(list.reduce((n, e) => n + e.minutes, 0) + run)}</span>
               </div>
-              {list.map((e) => (
-                <div key={e.id} className="flex items-center gap-2 border-b border-line/60 px-3.5 py-1.5 text-[12.5px] last:border-b-0">
-                  <span className="w-[70px] font-mono text-[11px] text-ink-3">{e.task_number ?? e.project_code ?? '—'}</span>
-                  <span className="min-w-0 flex-1 truncate text-ink">{e.task ?? e.project ?? 'Internal · not on a project'}</span>
-                  {e.note ? <span className="max-w-[30%] truncate text-ink-3">{e.note}</span> : null}
-                  <span className="text-[11px] text-ink-3">{e.is_billable ? 'billable' : 'non-billable'}</span>
-                  <span className="text-[11px] text-ink-3">{e.approved ? 'approved' : (e.state ?? '').replace(/_/g, ' ')}</span>
-                  <span className="w-[44px] text-right font-mono font-semibold text-ink">{hhmm(e.minutes)}</span>
+              {(list as QueueEntry[]).map((e) => (
+                <div key={e.id} className="flex flex-col border-b border-line/60 px-3.5 py-1.5 text-[12.5px] last:border-b-0">
+                  <div className="flex items-center gap-2">
+                    <span className="w-[70px] font-mono text-[11px] text-ink-3">{e.task_number ?? e.project_code ?? '—'}</span>
+                    <span className="min-w-0 flex-1 truncate text-ink">{e.task ?? e.project ?? 'Internal · not on a project'}</span>
+                    {e.note ? <span className="max-w-[30%] truncate text-ink-3">{e.note}</span> : null}
+                    <span className="text-[11px] text-ink-3">{e.is_billable ? 'billable' : 'non-billable'}</span>
+                    <span className="text-[11px] text-ink-3">{e.approved ? 'approved' : e.state === 'submitted' ? 'in HR timesheet' : (e.state ?? '').replace(/_/g, ' ')}</span>
+                    <span className="w-[44px] text-right font-mono font-semibold text-ink">{hhmm(e.minutes)}</span>
+                    {e.is_mine !== false && !e.locked && !e.running && !e.approved ? (
+                      <button type="button" disabled={offline} title={offline ? NEEDS_CONNECTION : undefined} aria-label={`Delete ${hhmm(e.minutes)} on ${fmtDay(e.on_date)}`} onClick={() => setDeleting(e)} className="text-[11.5px] font-semibold text-danger hover:underline disabled:opacity-50">
+                        Delete
+                      </button>
+                    ) : null}
+                  </div>
+                  {e.sent_back_note ? <span className="ps-[78px] text-[11.5px] text-danger">Sent back: {e.sent_back_note}</span> : null}
+                  {e.locked ? <span className="ps-[78px] text-[11px] text-ink-3">Locked · {e.lock_reason ?? (e.state ?? 'approved').replace(/_/g, ' ')}</span> : null}
                 </div>
               ))}
               {run && timer.running ? (
@@ -170,6 +198,7 @@ export function TimeView({ today, waiting, offline, onLogTime, onOffline }: { to
         })}
         {q.data && !entries.length && !running ? <p className="py-4 text-center text-ink-3">Nothing logged this week.</p> : null}
       </div>
+      {deleting ? <Confirm title="Delete time" message={`Delete ${hhmm(deleting.minutes)} on ${fmtDay(deleting.on_date)}?`} confirmLabel="Delete" danger busy={busy} onClose={() => setDeleting(null)} onConfirm={() => void remove(deleting)} /> : null}
     </div>
   );
 }

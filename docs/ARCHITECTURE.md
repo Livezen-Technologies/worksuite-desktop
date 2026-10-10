@@ -493,7 +493,15 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   in the capture phase while the tab is in front, so ⌘2 is not the shell's "tab 2" here), a task's panel
   (`TaskPanel.tsx`), My work grouped by the reader's own day (`logic.ts: groupMyWork`) and the day's time line. Its
   addresses are the web's (`routes.ts`: `/projects/<id>`, `/projects/<id>/tasks/<task>`, `?project=`, `?task=`); the
-  web screens it does not draw (timeline, sprints, budget, risks, reports…) are `BROWSER_PAGES` in `shared/links.ts`.
+  delivery screens (since 0.2.219, projects 1.2.0) are drawn here too, in `screens/` with their calls and shapes in
+  `delivery.ts`: Timeline & Gantt (`/projects[/<id>]/timeline`, `GET <id>/schedule`), Milestones & billing
+  (`/projects[/<id>]/milestones`; achieve with the 409 → force + reason retry, `milestones/invoice` to Billing's
+  drafts, opened with `openLink('/billing?invoice=<id>')`), Sprints (`/projects[/<id>]/sprints[/<sprint>]`), Team
+  workload (`/projects/workload`) and Time & approvals' queue and summary (`/projects/time?tab=queue|summary`; my
+  week stays `Views.tsx: TimeView`). Portfolio-level reads carry the chosen company (`company.tsx: withOrg`, the
+  remembered organisation choice for `projects`) in the request and the query key. Their writes are online only
+  (disabled offline); the web screens still not drawn (budget, risks, reports…) are `BROWSER_PAGES` in
+  `shared/links.ts`.
   The main process keeps the timer (`timer.ts`: `GET time/running` and this week's entries every minute, start, stop,
   Switch to, pause; the tray's lines, the title bar's pill and the always-on-top mini timer window `/projects/timer`,
   kind `timer`), the idle prompt (powerMonitor's idle time read every 30 s; after 15 minutes one banner, Keep 15 min

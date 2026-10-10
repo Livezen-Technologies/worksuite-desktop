@@ -194,7 +194,18 @@ describe('the Projects app’s addresses (PRJ-INT-02)', () => {
     expect(at('/projects/my-work?task=402')).toEqual({ view: { kind: 'my-work' }, taskId: 402 });
     expect(at('/projects/changes/7')).toEqual({ view: { kind: 'changes', id: 7 }, taskId: null });
     expect(at('/projects/timer').view).toEqual({ kind: 'timer' });
-    expect(at('/projects/18/timeline').view).toEqual({ kind: 'web', path: '/projects/18/timeline' });
+    // DELIVERY: the timeline, milestones, sprints and workload land natively.
+    expect(at('/projects/18/timeline').view).toEqual({ kind: 'timeline', projectId: 18 });
+    expect(at('/projects/timeline').view).toEqual({ kind: 'timeline', projectId: null });
+    expect(at('/projects/milestones').view).toEqual({ kind: 'milestones', projectId: null });
+    expect(at('/projects/18/milestones?task=4')).toEqual({ view: { kind: 'milestones', projectId: 18 }, taskId: 4 });
+    expect(at('/projects/sprints').view).toEqual({ kind: 'sprints', projectId: null, sprintId: null });
+    expect(at('/projects/sprints/7').view).toEqual({ kind: 'sprints', projectId: null, sprintId: 7 });
+    expect(at('/projects/18/sprints/7').view).toEqual({ kind: 'sprints', projectId: 18, sprintId: 7 });
+    expect(at('/projects/workload').view).toEqual({ kind: 'workload' });
+    expect(at('/projects/time?tab=queue').view).toEqual({ kind: 'time' });
+    expect(at('/projects/18/budget').view).toEqual({ kind: 'web', path: '/projects/18/budget' });
+    expect(at('/projects/sprints/x').view).toEqual({ kind: 'web', path: '/projects/sprints/x' });
     expect(boardRoute(18, 412)).toBe('/projects/18/tasks/412');
   });
 

@@ -35,7 +35,16 @@ describe('Projects links land in the native app', () => {
     expect(resolveWebLink('/projects?id=18')).toEqual({ kind: 'tab', route: '/projects?id=18', app: 'projects' });
     expect(resolveWebLink('/projects/my-work')).toEqual({ kind: 'tab', route: '/projects/my-work', app: 'projects' });
     expect(resolveWebLink('/projects/changes/7')).toEqual({ kind: 'tab', route: '/projects/changes/7', app: 'projects' });
-    expect(resolveWebLink('/projects/18/timeline')).toEqual({ kind: 'browser', path: '/projects/18/timeline', app: 'projects' });
+    // DELIVERY: the timeline, milestones, sprints and workload are drawn here.
+    expect(resolveWebLink('/projects/18/timeline')).toEqual({ kind: 'tab', route: '/projects/18/timeline', app: 'projects' });
+    expect(resolveWebLink('/projects/timeline')).toEqual({ kind: 'tab', route: '/projects/timeline', app: 'projects' });
+    expect(resolveWebLink('/projects/milestones')).toEqual({ kind: 'tab', route: '/projects/milestones', app: 'projects' });
+    expect(resolveWebLink('/projects/18/milestones')).toEqual({ kind: 'tab', route: '/projects/18/milestones', app: 'projects' });
+    expect(resolveWebLink('/projects/sprints/7')).toEqual({ kind: 'tab', route: '/projects/sprints/7', app: 'projects' });
+    expect(resolveWebLink('/projects/18/sprints')).toEqual({ kind: 'tab', route: '/projects/18/sprints', app: 'projects' });
+    expect(resolveWebLink('/projects/workload')).toEqual({ kind: 'tab', route: '/projects/workload', app: 'projects' });
+    expect(resolveWebLink('/projects/time?tab=queue')).toEqual({ kind: 'tab', route: '/projects/time?tab=queue', app: 'projects' });
+    expect(resolveWebLink('/projects/18/timelines')).toEqual({ kind: 'browser', path: '/projects/18/timelines', app: 'projects' });
     expect(resolveWebLink('/projects/budget')).toEqual({ kind: 'browser', path: '/projects/budget', app: 'projects' });
     expect(resolveWebLink('/projects/risks?project_id=3')).toEqual({ kind: 'browser', path: '/projects/risks?project_id=3', app: 'projects' });
   });

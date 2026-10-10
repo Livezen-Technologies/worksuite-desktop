@@ -136,8 +136,8 @@ export const APP_CATALOGUE: AppDefinition[] = [
 
   // WorkSuite Projects (WS-PROJECT-SRS-001 PRJ-DSK-01..04): native since 0.2.216 — the board with its keyboard, My work,
   // the tray timer and an offline outbox. `/projects/<id>`, `/projects/<id>/tasks/<task>`, `/projects?project=<id>` and
-  // `?task=<id>` (Mail, Calendar, notifications, search) open here; the screens not built here (timeline, sprints,
-  // budget, risks, reports, settings…) open on the web (shared/links.ts BROWSER_PAGES).
+  // `?task=<id>` (Mail, Calendar, notifications, search) open here; the timeline, milestones, sprints and workload are drawn
+  // here too; the screens not built here (budget, risks, reports, settings…) open on the web (shared/links.ts BROWSER_PAGES).
   { id: 'projects', label: 'Projects', group: 'work', icon: 'kanban', app: 'projects', webPath: '/projects', surface: 'native', order: 170, keywords: 'projects project board kanban sprint tasks my work timer time tracking timesheet milestones change requests', guest: 'locked', guestLabel: 'Shared workspaces' },
   // `/tenders?open=<id>` (notifications, search, the stream) opens that tender here.
   { id: 'tenders', label: 'Tenders', group: 'business', icon: 'file-text', app: 'tender', perm: 'tender.view', webPath: '/tenders', surface: 'native', sidebar: 'business', order: 129, keywords: 'tenders bids bid rfq rfp procurement pipeline award' },

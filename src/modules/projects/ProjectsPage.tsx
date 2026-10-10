@@ -20,7 +20,13 @@ import { Rail } from './Rail';
 import { boardRoute, viewOf } from './routes';
 import { TaskPanel } from './TaskPanel';
 import { MiniTimer } from './Timer';
-import { ChangesView, DashboardView, TimeView } from './Views';
+import { ChangesView, DashboardView } from './Views';
+// DELIVERY screens
+import { MilestonesScreen } from './screens/Milestones';
+import { SprintsScreen } from './screens/Sprints';
+import { TimeScreen } from './screens/Time';
+import { TimelineScreen } from './screens/Timeline';
+import { WorkloadScreen } from './screens/Workload';
 
 /**
  * WorkSuite Projects in a tab (WS-PROJECT-SRS-001 PRJ-DSK-01, D01–D04): the project switcher and views on the left, a
@@ -55,7 +61,10 @@ function Workspace() {
   const boardProject = view.kind === 'board' ? view.projectId : null;
   const current = boardProject ? (projects.get(boardProject) ?? null) : null;
 
-  useTabTitle(view.kind === 'board' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : view.kind === 'changes' ? 'Projects · Changes' : 'Projects');
+  // DELIVERY titles
+  const deliveryTitle = view.kind === 'timeline' ? 'Timeline' : view.kind === 'milestones' ? 'Milestones' : view.kind === 'sprints' ? 'Sprints' : view.kind === 'workload' ? 'Team workload' : null;
+  const deliveryProject = 'projectId' in view && view.kind !== 'board' && view.projectId ? (projects.get(view.projectId)?.code ?? null) : null;
+  useTabTitle(deliveryTitle ? `${deliveryProject ?? 'Projects'} · ${deliveryTitle}` : view.kind === 'board' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : view.kind === 'changes' ? 'Projects · Changes' : 'Projects');
 
   useEffect(() => {
     if (boardProject) noteRecent(boardProject);
@@ -149,7 +158,23 @@ function Workspace() {
             ) : view.kind === 'my-work' ? (
               <MyWork me={me} today={today} offline={offline} outbox={outbox} onOpenTask={(t) => openTask(t.id, t.project_id)} onGo={go} onOffline={onOffline} />
             ) : view.kind === 'time' ? (
-              <TimeView today={today} waiting={counts.data?.data.time_waiting ?? 0} offline={offline} onLogTime={() => setLogFor({ task: null })} onOffline={onOffline} />
+              <TimeScreen
+                today={today}
+                waiting={counts.data?.data.time_waiting ?? 0}
+                offline={offline}
+                tab={query.get('tab')}
+                onTab={(t) => go(t === 'mine' ? '/projects/time' : `/projects/time?tab=${t}`)}
+                onLogTime={() => setLogFor({ task: null })}
+                onOffline={onOffline}
+              />
+            ) : view.kind === 'timeline' ? (
+              <TimelineScreen key={view.projectId ?? 0} projectId={view.projectId} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
+            ) : view.kind === 'milestones' ? (
+              <MilestonesScreen key={view.projectId ?? 0} projectId={view.projectId} offline={offline} onOffline={onOffline} />
+            ) : view.kind === 'sprints' ? (
+              <SprintsScreen key={view.projectId ?? 0} projectId={view.projectId} sprintId={view.sprintId} offline={offline} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
+            ) : view.kind === 'workload' ? (
+              <WorkloadScreen onOffline={onOffline} />
             ) : view.kind === 'changes' ? (
               <ChangesView id={view.id} offline={offline} onGo={go} />
             ) : view.kind === 'dashboard' ? (
