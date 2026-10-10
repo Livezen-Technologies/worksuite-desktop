@@ -203,7 +203,7 @@ describe('the server’s answers', () => {
     expect(s.ai?.available).toBe(false);
     expect(s.ai?.image_model).toBe(false);
     expect(s.limits).toEqual({ render_bytes: 60 * 1048576, recipe_bytes: 24 * 1048576, batch_files: 500 });
-    expect(editorOf({ ai: { enabled: true, actions: ['alt_text'] } }).ai).toMatchObject({ available: true, actions: ['alt_text'] });
+    expect(editorOf({ ai: { enabled: true, actions: ['alt_text'], provider: 'WorkSuite AI · Org default' } }).ai).toMatchObject({ available: true, actions: ['alt_text'], provider_label: 'WorkSuite AI · Org default' });
     expect(editorOf(null)).toEqual({});
   });
 

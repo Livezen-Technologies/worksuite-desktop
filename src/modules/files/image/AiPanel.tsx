@@ -40,9 +40,10 @@ export function AiPanel(p: AiPanelProps) {
   const [turns, setTurns] = useState<Turn[]>([]);
   const [prompt, setPrompt] = useState('');
   const [busy, setBusy] = useState(false);
+  const [answered, setAnswered] = useState<string | null>(null);
   const abort = useRef<AbortController | null>(null);
   const allowed = (a: string) => a === 'generative' || !p.ai.actions || p.ai.actions.includes(a as never);
-  const provider = p.ai.provider_label || 'Org default';
+  const provider = answered || p.ai.provider_label || 'WorkSuite AI · Org default';
 
   const ask = async (action: 'suggest' | 'alt_text' | 'caption' | 'crop', text: string, ratio?: string) => {
     if (!p.fileId || busy) return;
@@ -53,6 +54,7 @@ export function AiPanel(p: AiPanelProps) {
     try {
       const image = await p.makeImage();
       const answer = await askAi(p.fileId, { action, prompt: action === 'suggest' ? text : undefined, ratio, image }, ctl.signal);
+      if (answer.provider) setAnswered(answer.provider);
       let turn: Turn = { answer, action };
       if (answer.steps?.length) {
         const { recipe, used } = applyAiSteps(p.recipe, answer.steps, p.picture);
@@ -95,7 +97,7 @@ export function AiPanel(p: AiPanelProps) {
   return (
     <div className="flex h-full min-h-0 flex-col gap-3">
       <Head title="AI assistant">
-        <span className="text-[12px] text-[#AFC0E8]">{`WorkSuite AI · ${provider}`}</span>
+        <span data-testid="ai-provider" className="text-[12px] text-[#AFC0E8]">{provider}</span>
       </Head>
       <p className="text-[12px] leading-[1.5] text-[#AFC0E8]">Runs through your organization’s AI provider. Nothing is sent until you ask; the picture goes small, without its location or camera details. Suggestions arrive as normal editing steps you can change or undo.</p>
       <div className="flex flex-wrap gap-1.5">

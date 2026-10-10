@@ -109,6 +109,9 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
   const [q, setQ] = useState(initialQ);
   const [kind, setKind] = useState('');
   const [sort, setSort] = useState('modified:desc');
+  // The Images view's own filters (VWR-E-07): my rating at least, and a tag.
+  const [minRating, setMinRating] = useState('');
+  const [tag, setTag] = useState('');
   const [selected, setSelected] = useState<Set<Key>>(() => (query.get('file') ? new Set([fileKey(Number(query.get('file')))]) : new Set()));
   const [anchor, setAnchor] = useState<Key | null>(null);
   const [menu, setMenu] = useState<{ at: { x: number; y: number }; items: MenuItem[]; label: string } | null>(null);
@@ -123,13 +126,13 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
   const group = GROUPS.find((g) => g.views.includes(view) && g.views.length > 1);
 
   const list = useInfiniteQuery({
-    queryKey: ['files', 'list', view, place.folder, q.trim(), kind, sort, unlockTick],
+    queryKey: ['files', 'list', view, place.folder, q.trim(), kind, sort, unlockTick, view === 'image' ? `${minRating}:${tag.trim()}` : ''],
     initialPageParam: 1,
     queryFn: async ({ pageParam, signal }): Promise<Page> => {
       const pw = folderView && place.folder ? lockPassword(place.folder) : null;
       if (pw && place.folder) return lockedPage(place.folder, pw, signal);
       const r = await request<DriveList>('GET', '/api/drive/list', {
-        query: { view: folderView ? undefined : view, folder_id: folderView ? place.folder : undefined, include_folders: folderView || view === 'starred' ? 1 : undefined, q: q.trim() || undefined, kind: kind || undefined, sort: sortBy, dir, page: pageParam, per_page: 100, counts: 0 },
+        query: { view: folderView ? undefined : view, folder_id: folderView ? place.folder : undefined, include_folders: folderView || view === 'starred' ? 1 : undefined, q: q.trim() || undefined, kind: kind || undefined, sort: sortBy, dir, page: pageParam, per_page: 100, counts: 0, ...(view === 'image' ? { min_rating: minRating || undefined, tag: tag.trim() || undefined } : {}) },
         signal,
       });
       // Locked asks everybody, its owner too (as `files/browse` does).
@@ -385,6 +388,17 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                 {TYPES.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
               </Select>
             ) : null}
+            {view === 'image' ? (
+              <>
+                <Select aria-label="Filter by my rating" value={minRating} onChange={(e) => setMinRating(e.target.value)} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
+                  {RATINGS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+                </Select>
+                <label className="flex h-9 w-[150px] items-center gap-1.5 rounded-[8px] border border-line px-2.5 text-ink-3 focus-within:border-primary">
+                  <Icon name="tag" size={14} />
+                  <input value={tag} onChange={(e) => setTag(e.target.value)} aria-label="Filter by tag" placeholder="Tag" className="min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none bare-focus" />
+                </label>
+              </>
+            ) : null}
             <Select aria-label="Sort by" value={sort} onChange={(e) => setSort(e.target.value)} className="h-9 rounded-[8px] border border-line bg-surface px-2 text-ink">
               {SORTS.map(([v, l]) => <option key={v} value={v}>{l}</option>)}
             </Select>
@@ -462,6 +476,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                       {isFolder ? <FolderIcon color={item.f.color} locked={item.f.is_locked} /> : <FileIcon f={item.f} />}
                       <span className="truncate font-semibold text-ink">{item.f.name}</span>
                       {item.f.starred ? <Icon name="star" size={13} label="Starred" className="shrink-0 fill-current text-[#E9A23B]" /> : null}
+                      {!isFolder ? <PhotoMarks f={item.f} /> : null}
                       {isFolder && item.f.is_locked ? <span className="shrink-0 rounded-[5px] bg-warning-bg px-1.5 py-0.5 text-[10.5px] font-bold text-warning">Locked</span> : null}
                     </span>
                     <span role="cell" className="truncate pr-2 text-ink-2">{isFolder ? (item.f.owner_name ?? (item.f.access?.owner ? 'Me' : '—')) : folderView ? owner(item.f) : item.f.folder_path || item.f.folder_name}</span>
@@ -502,6 +517,8 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
                       <span className="relative block w-full">
                         <Tile f={f} />
                         {f.starred ? <span className="absolute top-[7px] right-[7px] flex h-5 w-5 items-center justify-center rounded-full bg-surface text-[#E9A23B] shadow"><Icon name="star" size={11} className="fill-current" /></span> : null}
+                        {f.edited ? <span className="absolute top-[7px] left-[7px] rounded-[6px] bg-[#0F1B3D]/85 px-1.5 py-0.5 text-[10.5px] font-bold text-white">{`Edited · v${f.version ?? 1}`}</span> : null}
+                        {f.rating?.mine ? <span aria-label={`Rated ${f.rating.mine} of 5`} className="absolute bottom-[7px] left-[7px] rounded-[6px] bg-black/55 px-1.5 text-[11px] text-[#F5B400]">{'★'.repeat(f.rating.mine)}</span> : null}
                       </span>
                       <span className="flex flex-col gap-0.5 px-2.5 py-2">
                         <span className="truncate text-[12.5px] font-semibold text-ink">{f.name}</span>
@@ -563,6 +580,18 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
       ) : null}
       {menu ? <PopMenu at={menu.at} items={menu.items} label={menu.label} onClose={() => setMenu(null)} /> : null}
     </div>
+  );
+}
+
+const RATINGS: Array<[string, string]> = [['', 'Any rating'], ['1', '★ and up'], ['2', '★★ and up'], ['3', '★★★ and up'], ['4', '★★★★ and up'], ['5', '★★★★★']];
+
+/** A picture's marks in the list (VWR-E-07, VWR-E-15): "Edited · vN" when its layers are saved, and my stars. */
+function PhotoMarks({ f }: { f: DriveFile }) {
+  return (
+    <>
+      {f.edited ? <span className="shrink-0 rounded-[5px] bg-selection px-1.5 py-0.5 text-[10.5px] font-bold text-primary">{`Edited · v${f.version ?? 1}`}</span> : null}
+      {f.rating?.mine ? <span aria-label={`Rated ${f.rating.mine} of 5`} className="shrink-0 text-[11px] text-[#E9A23B]">{'★'.repeat(f.rating.mine)}</span> : null}
+    </>
   );
 }
 

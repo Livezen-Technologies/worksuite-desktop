@@ -111,7 +111,7 @@ export interface EditorBlock {
   saving?: { format?: 'same' | 'jpg' | 'png' | 'webp'; quality?: number; keep_layers?: boolean; strip_gps?: boolean; batch_output?: 'versions' | 'copies' };
   limits?: { max_render_mb?: number; max_recipe_mb?: number; batch_max_files?: number };
   libraries?: Partial<Record<'stickers' | 'frames' | 'fonts' | 'logos', boolean>>;
-  ai?: { enabled?: boolean; code?: string | null; reason?: string | null; actions?: string[]; unavailable?: Record<string, string> | null; provider_label?: string | null };
+  ai?: { enabled?: boolean; code?: string | null; reason?: string | null; actions?: string[]; unavailable?: Record<string, string> | null; provider?: string | null };
 }
 
 /** Drive settings › Photo editor as an editor needs them (SET-03…08); absent means the defaults. */
@@ -226,6 +226,8 @@ export interface BatchJob {
 
 export interface AiAnswer {
   action?: string;
+  /** The provider's label, as the organization's AI settings name it (AI-02). */
+  provider?: string | null;
   request_id?: string | null;
   model?: string | null;
   sent?: { width: number; height: number } | null;
@@ -429,7 +431,7 @@ export function editorOf(b: EditorBlock | null | undefined): EditorSettings {
   const tools = Array.isArray(b.tools) ? (Object.fromEntries(RAIL_TOOLS.map((t) => [t, b.tools!.includes(t)])) as EditorSettings['tools']) : undefined;
   return {
     tools,
-    ai: ai ? { available: ai.enabled === true, provider_label: ai.provider_label ?? null, actions: (ai.actions ?? []) as NonNullable<EditorSettings['ai']>['actions'], image_model: !ai.unavailable?.generative, reason: ai.reason ?? null, unavailable: ai.unavailable ?? null } : undefined,
+    ai: ai ? { available: ai.enabled === true, provider_label: ai.provider ?? null, actions: (ai.actions ?? []) as NonNullable<EditorSettings['ai']>['actions'], image_model: !ai.unavailable?.generative, reason: ai.reason ?? null, unavailable: ai.unavailable ?? null } : undefined,
     save_defaults: b.saving,
     limits: b.limits ? { render_bytes: (b.limits.max_render_mb ?? 60) * 1048576, recipe_bytes: (b.limits.max_recipe_mb ?? 24) * 1048576, batch_files: b.limits.batch_max_files ?? 500 } : undefined,
     quick_design: b.quick_design === true,

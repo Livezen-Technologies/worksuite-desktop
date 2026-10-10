@@ -2,6 +2,8 @@
     "module": "files",
     "version": "1.8.6",
     "paths": [
-        "electron/services/api-proxy.ts"
+        "electron/services/api-proxy.ts",
+        "electron/services/image-local.ts",
+        "electron/services/sync/conflicts.ts"
     ]
 }
