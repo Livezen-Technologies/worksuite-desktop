@@ -4,7 +4,7 @@ import { canOpen } from '../../core/access';
 import { officeOpenWithMenu } from '../office/open-with';
 import { cachedOfficeActions, driveOfficeDoc, prefetchOfficeActions, type OfficeRouting } from './office';
 import type { MenuItem } from './Menu';
-import { IMAGE_EDIT_EXTS, OFFICE_EXTS, PREVIEW_EXTS, TONE, ZIP_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder, type Key } from './api';
+import { IMAGE_EDIT_EXTS, OFFICE_EXTS, PREVIEW_EXTS, TONE, ZIP_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder, type Key, type View } from './api';
 import { app } from '../../core/app-state';
 import { computerWord } from './sync';
 
@@ -51,11 +51,42 @@ export interface Drive {
   inBrowser: (f: DriveFile) => void;
   /** Keep a folder on this computer (Drive sync): opens Sync devices with the folder chosen. */
   syncFolder: (f: DriveFolder) => void;
-  newFolder: () => void;
-  upload: () => void;
-  /** Files from Finder upload into the folder; rows dragged from a list move there. */
+  /** A new folder, in the folder shown or, from the rail's menu, in `parent` (null: the top of My Drive). */
+  newFolder: (parent?: number | null) => void;
+  /** Files from this computer, into the folder shown or into `folder`. */
+  upload: (folder?: number | null) => void;
+  /** A whole folder from this computer, with its folders. */
+  uploadFolder: (folder?: number | null) => void;
+  /** New document ▸ Document, Spreadsheet or Presentation, made in a folder and opened. */
+  newDocument: (kind: 'document' | 'spreadsheet' | 'presentation', folder: number | null) => void;
+  /** Files from Finder upload into the folder; rows dragged from a list move there (⌥ copies). */
   drop: (e: DragEvent, folder: number | null) => void;
   refresh: () => void;
+
+  /* The rail's folder menus (worksuite-desktop#328). */
+  /** Opens a folder, or a place such as Shared with me, in a new tab or a window of its own. */
+  openPlaceIn: (p: { view: View; folder: number | null }, where: 'tab' | 'window') => void;
+  /** Renamed in place: rejects with the server's reason, so the field can say it; Undo puts the old name back. */
+  renameTo: (item: Item, name: string) => Promise<void>;
+  /** Moves or copies to a folder straight away (a drop); `from` is where each came from, for Undo. */
+  moveTo: (items: Item[], folder: number | null, mode: 'move' | 'copy', from?: ReadonlyMap<Key, number | null>) => void;
+  /** Change colour ▸ (null: the default). */
+  setColour: (f: DriveFolder, color: string | null) => void;
+  /** Pin to top of the rail. */
+  pin: (f: DriveFolder, on: boolean) => void;
+  /** Leave folder / Remove from my Drive, for a folder somebody shared with me. */
+  leave: (f: DriveFolder) => void;
+  /** Available offline: keep the folder on this computer (Drive sync), or stop. */
+  keepOffline: (f: DriveFolder, on: boolean) => void;
+  /** Show in Finder / File Explorer, for a folder kept on this computer. */
+  reveal: (f: DriveFolder) => void;
+  /** The folder's WorkSuite address, on the clipboard. */
+  copyLink: (item: Item) => void;
+  /** The rail's manual order among siblings, after a drag; `into` first moves the dragged folder beside them. */
+  reorder: (ids: number[], into?: { folder: DriveFolder; parent: number | null }) => void;
+  /** Recent ▸ Clear recent list, and Starred ▸ Unstar all (each asks first). */
+  clearRecent: () => void;
+  unstarAll: () => void;
 }
 
 export const DriveCtx = createContext<Drive | null>(null);
@@ -137,9 +168,15 @@ export function folderMenu(f: DriveFolder, d: Drive): MenuItem[] {
     { sep: true },
     can(a, 'rename') ? { label: 'Rename', hint: 'F2', icon: 'compose', run: () => d.rename(item) } : null,
     can(a, 'move') ? { label: 'Move…', icon: 'folder-up', run: () => d.move([item], 'move') } : null,
+    can(a, 'download') ? { label: 'Copy to…', icon: 'copy', run: () => d.move([item], 'copy') } : null,
     { label: f.starred ? 'Remove star' : 'Star', icon: 'star', run: () => d.star(item, !f.starred) },
     { sep: true },
-    can(a, 'delete') ? { label: 'Delete folder', hint: 'Del', icon: 'trash', danger: true, run: () => d.trash([item]) } : null,
+    // Somebody else's folder: leave it, rather than binning it for everyone (worksuite-desktop#328).
+    a && !a.owner
+      ? { label: a.via === 'direct' ? 'Leave folder' : 'Remove from my Drive', icon: a.via === 'direct' ? 'logout' : 'x-circle', danger: true, run: () => d.leave(f) }
+      : can(a, 'delete')
+        ? { label: 'Move to Bin…', hint: 'Del', icon: 'trash', danger: true, run: () => d.trash([item]) }
+        : null,
   ];
   return tidy(out);
 }

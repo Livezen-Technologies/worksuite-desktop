@@ -68,6 +68,15 @@ export interface DriveFolder {
   owner_id?: number;
   owner_name?: string | null;
   children?: DriveFolder[];
+  /** The product's folder (Call recordings, Tenders): it keeps its name and place (worksuite-desktop#328). */
+  is_system?: boolean;
+  /** "Created by Tenders", for a system folder's lock. */
+  system_by?: string | null;
+  /** Pinned to the top of the rail, by this person. */
+  pinned?: boolean;
+  /** The manual order among its siblings. */
+  sort_order?: number;
+  updated_at?: string | null;
 }
 export interface TreeNode extends DriveFolder {
   children: TreeNode[];
