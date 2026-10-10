@@ -1,37 +1,39 @@
 /**
- * The Projects app's addresses — the web's own (PRJ-INT-02), so a deep link, a notification, Mail, Calendar and
- * search land on the same record here as on the web:
+ * The Projects app's addresses — the web's own (PRJ-INT-02, shell.tsx PATHS and ProjectPage routes), so a deep link,
+ * a notification, Mail, Calendar and search land on the same record here as on the web:
  *
- *   /projects                       Dashboard
- *   /projects/my-work               My work
- *   /projects/time                  Time & approvals (my week)
- *   /projects/changes[/<id>]        Change requests waiting for a decision
- *   /projects/<id>                  A project's overview (PORTFOLIO)
- *   /projects/<id>/board            A project's board
- *   /projects/<id>/tasks/<task>     A task, open over its project's board
- *   /projects/<id>/<tab>            A project's team, settings, activity or files (PORTFOLIO)
- *   /projects/all · /templates      The register and the templates (PORTFOLIO; filters in the query)
- *   /projects/clients[/<id>]        Clients, one open on the right (PORTFOLIO)
- *   /projects/activity · /settings  The activity log and Module settings (PORTFOLIO)
- *   ?new=blank | ?new=<template>    The New project dialog, over any view (PORTFOLIO)
- *   ?project=<id> | ?id=<id>        The older links to a project (G-12)
- *   ?task=<id>                      A task, open over whatever view
- *   /projects/timer                 The mini timer window (D02)
- *   DELIVERY:
- *   /projects[/<id>]/timeline       Timeline & Gantt (a project's, or the remembered one's)
- *   /projects[/<id>]/milestones     Milestones & billing
- *   /projects[/<id>]/sprints[/<s>]  Sprints, one open
- *   /projects/workload              Team workload
- *   /projects/time?tab=queue|summary  Time & approvals' approval queue and summary
+ *   /projects                         Dashboard
+ *   /projects/all · /templates        The register and the templates (filters in the query)
+ *   /projects/clients[/<id>]          Clients, one open on the right
+ *   /projects/activity · /settings    The activity log and Module settings
+ *   /projects/my-work                 My work
+ *   /projects/board                   The board of the project last worked in (else a choice)
+ *   /projects[/<id>]/timeline         Timeline & Gantt (module-wide: the remembered project's)
+ *   /projects[/<id>]/milestones       Milestones & billing
+ *   /projects[/<id>]/sprints[/<s>]    Sprints, one open
+ *   /projects/time[?tab=queue|summary]  Time & approvals: my week, the approval queue, the summary
+ *   /projects/workload                Team workload
+ *   /projects/budget · /risks         Budget & cost and the risk register (`?project_id=` narrows to one project)
+ *   /projects/changes[/<id>]          Change requests, one open
+ *   /projects/reports[/<kind>]        Reports, one address per report
+ *   /projects/<id>                    A project's overview
+ *   /projects/<id>/board              Its board; /projects/<id>/tasks/<task> a task open over it
+ *   /projects/<id>/<tab>              Its team, settings, activity, files, timeline, milestones, sprints[/<s>], budget,
+ *                                     risks or changes[/<c>] — each under the project's tab strip
+ *   ?new=blank | ?new=<template>      The New project dialog, over any view
+ *   ?project=<id> | ?id=<id>          The older links to a project (G-12)
+ *   ?task=<id>                        A task, open over whatever view
+ *   /projects/timer                   The mini timer window (D02)
  *
- * Anything else is a screen of the web's (budget, risks, reports…): shared/links.ts sends those links to the
- * browser, and a route that still lands here says so and offers the web page.
+ * Anything else — a project's Time tab (`/projects/<id>/time`) is the one web screen not drawn here — lands on the
+ * `web` view: shared/links.ts sends those links to the browser, and a route that still lands here says so and offers
+ * the web page.
  */
 export type ProjectsView =
   | { kind: 'dashboard' }
   | { kind: 'my-work' }
   | { kind: 'time' }
-  | { kind: 'changes'; id: number | null }
+  | { kind: 'changes'; id: number | null; projectId?: number | null }
   | { kind: 'board'; projectId: number }
   /** `/projects/board`: the board of the project last worked in (the web's remembered project), else a choice. */
   | { kind: 'board-home' }
@@ -48,6 +50,10 @@ export type ProjectsView =
   | { kind: 'milestones'; projectId: number | null }
   | { kind: 'sprints'; projectId: number | null; sprintId: number | null }
   | { kind: 'workload' }
+  // ── GOVERNANCE ──
+  | { kind: 'budget'; projectId: number | null }
+  | { kind: 'risks'; projectId: number | null }
+  | { kind: 'reports'; report: string | null }
   | { kind: 'web'; path: string };
 
 /** A project's own sections drawn here (PORTFOLIO); its board is `board`. */
@@ -79,7 +85,10 @@ export function viewOf(path: readonly string[], query: URLSearchParams): { view:
   if (a === 'sprints' && (!b || num(b)) && !c) return { view: { kind: 'sprints', projectId: null, sprintId: num(b) }, taskId };
   if (a === 'workload' && !b) return { view: { kind: 'workload' }, taskId };
   if (a === 'board' && !b) return { view: { kind: 'board-home' }, taskId };
-  // ── one project: its overview, board, own tabs (PORTFOLIO) and delivery screens (DELIVERY) ──
+  // ── GOVERNANCE: budget and risks (portfolio-wide, or one project's by `?project_id=`), reports ──
+  if ((a === 'budget' || a === 'risks') && !b) return { view: { kind: a, projectId: num(query.get('project_id')) }, taskId };
+  if (a === 'reports' && !c) return { view: { kind: 'reports', report: b ?? null }, taskId };
+  // ── one project: its overview, board and own tabs, and its delivery and governance screens ──
   const [, , , , d] = path;
   const project = num(a);
   if (project && (b === 'board' || b === 'tasks')) return { view: { kind: 'board', projectId: project }, taskId };
@@ -88,6 +97,8 @@ export function viewOf(path: readonly string[], query: URLSearchParams): { view:
   if (project && b === 'timeline' && !c) return { view: { kind: 'timeline', projectId: project }, taskId };
   if (project && b === 'milestones' && !c) return { view: { kind: 'milestones', projectId: project }, taskId };
   if (project && b === 'sprints' && (!c || num(c)) && !d) return { view: { kind: 'sprints', projectId: project, sprintId: num(c) }, taskId };
+  if (project && !c && (b === 'budget' || b === 'risks')) return { view: { kind: b, projectId: project }, taskId };
+  if (project && b === 'changes' && (!c || num(c)) && !d) return { view: { kind: 'changes', id: num(c), projectId: project }, taskId };
   return { view: { kind: 'web', path: `/${path.join('/')}` }, taskId: null };
 }
 

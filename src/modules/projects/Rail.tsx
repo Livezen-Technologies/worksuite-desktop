@@ -98,7 +98,10 @@ export function Rail({ view, counts, projects, pins, recent, canCreate, mayCreat
       {viewRow('/projects/time', 'Time & approvals', view.kind === 'time', 'clock', counts?.time_waiting)}
       {viewRow('/projects/workload', 'Team workload', view.kind === 'workload', 'users')}
       {head('GOVERNANCE')}
-      {viewRow('/projects/changes', 'Change requests', view.kind === 'changes', 'git-branch', counts?.changes_waiting)}
+      {viewRow('/projects/budget', 'Budget & cost', view.kind === 'budget' && !view.projectId, 'banknote')}
+      {viewRow('/projects/risks', 'Risks', view.kind === 'risks' && !view.projectId, 'warning', counts?.risks_open)}
+      {viewRow('/projects/changes', 'Change requests', view.kind === 'changes' && !view.projectId, 'git-branch', counts?.changes_waiting)}
+      {viewRow('/projects/reports', 'Reports', view.kind === 'reports', 'chart')}
       {maySettings ? head('ADMINISTER') : null}
       {maySettings ? viewRow('/projects/settings', 'Module settings', view.kind === 'settings', 'settings') : null}
       {head('PINNED')}

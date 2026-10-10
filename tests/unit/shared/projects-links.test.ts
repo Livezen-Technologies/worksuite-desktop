@@ -28,7 +28,7 @@ describe('Projects links land in the native app', () => {
     expect(parseDeepLink('worksuite://projects/18/tasks/412/extra')).toMatchObject({ ok: false, reason: 'unknown_route' });
   });
 
-  it('web links from Mail, Calendar, notifications and search open in the tab; screens not built here go to the browser', () => {
+  it('web links from Mail, Calendar, notifications and search open in the tab; the screens not built here (a project’s Time tab) go to the browser', () => {
     expect(resolveWebLink('/projects/18')).toEqual({ kind: 'tab', route: '/projects/18', app: 'projects' });
     expect(resolveWebLink('/projects/18/tasks/412')).toEqual({ kind: 'tab', route: '/projects/18/tasks/412', app: 'projects' });
     expect(resolveWebLink('/projects?project=18')).toEqual({ kind: 'tab', route: '/projects?project=18', app: 'projects' });
@@ -48,7 +48,14 @@ describe('Projects links land in the native app', () => {
     expect(resolveWebLink('/projects/workload')).toEqual({ kind: 'tab', route: '/projects/workload', app: 'projects' });
     expect(resolveWebLink('/projects/time?tab=queue')).toEqual({ kind: 'tab', route: '/projects/time?tab=queue', app: 'projects' });
     expect(resolveWebLink('/projects/18/timelines')).toEqual({ kind: 'browser', path: '/projects/18/timelines', app: 'projects' });
-    expect(resolveWebLink('/projects/budget')).toEqual({ kind: 'browser', path: '/projects/budget', app: 'projects' });
-    expect(resolveWebLink('/projects/risks?project_id=3')).toEqual({ kind: 'browser', path: '/projects/risks?project_id=3', app: 'projects' });
+    expect(resolveWebLink('/projects/sprints')).toEqual({ kind: 'tab', route: '/projects/sprints', app: 'projects' });
+    // Governance is native (W12–W15).
+    expect(resolveWebLink('/projects/budget')).toEqual({ kind: 'tab', route: '/projects/budget', app: 'projects' });
+    expect(resolveWebLink('/projects/risks?project_id=3')).toEqual({ kind: 'tab', route: '/projects/risks?project_id=3', app: 'projects' });
+    for (const path of ['/projects/reports', '/projects/reports/budget', '/projects/18/budget', '/projects/18/risks', '/projects/18/changes', '/projects/18/changes/4'])
+      expect(resolveWebLink(path)).toEqual({ kind: 'tab', route: path, app: 'projects' });
+    // The one page still on the web: a project's Time tab (Time & approvals itself is native).
+    expect(resolveWebLink('/projects/18/time')).toEqual({ kind: 'browser', path: '/projects/18/time', app: 'projects' });
+    expect(resolveWebLink('/projects/time')).toEqual({ kind: 'tab', route: '/projects/time', app: 'projects' });
   });
 });

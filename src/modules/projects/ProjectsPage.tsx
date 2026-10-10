@@ -20,7 +20,6 @@ import { Rail } from './Rail';
 import { boardRoute, viewOf } from './routes';
 import { TaskPanel } from './TaskPanel';
 import { MiniTimer } from './Timer';
-import { ChangesView } from './Views';
 // ── PORTFOLIO ──
 import { PortfolioDashboard } from './screens/Dashboard';
 import { NewProjectDialog } from './screens/NewProject';
@@ -33,11 +32,21 @@ import { SprintsScreen } from './screens/Sprints';
 import { TimeScreen } from './screens/Time';
 import { TimelineScreen } from './screens/Timeline';
 import { WorkloadScreen } from './screens/Workload';
+// ── GOVERNANCE ──
+import { BudgetScreen } from './screens/Budget';
+import { ChangesScreen } from './screens/Changes';
+import { governanceTitle } from './screens/gov-routes';
+import { ReportsScreen } from './screens/Reports';
+import { RisksScreen } from './screens/Risks';
 
 /**
- * WorkSuite Projects in a tab (WS-PROJECT-SRS-001 PRJ-DSK-01, D01–D04): the project switcher and views on the left, a
- * board, My work, my time or change decisions in the middle, a task open on the right — and, offline, the banner,
- * the outbox and the choices a reconnect may need. `/projects/timer` is the mini timer window (D02).
+ * WorkSuite Projects in a tab (WS-PROJECT-SRS-001 PRJ-DSK-01, D01–D04): the project switcher and the web's views on
+ * the left; in the middle the whole module — the Dashboard, All projects, Templates, Clients, the Activity log and
+ * Module settings, a project's page with its tabs (overview, board, timeline, sprints, milestones, team, budget, risks,
+ * changes, files, activity, settings), My work, Timeline & Gantt, Milestones, Sprints, Time & approvals, Team
+ * workload, Budget & cost, Risks, Change requests and Reports; a task open on the right; the New project dialog over
+ * any of them — and, offline, the banner, the outbox and the choices a reconnect may need. A project's Time tab is
+ * the one page still on the web. `/projects/timer` is the mini timer window (D02).
  */
 export default function ProjectsPage(_props: ModuleProps) {
   const { path, query } = useTab();
@@ -45,6 +54,10 @@ export default function ProjectsPage(_props: ModuleProps) {
   if (view.kind === 'timer') return <MiniTimer />;
   return <Workspace />;
 }
+
+/** The view kinds a project's tab strip names (ProjectPage's TABS) when they are opened for one project. */
+const OWN_TABS = new Set<string>(['timeline', 'milestones', 'sprints', 'budget', 'risks', 'changes']);
+const num = (v: string | undefined): number | null => (v && /^\d{1,12}$/.test(v) ? Number(v) : null);
 
 function Workspace() {
   const { path, query, go, active } = useTab();
@@ -68,13 +81,25 @@ function Workspace() {
   const boardProject = view.kind === 'board' ? view.projectId : view.kind === 'board-home' ? (recent[0] ?? pins[0] ?? null) : null;
   const current = boardProject ? (projects.get(boardProject) ?? null) : null;
 
-  // DELIVERY titles: "PRJ-0018 · Timeline", or "Projects · Timeline" module-wide.
-  const deliveryTitle = view.kind === 'timeline' ? 'Timeline' : view.kind === 'milestones' ? 'Milestones' : view.kind === 'sprints' ? 'Sprints' : view.kind === 'workload' ? 'Team workload' : null;
-  const deliveryProject = 'projectId' in view && view.kind !== 'board' && view.projectId ? (projects.get(view.projectId)?.code ?? null) : null;
-  useTabTitle(portfolioTitle(view, projects) ?? (deliveryTitle ? `${deliveryProject ?? 'Projects'} · ${deliveryTitle}` : boardProject || view.kind === 'board-home' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : view.kind === 'changes' ? 'Projects · Changes' : 'Projects'));
-  const may = usePermission();
-  // The project this view is about (its page, board or one of its own screens): noted as recent, and its tabs shown.
+  // The project this view is about (its page, board or one of its own screens): noted as recent, named in the title.
   const pageProject = view.kind === 'project' ? view.projectId : boardProject ?? ('projectId' in view ? (view.projectId ?? null) : null);
+  const pageCode = pageProject ? (projects.get(pageProject)?.code ?? null) : null;
+  // Delivery's titles: "PRJ-0018 · Timeline", or "Projects · Timeline" module-wide.
+  const deliveryTitle = view.kind === 'timeline' ? 'Timeline' : view.kind === 'milestones' ? 'Milestones' : view.kind === 'sprints' ? 'Sprints' : view.kind === 'workload' ? 'Team workload' : null;
+  useTabTitle(
+    portfolioTitle(view, projects) ??
+      governanceTitle(view, pageCode) ??
+      (deliveryTitle ? `${('projectId' in view && view.projectId ? pageCode : null) ?? 'Projects'} · ${deliveryTitle}` : boardProject || view.kind === 'board-home' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : 'Projects'),
+  );
+  const may = usePermission();
+  // A project's own screens sit under its tab strip (W04), as on the web: its board, and the delivery and governance
+  // screens opened for it (`/projects/<id>/timeline`…); a tab still on the web keeps the strip too.
+  const projectInPath = num(path[1]);
+  const ownTab: { projectId: number; tab: string } | null = boardProject
+    ? { projectId: boardProject, tab: 'board' }
+    : projectInPath && (OWN_TABS.has(view.kind) || (view.kind === 'web' && path[2]))
+      ? { projectId: projectInPath, tab: view.kind === 'web' ? (path[2] ?? '') : view.kind }
+      : null;
 
   useEffect(() => {
     if (pageProject) noteRecent(pageProject);
@@ -149,9 +174,8 @@ function Workspace() {
         {offline ? <OfflineBanner waiting={waiting} /> : null}
         <div className="flex min-h-0 flex-1">
           <main className="flex min-w-0 flex-1 flex-col bg-surface">
+            {ownTab ? <ProjectTabs projectId={ownTab.projectId} tab={ownTab.tab} onGo={go} /> : null}
             {boardProject ? (
-              <>
-              <ProjectTabs projectId={boardProject} tab="board" onGo={go} />
               <Board
                 key={boardProject}
                 projectId={boardProject}
@@ -168,7 +192,6 @@ function Workspace() {
                 onLogTime={(t) => setLogFor({ task: t })}
                 onOffline={onOffline}
               />
-              </>
             ) : view.kind === 'board-home' ? (
               <Empty
                 icon="kanban"
@@ -193,24 +216,21 @@ function Workspace() {
                 onOffline={onOffline}
               />
             ) : view.kind === 'timeline' ? (
-              <>
-                {view.projectId ? <ProjectTabs projectId={view.projectId} tab="timeline" onGo={go} /> : null}
-                <TimelineScreen key={view.projectId ?? 0} projectId={view.projectId} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
-              </>
+              <TimelineScreen key={view.projectId ?? 0} projectId={view.projectId} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
             ) : view.kind === 'milestones' ? (
-              <>
-                {view.projectId ? <ProjectTabs projectId={view.projectId} tab="milestones" onGo={go} /> : null}
-                <MilestonesScreen key={view.projectId ?? 0} projectId={view.projectId} offline={offline} onOffline={onOffline} />
-              </>
+              <MilestonesScreen key={view.projectId ?? 0} projectId={view.projectId} offline={offline} onOffline={onOffline} />
             ) : view.kind === 'sprints' ? (
-              <>
-                {view.projectId ? <ProjectTabs projectId={view.projectId} tab="sprints" onGo={go} /> : null}
-                <SprintsScreen key={view.projectId ?? 0} projectId={view.projectId} sprintId={view.sprintId} offline={offline} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
-              </>
+              <SprintsScreen key={view.projectId ?? 0} projectId={view.projectId} sprintId={view.sprintId} offline={offline} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
             ) : view.kind === 'workload' ? (
               <WorkloadScreen onOffline={onOffline} />
             ) : view.kind === 'changes' ? (
-              <ChangesView id={view.id} offline={offline} onGo={go} />
+              <ChangesScreen key={view.projectId ?? 'all'} id={view.id} projectId={view.projectId ?? null} offline={offline} onOffline={onOffline} onGo={go} />
+            ) : view.kind === 'budget' ? (
+              <BudgetScreen key={view.projectId ?? 'all'} projectId={view.projectId} offline={offline} onOffline={onOffline} onGo={go} />
+            ) : view.kind === 'risks' ? (
+              <RisksScreen key={view.projectId ?? 'all'} projectId={view.projectId} offline={offline} onOffline={onOffline} onGo={go} />
+            ) : view.kind === 'reports' ? (
+              <ReportsScreen kind={view.report} offline={offline} onOffline={onOffline} onGo={go} />
             ) : view.kind === 'dashboard' ? (
               <PortfolioDashboard offline={offline} mayCreate={may('project.manage')} onGo={go} onNew={() => setNew('blank')} onLogTime={() => setLogFor({ task: null })} onOffline={onOffline} />
             ) : isPortfolio(view) ? (
@@ -219,7 +239,7 @@ function Workspace() {
               <Empty
                 icon="external"
                 title="This page is on the web"
-                hint="This screen opens in WorkSuite on the web."
+                hint="Everything else in Projects is here; this page — a project's Time tab, or an address this app does not know — opens in WorkSuite on the web."
                 action={
                   <Button variant="primary" icon="external" onClick={() => openWeb(view.kind === 'web' ? view.path : '/projects')}>
                     Open in the browser

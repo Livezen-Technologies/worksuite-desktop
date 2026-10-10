@@ -207,7 +207,8 @@ describe('the Projects app’s addresses (PRJ-INT-02)', () => {
     expect(at('/projects/18/sprints/7').view).toEqual({ kind: 'sprints', projectId: 18, sprintId: 7 });
     expect(at('/projects/workload').view).toEqual({ kind: 'workload' });
     expect(at('/projects/time?tab=queue').view).toEqual({ kind: 'time' });
-    expect(at('/projects/18/budget').view).toEqual({ kind: 'web', path: '/projects/18/budget' });
+    expect(at('/projects/18/budget').view).toEqual({ kind: 'budget', projectId: 18 });
+    expect(at('/projects/18/time').view).toEqual({ kind: 'web', path: '/projects/18/time' });
     expect(at('/projects/sprints/x').view).toEqual({ kind: 'web', path: '/projects/sprints/x' });
     expect(boardRoute(18, 412)).toBe('/projects/18/tasks/412');
     expect(boardRoute(18)).toBe('/projects/18/board');

@@ -308,7 +308,8 @@ Vault-sealed, so the database file alone gives nothing to guess against.
 - A module's documents leave through the download manager by what they are,
   never by a path: `transfers:download` takes a typed variant (Garage's
   `garageDoc` — a check-in sheet, an estimate, a work order sheet, a delivery
-  note or a report's CSV, `shared/garage-docs.ts`), and the main process
+  note or a report's CSV, `shared/garage-docs.ts`; Projects' `projectsReport`
+  — a report as CSV, Excel or PDF, `shared/projects.ts`), and the main process
   builds the address it fetches. Hotel PMS has a channel of its own,
   `pms:download` (`shared/pms-files.ts`), with the same shape and the
   `desktop.downloads` check repeated in its handler.
@@ -485,29 +486,40 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   catch-up — every few seconds without the socket, every 30 s with it; offline they read the copy and keep new orders
   and lines in the outbox, and everything with money, a void, a booking or a table move is disabled.
 - WorkSuite Projects (`modules/projects`, main process `electron/services/projects/`, rules in `shared/projects.ts`;
-  WS-PROJECT-SRS-001 PRJ-DSK-01..04, PRJ-TIM-05, NFR-09): native since 0.2.216 (it was a browser surface). The tab
-  (`ProjectsPage.tsx`) has the project switcher (⌘P), the views (Dashboard, My work, Time & approvals, change
-  requests waiting), pinned projects (kept per server and person in `localStorage`, a view preference) and recent
-  ones on the left; a project's board (`Board.tsx` — the columns, J/K, ←/→, Shift+←/→ moves the card, Enter opens,
-  T timer, L log time, N new task, ⌘F filter, ⌘2 the web's timeline, ⌥⌘O a window of its own; the keys are caught
-  in the capture phase while the tab is in front, so ⌘2 is not the shell's "tab 2" here), a task's panel
-  (`TaskPanel.tsx`), My work grouped by the reader's own day (`logic.ts: groupMyWork`) and the day's time line. Its
-  addresses are the web's (`routes.ts`: `/projects/<id>`, `/projects/<id>/board`, `/projects/<id>/tasks/<task>`,
-  `?project=`, `?task=`, `?new=`); the web screens it does not draw yet are `BROWSER_PAGES` in `shared/links.ts`.
-  The portfolio (projects 1.2.0, `screens/`) is native: All projects (`/projects/all`, every filter in the query),
-  Templates, Clients (`/projects/clients[/<id>]`), the New project dialog (`?new=blank|<template>` over any view), a
-  project's page (`/projects/<id>` overview and `/team`, `/settings`, `/activity`, `/files`, with its board one tab of
-  it — `ProjectTabs` is drawn over each of a project's own screens), the Activity log and Module settings; its calls
-  and the web's contract types are `portfolio.ts`. So are the delivery screens, with their calls and shapes in
-  `delivery.ts`: Timeline & Gantt (`/projects[/<id>]/timeline`, `GET <id>/schedule`), Milestones & billing
-  (`/projects[/<id>]/milestones`; achieve with the 409 → force + reason retry, `milestones/invoice` to Billing's
-  drafts, opened with `openLink('/billing?invoice=<id>')`), Sprints (`/projects[/<id>]/sprints[/<sprint>]`), Team
-  workload (`/projects/workload`) and Time & approvals' queue and summary (`/projects/time?tab=queue|summary`; my
-  week stays `Views.tsx: TimeView`). `/projects/board` opens the board of the project last worked in.
-  `screens/kit.tsx` is the screens' one kit. `company.tsx` is the shared company selector (G-01):
-  `useProjectCompany()` and `withOrg()` mirror the web's, the choice is the organisation filter's (`core/org-prefs`,
-  app id `projects`), and portfolio-level reads carry it as `org` in the request and the query key while one
-  project's reads do not. Every write on these screens is online only (disabled offline).
+  WS-PROJECT-SRS-001 PRJ-DSK-01..04, PRJ-TIM-05, NFR-09): native since 0.2.216 (it was a browser surface), and since
+  0.2.219 (projects 1.2.0) every screen of the web's is drawn here. The tab (`ProjectsPage.tsx`) has the project
+  switcher (⌘P), the views in the web's groups (`Rail.tsx`: Portfolio, Work, Delivery, Governance, Administer, with
+  the counts), pinned projects (kept per server and person in `localStorage`, a view preference) and recent ones on
+  the left; a project's board (`Board.tsx` — the columns, J/K, ←/→, Shift+←/→ moves the card, Enter opens, T timer,
+  L log time, N new task, ⌘F filter, ⌘2 its timeline, ⌥⌘O a window of its own; the keys are caught in the capture
+  phase while the tab is in front, so ⌘2 is not the shell's "tab 2" here), a task's panel (`TaskPanel.tsx`), My work
+  grouped by the reader's own day (`logic.ts: groupMyWork`) and the day's time line. Its addresses are the web's
+  (`routes.ts`, one `ProjectsView` kind per screen): `/projects/<id>` is a project's overview and its board
+  `/projects/<id>/board` (`/tasks/<task>` a task over it; `/projects/board` the board of the project last worked in);
+  `?project=`, `?task=` and `?new=` work over any view. The screens live in `screens/`, three families sharing one
+  kit (`screens/kit.tsx`) and one company selector:
+  - the portfolio (calls and the web's contract types in `portfolio.ts`): the Dashboard, All projects
+    (`/projects/all`, every filter in the query), Templates, Clients (`/projects/clients[/<id>]`), the New project
+    dialog (`?new=blank|<template>`), a project's page (`ProjectPage.tsx`: overview, `/team`, `/settings`,
+    `/activity`, `/files`), the Activity log and Module settings;
+  - delivery (`delivery.ts`): Timeline & Gantt (`/projects[/<id>]/timeline`, `GET <id>/schedule`), Milestones &
+    billing (`/projects[/<id>]/milestones`; achieve with the 409 → force + reason retry, `milestones/invoice` to
+    Billing's drafts, opened with `openLink('/billing?invoice=<id>')`), Sprints (`/projects[/<id>]/sprints[/<s>]`),
+    Team workload (`/projects/workload`) and Time & approvals (`/projects/time[?tab=queue|summary]`; my week is
+    `Views.tsx: TimeView`);
+  - governance (`screens/gov-api.ts`, `gov-kit.tsx` for its formatters and tones): Budget & cost
+    (`/projects/budget`, `/projects/<id>/budget`), Risks with the heat map (`/projects/risks`, `/projects/<id>/risks`),
+    Change requests — list, Raise, Withdraw and the decision with what approval does (`/projects/changes[/<id>]`,
+    `/projects/<id>/changes[/<id>]`) — and Reports (`/projects/reports[/<kind>]`) with the scheduled emails; a
+    report's CSV, Excel or PDF leaves through the download manager (`transfers:download` with `projectsReport`,
+    `shared/projects.ts`).
+  A project's own screens (board, timeline, milestones, sprints, budget, risks, changes) sit under its tab strip
+  (`ProjectPage.tsx: ProjectTabs`), as on the web. `company.tsx` is the shared company selector (G-01):
+  `useProjectCompany()`, `withOrg()` and the "Company: ▾" control `CompanySelect` mirror the web's, the choice is the
+  organisation filter's (`core/org-prefs`, app id `projects`), and portfolio-level reads carry it as `org` in the
+  request and the query key while one project's reads do not. Every write on these screens other than the outbox's
+  is online only (disabled offline). The one Projects page still on the web is a project's own Time tab
+  (`/projects/<id>/time`): `BROWSER_PAGES` in `shared/links.ts` sends it to the browser.
   The main process keeps the timer (`timer.ts`: `GET time/running` and this week's entries every minute, start, stop,
   Switch to, pause; the tray's lines, the title bar's pill and the always-on-top mini timer window `/projects/timer`,
   kind `timer`), the idle prompt (powerMonitor's idle time read every 30 s; after 15 minutes one banner, Keep 15 min
@@ -518,7 +530,8 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   banners with buttons (`notices.ts`: `project.change_waiting` → Review, `project.task_overdue` → Open task / Snooze
   1 day, claimed from the notification service as Support's are). READ_CACHE keeps `/api/projects` answers; the
   screens read the pinned boards, my work and five weeks of my time ahead (`desk.ts: keepOffline`). Sign-out clears
-  the cache and the outbox with the rest. Approvals, budget and change decisions are online only.
+  the cache and the outbox with the rest. Approvals, budget and change decisions — and raising a risk or a change
+  request, withdrawing one, scheduling a report and exporting one — are online only.
 - Tabs stay mounted while recent (instant switching) and are suspended after
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.
