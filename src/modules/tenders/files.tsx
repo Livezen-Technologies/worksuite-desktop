@@ -1,4 +1,6 @@
 import { isOfficeFile, openInOffice } from '../../core/open-document';
+import { officeOpenKind } from '@shared/office-open';
+import { openOfficeDoc, type OfficeDoc } from '../office/open-with';
 import { useEffect, useMemo, useRef, useState, type DragEvent } from 'react';
 import type { UploadTarget } from '@shared/ipc/contract';
 import type { Transfer } from '@shared/types';
@@ -203,13 +205,24 @@ export function tenderFilePath(source: Source): string {
  * file in a WorkSuite DOC / Sheet / Slides tab, anything else as the download manager opens it (PDFs in PDF Studio).
  */
 export async function saveTenderFile(source: Source, name: string, open = false) {
-  if (open && isOfficeFile(name)) return openInOffice({ kind: 'api', path: tenderFilePath(source), name });
+  // Word, Excel and PowerPoint files where Settings › Files says (#322): a WorkSuite tab by default.
+  if (open && officeOpenKind(name)) return void openOfficeDoc(tenderOfficeDoc(source, name));
+  return downloadTenderFile(source, name, open);
+}
+
+async function downloadTenderFile(source: Source, name: string, open: boolean) {
   try {
     await call('transfers:download', { ...source, name: name.replace(/[/\\]/g, '-').slice(0, 255) || 'document', open });
     toast('success', open ? `Opening ${name}…` : `Saving ${name} to your downloads.`);
   } catch (e) {
     toast('error', errorMessage(e));
   }
+}
+
+/** A tender's file as "Open with" takes it (#322): not in Drive, so WorkSuite Office asks to save it there first. */
+export function tenderOfficeDoc(source: Source, name: string): OfficeDoc {
+  const path = tenderFilePath(source);
+  return { name, apiPath: path, builtinOk: isOfficeFile(name), openBuiltin: () => openInOffice({ kind: 'api', path, name }), openSystem: () => void downloadTenderFile(source, name, true) };
 }
 
 /**

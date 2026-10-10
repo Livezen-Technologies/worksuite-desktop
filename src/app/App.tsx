@@ -17,6 +17,7 @@ import { Shell } from '../layouts/Shell';
 import { Spinner } from '../components/ui';
 import { Onboarding, SetupWizard } from './onboarding/Onboarding';
 import { Toasts } from './overlays/Toasts';
+import { OfficeOpenHost } from '../modules/office/open-with';
 import { ShowMeHost } from '../modules/ai/help/ShowMe';
 import { LockScreen } from './screens/LockScreen';
 import { AddPictureScreen } from './screens/AddPictureScreen';
@@ -126,6 +127,8 @@ export function App() {
           <PhoneHost />
         </Suspense>
       ) : null}
+      {/* "Open with" for Office files asks here: Ask every time, Save to Drive first?, not installed (#322). */}
+      {auth.stage === 'ready' && !locked ? <OfficeOpenHost /> : null}
       <Toasts />
       <ShowMeHost />
     </Suspense>

@@ -421,6 +421,9 @@ const api = {
     focusFile: call('office:focusFile'),
     externalApps: call('office:externalApps'),
     openExternal: call('office:openExternal'),
+    // WorkSuite Office, the desktop editor (#322).
+    desktopApp: call('office:desktopApp'),
+    openInDesktopApp: call('office:openInDesktopApp'),
     localCopies: call('office:localCopies'),
     uploadLocal: call('office:uploadLocal'),
     forgetLocal: call('office:forgetLocal'),

@@ -1,8 +1,8 @@
 import { createContext, useContext, type DragEvent } from 'react';
 import type { ExternalAppId, OfficeMode } from '@shared/office';
 import { canOpen } from '../../core/access';
-import { knownApps } from '../office/local';
-import { cachedOfficeActions, prefetchOfficeActions, type OfficeRouting } from './office';
+import { officeOpenWithMenu } from '../office/open-with';
+import { cachedOfficeActions, driveOfficeDoc, prefetchOfficeActions, type OfficeRouting } from './office';
 import type { MenuItem } from './Menu';
 import { IMAGE_EDIT_EXTS, OFFICE_EXTS, PREVIEW_EXTS, TONE, ZIP_EXTS, can, extOf, openWay, type DriveFile, type DriveFolder, type Key } from './api';
 import { app } from '../../core/app-state';
@@ -92,7 +92,8 @@ export function fileMenu(f: DriveFile, d: Drive, list?: DriveFile[]): MenuItem[]
     office && canEdit ? { label: 'Edit', icon: 'compose', run: () => d.office(f, 'EDIT') } : null,
     office && (oa ? oa.actions.open_read_only : true) ? { label: 'Open read-only', icon: 'eye', run: () => d.office(f, 'VIEW') } : null,
     r.legacy && OFFICE_EXTS.includes(e) && can(a, 'edit') ? { label: 'Edit in Office', icon: 'external', run: () => d.office(f) } : null,
-    ...(inApps ? knownApps(e).map((x) => ({ label: `Open in ${x.label}`, icon: 'laptop', run: () => d.openIn(f, x.id) })) : []),
+    // Open with ▸ WorkSuite Office / WorkSuite (in app) / Default app / Word & co. (#322).
+    inApps ? officeOpenWithMenu(driveOfficeDoc(f, d)) : null,
     !office && can(a, 'download') ? { label: 'Open locally', icon: 'laptop', run: () => d.download([f], true) } : null,
     { label: 'Open in the browser', icon: 'globe', run: () => d.inBrowser(f) },
     { sep: true },

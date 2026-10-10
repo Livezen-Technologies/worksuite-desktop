@@ -709,6 +709,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('office:focusFile', (input, c) => ctx.office.focusFile(c.sender, input.fileId));
   router.handle('office:externalApps', (input) => ctx.officeLocal.apps(input.extension));
   router.handle('office:openExternal', (input) => ctx.officeLocal.open(input));
+  router.handle('office:desktopApp', () => ctx.officeApp.status());
+  router.handle('office:openInDesktopApp', (input) => ctx.officeApp.open(input));
   router.handle('office:localCopies', () => ctx.officeLocal.list());
   router.handle('office:uploadLocal', (input) => ctx.officeLocal.upload(input.id, input.how));
   router.handle('office:forgetLocal', (input) => ctx.officeLocal.forget(input.id));

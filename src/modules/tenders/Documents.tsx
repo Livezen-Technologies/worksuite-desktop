@@ -9,7 +9,8 @@ import { cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
 import { K, type DocAccess, type TenderDoc } from './api';
-import { AttachMenu, saveTenderFile, Uploading, useDropZone, useTenderUploads } from './files';
+import { AttachMenu, saveTenderFile, tenderOfficeDoc, Uploading, useDropZone, useTenderUploads } from './files';
+import { OpenWithButton } from '../office/open-with';
 import { addDocuments, DOC_KINDS, docKindLabel, removeDocument, replaceDocument, updateDocument } from './work';
 import { Checkbox } from '../../components/Checkbox';
 
@@ -104,6 +105,7 @@ export default function Documents({ id, docs, can }: { id: number; docs: TenderD
                       <button type="button" className={btnSmall + ' !h-7'} onClick={() => void saveTenderFile({ tenderDocument: d.id }, f!.download_name, true)}>
                         Open
                       </button>
+                      <OpenWithButton doc={tenderOfficeDoc({ tenderDocument: d.id }, f!.download_name)} className={btnSmall + ' !h-7 !w-7 justify-center !px-0'} />
                       <button type="button" aria-label={`Save ${d.title}`} title="Save to your downloads" className={btnSmall + ' !h-7 !w-7 justify-center !px-0'} onClick={() => void saveTenderFile({ tenderDocument: d.id }, f!.download_name)}>
                         <Icon name="download" size={13} />
                       </button>

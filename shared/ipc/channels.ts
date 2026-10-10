@@ -323,6 +323,8 @@ export const INVOKE_CHANNELS = [
   'office:focusFile',
   'office:externalApps',
   'office:openExternal',
+  'office:desktopApp',
+  'office:openInDesktopApp',
   'office:localCopies',
   'office:uploadLocal',
   'office:forgetLocal',

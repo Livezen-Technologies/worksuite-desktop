@@ -61,11 +61,13 @@ describe('the menus follow what the server allows', () => {
   const file = (capabilities: string[], owner = false) => ({ id: 1, name: 'Report.docx', extension: 'docx', access: { level: 'view' as const, owner, via: null, can_download: true, capabilities } }) as never;
 
   it('a viewer who may download gets no sharing, renaming or trash', () => {
-    const m = labels(fileMenu(file(['open', 'preview', 'download']), d));
+    const items = fileMenu(file(['open', 'preview', 'download']), d);
+    const m = labels(items);
     expect(m).toContain('Download');
-    // An Office file opens read-only in its tab, or in an app on this computer (the default one until others are found).
+    // An Office file opens read-only in its tab, or with Open with ▸ (#322): WorkSuite Office, its tab, or the app here.
     expect(m).toContain('Open read-only');
-    expect(m).toContain('Open in the default app');
+    const openWith = items.find((x) => 'label' in x && x.label === 'Open with');
+    expect(openWith && 'submenu' in openWith ? labels(openWith.submenu ?? []) : []).toEqual(['WorkSuite Office', 'WorkSuite (in app)', 'Default app on this computer']);
     expect(m).not.toContain('Open locally');
     expect(m).not.toContain('Share…');
     expect(m).not.toContain('Rename');

@@ -6,6 +6,8 @@ import { app } from '../../core/app-state';
 import { call, errorMessage, on } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { isOfficeFile, openInOffice } from '../../core/open-document';
+import { officeOpenKind } from '@shared/office-open';
+import { OpenWithButton, openOfficeDoc, type OfficeDoc } from '../office/open-with';
 import { useStore } from '../../core/store';
 import { attachmentRisk } from '@shared/attachments';
 import { ticketRoute } from '@shared/support';
@@ -1201,6 +1203,22 @@ function Attachments({ m, msgRef, offline, gate, pending }: { m: MessageDetail; 
       .then(() => toast('info', open ? text('Opening {name}…', { name: a.name }) : text('Downloading {name}…', { name: a.name })))
       .catch((e) => toast('error', errorMessage(e)));
   const iconButton = 'inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle';
+  /** An attachment as "Open with" takes it (#322): not in Drive, so WorkSuite Office asks to save it there first. */
+  const officeDoc = (a: MessageDetail['attachments'][number]): OfficeDoc => {
+    const path = `/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, dl: '1', ...(mailbox ? { mailbox } : {}) })}`;
+    return {
+      name: a.name,
+      apiPath: path,
+      builtinOk: isOfficeFile(a.name),
+      openBuiltin: () => openInOffice({ kind: 'api', name: a.name, path }),
+      openSystem: () => void download(a, true),
+      // The server copies it into My files (MAIL-RD-03): nothing goes through this computer.
+      saveToDrive: async () => {
+        const r = await apiPost<{ id?: number; file_id?: number } | null>(`/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}/save`, mailbox ? { mailbox } : {}, { folder, mime: a.mime || 'application/octet-stream', ...(mailbox ? { mailbox } : {}) });
+        return Number(r?.id ?? r?.file_id ?? 0) || null;
+      },
+    };
+  };
   return (
     <div className="flex max-h-[30%] shrink-0 flex-col gap-2 overflow-y-auto border-t border-line px-6 py-3 scroll-thin" aria-label={text('Attachments')}>
       {items.map((a) => {
@@ -1255,8 +1273,9 @@ function Attachments({ m, msgRef, offline, gate, pending }: { m: MessageDetail; 
                       .catch((e) => toast('error', errorMessage(e)))
                   : !local && isPdf(a)
                     ? openPdf({ kind: 'mail', uid: String(uid), ref: a.ref, folder, mailbox: mailbox ?? null, name: a.name }, a.name)
-                    : !local && isOfficeFile(a.name)
-                      ? openInOffice({ kind: 'api', name: a.name, path: `/api/mail/messages/${uid}/attachments/${encodeURIComponent(a.ref)}?${new URLSearchParams({ folder, dl: '1', ...(mailbox ? { mailbox } : {}) })}` })
+                    : !local && officeOpenKind(a.name)
+                      ? // Where Settings › Files says (#322): a WorkSuite DOC / Sheet / Slides tab, WorkSuite Office, or the app here.
+                        void openOfficeDoc(officeDoc(a))
                       : void download(a, true)
               }
               className="flex min-w-0 flex-1 items-center gap-3 rounded-[10px] border border-line px-3 py-2 text-left hover:bg-subtle"
@@ -1274,6 +1293,7 @@ function Attachments({ m, msgRef, offline, gate, pending }: { m: MessageDetail; 
                 </span>
               </span>
             </button>
+            {risk !== 'macro' && !local ? <OpenWithButton doc={officeDoc(a)} className={iconButton} /> : null}
             {risk !== 'macro' ? (
               <button type="button" onClick={() => void download(a, false)} aria-label={text('Download {name}', { name: a.name })} title={text('Download')} className={iconButton}>
                 <Icon name="download" size={16} />

@@ -251,8 +251,10 @@ export class SettingsService {
     const drive = patch.drive ? normalizeDrivePrefs({ ...this.prefs.drive, ...patch.drive }) : this.prefs.drive;
     // And the link settings (#170).
     const links = patch.links ? { ...this.prefs.links, ...patch.links } : this.prefs.links;
+    // And "Open Office files in" (#322): one kind at a time.
+    const officeOpen = patch.officeOpen ? { ...this.prefs.officeOpen, ...patch.officeOpen } : this.prefs.officeOpen;
     const before = this.prefs.appearance!;
-    this.prefs = { ...this.prefs, ...patch, meetRecording, drive, ...(links ? { links } : {}), appearance: before };
+    this.prefs = { ...this.prefs, ...patch, meetRecording, drive, ...(links ? { links } : {}), ...(officeOpen ? { officeOpen } : {}), appearance: before };
     if (patch.appearance !== undefined || patch.theme !== undefined || patch.darkColorProfile !== undefined) {
       const next: Partial<AppearancePrefs> = { ...before, ...patch.appearance };
       if (patch.darkColorProfile !== undefined && patch.appearance?.darkProfile === undefined) {

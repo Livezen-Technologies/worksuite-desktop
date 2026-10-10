@@ -105,6 +105,23 @@ The verifier never leaves WorkSuite Office, so a program that opened the link wi
 cannot use. `/api/auth/apps/*` is refused by the renderer's API proxy: only the main process mints these codes.
 Needs the server's Auth 1.2.0.
 
+### Open with WorkSuite Office (worksuite-desktop#322)
+
+"Open with ▸ WorkSuite Office" on a Word, Excel or PowerPoint file hands WorkSuite Office a link the main process
+builds (`shared/office-open.ts`, `electron/services/office-app.ts`); the page names only the file:
+
+- a Drive file: `worksuiteoffice://open?v=1&server=<origin>&uid=<user>[&org=<id>]&file=<id>&name=<name>[&mode=edit|view]`
+  — WorkSuite Office opens it with its own sign-in (Continue as, above) and Save is `POST /api/files/{id}/versions`
+  with `base_version`, a new version of the same file;
+- a copy of a file not in Drive (mail attachment, chat upload, tender document), when the person chose
+  **Open a copy only** over **Save to Drive & open**: `…&src=</api/… or /media/… path>&name=<name>` — read with
+  WorkSuite Office's own session.
+
+WorkSuite Office counts as installed when the system has a handler for `worksuiteoffice://`
+(`app.getApplicationNameForProtocol`); otherwise the app offers its download. A file already open in WorkSuite
+Office is focused there rather than opened twice. The WorkSuite Office side (handling `open`, single-instance
+focus, Finder/Explorer "Open With" registration) lives in the worksuite-office repository.
+
 ### Revocation
 
 Revoking a laptop ends its session and queues a wipe. The server answers
