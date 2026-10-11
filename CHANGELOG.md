@@ -11,6 +11,19 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.242 — 2026-10-11
+
+- **New project from a template (#337).** "Start from" in New project now has search and five groups: Blank project,
+  Copy an existing project, Company templates, My templates and ten built-in Template packs (Tender bid submission,
+  Website development, E-commerce store, Software licence deployment, IT support / AMC, Hosting / email migration,
+  Mobile app, Marketing campaign, Training / course delivery, Event). Choosing one fills the form and shows a Preview
+  of its phases on a timeline that follows Starts and Ends, its tasks, budget lines, folders and automations. Tick what
+  to include, pick a person for each role (or leave it open), and Create project builds it all in one step; the
+  project footer says which template and version it came from. Save as template works from any project, and
+  Projects › Templates manages them (duplicate, edit, versions, archive, import and export as JSON).
+- The Budget field has its amount box back next to the currency, and Starts/Ends use a date picker that shows dates
+  as "11 Oct 2026". (Projects 1.3.0; needs WorkSuite server Project 2.2.0)
+
 ## 0.2.241 — 2026-10-11
 
 - **Meet invitations show what actually happened (#347).** The People tab could say "Accepted · joining" for good

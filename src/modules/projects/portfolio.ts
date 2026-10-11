@@ -161,6 +161,10 @@ export interface FullDetail {
     next_event: { title: string; at: string } | null;
     tender: { id: number; code: string; status: string | null } | null;
   };
+  /** The template the project was made from (Projects 2.2, #337). */
+  template?: { key: string; name: string; version: number | null; at: string | null } | null;
+  /** The budget in lines: labour by role, and expenses (Projects 2.2). */
+  budget_lines?: Array<{ id: number; label: string; kind: 'labour' | 'expense'; role: string | null; hours: string; rate: string; amount: string; note: string | null }>;
   next_statuses: ProjectStatus[];
   can: Can;
 }

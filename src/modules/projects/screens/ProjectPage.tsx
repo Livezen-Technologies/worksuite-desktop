@@ -18,6 +18,7 @@ import {
 import { ActivityList } from './Activity';
 import { Chip, ErrorLine, Failed, Field, HealthChip, Kpi, Loading, MenuButton, Mono, Nothing, PageHead, Panel, ProjectStatusChip, areaClass, inputClass, needsConnection, useAsk, withConfirm } from './kit';
 import { ProjectTeam } from './Team';
+import { SaveAsTemplate } from './SaveAsTemplate';
 
 /**
  * W04 · One project (PRJ-STS, PRJ-BUD, PRJ-INT), natively: its header (status and health in words, Start timer, Edit,
@@ -117,8 +118,9 @@ export function ProjectPage({ projectId, tab, offline, onGo, onOpenTask, onOffli
 function Header({ d, offline, onGo }: { d: FullDetail; offline: boolean; onGo: (route: string) => void }) {
   const qc = useQueryClient();
   const timer = useProjectTimer();
-  const { confirm, prompt, dialog } = useAsk();
+  const { confirm, dialog } = useAsk();
   const [rebaselining, setRebaselining] = useState(false);
+  const [saving, setSaving] = useState(false);
   const p = d.project;
   const can = d.can ?? {};
   const refresh = () => void qc.invalidateQueries({ queryKey: qk.all });
@@ -157,18 +159,6 @@ function Header({ d, offline, onGo }: { d: FullDetail; offline: boolean; onGo: (
     }
   };
 
-  const saveAsTemplate = async () => {
-    const name = await prompt({ title: 'Save as template', message: 'Milestones, tasks, dependencies, roles and risks are copied; dates become offsets from the start.', confirmLabel: 'Save template', input: { label: 'Template name', value: `${p.name} template`, required: true } });
-    if (!name?.trim()) return;
-    try {
-      const r = await pwrites.saveAsTemplate(p.id, name.trim());
-      toast('success', `Template ${r?.code ?? ''} saved`.replace('  ', ' '));
-      refresh();
-    } catch (e) {
-      toast('error', errorText(e, 'The template could not be saved.'));
-    }
-  };
-
   const remove = async () => {
     if (!(await confirm({ title: `Delete ${p.code}?`, message: `“${p.name}” and its board, milestones and plan are removed. Logged time and costs stay in the records.`, confirmLabel: 'Delete project', danger: true }))) return;
     try {
@@ -187,7 +177,7 @@ function Header({ d, offline, onGo }: { d: FullDetail; offline: boolean; onGo: (
     ? [
         { label: 'Re-baseline…', onSelect: () => setRebaselining(true) },
         { label: p.is_template ? 'Unmark as template' : 'Mark as template', onSelect: () => void toggleTemplate() },
-        { label: 'Save as template…', onSelect: () => void saveAsTemplate() },
+        { label: 'Save as template…', onSelect: () => setSaving(true) },
         { label: 'Delete project…', onSelect: () => void remove(), danger: true },
       ]
     : [];
@@ -214,6 +204,7 @@ function Header({ d, offline, onGo }: { d: FullDetail; offline: boolean; onGo: (
           <ProjectStatusChip status={p.status} />
           {d.health?.status && d.health.status !== 'closed' ? <HealthChip health={d.health.status} /> : null}
           {p.is_template ? <Chip>Template</Chip> : null}
+          {d.template ? <Chip tone="bg-subtle text-ink-3">{`From ${d.template.name}${d.template.version ? ` v${d.template.version}` : ''}`}</Chip> : null}
         </>
       }
       actions={
@@ -236,6 +227,7 @@ function Header({ d, offline, onGo }: { d: FullDetail; offline: boolean; onGo: (
             Open on the web
           </Button>
           {rebaselining ? <Rebaseline d={d} offline={offline} onClose={() => setRebaselining(false)} onDone={refresh} /> : null}
+          {saving ? <SaveAsTemplate d={d} onClose={() => setSaving(false)} onDone={() => (setSaving(false), refresh())} /> : null}
           {dialog}
         </>
       }
