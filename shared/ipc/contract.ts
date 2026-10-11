@@ -706,6 +706,13 @@ export const contract = {
   /** Restart WorkSuite after Accessibility was granted (worksuite-desktop#147): the app and its input helper start again. */
   'rc:restart': ch(none, { session: true, rate: 1 }),
   'rc:setAllowRequests': ch(z.object({ value: z.boolean() }), { session: true, rate: 5 }),
+  /**
+   * The emergency chord this computer uses (RC09), where the organisation has
+   * not set one of its own. `null` puts it back to the default. Refused in the
+   * main process when a policy has chosen — the renderer's own check is for
+   * the person's benefit, not the rule's.
+   */
+  'rc:setStopChord': ch(z.object({ chord: z.string().max(64).nullable() }), { session: true, rate: 5 }),
   'rc:shareStarted': ch(
     z.object({
       uuid: z.string().regex(/^[A-Za-z0-9-]{8,64}$/),
@@ -1638,6 +1645,7 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'rc:checks': { checks: DiagnosticCheck[] };
   'rc:restart': void;
   'rc:setAllowRequests': RemoteControlView;
+  'rc:setStopChord': RemoteControlView;
   'rc:shareStarted': { shareId: number; controlOffered: boolean; why: string | null };
   'rc:shareChanged': void;
   'rc:shareStopped': void;

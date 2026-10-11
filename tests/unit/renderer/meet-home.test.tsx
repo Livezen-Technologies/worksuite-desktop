@@ -22,7 +22,7 @@ const nav = vi.fn();
 /** The route's own query, so a screen opened with a flag can be drawn as it really is. */
 let tabQuery = new URLSearchParams();
 
-const { ApiError, apiGet, apiPost } = await import('../../../src/core/api');
+const { ApiError, apiGet, apiPost, apiPut } = await import('../../../src/core/api');
 const { call } = await import('../../../src/core/bridge');
 const { app } = await import('../../../src/core/app-state');
 const { byDay, checkMeetingInput, historyJoinable, lengthLabel, meetingMinutes, upcomingJoinable } = await import('../../../src/modules/meet/home');
@@ -104,8 +104,12 @@ describe('the rules', () => {
   });
 });
 
-function serve(data: { upcoming?: unknown[]; history?: unknown[]; recordings?: unknown[] }) {
+function serve(data: { upcoming?: unknown[]; history?: unknown[]; recordings?: unknown[]; personal?: unknown }) {
   vi.mocked(apiGet).mockImplementation((async (path: string, q?: Record<string, string>) => {
+    if (path === '/api/meet/personal') {
+      if (data.personal) return data.personal;
+      throw new ApiError(503, 'Personal rooms are not available on this server yet.', null);
+    }
     if (path === '/api/meet/upcoming') return { meetings: data.upcoming ?? [] };
     if (path === '/api/meet/history') return { meetings: data.history ?? [] };
     if (path === '/api/meet/recordings') return { recordings: data.recordings ?? [] };
@@ -201,6 +205,95 @@ describe('Meet Home', () => {
 
     expect(await screen.findByRole('alert')).toBeTruthy();
     expect(vi.mocked(call).mock.calls.some(([c]) => c === 'windows:open')).toBe(false);
+  });
+
+  it('shows the personal room with its link, Start and Copy (D01)', async () => {
+    serve({ personal: { uuid: UUID, slug: 'hasarinda', title: 'Hasarinda’s room', url: 'https://app.worksuite.lk/meet/hasarinda', code: 'B5D 1C8 E2', locked: false, passcode: null } });
+    home();
+
+    expect(await screen.findByText('app.worksuite.lk/meet/hasarinda')).toBeTruthy();
+    const card = screen.getByRole('region', { name: 'Your personal room' });
+
+    fireEvent.click(within(card).getByRole('button', { name: /Start/ }));
+    await waitFor(() => expect(vi.mocked(call).mock.calls.some(([c, a]) => c === 'windows:open' && (a as { route: string }).route === `/meet/${UUID}`)).toBe(true));
+  });
+
+  it('says what renaming costs before it happens, and refuses a name the rules do not allow (D01)', async () => {
+    serve({ personal: { uuid: UUID, slug: 'hasarinda', title: 'Hasarinda’s room', url: 'https://app.worksuite.lk/meet/hasarinda', code: 'B5D 1C8 E2', locked: false, passcode: null } });
+    home();
+    fireEvent.click(await screen.findByRole('button', { name: 'Rename' }));
+
+    // The cost, stated rather than discovered: a vanity address is a thing
+    // other people have written down.
+    expect(screen.getByText(/will not reach you after this/)).toBeTruthy();
+
+    const box = screen.getByRole('textbox', { name: 'The name in your link' });
+
+    fireEvent.change(box, { target: { value: 'support' } });
+    expect((await screen.findByRole('alert')).textContent).toMatch(/WorkSuite itself/);
+    expect(screen.getByRole('button', { name: 'Use this name' }).hasAttribute('disabled')).toBe(true);
+
+    fireEvent.change(box, { target: { value: 'design-team' } });
+    expect(screen.queryByRole('alert')).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Use this name' }));
+    await waitFor(() => expect(vi.mocked(apiPut)).toHaveBeenCalledWith('/api/meet/personal', { slug: 'design-team' }));
+  });
+
+  it('draws no card at all where the server has no personal rooms (D01)', async () => {
+    // A server mid-upgrade answers 503. An empty card offering a link that
+    // cannot exist would be worse than no card.
+    serve({});
+    vi.mocked(apiGet).mockImplementation((async (path: string) => {
+      if (path === '/api/meet/personal') throw new ApiError(503, 'Personal rooms are not available on this server yet.', null);
+      if (path === '/api/meet/upcoming') return { meetings: [] };
+      if (path === '/api/meet/history') return { meetings: [] };
+      if (path === '/api/meet/recordings') return { recordings: [] };
+      return {};
+    }) as never);
+    home();
+
+    await waitFor(() => expect(screen.getByText('Upcoming meetings')).toBeTruthy());
+    expect(screen.queryByRole('region', { name: 'Your personal room' })).toBeNull();
+  });
+
+  it('offers Rejoin for the meeting still open, and not for one that ended (D07)', async () => {
+    serve({ history: [hist({ status: 'open', started_at: at(-20), ended_at: null, title: 'Weekly team sync' })] });
+    home();
+
+    expect(await screen.findByRole('button', { name: /Rejoin/ })).toBeTruthy();
+    cleanup();
+
+    serve({ history: [hist({ status: 'ended' })] });
+    home();
+    await waitFor(() => expect(screen.getByText('Recent meetings')).toBeTruthy());
+    expect(screen.queryByRole('button', { name: /Rejoin/ })).toBeNull();
+  });
+
+  it('says the devices are ready without switching anything on (D07)', async () => {
+    serve({});
+    vi.mocked(call).mockImplementation((async (channel: string) =>
+      channel === 'media:permissions'
+        ? { rows: [{ id: 'camera', label: 'Camera', state: 'granted', detail: '' }, { id: 'microphone', label: 'Microphone', state: 'granted', detail: '' }] }
+        : null) as never);
+    home();
+
+    expect(await screen.findByText(/Camera and microphone ready/)).toBeTruthy();
+    // Nothing was opened to find that out: no camera, no microphone.
+    const { createLocalVideoTrack, createLocalAudioTrack } = await import('livekit-client');
+
+    expect(vi.mocked(createLocalVideoTrack)).not.toHaveBeenCalled();
+    expect(vi.mocked(createLocalAudioTrack)).not.toHaveBeenCalled();
+  });
+
+  it('names the device this computer has blocked (D07)', async () => {
+    serve({});
+    vi.mocked(call).mockImplementation((async (channel: string) =>
+      channel === 'media:permissions'
+        ? { rows: [{ id: 'camera', label: 'Camera', state: 'denied', detail: '' }, { id: 'microphone', label: 'Microphone', state: 'granted', detail: '' }] }
+        : null) as never);
+    home();
+
+    expect(await screen.findByText('The camera is blocked by this computer')).toBeTruthy();
   });
 
   it('warns once the system has actually refused something, and points at the one Settings page that fixes it (D01)', async () => {

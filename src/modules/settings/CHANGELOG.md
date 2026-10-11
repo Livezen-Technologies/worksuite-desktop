@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.34.0 — 2026-10-11
+
+- Settings › Remote control measures the media path when asked: whether UDP leaves this network and whether the relay answers, gathered from the STUN and TURN servers this server hands out (RC09).
+- The emergency stop can be changed on this computer while the organisation has not set one of its own — two modifiers at least, from chords known to register, and never off.
+
 ## 1.33.0 — 2026-10-11
 
 - Settings › Meet gained Behaviour — pop the call out when you switch apps, global mute and camera keys, share computer sound when presenting, and video quality on battery — and System permissions: camera, microphone, screen recording, accessibility and notifications, each with where it is granted.

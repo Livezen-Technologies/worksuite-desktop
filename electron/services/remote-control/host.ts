@@ -263,6 +263,10 @@ export function createRemoteControl(deps: HostDeps): RemoteControlService {
     prefs: {
       allowRequests: () => deps.db.getConfig<boolean>('rc_allow_requests') ?? true,
       setAllowRequests: (v) => deps.db.setConfig('rc_allow_requests', v),
+      // Per computer, not per account: which chord is free depends on the
+      // keyboard in front of somebody and on what else is installed here.
+      stopChord: () => deps.db.getConfig<string>('rc_stop_chord') ?? null,
+      setStopChord: (v) => deps.db.setConfig('rc_stop_chord', v),
     },
   });
   return service;

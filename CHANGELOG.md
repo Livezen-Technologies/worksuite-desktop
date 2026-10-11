@@ -11,6 +11,45 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.233 — 2026-10-11
+
+The three Meet artboards that were left partial, finished — each had something behind it that had to be built or
+decided first, and this entry says which.
+
+- **Your personal room (meet 1.22.0, server Communication 1.70.0).** One address you give out once, at
+  `…/meet/hasarinda`, with **Start**, **Copy link** and renaming. This was recorded as *not built because it does
+  not exist to build*: there was no per-person room anywhere — not in the server, not in the web app, not here. The
+  server has it now, and this is its card. **Renaming says what it costs before it happens:** the old link stops
+  working at once, and the name you give up becomes free for somebody else. A server that has not run the migration
+  answers 503 and the card draws nothing at all, rather than offering a link that cannot exist.
+- **Rejoin the meeting you were last in (meet 1.22.0).** From the last day, and only one nobody has ended — the
+  laptop that slept and the window closed by accident, not yesterday's call. A button that cannot work would be
+  worse than no button.
+- **Camera and microphone ready (meet 1.22.0).** On Meet home, from the permission the system granted and the
+  devices chosen last time. **Nothing is switched on to find out:** putting a light on somebody's face for a line of
+  text on a home page is not a trade worth making, so the live measurement stays on the pre-join screen and behind
+  Check, which opens it deliberately.
+- **The media path is measured after all (settings 1.34.0).** The checks used to say UDP and TURN could not be
+  known from a settings page. That was true of the *media server* — its address arrives when a meeting is joined —
+  but a call's media only flows the way ICE finds, and ICE can be run against the STUN and TURN servers this
+  deployment already hands out. So **Run checks again** now reports whether a UDP packet left this network and came
+  back, and whether the relay answered and over which protocol. It runs **only when asked**, because gathering sends
+  packets on somebody's behalf. What it still does not claim is throughput, or the path to the particular media
+  server a meeting ends up on.
+- **The emergency stop can be changed on this computer (settings 1.34.0)** — but only while your organisation has
+  left it at the default. Where they have set one it stays theirs, because a company that standardised on a chord
+  did so to be able to tell everybody the same thing in an incident. The choices need two modifiers at least, so the
+  chord cannot be pressed by accident while you type, and there is no *off*: only which chord.
+
+**Still deliberately not built:** the second left-hand nav the D01 artboard draws, and D07 as a separate page. Of
+the nav's six entries, two are sections of the page it would sit on, one is the app's own Settings, and *Remote
+sessions* has no list view on the desktop at all — one real destination out of six, beside a sidebar that already
+says where you are. And D07 is not a second page: it is the same material in a landing-shaped arrangement, so what
+it carried that D01 did not — rejoining, device readiness — is now **on the one Meet page**, where both artboards'
+content lives together.
+
+---
+
 ## 0.2.232 — 2026-10-11
 
 - **Remote support has a desktop side (meet 1.21.0).** The server and the web app have had this feature for a

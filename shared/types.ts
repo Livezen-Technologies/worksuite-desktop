@@ -1527,6 +1527,8 @@ export interface RemoteControlView {
   emergencyChord: string;
   /** False when another app holds the emergency chord; the indicator's Stop still works. */
   chordRegistered: boolean;
+  /** True when the organisation set the chord, so it is not this person's to change (RC09). */
+  chordSetByOrganisation?: boolean;
   share: { uuid: string; shareId: number; label: string; kind: 'screen' | 'window'; allowRequests: boolean; paused: boolean } | null;
   requests: RemoteControlRequestView[];
   session: RemoteControlSessionView | null;

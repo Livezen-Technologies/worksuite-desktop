@@ -228,6 +228,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     await restartForAccessibility({ stopControl: () => rc.shutdown('stopped'), stopProbes, relaunch: (safe, args) => ctx.relaunch(safe, args) });
   });
   router.handle('rc:setAllowRequests', (input) => rc.setAllowRequests(input.value));
+  router.handle('rc:setStopChord', (input) => rc.setStopChord(input.chord));
   router.handle('rc:shareStarted', async (input, c) => {
     fromMeeting(c.sender);
     const granted = ctx.screenShare.lastGranted(c.sender.id);

@@ -1,6 +1,6 @@
 import { LivestreamDestinations } from '../meet/Livestreaming';
 import { ColorProfiles } from './Appearance';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, useRef, type ReactNode } from 'react';
 import { categoryVisible } from '@shared/access';
 import { FOLLOW_UP_DEFAULTS, QUICK_ASK_SHORTCUTS, type AiDisplay, type ChatDrawerMode, type Preferences, type RemoteControlIdentity, type RemoteControlView, type WebchatFollowUpPrefs } from '@shared/types';
@@ -9,6 +9,9 @@ import { app, isLocked, updatePrefs } from '../../core/app-state';
 import { call, errorMessage, isMac, on } from '../../core/bridge';
 import { permissionLabel, permissionsMissing } from '@shared/meet-permissions';
 import { meetDiagnosticsSummary } from '@shared/meet-diagnostics';
+import { iceChecks } from '@shared/ice-probe';
+import { STOP_CHORD_CHOICES } from '@shared/remote-control/stop-chord';
+import { probeIce } from '../meet/ice';
 import { PROTECTED_APP_LABELS } from '@shared/remote-control/protected-apps';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, shortcutMeta, DEFAULT_SHORTCUTS } from '../../core/commands';
 import { LANGUAGES, t, text } from '../../core/i18n';
@@ -1792,8 +1795,25 @@ export function clipboardLabel(policy: 'off' | 'text_only' | 'text_and_files' | 
  */
 function RemoteControlChecks() {
   const q = useQuery({ queryKey: ['rc-checks'], queryFn: () => call('rc:checks'), refetchOnWindowFocus: false, staleTime: 30_000 });
-  const rows = q.data?.checks ?? [];
-  const worst = rows.length ? meetDiagnosticsSummary(rows) : null;
+  /*
+   * The media path (RC09), measured here rather than in the main process:
+   * gathering ICE candidates needs a browser's own WebRTC. It runs only when
+   * asked — gathering sends UDP on somebody's behalf, and a settings page that
+   * did that on every visit would be making traffic nobody asked for.
+   */
+  const probe = useMutation({ mutationFn: () => probeIce() });
+  const rows = [...(q.data?.checks ?? []).filter((r) => r.id !== 'meet-media'), ...iceChecks(probe.data ?? null)];
+  /*
+   * The one word at the top speaks only for rows that were actually measured.
+   * A list of nothing but "not measured yet" would otherwise read as "nothing
+   * in the way", which is the reassurance these checks exist to withhold.
+   */
+  const measured = rows.filter((r) => r.status !== 'skip');
+  const worst = measured.length ? meetDiagnosticsSummary(measured) : null;
+  const run = () => {
+    void q.refetch();
+    probe.mutate();
+  };
 
   return (
     <div className="mt-4 rounded-[12px] border border-line bg-surface p-4">
@@ -1805,12 +1825,18 @@ function RemoteControlChecks() {
           </Chip>
         ) : null}
         <span className="flex-1" />
-        <Button size="sm" variant="ghost" icon="refresh" loading={q.isFetching} onClick={() => void q.refetch()}>
+        <Button size="sm" variant="ghost" icon="refresh" loading={q.isFetching || probe.isPending} onClick={run}>
           Run checks again
         </Button>
       </div>
       {q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
-      {!rows.length && q.isLoading ? <Spinner /> : null}
+      {!q.data && q.isLoading ? <Spinner /> : null}
+      {!probe.data && !probe.isPending ? (
+        <p className="pb-2 text-[12px] text-ink-3">
+          The media path is not checked until you ask: it sends a few packets to this server&rsquo;s relays to find out whether a call&rsquo;s audio and video can
+          leave this network.
+        </p>
+      ) : null}
       <ul className="flex flex-col" data-testid="rc-checks">
         {rows.map((r) => (
           <li key={r.id} className="flex items-start gap-2.5 border-t border-line py-2.5 first:border-t-0 first:pt-0">
@@ -1935,6 +1961,16 @@ export function RemoteControlSection() {
       toast('error', errorMessage(e));
     }
   };
+  /** A different chord on this computer. The main process has the last word. */
+  const chooseChord = async (chord: string) => {
+    try {
+      await fresh(await call('rc:setStopChord', { chord }));
+      toast('success', `The emergency stop is now ${chord}.`);
+    } catch (e) {
+      toast('error', errorMessage(e));
+      void q.refetch();
+    }
+  };
   const restart = async () => {
     setRestarting(true);
     try {
@@ -2052,10 +2088,32 @@ export function RemoteControlSection() {
       <Row label="Let people ask to control my screen" hint="The starting choice each time you share; you can change it in the share picker.">
         <Switch label="Let people ask to control my screen" checked={v.allowRequests} disabled={!works} onChange={(x) => void set(x)} />
       </Row>
-      <Row label="Emergency stop" hint="Ends control at once, whatever the other person is doing. It is never passed on to them.">
-        <span className="font-mono text-[13px] text-ink">{v.emergencyChord}</span>
-        {!v.chordRegistered ? <span className="ml-2 text-[12px] text-warning">Another app holds this shortcut — use Stop on the bar instead.</span> : null}
+      {/* RC09: changeable here only while the organisation has left it at the
+        * default. Where they have set one, the row stays what it was — a
+        * company that standardised on a chord did so to be able to tell
+        * everybody the same thing in an incident. */}
+      <Row
+        label="Emergency stop"
+        hint="Ends control at once, whatever the other person is doing. It is never passed on to them, and it cannot be turned off — only changed."
+        lock={v.chordSetByOrganisation ? { reason: 'Set by your organisation’s Meet policy.' } : undefined}
+      >
+        {v.chordSetByOrganisation ? (
+          <span className="font-mono text-[13px] text-ink">{v.emergencyChord}</span>
+        ) : (
+          <Select
+            value={v.emergencyChord}
+            aria-label="Emergency stop"
+            options={STOP_CHORD_CHOICES.map((c) => ({ value: c.chord, label: c.chord }))}
+            onValueChange={(chord) => void chooseChord(String(chord))}
+          />
+        )}
+        {!v.chordRegistered ? <span className="ml-2 text-[12px] text-warning">Another app holds this shortcut — choose another, or use Stop on the bar.</span> : null}
       </Row>
+      {!v.chordSetByOrganisation ? (
+        <p className="-mt-2 pb-1 text-[12px] text-ink-3">
+          {STOP_CHORD_CHOICES.find((c) => c.chord === v.emergencyChord)?.note ?? 'Two modifiers at least, so it cannot be pressed by accident while you type.'}
+        </p>
+      ) : null}
       <Row label="How input reaches this computer" hint="The system's own tools, started only while someone has control.">
         <span className="text-[13px] text-ink-2">{methodLabel(s.method)}</span>
       </Row>

@@ -46,7 +46,8 @@ const view: RemoteControlView = {
 const checks: DiagnosticCheck[] = [
   { id: 'meet-screen', label: 'Screen sharing', status: 'pass', detail: '2 screens can be captured.' },
   { id: 'meet-input', label: 'Remote input', status: 'warn', detail: 'Accessibility is off, so your screen can be seen but not controlled.' },
-  { id: 'meet-media', label: 'Media path (UDP and TURN)', status: 'skip', detail: 'Not knowable from here.' },
+  // The main process no longer answers for the media path: the probe does.
+  { id: 'meet-clipboard', label: 'Clipboard while controlled', status: 'pass', detail: 'Text only, by your organisation’s policy.' },
 ];
 
 let served: DiagnosticCheck[] = checks;
@@ -73,8 +74,14 @@ describe('the checks', () => {
 
     const list = await screen.findByTestId('rc-checks');
 
-    await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(3));
-    expect([...list.querySelectorAll('li')].map((li) => li.querySelector('b')!.textContent)).toEqual(['Screen sharing', 'Remote input', 'Media path (UDP and TURN)']);
+    await waitFor(() => expect(list.querySelectorAll('li')).toHaveLength(4));
+    // The two from the main process, then the media row the probe owns.
+    expect([...list.querySelectorAll('li')].map((li) => li.querySelector('b')!.textContent)).toEqual([
+      'Screen sharing',
+      'Remote input',
+      'Clipboard while controlled',
+      'Media path (UDP and TURN)',
+    ]);
     // One warning among them: works, with limits — not "nothing in the way".
     expect(screen.getByText('Works, with limits')).toBeTruthy();
   });
@@ -131,6 +138,42 @@ describe('the labels themselves', () => {
     expect(clipboardLabel('text_only')).toBe('Text only');
     expect(clipboardLabel('text_and_files')).toBe('Text, and files you accept');
     expect(clipboardLabel(null)).toBe('As your organisation’s policy says');
+  });
+});
+
+describe('the emergency stop', () => {
+  it('can be changed on this computer while the organisation has not set one', async () => {
+    mount();
+
+    const picker = await screen.findByRole('combobox', { name: 'Emergency stop' });
+
+    expect(picker).toBeTruthy();
+    // The note under it says what that chord costs on this keyboard.
+    expect(screen.getByText(/Windows and Linux reach it easily/)).toBeTruthy();
+  });
+
+  it('stays the organisation’s where they have set one', async () => {
+    bridge.call.mockImplementation(async (ch: string) => (ch === 'rc:checks' ? { checks: served } : { ...view, emergencyChord: 'Ctrl+Alt+F9', chordSetByOrganisation: true }));
+    mount();
+
+    expect(await screen.findByText('Ctrl+Alt+F9')).toBeTruthy();
+    expect(screen.queryByRole('combobox', { name: 'Emergency stop' })).toBeNull();
+    expect(screen.getAllByText('Set by your organization').length).toBeGreaterThan(0);
+  });
+
+  it('says it cannot be turned off, only changed', async () => {
+    mount();
+    expect(await screen.findByText(/cannot be turned off — only changed/)).toBeTruthy();
+  });
+});
+
+describe('the media path', () => {
+  it('is not measured until asked, and says so', async () => {
+    mount();
+
+    expect(await screen.findByText(/not checked until you ask/)).toBeTruthy();
+    // Nothing has gathered: the row says it has not been measured.
+    expect(screen.getByText(/Not measured yet/)).toBeTruthy();
   });
 });
 

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.22.0 — 2026-10-11
+
+- Your personal room on Meet home (D01): one address you give out once — the link, Start, Copy link, and renaming with what it costs said first (the old link stops working, and the name you give up becomes free).
+- Rejoin the meeting you were last in, when it is still open and from the last day (D07).
+- Meet home says whether the camera and microphone are ready without switching either on: the permission the system granted and the devices chosen last time (D07).
+
 ## 1.21.0 — 2026-10-11
 
 - A support session has its own tab in the meeting window: who is being helped, the ticket, the computer, what control was allowed and by whom, the files, and End session with an outcome (RC10).

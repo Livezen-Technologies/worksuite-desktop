@@ -1,6 +1,7 @@
 import type { DesktopPolicy, RemoteControlConsent, RemoteControlOffer, RemoteControlRequestView, RemoteControlSessionView, RemoteControlSupport, RemoteControlView } from '@shared/types';
-import { ControlReceiver, acceleratorsFor, chordOf, importKeys, parseChord, parseEnvelope, type Caps, type Refusal } from '@shared/remote-control/channel';
+import { ControlReceiver, acceleratorsFor, canonicalChord, chordOf, importKeys, parseChord, parseEnvelope, type Caps, type Refusal } from '@shared/remote-control/channel';
 import { PROTECTED_APPS } from '@shared/remote-control/protected-apps';
+import { chordRefusal, effectiveStopChord, policyChoseChord } from '@shared/remote-control/stop-chord';
 import { DesktopError, isDesktopError } from '../../main/errors';
 import { logger } from '../../main/log';
 import { checkGrant, type GrantDelivery } from './grant';
@@ -178,7 +179,13 @@ export interface RemoteControlDeps {
     /** Let the person here choose files in the system's dialog and offer them in the session; how many went. */
     pickAndOffer(sessionId: number, to: string): Promise<number>;
   };
-  prefs: { allowRequests(): boolean; setAllowRequests(v: boolean): void };
+  prefs: {
+    allowRequests(): boolean;
+    setAllowRequests(v: boolean): void;
+    /** The chord this computer chose, where the organisation left it at the default (RC09). */
+    stopChord?(): string | null;
+    setStopChord?(v: string | null): void;
+  };
   now?: () => number;
   timers?: { every(ms: number, fn: () => void): () => void; after(ms: number, fn: () => void): () => void };
 }
@@ -296,7 +303,9 @@ export class RemoteControlService {
     return {
       support: this.deps.support(),
       allowRequests: this.deps.prefs.allowRequests(),
-      emergencyChord: policy.remote_emergency_stop_chord,
+      emergencyChord: this.stopChord(),
+      // Whether it is theirs to change at all (RC09).
+      chordSetByOrganisation: policyChoseChord(policy.remote_emergency_stop_chord),
       chordRegistered: this.chordOk,
       share: this.share
         ? { uuid: this.share.uuid, shareId: this.share.shareId, label: this.share.source?.name ?? 'your screen', kind: this.share.source?.kind ?? 'screen', allowRequests: this.share.allowRequests, paused: this.share.paused }
@@ -775,7 +784,7 @@ export class RemoteControlService {
         return;
       }
       const keys = await importKeys(check.key);
-      live.receiver = new ControlReceiver(check.claims, keys, this.now, this.deps.policy().remote_emergency_stop_chord);
+      live.receiver = new ControlReceiver(check.claims, keys, this.now, this.stopChord());
       live.receiverVersion = check.claims.key_version;
       live.controllerIdentity = check.claims.controller_identity;
       live.receiverAt = this.now();
@@ -937,8 +946,49 @@ export class RemoteControlService {
 
   // ── the watchers ──────────────────────────────────────────────────────
 
+  /**
+   * The chord in force: the organisation's where they set one, else this
+   * computer's choice, else the default (RC09). One answer, read by the
+   * global shortcut, by the receiver that refuses to inject it, and by the row
+   * in Settings — three readings that could disagree would be three bugs.
+   */
+  stopChord(): string {
+    return effectiveStopChord(this.deps.policy().remote_emergency_stop_chord, this.deps.prefs.stopChord?.() ?? null);
+  }
+
+  /**
+   * Choose a different chord on this computer.
+   *
+   * Refused outright where the organisation has set its own: a company that
+   * standardised on a chord did so to be able to tell everybody the same thing
+   * in an incident, and a person quietly differing would make that untrue.
+   */
+  setStopChord(wanted: string | null): RemoteControlView {
+    const policy = this.deps.policy().remote_emergency_stop_chord;
+
+    if (policyChoseChord(policy)) {
+      throw new DesktopError('POLICY_DENIED', 'Your organisation sets the emergency stop for this computer.');
+    }
+
+    const next = wanted === null ? null : effectiveStopChord(policy, wanted);
+
+    if (wanted !== null && next !== canonicalChord(wanted)) {
+      throw new DesktopError('IPC_VALIDATION_FAILED', chordRefusal(wanted) || 'That chord cannot be used for the emergency stop.');
+    }
+
+    this.deps.prefs.setStopChord?.(next);
+    // Hold the new one before letting the old one go, so there is no instant
+    // in which no chord at all stops control.
+    this.registerChord();
+
+    return this.view();
+  }
+
   private registerChord(): void {
-    this.chords = acceleratorsFor(this.deps.policy().remote_emergency_stop_chord, process.platform);
+    // Let the old chord go first: registering a second accelerator for the
+    // same key would be refused, and the stale one would keep working.
+    this.unregisterChord();
+    this.chords = acceleratorsFor(this.stopChord(), process.platform);
     this.chordOk = this.chords.length > 0;
     for (const a of this.chords) {
       const ok = this.deps.shortcuts.register(a, () => {

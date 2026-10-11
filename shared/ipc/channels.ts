@@ -164,6 +164,7 @@ export const INVOKE_CHANNELS = [
   'rc:checks',
   'rc:restart',
   'rc:setAllowRequests',
+  'rc:setStopChord',
   'rc:shareStarted',
   'rc:shareChanged',
   'rc:shareStopped',

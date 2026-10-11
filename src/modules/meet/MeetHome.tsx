@@ -26,6 +26,9 @@ import { effectiveShortcuts, prettyAccelerator } from '../../core/commands';
 import { meetHomeWarning } from '@shared/meet-permissions';
 import { readCode } from '@shared/support-session';
 import { support } from './support/api';
+import { PersonalRoomCard, RejoinCard } from './PersonalRoomCard';
+import { rejoinable } from './home';
+import { readPrefs } from './devices';
 import { byDay, checkMeetingInput, dayHeading, historyJoinable, lengthLabel, meetingMinutes, scheduledMinutes, upcomingJoinable } from './home';
 import { useMeetT, type MKey } from './i18n';
 
@@ -195,6 +198,10 @@ export function MeetHome() {
     <div className="h-full overflow-y-auto scroll-thin">
       <main className="mx-auto flex max-w-[1240px] flex-col gap-5 px-5 py-6 text-[13px] sm:px-8 lg:py-7">
         <SystemWarning onFix={() => navigate('/settings/meet')} />
+        {/* D07's own two pieces: the meeting you can walk back into, and
+          * whether the devices are ready — both above everything else,
+          * because they are what somebody who just lost a call came for. */}
+        <RejoinCard meeting={rejoinable(history.data?.meetings ?? [], now)} />
         <section className="grid items-center gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <div className="flex min-w-0 flex-col gap-3.5">
             <span className="text-[12px] font-bold tracking-[0.7px] text-teal uppercase">{t('home.eyebrow')}</span>
@@ -247,9 +254,7 @@ export function MeetHome() {
                 ) : null}
               </form>
             </div>
-            <button type="button" onClick={() => setChecking(true)} className="flex items-center gap-1.5 self-start rounded-[7px] px-1 py-0.5 text-[13px] font-semibold text-primary hover:underline">
-              <Icon name="settings" size={14} /> {t('home.checkDevices')}
-            </button>
+            <DeviceReadiness onCheck={() => setChecking(true)} />
             {/* The keys for the three things this page starts (D01), in the
               * person's own accelerators. Decoration, so hidden from readers
               * that would otherwise read a key out as if it were a heading. */}
@@ -288,7 +293,10 @@ export function MeetHome() {
               </div>
             ))}
           </Card>
-          <RecentCard history={history} onChat={chat ? (id) => navigate(`/chat?room=${id}`) : undefined} onStart={() => void instant()} />
+          <div className="flex min-w-0 flex-col gap-5">
+            <PersonalRoomCard copy={(value, what) => void navigator.clipboard.writeText(value).then(() => toast('success', `${what} copied.`))} />
+            <RecentCard history={history} onChat={chat ? (id) => navigate(`/chat?room=${id}`) : undefined} onStart={() => void instant()} />
+          </div>
         </div>
         <Recordings />
       </main>
@@ -297,6 +305,52 @@ export function MeetHome() {
       {scheduling ? <ScheduleDialog onClose={() => setScheduling(false)} online /> : null}
       {checking ? <DeviceCheck name={me ?? ''} onClose={() => setChecking(false)} /> : null}
     </div>
+  );
+}
+
+/**
+ * Whether this computer is ready for a meeting (WS-MEET-ENH-01 D07).
+ *
+ * **It says what is known without opening anything.** The permission the
+ * system has granted, and the devices this computer chose last time, which are
+ * remembered locally. Switching on the camera to find out whether the camera
+ * works would put a light on somebody's face for a line of text on a home
+ * page, so the live measurement stays where it belongs: on the pre-join
+ * screen, and behind Check, which opens it deliberately.
+ */
+function DeviceReadiness({ onCheck }: { onCheck: () => void }) {
+  const t = useMeetT();
+  const q = useQuery({ queryKey: ['meet-permissions'], queryFn: () => call('media:permissions'), refetchOnWindowFocus: true, staleTime: 30_000 });
+  const rows = q.data?.rows ?? [];
+  const state = (id: 'camera' | 'microphone') => rows.find((r) => r.id === id)?.state ?? null;
+  const refused = (['camera', 'microphone'] as const).filter((id) => state(id) === 'denied');
+  // Nothing is claimed before the answer arrives, or where the answer is that
+  // this computer has no such permission to grant.
+  const known = rows.length > 0;
+  const [remembered] = useState(() => {
+    const prefs = readPrefs();
+
+    return [prefs.camId ? 'camera' : null, prefs.micId ? 'microphone' : null].filter(Boolean).length;
+  });
+
+  return (
+    <span className="flex flex-wrap items-center gap-x-2.5 gap-y-1">
+      {known ? (
+        <span className={cx('flex items-center gap-1.5 text-[12.5px]', refused.length ? 'text-warning' : 'text-ink-2')}>
+          <Icon name={refused.length ? 'warning' : 'check'} size={14} className={refused.length ? 'text-warning' : 'text-success'} />
+          {refused.length === 2
+            ? 'The camera and microphone are blocked by this computer'
+            : refused.length === 1
+              ? `The ${refused[0]} is blocked by this computer`
+              : remembered > 0
+                ? 'Camera and microphone ready, on the devices you chose last time'
+                : 'Camera and microphone ready'}
+        </span>
+      ) : null}
+      <button type="button" onClick={onCheck} className="flex items-center gap-1.5 rounded-[7px] px-1 py-0.5 text-[13px] font-semibold text-primary hover:underline">
+        <Icon name="settings" size={14} /> {t('home.checkDevices')}
+      </button>
+    </span>
   );
 }
 

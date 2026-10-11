@@ -89,3 +89,36 @@ export function byDay<T extends Pick<UpcomingRow, 'scheduled_at'>>(rows: T[]): A
   }
   return out;
 }
+
+/**
+ * The meeting Rejoin offers (WS-MEET-ENH-01 D07), or null.
+ *
+ * The one you were last in and could still walk back into: a meeting nobody
+ * ended, that you were part of, most recent first. Rejoining is the thing
+ * people do most after a laptop sleeps or a window is closed by accident, and
+ * the alternative is scrolling the history for the row you just left.
+ *
+ * A meeting whose status is `ended` is never offered, however recent — the
+ * card would be a button that cannot work. Nor is one from more than a day
+ * ago, because "rejoin" stops being the right word for yesterday's call.
+ */
+export function rejoinable<T extends Pick<HistoryRow, 'status'> & { started_at?: string | null; created_at?: string | null }>(
+  rows: T[],
+  now = Date.now(),
+  withinMs = 24 * 3600_000,
+): T | null {
+  const when = (h: T): number => {
+    // `created_at` is not nullable in the type, but a row from an older server
+    // can arrive without it, and a missing date must not read as 1970.
+    const stamp = h.started_at ?? h.created_at ?? null;
+    const at = stamp ? Date.parse(stamp.includes('T') ? stamp : `${stamp.replace(' ', 'T')}Z`) : NaN;
+
+    return Number.isNaN(at) ? 0 : at;
+  };
+
+  return (
+    rows
+      .filter((h) => historyJoinable(h) && now - when(h) <= withinMs && when(h) > 0)
+      .sort((a, b) => when(b) - when(a))[0] ?? null
+  );
+}

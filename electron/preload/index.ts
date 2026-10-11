@@ -269,6 +269,7 @@ const api = {
     checks: call('rc:checks'),
     restart: call('rc:restart'),
     setAllowRequests: call('rc:setAllowRequests'),
+    setStopChord: call('rc:setStopChord'),
     shareStarted: call('rc:shareStarted'),
     shareChanged: call('rc:shareChanged'),
     shareStopped: call('rc:shareStopped'),
