@@ -518,7 +518,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
   };
 
   const filesIn = (files: File[]) => {
-    const pics = files.filter((f) => /^image\/(png|jpeg|gif|webp|bmp|heic|heif|svg\+xml)$/.test(f.type));
+    const pics = files.filter((f) => (/^image\/(png|jpeg|gif|webp|bmp|heic|heif|svg\+xml)$/i.test(f.type) || /\.(heic|heif)$/i.test(f.name)));
     const others = files.filter((f) => !pics.includes(f));
     if (pics.length) void insertImages(pics);
     if (others.length) onFiles?.(others);
