@@ -88,9 +88,20 @@ export class CallService {
   canShowRing(): boolean { return this.canRing(); }
 
   handle(e: RealtimeEvent): void {
-    if (e.type === 'chat.call.stopped' || e.type === 'meet.ring.stopped') {
+    if (e.type === 'chat.call.stopped') {
       const key = String(e.uuid ?? e.call_id ?? '');
       if (key) this.cancelled.add(key);
+      return;
+    }
+    /*
+     * A meeting ring stops by its own id, not the meeting's (worksuite-desktop#347):
+     * keyed by the meeting, one stopped ring kept every later ring into that
+     * meeting — Ring again — from showing on this computer. The invitation
+     * moving on (answered elsewhere, cancelled, run out) stops it too.
+     */
+    if (e.type === 'meet.ring.stopped' || (e.type === 'meeting.invite_state_changed' && e.invite_state !== 'ringing')) {
+      const ring = Number(e.ring_id);
+      if (Number.isInteger(ring) && ring > 0) this.cancelled.add(`meet-ring-${ring}`);
       return;
     }
     if (e.type === 'chat.call.ringing') this.ring(e as unknown as Ringing);
@@ -156,7 +167,7 @@ export class CallService {
     if (this.rung.has(key) || [...this.active.values()].some((a) => a.uuid === r.uuid)) return;
     this.rung.set(key, now);
     const generation = this.generation;
-    const show = () => { if (generation === this.generation && !this.cancelled.has(r.uuid) && this.canRingMeet()) this.windows.open('ring', route, 'Invitation to a WorkSuite meeting', true); };
+    const show = () => { if (generation === this.generation && !this.cancelled.has(key) && this.canRingMeet()) this.windows.open('ring', route, 'Invitation to a WorkSuite meeting', true); };
     if (this.attention) void this.attention(`meet-ring:${r.ring_id}`, `meet:${r.uuid}`).then((allowed) => { if (allowed) show(); }).catch(() => {});
     else show();
   }
