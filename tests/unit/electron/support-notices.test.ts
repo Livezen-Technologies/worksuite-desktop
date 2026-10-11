@@ -360,9 +360,9 @@ describe('the tray (FR-DSK-04)', () => {
   const actions = { open: vi.fn(), openRoute: vi.fn(), clockIn: vi.fn(), clockOut: vi.fn(), pauseNotifications: vi.fn(), openSettings: vi.fn(), checkUpdates: vi.fn(), quit: vi.fn(), lock: vi.fn(), pauseRemoteControl: vi.fn(), stopRemoteControl: vi.fn(), joinWebchat: vi.fn(), quickAsk: vi.fn(), aiChanges: vi.fn(), ringingSettings: vi.fn() };
 
   it('lists the support tickets waiting, and opens My tickets from there', () => {
-    const line = trayMenu(model, actions).find((i) => typeof i.label === 'string' && i.label.includes('Support 4'))!;
-    expect(line.label).toBe('Unread Chat 2 · Support 4');
-    (line.click as () => void)();
+    const line = trayMenu(model, actions).find((i) => typeof i.label === 'string' && i.label.startsWith('Support ·'))!;
+    expect(line.label).toBe('Support · 4 waiting');
+    ((line.submenu as Array<{ label: string; click: () => void }>).find((i) => i.label === 'My tickets')!.click)();
     expect(actions.openRoute).toHaveBeenCalledWith('/support?view=mine');
     expect(trayMenu({ ...model, apps: ['chat'] }, actions).some((i) => typeof i.label === 'string' && i.label.includes('Support'))).toBe(false);
   });

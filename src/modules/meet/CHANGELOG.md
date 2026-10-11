@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.24.0 — 2026-10-11
+
+- Invitations in the People panel follow what actually happened (worksuite-desktop#347): Ringing with its time, Didn't answer, Declined with their reason, Invite cancelled, Joining… only after Accept, Couldn't join, Busy in another call and Offline, each with Cancel, Ring again, Remove, Copy link or Message; the ring screen sends Accept, Decline with a message and Not now to the server; the host's badge comes from the meeting's host id
+
 ## 1.23.0 — 2026-10-11
 
 - The meeting's side panel is four tabs — Chat, People, Q&A and More — with Polls, Board, Notes and Files behind More as cards that each say what the tool is for. Nothing is removed; a support session keeps the three RC-SUP-03 leaves it.

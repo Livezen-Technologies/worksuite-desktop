@@ -43,7 +43,7 @@ import { Database } from '../../../electron/services/db';
 import type { HttpClient } from '../../../electron/services/http';
 import { Vault } from '../../../electron/services/vault';
 import { NotificationService } from '../../../electron/services/notifications';
-import { trayMenu, type TrayModel } from '../../../electron/tray/tray';
+import { TRAY_TOP_LINES, trayMenu, type TrayModel } from '../../../electron/tray/tray';
 import { windowRoute } from '../../../electron/windows/manager';
 
 /**
@@ -210,38 +210,45 @@ describe('the tray and the menu', () => {
     pauseRemoteControl: vi.fn(), stopRemoteControl: vi.fn(), joinWebchat: vi.fn(), quickAsk: vi.fn(), aiChanges: vi.fn(), ringingSettings: vi.fn(),
   };
   const labels = (apps: string[]) => trayMenu({ ...model, apps }, actions).map((i) => i.label ?? i.type);
-  const quick = (apps: string[]) => (trayMenu({ ...model, apps }, actions).find((i) => i.label === 'Quick Actions')?.submenu as Array<{ label: string }> | undefined)?.map((i) => i.label) ?? null;
+  const sub = (apps: string[], starts: string) => (trayMenu({ ...model, apps }, actions).find((i) => String(i.label).startsWith(starts))?.submenu as Array<{ label: string; click?: () => void }> | undefined) ?? null;
 
-  it('builds the unread line and the quick actions from the apps the person has', () => {
-    expect(labels(['chat', 'mail', 'tasks', 'files', 'crm'])).toContain('Unread Chat 2 · Unread Mail 5');
-    expect(quick(['chat', 'mail', 'tasks', 'files', 'crm'])).toEqual(['New Task', 'New Email', 'Open Chat', 'Upload File', 'New Lead']);
-    expect(labels(['chat', 'tasks'])).toContain('Unread Chat 2');
-    expect(quick(['chat', 'tasks'])).toEqual(['New Task', 'Open Chat']);
+  it('gives each app the person has one line, and New ▸ only what they may create (#346)', () => {
+    expect(labels(['chat', 'mail', 'tasks', 'files', 'crm'])).toEqual(expect.arrayContaining(['Chat · 2 unread', 'Mail · 5 unread']));
+    expect(sub(['chat', 'mail', 'tasks', 'files', 'crm'], 'New')!.map((i) => i.label)).toEqual(['Email', 'Chat message', 'Task', 'Lead', 'Upload file']);
+    expect(labels(['chat', 'tasks'])).toContain('Chat · 2 unread');
+    expect(labels(['chat', 'tasks']).some((x) => String(x).startsWith('Mail'))).toBe(false);
+    expect(sub(['chat', 'tasks'], 'New')!.map((i) => i.label)).toEqual(['Chat message', 'Task']);
   });
 
   it('offers nothing of an app the person was not given', () => {
     const l = labels(['hr']);
-    expect(l.some((x) => String(x).startsWith('Unread'))).toBe(false);
-    expect(quick(['hr'])).toBeNull();
+    expect(l.some((x) => /^(Chat|Mail|Support|Calls|Live) ·/.test(String(x)))).toBe(false);
+    expect(sub(['hr'], 'New')).toBeNull();
     expect(l).toContain('Open WorkSuite');
   });
 
-  it('opens whichever of the person’s apps has more unread', () => {
-    const line = trayMenu({ ...model, apps: ['chat', 'mail'] }, actions).find((i) => String(i.label).startsWith('Unread'))!;
-    (line.click as () => void)();
+  it('opens each app from its own line', () => {
+    sub(['chat', 'mail'], 'Mail ·')!.find((i) => i.label === 'Open Mail')!.click!();
     expect(actions.openRoute).toHaveBeenLastCalledWith('/mail');
-    const chatOnly = trayMenu({ ...model, apps: ['chat'] }, actions).find((i) => String(i.label).startsWith('Unread'))!;
-    (chatOnly.click as () => void)();
+    sub(['chat'], 'Chat ·')!.find((i) => i.label === 'Open Chat')!.click!();
     expect(actions.openRoute).toHaveBeenLastCalledWith('/chat');
+  });
+
+  it('keeps the whole menu short enough for a 768-pixel screen, with Quit last (#346)', () => {
+    const every = trayMenu({ ...model, apps: ['chat', 'mail', 'tasks', 'files', 'crm', 'ai', 'notes', 'meet'], quickAsk: 'Ctrl+Shift+Space', attendance: { linked: true, clockedIn: false, since: null } }, { ...actions, setPresence: vi.fn() });
+    expect(every.length).toBeLessThanOrEqual(TRAY_TOP_LINES);
+    expect(every.at(-1)!.label).toBe('Quit WorkSuite');
+    expect(every.filter((i) => i.label === 'Check for updates')).toHaveLength(1);
+    expect(every.some((i) => /Update Now|Connected/.test(String(i.label)))).toBe(false);
   });
 
   it('puts a visitor calling first, with Answer, and the call I am on with a way back (ENH-WCHAT-05)', () => {
     const answerWebchatCall = vi.fn();
     const items = trayMenu({ ...model, apps: ['chat'], webchatCalls: [{ id: 31, label: 'Kamal · creativefx.lk' }], webchatOnCall: { conversationId: 4, label: 'Nimali', held: true } }, { ...actions, answerWebchatCall });
-    expect(items.slice(0, 6).map((i) => i.label ?? i.type)).toEqual(['Voice call ringing', 'Answer — Kamal · creativefx.lk', 'separator', 'On a call with Nimali · on hold', 'Return to the call', 'separator']);
-    (items[1]!.click as () => void)();
+    expect(items.slice(0, 3).map((i) => i.label ?? i.type)).toEqual(['Answer call — Kamal · creativefx.lk', 'Return to call with Nimali · on hold', 'separator']);
+    (items[0]!.click as () => void)();
     expect(answerWebchatCall).toHaveBeenCalledWith(31);
-    (items[4]!.click as () => void)();
+    (items[1]!.click as () => void)();
     expect(actions.openRoute).toHaveBeenLastCalledWith('/chat?view=website&website=4');
     // Website calls are Chat's.
     expect(trayMenu({ ...model, apps: ['hr'], webchatCalls: [{ id: 31, label: 'Kamal' }] }, actions).some((i) => String(i.label).includes('Kamal'))).toBe(false);

@@ -67,7 +67,7 @@ function answer(over: Record<string, unknown> = {}) {
 let dirs: string[] = [];
 const env = process.env.APPIMAGE;
 
-function setup(opts: { answer?: Record<string, unknown>; busy?: () => Partial<BusyReport>; autoDownload?: boolean; deadlineHours?: number; dir?: string; body?: Buffer } = {}) {
+function setup(opts: { answer?: Record<string, unknown>; busy?: () => Partial<BusyReport>; autoDownload?: boolean; deadlineHours?: number; dir?: string; body?: Buffer; deps?: Partial<UpdaterDeps> } = {}) {
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'ws-ux-'));
   dirs.push(dir);
   process.env.APPIMAGE = join(dir, 'WorkSuite.AppImage');
@@ -109,6 +109,7 @@ function setup(opts: { answer?: Record<string, unknown>; busy?: () => Partial<Bu
     prepareRestart,
     history,
     notifier,
+    ...opts.deps,
   };
   return { updater: new UpdaterService(deps), dir, history, prepareRestart, fetch };
 }
@@ -147,9 +148,11 @@ describe('the signed answer and the pipeline', () => {
       ['manifest', 'done'],
       ['download', 'done'],
       ['sha256', 'done'],
-      ['codesign', 'skipped'],
+      // Linux (worksuite-desktop#345): no code signature; the signed answer naming the package's SHA-256 is the check.
+      ['codesign', 'done'],
       ['stage', 'done'],
     ]);
+    expect(s.pipeline?.find((p) => p.id === 'codesign')?.detail).toBe('Ed25519-signed answer · SHA-256 matched');
     expect(s.pipeline?.[0]?.detail).toBe('Ed25519 signature valid · key ws-uc-test');
     expect(s.download).toBeNull();
   });
@@ -355,5 +358,56 @@ describe('Update diagnostics', () => {
     const p = await t.updater.probe();
     expect(p).toMatchObject({ reached: true, status: 200, verified: true, keyId: 'ws-uc-test', pkg: { size: PACKAGE.length }, download: { ok: true, status: 200 } });
     expect(t.updater.get().state).toBe('IDLE');
+  });
+});
+
+describe('a .deb or .rpm install updates itself (worksuite-desktop#345)', () => {
+  const debAnswer = () => answer({ package: { id: 'pkg', type: 'deb', size: PACKAGE.length, sha256: SHA, file_name: 'WorkSuite-2.7.0-amd64.deb', download_url: 'https://cdn.example/WorkSuite-2.7.0-amd64.deb' } });
+  const asDeb = (over: Partial<UpdaterDeps> = {}) => {
+    const t = setup({ answer: debAnswer(), deps: { linuxKind: () => 'deb', ...over } });
+    delete process.env.APPIMAGE;
+    return t;
+  };
+
+  it('is offered the .deb, not refused as "update it with your package manager", and installs it behind one prompt', async () => {
+    const installPackage = vi.fn(async () => ({ ok: true as const }));
+    const t = asDeb({ installPackage });
+    const s = await t.updater.check();
+    expect(s.installBlockedReason).toBeNull();
+    expect(s.installKind).toBe('deb');
+    await vi.waitFor(() => expect(t.updater.get().state).toBe('STAGED'));
+    const r = await t.updater.install(true);
+    expect(r.started).toBe(true);
+    expect(installPackage).toHaveBeenCalledWith('deb', expect.stringMatching(/WorkSuite-2\.7\.0-amd64\.deb$|2\.7\.0/));
+    expect(appMock.relaunch).toHaveBeenCalledWith({ args: ['--updated'] });
+    expect(appMock.exit).toHaveBeenCalledWith(0);
+  });
+
+  it('closing the password prompt opens the package in the software installer and keeps WorkSuite running', async () => {
+    const openPath = vi.fn(async () => '');
+    const t = asDeb({ installPackage: vi.fn(async () => ({ ok: false as const, reason: 'cancelled' as const, detail: 'closed' })), openPath });
+    await t.updater.check();
+    await vi.waitFor(() => expect(t.updater.get().state).toBe('STAGED'));
+    const r = await t.updater.install(true);
+    expect(r.started).toBe(false);
+    expect(r.message).toMatch(/password prompt was closed.*software installer/);
+    expect(openPath).toHaveBeenCalled();
+    expect(appMock.exit).not.toHaveBeenCalled();
+    expect(t.updater.get().state).toBe('STAGED');
+  });
+
+  it('a copy installed some other way says how to get the update instead of naming a package manager', async () => {
+    const t = setup({ answer: debAnswer(), deps: { linuxKind: () => null } });
+    delete process.env.APPIMAGE;
+    const s = await t.updater.check();
+    expect(s.installKind).toBeNull();
+    expect(s.installBlockedReason).toMatch(/not installed from a WorkSuite AppImage, \.deb or \.rpm/);
+  });
+
+  it('never installs on quit, where nobody could answer the password prompt', async () => {
+    const t = asDeb({ installPackage: vi.fn(async () => ({ ok: true as const })) });
+    await t.updater.check();
+    await vi.waitFor(() => expect(t.updater.get().state).toBe('STAGED'));
+    expect(t.updater.installOnQuitSync()).toBe(false);
   });
 });

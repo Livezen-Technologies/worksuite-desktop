@@ -1,11 +1,15 @@
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useMemo, useRef, useState, type KeyboardEvent } from 'react';
 import { apiDelete, apiGet, apiPost } from '../../core/api';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { UserAvatar } from '../../components/UserAvatar';
+import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
+import { useNow } from '../calls/parts';
+import { openChatWindow } from '../chat/window';
+import { INVITE_TONE, inviteActions, inviteLabel, inviteStateOf, nextRead, type InviteAction, type Ring } from './invites';
 import { meet } from './session';
 
 /**
@@ -15,6 +19,10 @@ import { meet } from './session';
  * them. The panel shows how each invitation stands, with Cancel while it
  * rings and Ring again after a short wait. Who may invite is the room's
  * setting; the server checks it again.
+ *
+ * How each stands is the server's (worksuite-desktop#347): Ringing until it is
+ * answered or runs out, Joining… only after Accept, then In the meeting or
+ * Couldn't join — see `invites.ts`.
  */
 
 export interface Invitable {
@@ -24,42 +32,11 @@ export interface Invitable {
   avatar: string | null;
   status: 'online' | 'away' | 'busy' | 'dnd' | 'offline' | string;
   in_call: boolean;
-  /** A ring to them is still ringing, or was just answered: not again yet. */
-  pending: 'ringing' | 'cooldown' | null;
+  /** A ring to them is still ringing, was just answered, or they were rung three times lately: not again yet. */
+  pending: 'ringing' | 'cooldown' | 'too_many' | null;
 }
 
-export type RingState = 'ringing' | 'accepted' | 'joined' | 'declined' | 'no_answer' | 'cancelled' | 'unavailable';
-
-export interface Ring {
-  id: number;
-  user_id: number;
-  name: string;
-  state: RingState;
-  invited_by: { id: number; name: string };
-  rang_at: string;
-  retry_in: number;
-}
-
-/** An invitation's state, in words. */
-export const RING_LABEL: Record<RingState, string> = {
-  ringing: 'Ringing…',
-  accepted: 'Accepted · joining',
-  joined: 'Joined',
-  declined: 'Declined',
-  no_answer: 'No answer',
-  cancelled: 'Cancelled',
-  unavailable: 'Unavailable · sent as a missed invitation',
-};
-
-const RING_TONE: Record<RingState, string> = {
-  ringing: 'text-primary',
-  accepted: 'text-success',
-  joined: 'text-success',
-  declined: 'text-danger',
-  no_answer: 'text-ink-3',
-  cancelled: 'text-ink-3',
-  unavailable: 'text-ink-3',
-};
+export type { InviteState, Ring, RingState } from './invites';
 
 const STATUS: Record<string, [string, string]> = {
   online: ['Available', 'bg-success'],
@@ -69,72 +46,112 @@ const STATUS: Record<string, [string, string]> = {
   offline: ['Offline', 'bg-ink-3'],
 };
 
+/**
+ * The invitations, read from the server — never kept from before: it is read
+ * again after a reconnect (`realtime:resync`, which bumps `ringsVersion`) and
+ * on every change the server announces, and just after its own clock settles
+ * the next one (worksuite-desktop#347).
+ */
 export function useRings() {
   const uuid = meet.uuid;
   return useQuery({
     queryKey: ['meet', uuid, 'rings', meet.ringsVersion],
     queryFn: ({ signal }) => apiGet<{ rings: Ring[] }>(`/api/meet/${uuid}/rings`, undefined, signal),
-    // Fast while something rings (it may run out); the server's push brings the rest.
-    refetchInterval: (q) => (q.state.data?.rings.some((r) => r.state === 'ringing') ? 3_000 : 20_000),
+    // Read again under a new version: the list stays on screen meanwhile.
+    placeholderData: keepPreviousData,
+    refetchInterval: (q) => nextRead(q.state.data?.rings ?? [], q.state.dataUpdatedAt || Date.now(), Date.now()),
   });
 }
 
 /** Ring these people; the server says who was rung, who could not be and why. */
 async function ringPeople(userIds: number[]): Promise<void> {
-  const r = await apiPost<{ rings: Array<{ user_id: number; state: string; why?: string }> }>(`/api/meet/${meet.uuid}/ring`, { user_ids: userIds });
+  const r = await apiPost<{ rings: Array<{ user_id: number; state: string; invite_state?: string; why?: string; message?: string }> }>(`/api/meet/${meet.uuid}/ring`, { user_ids: userIds });
   const rung = r.rings.filter((x) => x.state === 'ringing').length;
-  const away = r.rings.filter((x) => x.state === 'unavailable').length;
-  const skipped = r.rings.filter((x) => x.state === 'skipped').length;
-  const parts = [rung ? `Ringing ${rung}` : null, away ? `${away} unavailable — they get a missed invitation` : null, skipped ? `${skipped} already in the meeting or just invited` : null].filter(Boolean);
-  toast(rung || away ? 'success' : 'info', parts.join(' · ') || 'No one was invited.');
+  const busy = r.rings.filter((x) => x.invite_state === 'busy').length;
+  const away = r.rings.filter((x) => x.state === 'unavailable').length - busy;
+  const limited = r.rings.find((x) => x.why === 'too_many');
+  const skipped = r.rings.filter((x) => x.state === 'skipped' && x.why !== 'too_many').length;
+  const parts = [
+    rung ? `Ringing ${rung}` : null,
+    busy ? `${busy} busy in another call — they get a missed invitation` : null,
+    away ? `${away} unavailable — they get a missed invitation` : null,
+    skipped ? `${skipped} already in the meeting or just invited` : null,
+    limited?.message ?? null,
+  ].filter(Boolean);
+  toast(rung || away || busy ? 'success' : 'info', parts.join(' · ') || 'No one was invited.');
 }
 
-/** The invitations in this meeting, in the People panel. */
+/** A conversation with them, beside the meeting. */
+async function message(r: Ring): Promise<void> {
+  const room = await apiPost<{ room_id: number }>('/api/chat/rooms/direct', { user_id: r.user_id });
+  await openChatWindow(room.room_id, r.name, { onTop: true });
+}
+
+const ACTION_LABEL: Record<InviteAction, string> = { cancel: 'Cancel', ring_again: 'Ring again', remove: 'Remove', copy_link: 'Copy link', message: 'Message' };
+
+/** The invitations in this meeting, in the People panel: each as it stands, with what can be done about it. */
 export function Invitations() {
   const q = useRings();
   const qc = useQueryClient();
-  const rings = (q.data?.rings ?? []).filter((r) => r.state !== 'joined');
+  const now = useNow();
+  // Somebody in the call is in "In the meeting", whatever their invitation last said.
+  const here = new Set(meet.people.map((p) => p.id));
+  const rings = (q.data?.rings ?? []).filter((r) => inviteStateOf(r) !== 'joined' && !here.has(r.user_id));
   if (!rings.length) return null;
   const refresh = () => void qc.invalidateQueries({ queryKey: ['meet', meet.uuid, 'rings'] });
-  const cancel = async (r: Ring) => {
+  const act = async (r: Ring, a: InviteAction) => {
     try {
-      await apiDelete(`/api/meet/${meet.uuid}/rings/${r.id}`);
+      if (a === 'cancel') await apiDelete(`/api/meet/${meet.uuid}/rings/${r.id}`);
+      else if (a === 'ring_again') await ringPeople([r.user_id]);
+      else if (a === 'remove') await apiDelete(`/api/meet/${meet.uuid}/invitees/${r.user_id}`);
+      else if (a === 'message') await message(r);
+      else if (a === 'copy_link') {
+        await navigator.clipboard.writeText(meet.info?.join_url ?? '');
+        toast('success', 'Join link copied.');
+      }
     } catch (e) {
       toast('error', errorMessage(e));
     }
-    refresh();
-  };
-  const again = async (r: Ring) => {
-    try {
-      await ringPeople([r.user_id]);
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
-    refresh();
+    if (a !== 'copy_link' && a !== 'message') refresh();
   };
   return (
     <div className="flex flex-col gap-1.5">
       <b className="text-ink">Invited · {rings.length}</b>
-      {rings.map((r) => (
-        <div key={r.id} className="flex items-center gap-2.5">
-          <UserAvatar userId={r.user_id} name={r.name} size={26} />
-          <span className="flex min-w-0 flex-1 flex-col">
-            <b className="truncate text-ink">{r.name}</b>
-            <span className={cx('text-[11px] font-semibold', RING_TONE[r.state])} aria-live="polite">
-              {RING_LABEL[r.state]}
+      {rings.map((r) => {
+        const state = inviteStateOf(r);
+        const actions = inviteActions(state).filter((a) => a === 'copy_link' || a === 'message' || a === 'cancel' || meet.mayInvite);
+        return (
+          <div key={r.id} className="flex items-center gap-2.5">
+            <UserAvatar userId={r.user_id} name={r.name} size={26} />
+            <span className="flex min-w-0 flex-1 flex-col">
+              <b className="truncate text-ink">{r.name}</b>
+              <span className={cx('flex items-center gap-1 truncate text-[11px] font-semibold', INVITE_TONE[state])} aria-live="polite" data-state={state}>
+                {state === 'ringing' ? (
+                  <span aria-hidden className="motion-safe:animate-pulse">
+                    <Icon name="bell" size={11} />
+                  </span>
+                ) : null}
+                {inviteLabel(r, now)}
+              </span>
             </span>
-          </span>
-          {r.state === 'ringing' ? (
-            <button type="button" onClick={() => void cancel(r)} className="text-[12px] font-semibold text-danger hover:underline">
-              Cancel
-            </button>
-          ) : r.state !== 'accepted' && meet.mayInvite ? (
-            <button type="button" disabled={r.retry_in > 0} title={r.retry_in > 0 ? `You can ring again in ${r.retry_in} s` : undefined} onClick={() => void again(r)} className="text-[12px] font-semibold text-primary hover:underline disabled:text-ink-3 disabled:no-underline">
-              Ring again
-            </button>
-          ) : null}
-        </div>
-      ))}
+            {actions.map((a) => {
+              const wait = a === 'ring_again' && r.retry_in > 0;
+              return (
+                <button
+                  key={a}
+                  type="button"
+                  disabled={wait}
+                  title={wait ? `You can ring again in ${r.retry_in} s` : undefined}
+                  onClick={() => void act(r, a)}
+                  className={cx('text-[12px] font-semibold hover:underline disabled:text-ink-3 disabled:no-underline', a === 'cancel' || a === 'remove' ? 'text-danger' : 'text-primary')}
+                >
+                  {ACTION_LABEL[a]}
+                </button>
+              );
+            })}
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -230,7 +247,7 @@ export function AddPeopleDialog({ onClose }: { onClose: () => void }) {
                     {word}
                   </span>
                 </span>
-                {u.in_call ? <span className="text-[11.5px] font-semibold text-success">In the meeting</span> : u.pending === 'ringing' ? <span className="text-[11.5px] font-semibold text-primary">Ringing…</span> : u.pending === 'cooldown' ? <span className="text-[11.5px] text-ink-3">Just invited</span> : null}
+                {u.in_call ? <span className="text-[11.5px] font-semibold text-success">In the meeting</span> : u.pending === 'ringing' ? <span className="text-[11.5px] font-semibold text-primary">Ringing…</span> : u.pending === 'cooldown' ? <span className="text-[11.5px] text-ink-3">Just invited</span> : u.pending === 'too_many' ? <span className="text-[11.5px] text-ink-3">Rung 3 times lately</span> : null}
               </label>
             );
           })}
