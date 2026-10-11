@@ -61,7 +61,7 @@ vi.mock('electron', () => ({
 import { DesktopError } from '../../../electron/main/errors';
 import { AT_RISK_ACTIONS, AtRiskAlerts, atRiskNotice, LivePulse, liveTitle, wallTarget } from '../../../electron/services/live-desk';
 import { WebchatRinger, type PendingAnswer, type RingingEntry } from '../../../electron/services/webchat-ring';
-import { trayMenu, TrayService, type TrayActions, type TrayModel } from '../../../electron/tray/tray';
+import { MENU_EVERY_MS, trayMenu, TrayService, type TrayActions, type TrayModel } from '../../../electron/tray/tray';
 import { LIVE_ROUTE, LIVE_TRAY_WIDTH, ringTrayBounds, windowRoute } from '../../../electron/windows/manager';
 import type { HttpClient } from '../../../electron/services/http';
 
@@ -159,6 +159,9 @@ describe('MAP-22: the figures the menu-bar icon carries, read with the main wind
   it('“18 · 2 waiting” in the menu bar, red while one is at risk; the click opens the mini-dashboard, ringing or not', () => {
     onPlatform('darwin');
     trays.length = 0;
+    // The menu follows a change within two seconds (#346): time moves on before it is read.
+    vi.useFakeTimers();
+    const settle = () => vi.advanceTimersByTime(MENU_EVERY_MS);
     const a: TrayActions = {
       open: vi.fn(), openRoute: vi.fn(), clockIn: vi.fn(), clockOut: vi.fn(), pauseNotifications: vi.fn(), openSettings: vi.fn(), checkUpdates: vi.fn(), quit: vi.fn(), lock: vi.fn(),
       pauseRemoteControl: vi.fn(), stopRemoteControl: vi.fn(), joinWebchat: vi.fn(), quickAsk: vi.fn(), aiChanges: vi.fn(), ringingSettings: vi.fn(), showRingMenu: vi.fn(() => true),
@@ -180,27 +183,34 @@ describe('MAP-22: the figures the menu-bar icon carries, read with the main wind
     expect(String((trays[0]!.images.at(-1) as { path: string }).path)).toMatch(/normalTemplate\.png$/);
     expect(trays[0]!.tooltip).toBe('WorkSuite — 18 visitors on your sites');
     // Nothing rings, and the click still opens the mini-dashboard.
+    settle();
     expect(trays[0]!.menu).toBeNull();
     trays[0]!.handlers.click!({}, { x: 1200, y: 0, width: 22, height: 24 });
     expect(a.showRingMenu).toHaveBeenCalledTimes(1);
     // Without the Live figures (not website staff), the menu as before.
     t.update({ live: null });
     expect(trays[0]!.title).toBe('');
+    settle();
     expect(trays[0]!.menu).not.toBeNull();
+    vi.useRealTimers();
   });
 
   it('the plain menu offers the Live dashboard and the Live map window with their shortcuts', () => {
     const a = { showRingMenu: vi.fn(() => true), liveDashboard: vi.fn(), liveMap: vi.fn() } as unknown as TrayActions;
     const m = { signedIn: true, apps: ['chat'], webchatRinging: [], live: { online: 18, atRisk: false }, userName: null, organization: null, offline: false, pending: 0 } as unknown as TrayModel;
-    const items = trayMenu(m, a);
+    // One "Live · 18 on your sites" line, the dashboard and the map window in its submenu (#346).
+    const live = trayMenu(m, a).find((i) => i.label === 'Live · 18 on your sites')!;
+    const items = live.submenu as Array<{ label: string; accelerator?: string; registerAccelerator?: boolean; click: () => void }>;
     const dash = items.find((i) => i.label === 'Open Live dashboard')!;
     const map = items.find((i) => i.label === 'Show Live map window')!;
-    expect([dash.accelerator, dash.registerAccelerator, map.accelerator, map.registerAccelerator]).toEqual(['CmdOrCtrl+Shift+D', false, 'CmdOrCtrl+Shift+M', false]);
-    (map.click as () => void)();
+    // Keys beside the lines on Windows and macOS; Ubuntu's tray cannot draw them.
+    if (process.platform === 'linux') expect([dash.accelerator, map.accelerator]).toEqual([undefined, undefined]);
+    else expect([dash.accelerator, dash.registerAccelerator, map.accelerator, map.registerAccelerator]).toEqual(['CmdOrCtrl+Shift+D', false, 'CmdOrCtrl+Shift+M', false]);
+    map.click();
     expect(a.liveMap).toHaveBeenCalled();
-    (items.find((i) => i.label === 'Live dashboard…')!.click as () => void)();
+    items.find((i) => i.label === 'Live dashboard…')!.click();
     expect(a.showRingMenu).toHaveBeenCalledWith(null);
-    expect(trayMenu({ ...m, live: null }, a).some((i) => i.label === 'Open Live dashboard')).toBe(false);
+    expect(trayMenu({ ...m, live: null }, a).some((i) => String(i.label).startsWith('Live'))).toBe(false);
   });
 });
 

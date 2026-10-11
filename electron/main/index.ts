@@ -129,7 +129,7 @@ import { officeDocRoute } from '@shared/office';
 import { pdfPathsInArgv } from '../services/pdf/local-files';
 import { DEFAULT_PDF_POLICY } from '../services/pdf/service';
 import { Vault } from '../services/vault';
-import { TrayService } from '../tray/tray';
+import { indicatorHostRunning, NO_TRAY_HINT, TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
 import { linuxInstallKind } from '../updater/linux';
 import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl, reportProblemUrl } from '../updater/update-center';
@@ -1152,7 +1152,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       return;
     }
     const w = windows.showMain();
-    w.webContents.send('navigate', req);
+    // A window just made (closed to the tray) is still loading: a route sent now is lost (#346). Send it once loaded.
+    if (w.webContents.isLoading()) w.webContents.once('did-finish-load', () => w.webContents.send('navigate', req));
+    else w.webContents.send('navigate', req);
   };
   // Marketing's Next contact (MKT-DSK-01): the global key and the tray's line — My call queue's workspace, on a new claim.
   const openNextContact = (source: 'shortcut' | 'tray'): void => navigate({ route: nextContactRoute(), source });
@@ -1539,6 +1541,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     return { accounts: m.accounts, unread: m.unread, paused: m.paused, pauseLabel: m.pauseLabel, pauseSet: !!m.pause, choices: m.pauseChoices, hoursNote: m.hoursNote };
   };
   realtime.onEvent = (e) => {
+    // My own status changed somewhere (the window, another device): the tray's status line follows (#346).
+    const pe = e as { type?: string; who?: number | string; status?: string };
+    if (pe.type === 'chat.presence' && String(pe.who ?? '') === String(sessionCtl.get().user?.id ?? '-') && pe.status) tray.update({ presence: pe.status === 'online' ? 'available' : pe.status });
     notifications.handleRealtime(e);
     mailAlerts.handleRealtime(e);
     supportNotices.handle(e);
@@ -1726,6 +1731,15 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Leave any call first, so the other side is not left talking to nobody.
     void Promise.race([calls.endAll(), new Promise((r) => setTimeout(r, 2_000))]).finally(() => app.quit());
   };
+  /** The status the tray shows, from the server (#346): at sign-in, and after a change from the tray did not go through. */
+  const refreshTrayPresence = async (): Promise<void> => {
+    try {
+      const me = await http.get<{ status?: string; choice?: string }>('/api/chat/presence/me');
+      tray.update({ presence: me?.choice ?? (me?.status === 'online' ? 'available' : (me?.status ?? null)) });
+    } catch {
+      /* the status line falls back to Online */
+    }
+  };
   const tray = new TrayService({
     open: () => windows.showMain(),
     openRoute: (route) => navigate({ route, source: 'tray' }),
@@ -1760,6 +1774,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     supportQuickReply: (id) => openQuickReply(id),
     supportQuickLatest: () => quickLatest(),
     supportPresence: (status) => void supportDesk.setPresence(status),
+    // The status line (worksuite-desktop#346): Chat's presence, sent now; the window hears it as a realtime event.
+    setPresence: (status) => {
+      tray.update({ presence: status });
+      void http
+        .post('/api/chat/presence', { status, active: true })
+        .then(() => broadcast('realtime:event', { type: 'chat.presence', who: Number(sessionCtl.get().user?.id ?? 0), status: status === 'available' ? 'online' : status }))
+        .catch((e) => {
+          log.info('status not set from the tray', { error: String((e as Error)?.message ?? e) });
+          void refreshTrayPresence();
+        });
+    },
     marketingNextContact: () => openNextContact('tray'),
     meetJoinNext: () => meetAction('meet-join-next', 'tray'),
     meetStart: () => meetAction('meet-new', 'tray'),
@@ -2437,6 +2462,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     attendanceTimer.unref?.();
     stopPresence();
     void heartbeatPresence();
+    void refreshTrayPresence();
     presenceTimer = setInterval(() => void heartbeatPresence(), 30_000);
     presenceTimer.unref?.();
     // What this computer can do for Meet remote control (WF-RC-08), once the device is known.
@@ -3242,6 +3268,21 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   screen.on('display-metrics-changed', () => windows.refit());
 
   tray.start();
+  // GNOME without the AppIndicator extension shows no tray icon at all (#346): say so once, with the fix.
+  if (process.platform === 'linux') {
+    const marker = join(app.getPath('userData'), 'tray-hint-shown');
+    if (!existsSync(marker)) {
+      void indicatorHostRunning().then((running) => {
+        if (running !== false) return;
+        try {
+          writeFileSync(marker, new Date().toISOString());
+        } catch {
+          /* shown again next time */
+        }
+        setTimeout(() => broadcast('toast', { kind: 'info', text: NO_TRAY_HINT }), 8_000).unref?.();
+      });
+    }
+  }
   lock.start();
   // The till sends its sales with its own credential, whoever is signed in (or nobody).
   pos.start();
