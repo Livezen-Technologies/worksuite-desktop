@@ -22,6 +22,7 @@ import { SMART_VIEWS, folderName, mailboxLetter, type SmartViewId } from './mode
 import { AccountAvatar, AccountTag, Count, SectionHeading } from './parts';
 import { useAccountTags } from './useAccountTags';
 import { accountName, accountState, syncAgo, syncAt, type SyncSummary } from './sync';
+import { mailboxProblemText } from './oauth';
 import type { AllCounts, Folder, Mailbox, SyncAccount, ViewCounts } from './types';
 
 /** Where the list is: All Accounts (`unified`), a smart view, or a folder of one mailbox. */
@@ -369,7 +370,7 @@ function Row({ icon, iconClass, lead, label, title, count, countTitle, strong, a
 /** An account's row: open its folders, its inbox, and its own sync button — a spinner while it syncs, Retry when it failed (DMO-SYN-01/02/04). */
 function AccountRow({ box, account, running, offline, open, count, active, onToggle, onPick, onSync }: { box: Mailbox; account: SyncAccount | null; running: boolean; offline: boolean; open: boolean; count: number | null; active: boolean; onToggle: () => void; onPick: () => void; onSync: () => void }) {
   const failed = !running && (account?.last_result === 'failed' || box.auth_state === 'problem');
-  const why = account?.error ?? box.last_error ?? text('The last sync did not finish.');
+  const why = (box.auth_state === 'problem' ? mailboxProblemText(box) : null) ?? account?.error ?? box.last_error ?? text('The last sync did not finish.');
   const name = mailboxName(box);
   const status = account ? accountState(account) : null;
   const feedback = useSyncFeedback(running, account?.last_result === 'failed');
