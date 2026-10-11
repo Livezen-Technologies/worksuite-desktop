@@ -16,6 +16,8 @@ import { LocalRecorder, RecordingError } from './recorder';
 import { LiveTranscriber } from './transcribe/live';
 import type { SpeechLanguage } from './transcribe/engine';
 import type { AutoEmail, Transcript } from '../meetings/transcripts/api';
+import { queryClient } from '../../core/query';
+import { isInviteEvent } from './invites';
 
 /**
  * One Meet meeting, in its window (MeetLobby → MeetRoom). Like a call, kept
@@ -503,7 +505,7 @@ export class MeetSession {
     void this.loadBoard();
     this.offRoles?.();
     // Roles and settings changed by someone else reach everyone in the meeting at once (`meet.control`, what: roles).
-    this.offRoles = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
+    const offControl = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
       if (e?.type !== 'meet.control' || e.meeting !== this.uuid) return;
       // A settings change (#91) comes as both: what it changed for me is told when the settings are read again.
       if (e.what === 'roles' || e.what === 'settings') void this.reload().then(() => this.refreshActivities());
@@ -528,11 +530,37 @@ export class MeetSession {
         this.changed();
       }
     });
+    const offInvites = this.watchInvites();
+    this.offRoles = () => {
+      offControl();
+      offInvites();
+    };
     if (this.admitted) await this.enter();
     else {
       this.phase = 'waiting';
       this.changed();
     }
+  }
+
+  /**
+   * The invitations, kept to the server's word (worksuite-desktop#347): read
+   * again the moment one moves (`meeting.invite_state_changed`), and after a
+   * reconnect — what they said before the connection dropped is not kept.
+   * Nothing is patched from the event (FR-RT-03); the server has already
+   * ignored an answer to an earlier ring.
+   */
+  watchInvites(): () => void {
+    const offEvent = on('realtime:event', (e) => {
+      if (isInviteEvent(e) && e.meeting === this.uuid) void queryClient.invalidateQueries({ queryKey: ['meet', this.uuid, 'rings'] });
+    });
+    const offResync = on('realtime:resync', () => {
+      this.ringsVersion++;
+      this.changed();
+    });
+    return () => {
+      offEvent();
+      offResync();
+    };
   }
 
   /** The meeting's roles and settings again, after somebody changed them. */
