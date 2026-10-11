@@ -9,7 +9,7 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
-import { clientLabel, K, useMfa, usePasskeys, useSessions, useSignIns, type PasswordPolicy, type Passkey, type SessionRow, type SignIn } from './api';
+import { clientLabel, K, useMfa, usePasskeys, useSessions, useSignIns, useTrustedDevices, type PasswordPolicy, type Passkey, type SessionRow, type SignIn, type TrustedDevice } from './api';
 import { Card, daysAgo, Head, Note, Pill } from './parts';
 import { BackupCodes, CodeBoxes, TwoFactorSheet } from './TwoFactor';
 
@@ -107,6 +107,7 @@ export default function Security() {
 
         <div className="flex min-w-0 flex-col gap-4">
           <Sessions />
+          <TrustedDevices />
           {signIns.data ? <SignIns items={signIns.data.items} onPassword={() => setSheet('password')} /> : null}
         </div>
       </div>
@@ -544,6 +545,108 @@ function SessionLine({ r, current, children }: { r: SessionRow; current: boolean
       </span>
       {children}
     </div>
+  );
+}
+
+// ── remembered devices ───────────────────────────────────────────────────
+
+/**
+ * The computers and browsers this account has verified (worksuite-desktop#301): a sign-in from one of them is not
+ * asked for an emailed code or to verify again. Removing one means its next sign-in is verified again; it does not
+ * sign it out (Active sessions does that).
+ */
+function TrustedDevices() {
+  const q = useTrustedDevices();
+  const qc = useQueryClient();
+  const [busy, setBusy] = useState<number | 'all' | null>(null);
+  const [confirmAll, setConfirmAll] = useState(false);
+  if (q.data === null) return null;
+  const rows = q.data ?? [];
+  const remove = async (d: TrustedDevice | null) => {
+    setBusy(d ? d.id : 'all');
+    try {
+      await apiDelete(d ? `/api/auth/devices/${d.id}` : '/api/auth/devices');
+      toast('success', d ? 'Device removed. It will be verified again next time.' : 'All remembered devices removed.');
+      setConfirmAll(false);
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(null);
+      void qc.invalidateQueries({ queryKey: K.devices });
+    }
+  };
+  return (
+    <Card
+      title={
+        <span className="flex flex-col">
+          Remembered devices
+          <span className="text-[12.5px] font-medium text-ink-3">Not asked to verify again when you sign in.</span>
+        </span>
+      }
+      action={
+        rows.length > 1 ? (
+          <button type="button" className={btn} disabled={busy !== null} onClick={() => setConfirmAll(true)}>
+            Remove all
+          </button>
+        ) : null
+      }
+    >
+      {q.isLoading ? (
+        <Spinner />
+      ) : q.error ? (
+        <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
+      ) : rows.length === 0 ? (
+        <p className="m-0 text-[12.5px] text-ink-3">No remembered devices. The next sign-in on a computer or browser asks to verify it.</p>
+      ) : (
+        <div className="flex flex-col" aria-label="Remembered devices">
+          {rows.map((d) => {
+            const name = d.label || [d.browser, d.platform].filter(Boolean).join(' on ') || 'A device';
+            const mobile = /android|ios|iphone|ipad/i.test(`${d.platform} ${d.label}`);
+            return (
+              <div key={d.id} data-device={d.id} className="flex items-center gap-3 border-t border-line/70 py-2.5 first:border-t-0">
+                <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-subtle text-ink-2">
+                  <Icon name={mobile ? 'mobile' : d.browser ? 'globe' : 'laptop'} size={16} />
+                </span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex items-center gap-2">
+                    <b className="truncate text-[13px] text-ink">{name}</b>
+                    {d.current ? <Pill tone="green">This computer</Pill> : null}
+                  </span>
+                  <span className="truncate text-[12px] text-ink-3">
+                    {d.last_ip ? `${d.last_ip} · ` : ''}
+                    {d.last_seen_at ? `last used ${relative(d.last_seen_at)}` : d.created_at ? `added ${dateLabel(d.created_at)}` : ''}
+                    {d.expires_at ? ` · until ${dateLabel(d.expires_at)}` : ''}
+                  </span>
+                </span>
+                <button type="button" className="text-[12.5px] font-semibold text-danger hover:underline disabled:opacity-50" disabled={busy !== null} aria-label={`Remove ${name}`} onClick={() => void remove(d)}>
+                  {busy === d.id ? 'Removing…' : 'Remove'}
+                </button>
+              </div>
+            );
+          })}
+          <p className="m-0 mt-2 text-[11.5px] text-ink-3">A removed device is asked to verify again at its next sign-in. To sign it out now, use Active sessions.</p>
+        </div>
+      )}
+      {confirmAll ? (
+        <Sheet
+          title="Remove all remembered devices?"
+          width={440}
+          onClose={() => setConfirmAll(false)}
+          footer={
+            <>
+              <button type="button" className={btn} onClick={() => setConfirmAll(false)}>
+                Cancel
+              </button>
+              <button type="button" className="inline-flex h-[34px] items-center rounded-[8px] bg-danger px-3.5 text-[13px] font-bold text-white disabled:opacity-50" disabled={busy !== null} onClick={() => void remove(null)}>
+                Remove all
+              </button>
+            </>
+          }
+        >
+          <p className="m-0 text-[13px] text-ink-2">Every computer and browser, this one included, will be asked to verify again the next time you sign in on it.</p>
+        </Sheet>
+      ) : null}
+    </Card>
   );
 }
 

@@ -4,9 +4,21 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.1.1 — 2026-10-11
+## 1.3.1 — 2026-10-11
 
 - The support report carries Meet's remote-control checks; a gatherer that cannot answer leaves one skipped row rather than taking the report down.
+
+## 1.3.0 — 2026-10-10
+
+**Added**
+
+- voice message timings — send to bubble, send to Sent, size per minute — median and 95th percentile (#300)
+
+## 1.2.0 — 2026-10-10
+
+**Added**
+
+- WhatsApp linking — each link attempt with its steps and error (#323)
 
 ## 1.1.0 — 2026-10-05
 

@@ -98,6 +98,11 @@ const api = {
     signIn: call('auth:signIn'),
     verifyMfa: call('auth:verifyMfa'),
     cancelMfa: call('auth:cancelMfa'),
+    verifyDevice: call('auth:verifyDevice'),
+    resendDevice: call('auth:resendDevice'),
+    solveCaptcha: call('auth:solveCaptcha'),
+    requestUnblock: call('auth:requestUnblock'),
+    clearGate: call('auth:clearGate'),
     passkeyStart: call('auth:passkeyStart'),
     passkeyCancel: call('auth:passkeyCancel'),
     openPage: call('auth:openPage'),
@@ -431,6 +436,9 @@ const api = {
     focusFile: call('office:focusFile'),
     externalApps: call('office:externalApps'),
     openExternal: call('office:openExternal'),
+    // WorkSuite Office, the desktop editor (#322).
+    desktopApp: call('office:desktopApp'),
+    openInDesktopApp: call('office:openInDesktopApp'),
     localCopies: call('office:localCopies'),
     uploadLocal: call('office:uploadLocal'),
     forgetLocal: call('office:forgetLocal'),
@@ -567,6 +575,10 @@ const api = {
     displays: call('support:displays'),
     wall: call('support:wall'),
     wallClose: call('support:wallClose'),
+  },
+  slides: {
+    present: call('slides:present'),
+    close: call('slides:close'),
   },
   help: {
     capture: call('help:capture'),

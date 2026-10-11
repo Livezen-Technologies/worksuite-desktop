@@ -10,6 +10,8 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
+import { WhatsappLinkLog } from './WhatsappLinkLog';
+import { VoiceSendTimes } from './VoiceSendTimes';
 
 /**
  * Help → Diagnostics (UI-21, FR-DIAG-01/02, WF-29): live health checks, the
@@ -96,6 +98,12 @@ export default function DiagnosticsPage(_props: ModuleProps) {
           </div>
           <p className="mt-3 text-[12.5px] text-ink-3">Safe Mode starts without hardware acceleration, tab restore or background previews. WorkSuite offers it automatically after three crashes in ten minutes.</p>
         </div>
+
+        {/* Each attempt to link a WhatsApp Web number, for whoever may link them (worksuite-desktop#323). */}
+        <WhatsappLinkLog />
+
+        {/* How fast voice messages go from this computer (worksuite-desktop#300). */}
+        <VoiceSendTimes />
       </div>
 
       {preview ? (

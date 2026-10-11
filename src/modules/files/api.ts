@@ -6,7 +6,8 @@ import { apiGet, apiPost, apiUrl } from '../../core/api';
  * rule lives on the server (DriveGuard): a row carries `access`, and this
  * side only shows what that allows. Stamps are UTC without a zone.
  */
-export type Level = 'view' | 'edit' | 'full';
+/** `comment` (worksuite-desktop#329): open it and take part in its comments, without changing it. */
+export type Level = 'view' | 'comment' | 'edit' | 'full';
 
 export interface ItemAccess {
   level: Level | null;
@@ -67,6 +68,15 @@ export interface DriveFolder {
   owner_id?: number;
   owner_name?: string | null;
   children?: DriveFolder[];
+  /** The product's folder (Call recordings, Tenders): it keeps its name and place (worksuite-desktop#328). */
+  is_system?: boolean;
+  /** "Created by Tenders", for a system folder's lock. */
+  system_by?: string | null;
+  /** Pinned to the top of the rail, by this person. */
+  pinned?: boolean;
+  /** The manual order among its siblings. */
+  sort_order?: number;
+  updated_at?: string | null;
 }
 export interface TreeNode extends DriveFolder {
   children: TreeNode[];

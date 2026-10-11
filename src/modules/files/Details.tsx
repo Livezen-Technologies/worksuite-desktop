@@ -17,7 +17,7 @@ import { Checkbox } from '../../components/Checkbox';
 type Tab = 'details' | 'activity' | 'comments' | 'versions' | 'access';
 
 const stamp = (s: string | null | undefined) => (s ? `${dateLabel(s)}, ${timeLabel(s)}` : '—');
-const LEVEL: Record<string, string> = { view: 'Can view', edit: 'Can edit', full: 'Full access' };
+const LEVEL: Record<string, string> = { view: 'Can view', comment: 'Can comment', edit: 'Can edit', full: 'Full access' };
 const initials = (n: string | null | undefined) => (n ?? '?').split(/\s+/).filter(Boolean).map((w) => w[0]).join('').slice(0, 2).toUpperCase() || '?';
 
 /**

@@ -1,6 +1,10 @@
 import { app } from '../../core/app-state';
 import { apiUrl } from '../../core/api';
+import { call } from '../../core/bridge';
 import { isOfficeFile, mediaToken, openDocument, openInOffice } from '../../core/open-document';
+import { officeOpenKind } from '@shared/office-open';
+import { openOfficeDoc, type OfficeDoc } from '../office/open-with';
+import { isSlidesFile, openSlidesViewer } from '../office/slides/overlay';
 
 /** Chat shapes, as `/api/chat/rooms` and `/api/chat/messages` return them. Stamps are UTC without a zone. */
 export interface Room {
@@ -138,8 +142,32 @@ export function mediaUrl(u: string | null | undefined): string | null {
  */
 export function openAttachment(f: Pick<ChatFile, 'download_url' | 'filename'>, link: (url: string) => void): void {
   const token = mediaToken(f.download_url);
-  // A Word, Excel or PowerPoint file opens in a WorkSuite DOC / Sheet / Slides tab.
-  if (token && isOfficeFile(f.filename)) openInOffice({ kind: 'api', path: `/media/${token}?download=1`, name: f.filename });
+  const doc = chatOfficeDoc(f);
+  // A presentation opens in the slide viewer (#321), whose Open in WorkSuite Office goes the #322 way; any other Word,
+  // Excel or PowerPoint file opens where Settings › Files says (#322): a WorkSuite DOC / Sheet / Slides tab by
+  // default, WorkSuite Office, or the app on this computer.
+  if (doc && token && isSlidesFile(f.filename)) {
+    openSlidesViewer({ name: f.filename, url: apiUrl(`/media/${token}`), onDownload: () => void call('transfers:download', { chatMedia: token, name: f.filename, open: false }).catch(() => undefined), onOpenInOffice: () => void openOfficeDoc(doc, 'worksuite-office') });
+  } else if (doc && officeOpenKind(f.filename)) void openOfficeDoc(doc);
   else if (token) void openDocument({ chatMedia: token }, f.filename);
   else if (f.download_url) link(f.download_url);
+}
+
+/**
+ * A chat file as "Open with" takes it (#322): a Drive file (a WhatsApp attachment kept in Drive) by its id, an upload
+ * by its signed address — not in Drive, so WorkSuite Office asks to save it there first. Null when the app cannot
+ * fetch it itself.
+ */
+export function chatOfficeDoc(f: Pick<ChatFile, 'download_url' | 'filename'> & { url?: string | null; driveFile?: number }): OfficeDoc | null {
+  const name = f.filename;
+  const builtinOk = isOfficeFile(name);
+  if (f.driveFile) {
+    const id = f.driveFile;
+    const path = `/api/files/${id}/download`;
+    return { name, driveId: id, builtinOk, openBuiltin: () => openInOffice({ kind: 'api', path, name }), openSystem: () => void openDocument({ fileId: String(id) }, name) };
+  }
+  const token = mediaToken(f.download_url) ?? mediaToken(f.url);
+  if (!token) return null;
+  const path = `/media/${token}?download=1`;
+  return { name, apiPath: path, builtinOk, openBuiltin: () => openInOffice({ kind: 'api', path, name }), openSystem: () => void openDocument({ chatMedia: token }, name) };
 }

@@ -210,6 +210,7 @@ describe('the channel toolbar', () => {
     expect(numberState({ status: 'qr_required' })).toEqual({ tone: 'waiting', label: 'Waiting for scan' });
     expect(numberState({ status: 'connecting' })).toEqual({ tone: 'waiting', label: 'Connecting' });
     expect(numberState({ status: 'expired' })).toEqual({ tone: 'down', label: 'Not connected' });
+    expect(numberState({ status: 'error' })).toEqual({ tone: 'down', label: 'Error' });
     expect(numberName({ name: 'Support', phone: '94771234567' })).toBe('Support · +94 77 123 4567');
     expect(numberName({ name: 'Support', phone: null })).toBe('Support');
   });
@@ -561,7 +562,7 @@ describe('WhatsApp channel settings', () => {
     expect(within(sales).queryByRole('button', { name: 'Unlink from phone' })).toBeNull();
     expect(within(sales).queryByRole('button', { name: 'Make default' })).toBeNull();
     const support = screen.getByRole('listitem', { name: 'Support' });
-    expect(within(support).getByText('Not connected')).toBeTruthy();
+    expect(within(support).getByText('Error')).toBeTruthy();
     expect(within(support).getByText('The phone unlinked this device.')).toBeTruthy();
     // The server says this person may not change Support: nothing is offered.
     expect(within(support).queryAllByRole('button')).toHaveLength(0);

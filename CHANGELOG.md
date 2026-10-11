@@ -5,7 +5,13 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
-## 0.2.230 — 2026-10-11
+> **A note on the numbers.** 0.2.223 to 0.2.232 are the Meet and remote-control
+> work from a branch that ran alongside 0.2.221 and 0.2.222. Both lines had
+> reached for 0.2.221 and 0.2.222, so that run was renumbered on the way in
+> rather than published twice: the app's versions are one sequence, and these
+> come after what had already shipped.
+
+## 0.2.232 — 2026-10-11
 
 - **Remote support has a desktop side (meet 1.21.0).** The server and the web app have had this feature for a
   while; the desktop had the type and nothing else. Now, in a support session's meeting window:
@@ -40,9 +46,9 @@ and the AI already removed — so there is nothing to hide in the client.
 
 ---
 
-## 0.2.229 — 2026-10-11
+## 0.2.231 — 2026-10-11
 
-- **Settings › Remote control now shows its own checks (meet 1.20.0, diagnostics 1.1.1).** What can be captured
+- **Settings › Remote control now shows its own checks (meet 1.20.0, diagnostics 1.3.1).** What can be captured
   (and, on a Mac that refused it, where the permission lives), how many displays there are and that the picker
   offers each one separately, whether input can reach this computer at all — Wayland is said plainly — and what the
   clipboard policy allows. **Run checks again** re-reads them; it opens no capture and asks for no permission, so it
@@ -64,7 +70,7 @@ and the AI already removed — so there is nothing to hide in the client.
 
 ---
 
-## 0.2.228 — 2026-10-11
+## 0.2.230 — 2026-10-11
 
 - **Share your screen, without setting up a call first (meet 1.19.0).** Meet home has a Share your screen item, and
   ⌘⇧E (Ctrl+Shift+E) now reaches it rather than only bringing the page forward. It makes a meeting — a screen others
@@ -91,7 +97,7 @@ a person, a slug, and somewhere to resolve it — and is recorded as such in the
 
 ---
 
-## 0.2.227 — 2026-10-10
+## 0.2.229 — 2026-10-10
 
 - **When remote control ends, the controller is told properly (meet 1.18.0).** It used to be a toast: who ended it
   and when, gone a few seconds later. There is now a card over the shared screen with who ended it, that the other
@@ -109,7 +115,7 @@ a person, a slug, and somewhere to resolve it — and is recorded as such in the
 
 ---
 
-## 0.2.226 — 2026-10-10
+## 0.2.228 — 2026-10-10
 
 - **The call bar's two facts, and what the emergency stop says afterwards (meet 1.17.0).**
   - **"Encrypted in transit"**, not the artboard's "Encrypted". Media is encrypted on every hop — WebRTC gives no
@@ -133,7 +139,7 @@ a person, a slug, and somewhere to resolve it — and is recorded as such in the
 
 ---
 
-## 0.2.225 — 2026-10-10
+## 0.2.227 — 2026-10-10
 
 - **The pre-join screen: three more ways in, and a device check (meet 1.16.0).**
   - **Join muted**, **Audio only** and **Present** sit beside Join now. Each overrides this screen's switches for
@@ -158,7 +164,7 @@ a person, a slug, and somewhere to resolve it — and is recorded as such in the
 
 ---
 
-## 0.2.224 — 2026-10-10
+## 0.2.226 — 2026-10-10
 
 - **The sharing bar (meet 1.15.0).** While you share a screen, a strip sits at the top of it: what is being shared,
   how long for, mute, the camera, the chat, **Pause** and **Stop sharing**. The call window is behind whatever you
@@ -179,9 +185,9 @@ a person, a slug, and somewhere to resolve it — and is recorded as such in the
 
 ---
 
-## 0.2.223 — 2026-10-10
+## 0.2.225 — 2026-10-10
 
-- **Settings › Meet: Behaviour, and what the system allows (meet 1.14.0, settings 1.31.0, calls 1.7.2).**
+- **Settings › Meet: Behaviour, and what the system allows (meet 1.14.0, settings 1.33.0, calls 1.7.2).**
   - **Pop out the call when I switch apps.** The meeting shrinks to a card that floats over whatever you move to
     and goes back when you return. Only when no WorkSuite window is in front — moving between WorkSuite's own
     windows is not switching apps, and a call that shrank every time you clicked your inbox would be unusable. It
@@ -207,7 +213,7 @@ a person, a slug, and somewhere to resolve it — and is recorded as such in the
 
 ---
 
-## 0.2.222 — 2026-10-10
+## 0.2.224 — 2026-10-10
 
 - **Meet in the tray, and Audio only on an invitation (meet 1.13.0).** The tray had no Meet lines at all.
   - **Join next: <the meeting>** when there is something to join, **Start instant meeting** and **Share screen**
@@ -232,9 +238,9 @@ a person, a slug, and somewhere to resolve it — and is recorded as such in the
 
 ---
 
-## 0.2.221 — 2026-10-10
+## 0.2.223 — 2026-10-10
 
-- **Meet has keyboard shortcuts (meet 1.12.0, settings 1.30.0, calls 1.7.1).** Nine of them, in Settings ›
+- **Meet has keyboard shortcuts (meet 1.12.0, settings 1.32.0, calls 1.7.1).** Nine of them, in Settings ›
   Keyboard shortcuts with the rest: mute, the camera, Join next meeting, Share screen, Start instant meeting,
   Raise or lower hand, Float the call over other apps, and the two notes keys. Until now Meet had none at all.
   - **Five are global**, held by the app itself so they work with WorkSuite behind whatever you are presenting —
@@ -260,6 +266,84 @@ a person, a slug, and somewhere to resolve it — and is recorded as such in the
     document with its own editor, and a key that silently appends to somebody else's paragraph is not a feature.
 
 ---
+
+## 0.2.222 — 2026-10-10
+
+- **Sign-in: the app handles every protection the server asks for (settings 1.31.0, account 1.2.0, #301).** Until
+  now a CAPTCHA, a wait, a blocked account or a new-device code all came out as a plain failed sign-in.
+  - **CAPTCHA:** opens in a small window on your WorkSuite server's page (the provider only draws there), in its
+    own private session; the answer goes with the next attempt only.
+  - **New computer:** the code emailed to you — where it went, when it expires, tries left, Send another code — or,
+    if you use two-factor, your authenticator code, which verifies this computer too. **Remember this computer**
+    keeps it verified (the token is in the system's secure storage); untick it and the next sign-in asks again.
+  - **Too many attempts:** a live countdown, what the next failure costs, and when the account would be blocked.
+    **Blocked:** "Email me an unblock link".
+  - **My account › Security › Remembered computers:** this one marked; remove one or all.
+  - An app the server keeps from you offers **Ask for access** with a reason.
+  - Needs WorkSuite Server with Auth 2.3.0 for the CAPTCHA page.
+- **Voice messages send faster and survive a restart (chat 1.77.0, diagnostics 1.3.0, #300).** Recorded as Opus
+  mono at 32 kbit/s — about a quarter of the size. The bubble shows **Sending… 40%**, **Retrying in 15 s**, and
+  **Sent** only when the server has it; retries come after 2 s, 5 s, 15 s, 30 s and 60 s, then Retry and Cancel
+  (Cancel removes the bubble, the recording and the partial upload). A message that did not go is kept and resent
+  at the next launch, and "Clear finished" no longer throws it away. The recorder checks there is room first, counts
+  down the last 30 seconds, and keeps what it has if the microphone goes. Help › Diagnostics shows the timings
+  (send to bubble, send to Sent) as median and 95th percentile, with Clear for a new baseline.
+- **Files: menus on the sidebar's folders (files 1.11.0, #328).** Right-click a folder, use the ⋯ that appears on
+  hover, or press ⇧F10: Open (here, new tab, new window), New folder / Upload / New document inside, Share, Copy
+  link, Rename, Move to, Copy to, colour, Star, **Pin to top**, Available offline, Details, Activity, Download as
+  ZIP, Show in Finder, Move to Bin (saying how many files are inside). Shared folders offer **Leave folder** or
+  **Remove from my Drive** instead of Bin; folders WorkSuite made (Call recordings, Tenders) show a lock — "Created
+  by Tenders" — and can't be renamed, moved or deleted.
+  - My Drive, Recent and Starred have their own menus (Storage details, Clear recent, Unstar all); the Folders
+    header sorts by Name, Modified or Manual, shows starred first, or collapses all.
+  - **Rename in place** with F2. **Drag** files from the list onto a folder to move them (⌥ copies; a closed folder
+    opens after a second), drag folders to reorder or nest them, or drop files from Finder / Explorer to upload.
+  - **Undo** after Move, Rename and Bin. The tree works from the keyboard: arrows, → ←, Enter, F2, ⌘⌫.
+  - Sort and "starred first" are kept on this computer; pins follow you. Needs WorkSuite Server with Files 1.8.0.
+- **Files: the Share dialog, redesigned (files 1.11.0, ai 1.9.1, #329).** One search for people, teams, departments,
+  roles and companies, each result tagged with its type, in a list that floats instead of pushing everything down.
+  Payroll records without a WorkSuite sign-in show greyed out — "Can't share". The people you pick become chips;
+  **Share** waits for one. Permissions are a short menu with each level explained, now including **Can comment**.
+  Notify by **Chat** and/or **Email**, with a message, appears once someone is added. One **Who has access** list
+  with role pickers and the inherited access as a switch; **General access**: Restricted, Anyone at the company with
+  the link, Anyone with the link. Footer: Copy link, Send in chat, Done. "No download" is no longer offered.
+  Needs WorkSuite Server with Files 1.8.0.
+
+## 0.2.221 — 2026-10-10
+
+- **Office: the editor fills the tab, with one header (office 1.2.0, #326).** The white strip under the editor came
+  from the AI button: the editor stopped short of it across its whole width. The AI button now steps aside while an
+  Office editor is on screen (open the assistant from the command palette), and the editor fills everything between
+  the file header and the status bar. Around and behind it is the app's own grey in light and dark, not white.
+  ONLYOFFICE's second header (name, Editing, Share) and its feature tips are gone; the editor opens in the app's theme
+  (needs WorkSuite Server with EuroOffice 1.3.0; older Document Servers ignore the newer settings).
+- **Presentations: a real slide viewer and Present (office 1.2.0, #321).** A .pptx in Files (Preview / Space), chat,
+  Mail and Tenders opens in a slide viewer: sharp slides fitted to the window and re-fitted on resize, thumbnails down
+  the left, ‹ Slide 1 of 8 ›, zoom (Fit slide, Fit width, 50–200%, ⌘+ ⌘− ⌘0), Download and Open in WorkSuite Office;
+  ← → Space Page Up/Down Home End move through the deck.
+  - **Present ▶** (⌘⏎ or F5; ⇧⌘⏎ from the current slide) fills the screen in black with no app around it. Click, →
+    or Space for next, ← back, B blanks, Esc ends; moving the mouse shows prev/next, the slide number, a laser pointer
+    and exit, fading after 2 seconds. With a second display the slides go there and this screen shows the presenter
+    view: current and next slide, speaker notes, a timer and the clock. Present is in the editor's header too.
+  - Slides are drawn here, so they work offline. Transitions and animations do not play yet; Present from the editor
+    shows the last saved version. "Present in meeting" is not built — pick the "Slideshow" window in Meet's picker.
+- **Open with WorkSuite Office (files 1.10.0, settings 1.30.0, #322).** Word, Excel and PowerPoint files have **Open
+  with ▸** — WorkSuite Office, WorkSuite (in the app), the default app here, and Word/Excel/PowerPoint where installed
+  — in Files' menu and as a button on Mail attachments, chat files and tender documents. **Settings › Files & Sync ›
+  Office files** picks, per Documents / Spreadsheets / Presentations, where Open and double-click go: Built-in editor
+  (the default, as before), WorkSuite Office, Ask every time, or Default app. A Drive file opens in WorkSuite Office
+  through a `worksuiteoffice://open` link and saves back as a new version; a file not in Drive asks "Save to Drive
+  first?"; without WorkSuite Office installed it offers Download. WorkSuite Office itself must handle the new link,
+  and registering as a Finder / Explorer "Open With" app belongs to that app.
+- **Mail: Microsoft 365 sign-in says what went wrong (mail 1.29.0, #324).** Adding a Microsoft 365 mailbox now shows
+  each step — sign-in, token, IMAP, SMTP — as it happens, and a failure says why in plain words with Microsoft's code,
+  **Copy details** and, when an administrator must approve the app, the approval link to send them. An optional email
+  field picks the right account. Needs WorkSuite Server with Mail 1.26.0; against an older server it works as before.
+- **WhatsApp: numbers link reliably (chat 1.76.0, diagnostics 1.2.0, #323).** **Scan again** starts a clean session
+  and shows a new QR code that refreshes itself, with a countdown; **Link with phone number instead** gives a pairing
+  code. One error shows, not several, with what to do and "Details for admin"; a link that does not start in 60
+  seconds says so. Help › Diagnostics › WhatsApp linking lists each attempt. Needs WorkSuite Server with Whatsapp 1.8.0.
+
 
 ## 0.2.220 — 2026-10-10
 

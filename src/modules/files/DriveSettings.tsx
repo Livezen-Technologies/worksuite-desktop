@@ -2,6 +2,8 @@ import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import type { BandwidthLimit, DrivePrefs } from '@shared/types';
 import { MAX_CONCURRENT, transferSections, transferSummary } from '@shared/transfers';
+import { OFFICE_APP_DOWNLOAD_URL, OFFICE_APP_NAME, OFFICE_OPEN_CHOICES, OFFICE_OPEN_CHOICE_LABELS, OFFICE_OPEN_KINDS, OFFICE_OPEN_KIND_LABELS, normalizeOfficeOpenPrefs, officeOpenExtensions, type OfficeOpenChoice } from '@shared/office-open';
+import { officeAppStatus } from '../office/open-with';
 import { app, updatePrefs } from '../../core/app-state';
 import { apiGet } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
@@ -44,6 +46,8 @@ export function DriveSettings({ embedded = false }: { embedded?: boolean }) {
           </div>
           <Button onClick={reset}>Reset to defaults</Button>
         </div>
+
+        <OfficeOpenSection />
 
         <Section title="Transfers">
           <Row label="Files moving at once" hint="At most two uploads and downloads together, across every module. The rest wait their turn in the queue.">
@@ -110,6 +114,38 @@ export function DriveSettings({ embedded = false }: { embedded?: boolean }) {
 
 function range(from: number, to: number): number[] {
   return Array.from({ length: Math.max(0, to - from + 1) }, (_, i) => from + i);
+}
+
+/**
+ * "Open Office files in" (worksuite-desktop#322): where a double-click opens Word, Excel and PowerPoint files, per
+ * kind. Right-click › Open with still offers every place each time.
+ */
+function OfficeOpenSection() {
+  const saved = useStore(app, (s) => s.prefs?.officeOpen);
+  const prefs = normalizeOfficeOpenPrefs(saved);
+  const desktopApp = useQuery({ queryKey: ['office', 'desktop-app'], queryFn: () => officeAppStatus(true), staleTime: 30_000 });
+  const missing = desktopApp.data && !desktopApp.data.installed;
+  return (
+    <Section title="Office files">
+      {OFFICE_OPEN_KINDS.map((k) => (
+        <Row key={k} label={`Open ${OFFICE_OPEN_KIND_LABELS[k].toLowerCase()} in`} hint={`${officeOpenExtensions(k).slice(0, 4).map((e) => `.${e}`).join(', ')}… — when double-clicked anywhere in WorkSuite.`}>
+          <Select
+            label={`Open ${OFFICE_OPEN_KIND_LABELS[k].toLowerCase()} in`}
+            value={prefs[k]}
+            options={OFFICE_OPEN_CHOICES.map((c) => ({ value: c, label: c === 'worksuite-office' && missing ? `${OFFICE_OPEN_CHOICE_LABELS[c]} (not installed)` : OFFICE_OPEN_CHOICE_LABELS[c] }))}
+            onValueChange={(v) => void updatePrefs({ officeOpen: { [k]: v as OfficeOpenChoice } }).catch((e) => toast('error', errorMessage(e)))}
+          />
+        </Row>
+      ))}
+      {missing ? (
+        <Row label={`${OFFICE_APP_NAME} isn’t installed`} hint="WorkSuite’s desktop editor for Word, Excel and PowerPoint files, saving back to Drive.">
+          <Button icon="download" onClick={() => void call('app:openExternal', { url: OFFICE_APP_DOWNLOAD_URL }).catch((e) => toast('error', errorMessage(e)))}>
+            Download
+          </Button>
+        </Row>
+      ) : null}
+    </Section>
+  );
 }
 
 function Section({ title, children }: { title: string; children: ReactNode }) {

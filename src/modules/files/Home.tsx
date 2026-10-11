@@ -129,7 +129,7 @@ export function Home({ onPlace, now, newItems }: { onPlace: (p: Place, q?: strin
         >
           <Icon name="plus" size={15} /> New
         </button>
-        <button type="button" onClick={d.upload} className="flex h-9 shrink-0 items-center gap-1.5 rounded-[9px] border border-line bg-surface px-3 font-semibold text-ink hover:bg-subtle">
+        <button type="button" onClick={() => d.upload()} className="flex h-9 shrink-0 items-center gap-1.5 rounded-[9px] border border-line bg-surface px-3 font-semibold text-ink hover:bg-subtle">
           <Icon name="upload" size={15} /> Upload
         </button>
       </header>

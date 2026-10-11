@@ -181,6 +181,8 @@ export function numberState(a: Pick<WaAccount, 'status'>): { tone: NumberTone; l
   if (isConnected(a)) return { tone: 'connected', label: 'Connected' };
   if (a.status === 'qr_required' || a.status === 'setup') return { tone: 'waiting', label: 'Waiting for scan' };
   if (isConnecting(a)) return { tone: 'waiting', label: 'Connecting' };
+  // A link that failed says so ("Error", with its reason beside it), rather than reading as merely not connected (#323).
+  if (a.status === 'error') return { tone: 'down', label: 'Error' };
   return { tone: 'down', label: 'Not connected' };
 }
 

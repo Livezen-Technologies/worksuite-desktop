@@ -4,15 +4,27 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## 1.31.0 — 2026-10-10
+## 1.33.0 — 2026-10-11
 
 - Settings › Meet gained Behaviour — pop the call out when you switch apps, global mute and camera keys, share computer sound when presenting, and video quality on battery — and System permissions: camera, microphone, screen recording, accessibility and notifications, each with where it is granted.
 - Hardware acceleration and opening meeting links in the app are named with where they live rather than repeated here.
 
-## 1.30.0 — 2026-10-10
+## 1.32.0 — 2026-10-11
 
 - Keyboard shortcuts are grouped by area with a Global or In app badge, a search box, and one Reset to defaults beside the per-row ones. A clash now says which key does nothing until one of them is changed.
 - The remote-control emergency stop is listed, read-only, with where it is changed and why it cannot be removed.
+
+## 1.31.0 — 2026-10-10
+
+**Added**
+
+- sign-in protection screens — CAPTCHA, new-device code, wait countdown, locked account (#301)
+
+## 1.30.0 — 2026-10-10
+
+**Added**
+
+- Open Office files in — Built-in editor, WorkSuite Office, Ask every time or Default app per kind (#322)
 
 ## 1.29.0 — 2026-10-10
 

@@ -1,6 +1,7 @@
 import { verifyLockChange } from '../services/lock-verification';
 import { BrowserWindow, app, clipboard, dialog, nativeImage, powerMonitor, screen, shell, systemPreferences, type WebContents, webContents } from 'electron';
 import { wallDisplays } from '../services/live-desk';
+import { planShow } from '../services/slideshow';
 import { readFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { writeAtomically } from '../services/pdf/host';
@@ -32,6 +33,7 @@ import { restartForAccessibility } from '../services/remote-control/accessibilit
 import { createZip } from '../services/zip';
 import { listConflicts, resolveConflict } from '../services/sync/conflicts';
 import { openExternalSafely } from '../security/hardening';
+import { solveCaptcha } from '../services/captcha-window';
 import { answerNotice } from '../services/ai-pending';
 import { notificationSettingsUrl } from '../services/locked-notifications';
 import { meetPermissions } from '@shared/meet-permissions';
@@ -272,8 +274,19 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return true;
   });
   router.handle('auth:signIn', (input) => ctx.session.signIn(input.email, input.password));
-  router.handle('auth:verifyMfa', (input) => ctx.session.verifyMfa(input.code));
+  router.handle('auth:verifyMfa', (input) => ctx.session.verifyMfa(input.code, input.remember ?? true));
   router.handle('auth:cancelMfa', () => ctx.session.cancelMfa());
+  // A new computer, a CAPTCHA, a block (worksuite-desktop#301).
+  router.handle('auth:verifyDevice', (input) => ctx.session.verifyDevice(input.code, input.remember));
+  router.handle('auth:resendDevice', () => ctx.session.resendDevice());
+  router.handle('auth:solveCaptcha', async (_input, c) => {
+    const origin = ctx.auth.getServer()?.origin;
+    if (!origin) throw new DesktopError('NOT_WORKSUITE', 'Choose a WorkSuite server first.');
+    const token = await solveCaptcha(origin, { parent: winOf(c.sender), devTools: !app.isPackaged });
+    return token ? ctx.session.captchaSolved(token) : ctx.session.get();
+  });
+  router.handle('auth:requestUnblock', async (input) => ({ message: await ctx.auth.requestUnblock(input.email.trim()) }));
+  router.handle('auth:clearGate', () => ctx.session.clearGate());
   router.handle('auth:passkeyStart', async () => {
     const url = ctx.session.startPasskey(os.hostname());
     const origin = ctx.auth.getServer()?.origin;
@@ -769,6 +782,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('office:focusFile', (input, c) => ctx.office.focusFile(c.sender, input.fileId));
   router.handle('office:externalApps', (input) => ctx.officeLocal.apps(input.extension));
   router.handle('office:openExternal', (input) => ctx.officeLocal.open(input));
+  router.handle('office:desktopApp', () => ctx.officeApp.status());
+  router.handle('office:openInDesktopApp', (input) => ctx.officeApp.open(input));
   router.handle('office:localCopies', () => ctx.officeLocal.list());
   router.handle('office:uploadLocal', (input) => ctx.officeLocal.upload(input.id, input.how));
   router.handle('office:forgetLocal', (input) => ctx.officeLocal.forget(input.id));
@@ -1093,6 +1108,16 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('support:displays', () => ({ displays: wallDisplays(screen.getAllDisplays(), ctx.windows.mainDisplayId()), open: ctx.windows.supportWallOpen() }));
   router.handle('support:wall', (input) => void ctx.windows.showSupportWall(input.displayId));
   router.handle('support:wallClose', () => void ctx.windows.closeSupportWall());
+  // A presentation's slideshow (#321): the slides on another screen when there is one, the presenter view on this one.
+  router.handle('slides:present', (input, c) => {
+    const from = winOf(c.sender);
+    const here = from && !from.isDestroyed() ? screen.getDisplayMatching(from.getBounds()).id : null;
+    const plan = planShow(screen.getAllDisplays(), here, screen.getPrimaryDisplay().id, input.presenter !== false);
+    if (!plan) throw new DesktopError('UNSUPPORTED', 'There is no screen to present on.');
+    ctx.windows.showSlideshow(input.id, plan);
+    return { presenter: plan.presenter !== null };
+  });
+  router.handle('slides:close', () => void ctx.windows.closeSlideshow());
   // Contact Support (D-11): the asking window's own pixels, and the last day's log (redacted as it was written).
   router.handle('help:capture', async (_i, c) => {
     const w = winOf(c.sender);

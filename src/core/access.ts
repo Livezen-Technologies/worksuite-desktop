@@ -1,6 +1,7 @@
 import { useMemo } from 'react';
-import { GUEST_APPS, type AppDefinition } from '@shared/apps';
-import { GUEST_VISIBLE, canOpenApp, canOpenLink, canOpenRoute, canOpenWebPath, guestLockedApp, type VisibleApps } from '@shared/access';
+import { GUEST_APPS, findApp, type AppDefinition } from '@shared/apps';
+import { GUEST_VISIBLE, canOpenApp, canOpenLink, canOpenRoute, canOpenWebPath, guestLockedApp, routeOwner, type VisibleApps } from '@shared/access';
+import { askForAccess } from './access-request';
 import { app, isGuest } from './app-state';
 import { openSignInPanel } from './session';
 import { useStore } from './store';
@@ -69,7 +70,16 @@ export function refuse(target?: string): void {
     openSignInPanel(locked ?? target ?? '');
     return;
   }
-  toast('error', NO_ACCESS);
+  // An app the server gives by name can be asked for, from the refusal itself (the "Access denied" screen's request).
+  const def = target ? requestableApp(target) : null;
+  toast('error', NO_ACCESS, def ? { label: 'Ask for access', run: () => askForAccess({ slug: def.app!, label: def.label, ...(target?.startsWith('/') ? { path: target } : {}) }) } : undefined);
+}
+
+/** The app a refused target belongs to, when the server gives it by name (its `app` slug); null otherwise. */
+export function requestableApp(target: string): AppDefinition | null {
+  const id = target.includes('/') || target.includes('?') ? routeOwner(target.startsWith('/') ? target : `/${target}`) : target;
+  const def = findApp(id);
+  return def?.app ? def : null;
 }
 
 /** Whether the person may open this app; re-renders when access changes. */

@@ -223,7 +223,7 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
     if ((e.target as HTMLElement).closest('[data-row]')) return;
     e.preventDefault();
     const items: MenuItem[] = [
-      ...(mayAdd ? [{ label: 'New folder', hint: '⇧⌘N', icon: 'folder-plus', run: d.newFolder }, { label: 'Upload files…', icon: 'upload', run: d.upload }, { sep: true } as const] : []),
+      ...(mayAdd ? [{ label: 'New folder', hint: '⇧⌘N', icon: 'folder-plus', run: () => d.newFolder() }, { label: 'Upload files…', icon: 'upload', run: () => d.upload() }, { sep: true } as const] : []),
       { label: 'Select all', hint: '⌘A', icon: 'check', run: () => setSelected(new Set(items_())) },
       { label: 'Refresh', icon: 'refresh', run: d.refresh },
     ];
@@ -237,6 +237,8 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
     const onKey = (e: KeyboardEvent) => {
       const t = e.target as HTMLElement | null;
       if (document.querySelector('[aria-modal="true"], [role="menu"]')) return;
+      // The rail's folder tree has keys of its own (worksuite-desktop#328).
+      if (t?.closest?.('[role="tree"]')) return;
       if (t && (t.isContentEditable || ['INPUT', 'TEXTAREA', 'SELECT'].includes(t.tagName))) {
         if (e.key === 'Escape' && t.getAttribute('aria-label')?.startsWith('Search')) (t as HTMLInputElement).blur();
         return;
@@ -272,7 +274,15 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
   const dragStart = (item: Item, e: DragEvent) => {
     const keys = selected.has(keyOf(item)) ? [...selected] : [keyOf(item)];
     e.dataTransfer.setData('application/x-ws-drive', JSON.stringify(keys));
-    e.dataTransfer.effectAllowed = 'move';
+    // Each one's name and folder, for the toast and its Undo when it lands on a folder in the rail (worksuite-desktop#328).
+    const about: Record<string, { name: string; parent: number | null }> = {};
+    for (const k of keys) {
+      const i = byKey.get(k) ?? (k === keyOf(item) ? item : null);
+      if (i) about[k] = { name: i.f.name, parent: (i.type === 'file' ? i.f.folder_id : i.f.parent_id) ?? null };
+    }
+    e.dataTransfer.setData('application/x-ws-drive-about', JSON.stringify(about));
+    // ⌥ copies instead of moving.
+    e.dataTransfer.effectAllowed = 'copyMove';
   };
   const dropOn = (folder: DriveFolder) => ({
     onDragOver: (e: DragEvent) => {
@@ -350,11 +360,11 @@ export function Explorer({ place, active, onPlace, ask, initialQ }: { place: Pla
               </button>
               {current?.is_locked ? <span className="ml-1.5 flex items-center gap-1 rounded-xl bg-warning-bg px-2 py-0.5 text-[11.5px] font-bold text-warning"><Icon name="lock" size={11} /> Password locked</span> : null}
               <span className="flex-1" />
-              {folderAccess && !folderAccess.owner ? <span className="shrink-0 text-[12px] text-ink-3">Shared with you · {folderAccess.level === 'full' ? 'Full access' : folderAccess.level === 'edit' ? 'Can edit' : 'Can view'}</span> : null}
+              {folderAccess && !folderAccess.owner ? <span className="shrink-0 text-[12px] text-ink-3">Shared with you · {folderAccess.level === 'full' ? 'Full access' : folderAccess.level === 'edit' ? 'Can edit' : folderAccess.level === 'comment' ? 'Can comment' : 'Can view'}</span> : null}
               {mayAdd ? (
                 <>
-                  <button type="button" onClick={d.newFolder} className="h-9 shrink-0 rounded-[8px] border border-line bg-surface px-3 font-semibold whitespace-nowrap text-ink hover:bg-subtle">New folder</button>
-                  <button type="button" onClick={d.upload} className="h-9 shrink-0 rounded-[8px] bg-primary px-3.5 font-bold whitespace-nowrap text-white hover:bg-primary-hover">Upload</button>
+                  <button type="button" onClick={() => d.newFolder()} className="h-9 shrink-0 rounded-[8px] border border-line bg-surface px-3 font-semibold whitespace-nowrap text-ink hover:bg-subtle">New folder</button>
+                  <button type="button" onClick={() => d.upload()} className="h-9 shrink-0 rounded-[8px] bg-primary px-3.5 font-bold whitespace-nowrap text-white hover:bg-primary-hover">Upload</button>
                 </>
               ) : null}
             </nav>

@@ -360,7 +360,7 @@ export type OfficeCommand = z.infer<typeof officeCommandSchema>;
 /** What the main process tells a tab about its editor (`office:event`). */
 export interface OfficeViewEvent {
   viewId: string;
-  type: OfficeEditorEventName | 'hostReady' | 'scriptFailed' | 'crashed' | 'downloadBlocked' | 'focus';
+  type: OfficeEditorEventName | 'hostReady' | 'scriptFailed' | 'crashed' | 'downloadBlocked' | 'focus' | 'present';
   data: unknown;
 }
 

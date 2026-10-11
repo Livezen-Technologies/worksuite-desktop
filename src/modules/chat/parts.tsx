@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { frequentEmoji, noteEmojiUsed, searchEmoji } from './emoji';
 import { levelsToWaveform } from './kit/waveform';
+import { checkStorage, countdown, VOICE_CONSTRAINTS, VOICE_MAX_MS, voiceRecorderOptions } from './kit/recording';
 
 /** Reactions offered on hover; the full set is in the picker. */
 export const QUICK_REACTIONS = ['👍', '❤️', '😂', '😮', '😢', '🙏'];
@@ -77,10 +78,8 @@ export function EmojiPicker({ onPick, onClose, className }: { onPick: (e: string
 
 /** Bars kept for the live level meter while recording. */
 const LEVELS = 36;
-/** Opus where the system records it, in WebM and then Ogg; MP4 (AAC) otherwise (#285). */
-const RECORD_TYPES = ['audio/webm;codecs=opus', 'audio/ogg;codecs=opus', 'audio/mp4'];
 /** The longest voice message the server keeps. */
-const MOST = 10 * 60_000;
+const MOST = VOICE_MAX_MS;
 
 /**
  * A voice note, recorded in place of the message box and sent as a chat
@@ -91,9 +90,18 @@ const MOST = 10 * 60_000;
  * on or send (#285). Its length is counted here, pauses left out, and its
  * loudness kept as the waveform sent with it, so the message shows both the
  * moment it is sent.
+ *
+ * Recorded as Opus, mono, 32 kbit/s (AAC in MP4 where Opus can't be), and sent
+ * exactly as recorded (#300). Before the microphone opens it checks there is
+ * room to keep the recording until it is sent; over the last half minute a
+ * countdown shows; and a microphone that is taken away mid-recording (unplugged,
+ * permission withdrawn) stops it with what was recorded kept, to send or throw
+ * away. `onDone` is told when Send was pressed, for the send timings.
  */
-export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Blob, ms: number, waveform: number[]) => void; onCancel: () => void; compact?: boolean }) {
+export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Blob, ms: number, waveform: number[], pressedAt?: number) => void; onCancel: () => void; compact?: boolean }) {
   const [state, setState] = useState<'starting' | 'recording' | 'paused' | 'stopped' | 'failed'>('starting');
+  // The microphone went away mid-recording: why, shown above what was kept.
+  const [lost, setLost] = useState<string | null>(null);
   const [elapsed, setElapsed] = useState(0);
   const [levels, setLevels] = useState<number[]>(() => Array.from({ length: LEVELS }, () => 0));
   // The recording so far, while Preview plays it.
@@ -109,10 +117,11 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
   const took = useRef(0);
   const result = useRef<Blob | null>(null);
   const after = useRef<'keep' | 'send' | 'discard'>('keep');
+  const pressed = useRef<number | undefined>(undefined);
   // What waits for the recorder to hand over what it holds (Preview while paused).
   const flushed = useRef<(() => void) | null>(null);
   const recorded = () => before.current + (paused.current ? 0 : Date.now() - since.current);
-  const finish = (blob: Blob) => onDone(blob, took.current, levelsToWaveform(read.current));
+  const finish = (blob: Blob) => onDone(blob, took.current, levelsToWaveform(read.current), pressed.current);
 
   useEffect(() => {
     let stream: MediaStream | null = null;
@@ -127,12 +136,29 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
     };
     void (async () => {
       try {
+        // Room to keep it until it is sent, asked before anything is recorded (#300).
+        const room = await checkStorage(MOST);
+        if (room.kind === 'full') throw new Error('This computer is out of space, so a voice message can\'t be recorded. Free some space and try again.');
+        if (room.kind === 'low') toast('warning', `Space on this computer is low: there is room for about ${room.minutes} minute${room.minutes === 1 ? '' : 's'} of recording.`);
         const { granted } = await call('media:access', { kind: 'microphone' });
         if (!granted) throw new Error('WorkSuite is not allowed to use the microphone. Allow it in System Settings → Privacy & Security → Microphone.');
-        stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+        stream = await navigator.mediaDevices.getUserMedia({ audio: VOICE_CONSTRAINTS });
         if (after.current === 'discard') return halt();
-        const mime = RECORD_TYPES.find((m) => MediaRecorder.isTypeSupported(m));
-        const r = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+        let r: MediaRecorder;
+        try {
+          r = new MediaRecorder(stream, voiceRecorderOptions());
+        } catch {
+          // A recorder that refuses the bit rate still records, at its own.
+          r = new MediaRecorder(stream);
+        }
+        // The microphone taken away mid-recording (unplugged, or its permission withdrawn): what was recorded is kept.
+        const gone = (why: string) => {
+          if (after.current === 'discard' || r.state === 'inactive') return;
+          setLost(why);
+          r.stop();
+        };
+        stream.getTracks().forEach((t) => t.addEventListener?.('ended', () => gone('The microphone stopped (unplugged, or its permission was withdrawn). What you recorded is kept: send it or throw it away.')));
+        r.onerror = () => gone('Recording stopped because of a problem with the microphone. What you recorded is kept: send it or throw it away.');
         r.ondataavailable = (e) => {
           if (e.data.size) chunks.current.push(e.data);
           const then = flushed.current;
@@ -226,6 +252,7 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
     } else play();
   };
   const send = () => {
+    pressed.current = performance.now();
     setHearing(null);
     if (state === 'stopped' && result.current) return finish(result.current);
     after.current = 'send';
@@ -240,6 +267,7 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
   const btn = compact ? 'h-7 w-7' : 'h-8 w-8';
   const tool = cx('flex shrink-0 items-center justify-center rounded-[8px] border border-line text-ink hover:bg-subtle', btn);
   const held = state === 'paused' || state === 'stopped';
+  const left = state === 'recording' || state === 'paused' ? countdown(elapsed, MOST) : null;
 
   return (
     <div className={cx('flex flex-1 items-center', compact ? 'gap-1.5' : 'gap-2.5')} role="group" aria-label="Recording a voice message">
@@ -248,8 +276,15 @@ export function VoiceRecorder({ onDone, onCancel, compact }: { onDone: (blob: Bl
       </button>
       <span className={cx('h-2.5 w-2.5 shrink-0 rounded-full', state === 'recording' ? 'animate-pulse bg-danger' : held ? 'bg-ink-3' : 'bg-line')} aria-hidden />
       <span className="w-10 shrink-0 font-mono text-[13px] text-ink tabular" aria-label="Recorded">{formatClock(elapsed / 1000)}</span>
-      <div className="flex h-7 min-w-0 flex-1 items-center gap-[2px] overflow-hidden" aria-hidden>
-        {state === 'starting' ? (
+      {left !== null ? (
+        <span role="timer" aria-live="polite" aria-label={`${Math.ceil(left / 1000)} seconds left`} className="shrink-0 rounded-full bg-danger/10 px-2 py-0.5 font-mono text-[11.5px] font-semibold text-danger tabular">
+          {formatClock(Math.ceil(left / 1000))} left
+        </span>
+      ) : null}
+      <div className="flex h-7 min-w-0 flex-1 items-center gap-[2px] overflow-hidden" aria-hidden={!lost}>
+        {lost ? (
+          <span role="alert" className="min-w-0 truncate text-[12px] text-danger" title={lost}>{lost}</span>
+        ) : state === 'starting' ? (
           <span className="text-[12.5px] text-ink-3">Starting the microphone…</span>
         ) : (
           levels.map((v, i) => <span key={i} data-level={v.toFixed(2)} className={cx('w-[3px] shrink-0 rounded-full', state === 'recording' ? 'bg-danger' : 'bg-ink-3')} style={{ height: `${Math.max(12, v * 100)}%` }} />)

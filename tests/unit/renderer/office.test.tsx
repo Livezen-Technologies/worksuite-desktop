@@ -117,8 +117,10 @@ describe('opening a document (web-api §1)', () => {
 
   it('wires each editor feature only with the permission behind it', () => {
     const e = editorEvents(boot());
-    expect(e).toEqual(expect.arrayContaining(['onDocumentStateChange', 'onRequestRefreshFile', 'onRequestSharingSettings', 'onRequestRename', 'onRequestUsers', 'onRequestSendNotify']));
+    expect(e).toEqual(expect.arrayContaining(['onDocumentStateChange', 'onRequestRefreshFile', 'onRequestRename', 'onRequestUsers', 'onRequestSendNotify']));
     expect(e).not.toContain('onRequestEditRights');
+    // The tab's header has WorkSuite's Share; the editor draws no second one (#326).
+    expect(e).not.toContain('onRequestSharingSettings');
     const viewer = editorEvents(boot({ mode: 'VIEW', available_modes: ['VIEW'], permissions: { ...all, edit: false, share: false, rename: false, mention: false } }));
     expect(viewer).not.toContain('onRequestSharingSettings');
     expect(viewer).not.toContain('onRequestRename');
@@ -166,6 +168,17 @@ describe('opening a document (web-api §1)', () => {
     release(boot());
     await opening;
     expect(calls.filter((c) => c[0] === 'end')).toEqual([['end', 42, SID, 'CLOSED']]);
+  });
+});
+
+describe('Present keys in a presentation’s editor (#321)', () => {
+  it('reach the tab as a request to present', () => {
+    const { s } = make();
+    const present = vi.fn();
+    (s as unknown as { hooks: { present?: (fromCurrent: boolean) => void } }).hooks.present = present;
+    s.onViewEvent({ viewId: 'v', type: 'present', data: { fromCurrent: true } });
+    s.onViewEvent({ viewId: 'v', type: 'present', data: null });
+    expect(present.mock.calls).toEqual([[true], [false]]);
   });
 });
 
@@ -502,7 +515,26 @@ describe('the Office tab', () => {
     const open = vi.mocked(call).mock.calls.find(([ch]) => ch === 'office:open')![1] as { apiUrl: string; config: unknown; organizationId: string | null };
     expect(open.apiUrl).toBe('https://docs.example.com/web-apps/apps/api/documents/api.js');
     expect(open.config).toEqual({ document: { key: 'f42v7-a' }, token: 'eyJ' });
-    expect(apiPost).toHaveBeenCalledWith('/api/files/42/office/session', expect.objectContaining({ client_type: 'DESKTOP_LINUX', layout: 'desktop' }));
+    expect(apiPost).toHaveBeenCalledWith('/api/files/42/office/session', expect.objectContaining({ client_type: 'DESKTOP_LINUX', layout: 'desktop', theme: 'light' }));
+  });
+
+  it('fills the space under the header in the app background, asks for the dark theme, and moves the AI launcher aside (#326)', async () => {
+    document.documentElement.dataset.theme = 'dark';
+    try {
+      vi.mocked(apiPost).mockImplementation(async (path: string) => (path.endsWith('/office/session') ? boot() : beat()));
+      vi.mocked(call).mockImplementation((async (ch: string) => (ch === 'office:open' ? { viewId: '5f9c3a2e-5b1f-4c7e-9a41-2f1d7c9b8e10' } : ch === 'office:localCopies' ? [] : null)) as never);
+      mount('/office/42?name=Proposal.docx');
+      await waitFor(() => expect(document.querySelector('[data-office-editor]')).toBeTruthy());
+      const surface = document.querySelector<HTMLElement>('[data-office-editor]')!;
+      expect(surface.hasAttribute('data-hide-ai-launcher')).toBe(true);
+      expect(surface.className).toContain('flex-1');
+      expect(surface.className).toContain('min-h-0');
+      expect(surface.className).toContain('bg-ground');
+      expect(surface.className).not.toContain('bg-white');
+      expect(apiPost).toHaveBeenCalledWith('/api/files/42/office/session', expect.objectContaining({ theme: 'dark' }));
+    } finally {
+      delete document.documentElement.dataset.theme;
+    }
   });
 
   describe('menus over the editor, and Open in new window (worksuite-desktop#39)', () => {
@@ -563,7 +595,7 @@ describe('the Office tab', () => {
       fireEvent.click(await screen.findByRole('button', { name: /Editing/ }));
       const menu = await screen.findByRole('menu', { name: 'Mode' });
       fireEvent.click([...menu.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find((b) => b.textContent === 'Reviewing (changes tracked)')!);
-      await waitFor(() => expect(vi.mocked(apiPost)).toHaveBeenCalledWith(expect.stringMatching(/\/mode$/), { mode: 'REVIEW' }));
+      await waitFor(() => expect(vi.mocked(apiPost)).toHaveBeenCalledWith(expect.stringMatching(/\/mode$/), { mode: 'REVIEW', lang: 'en', layout: 'desktop', theme: 'light' }));
       expect(await screen.findByRole('button', { name: /Reviewing/ })).toBeTruthy();
       expect(screen.queryByRole('menu')).toBeNull();
     });
@@ -664,6 +696,32 @@ describe('the Office tab', () => {
     expect(await screen.findByText("You're offline")).toBeTruthy();
     expect(screen.getByText(/not on this computer/)).toBeTruthy();
     expect(apiPost).not.toHaveBeenCalled();
+  });
+
+  it('a presentation has Present (#321): the saved deck goes to a full-screen slideshow', async () => {
+    const deckBytes = new Uint8Array([80, 75, 3, 4]);
+    const fetchMock = vi.fn(async () => new Response(deckBytes, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    vi.mocked(apiPost).mockImplementation(async (path: string) => (path.endsWith('/office/session') ? boot({ document_type: 'slide', config: { document: { key: 'f42v7-a' }, documentType: 'slide', token: 'eyJ' }, file: { id: 42, name: 'Q3 review.pptx', extension: 'pptx', type: 'PRESENTATION', version: 7, size: 1000 } }) : beat()));
+    vi.mocked(call).mockImplementation((async (ch: string) => (ch === 'office:open' ? { viewId: '5f9c3a2e-5b1f-4c7e-9a41-2f1d7c9b8e10' } : ch === 'slides:present' ? { presenter: false } : ch === 'office:localCopies' || ch === 'office:externalApps' ? [] : null)) as never);
+    mount('/office/42?name=Q3%20review.pptx');
+    const presentButton = await screen.findByRole('button', { name: 'Present' });
+    fireEvent.click(presentButton);
+    await waitFor(() => expect(vi.mocked(call).mock.calls.some(([ch]) => ch === 'slides:present')).toBe(true));
+    expect(String((fetchMock.mock.calls[0] as unknown[])[0])).toContain('/api/files/42/download');
+    const input = vi.mocked(call).mock.calls.find(([ch]) => ch === 'slides:present')![1] as { id: string; presenter: boolean };
+    expect(input.presenter).toBe(true);
+    expect(input.id).toMatch(/^[A-Za-z0-9-]{8,64}$/);
+    vi.unstubAllGlobals();
+  });
+
+  it('a document has no Present', async () => {
+    vi.mocked(apiPost).mockImplementation(async (path: string) => (path.endsWith('/office/session') ? boot() : beat()));
+    vi.mocked(call).mockImplementation((async (ch: string) => (ch === 'office:open' ? { viewId: '5f9c3a2e-5b1f-4c7e-9a41-2f1d7c9b8e10' } : ch === 'office:localCopies' || ch === 'office:externalApps' ? [] : null)) as never);
+    mount('/office/42?name=Proposal.docx');
+    expect(await screen.findByRole('heading', { name: 'Proposal.docx' })).toBeTruthy();
+    await waitFor(() => expect(screen.getByRole('status').textContent).toMatch(/Saved/));
+    expect(screen.queryByRole('button', { name: 'Present' })).toBeNull();
   });
 
   it('a Document Server outage never stops Drive: the server’s sentence and what it offers (OO-ERR-001)', async () => {

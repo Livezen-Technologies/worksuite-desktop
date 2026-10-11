@@ -47,6 +47,7 @@ import { createApiProxy } from '../services/api-proxy';
 import { AuditService } from '../services/audit';
 import { AuthService } from '../services/auth';
 import { DesktopAccountsFile, OfficeSignIn } from '../services/office-signin';
+import { OfficeApp } from '../services/office-app';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
@@ -293,6 +294,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     };
     const dev = device?.current();
     if (dev) h['X-WS-Device'] = dev.id;
+    // The remembered computer (worksuite-desktop#301): the server marks it as this one in the account's devices.
+    Object.assign(h, auth.deviceHeader());
     return h;
   };
 
@@ -790,8 +793,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     configureSession: (ses) => {
       if (proxyConfig) void ses.setProxy(proxyConfig);
     },
+    dark: () => nativeTheme.shouldUseDarkColors,
   });
   office.install();
+  nativeTheme.on('updated', () => office.setTheme(nativeTheme.shouldUseDarkColors));
   // Office files on this computer for WorkSuite DOC / Sheet / Slides tabs (office-local.ts): handles, never paths.
   const officeFiles = new OfficeLocalFiles({ forbidden: () => [p.userData] });
   const officeLocal = new OfficeExternal({
@@ -1155,6 +1160,21 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (origin) void openExternalSafely(`${origin}${target.path}`);
     } else windows.showMain();
   };
+  // WorkSuite Office, the desktop editor: "Open with ▸ WorkSuite Office" hands it a link this process builds (#322).
+  const officeApp = new OfficeApp({
+    protocolApp: (url) => app.getApplicationNameForProtocol(url),
+    open: async (url) => {
+      if (!app.isPackaged && process.env.WS_E2E_EXTERNAL_LOG) await fsp.writeFile(process.env.WS_E2E_EXTERNAL_LOG, `${url}\n`, { flag: 'a' });
+      else await shell.openExternal(url);
+    },
+    account: () => {
+      const origin = auth.getServer()?.origin;
+      const uid = sessionCtl.userId();
+      return origin && uid && sessionCtl.isReady() ? { origin, userId: String(uid) } : null;
+    },
+    canOpenFiles: () => sessionCtl.hasPermission('desktop.files.open_external'),
+    audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
+  });
   // WorkSuite Office on this computer: who this app is signed in as, and its "Continue as" (worksuite-office#6).
   const desktopAccounts = new DesktopAccountsFile(join(p.userData, 'desktop-accounts.json'), log);
   const officeSignIn = new OfficeSignIn({
@@ -2854,6 +2874,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ai,
     office,
     officeLocal,
+    officeApp,
     officeFiles,
     imageLocal,
     relaunch,

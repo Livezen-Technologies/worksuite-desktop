@@ -99,6 +99,20 @@ export interface SignIn {
   created_at: string;
 }
 
+/** A computer or browser this account has verified (worksuite-desktop#301): it is not asked to verify again until it expires. */
+export interface TrustedDevice {
+  id: number;
+  label: string;
+  platform: string;
+  browser: string;
+  last_ip: string | null;
+  last_seen_at: string | null;
+  expires_at: string | null;
+  created_at: string | null;
+  /** This computer. */
+  current?: boolean;
+}
+
 export interface SignIns {
   items: SignIn[];
   failed_7d: number;
@@ -123,6 +137,7 @@ export const K = {
   passkeys: ['account', 'passkeys'] as const,
   sessions: ['account', 'sessions'] as const,
   signIns: ['account', 'sign-ins'] as const,
+  devices: ['account', 'trusted-devices'] as const,
   policy: ['account', 'password-policy'] as const,
   regional: ['account', 'regional'] as const,
   notifications: ['account', 'notifications'] as const,
@@ -179,6 +194,24 @@ export function useSignIns() {
     queryFn: async ({ signal }) => {
       try {
         return await apiGet<SignIns>('/api/auth/sign-ins', undefined, signal);
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 404) return null;
+        throw e;
+      }
+    },
+    staleTime: 0,
+    refetchOnMount: 'always',
+  });
+}
+
+/** Remembered devices. A server without them (before sign-in protection) answers 404: null, and the card is not shown. */
+export function useTrustedDevices() {
+  return useQuery({
+    queryKey: K.devices,
+    queryFn: async ({ signal }) => {
+      try {
+        const rows = await apiGet<TrustedDevice[]>('/api/auth/devices', undefined, signal);
+        return Array.isArray(rows) ? rows : [];
       } catch (e) {
         if (e instanceof ApiError && e.status === 404) return null;
         throw e;

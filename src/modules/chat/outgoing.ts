@@ -6,6 +6,7 @@ import { holdWhileSending } from '../../core/closeGuard';
 import { createStore } from '../../core/store';
 import type { Staged } from './attach';
 import { rememberVoice } from './kit/voice';
+import { isTimed, voiceRetried, voiceSendEnded, voiceSendStarted } from './kit/voiceMetrics';
 
 export type MediaPhase = 'preparing' | 'queued' | 'uploading' | 'processing' | 'sending' | 'sent' | 'failed' | 'cancelled';
 export interface OutgoingMedia {
@@ -27,6 +28,8 @@ export interface OutgoingMedia {
   sent?: number;
   speed?: number;
   error: string | null;
+  /** Waiting to be tried again by itself after a temporary failure: when (#300). */
+  retryAt?: string | null;
   createdAt: string;
 }
 export const outgoing = createStore<{ jobs: OutgoingMedia[] }>({ jobs: [] });
@@ -64,13 +67,16 @@ export function outgoingForRoom(roomId: string, transfers: Transfer[]): Outgoing
   const local = outgoing.get().jobs.filter((j) => j.roomId === roomId && j.owner === owner());
   const result = local.map((j) => {
     const t = transfers.find((t) => t.id === j.transferId || t.chat?.clientMessageId === j.id);
-    return t ? { ...j, transferId: t.id, phase: transferPhase(t), progress: t.phase === 'uploading' && t.total > 0 ? t.bytes / t.total : null, sent: t.bytes, speed: t.speed, error: t.error } : j;
+    return t ? { ...j, transferId: t.id, phase: transferPhase(t), progress: t.phase === 'uploading' && t.total > 0 ? t.bytes / t.total : null, sent: t.bytes, speed: t.speed, error: t.error, retryAt: t.state === 'queued' ? (t.retryAt ?? null) : null, ...(!j.preview && t.chat?.preview ? { preview: t.chat.preview } : {}) } : j;
   });
   for (const t of transfers) {
     if (t.chat?.roomId !== roomId || result.some((j) => j.id === t.chat!.clientMessageId)) continue;
-    result.push({ id: t.chat.clientMessageId, owner: owner(), roomId, name: t.name, size: t.total, mime: '', target: { kind: 'chat', ...t.chat }, transferId: t.id, phase: transferPhase(t), progress: t.total > 0 && t.phase === 'uploading' ? t.bytes / t.total : null, sent: t.bytes, speed: t.speed, error: t.error, createdAt: t.createdAt });
+    // A voice message cancelled is gone from the conversation (#300), in every window and after a restart.
+    if (t.chat.voice && t.state === 'cancelled') continue;
+    const { preview, ...chat } = t.chat;
+    result.push({ id: chat.clientMessageId, owner: owner(), roomId, name: t.name, size: t.total, mime: '', ...(preview ? { preview } : {}), target: { kind: 'chat', ...chat }, transferId: t.id, phase: transferPhase(t), progress: t.total > 0 && t.phase === 'uploading' ? t.bytes / t.total : null, sent: t.bytes, speed: t.speed, error: t.error, retryAt: t.state === 'queued' ? (t.retryAt ?? null) : null, createdAt: t.createdAt });
   }
-  return result.sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  return result.filter((j) => !(j.target.voice && j.phase === 'cancelled')).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
 }
 
 function launch(id: string, originalQuality: boolean): void {
@@ -103,7 +109,7 @@ function launch(id: string, originalQuality: boolean): void {
  * Synchronous enqueue: the bubble exists before preparation or IPC starts. A voice message's length and loudness,
  * measured while it was recorded, go with it and are its bubble's at once (#285).
  */
-export function queueMedia(roomId: string, sources: Staged[], extra: { caption?: string; replyTo?: number; voice?: boolean; durationMs?: number; waveform?: number[] }, originalQuality = false): void {
+export function queueMedia(roomId: string, sources: Staged[], extra: { caption?: string; replyTo?: number; voice?: boolean; durationMs?: number; waveform?: number[] }, originalQuality = false, timing: { pressedAt?: number } = {}): void {
   const jobs = sources.map((source, i): OutgoingMedia => {
     const id = `desktop-${crypto.randomUUID()}`;
     const createdAt = new Date(Date.now() + i).toISOString();
@@ -112,12 +118,27 @@ export function queueMedia(roomId: string, sources: Staged[], extra: { caption?:
     return { id, owner: owner(), roomId, name: source.kind === 'blob' ? source.name : source.file.name, size: source.kind === 'blob' ? source.blob.size : source.file.size, mime, preview, source, originalQuality, target: { kind: 'chat', roomId, clientMessageId: id, submittedAt: createdAt, ...(i === 0 ? extra : {}) }, phase: 'preparing', progress: null, error: null, createdAt };
   });
   outgoing.set({ jobs: [...outgoing.get().jobs, ...jobs] });
-  if (extra.voice && jobs[0]) rememberVoice(jobs[0].id, { ms: extra.durationMs ?? null, peaks: extra.waveform ?? null });
+  if (extra.voice && jobs[0]) {
+    rememberVoice(jobs[0].id, { ms: extra.durationMs ?? null, peaks: extra.waveform ?? null });
+    // Timed from Send to its bubble and to the server's confirmation (#300).
+    voiceSendStarted(jobs[0].id, { bytes: jobs[0].size, durationMs: extra.durationMs ?? 0, mime: jobs[0].mime, pressedAt: timing.pressedAt });
+  }
   jobs.forEach((j) => launch(j.id, originalQuality));
 }
 
+/**
+ * Cancel: the upload stops and the server is told to throw away what it has. A voice message's bubble goes with it
+ * (#300), and its recording on this computer (the transfer manager deletes its own copy); a file's stays as Cancelled,
+ * to send again.
+ */
 export async function cancelMedia(j: OutgoingMedia): Promise<void> {
   update(j.id, { phase: 'cancelled' });
+  if (j.target.voice) {
+    voiceSendEnded(j.id, 'cancelled');
+    const gone = outgoing.get().jobs.find((x) => x.id === j.id);
+    if (gone?.preview?.startsWith('blob:')) URL.revokeObjectURL(gone.preview);
+    outgoing.set({ jobs: outgoing.get().jobs.filter((x) => x.id !== j.id) });
+  }
   if (j.transferId) await call('transfers:cancel', { id: j.transferId });
 }
 export async function retryMedia(j: OutgoingMedia): Promise<void> {
@@ -132,3 +153,20 @@ export function acknowledgeMedia(ids: Set<string>): void {
   removed.forEach((j) => { if (j.preview?.startsWith('blob:')) URL.revokeObjectURL(j.preview); });
   outgoing.set({ jobs: outgoing.get().jobs.filter((j) => !ids.has(j.id)) });
 }
+
+/**
+ * The send timings' ends (#300): a timed voice message is confirmed when its transfer is done (the server answered
+ * the post), and given up when it fails for good or a local step failed. Retries are counted on the way.
+ */
+export function observeVoiceSends(transfers: Transfer[] = app.get().transfers ?? []): void {
+  for (const j of outgoing.get().jobs) {
+    if (!j.target.voice || !isTimed(j.id)) continue;
+    const t = transfers.find((t) => t.id === j.transferId || t.chat?.clientMessageId === j.id);
+    if (t?.attempts) voiceRetried(j.id, t.attempts);
+    if (t?.state === 'done') voiceSendEnded(j.id, 'sent');
+    else if (t?.state === 'failed' || (!t && j.phase === 'failed')) voiceSendEnded(j.id, 'failed');
+    else if (t?.state === 'cancelled') voiceSendEnded(j.id, 'cancelled');
+  }
+}
+app.subscribe(() => observeVoiceSends());
+outgoing.subscribe(() => observeVoiceSends());

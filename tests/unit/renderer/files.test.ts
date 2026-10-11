@@ -61,11 +61,13 @@ describe('the menus follow what the server allows', () => {
   const file = (capabilities: string[], owner = false) => ({ id: 1, name: 'Report.docx', extension: 'docx', access: { level: 'view' as const, owner, via: null, can_download: true, capabilities } }) as never;
 
   it('a viewer who may download gets no sharing, renaming or trash', () => {
-    const m = labels(fileMenu(file(['open', 'preview', 'download']), d));
+    const items = fileMenu(file(['open', 'preview', 'download']), d);
+    const m = labels(items);
     expect(m).toContain('Download');
-    // An Office file opens read-only in its tab, or in an app on this computer (the default one until others are found).
+    // An Office file opens read-only in its tab, or with Open with ▸ (#322): WorkSuite Office, its tab, or the app here.
     expect(m).toContain('Open read-only');
-    expect(m).toContain('Open in the default app');
+    const openWith = items.find((x) => 'label' in x && x.label === 'Open with');
+    expect(openWith && 'submenu' in openWith ? labels(openWith.submenu ?? []) : []).toEqual(['WorkSuite Office', 'WorkSuite (in app)', 'Default app on this computer']);
     expect(m).not.toContain('Open locally');
     expect(m).not.toContain('Share…');
     expect(m).not.toContain('Rename');
@@ -106,6 +108,14 @@ describe('the menus follow what the server allows', () => {
     expect(labels(folderMenu(f(true), d))).toContain('Password lock…');
     expect(labels(folderMenu(f(false), d))).not.toContain('Password lock…');
     expect(can(null, 'open')).toBe(false);
+  });
+
+  it('a folder somebody shared with me is left, not binned for everyone (worksuite-desktop#328)', () => {
+    const f = (owner: boolean, via: string) => ({ id: 2, name: 'HR', is_locked: false, starred: false, access: { level: 'full', owner, via, can_download: true, capabilities: ['open', 'share', 'delete', 'rename', 'move', 'download'] } }) as never;
+    expect(labels(folderMenu(f(true, 'owner'), d))).toEqual(expect.arrayContaining(['Copy to…', 'Move to Bin…']));
+    expect(labels(folderMenu(f(false, 'direct'), d))).toContain('Leave folder');
+    expect(labels(folderMenu(f(false, 'direct'), d))).not.toContain('Move to Bin…');
+    expect(labels(folderMenu(f(false, 'inherited'), d))).toContain('Remove from my Drive');
   });
 
   it('never starts, ends or doubles a separator', () => {

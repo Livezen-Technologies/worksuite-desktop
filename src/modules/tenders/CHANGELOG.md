@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.0 — 2026-10-10
+
+**Added**
+
+- tender .pptx documents open in the slide viewer and Office documents follow Open with (#321, #322)
+
 ## 1.6.0 — 2026-10-09
 
 - Checklist sections: pick one already there or make a new one when adding a line; rename a section on all its lines (or merge into another); delete a section, keeping its lines or removing them with it.

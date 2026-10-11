@@ -34,6 +34,8 @@ import { SyncButton } from '../../components/SyncButton';
 import { pullPrefs, setPullEnabled } from '../../components/listRefresh';
 import { forgetMailbox } from './localFirst';
 import { SpamSecurity } from './protection/SpamSecurity';
+import { isAttemptId, startBody, summaryLine, type OAuthStart } from './oauth';
+import { watchAttempt } from './OAuthSignIn';
 
 /**
  * Settings › Mail: the accounts and what this computer keeps (Accounts &
@@ -166,9 +168,15 @@ function Accounts() {
   const repair = async (b: Mailbox) => {
     if (b.auth_type !== 'oauth' || !b.oauth_provider) return setRepairing(b);
     try {
-      const r = await apiPost<{ url: string }>(`/api/mail/oauth/${b.oauth_provider}/start`);
+      const r = await apiPost<OAuthStart>(`/api/mail/oauth/${b.oauth_provider}/start`, startBody(b.email));
       await call('app:openExternal', { url: r.url });
       toast('info', text('Sign in again in your browser. The mailbox picks up from where it stopped; nothing else changes.'));
+      // Then say how it went — the steps and, if it failed, why — rather than leaving the card to find out.
+      if (isAttemptId(r.attempt)) watchAttempt(r.attempt, (a) => {
+        const line = summaryLine(a);
+        toast(line.kind, line.text);
+        if (a.status === 'connected') void qc.invalidateQueries({ queryKey: mailKeys.mailboxes });
+      });
     } catch (e) {
       toast('error', errorMessage(e));
     }
@@ -325,7 +333,7 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
     setB({ ...b, ...patch });
     try {
       await apiPut(`/api/mail/mailboxes/${b.id}`, patch);
-      void qc.invalidateQueries({ queryKey: ['mail'] });
+      void qc.invalidateQueries({ queryKey: mailKeys.mailboxes });
     } catch (e) {
       setB(before);
       toast('error', errorMessage(e));
@@ -334,7 +342,7 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
   const act = async (run: () => Promise<unknown>, done: string) => {
     try {
       await run();
-      void qc.invalidateQueries({ queryKey: ['mail'] });
+      void qc.invalidateQueries({ queryKey: mailKeys.mailboxes });
       toast('success', done);
     } catch (e) {
       toast('error', errorMessage(e));
@@ -353,7 +361,7 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
             onSync={async () => {
               try {
                 await apiPost(`/api/mail/mailboxes/${b.id}/sync`);
-                void qc.invalidateQueries({ queryKey: ['mail'] });
+                void qc.invalidateQueries({ queryKey: mailKeys.mailboxes });
               } catch (e) {
                 toast('error', errorMessage(e));
                 throw e;
@@ -392,7 +400,7 @@ function RepairPassword({ box, onClose }: { box: Mailbox; onClose: () => void })
     setError(null);
     try {
       await apiPut(`/api/mail/mailboxes/${box.id}`, { password });
-      void qc.invalidateQueries({ queryKey: ['mail'] });
+      void qc.invalidateQueries({ queryKey: mailKeys.mailboxes });
       toast('success', text('{email} signs in again.', { email: box.email }));
       onClose();
     } catch (e) {
@@ -452,7 +460,7 @@ function Storage() {
   // The same Sync all as the folder pane: single-flight, three accounts at a time (DMO-SYN-02/12).
   const syncAll = async () => {
     const r = await runSync(includedIds(sync.data, list), { all: true, offline: app.get().status?.network === 'OFFLINE' });
-    void qc.invalidateQueries({ queryKey: ['mail'] });
+    void qc.invalidateQueries({ queryKey: mailKeys.mailboxes });
     if (!r.started.length) return;
     toast(r.failed.length ? 'error' : 'success', r.failed.length ? text('{n} mailboxes could not be synced.', { n: r.failed.length }) : text('Every mailbox was synced.'));
     if (r.failed.length) throw new Error('sync failed');

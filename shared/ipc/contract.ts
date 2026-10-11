@@ -62,6 +62,7 @@ import {
   type RestaurantStatus,
 } from '../restaurant';
 import { MAX_OFFICE_LOCAL_BYTES, OFFICE_EDITOR_EVENTS, OFFICE_EXPORT_TOKEN, officeCommandSchema, type ExternalApp, type OfficeLocalCopy, type OfficeLocalPick } from '../office';
+import { OFFICE_APP_SRC, type OfficeAppStatus } from '../office-open';
 import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
 import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
@@ -148,6 +149,7 @@ const customProfileSchema = z.object({
 });
 
 const supportNoticeChoice = z.object({ banner: z.boolean(), sound: z.boolean() });
+const officeOpenChoice = z.enum(['builtin', 'worksuite-office', 'ask', 'system']);
 
 const bandwidthLimitSchema = z.object({ on: z.boolean(), value: z.number().positive().max(1_000_000), unit: z.enum(['KB', 'MB']) });
 
@@ -198,6 +200,8 @@ export const preferencesPatchSchema = z
     mailCacheDays: z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)]),
     mailtoHandler: z.boolean(),
     links: z.object({ openInApp: z.boolean(), mailLinks: z.enum(['new-tab', 'current-tab']), confirmActions: z.boolean() }).partial(),
+    // Settings › Files › Open Office files in (worksuite-desktop#322).
+    officeOpen: z.object({ doc: officeOpenChoice, sheet: officeOpenChoice, slides: officeOpenChoice }).partial(),
     mailCacheDaysByMailbox: z.record(z.string().regex(/^\d{1,12}$/), z.union([z.literal(7), z.literal(30), z.literal(90), z.literal(0)])).refine((r) => Object.keys(r).length <= 200),
     mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['all', 'recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
     mailAlerts: z.enum(['all', 'focused', 'vip', 'none']),
@@ -427,8 +431,14 @@ export const contract = {
   'auth:state': ch(none, { whileLocked: true }),
   'auth:setServer': ch(z.object({ url: z.string().min(3).max(512) }), { rate: 2 }),
   'auth:signIn': ch(z.object({ email: z.string().min(1).max(254), password: z.string().min(1).max(512) }), { rate: 2 }),
-  'auth:verifyMfa': ch(z.object({ code: z.string().regex(/^[A-Za-z0-9-]{4,32}$/) }), { rate: 2 }),
+  'auth:verifyMfa': ch(z.object({ code: z.string().regex(/^[A-Za-z0-9-]{4,32}$/), remember: z.boolean().optional() }), { rate: 2 }),
   'auth:cancelMfa': ch(none),
+  // A new computer's emailed code, another code, the CAPTCHA window, the emailed unblock link (worksuite-desktop#301).
+  'auth:verifyDevice': ch(z.object({ code: z.string().regex(/^\d{6}$/), remember: z.boolean() }), { rate: 2 }),
+  'auth:resendDevice': ch(none, { rate: 2 }),
+  'auth:solveCaptcha': ch(none, { rate: 2 }),
+  'auth:requestUnblock': ch(z.object({ email: z.string().min(1).max(254) }), { rate: 2 }),
+  'auth:clearGate': ch(none),
   // Opens the server's passkey page in the browser; the result returns through worksuite://auth/callback.
   'auth:passkeyStart': ch(none, { rate: 2 }),
   'auth:passkeyCancel': ch(none),
@@ -1240,6 +1250,17 @@ export const contract = {
     }),
     { session: true, rate: 3, sensitive: true },
   ),
+  // WorkSuite Office, the desktop editor (worksuite-desktop#322): whether it is here, and a file handed to it. The
+  // main process builds the link itself (shared/office-open.ts) from the signed-in server and user; the page names
+  // only the file.
+  'office:desktopApp': ch(none, { session: true, rate: 20 }),
+  'office:openInDesktopApp': ch(
+    z.discriminatedUnion('kind', [
+      z.strictObject({ kind: z.literal('drive'), fileId: driveId, name: z.string().min(1).max(255), mode: z.enum(['edit', 'view']).optional(), organizationId: z.string().regex(/^\d{1,12}$/).nullable().optional() }),
+      z.strictObject({ kind: z.literal('copy'), path: z.string().regex(OFFICE_APP_SRC).refine((p) => !p.includes('..')), name: z.string().min(1).max(255), organizationId: z.string().regex(/^\d{1,12}$/).nullable().optional() }),
+    ]),
+    { session: true, rate: 5, sensitive: true },
+  ),
   'office:localCopies': ch(none, { session: true }),
   'office:uploadLocal': ch(z.object({ id: z.string().uuid(), how: z.enum(['version', 'new_version', 'keep_both']) }), { session: true, rate: 3, sensitive: true }),
   'office:forgetLocal': ch(z.object({ id: z.string().uuid() }), { session: true, rate: 10 }),
@@ -1349,6 +1370,8 @@ export const contract = {
   'support:displays': ch(none, { session: true }),
   'support:wall': ch(z.object({ displayId: z.number().int().nullable() }), { session: true, rate: 10 }),
   'support:wallClose': ch(none, { session: true }),
+  'slides:present': ch(z.object({ id: z.string().regex(/^[A-Za-z0-9-]{8,64}$/), presenter: z.boolean().optional() }), { session: true, rate: 5 }),
+  'slides:close': ch(none, { session: true }),
   'help:capture': ch(none, { session: true, rate: 5 }),
   'help:logs': ch(none, { session: true, rate: 10 }),
   'offline:submit': ch(mutationInputSchema, { session: true, rate: 20 }),
@@ -1569,6 +1592,11 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'auth:signIn': AuthState;
   'auth:verifyMfa': AuthState;
   'auth:cancelMfa': AuthState;
+  'auth:verifyDevice': AuthState;
+  'auth:resendDevice': AuthState;
+  'auth:solveCaptcha': AuthState;
+  'auth:requestUnblock': { message: string };
+  'auth:clearGate': AuthState;
   'auth:passkeyStart': AuthState;
   'auth:passkeyCancel': AuthState;
   'auth:openPage': boolean;
@@ -1848,6 +1876,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'office:focusFile': boolean;
   'office:externalApps': ExternalApp[];
   'office:openExternal': OfficeLocalCopy;
+  'office:desktopApp': OfficeAppStatus;
+  'office:openInDesktopApp': boolean;
   'office:localCopies': OfficeLocalCopy[];
   'office:uploadLocal': { state: 'uploaded'; version: number | null } | { state: 'conflict'; conflict: NonNullable<OfficeLocalCopy['conflict']> } | { state: 'queued' };
   'office:forgetLocal': boolean;
@@ -1889,6 +1919,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'support:displays': { displays: WallDisplay[]; open: boolean };
   'support:wall': void;
   'support:wallClose': void;
+  'slides:present': { presenter: boolean };
+  'slides:close': void;
   'help:capture': { name: string; data: string; width: number; height: number };
   'help:logs': { text: string; lines: number; bytes: number };
   'offline:submit': SubmitResult;

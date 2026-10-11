@@ -13,7 +13,7 @@ import { FileIcon } from './Thumb';
 import { Select } from '../../components/Select';
 import { OrgSwitcher } from '../../components/OrgSwitcher';
 
-const LEVEL: Record<string, [string, string]> = { view: ['Can view', 'text-ink-2'], edit: ['Can edit', 'text-primary'], full: ['Full access', 'text-success'] };
+const LEVEL: Record<string, [string, string]> = { view: ['Can view', 'text-ink-2'], comment: ['Can comment', 'text-ink-2'], edit: ['Can edit', 'text-primary'], full: ['Full access', 'text-success'] };
 const KINDS: Array<[string, string]> = [['', 'Any type'], ['document', 'Documents'], ['spreadsheet', 'Spreadsheets'], ['presentation', 'Presentations'], ['pdf', 'PDFs'], ['image', 'Images'], ['video', 'Video'], ['audio', 'Audio'], ['archive', 'Archives']];
 const WHEN: Array<[string, string]> = [['', 'Shared any time'], ['7', 'In the last 7 days'], ['30', 'In the last 30 days'], ['90', 'In the last 90 days']];
 
@@ -73,6 +73,7 @@ export function Shared({ onPlace }: { onPlace: (p: Place) => void }) {
             <Select aria-label="Access" value={level} onChange={(e) => setLevel(e.target.value)} className={select(!!level)}>
               <option value="">Any access</option>
               <option value="view">Can view</option>
+              <option value="comment">Can comment</option>
               <option value="edit">Can edit</option>
               <option value="full">Full access</option>
             </Select>
