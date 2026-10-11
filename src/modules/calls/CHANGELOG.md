@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-11
+
+**Added**
+
+- Claim incoming-call attention before opening a ring window; ignore stopped calls and pending claims after sign-out.
+
 ## 1.7.2 — 2026-10-10
 
 - The share picker's computer-sound box starts from the Meet preference, and still decides each share on its own.

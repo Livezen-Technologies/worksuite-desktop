@@ -9,6 +9,12 @@ vi.mock('electron', () => ({
     static isSupported = () => true;
     private handlers: Record<string, Handler> = {};
     constructor(private readonly o: { title: string; body: string; silent: boolean }) {}
+    get title() { return this.o.title; }
+    set title(value: string) { this.o.title = value; }
+    get body() { return this.o.body; }
+    set body(value: string) { this.o.body = value; }
+    get silent() { return this.o.silent; }
+    set silent(value: boolean) { this.o.silent = value; }
     on(event: string, h: Handler) {
       this.handlers[event] = h;
       return this;
@@ -165,11 +171,11 @@ describe('no duplicates after unlocking, sleeping or reconnecting (#114)', () =>
     const { s, unlock } = service({}, { rooms: [room()], messages: msgs });
     s.start('5');
     s.handleRealtime(message(1));
-    expect(shown).toHaveLength(1);
+    await vi.waitFor(() => expect(shown).toHaveLength(1));
     s.markGap(Date.now() - 60_000); // the computer went to sleep
     unlock();
     await s.catchUpChat(); // the realtime resync after resume
-    expect(shown.map((n) => n.body)).toEqual([LOCKED_MESSAGE, 'Missed while asleep']);
+    await vi.waitFor(() => expect(shown.map((n) => n.body)).toEqual([LOCKED_MESSAGE, 'Missed while asleep']));
     await s.catchUpChat(); // a second resync: no gap, nothing new
     s.markGap(Date.now() - 60_000);
     await s.catchUpChat(); // another reconnect: the same messages are not shown again
@@ -189,7 +195,7 @@ describe('no duplicates after unlocking, sleeping or reconnecting (#114)', () =>
     s.realtimeState('down');
     await s.catchUpChat();
     expect(get).toHaveBeenCalledWith('/api/chat/rooms');
-    expect(shown.map((n) => n.body)).toEqual([LOCKED_MESSAGE, LOCKED_MESSAGE]);
+    await vi.waitFor(() => expect(shown.map((n) => n.body)).toEqual([LOCKED_MESSAGE, LOCKED_MESSAGE]));
     s.stop();
   });
 
@@ -201,7 +207,7 @@ describe('no duplicates after unlocking, sleeping or reconnecting (#114)', () =>
     await s.catchUpChat();
     expect(shown).toEqual([]);
     await s.catchUpChat();
-    expect(shown).toHaveLength(2);
+    await vi.waitFor(() => expect(shown).toHaveLength(2));
     await s.catchUpChat();
     expect(shown).toHaveLength(2);
     s.stop();

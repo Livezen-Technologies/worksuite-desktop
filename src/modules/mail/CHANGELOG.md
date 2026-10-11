@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.32.0 — 2026-10-11
+
+**Added**
+
+- Share new-mail attention with the device router and withdraw mail alerts when their bell entry is read elsewhere.
+
 ## 1.31.0 — 2026-10-11
 
 - New-mail alerts (ENH-MAIL-05): a native notification with Reply, Mark as read, Archive and Flag when WorkSuite isn't in front; an in-app card when it is; never both; grouped bursts with one sound; preview levels, hidden while sharing the screen; cleared everywhere when the message is read anywhere; a "New" tag in the list.

@@ -105,7 +105,8 @@ export interface MailAlertHost {
   /** This computer's pause for this person (Preferences.mailAlertPause). */
   savePause(userId: string, pause: MailPause | null): void;
   /** Which new mail may alert (Focused / VIPs, DMO-NTF-02) and whether it may break WorkSuite's quiet hours. */
-  accept?(a: MailArrival): Promise<{ alert: boolean; breakthrough: boolean }>;
+  accept?(a: MailArrival): Promise<{ alert: boolean; breakthrough: boolean; sound?: boolean }>;
+  dismiss?(a: MailArrival): void;
   /** The tray, the badge and the status changed. */
   changed(): void;
 }
@@ -152,6 +153,8 @@ export class MailAlertService {
   /** What arrived while paused: the resume summary counts it (MNA-TRY-04). */
   private held = new Map<string, MailArrival>();
   private wasPaused = false;
+  private generation = 0;
+  private mutedKeys = new Set<string>();
   private server: ServerAlertPrefs = { preview: null, minPreview: null, sound: null };
   private hours: WorkingHours | null = null;
   private hoursKnown = false;
@@ -204,6 +207,8 @@ export class MailAlertService {
   }
 
   stop(): void {
+    this.generation++;
+    this.mutedKeys.clear();
     // The web may notify again at once, rather than when the heartbeat goes stale (MNA-WEB-07).
     if (this.started) void this.api.gone(this.host.deviceId()).catch(() => undefined);
     this.started = false;
@@ -215,7 +220,7 @@ export class MailAlertService {
       p.note?.close();
     }
     this.pending.clear();
-    for (const l of this.live.values()) l.note?.close();
+    for (const l of [...this.live.values()]) this.close(l, false);
     this.live.clear();
     this.host.send('mail-alert:clear', { all: true });
     this.seen.clear();
@@ -263,6 +268,20 @@ export class MailAlertService {
       const a = parseArrival(e);
       if (a) this.ingest(a);
       else this.ingestRest(e);
+      return;
+    }
+    if (e.type === 'notification.read') {
+      const contexts = Array.isArray(e.contextKeys) ? e.contextKeys : [];
+      if (e.all) {
+        const known = [...this.buffer, ...this.recent, ...this.held.values(), ...[...this.live.values()].flatMap((l) => l.items)];
+        for (const mailbox of new Set(known.map((a) => a.mailbox))) this.withdrawMailbox(mailbox);
+      } else {
+        const messages = contexts.flatMap((context) => {
+          const m = String(context).match(/^mail:(\d+):(\d+)$/);
+          return m ? [{ mailbox: Number(m[1]), uid: Number(m[2]) }] : [];
+        });
+        if (messages.length) this.withdraw(messages);
+      }
       return;
     }
     if (e.type !== 'mail') return;
@@ -348,17 +367,23 @@ export class MailAlertService {
   }
 
   private async admit(a: MailArrival): Promise<void> {
+    const generation = this.generation;
+    const user = this.host.userId();
     let breakthrough = false;
     if (this.host.accept) {
       try {
         const r = await this.host.accept(a);
         if (!r.alert) return;
         breakthrough = r.breakthrough;
+        if (r.sound === false) {
+          this.mutedKeys.add(a.key);
+          if (this.mutedKeys.size > 500) this.mutedKeys.delete(this.mutedKeys.values().next().value!);
+        }
       } catch {
         // Which mail may alert could not be worked out: if in doubt, say it (WF-DO01 fails open).
       }
     }
-    if (this.cleared.has(a.key)) return;
+    if (generation !== this.generation || user !== this.host.userId() || this.cleared.has(a.key)) return;
     if (breakthrough) this.breakthrough.add(a.key);
     this.buffer.push(a);
     this.armBuffer();
@@ -475,7 +500,7 @@ export class MailAlertService {
     // A new message in a conversation already alerted replaces its alert (tag per conversation, MNA-WIN-06).
     const before = [...this.live.values()].find((l) => l.kind === 'single' && l.conversation === a.conversation);
     if (before) this.close(before, false);
-    const sound = !silent && this.takeSound(false, now, this.recent.filter((x) => x.key !== a.key).length);
+    const sound = !silent && !this.mutedKeys.has(a.key) && this.takeSound(false, now, this.recent.filter((x) => x.key !== a.key).length);
     const level = this.levelFor([a]);
     const live: Live = { id: this.nextId('mail'), kind: 'single', items: [a], rest: new Map(), conversation: a.conversation, delivery, note: null, card: null };
     if (delivery === 'card') {
@@ -499,7 +524,7 @@ export class MailAlertService {
       onClick: () => this.act(live, 'open', a.key),
       onButton: (i) => this.act(live, (['read', 'archive', 'flag'] as const)[i] ?? 'open', a.key),
       onReply: (text) => this.act(live, 'reply', a.key, text),
-      onClose: () => this.live.delete(live.id),
+      onClose: () => { if (this.live.has(live.id)) for (const a of live.items) this.host.dismiss?.(a); this.live.delete(live.id); },
     });
     this.live.set(live.id, live);
     this.latest = this.cardFor(live, level);
@@ -507,7 +532,7 @@ export class MailAlertService {
   }
 
   private showGroup(kind: Exclude<GroupKind, 'single'>, items: MailArrival[], rest: Map<number, number>, delivery: 'card' | 'native', replacing: boolean, now: number): void {
-    const sound = this.takeSound(replacing, now, 0);
+    const sound = items.some((a) => !this.mutedKeys.has(a.key)) && this.takeSound(replacing, now, 0);
     const level = this.levelFor(items);
     const account = kind === 'account' ? (items[0]?.mailbox ?? [...rest.keys()][0] ?? null) : null;
     const live: Live = { id: this.nextId('mail-group'), kind, items, rest, conversation: null, delivery, note: null, card: null };
@@ -530,7 +555,7 @@ export class MailAlertService {
       onClick: () => this.act(live, 'open-inbox'),
       onButton: (i) => this.act(live, i === 0 ? 'open-inbox' : 'read-all'),
       onReply: () => undefined,
-      onClose: () => this.live.delete(live.id),
+      onClose: () => { if (this.live.has(live.id)) for (const a of live.items) this.host.dismiss?.(a); this.live.delete(live.id); },
     });
     this.live.set(live.id, live);
     this.host.changed();
@@ -939,7 +964,7 @@ export class MailAlertService {
     const content = items.length ? groupContent('accounts', items, level, this.platform) : { title: 'WorkSuite Mail', body: '' };
     live.note = this.notify(
       { ...content, title: summaryTitle(n), body: level === 'hidden' ? 'Open WorkSuite to read them.' : content.body },
-      { tag: 'mail-summary', group: null, groupTitle: null, silent: true, reply: null, buttons: this.actionsSupported() && items.length ? ['Open Inbox', 'Mark all as read'] : [], onClick: () => this.act(live, 'open-inbox'), onButton: (i) => this.act(live, i === 0 ? 'open-inbox' : 'read-all'), onReply: () => undefined, onClose: () => this.live.delete(live.id) },
+      { tag: 'mail-summary', group: null, groupTitle: null, silent: true, reply: null, buttons: this.actionsSupported() && items.length ? ['Open Inbox', 'Mark all as read'] : [], onClick: () => this.act(live, 'open-inbox'), onButton: (i) => this.act(live, i === 0 ? 'open-inbox' : 'read-all'), onReply: () => undefined, onClose: () => { if (this.live.has(live.id)) for (const a of live.items) this.host.dismiss?.(a); this.live.delete(live.id); } },
     );
   }
 

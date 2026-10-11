@@ -67,6 +67,8 @@ export function meetRingRoute(r: Partial<MeetRinging> | null | undefined): strin
  * a page cannot do reliably for itself (a beacon carries no credentials).
  */
 export class CallService {
+  private generation = 0;
+  private cancelled = new Set<string>();
   private rung = new Map<string, number>();
   private active = new Map<number, { uuid: string; kind: 'call' | 'meet'; title: string; since: number }>();
   onActiveChanged: (active: boolean) => void = () => undefined;
@@ -82,7 +84,15 @@ export class CallService {
     private readonly canRingMeet: () => boolean = canRing,
   ) {}
 
+  attention: ((key: string, context: string) => Promise<boolean>) | null = null;
+  canShowRing(): boolean { return this.canRing(); }
+
   handle(e: RealtimeEvent): void {
+    if (e.type === 'chat.call.stopped' || e.type === 'meet.ring.stopped') {
+      const key = String(e.uuid ?? e.call_id ?? '');
+      if (key) this.cancelled.add(key);
+      return;
+    }
     if (e.type === 'chat.call.ringing') this.ring(e as unknown as Ringing);
     else if (e.type === 'meet.ring') this.ringMeet(e as unknown as MeetRinging);
   }
@@ -105,6 +115,7 @@ export class CallService {
   }
 
   stop(): void {
+    this.generation++;
     if (this.pollTimer) clearInterval(this.pollTimer);
     this.pollTimer = null;
   }
@@ -144,7 +155,10 @@ export class CallService {
     for (const [u, at] of this.rung) if (now - at > 120_000) this.rung.delete(u);
     if (this.rung.has(key) || [...this.active.values()].some((a) => a.uuid === r.uuid)) return;
     this.rung.set(key, now);
-    this.windows.open('ring', route, 'Invitation to a WorkSuite meeting', true);
+    const generation = this.generation;
+    const show = () => { if (generation === this.generation && !this.cancelled.has(r.uuid) && this.canRingMeet()) this.windows.open('ring', route, 'Invitation to a WorkSuite meeting', true); };
+    if (this.attention) void this.attention(`meet-ring:${r.ring_id}`, `meet:${r.uuid}`).then((allowed) => { if (allowed) show(); }).catch(() => {});
+    else show();
   }
 
   ring(r: Ringing): void {
@@ -156,8 +170,14 @@ export class CallService {
     for (const [u, at] of this.rung) if (now - at > 120_000) this.rung.delete(u);
     if (this.rung.has(r.uuid) || [...this.active.values()].some((a) => a.uuid === r.uuid)) return;
     this.rung.set(r.uuid, now);
-    this.windows.open('ring', route, 'Incoming WorkSuite call', true);
-    void this.delivered(r.uuid);
+    const generation = this.generation;
+    const show = () => {
+      if (generation !== this.generation || this.cancelled.has(r.uuid) || !this.canRing()) return;
+      this.windows.open('ring', route, 'Incoming WorkSuite call', true);
+      void this.delivered(r.uuid);
+    };
+    if (this.attention) void this.attention(`call:${r.uuid}`, `call:${r.uuid}`).then((allowed) => { if (allowed) show(); }).catch(() => {});
+    else show();
   }
 
   /** The ring is showing here: the caller's "Calling…" becomes "Ringing…" (worksuite-desktop#113). An older server has no such call. */

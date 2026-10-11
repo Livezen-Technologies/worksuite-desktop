@@ -1,3 +1,5 @@
+import { notificationContext } from '@shared/notification-target';
+import { NotificationDevice } from './notification-device';
 import { localeForLanguage, localize, normalizeLanguage } from '@shared/localization';
 import { meetingNoticeActions, type MeetingNoticeActions } from '@shared/meeting-invitations';
 import { inDnd } from '@shared/notification-block';
@@ -67,6 +69,7 @@ export interface Incoming {
   sender: string | null;
   link: string | null;
   critical: boolean;
+  sound?: boolean;
   /** A VIP's mail during quiet hours, when the person allows it (ENH-MAIL-03 DMO-NTF-03). */
   breakthrough?: boolean;
   /** An incoming call (`chat.call.ringing`), not a message: said as a call, locked or not (worksuite-desktop#113). */
@@ -323,6 +326,9 @@ const MODULE_LABELS: Record<string, string> = {
 
 export class NotificationService {
   private shown: string[] = [];
+  private device: NotificationDevice | null = null;
+  viewing = '';
+  lastInputAt: () => number = () => this.isFocused() ? Date.now() : 0;
   /** Whether the list has been read once since sign-in: what was there then is not news. */
   private listed = false;
   private pausedUntil: number | null = null;
@@ -333,7 +339,11 @@ export class NotificationService {
    * it is the setting, not what the window shows now.
    */
   callWindowOn: () => boolean = () => false;
+  staffCallWindowOn: () => boolean = () => false;
   private live = new Map<string, Notification>();
+  private liveNotices = new Map<string, Incoming>();
+  private nativeGroups = new Map<string, { note: Notification; at: number; count: number }>();
+  private programmaticClose = new WeakSet<Notification>();
   private unread = { mail: 0, chat: 0, notifications: 0, tasks: 0 };
   private lastMailCount: number | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
@@ -395,6 +405,11 @@ export class NotificationService {
 
   start(userId: string): void {
     this.userId = userId;
+    const saved = this.db.getConfig?.<unknown>(`notifications.shown.${userId}`);
+    this.shown = Array.isArray(saved) ? saved.filter((key): key is string => typeof key === 'string').slice(-500) : [];
+    this.device?.stop();
+    this.device = new NotificationDevice(this.http, () => ({ focused: this.isFocused(), lastInputAt: this.lastInputAt(), viewing: this.viewing }));
+    this.device.start();
     this.listed = false;
     void this.refreshList();
     void this.refreshCounts();
@@ -414,13 +429,16 @@ export class NotificationService {
   }
 
   stop(): void {
+    this.device?.stop();
+    this.device = null;
+    this.viewing = '';
     if (this.pollTimer) clearInterval(this.pollTimer);
     if (this.mailTimer) clearInterval(this.mailTimer);
     if (this.mailNudge) clearTimeout(this.mailNudge);
     this.pollTimer = null;
     this.mailTimer = null;
     this.mailNudge = null;
-    for (const n of this.live.values()) n.close();
+    for (const n of this.live.values()) this.closeNative(n);
     this.live.clear();
     this.userId = null;
     this.lastMailCount = null;
@@ -668,7 +686,7 @@ export class NotificationService {
     }
     await Promise.allSettled(ids.map((id) => this.http.post(`/api/notifications/${encodeURIComponent(id)}/read`)));
     if (this.userId) for (const id of ids) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ? AND id = ?', this.userId, id);
-    for (const id of ids) this.live.get(id)?.close();
+    for (const id of ids) this.closeNative(this.live.get(id));
     await this.refreshCounts();
   }
 
@@ -678,7 +696,7 @@ export class NotificationService {
     this.mailUnread.clear();
     await this.http.post('/api/notifications/read-all');
     if (this.userId) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ?', this.userId);
-    for (const n of this.live.values()) n.close();
+    for (const n of this.live.values()) this.closeNative(n);
     this.live.clear();
     await this.refreshCounts();
   }
@@ -687,16 +705,34 @@ export class NotificationService {
     if (this.shown.includes(id)) return false;
     this.shown.push(id);
     if (this.shown.length > 500) this.shown.splice(0, this.shown.length - 500);
+    if (this.userId) this.db.setConfig?.(`notifications.shown.${this.userId}`, this.shown);
     return true;
   }
 
   /** Realtime events that concern notifications and badges. */
   handleRealtime(e: RealtimeEvent): void {
     switch (e.type) {
-      case 'notification': {
+      case 'notification.update': {
         const id = String(e.id ?? '');
+        const link = typeof e.link === 'string' ? e.link : null;
+        const previous = this.liveNotices.get(id);
+        if (previous && previous.module !== 'chat' && this.live.has(id)) this.showNative({ ...previous, title: String(e.title ?? previous.title), body: String(e.body ?? previous.body), link: link ?? previous.link }, true);
+        void this.refreshList();
+        break;
+      }
+      case 'notification.read': {
+        const ids = Array.isArray(e.ids) ? e.ids.map(String) : [];
+        const contexts = Array.isArray(e.contextKeys) ? e.contextKeys.map(String) : [];
+        for (const [id, note] of this.live) if (e.all === true || ids.includes(id) || contexts.includes(notificationContext(this.liveNotices.get(id)?.link ?? null))) { this.closeNative(note); this.live.delete(id); this.liveNotices.delete(id); }
+        if (e.all === true) this.nativeGroups.clear();
+        else for (const context of contexts) this.nativeGroups.delete(context);
+        void this.refreshList(); void this.refreshCounts(); break;
+      }
+      case 'notification': {
+        if (e.progress_key !== undefined) break;
+        const id = String(e.id ?? (e.event_id ? `event:${e.event_id}` : ''));
         if (!id) return;
-        this.unread.notifications += 1;
+        if (e.transient !== true) this.unread.notifications += 1;
         const link = typeof e.link === 'string' ? e.link : null;
         const category = typeof e.category === 'string' ? e.category : null;
         if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
@@ -743,6 +779,7 @@ export class NotificationService {
         break;
       }
       case 'chat.read':
+        if (Number(e.unread) === 0) for (const [id, notice] of this.liveNotices) if (notificationContext(notice.link) === `chat:${e.room_id}`) { this.closeNative(this.live.get(id)); this.live.delete(id); this.liveNotices.delete(id); }
         void this.refreshCounts();
         break;
       // The server's mail sync pushes (IDLE): new mail is counted now rather than at the next two-minute poll.
@@ -757,6 +794,7 @@ export class NotificationService {
         break;
       }
       case 'chat.call.ringing': {
+        if (this.staffCallWindowOn()) break;
         if (e.desktop === false) return;
         const caller = String(e.caller_name ?? 'Someone');
         this.notify({
@@ -840,7 +878,7 @@ export class NotificationService {
         const prefix = `webchat-nrs:${String(e.conversation_id ?? '')}:`;
         for (const [key, note] of this.live) {
           if (key.startsWith(prefix)) {
-            note.close();
+            this.closeNative(note);
             this.live.delete(key);
           }
         }
@@ -850,7 +888,7 @@ export class NotificationService {
         // Answered, taken over or passed on: its banner goes (#230).
         const id = Number(e.conversation_id);
         if (['answered', 'taken', 'reassigned'].includes(String(e.stage)) && this.websiteShown.has(id)) {
-          this.websiteShown.get(id)!.note.close();
+          this.closeNative(this.websiteShown.get(id)!.note);
           this.websiteShown.delete(id);
         }
         break;
@@ -875,7 +913,7 @@ export class NotificationService {
         const prefix = `webchat:${String(e.conversation_id ?? '')}:`;
         for (const [key, note] of this.live) {
           if (key.startsWith(prefix)) {
-            note.close();
+            this.closeNative(note);
             this.live.delete(key);
           }
         }
@@ -887,7 +925,7 @@ export class NotificationService {
         const key = `webchat-call:${String(e.call_id ?? '')}`;
         if (e.what !== 'ringing') {
           // Answered, declined, missed or hung up: the banner goes, wherever it was.
-          this.live.get(key)?.close();
+          this.closeNative(this.live.get(key));
           this.live.delete(key);
           break;
         }
@@ -910,7 +948,7 @@ export class NotificationService {
       case 'chat.call.stopped': {
         // Answered elsewhere or ended: dismiss the ringing notification everywhere.
         const key = `call:${String(e.uuid ?? '')}`;
-        this.live.get(key)?.close();
+        this.closeNative(this.live.get(key));
         this.live.delete(key);
         break;
       }
@@ -955,18 +993,53 @@ export class NotificationService {
       log.debug('notification suppressed', { module: n.module, why });
       return;
     }
+    const device = this.device;
+    if (device && !n.id.startsWith('test:') && !n.id.startsWith('local:')) {
+      const key = /^\d+$/.test(n.id) ? `notification:${n.id}` : n.id;
+      void device.decision(key, notificationContext(n.link)).then((decision) => { if (decision.notify && this.device === device) this.showNative({ ...n, sound: decision.sound }); });
+      return;
+    }
+    this.showNative(n);
+  }
+
+  async requestAttention(key: string, context: string, sound?: (enabled: boolean) => void): Promise<boolean> {
+    if (this.shown.includes(`attention:${key}`)) return false;
+    const decision = this.device ? await this.device.decision(key, context) : { notify: true, sound: true };
+    const allowed = decision.notify;
+    sound?.(decision.sound !== false);
+    if (allowed) this.remember(`attention:${key}`);
+    return allowed;
+  }
+
+  private showNative(n: Incoming, update = false): void {
     if (!Notification.isSupported()) return;
+    this.closeNative(this.live.get(n.id));
     const locked = this.isLocked();
     const privacy: NotificationPrivacy = locked ? 'GENERIC' : this.prefs().notificationPrivacy;
     const shown = locked ? presentLocked(n, this.prefs()) : present(n, privacy, MODULE_LABELS[n.module] ?? n.module.charAt(0).toUpperCase() + n.module.slice(1), this.prefs().language);
+    const context = !n.critical && !n.website ? notificationContext(n.link) : '';
+    const previous = context ? this.nativeGroups.get(context) : undefined;
+    const grouped = previous && Date.now() - previous.at < 60_000 ? previous : undefined;
+    if (grouped && n.module === 'chat') {
+      grouped.count++;
+      grouped.note.title = `${shown.title} (${grouped.count})`;
+      grouped.note.body = shown.body;
+      grouped.note.silent = n.sound === false || !this.prefs().notificationSounds || (locked && this.prefs().lockedNotificationSounds === false);
+      for (const [id, note] of this.live) if (note === grouped.note) this.liveNotices.set(id, { ...n, id });
+      grouped.note.show();
+      return;
+    }
+    if (grouped && grouped.note !== this.live.get(n.id)) this.closeNative(grouped.note);
+    const count = grouped ? grouped.count + (update ? 0 : 1) : 1;
     const custom = n.custom ?? null;
     const replyable = ((!!n.website && !!this.sendWebsiteReply) || (!!custom?.reply && !!custom.onReply)) && inlineReply(process.platform, privacy, locked);
     const lasting = n.critical || !!custom?.persistent;
     const icon = process.platform === 'darwin' ? undefined : nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '128x128.png'));
     const note = new Notification({
-      title: shown.title,
+      id: context || n.id,
+      title: !update && context && count > 1 ? `${shown.title} (${count})` : shown.title,
       body: shown.body,
-      silent: !this.prefs().notificationSounds || custom?.sound === false || (locked && this.prefs().lockedNotificationSounds === false),
+      silent: n.sound === false || !this.prefs().notificationSounds || custom?.sound === false || (locked && this.prefs().lockedNotificationSounds === false),
       icon,
       urgency: lasting ? 'critical' : 'normal',
       hasReply: replyable,
@@ -993,7 +1066,7 @@ export class NotificationService {
     });
     // One banner per website conversation: a new message replaces the last (worksuite-desktop#230).
     if (n.website) {
-      this.websiteShown.get(n.website.conversationId)?.note.close();
+      this.closeNative(this.websiteShown.get(n.website.conversationId)?.note);
       this.websiteShown.set(n.website.conversationId, { note, count: n.websiteCount ?? 1, at: Date.now() });
     }
     note.on('click', () => {
@@ -1011,15 +1084,15 @@ export class NotificationService {
         void Promise.resolve()
           .then(() => custom.onAction(index))
           .catch((error: unknown) => log.debug('a banner button failed', { module: n.module, error: String(error) }))
-          .finally(() => note.close());
+          .finally(() => this.closeNative(note));
         return;
       }
       if (n.flag && recipient === this.userId) {
-        void this.flagAction(n, n.flag, index).then(() => note.close());
+        void this.flagAction(n, n.flag, index).then(() => this.closeNative(note));
         return;
       }
       if (n.mail && recipient === this.userId) {
-        void this.mailAction(n, n.mail, index).then(() => note.close());
+        void this.mailAction(n, n.mail, index).then(() => this.closeNative(note));
         return;
       }
       // Social Media's buttons open the screen, or copy a manual reminder's caption; none of them acts on the post.
@@ -1035,14 +1108,14 @@ export class NotificationService {
       }
       if (n.callback && recipient === this.userId) {
         this.callbackAction(n, n.callback, index);
-        note.close();
+        this.closeNative(note);
         return;
       }
       if (n.meeting && !n.reminder && recipient === this.userId) {
         const answer = n.meeting.answers[index];
         if (!answer) return;
         if (this.isLocked() || !this.moduleEnabled(n)) { this.onClick(n.link, n.module); return; }
-        void this.answerMeeting(n.meeting.meetingId, answer.rsvp).then(() => this.markRead([n.id])).then(() => note.close()).catch((error) => {
+        void this.answerMeeting(n.meeting.meetingId, answer.rsvp).then(() => this.markRead([n.id])).then(() => this.closeNative(note)).catch((error) => {
           log.debug('Meeting answer failed', { error: String(error) });
           this.onClick(n.link, n.module);
         });
@@ -1054,7 +1127,7 @@ export class NotificationService {
         ? this.http.post(`/api/task-reminder-runs/${n.reminder.runId}/snooze`, { minutes: 15 })
         : index === 1 ? this.http.request('PATCH', `/api/tasks/${n.reminder.taskId}`, { body: { field: 'status', value: 'done' } }) : null;
       if (!action) return;
-      void action.then(() => this.markRead([n.id])).then(() => note.close()).catch((error) => {
+      void action.then(() => this.markRead([n.id])).then(() => this.closeNative(note)).catch((error) => {
         log.debug('Task reminder action failed', { error: String(error) });
         this.onClick(n.link, n.module);
       });
@@ -1069,20 +1142,37 @@ export class NotificationService {
         void Promise.resolve()
           .then(() => custom.onReply!(text))
           .catch((error: unknown) => log.debug('a banner reply failed', { module: n.module, error: String(error) }))
-          .finally(() => note.close());
+          .finally(() => this.closeNative(note));
         return;
       }
       if (!n.website || recipient !== this.userId) return;
-      void this.websiteReply(n, n.website, replyText(details, legacy)).then(() => note.close());
+      void this.websiteReply(n, n.website, replyText(details, legacy)).then(() => this.closeNative(note));
     });
-    note.on('close', () => this.live.delete(n.id));
+    note.on('close', () => {
+      if (this.live.get(n.id) !== note) return;
+      this.live.delete(n.id); this.liveNotices.delete(n.id);
+      const readId = n.readId ?? (/^\d+$/.test(n.id) ? n.id : null);
+      if (!this.programmaticClose.has(note) && readId && recipient === this.userId) void this.markRead([readId]).catch(() => undefined);
+      else if (!this.programmaticClose.has(note) && context && recipient && recipient === this.userId) void this.http.post('/api/notifications/devices/dismiss', { contextKey: context }).catch(() => undefined);
+    });
     note.on('show', () => (this.lastFailure = null));
     note.on('failed', (_event, error) => {
       this.lastFailure = String(error);
       log.info('the system refused a notification', { error: this.lastFailure.slice(0, 200) });
     });
     this.live.set(n.id, note);
+    this.liveNotices.set(n.id, n);
+    if (context) {
+      this.nativeGroups.set(context, { note, at: grouped?.at ?? Date.now(), count });
+      if (this.nativeGroups.size > 500) this.nativeGroups.delete(this.nativeGroups.keys().next().value!);
+    }
     note.show();
+  }
+
+  private closeNative(note: Notification | undefined): void {
+    if (!note) return;
+    this.programmaticClose.add(note);
+    note.close();
   }
 
   /**

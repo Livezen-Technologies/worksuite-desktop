@@ -1,8 +1,10 @@
 {
     "module": "notifications",
-    "version": "1.13.0",
+    "version": "2.0.0",
     "paths": [
         "electron/services/notifications.ts",
-        "shared/task-reminders.ts"
+        "shared/task-reminders.ts",
+        "electron/services/notification-device.ts",
+        "shared/notification-target.ts"
     ]
 }

@@ -1008,6 +1008,7 @@ export const contract = {
   /** Download only / Export: the rendered picture where the person chooses in the save dialog. */
   'image:saveAs': ch(z.strictObject({ name: z.string().min(1).max(255).regex(/^[^/\\]+$/), bytes: imageBytes }), { session: true, rate: 10, sensitive: true }),
 
+  'notifications:context': ch(z.object({ viewing: z.string().max(160) }), { session: true, rate: 30 }),
   'notifications:list': ch(none, { session: true }),
   'notifications:markRead': ch(z.object({ ids: z.array(idString).min(1).max(200) }), { session: true }),
   'notifications:markAllRead': ch(none, { session: true }),
@@ -1806,6 +1807,7 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'image:cacheGet': { bytes: Uint8Array; type: string; savedAt: string } | null;
   'image:cachePut': void;
   'image:saveAs': { name: string } | null;
+  'notifications:context': void;
   'notifications:list': { items: NotificationItem[]; unread: number };
   'notifications:markRead': void;
   'notifications:markAllRead': void;

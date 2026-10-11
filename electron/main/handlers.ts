@@ -1000,6 +1000,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     await shell.openExternal(url);
     return true;
   });
+  router.handle('notifications:context', (input, c) => { if (winOf(c.sender)?.isFocused()) ctx.notifications.viewing = input.viewing; });
   router.handle('notifications:refresh', () => ctx.notifications.refreshCounts());
 
   // ── new-mail alerts (ENH-MAIL-05) ───────────────────────────────────────

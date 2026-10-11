@@ -1,3 +1,4 @@
+import { notificationContext } from '@shared/notification-target';
 import { createContext, useCallback, useContext, useEffect, useMemo, type ReactNode } from 'react';
 import { call, errorMessage } from './bridge';
 import { toast } from './toasts';
@@ -53,6 +54,12 @@ export function openRouteInWindow(route: string, title?: string): void {
 }
 
 export function TabProvider({ tabId, route, active, children, onGo, onTitle }: { tabId: string; route: string; active: boolean; children: ReactNode; onGo?: (route: string) => void; onTitle?: (title: string) => void }) {
+  useEffect(() => {
+    if (!active) return;
+    const report = () => { if (document.hasFocus()) void call('notifications:context', { viewing: notificationContext(route) }).catch(() => undefined); };
+    report(); window.addEventListener('focus', report);
+    return () => window.removeEventListener('focus', report);
+  }, [active, route]);
   const go = useCallback((r: string) => (onGo ? onGo(r) : setRoute(tabId, r)), [tabId, onGo]);
   const api = useMemo<TabApi>(() => {
     const { path, query } = parseRoute(route);
