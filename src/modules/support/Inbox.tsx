@@ -10,9 +10,11 @@ import { toast } from '../../core/toasts';
 import { useNow } from '../../core/use-now';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import { SidePanel } from '../../components/SidePanel';
+import { useListSelection } from '../../components/useListSelection';
 import { Empty } from '../../components/ui';
 import { K, listTickets, meta, views } from './api';
 import { Availability } from './Availability';
+import { BulkBar } from './BulkBar';
 import type { ComposerMode } from './Composer';
 import { usePollInterval, useRealtimeLive, useSupportLive } from './live';
 import { NewTicketSheet } from './NewTicket';
@@ -22,6 +24,7 @@ import { Rail } from './Rail';
 import { ReadingPane } from './ReadingPane';
 import { OutboxBar } from './Outbox';
 import { ResolveDialog } from './ResolveDialog';
+import { useTicketActions } from './TicketActions';
 import { NO_FILTERS, TicketList, channelChoices, type ListFilters } from './TicketList';
 import { WallboardChooser, mayReadReports } from './Wallboard';
 import { isMac } from '../../core/bridge';
@@ -32,6 +35,11 @@ import { Button } from '../../components/ui';
  * kept current by the realtime gateway (live.ts), with the keyboard of FR-WSP-06: j/k move, Enter opens the ticket's
  * tab, R replies, N writes a note, E resolves, / searches, ⌘↵ sends from the reading pane — and C raises a new ticket
  * (#298).
+ *
+ * Several at once (#333): X picks the ticket in front (⇧X the run to it), ⌘A / Ctrl+A every ticket loaded, Esc clears;
+ * with tickets picked the bulk bar shows, and E resolves them (closes them, when all are resolved), A gives them to me,
+ * P and # open their priority and tag menus, Shift+F10 (or the menu key) the whole menu — on the ticket in front when
+ * none is picked. A right-click on a row opens the same menu (TicketActions.tsx).
  *
  * The view and its search live in the route (`/support?view=unassigned&q=…`), so the quick actions, a deep link and a
  * restored tab open on them; the filters, the sort and the ticket being read are this tab's own. `?new=1` (⌘K's Create
@@ -127,7 +135,16 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   const selectedId = sel && sel.key === listKey ? sel.id : null;
   const select = (id: number | null) => setSel(id === null ? null : { key: listKey, id });
   const [focusRequest, setFocusRequest] = useState<{ mode: ComposerMode; n: number } | null>(null);
-  const [resolving, setResolving] = useState<TicketShow['ticket'] | null>(null);
+  const [resolving, setResolving] = useState<Pick<TicketShow['ticket'], 'id' | 'reference' | 'subject' | 'version'> | null>(null);
+
+  // The tickets picked for the bulk bar (#333): this list's, cleared when the list asked for changes.
+  const picks = useListSelection(rows.map((t) => t.id));
+  const [selKey, setSelKey] = useState(listKey);
+  if (selKey !== listKey) {
+    setSelKey(listKey);
+    picks.clear();
+  }
+  const picked = rows.filter((t) => picks.selected.has(t.id));
   // New ticket (#298): for whoever may raise one, once the desk has said (or could not be asked).
   const [creating, setCreating] = useState(false);
   const metaKnown = metaQ.isSuccess || metaQ.isError;
@@ -136,6 +153,28 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   const width = useResizableWidth('support.list', { defaultWidth: 380, min: 300, max: () => Math.max(300, window.innerWidth - 760) });
 
   const openTab = (id: number) => navigate(ticketRoute(id));
+  const actions = useTicketActions({
+    meta: metaQ.data,
+    me,
+    onOpen: (t) => select(t.id),
+    onOpenTab: (t) => openTab(t.id),
+    onRespond: (t, mode) => {
+      select(t.id);
+      setFocusRequest((f) => ({ mode, n: (f?.n ?? 0) + 1 }));
+    },
+    onResolveOne: (t) => setResolving(t),
+    onChanged: (action, answer) => {
+      // Gone from the list: deleted, restored out of the bin, merged away.
+      if (action !== 'delete' && action !== 'restore' && action !== 'merge') return;
+      const gone = new Set(answer.results.filter((r) => r.ok).map((r) => r.id));
+      picks.setSelected((now) => new Set([...now].filter((id) => !gone.has(id))));
+    },
+  });
+  /** Where a menu opened from the keyboard goes: under the ticket in front. */
+  const menuAt = (id: number | null): { x: number; y: number } => {
+    const r = id === null ? null : document.getElementById(`support-row-${id}`)?.getBoundingClientRect();
+    return r ? { x: r.left + 24, y: r.top + Math.min(r.height, 28) } : { x: window.innerWidth / 3, y: window.innerHeight / 3 };
+  };
   const pick = (to: { view?: string; saved?: number }) => {
     const query = new URLSearchParams();
     if (to.saved !== undefined) query.set('saved', String(to.saved));
@@ -147,10 +186,47 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   const keys = useRef<(e: KeyboardEvent) => void>(() => undefined);
   useEffect(() => {
     keys.current = (e: KeyboardEvent) => {
-      if (e.defaultPrevented || e.metaKey || e.ctrlKey || e.altKey || isTyping(e)) return;
-      const at = selectedId === null ? -1 : rows.findIndex((t) => t.id === selectedId);
+      if (e.defaultPrevented || isTyping(e)) return;
       const k = e.key;
-      if (k === 'j' || k === 'k') {
+      // ⌘A / Ctrl+A: every ticket loaded (#333).
+      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && k.toLowerCase() === 'a') {
+        if (!rows.length) return;
+        e.preventDefault();
+        picks.selectAll();
+        return;
+      }
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const at = selectedId === null ? -1 : rows.findIndex((t) => t.id === selectedId);
+      const current = at >= 0 ? rows[at]! : null;
+      // What a key acts on: the tickets picked, else the one in front.
+      const targets = picked.length ? picked : current ? [current] : [];
+      const may = actions.can(targets);
+      if (k === 'Escape') {
+        if (picks.escape(e)) e.preventDefault();
+      } else if ((k === 'x' || k === 'X') && current) {
+        e.preventDefault();
+        picks.pick(current.id, e.shiftKey ? 'range' : 'toggle', current.id);
+      } else if ((k === 'F10' && e.shiftKey) || k === 'ContextMenu') {
+        if (!targets.length) return;
+        e.preventDefault();
+        const p = menuAt(current?.id ?? targets[0]!.id);
+        actions.openMenu(targets, p.x, p.y);
+      } else if ((k === 'a' || k === 'A') && targets.length && (may.assign || may.take)) {
+        e.preventDefault();
+        actions.assignToMe(targets);
+      } else if ((k === 'p' || k === 'P') && targets.length && may.edit) {
+        e.preventDefault();
+        const p = menuAt(current?.id ?? targets[0]!.id);
+        actions.openMenu(targets, p.x, p.y, 'priority');
+      } else if (k === '#' && targets.length && may.edit) {
+        e.preventDefault();
+        const p = menuAt(current?.id ?? targets[0]!.id);
+        actions.openMenu(targets, p.x, p.y, 'tags');
+      } else if ((k === 'e' || k === 'E') && picked.length) {
+        // The picked tickets: resolved — or closed, when they all are resolved already.
+        e.preventDefault();
+        actions.setStatus(picked, picked.every((t) => t.status === 'resolved') ? 'closed' : 'resolved');
+      } else if (k === 'j' || k === 'k') {
         e.preventDefault();
         const next = k === 'j' ? Math.min(rows.length - 1, at + 1) : Math.max(0, at === -1 ? 0 : at - 1);
         if (rows[next]) select(rows[next]!.id);
@@ -215,7 +291,12 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   }, [active, wallAllowed]);
 
   const title = saved ? saved.name : text(rail.data?.views.find((v) => v.key === view)?.label ?? VIEW_LABEL[view as keyof typeof VIEW_LABEL] ?? view);
-  const count = saved ? saved.count : (rail.data?.views.find((v) => v.key === view)?.count ?? null);
+  // The server's count for the view (or saved view); a search or a filter on top of it is not one it counts, so then
+  // the tickets loaded, "50+" while more match.
+  const narrowed = !!q || filters.status.length + filters.priority.length + filters.source.length > 0;
+  const viewCount = saved ? saved.count : (rail.data?.views.find((v) => v.key === view)?.count ?? null);
+  const count = narrowed ? (list.isSuccess ? rows.length : null) : viewCount;
+  const countMore = narrowed && !!list.hasNextPage;
   const single = orgs.length === 1 ? Number(orgs[0]) : orgOptions.length === 1 ? Number(orgOptions[0]!.id) : null;
 
   return (
@@ -250,6 +331,7 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
             <TicketList
               title={title}
               count={count}
+              countMore={countMore}
               live={live}
               offline={list.data?.pages[0]?.offline === true}
               rows={rows}
@@ -273,6 +355,22 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
               onNew={canCreate ? () => setCreating(true) : null}
               searchRef={searchRef}
               now={now}
+              picked={picks.selected}
+              onPick={(id, how) => picks.pick(id, how, selectedId)}
+              onRowMenu={(t, x, y) => actions.openMenu(picks.selected.has(t.id) ? picked : [t], x, y)}
+              bulk={
+                picked.length ? (
+                  <BulkBar
+                    targets={picked}
+                    loaded={rows.length}
+                    more={!!list.hasNextPage}
+                    actions={actions}
+                    onSelectAll={picks.selectAll}
+                    onLoadMore={list.hasNextPage && !list.isFetchingNextPage ? () => void list.fetchNextPage() : null}
+                    onClear={picks.clear}
+                  />
+                ) : null
+              }
             />
           </div>
           <ResizeDivider state={width} label={text('Resize the ticket list')} />
@@ -289,6 +387,7 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
           )}
         </div>
       </div>
+      {actions.elements}
       {resolving ? <ResolveDialog ticket={resolving} onClose={() => setResolving(null)} /> : null}
       {creating ? (
         <NewTicketSheet
