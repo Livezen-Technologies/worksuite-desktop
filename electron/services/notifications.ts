@@ -1002,8 +1002,13 @@ export class NotificationService {
     this.showNative(n);
   }
 
-  async requestAttention(key: string, context: string): Promise<boolean> {
-    return this.device ? this.device.claim(key, context) : true;
+  async requestAttention(key: string, context: string, sound?: (enabled: boolean) => void): Promise<boolean> {
+    if (this.shown.includes(`attention:${key}`)) return false;
+    const decision = this.device ? await this.device.decision(key, context) : { notify: true, sound: true };
+    const allowed = decision.notify;
+    sound?.(decision.sound !== false);
+    if (allowed) this.remember(`attention:${key}`);
+    return allowed;
   }
 
   private showNative(n: Incoming, update = false): void {
@@ -1031,6 +1036,7 @@ export class NotificationService {
     const lasting = n.critical || !!custom?.persistent;
     const icon = process.platform === 'darwin' ? undefined : nativeImage.createFromPath(join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '128x128.png'));
     const note = new Notification({
+      id: context || n.id,
       title: !update && context && count > 1 ? `${shown.title} (${count})` : shown.title,
       body: shown.body,
       silent: n.sound === false || !this.prefs().notificationSounds || custom?.sound === false || (locked && this.prefs().lockedNotificationSounds === false),

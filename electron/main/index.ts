@@ -513,7 +513,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       else delete all[uid];
       settings.update({ mailAlertPause: all });
     },
-    accept: (a) => notifications.mailAccept(a),
+    accept: async (a) => {
+      const decision = await notifications.mailAccept(a);
+      let sound = true;
+      if (!decision.alert || !await notifications.requestAttention(`mail:${a.mailbox}:${a.uid}`, `mail:${a.mailbox}:${a.uid}`, (enabled) => { sound = enabled; })) return { alert: false, breakthrough: false };
+      return { ...decision, sound };
+    },
+    dismiss: (a) => { void http.post('/api/notifications/devices/dismiss', { contextKey: `mail:${a.mailbox}:${a.uid}` }).catch(() => {}); },
     changed: () => {
       emitStatus();
       sendTo(windows.getMain(), 'mail-alert:state', mailAlerts.state());

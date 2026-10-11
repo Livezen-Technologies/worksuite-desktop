@@ -9,6 +9,12 @@ vi.mock('electron', () => ({
     static isSupported = () => true;
     private handlers: Record<string, Handler> = {};
     constructor(private readonly o: { title: string; body: string; silent: boolean }) {}
+    get title() { return this.o.title; }
+    set title(value: string) { this.o.title = value; }
+    get body() { return this.o.body; }
+    set body(value: string) { this.o.body = value; }
+    get silent() { return this.o.silent; }
+    set silent(value: boolean) { this.o.silent = value; }
     on(event: string, h: Handler) {
       this.handlers[event] = h;
       return this;

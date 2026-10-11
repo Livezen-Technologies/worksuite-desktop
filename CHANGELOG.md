@@ -11,6 +11,13 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.238 — 2026-10-11
+
+- **One alert, on the right device (#339).** An active desktop gets attention first; an active browser wins when the desktop is idle. Other devices keep their badges without another popup. Viewing the conversation suppresses its alert everywhere.
+- Replayed events are remembered across restarts. Chat bursts update one notice; reading or dismissing clears connected devices. Calls claim attention once even during quiet hours.
+- Per-type popup, sound, email and mobile controls include an unread-email delay (15 minutes by default), with due unread events combined into a digest.
+- Requires the companion WorkSuite server migration and updated mobile client for coordinated routing; see `docs/NOTIFICATION_DELIVERY.md`.
+
 ## 0.2.237 — 2026-10-11
 
 - **New-mail alerts you can act on (ENH-MAIL-05).** When WorkSuite isn't in front (another program, minimised, or in the tray), a new email shows a system notification:

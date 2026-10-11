@@ -674,6 +674,15 @@ describe('the server’s contract (ENH-MAIL-05 §7)', () => {
     expect(String(notes[0]!.options.body)).toContain('and 23 more');
   });
 
+  it('withdraws a native mail alert when its bell entry is read on another device', async () => {
+    const r = rig();
+    r.service.handleRealtime(event());
+    await vi.advanceTimersByTimeAsync(2_100);
+    expect(open()).toHaveLength(1);
+    r.service.handleRealtime({ type: 'notification.read', ids: ['901'], contextKeys: ['mail:3:41'], all: false });
+    expect(open()).toHaveLength(0);
+  });
+
   it('clears every alert of a mailbox on “all”', async () => {
     const r = rig();
     r.service.handleRealtime(event());
