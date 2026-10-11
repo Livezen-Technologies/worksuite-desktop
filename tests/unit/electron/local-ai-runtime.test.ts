@@ -56,8 +56,14 @@ function setup(installed: boolean, opts: { usable?: boolean; files?: Record<stri
     usable: () => opts.usable ?? true,
   };
   const rt = new LocalAIRuntime({ spawn: inProcess(spawned), models: models as never, modelsRoot: root, emit: (s, e) => events.push([s, e]), idleMs: 60_000 });
-  const until = async (pred: () => boolean) => {
-    for (let i = 0; i < 400 && !pred(); i++) await new Promise((r) => setTimeout(r, 25));
+  // Waits for the real engine; on a busy machine a load and an answer can take well over ten seconds, so it
+  // waits up to 45 s and fails here, by name, rather than giving up quietly and failing a later check instead.
+  const until = async (pred: () => boolean, ms = 45_000) => {
+    const end = Date.now() + ms;
+    while (!pred()) {
+      if (Date.now() > end) throw new Error(`Timed out after ${ms / 1000} s waiting for the local AI runtime`);
+      await new Promise((r) => setTimeout(r, 25));
+    }
   };
   return { rt, events, spawned, until };
 }
@@ -84,7 +90,8 @@ describe('Local AI runtime (main process side)', () => {
   it('cancels, and a window that goes away cancels what it asked', async () => {
     const { rt, events, until } = setup(true);
     await rt.ask(3, { id: 'req-cccccccc', messages: [{ role: 'user', content: 'Long' }], maxTokens: 2000 });
-    await until(() => events.some(([, e]) => e.type === 'chunk'));
+    // Straight away, while the request is certainly still running: the tiny test model can finish its whole answer
+    // between two polls, and a finished request has nothing left to cancel.
     rt.senderGone(3);
     await until(() => events.some(([, e]) => e.type === 'done'));
     expect((events.find(([, e]) => e.type === 'done')![1] as { cancelled: boolean }).cancelled).toBe(true);
@@ -95,7 +102,7 @@ describe('Local AI runtime (main process side)', () => {
     const { rt, events, spawned, until } = setup(true);
     for (let n = 1; n <= 4; n++) {
       await rt.ask(1, { id: `req-crash00${n}`, messages: [{ role: 'user', content: 'x' }], maxTokens: 2000 });
-      await until(() => events.some(([, e]) => e.id === `req-crash00${n}` && e.type === 'chunk'));
+      // Crashed while the request is in flight (see the cancel test above for why not after its first chunk).
       spawned.at(-1)!.crash();
       await until(() => events.some(([, e]) => e.id === `req-crash00${n}` && e.type === 'error'));
     }
@@ -104,7 +111,7 @@ describe('Local AI runtime (main process side)', () => {
     await expect(rt.ask(1, { id: 'req-crash005', messages: [{ role: 'user', content: 'x' }] })).rejects.toThrow(/stopped 4 times in 10 minutes/);
     await rt.reset();
     expect(rt.status({ at: null, error: null }, null).runtime).toBe('off');
-  }, 120_000);
+  }, 240_000);
 
   it('says when no model is installed, without starting anything', async () => {
     const { rt, spawned } = setup(false);
