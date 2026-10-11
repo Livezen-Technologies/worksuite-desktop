@@ -161,6 +161,7 @@ function frameOf(img: HTMLImageElement): { left: number; top: number; width: num
 export interface MailEditorProps {
   value: string;
   onChange: (html: string) => void;
+  onBusyChange?: (busy: boolean) => void;
   clean: (html: string) => string;
   label: string;
   placeholder?: string;
@@ -211,7 +212,7 @@ const SIGNATURE_TOOLS = new Set(['undo', 'redo', 'font', 'size', 'bold', 'italic
 type Panel = 'link' | 'colour' | 'highlight' | 'table' | 'emoji' | 'chars' | 'image-url' | null;
 type Dialog = 'table' | 'button' | 'crop' | 'drive' | null;
 
-export function MailEditor({ value, onChange, clean, label, placeholder, editorRef, autoFocus, onFiles, aiSections, mergeFields, onMeetingLink, onAttachInstead, offline, minHeight = 260, className, footer, variant = 'compose', imageMaxBytes, extraGroups, leadingGroups, fill, below, insertRef }: MailEditorProps) {
+export function MailEditor({ value, onChange, onBusyChange, clean, label, placeholder, editorRef, autoFocus, onFiles, aiSections, mergeFields, onMeetingLink, onAttachInstead, offline, minHeight = 260, className, footer, variant = 'compose', imageMaxBytes, extraGroups, leadingGroups, fill, below, insertRef }: MailEditorProps) {
   const signature = variant === 'signature';
   const box = useRef<HTMLDivElement | null>(null);
   const wrap = useRef<HTMLDivElement | null>(null);
@@ -233,6 +234,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
   const [painter, setPainter] = useState<Here | null>(null);
   const [pasted, setPasted] = useState<{ before: string; start: number; end: number; data: { html: string; text: string }; mode: PasteMode } | null>(null);
   const [busy, setBusy] = useState(0);
+  useEffect(() => { onBusyChange?.(busy > 0); }, [busy, onBusyChange]);
   const rerender = () => setTick((n) => n + 1);
 
   const isEmpty = (el: HTMLElement) => !(el.textContent ?? '').trim() && !el.querySelector('li, img, hr, blockquote, table');

@@ -184,6 +184,7 @@ function TicketComposer({
     return () => window.removeEventListener('support:retry-message', retry);
   }, [ticket.id]);
   const insertHtml = useRef<((html: string) => void) | null>(null);
+  const [editorBusy, setEditorBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [caret, setCaret] = useState(0);
   const [pick, setPick] = useState(0);
@@ -210,6 +211,7 @@ function TicketComposer({
   };
 
   const switchMode = (nextMode: ComposerMode) => {
+    if (editorBusy) return;
     const now = latest.current;
     if (nextMode === now.mode) return;
     const { mode: oldMode, otherDrafts = {}, ...content } = now;
@@ -529,7 +531,7 @@ function TicketComposer({
   // A move chosen earlier that the ticket no longer allows (somebody changed its status) is not made.
   const then = d.status && moves.includes(d.status) ? d.status : null;
   const uploading = uploads.some((u) => !u.error);
-  const canSend = typed && !uploading && !sending && (mode === 'note' || ccTyped.bad.length === 0);
+  const canSend = typed && !uploading && !editorBusy && !sending && (mode === 'note' || ccTyped.bad.length === 0);
 
   const send = async (confirmed = false, asNote = false, at?: string, retryInput?: MessageInput) => {
     const body = retryInput?.body ?? latest.current.body.trim();
@@ -841,6 +843,7 @@ function TicketComposer({
           <MailEditor
             value={replyHtml(d.body, d.html)}
             clean={linkReplyUrls}
+            onBusyChange={setEditorBusy}
             onChange={(html) => {
               clientId.current = null;
               update({ html, body: replyText(html) });
