@@ -8,6 +8,8 @@ import { useCanOpen, useVisibleIds } from '../../core/access';
 import { app, isLocked, updatePrefs } from '../../core/app-state';
 import { call, errorMessage, isMac, on } from '../../core/bridge';
 import { permissionLabel, permissionsMissing } from '@shared/meet-permissions';
+import { meetDiagnosticsSummary } from '@shared/meet-diagnostics';
+import { PROTECTED_APP_LABELS } from '@shared/remote-control/protected-apps';
 import { conflicts, effectiveShortcuts, prettyAccelerator, accelerator, shortcutMeta, DEFAULT_SHORTCUTS } from '../../core/commands';
 import { LANGUAGES, t, text } from '../../core/i18n';
 import { LOCAL_AI_KEY, useLocalAIStatus, useLocalModels } from '../../core/local-ai';
@@ -22,7 +24,7 @@ import { bytes, currentZone, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { CollapsibleSection } from '../../components/Collapsible';
 import { Icon } from '../../components/Icon';
-import { Button, Chip, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
+import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
 import { Select } from '../../components/Select';
 import type { ModuleProps } from '../registry';
 import { playOnce, playTone, ringtoneId, RINGTONES, type RingOn } from '../calls/tones';
@@ -1759,6 +1761,75 @@ export function methodLabel(method: string | null): string {
   return method === 'sendinput' ? 'Windows input (SendInput, through PowerShell)' : method === 'cgevent' ? 'macOS events (CGEvent, through osascript)' : method === 'xdotool' ? 'xdotool (X11)' : 'None';
 }
 
+/** How long the controller waits after the person here moves the mouse (RC-INP-04). */
+export function holdLabel(ms: number | null): string {
+  if (ms === null) return text('As your organisation’s policy says');
+
+  // Said in whole tenths: "1.5 seconds", not "1500 ms", for a row somebody
+  // reads once to know whether their own mouse will win.
+  const seconds = ms / 1000;
+
+  return seconds >= 1 ? text('Their input waits {n} seconds', { n: String(Number(seconds.toFixed(1))) }) : text('Their input waits {n} ms', { n: String(Math.round(ms)) });
+}
+
+export function clipboardLabel(policy: 'off' | 'text_only' | 'text_and_files' | null): string {
+  return policy === 'off'
+    ? text('Nothing can be put on your clipboard')
+    : policy === 'text_only'
+      ? text('Text only')
+      : policy === 'text_and_files'
+        ? text('Text, and files you accept')
+        : text('As your organisation’s policy says');
+}
+
+/**
+ * The checks the artboard draws (RC09), run on demand.
+ *
+ * Reads only — no capture is opened and no permission is asked for — so **Run
+ * checks again** is safe to press repeatedly and never puts a system prompt in
+ * front of anybody. Two of the rows deliberately say they cannot be known from
+ * here rather than showing a tick; `shared/meet-diagnostics.ts` says why.
+ */
+function RemoteControlChecks() {
+  const q = useQuery({ queryKey: ['rc-checks'], queryFn: () => call('rc:checks'), refetchOnWindowFocus: false, staleTime: 30_000 });
+  const rows = q.data?.checks ?? [];
+  const worst = rows.length ? meetDiagnosticsSummary(rows) : null;
+
+  return (
+    <div className="mt-4 rounded-[12px] border border-line bg-surface p-4">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <h3 className="text-[14px] font-bold text-ink">Checks</h3>
+        {worst ? (
+          <Chip tone={worst === 'fail' ? 'danger' : worst === 'warn' ? 'warning' : 'success'}>
+            {worst === 'fail' ? 'Something is in the way' : worst === 'warn' ? 'Works, with limits' : 'Nothing in the way'}
+          </Chip>
+        ) : null}
+        <span className="flex-1" />
+        <Button size="sm" variant="ghost" icon="refresh" loading={q.isFetching} onClick={() => void q.refetch()}>
+          Run checks again
+        </Button>
+      </div>
+      {q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
+      {!rows.length && q.isLoading ? <Spinner /> : null}
+      <ul className="flex flex-col" data-testid="rc-checks">
+        {rows.map((r) => (
+          <li key={r.id} className="flex items-start gap-2.5 border-t border-line py-2.5 first:border-t-0 first:pt-0">
+            <Icon
+              name={r.status === 'pass' ? 'check' : r.status === 'fail' ? 'alert' : r.status === 'warn' ? 'warning' : 'info'}
+              size={15}
+              className={cx('mt-0.5 shrink-0', r.status === 'pass' ? 'text-success' : r.status === 'fail' ? 'text-danger' : r.status === 'warn' ? 'text-warning' : 'text-ink-3')}
+            />
+            <span className="flex min-w-0 flex-col">
+              <b className="text-[13.5px] font-semibold text-ink">{r.label}</b>
+              <span className="text-[12.5px] leading-relaxed text-ink-2">{r.detail}</span>
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
 /** A fresh remote-control state, in place of any older answer still on its way. */
 async function fresh(next: Awaited<ReturnType<typeof call<'rc:recheck'>>>): Promise<void> {
   await queryClient.cancelQueries({ queryKey: ['rc-state'] });
@@ -1843,6 +1914,10 @@ export function RemoteControlSection() {
     };
   }, []);
   const s = v?.support;
+  // Both are the organisation's to set, so they are read from the policy
+  // rather than offered as choices (RC09).
+  const localHoldMs = useStore(app, (st) => st.bootstrap?.policy.remote_local_priority_hold_ms ?? null);
+  const clipboard = useStore(app, (st) => st.bootstrap?.policy.remote_clipboard ?? null);
   // The banner asks for access: keep asking macOS every two seconds while it is on screen, and stop once granted.
   const waiting = !!s && (s.accessibility === 'denied' || s.accessibility === 'unknown');
   useEffect(() => {
@@ -1984,6 +2059,29 @@ export function RemoteControlSection() {
       <Row label="How input reaches this computer" hint="The system's own tools, started only while someone has control.">
         <span className="text-[13px] text-ink-2">{methodLabel(s.method)}</span>
       </Row>
+      {/* RC09: the hold already exists in the service (RC-INP-04) — what was
+        * missing was saying how long it is, and that it is not yours to set. */}
+      <Row label="When you move your own mouse" hint="Their input waits, so you are never fighting the pointer. Nothing is sent to them while it waits." lock={{ reason: 'Set by your organisation’s Meet policy.' }}>
+        <span className="text-[13px] text-ink-2">{holdLabel(localHoldMs)}</span>
+      </Row>
+      <Row label="Clipboard while someone controls this computer" lock={{ reason: 'Set by your organisation’s Meet policy.' }} hint="You are told each time something is put on your clipboard, and a file always waits for your answer.">
+        <span className="text-[13px] text-ink-2">{clipboardLabel(clipboard)}</span>
+      </Row>
+      <RemoteControlChecks />
+      <CollapsibleSection variant="row" level={4} defaultOpen={false} persist="settings.remote-control.protected" className="mt-1" bodyClassName="text-[12.5px] text-ink-2" title="Apps nobody can control" summary={`${PROTECTED_APP_LABELS.length} kinds`}>
+        <p>
+          Control pauses by itself while one of these is in front, and only you can resume it. This computer decides that on its own — it is not asked of the
+          meeting, and it holds even while somebody is driving.
+        </p>
+        <ul className="mt-1.5 space-y-1">
+          {PROTECTED_APP_LABELS.map((p) => (
+            <li key={p.label}>
+              <b className="font-semibold text-ink">{p.label}</b> — {p.what}
+            </li>
+          ))}
+        </ul>
+        <p className="mt-1.5 text-[12px] text-ink-3">Your screen is still shared while control is paused. Stop the share itself from the bar at the top of the screen.</p>
+      </CollapsibleSection>
       <p className="mt-4 text-[12.5px] leading-relaxed text-ink-3">
         While someone has control, a red bar stays at the top of your screen with Pause and Stop. Moving your own mouse always wins: their input waits until you stop. Control pauses by itself when the screen locks, the computer sleeps, or a password manager or system prompt comes to the front, and only you can resume it.
       </p>

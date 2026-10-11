@@ -63,6 +63,7 @@ import { SalonDesk } from '../services/salon-desk';
 import { SalonPrint } from '../services/salon-print';
 import { SalonSync } from '../services/salon-sync';
 import { DiagnosticsService } from '../services/diagnostics';
+import { MeetDiagnostics } from '../services/meet-diagnostics';
 import { readEnterpriseConfig } from '../services/enterprise';
 import { CLIENT_TYPE, CLIENT_TYPE_HEADER, HttpClient, withSafeHeaders, type FetchLike } from '../services/http';
 import { createNetFetch } from '../services/net-fetch';
@@ -2657,6 +2658,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   if (pendingMailFiles.length) handMailFiles(pendingMailFiles.splice(0));
   app.on('will-quit', () => mailFiles.closeAll());
 
+  /*
+   * The checks Settings › Remote control shows (RC09). Built here so the
+   * support bundle carries the same rows: a person reading them on screen and
+   * the engineer reading the bundle should not be looking at two answers.
+   */
+  const meetDiagnostics = new MeetDiagnostics({
+    support: () => remoteControl.view().support,
+    policy: () => sessionCtl.current()?.policy ?? null,
+    realtime: () => realtime.getState(),
+  });
   const diagnostics = new DiagnosticsService({
     serverOrigin: () => auth.getServer()?.origin ?? null,
     timedFetch: async (path) => {
@@ -2678,6 +2689,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     policy: () => sessionCtl.current()?.policy ?? null,
     deviceInfo: () => device.info(secrets.getStatus()),
     accessibility: accessibilityDiagnostics,
+    meet: () => meetDiagnostics.run(),
     settings: () => settings.effective(),
     offline: () => {
       const uid = sessionCtl.userId();
@@ -2814,6 +2826,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     lockPin,
     updater,
     diagnostics,
+    meetDiagnostics,
     audit,
     windows,
     calls,

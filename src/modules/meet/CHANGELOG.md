@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.20.0 — 2026-10-11
+
+- Settings › Remote control shows its checks — what can be captured, the displays and which the picker offers, whether input can reach this computer, and the clipboard policy — with Run checks again; the same rows go into the support report.
+- The two things the organisation decides are named: how long a controller's input waits after you move your own mouse, and what may be put on your clipboard.
+- Settings lists the apps nobody can control — password managers and the system's own prompts — read from the list the service itself matches against.
+
 ## 1.19.0 — 2026-10-11
 
 - Share your screen on Meet home: makes a meeting and opens its pre-join screen with the share waiting, camera off — the ⌘⇧E key now does this instead of only opening the page.

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.1 — 2026-10-11
+
+- The support report carries Meet's remote-control checks; a gatherer that cannot answer leaves one skipped row rather than taking the report down.
+
 ## 1.1.0 — 2026-10-05
 
 - Screen timings in the report (timings.json) (#252)

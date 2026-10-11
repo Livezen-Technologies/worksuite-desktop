@@ -16,6 +16,7 @@ import type { BootstrapService } from '../services/bootstrap';
 import type { Database } from '../services/db';
 import type { DeviceService } from '../services/device';
 import type { DiagnosticsService } from '../services/diagnostics';
+import type { MeetDiagnostics } from '../services/meet-diagnostics';
 import type { HttpClient } from '../services/http';
 import type { LockService } from '../services/lock';
 import type { LockPin } from '../services/lock-pin';
@@ -100,6 +101,8 @@ export interface AppContext {
   lockPin: LockPin;
   updater: UpdaterService;
   diagnostics: DiagnosticsService;
+  /** The remote-control checks (RC09), read by `rc:checks` and by the support bundle. */
+  meetDiagnostics: MeetDiagnostics;
   audit: AuditService;
   windows: WindowManager;
   calls: CallService;

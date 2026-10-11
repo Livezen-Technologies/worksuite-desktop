@@ -5,6 +5,30 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.229 — 2026-10-11
+
+- **Settings › Remote control now shows its own checks (meet 1.20.0, diagnostics 1.1.1).** What can be captured
+  (and, on a Mac that refused it, where the permission lives), how many displays there are and that the picker
+  offers each one separately, whether input can reach this computer at all — Wayland is said plainly — and what the
+  clipboard policy allows. **Run checks again** re-reads them; it opens no capture and asks for no permission, so it
+  never puts a system prompt in front of you. The same rows go into the support report, so the person on the phone
+  and the engineer reading their report are looking at one answer.
+- **Two rows that say they cannot be known from here.** The artboard draws a *firewall UDP* row and a *TURN* row
+  with ticks. WorkSuite is told the media server's address and its relays only when it **joins a meeting**, and never
+  learns which UDP ports carry the media, so those ticks would be the diagnostics lying about the one thing somebody
+  opens them to find out. The row says what is not knowable and where it is — the pre-join screen of a real meeting,
+  and the call's own connection quality while you are in it.
+- **The two things your organisation decides are now named (meet 1.20.0).** How long a controller's input waits
+  after you move your own mouse ("Their input waits 1.5 seconds" — the behaviour was always there, the number was
+  not), and what may be put on your clipboard while somebody is controlling this computer. Both are shown as facts
+  with *Set by your organization*, not as switches: a switch would imply they were yours to change.
+- **The apps nobody can control are listed (meet 1.20.0)** — password managers, the system's keychain and its
+  prompts, Linux password dialogs — read from the same list the service matches against, so the screen cannot
+  promise a protection that is not there. It also repeats the distinction people get wrong: control pauses, **the
+  share does not stop**.
+
+---
+
 ## 0.2.228 — 2026-10-11
 
 - **Share your screen, without setting up a call first (meet 1.19.0).** Meet home has a Share your screen item, and

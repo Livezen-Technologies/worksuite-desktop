@@ -261,6 +261,7 @@ const api = {
   rc: {
     state: call('rc:state'),
     recheck: call('rc:recheck'),
+    checks: call('rc:checks'),
     restart: call('rc:restart'),
     setAllowRequests: call('rc:setAllowRequests'),
     shareStarted: call('rc:shareStarted'),

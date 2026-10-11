@@ -1,5 +1,6 @@
 import type { DesktopPolicy, RemoteControlConsent, RemoteControlOffer, RemoteControlRequestView, RemoteControlSessionView, RemoteControlSupport, RemoteControlView } from '@shared/types';
 import { ControlReceiver, acceleratorsFor, chordOf, importKeys, parseChord, parseEnvelope, type Caps, type Refusal } from '@shared/remote-control/channel';
+import { PROTECTED_APPS } from '@shared/remote-control/protected-apps';
 import { DesktopError, isDesktopError } from '../../main/errors';
 import { logger } from '../../main/log';
 import { checkGrant, type GrantDelivery } from './grant';
@@ -184,8 +185,12 @@ export interface RemoteControlDeps {
 
 const LIVE: Status[] = ['CONTROL_APPROVED', 'CONTROL_ACTIVE', 'CONTROL_PAUSED'];
 const REPORTED: Refusal[] = ['bad_mac', 'stale_sequence', 'input_burst', 'wrong_sender', 'out_of_bounds', 'reserved_chord'];
-/** Apps whose windows nobody else should drive: password managers and the system's own prompts. */
-const PROTECTED = ['1password', 'keepass', 'bitwarden', 'lastpass', 'dashlane', 'enpass', 'keeper', 'keychain access', 'securityagent', 'credential', 'consent.exe', 'windows security', 'polkit', 'gcr-prompter', 'pinentry', 'seahorse'];
+/**
+ * Apps whose windows nobody else should drive: password managers and the
+ * system's own prompts. The list moved to `shared/` so Settings can show it
+ * (RC09) — two copies of it would be two lists that drift apart.
+ */
+const PROTECTED: readonly string[] = PROTECTED_APPS;
 
 /** Why control is paused, as the indicator says it (RC04). */
 export function pauseText(reason: string | null): string {

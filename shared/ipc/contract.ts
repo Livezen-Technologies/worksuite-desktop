@@ -686,6 +686,13 @@ export const contract = {
   'rc:state': ch(none, { session: true, whileLocked: true }),
   /** Asks macOS again whether WorkSuite may take input (Check again; back from System Settings — worksuite-desktop#47). */
   'rc:recheck': ch(none, { session: true, rate: 20 }),
+  /**
+   * The checks under Settings › Remote control (WS-MEET-ENH-01 RC09): what can
+   * be captured, the displays, whether input can reach this computer, the
+   * clipboard policy. Reads only — it never opens a capture or asks macOS for
+   * a permission, so pressing Run checks again puts no prompt on screen.
+   */
+  'rc:checks': ch(none, { session: true, rate: 20 }),
   /** Restart WorkSuite after Accessibility was granted (worksuite-desktop#147): the app and its input helper start again. */
   'rc:restart': ch(none, { session: true, rate: 1 }),
   'rc:setAllowRequests': ch(z.object({ value: z.boolean() }), { session: true, rate: 5 }),
@@ -1600,6 +1607,7 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'speech:result': void;
   'rc:state': RemoteControlView;
   'rc:recheck': RemoteControlView;
+  'rc:checks': { checks: DiagnosticCheck[] };
   'rc:restart': void;
   'rc:setAllowRequests': RemoteControlView;
   'rc:shareStarted': { shareId: number; controlOffered: boolean; why: string | null };

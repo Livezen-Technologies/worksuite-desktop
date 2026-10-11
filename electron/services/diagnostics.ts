@@ -31,6 +31,8 @@ export interface DiagnosticsDeps {
   policy: () => unknown;
   deviceInfo: () => unknown;
   accessibility?: () => Promise<unknown>;
+  /** Meet's remote-control checks (WS-MEET-ENH-01 RC09), the same rows Settings shows. */
+  meet?: () => Promise<DiagnosticCheck[]>;
   settings: () => unknown;
   offline: () => unknown;
   crashes: () => unknown;
@@ -137,6 +139,14 @@ export class DiagnosticsService {
       status: ss.persistent ? 'pass' : 'warn',
       detail: ss.persistent ? `Using ${ss.backend}.` : 'No system keyring found; you will be asked to sign in each time WorkSuite starts.',
     });
+
+    if (this.deps.meet) {
+      try {
+        checks.push(...(await this.deps.meet()));
+      } catch (e) {
+        checks.push({ id: 'meet', label: 'Screen sharing and remote control', status: 'skip', detail: redactString(String((e as Error).message ?? e)) });
+      }
+    }
 
     checks.push({
       id: 'gpu',

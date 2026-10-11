@@ -218,6 +218,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     await accessibility.refresh();
     return rc.view();
   });
+  // Reads only: no capture is opened and no permission is asked for, so Run
+  // checks again never puts a system prompt in front of somebody.
+  router.handle('rc:checks', async () => ({ checks: await ctx.meetDiagnostics.run() }));
   router.handle('rc:restart', async () => {
     if (process.platform !== 'darwin') throw new DesktopError('UNSUPPORTED', 'Restarting for Accessibility is only needed on macOS.');
     await restartForAccessibility({ stopControl: () => rc.shutdown('stopped'), stopProbes, relaunch: (safe, args) => ctx.relaunch(safe, args) });
