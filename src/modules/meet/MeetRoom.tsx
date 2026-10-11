@@ -27,6 +27,7 @@ import { isGuest, meet, roleOf, userIdOf } from './session';
 import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } from './RoomRoles';
 import { HostControlsDrawer, cameraControl, hostControlsControl, micControl, reactControl } from './HostControls';
 import { AddPeopleDialog, Invitations } from './InvitePeople';
+import { badgeRole } from './invites';
 import { MeetNotes } from './MeetNotes';
 import { SessionPanel } from './support/SessionPanel';
 import { supportTabs } from '@shared/support-session';
@@ -172,7 +173,8 @@ export function MeetRoom() {
     const h = meet.handOf(p);
     return h ? { position: h.position, label: `${t('act.handUp')} · ${h.position}` } : null;
   };
-  const people = participants.map((p) => personOf(p, p === lp, { host: p === lp ? meet.isHost : roleOf(p) === 'host', guest: isGuest(p), hand: handOn(p) }));
+  // The badge from the meeting's host id first (#347): whoever made it is its Host.
+  const people = participants.map((p) => personOf(p, p === lp, { host: badgeRole(userIdOf(p), p === lp ? meet.role : roleOf(p), info) === 'host', guest: isGuest(p), hand: handOn(p) }));
   // Q&A, polls and raised hands (#92): what each is waiting on — a live poll I have not voted in, hands up for the hosts.
   const acts = meet.activities;
   const handsOn = meet.settings.raise_hand !== false;
@@ -511,9 +513,10 @@ function PeoplePanel() {
       </div>
       {present.map((p) => {
         const self = p === room.localParticipant;
-        const role = self ? meet.role : roleOf(p);
-        const hand = meet.handOf(p);
         const uid = userIdOf(p);
+        // Host and co-hosts as the meeting names them (#347); the connection's word for anybody else.
+        const role = badgeRole(uid, self ? meet.role : roleOf(p), meet.info);
+        const hand = meet.handOf(p);
         const state = p.isSpeaking ? 'Speaking' : !p.isMicrophoneEnabled ? 'Muted' : '';
         const name = p.name || 'Guest';
         // What I may do to them: the server checks again.

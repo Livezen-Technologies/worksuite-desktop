@@ -137,6 +137,46 @@ describe('meeting invitations (worksuite-desktop#79)', () => {
   });
 });
 
+describe('meeting invitations that move on (worksuite-desktop#347)', () => {
+  const invite = { ring_id: 31, uuid: ringing.uuid, title: 'Design review', inviter_name: 'Kumari', silent: true, expires_in: 40 };
+
+  it('rings again after a ring into the same meeting stopped', () => {
+    const open = vi.fn();
+    const calls = new CallService({ open } as never, { get: vi.fn(), post: vi.fn() } as never, () => true);
+    calls.handle({ type: 'meet.ring', ...invite } as never);
+    calls.handle({ type: 'meet.ring.stopped', ring_id: 31, uuid: ringing.uuid, state: 'no_answer' } as never);
+    calls.handle({ type: 'meet.ring', ...invite, ring_id: 32 } as never);
+    expect(open).toHaveBeenCalledTimes(2);
+  });
+
+  it('never shows a ring the host cancelled, or that was answered on another device, while it waited to show', async () => {
+    let allow: (v: boolean) => void = () => undefined;
+    const open = vi.fn();
+    const calls = new CallService({ open } as never, { get: vi.fn(), post: vi.fn() } as never, () => true);
+    calls.attention = () => new Promise<boolean>((r) => (allow = r));
+    calls.handle({ type: 'meet.ring', ...invite } as never);
+    calls.handle({ type: 'meeting.invite_state_changed', meeting: ringing.uuid, invitee_id: 7, ring_id: 31, invite_state: 'cancelled' } as never);
+    allow(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(open).not.toHaveBeenCalled();
+  });
+
+  it('is not stopped by the ring still ringing, or by a different ring', async () => {
+    let allow: (v: boolean) => void = () => undefined;
+    const open = vi.fn();
+    const calls = new CallService({ open } as never, { get: vi.fn(), post: vi.fn() } as never, () => true);
+    calls.attention = () => new Promise<boolean>((r) => (allow = r));
+    calls.handle({ type: 'meet.ring', ...invite } as never);
+    calls.handle({ type: 'meeting.invite_state_changed', meeting: ringing.uuid, invitee_id: 7, ring_id: 31, invite_state: 'ringing' } as never);
+    calls.handle({ type: 'meet.ring.stopped', ring_id: 30, uuid: ringing.uuid } as never);
+    allow(true);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(open).toHaveBeenCalledTimes(1);
+  });
+});
+
 describe('media servers from the bootstrap', () => {
   it('takes the announced LiveKit origin, secure schemes only', () => {
     expect(mediaServersOf({ livekit_url: 'wss://lk.worksuite.lk' })).toEqual(['wss://lk.worksuite.lk']);

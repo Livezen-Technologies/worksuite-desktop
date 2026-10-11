@@ -5,7 +5,8 @@ import { ActivityList } from './Activity';
 import { ClientsView } from './Clients';
 import { ModuleSettings } from './ModuleSettings';
 import { ProjectPage } from './ProjectPage';
-import { AllProjects, TemplatesView } from './Register';
+import { AllProjects } from './Register';
+import { TemplateLibraryView } from './TemplateLibrary';
 
 /**
  * The PORTFOLIO screens in the Projects tab (PRJ-DSK-01): All projects, Templates, Clients, a project's page
@@ -49,8 +50,8 @@ export function PortfolioScreen({ view, query, offline, onGo, onNew, onOpenTask,
   query: URLSearchParams;
   offline: boolean;
   onGo: (route: string) => void;
-  /** Opens New project over this view: blank, or from a template. */
-  onNew: (templateId: number | null) => void;
+  /** Opens New project over this view: blank, or from a template (its key, or a template project's id). */
+  onNew: (template: number | string | null) => void;
   onOpenTask: (taskId: number) => void;
   onOffline: (o: boolean) => void;
 }) {
@@ -60,7 +61,7 @@ export function PortfolioScreen({ view, query, offline, onGo, onNew, onOpenTask,
     case 'all':
       return <AllProjects query={query} offline={offline} mayCreate={mayCreate} onGo={onGo} onNew={() => onNew(null)} onOffline={onOffline} />;
     case 'templates':
-      return <TemplatesView offline={offline} mayCreate={mayCreate} onGo={onGo} onUse={onNew} onOffline={onOffline} />;
+      return <TemplateLibraryView offline={offline} mayCreate={mayCreate} onGo={onGo} onUse={onNew} onOffline={onOffline} />;
     case 'clients':
       return <ClientsView id={view.id} offline={offline} onGo={onGo} onOffline={onOffline} />;
     case 'activity':
