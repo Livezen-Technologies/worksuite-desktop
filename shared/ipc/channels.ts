@@ -17,6 +17,7 @@ export const INVOKE_CHANNELS = [
   'app:openInBrowser',
   'links:audit',
   'app:setDockIcon',
+  'app:setOverlayIcon',
 
   'local:enter', 'local:leave', 'local:status', 'local:profile', 'local:unlock', 'local:api', 'local:overview', 'local:export', 'local:restorePreview', 'local:restore', 'local:deleteAll', 'local:meeting', 'local:joinMeeting', 'local:moveOffer', 'local:move', 'local:keep',
   'guest:pending',
@@ -228,6 +229,14 @@ export const INVOKE_CHANNELS = [
   'notifications:refresh',
   // A reminder this computer worked out by itself, while WorkSuite could not send it (ENH-MAIL-03 DMO-TSK-02).
   'notifications:reminder',
+  // New-mail alerts (ENH-MAIL-05).
+  'mailAlert:view',
+  'mailAlert:action',
+  'mailAlert:clear',
+  'mailAlert:pause',
+  'mailAlert:state',
+  'mailAlert:latest',
+  'mailAlert:prefs',
 
   'clipboard:readForPaste',
 
@@ -472,6 +481,11 @@ export const EVENT_CHANNELS = [
   'command',
   'notifications:changed',
   'notification:clicked',
+  // New-mail alerts (ENH-MAIL-05): a card to show, cards to take away, rows that arrived in the folder in front, the pause.
+  'mail-alert:show',
+  'mail-alert:clear',
+  'mail-alert:list',
+  'mail-alert:state',
   'realtime:event',
   'realtime:resync',
   'transfers:changed',

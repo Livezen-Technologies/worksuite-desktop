@@ -36,6 +36,7 @@ import { forgetMailbox } from './localFirst';
 import { SpamSecurity } from './protection/SpamSecurity';
 import { isAttemptId, startBody, summaryLine, type OAuthStart } from './oauth';
 import { openSignInUrl, watchAttempt } from './OAuthSignIn';
+import { MailAlertSettings } from './alerts/MailAlertSettings';
 
 /**
  * Settings › Mail: the accounts and what this computer keeps (Accounts &
@@ -277,6 +278,8 @@ function Accounts() {
                   {text('VIPs can break through quiet hours')}
                 </label>
                 <p className="text-[12px] text-ink-3">{text('Quiet hours are set under Settings › Notifications. Rules that run on this computer can also show an alert or play a sound.')}</p>
+                {/* New-mail alerts (ENH-MAIL-05): preview level, Mail sound and the pause. */}
+                <MailAlertSettings />
               </div>
             ) : null}
             <label className="flex items-center gap-2.5">

@@ -36,6 +36,7 @@ import { MandatoryBanner } from '../app/screens/MandatoryUpdate';
 import { UpdateDialogs } from '../app/screens/UpdateDialogs';
 import { ChatDrawer, MinimisedChats, useDrawerShown } from '../modules/chat/ChatDrawer';
 import { RingingBar } from '../modules/chat/website/Ringing';
+import { MailAlertCards } from '../modules/mail/alerts/MailAlertCards';
 import { watchMicrophone } from '../modules/chat/website/mic';
 import { Sidebar } from './Sidebar';
 import { StatusBar } from './StatusBar';
@@ -59,6 +60,15 @@ export function Shell() {
   const restored = useRef(false);
   const guest = useGuest();
   const knownApps = useRef<Set<string> | null>(null);
+
+  // Which app is in front, for new-mail alerts (ENH-MAIL-05 §3.1): in another app a new email is a card; Mail says
+  // its own place (account and folder) itself.
+  const frontApp = useStore(tabsStore, (s) => s.tabs.find((t) => t.id === s.activeId)?.app ?? null);
+  const hasMail = useCanOpen('mail');
+  useEffect(() => {
+    if (!hasMail || frontApp === 'mail') return;
+    void call('mailAlert:view', { module: frontApp, box: null, folder: null }).catch(() => undefined);
+  }, [frontApp, hasMail]);
 
   // Settings › AI Assistant: the assistant open from the start, where the person keeps it (#61).
   const aiDisplay = useAiDisplay();
@@ -340,6 +350,11 @@ export function Shell() {
           <StatusBar />
         </div>
       </div>
+      {hasMail && !guest ? (
+        <PanelBoundary name="New email alerts" floating>
+          <MailAlertCards />
+        </PanelBoundary>
+      ) : null}
       <PanelBoundary name="This panel" onClose={() => closeOverlay()} floating resetKey={overlay}>
         {overlay === 'search' ? <SearchOverlay mode="search" /> : null}
         {overlay === 'palette' ? <SearchOverlay mode="palette" /> : null}

@@ -87,6 +87,7 @@ const api = {
     openExternal: call('app:openExternal'),
     openInBrowser: call('app:openInBrowser'),
     setDockIcon: call('app:setDockIcon'),
+    setOverlayIcon: call('app:setOverlayIcon'),
   },
   local: { enter: call('local:enter'), leave: call('local:leave'), status: call('local:status'), profile: call('local:profile'), unlock: call('local:unlock'), api: call('local:api'), overview: call('local:overview'), export: call('local:export'), restorePreview: call('local:restorePreview'), restore: call('local:restore'), deleteAll: call('local:deleteAll'), meeting: call('local:meeting'), joinMeeting: call('local:joinMeeting'), moveOffer: call('local:moveOffer'), move: call('local:move'), keep: call('local:keep') },
   // Item links opened in the app go on the audit trail (#170).
@@ -337,6 +338,15 @@ const api = {
     openSettings: call('notifications:openSettings'),
     refresh: call('notifications:refresh'),
     reminder: call('notifications:reminder'),
+  },
+  mailAlert: {
+    view: call('mailAlert:view'),
+    action: call('mailAlert:action'),
+    clear: call('mailAlert:clear'),
+    pause: call('mailAlert:pause'),
+    state: call('mailAlert:state'),
+    latest: call('mailAlert:latest'),
+    prefs: call('mailAlert:prefs'),
   },
   clipboard: {
     readForPaste: call('clipboard:readForPaste'),

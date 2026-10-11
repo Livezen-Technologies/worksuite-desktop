@@ -98,5 +98,7 @@ export function wireQueryInvalidation(): void {
     if (touchesSocialMedia(e)) void queryClient.invalidateQueries({ queryKey: ['social-media'] });
   });
   on('notifications:changed', () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }));
+  // New mail in the folder in front (ENH-MAIL-05 MNA-APP-02): the list asks now, and the row comes in marked "New".
+  on('mail-alert:list', () => void queryClient.invalidateQueries({ queryKey: ['mail'] }));
   on('offline:changed', () => void queryClient.invalidateQueries({ queryKey: ['offline'] }));
 }

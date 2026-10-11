@@ -2,6 +2,7 @@ import type { AppearancePrefs, DarkColorProfile, Tint } from './theme-profiles';
 import type { ItemLink, ItemSource } from './item-links';
 import type { LinkPrefs } from './link-prefs';
 import type { MailMediaPrefs } from './mail-media';
+import type { MailPause } from './mail-alerts';
 import type { ConnectionStats } from './connection';
 import type { SupportNoticePrefs } from './support';
 /**
@@ -369,6 +370,12 @@ export interface Preferences {
   mailAlerts?: 'all' | 'focused' | 'vip' | 'none';
   /** VIP mail shows a banner during quiet hours (DMO-NTF-03). */
   mailVipBreakthrough?: boolean;
+  /** What a new-mail alert may show on this computer (ENH-MAIL-05 MNA-PRV-01); unset: the person's choice on the server, else Full. */
+  mailAlertPreview?: 'full' | 'sender' | 'hidden';
+  /** Mail sound (MNA-WIN-07): off makes new-mail alerts silent. Unset: on. */
+  mailAlertSound?: boolean;
+  /** Pause mail alerts (MNA-TRY-02), per person on this computer, by user id. */
+  mailAlertPause?: Record<string, MailPause>;
   /** Settings › Mail › Images & media on this computer: attachments downloaded ahead (#163). Unset fields take DEFAULT_MAIL_MEDIA. */
   mailMedia?: Partial<MailMediaPrefs>;
   tabSuspendMinutes: number;
@@ -965,7 +972,22 @@ export interface StatusSnapshot {
    * `support`: my live support tickets with something unread (the desk's `GET badges`); `supportNotices`: the unread
    * notifications about support tickets, which the badge leaves to `support` so a ticket counts once.
    */
-  unread: { mail: number; chat: number; notifications: number; tasks: number; webchat?: number; ringing?: number; support?: number; supportNotices?: number };
+  unread: {
+    mail: number;
+    chat: number;
+    notifications: number;
+    tasks: number;
+    webchat?: number;
+    ringing?: number;
+    support?: number;
+    supportNotices?: number;
+    /** Unread in the inboxes included in All Accounts: the badge's mail (ENH-MAIL-05 MNA-TRY-03). */
+    mailBadge?: number;
+    /** Unread bell entries about new mail: counted once, as mail, on the badge. */
+    mailNotices?: number;
+  };
+  /** Mail alerts are paused on this computer (MNA-TRY-02): the Mail footer says so. */
+  mailAlertsPaused?: string | null;
   notificationsPausedUntil: string | null;
   /** Whether the operating system lets this app show notifications (false: banners are blocked there). */
   notificationsSupported?: boolean;
