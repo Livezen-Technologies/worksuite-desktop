@@ -11,6 +11,17 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.241 — 2026-10-11
+
+- **Meet invitations show what actually happened (#347).** The People tab could say "Accepted · joining" for good
+  after the person declined, closed the ring or let it ring out. Each invitation now follows the server: 🔔 Ringing…
+  with a timer and Cancel; Didn't answer, Declined (with their reason) or Invite cancelled with Ring again and Remove;
+  Joining… with Cancel; Couldn't join with Ring again; Offline with Copy link; Busy in another call with Ring again and
+  Message. "Accepted" only shows once they tap Accept. The ring window gains Decline with a message, and Not now tells
+  the host at once and stops the ringing on the person's other devices. Ringing again into the same meeting now shows
+  (it used to be blocked on that computer). The meeting's creator shows as Host. (Meet 1.24.0, Calls 1.8.1; needs
+  WorkSuite server Communication 1.72.0)
+
 ## 0.2.240 — 2026-10-11
 
 - **Ubuntu and other Linux .deb/.rpm installs update themselves (#345, settings 1.36.0).** A copy installed from a
