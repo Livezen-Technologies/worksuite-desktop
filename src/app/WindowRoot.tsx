@@ -5,6 +5,7 @@ import { call, isMac } from '../core/bridge';
 import { TabProvider } from '../core/tab-context';
 import { appForRoute, moduleFor } from '../modules/registry';
 import { ModuleBoundary, Spinner, IconButton, cx } from '../components/ui';
+import { moduleRecovery, useOptionalQueryClient } from '../components/moduleRecovery';
 import { useWindowBarHidden } from './windowChrome';
 import { WINDOW_DRAG } from '../core/dock-drag';
 import { Icon } from '../components/Icon';
@@ -31,6 +32,7 @@ export function WindowRoot({ hash }: { hash: string }) {
   const [kind, qs] = hash.replace('#/window/', '').split('?') as [string, string | undefined];
   const initial = new URLSearchParams(qs ?? '').get('route') ?? '/home';
   const [route, setRoute] = useState(initial);
+  const qc = useOptionalQueryClient();
   const [pinned, setPinned] = useState(false);
   const [named, setNamed] = useState<string | null>(null);
   const [windowId, setWindowId] = useState<number | null>(null);
@@ -114,7 +116,7 @@ export function WindowRoot({ hash }: { hash: string }) {
         {!mod || !allowed ? (
           <div className="p-6 text-[13px] text-ink-2">You don't have access to this.</div>
         ) : (
-          <ModuleBoundary name={mod.manifest.name} onDiagnostics={() => setRoute('/diagnostics')} resetKey={route}>
+          <ModuleBoundary name={mod.manifest.name} {...moduleRecovery(mod, qc, setRoute)} resetKey={route}>
             <Suspense fallback={<Spinner />}>
               <TabProvider tabId={`window-${kind}`} route={route} active onGo={setRoute} onTitle={setNamed}>
                 <mod.component tabId={`window-${kind}`} route={route} active />

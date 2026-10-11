@@ -55,6 +55,7 @@ import { accessibility, createRemoteControl } from '../services/remote-control/h
 import { AX_RESTARTED_ARG, watchAccessibility } from '../services/remote-control/accessibility-watch';
 import { DEFAULT_POLICY } from '../services/policy';
 import { Database } from '../services/db';
+import { rebuildIfAsked } from '../services/mail-repair';
 import { archName, DeviceService, platformName } from '../services/device';
 import { PmsLocks } from '../services/pms-locks';
 import { ContactSync } from '../services/contact-sync';
@@ -245,6 +246,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   hardenSession(session.defaultSession);
 
   const enterprise = readEnterpriseConfig();
+  // Repair local mail data asked for a rebuild (worksuite-desktop#338): done before anything opens the database.
+  rebuildIfAsked(p.database, (msg, data) => log.warn(msg, data));
   const db = new Database(p.database);
   const secrets = new SecureStore(p.secrets);
   secrets.init();

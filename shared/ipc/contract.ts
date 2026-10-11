@@ -119,6 +119,7 @@ import type {
   UpdateStatus,
   UpdateDiagnostics,
   MailStoreStats,
+  MailRepairResult,
 } from '../types';
 
 const none = z.undefined().or(z.null()).optional();
@@ -1325,6 +1326,11 @@ export const contract = {
    * them at once and refreshes from the server behind them (worksuite-desktop#162). Null where nothing is saved.
    */
   'offline:peek': ch(z.strictObject({ paths: z.array(z.string().regex(/^\/api\/mail\/[A-Za-z0-9/_\-.,:@~]*(\?[^\s]*)?$/).max(2048)).min(1).max(12) }), { session: true, rate: 60 }),
+  /**
+   * Repair local mail data (worksuite-desktop#338): check the database; clear Mail's copy to be downloaded again, or
+   * — the check failed — rebuild it on restart. Unsent mail, drafts and settings are kept either way.
+   */
+  'offline:repairMail': ch(none, { session: true, sensitive: true, rate: 1 }),
   /** Remove one mailbox's saved mail from this computer (the mailbox was removed from the account). */
   'offline:clearMailbox': ch(z.strictObject({ mailbox: z.string().regex(/^\d{1,12}$/) }), { session: true, sensitive: true, rate: 5 }),
   /** Mail search over what this computer keeps (lists and opened messages), for when the server cannot be reached. */
@@ -1939,6 +1945,7 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'offline:mailStats': MailStoreStats;
   'offline:peek': Array<{ body: string; cachedAt: string } | null>;
   'offline:clearMailbox': number;
+  'offline:repairMail': MailRepairResult;
   'offline:mailSearch': Array<Record<string, unknown>>;
   'offline:mailList': { messages: Array<Record<string, unknown>>; total: number };
   'mailfile:pick': MailFileHandle | null;

@@ -33,6 +33,19 @@ export interface Mailbox {
   /** WorkSuite's own copy of this mailbox on the server (Mail SRS v2.2 §9), when the organization keeps one. */
   copy?: MailboxCopy | null;
   notify?: boolean;
+  /** Set on this computer as the list is read (safety.ts, #338): whether the account can work, and why not. */
+  health?: AccountHealth;
+}
+
+/** Why an account cannot work (#338): no address, a sign-in that never finished, no server, or a refused sign-in. */
+export type AccountErrorCode = 'missing_email' | 'missing_token' | 'missing_host' | 'auth_failed';
+
+/** One account's state on this computer: `error` accounts show a red marker and Reconnect · Remove, the others load as usual. */
+export interface AccountHealth {
+  status: 'ok' | 'error';
+  code: AccountErrorCode | null;
+  /** Kept, never deleted: the person reconnects it or removes it. */
+  needs_reconnect: boolean;
 }
 
 export interface MailboxCopy {

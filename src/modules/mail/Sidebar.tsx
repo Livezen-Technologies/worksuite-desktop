@@ -23,6 +23,7 @@ import { AccountAvatar, AccountTag, Count, SectionHeading } from './parts';
 import { useAccountTags } from './useAccountTags';
 import { accountName, accountState, syncAgo, syncAt, type SyncSummary } from './sync';
 import { mailboxProblemText } from './oauth';
+import { issueText } from './safety';
 import type { AllCounts, Folder, Mailbox, SyncAccount, ViewCounts } from './types';
 
 /** Where the list is: All Accounts (`unified`), a smart view, or a folder of one mailbox. */
@@ -99,9 +100,11 @@ const FOLDER_ICON: Record<string, string> = { inbox: 'inbox', sent: 'send', draf
 /** A mailbox's name in the sidebar: its address, or its own name and provider when it has one. */
 export function mailboxName(b: Mailbox): string {
   if (b.shared) return text('{email} · shared', { email: b.email });
-  const local = b.email.split('@')[0] ?? '';
-  if (b.display_name && b.display_name !== local && b.display_name !== b.email && b.provider_label) return `${b.display_name} · ${b.provider_label}`;
-  return b.email;
+  // Never a missing address read as one (#338): an account half set up says which it is.
+  const email = b.email ?? '';
+  const local = email.split('@')[0] ?? '';
+  if (b.display_name && b.display_name !== local && b.display_name !== email && b.provider_label) return `${b.display_name} · ${b.provider_label}`;
+  return email || b.display_name || text('Account {id}', { id: b.id });
 }
 
 /** A mailbox's unread count: the mirror's when it counted it, else the local store's. */
@@ -369,8 +372,10 @@ function Row({ icon, iconClass, lead, label, title, count, countTitle, strong, a
 
 /** An account's row: open its folders, its inbox, and its own sync button — a spinner while it syncs, Retry when it failed (DMO-SYN-01/02/04). */
 function AccountRow({ box, account, running, offline, open, count, active, onToggle, onPick, onSync }: { box: Mailbox; account: SyncAccount | null; running: boolean; offline: boolean; open: boolean; count: number | null; active: boolean; onToggle: () => void; onPick: () => void; onSync: () => void }) {
-  const failed = !running && (account?.last_result === 'failed' || box.auth_state === 'problem');
-  const why = (box.auth_state === 'problem' ? mailboxProblemText(box) : null) ?? account?.error ?? box.last_error ?? text('The last sync did not finish.');
+  // An account that cannot work (#338) is marked red as one whose sync failed: the bar above the list offers Reconnect and Remove.
+  const broken = box.health?.status === 'error' && box.health.code ? box.health.code : null;
+  const failed = !running && (account?.last_result === 'failed' || box.auth_state === 'problem' || !!broken);
+  const why = (broken && broken !== 'auth_failed' ? issueText(broken) : null) ?? (box.auth_state === 'problem' ? mailboxProblemText(box) : null) ?? account?.error ?? box.last_error ?? text('The last sync did not finish.');
   const name = mailboxName(box);
   const status = account ? accountState(account) : null;
   const feedback = useSyncFeedback(running, account?.last_result === 'failed');
@@ -378,7 +383,7 @@ function AccountRow({ box, account, running, offline, open, count, active, onTog
   const { tags, mode } = useAccountTags();
   const tag = tags.get(box.id);
   return (
-    <div className={cx('group relative flex h-[30px] items-center rounded-[8px]', active ? 'bg-selection' : 'hover:bg-subtle')}>
+    <div data-attention={broken ? broken : undefined} className={cx('group relative flex h-[30px] items-center rounded-[8px]', active ? 'bg-selection' : 'hover:bg-subtle')}>
       <button type="button" onClick={onToggle} aria-expanded={open} aria-label={open ? text('Hide the folders of {name}', { name }) : text('Show the folders of {name}', { name })} className="inline-flex h-6 w-5 shrink-0 items-center justify-center text-ink-3 hover:text-ink">
         <Icon name="chevron-down" size={12} className={cx('transition-transform motion-reduce:transition-none', open ? '' : '-rotate-90')} />
       </button>

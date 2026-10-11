@@ -11,7 +11,7 @@ import { FormattingSettings } from './ReadingSettings';
 import { AccountTagSettings } from './AccountTagSettings';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
-import { Button, Chip, ErrorNote, Modal, Spinner, Switch, TextField, cx } from '../../components/ui';
+import { Button, Chip, ErrorNote, Modal, Spinner, Switch, cx } from '../../components/ui';
 import { AutocompleteSettings } from './AutocompleteSettings';
 import type { Preferences } from '@shared/types';
 import { AddMailbox } from './AddMailbox';
@@ -34,8 +34,8 @@ import { SyncButton } from '../../components/SyncButton';
 import { pullPrefs, setPullEnabled } from '../../components/listRefresh';
 import { forgetMailbox } from './localFirst';
 import { SpamSecurity } from './protection/SpamSecurity';
-import { isAttemptId, startBody, summaryLine, type OAuthStart } from './oauth';
-import { openSignInUrl, watchAttempt } from './OAuthSignIn';
+import { RepairPassword, oauthProviderOf, signInAgain } from './AccountAttention';
+import { RepairLocalMailButton } from './RepairLocalMail';
 import { MailAlertSettings } from './alerts/MailAlertSettings';
 
 /**
@@ -167,21 +167,9 @@ function Accounts() {
   const [repairing, setRepairing] = useState<Mailbox | null>(null);
   const list = (boxes.data?.mailboxes ?? []).filter((b) => !b.archived);
   const repair = async (b: Mailbox) => {
-    if (b.auth_type !== 'oauth' || !b.oauth_provider) return setRepairing(b);
-    try {
-      const r = await apiPost<OAuthStart>(`/api/mail/oauth/${b.oauth_provider}/start`, startBody(b.email));
-      const refused = await openSignInUrl(r.url, b.oauth_provider);
-      if (refused) return toast('error', `${refused.message} ${refused.next_step ?? ''} (${text('Reference ID {id}', { id: refused.ref ?? '' })})`);
-      toast('info', text('Sign in again in your browser. The mailbox picks up from where it stopped; nothing else changes.'));
-      // Then say how it went — the steps and, if it failed, why — rather than leaving the card to find out.
-      if (isAttemptId(r.attempt)) watchAttempt(r.attempt, (a) => {
-        const line = summaryLine(a);
-        toast(line.kind, line.text);
-        if (a.status === 'connected') void qc.invalidateQueries({ queryKey: mailKeys.mailboxes });
-      });
-    } catch (e) {
-      toast('error', errorMessage(e));
-    }
+    const provider = b.auth_type === 'oauth' ? oauthProviderOf(b) : null;
+    if (!provider) return setRepairing(b);
+    await signInAgain(b, provider, qc);
   };
   if (!prefs) return null;
   return (
@@ -232,8 +220,10 @@ function Accounts() {
             <Checkbox checked={prefs.mailCacheDays !== 0} onChange={(e) => void updatePrefs({ mailCacheDays: e.target.checked ? 30 : 0 })} />
             Download message bodies
           </label>
-          <div className="mt-3 flex items-center justify-between border-t border-line pt-3 text-[13px] text-ink-2">
-            <span>{text('Using {size} · encrypted on this device', { size: bytes(store.data ?? 0) })}</span>
+          <div className="mt-3 flex items-center justify-between gap-2 border-t border-line pt-3 text-[13px] text-ink-2">
+            <span className="min-w-0 flex-1">{text('Using {size} · encrypted on this device', { size: bytes(store.data ?? 0) })}</span>
+            {/* Repair local mail data (#338): checked, cleared and downloaded again; the outbox and settings kept. */}
+            <RepairLocalMailButton size="sm" onDone={() => void qc.invalidateQueries({ queryKey: mailKeys.localStore })} />
             <Button
               size="sm"
               onClick={() =>
@@ -389,49 +379,6 @@ function ManageMailbox({ box, onClose }: { box: Mailbox; onClose: () => void }) 
           ) : null}
         </div>
         {confirm ? <p className="text-[12.5px] text-ink-3">Removing it takes it out of WorkSuite on every computer. Nothing is deleted at the provider.</p> : null}
-      </div>
-    </Modal>
-  );
-}
-
-function RepairPassword({ box, onClose }: { box: Mailbox; onClose: () => void }) {
-  const qc = useQueryClient();
-  const [password, setPassword] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const save = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await apiPut(`/api/mail/mailboxes/${box.id}`, { password });
-      void qc.invalidateQueries({ queryKey: mailKeys.mailboxes });
-      toast('success', text('{email} signs in again.', { email: box.email }));
-      onClose();
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <Modal
-      title={text('Repair {email}', { email: box.email })}
-      labelledBy="mail-repair-title"
-      width={460}
-      onClose={onClose}
-      footer={
-        <>
-          <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={busy} disabled={!password} onClick={() => void save()}>
-            Test and save
-          </Button>
-        </>
-      }
-    >
-      <div className="flex flex-col gap-3 p-5">
-        <p className="text-[13px] text-ink-2">{box.last_error ? box.last_error : text('The mail server refused the saved password.')} {text('Enter the current password; the server settings stay as they are.')}</p>
-        <TextField type="password" label="Password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
-        {error ? <ErrorNote error={error} /> : null}
       </div>
     </Modal>
   );

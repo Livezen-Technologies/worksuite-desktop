@@ -5,6 +5,7 @@ import { text } from '../../core/i18n';
 import type { OfflineMutation } from '@shared/types';
 import { queueKey, type QueuedAction } from './model';
 import { useLocalFirst } from './localFirst';
+import { safeMailboxes } from './safety';
 import type { Folder, Label, LocalMailbox, MailPrefs, Mailbox, MessageContext, MessageRef, OutboxRow, SignaturesData, SyncStatus, Template, ViewCounts } from './types';
 
 /**
@@ -30,7 +31,8 @@ export const mailKeys = {
 export function useMailboxes() {
   // Cached first (worksuite-desktop#162): the accounts show from this computer before the server answers.
   useLocalFirst(mailKeys.mailboxes, { path: '/api/mail/mailboxes' });
-  return useQuery({ queryKey: mailKeys.mailboxes, queryFn: () => apiGet<{ mailboxes: Mailbox[] }>('/api/mail/mailboxes'), staleTime: 5 * 60_000 });
+  // Read an account at a time (#338): one broken account is marked, never the list's end.
+  return useQuery({ queryKey: mailKeys.mailboxes, queryFn: () => apiGet<{ mailboxes: Mailbox[] }>('/api/mail/mailboxes'), staleTime: 5 * 60_000, select: safeMailboxes });
 }
 
 /** The sidebar's numbers. An older server has no such call: then there are none, not zeros. */

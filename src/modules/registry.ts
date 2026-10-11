@@ -27,9 +27,16 @@ export interface DesktopModule {
   always?: boolean;
   /** Available to whoever may open this app (a part of another app, in its own windows; shared/access.ts). */
   requires?: string;
+  /** The module's own way out of its "failed to load" screen, beside Retry (Mail: Repair local mail data, #338). */
+  recover?: LazyExoticComponent<ComponentType<RecoverProps>>;
 }
 
-const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: ComponentType<ModuleProps> }> }> = [
+/** A module's recovery action: `onDone` starts the module again. */
+export interface RecoverProps {
+  onDone: () => void;
+}
+
+const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: ComponentType<ModuleProps> }>; recover?: () => Promise<{ default: ComponentType<RecoverProps> }> }> = [
   {
     input: defineDesktopManifest({
       id: 'home', name: 'Home', icon: 'home', contractVersion: 1, desktop: { enabled: true },
@@ -52,6 +59,7 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
       deepLinks: ['mail', 'mail/:id'],
     }),
     load: () => import('./mail/MailPage'),
+    recover: () => import('./mail/RepairLocalMail'),
   },
   {
     input: defineDesktopManifest({
@@ -456,7 +464,7 @@ for (const def of DEFS) {
     continue;
   }
   const id = check.manifest.id;
-  MODULES.push({ id, manifest: check.manifest, component: lazy(def.load), always: SHELL_SCREENS.has(id), requires: APP_PARTS[id] });
+  MODULES.push({ id, manifest: check.manifest, component: lazy(def.load), always: SHELL_SCREENS.has(id), requires: APP_PARTS[id], ...(def.recover ? { recover: lazy(def.recover) } : {}) });
 }
 
 export function moduleFor(id: string): DesktopModule | undefined {

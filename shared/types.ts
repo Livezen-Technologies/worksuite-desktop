@@ -1829,6 +1829,23 @@ export interface MailStoreStats {
   bodies?: Record<string, MailBodiesProgress>;
 }
 
+/**
+ * Repair local mail data (offline:repairMail, worksuite-desktop#338): the database's own check, and what was done —
+ * Mail's copy cleared to be downloaded again, or (the check failed) a rebuild on restart. The outbox of unsent mail
+ * and the drafts are counted to show they were kept.
+ */
+export interface MailRepairResult {
+  /** `ok`, or what the check found. */
+  check: string;
+  healthy: boolean;
+  action: 'cleared' | 'restart';
+  /** Mail's saved answers removed. */
+  removed: number;
+  kept: { outbox: number; drafts: number };
+  /** Where the old database is kept; null when no copy could be made. */
+  backup: string | null;
+}
+
 /** One mailbox's body download on this computer (#190). */
 export interface MailBodiesProgress {
   stored: number;
