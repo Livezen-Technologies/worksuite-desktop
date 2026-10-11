@@ -456,7 +456,8 @@ export function accountLabel(b: MailboxRow): string {
 export function trayAccounts(raw: unknown): TrayMailAccount[] {
   const list = raw && typeof raw === 'object' && Array.isArray((raw as { mailboxes?: unknown }).mailboxes) ? (raw as { mailboxes: MailboxRow[] }).mailboxes : [];
   return list
-    .filter((b) => int(b.id) && b.in_unified !== false && b.archived !== true)
+    // A record that is not an account is passed over, never the tray's whole list (#338).
+    .filter((b) => !!b && typeof b === 'object' && int(b.id) && b.in_unified !== false && b.archived !== true)
     .map((b) => ({ id: int(b.id)!, label: accountLabel(b), unread: Math.max(0, Number(b.unread ?? 0) || 0), problem: b.auth_state === 'problem' }));
 }
 

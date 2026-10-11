@@ -24,6 +24,7 @@ import type { IpcRouter } from '../ipc/router';
 import { applyAutostart } from './autostart';
 import { writeBootConfig } from './boot';
 import { paths } from './paths';
+import { repairMail } from '../services/mail-repair';
 import { archName, platformName } from '../services/device';
 import { listPrinters, printHtml, printToPdf } from '../services/print';
 import { pmsDownload } from '../services/pms-download';
@@ -1120,6 +1121,12 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     });
   });
   router.handle('offline:clearMailbox', (input) => ctx.cache.clearMailbox(uid(), input.mailbox));
+  // Repair local mail data (worksuite-desktop#338): a damaged database is rebuilt on restart, the outbox and settings kept.
+  router.handle('offline:repairMail', () => {
+    const r = repairMail({ db: ctx.db, dbPath: paths().database, userId: uid(), afterClear: () => ctx.mailBodies?.kick(2_000, true) });
+    if (r.action === 'restart') setTimeout(() => ctx.relaunch(false), 1_500);
+    return r;
+  });
   router.handle('offline:mailSearch', (input) => (canOpenApp('mail', ctx.session.visibleApps()) ? ctx.cache.mailSearch(uid(), input.q) : []));
   router.handle('offline:mailList', (input) => (canOpenApp('mail', ctx.session.visibleApps()) ? ctx.cache.mailList(uid(), { mailbox: input.mailbox, folder: input.folder, role: input.role ?? null, limit: input.limit, offset: input.offset ?? 0 }) : { messages: [], total: 0 }));
   router.handle('offline:submit', (input) => ctx.queue.submit(uid(), input));

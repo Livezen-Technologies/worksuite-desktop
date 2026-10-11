@@ -604,6 +604,7 @@ const api = {
     mailStats: call('offline:mailStats'),
     peek: call('offline:peek'),
     clearMailbox: call('offline:clearMailbox'),
+    repairMail: call('offline:repairMail'),
     mailSearch: call('offline:mailSearch'),
     mailList: call('offline:mailList'),
     submit: call('offline:submit'),

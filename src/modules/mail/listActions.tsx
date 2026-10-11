@@ -140,7 +140,7 @@ function moveCounts(qc: QueryClient, targets: Target[], sign: 1 | -1, toTrash: b
     });
     const unreadInbox = ts.filter((t) => t.folder === 'inbox' && !t.row.is_read).length;
     if (unreadInbox) {
-      qc.setQueryData<{ mailboxes: Mailbox[] }>(mailKeys.mailboxes, (d) => (d?.mailboxes ? { ...d, mailboxes: d.mailboxes.map((m) => (String(m.id) === box && m.unread !== null ? { ...m, unread: Math.max(0, m.unread + sign * unreadInbox) } : m)) } : d));
+      qc.setQueryData<{ mailboxes: Mailbox[] }>(mailKeys.mailboxes, (d) => (d?.mailboxes ? { ...d, mailboxes: d.mailboxes.map((m) => (m && String(m.id) === box && typeof m.unread === 'number' ? { ...m, unread: Math.max(0, m.unread + sign * unreadInbox) } : m)) } : d));
     }
   }
 }

@@ -212,7 +212,7 @@ export function rowStamp(stamp: string, today = todayInZone()): string {
 export function mailboxLetter(m: Pick<Mailbox, 'email'> & Partial<Pick<Mailbox, 'provider' | 'account_type' | 'oauth_provider'>>): string {
   if (m.account_type === 'local_mailbox' || m.provider === 'local') return 'W';
   if (/gmail|google/.test(m.provider ?? '') || m.oauth_provider === 'google') return 'G';
-  return (m.email[0] ?? '?').toUpperCase();
+  return ((m.email ?? '')[0] ?? '?').toUpperCase();
 }
 
 const TONES: Record<string, string> = {

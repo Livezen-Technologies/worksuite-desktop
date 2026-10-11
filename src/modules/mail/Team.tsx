@@ -179,7 +179,7 @@ export function TeamWork({ msgRef, m, account, offline }: { msgRef: MessageRef; 
   const [mode, setMode] = useState<'reply' | 'note'>('reply');
   const [draft, setDraft] = useState('');
   const [busy, setBusy] = useState(false);
-  const short = account ? `${account.email.split('@')[0]}@` : text('the shared address');
+  const short = account?.email ? `${account.email.split('@')[0]}@` : text('the shared address');
   const list = notes.data?.notes ?? [];
   const refresh = () => void qc.invalidateQueries({ queryKey: ['mail', 'team'] });
 

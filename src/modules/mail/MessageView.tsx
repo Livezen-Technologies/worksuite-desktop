@@ -57,6 +57,7 @@ import { LinkRecordDialog, LinkedRecordChips, type LinkItem } from './recordLink
 import { MarkerChips, RecallDialog, ReceiptBar, ReportDialog, SmimeChip, VoteBar, VoteTally, sendReceipt } from './MessageExtras';
 import type { ComposeSeed, MailPrefs, Mailbox, MessageContext, MessageDetail, MessageRef, MessageRow } from './types';
 import { identityQuery, lookupProblem, problemDetails, problemTitle, type MovedTo } from './messageLookup';
+import { safeMessage } from './safety';
 
 /** A PDF attachment, by its type or its name. */
 const isPdf = (a: { name: string; mime: string }) => a.mime === 'application/pdf' || /\.pdf$/i.test(a.name);
@@ -211,7 +212,8 @@ export function MessageView(p: MessageViewProps) {
   const refKey = `${ref.mailbox ?? ''}:${ref.folder}:${ref.uid}`;
   // eslint-disable-next-line react-hooks/exhaustive-deps -- the message is named by refKey; the object is new each render
   useEffect(() => void seedMessage(qc, ref, markRead !== 'open'), [qc, refKey, markRead]);
-  const m = q.data?.data;
+  // Read through safeMessage (#338): a body, sender or list that is missing is empty, never a crash in the reader.
+  const m = useMemo(() => (q.data ? safeMessage(q.data.data) : undefined) ?? undefined, [q.data]);
   const clean = useMemo(() => (m ? sanitizeMailHtml(m.body_html) : null), [m]);
   // Plain text (DMO-RD-09): asked for on this message, or always for this sender.
   const plainSenders = p.prefs.plainTextSenders ?? [];
