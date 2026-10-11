@@ -166,6 +166,43 @@ describe('Meet Home', () => {
     expect((open[1] as { route: string }).route).toBe(`/meet/${UUID}?present=1`);
   });
 
+  it('redeems a support code only after the meeting lookup says there is no such code (RC11)', async () => {
+    serve({});
+    // 847291663 is nine digits: it could be either kind of code, so the
+    // meeting is asked first — redeeming spends a support code.
+    vi.mocked(apiPost).mockResolvedValue({ uuid: UUID, title: 'Support · printer', agent: 'Hasarinda', company: null } as never);
+    home();
+    fireEvent.change(screen.getByRole('textbox', { name: /Meeting code or link/ }), { target: { value: '847 291 663' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+
+    await waitFor(() => expect(vi.mocked(apiPost)).toHaveBeenCalledWith('/api/meet/support/join', { code: '847291663' }));
+    const resolve = vi.mocked(apiGet).mock.calls.filter(([p]) => p === '/api/meet/resolve');
+
+    expect(resolve).toHaveLength(1);
+    await waitFor(() => expect(vi.mocked(call).mock.calls.some(([c, a]) => c === 'windows:open' && (a as { route: string }).route === `/meet/${UUID}`)).toBe(true));
+  });
+
+  it('does not spend a support code when the digits were a meeting code', async () => {
+    serve({});
+    home();
+    fireEvent.change(screen.getByRole('textbox', { name: /Meeting code or link/ }), { target: { value: '482 119 330' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+
+    await waitFor(() => expect(vi.mocked(call).mock.calls.some(([c]) => c === 'windows:open')).toBe(true));
+    expect(vi.mocked(apiPost).mock.calls.some(([p]) => String(p).includes('support/join'))).toBe(false);
+  });
+
+  it('says a code is not valid when neither kind of lookup knows it', async () => {
+    serve({});
+    vi.mocked(apiPost).mockRejectedValue(new ApiError(404, 'That code isn’t valid.', null));
+    home();
+    fireEvent.change(screen.getByRole('textbox', { name: /Meeting code or link/ }), { target: { value: '111222333' } });
+    fireEvent.click(screen.getByRole('button', { name: 'Join' }));
+
+    expect(await screen.findByRole('alert')).toBeTruthy();
+    expect(vi.mocked(call).mock.calls.some(([c]) => c === 'windows:open')).toBe(false);
+  });
+
   it('warns once the system has actually refused something, and points at the one Settings page that fixes it (D01)', async () => {
     serve({});
     vi.mocked(call).mockImplementation((async (channel: string) =>

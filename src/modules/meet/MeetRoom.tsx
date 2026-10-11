@@ -31,6 +31,8 @@ import { HostLeaveDialog, RoleBadge, RoomSettingsPanel, TransferHostDialog } fro
 import { HostControlsDrawer, cameraControl, hostControlsControl, micControl, reactControl } from './HostControls';
 import { AddPeopleDialog, Invitations } from './InvitePeople';
 import { MeetNotes } from './MeetNotes';
+import { SessionPanel } from './support/SessionPanel';
+import { supportTabs } from '@shared/support-session';
 import { RecordingSettings } from './RecordingSettings';
 import { StartTranscriptionDialog } from './TranscriptControls';
 import { effectiveShortcuts, prettyAccelerator } from '../../core/commands';
@@ -131,6 +133,14 @@ export function MeetRoom() {
   // effect, so it happens once however many times React renders.
   const [picking, setPicking] = useState<'start' | 'change' | null>(() => (meet.wantsPresent && meet.mayPresent ? 'start' : null));
   const [ending, setEnding] = useState(false);
+  /*
+   * A remote support session (RC-SUP-03): the server says so, and the room is
+   * reduced to the conversation, files and the session's own tab. The rest —
+   * Q&A, polls, the board, the meeting's notes, the room's settings — belongs
+   * to a meeting with an audience, and this is two people and a problem.
+   */
+  const support = meet.info?.session_kind === 'support';
+  const roomTabs = <T extends { id: string }>(tabs: T[]): T[] => (support ? supportTabs(tabs) : tabs);
   const [sharingDocument, setSharingDocument] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [streamSettings, setStreamSettings] = useState(false);
@@ -368,7 +378,7 @@ export function MeetRoom() {
         lastSpeaker={meet.lastSpeaker}
         alerts={alerts}
         board={ui.boardOnStage ? <Whiteboard stage /> : null}
-        tabs={[
+        tabs={roomTabs([
           { id: 'People', label: 'People', badge: meet.canManage ? waiting.length : undefined, content: <PeoplePanel /> },
           {
             id: 'Chat',
@@ -412,7 +422,8 @@ export function MeetRoom() {
           { id: 'Files', label: 'Files', content: <MeetingFiles roomId={info.room_id} mayShare={meet.mayPresent} onPresent={() => { toast('info', 'Choose the document window to present. Participants follow its page or slide as you navigate.'); setPicking(sharing ? 'change' : 'start'); }} /> },
           { id: 'Info', label: 'Info', content: <InfoPanel /> },
           { id: 'Settings', label: 'Settings', content: <RoomSettingsPanel onHostControls={meet.canManage ? () => setHostControls(true) : undefined} /> },
-        ]}
+          ...(support ? [{ id: 'Session', label: 'Session', content: <SessionPanel uuid={info.uuid} /> }] : []),
+        ])}
         buttons={buttons}
         more={more}
         end={{

@@ -1,6 +1,6 @@
 {
     "module": "meet",
-    "version": "1.20.0",
+    "version": "1.21.0",
     "paths": [
         "electron/services/meet-diagnostics.ts",
         "electron/services/meet-keys.ts",
@@ -8,6 +8,7 @@
         "electron/services/share-bar.ts",
         "shared/livestream.ts",
         "shared/meet-diagnostics.ts",
-        "shared/remote-control/protected-apps.ts"
+        "shared/remote-control/protected-apps.ts",
+        "shared/support-session.ts"
     ]
 }

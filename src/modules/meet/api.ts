@@ -34,6 +34,14 @@ export interface MeetInfo {
   presenters?: number[];
   locked?: boolean;
   room_settings?: RoomSettings;
+  /**
+   * A remote support session rather than a meeting (WS-MEET-ENH-01 RC-SUP-03).
+   * The server says so; when it does, the room is reduced to the screen, the
+   * conversation, files and the session itself — a support call is two people
+   * and a problem, not a meeting with an audience.
+   */
+  session_kind?: 'meeting' | 'support';
+  ticket_id?: number | null;
 }
 
 /** Host runs the meeting; co-hosts run the room with them; presenters may share; participants take part. */

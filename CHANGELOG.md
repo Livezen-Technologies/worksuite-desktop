@@ -5,6 +5,41 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.230 — 2026-10-11
+
+- **Remote support has a desktop side (meet 1.21.0).** The server and the web app have had this feature for a
+  while; the desktop had the type and nothing else. Now, in a support session's meeting window:
+  - **Session** — who is being helped, the ticket (which opens in its own quick-reply window, without closing the
+    meeting), the reason, the computer sharing its screen, the files that changed hands, and **End session** with
+    *Resolved · Not resolved · Needs a follow-up*, which tells the ticket how it went. Control gets a line of its
+    own at the top, because it is what somebody in a support session most wants to know — including when nobody is
+    controlling the computer, which is said plainly rather than left as a blank to be feared.
+  - **Notes** — the agent's own, saved when they click away. The only thing besides the chat that AI assist reads.
+  - **AI assist** — *Summarise so far*, *Draft checklist*, *Draft ticket note*. Every one is marked a draft and
+    kept nowhere until **Copy to chat** or **Add to ticket notes**. Ticking a checklist step only writes it into
+    the notes: the agent does the step. The sentence about what assist reads — *this session's chat and your notes
+    only, never the screen, keystrokes or clipboard; it cannot click, type or run anything* — is **the server's own
+    wording**, printed as sent, because two wordings of one promise is one too many. The tab exists only when the
+    server says assist is enabled, and the checklist only where the policy allows more than a summary.
+- **A support code, for somebody with no link (meet 1.21.0).** Nine digits, once, ten minutes, with the countdown
+  running — a code read out over the phone is worthless a minute after it expires, and when it does expire the
+  digits are taken off the screen, because a code on screen is a code somebody reads out. **Copy code**, **Copy
+  invite link** and a pasteable invitation that says what the code does *not* permit. The link points at the web
+  join page rather than a `worksuite://` link: the person a support code exists for is exactly the person who may
+  not have WorkSuite installed.
+- **Meet home's code box takes a support code too.** The meeting is looked up first, and the support code redeemed
+  only when there is no such meeting — redeeming spends it. A code neither lookup knows still reads as "no meeting
+  has that ID" rather than going quiet.
+- **A support session is a smaller room.** Chat, Files and Session, as the server's own RC-SUP-03 says. Q&A, polls,
+  the whiteboard, the meeting's notes and the room's settings belong to a meeting with an audience; this is two
+  people and a problem.
+
+Nothing in this is decided on this computer: whether the reader is the agent, whether the notes may be read at all
+and whether AI assist exists are the server's answers, and the person being helped is served a panel with the notes
+and the AI already removed — so there is nothing to hide in the client.
+
+---
+
 ## 0.2.229 — 2026-10-11
 
 - **Settings › Remote control now shows its own checks (meet 1.20.0, diagnostics 1.1.1).** What can be captured

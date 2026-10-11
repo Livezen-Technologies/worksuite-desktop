@@ -24,6 +24,8 @@ import { InfoTip, RecordingCard, recordingItems, type MainAction, type Recording
 import { useHomeAction } from './shortcuts';
 import { effectiveShortcuts, prettyAccelerator } from '../../core/commands';
 import { meetHomeWarning } from '@shared/meet-permissions';
+import { readCode } from '@shared/support-session';
+import { support } from './support/api';
 import { byDay, checkMeetingInput, dayHeading, historyJoinable, lengthLabel, meetingMinutes, scheduledMinutes, upcomingJoinable } from './home';
 import { useMeetT, type MKey } from './i18n';
 
@@ -98,7 +100,35 @@ export function MeetHome() {
       let uuid: string;
       if ('uuid' in what) uuid = what.uuid;
       else {
-        const r = await resolveCode(what.code);
+        /*
+         * A nine-digit code can be either a meeting's own code or a **support
+         * code** (RC11), and they are looked up by different endpoints. The
+         * meeting is tried first because that is what most people type; a
+         * support code is redeemed only when the meeting lookup says no such
+         * code, because redeeming spends it — it works once.
+         */
+        const r = await resolveCode(what.code).catch(async (e: unknown) => {
+          const digits = readCode(what.code);
+
+          if (!digits || !(e instanceof ApiError) || (e.status !== 404 && e.status !== 422)) throw e;
+
+          let s: Awaited<ReturnType<typeof support.join>> | null = null;
+
+          try {
+            s = await support.join(digits);
+          } catch {
+            s = null;
+          }
+
+          // A support code that does not open a session is no better than a
+          // meeting code that does not: the original "no such code" stands,
+          // rather than the box going quiet because something came back.
+          if (!s?.uuid) throw e;
+
+          toast('info', s.agent ? `Joining ${s.agent}'s support session.` : 'Joining the support session.');
+
+          return { uuid: s.uuid, title: s.title, ended: false };
+        });
         if (r.ended) return setCodeError('err.ended');
         uuid = r.uuid;
       }

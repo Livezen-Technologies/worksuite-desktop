@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.21.0 — 2026-10-11
+
+- A support session has its own tab in the meeting window: who is being helped, the ticket, the computer, what control was allowed and by whom, the files, and End session with an outcome (RC10).
+- A support code an agent can read out — nine digits, once, ten minutes — with a live countdown, Copy code, Copy invite link and a pasteable invitation; the link opens the web join page, so it works for somebody without WorkSuite installed (RC11).
+- Meet home's code box accepts a support code too: the meeting is looked up first and the support code redeemed only when there is no such meeting, because redeeming spends it.
+- AI assist inside the session tab: Summarise so far, Draft checklist and Draft ticket note, each marked a draft and kept nowhere until Copy to chat or Add to ticket notes, with the server's own sentence about what assist reads (RC17).
+- A support session reduces the room to Chat, Files and Session, as the server's RC-SUP-03 says.
+
 ## 1.20.0 — 2026-10-11
 
 - Settings › Remote control shows its checks — what can be captured, the displays and which the picker offers, whether input can reach this computer, and the clipboard policy — with Run checks again; the same rows go into the support report.
