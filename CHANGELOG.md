@@ -24,6 +24,17 @@ person who has to live with the change — what it does, and where it bites.
     an **Installed as** tile replaces the duplicate Channel tile, and empty release notes say "Release notes not
     available". Diagnostics names the install type.
   - Releases must upload the `.deb` and `.rpm` to the Update Center along with the AppImage (docs/RELEASING.md).
+- **A tray menu that fits the screen and stays current (#346).** On Ubuntu the menu was about 30 lines and ran off
+  smaller screens, Quit included.
+  - It is now about fifteen lines: your name, your status (● Away ▸ Online, Away, Busy, Do not disturb, Appear
+    offline — sent at once; offline shows here too), Open WorkSuite, Quick Ask, New ▸, one line per app with the
+    detail in a submenu ("Support · 1 unassigned", "Calls · nothing waiting"), Pause notifications, Restart to update
+    (only when one is ready), and Settings, Check for updates, Lock and Quit, always last.
+  - Duplicates are gone: two Live dashboard lines, Update Now beside Check for Updates, Online/Away twice, Connected.
+  - The menu refreshes within two seconds of a change, also on Ubuntu, where it used to keep old counts. Clicking a
+    line while the window is closed opens it on the right page. Status changed in the window shows in the tray.
+  - Ubuntu without tray-icon support is told once how to add it, and the launcher's right-click menu has Open
+    WorkSuite and New email.
 
 ## 0.2.238 — 2026-10-11
 
