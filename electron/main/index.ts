@@ -131,6 +131,7 @@ import { DEFAULT_PDF_POLICY } from '../services/pdf/service';
 import { Vault } from '../services/vault';
 import { TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
+import { linuxInstallKind } from '../updater/linux';
 import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl, reportProblemUrl } from '../updater/update-center';
 import { announce, noticeText } from '../updater/notice';
 import { runUpdateDiagnostics } from '../updater/diagnostics';
@@ -982,6 +983,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   let lastTray = '';
   const updater: UpdaterService = new UpdaterService({
+    openPath: (path) => shell.openPath(path),
     fetch: fetchImpl,
     platform: platformName(),
     arch: archName(),
@@ -995,7 +997,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         version: app.getVersion(),
         platform: platformName(),
         arch: archName(),
-        installType: ucInstallType(platformName(), !!process.env.APPIMAGE),
+        installType: ucInstallType(platformName(), platformName() === 'linux' ? linuxInstallKind() : null),
         channel,
         installId: device.installId(),
         osVersion: process.getSystemVersion(),
@@ -1081,9 +1083,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         ? 'NSIS per-user'
         : platform === 'macos'
           ? 'app bundle'
-          : process.env.APPIMAGE
-            ? 'AppImage'
-            : 'package manager';
+          : (() => {
+              // How this copy updates (worksuite-desktop#345): "Installed as: .deb package".
+              const kind = linuxInstallKind();
+              return kind === 'appimage' ? 'AppImage' : kind === 'deb' ? '.deb package' : kind === 'rpm' ? '.rpm package' : 'unknown package';
+            })();
     const boot = sessionCtl?.current() ?? null;
     return runUpdateDiagnostics({
       now: () => new Date(),

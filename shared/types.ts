@@ -1106,6 +1106,8 @@ export interface UpdateStatus {
   download?: DownloadProgress | null;
   /** Manifest signature → Download → SHA-256 → Code signature → Stage, each with where it stands. */
   pipeline?: PipelineStep[] | null;
+  /** How this copy updates: exe, dmg, appimage, deb or rpm (null: it cannot update itself). worksuite-desktop#345. */
+  installKind?: string | null;
   /** This version must be replaced: since when, by when, and whether modules are locked now. */
   mandatory?: MandatoryUpdate | null;
   /** The last update that failed: a code, the rollback state and a reference for support. */
