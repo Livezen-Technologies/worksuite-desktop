@@ -168,7 +168,15 @@ module.exports = {
     synopsis: 'The WorkSuite desktop client',
     description: 'WorkSuite Desktop — mail, chat, tasks, files and every WorkSuite app on your desktop.',
     mimeTypes: ['x-scheme-handler/worksuite', 'x-scheme-handler/mailto', 'application/x-worksuite-reference'],
-    desktop: { entry: { StartupWMClass: 'WorkSuite' } },
+    // The launcher's right-click menu (worksuite-desktop#346): reachable where the desktop shows no tray icon (GNOME
+    // without the AppIndicator extension). A second launch focuses the running WorkSuite; mailto: opens a new email.
+    desktop: {
+      entry: { StartupWMClass: 'WorkSuite', Actions: 'open;new-email;' },
+      desktopActions: {
+        open: { Name: 'Open WorkSuite', Exec: 'worksuite' },
+        'new-email': { Name: 'New email', Exec: 'worksuite mailto:' },
+      },
+    },
     artifactName: 'WorkSuite-${version}-${arch}.${ext}',
   },
   // Remote control on X11: xdotool injects; xwininfo (x11-utils) tells a shared window from one covering it.

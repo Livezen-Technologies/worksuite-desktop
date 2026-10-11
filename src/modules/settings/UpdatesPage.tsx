@@ -34,13 +34,36 @@ function Tile({ label, value, sub, tone }: { label: string; value: ReactNode; su
 
 const STEP_LABEL: Record<PipelineStep['id'], string> = { manifest: 'Manifest', download: 'Download', sha256: 'SHA-256', codesign: 'Code signature', stage: 'Stage' };
 
-export function Pipeline({ steps }: { steps: PipelineStep[] }) {
+const LINUX_KINDS = ['appimage', 'deb', 'rpm'];
+
+/**
+ * The step names for how this copy installs (worksuite-desktop#345): on Linux there is no code signature to check —
+ * the Update Center's Ed25519-signed answer is the trust, so the step says so — and a .deb or .rpm has no separate
+ * Stage step (the package manager installs it).
+ */
+export function pipelineFor(steps: PipelineStep[], installKind: string | null | undefined): Array<PipelineStep & { label: string }> {
+  const linux = LINUX_KINDS.includes(installKind ?? '');
+  const pkg = installKind === 'deb' || installKind === 'rpm';
+  return steps.filter((s) => !(pkg && s.id === 'stage')).map((s) => ({ ...s, label: s.id === 'codesign' && linux ? 'Release signature (Ed25519)' : STEP_LABEL[s.id] }));
+}
+
+/** "Installed as" and how such a copy updates. */
+export const INSTALLED_AS: Record<string, { label: string; how: string }> = {
+  exe: { label: 'Windows installer', how: 'Updates itself' },
+  dmg: { label: 'macOS app', how: 'Updates itself' },
+  appimage: { label: 'AppImage', how: 'Updates itself, no password needed' },
+  deb: { label: '.deb package', how: 'Update now asks for your password once' },
+  rpm: { label: '.rpm package', how: 'Update now asks for your password once' },
+};
+
+export function Pipeline({ steps, installKind }: { steps: PipelineStep[]; installKind?: string | null }) {
+  const shown = pipelineFor(steps, installKind);
   return (
-    <ol className="mt-4 grid grid-cols-5 gap-2" aria-label="Verification">
-      {steps.map((s) => (
+    <ol className={cx('mt-4 grid gap-2', shown.length === 4 ? 'grid-cols-4' : 'grid-cols-5')} aria-label="Verification">
+      {shown.map((s) => (
         <li
           key={s.id}
-          aria-label={`${STEP_LABEL[s.id]}: ${s.state}`}
+          aria-label={`${s.label}: ${s.state}`}
           className={cx(
             'min-w-0 rounded-[8px] px-2.5 py-2 text-[12px]',
             s.state === 'done' ? 'bg-success/10' : s.state === 'active' ? 'bg-selection' : s.state === 'failed' ? 'bg-danger-bg' : 'bg-subtle',
@@ -48,7 +71,7 @@ export function Pipeline({ steps }: { steps: PipelineStep[] }) {
         >
           <div className={cx('font-semibold', s.state === 'done' ? 'text-success' : s.state === 'active' ? 'text-primary' : s.state === 'failed' ? 'text-danger' : 'text-ink-2')}>
             {s.state === 'done' ? '✓ ' : s.state === 'active' ? '● ' : s.state === 'failed' ? '✕ ' : ''}
-            {STEP_LABEL[s.id]}
+            {s.label}
           </div>
           <div className="truncate text-ink-3" title={s.detail}>
             {s.detail}
@@ -125,7 +148,7 @@ function DownloadCard({ u }: { u: UpdateStatus }) {
           </div>
         </>
       ) : null}
-      {u.pipeline ? <Pipeline steps={u.pipeline} /> : null}
+      {u.pipeline ? <Pipeline steps={u.pipeline} installKind={u.installKind} /> : null}
     </section>
   );
 }
@@ -250,6 +273,7 @@ function WhatsNewPanel({ u }: { u: UpdateStatus }) {
           ))}
         </ul>
       ) : null}
+      {!n.summary && !n.highlights.length ? <p className="mt-1 text-[13px] text-ink-2">Release notes not available{n.url ? ' here: open the full release notes.' : '.'}</p> : null}
       {meta.length ? <p className="mt-2 text-[12px] text-ink-3">{meta.join(' · ')}</p> : null}
     </section>
   );
@@ -291,7 +315,13 @@ export function UpdatesPage({ onDiagnostics }: { onDiagnostics?: () => void }) {
       <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Tile label="Current version" value={u?.currentVersion ?? '—'} sub={u ? `${u.channel === 'org' ? 'Organization build' : CHANNEL_INFO[u.channel].label} channel` : ''} />
         <Tile label="Latest version" value={u?.availableVersion ?? u?.currentVersion ?? '—'} sub={latestSub} tone={u?.availableVersion ? 'primary' : undefined} />
-        <Tile label="Channel" value={<span className="font-sans">{u ? CHANNEL_INFO[u.channel].label : '—'}</span>} sub={channelSource(policy, !!prefs?.updateChannelChosen)} />
+        {/* The channel is chosen in its own section below; this tile says how this copy updates (worksuite-desktop#345). */}
+        <Tile
+          label="Installed as"
+          value={<span className="font-sans">{u?.installKind ? (INSTALLED_AS[u.installKind]?.label ?? u.installKind) : '—'}</span>}
+          sub={u?.installKind ? (INSTALLED_AS[u.installKind]?.how ?? '') : u ? 'Cannot update itself' : ''}
+          tone={u && !u.installKind ? 'danger' : undefined}
+        />
         <Tile
           label="Minimum supported"
           value={u?.minimumVersion ?? '—'}
@@ -313,6 +343,7 @@ export function UpdatesPage({ onDiagnostics }: { onDiagnostics?: () => void }) {
       </div>
       <section aria-label="Channel" className="rounded-[12px] border border-line bg-surface px-5">
         <ChannelRow u={u} />
+        <p className="-mt-1 pb-2 text-[12px] text-ink-3">{channelSource(policy, !!prefs?.updateChannelChosen)}</p>
         <div className="flex items-center gap-3 py-3.5">
           <span className="flex-1 text-[13px] text-ink-2">Something not right? Diagnostics checks why an update would not arrive or install.</span>
           {onDiagnostics ? (

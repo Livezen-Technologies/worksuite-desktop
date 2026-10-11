@@ -78,8 +78,16 @@ node scripts/publish-release.mjs --app desktop --app-id lk.worksuite.desktop --c
   --file windows:x64:exe:release/0.2.125/WorkSuite-Setup-0.2.125-x64.exe \
   --file macos:arm64:dmg:release/0.2.125/WorkSuite-0.2.125-arm64.dmg \
   --file macos:x64:dmg:release/0.2.125/WorkSuite-0.2.125-x64.dmg \
-  --file linux:x64:appimage:release/0.2.125/WorkSuite-0.2.125-x86_64.AppImage
+  --file linux:x64:appimage:release/0.2.125/WorkSuite-0.2.125-x86_64.AppImage \
+  --file linux:x64:deb:release/0.2.125/WorkSuite-0.2.125-amd64.deb \
+  --file linux:x64:rpm:release/0.2.125/WorkSuite-0.2.125-x86_64.rpm
 ```
+
+**Every Linux format goes up** (worksuite-desktop#345). Each copy asks for the type it was installed as — an
+AppImage for an AppImage, a `.deb` for a `.deb` install (`resources/package-type`), an `.rpm` for an `.rpm` — and is
+never offered another. A release without the `.deb` leaves every `.deb` install where it is. A `.deb`/`.rpm` install
+updates with one password prompt (`pkexec apt-get install` / `dnf install` of the downloaded, SHA-256-checked
+package), or opens the package in the software installer when that prompt cannot be shown.
 
 The script stops at **READY_FOR_TEST**; people approve and publish in the
 Update Center's `/admin`. Unsigned installers are accepted on BETA, DEV and

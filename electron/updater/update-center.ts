@@ -147,11 +147,14 @@ export function isTestChannel(channel: string): boolean {
   return ['beta', 'dev', 'internal'].includes(channel.toLowerCase());
 }
 
-/** The package type this installation installs by itself. */
-export function ucInstallType(platform: Platform, runningAsAppImage: boolean): string | null {
+/**
+ * The package type this installation installs by itself. On Linux it is how this copy was installed (linux.ts): an
+ * AppImage asks for an AppImage, a .deb install for a .deb and an .rpm install for an .rpm — never another format.
+ */
+export function ucInstallType(platform: Platform, linuxKind: 'appimage' | 'deb' | 'rpm' | null): string | null {
   if (platform === 'windows') return 'exe';
   if (platform === 'macos') return 'dmg';
-  return runningAsAppImage ? 'appimage' : null;
+  return linuxKind;
 }
 
 /** A pseudonymous device reference: the install id never leaves the computer. */

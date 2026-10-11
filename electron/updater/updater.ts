@@ -14,6 +14,7 @@ import { logger } from '../main/log';
 import type { FetchLike } from '../services/http';
 import { DEFAULT_GRACE_MINUTES, acceptUpdateResponse, isCriticalRelease, isRequired, isSecurityRelease, isTestChannel, ucInstallType, type UcPackage } from './update-center';
 import { ResumableDownload } from './downloader';
+import { installPackage, linuxInstallKind, type LinuxInstallKind } from './linux';
 import type { UpdateProbe } from './diagnostics';
 import { linuxWatchdogScript, macRestoreScript, macSwapScript, UpdateScheduler, type UpdateHealth, type UpdateHistory, type UpdateNotifier } from './update-flow';
 
@@ -60,6 +61,12 @@ export interface UpdaterDeps {
   fetch: FetchLike;
   platform: Platform;
   arch: Arch;
+  /** Linux: how this copy was installed (tests); otherwise read from $APPIMAGE and resources/package-type. */
+  linuxKind?: () => LinuxInstallKind | null;
+  /** Linux .deb/.rpm: installs the package behind a password prompt (tests replace it). */
+  installPackage?: typeof installPackage;
+  /** Opens a file in its desktop handler (shell.openPath): '' when it opened. */
+  openPath?: (path: string) => Promise<string>;
   /** Pinned Update Center response keys, key_id → base64url raw Ed25519. */
   responseKeys: Readonly<Record<string, string>>;
   /** The update check for this channel, or null when no Update Center is configured. */
@@ -237,6 +244,7 @@ export class UpdaterService {
       channelFallback: this.fallback(channel, ch),
       nextCheckAt: this.scheduler?.nextAt()?.toISOString() ?? null,
       justUpdatedNotes: notice && notice.version === app.getVersion() ? { highlights: notice.highlights ?? [], summary: notice.summary ?? null, schema: this.deps.schema?.() ?? null } : null,
+      installKind: ucInstallType(this.deps.platform, this.linuxKind()),
     };
   }
 
@@ -575,6 +583,17 @@ export class UpdaterService {
     return this.get();
   }
 
+  /** How this copy was installed on Linux (AppImage, .deb, .rpm), or null elsewhere (worksuite-desktop#345). */
+  private linuxKind(): LinuxInstallKind | null {
+    return this.deps.platform === 'linux' ? (this.deps.linuxKind?.() ?? linuxInstallKind()) : null;
+  }
+
+  /** A .deb or .rpm install: the system's package manager installs the update, behind one password prompt. */
+  private systemPackage(): 'deb' | 'rpm' | null {
+    const k = this.linuxKind();
+    return k === 'deb' || k === 'rpm' ? k : null;
+  }
+
   /** An unsigned build may take an update only from a test channel, and only when this computer asked for one. */
   private unsignedAllowed(offer: Pick<Offer, 'channel'>): boolean {
     return isTestChannel(offer.channel) && this.deps.channel() !== 'stable';
@@ -583,8 +602,8 @@ export class UpdaterService {
   private async installBlockedReason(offer: Offer): Promise<string | null> {
     const { pkg } = offer;
     if (!app.isPackaged) return 'Development builds do not install updates.';
-    const wanted = ucInstallType(this.deps.platform, !!process.env.APPIMAGE);
-    if (this.deps.platform === 'linux' && !wanted) return 'WorkSuite was installed from a package; update it with your package manager.';
+    const wanted = ucInstallType(this.deps.platform, this.linuxKind());
+    if (this.deps.platform === 'linux' && !wanted) return 'This copy of WorkSuite was not installed from a WorkSuite AppImage, .deb or .rpm, so it cannot update itself. Install the latest package from the download page.';
     if (pkg.type !== wanted) return 'No installer for this computer is included in the release.';
     if (this.deps.platform === 'macos') {
       const bundle = bundlePath();
@@ -915,9 +934,9 @@ export class UpdaterService {
         this.step('codesign', 'done', 'Authenticode valid');
         return file;
       }
-      // Linux AppImage: the signed update response and its SHA-256 are the trust.
-      await chmod(file, 0o755);
-      this.step('codesign', 'skipped', 'AppImage: the signed answer and SHA-256 are the check');
+      // Linux: the Update Center's Ed25519-signed answer names the package and its SHA-256, which matched above.
+      if (!this.systemPackage()) await chmod(file, 0o755);
+      this.step('codesign', 'done', 'Ed25519-signed answer · SHA-256 matched');
       return file;
     } catch (e) {
       log.error('update failed code-signature verification', { error: errorText(e) });
@@ -1024,11 +1043,14 @@ export class UpdaterService {
     this.record('install', `${relaunch ? 'restart' : 'on quit'}${force ? ', forced' : ''}`, version);
     try {
       if (relaunch) await this.deps.prepareRestart?.().catch((e) => log.warn('saving before the restart did not finish', { error: errorText(e) }));
-      await this.deps.beforeQuit();
-      const rollbackPossible = this.deps.platform !== 'windows';
+      // A system package is installed while WorkSuite still runs (the password prompt needs it); it quits afterwards.
+      if (!this.systemPackage()) await this.deps.beforeQuit();
+      const rollbackPossible = this.deps.platform !== 'windows' && !this.systemPackage();
       this.deps.health?.beforeInstall(app.getVersion(), version, rollbackPossible, relaunch, this.status.notes?.url ?? this.status.notesUrl, new Date(), { highlights: this.status.notes?.highlights, summary: this.status.notes?.summary });
       if (relaunch) this.deps.health?.requestSessionRestore();
       this.deps.notifier?.doneWith(version);
+      const pkgKind = this.systemPackage();
+      if (pkgKind) return await this.installSystemPackage(pkgKind, this.stagedPath, version, relaunch, busy);
       this.launchInstaller(this.stagedPath, version, relaunch);
       return { started: true, busy, message: null };
     } catch (e) {
@@ -1048,6 +1070,8 @@ export class UpdaterService {
     if (this.quitInstallTried) return false;
     this.quitInstallTried = true;
     if (this.status.state !== 'STAGED' || !this.stagedPath || !(this.deps.installOnQuit?.() ?? false)) return false;
+    // A .deb or .rpm needs its password prompt answered, which cannot happen after WorkSuite has gone.
+    if (this.systemPackage()) return false;
     const version = this.status.availableVersion ?? this.offer?.version ?? 'unknown';
     try {
       this.record('install', 'on quit', version);
@@ -1061,6 +1085,34 @@ export class UpdaterService {
       this.record('install-failed', errorText(e), version);
       return false;
     }
+  }
+
+  /**
+   * A .deb or .rpm (worksuite-desktop#345): the system's package manager installs the downloaded package behind one
+   * password prompt, then WorkSuite restarts on the new version. No pkexec, or the prompt closed: the package opens in
+   * the desktop's software installer instead, and WorkSuite keeps running until the person installs it there.
+   */
+  private async installSystemPackage(kind: 'deb' | 'rpm', path: string, version: string, relaunch: boolean, busy: BusyReport): Promise<{ started: boolean; busy: BusyReport | null; message: string | null }> {
+    const r = await (this.deps.installPackage ?? installPackage)(kind, path);
+    if (r.ok) {
+      this.record('install', `${kind} installed by the package manager`, version);
+      if (relaunch) {
+        await this.deps.beforeQuit();
+        app.relaunch({ args: ['--updated'] });
+        app.exit(0);
+      }
+      return { started: true, busy, message: null };
+    }
+    this.record('install-failed', `${kind}: ${r.reason} (${r.detail})`, version);
+    if (r.reason === 'failed') {
+      this.fail('UPDATE_INSTALL_FAILED', `The package manager could not install WorkSuite ${version}: ${r.detail}`, { version, rollback: 'not-possible' });
+      return { started: false, busy, message: 'The update could not be installed.' };
+    }
+    // No pkexec, or the password prompt was closed: hand the package to the software installer.
+    const opened = (await (this.deps.openPath?.(path) ?? Promise.resolve('no opener'))) === '';
+    this.set({ state: 'STAGED' });
+    const how = opened ? 'It is open in your software installer: choose Install there, then restart WorkSuite.' : `Install it from ${path} with your software installer, or run: sudo ${kind === 'deb' ? 'apt install' : 'dnf install'} "${path}"`;
+    return { started: false, busy, message: `${r.reason === 'cancelled' ? 'The password prompt was closed.' : 'This computer has no pkexec to ask for your password.'} ${how}` };
   }
 
   private launchInstaller(path: string, version: string, relaunch: boolean): void {

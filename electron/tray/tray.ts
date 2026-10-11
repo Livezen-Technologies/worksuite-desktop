@@ -1,4 +1,5 @@
 import { app, Menu, nativeImage, Tray, type MenuItemConstructorOptions, type NativeImage, type Rectangle } from 'electron';
+import { execFile } from 'node:child_process';
 import { join } from 'node:path';
 import { attentionCount, trayState, trayTooltip, type TrayState } from '@shared/network';
 import { logger } from '../main/log';
@@ -89,6 +90,8 @@ export interface TrayModel {
   /** The included inboxes' unread, on the badge with the rest (MNA-TRY-03), and the bell's mail entries it stands for. */
   mailBadge?: number;
   mailNotices?: number;
+  /** The status chosen (Chat's presence: available, away, busy, dnd, offline), for the status line. Optional. */
+  presence?: string | null;
 }
 
 export interface TrayMail {
@@ -137,17 +140,8 @@ export function trayUpdateItems(u: TrayUpdate | null | undefined, a: Pick<TrayAc
   return [{ label: u.kind === 'ready' ? `Update ready: ${u.version}` : `Update available: ${u.version}`, enabled: false }, { label: u.kind === 'ready' ? 'Restart to Update' : 'Update Now', click: a.updateNow }, { type: 'separator' }];
 }
 
-/** Quick Actions, each of its app: offered only to whoever may open that app. */
 /** A title that fits a menu line. */
 const short = (s: string): string => (s.length > 46 ? `${s.slice(0, 45)}…` : s);
-
-export const QUICK_ACTIONS: ReadonlyArray<{ app: string; label: string; route: string }> = [
-  { app: 'tasks', label: 'New Task', route: '/tasks?new=1' },
-  { app: 'mail', label: 'New Email', route: '/mail?compose=1' },
-  { app: 'chat', label: 'Open Chat', route: '/chat' },
-  { app: 'files', label: 'Upload File', route: '/files?upload=1' },
-  { app: 'crm', label: 'New Lead', route: '/crm?new=1' },
-];
 
 export interface TrayActions {
   open: () => void;
@@ -188,6 +182,8 @@ export interface TrayActions {
   supportQuickReply?: (ticketId: number) => void;
   supportQuickLatest?: () => void;
   supportPresence?: (status: 'available' | 'away') => void;
+  /** The status line's choices (worksuite-desktop#346): Chat's presence, sent to the server at once. Optional for older callers. */
+  setPresence?: (status: 'available' | 'away' | 'busy' | 'dnd' | 'offline') => void;
   /** Marketing's Next contact (⌘⇧N / Ctrl+Shift+N from other apps): My call queue's workspace, on the next contact. */
   marketingNextContact?: () => void;
   /** The Projects timer's Stop, Switch to (one click: what runs stops, the other starts), Resume and the mini timer. */
@@ -370,6 +366,27 @@ function icon(state: TrayState, colour = false): NativeImage {
   return nativeImage.createFromPath(join(dir, `${state}.png`));
 }
 
+/**
+ * Whether this Linux desktop shows tray icons (worksuite-desktop#346). Electron's tray on Linux is a
+ * StatusNotifierItem: on GNOME without the AppIndicator extension nothing hosts it, the icon never appears, and
+ * Electron says nothing. Asks the session bus whether a StatusNotifierWatcher is running; null when it cannot ask.
+ */
+export function indicatorHostRunning(exec: typeof execFile = execFile): Promise<boolean | null> {
+  return new Promise((resolve) => {
+    exec('gdbus', ['call', '--session', '--dest', 'org.freedesktop.DBus', '--object-path', '/org/freedesktop/DBus', '--method', 'org.freedesktop.DBus.NameHasOwner', 'org.kde.StatusNotifierWatcher'], { timeout: 3000 }, (err, out) => {
+      if (err) return resolve(null);
+      resolve(/true/.test(String(out)));
+    });
+  });
+}
+
+/** What to tell somebody whose desktop shows no tray icon, once. */
+export const NO_TRAY_HINT =
+  'Your desktop is not showing tray icons, so the WorkSuite icon is hidden. On Ubuntu, install the AppIndicator extension: sudo apt install gnome-shell-extension-appindicator, then sign out and in. Until then, right-click WorkSuite in the dock for Open WorkSuite.';
+
+/** The menu is rebuilt at most this often (worksuite-desktop#346). */
+export const MENU_EVERY_MS = 2_000;
+
 function untilTomorrowMinutes(): number {
   const now = new Date();
   const t = new Date(now);
@@ -405,6 +422,8 @@ export class TrayService {
   private lastState: string | null = null;
   /** The menu, kept to pop up on a right-click while a click opens the ringing menu (macOS, R-06). */
   private menu: Menu | null = null;
+  private menuTimer: NodeJS.Timeout | null = null;
+  private lastMenuAt = 0;
 
   constructor(private readonly actions: TrayActions) {}
 
@@ -492,6 +511,31 @@ export class TrayService {
     if (live && !ringing) this.tray.setToolTip(`WorkSuite — ${live.online === 1 ? '1 visitor' : `${live.online} visitors`} on your sites${live.atRisk ? ' · somebody is at risk' : ''}`);
     if (ringing) this.tray.setToolTip(m.webchatCalls?.length ? 'WorkSuite — a website visitor is calling' : `WorkSuite — ${ringing === 1 ? 'a website chat is' : `${ringing} website chats are`} ringing`);
     else if (m.signedIn && hasChat && m.webchatOnCall) this.tray.setToolTip(`WorkSuite — on a call with ${m.webchatOnCall.label}${m.webchatOnCall.held ? ' (on hold)' : ''}`);
+    this.scheduleMenu();
+  }
+
+  /**
+   * The menu is built again and handed over again on every change (worksuite-desktop#346): on Ubuntu the tray is an
+   * AppIndicator, which never sees a change made to a menu it already has. At most once every two seconds, so a burst
+   * of messages does not make the open menu flicker; the first change after a quiet spell shows at once.
+   */
+  private scheduleMenu(): void {
+    if (this.menuTimer) return;
+    const wait = Math.max(0, this.lastMenuAt + MENU_EVERY_MS - Date.now());
+    if (wait === 0) return this.buildMenu();
+    this.menuTimer = setTimeout(() => {
+      this.menuTimer = null;
+      this.buildMenu();
+    }, wait);
+    this.menuTimer.unref?.();
+  }
+
+  private buildMenu(): void {
+    if (!this.tray) return;
+    this.lastMenuAt = Date.now();
+    const m = this.model;
+    const ringing = m.signedIn && m.apps.includes('chat') ? m.webchatRinging.length + (m.webchatCalls?.length ?? 0) : 0;
+    const live = m.signedIn && m.apps.includes('chat') ? (m.live ?? null) : null;
     this.menu = Menu.buildFromTemplate(trayMenu(m, this.actions));
     // On macOS a menu set on the icon opens on every click: while chats ring, the click opens the ringing menu and a
     // right-click this one (R-06).
@@ -500,115 +544,239 @@ export class TrayService {
   }
 
   destroy(): void {
+    if (this.menuTimer) clearTimeout(this.menuTimer);
+    this.menuTimer = null;
     this.tray?.destroy();
     this.tray = null;
   }
 }
 
+/** The statuses the tray offers: Chat's presence, which website chats and Support route by (MyStatus.tsx). */
+export const TRAY_STATUSES: ReadonlyArray<{ id: 'available' | 'away' | 'busy' | 'dnd' | 'offline'; label: string }> = [
+  { id: 'available', label: 'Online' },
+  { id: 'away', label: 'Away' },
+  { id: 'busy', label: 'Busy' },
+  { id: 'dnd', label: 'Do not disturb' },
+  { id: 'offline', label: 'Appear offline' },
+];
+
+/** About 40 characters at most: a long name or organisation is cut with an ellipsis rather than widening the menu. */
+export function fit(s: string, max = 40): string {
+  return s.length > max ? `${s.slice(0, max - 1)}…` : s;
+}
+
+/** "Dimuthu Anuraj · Livezen Technologies", the organisation shortened first. */
+export function headerLabel(name: string | null, org: string | null): string {
+  if (!name && !org) return 'WorkSuite';
+  if (!org) return fit(name!);
+  if (!name) return fit(org);
+  const room = Math.max(12, 40 - name.length - 3);
+  return fit(`${name} · ${fit(org, room)}`, 44);
+}
+
+/** The status line: "● Away", or the connection while it is down — "○ Offline · reconnecting". */
+export function statusLabel(m: Pick<TrayModel, 'offline' | 'pending' | 'support' | 'presence'>): string {
+  if (m.offline) return m.pending > 0 ? `○ Offline · ${m.pending} waiting to send` : '○ Offline · reconnecting';
+  const p = m.presence ?? m.support?.presence ?? null;
+  const name = TRAY_STATUSES.find((s) => s.id === p)?.label;
+  return name ? `● ${name}` : '● Online';
+}
+
+/** Support's one summary: the most important non-zero count, a warning only when something is overdue. */
+export function supportSummary(f: SupportPulseFigures): string {
+  if (f.breached || (f.overdue ?? 0) > 0) return `Support · ${f.overdue ?? f.atRisk} overdue ⚠`;
+  if ((f.unassigned ?? 0) > 0) return `Support · ${f.unassigned} unassigned`;
+  if (f.atRisk > 0) return `Support · ${f.atRisk} at risk`;
+  if (f.open > 0) return `Support · ${f.open} open`;
+  return 'Support · all clear';
+}
+
+export function callsSummary(mk: TrayMarketing): string {
+  if ((mk.queueWaiting ?? 0) > 0) return `Calls · ${mk.queueWaiting} waiting`;
+  if ((mk.callbacksToday ?? 0) > 0) return `Calls · ${mk.callbacksToday} callback${mk.callbacksToday === 1 ? '' : 's'} today`;
+  if (mk.sending) return `Calls · sending ${mk.sending.pct}%`;
+  return 'Calls · nothing waiting';
+}
+
+export function mailSummary(m: Pick<TrayModel, 'mail' | 'unreadMail'>): string {
+  const mail = m.mail;
+  if (mail?.accounts.some((x) => x.problem)) return 'Mail · ⚠ sign-in needed';
+  const n = mail ? mail.unread : m.unreadMail;
+  const alerts = mail?.paused ? ' · alerts paused' : '';
+  return `Mail · ${n > 0 ? `${n} unread` : 'all read'}${alerts}`;
+}
+
+/** The lines of a section without its own separators and status lines: they sit in a submenu now. */
+function inner(items: MenuItemConstructorOptions[]): MenuItemConstructorOptions[] {
+  const out = items.filter((i, n, all) => !(i.type === 'separator' && (n === 0 || n === all.length - 1 || all[n - 1]?.type === 'separator')));
+  while (out.length && out[out.length - 1]!.type === 'separator') out.pop();
+  return out;
+}
+
 /**
- * The tray menu. Built from the apps the person may open, and again whenever
- * those change (a new bootstrap updates `apps`): no unread line for an app
- * they do not have, no quick action into one.
+ * Keys beside a line are drawn on Windows and macOS only: AppIndicator (Ubuntu's tray) cannot right-align them, so on
+ * Linux they would run into the label (worksuite-desktop#346).
  */
-export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptions[] {
+export function forPlatform(items: MenuItemConstructorOptions[], platform: NodeJS.Platform = process.platform): MenuItemConstructorOptions[] {
+  if (platform !== 'linux') return items;
+  return items.map(({ accelerator: _a, registerAccelerator: _r, ...i }) => ({ ...i, ...(Array.isArray(i.submenu) ? { submenu: forPlatform(i.submenu, platform) } : {}) }));
+}
+
+/** The longest the menu may grow before its end runs off a 768-pixel screen: detail goes into submenus. */
+export const TRAY_TOP_LINES = 22;
+
+/**
+ * The tray menu (worksuite-desktop#346): about fifteen top-level lines on every screen, whatever the person has.
+ *
+ *   Name · Organisation                     (heading)
+ *   ● Away ▸                                Online · Away · Busy · Do not disturb · Appear offline (· Clock in/out)
+ *   Open WorkSuite · Quick Ask… · New ▸
+ *   Chat · 11 unread ▸   Mail · 209 unread ▸   Support · 1 unassigned ▸   Calls · nothing waiting ▸
+ *   Meet ▸   Timer ▸   Live ▸                (each only for whoever has it, with something to show)
+ *   Pause notifications ▸ · Restart to update to 0.2.232 (only when one is ready)
+ *   Settings… · Check for updates · Lock WorkSuite · Quit WorkSuite (always last)
+ *
+ * Each section is one line saying the most important thing (a warning only when something is overdue), with its
+ * detail in a submenu. What rings or is happening now — someone controlling this computer, a visitor calling, a
+ * website chat ringing — comes first while it lasts. Built from the apps the person may open: no line for an app they
+ * do not have.
+ */
+export function trayMenu(m: TrayModel, a: TrayActions, now = new Date()): MenuItemConstructorOptions[] {
   const items: MenuItemConstructorOptions[] = [];
-  const has = (id: string) => m.apps.includes(id);
+  const has = (id: string) => m.signedIn && m.apps.includes(id);
+  const sep = (): void => {
+    if (items.length && items[items.length - 1]!.type !== 'separator') items.push({ type: 'separator' });
+  };
+
+  // What is happening now, first while it lasts.
   if (m.remoteControl) {
-    items.push({ label: `${m.remoteControl.controller} ${m.remoteControl.paused ? 'had control — paused' : 'is controlling this computer'}`, enabled: false });
-    if (!m.remoteControl.paused) items.push({ label: 'Pause remote control', click: a.pauseRemoteControl });
-    items.push({ label: 'Stop remote control', click: a.stopRemoteControl });
-    items.push({ type: 'separator' });
+    items.push({ label: fit(`${m.remoteControl.controller} ${m.remoteControl.paused ? 'had control — paused' : 'is controlling this computer'}`, 46), submenu: [...(m.remoteControl.paused ? [] : [{ label: 'Pause remote control', click: a.pauseRemoteControl }]), { label: 'Stop remote control', click: a.stopRemoteControl }] });
   }
-  // A visitor calling, and the call I am on (ENH-WCHAT-05): first of all.
-  if (m.signedIn && has('chat') && m.webchatCalls?.length) {
-    items.push({ label: m.webchatCalls.length === 1 ? 'Voice call ringing' : `${m.webchatCalls.length} voice calls ringing`, enabled: false });
-    for (const c of m.webchatCalls.slice(0, 3)) items.push({ label: `Answer — ${c.label}`, click: () => a.answerWebchatCall?.(c.id) });
-    items.push({ type: 'separator' });
+  if (has('chat') && m.webchatCalls?.length) {
+    for (const c of m.webchatCalls.slice(0, 2)) items.push({ label: fit(`Answer call — ${c.label}`), click: () => a.answerWebchatCall?.(c.id) });
   }
-  if (m.signedIn && has('chat') && m.webchatOnCall) {
+  if (has('chat') && m.webchatOnCall) {
     const call = m.webchatOnCall;
-    items.push({ label: `On a call with ${call.label}${call.held ? ' · on hold' : ''}`, enabled: false });
-    items.push({ label: 'Return to the call', click: () => a.openRoute(`/chat?view=website&website=${call.conversationId}`) });
-    items.push({ type: 'separator' });
+    items.push({ label: fit(`Return to call with ${call.label}${call.held ? ' · on hold' : ''}`), click: () => a.openRoute(`/chat?view=website&website=${call.conversationId}`) });
   }
-  // Website chats are Chat's: rung, listed and joined only for somebody who has it.
-  if (m.signedIn && has('chat') && m.webchatRinging.length) {
-    items.push({ label: m.webchatRinging.length === 1 ? 'Website chat ringing' : `${m.webchatRinging.length} website chats ringing`, enabled: false });
-    for (const c of m.webchatRinging.slice(0, 5)) items.push({ label: `Join — ${c.label}`, click: () => a.joinWebchat(c.id) });
-    // Where the icon's click does not reach (most Linux trays), the ringing menu with its reply box from here (R-06).
-    if (a.showRingMenu) items.push({ label: 'Reply from here…', click: () => void a.showRingMenu?.(null) });
-    items.push({ label: 'Open Website Chats', click: () => a.openRoute('/chat?view=website') });
-    items.push({ label: 'Ringing settings…', click: a.ringingSettings });
-    items.push({ type: 'separator' });
-  }
-  // The Live dashboard for website staff (L-05, MAP-22): the mini-dashboard where the click does not reach, and the two
-  // windows with their shortcuts — shown, not registered here (main holds them while WorkSuite is not in front).
-  if (m.signedIn && has('chat') && m.live) {
-    if (a.showRingMenu && !m.webchatRinging.length) items.push({ label: 'Live dashboard…', click: () => void a.showRingMenu?.(null) });
-    if (a.liveDashboard) items.push({ label: 'Open Live dashboard', accelerator: 'CmdOrCtrl+Shift+D', registerAccelerator: false, click: a.liveDashboard });
-    if (a.liveMap) items.push({ label: 'Show Live map window', accelerator: 'CmdOrCtrl+Shift+M', registerAccelerator: false, click: a.liveMap });
-    items.push({ type: 'separator' });
-  }
-  if (m.signedIn && has('support') && m.support) items.push(...supportItems(m.support, a, m.supportShortcut ?? null));
-  if (m.signedIn) {
-    items.push({ label: [m.userName, m.organization].filter(Boolean).join(' · ') || 'WorkSuite', enabled: false });
-    items.push({ type: 'separator' });
-  }
-  items.push(...trayUpdateItems(m.update, a));
-  items.push(...trayMeetItems(m, a, m.shortcutLabels ?? {}));
-  items.push(...trayMarketingItems(m, a));
-  items.push(...trayProjectItems(m, a));
-  items.push(...trayMailItems(m, a));
-  items.push({ label: 'Open WorkSuite', click: a.open });
-  if (m.signedIn && m.quickAsk && has('ai')) items.push({ label: 'Quick Ask', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
-  if (m.signedIn && m.aiChanges > 0 && has('ai')) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant is waiting' : `${m.aiChanges} changes from the assistant are waiting`, click: a.aiChanges });
-  if (m.signedIn) {
-    const unread = [
-      has('chat') ? { label: `Unread Chat ${m.unreadChat}`, n: m.unreadChat, route: '/chat' } : null,
-      // With Mail's own lines (D28), mail is counted there, per account.
-      has('mail') && !m.mail ? { label: `Unread Mail ${m.unreadMail}`, n: m.unreadMail, route: '/mail' } : null,
-      has('support') && m.unreadSupport ? { label: `Support ${m.unreadSupport}`, n: m.unreadSupport, route: '/support?view=mine' } : null,
-    ].filter((x) => x !== null);
-    if (unread.length) {
-      const most = unread.reduce((x, y) => (y.n > x.n ? y : x));
-      items.push({ label: unread.map((u) => u.label).join(' · '), click: () => a.openRoute(most.route) });
-    }
-    items.push({ type: 'separator' });
-    if (m.attendance?.linked) {
-      items.push(
-        m.attendance.clockedIn
-          ? { label: `Clock Out${m.attendance.since ? ` (in since ${m.attendance.since})` : ''}`, click: a.clockOut }
-          : { label: 'Start Work / Clock In', click: a.clockIn },
-      );
-    }
-    const quick = QUICK_ACTIONS.filter((q) => has(q.app));
-    if (quick.length) items.push({ label: 'Quick Actions', submenu: quick.map((q) => ({ label: q.label, click: () => a.openRoute(q.route) })) });
-    const paused = m.notificationsPausedUntil && new Date(m.notificationsPausedUntil).getTime() > Date.now();
+  if (has('chat') && m.webchatRinging.length) {
+    const ring = m.webchatRinging;
     items.push({
-      label: paused ? `Notifications paused until ${new Date(m.notificationsPausedUntil!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Pause Notifications',
+      label: ring.length === 1 ? `Website chat ringing — ${fit(ring[0]!.label, 24)}` : `${ring.length} website chats ringing`,
       submenu: [
-        { label: 'For 30 minutes', click: () => a.pauseNotifications(30) },
-        { label: 'For 1 hour', click: () => a.pauseNotifications(60) },
-        { label: 'Until tomorrow', click: () => a.pauseNotifications(untilTomorrowMinutes()) },
-        ...(paused ? [{ type: 'separator' as const }, { label: 'Resume notifications', click: () => a.pauseNotifications(null) }] : []),
+        ...ring.slice(0, 5).map((c) => ({ label: fit(`Join — ${c.label}`), click: () => a.joinWebchat(c.id) })),
+        ...(a.showRingMenu ? [{ label: 'Reply from here…', click: () => void a.showRingMenu?.(null) }] : []),
+        { type: 'separator' as const },
+        { label: 'Open Website Chats', click: () => a.openRoute('/chat?view=website') },
+        { label: 'Ringing settings…', click: a.ringingSettings },
       ],
     });
-    items.push({
-      label: m.offline ? (m.pending > 0 ? `Offline — ${m.pending} change${m.pending === 1 ? '' : 's'} waiting` : 'Offline') : 'Connected',
-      enabled: false,
-    });
-    items.push({ type: 'separator' });
-    items.push({ label: 'Lock WorkSuite', click: a.lock });
   }
-  items.push({ label: 'Settings', click: a.openSettings });
-  items.push({ label: m.updateReady ? 'Restart to Update' : 'Check for Updates', click: a.checkUpdates });
-  items.push({ type: 'separator' });
+  sep();
+
+  if (m.signedIn) {
+    items.push({ label: headerLabel(m.userName, m.organization), enabled: false });
+    const set = a.setPresence ?? (a.supportPresence ? (s: string) => (s === 'available' || s === 'away' ? a.supportPresence!(s) : undefined) : null);
+    const current = m.presence ?? m.support?.presence ?? null;
+    const statusMenu: MenuItemConstructorOptions[] = set
+      ? TRAY_STATUSES.filter((s) => a.setPresence || s.id === 'available' || s.id === 'away').map((s) => ({ label: s.label, type: 'radio' as const, checked: current ? current === s.id : s.id === 'available', click: () => set(s.id) }))
+      : [];
+    if (m.attendance?.linked) {
+      if (statusMenu.length) statusMenu.push({ type: 'separator' });
+      statusMenu.push(m.attendance.clockedIn ? { label: `Clock out${m.attendance.since ? ` (in since ${m.attendance.since})` : ''}`, click: a.clockOut } : { label: 'Start work · clock in', click: a.clockIn });
+    }
+    items.push(statusMenu.length ? { label: statusLabel(m), submenu: statusMenu } : { label: statusLabel(m), enabled: false });
+    sep();
+  }
+
+  items.push({ label: 'Open WorkSuite', click: a.open });
+  if (has('ai') && m.quickAsk) items.push({ label: 'Quick Ask…', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
+  if (has('ai') && m.aiChanges > 0) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant waits' : `${m.aiChanges} changes from the assistant wait`, click: a.aiChanges });
+  if (m.signedIn) {
+    const create: MenuItemConstructorOptions[] = [
+      ...(has('mail') ? [{ label: 'Email', click: () => a.openRoute('/mail?compose=1') }] : []),
+      ...(has('chat') ? [{ label: 'Chat message', click: () => a.openRoute('/chat?new=1') }] : []),
+      ...(has('meet') && a.meetStart ? [{ label: 'Meeting', click: a.meetStart }] : []),
+      ...(has('tasks') ? [{ label: 'Task', click: () => a.openRoute('/tasks?new=1') }] : []),
+      ...(has('notes') ? [{ label: 'Note', click: () => a.openRoute('/notes?new=1') }] : []),
+      ...(has('crm') ? [{ label: 'Lead', click: () => a.openRoute('/crm?new=1') }] : []),
+      ...(has('files') ? [{ label: 'Upload file', click: () => a.openRoute('/files?upload=1') }] : []),
+    ];
+    if (create.length) items.push({ label: 'New', submenu: create });
+  }
+  sep();
+
+  // One line per section, its detail in a submenu.
+  if (has('chat')) {
+    items.push({
+      label: `Chat · ${m.unreadChat > 0 ? `${m.unreadChat} unread` : 'all read'}`,
+      submenu: [
+        { label: 'Open Chat', click: () => a.openRoute('/chat') },
+        { label: 'Website Chats', click: () => a.openRoute('/chat?view=website') },
+      ],
+    });
+  }
+  if (has('mail')) {
+    const mailLines = inner(trayMailItems(m, a)).filter((i) => !(i.enabled === false && typeof i.label === 'string' && /^(Connected|Offline) · /.test(i.label)));
+    items.push({ label: mailSummary(m), submenu: [{ label: 'Open Mail', click: () => a.openRoute('/mail') }, ...(mailLines.length ? [{ type: 'separator' as const }, ...mailLines] : [])] });
+  }
+  if (has('support') && m.support) {
+    const lines = inner(supportItems(m.support, a, m.supportShortcut ?? null));
+    items.push({ label: supportSummary(m.support), submenu: lines });
+  } else if (has('support') && m.unreadSupport) {
+    // Before the desk's figures arrive: the tickets waiting for me, from the badge's count.
+    items.push({ label: `Support · ${m.unreadSupport} waiting`, submenu: [{ label: 'My tickets', click: () => a.openRoute('/support?view=mine') }, { label: 'Open Support', click: () => a.openRoute('/support') }] });
+  }
+  if (has('marketing') && m.marketing) {
+    const lines = inner(trayMarketingItems(m, a));
+    if (lines.length) items.push({ label: callsSummary(m.marketing), submenu: lines });
+  }
+  if (has('meet') && m.meet) {
+    const lines = inner(trayMeetItems(m, a, m.shortcutLabels ?? {}));
+    if (lines.length) items.push({ label: m.meet.inCall ? 'Meet · in a meeting' : m.meet.next ? fit(`Meet · next: ${m.meet.next.title}`) : 'Meet', submenu: lines });
+  }
+  if (has('projects') && m.projectTimer?.available) {
+    const lines = inner(trayProjectItems(m, a, now.getTime()));
+    const r = m.projectTimer.running;
+    if (lines.length) items.push({ label: r ? fit(`Timer · ${clockOf(Math.max(0, (now.getTime() - (stampMs(r.startedAt) ?? now.getTime())) / 1000)).replace(/:\d\d$/, '')} ${targetLabel(r)}`) : 'Timer', submenu: lines });
+  }
+  if (has('chat') && m.live) {
+    const live: MenuItemConstructorOptions[] = [
+      ...(a.showRingMenu ? [{ label: 'Live dashboard…', click: () => void a.showRingMenu?.(null) }] : []),
+      ...(a.liveDashboard ? [{ label: 'Open Live dashboard', accelerator: 'CmdOrCtrl+Shift+D', registerAccelerator: false, click: a.liveDashboard }] : []),
+      ...(a.liveMap ? [{ label: 'Show Live map window', accelerator: 'CmdOrCtrl+Shift+M', registerAccelerator: false, click: a.liveMap }] : []),
+    ];
+    if (live.length) items.push({ label: `Live · ${m.live.online} on your sites${m.live.atRisk ? ' ⚠' : ''}`, submenu: live });
+  }
+  sep();
+
+  if (m.signedIn) {
+    const paused = m.notificationsPausedUntil && new Date(m.notificationsPausedUntil).getTime() > now.getTime();
+    items.push({
+      label: paused ? `Notifications paused until ${new Date(m.notificationsPausedUntil!).toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : 'Pause notifications',
+      submenu: [
+        { label: '30 minutes', click: () => a.pauseNotifications(30) },
+        { label: '1 hour', click: () => a.pauseNotifications(60) },
+        { label: 'Until tomorrow', click: () => a.pauseNotifications(untilTomorrowMinutes()) },
+        ...(paused ? [{ type: 'separator' as const }, { label: 'Resume', click: () => a.pauseNotifications(null) }] : []),
+      ],
+    });
+  }
+  // The update only when there is something to do: ready to restart, or required by a deadline.
+  const u = m.update;
+  if (a.updateNow && u?.kind === 'required') items.push({ label: u.deadline ? `⚠ Update required · ${installBy(u.deadline, now).replace(/ · .*$/, '')}` : '⚠ Update required', click: a.updateNow });
+  else if (a.updateNow && (u?.kind === 'ready' || m.updateReady)) items.push({ label: `Restart to update${u?.version ? ` to ${u.version}` : ''}`, click: a.updateNow });
+  sep();
+
+  items.push({ label: 'Settings…', click: a.openSettings });
+  items.push({ label: 'Check for updates', click: a.checkUpdates });
+  if (m.signedIn) items.push({ label: 'Lock WorkSuite', accelerator: 'CmdOrCtrl+Alt+L', registerAccelerator: false, click: a.lock });
+  // Quit is always last, and always there.
   items.push({ label: 'Quit WorkSuite', click: a.quit });
-  return items;
+  return forPlatform(items);
 }
 
 const plural = (n: number, one: string, many: string) => (n === 1 ? one : many.replace('{n}', String(n)));
-const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false });
 
 /**
  * The tray's Support section (WS-SUPPORT-SRS-001 D-05): the mini dashboard as menu items, the same on the macOS menu
@@ -617,11 +785,10 @@ const hhmm = (iso: string) => new Date(iso).toLocaleTimeString([], { hour: '2-di
  *  - My numbers (FR-WSP-02): open, overdue, unassigned and at risk, each opening its view; unread and due today
  *    beside them.
  *  - Next SLA due (FR-SLA-07): the four soonest of mine, each opening its quick-reply window (D-04, FR-DSK-03).
- *  - Quick reply to latest (⌃⌥R) and Open Support; Online / Away (FR-ASN-06), Chat's presence as routing reads it.
+ *  - Quick reply to latest (⌃⌥R) and Open Support. Online / Away (FR-ASN-06) is the menu's status line.
  */
 export function supportItems(f: SupportPulseFigures, a: Pick<TrayActions, 'openRoute' | 'supportQuickReply' | 'supportQuickLatest' | 'supportPresence'>, shortcut: string | null = null): MenuItemConstructorOptions[] {
   const items: MenuItemConstructorOptions[] = [];
-  items.push({ label: `Support · synced ${hhmm(f.syncedAt)}`, enabled: false });
   const mine = [`My open ${f.open}`, f.unread ? plural(f.unread, '1 unread', '{n} unread') : null, f.dueToday !== null ? `${f.dueToday} due today` : null].filter(Boolean).join(' · ');
   items.push({ label: mine, click: () => a.openRoute('/support?view=mine') });
   if (f.overdue !== null) items.push({ label: `Overdue ${f.overdue}`, click: () => a.openRoute('/support?view=overdue') });
@@ -640,11 +807,7 @@ export function supportItems(f: SupportPulseFigures, a: Pick<TrayActions, 'openR
   }
   if (a.supportQuickLatest) items.push({ label: 'Quick reply to latest', ...(shortcut ? { accelerator: shortcut, registerAccelerator: false } : {}), click: a.supportQuickLatest });
   items.push({ label: 'Open Support', click: () => a.openRoute('/support') });
-  if (f.presence && a.supportPresence) {
-    const set = a.supportPresence;
-    items.push({ label: 'Online', type: 'radio', checked: f.presence === 'available', click: () => set('available') });
-    items.push({ label: 'Away', type: 'radio', checked: f.presence !== 'available', click: () => set('away') });
-  }
+  // Online / Away is the status line's now (worksuite-desktop#346): one switch, not one per section.
   items.push({ type: 'separator' });
   return items;
 }
