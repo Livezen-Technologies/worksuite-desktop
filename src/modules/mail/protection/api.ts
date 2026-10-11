@@ -38,7 +38,9 @@ export function useMessageProtection(ref: MessageRef, enabled = true) {
     queryKey: key,
     queryFn: async ({ signal }) => {
       try {
-        return await apiGetMeta<MessageProtection>(protectionPath(ref), protectionQuery(ref), signal);
+        const r = await apiGetMeta<MessageProtection | null>(protectionPath(ref), protectionQuery(ref), signal);
+        // The server's empty answer: nothing to say about this message (outside protection).
+        return r.data ? (r as ProtectionAnswer) : { unavailable: true };
       } catch (e) {
         if (isMissing(e)) return { unavailable: true };
         throw e;
@@ -50,7 +52,7 @@ export function useMessageProtection(ref: MessageRef, enabled = true) {
     // The verdict is pushed by the server; until it is here, it is asked again (bounded by the 5 s / 60 s targets, NFR-MPR-02).
     refetchInterval: (q) => {
       const d = q.state.data;
-      const checking = !!d && !('unavailable' in d) && (d.data.verdict === 'CHECKING' || d.data.attachments?.some((a) => a.status === 'checking'));
+      const checking = !!d && !('unavailable' in d) && !!d.data && (d.data.verdict === 'CHECKING' || d.data.attachments?.some((a) => a.status === 'checking'));
       return online && checking ? 4_000 : false;
     },
   });

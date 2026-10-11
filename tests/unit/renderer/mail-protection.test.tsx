@@ -134,6 +134,9 @@ describe('attachment gating and offline (P-UI-11, MPR-UX-02, MPR-UX-07)', () => 
     expect(spam).toMatchObject({ waitingOnline: true, fromCache: true });
     expect(attachmentGate(spam.protection, atts.slice(0, 1), spam.waitingOnline)!.get('2')!.open).toBe(false);
     expect(protectionView({ unavailable: true }, { offline: false, failed: false }).unavailable).toBe(true);
+    // The server's empty answer (the mailbox is outside protection): no verdict, the reader as before — never a crash.
+    expect(protectionView({ data: null as never, offline: false }, { offline: false, failed: false })).toMatchObject({ protection: null, unavailable: true });
+    expect(protectionView({ data: null as never, offline: true }, { offline: true, failed: false })).toMatchObject({ protection: null, unavailable: true });
   });
 });
 
@@ -250,6 +253,14 @@ describe('the reader with a verdict (P-UI-10, P-UI-11)', () => {
     const banner = await screen.findByRole('alert', { name: 'Dangerous attachment removed' });
     expect(within(banner).queryByRole('button', { name: 'Release' })).toBeNull();
     expect(within(banner).queryByRole('button', { name: 'Request release' })).toBeNull();
+  });
+
+  it('opens a message the server has no verdict for (an empty answer) as before: no Checking, no crash', async () => {
+    protection = () => ({ data: null, offline: false, cachedAt: null });
+    wrap(<Page initial="/mail?box=3&msg=201&mbx=3" />);
+    await waitFor(() => expect(document.querySelector('iframe[title="Message"]')).toBeTruthy());
+    expect(screen.queryByText('Mail failed to load')).toBeNull();
+    expect(screen.queryByRole('status', { name: 'Checking this message…' })).toBeNull();
   });
 
   it('offline with no verdict on this computer: Checking, and every attachment locked until online (MPR-UX-07)', async () => {
