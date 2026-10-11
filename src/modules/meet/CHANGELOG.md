@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.23.0 — 2026-10-11
+
+- The meeting's side panel is four tabs — Chat, People, Q&A and More — with Polls, Board, Notes and Files behind More as cards that each say what the tool is for. Nothing is removed; a support session keeps the three RC-SUP-03 leaves it.
+- One chat composer with a picker that says who will read the message: Everyone (the meeting's own chat, which guests see) or Staff only (the workspace conversation, which they cannot). It replaces three stacked composers, none of which said where a message would go.
+- A message typed while the chat connection is down is kept and retried, and says 'Waiting to send', instead of being lost to an error.
+
 ## 1.22.0 — 2026-10-11
 
 - Your personal room on Meet home (D01): one address you give out once — the link, Start, Copy link, and renaming with what it costs said first (the old link stops working, and the name you give up becomes free).

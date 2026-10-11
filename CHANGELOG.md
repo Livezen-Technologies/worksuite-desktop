@@ -11,6 +11,33 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.234 — 2026-10-11
+
+- **The meeting's side panel is four tabs (meet 1.23.0).** Chat, People and Q&A in the strip; Polls, Board, Notes,
+  Files, Info and Settings behind **More**, as cards that each say what the tool is for. Ten tabs in a 380px column
+  wrapped onto three rows, and the three a meeting actually uses sat among seven it rarely does. **Nothing is
+  removed and nothing moves house** — a tool behind More is the same tab with the same content, one press further
+  away, and opening one shows it inside More with a way back rather than leaving the strip highlighting nothing. A
+  support session keeps the three tabs RC-SUP-03 leaves it: hiding one of three would hide a third of a panel to
+  save nothing.
+- **One chat composer, and it says who will read you (meet 1.23.0).** The Chat tab used to stack three things —
+  the meeting chat, a collapsed *Desktop guest chat* and a collapsed *Workspace conversation (members only)* —
+  three composers, none of which told you who would see what you typed. There is one now, with a picker:
+  **Everyone** (the meeting's own chat, which a guest in a browser reads) or **Staff only** (the meeting's
+  workspace conversation, which a guest cannot reach). Both are transports this product already had; what was
+  missing was being told, before pressing send, which one you were about to use. A meeting with no workspace
+  conversation has no Staff only to choose, and the picker will not point at it.
+- **A message typed while the chat is reconnecting is kept (meet 1.23.0).** It stays in the thread marked *Waiting
+  to send*, with the banner and **Retry** above, and goes the moment the connection is back — instead of an error
+  that cost somebody the sentence they just wrote.
+
+**Not built, from the same canvas:** its third audience, a private message to one person in the meeting. The
+meeting chat has no recipient and no audience column, and a workspace direct message is a different conversation
+rather than part of this meeting. An option that read *"only Dimuthu sees it"* and then showed it to the room is
+the one version of this worth refusing.
+
+---
+
 ## 0.2.233 — 2026-10-11
 
 The three Meet artboards that were left partial, finished — each had something behind it that had to be built or
