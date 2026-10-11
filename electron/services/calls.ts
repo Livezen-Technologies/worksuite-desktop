@@ -82,6 +82,9 @@ export class CallService {
     private readonly canRingMeet: () => boolean = canRing,
   ) {}
 
+  attention: ((key: string, context: string) => Promise<boolean>) | null = null;
+  canShowRing(): boolean { return this.canRing(); }
+
   handle(e: RealtimeEvent): void {
     if (e.type === 'chat.call.ringing') this.ring(e as unknown as Ringing);
     else if (e.type === 'meet.ring') this.ringMeet(e as unknown as MeetRinging);
@@ -144,7 +147,9 @@ export class CallService {
     for (const [u, at] of this.rung) if (now - at > 120_000) this.rung.delete(u);
     if (this.rung.has(key) || [...this.active.values()].some((a) => a.uuid === r.uuid)) return;
     this.rung.set(key, now);
-    this.windows.open('ring', route, 'Invitation to a WorkSuite meeting', true);
+    const show = () => { if (this.canRingMeet()) this.windows.open('ring', route, 'Invitation to a WorkSuite meeting', true); };
+    if (this.attention) void this.attention(`meet-ring:${r.ring_id}`, `meet:${r.uuid}`).then((allowed) => { if (allowed) show(); });
+    else show();
   }
 
   ring(r: Ringing): void {
@@ -156,8 +161,13 @@ export class CallService {
     for (const [u, at] of this.rung) if (now - at > 120_000) this.rung.delete(u);
     if (this.rung.has(r.uuid) || [...this.active.values()].some((a) => a.uuid === r.uuid)) return;
     this.rung.set(r.uuid, now);
-    this.windows.open('ring', route, 'Incoming WorkSuite call', true);
-    void this.delivered(r.uuid);
+    const show = () => {
+      if (!this.canRing()) return;
+      this.windows.open('ring', route, 'Incoming WorkSuite call', true);
+      void this.delivered(r.uuid);
+    };
+    if (this.attention) void this.attention(`call:${r.uuid}`, `call:${r.uuid}`).then((allowed) => { if (allowed) show(); });
+    else show();
   }
 
   /** The ring is showing here: the caller's "Calling…" becomes "Ringing…" (worksuite-desktop#113). An older server has no such call. */

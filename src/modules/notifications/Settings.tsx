@@ -50,7 +50,7 @@ interface Payload {
 
 const on = (v: unknown) => v === true || v === 1 || v === '1';
 /** The channels this screen offers, in this order, with the design's words. */
-const OFFERED: Record<string, string> = { in_app: 'In app', email: 'Email', web_push: 'Browser push', chat: 'System conversation' };
+const OFFERED: Record<string, string> = { in_app: 'In app', email: 'Email', mobile_push: 'Mobile push', web_push: 'Browser push', chat: 'System conversation' };
 const DESKTOP = '__desktop';
 
 export default function NotificationSettings() {
@@ -112,6 +112,31 @@ export default function NotificationSettings() {
           </label>
         </div>
 
+        <Card title="Device delivery">
+          <label className="flex items-center justify-between gap-3 text-[13px] text-ink">
+            Desktop app takes priority
+            <Switch label="Desktop app takes priority" checked={cats.device_delivery?.desktop_priority !== false} onChange={(v) => commit({ categories: { ...cats, device_delivery: { ...cats.device_delivery, desktop_priority: v } } })} />
+          </label>
+          <p className="text-[12px] text-ink-3">One device alerts you. Other devices update their badges quietly.</p>
+        </Card>
+        <Card title="By notification type">
+          <div className="space-y-3">
+            {data.catalogue.flatMap((category) => category.events).map((event) => {
+              const key = `event:${event.key}`;
+              const own = cats[key] ?? {};
+              return <div key={key} className="flex flex-wrap items-center gap-3 border-b border-line py-2 text-[12px] text-ink">
+                <span className="min-w-[180px] flex-1">{event.label}</span>
+                {(['popup', 'sound', 'email', 'mobile_push'] as const).map((channel) => <label key={channel} className="flex items-center gap-1.5">
+                  {({ popup: 'Pop-up', sound: 'Sound', email: 'Email', mobile_push: 'Mobile' })[channel]}
+                  <Switch label={`${event.label}: ${channel}`} checked={own[channel] !== false} onChange={(v) => commit({ categories: { ...cats, [key]: { ...own, [channel]: v } } })} />
+                </label>)}
+                <label className="flex items-center gap-1.5">Email delay (minutes)
+                  <input aria-label={`${event.label}: email delay`} type="number" min={1} max={10080} defaultValue={Number(own.email_delay_minutes ?? 15)} className="w-16 rounded border border-line bg-ground px-2 py-1" onBlur={(e) => commit({ categories: { ...cats, [key]: { ...own, email_delay_minutes: Math.max(1, Math.min(10080, Number(e.target.value) || 15)) } } })} />
+                </label>
+              </div>;
+            })}
+          </div>
+        </Card>
         <Card title="By app and channel" action={<span className="text-[12px] text-ink-3">A switch at the top turns a whole channel on or off</span>}>
           <div className="overflow-x-auto" data-notif-matrix>
             <table className="w-full table-fixed border-collapse text-[13px]">

@@ -1795,8 +1795,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     // Minimised counts as away from the conversation (#230): a minimised window is never focused.
     focused: () => {
-      const w = windows.getMain();
-      return !!w && !w.isMinimized() && w.isFocused();
+      const w = BrowserWindow.getFocusedWindow();
+      return (!!w && !w.isMinimized() && w.isFocused()) || powerMonitor.getSystemIdleTime() < 120;
     },
     followUpPrefs: () => ({ ...FOLLOW_UP_DEFAULTS, ...settings.effective().webchatFollowUps }),
     idleSeconds: () => powerMonitor.getSystemIdleTime(),
@@ -1843,8 +1843,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // choice in Settings, and only while WorkSuite is not in front (worksuite-desktop#230).
   notifications.websiteAttending = (id) => webchat.attending(id);
   notifications.followUpDesktop = () => ({ ...FOLLOW_UP_DEFAULTS, ...settings.effective().webchatFollowUps }).desktop;
+  notifications.lastInputAt = () => Date.now() - powerMonitor.getSystemIdleTime() * 1000;
+  calls.attention = (key, context) => notifications.requestAttention(key, context);
+  notifications.staffCallWindowOn = () => calls.canShowRing();
   notifications.isFocused = () => {
-    const w = windows.getMain();
+    const w = BrowserWindow.getFocusedWindow();
     return !!w && !w.isMinimized() && w.isFocused();
   };
   notifications.ringerShowing = () => settings.effective().webchatRinging.window && (webchat.state().chats.length > 0 || !!webchat.state().handoffs?.length || !!webchat.state().calls?.length);

@@ -991,6 +991,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     await shell.openExternal(url);
     return true;
   });
+  router.handle('notifications:context', (input, c) => { if (winOf(c.sender)?.isFocused()) ctx.notifications.viewing = input.viewing; });
   router.handle('notifications:refresh', () => ctx.notifications.refreshCounts());
   router.handle('notifications:reminder', (input) =>
     ctx.notifications.notify({ id: `reminder:${input.id}`, module: 'mail', title: input.title, body: input.body, sender: null, link: input.route, critical: false, flag: input.flag ?? null }),

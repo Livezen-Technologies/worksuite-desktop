@@ -218,6 +218,7 @@ export const INVOKE_CHANNELS = [
   'image:cachePut',
   'image:saveAs',
 
+  'notifications:context',
   'notifications:list',
   'notifications:markRead',
   'notifications:markAllRead',
