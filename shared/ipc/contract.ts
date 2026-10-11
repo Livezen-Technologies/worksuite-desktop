@@ -7,6 +7,7 @@ import type { SmimeVerdict } from '../smime';
 import type { ConnectionDetails, SpeedTestResult } from '../connection';
 import type { MeetPermissionRow } from '../meet-permissions';
 import type { ShareBarState } from '../share-bar';
+import type { MailAlertCard, MailAlertState } from '../mail-alerts';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
  *
@@ -206,6 +207,9 @@ export const preferencesPatchSchema = z
     mailFolderOffline: z.record(z.string().regex(/^(\d{1,12}|local):[A-Za-z0-9._\-/ :]{1,128}$/), z.enum(['all', 'recent', 'headers', 'online'])).refine((r) => Object.keys(r).length <= 500),
     mailAlerts: z.enum(['all', 'focused', 'vip', 'none']),
     mailVipBreakthrough: z.boolean(),
+    // New-mail alerts (ENH-MAIL-05): the preview level and Mail sound. The pause has its own channel.
+    mailAlertPreview: z.enum(['full', 'sender', 'hidden']),
+    mailAlertSound: z.boolean(),
     // Settings › Mail › Images & media, this computer's part (worksuite-desktop#163).
     mailMedia: z
       .object({
@@ -403,6 +407,8 @@ export const contract = {
   ),
   /** macOS: the Dock icon with the unread count painted on (the renderer draws it; see core/dock-badge). */
   'app:setDockIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(4_000_000) }), { whileLocked: true, rate: 30 }),
+  /** Windows: the taskbar's overlay icon with the unread count (MNA-TRY-03), painted by the renderer; null clears it. */
+  'app:setOverlayIcon': ch(z.object({ png: z.string().regex(/^data:image\/png;base64,[A-Za-z0-9+/=]+$/).max(200_000).nullable(), description: z.string().max(120) }), { whileLocked: true, rate: 30 }),
 
   // Guest mode runs in the main window (#149): entering it is refused while an account is signed in.
   'local:enter': ch(none, { rate: 4 }),
@@ -1022,6 +1028,23 @@ export const contract = {
   'notifications:openSettings': ch(none, { session: true, rate: 4 }),
   /** The bell's count again, now: after the notification centre read, snoozed or archived something. */
   'notifications:refresh': ch(none, { session: true, rate: 10 }),
+  // New-mail alerts (ENH-MAIL-05): what the main window shows (MNA-EVT-05 decides by it), a card's buttons and quick
+  // reply, a message opened here (its alert goes), the pause, and the state the tray and the settings show.
+  'mailAlert:view': ch(z.object({ module: z.string().max(64).nullable(), box: z.string().regex(/^(unified|\d{1,12})$/).nullable(), folder: z.string().max(128).nullable() }), { session: true, rate: 20 }),
+  'mailAlert:action': ch(
+    z.object({
+      id: z.string().max(80).nullable().optional(),
+      key: z.string().regex(/^\d{1,15}:[A-Za-z0-9._\-/ :]{1,128}:\d{1,15}$/).max(180).nullable().optional(),
+      action: z.enum(['open', 'reply', 'read', 'archive', 'flag', 'read-all', 'open-inbox', 'dismiss', 'undo']),
+      text: z.string().max(20_000).nullable().optional(),
+    }),
+    { session: true, rate: 10 },
+  ),
+  'mailAlert:clear': ch(z.object({ mailbox: z.number().int().positive(), folder: z.string().max(128), uid: z.number().int().positive() }), { session: true, rate: 30 }),
+  'mailAlert:pause': ch(z.object({ mode: z.enum(['1h', 'tomorrow', 'outside_hours', 'manual']).nullable() }), { session: true, rate: 4 }),
+  'mailAlert:state': ch(none, { session: true }),
+  'mailAlert:latest': ch(none, { session: true }),
+  'mailAlert:prefs': ch(z.object({ preview: z.enum(['full', 'sender', 'hidden']).optional(), sound: z.boolean().optional() }), { session: true, rate: 4 }),
 
   'clipboard:readForPaste': ch(none, { session: true, rate: 5 }),
 
@@ -1573,6 +1596,7 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'app:openInBrowser': boolean;
   'links:audit': void;
   'app:setDockIcon': boolean;
+  'app:setOverlayIcon': boolean;
   'local:enter': LocalStatus;
   'local:leave': void;
   'local:status': LocalStatus;
@@ -1791,6 +1815,13 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'notifications:permission': NotificationPermission;
   'notifications:openSettings': boolean;
   'notifications:refresh': void;
+  'mailAlert:view': void;
+  'mailAlert:action': { ok: boolean; sending?: { id: string; at: number } | null };
+  'mailAlert:clear': void;
+  'mailAlert:pause': MailAlertState;
+  'mailAlert:state': MailAlertState;
+  'mailAlert:latest': MailAlertCard | null;
+  'mailAlert:prefs': MailAlertState;
   'clipboard:readForPaste': { text: string | null; image: string | null; files: PickedFile[] };
   'print:print': boolean;
   'print:printers': Array<{ name: string; displayName: string; isDefault: boolean }>;

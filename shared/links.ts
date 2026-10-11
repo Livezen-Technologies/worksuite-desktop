@@ -65,6 +65,11 @@ export function resolveWebLink(link: string | null | undefined, catalogue: AppDe
     const open = new URLSearchParams(notice[1] ?? '').get('open');
     return { kind: 'tab', route: open && /^\d+$/.test(open) ? `/home?announcement=${open}` : '/home?announcements=all', app: 'home' };
   }
+  // A new email's deep link (ENH-MAIL-05 MNA-EVT-03): that message in its account's Inbox; and an account's Inbox.
+  const mailMessage = /^\/mail\/m\/(\d{1,12})\/(\d{1,15})\/?(?:[?#].*)?$/.exec(path);
+  if (mailMessage) return { kind: 'tab', route: `/mail?box=${mailMessage[1]}&folder=inbox&msg=${mailMessage[2]}&mbx=${mailMessage[1]}`, app: 'mail' };
+  const mailBox = /^\/mail\?(?:.*&)?mailbox=(\d{1,12})(?:&|$)/.exec(path);
+  if (mailBox) return { kind: 'tab', route: `/mail?box=${mailBox[1]}&folder=inbox`, app: 'mail' };
   const own = ownPath(path);
   if (own) return { kind: 'tab', route: own.route, app: own.app };
   const app = appForWebPath(path, catalogue);

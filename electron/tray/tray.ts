@@ -8,6 +8,7 @@ import type { TrayMarketing } from '../services/marketing-pulse';
 import type { TrayMeet } from '../services/meet-next';
 import { NEXT_CONTACT_LABEL } from '../services/marketing-shortcut';
 import { clockOf, hhmm as hm, stampMs, targetLabel, type ProjectTimerState, type TimerTarget } from '@shared/projects';
+import { inboxRoute, mailTooltip, type PauseMode, type TrayMailAccount } from '@shared/mail-alerts';
 
 const log = logger('tray');
 
@@ -80,6 +81,27 @@ export interface TrayModel {
    * for anybody without Projects. Optional for older callers.
    */
   projectTimer?: ProjectTimerState | null;
+  /**
+   * Mail's lines (ENH-MAIL-05 D28): unread per included account (a sign-in problem said instead of a count), New
+   * email, and Pause mail alerts with its choices. Null or absent: the plain "Unread Mail" count only.
+   */
+  mail?: TrayMail | null;
+  /** The included inboxes' unread, on the badge with the rest (MNA-TRY-03), and the bell's mail entries it stands for. */
+  mailBadge?: number;
+  mailNotices?: number;
+}
+
+export interface TrayMail {
+  accounts: TrayMailAccount[];
+  unread: number;
+  /** Pop-ups and sounds held now, and how it reads ("Paused until 11:42"). */
+  paused: boolean;
+  pauseLabel: string | null;
+  /** A pause is set, even when it is not holding anything now (outside working hours, during them). */
+  pauseSet: boolean;
+  choices: Array<{ mode: PauseMode; label: string; detail: string }>;
+  /** Why Outside working hours is missing. */
+  hoursNote: string | null;
 }
 
 export interface TrayUpdate {
@@ -173,6 +195,57 @@ export interface TrayActions {
   projectTimerSwitch?: (t: TimerTarget) => void;
   projectTimerResume?: () => void;
   projectTimerWindow?: () => void;
+  /** Pause mail alerts (a choice), or resume them (null). Optional for older callers. */
+  mailPause?: (mode: PauseMode | null) => void;
+}
+
+/** The note under the pause choices (D28). */
+export const MAIL_PAUSE_NOTE = 'Mail still syncs. Unread counts keep updating; only pop-ups and sounds stop.';
+
+/**
+ * Mail's lines (ENH-MAIL-05 D28, MNA-TRY-01/02): the connection and whether mail alerts are on, unread per account —
+ * an account whose sign-in failed says "Sign-in needed" instead, with a warning sign, as a menu cannot be red — New
+ * email, and Pause mail alerts › For 1 hour, Until tomorrow 08:00, Outside working hours (only with the person's
+ * working hours from HR), Until I turn them on. Only for somebody who has Mail.
+ */
+export function trayMailItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'mail' | 'offline'>, a: Pick<TrayActions, 'openRoute' | 'mailPause'>): MenuItemConstructorOptions[] {
+  const mail = m.mail;
+  if (!m.signedIn || !m.apps.includes('mail') || !mail) return [];
+  const items: MenuItemConstructorOptions[] = [];
+  const alerts = mail.paused || mail.pauseSet ? `mail alerts ${(mail.pauseLabel ?? 'Paused').replace(/^Paused/, 'paused')}` : 'mail alerts on';
+  items.push({ label: `${m.offline ? 'Offline' : 'Connected'} · ${alerts}`, enabled: false });
+  if (mail.accounts.length) {
+    items.push({ label: 'Unread mail', enabled: false });
+    for (const acct of mail.accounts.slice(0, 8)) {
+      items.push(
+        acct.problem
+          ? { label: `${short(acct.label)} — ⚠ Sign-in needed`, click: () => a.openRoute('/settings/mail?tab=accounts') }
+          : { label: `${short(acct.label)} — ${acct.unread}`, click: () => a.openRoute(inboxRoute(acct.id)) },
+      );
+    }
+  }
+  items.push({ label: 'New email', accelerator: 'CmdOrCtrl+N', registerAccelerator: false, click: () => a.openRoute('/mail?compose=1') });
+  if (a.mailPause) {
+    const pause = a.mailPause;
+    const submenu: MenuItemConstructorOptions[] = mail.choices.map((c) => ({ label: c.detail ? `${c.label} (${c.detail})` : c.label, click: () => pause(c.mode) }));
+    if (mail.hoursNote) submenu.push({ label: mail.hoursNote, enabled: false });
+    submenu.push({ type: 'separator' }, { label: MAIL_PAUSE_NOTE, enabled: false });
+    if (mail.pauseSet) submenu.push({ type: 'separator' }, { label: 'Resume mail alerts', click: () => pause(null) });
+    items.push({ label: mail.pauseSet ? `Mail alerts: ${mail.pauseLabel ?? 'Paused'}` : 'Pause mail alerts', submenu });
+  }
+  items.push({ type: 'separator' });
+  return items;
+}
+
+/** The tooltip's words with Mail's lines (D28): "WorkSuite — 6 unread emails", what else waits, and a pause. */
+export function trayMailTooltip(base: string, m: Pick<TrayModel, 'mail' | 'unreadChat' | 'apps'>): string {
+  const mail = m.mail;
+  if (!mail || !m.apps.includes('mail')) return base;
+  const head = mailTooltip(mail.unread);
+  const extra = base.replace(/^WorkSuite — /, '').split(' · ').filter((p) => p && !/^\d+ unread \(/.test(p) && p !== 'all up to date');
+  const chat = m.apps.includes('chat') && m.unreadChat ? `${m.unreadChat} unread chat${m.unreadChat === 1 ? '' : 's'}` : null;
+  const paused = mail.paused ? `mail alerts ${(mail.pauseLabel ?? 'Paused').replace(/^Paused/, 'paused')}` : null;
+  return [head, chat, ...extra, paused].filter(Boolean).join(' · ');
 }
 
 /**
@@ -378,7 +451,8 @@ export class TrayService {
     // draw its badge.
     const hasChat = m.apps.includes('chat');
     const hasSupport = m.apps.includes('support');
-    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther, hasSupport ? (m.unreadSupport ?? 0) : 0, hasSupport ? (m.unreadSupportNotices ?? 0) : 0);
+    const hasMail = m.apps.includes('mail');
+    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther, hasSupport ? (m.unreadSupport ?? 0) : 0, hasSupport ? (m.unreadSupportNotices ?? 0) : 0, hasMail ? (m.mailBadge ?? 0) : 0, hasMail ? (m.mailNotices ?? 0) : 0);
     // A website chat ringing shows as something waiting for you, whatever else is going on (RING-43) — Chat's, so only with Chat.
     const ringing = m.signedIn && hasChat ? m.webchatRinging.length + (m.webchatCalls?.length ?? 0) : 0;
     const state = ringing ? 'unread' : trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
@@ -399,7 +473,7 @@ export class TrayService {
       this.lastState = look;
     }
     this.tray.setToolTip(
-      trayTooltip({
+      trayMailTooltip(trayTooltip({
         error: m.error,
         offline: m.offline && m.signedIn,
         pending: m.pending,
@@ -409,7 +483,7 @@ export class TrayService {
         unreadMail: m.apps.includes('mail') ? m.unreadMail : 0,
         unreadOther: m.unreadOther,
         unreadSupport: hasSupport ? (m.unreadSupport ?? 0) : 0,
-      }),
+      }), m),
     );
     // "18 · 2 waiting" for website staff (MAP-UI-04): on the sites, and waiting on me as the badge counts them (MAP-25).
     // The Projects timer while it runs (D02's menu bar "1:12"), after what rings and the Live figures.
@@ -484,13 +558,15 @@ export function trayMenu(m: TrayModel, a: TrayActions): MenuItemConstructorOptio
   items.push(...trayMeetItems(m, a, m.shortcutLabels ?? {}));
   items.push(...trayMarketingItems(m, a));
   items.push(...trayProjectItems(m, a));
+  items.push(...trayMailItems(m, a));
   items.push({ label: 'Open WorkSuite', click: a.open });
   if (m.signedIn && m.quickAsk && has('ai')) items.push({ label: 'Quick Ask', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
   if (m.signedIn && m.aiChanges > 0 && has('ai')) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant is waiting' : `${m.aiChanges} changes from the assistant are waiting`, click: a.aiChanges });
   if (m.signedIn) {
     const unread = [
       has('chat') ? { label: `Unread Chat ${m.unreadChat}`, n: m.unreadChat, route: '/chat' } : null,
-      has('mail') ? { label: `Unread Mail ${m.unreadMail}`, n: m.unreadMail, route: '/mail' } : null,
+      // With Mail's own lines (D28), mail is counted there, per account.
+      has('mail') && !m.mail ? { label: `Unread Mail ${m.unreadMail}`, n: m.unreadMail, route: '/mail' } : null,
       has('support') && m.unreadSupport ? { label: `Support ${m.unreadSupport}`, n: m.unreadSupport, route: '/support?view=mine' } : null,
     ].filter((x) => x !== null);
     if (unread.length) {

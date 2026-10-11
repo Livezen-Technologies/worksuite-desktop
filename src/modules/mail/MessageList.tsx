@@ -472,7 +472,15 @@ function Row({ r, view, selectedKey, onOpen, onStar, unified, mailboxId, prefs, 
   // Which account it came to (#227): its tag in the combined views, and in every view for an account set so.
   const tag = tags.get(m.mailbox?.id ?? (unified ? -1 : (mailboxId ?? -1)));
   const badge = tag && tagShows(tag, prefs.accountTag, unified) ? <AccountTag tag={tag} mode={prefs.accountTag} /> : null;
-  const queued = r.queued ? <span className="shrink-0 text-[11.5px] font-semibold text-warning">{text(QUEUED_LABEL[r.queued])}</span> : null;
+  // New mail that came in while this folder was in front (#236, ENH-MAIL-05 MNA-APP-02): said in words as well as the
+  // accent edge, so colour is not the only sign (MNA-A11-02).
+  const fresh = refresh?.freshClass(r.key) ? <span className="shrink-0 rounded-[4px] bg-primary/10 px-1 text-[10.5px] font-bold text-primary">{text('New')}</span> : null;
+  const queued = (
+    <>
+      {fresh}
+      {r.queued ? <span className="shrink-0 text-[11.5px] font-semibold text-warning">{text(QUEUED_LABEL[r.queued])}</span> : null}
+    </>
+  );
   const sender = m.from_name || m.from_email || text('(unknown sender)');
   const subject = m.subject || text('(no subject)');
   const stamp = rowStamp(m.created_at);

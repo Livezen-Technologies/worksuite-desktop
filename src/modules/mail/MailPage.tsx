@@ -5,7 +5,7 @@ import { useResizableWidth } from '../../components/ResizeDivider';
 import { canOpen } from '../../core/access';
 import { dayWords, parseTs, todayInZone } from '../../core/time';
 import { app } from '../../core/app-state';
-import { errorMessage, isMac } from '../../core/bridge';
+import { call, errorMessage, isMac } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import type { MenuSection } from '../../components/Menu';
 import { useStore } from '../../core/store';
@@ -431,6 +431,21 @@ function MailWorkspace({ active }: ModuleProps) {
     const t = tabs.find((x) => x.key === currentKey);
     if (t && !t.subject && known.subject) setTabs(withTab(tabs, { ...t, subject: known.subject, from: known.from_name || known.from_email }, currentKey));
   }
+
+  // New-mail alerts (ENH-MAIL-05 §3.1): where Mail is, so mail arriving in the folder in front is the row's "New"
+  // and not a card; and a message opened here has had its alert (MNA-EVT-06).
+  const viewBox = place.view || place.label !== null ? null : /^(unified|\d{1,12})$/.test(place.box) ? place.box : null;
+  useEffect(() => {
+    if (!active) return;
+    void call('mailAlert:view', { module: 'mail', box: viewBox, folder: viewBox ? place.folder : null }).catch(() => undefined);
+  }, [active, viewBox, place.folder]);
+  const opened = current && /^\d{1,15}$/.test(current.uid) && current.mailbox && /^\d{1,12}$/.test(current.mailbox) ? JSON.stringify({ mailbox: Number(current.mailbox), folder: current.folder, uid: Number(current.uid) }) : null;
+  useEffect(() => {
+    if (opened) void call('mailAlert:clear', JSON.parse(opened) as { mailbox: number; folder: string; uid: number }).catch(() => undefined);
+  }, [opened]);
+  // Mail alerts paused on this computer (MNA-TRY-02): the footer says so, with Resume.
+  const pausedLabel = status?.mailAlertsPaused ?? null;
+  const alertsPaused = pausedLabel ? { label: pausedLabel, onResume: () => void call('mailAlert:pause', { mode: null }).catch((e) => toast('error', errorMessage(e))) } : null;
 
   const placeQuery = (p: Partial<Place> = {}) => {
     const next = { ...place, ...p };
@@ -1209,7 +1224,7 @@ function MailWorkspace({ active }: ModuleProps) {
         </div>
       </div>
       <div aria-live="polite" className="sr-only">{heard.say}</div>
-      <StatusBar summary={summary} sync={shared.status} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} items={virtualOutbox || folder === 'outbox' || firstPage?.data.local ? null : (firstPage?.data.total ?? null)} notice={brokenRules ? { text: brokenRules === 1 ? text('1 rule was switched off') : text('{n} rules were switched off', { n: brokenRules }), onClick: () => navigate('/settings/mail?tab=rules') } : null} unread={allRole === 'inbox' ? unifiedUnread : null} onOpenSync={() => navigate('/settings/mail?tab=accounts')} />
+      <StatusBar alertsPaused={alertsPaused} summary={summary} sync={shared.status} waiting={mailPending.length} zoom={prefs.zoom ?? 100} localBytes={localBytes.data ?? null} items={virtualOutbox || folder === 'outbox' || firstPage?.data.local ? null : (firstPage?.data.total ?? null)} notice={brokenRules ? { text: brokenRules === 1 ? text('1 rule was switched off') : text('{n} rules were switched off', { n: brokenRules }), onClick: () => navigate('/settings/mail?tab=rules') } : null} unread={allRole === 'inbox' ? unifiedUnread : null} onOpenSync={() => navigate('/settings/mail?tab=accounts')} />
       {outgoing.length ? (
         <div role="status" aria-live="polite" className="pointer-events-none fixed bottom-14 left-1/2 z-40 flex -translate-x-1/2 flex-col gap-2">
           {outgoing.map((o) => (

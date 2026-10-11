@@ -103,6 +103,15 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     app.dock.setIcon(img);
     return true;
   });
+  router.handle('app:setOverlayIcon', (input) => {
+    // Windows has no badge count on the taskbar button: the count is an overlay icon, painted by the window (MNA-TRY-03).
+    if (process.platform !== 'win32') return false;
+    const win = ctx.windows.getMain();
+    if (!win || win.isDestroyed()) return false;
+    const img = input.png ? nativeImage.createFromDataURL(input.png) : null;
+    win.setOverlayIcon(img && !img.isEmpty() ? img : null, input.description);
+    return true;
+  });
   router.handle('app:openInBrowser', async (input, c) => {
     const origin = ctx.auth.getServer()?.origin;
     if (!origin) throw new DesktopError('NOT_SIGNED_IN', 'No WorkSuite server is configured.');
@@ -992,6 +1001,18 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return true;
   });
   router.handle('notifications:refresh', () => ctx.notifications.refreshCounts());
+
+  // ── new-mail alerts (ENH-MAIL-05) ───────────────────────────────────────
+  router.handle('mailAlert:view', (input) => ctx.mailAlerts.setPlace(input));
+  router.handle('mailAlert:action', (input) => ctx.mailAlerts.action(input));
+  router.handle('mailAlert:clear', (input) => ctx.mailAlerts.seenHere(input));
+  router.handle('mailAlert:pause', (input) => ctx.mailAlerts.pause(input.mode));
+  router.handle('mailAlert:state', () => ctx.mailAlerts.state());
+  router.handle('mailAlert:latest', () => ctx.mailAlerts.latestCard());
+  router.handle('mailAlert:prefs', async (input) => {
+    await ctx.mailAlerts.savePrefs(input);
+    return ctx.mailAlerts.state();
+  });
   router.handle('notifications:reminder', (input) =>
     ctx.notifications.notify({ id: `reminder:${input.id}`, module: 'mail', title: input.title, body: input.body, sender: null, link: input.route, critical: false, flag: input.flag ?? null }),
   );

@@ -16,7 +16,7 @@ import type { SyncStatus } from './types';
  * an account that has not synced for too long, what is waiting to go, the
  * selection, the reading zoom and how much mail this computer keeps.
  */
-export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unread, selected, onOpenSync, notice }: { summary: SyncSummary; sync: SyncStatus | null; waiting: number; zoom: number; localBytes: number | null; items?: number | null; unread?: number | null; selected?: number; onOpenSync?: () => void; notice?: { text: string; onClick: () => void } | null }) {
+export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unread, selected, onOpenSync, notice, alertsPaused }: { summary: SyncSummary; sync: SyncStatus | null; waiting: number; zoom: number; localBytes: number | null; items?: number | null; unread?: number | null; selected?: number; onOpenSync?: () => void; notice?: { text: string; onClick: () => void } | null; alertsPaused?: { label: string; onResume: () => void } | null }) {
   // "New mail pushed" only while a push connection is really up (worksuite-desktop#172).
   const pushed = !!sync?.enabled && summary.live > 0;
   const dot = summary.state === 'offline' || summary.tone === 'warning' ? 'bg-warning' : summary.tone === 'danger' ? 'bg-danger' : summary.state === 'syncing' ? 'bg-primary' : 'bg-success';
@@ -41,6 +41,16 @@ export function StatusBar({ summary, sync, waiting, zoom, localBytes, items, unr
       ) : null}
       {summary.liveLine && summary.state !== 'offline' && summary.detail !== summary.liveLine ? <span className={summary.live < summary.pushTotal ? 'text-warning' : undefined}>{summary.liveLine}</span> : null}
       {summary.state === 'up_to_date' && pushed ? <span>{text('New mail pushed')}</span> : null}
+      {/* Mail alerts paused (ENH-MAIL-05 MNA-TRY-02): mail still syncs; only pop-ups and sounds stop. */}
+      {alertsPaused ? (
+        <span className="flex items-center gap-1.5 font-semibold text-warning">
+          <Icon name="bell-off" size={12} aria-hidden />
+          {text('Mail alerts: {state}', { state: alertsPaused.label })}
+          <button type="button" onClick={alertsPaused.onResume} className="text-primary hover:underline">
+            {text('Resume')}
+          </button>
+        </span>
+      ) : null}
       {typeof items === 'number' ? <span>{text('Items: {n}', { n: items.toLocaleString() })}</span> : null}
       {typeof unread === 'number' && unread > 0 ? <span>{text('Unread: {n}', { n: unread.toLocaleString() })}</span> : null}
       {selected && selected > 1 ? <span className="font-semibold text-ink">{text('{n} selected', { n: selected })}</span> : null}
