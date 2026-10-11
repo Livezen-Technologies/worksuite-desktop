@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.25.0 — 2026-10-11
+
+- Host controls only for the people who may use them (worksuite-desktop#348): one permission table, the server's, builds the People tab, each person's menu, the waiting room and More — a guest or a staff participant sees no Mute all, Remove, Admit or Lock, not even greyed out, and a person's menu offers them Pin for me; only the host sees End for everyone and Make co-host
+
+**Added**
+
+- Mute all, Turn off camera, Stop their screen share, Ask to unmute or turn on camera, Spotlight for everyone and Pin for me; controls appear and go the moment a co-host role arrives on the connection or meeting.role_changed is heard; when the host's connection goes and does not come back, the room asks the server to pass the host role on (to a co-host, else whoever signed in has been here longest, never a guest)
+
 ## 1.24.0 — 2026-10-11
 
 - Invitations in the People panel follow what actually happened (worksuite-desktop#347): Ringing with its time, Didn't answer, Declined with their reason, Invite cancelled, Joining… only after Accept, Couldn't join, Busy in another call and Offline, each with Cancel, Ring again, Remove, Copy link or Message; the ring screen sends Accept, Decline with a message and Not now to the server; the host's badge comes from the meeting's host id

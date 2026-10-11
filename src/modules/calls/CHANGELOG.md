@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.9.0 — 2026-10-11
+
+- The call surface can keep one person large ahead of whoever is speaking (focus), for Meet's Pin for me and Spotlight for everyone (worksuite-desktop#348)
+
 ## 1.8.1 — 2026-10-11
 
 - A meeting ring stopping no longer keeps Ring again into the same meeting from showing on this computer; a ring the host cancelled before it showed stays hidden (worksuite-desktop#347)

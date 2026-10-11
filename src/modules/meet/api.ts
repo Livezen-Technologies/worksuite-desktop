@@ -1,5 +1,6 @@
 import { apiGet, apiPost } from '../../core/api';
 import { call } from '../../core/bridge';
+import { can, meetingRoleOf, type MeetingRole } from './permissions';
 
 /**
  * WorkSuite Meet (`/api/meet/*`): meetings with a link, a code and a lobby,
@@ -27,6 +28,9 @@ export interface MeetInfo {
   code?: string | null;
   /** Roles and room settings (worksuite-desktop#82); missing from an older server. */
   role?: MeetRole;
+  /** My one role in the permission table, and what it allows here (#348); missing from an older server. */
+  meeting_role?: MeetingRole;
+  permissions?: string[];
   is_cohost?: boolean;
   can_manage?: boolean;
   host_id?: number;
@@ -154,9 +158,9 @@ export interface RoomActivity {
 export const may = {
   manage: (r: MeetRole) => r === 'host' || r === 'cohost',
   present: (r: MeetRole, s: RoomSettings) => s.present === 'everyone' || r !== 'participant',
-  /** Nobody while the room has recording off (worksuite-desktop#91). */
-  record: (r: MeetRole, s: RoomSettings) => s.recording !== false && (r === 'host' || (r === 'cohost' && s.record === 'hosts')),
-  invite: (r: MeetRole, s: RoomSettings) => s.invite === 'everyone' || r === 'host' || r === 'cohost',
+  /** Nobody while the room has recording off (worksuite-desktop#91). The permission table decides (#348). */
+  record: (r: MeetRole, s: RoomSettings) => can(meetingRoleOf(r, false), 'record', s),
+  invite: (r: MeetRole, s: RoomSettings) => can(meetingRoleOf(r, false), 'invite', s),
   chat: (r: MeetRole, s: RoomSettings) => (s.chat === 'off' ? false : s.chat === 'hosts' ? r === 'host' || r === 'cohost' : true),
   transcripts: (r: MeetRole, s: RoomSettings) => s.transcripts === 'participants' || r === 'host' || r === 'cohost',
   /** Participants' permissions (worksuite-desktop#91): the host and co-hosts are never limited. A setting an older server leaves out is on. */
@@ -242,6 +246,9 @@ export interface Sfu {
   identity: string;
   is_host: boolean;
   role?: MeetRole;
+  /** The one role of the permission table, and what it allows (#348). */
+  meeting_role?: MeetingRole;
+  permissions?: string[];
   /** Why we wait at the door: to be admitted, or until a host is in. Null: straight in. */
   door?: 'waiting_room' | 'no_host' | null;
 }

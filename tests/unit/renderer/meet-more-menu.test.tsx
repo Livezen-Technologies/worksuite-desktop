@@ -125,30 +125,27 @@ describe('the meeting More menu (#124)', () => {
     expect(item(meetMoreSections(state({ recordingCommand: 'error' }), actions()), 'recording')!.disabled).toBe(false);
   });
 
-  it('shows a participant what they may use, and why the rest is unavailable', () => {
+  it('shows a participant or a guest no host controls at all, not even disabled (#348)', () => {
     const m = meetMoreSections(state({ role: 'participant', canManage: false, mayRecord: false, mayStopRecording: false, mayTranscribe: false }), actions());
-    expect(m[1]!.items.map((i) => i.id)).toEqual(['lock']);
-    expect(item(m, 'lock')).toMatchObject({ disabled: true, reason: 'Only the host and co-hosts can lock the meeting' });
-    expect(item(m, 'lock')!.onSelect).toBeUndefined();
-    expect(item(m, 'recording')).toMatchObject({ label: 'Start Recording', disabled: true, reason: 'Only the host can record this meeting' });
-    expect(item(m, 'transcription')).toMatchObject({ disabled: true, reason: 'Only hosts and people who may record can transcribe' });
-    expect(item(m, 'host-controls')).toBeUndefined();
-    expect(item(m, 'livestream')).toBeUndefined();
-    expect(item(m, 'recording-settings')).toBeUndefined();
+    expect(m.map((s) => s.label)).toEqual(['Meeting Tools']);
+    for (const id of ['lock', 'recording', 'transcription', 'host-controls', 'livestream', 'recording-settings']) expect(item(m, id)).toBeUndefined();
+    expect(m[0]!.items.map((i) => i.id)).toEqual(['activities', 'info']);
     // Everybody keeps the activities and the meeting's info.
     expect(item(m, 'qa')!.disabled).toBeUndefined();
     expect(item(m, 'link')!.disabled).toBeUndefined();
 
-    const locked = meetMoreSections(state({ role: 'participant', canManage: false, locked: true, mayRecord: false, mayStopRecording: false }), actions());
-    expect(item(locked, 'lock')).toMatchObject({ label: 'Unlock Meeting', disabled: true, reason: 'Only the host and co-hosts can unlock the meeting' });
+    const locked = meetMoreSections(state({ role: 'participant', canManage: false, locked: true, mayRecord: false, mayStopRecording: false, mayTranscribe: false, recordingActive: true, transcribingElsewhere: { by: 'Kamala' } }), actions());
+    expect(item(locked, 'lock')).toBeUndefined();
+    expect(item(locked, 'recording')).toBeUndefined();
+    expect(item(locked, 'transcription')).toBeUndefined();
   });
 
   it('explains recording and transcription turned off for the meeting, and co-host recording', () => {
     const off = meetMoreSections(state({ settings: { recording: false, transcription: false }, mayRecord: false, mayTranscribe: false }), actions());
     expect(item(off, 'recording')!.reason).toBe("Recording isn't turned on for this meeting");
     expect(item(off, 'transcription')!.reason).toBe("Transcription isn't turned on for this meeting");
-    const cohost = meetMoreSections(state({ role: 'participant', canManage: false, settings: { recording: true, record: 'hosts' }, mayRecord: false, mayStopRecording: false }), actions());
-    expect(item(cohost, 'recording')!.reason).toBe('Only the host and co-hosts can record');
+    const cohost = meetMoreSections(state({ role: 'cohost', settings: { recording: true, record: 'host' }, mayRecord: false, mayStopRecording: false }), actions());
+    expect(item(cohost, 'recording')).toMatchObject({ disabled: true, reason: 'Only the host can record this meeting' });
     // A running recording a co-host may still stop after recording was turned off.
     const stoppable = meetMoreSections(state({ role: 'cohost', settings: { recording: false }, mayRecord: false, mayStopRecording: true, recordingActive: true }), actions());
     expect(item(stoppable, 'recording')).toMatchObject({ label: 'Stop Recording', disabled: false });
@@ -164,7 +161,7 @@ describe('the meeting More menu (#124)', () => {
 
   it('is translated: the stateful labels and reasons in Sinhala and Tamil', () => {
     setLanguage('si');
-    const si = meetMoreSections(state({ locked: true, transcribingHere: true, role: 'participant', canManage: false, mayRecord: false, mayStopRecording: false }), actions());
+    const si = meetMoreSections(state({ locked: true, transcribingHere: true, role: 'cohost', mayRecord: false, mayStopRecording: false }), actions());
     expect(si.map((s) => s.label)).toEqual(['රැස්වීම් මෙවලම්', 'සත්කාරක පාලන']);
     expect(item(si, 'lock')!.label).toBe('රැස්වීමේ අගුළු අරින්න');
     expect(item(si, 'transcription')!.label).toBe('පිටපත් කිරීම නවත්වන්න');
@@ -245,10 +242,9 @@ describe('the call controls with the More menu', () => {
     const headings = within(menu)
       .getAllByRole('group')
       .map((g) => document.getElementById(g.getAttribute('aria-labelledby') ?? '')?.textContent);
-    expect(headings).toEqual(['Meeting Tools', 'Host Controls', 'View & Layout']);
-    const lock = within(menu).getByRole('menuitem', { name: 'Lock Meeting' });
-    expect(lock.getAttribute('aria-disabled')).toBe('true');
-    expect(lock.textContent).toContain('Only the host and co-hosts can lock the meeting');
+    // A participant has no Host Controls group, and no Lock Meeting to see greyed out (#348).
+    expect(headings).toEqual(['Meeting Tools', 'View & Layout']);
+    expect(within(menu).queryByRole('menuitem', { name: 'Lock Meeting' })).toBeNull();
     fireEvent.keyDown(document.activeElement!, { key: 'Escape' });
     expect(screen.queryByRole('menu')).toBeNull();
     expect(document.activeElement).toBe(more);

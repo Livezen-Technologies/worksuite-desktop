@@ -1,0 +1,25 @@
+{
+    "about": "Who may do what in a Meet meeting (worksuite-desktop#348). The one table: the server enforces it (Modules\\Communication\\Libraries\\MeetPermissions), and the web (web/src/lib/meet/permissions.ts) and desktop (src/modules/meet/permissions.ts) build their menus from copies of it. Each side has a test that its table is this one. true: the role may; false: never; \"setting\": when the room's settings allow it.",
+    "roles": ["host", "co_host", "participant", "guest"],
+    "actions": {
+        "admit":             { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "mute":              { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "ask_unmute":        { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "remove":            { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "set_cohost":        { "host": true, "co_host": false,     "participant": false,     "guest": false },
+        "lock":              { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "stop_screen_share": { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "set_presenter":     { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "room_settings":     { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "mark_ended":        { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "record":            { "host": true, "co_host": "setting", "participant": false,     "guest": false },
+        "end_for_all":       { "host": true, "co_host": false,     "participant": false,     "guest": false },
+        "transfer_host":     { "host": true, "co_host": false,     "participant": false,     "guest": false },
+        "spotlight":         { "host": true, "co_host": true,      "participant": false,     "guest": false },
+        "pin_self":          { "host": true, "co_host": true,      "participant": true,      "guest": true },
+        "raise_hand":        { "host": true, "co_host": true,      "participant": true,      "guest": true },
+        "react":             { "host": true, "co_host": true,      "participant": true,      "guest": true },
+        "chat":              { "host": true, "co_host": true,      "participant": true,      "guest": true },
+        "invite":            { "host": true, "co_host": true,      "participant": "setting", "guest": false }
+    }
+}

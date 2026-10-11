@@ -11,6 +11,17 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.244 — 2026-10-11
+
+- **Meet host controls only for the people who may use them (#348).** Guests and participants no longer see Mute all,
+  Remove, Admit/Deny, Make co-host, Lock, Recording or End meeting for all — not even greyed out; their row menu is Pin
+  for me. The People tab, row menus, waiting room and ⋯ More are drawn from one permission table shared with the
+  server (host, co-host, participant, guest), so a co-host's controls appear the moment they're made co-host and go
+  when it's removed, and only the host sees End meeting for all and Make co-host. New for hosts and co-hosts: Mute
+  all, mute someone's camera or screen share, ask someone to unmute or turn their camera on, and Spotlight for
+  everyone. If the host's app drops, host passes to a co-host or a signed-in person, never a guest. (Meet 1.25.0,
+  Calls 1.9.0; needs WorkSuite server Communication 1.73.0, which also enforces all of this)
+
 ## 0.2.243 — 2026-10-11
 
 - **One broken mail account, message or answer never takes Mail down (#338).** Mail could show only "Mail failed to
