@@ -1,9 +1,7 @@
 import { LivestreamBadge, LivestreamControls, useLivestreamNotice } from './Livestreaming';
 import { RecordingFeedback } from './RecordingFeedback';
-import BrowserMeetingChat from './BrowserMeetingChat';
-import { GuestChat } from './GuestChat';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useState, useSyncExternalStore } from 'react';
+import { useEffect, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { RoomEvent, type Participant } from 'livekit-client';
 import { callQuality, type CallQuality } from '../../core/connection';
 import { ConnectionWarning } from '../../components/ConnectionWarning';
@@ -18,7 +16,6 @@ import type { ControlButton } from '../calls/ui/CoreCallControls';
 import { meetMoreSections } from './moreMenu';
 import { personOf } from '../calls/ui/people';
 import { callUi } from '../calls/ui/state';
-import { Thread } from '../chat/Thread';
 import { formatCode, invitation } from './api';
 import { ShareInChat, ShareRow } from './MeetHome';
 import { remote } from './remote/controller';
@@ -33,6 +30,9 @@ import { AddPeopleDialog, Invitations } from './InvitePeople';
 import { MeetNotes } from './MeetNotes';
 import { SessionPanel } from './support/SessionPanel';
 import { supportTabs } from '@shared/support-session';
+import { panelLayout } from '@shared/meet-panel';
+import { MorePanel } from './MorePanel';
+import { MeetChatPanel } from './MeetChatPanel';
 import { RecordingSettings } from './RecordingSettings';
 import { StartTranscriptionDialog } from './TranscriptControls';
 import { effectiveShortcuts, prettyAccelerator } from '../../core/commands';
@@ -140,7 +140,17 @@ export function MeetRoom() {
    * to a meeting with an audience, and this is two people and a problem.
    */
   const support = meet.info?.session_kind === 'support';
-  const roomTabs = <T extends { id: string }>(tabs: T[]): T[] => (support ? supportTabs(tabs) : tabs);
+  /*
+   * The panel's own layout (the Meet Side Panel canvas): Chat, People and Q&A
+   * in the strip, everything else behind More, which has room to say what each
+   * tool is for. A support session keeps the three RC-SUP-03 leaves it.
+   */
+  const roomTabs = <T extends { id: string; label: string; badge?: number; content: ReactNode }>(tabs: T[]): Array<{ id: string; label: string; badge?: number; content: ReactNode }> => {
+    const all = support ? supportTabs(tabs) : tabs;
+    const { tabs: strip, more } = panelLayout(all, { support });
+
+    return more.length ? [...strip, { id: 'More', label: 'More', content: <MorePanel items={more} /> }] : strip;
+  };
   const [sharingDocument, setSharingDocument] = useState(false);
   const [leaving, setLeaving] = useState(false);
   const [streamSettings, setStreamSettings] = useState(false);
@@ -383,24 +393,11 @@ export function MeetRoom() {
           {
             id: 'Chat',
             label: 'Chat',
-            content: info.room_id ? (
-              <div className="flex h-full flex-col">
-                <span className="border-b border-line px-3 py-2 text-[11.5px] text-ink-3">
-                  {meet.settings.chat === 'off'
-                    ? 'The host has turned chat off in this meeting.'
-                    : meet.settings.chat === 'hosts' && !meet.canManage
-                      ? 'Only the host and co-hosts can write here.'
-                      : "Meeting chat · saved to the meeting's conversation"}
-                </span>
-                <div className="min-h-0 flex-1 flex flex-col">
-                  <BrowserMeetingChat uuid={info.uuid} />
-                  <details className="border-t border-line"><summary className="cursor-pointer p-3 text-xs text-ink-3">Desktop guest chat</summary><GuestChat room={room} chat={meet.settings.chat} /></details>
-                  <details className="border-t border-line"><summary className="cursor-pointer p-3 text-xs text-ink-3">Workspace conversation (members only)</summary><div className="h-80"><Thread roomId={String(info.room_id)} room={undefined} mini bare rooms={[]} /></div></details>
-                </div>
-              </div>
-            ) : (
-              <><BrowserMeetingChat uuid={info.uuid} /><GuestChat room={room} chat={meet.settings.chat} /></>
-            ),
+            // One thread and one composer, with a picker that says who will
+            // read it (the Meet Side Panel canvas). It replaced three stacked
+            // composers — the meeting chat, a collapsed guest chat and a
+            // collapsed workspace conversation — none of which said that.
+            content: <MeetChatPanel uuid={info.uuid} roomId={info.room_id} chat={meet.settings.chat} canManage={meet.canManage} />,
           },
           { id: 'Q&A', label: t('act.qa'), badge: openQuestions || undefined, content: <QaPanel /> },
           { id: 'Polls', label: t('act.polls'), badge: pollsWaiting || undefined, content: <PollsPanel /> },
