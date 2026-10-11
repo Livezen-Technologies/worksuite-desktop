@@ -131,9 +131,9 @@ export function NewProjectDialog({ start, offline, onClose, onGo }: { start: str
   const clientName = (clients.data?.data.clients ?? []).find((c) => String(c.id) === f.client_id)?.name ?? '';
 
   // The form filled from a template, once, when its plan arrives (state set while rendering: no effect, no flash).
-  if (spec && item && filledFor !== item.key && categories.data) {
+  if (spec && item && filledFor !== item.key && !categories.isLoading) {
     const d = spec.defaults;
-    const cat = categories.data.data.categories.find((c) => c.name.toLowerCase() === (d.category || spec.category).toLowerCase() && c.status !== 'archived');
+    const cat = (categories.data?.data.categories ?? []).find((c) => c.name.toLowerCase() === (d.category || spec.category).toLowerCase() && c.status !== 'archived');
     const words = { client: clientName, year: today.slice(0, 4), name: spec.name };
     // "{client} website" with no client yet is the template's own name, not "website".
     const pattern = d.name_pattern && !(clientName === '' && d.name_pattern.includes('{client}')) ? d.name_pattern : spec.name;
