@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.19.0 — 2026-10-11
+
+- Share your screen on Meet home: makes a meeting and opens its pre-join screen with the share waiting, camera off — the ⌘⇧E key now does this instead of only opening the page.
+- Meet home prints the keys for new meeting, join next and share screen, read from the person's own shortcuts and left out when the global keys are turned off.
+- An amber line on Meet home when the system has refused screen recording or accessibility, with Fix in Settings — a denial only, never a permission this computer does not have.
+
 ## 1.18.0 — 2026-10-10
 
 - When a control session ends, the controller gets a card saying who ended it, that the screen is still shared, and how long the session lasted — instead of a toast that is gone before it is read.

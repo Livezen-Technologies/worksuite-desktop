@@ -5,6 +5,33 @@ person who has to live with the change — what it does, and where it bites.
 
 ---
 
+## 0.2.228 — 2026-10-11
+
+- **Share your screen, without setting up a call first (meet 1.19.0).** Meet home has a Share your screen item, and
+  ⌘⇧E (Ctrl+Shift+E) now reaches it rather than only bringing the page forward. It makes a meeting — a screen others
+  can see has to be seen in one; there is no share without a meeting on the server — and opens its pre-join screen
+  with the camera off and Share screen as the main button. The pre-join screen is deliberately still there: a key
+  that put your screen in front of other people with nothing in between would be a surprise, not a shortcut. On
+  that screen, **Join without sharing** is the way out for anybody who changed their mind.
+- **Meet home prints the keys for the three things it starts (meet 1.19.0).** New meeting, join next and share
+  screen, in the accelerators *that person* has — so anybody who changed one in Settings is told what they press.
+  Turning the global keys off removes the hints with the keys: a hint is a promise that the key is held everywhere.
+- **An amber line when the system is in the way (meet 1.19.0).** On Meet home: screen recording refused ("Share
+  screen will show nothing to the others") or accessibility refused ("others can see your screen but cannot use
+  your mouse or keyboard"), with **Fix in Settings**. Only an outright denial earns it — "unable to verify", and a
+  permission this computer does not have at all, do not, because a banner that showed on every Windows machine
+  would be a banner nobody reads. The full five rows stay in Settings › Meet.
+
+**Not built, and why.** The design's Meet page also draws a second left-hand nav (Home · Today · Recordings ·
+Remote sessions · Personal room · Settings) and a **Personal room** card with a permanent link. The nav is not
+built: four of its six entries are sections of the page it would sit on, or the app's own Settings, and a second
+navigation model beside the app's sidebar would mean two places that disagree about where you are. The Personal
+room is not built because it does not exist to build: there is no per-person room, and no vanity link, anywhere in
+the server's Communication module, the web app or this one. It is a server feature first — a reusable room owned by
+a person, a slug, and somewhere to resolve it — and is recorded as such in the audit.
+
+---
+
 ## 0.2.227 — 2026-10-10
 
 - **When remote control ends, the controller is told properly (meet 1.18.0).** It used to be a toast: who ended it

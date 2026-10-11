@@ -312,11 +312,13 @@ export function formatCode(code: string | null | undefined): string {
 
 /** Open a meeting in its window (one window per meeting). */
 /** Open a meeting in its window. `quiet`: its join screen starts with the microphone and camera off (an accepted ring). */
-export async function openMeeting(uuid: string, title?: string | null, opts: { quiet?: boolean; audioOnly?: boolean } = {}): Promise<void> {
+export async function openMeeting(uuid: string, title?: string | null, opts: { quiet?: boolean; audioOnly?: boolean; present?: boolean } = {}): Promise<void> {
   if (!UUID.test(uuid)) return;
   // `quiet`: nothing switches on by itself (an accepted invitation).
   // `audio`: the camera starts off, the microphone as remembered (D04's Audio only).
-  const flags = [opts.quiet ? 'quiet=1' : '', opts.audioOnly ? 'audio=1' : ''].filter(Boolean).join('&');
+  // `present`: came from Share screen (D01), so the pre-join screen offers the
+  // share as its main action and starts the camera off.
+  const flags = [opts.quiet ? 'quiet=1' : '', opts.audioOnly ? 'audio=1' : '', opts.present ? 'present=1' : ''].filter(Boolean).join('&');
   await call('windows:open', { kind: 'meet', route: `/meet/${uuid}${flags ? `?${flags}` : ''}`, title: title ?? 'WorkSuite Meet', alwaysOnTop: false });
 }
 

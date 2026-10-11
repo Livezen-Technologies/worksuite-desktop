@@ -122,3 +122,37 @@ export const permissionLabel = (state: PermissionState): string =>
 
 /** How many rows are a problem, for the "1 permission missing" line the design draws. */
 export const permissionsMissing = (rows: MeetPermissionRow[]): number => rows.filter((r) => r.state === 'denied').length;
+
+/**
+ * The one line Meet's home shows when the system is standing in the way
+ * (WS-MEET-ENH-01 D01's amber banner).
+ *
+ * Only a **denial** earns a banner. "Unable to verify" and "this computer does
+ * not ask for it" are not problems, and a home page that warned about them
+ * would cry wolf on every Windows machine — the full five rows are a section
+ * in Settings for whoever wants them.
+ *
+ * At most one, worst first: a screen that cannot be captured at all is a
+ * larger thing than a screen that can be seen but not controlled.
+ */
+export function meetHomeWarning(rows: MeetPermissionRow[]): { id: 'screen' | 'accessibility'; title: string; detail: string } | null {
+  const denied = (id: 'screen' | 'accessibility'): boolean => rows.some((r) => r.id === id && r.state === 'denied');
+
+  if (denied('screen')) {
+    return {
+      id: 'screen',
+      title: 'Screen sharing is blocked on this computer',
+      detail: 'WorkSuite is not allowed to record the screen, so Share screen will show nothing to the others.',
+    };
+  }
+
+  if (denied('accessibility')) {
+    return {
+      id: 'accessibility',
+      title: 'Remote control is limited on this computer',
+      detail: 'Others can see your screen when you share it, but cannot use your mouse or keyboard.',
+    };
+  }
+
+  return null;
+}

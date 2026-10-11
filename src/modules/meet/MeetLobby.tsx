@@ -27,7 +27,15 @@ export function MeetLobby() {
   const quiet = query.get('quiet') === '1';
   // Answered "Audio only" on the invitation (D04): the camera starts off.
   const audioOnly = query.get('audio') === '1';
-  const d = useMeetDevices(!waiting && !joining, { camAllowed: info.mode !== 'audio', startOff: quiet, camOff: audioOnly });
+  /*
+   * Came from Share screen on Meet home (D01): the camera starts off and the
+   * main button is the share, because somebody who pressed Share screen asked
+   * to show their screen, not to be on camera. The screen is still this one —
+   * the devices, who is already in, the passcode — since a share with the
+   * wrong microphone live is its own kind of accident.
+   */
+  const presenting = query.get('present') === '1';
+  const d = useMeetDevices(!waiting && !joining, { camAllowed: info.mode !== 'audio', startOff: quiet, camOff: audioOnly || presenting });
   const [passcode, setPasscode] = useState('');
   const [sent, setSent] = useState(false);
   const others = info.joined_count;
@@ -70,7 +78,7 @@ export function MeetLobby() {
           className="flex min-w-0 flex-col gap-3 lg:border-s lg:border-line lg:ps-10"
           onSubmit={(e) => {
             e.preventDefault();
-            join();
+            join({ present: presenting });
           }}
         >
           <span aria-hidden className="flex h-12 w-12 items-center justify-center rounded-[14px] bg-selection text-primary">
@@ -126,8 +134,8 @@ export function MeetLobby() {
           ) : (
             <button type="submit" disabled={blocked} aria-busy={busy} className={cx('flex h-12 items-center justify-center gap-2 rounded-[12px] bg-primary text-[15px] font-bold text-white hover:bg-primary-hover', blocked && 'opacity-70')}>
               {busy ? <Icon name="spinner" size={17} className="animate-spin" /> : null}
-              {busy ? t('lobby.joining') : info.is_host ? t('lobby.joinNow') : t('lobby.askToJoin')}
-              {!busy ? <Icon name="arrow-right" size={17} /> : null}
+              {busy ? t('lobby.joining') : presenting && info.is_host ? t('lobby.shareScreen') : info.is_host ? t('lobby.joinNow') : t('lobby.askToJoin')}
+              {!busy ? <Icon name={presenting && info.is_host ? 'screen-share' : 'arrow-right'} size={17} /> : null}
             </button>
           )}
           {!waiting ? (
@@ -140,8 +148,8 @@ export function MeetLobby() {
                   {t('lobby.audioOnly')}
                 </button>
               ) : null}
-              <button type="button" disabled={blocked} onClick={() => join({ present: true })} className="h-10 flex-1 rounded-[10px] border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-subtle disabled:opacity-60">
-                {t('lobby.present')}
+              <button type="button" disabled={blocked} onClick={() => join({ present: !presenting })} className="h-10 flex-1 rounded-[10px] border border-line bg-surface px-3 text-[13px] font-semibold text-ink hover:bg-subtle disabled:opacity-60">
+                {presenting ? t('lobby.joinWithoutSharing') : t('lobby.present')}
               </button>
             </div>
           ) : null}

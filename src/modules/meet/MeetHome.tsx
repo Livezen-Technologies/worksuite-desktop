@@ -22,6 +22,8 @@ import { transferAct, useLocalRecordings, useRecordingDownloads, useTransfers } 
 import { DownloadStatusView } from './RecordingStatus';
 import { InfoTip, RecordingCard, recordingItems, type MainAction, type RecordingItem } from './RecordingCard';
 import { useHomeAction } from './shortcuts';
+import { effectiveShortcuts, prettyAccelerator } from '../../core/commands';
+import { meetHomeWarning } from '@shared/meet-permissions';
 import { byDay, checkMeetingInput, dayHeading, historyJoinable, lengthLabel, meetingMinutes, scheduledMinutes, upcomingJoinable } from './home';
 import { useMeetT, type MKey } from './i18n';
 
@@ -69,6 +71,22 @@ export function MeetHome() {
       const m = await createMeeting({ title: 'Instant meeting' });
       await openMeeting(m.uuid, m.title);
     });
+  /*
+   * Share screen, without a call first (WS-MEET-ENH-01 D01).
+   *
+   * A screen others can see needs a room to be seen in — there is no sharing
+   * without a meeting on the server — so this makes one and carries `present`
+   * through to the pre-join screen, which starts the camera off and offers the
+   * share as its main action. What it is not is a share that happens behind
+   * your back: the pre-join screen still stands between the press and the
+   * picker, which is where somebody checks their microphone and sees who is
+   * already in.
+   */
+  const share = () =>
+    run('new', async () => {
+      const m = await createMeeting({ title: `${me ? `${me.split(' ')[0]}'s` : 'A'} screen` });
+      await openMeeting(m.uuid, m.title, { present: true });
+    });
   const later = () => run('new', async () => setCreated(await createMeeting({ later: true, title: `${me ? `${me.split(' ')[0]}'s` : 'A'} meeting` })));
   const join = async () => {
     const what = checkMeetingInput(code);
@@ -101,12 +119,14 @@ export function MeetHome() {
    * (WS-MEET-ENH-01 D06). The main process cannot start a meeting itself, so
    * it brings this page forward with `?do=…` and the action runs here.
    *
-   * `share` only opens this page: sharing a screen without a meeting is the
-   * Meet home card that D01 adds, and a key that quietly started a meeting to
-   * share from would be a surprise, not a shortcut.
+   * `share` makes a meeting and goes to its pre-join screen with the share
+   * waiting (D01) rather than starting one silently: a key that put a screen
+   * in front of other people with no screen in between would be a surprise,
+   * not a shortcut.
    */
   useHomeAction(query, (action) => {
     if (action === 'new') return instant();
+    if (action === 'share') return share();
     if (action !== 'join-next') return;
 
     const next = (upcoming.data?.meetings ?? []).find((u) => upcomingJoinable(u, Date.now(), liveIds.has(u.uuid)));
@@ -115,8 +135,28 @@ export function MeetHome() {
 
     void openMeeting(next.uuid, next.title);
   });
+  /*
+   * The keys the design prints beside these actions, read from the person's
+   * own shortcuts (D06) rather than drawn as ⌘⇧E: anybody who changed one in
+   * Settings is told what they actually press. `globalKeys` off means the
+   * three held system-wide are not held, so they are not advertised either —
+   * the keys still work while this window has focus, but a hint is a promise.
+   */
+  const keys = effectiveShortcuts(useStore(app, (st) => st.prefs?.shortcuts));
+  const globalKeys = useStore(app, (st) => st.prefs?.meetBehaviour?.globalKeys) !== false;
+  const hint = (id: string): string | undefined => {
+    const pretty = prettyAccelerator(keys[id] ?? '');
+
+    return globalKeys && pretty ? pretty : undefined;
+  };
+  const withKey = (text: string, id: string): string => {
+    const key = hint(id);
+
+    return key ? `${text}  ·  ${key}` : text;
+  };
   const newItems: MenuItem[] = [
-    { label: t('home.startNow'), hint: t('home.startNowHint'), icon: 'video', run: () => void instant() },
+    { label: t('home.startNow'), hint: withKey(t('home.startNowHint'), 'meet-new'), icon: 'video', run: () => void instant() },
+    { label: t('home.shareScreen'), hint: withKey(t('home.shareScreenHint'), 'meet-share-screen'), icon: 'screen-share', run: () => void share() },
     { label: t('home.later'), hint: t('home.laterHint'), icon: 'link', run: () => void later() },
     ...(meetings ? [{ label: t('home.schedule'), hint: canSchedule ? t('home.scheduleHint') : t('home.scheduleNoPermission'), icon: 'calendar', disabled: !canSchedule, run: () => setScheduling(true) }] : []),
   ];
@@ -124,6 +164,7 @@ export function MeetHome() {
   return (
     <div className="h-full overflow-y-auto scroll-thin">
       <main className="mx-auto flex max-w-[1240px] flex-col gap-5 px-5 py-6 text-[13px] sm:px-8 lg:py-7">
+        <SystemWarning onFix={() => navigate('/settings/meet')} />
         <section className="grid items-center gap-6 lg:grid-cols-[minmax(0,1.15fr)_minmax(0,1fr)]">
           <div className="flex min-w-0 flex-col gap-3.5">
             <span className="text-[12px] font-bold tracking-[0.7px] text-teal uppercase">{t('home.eyebrow')}</span>
@@ -179,6 +220,22 @@ export function MeetHome() {
             <button type="button" onClick={() => setChecking(true)} className="flex items-center gap-1.5 self-start rounded-[7px] px-1 py-0.5 text-[13px] font-semibold text-primary hover:underline">
               <Icon name="settings" size={14} /> {t('home.checkDevices')}
             </button>
+            {/* The keys for the three things this page starts (D01), in the
+              * person's own accelerators. Decoration, so hidden from readers
+              * that would otherwise read a key out as if it were a heading. */}
+            {hint('meet-new') || hint('meet-join-next') || hint('meet-share-screen') ? (
+              <span aria-hidden className="flex flex-wrap items-center gap-x-2.5 gap-y-1 self-start font-mono text-[11.5px] text-ink-3">
+                {([['meet-new', t('home.keyNew')], ['meet-join-next', t('home.keyJoinNext')], ['meet-share-screen', t('home.keyShare')]] as const)
+                  .map(([id, what]) => (hint(id) ? `${hint(id)} ${what}` : null))
+                  .filter(Boolean)
+                  .map((line, i) => (
+                    <span key={line} className="flex items-center gap-2.5">
+                      {i > 0 ? <span className="text-line">·</span> : null}
+                      {line}
+                    </span>
+                  ))}
+              </span>
+            ) : null}
           </div>
           <figure className="hidden flex-col items-center gap-2 lg:flex">
             <Illustration />
@@ -209,6 +266,34 @@ export function MeetHome() {
       {created ? <CreatedDialog m={created} host={me} onClose={() => setCreated(null)} /> : null}
       {scheduling ? <ScheduleDialog onClose={() => setScheduling(false)} online /> : null}
       {checking ? <DeviceCheck name={me ?? ''} onClose={() => setChecking(false)} /> : null}
+    </div>
+  );
+}
+
+/**
+ * The amber line the design draws above Meet's home: "Remote control is
+ * limited on this Mac", with the way to fix it (D01).
+ *
+ * It speaks only of a permission the system has actually refused —
+ * `meetHomeWarning` decides which, and says why nothing else qualifies. While
+ * the answer has not arrived there is no banner: a warning that flashed on
+ * every load and then went away would teach people to ignore it.
+ */
+function SystemWarning({ onFix }: { onFix: () => void }) {
+  const q = useQuery({ queryKey: ['meet-permissions'], queryFn: () => call('media:permissions'), refetchOnWindowFocus: true, staleTime: 30_000 });
+  const warning = meetHomeWarning(q.data?.rows ?? []);
+
+  if (!warning) return null;
+
+  return (
+    <div role="status" className="flex flex-wrap items-center gap-x-3 gap-y-2 rounded-[12px] border border-warning/40 bg-warning-bg px-4 py-3">
+      <Icon name="alert" size={16} className="text-warning" />
+      <span className="flex min-w-0 flex-col">
+        <b className="text-[13.5px] text-ink">{warning.title}</b>
+        <span className="text-[12.5px] text-ink-2">{warning.detail}</span>
+      </span>
+      <span className="flex-1" />
+      <Button size="sm" variant="ghost" onClick={onFix}>Fix in Settings</Button>
     </div>
   );
 }

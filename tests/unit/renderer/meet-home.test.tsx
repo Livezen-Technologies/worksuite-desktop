@@ -10,7 +10,7 @@ import type * as CoreApi from '../../../src/core/api';
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn() }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async () => null), on: () => () => undefined, hasDesktop: () => true, errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)), isMac: false, platform: 'linux', registerDropped: vi.fn() }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
-vi.mock('../../../src/core/tab-context', () => ({ useTab: () => ({ navigate: nav, go: nav, query: new URLSearchParams(), path: ['meet'] }), useTabTitle: () => undefined }));
+vi.mock('../../../src/core/tab-context', () => ({ useTab: () => ({ navigate: nav, go: nav, query: tabQuery, path: ['meet'] }), useTabTitle: () => undefined }));
 vi.mock('livekit-client', () => ({
   Room: { getLocalDevices: vi.fn(async (kind: string) => (kind === 'audioinput' ? [{ deviceId: 'mic-2', label: 'USB microphone', kind }] : [])) },
   // No camera or microphone in a test: they never start.
@@ -19,6 +19,8 @@ vi.mock('livekit-client', () => ({
   Track: {},
 }));
 const nav = vi.fn();
+/** The route's own query, so a screen opened with a flag can be drawn as it really is. */
+let tabQuery = new URLSearchParams();
 
 const { ApiError, apiGet, apiPost } = await import('../../../src/core/api');
 const { call } = await import('../../../src/core/bridge');
@@ -34,6 +36,7 @@ const UUID = 'b5d1c8e2-4f7a-4c1e-9a3b-2e6f8d0c1a77';
 
 beforeEach(() => {
   localStorage.clear();
+  tabQuery = new URLSearchParams();
   nav.mockReset();
   vi.mocked(call).mockReset().mockResolvedValue(null as never);
   vi.mocked(apiGet).mockReset();
@@ -117,18 +120,72 @@ const home = () => render(<QueryClientProvider client={new QueryClient({ default
 const hist = (o: Record<string, unknown>) => ({ uuid: UUID, title: 'Weekly team sync', type: 'instant', code: '482119330', started_at: at(-24 * 60), ended_at: at(-24 * 60 + 30), scheduled_at: null, created_at: at(-24 * 60), status: 'ended', in_call: null, is_host: true, host_name: 'Me', people: ['A', 'B', 'C', 'D'], room_id: 12, join_url: `https://meet.worksuite.lk/meet/${UUID}`, recording: false, recording_ready: false, ...o });
 
 describe('Meet Home', () => {
-  it('New meeting offers Start now, a link for later and Schedule in Calendar, and closes with Escape', async () => {
+  it('New meeting offers Start now, Share your screen, a link for later and Schedule in Calendar, and closes with Escape', async () => {
     serve({});
     home();
     fireEvent.click(screen.getByRole('button', { name: /New meeting/ }));
     const menu = screen.getByRole('menu', { name: 'New meeting' });
+    // The two the keys reach (D01) carry the accelerator the person actually
+    // presses; the other two have no key, and are not given a made-up one.
     expect([...menu.querySelectorAll('[role="menuitem"]')].map((b) => b.textContent)).toEqual([
-      'Start nowStart a meeting and invite others.',
+      'Start nowStart a meeting and invite others.  ·  Ctrl+Alt+Shift+N',
+      'Share your screenStart a meeting with just your screen.  ·  Ctrl+Shift+E',
       'Create link for laterGet a meeting link to share.',
       'Schedule in CalendarChoose a time and invite participants.',
     ]);
     fireEvent.keyDown(window, { key: 'Escape' });
     expect(screen.queryByRole('menu')).toBeNull();
+  });
+
+  it('does not advertise keys that are not held (D01)', async () => {
+    // Global keys off in Settings: they still work while this window has
+    // focus, but a hint on the page is a promise about a key held everywhere.
+    app.set({ prefs: { meetBehaviour: { globalKeys: false } } } as never);
+    serve({});
+    home();
+    fireEvent.click(screen.getByRole('button', { name: /New meeting/ }));
+    const menu = screen.getByRole('menu', { name: 'New meeting' });
+
+    expect(menu.textContent).not.toMatch(/Ctrl\+/);
+    expect(screen.queryByText(/join next/)).toBeNull();
+  });
+
+  it('Share your screen makes a meeting and goes to its pre-join screen with the share waiting (D01)', async () => {
+    serve({});
+    vi.mocked(apiPost).mockResolvedValue({ uuid: UUID, title: 'Hasarinda’s screen' } as never);
+    home();
+    fireEvent.click(screen.getByRole('button', { name: /New meeting/ }));
+    fireEvent.click(screen.getByRole('menuitem', { name: /Share your screen/ }));
+
+    await waitFor(() => expect(vi.mocked(call).mock.calls.some(([c]) => c === 'windows:open')).toBe(true));
+
+    const open = vi.mocked(call).mock.calls.find(([c]) => c === 'windows:open')!;
+
+    // `present=1`, not a share started behind the person's back: the pre-join
+    // screen still stands between the press and the picker.
+    expect((open[1] as { route: string }).route).toBe(`/meet/${UUID}?present=1`);
+  });
+
+  it('warns once the system has actually refused something, and points at the one Settings page that fixes it (D01)', async () => {
+    serve({});
+    vi.mocked(call).mockImplementation((async (channel: string) =>
+      channel === 'media:permissions'
+        ? { rows: [{ id: 'accessibility', label: 'Accessibility (remote control)', state: 'denied', detail: '' }] }
+        : null) as never);
+    home();
+
+    await waitFor(() => expect(screen.getByText(/Remote control is limited/)).toBeTruthy());
+
+    fireEvent.click(screen.getByRole('button', { name: 'Fix in Settings' }));
+    expect(nav).toHaveBeenCalledWith('/settings/meet');
+  });
+
+  it('says nothing about permissions it cannot read (D01)', async () => {
+    serve({});
+    home();
+
+    await waitFor(() => expect(screen.getByText('Upcoming meetings')).toBeTruthy());
+    expect(screen.queryByText(/Fix in Settings/)).toBeNull();
   });
 
   it('New meeting: one highlight that follows the pointer and the arrow keys, and one meeting per choice (worksuite-desktop#90)', async () => {
@@ -359,6 +416,29 @@ describe('the pre-join screen', () => {
   it('an audio meeting starts with the camera off', () => {
     lobby({ mode: 'audio' });
     expect(screen.getByRole('button', { name: 'Turn on camera' })).toBeTruthy();
+  });
+
+  it('opened from Share screen, shares as its main action and starts the camera off (D01)', async () => {
+    const join = vi.spyOn(meet, 'join').mockResolvedValue();
+    tabQuery = new URLSearchParams('present=1');
+    lobby();
+
+    // Pressed Share screen: not on camera, and the big button is the share.
+    expect(screen.getByRole('button', { name: 'Turn on camera' })).toBeTruthy();
+
+    fireEvent.click(screen.getByRole('button', { name: /Share screen/ }));
+    await waitFor(() => expect(join).toHaveBeenCalledWith(expect.objectContaining({ present: true, cam: false })));
+
+    // And the way out of it, for somebody who changed their mind on this screen.
+    expect(screen.getByRole('button', { name: 'Join without sharing' })).toBeTruthy();
+    join.mockRestore();
+  });
+
+  it('offers Present, not a share, when it was opened the ordinary way', () => {
+    lobby();
+    expect(screen.getByRole('button', { name: /Join now/ })).toBeTruthy();
+    expect(screen.getByRole('button', { name: 'Present' })).toBeTruthy();
+    expect(screen.queryByRole('button', { name: 'Join without sharing' })).toBeNull();
   });
 });
 
