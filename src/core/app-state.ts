@@ -8,7 +8,7 @@ import { call, hasDesktop, on } from './bridge';
 import { createStore } from './store';
 import { setRegional } from './time';
 import { setLanguage } from './i18n';
-import { updateDockBadge } from './dock-badge';
+import { updateDockBadge, updateTaskbarOverlay } from './dock-badge';
 
 /**
  * Renderer-side mirror of the desktop's state, kept current by main-process
@@ -138,6 +138,15 @@ export async function initAppState(): Promise<void> {
   });
   on<Bootstrap | null>('session:changed', (b) => applyBootstrap(b));
   on<StatusSnapshot>('status:changed', (s) => app.set({ status: s }));
+  if (info.platform === 'windows') {
+    // The taskbar button's overlay with the count (ENH-MAIL-05 MNA-TRY-03): Windows draws no badge count itself.
+    const sync = () => {
+      const s = app.get();
+      void updateTaskbarOverlay(s.status, s.auth?.stage === 'ready', s.prefs?.badgeCount !== false);
+    };
+    sync();
+    app.subscribe(sync);
+  }
   if (info.platform === 'macos') {
     // The Dock badge is painted onto the icon on macOS (see dock-badge); it only repaints when the count changes.
     const sync = () => {

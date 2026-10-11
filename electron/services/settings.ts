@@ -179,6 +179,11 @@ export class SettingsService {
     this.emit();
   }
 
+  /** The organisation's minimum for what any notification shows here, or null without a policy. */
+  policyMinPrivacy(): DesktopPolicy['notification_min_privacy'] | null {
+    return this.policy?.notification_min_privacy ?? null;
+  }
+
   setPolicy(policy: DesktopPolicy | null): void {
     this.policy = policy;
     this.emit();

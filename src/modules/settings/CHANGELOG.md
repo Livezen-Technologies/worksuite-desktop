@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.35.0 — 2026-10-11
+
+- Tray menu: unread per account, sign-in problems, New email, Pause mail alerts (1 hour, until tomorrow 08:00, outside working hours, until I turn them on) (ENH-MAIL-05).
+
 ## 1.34.0 — 2026-10-11
 
 - Settings › Remote control measures the media path when asked: whether UDP leaves this network and whether the relay answers, gathered from the STUN and TURN servers this server hands out (RC09).

@@ -67,17 +67,62 @@ export async function paint(label: string): Promise<string> {
   return canvas.toDataURL('image/png');
 }
 
+/** The count on the icon: what needs you, and the included inboxes' unread mail (ENH-MAIL-05 MNA-TRY-03). */
+export function badgeCount(u: StatusSnapshot['unread']): number {
+  return attentionCount(u.chat + (u.webchat ?? 0) + (u.ringing ?? 0), u.notifications, u.support ?? 0, u.supportNotices ?? 0, u.mailBadge ?? 0, u.mailNotices ?? 0);
+}
+
 /** Called with every status push; repaints only when the label changes. */
 export async function updateDockBadge(status: StatusSnapshot | null, signedIn: boolean, enabled = true): Promise<void> {
   const u = status?.unread;
   // Visitors waiting on me in my website chats count with chat (worksuite-desktop#230), and so do chats ringing for me
   // until joined or silenced — the "1" on the Dock icon under the call window (R-05, R-06; RING-44).
-  const label = signedIn && u && enabled ? badgeLabel(attentionCount(u.chat + (u.webchat ?? 0) + (u.ringing ?? 0), u.notifications, u.support ?? 0, u.supportNotices ?? 0)) : '';
+  const label = signedIn && u && enabled ? badgeLabel(badgeCount(u)) : '';
   if (label === shown) return;
   shown = label;
   try {
     await call('app:setDockIcon', { png: await paint(label) });
   } catch {
     shown = null; // try again with the next push
+  }
+}
+
+/** The Windows taskbar's overlay: a small red badge with the count (Windows has no badge count of its own). */
+export async function paintOverlay(label: string): Promise<string> {
+  const size = 32;
+  const canvas = document.createElement('canvas');
+  canvas.width = size;
+  canvas.height = size;
+  const g = canvas.getContext('2d');
+  if (!g) throw new Error('no 2d context');
+  g.fillStyle = '#D92D20';
+  g.beginPath();
+  g.arc(size / 2, size / 2, size / 2, 0, Math.PI * 2);
+  g.fill();
+  g.fillStyle = '#FFFFFF';
+  g.font = `700 ${label.length > 2 ? 13 : 18}px "Segoe UI", sans-serif`;
+  g.textAlign = 'center';
+  g.textBaseline = 'middle';
+  g.fillText(label, size / 2, size / 2 + 1);
+  return canvas.toDataURL('image/png');
+}
+
+let overlay: string | null = null;
+
+/**
+ * Windows: the taskbar button's overlay icon with the unread count (MNA-TRY-03), and its description — "WorkSuite —
+ * 6 unread emails" — for screen readers. Repaints only when the count changes; none clears it.
+ */
+export async function updateTaskbarOverlay(status: StatusSnapshot | null, signedIn: boolean, enabled = true): Promise<void> {
+  const u = status?.unread;
+  const label = signedIn && u && enabled ? badgeLabel(badgeCount(u)) : '';
+  if (label === overlay) return;
+  overlay = label;
+  const mail = u?.mailBadge ?? 0;
+  const description = !label ? 'WorkSuite' : mail > 0 ? `WorkSuite — ${mail === 1 ? '1 unread email' : `${mail} unread emails`}` : `WorkSuite — ${label} unread`;
+  try {
+    await call('app:setOverlayIcon', { png: label ? await paintOverlay(label) : null, description });
+  } catch {
+    overlay = null;
   }
 }

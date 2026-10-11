@@ -21,6 +21,7 @@ import type { HttpClient } from '../services/http';
 import type { LockService } from '../services/lock';
 import type { LockPin } from '../services/lock-pin';
 import type { NotificationService } from '../services/notifications';
+import type { MailAlertService } from '../services/mail-alerts';
 import type { OfflineCache } from '../services/offline-cache';
 import type { OfflineQueue } from '../services/offline-queue';
 import type { SecureStore } from '../services/secure-store';
@@ -87,6 +88,8 @@ export interface AppContext {
   session: SessionController;
   realtime: RealtimeService;
   notifications: NotificationService;
+  /** New-mail alerts (ENH-MAIL-05): native, in-app, the tray's mail lines, the pause and the badge's mail. */
+  mailAlerts: MailAlertService;
   cache: OfflineCache;
   /** "Download message bodies": Mail's bodies fetched ahead into the offline cache (#190). */
   mailBodies?: MailBodies;

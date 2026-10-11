@@ -57,14 +57,17 @@ export function trayTooltip(s: {
 
 /**
  * The count on the tray, the taskbar and the Dock: unread chat and unread
- * notifications — the two red counts on the title bar. Mail is not in it: its
- * count is every unread message in every inbox the person can open, shared
- * mailboxes included, which the sidebar shows as information.
+ * notifications — the two red counts on the title bar — and, with new-mail
+ * alerts (ENH-MAIL-05 MNA-TRY-03), the unread of the inboxes included in All
+ * Accounts only: not every inbox the person can open, so a busy shared inbox
+ * left out of All Accounts never puts "99+" on the icon.
  */
-export function attentionCount(chat: number, notifications: number, support = 0, supportNotices = 0): number {
+export function attentionCount(chat: number, notifications: number, support = 0, supportNotices = 0, mail = 0, mailNotices = 0): number {
   // Support tickets count by the desk's own measure (unread or newly assigned, FR-DSK-04): their notifications in the
-  // bell are not counted again.
-  return Math.max(0, chat || 0) + Math.max(0, (notifications || 0) - Math.max(0, supportNotices || 0)) + Math.max(0, support || 0);
+  // bell are not counted again. So does mail (ENH-MAIL-05 MNA-TRY-03): the included inboxes' unread, and not the bell's
+  // "New email" entries as well.
+  const bell = Math.max(0, (notifications || 0) - Math.max(0, supportNotices || 0) - (mail > 0 ? Math.max(0, mailNotices || 0) : 0));
+  return Math.max(0, chat || 0) + bell + Math.max(0, support || 0) + Math.max(0, mail || 0);
 }
 
 /** OS offline evidence is separate from failure to reach the configured server. */

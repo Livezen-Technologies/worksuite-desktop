@@ -72,6 +72,8 @@ import { installProcessGuards } from './process-guards';
 import { LockService } from '../services/lock';
 import { LockPin } from '../services/lock-pin';
 import { NotificationService, inDnd } from '../services/notifications';
+import { MailAlertService } from '../services/mail-alerts';
+import { previewOfPrivacy } from '@shared/mail-alerts';
 import { SupportNotices } from '../services/support-notices';
 import { SupportDesk } from '../services/support-desk';
 import { SupportUrgent } from '../services/support-urgent';
@@ -470,6 +472,54 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const notifications = new NotificationService(db, getVault, http, () => settings.effective());
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
+  // New-mail alerts (ENH-MAIL-05): one per message on this computer — the row's "New" in Mail, the in-app card while
+  // WorkSuite is in front, the system's notification while it is not — and the tray's mail lines, pause and badge.
+  const mailAlerts = new MailAlertService(http, {
+    prefs: () => settings.effective(),
+    userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
+    deviceId: () => device.installId(),
+    appVersion: () => app.getVersion(),
+    window: () => {
+      const w = windows.getMain();
+      // Behind the lock nothing is "in front": a new email is the system's notification, with nothing of it shown.
+      const visible = !!w && !w.isDestroyed() && w.isVisible() && !w.isMinimized() && !lock.isLocked();
+      return { visible, focused: visible && !!w?.isFocused() };
+    },
+    osDnd: () => systemFocus.active(),
+    appQuiet: () => {
+      const p = settings.effective();
+      return (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null;
+    },
+    locked: () => lock.isLocked(),
+    sharing: () => screenShare.isSharing(),
+    mailAllowed: () => notificationAllowed({ module: 'mail', link: '/mail' }, sessionCtl.visibleApps()),
+    policyMinPreview: () => {
+      const min = settings.policyMinPrivacy();
+      return min ? previewOfPrivacy(min) : null;
+    },
+    send: (channel, payload) => sendTo(windows.getMain(), channel, payload),
+    open: (route) => notifications.onClick(route, 'mail'),
+    submit: (input) => {
+      const me = sessionCtl.userId();
+      return me ? queue.submit(me, input) : Promise.resolve({ delivered: false, queued: false, id: null, status: null, data: null, error: 'You are signed out.', code: 'NOT_SIGNED_IN' });
+    },
+    saveDraft: (context, content) => {
+      const me = sessionCtl.userId();
+      if (me) queue.saveDraft(me, 'mail', context, content);
+    },
+    savePause: (uid, pause) => {
+      const all = { ...(settings.raw().mailAlertPause ?? {}) };
+      if (pause) all[uid] = pause;
+      else delete all[uid];
+      settings.update({ mailAlertPause: all });
+    },
+    accept: (a) => notifications.mailAccept(a),
+    changed: () => {
+      emitStatus();
+      sendTo(windows.getMain(), 'mail-alert:state', mailAlerts.state());
+    },
+  });
+  notifications.mailArrivals = (rows, quiet) => mailAlerts.ingestListed(rows, quiet);
   // SalonMate's front desk, while WorkSuite is out of reach: the day's copy and the outbox.
   const salonSync = new SalonSync({
     db,
@@ -1396,7 +1446,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     tray: (t) => tray.update({ projectTimer: t }),
   });
-  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n);
+  // A new email's bell entry is the new-mail alerts' to show (ENH-MAIL-05): never a plain banner as well.
+  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n) || mailAlerts.claim(n);
   notifications.onRefresh = () => void supportNotices.refreshBadges();
 
   // ── status ─────────────────────────────────────────────────────────────
@@ -1411,7 +1462,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const support = supportNotices.count();
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
-    const counts = { ...raw, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: canOpenApp('mail', visible) ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0 };
+    const hasMail = canOpenApp('mail', visible);
+    const counts = { ...raw, mailBadge: hasMail ? mailAlerts.unread() : 0, mailNotices: hasMail ? raw.mailNotices : 0, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: hasMail ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -1422,6 +1474,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() + projects.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
+      mailAlertsPaused: hasMail ? (mailAlerts.state().pauseLabel ?? null) : null,
       notificationsSupported: notifications.supported(),
       services,
       locked: lock.isLocked(),
@@ -1450,6 +1503,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         unreadSupportNotices: s.unread.supportNotices ?? 0,
         badge: settings.effective().badgeCount !== false,
         notificationsPausedUntil: s.notificationsPausedUntil,
+        mailBadge: s.unread.mailBadge ?? 0,
+        mailNotices: s.unread.mailNotices ?? 0,
+        mail: trayMail(),
       });
     }, 300);
   }
@@ -1467,8 +1523,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (scope && !scope.uuid && scope.kind !== 'chat-mini' && win) scope.uuid = calls.list().find(c => c.windowId === win.id && c.kind === 'call')?.uuid ?? null;
     return scope;
   }
+  // Mail's lines in the tray (D28): accounts, the pause and its choices.
+  const trayMail = () => {
+    const m = mailAlerts.state();
+    return { accounts: m.accounts, unread: m.unread, paused: m.paused, pauseLabel: m.pauseLabel, pauseSet: !!m.pause, choices: m.pauseChoices, hoursNote: m.hoursNote };
+  };
   realtime.onEvent = (e) => {
     notifications.handleRealtime(e);
+    mailAlerts.handleRealtime(e);
     supportNotices.handle(e);
     supportDesk.handle(e);
     supportUrgent.handle(e);
@@ -1495,6 +1557,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void notifications.refreshList(true);
     void notifications.catchUpChat();
     void notifications.refreshCounts();
+    // New mail the push missed (ENH-MAIL-05): from the server's recent alerts, each still once.
+    void mailAlerts.catchUp();
   };
   notifications.onChanged = () => {
     emitStatus();
@@ -1661,6 +1725,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       notifications.pause(m);
       emitStatus();
     },
+    mailPause: (mode) => void mailAlerts.pause(mode),
     openSettings: () => navigate({ route: '/settings', source: 'tray' }),
     checkUpdates: () => {
       if (updater.get().state === 'STAGED') void updater.install(false).then((r) => !r.started && navigate({ route: '/settings/updates', source: 'tray' }));
@@ -2324,6 +2389,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     setExternalAllowList([new URL(auth.getServer()!.origin).hostname]);
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
+    mailAlerts.start();
     supportNotices.start();
     supportDesk.start();
     supportUrgent.start();
@@ -2411,6 +2477,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     phone.reset();
     realtime.stop();
     notifications.stop();
+    mailAlerts.stop();
     supportNotices.stop();
     supportDesk.stop();
     supportUrgent.stop();
@@ -2836,6 +2903,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     session: sessionCtl,
     realtime,
     notifications,
+    mailAlerts,
     cache,
     mailBodies,
     mailMedia,

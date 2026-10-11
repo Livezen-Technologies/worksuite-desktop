@@ -4,6 +4,7 @@ import { localeForLanguage, localize, normalizeLanguage } from '@shared/localiza
 import { meetingNoticeActions, type MeetingNoticeActions } from '@shared/meeting-invitations';
 import { inDnd } from '@shared/notification-block';
 import { mailAlertFor, type FocusContext } from '@shared/mail-focus';
+import { BULK_JUMP, listedArrival, type MailArrival } from '@shared/mail-alerts';
 import { socialNoticeActions, type SocialNotice } from '@shared/social-notices';
 import { reminderAction } from '@shared/task-reminders';
 import { returningWords, returnVisitOf } from '@shared/website-returning';
@@ -384,6 +385,14 @@ export class NotificationService {
    * measure (`GET badges`), so these are not counted twice (FR-DSK-04).
    */
   private supportUnread = new Set<string>();
+  /** The unread bell entries about new mail: the badge counts mail by its inboxes, so these are not counted twice. */
+  private mailUnread = new Set<string>();
+  /**
+   * New-mail alerts (ENH-MAIL-05), when main has them: new mail found by the count going up goes there, as the rows
+   * the list shows — the same path as the server's push, so a message found both ways alerts once. `quiet`: a jump
+   * the size of an import or a re-sync, remembered and never alerted.
+   */
+  mailArrivals: ((rows: Array<Record<string, unknown>>, quiet: boolean) => void) | null = null;
 
   constructor(
     private readonly db: Database,
@@ -435,11 +444,12 @@ export class NotificationService {
     this.lastMailCount = null;
     this.unread = { mail: 0, chat: 0, notifications: 0, tasks: 0 };
     this.supportUnread.clear();
+    this.mailUnread.clear();
     this.gapSince = null;
   }
 
   counts() {
-    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length, supportNotices: this.supportUnread.size };
+    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length, supportNotices: this.supportUnread.size, mailNotices: this.mailUnread.size };
   }
 
   /**
@@ -515,6 +525,10 @@ export class NotificationService {
       this.lastMailCount = count;
       this.unread.mail = count;
       this.onChanged();
+      if (this.mailArrivals) {
+        if (!first && before !== null && count > before) await this.listNewMail(count - before);
+        return;
+      }
       if (!first && before !== null && count > before) {
         const n = count - before;
         let sender: string | null = null;
@@ -565,6 +579,31 @@ export class NotificationService {
     }
   }
 
+  /** The newest unread in the included inboxes, after the count went up by `n`: to the new-mail alerts. */
+  private async listNewMail(n: number): Promise<void> {
+    try {
+      const list = await this.http.get<{ messages?: Array<Record<string, unknown>> }>('/api/mail/messages', { query: { unified: 1, folder: 'inbox', per_page: Math.min(10, n) } });
+      const rows = (list.messages ?? []).map((x) => listedArrival(x)).filter((x): x is Record<string, unknown> => x !== null);
+      this.mailArrivals?.(rows, n > BULK_JUMP);
+    } catch (e) {
+      log.debug('new mail could not be listed', { code: isDesktopError(e) ? e.code : String(e) });
+    }
+  }
+
+  /**
+   * Whether one new message may alert here (DMO-NTF-02: every message, Focused only, VIPs only or none), and whether a
+   * VIP's may break quiet hours (DMO-NTF-03) — for the new-mail alerts, as the older banner decided it.
+   */
+  async mailAccept(a: Pick<MailArrival, 'fromAddr'>): Promise<{ alert: boolean; breakthrough: boolean }> {
+    const p = this.prefs();
+    const mode = p.mailAlerts ?? 'all';
+    if (mode === 'none') return { alert: false, breakthrough: false };
+    const ctx = mode !== 'all' || p.mailVipBreakthrough ? await this.focusContext() : null;
+    const from = (a.fromAddr ?? '').toLowerCase();
+    if (!mailAlertFor({ from_email: from }, mode, ctx)) return { alert: false, breakthrough: false };
+    return { alert: true, breakthrough: !!p.mailVipBreakthrough && !!ctx?.vips.includes(from) };
+  }
+
   /**
    * The list from the server. With `announce`, an unread one this app has not shown yet, from the last few minutes,
    * pops up as it would have from the realtime push: the push is the fast way, this is the one that does not miss.
@@ -577,6 +616,7 @@ export class NotificationService {
       const items = raw.map(mapServerNotification);
       this.unread.notifications = Number(data.unread ?? items.filter((i) => !i.read).length);
       this.supportUnread = new Set(items.filter((i) => !i.read && i.module === 'support').map((i) => i.id));
+      this.mailUnread = new Set(items.filter((i) => !i.read && i.module === 'mail').map((i) => i.id));
       this.cache(items);
       if (announce && this.listed) {
         const since = Date.now() - MISSED_WINDOW_MS;
@@ -640,7 +680,10 @@ export class NotificationService {
   async markRead(allIds: string[]): Promise<void> {
     this.markLocalRead(allIds.filter((id) => id.startsWith('local:')));
     const ids = allIds.filter((id) => !id.startsWith('local:'));
-    for (const id of ids) this.supportUnread.delete(id);
+    for (const id of ids) {
+      this.supportUnread.delete(id);
+      this.mailUnread.delete(id);
+    }
     await Promise.allSettled(ids.map((id) => this.http.post(`/api/notifications/${encodeURIComponent(id)}/read`)));
     if (this.userId) for (const id of ids) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ? AND id = ?', this.userId, id);
     for (const id of ids) this.closeNative(this.live.get(id));
@@ -650,6 +693,7 @@ export class NotificationService {
   async markAllRead(): Promise<void> {
     this.markLocalRead('all');
     this.supportUnread.clear();
+    this.mailUnread.clear();
     await this.http.post('/api/notifications/read-all');
     if (this.userId) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ?', this.userId);
     for (const n of this.live.values()) this.closeNative(n);
@@ -692,6 +736,7 @@ export class NotificationService {
         const link = typeof e.link === 'string' ? e.link : null;
         const category = typeof e.category === 'string' ? e.category : null;
         if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
+        if (moduleOf({ category, link }) === 'mail' || e.event === 'mail.received') this.mailUnread.add(id);
         // Shown its module's way (Support's banners): remembered, so the list does not show it again.
         if (!this.shown.includes(id) && this.claim({ id, event: typeof e.event === 'string' ? e.event : null, title: String(e.title ?? 'Notification'), body: String(e.body ?? ''), link, category, priority: typeof e.priority === 'string' ? e.priority : null })) {
           this.remember(id);
