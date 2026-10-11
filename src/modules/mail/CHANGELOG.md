@@ -8,7 +8,7 @@ the root CHANGELOG.md.
 
 **Fixed**
 
-- compact Helpdesk editor variant and local HEIC conversion for inline images.
+- compact Helpdesk editor variant and CSP-compatible local HEIC conversion for inline images.
 
 ## 1.30.0 — 2026-10-11
 

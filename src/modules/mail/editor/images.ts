@@ -239,13 +239,13 @@ export interface Prepared {
  */
 export async function prepareImage(file: Blob, maxBytes = IMAGE_MAX_BYTES, maxWidth = IMAGE_MAX_WIDTH): Promise<Prepared> {
   if (/^image\/(heic|heif)$/i.test(file.type) || ('name' in file && /\.(heic|heif)$/i.test(String(file.name)))) {
-    const convert = (await import('heic2any')).default;
-    const jpeg = await convert({
+    const { heicTo } = await import('heic-to/csp');
+    const jpeg = await heicTo({
       blob: file,
-      toType: 'image/jpeg',
+      type: 'image/jpeg',
       quality: 0.85,
     });
-    file = Array.isArray(jpeg) ? jpeg[0]! : jpeg;
+    file = jpeg;
   }
   const img = await load(file);
   try {
