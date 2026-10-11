@@ -26,6 +26,8 @@ import { OrgSwitcher } from '../app/overlays/OrgSwitcher';
 import { switchOrganization } from '../core/orgs';
 import { ClockPopover } from '../app/overlays/ClockPopover';
 import { ItemLinkDialog } from '../app/overlays/ItemLinkDialog';
+import { AccessRequestDialog } from '../app/overlays/AccessRequestDialog';
+import { closeAccessRequest } from '../core/access-request';
 import { closeItemDialog, openItemLink } from '../core/item-links';
 import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner, UpdatePopover } from '../app/screens/UpdateScreens';
@@ -352,6 +354,9 @@ export function Shell() {
       </PanelBoundary>
       <PanelBoundary name="This link" onClose={closeItemDialog} floating>
         <ItemLinkDialog />
+      </PanelBoundary>
+      <PanelBoundary name="Ask for access" onClose={closeAccessRequest} floating>
+        <AccessRequestDialog />
       </PanelBoundary>
     </div>
   );

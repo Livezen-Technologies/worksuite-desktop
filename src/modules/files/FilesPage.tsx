@@ -10,7 +10,7 @@ import { toast } from '../../core/toasts';
 import { useNow } from '../calls/parts';
 import type { ModuleProps } from '../registry';
 import { ALL_VIEWS, TITLES, TONE, can, kindOf, openWay, pathTo, splitKeys, tree as loadTree, type DriveFile, type DriveFolder, type Key, type TreeNode, type View } from './api';
-import { DriveCtx, type Drive, type Item } from './ctx';
+import { DriveCtx, keyOf, type Drive, type Item } from './ctx';
 import { ArchiveDialog, ConfirmDialog, FolderPicker, LinkDialog, LockDialog, NameDialog, SecureLinkDialog, SendToChatDialog } from './Dialogs';
 import { Explorer } from './Explorer';
 import { Home } from './Home';
@@ -76,6 +76,22 @@ function placeFrom(q: URLSearchParams): Place {
   return { view: v && ALL_VIEWS.includes(v) ? v : 'home', folder: null };
 }
 
+/** What a list or the rail said about what it dragged: each key's name and the folder it was in. */
+export function dragAbout(raw: string): Map<Key, { name?: string; parent?: number | null }> {
+  const out = new Map<Key, { name?: string; parent?: number | null }>();
+  if (!raw) return out;
+  try {
+    const v = JSON.parse(raw) as Record<string, { name?: unknown; parent?: unknown }>;
+    for (const [k, x] of Object.entries(v)) {
+      if (!/^[fd]:\d+$/.test(k) || !x || typeof x !== 'object') continue;
+      out.set(k as Key, { name: typeof x.name === 'string' ? x.name : undefined, parent: typeof x.parent === 'number' ? x.parent : x.parent === null ? null : undefined });
+    }
+  } catch {
+    /* not ours */
+  }
+  return out;
+}
+
 function nameIn(nodes: TreeNode[], id: number): string | null {
   for (const n of nodes) {
     if (n.id === id) return n.name;
@@ -94,7 +110,7 @@ function nameIn(nodes: TreeNode[], id: number): string | null {
  */
 export default function FilesPage(_props: ModuleProps) {
   const qc = useQueryClient();
-  const { query, go, navigate, active } = useTab();
+  const { query, go, navigate, active, openInNewTab, openInWindow } = useTab();
   const place = placeFrom(query);
   const [dialog, setDialog] = useState<Dialog | null>(null);
   const [preview, setPreview] = useState<{ files: DriveFile[]; index: number } | null>(null);
@@ -151,11 +167,11 @@ export default function FilesPage(_props: ModuleProps) {
     }
   };
 
-  const uploadFolder = async () => {
+  const uploadFolder = async (folder: number | null = folderId) => {
     try {
       const picked = await call('files:pickFolder', { title: 'Upload a folder to WorkSuite Files' });
       if (!picked.length) return;
-      await call('transfers:upload', { handles: picked.map((p) => p.handle), target: { kind: 'files', folderId: folderId === null ? null : String(folderId) } });
+      await call('transfers:upload', { handles: picked.map((p) => p.handle), target: { kind: 'files', folderId: folder === null ? null : String(folder) } });
       const top = picked[0]?.relativePath?.split('/')[0] ?? 'the folder';
       toast('info', `Uploading “${top}” — ${picked.length} ${picked.length === 1 ? 'file' : 'files'}, in their folders.`);
     } catch (e) {
@@ -208,21 +224,46 @@ export default function FilesPage(_props: ModuleProps) {
     else toast('info', 'Nothing was uploaded.');
   };
 
-  const moveTo = (items: Item[], folder: number | null, name: string, mode: 'move' | 'copy') =>
+  /** Where an item is now: what Undo moves it back to. */
+  const parentOf = (i: Item): number | null | undefined => (i.type === 'file' ? i.f.folder_id : i.f.parent_id);
+  const placeTo = (i: Item, folder: number | null) => (i.type === 'file' ? apiPut(`/api/files/${i.f.id}`, { folder_id: folder }) : apiPost(`/api/drive/folders/${i.f.id}/move`, { parent_id: folder }));
+
+  /**
+   * Moves or copies, one at a time. A move says Undo (worksuite-desktop#328), which puts each item back where it was —
+   * from `from` when the caller knows (a drag from the rail or a list), else from the row itself.
+   */
+  const moveTo = (items: Item[], folder: number | null, name: string, mode: 'move' | 'copy', from?: ReadonlyMap<Key, number | null>) =>
     void run(async () => {
-      let done = 0;
+      const moved: Array<{ item: Item; back: number | null | undefined }> = [];
       const failed: string[] = [];
       for (const i of items) {
+        const back = from?.has(keyOf(i)) ? from.get(keyOf(i)) : parentOf(i);
         try {
           if (mode === 'copy' && i.type === 'file') await apiPost(`/api/files/${i.f.id}/copy`, { folder_id: folder });
-          else if (i.type === 'file') await apiPut(`/api/files/${i.f.id}`, { folder_id: folder });
-          else await apiPost(`/api/drive/folders/${i.f.id}/move`, { parent_id: folder });
-          done++;
+          else if (mode === 'copy') await apiPost(`/api/folders/${i.f.id}/copy`, { parent_id: folder });
+          else await placeTo(i, folder);
+          moved.push({ item: i, back });
         } catch (e) {
           failed.push(`${i.f.name}: ${errorMessage(e)}`);
         }
       }
-      if (done) toast('success', `${mode === 'move' ? 'Moved' : 'Copied'} ${done} ${done === 1 ? 'item' : 'items'} to ${name}`);
+      const done = moved.length;
+      // Undo only when it is known where every one of them was.
+      const undo = mode === 'move' && done > 0 && moved.every((m) => m.back !== undefined);
+      if (done)
+        toast(
+          'success',
+          `${mode === 'move' ? 'Moved' : 'Copied'} ${done === 1 ? `“${moved[0]!.item.f.name}”` : `${done} items`} to ${name}`,
+          undo
+            ? {
+                label: 'Undo',
+                run: () =>
+                  void run(async () => {
+                    for (const m of moved) await placeTo(m.item, m.back ?? null);
+                  }, 'Moved back'),
+              }
+            : undefined,
+        );
       if (failed.length) toast('error', failed.slice(0, 2).join(' · ') + (failed.length > 2 ? ` · and ${failed.length - 2} more` : ''));
     });
 
@@ -232,16 +273,26 @@ export default function FilesPage(_props: ModuleProps) {
       const folders = items.filter((i) => i.type === 'folder').map((i) => i.f.id);
       for (const id of files) await apiDelete(`/api/files/${id}`);
       for (const id of folders) await apiDelete(`/api/folders/${id}`);
-      if (files.length && !folders.length) {
-        toast('success', `${files.length === 1 ? `“${items[0]!.f.name}”` : `${files.length} files`} moved to the recycle bin`, {
-          label: 'Undo',
-          run: () =>
-            void run(async () => {
-              for (const id of files) await apiPost(`/api/files/${id}/restore`);
-            }, 'Restored'),
-        });
-      } else toast('success', `${items.length} ${items.length === 1 ? 'item' : 'items'} deleted`);
+      // Folders come back with what went in with them (worksuite-desktop#328), so Undo serves both.
+      toast('success', `${items.length === 1 ? `“${items[0]!.f.name}”` : `${items.length} items`} moved to the recycle bin`, {
+        label: 'Undo',
+        run: () =>
+          void run(async () => {
+            for (const id of folders) await apiPost(`/api/folders/${id}/restore`);
+            for (const id of files) await apiPost(`/api/files/${id}/restore`);
+          }, 'Restored'),
+      });
     });
+
+  /** A rename, with Undo; the reason it failed is thrown, for the field that asked. */
+  const renameTo = async (item: Item, name: string) => {
+    const was = item.f.name;
+    if (name === was) return;
+    const put = (to: string) => (item.type === 'file' ? apiPut(`/api/files/${item.f.id}`, { name: to }) : apiPut(`/api/drive/folders/${item.f.id}`, { name: to }));
+    await put(name);
+    toast('success', `Renamed to “${name}”`, { label: 'Undo', run: () => void run(() => put(was), `Renamed back to “${was}”`) });
+    refresh();
+  };
 
   const d: Drive = {
     folderId,
@@ -311,13 +362,17 @@ export default function FilesPage(_props: ModuleProps) {
       }, `Your browser is downloading “${f.name}” as a zip`),
     trash: (items) => {
       if (!items.length) return;
-      const folders = items.filter((i) => i.type === 'folder');
+      const folders = items.filter((i): i is Extract<Item, { type: 'folder' }> => i.type === 'folder');
       if (folders.length || items.length > 1) {
+        // How much goes with a folder, so nobody bins a full one thinking it empty (worksuite-desktop#328).
+        const inside = folders.reduce((n, f) => n + (f.f.file_count ?? 0), 0);
         setDialog({
           kind: 'confirm',
-          title: items.length === 1 ? `Delete “${items[0]!.f.name}”?` : `Delete ${items.length} items?`,
-          body: folders.length ? 'Files go to the recycle bin for 30 days. A deleted folder can’t be brought back from there.' : 'They go to the recycle bin for 30 days.',
-          action: folders.length ? 'Delete' : 'Move to trash',
+          title: items.length === 1 ? `Move “${items[0]!.f.name}” to the bin?` : `Move ${items.length} items to the bin?`,
+          body: folders.length
+            ? `${inside ? `${inside.toLocaleString()} ${inside === 1 ? 'file' : 'files'} inside ${folders.length === 1 ? 'it' : 'them'} go${inside === 1 ? 'es' : ''} too. ` : `${folders.length === 1 ? 'It is' : 'They are'} empty. `}Files stay in the recycle bin for 30 days, and you can undo this straight away.`
+            : 'They go to the recycle bin for 30 days.',
+          action: 'Move to Bin',
           run: () => trashNow(items),
         });
       } else trashNow(items);
@@ -328,15 +383,11 @@ export default function FilesPage(_props: ModuleProps) {
         title: item.type === 'file' ? 'Rename file' : 'Rename folder',
         initial: item.f.name,
         action: 'Rename',
-        save: async (name) => {
-          if (name === item.f.name) return;
-          if (item.type === 'file') await apiPut(`/api/files/${item.f.id}`, { name });
-          else await apiPut(`/api/drive/folders/${item.f.id}`, { name });
-          toast('success', 'Renamed');
-          refresh();
-        },
+        save: (name) => renameTo(item, name),
       }),
+    renameTo,
     move: (items, mode) => setDialog({ kind: 'pick', items, mode }),
+    moveTo: (items, folder, mode, from) => moveTo(items, folder, folder === null ? 'My Drive' : (nameIn(tree, folder) ?? 'the folder'), mode, from),
     duplicate: (f) => void run(() => apiPost(`/api/files/${f.id}/copy`, { folder_id: f.folder_id }), `Made a copy of “${f.name}”`),
     zip: (files) =>
       setDialog({
@@ -380,28 +431,42 @@ export default function FilesPage(_props: ModuleProps) {
     play: (files, index) => setEditor({ kind: 'media', files, index }),
     inBrowser: (f) => void call('app:openInBrowser', { path: `/files?file=${f.id}` }),
     syncFolder: (f) => go(`/files?view=devices&sync=${f.id}`),
-    newFolder: () =>
+    newFolder: (parent) => {
+      const into = parent === undefined ? folderId : parent;
+      const where = into === null ? null : nameIn(tree, into);
       setDialog({
         kind: 'name',
-        title: 'New folder',
+        title: where ? `New folder in “${where}”` : 'New folder',
         initial: 'Untitled folder',
         action: 'Create',
         save: async (name) => {
-          const r = await apiPost<{ id: number | string }>('/api/folders', { name, parent_id: folderId });
+          const r = await apiPost<{ id: number | string }>('/api/folders', { name, parent_id: into });
           toast('success', `Folder “${name}” created`);
           refresh();
-          askDetails(`d:${Number(r.id)}`);
+          if (into === folderId) askDetails(`d:${Number(r.id)}`);
         },
-      }),
-    upload: () => void upload(),
+      });
+    },
+    upload: (folder) => void upload(undefined, folder === undefined ? folderId : folder),
+    uploadFolder: (folder) => void uploadFolder(folder === undefined ? folderId : folder),
+    newDocument: (type, folder) => void newOffice({ type }, folder),
     drop: (e: DragEvent, folder) => {
       const internal = e.dataTransfer.getData('application/x-ws-drive');
       if (internal) {
         try {
           const keys = (JSON.parse(internal) as Key[]).filter((k) => k !== `d:${folder}`);
           const { files, folders } = splitKeys(keys);
-          const items: Item[] = [...files.map((id) => ({ type: 'file' as const, f: { id, name: `file ${id}` } as DriveFile })), ...folders.map((id) => ({ type: 'folder' as const, f: { id, name: `folder ${id}` } as DriveFolder }))];
-          if (items.length) moveTo(items, folder, folder === null ? 'My Drive' : (nameIn(tree, folder) ?? 'the folder'), 'move');
+          // Names and where each came from, when the list or the rail said (for the toast and Undo).
+          const about = dragAbout(e.dataTransfer.getData('application/x-ws-drive-about'));
+          const label = (k: Key, fallback: string) => about.get(k)?.name ?? (k.startsWith('d:') ? nameIn(tree, Number(k.slice(2))) : null) ?? fallback;
+          const items: Item[] = [
+            ...files.map((id) => ({ type: 'file' as const, f: { id, name: label(`f:${id}`, `file ${id}`), folder_id: about.get(`f:${id}`)?.parent ?? undefined } as DriveFile })),
+            ...folders.map((id) => ({ type: 'folder' as const, f: { id, name: label(`d:${id}`, `folder ${id}`), parent_id: about.get(`d:${id}`)?.parent ?? undefined } as DriveFolder })),
+          ];
+          const from = new Map<Key, number | null>();
+          for (const [k, v] of about) if (v.parent !== undefined) from.set(k, v.parent);
+          // ⌥ (Alt) copies; a plain drop moves (worksuite-desktop#328).
+          if (items.length) moveTo(items, folder, folder === null ? 'My Drive' : (nameIn(tree, folder) ?? 'the folder'), e.altKey ? 'copy' : 'move', from);
         } catch {
           /* not ours */
         }
@@ -411,12 +476,72 @@ export default function FilesPage(_props: ModuleProps) {
       if (dropped.length) void upload(dropped, folder);
     },
     refresh,
+
+    openPlaceIn: (p, where) => {
+      const route = p.view === 'folder' && p.folder ? `/files?folder=${p.folder}` : `/files?view=${p.view}`;
+      const title = `Files · ${p.view === 'folder' && p.folder ? (nameIn(tree, p.folder) ?? 'Folder') : TITLES[p.view]}`;
+      if (where === 'tab') openInNewTab(route, title);
+      else openInWindow(route, title);
+    },
+    setColour: (f, color) => void run(() => apiPut(`/api/drive/folders/${f.id}`, { color: color ?? '' }), color ? `“${f.name}” recoloured` : `“${f.name}” back to the usual colour`),
+    pin: (f, on) => void run(() => apiPost(`/api/drive/folders/${f.id}/pin`, { on }), on ? `“${f.name}” pinned to the top` : `“${f.name}” unpinned`),
+    leave: (f) =>
+      setDialog({
+        kind: 'confirm',
+        title: f.access?.via === 'direct' ? `Leave “${f.name}”?` : `Remove “${f.name}” from your Drive?`,
+        body:
+          f.access?.via === 'direct'
+            ? `It stops being shared with you${f.owner_name ? ` — ${f.owner_name} can share it again` : ''}. Nothing in it is deleted.`
+            : 'It reaches you through a team or role, so it only leaves your lists; the owner’s sharing stays as it is. Nothing in it is deleted.',
+        action: f.access?.via === 'direct' ? 'Leave folder' : 'Remove',
+        run: () =>
+          void run(async () => {
+            const r = await apiPost<{ left: boolean; removed: boolean }>(`/api/drive/folders/${f.id}/leave`, {});
+            toast('success', r.left && !r.removed ? `You left “${f.name}”` : `“${f.name}” removed from your Drive`);
+            if (place.folder === f.id) onPlace({ view: 'shared', folder: null });
+          }),
+      }),
+    keepOffline: (f, on) => {
+      if (on) return go(`/files?view=devices&sync=${f.id}`);
+      const synced = app.get().sync?.folders.find((x) => x.folderId === f.id);
+      if (!synced) return void toast('info', `“${f.name}” is kept on this computer with a folder above it. Stop syncing that one in Sync devices.`);
+      setDialog({
+        kind: 'confirm',
+        title: `Stop keeping “${f.name}” on this computer?`,
+        body: 'The copy here is removed once sync stops. Everything stays in your Drive.',
+        action: 'Stop syncing',
+        run: () => void run(() => call('sync:remove', { id: synced.id }), `“${f.name}” is online only now`),
+      });
+    },
+    reveal: (f) => void call('sync:reveal', { folderId: f.id }).catch((e: unknown) => toast('error', errorMessage(e))),
+    copyLink: (item) => {
+      const origin = app.get().auth?.server?.origin ?? '';
+      const url = `${origin}/files?${item.type === 'file' ? 'file' : 'folder'}=${item.f.id}`;
+      void navigator.clipboard.writeText(url).then(
+        () => toast('success', 'Link copied — people need access to open it'),
+        () => toast('error', 'The link could not be copied'),
+      );
+    },
+    reorder: (ids, into) =>
+      void run(async () => {
+        if (into) await apiPost(`/api/drive/folders/${into.folder.id}/move`, { parent_id: into.parent });
+        await apiPut('/api/drive/folders/order', { ids });
+      }, into ? `Moved “${into.folder.name}” to ${into.parent === null ? 'My Drive' : (nameIn(tree, into.parent) ?? 'the folder')}` : undefined),
+    clearRecent: () => void run(() => apiPost('/api/drive/recent/clear', {}), 'Recent list cleared'),
+    unstarAll: () =>
+      setDialog({
+        kind: 'confirm',
+        title: 'Unstar everything?',
+        body: `${treeQ.data?.counts.starred ? `${treeQ.data.counts.starred.toLocaleString()} starred ${treeQ.data.counts.starred === 1 ? 'item loses its' : 'items lose their'} star. ` : ''}Nothing is deleted.`,
+        action: 'Unstar all',
+        run: () => void run(() => apiPost('/api/drive/starred/clear', {}), 'Stars removed'),
+      }),
   };
 
   /** + New → Document, Spreadsheet, Presentation, or from a template: made by the server and opened for editing (OO-DRV-050). */
-  const newOffice = async (input: { type?: 'document' | 'spreadsheet' | 'presentation'; template_id?: string }) => {
+  const newOffice = async (input: { type?: 'document' | 'spreadsheet' | 'presentation'; template_id?: string }, folder: number | null = folderId) => {
     try {
-      const r = await createDocument({ ...input, folder_id: folderId });
+      const r = await createDocument({ ...input, folder_id: folder });
       toast('success', `“${r.file.name}” created`);
       refresh();
       void openOfficeTab(r.file, 'EDIT');
@@ -428,9 +553,9 @@ export default function FilesPage(_props: ModuleProps) {
   const serverOffice = !officeRouting.legacy;
 
   const newItems: MenuItem[] = [
-    { label: 'New folder', hint: '⇧⌘N', tag: { text: 'DIR', tone: TONE.folder! }, run: d.newFolder },
+    { label: 'New folder', hint: '⇧⌘N', tag: { text: 'DIR', tone: TONE.folder! }, run: () => d.newFolder() },
     { sep: true },
-    { label: 'Upload files…', tag: { text: 'UP', tone: TONE.code! }, run: d.upload },
+    { label: 'Upload files…', tag: { text: 'UP', tone: TONE.code! }, run: () => d.upload() },
     { label: 'Upload folder…', tag: { text: 'UP', tone: TONE.code! }, run: () => void uploadFolder() },
     ...(perms.includes('urls.manage') ? [{ label: 'Download from URL or magnet…', tag: { text: 'URL', tone: TONE.image! }, run: () => setUrlTray(true) }] : []),
     { sep: true },
@@ -534,7 +659,7 @@ export default function FilesPage(_props: ModuleProps) {
             ancestors={ancestors}
             onPlace={(p) => onPlace(p)}
             newItems={newItems}
-            onUpload={d.upload}
+            onUpload={() => d.upload()}
             onDrop={(e, folder) => d.drop(e, folder)}
             canPartners={perms.includes('files.permissions.manage')}
           />

@@ -12,6 +12,8 @@ export type MenuItem =
       danger?: boolean;
       strong?: boolean;
       disabled?: boolean;
+      /** The current choice of several (a stacked menu): a check at the end. */
+      checked?: boolean;
       run: () => void;
       /** A submenu (Open with ▸): opened by hovering, clicking or → instead of `run`. */
       submenu?: MenuItem[];
@@ -123,11 +125,17 @@ export function PopMenu({ at, items, label, onClose, width = 280, head, stacked 
               }}
               className={cx('flex shrink-0 items-start gap-3 rounded-[9px] px-2.5 py-2.5 text-left outline-none focus:bg-selection disabled:opacity-45', m.danger ? 'text-danger' : 'text-ink')}
             >
-              <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px]', m.danger ? 'bg-danger-bg' : 'bg-subtle text-primary')}>{m.icon ? <Icon name={m.icon} size={16} /> : null}</span>
+              {m.icon ? <span className={cx('flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px]', m.danger ? 'bg-danger-bg' : 'bg-subtle text-primary')}><Icon name={m.icon} size={16} /></span> : null}
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="text-[13.5px] leading-[18px] font-semibold">{m.label}</span>
                 {m.hint ? <span className="text-[12px] leading-[16px] text-ink-3">{m.hint}</span> : null}
               </span>
+              {m.checked ? (
+                <>
+                  <Icon name="check" size={16} className="mt-0.5 shrink-0 text-primary" />
+                  <span className="sr-only">(current)</span>
+                </>
+              ) : null}
             </button>
           ) : (
             <button

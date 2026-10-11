@@ -220,6 +220,8 @@ export type AuthStage =
   | 'no-server'
   | 'signed-out'
   | 'mfa'
+  /** A new computer, for somebody without two-factor: the code emailed to them (worksuite-desktop#301). */
+  | 'device-code'
   /** Waiting for a passkey sign-in in the browser to come back through worksuite://auth/callback. */
   | 'passkey'
   | 'registering'
@@ -229,6 +231,63 @@ export type AuthStage =
   | 'blocked'
   | 'revoked';
 
+export type CaptchaProvider = 'turnstile' | 'hcaptcha' | 'recaptcha';
+
+/**
+ * What stands between the sign-in form and the next attempt (worksuite-desktop#301), from the server's answer:
+ * a CAPTCHA to solve first, a wait with its end, or a block. Counted and decided on the server; the app only says so.
+ */
+export type SignInGate =
+  | {
+      kind: 'captcha';
+      email: string;
+      provider: CaptchaProvider | null;
+      /** Solved in the CAPTCHA window; the token waits in the main process for the next attempt. */
+      solved: boolean;
+      message: string;
+    }
+  | {
+      kind: 'restricted';
+      email: string;
+      /** When sign-in opens again (epoch ms). */
+      until: number;
+      /** The whole wait, seconds, when the server said. */
+      total: number | null;
+      failures: number | null;
+      /** Minutes the next failure would wait; 0 when it would block the account. */
+      nextWait: number | null;
+      blockAfter: number | null;
+      message: string;
+    }
+  | {
+      kind: 'blocked';
+      email: string;
+      reference: string | null;
+      failures: number | null;
+      blockedAt: string | null;
+      lastPlace: string | null;
+      lastBrowser: string | null;
+      /** Whether the account's company lets people unblock themselves with an emailed link. */
+      selfUnblock: boolean;
+      linkHours: number | null;
+      message: string;
+    };
+
+/** The emailed-code step for a new computer (worksuite-desktop#301). */
+export interface DeviceCodeStep {
+  /** `sa**li@example.com`. */
+  emailHint: string;
+  /** False when the server could not send the code (it says why in `message`). */
+  sent: boolean;
+  message: string | null;
+  /** When the code (and this step) expires (epoch ms). */
+  expiresAt: number;
+  /** When another code may be asked for (epoch ms). */
+  resendAt: number;
+  /** Wrong codes left before this one is spent. */
+  attemptsLeft: number;
+}
+
 export interface AuthState {
   stage: AuthStage;
   server: ServerInfo | null;
@@ -237,6 +296,12 @@ export interface AuthState {
   message: string | null;
   /** First-run wizard still to be completed for this user on this device. */
   setupPending: boolean;
+  /** A CAPTCHA, a wait or a block before the next sign-in attempt (worksuite-desktop#301). */
+  gate?: SignInGate | null;
+  /** The `device-code` stage's step. */
+  deviceCode?: DeviceCodeStep | null;
+  /** The `mfa` stage on a computer the account has not verified: the code verifies it too. */
+  mfaNewDevice?: boolean;
 }
 
 export interface Preferences {
@@ -904,7 +969,8 @@ export interface Transfer {
   state: TransferState;
   /** Chat upload lifecycle; completion means the attachment message was confirmed. */
   phase?: 'preparing' | 'uploading' | 'processing' | 'waiting' | 'sending';
-  chat?: { roomId: string; clientMessageId: string; caption?: string; voice?: boolean; durationMs?: number; waveform?: number[] };
+  /** `preview`: a voice message's recording on this computer, playable until the server's copy is in — also after a restart (#300). */
+  chat?: { roomId: string; clientMessageId: string; caption?: string; voice?: boolean; durationMs?: number; waveform?: number[]; preview?: string };
   speed: number;
   error: string | null;
   createdAt: string;

@@ -11,6 +11,7 @@ import type { CommandOutcome, DeviceCommand, DeviceService, Directive } from '..
 import type { EnterpriseConfig } from '../services/enterprise';
 import { isPassingFailure, type FetchLike } from '../services/http';
 import { capabilitiesFor, type DeviceCapabilities } from '../services/policy';
+import { isGateError } from '../services/sign-in-gate';
 
 const log = logger('session');
 
@@ -258,7 +259,7 @@ export class SessionController {
     const server: ServerInfo = { ...info, locked: false };
     this.auth.setServer(server);
     this.lastProbe = Date.now();
-    this.set({ stage: 'signed-out', server, message: null });
+    this.set({ stage: 'signed-out', server, message: null, gate: null, deviceCode: null });
     if (info.minimumVersion) this.hooks.minimumVersion(info.minimumVersion);
     return this.get();
   }
@@ -287,22 +288,57 @@ export class SessionController {
     return flight;
   }
 
+  /**
+   * A CAPTCHA, a wait or a block the server answered with (worksuite-desktop#301): shown on the sign-in screen,
+   * with whatever step was under way given up — not thrown, so the screen can draw it.
+   */
+  private gated(e: unknown): AuthState {
+    if (!isGateError(e)) throw e;
+    this.set({ stage: 'signed-out', gate: e.gate, deviceCode: null, mfaNewDevice: false, message: null });
+    return this.get();
+  }
+
   signIn(email: string, password: string): Promise<AuthState> {
     return this.once(async () => {
       if (!this.state.server) throw new DesktopError('NOT_WORKSUITE', 'Choose a WorkSuite server first.');
-      const outcome = await this.auth.signIn(email.trim(), password);
+      let outcome;
+      try {
+        outcome = await this.auth.signIn(email.trim(), password);
+      } catch (e) {
+        if (isGateError(e)) return this.gated(e);
+        // A wrong password after a CAPTCHA was asked for: the server says again whether one is still due.
+        if (this.state.gate) this.set({ gate: null });
+        throw e;
+      }
       if (outcome.kind === 'mfa') {
-        this.set({ stage: 'mfa', message: null });
+        this.set({ stage: 'mfa', message: null, gate: null, deviceCode: null, mfaNewDevice: outcome.newDevice });
         return this.get();
       }
+      if (outcome.kind === 'device-code') {
+        this.set({ stage: 'device-code', message: null, gate: null, deviceCode: outcome.step, mfaNewDevice: false });
+        return this.get();
+      }
+      this.set({ gate: null, deviceCode: null, mfaNewDevice: false });
       await this.afterSignIn(outcome.payload);
       return this.get();
     });
   }
 
-  verifyMfa(code: string): Promise<AuthState> {
+  verifyMfa(code: string, remember = true): Promise<AuthState> {
     return this.once(async () => {
-      const payload = await this.auth.verifyMfa(code);
+      let payload;
+      try {
+        payload = await this.auth.verifyMfa(code, remember);
+      } catch (e) {
+        if (isGateError(e)) return this.gated(e);
+        // Too many codes, or the attempt expired: back to the password, saying why.
+        if (this.state.stage === 'mfa' && !this.auth.hasPendingChallenge()) {
+          this.set({ stage: 'signed-out', message: e instanceof Error ? e.message : null, mfaNewDevice: false });
+          return this.get();
+        }
+        throw e;
+      }
+      this.set({ mfaNewDevice: false });
       await this.afterSignIn(payload);
       return this.get();
     });
@@ -310,7 +346,57 @@ export class SessionController {
 
   cancelMfa(): AuthState {
     this.auth.cancelChallenge();
-    this.set({ stage: 'signed-out', message: null });
+    this.set({ stage: 'signed-out', message: null, deviceCode: null, mfaNewDevice: false });
+    return this.get();
+  }
+
+  /** A new computer's emailed code (worksuite-desktop#301). `remember`: keep this computer as verified. */
+  verifyDevice(code: string, remember: boolean): Promise<AuthState> {
+    return this.once(async () => {
+      let payload;
+      try {
+        payload = await this.auth.verifyDevice(code, remember);
+      } catch (e) {
+        if (isGateError(e)) return this.gated(e);
+        if (!this.auth.hasDeviceChallenge()) {
+          // Expired or spent: a new sign-in sends a new code.
+          this.set({ stage: 'signed-out', deviceCode: null, message: e instanceof Error ? e.message : null });
+          return this.get();
+        }
+        this.set({ deviceCode: this.auth.deviceStep() });
+        throw e;
+      }
+      this.set({ deviceCode: null });
+      await this.afterSignIn(payload);
+      return this.get();
+    });
+  }
+
+  async resendDevice(): Promise<AuthState> {
+    try {
+      const step = await this.auth.resendDevice();
+      this.set({ deviceCode: step });
+    } catch (e) {
+      if (!this.auth.hasDeviceChallenge()) {
+        this.set({ stage: 'signed-out', deviceCode: null, message: e instanceof Error ? e.message : null });
+        return this.get();
+      }
+      throw e;
+    }
+    return this.get();
+  }
+
+  /** The CAPTCHA was solved in its window: the next attempt carries it. */
+  captchaSolved(token: string): AuthState {
+    const gate = this.state.gate;
+    this.auth.setCaptchaToken(token, gate?.email ?? null);
+    if (gate?.kind === 'captcha') this.set({ gate: { ...gate, solved: true } });
+    return this.get();
+  }
+
+  /** Back to the sign-in form from a wait or a block (the server still decides the next attempt). */
+  clearGate(): AuthState {
+    if (this.state.gate) this.set({ gate: null });
     return this.get();
   }
 
@@ -622,6 +708,8 @@ export class SessionController {
       this.device.forget(uid);
     }
     this.auth.forget();
+    // A removed computer is not one anybody verified any more.
+    this.auth.forgetDevices();
     this.bootstrap.setLastUser(null);
     this.boot = null;
     this.set({ stage: 'revoked', user: null, message: reason, setupPending: false });

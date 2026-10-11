@@ -9,7 +9,7 @@ import { Icon } from '../../../components/Icon';
 import { FileBadge } from '../../../components/ui';
 import { CardFrame, Chip, type CardAction } from './CardFrame';
 
-type Level = 'view' | 'edit' | 'full';
+type Level = 'view' | 'comment' | 'edit' | 'full';
 
 /** One item on a share card, as the server worked it out for this reader (ShareCards::card). */
 export interface ShareItem {
@@ -48,7 +48,7 @@ export interface FileShareCardData {
   can_request_edit?: boolean;
 }
 
-export const LEVEL_WORDS: Record<Level, string> = { view: 'Can view', edit: 'Can edit', full: 'Full access' };
+export const LEVEL_WORDS: Record<Level, string> = { view: 'Can view', comment: 'Can comment', edit: 'Can edit', full: 'Full access' };
 
 const plural = (n: number, one: string) => `${n} ${one}${n === 1 ? '' : 's'}`;
 

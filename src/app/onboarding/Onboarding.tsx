@@ -12,6 +12,8 @@ import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
 import { Button, TextField, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
+import { useNow } from '../../core/use-now';
+import { BlockedPanel, CaptchaBox, DeviceCodeStep, gateFor, WaitPanel } from './SignInProtection';
 
 /**
  * Welcome, server selection, sign-in and two-step verification (UI-01,
@@ -47,7 +49,8 @@ export function Onboarding({ auth }: { auth: AuthState }) {
         {!guest ? <>
         {auth.stage === 'no-server' ? <ServerStep /> : null}
         {auth.stage === 'signed-out' || auth.stage === 'expired' ? <SignInStep auth={auth} /> : null}
-        {auth.stage === 'mfa' ? <MfaStep /> : null}
+        {auth.stage === 'mfa' ? <MfaStep newDevice={!!auth.mfaNewDevice} /> : null}
+        {auth.stage === 'device-code' ? <DeviceCodeStep auth={auth} /> : null}
         {auth.stage === 'passkey' ? <PasskeyStep auth={auth} /> : null}
         {auth.stage === 'registering' || auth.stage === 'bootstrapping' ? <Progress stage={auth.stage} /> : null}
         {auth.stage === 'blocked' || auth.stage === 'revoked' ? <Stopped auth={auth} /> : null}
@@ -114,6 +117,14 @@ function SignInStep({ auth }: { auth: AuthState }) {
       setPasskeyBusy(false);
     }
   };
+  // A CAPTCHA, a wait or a block the server answered with, for the address in the form (worksuite-desktop#301).
+  const now = useNow(1000).getTime();
+  const gate = gateFor(auth.gate, email, now);
+  // A wait that has run out is over: the form is back, and the main process forgets it.
+  const waitOver = auth.gate?.kind === 'restricted' && auth.gate.until <= now;
+  useEffect(() => {
+    if (waitOver) void call('auth:clearGate').catch(() => undefined);
+  }, [waitOver]);
   const submit = async () => {
     setBusy(true);
     setError(null);
@@ -121,11 +132,21 @@ function SignInStep({ auth }: { auth: AuthState }) {
       await call('auth:signIn', { email, password });
     } catch (e) {
       setError(errorMessage(e));
-      setPassword('');
     } finally {
+      // A refused attempt never keeps the password: the next one is typed again.
+      setPassword('');
       setBusy(false);
     }
   };
+  const back = () => {
+    setEmail('');
+    setPassword('');
+    setError(null);
+    void call('auth:clearGate').catch(() => undefined);
+  };
+  if (gate?.kind === 'blocked') return <BlockedPanel gate={gate} onBack={back} />;
+  if (gate?.kind === 'restricted') return <WaitPanel gate={gate} onBack={back} />;
+  const captcha = gate?.kind === 'captcha' ? gate : null;
   return (
     <form
       onSubmit={(e) => {
@@ -148,8 +169,9 @@ function SignInStep({ auth }: { auth: AuthState }) {
       </div>
       {auth.message ? <div className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning">{auth.message}</div> : null}
       <TextField label={t('auth.email')} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={!email} />
-      <TextField label={t('auth.password')} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus={!!email} error={error} />
-      <Button variant="primary" size="lg" type="submit" loading={busy} disabled={!email || !password}>
+      <TextField label={t('auth.password')} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus={!!email} error={error ?? (captcha && !captcha.solved ? captcha.message : null)} />
+      {captcha ? <CaptchaBox gate={captcha} /> : null}
+      <Button variant="primary" size="lg" type="submit" loading={busy} disabled={!email || !password || (captcha !== null && !captcha.solved)}>
         {t('auth.signIn')}
       </Button>
       <button type="button" className="text-left text-[12.5px] font-semibold text-primary hover:underline" onClick={() => void call('auth:openPage', { page: 'forgot-password' }).catch((e: unknown) => setError(errorMessage(e)))}>
@@ -226,15 +248,20 @@ function PasskeyStep({ auth }: { auth: AuthState }) {
   );
 }
 
-function MfaStep() {
+/**
+ * Two-factor. On a computer the account has not verified the same code verifies it (worksuite-desktop#301): nobody
+ * with two-factor is asked for an emailed code as well, and the computer can be remembered.
+ */
+function MfaStep({ newDevice }: { newDevice: boolean }) {
   const [code, setCode] = useState('');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [remember, setRemember] = useState(true);
   const submit = async (value = code) => {
     setBusy(true);
     setError(null);
     try {
-      await call('auth:verifyMfa', { code: value.replace(/\s+/g, '') });
+      await call('auth:verifyMfa', { code: value.replace(/\s+/g, ''), ...(newDevice ? { remember } : {}) });
     } catch (e) {
       setError(errorMessage(e));
       setCode('');
@@ -253,6 +280,7 @@ function MfaStep() {
       <div>
         <h1 className="text-[22px] font-bold text-ink">{t('auth.mfaTitle')}</h1>
         <p className="mt-1 text-[13.5px] text-ink-3">{t('auth.mfaHint')}</p>
+        {newDevice ? <p className="mt-2 rounded-[8px] bg-subtle px-3 py-2 text-[12.5px] text-ink-2">This is the first time you’re signing in on this computer: the code verifies it too.</p> : null}
       </div>
       <TextField
         label="Code"
@@ -267,6 +295,12 @@ function MfaStep() {
         error={error}
         className="font-mono"
       />
+      {newDevice ? (
+        <label className="flex cursor-pointer items-center gap-2.5 text-[13px] text-ink-2">
+          <Checkbox checked={remember} onChange={(e) => setRemember(e.target.checked)} />
+          Remember this computer
+        </label>
+      ) : null}
       <Button variant="primary" size="lg" type="submit" loading={busy} disabled={code.length < 6}>
         {t('auth.verify')}
       </Button>

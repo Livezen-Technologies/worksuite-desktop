@@ -110,6 +110,14 @@ describe('the menus follow what the server allows', () => {
     expect(can(null, 'open')).toBe(false);
   });
 
+  it('a folder somebody shared with me is left, not binned for everyone (worksuite-desktop#328)', () => {
+    const f = (owner: boolean, via: string) => ({ id: 2, name: 'HR', is_locked: false, starred: false, access: { level: 'full', owner, via, can_download: true, capabilities: ['open', 'share', 'delete', 'rename', 'move', 'download'] } }) as never;
+    expect(labels(folderMenu(f(true, 'owner'), d))).toEqual(expect.arrayContaining(['Copy to…', 'Move to Bin…']));
+    expect(labels(folderMenu(f(false, 'direct'), d))).toContain('Leave folder');
+    expect(labels(folderMenu(f(false, 'direct'), d))).not.toContain('Move to Bin…');
+    expect(labels(folderMenu(f(false, 'inherited'), d))).toContain('Remove from my Drive');
+  });
+
   it('never starts, ends or doubles a separator', () => {
     const items = fileMenu(file(['open']), d);
     expect('sep' in items[0]!).toBe(false);

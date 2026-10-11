@@ -11,6 +11,7 @@ import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { WhatsappLinkLog } from './WhatsappLinkLog';
+import { VoiceSendTimes } from './VoiceSendTimes';
 
 /**
  * Help → Diagnostics (UI-21, FR-DIAG-01/02, WF-29): live health checks, the
@@ -100,6 +101,9 @@ export default function DiagnosticsPage(_props: ModuleProps) {
 
         {/* Each attempt to link a WhatsApp Web number, for whoever may link them (worksuite-desktop#323). */}
         <WhatsappLinkLog />
+
+        {/* How fast voice messages go from this computer (worksuite-desktop#300). */}
+        <VoiceSendTimes />
       </div>
 
       {preview ? (
