@@ -11,6 +11,13 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.239 — 2026-10-11
+
+- **Mail opens again.** Mail showed "Mail failed to load" when the selected message came from a mailbox outside mail
+  protection: the server answers "no verdict" for it, and the reader read a verdict from that empty answer and
+  crashed. That answer now means no verdict, and the message opens as it did before protection, with no banner and
+  no "Checking". (Mail 1.32.1)
+
 ## 0.2.238 — 2026-10-11
 
 - **One alert, on the right device (#339).** An active desktop gets attention first; an active browser wins when the desktop is idle. Other devices keep their badges without another popup. Viewing the conversation suppresses its alert everywhere.

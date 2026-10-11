@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.32.1 — 2026-10-11
+
+- Mail no longer fails to load when the server has no protection verdict for a message (its empty answer is read as no verdict, the reader as before)
+
 ## 1.32.0 — 2026-10-11
 
 **Added**
