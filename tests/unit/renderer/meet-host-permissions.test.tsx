@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { readFileSync } from 'node:fs';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
@@ -20,7 +21,6 @@ vi.mock('../../../src/core/api', () => {
   return { ApiError, ...api, request: vi.fn() };
 });
 
-import shared from '../../fixtures/meet-permissions.json';
 import { DEFAULT_ROOM_SETTINGS, type MeetInfo } from '../../../src/modules/meet/api';
 import { MEETING_ROLES, PERMISSIONS, can, meetingRoleOf, rowActions } from '../../../src/modules/meet/permissions';
 import { PeoplePanel } from '../../../src/modules/meet/PeoplePanel';
@@ -28,6 +28,9 @@ import { HOST_GONE_MS, isRoleChangedEvent, meet, meetingRoleOfParticipant } from
 import { meetMoreSections } from '../../../src/modules/meet/moreMenu';
 import { featured } from '../../../src/modules/calls/ui/people';
 import type { Participant, Room } from 'livekit-client';
+
+// The server's permission table, byte for byte (app/Modules/Communication/Config/meet-permissions.json).
+const shared = JSON.parse(readFileSync('tests/fixtures/meet-permissions.json', 'utf8')) as { roles: unknown; actions: unknown };
 
 /**
  * Host controls only for the people who may use them (worksuite-desktop#348).
