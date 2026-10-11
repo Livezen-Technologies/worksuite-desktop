@@ -1,6 +1,21 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef, useState, type DragEvent } from 'react';
-import { REWRITE_LABEL, REWRITE_MODES, statusLabel, type Caps, type IdName, type MessageAnswer, type RewriteMode, type ServerDraft, type SupportStatus, type Ticket } from '@shared/support';
+import {
+  REWRITE_LABEL,
+  REWRITE_MODES,
+  statusLabel,
+  fromLegacyMessage,
+  type MessageInput,
+  type Message,
+  type TicketShow,
+  type Caps,
+  type IdName,
+  type MessageAnswer,
+  type RewriteMode,
+  type ServerDraft,
+  type SupportStatus,
+  type Ticket,
+} from '@shared/support';
 import { isMac } from '../../core/bridge';
 import { useDraft } from '../../core/drafts';
 import { text } from '../../core/i18n';
@@ -8,10 +23,13 @@ import { bytes, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
-import { Avatar, Button, FileBadge, IconButton, Kbd, cx } from '../../components/ui';
+import { Avatar, Button, FileBadge, IconButton, Modal, cx } from '../../components/ui';
 import { K, MAX_FILES, MAX_FILE_BYTES, addMessage, agents, aiRewrite, assistError, canned, errorText, newClientId, removeAttachment, renderCanned, saveServerDraft, serverDraft, uploadAttachment } from './api';
+import { MailEditor } from '../mail/editor/MailEditor';
+import { codeBlockHtml, inlineCodeHtml } from '../mail/editor/insert';
+import { cleanReplyHtml, linkReplyUrls, placeRichCaret, replacePickerToken, replyHtml, replyText, richCaret } from './richReply';
 import { AiBadge } from './parts';
-import { mentionQuery, mentionedIds, parseCc, pasteIsFiles, pastedName, slashQuery, spliceText } from './compose';
+import { mentionQuery, mentionedIds, parseCc, pastedName, slashQuery, spliceText } from './compose';
 
 /**
  * The composer (FR-COM-01, D-01's inline reply and D-02's): a reply to the requester or an internal note, as two
@@ -52,6 +70,8 @@ export interface DraftFile {
 
 export interface SupportDraft {
   body: string;
+  html?: string;
+  otherDrafts?: Partial<Record<ComposerMode, Omit<SupportDraft, 'mode' | 'otherDrafts'>>>;
   mode: ComposerMode;
   /** The status the ticket moves to once the message is in; null keeps it. */
   status?: SupportStatus | null;
@@ -88,7 +108,10 @@ export function insertAt(body: string, at: number, text: string): { text: string
 
 /** Whether the person may write each kind here: a note needs notes and reply (§5.2), a reply needs reply. */
 export function composerModes(can: Caps): { reply: boolean; note: boolean } {
-  return { reply: can.reply === true, note: can.reply === true && can.notes === true };
+  return {
+    reply: can.reply === true,
+    note: can.reply === true && can.notes === true,
+  };
 }
 
 /** A file on its way up: kept here (not in the draft) until the server has it. */
@@ -97,12 +120,14 @@ interface Upload {
   file: File;
   name: string;
   preview: string | null;
+  progress?: number;
+  mode: ComposerMode;
   error: string | null;
 }
 
 let uploadSeq = 0;
 
-export function Composer({
+function TicketComposer({
   ticket,
   can,
   compact = false,
@@ -140,16 +165,37 @@ export function Composer({
   const d = draft.value;
   const mode: ComposerMode = d.mode === 'reply' && modes.reply ? 'reply' : modes.note ? 'note' : 'reply';
   const extras = !legacy;
+  const [expanded, setExpanded] = useState(false);
+  const [shortcuts, setShortcuts] = useState(false);
+  const warningAsNote = useRef(false);
+  const [attachmentWarning, setAttachmentWarning] = useState(false);
+  const [scheduleOpen, setScheduleOpen] = useState(false);
+  const [scheduleAt, setScheduleAt] = useState('');
+  const scheduleRequested = useRef<string | undefined>(undefined);
+  const [failed, setFailed] = useState(false);
+  const sendGate = useRef(false);
+  const retrySend = useRef<(input: MessageInput) => void>(() => undefined);
+  useEffect(() => {
+    const retry = (event: Event) => {
+      const detail = (event as CustomEvent<{ ticketId: number; input: MessageInput }>).detail;
+      if (detail?.ticketId === ticket.id) retrySend.current(detail.input);
+    };
+    window.addEventListener('support:retry-message', retry);
+    return () => window.removeEventListener('support:retry-message', retry);
+  }, [ticket.id]);
+  const insertHtml = useRef<((html: string) => void) | null>(null);
+  const [editorBusy, setEditorBusy] = useState(false);
   const [sending, setSending] = useState(false);
   const [caret, setCaret] = useState(0);
   const [pick, setPick] = useState(0);
   const [dismissed, setDismissed] = useState<string | null>(null);
   const [dragging, setDragging] = useState(false);
+  const cancelledUploads = useRef(new Set<string>());
   const [uploads, setUploads] = useState<Upload[]>([]);
   const [previews, setPreviews] = useState<Record<number, string>>({});
   const [ccOpen, setCcOpen] = useState(false);
   const [ccText, setCcText] = useState('');
-  const box = useRef<HTMLTextAreaElement>(null);
+  const box = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const clientId = useRef<string | null>(null);
   const typingSaid = useRef<ComposerMode | null>(null);
@@ -164,22 +210,69 @@ export function Composer({
     draft.setValue(next);
   };
 
+  const switchMode = (nextMode: ComposerMode) => {
+    if (editorBusy) return;
+    const now = latest.current;
+    if (nextMode === now.mode) return;
+    const { mode: oldMode, otherDrafts = {}, ...content } = now;
+    const saved = otherDrafts[nextMode];
+    const remaining = { ...otherDrafts };
+    delete remaining[nextMode];
+    update({
+      body: '',
+      html: '',
+      files: [],
+      cc: [],
+      mentions: [],
+      status: null,
+      ...saved,
+      mode: nextMode,
+      otherDrafts: { ...remaining, [oldMode]: content },
+    });
+    scheduleRequested.current = undefined;
+    setCcText('');
+    clientId.current = null;
+    setRewrite(null);
+    setFailed(false);
+  };
   const files = extras ? (d.files ?? []) : [];
   const ccSaved = extras ? (d.cc ?? []) : [];
   const typed = d.body.trim() !== '';
   const slash = slashQuery(d.body, caret);
   const mention = mode === 'note' && extras ? mentionQuery(d.body, caret) : null;
   const picking = slash && dismissed !== `/${slash.start}` ? 'canned' : mention && dismissed !== `@${mention.start}` ? 'mention' : null;
-  const cannedQ = useQuery({ queryKey: K.canned(slash?.word ?? ''), queryFn: () => canned(slash?.word ?? ''), enabled: picking === 'canned', staleTime: 60_000 });
-  const people = useQuery({ queryKey: K.agents(`ticket:${ticket.id}`), queryFn: () => agents({ ticket_id: ticket.id }), enabled: picking === 'mention', staleTime: 60_000 });
+  const cannedQ = useQuery({
+    queryKey: K.canned(slash?.word ?? ''),
+    queryFn: () => canned(slash?.word ?? ''),
+    enabled: picking === 'canned',
+    staleTime: 60_000,
+  });
+  const people = useQuery({
+    queryKey: K.agents(`ticket:${ticket.id}`),
+    queryFn: () => agents({ ticket_id: ticket.id }),
+    enabled: picking === 'mention',
+    staleTime: 60_000,
+  });
   const choices =
     picking === 'canned'
-      ? (cannedQ.data ?? []).slice(0, 8).map((c) => ({ key: `c${c.id}`, label: c.title, hint: c.shortcut ? `/${c.shortcut}` : c.body.slice(0, 80), canned: c, person: null }))
+      ? (cannedQ.data ?? []).slice(0, 8).map((c) => ({
+          key: `c${c.id}`,
+          label: c.title,
+          hint: c.shortcut ? `/${c.shortcut}` : c.body.slice(0, 80),
+          canned: c,
+          person: null,
+        }))
       : picking === 'mention' && mention
         ? (people.data ?? [])
             .filter((p) => !mention.word || p.name.toLowerCase().includes(mention.word.toLowerCase()))
             .slice(0, 8)
-            .map((p) => ({ key: `p${p.id}`, label: p.name, hint: p.presence === 'available' ? text('Online') : text(p.presence.charAt(0).toUpperCase() + p.presence.slice(1)), canned: null, person: p }))
+            .map((p) => ({
+              key: `p${p.id}`,
+              label: p.name,
+              hint: p.presence === 'available' ? text('Online') : text(p.presence.charAt(0).toUpperCase() + p.presence.slice(1)),
+              canned: null,
+              person: p,
+            }))
         : [];
   const highlighted = Math.min(pick, Math.max(0, choices.length - 1));
   const pickerId = `support-pick-${ticket.id}`;
@@ -188,7 +281,7 @@ export function Composer({
   const startCanned = useRef<() => void>(() => undefined);
   useEffect(() => {
     if (!focusRequest) return;
-    update({ mode: focusRequest.mode });
+    switchMode(focusRequest.mode);
     box.current?.focus();
     if (focusRequest.canned) setTimeout(() => startCanned.current(), 0);
     // Only a new request moves the focus: the draft changing must not.
@@ -200,18 +293,18 @@ export function Composer({
     setTimeout(() => {
       const el = box.current;
       if (!el) return;
-      el.focus();
-      el.setSelectionRange(at, at);
+      placeRichCaret(el, at);
     }, 0);
 
   // The KB & AI panel's text: at the caret, or in place of what is there; the focus comes here to review it.
   useEffect(() => {
     if (!insertRequest) return;
-    const now = latest.current.body;
     const want = insertRequest.mode && (insertRequest.mode === 'reply' ? modes.reply : modes.note) ? insertRequest.mode : undefined;
-    const r = insertRequest.how === 'replace' || !now.trim() ? { text: insertRequest.text, caret: insertRequest.text.length } : insertAt(now, box.current?.selectionStart ?? now.length, insertRequest.text);
+    if (want) switchMode(want);
+    const now = latest.current.body;
+    const r = insertRequest.how === 'replace' || !now.trim() ? { text: insertRequest.text, caret: insertRequest.text.length } : insertAt(now, richCaret(box.current), insertRequest.text);
     clientId.current = null;
-    update({ body: r.text, ...(want ? { mode: want } : {}) });
+    update({ body: r.text, html: replyHtml(r.text) });
     setCaret(r.caret);
     placeCaret(r.caret);
     // Only a new request puts text in.
@@ -247,24 +340,38 @@ export function Composer({
     setOffered(null);
     const here = latest.current;
     if (here.body.trim() || here.files?.length) return;
-    update({ body: offered.body, mode: offered.mode === 'reply' ? 'reply' : 'note', ...(offered.cc?.length ? { cc: offered.cc } : {}) });
+    update({
+      body: offered.body,
+      html: offered.body_html ?? undefined,
+      mode: offered.mode === 'reply' ? 'reply' : 'note',
+      ...(offered.cc?.length ? { cc: offered.cc } : {}),
+    });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [offered, draft.loaded]);
   useEffect(() => {
-    if (legacy || synced.current === null || d.body === synced.current) return;
+    if (legacy || synced.current === null || `${d.body}\0${d.html ?? ''}` === synced.current) return;
     const body = d.body;
     const timer = setTimeout(() => {
-      synced.current = body;
-      void saveServerDraft(ticket.id, { mode, body, cc: mode === 'reply' ? latest.current.cc : undefined }).catch(() => {
+      synced.current = `${body}\0${latest.current.html ?? ''}`;
+      void saveServerDraft(ticket.id, {
+        mode,
+        body,
+        body_html: latest.current.html,
+        cc: mode === 'reply' ? latest.current.cc : undefined,
+      }).catch(() => {
         // Kept on this computer either way; the next change tries again.
         synced.current = null;
       });
     }, SERVER_DRAFT_MS);
     return () => clearTimeout(timer);
-  }, [d.body, mode, legacy, ticket.id]);
+  }, [d.body, d.html, mode, legacy, ticket.id]);
 
   // The writing assistant's suggestion, shown above the text until it replaces it or is set aside.
-  const [rewrite, setRewrite] = useState<{ mode: RewriteMode; phase: 'working' | 'done' | 'error'; text: string } | null>(null);
+  const [rewrite, setRewrite] = useState<{
+    mode: RewriteMode;
+    phase: 'working' | 'done' | 'error';
+    text: string;
+  } | null>(null);
   const runRewrite = (m: RewriteMode) => {
     const body = latest.current.body.trim();
     if (!body) return;
@@ -305,7 +412,7 @@ export function Composer({
 
   const setBody = (body: string, at?: number) => {
     clientId.current = null;
-    update({ body });
+    update({ body, html: replyHtml(body) });
     if (at !== undefined) setCaret(at);
   };
 
@@ -325,22 +432,40 @@ export function Composer({
       }
     } else if (c.person) {
       insert = `@${c.person.name} `;
-      update({ mentions: [...(latest.current.mentions ?? []).filter((m) => m.id !== c.person!.id), { id: c.person.id, name: c.person.name }] });
+      update({
+        mentions: [...(latest.current.mentions ?? []).filter((m) => m.id !== c.person!.id), { id: c.person.id, name: c.person.name }],
+      });
     }
     const now = latest.current.body;
     const there = now.slice(q.start, q.start + token.length) === token;
     const r = there ? spliceText(now, q.start, q.start + token.length, insert) : spliceText(now, now.length, now.length, insert);
-    setBody(r.text, r.caret);
+    const html = replacePickerToken(replyHtml(now, latest.current.html), token, insert);
+    update({ body: replyText(html), html });
+    setCaret(r.caret);
     placeCaret(r.caret);
     setPick(0);
   };
 
-  const upload = async (key: string, f: File, name: string, preview: string | null) => {
+  const upload = async (key: string, f: File, name: string, preview: string | null, uploadMode: ComposerMode) => {
     try {
-      const a = await uploadAttachment(ticket.id, f, name);
+      const a = await uploadAttachment(ticket.id, f, name, (fraction) => setUploads((list) => list.map((item) => (item.key === key ? { ...item, progress: fraction } : item))));
       setUploads((u) => u.filter((x) => x.key !== key));
+      if (cancelledUploads.current.has(key)) {
+        void removeAttachment(a.id).catch(() => undefined);
+        return;
+      }
       if (preview) setPreviews((p) => ({ ...p, [a.id]: preview }));
-      update({ files: [...(latest.current.files ?? []), { id: a.id, name: a.name, size: a.size, mime: a.mime }] });
+      const file = { id: a.id, name: a.name, size: a.size, mime: a.mime };
+      if (latest.current.mode === uploadMode) update({ files: [...(latest.current.files ?? []), file] });
+      else {
+        const saved = latest.current.otherDrafts?.[uploadMode] ?? { body: '' };
+        update({
+          otherDrafts: {
+            ...latest.current.otherDrafts,
+            [uploadMode]: { ...saved, files: [...(saved.files ?? []), file] },
+          },
+        });
+      }
     } catch (e) {
       setUploads((u) => u.map((x) => (x.key === key ? { ...x, error: errorText(e, text('It could not be attached.')) } : x)));
     }
@@ -362,20 +487,23 @@ export function Composer({
       const key = `u${++uploadSeq}`;
       const preview = f.type.startsWith('image/') && typeof URL.createObjectURL === 'function' ? URL.createObjectURL(f) : null;
       if (preview) pictures.current.add(preview);
-      setUploads((u) => [...u, { key, file: f, name, preview, error: null }]);
-      void upload(key, f, name, preview);
+      setUploads((u) => [...u, { key, file: f, name, preview, error: null, mode }]);
+      void upload(key, f, name, preview, mode);
     }
   };
   const retry = (u: Upload) => {
     setUploads((list) => list.map((x) => (x.key === u.key ? { ...x, error: null } : x)));
-    void upload(u.key, u.file, u.name, u.preview);
+    void upload(u.key, u.file, u.name, u.preview, u.mode);
   };
   const dropUpload = (u: Upload) => {
+    cancelledUploads.current.add(u.key);
     forget(u.preview);
     setUploads((list) => list.filter((x) => x.key !== u.key));
   };
   const dropFile = (f: DraftFile) => {
-    update({ files: (latest.current.files ?? []).filter((x) => x.id !== f.id) });
+    update({
+      files: (latest.current.files ?? []).filter((x) => x.id !== f.id),
+    });
     forget(previews[f.id]);
     // Taken back at the server too. One never sent is its uploader's alone either way.
     void removeAttachment(f.id).catch(() => undefined);
@@ -385,9 +513,9 @@ export function Composer({
   startCanned.current = () => {
     const el = box.current;
     const body = latest.current.body;
-    const at = el?.selectionStart ?? body.length;
+    const at = richCaret(el);
     const prefix = at === 0 || body[at - 1] === '\n' ? '/' : '\n/';
-    const r = spliceText(body, at, el?.selectionEnd ?? at, prefix);
+    const r = spliceText(body, at, at, prefix);
     setBody(r.text, r.caret);
     setDismissed(null);
     placeCaret(r.caret);
@@ -403,50 +531,118 @@ export function Composer({
   // A move chosen earlier that the ticket no longer allows (somebody changed its status) is not made.
   const then = d.status && moves.includes(d.status) ? d.status : null;
   const uploading = uploads.some((u) => !u.error);
-  const canSend = typed && !uploading && !sending && (mode === 'note' || ccTyped.bad.length === 0);
+  const canSend = typed && !uploading && !editorBusy && !sending && (mode === 'note' || ccTyped.bad.length === 0);
 
-  const send = async () => {
-    const body = latest.current.body.trim();
-    if (!canSend || !body) return;
+  const send = async (confirmed = false, asNote = false, at?: string, retryInput?: MessageInput) => {
+    const body = retryInput?.body ?? latest.current.body.trim();
+    if ((!retryInput && !canSend) || !body || sendGate.current) return;
+    if (legacy && /<img\b/i.test(latest.current.html ?? '')) {
+      toast('error', text('Inline images need a newer Helpdesk server.'));
+      return;
+    }
+    if (at) scheduleRequested.current = at;
+    if (!retryInput && !confirmed && /\battach(?:ed|ment|ments)?\b/i.test(body) && !files.length && !/<img\b/i.test(latest.current.html ?? '')) {
+      warningAsNote.current = asNote;
+      setAttachmentWarning(true);
+      return;
+    }
+    sendGate.current = true;
+    const sentDraft = latest.current;
     setSending(true);
+    setFailed(false);
     clientId.current ??= newClientId();
-    const internal = mode === 'note';
+    const internal = retryInput?.internal ?? (asNote || mode === 'note');
     const mentions = internal && extras ? mentionedIds(body, latest.current.mentions ?? []) : [];
-    try {
-      const r = await addMessage(ticket.id, {
+    const input: MessageInput = retryInput ?? {
+      body,
+      ...(!legacy && latest.current.html ? { body_html: cleanReplyHtml(latest.current.html) } : {}),
+      internal,
+      client_id: clientId.current,
+      ...(scheduleRequested.current && !internal ? { send_at: scheduleRequested.current } : {}),
+      ...(files.length ? { attachments: files.map((f) => f.id) } : {}),
+      ...(!internal && cc.length ? { cc } : {}),
+      ...(mentions.length ? { mentions } : {}),
+      ...(then ? { status: then } : {}),
+    };
+    const paint = (message: Message) =>
+      qc.setQueryData<TicketShow>(K.ticket(ticket.id), (show) =>
+        show
+          ? {
+              ...show,
+              messages: [...show.messages.filter((m) => m.client_id !== input.client_id), message],
+            }
+          : show,
+      );
+    const optimistic: Message = {
+      ...fromLegacyMessage({
+        id: -Date.now(),
         body,
-        internal,
-        client_id: clientId.current,
-        ...(files.length ? { attachments: files.map((f) => f.id) } : {}),
-        ...(!internal && cc.length ? { cc } : {}),
-        ...(mentions.length ? { mentions } : {}),
-        ...(then ? { status: then } : {}),
+        is_internal: internal,
+        from: 'staff',
+        author_id: null,
+      }),
+      body_html: input.body_html ?? null,
+      client_id: input.client_id ?? null,
+      created_at: new Date().toISOString(),
+      local_status: 'sending',
+      local_ticket_id: ticket.id,
+      retry_input: input,
+    };
+    paint(optimistic);
+    try {
+      const r = await addMessage(ticket.id, input);
+      paint({
+        ...r.message,
+        body_html: r.message.body_html ?? input.body_html ?? null,
+        client_id: input.client_id ?? null,
       });
       clientId.current = null;
-      Object.values(previews).forEach(forget);
-      setPreviews({});
-      setCcText('');
-      setCcOpen(false);
+      scheduleRequested.current = undefined;
+
       // Emptied, then cleared: nothing of it is kept on this computer.
-      latest.current = { body: '', mode };
+      if (latest.current === sentDraft && (!retryInput || (retryInput.body === sentDraft.body && (retryInput.body_html ?? '') === (sentDraft.html ?? '')))) {
+        latest.current = {
+          body: '',
+          html: '',
+          mode,
+          otherDrafts: sentDraft.otherDrafts,
+        };
+        Object.values(previews).forEach(forget);
+        setPreviews({});
+        setCcText('');
+        setCcOpen(false);
+      }
       // Sending clears the server's copy too.
       if (synced.current !== null) synced.current = '';
       setRewrite(null);
-      draft.setValue({ body: '', mode });
-      await draft.clear();
+      draft.setValue(latest.current);
+      if (!latest.current.body && !Object.values(latest.current.otherDrafts ?? {}).some((saved) => saved?.body || saved?.files?.length)) await draft.clear();
       // Queued offline: the outbox has said so (api.ts), and sends it when WorkSuite is back.
       if (r.queued) void qc.invalidateQueries({ queryKey: ['offline', 'pending'] });
-      else if (r.status_refused) toast('warning', text('Sent, but the status did not change: {why}', { why: r.status_refused.message }));
+      else if (r.status_refused)
+        toast(
+          'warning',
+          text('Sent, but the status did not change: {why}', {
+            why: r.status_refused.message,
+          }),
+        );
       else toast('success', internal ? text('Note added to {ref}.', { ref: ticket.reference }) : text('Reply sent on {ref}.', { ref: ticket.reference }));
       void qc.invalidateQueries({ queryKey: K.ticket(ticket.id) });
       void qc.invalidateQueries({ queryKey: K.lists });
       void qc.invalidateQueries({ queryKey: ['support', 'views'] });
       onSent?.(r);
     } catch (e) {
+      paint({ ...optimistic, local_status: 'failed' });
+      setFailed(true);
       toast('error', errorText(e, text('The message was not sent. It is still here; try again.')));
     } finally {
+      sendGate.current = false;
       setSending(false);
     }
+  };
+
+  retrySend.current = (input) => {
+    void send(true, input.internal, undefined, input);
   };
 
   const onDrag = (e: DragEvent) => {
@@ -461,6 +657,9 @@ export function Composer({
   return (
     <div
       data-support-composer
+      data-hide-ai-launcher
+      role={expanded ? 'dialog' : undefined}
+      aria-label={expanded ? text('Expanded ticket reply') : undefined}
       hidden={hidden}
       onDragEnter={onDrag}
       onDragOver={onDrag}
@@ -469,11 +668,13 @@ export function Composer({
       }}
       onDrop={(e) => {
         if (!extras || !e.dataTransfer.types.includes('Files')) return;
+        setDragging(false);
+        if ((e.target as Element).closest('[contenteditable]')) return;
         e.preventDefault();
         setDragging(false);
         addFiles(Array.from(e.dataTransfer.files));
       }}
-      className={cx('relative flex shrink-0 flex-col border-t border-line bg-surface', compact ? 'gap-1.5 px-3 py-2' : 'gap-2 px-4 py-3', className)}
+      className={cx('flex shrink-0 flex-col border-t border-line bg-surface', expanded ? 'fixed inset-4 z-40 overflow-y-auto rounded-xl border shadow-xl' : 'relative', compact ? 'gap-1.5 px-3 py-2' : 'gap-2 px-4 py-3', className)}
     >
       {dragging ? (
         <div role="status" className="pointer-events-none absolute inset-1 z-20 flex flex-col items-center justify-center gap-1 rounded-[10px] border-2 border-dashed border-primary bg-selection/90 text-[13px] font-semibold text-primary">
@@ -484,20 +685,42 @@ export function Composer({
       <div className="flex min-w-0 items-center gap-2">
         <div role="radiogroup" aria-label={text('Write a')} className="inline-flex shrink-0 rounded-[8px] bg-subtle p-0.5">
           {modes.reply ? (
-            <button type="button" role="radio" aria-checked={mode === 'reply'} onClick={() => update({ mode: 'reply' })} className={cx('h-6 rounded-[6px] px-2.5 text-[12px] font-semibold', mode === 'reply' ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'reply'}
+              onClick={() => switchMode('reply')}
+              className={cx('h-6 rounded-[6px] px-2.5 text-[12px] font-semibold', mode === 'reply' ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}
+            >
               {text('Reply to requester')}
             </button>
           ) : null}
           {modes.note ? (
-            <button type="button" role="radio" aria-checked={mode === 'note'} onClick={() => update({ mode: 'note' })} className={cx('h-6 rounded-[6px] px-2.5 text-[12px] font-semibold', mode === 'note' ? 'bg-warning-bg text-warning-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
+            <button
+              type="button"
+              role="radio"
+              aria-checked={mode === 'note'}
+              onClick={() => switchMode('note')}
+              className={cx('h-6 rounded-[6px] px-2.5 text-[12px] font-semibold', mode === 'note' ? 'bg-warning-bg text-warning-ink shadow-sm' : 'text-ink-3 hover:text-ink')}
+            >
               {text('Internal note')}
             </button>
           ) : null}
         </div>
         <span className="min-w-0 truncate text-[11.5px] text-ink-3">
           {mode === 'reply'
-            ? [ticket.requester.email ? text('To {who} <{email}>', { who: to, email: ticket.requester.email }) : text('To {who}', { who: to }), cc.length ? text('CC {list}', { list: cc.join(', ') }) : null].filter(Boolean).join(' · ')
-            : text('Only staff see notes')}
+            ? [
+                ticket.requester.email
+                  ? text('To {who} <{email}>', {
+                      who: to,
+                      email: ticket.requester.email,
+                    })
+                  : text('To {who}', { who: to }),
+                cc.length ? text('CC {list}', { list: cc.join(', ') }) : null,
+              ]
+                .filter(Boolean)
+                .join(' · ')
+            : text('Only your team can see this')}
         </span>
         {extras && mode === 'reply' && !ccOpen ? (
           <button type="button" onClick={() => setCcOpen(true)} className="shrink-0 text-[11.5px] font-semibold text-primary hover:underline">
@@ -512,7 +735,16 @@ export function Composer({
           {ccSaved.map((e) => (
             <span key={e} className="inline-flex items-center gap-1 rounded-full bg-subtle py-0.5 pr-1 pl-2 text-ink-2">
               {e}
-              <button type="button" aria-label={text('Remove {email}', { email: e })} onClick={() => update({ cc: (latest.current.cc ?? []).filter((x) => x !== e) })} className="rounded-full p-0.5 hover:bg-line">
+              <button
+                type="button"
+                aria-label={text('Remove {email}', { email: e })}
+                onClick={() =>
+                  update({
+                    cc: (latest.current.cc ?? []).filter((x) => x !== e),
+                  })
+                }
+                className="rounded-full p-0.5 hover:bg-line"
+              >
                 <Icon name="x" size={11} />
               </button>
             </span>
@@ -574,18 +806,16 @@ export function Composer({
         </section>
       ) : null}
       <div className="relative">
-        <textarea
-          ref={box}
-          value={d.body}
-          onChange={(e) => setBody(e.target.value, e.target.selectionStart)}
-          onSelect={(e) => setCaret(e.currentTarget.selectionStart)}
-          onPaste={(e) => {
-            const list = Array.from(e.clipboardData?.files ?? []);
-            if (!extras || !pasteIsFiles(list, e.clipboardData?.getData('text/plain') ?? '')) return;
-            e.preventDefault();
-            addFiles(list, true);
-          }}
-          onKeyDown={(e) => {
+        <IconButton icon={expanded ? 'minimize' : 'maximize'} label={expanded ? text('Collapse editor') : text('Expand editor')} onClick={() => setExpanded((x) => !x)} className="absolute right-2 -top-8" />
+        <div
+          className={cx(
+            'rounded-[8px] border [&_[contenteditable]]:px-3 [&_[contenteditable]]:py-2 [&_[contenteditable]]:text-[13px]',
+            mode === 'note' ? 'border-[#F6D7B0] bg-[#FFFBF3] dark:border-[#5A3B14] dark:bg-[#21180B]' : 'border-line bg-surface',
+          )}
+          onSelect={() => setCaret(richCaret(box.current))}
+          onKeyUp={() => setCaret(richCaret(box.current))}
+          onKeyDownCapture={(e) => {
+            if (!(e.target instanceof Element) || !e.target.closest('[contenteditable]') || e.nativeEvent.isComposing) return;
             if (picking && choices.length) {
               if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
                 e.preventDefault();
@@ -609,19 +839,91 @@ export function Composer({
               void send();
             }
           }}
-          rows={compact ? 2 : 4}
-          aria-label={mode === 'reply' ? text('Reply to {who}', { who: to }) : text('Internal note')}
-          aria-autocomplete="list"
-          aria-controls={picking ? pickerId : undefined}
-          aria-activedescendant={picking && choices.length ? `${pickerId}-${highlighted}` : undefined}
-          placeholder={mode === 'reply' ? text('Reply to {who}… (/ for canned responses)', { who: to }) : extras ? text('Write a note only staff will see… (@ to mention)') : text('Write a note only staff will see…')}
-          className={cx(
-            'w-full resize-y rounded-[8px] border px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-primary',
-            mode === 'note' ? 'border-[#F6D7B0] bg-[#FFFBF3] dark:border-[#5A3B14] dark:bg-[#21180B]' : 'border-line bg-surface',
-          )}
-        />
+        >
+          <MailEditor
+            value={replyHtml(d.body, d.html)}
+            clean={linkReplyUrls}
+            onBusyChange={setEditorBusy}
+            onChange={(html) => {
+              clientId.current = null;
+              update({ html, body: replyText(html) });
+              setCaret(richCaret(box.current));
+            }}
+            editorRef={box}
+            insertRef={insertHtml}
+            label={mode === 'reply' ? text('Reply to {who}', { who: to }) : text('Internal note')}
+            placeholder={mode === 'reply' ? text('Reply… (/ for saved replies)') : text('Write a note… (@ to mention)')}
+            variant="support"
+            minHeight={expanded ? 320 : 96}
+            className={cx('!bg-transparent [&_[contenteditable]]:max-h-[40vh] [&_[contenteditable]]:overflow-y-auto', expanded && '[&_[contenteditable]]:max-h-none')}
+            onFiles={extras ? addFiles : undefined}
+            aiSections={
+              extras
+                ? [
+                    {
+                      id: 'rewrite',
+                      items: REWRITE_MODES.map((m) => ({
+                        id: m,
+                        label: text(REWRITE_LABEL[m]),
+                        disabled: !typed || rewrite?.phase === 'working',
+                        onSelect: () => runRewrite(m),
+                      })),
+                    },
+                  ]
+                : undefined
+            }
+            extraGroups={[
+              {
+                id: 'support-insert',
+                label: text('Insert'),
+                items: [
+                  {
+                    id: 'support-code',
+                    label: text('Inline code'),
+                    icon: 'code',
+                    run: () => insertHtml.current?.(inlineCodeHtml(window.getSelection()?.toString() ?? '')),
+                  },
+                  {
+                    id: 'support-code-block',
+                    label: text('Code block'),
+                    icon: 'square-code',
+                    run: () => insertHtml.current?.(codeBlockHtml(window.getSelection()?.toString() ?? '')),
+                  },
+                  {
+                    id: 'support-quote',
+                    label: text('Quote'),
+                    icon: 'quote',
+                    run: () => {
+                      document.execCommand('formatBlock', false, 'blockquote');
+                      if (box.current)
+                        update({
+                          html: cleanReplyHtml(box.current.innerHTML),
+                          body: replyText(box.current.innerHTML),
+                        });
+                    },
+                  },
+                  ...(extras
+                    ? [
+                        {
+                          id: 'support-attach',
+                          label: text('Attach'),
+                          icon: 'paperclip',
+                          run: () => fileInput.current?.click(),
+                        },
+                      ]
+                    : []),
+                ],
+              },
+            ]}
+          />
+        </div>
         {picking ? (
-          <div id={pickerId} role="listbox" aria-label={picking === 'canned' ? text('Canned responses') : text('People to mention')} className="absolute bottom-full left-0 z-30 mb-1 max-h-[260px] w-[340px] max-w-full overflow-y-auto rounded-[10px] border border-line bg-surface py-1 shadow-xl scroll-thin">
+          <div
+            id={pickerId}
+            role="listbox"
+            aria-label={picking === 'canned' ? text('Canned responses') : text('People to mention')}
+            className="absolute bottom-full left-0 z-30 mb-1 max-h-[260px] w-[340px] max-w-full overflow-y-auto rounded-[10px] border border-line bg-surface py-1 shadow-xl scroll-thin"
+          >
             {choices.length ? (
               choices.map((c, i) => (
                 <div
@@ -671,6 +973,7 @@ export function Composer({
                   <span className="block truncate font-semibold text-ink">{u.name}</span>
                   <span className={cx('block truncate text-[11px]', u.error ? 'text-danger' : 'text-ink-3')}>{u.error ?? text('Uploading and scanning…')}</span>
                 </span>
+                {!u.error && u.progress !== undefined ? <progress aria-label={text('Uploading {name}', { name: u.name })} value={u.progress} max={1} className="w-16" /> : null}
                 {u.error ? (
                   <button type="button" aria-label={text('Try {name} again', { name: u.name })} onClick={() => retry(u)} className="rounded-[6px] p-1 text-ink-3 hover:bg-subtle hover:text-ink">
                     <Icon name="refresh" size={13} />
@@ -687,7 +990,7 @@ export function Composer({
           <span className="text-[11px] text-ink-3">{text('{n} files · {size} · max 25 MB each · scanned before sending', { n: files.length + uploads.length, size: bytes(total) })}</span>
         </div>
       ) : null}
-      <div className="flex min-w-0 items-center gap-1.5">
+      <div className="flex min-w-0 flex-wrap items-center gap-1.5">
         {extras ? (
           <>
             <input
@@ -710,27 +1013,33 @@ export function Composer({
             )}
           </>
         ) : null}
-        <Button
-          size="sm"
-          variant="ghost"
-          title={text('Canned responses: type / at the start of a line')}
-          onClick={() => startCanned.current()}
-        >
+        <Button size="sm" variant="ghost" title={text('Canned responses: type / at the start of a line')} onClick={() => startCanned.current()}>
           <span className="font-mono">/</span> {text('canned')}
         </Button>
         {extras ? (
           <Select<string>
-            className={cx('h-7 text-[12px]', compact ? 'w-[96px]' : 'w-[150px]')}
+            className={cx('h-7 text-[12px]', 'min-w-[170px] shrink-0')}
             aria-label={text('Writing assistant')}
             value=""
             disabled={!typed || rewrite?.phase === 'working'}
             onValueChange={(v) => {
               if (v) runRewrite(v as RewriteMode);
             }}
-            options={[{ value: '', label: text('AI rewrite…') }, ...REWRITE_MODES.map((m) => ({ value: m, label: text(REWRITE_LABEL[m]) }))]}
+            options={[
+              { value: '', label: text('AI rewrite…') },
+              ...REWRITE_MODES.map((m) => ({
+                value: m,
+                label: text(REWRITE_LABEL[m]),
+              })),
+            ]}
           />
         ) : null}
-        {compact ? <span className="min-w-0 truncate text-[11px] text-ink-3">{text('R reply · N note · {keys} send', { keys: sendKeys })}</span> : null}
+        <IconButton icon="help-circle" label={text('Reply shortcuts')} onClick={() => setShortcuts((x) => !x)} />
+        {shortcuts ? (
+          <span role="status" className="text-[11px] text-ink-3">
+            {text('R reply · N note · {keys} send', { keys: sendKeys })}
+          </span>
+        ) : null}
         <span className="ml-auto" />
         {moves.length ? (
           <Select<string>
@@ -738,7 +1047,18 @@ export function Composer({
             aria-label={text('Status after sending')}
             value={then ?? ''}
             onValueChange={(v) => update({ status: (v || null) as SupportStatus | null })}
-            options={[{ value: '', label: text('Keep {status}', { status: text(statusLabel(ticket.status)) }) }, ...moves.map((s) => ({ value: s, label: text('Then: {status}', { status: text(statusLabel(s)) }) }))]}
+            options={[
+              {
+                value: '',
+                label: text('Keep {status}', {
+                  status: text(statusLabel(ticket.status)),
+                }),
+              },
+              ...moves.map((s) => ({
+                value: s,
+                label: text('Then: {status}', { status: text(statusLabel(s)) }),
+              })),
+            ]}
           />
         ) : null}
         <Button
@@ -747,16 +1067,71 @@ export function Composer({
           icon="send"
           loading={sending}
           disabled={!canSend}
-          title={uploading ? text('Waiting for the files to finish uploading') : undefined}
+          title={uploading ? text('Waiting for the files to finish uploading') : sendKeys}
           onClick={() => void send()}
           aria-keyshortcuts={isMac ? 'Meta+Enter' : 'Control+Enter'}
         >
-          {mode === 'note' ? text('Add note') : text('Send')}
-          <Kbd tone={mode === 'note' ? 'key' : 'accent'} aria-hidden>
-            {sendKeys}
-          </Kbd>
+          {failed ? text('Retry') : mode === 'note' ? text('Add note') : text('Send')}
         </Button>
+        {!legacy && mode === 'reply' ? (
+          <Select<string>
+            aria-label={text('More send options')}
+            className="h-7 w-[70px] shrink-0"
+            value=""
+            disabled={!canSend}
+            options={[{ value: '', label: text('Send ▾') }, { value: 'later', label: text('Send later') }, ...(modes.note ? [{ value: 'note', label: text('Send as note') }] : [])]}
+            onValueChange={(choice) => {
+              if (choice === 'later') setScheduleOpen(true);
+              else if (choice === 'note') void send(false, true);
+            }}
+          />
+        ) : null}
       </div>
+      {scheduleOpen ? (
+        <Modal title={text('Send later')} onClose={() => setScheduleOpen(false)}>
+          <label className="flex flex-col gap-2">
+            {text('Send at')}
+            <input aria-label={text('Send at')} type="datetime-local" value={scheduleAt} onChange={(event) => setScheduleAt(event.target.value)} />
+          </label>
+          <Button
+            disabled={!scheduleAt || !Number.isFinite(new Date(scheduleAt).getTime()) || new Date(scheduleAt).getTime() <= Date.now()}
+            onClick={() => {
+              const at = new Date(scheduleAt).toISOString();
+              setScheduleOpen(false);
+              void send(false, false, at);
+            }}
+          >
+            {text('Schedule reply')}
+          </Button>
+        </Modal>
+      ) : null}
+      {attachmentWarning ? (
+        <Modal title={text('Did you forget an attachment?')} onClose={() => setAttachmentWarning(false)}>
+          <p>{text('Your reply mentions an attachment, but no file is attached.')}</p>
+          <div className="mt-3 flex gap-2">
+            <Button
+              onClick={() => {
+                setAttachmentWarning(false);
+                fileInput.current?.click();
+              }}
+            >
+              {text('Attach a file')}
+            </Button>
+            <Button
+              onClick={() => {
+                setAttachmentWarning(false);
+                void send(true, warningAsNote.current);
+              }}
+            >
+              {text('Send anyway')}
+            </Button>
+          </div>
+        </Modal>
+      ) : null}
     </div>
   );
+}
+
+export function Composer(props: Parameters<typeof TicketComposer>[0]) {
+  return <TicketComposer key={props.ticket.id} {...props} />;
 }

@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import type { ReactNode } from 'react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { WebchatRingChat, WebchatRingState } from '@shared/types';
 
 let push: ((s: WebchatRingState) => void) | null = null;
@@ -31,6 +31,11 @@ import { call } from '../../../src/core/bridge';
 import { RingAlertPill, WebchatRingWindow } from '../../../src/modules/chat/website/Ringing';
 import { RingTrayWindow, trayLine } from '../../../src/modules/chat/website/RingTray';
 import { savedMatches } from '../../../src/modules/chat/website/RingCard';
+
+// Elapsed times ("At risk · 3:12", "Waiting 1:38") are worked out from fixture timestamps built when this file loads.
+// Pin Date so a slow machine can't move the clock between building the fixtures and drawing them; timers stay real.
+vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-11T09:00:00Z') });
+afterAll(() => vi.useRealTimers());
 
 /**
  * R-05 "Native incoming-chat window — reply and join from the alert" and R-06 "Tray menu — reply and join, title bar
@@ -173,13 +178,13 @@ describe('R-06: the tray’s ringing menu', () => {
     const m = within(menu);
     expect(m.getByText('3 website chats ringing')).toBeTruthy();
     const anne = m.getByRole('listitem', { name: 'Anne · Acme Ltd' });
-    expect(within(anne).getByText(/^At risk · 3:1[23] · Kandy$/)).toBeTruthy();
+    expect(within(anne).getByText('At risk · 3:12 · Kandy')).toBeTruthy();
     expect(within(anne).getByText('"My activation key says invalid on the second laptop"')).toBeTruthy();
     expect(within(anne).getByRole('button', { name: 'Send and join' }).textContent).toBe('Send & join');
     const kasun = m.getByRole('listitem', { name: 'Kasun P.' });
-    expect(within(kasun).getByText(/^Assigned to you · 0:4\d$/)).toBeTruthy();
+    expect(within(kasun).getByText('Assigned to you · 0:42')).toBeTruthy();
     expect(within(kasun).getByRole('button', { name: 'Reply' })).toBeTruthy();
-    expect(within(m.getByRole('listitem', { name: 'Visitor 4F2A' })).getByText(/^Waiting · 1:0[56]$/)).toBeTruthy();
+    expect(within(m.getByRole('listitem', { name: 'Visitor 4F2A' })).getByText('Waiting · 1:05')).toBeTruthy();
     expect(m.getByText('Reply from here: sending joins the chat and stops the ring.')).toBeTruthy();
     expect(m.getAllByRole('button').slice(-3).map((b) => b.textContent)).toEqual(['Open Website Chats', 'Ringing settings…', 'Quit WorkSuite']);
     // The reply box has the keyboard at once.
@@ -207,7 +212,7 @@ describe('R-06: the tray’s ringing menu', () => {
     expect(within(open).getByText('"Do you offer a trial?"')).toBeTruthy();
     expect(within(open).getByLabelText('Reply to Kasun P.')).toBeTruthy();
     expect(within(screen.getByRole('listitem', { name: 'Anne · Acme Ltd' })).queryByRole('textbox')).toBeNull();
-    expect(within(screen.getByRole('listitem', { name: 'Anne · Acme Ltd' })).getByText(/^At risk · 3:1[23]$/)).toBeTruthy();
+    expect(within(screen.getByRole('listitem', { name: 'Anne · Acme Ltd' })).getByText('At risk · 3:12')).toBeTruthy();
   });
 
   it('its menu items and Esc', async () => {

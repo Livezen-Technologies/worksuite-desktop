@@ -35,7 +35,7 @@ import { pullPrefs, setPullEnabled } from '../../components/listRefresh';
 import { forgetMailbox } from './localFirst';
 import { SpamSecurity } from './protection/SpamSecurity';
 import { isAttemptId, startBody, summaryLine, type OAuthStart } from './oauth';
-import { watchAttempt } from './OAuthSignIn';
+import { openSignInUrl, watchAttempt } from './OAuthSignIn';
 import { MailAlertSettings } from './alerts/MailAlertSettings';
 
 /**
@@ -170,7 +170,8 @@ function Accounts() {
     if (b.auth_type !== 'oauth' || !b.oauth_provider) return setRepairing(b);
     try {
       const r = await apiPost<OAuthStart>(`/api/mail/oauth/${b.oauth_provider}/start`, startBody(b.email));
-      await call('app:openExternal', { url: r.url });
+      const refused = await openSignInUrl(r.url, b.oauth_provider);
+      if (refused) return toast('error', `${refused.message} ${refused.next_step ?? ''} (${text('Reference ID {id}', { id: refused.ref ?? '' })})`);
       toast('info', text('Sign in again in your browser. The mailbox picks up from where it stopped; nothing else changes.'));
       // Then say how it went — the steps and, if it failed, why — rather than leaving the card to find out.
       if (isAttemptId(r.attempt)) watchAttempt(r.attempt, (a) => {
@@ -210,7 +211,7 @@ function Accounts() {
                 <span className="w-[190px] shrink-0 text-right text-[12px] text-ink-3">{problem && b.last_sync_at ? text('since {time} · settings unchanged', { time: timeLabel(b.last_sync_at) }) : offlineWords(words.label, stats.data?.byMailbox[String(b.id)]?.messages ?? null)}</span>
                 {problem ? (
                   <Button variant="danger" onClick={() => void repair(b)}>
-                    Repair
+                    {b.auth_type === 'oauth' ? text('Sign in again') : text('Repair')}
                   </Button>
                 ) : (
                   <Button onClick={() => setManaging(b)}>Manage</Button>

@@ -12,6 +12,7 @@ import { Button, ErrorNote, Modal, Spinner, TextField, cx, initials } from '../.
 import type { Preferences } from '@shared/types';
 import { useLocalMailboxes, useOAuthProviders } from './api';
 import { OAuthProgress, useOAuthSignIn } from './OAuthSignIn';
+import { isPersonalMicrosoftAddress } from '@shared/mail-oauth';
 import { accountBg } from './parts';
 import type { LocalMailbox } from './types';
 
@@ -186,6 +187,11 @@ function OAuthPane({ provider }: { provider: 'microsoft' | 'google' }) {
           {provider === 'microsoft' ? (
             <div className="mt-4 max-w-[360px]">
               <TextField label={text('Email address (optional)')} type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="name@company.com" hint={text('Picks the account at Microsoft, and lets WorkSuite name your organisation if an admin has to approve it.')} />
+              {isPersonalMicrosoftAddress(email) ? (
+                <p role="note" className="mt-2 rounded-[10px] bg-subtle px-3 py-2 text-[12.5px] text-ink-2">
+                  {text('This is a personal Microsoft account (Outlook.com, Hotmail or Live). It connects when your WorkSuite admin allows personal accounts; if it is refused, add it with IMAP / SMTP and an app password instead.')}
+                </p>
+              ) : null}
             </div>
           ) : null}
           <div className="mt-4 flex items-center gap-3">
@@ -196,7 +202,6 @@ function OAuthPane({ provider }: { provider: 'microsoft' | 'google' }) {
           <OAuthProgress phase={signIn.phase} attempt={signIn.attempt} onRetry={() => void signIn.start(email)} />
         </>
       ) : null}
-      {signIn.error ? <div className="mt-3"><ErrorNote error={signIn.error} /></div> : null}
     </div>
   );
 }

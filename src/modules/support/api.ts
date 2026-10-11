@@ -181,7 +181,16 @@ async function orQueue<T>(id: number, what: string, method: 'POST' | 'PATCH', pa
     return await now();
   } catch (e) {
     if (!(e instanceof ApiError) || !e.offline) throw e;
-    const r = await call('offline:submit', { module: 'support', entity: 'ticket', entityId: String(id), label: outboxLabel(what, id).slice(0, 200), method, path, body, queueIfOffline: true });
+    const r = await call('offline:submit', {
+      module: 'support',
+      entity: 'ticket',
+      entityId: String(id),
+      label: outboxLabel(what, id).slice(0, 200),
+      method,
+      path,
+      body,
+      queueIfOffline: true,
+    });
     if (r.queued) toast('info', text('You are offline: {what} is in the outbox and goes when WorkSuite is back.', { what: outboxLabel(what, id) }));
     if (r.queued || r.delivered) return queued();
     throw new ApiError(r.status ?? 0, r.error ?? 'The change could not be kept to send later.', r.code);
@@ -196,7 +205,19 @@ export function listTickets(p: ListParams, signal?: AbortSignal): Promise<Ticket
     async () => {
       const r = await getMeta<TicketPage>(
         `${BASE}/tickets`,
-        { ...(p.extra ?? {}), view: p.view, sort: p.sort, q: p.q?.trim() || undefined, status: list(p.status), priority: list(p.priority), source: list(p.source) ?? p.extra?.source, organization: list(p.organization) ?? p.extra?.organization, assignee: p.assignee, limit: p.limit, cursor: p.cursor ?? undefined },
+        {
+          ...(p.extra ?? {}),
+          view: p.view,
+          sort: p.sort,
+          q: p.q?.trim() || undefined,
+          status: list(p.status),
+          priority: list(p.priority),
+          source: list(p.source) ?? p.extra?.source,
+          organization: list(p.organization) ?? p.extra?.organization,
+          assignee: p.assignee,
+          limit: p.limit,
+          cursor: p.cursor ?? undefined,
+        },
         signal,
       );
       for (const t of r.data.items ?? []) references.set(t.id, t.reference);
@@ -240,9 +261,18 @@ export interface RequesterHit {
 export async function findRequesters(q: string, signal?: AbortSignal): Promise<RequesterHit[]> {
   const term = q.trim();
   if (term.length < 2) return [];
-  const r = await get<{ results?: Array<Partial<RequesterHit> & { id: number | string }> }>('/api/contacts/lookup', { q: term, kinds: 'contact,customer,employee', limit: 8 }, signal);
+  const r = await get<{
+    results?: Array<Partial<RequesterHit> & { id: number | string }>;
+  }>('/api/contacts/lookup', { q: term, kinds: 'contact,customer,employee', limit: 8 }, signal);
   return (r?.results ?? [])
-    .map((x) => ({ kind: String(x.kind ?? 'contact'), id: Number(x.id), name: x.name ?? null, email: x.email ?? null, phone: x.phone ?? null, subtitle: x.subtitle ?? null }))
+    .map((x) => ({
+      kind: String(x.kind ?? 'contact'),
+      id: Number(x.id),
+      name: x.name ?? null,
+      email: x.email ?? null,
+      phone: x.phone ?? null,
+      subtitle: x.subtitle ?? null,
+    }))
     .filter((x) => Number.isSafeInteger(x.id) && x.id > 0);
 }
 
@@ -292,19 +322,38 @@ export function ticketEvents(id: number, beforeId?: number): Promise<{ events: T
  */
 export async function updateTicket(id: number, version: number, changes: TicketChanges): Promise<TicketFull | null> {
   const body = { ...changes, version };
-  return orQueue(id, 'Property change', 'PATCH', `${BASE}/tickets/${id}`, body, async () => (await v1Only(() => send<{ ticket: TicketFull }>('PATCH', `${BASE}/tickets/${id}`, body))).ticket, () => null);
+  return orQueue(
+    id,
+    'Property change',
+    'PATCH',
+    `${BASE}/tickets/${id}`,
+    body,
+    async () => (await v1Only(() => send<{ ticket: TicketFull }>('PATCH', `${BASE}/tickets/${id}`, body))).ticket,
+    () => null,
+  );
 }
 
 /** Move the status through the state machine. Null from the as-built API, which answers nothing: read the ticket again. */
 export function transition(id: number, input: TransitionInput): Promise<TicketFull | null> {
-  return orQueue(id, 'Status change', 'POST', `${BASE}/tickets/${id}/transition`, input, () => transitionNow(id, input), () => null);
+  return orQueue(
+    id,
+    'Status change',
+    'POST',
+    `${BASE}/tickets/${id}/transition`,
+    input,
+    () => transitionNow(id, input),
+    () => null,
+  );
 }
 
 function transitionNow(id: number, input: TransitionInput): Promise<TicketFull | null> {
   return v1OrLegacy(
     async () => (await send<{ ticket: TicketFull }>('POST', `${BASE}/tickets/${id}/transition`, input)).ticket,
     async () => {
-      await send('POST', `${LEGACY}/${id}/action`, { action: 'status', ...input });
+      await send('POST', `${LEGACY}/${id}/action`, {
+        action: 'status',
+        ...input,
+      });
       return null;
     },
   );
@@ -312,14 +361,27 @@ function transitionNow(id: number, input: TransitionInput): Promise<TicketFull |
 
 /** Give it to somebody (or nobody). Giving an unassigned ticket to yourself is taking it. */
 export function assign(id: number, input: AssignInput): Promise<TicketFull | null> {
-  return orQueue(id, 'Assignment', 'POST', `${BASE}/tickets/${id}/assign`, input, () => assignNow(id, input), () => null);
+  return orQueue(
+    id,
+    'Assignment',
+    'POST',
+    `${BASE}/tickets/${id}/assign`,
+    input,
+    () => assignNow(id, input),
+    () => null,
+  );
 }
 
 function assignNow(id: number, input: AssignInput): Promise<TicketFull | null> {
   return v1OrLegacy(
     async () => (await send<{ ticket: TicketFull }>('POST', `${BASE}/tickets/${id}/assign`, input)).ticket,
     async () => {
-      await send('POST', `${LEGACY}/${id}/action`, { action: 'assign', user_id: input.user_id, version: input.version, reason: input.reason });
+      await send('POST', `${LEGACY}/${id}/action`, {
+        action: 'assign',
+        user_id: input.user_id,
+        version: input.version,
+        reason: input.reason,
+      });
       return null;
     },
   );
@@ -342,31 +404,75 @@ export function take(id: number, version?: number): Promise<TicketFull | null> {
  * are not something it can take, and files are refused rather than dropped.
  */
 export function addMessage(id: number, input: MessageInput): Promise<MessageAnswer & { queued?: boolean }> {
-  return orQueue<MessageAnswer & { queued?: boolean }>(id, input.internal ? 'Internal note' : 'Reply to requester', 'POST', `${BASE}/tickets/${id}/messages`, input, () => addMessageNow(id, input), () => ({
-    message: { ...fromLegacyMessage({ id: 0, body: input.body, is_internal: input.internal, from: 'staff', author_id: null }), client_id: input.client_id ?? null, created_at: new Date().toISOString() },
-    duplicate: false,
-    ticket: null,
-    status_refused: null,
-    queued: true,
-  }));
+  return orQueue<MessageAnswer & { queued?: boolean }>(
+    id,
+    input.internal ? 'Internal note' : 'Reply to requester',
+    'POST',
+    `${BASE}/tickets/${id}/messages`,
+    input,
+    () => addMessageNow(id, input),
+    () => ({
+      message: {
+        ...fromLegacyMessage({
+          id: 0,
+          body: input.body,
+          is_internal: input.internal,
+          from: 'staff',
+          author_id: null,
+        }),
+        client_id: input.client_id ?? null,
+        created_at: new Date().toISOString(),
+      },
+      duplicate: false,
+      ticket: null,
+      status_refused: null,
+      queued: true,
+    }),
+  );
 }
 
 function addMessageNow(id: number, input: MessageInput): Promise<MessageAnswer> {
   return v1OrLegacy(
     () => send<MessageAnswer>('POST', `${BASE}/tickets/${id}/messages`, input),
     async () => {
-      if (input.attachments?.length) throw new ApiError(501, NEEDS_NEWER_SERVER, 'NOT_SUPPORTED');
-      const r = await send<{ id: number; duplicate?: boolean }>('POST', `${LEGACY}/${id}/reply`, { body: input.body, internal: input.internal, client_id: input.client_id });
+      if (input.attachments?.length || input.send_at || /<img\b/i.test(input.body_html ?? '')) throw new ApiError(501, NEEDS_NEWER_SERVER, 'NOT_SUPPORTED');
+      const r = await send<{ id: number; duplicate?: boolean }>('POST', `${LEGACY}/${id}/reply`, {
+        body: input.body,
+        internal: input.internal,
+        client_id: input.client_id,
+      });
       let refused: MessageAnswer['status_refused'] = null;
       if (input.status && !r.duplicate) {
         try {
-          await send('POST', `${LEGACY}/${id}/action`, { action: 'status', status: input.status, reason: 'Set on send' });
+          await send('POST', `${LEGACY}/${id}/action`, {
+            action: 'status',
+            status: input.status,
+            reason: 'Set on send',
+          });
         } catch (e) {
-          refused = { code: e instanceof ApiError ? (e.code ?? 'REFUSED') : 'REFUSED', message: e instanceof Error ? e.message : 'The status could not be changed.' };
+          refused = {
+            code: e instanceof ApiError ? (e.code ?? 'REFUSED') : 'REFUSED',
+            message: e instanceof Error ? e.message : 'The status could not be changed.',
+          };
         }
       }
-      const message = fromLegacyMessage({ id: r.id, body: input.body, is_internal: input.internal, from: 'staff', author_id: null });
-      return { message: { ...message, client_id: input.client_id ?? null, created_at: new Date().toISOString() }, duplicate: !!r.duplicate, ticket: null, status_refused: refused };
+      const message = fromLegacyMessage({
+        id: r.id,
+        body: input.body,
+        is_internal: input.internal,
+        from: 'staff',
+        author_id: null,
+      });
+      return {
+        message: {
+          ...message,
+          client_id: input.client_id ?? null,
+          created_at: new Date().toISOString(),
+        },
+        duplicate: !!r.duplicate,
+        ticket: null,
+        status_refused: refused,
+      };
     },
   );
 }
@@ -386,11 +492,58 @@ export const MAX_FILE_BYTES = 25 * 1024 * 1024;
  * One file for the composer: scanned and kept, waiting for the message that carries it. With no ticket (null), one for
  * the New ticket form (`POST attachments`), claimed by the ticket's first message when it is raised.
  */
-export async function uploadAttachment(ticketId: number | null, file: Blob, name: string): Promise<Attachment> {
+const supportUploads = new WeakMap<Blob, { id: string; size: number; chunks: number }>();
+export async function uploadAttachment(ticketId: number | null, file: Blob, name: string, progress?: (fraction: number) => void): Promise<Attachment> {
+  if (ticketId !== null && file.size >= 8 * 1024 * 1024) {
+    let session = supportUploads.get(file);
+    if (!session) {
+      const hash = await crypto.subtle.digest('SHA-256', await file.arrayBuffer());
+      const sha256 = Array.from(new Uint8Array(hash), (b) => b.toString(16).padStart(2, '0')).join('');
+      const init = await send<{
+        upload_id: string;
+        chunk_size: number;
+        total_chunks: number;
+      }>('POST', '/api/uploads/init', {
+        purpose: 'support',
+        ticket_id: ticketId,
+        filename: name,
+        total_size: file.size,
+        chunk_size: 2 * 1024 * 1024,
+        mime_type: file.type,
+        sha256,
+      });
+      session = {
+        id: init.upload_id,
+        size: init.chunk_size,
+        chunks: init.total_chunks,
+      };
+      supportUploads.set(file, session);
+    }
+    const status = await get<{ received_chunks?: number[]; status?: string }>(`/api/uploads/${session.id}/status`);
+    if (status.status === 'failed' || status.status === 'aborted') {
+      supportUploads.delete(file);
+      throw new ApiError(422, 'This upload could not be completed. Retry to start a new upload.', 'UPLOAD_FAILED');
+    }
+    const received = new Set(status.received_chunks ?? []);
+    for (let i = 0; status.status !== 'completed' && i < session.chunks; i++) {
+      if (!received.has(i)) {
+        const form = new FormData();
+        form.set('chunk_index', String(i));
+        form.set('chunk', file.slice(i * session.size, (i + 1) * session.size), name);
+        await send('POST', `/api/uploads/${session.id}/chunk`, form);
+      }
+      progress?.((i + 1) / session.chunks);
+    }
+    const answer = await send<{ attachment: Attachment }>('POST', `${BASE}/tickets/${ticketId}/attachments/from-upload`, { upload_id: session.id });
+    supportUploads.delete(file);
+    return answer.attachment;
+  }
   const form = new FormData();
   form.append('file', file, name);
   const path = ticketId === null ? `${BASE}/attachments` : `${BASE}/tickets/${ticketId}/attachments`;
-  return (await v1Only(() => send<{ attachment: Attachment }>('POST', path, form))).attachment;
+  const result = (await v1Only(() => send<{ attachment: Attachment }>('POST', path, form))).attachment;
+  progress?.(1);
+  return result;
 }
 
 /** Take back an upload that was not sent (the composer's ×). */
@@ -412,7 +565,15 @@ export function views(organization?: string[]): Promise<ViewsAnswer> {
 
 /** What the rail, dock and tray count; null for a server without them. */
 export function badges(organization?: string[]): Promise<Badges | null> {
-  return v1OrElse(async () => (await get<{ badges: Badges }>(`${BASE}/badges`, { organization: list(organization) })).badges, () => null);
+  return v1OrElse(
+    async () =>
+      (
+        await get<{ badges: Badges }>(`${BASE}/badges`, {
+          organization: list(organization),
+        })
+      ).badges,
+    () => null,
+  );
 }
 
 /** Statuses and their moves, priorities, types, my organizations with my caps in each, their teams, categories, tags. */
@@ -423,26 +584,58 @@ export function meta(signal?: AbortSignal): Promise<Meta> {
 /** Who a ticket can be given to, with their presence and load (never another organization's people). */
 export function agents(q: { organization?: number | null; ticket_id?: number; team?: number } = {}): Promise<Agent[]> {
   return v1OrLegacy(
-    async () => (await get<{ agents: Agent[] }>(`${BASE}/agents`, { organization: q.organization ?? undefined, ticket_id: q.ticket_id, team: q.team })).agents ?? [],
-    async () => ((await get<{ agents?: Array<{ id: number; name: string }> }>(`${LEGACY}/agents`)).agents ?? []).map((a) => ({ id: a.id, name: a.name, presence: 'offline', open: 0, capacity: null, teams: [] })),
+    async () =>
+      (
+        await get<{ agents: Agent[] }>(`${BASE}/agents`, {
+          organization: q.organization ?? undefined,
+          ticket_id: q.ticket_id,
+          team: q.team,
+        })
+      ).agents ?? [],
+    async () =>
+      ((await get<{ agents?: Array<{ id: number; name: string }> }>(`${LEGACY}/agents`)).agents ?? []).map((a) => ({
+        id: a.id,
+        name: a.name,
+        presence: 'offline',
+        open: 0,
+        capacity: null,
+        teams: [],
+      })),
   );
 }
 
 /** My canned responses and my organizations' shared ones, most used first (what "/" offers). */
 export function canned(q?: string): Promise<Canned[]> {
-  return v1OrElse(async () => (await get<{ canned: Canned[] }>(`${BASE}/canned`, { q: q?.trim() || undefined })).canned ?? [], () => []);
+  return v1OrElse(
+    async () =>
+      (
+        await get<{ canned: Canned[] }>(`${BASE}/canned`, {
+          q: q?.trim() || undefined,
+        })
+      ).canned ?? [],
+    () => [],
+  );
 }
 
 /** A canned response with its placeholders filled for a ticket ({{requester.first_name}}…). */
 export async function renderCanned(id: number, ticketId: number): Promise<string> {
-  return (await v1Only(() => send<{ body: string }>('POST', `${BASE}/canned/${id}/render`, { ticket_id: ticketId }))).body;
+  return (
+    await v1Only(() =>
+      send<{ body: string }>('POST', `${BASE}/canned/${id}/render`, {
+        ticket_id: ticketId,
+      }),
+    )
+  ).body;
 }
 
 /* ── links and watchers ─────────────────────────────────────────────────── */
 
 /** What the ticket is linked to, as I may see it (FR-TKT-05). Nothing from an as-built server, which has no links. */
 export function links(ticketId: number, signal?: AbortSignal): Promise<TicketLink[]> {
-  return v1OrElse(async () => (await get<{ links: TicketLink[] }>(`${BASE}/tickets/${ticketId}/links`, undefined, signal)).links ?? [], () => []);
+  return v1OrElse(
+    async () => (await get<{ links: TicketLink[] }>(`${BASE}/tickets/${ticketId}/links`, undefined, signal)).links ?? [],
+    () => [],
+  );
 }
 
 /** Follow a ticket: told whenever it changes (FR-ASN-07). Watchers do not change the version. */
@@ -459,15 +652,21 @@ export function unwatch(ticketId: number, userId: number): Promise<unknown> {
 
 /** Who else is on a ticket now. Nobody, for a server without presence — and for an answer from the saved copy. */
 export function presence(ticketId: number): Promise<Present[]> {
-  return v1OrElse(async () => {
-    const r = await getMeta<{ present: Present[] }>(`${BASE}/tickets/${ticketId}/presence`);
-    return r.offline ? [] : (r.data.present ?? []);
-  }, () => []);
+  return v1OrElse(
+    async () => {
+      const r = await getMeta<{ present: Present[] }>(`${BASE}/tickets/${ticketId}/presence`);
+      return r.offline ? [] : (r.data.present ?? []);
+    },
+    () => [],
+  );
 }
 
 /** I am on this ticket (viewing, typing a reply or a note), or I have left it. Answers who else is. */
 export function here(ticketId: number, state: 'viewing' | 'typing' | 'left', mode?: 'reply' | 'note'): Promise<Present[]> {
-  return v1OrElse(async () => (await send<{ present: Present[] }>('POST', `${BASE}/tickets/${ticketId}/presence`, mode ? { state, mode } : { state })).present ?? [], () => []);
+  return v1OrElse(
+    async () => (await send<{ present: Present[] }>('POST', `${BASE}/tickets/${ticketId}/presence`, mode ? { state, mode } : { state })).present ?? [],
+    () => [],
+  );
 }
 
 /* ── website chat → ticket (D-06, FR-LCH-01…08, FR-DSK-08) ──────────────── */
@@ -482,15 +681,38 @@ export function conversionPreview(conversationId: number, signal?: AbortSignal):
  * until it is done, so pressing Raise again after a failure raises one ticket. On a server without v1, the as-built
  * route, which always creates and answers `{id, reference}`.
  */
-export function convertChat(input: ConvertInput, key: string): Promise<{ id: number; reference: string; appended: boolean; answer: ConvertAnswer | null }> {
-  return v1OrLegacy<{ id: number; reference: string; appended: boolean; answer: ConvertAnswer | null }>(
+export function convertChat(
+  input: ConvertInput,
+  key: string,
+): Promise<{
+  id: number;
+  reference: string;
+  appended: boolean;
+  answer: ConvertAnswer | null;
+}> {
+  return v1OrLegacy<{
+    id: number;
+    reference: string;
+    appended: boolean;
+    answer: ConvertAnswer | null;
+  }>(
     async () => {
       const a = await send<ConvertAnswer>('POST', `${BASE}/conversions`, input, { 'Idempotency-Key': key });
-      return { id: a.ticket.id, reference: a.ticket.reference, appended: a.appended, answer: a };
+      return {
+        id: a.ticket.id,
+        reference: a.ticket.reference,
+        appended: a.appended,
+        answer: a,
+      };
     },
     async () => {
       const r = await send<{ id: number; reference: string }>('POST', `${LEGACY}/from-conversation`, { conversation_id: input.conversation_id });
-      return { id: r.id, reference: r.reference, appended: false, answer: null };
+      return {
+        id: r.id,
+        reference: r.reference,
+        appended: false,
+        answer: null,
+      };
     },
   );
 }
@@ -498,8 +720,18 @@ export function convertChat(input: ConvertInput, key: string): Promise<{ id: num
 /** A chat or an email that is a ticket already (`ALREADY_CONVERTED`, `already_converted`): that ticket. */
 export function alreadyConverted(e: unknown): { id: number; reference: string; status: string | null } | null {
   if (!(e instanceof ApiError) || e.code?.toUpperCase() !== 'ALREADY_CONVERTED') return null;
-  const t = (e.data as { ticket?: { id?: unknown; reference?: unknown; status?: unknown } } | null)?.ticket;
-  return t && typeof t.id === 'number' ? { id: t.id, reference: String(t.reference ?? ''), status: typeof t.status === 'string' ? t.status : null } : null;
+  const t = (
+    e.data as {
+      ticket?: { id?: unknown; reference?: unknown; status?: unknown };
+    } | null
+  )?.ticket;
+  return t && typeof t.id === 'number'
+    ? {
+        id: t.id,
+        reference: String(t.reference ?? ''),
+        status: typeof t.status === 'string' ? t.status : null,
+      }
+    : null;
 }
 
 /** The visitor left no email address, and the ticket needs one to reach them (`422 requester_email_required`). */
@@ -519,7 +751,10 @@ export type ConversionOffer = 'yes' | 'no' | 'unknown';
  * what they did before.
  */
 export function conversionOffer(m: unknown, kind: 'chat' | 'email'): ConversionOffer {
-  const d = (m ?? null) as { capabilities?: Record<string, unknown> | null; can?: Record<string, unknown> | null } | null;
+  const d = (m ?? null) as {
+    capabilities?: Record<string, unknown> | null;
+    can?: Record<string, unknown> | null;
+  } | null;
   const on = d?.capabilities?.[`convert_${kind}`];
   if (typeof on !== 'boolean') return 'unknown';
   if (!on) return 'no';
@@ -554,9 +789,19 @@ export interface EmailConvertAnswer {
  */
 export async function convertEmail(input: EmailConvertInput): Promise<EmailConvertAnswer> {
   const a = await v1Only(() => send<Record<string, unknown>>('POST', `${BASE}/conversions/email`, input));
-  const t = (a.ticket && typeof a.ticket === 'object' ? a.ticket : a) as { id?: unknown; reference?: unknown; status?: unknown };
+  const t = (a.ticket && typeof a.ticket === 'object' ? a.ticket : a) as {
+    id?: unknown;
+    reference?: unknown;
+    status?: unknown;
+  };
   if (typeof t.id === 'number' && typeof t.reference === 'string') references.set(t.id, t.reference);
-  return { id: Number(t.id), reference: String(t.reference ?? ''), status: typeof t.status === 'string' ? (t.status as TicketFull['status']) : null, appended: a.appended === true, existing: a.existing === true };
+  return {
+    id: Number(t.id),
+    reference: String(t.reference ?? ''),
+    status: typeof t.status === 'string' ? (t.status as TicketFull['status']) : null,
+    appended: a.appended === true,
+    existing: a.existing === true,
+  };
 }
 
 /* ── knowledge and AI in a ticket (D-10) ────────────────────────────────── */
@@ -571,7 +816,12 @@ export async function ticketArticles(ticketId: number, q?: string, signal?: Abor
 
 /** What to put in the reply for an article — its link (public articles only: `422 INTERNAL`) or its text; counted as a use. */
 export function insertArticle(ticketId: number, articleId: number, mode: 'link' | 'text'): Promise<KbInsert> {
-  return v1Only(() => send<KbInsert>('POST', `${BASE}/tickets/${ticketId}/kb/insert`, { article_id: articleId, mode }));
+  return v1Only(() =>
+    send<KbInsert>('POST', `${BASE}/tickets/${ticketId}/kb/insert`, {
+      article_id: articleId,
+      mode,
+    }),
+  );
 }
 
 /** The thread in up to five bullets (FR-AI-01), kept by the server until the thread moves; `refresh` asks anew. */
@@ -581,7 +831,11 @@ export function aiSummary(ticketId: number, refresh = false): Promise<AiSummary>
 
 /** A reply to edit and send oneself (FR-AI-02): never sent by this call. Notes go in only when asked. */
 export function aiReply(ticketId: number, input: { tone: AiTone; include_notes: boolean; instructions?: string }): Promise<AiReplyDraft> {
-  const body = { tone: input.tone, include_notes: input.include_notes, ...(input.instructions?.trim() ? { instructions: input.instructions.trim() } : {}) };
+  const body = {
+    tone: input.tone,
+    include_notes: input.include_notes,
+    ...(input.instructions?.trim() ? { instructions: input.instructions.trim() } : {}),
+  };
   return v1Only(() => send<AiReplyDraft>('POST', `${BASE}/tickets/${ticketId}/ai/reply`, body));
 }
 
@@ -592,7 +846,13 @@ export function aiClassify(ticketId: number): Promise<AiClassification> {
 
 /** The composer's text improved, shortened, made friendlier or more professional, or translated. */
 export function aiRewrite(text: string, mode: RewriteMode, organizationId?: number | null): Promise<{ text: string; model: string | null }> {
-  return v1Only(() => send<{ text: string; model: string | null }>('POST', `${BASE}/ai/rewrite`, { text, mode, ...(organizationId ? { organization_id: organizationId } : {}) }));
+  return v1Only(() =>
+    send<{ text: string; model: string | null }>('POST', `${BASE}/ai/rewrite`, {
+      text,
+      mode,
+      ...(organizationId ? { organization_id: organizationId } : {}),
+    }),
+  );
 }
 
 /** The assistant could not answer (`503 AI_UNAVAILABLE`): the rest of the desk carries on without it. */
@@ -612,19 +872,44 @@ export function assistError(e: unknown): string {
 
 /** My draft of a ticket as the server keeps it, or null (none, or a server without drafts). */
 export async function serverDraft(ticketId: number, signal?: AbortSignal): Promise<ServerDraft | null> {
-  return v1OrElse(async () => (await get<{ draft: ServerDraft | null }>(`${BASE}/tickets/${ticketId}/draft`, undefined, signal)).draft ?? null, () => null);
+  return v1OrElse(
+    async () => (await get<{ draft: ServerDraft | null }>(`${BASE}/tickets/${ticketId}/draft`, undefined, signal)).draft ?? null,
+    () => null,
+  );
 }
 
 /** Keeps my draft on the server too — an empty body removes it. */
-export function saveServerDraft(ticketId: number, draft: { mode: 'reply' | 'note'; body: string; cc?: string[] }): Promise<unknown> {
-  return v1OrElse(() => send('PUT', `${BASE}/tickets/${ticketId}/draft`, { mode: draft.mode, body: draft.body, ...(draft.cc?.length ? { cc: draft.cc } : {}) }), () => null);
+export function saveServerDraft(
+  ticketId: number,
+  draft: {
+    mode: 'reply' | 'note';
+    body: string;
+    body_html?: string;
+    cc?: string[];
+  },
+): Promise<unknown> {
+  return v1OrElse(
+    () =>
+      send('PUT', `${BASE}/tickets/${ticketId}/draft`, {
+        mode: draft.mode,
+        body: draft.body,
+        body_html: draft.body_html,
+        ...(draft.cc?.length ? { cc: draft.cc } : {}),
+      }),
+    () => null,
+  );
 }
 
 /* ── windows ───────────────────────────────────────────────────────────── */
 
 /** A ticket's quick-reply window (D-04): floating, always on top, one at a time; its draft is the ticket's. */
 export function openQuickReply(ticketId: number): void {
-  void call('windows:open', { kind: 'support-quick', route: quickRoute(ticketId), title: 'Quick reply', alwaysOnTop: true }).catch(() => undefined);
+  void call('windows:open', {
+    kind: 'support-quick',
+    route: quickRoute(ticketId),
+    title: 'Quick reply',
+    alwaysOnTop: true,
+  }).catch(() => undefined);
 }
 
 /* ── refusals ───────────────────────────────────────────────────────────── */

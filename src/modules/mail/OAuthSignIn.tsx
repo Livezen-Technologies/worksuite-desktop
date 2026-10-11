@@ -1,5 +1,6 @@
 import { useQueryClient } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useRef, useState } from 'react';
+import { checkSignInUrl, describeSignInUrl, newReferenceId } from '@shared/mail-oauth';
 import { apiGet, apiPost } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { text } from '../../core/i18n';
@@ -7,12 +8,27 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, cx } from '../../components/ui';
 import { mailKeys } from './api';
-import { detailsText, initialSteps, isAttemptId, isFinished, nextPoll, startBody, type OAuthAttempt, type OAuthExplained, type OAuthStart, type OAuthStep } from './oauth';
+import { detailsText, explained, initialSteps, isAttemptId, isFinished, nextPoll, startBody, startFailure, type OAuthAttempt, type OAuthExplained, type OAuthStart, type OAuthStep } from './oauth';
 
 /**
  * The desktop half of a Microsoft / Google mailbox sign-in (see ./oauth.ts for the flow): start it, open the system
  * browser, watch the attempt, and show each step and any explanation.
  */
+
+/**
+ * A sign-in URL from the server, checked before the browser opens it: the provider's page, a code with PKCE S256 and
+ * a state, no secret. A refusal is logged under a reference ID and explained; the URL's values are never logged.
+ */
+export function openSignInUrl(url: string, provider: string): Promise<OAuthExplained | null> {
+  const check = checkSignInUrl(url, provider);
+  if (!check.ok) {
+    const ref = newReferenceId();
+    console.error(`Mailbox sign-in refused [${ref}]: ${check.problem} ${describeSignInUrl(url)}`);
+    return Promise.resolve({ ...startFailure('', ref), title: "WorkSuite's sign-in isn't set up correctly", message: "The sign-in page WorkSuite's server sent isn't one WorkSuite can safely open.", next_step: 'Contact your WorkSuite admin and give them the details below.', details: { request_id: ref, error: check.problem } });
+  }
+  if (check.warnings.length) console.error(`Mailbox sign-in: ${check.warnings.join(', ')} ${describeSignInUrl(url)}`);
+  return call('app:openExternal', { url }).then(() => null);
+}
 
 /**
  * Watch an attempt to its end without a component (the repair flow, which only toasts the outcome). Returns a
@@ -47,7 +63,6 @@ export function useOAuthSignIn(provider: string) {
   const qc = useQueryClient();
   const [phase, setPhase] = useState<SignInPhase>('idle');
   const [attempt, setAttempt] = useState<OAuthAttempt | null>(null);
-  const [error, setError] = useState<string | null>(null);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const run = useRef(0);
 
@@ -88,11 +103,18 @@ export function useOAuthSignIn(provider: string) {
       stop();
       const mine = run.current;
       setPhase('starting');
-      setError(null);
       setAttempt(null);
+      const fail = (e: OAuthExplained) => {
+        if (run.current !== mine) return;
+        const ref = e.ref ?? '';
+        const steps = initialSteps().map((s) => ({ ...s, status: s.id === 'signin' ? ('fail' as const) : ('skipped' as const) }));
+        setAttempt({ id: ref, request_id: ref, provider, client: 'desktop', purpose: 'connect', status: 'failed', email: null, connection_id: null, steps, error: e, warnings: [], created_at: null, finished_at: null });
+        setPhase('done');
+      };
       try {
         const r = await apiPost<OAuthStart>(`/api/mail/oauth/${provider}/start`, startBody(email));
-        await call('app:openExternal', { url: r.url });
+        const refused = await openSignInUrl(r.url, provider);
+        if (refused) return fail(refused);
         if (run.current !== mine) return;
         if (isAttemptId(r.attempt)) {
           setPhase('waiting');
@@ -101,8 +123,9 @@ export function useOAuthSignIn(provider: string) {
           setPhase('legacy');
         }
       } catch (e) {
-        setError(errorMessage(e));
-        setPhase('idle');
+        const ref = newReferenceId();
+        console.error(`Mailbox sign-in could not start [${ref}]: ${errorMessage(e).slice(0, 300)}`);
+        fail(startFailure(errorMessage(e), ref));
       }
     },
     [provider, stop, watch],
@@ -112,10 +135,9 @@ export function useOAuthSignIn(provider: string) {
     stop();
     setPhase('idle');
     setAttempt(null);
-    setError(null);
   }, [stop]);
 
-  return { phase, attempt, error, start, reset };
+  return { phase, attempt, start, reset };
 }
 
 const STEP_ICON: Record<OAuthStep['status'], { icon: string; tone: string }> = {
@@ -147,36 +169,68 @@ function copy(value: string, what: string) {
   );
 }
 
-export function OAuthErrorCard({ error, attempt }: { error: OAuthExplained; attempt?: OAuthAttempt | null }) {
+/**
+ * A failed sign-in, in words: what went wrong and the next step, the admin consent link to copy when the Microsoft 365
+ * admin has to approve WorkSuite, and — under Details — Microsoft's code, the reference ID and Copy details.
+ */
+export function OAuthErrorCard({ error: raw, attempt }: { error: OAuthExplained; attempt?: OAuthAttempt | null }) {
+  const error = explained(raw) ?? raw;
+  const [open, setOpen] = useState(false);
+  const detailsId = useId();
   const d = error.details ?? {};
-  const code = error.code ?? d.code ?? null;
+  const code = error.code ?? d.code ?? (error.aadsts ? `AADSTS${error.aadsts}` : null);
+  const ref = error.ref ?? d.request_id ?? attempt?.request_id ?? null;
+  const consent = error.admin_consent_url ?? (error.action?.type === 'copy' && /adminconsent/i.test(error.action.value) ? error.action.value : null);
+  const otherCopy = error.action?.type === 'copy' && error.action.value !== consent ? error.action : null;
+  const howTo = error.help_url ?? (error.action?.type === 'link' ? error.action.value : null);
   return (
     <div role={error.quiet ? 'status' : 'alert'} className={cx('rounded-[10px] px-3 py-2.5 text-[13px]', error.quiet ? 'bg-subtle text-ink-2' : 'bg-danger-bg text-ink')}>
       <p className="font-semibold">{error.title}</p>
       <p className="mt-0.5 text-ink-2">{error.message}</p>
       {error.next_step ? <p className="mt-0.5 text-ink-2">{error.next_step}</p> : null}
-      {error.admin_consent_url ? (
+      {consent ? (
         <div className="mt-2 flex flex-wrap items-center gap-2 rounded-[8px] bg-surface px-2 py-1.5">
-          <span className="text-[12px] text-ink-3">{text('Approval link for your Microsoft 365 admin')}</span>
-          <code className="min-w-0 flex-1 truncate font-mono text-[12px]">{error.admin_consent_url}</code>
-          <Button size="sm" icon="copy" onClick={() => copy(error.admin_consent_url!, text('Approval link'))}>
-            {text('Copy approval link')}
+          <span className="text-[12px] text-ink-3">{text('Admin consent link for your Microsoft 365 admin')}</span>
+          <code className="min-w-0 flex-1 truncate font-mono text-[12px]">{consent}</code>
+          <Button size="sm" icon="copy" onClick={() => copy(consent, text('Admin consent link'))}>
+            {text('Copy admin consent link')}
           </Button>
         </div>
       ) : null}
-      {error.help_url ? (
-        <button type="button" className="mt-1 text-[12.5px] font-semibold text-primary hover:underline" onClick={() => void call('app:openExternal', { url: error.help_url! })}>
-          {text('How to')}
+      {otherCopy ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2 rounded-[8px] bg-surface px-2 py-1.5">
+          <code className="min-w-0 flex-1 truncate font-mono text-[12px]">{otherCopy.value}</code>
+          <Button size="sm" icon="copy" onClick={() => copy(otherCopy.value, otherCopy.label)}>
+            {otherCopy.label}
+          </Button>
+        </div>
+      ) : null}
+      {howTo ? (
+        <button type="button" className="mt-1 text-[12.5px] font-semibold text-primary hover:underline" onClick={() => void call('app:openExternal', { url: howTo })}>
+          {error.action?.type === 'link' ? error.action.label : text('How to')}
         </button>
       ) : null}
       {!error.quiet ? (
-        <div className="mt-2 flex flex-wrap items-center gap-2 text-[12px] text-ink-3">
-          {code ?? d.error ? <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-ink-2">{code ?? d.error}</code> : null}
-          {d.request_id ? <span>{text('Request ID {id}', { id: d.request_id })}</span> : null}
-          {d.correlation_id ? <span>{text('Correlation ID {id}', { id: d.correlation_id })}</span> : null}
-          <Button size="sm" icon="copy" onClick={() => copy(detailsText(attempt ?? { request_id: d.request_id ?? '', provider: d.provider ?? '', status: 'failed', steps: [], email: null, error }), text('Details'))}>
-            {text('Copy details')}
-          </Button>
+        <div className="mt-2">
+          <button type="button" aria-expanded={open} aria-controls={detailsId} onClick={() => setOpen(!open)} className="inline-flex items-center gap-1 text-[12px] font-semibold text-ink-3 hover:text-ink-2">
+            <Icon name="chevron-down" size={12} className={cx('transition-transform motion-reduce:transition-none', open ? '' : '-rotate-90')} />
+            {text('Details')}
+          </button>
+          <div id={detailsId} hidden={!open} className="mt-1.5 space-y-1 text-[12px] text-ink-3">
+            {code ?? d.error ? (
+              <p>
+                {text('Error code')} <code className="rounded bg-surface px-1.5 py-0.5 font-mono text-ink-2">{code ?? d.error}</code>
+              </p>
+            ) : null}
+            {error.error_code ? <p>{text('WorkSuite code {code}', { code: error.error_code })}</p> : null}
+            {ref ? <p>{text('Reference ID {id}', { id: ref })}</p> : null}
+            {d.correlation_id ? <p>{text('Correlation ID {id}', { id: d.correlation_id })}</p> : null}
+            {d.trace_id ? <p>{text('Trace ID {id}', { id: d.trace_id })}</p> : null}
+            {d.description ? <p className="break-words">{d.description}</p> : null}
+            <Button size="sm" icon="copy" onClick={() => copy(detailsText(attempt ? { ...attempt, error } : { request_id: ref ?? '', provider: d.provider ?? '', status: 'failed', steps: [], email: null, error }), text('Details'))}>
+              {text('Copy details')}
+            </Button>
+          </div>
         </div>
       ) : null}
     </div>
@@ -208,13 +262,16 @@ export function OAuthProgress({ phase, attempt, onRetry }: { phase: SignInPhase;
       {phase === 'done' && attempt?.error ? <OAuthErrorCard error={attempt.error} attempt={attempt} /> : null}
       {phase === 'done' && attempt?.status === 'cancelled' && !attempt.error ? <p className="text-[13px] text-ink-2">{text('Sign-in was cancelled. Try again when you are ready.')}</p> : null}
       {phase === 'done' && attempt
-        ? attempt.warnings.map((w, i) => (
-            <div key={i} className="rounded-[10px] bg-warning-bg px-3 py-2 text-[13px] text-warning">
-              <p className="font-semibold">{w.title}</p>
-              <p>{w.message}</p>
-              {w.next_step ? <p>{w.next_step}</p> : null}
-            </div>
-          ))
+        ? attempt.warnings.map((raw, i) => {
+            const w = explained(raw) ?? raw;
+            return (
+              <div key={i} className="rounded-[10px] bg-warning-bg px-3 py-2 text-[13px] text-warning">
+                <p className="font-semibold">{w.title}</p>
+                <p>{w.message}</p>
+                {w.next_step ? <p>{w.next_step}</p> : null}
+              </div>
+            );
+          })
         : null}
       {phase === 'done' && attempt && attempt.status !== 'connected' ? (
         <Button variant="primary" icon="external" onClick={onRetry}>

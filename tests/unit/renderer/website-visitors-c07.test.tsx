@@ -1,7 +1,7 @@
 // @vitest-environment jsdom
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
 /**
@@ -24,6 +24,11 @@ vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 import { apiGet, apiPost } from '../../../src/core/api';
 import { toast } from '../../../src/core/toasts';
 import { WebsiteLive, type OnlineVisitor } from '../../../src/modules/chat/website/WebsiteLive';
+
+// Elapsed times ("At risk · 3:12", "Waiting 1:38") are worked out from fixture timestamps built when this file loads.
+// Pin Date so a slow machine can't move the clock between building the fixtures and drawing them; timers stay real.
+vi.useFakeTimers({ toFake: ['Date'], now: new Date('2026-10-11T09:00:00Z') });
+afterAll(() => vi.useRealTimers());
 
 const ago = (ms: number) => new Date(Date.now() - ms).toISOString();
 const visitor = (over: Partial<OnlineVisitor>): OnlineVisitor => ({
@@ -100,7 +105,7 @@ describe('the Visitors online table (UX-VIS-01)', () => {
     mount();
     await waitFor(() => expect(rows()).toHaveLength(4));
     expect(cells('Visitor 7A3D')).toEqual(['Visitor 7A3D· Colombo', '/shop/microsoft-365', '4m', '6', '3rd', 'Now']);
-    expect(cells('Visitor 4F2A')).toEqual(['Visitor 4F2A· Colombo', '/shop/adobe-creative-cloud', '6m', '4', '1st', expect.stringMatching(/^Waiting 1:3\d$/)]);
+    expect(cells('Visitor 4F2A')).toEqual(['Visitor 4F2A· Colombo', '/shop/adobe-creative-cloud', '6m', '4', '1st', 'Waiting 1:38']);
     expect(cells('Visitor 51EF')).toEqual(['Visitor 51EF· London', '/blog/office-2024-vs-365', '6m', '3', '2nd', '3 min ago']);
     // Placed by the browser's clock alone: the country, marked ≈.
     expect(cells('Visitor 2C88')).toEqual(['Visitor 2C88· Sri Lanka ≈', '/', '0m', '1', '1st', 'Just arrived']);
@@ -206,7 +211,7 @@ describe('speak first (UX-VIS-04, VIS-07)', () => {
   it('somebody waiting in a chat has Open the chat and Invite a colleague instead', async () => {
     mount(2);
     const card = await panel();
-    expect(within(card).getByText(/^Waiting 1:3\d$/)).toBeTruthy();
+    expect(within(card).getByText('Waiting 1:38')).toBeTruthy();
     expect(within(card).queryByRole('textbox')).toBeNull();
     fireEvent.click(within(card).getByRole('button', { name: 'Open the chat' }));
     expect(props.onOpenChat).toHaveBeenLastCalledWith(9);
