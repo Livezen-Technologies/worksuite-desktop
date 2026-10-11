@@ -153,6 +153,7 @@ export class MailAlertService {
   /** What arrived while paused: the resume summary counts it (MNA-TRY-04). */
   private held = new Map<string, MailArrival>();
   private wasPaused = false;
+  private generation = 0;
   private mutedKeys = new Set<string>();
   private server: ServerAlertPrefs = { preview: null, minPreview: null, sound: null };
   private hours: WorkingHours | null = null;
@@ -206,6 +207,8 @@ export class MailAlertService {
   }
 
   stop(): void {
+    this.generation++;
+    this.mutedKeys.clear();
     // The web may notify again at once, rather than when the heartbeat goes stale (MNA-WEB-07).
     if (this.started) void this.api.gone(this.host.deviceId()).catch(() => undefined);
     this.started = false;
@@ -217,7 +220,7 @@ export class MailAlertService {
       p.note?.close();
     }
     this.pending.clear();
-    for (const l of this.live.values()) l.note?.close();
+    for (const l of [...this.live.values()]) this.close(l, false);
     this.live.clear();
     this.host.send('mail-alert:clear', { all: true });
     this.seen.clear();
@@ -364,6 +367,8 @@ export class MailAlertService {
   }
 
   private async admit(a: MailArrival): Promise<void> {
+    const generation = this.generation;
+    const user = this.host.userId();
     let breakthrough = false;
     if (this.host.accept) {
       try {
@@ -378,7 +383,7 @@ export class MailAlertService {
         // Which mail may alert could not be worked out: if in doubt, say it (WF-DO01 fails open).
       }
     }
-    if (this.cleared.has(a.key)) return;
+    if (generation !== this.generation || user !== this.host.userId() || this.cleared.has(a.key)) return;
     if (breakthrough) this.breakthrough.add(a.key);
     this.buffer.push(a);
     this.armBuffer();
