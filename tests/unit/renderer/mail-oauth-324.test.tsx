@@ -20,6 +20,8 @@ import { detailsText, initialSteps, isAttemptId, nextPoll, startBody, summaryLin
  */
 
 const ID = 'a'.repeat(32);
+/** A sign-in page as the server builds it: a code, PKCE S256 and a state (the app checks before opening it). */
+const SIGN_IN = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?response_type=code&state=st&code_challenge=ch&code_challenge_method=S256&scope=openid';
 const attempt = (over: Partial<OAuthAttempt>): OAuthAttempt => ({
   id: ID, request_id: '7F3A9C21B04E', provider: 'microsoft', client: 'desktop', purpose: 'connect', status: 'pending', email: null, connection_id: null,
   steps: initialSteps(), error: null, warnings: [], created_at: null, finished_at: null, ...over,
@@ -57,7 +59,7 @@ describe('the pieces', () => {
   it('copies the code and every id support asks for', () => {
     const t = detailsText(consent);
     expect(t).toContain('Error code: AADSTS65001');
-    expect(t).toContain('Request ID: 7F3A9C21B04E');
+    expect(t).toContain('Reference ID: 7F3A9C21B04E');
     expect(t).toContain('Trace ID: trace-1');
     expect(t).toContain('Correlation ID: corr-2');
     expect(t).toContain('Signed in ✗');
@@ -102,23 +104,24 @@ describe('adding a Microsoft 365 mailbox', () => {
 
   it('opens the browser, watches the steps, and explains a consent failure with the approval link', async () => {
     replies = [attempt({}), consent];
-    vi.mocked(apiPost).mockResolvedValue({ url: 'https://login.microsoftonline.com/x', attempt: ID, request_id: '7F3A9C21B04E' } as never);
+    vi.mocked(apiPost).mockResolvedValue({ url: SIGN_IN, attempt: ID, request_id: '7F3A9C21B04E' } as never);
     const dialog = await open();
 
     fireEvent.change(within(dialog).getByLabelText(/Email address/), { target: { value: 'amal@contoso.com' } });
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Sign in with Microsoft' }));
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/mail/oauth/microsoft/start', { client: 'desktop', login_hint: 'amal@contoso.com' }));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('app:openExternal', { url: 'https://login.microsoftonline.com/x' }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('app:openExternal', { url: SIGN_IN }));
     expect(await within(dialog).findByRole('list', { name: 'Sign-in steps' })).toBeTruthy();
     expect(within(dialog).getByText(/Finish signing in in your browser/)).toBeTruthy();
 
     await vi.advanceTimersByTimeAsync(2100);
     await vi.advanceTimersByTimeAsync(2100);
     expect(await within(dialog).findByText('Your Microsoft 365 admin needs to approve WorkSuite')).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Details' }));
     expect(within(dialog).getByText('AADSTS65001')).toBeTruthy();
     expect(apiGet).toHaveBeenCalledWith(`/api/mail/oauth/attempts/${ID}`);
 
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy approval link' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Copy admin consent link' }));
     await waitFor(() => expect(navigator.clipboard.writeText).toHaveBeenCalledWith('https://login.microsoftonline.com/contoso.com/adminconsent?client_id=cid'));
     fireEvent.click(within(dialog).getByRole('button', { name: 'Copy details' }));
     await waitFor(() => expect(vi.mocked(navigator.clipboard.writeText).mock.calls[1]?.[0]).toContain('Correlation ID: corr-2'));
@@ -127,7 +130,7 @@ describe('adding a Microsoft 365 mailbox', () => {
 
   it('says it is connected when every step passed', async () => {
     replies = [attempt({ status: 'connected', email: 'amal@contoso.com', steps: initialSteps().map((s) => ({ ...s, status: 'pass' as const })) })];
-    vi.mocked(apiPost).mockResolvedValue({ url: 'https://login.microsoftonline.com/x', attempt: ID } as never);
+    vi.mocked(apiPost).mockResolvedValue({ url: SIGN_IN, attempt: ID } as never);
     const dialog = await open();
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Sign in with Microsoft' }));
     await vi.advanceTimersByTimeAsync(2100);
@@ -136,7 +139,7 @@ describe('adding a Microsoft 365 mailbox', () => {
 
   it('falls back to "finish in your browser" with an older server', async () => {
     replies = [attempt({})];
-    vi.mocked(apiPost).mockResolvedValue({ url: 'https://login.microsoftonline.com/x' } as never);
+    vi.mocked(apiPost).mockResolvedValue({ url: SIGN_IN } as never);
     const dialog = await open();
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Sign in with Microsoft' }));
     expect(await within(dialog).findByText(/The mailbox appears here when you are done/)).toBeTruthy();

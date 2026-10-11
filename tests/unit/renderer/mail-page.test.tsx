@@ -355,11 +355,12 @@ describe('add a mailbox', () => {
     fireEvent.change(await within(dialog).findByLabelText(/This mailbox's mail password/), { target: { value: 'pw' } });
     fireEvent.submit(within(dialog).getByLabelText(/This mailbox's mail password/).closest('form')!);
     await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/mail/local-mailboxes/8/connect', { password: 'pw' }));
-    // Microsoft 365: sign in in the browser.
+    // Microsoft 365: sign in in the browser (a sign-in page with PKCE and a state, as the server builds it).
+    const signIn = 'https://login.microsoftonline.com/common/oauth2/v2.0/authorize?response_type=code&state=st&code_challenge=ch&code_challenge_method=S256';
     fireEvent.click(within(dialog).getByRole('radio', { name: /Microsoft 365/ }));
-    vi.mocked(apiPost).mockResolvedValueOnce({ url: 'https://login.microsoftonline.com/x' } as never);
+    vi.mocked(apiPost).mockResolvedValueOnce({ url: signIn } as never);
     fireEvent.click(await within(dialog).findByRole('button', { name: 'Sign in with Microsoft' }));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('app:openExternal', { url: 'https://login.microsoftonline.com/x' }));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('app:openExternal', { url: signIn }));
   });
 });
 

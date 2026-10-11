@@ -10,7 +10,13 @@
  * verifier, the code or a token, so no loopback listener or desktop redirect URI is needed.
  *
  * An older server answers start with only `url`: the app then falls back to "finish in your browser".
+ *
+ * Before the browser opens, the URL is checked (shared/mail-oauth.ts: the provider's page, PKCE S256, a state, no
+ * secret). A failure says what went wrong and what to do, with the server's one action (copy the admin consent link or
+ * the redirect URI, or a how-to); Microsoft's code and the reference ID are under Details, and nothing ever says
+ * "check the server log" (worksuite#154).
  */
+import { explainProviderError, mentionsServerLog } from '@shared/mail-oauth';
 
 export type StepStatus = 'pending' | 'pass' | 'warn' | 'fail' | 'skipped';
 
@@ -46,6 +52,14 @@ export interface OAuthExplained {
   admin_consent_url: string | null;
   help_url: string | null;
   details: OAuthErrorDetails;
+  /** The reference ID every log line about this failure carries (the server's request ID, or the app's own). */
+  ref?: string | null;
+  /** A stable name for the failure: M365_ADMIN_CONSENT, M365_IMAP_DISABLED… */
+  error_code?: string | null;
+  /** Microsoft's number alone ('65001'). */
+  aadsts?: string | number | null;
+  /** The one button that moves things on: copy the admin consent link or redirect URI, or open a how-to. */
+  action?: { type: 'copy' | 'link'; label: string; value: string } | null;
 }
 
 export interface OAuthAttempt {
@@ -110,10 +124,11 @@ export function detailsText(a: Pick<OAuthAttempt, 'request_id' | 'provider' | 's
   const lines = [`WorkSuite mailbox sign-in (${a.provider}, desktop)`, `Result: ${a.status}${e ? ` — ${e.title}` : ''}`];
   if (a.email) lines.push(`Account: ${a.email}`);
   if (e?.code ?? d.code) lines.push(`Error code: ${e?.code ?? d.code}`);
+  if (e?.error_code) lines.push(`WorkSuite code: ${e.error_code}`);
   if (d.error) lines.push(`Error: ${d.error}`);
   if (d.description) lines.push(`Description: ${d.description}`);
   if (d.stage) lines.push(`Stage: ${d.stage}`);
-  lines.push(`Request ID: ${a.request_id}`);
+  lines.push(`Reference ID: ${e?.ref ?? d.request_id ?? a.request_id}`);
   if (d.trace_id) lines.push(`Trace ID: ${d.trace_id}`);
   if (d.correlation_id) lines.push(`Correlation ID: ${d.correlation_id}`);
   if (d.timestamp) lines.push(`Timestamp: ${d.timestamp}`);
@@ -126,8 +141,56 @@ export function detailsText(a: Pick<OAuthAttempt, 'request_id' | 'provider' | 's
 export function summaryLine(a: OAuthAttempt): { kind: 'success' | 'info' | 'error'; text: string } {
   if (a.status === 'connected') return { kind: 'success', text: a.email ? `${a.email} is connected.` : 'Mailbox connected.' };
   if (a.status === 'cancelled' || a.error?.quiet) return { kind: 'info', text: 'Sign-in was cancelled. Try again when you are ready.' };
-  const e = a.error;
+  const e = explained(a.error);
   if (!e) return { kind: 'error', text: 'The sign-in did not finish. Try again.' };
   const code = e.code ?? e.details?.code;
   return { kind: 'error', text: `${e.message}${e.next_step ? ` ${e.next_step}` : ''}${code ? ` (${code})` : ''}` };
+}
+
+/**
+ * An explanation fit to show: one that sends the person to the server log (an older server's "OAuth sign-in failed —
+ * check the server log"), or names nothing, is replaced by what Microsoft's code means. The codes and IDs are kept.
+ */
+export function explained(e: OAuthExplained | null): OAuthExplained | null {
+  if (!e) return null;
+  const d = e.details ?? {};
+  const vague = mentionsServerLog(e.title, e.message, e.next_step) || !e.title || !e.message;
+  const mapped = explainProviderError({ code: e.code ?? d.code, error: e.error ?? d.error, description: d.description });
+  if (!vague && !(e.kind === 'unknown' && mapped.kind !== 'unknown')) return e;
+  return {
+    ...e,
+    kind: mapped.kind,
+    code: e.code ?? mapped.code,
+    title: mapped.title,
+    message: mapped.message,
+    next_step: mapped.next_step,
+    quiet: mapped.kind === 'cancelled',
+  };
+}
+
+/** A start that failed before the browser opened, in words — never a log the person can't read. */
+export function startFailure(message: string, ref: string): OAuthExplained {
+  const vague = mentionsServerLog(message) || !message.trim();
+  return {
+    kind: 'unknown',
+    code: null,
+    error: 'start_failed',
+    title: "The sign-in couldn't start",
+    message: vague ? "WorkSuite couldn't start the sign-in with Microsoft." : message,
+    next_step: 'Try again. If it keeps happening, give your admin the details below.',
+    quiet: false,
+    admin_consent_url: null,
+    help_url: null,
+    ref,
+    details: { request_id: ref, error: 'start_failed', description: vague ? null : message },
+  };
+}
+
+/** Why a mailbox's sign-in stopped working, for its row: "Sign in again" for a revoked or expired Microsoft sign-in. */
+export function mailboxProblemText(b: { auth_type?: string; last_error?: string | null }): string | null {
+  const raw = b.last_error ?? null;
+  if (b.auth_type !== 'oauth') return raw && !mentionsServerLog(raw) ? raw : raw ? 'The sign-in failed.' : null;
+  const e = explainProviderError({ error: /invalid_grant|oauth_expired|sign-in expired/i.test(raw ?? '') ? 'invalid_grant' : null, description: raw });
+  if (e.kind === 'unknown') return raw && !mentionsServerLog(raw) ? raw : 'The sign-in stopped working. Sign in again.';
+  return `${e.message} ${e.next_step ?? ''}`.trim();
 }
