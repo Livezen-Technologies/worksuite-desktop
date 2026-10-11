@@ -6,6 +6,7 @@ import { adoptWindow, detachTab, dockSide, navigate, setSplit, swapSides, tabsSt
 import { TabProvider } from '../core/tab-context';
 import { moduleFor } from '../modules/registry';
 import { ModuleBoundary, Spinner, IconButton, cx } from '../components/ui';
+import { moduleRecovery, useOptionalQueryClient } from '../components/moduleRecovery';
 import { TAB_DRAG, WINDOW_DRAG, dragHas, droppedWindow } from '../core/dock-drag';
 
 /**
@@ -30,6 +31,7 @@ export function Workspace() {
   const visible = useVisibleIds();
   const sideId = useStore(tabsStore, (s) => s.sideId);
   const split = useStore(tabsStore, (s) => s.split);
+  const qc = useOptionalQueryClient();
   const ref = useRef<HTMLElement>(null);
   const [zone, setZone] = useState<'side' | 'tab' | null>(null);
   const [resizing, setResizing] = useState(false);
@@ -97,7 +99,7 @@ export function Workspace() {
             <div className="flex h-full flex-col">
               {side ? <SideBar id={tab.id} title={tab.title} /> : null}
               <div className="relative min-h-0 flex-1">
-                <ModuleBoundary name={mod.manifest.name} onDiagnostics={() => navigate('/diagnostics')} resetKey={tab.route}>
+                <ModuleBoundary name={mod.manifest.name} {...moduleRecovery(mod, qc, navigate)} resetKey={tab.route}>
                   <Suspense fallback={<Spinner />}>
                     <TabProvider tabId={tab.id} route={tab.route} active={shown}>
                       <C tabId={tab.id} route={tab.route} active={shown} />

@@ -242,7 +242,8 @@ export async function runSync(ids: number[], opts: { all?: boolean; offline?: bo
       }
     }
   };
-  await Promise.all(Array.from({ length: Math.min(SYNC_PARALLEL, todo.length) }, worker));
+  // Each account on its own (#338): one that throws — even past its own catch — never stops the others being tried.
+  await Promise.allSettled(Array.from({ length: Math.min(SYNC_PARALLEL, todo.length) }, worker));
   if (opts.all) syncRunner.set({ all: false });
   return { started: todo, failed };
 }

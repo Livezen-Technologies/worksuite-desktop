@@ -22,7 +22,11 @@ import { useVips } from './PeopleCard';
 import { TodoPane, nextSlot } from './TodoPane';
 import type { ModuleProps } from '../registry';
 import { AddMailbox } from './AddMailbox';
-import { PREFETCH_AHEAD, prefetchMessages, useForgetRemovedMailboxes, useLocalFirst, useServerStateOnRefusal } from './localFirst';
+import { PREFETCH_AHEAD, messageKey, prefetchMessages, useForgetRemovedMailboxes, useLocalFirst, useServerStateOnRefusal } from './localFirst';
+import { AccountAttention } from './AccountAttention';
+import { MailBoundary } from './MailBoundary';
+import { safeListData } from './safety';
+import { diagnosticsRoute, noteAccount } from '../../core/screen-errors';
 import { messageAction, moveMessage, useTemplates, useLocalStore, useMailPrefs, useMailboxes, usePendingMail, useViewCounts } from './api';
 import { registerCommand, runCommand } from '../../core/commands';
 import { MAIL_COMMANDS, bindings, commandFor, isPlain, keyLabel, keyOf, type MailCommandId } from './keymap';
@@ -59,7 +63,7 @@ import { SearchView } from './SearchView';
 import { MailFileViewer } from './FileViewer';
 import { ExportDialog } from './DataFiles';
 import { MailSidebar, unreadOf, type Place } from './Sidebar';
-import { fetchProtection, useQuarantineCount } from './protection/api';
+import { fetchProtection, protectionKeys, useQuarantineCount } from './protection/api';
 import { QUARANTINE_ROUTE, QuarantinePage } from './protection/QuarantinePage';
 import { attachmentGate } from './protection/verdicts';
 import { StatusBar, WaitingPanel } from './StatusBar';
@@ -207,6 +211,8 @@ function MailWorkspace({ active }: ModuleProps) {
     },
     getNextPageParam: nextListParam,
     enabled: (mailboxes.isSuccess || mailboxes.isError) && folder !== 'outbox',
+    // Each page and row read on its own (#338): one bad answer never takes the list — or Mail — down.
+    select: safeListData,
   });
   // The list from this computer at once — every saved page of this folder, the latest 100 — then the server's
   // (worksuite-desktop#162, #208). All Accounts reads every account's saved pages for the role.
@@ -424,6 +430,9 @@ function MailWorkspace({ active }: ModuleProps) {
   // The open message: the URL names it; its tab joins the strip.
   const current: MessageRef | null = msg ? { uid: msg, folder: msgFolder, mailbox: msgBox ?? effectiveBox, mid: query.get('mid'), midHash: query.get('mih'), uidvalidity: query.get('uv') ? Number(query.get('uv')) : null } : null;
   const currentKey = current ? queueKey(current.mailbox, current.folder, current.uid) : null;
+  // The account on screen, for the log line of an error Mail cannot draw past (#338).
+  const accountOnScreen = current?.mailbox ?? effectiveBox ?? null;
+  useEffect(() => noteAccount('mail', accountOnScreen), [accountOnScreen]);
   const known = current ? flat.find((r) => r.key === currentKey)?.row : undefined;
   if (current && currentKey && !tabs.some((t) => t.key === currentKey)) {
     setTabs(withTab(tabs, { key: currentKey, ref: current, subject: known?.subject ?? '', from: known ? known.from_name || known.from_email : '' }, currentKey));
@@ -778,7 +787,7 @@ function MailWorkspace({ active }: ModuleProps) {
   const focusHint = focusOn && focusTab === 'focused' && focusSplit && showFocusedHint(focusSplit.focused, focusSplit.other, !list.isLoading && !fill)
     ? { onTurnOff: () => setPrefs({ focused: false }), onTeach: () => setFocusTab('other') }
     : null;
-  const listEl = virtualOutbox ? (
+  const listInner = virtualOutbox ? (
     <OutboxView active={active} pending={pending.data ?? []} onEdit={openCompose} />
   ) : folder === 'outbox' ? (
       <ScheduledList active={active} />
@@ -846,6 +855,12 @@ function MailWorkspace({ active }: ModuleProps) {
         }
       />
     );
+  // A list that cannot be drawn says so in its place (#338); the folders and the reading pane go on working.
+  const listEl = (
+    <MailBoundary part="list" className="max-w-[420px] border-r border-line" resetKey={listKeyId} account={effectiveBox} onRetry={() => void qc.resetQueries({ queryKey: listKey })} onDiagnostics={(ref) => navigate(diagnosticsRoute(ref))}>
+      {listInner}
+    </MailBoundary>
+  );
 
   // Rules that run on this computer only (DMO-RUL-04): applied to new inbox mail as it shows up here.
   const rules = useRules(active && boxes.length > 0);
@@ -1046,6 +1061,17 @@ function MailWorkspace({ active }: ModuleProps) {
       empty={<Empty icon="mail" title={text('Select a message')} hint={text('Choose a message from the list to read it here. j and k move through the list.')} />}
     >
       {current ? (
+        // One message that cannot be drawn says so here (#338): "This message couldn't be shown · Try again · Details".
+        <MailBoundary
+          part="message"
+          resetKey={currentKey}
+          account={current.mailbox}
+          onRetry={() => {
+            void qc.resetQueries({ queryKey: messageKey(current) });
+            void qc.resetQueries({ queryKey: protectionKeys.message(current) });
+          }}
+          onDiagnostics={(ref) => navigate(diagnosticsRoute(ref))}
+        >
         <MessageView
           key={currentKey}
           msgRef={current}
@@ -1093,6 +1119,7 @@ function MailWorkspace({ active }: ModuleProps) {
           quickStepButtons={(quickSteps.data ?? []).map((q) => ({ id: q.id, name: q.name, icon: q.icon, run: () => runStep(q, currentRow ? [targetOf(currentRow)] : []) }))}
           stateMenu={() => menuSections(currentRow ? [targetOf(currentRow)] : current ? [{ row: { id: Number(current.uid) || 0, subject: tabs.find((t) => t.key === currentKey)?.subject ?? '', from_name: '', from_email: '', preview: '', is_read: true, is_starred: false, has_attachment: false, created_at: '' }, mailbox: current.mailbox, folder: current.folder }] : [])}
         />
+        </MailBoundary>
       ) : null}
     </ReadingPane>
   );
@@ -1148,6 +1175,7 @@ function MailWorkspace({ active }: ModuleProps) {
       <div className="flex min-h-0 flex-1">
         {!focus ? (
           <SidePanel id="mail" label="the folders">
+            <MailBoundary part="sidebar" onRetry={() => void qc.resetQueries({ queryKey: ['mail', 'mailboxes'] })} onDiagnostics={(ref) => navigate(diagnosticsRoute(ref))}>
             <MailSidebar
               boxes={boxes}
               loading={mailboxes.isLoading}
@@ -1178,6 +1206,7 @@ function MailWorkspace({ active }: ModuleProps) {
               quarantine={quarantineHeld}
               onQuarantine={() => go(QUARANTINE_ROUTE)}
             />
+            </MailBoundary>
           </SidePanel>
         ) : null}
         <div className="flex min-w-0 flex-1 flex-col">
@@ -1192,6 +1221,8 @@ function MailWorkspace({ active }: ModuleProps) {
               </div>
             </div>
           ) : null}
+          {/* An account that cannot work (#338): named here with Reconnect and Remove; the others load as usual. */}
+          <AccountAttention boxes={boxes} />
           {prefsLoaded && boxes.length > 0 && !globalPrefs.firstRun ? <FirstRun onPrefs={(patch) => setGlobalPrefs(patch)} /> : null}
           {globalPrefs.firstRun === 'outlook' ? <FirstRunOffers outlook={globalPrefs.keyScheme === 'outlook'} onImport={() => navigate('/settings/mail?tab=import')} onSignatures={() => navigate('/settings/mail?tab=signatures')} onDone={() => setGlobalPrefs({ firstRun: 'done' })} onRestore={() => setGlobalPrefs({ firstRun: 'outlook' })} /> : null}
           {away ? (

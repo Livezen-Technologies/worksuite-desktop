@@ -387,6 +387,7 @@ export const INVOKE_CHANNELS = [
   'offline:mailStats',
   'offline:peek',
   'offline:clearMailbox',
+  'offline:repairMail',
   'offline:mailSearch',
   'offline:mailList',
   // Help & Guide's Contact Support (WS-SUPPORT-SRS-001 D-11): the window's picture and the redacted recent log.

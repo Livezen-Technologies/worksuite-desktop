@@ -5,12 +5,12 @@ import { Select } from '../../../components/Select';
 import { Button, cx } from '../../../components/ui';
 import { CompanySelect, useOrgParam } from '../company';
 import { openWeb } from '../parts';
-import { HEALTH_CHIP, PRIORITY, daysLeftText, fmtDay, pk, preads, projectPath, shortMoney, templateSummary, usedTone, type FullProject } from '../portfolio';
+import { HEALTH_CHIP, PRIORITY, daysLeftText, fmtDay, pk, preads, projectPath, shortMoney, usedTone, type FullProject } from '../portfolio';
 import type { ProjectStatus } from '../api';
-import { Chip, Failed, HealthChip, Loading, Mono, Nothing, PageHead, Panel, Progress, ProjectStatusChip, TD, TH, needsConnection } from './kit';
+import { Failed, HealthChip, Loading, Mono, Nothing, PageHead, Panel, Progress, ProjectStatusChip, TD, TH, needsConnection } from './kit';
 
 /**
- * W02 · All projects (PRJ-REG) and the Templates view, natively (D01's density and tokens).
+ * W02 · All projects (PRJ-REG), natively (D01's density and tokens). The Templates view is TemplateLibrary.tsx.
  *
  * Every filter lives in the address — `/projects/all?status=active&health=at_risk` — so the dashboard's figures link
  * straight to the rows behind them and a filtered list is a route like any other (a tab, a window, a link). "Company ▾"
@@ -302,68 +302,5 @@ function ProjectCard({ p, onOpen }: { p: FullProject; onOpen: () => void }) {
         </span>
       </span>
     </button>
-  );
-}
-
-// ── templates ──────────────────────────────────────────────────────────────
-
-export function TemplatesView({ offline, mayCreate, onGo, onUse, onOffline }: { offline: boolean; mayCreate: boolean; onGo: (route: string) => void; onUse: (templateId: number | null) => void; onOffline: (o: boolean) => void }) {
-  const org = useOrgParam();
-  const q = useQuery({ queryKey: pk.templates(org), queryFn: ({ signal }) => preads.templates(null, { signal }), staleTime: 60_000 });
-  const fromCache = !!q.data?.offline;
-  useEffect(() => onOffline(fromCache), [fromCache, onOffline]);
-  const rows = q.data?.data.templates ?? [];
-  return (
-    <div className="flex min-h-0 flex-1 flex-col">
-      <PageHead
-        title="Templates"
-        sub="Start a project with its milestones, tasks and roles already in place."
-        actions={
-          <>
-            <CompanySelect />
-            <NewProjectButton may={mayCreate} offline={offline} onNew={() => onUse(null)} />
-          </>
-        }
-      />
-      <div className="min-h-0 flex-1 overflow-y-auto px-5 py-3.5 scroll-thin">
-        {q.isLoading ? (
-          <Loading label="Loading templates" />
-        ) : q.error && !q.data ? (
-          <Failed error={q.error} onRetry={() => void q.refetch()} />
-        ) : rows.length === 0 ? (
-          <Panel>
-            <Nothing text="No templates yet. Open a finished project and choose “Save as template” to make one." />
-          </Panel>
-        ) : (
-          <ul aria-label="Templates" className="grid grid-cols-[repeat(auto-fill,minmax(280px,1fr))] gap-2.5">
-            {rows.map((t) => (
-              <li key={t.id} className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface p-3.5">
-                <div className="flex items-start gap-2">
-                  <Icon name="copy" size={16} className="mt-0.5 shrink-0 text-ink-3" />
-                  <div className="min-w-0 flex-1">
-                    <h2 className="text-[13px] font-bold text-ink">
-                      <button type="button" onClick={() => onGo(projectPath(t.id))} className="text-start hover:text-primary hover:underline">
-                        {t.name}
-                      </button>
-                    </h2>
-                    <Mono className="text-[11px] text-ink-3">{t.code}</Mono>
-                  </div>
-                  <Chip>Template</Chip>
-                </div>
-                {t.description ? <p className="line-clamp-2 text-[12px] text-ink-2">{t.description}</p> : null}
-                <p className="text-[11.5px] text-ink-3">{templateSummary(t, true) || 'Empty'}</p>
-                {mayCreate ? (
-                  <div className="mt-auto pt-1">
-                    <Button size="sm" variant="primary" disabled={offline} title={offline ? needsConnection('A new project') : undefined} aria-label={`Use template ${t.name}`} onClick={() => onUse(t.id)}>
-                      Use template
-                    </Button>
-                  </div>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        )}
-      </div>
-    </div>
   );
 }

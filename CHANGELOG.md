@@ -11,6 +11,36 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.243 — 2026-10-11
+
+- **One broken mail account, message or answer never takes Mail down (#338).** Mail could show only "Mail failed to
+  load" when a single account or message was broken (the protection crash fixed in 0.2.239 was one such case).
+  - An account with no address, no token or no server is set aside with a red marker and **Reconnect** (sign in
+    again, the password, or Add a mailbox, whichever it needs) and **Remove**; every other account keeps working.
+  - The reading pane, the message list and the sidebar each fail on their own: "This message couldn't be shown ·
+    Try again · Details", and the rest of Mail stays usable. Accounts are read one at a time, and Sync all no longer
+    stops at the first failure.
+  - The "failed to load" screen now shows a reference (e.g. E-7F3A9C), Open Diagnostics goes to that error, and
+    **Retry** really starts the module again instead of redrawing the same error.
+  - **Repair local mail data** (Settings › Mail › Accounts & offline, and on Mail's error screen) checks the local
+    database and rebuilds Mail's copy from the server, keeping unsent mail, drafts and settings; a damaged database
+    is rebuilt at the next start with everything readable kept and the old file kept as .bak.
+  - Mail opens from this computer's copy when the server or an account is failing.
+  (Mail 1.33.0, Diagnostics 1.4.0, Settings 1.37.0)
+
+## 0.2.242 — 2026-10-11
+
+- **New project from a template (#337).** "Start from" in New project now has search and five groups: Blank project,
+  Copy an existing project, Company templates, My templates and ten built-in Template packs (Tender bid submission,
+  Website development, E-commerce store, Software licence deployment, IT support / AMC, Hosting / email migration,
+  Mobile app, Marketing campaign, Training / course delivery, Event). Choosing one fills the form and shows a Preview
+  of its phases on a timeline that follows Starts and Ends, its tasks, budget lines, folders and automations. Tick what
+  to include, pick a person for each role (or leave it open), and Create project builds it all in one step; the
+  project footer says which template and version it came from. Save as template works from any project, and
+  Projects › Templates manages them (duplicate, edit, versions, archive, import and export as JSON).
+- The Budget field has its amount box back next to the currency, and Starts/Ends use a date picker that shows dates
+  as "11 Oct 2026". (Projects 1.3.0; needs WorkSuite server Project 2.2.0)
+
 ## 0.2.241 — 2026-10-11
 
 - **Meet invitations show what actually happened (#347).** The People tab could say "Accepted · joining" for good
