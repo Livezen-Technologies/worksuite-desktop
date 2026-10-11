@@ -334,7 +334,11 @@ export interface Message {
   body_html: string | null;
   author: IdName | null;
   author_name: string | null;
-  from: 'requester' | 'staff';
+  /**
+   * Who wrote it: the requester, the desk, or (#332) a website chat's own lines — `system` for its events and the
+   * visitor details line, `assistant` for its chatbot's answers. Neither is ever an internal note.
+   */
+  from: 'requester' | 'staff' | 'system' | 'assistant';
   internal: boolean;
   channel: string | null;
   delivery_channel: string | null;
