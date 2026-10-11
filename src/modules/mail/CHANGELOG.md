@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.30.1 — 2026-10-11
+
+**Fixed**
+
+- compact Helpdesk editor variant and CSP-compatible local HEIC conversion for inline images.
+
 ## 1.30.0 — 2026-10-11
 
 - Microsoft 365 sign-in (#154): a failed sign-in shows the message, next step, an action (copy admin consent link, copy redirect URI) and the AADSTS code and reference under Details, never "check the server log"; the sign-in URL is checked (https, PKCE S256, state, no client secret) before it opens; OAuth mailboxes refused at refresh show Sign in again.

@@ -227,14 +227,14 @@ describe('the reading pane', () => {
     fireEvent.click(await screen.findByText('Subject 1284'));
     const pane = await screen.findByRole('article', { name: 'Ticket CFX-001284' });
     expect(within(pane).getByRole('radio', { name: 'Internal note' }).getAttribute('aria-checked')).toBe('true');
-    fireEvent.change(within(pane).getByRole('textbox', { name: 'Internal note' }), { target: { value: 'Checked the partner centre' } });
+    editReply(within(pane).getByRole('textbox', { name: 'Internal note' }), 'Checked the partner centre');
     fireEvent.keyDown(within(pane).getByRole('textbox', { name: 'Internal note' }), { key: 'Enter', ctrlKey: true });
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(1));
     const body = calls('POST', '/api/support/v1/tickets/1284/messages')[0]!.body as Record<string, unknown>;
     expect(body).toMatchObject({ body: 'Checked the partner centre', internal: true });
     expect(String(body.client_id)).toMatch(/^desk:/);
     fireEvent.click(within(pane).getByRole('radio', { name: 'Reply to requester' }));
-    fireEvent.change(within(pane).getByRole('textbox', { name: /Reply to Requester 1284/ }), { target: { value: 'Thanks' } });
+    editReply(within(pane).getByRole('textbox', { name: /Reply to Requester 1284/ }), 'Thanks');
     fireEvent.click(within(pane).getByRole('button', { name: /^Send/ }));
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(2));
     expect(calls('POST', '/api/support/v1/tickets/1284/messages')[1]!.body).toMatchObject({ body: 'Thanks', internal: false });
@@ -275,7 +275,7 @@ describe('the keyboard (FR-WSP-06)', () => {
     const pane = await screen.findByRole('article', { name: 'Ticket CFX-001284' });
     key('r');
     await waitFor(() => expect(within(pane).getByRole('radio', { name: 'Reply to requester' }).getAttribute('aria-checked')).toBe('true'));
-    expect(document.activeElement?.tagName).toBe('TEXTAREA');
+    expect(document.activeElement?.getAttribute('contenteditable')).toBe('true');
     (document.activeElement as HTMLElement).blur();
     key('n');
     await waitFor(() => expect(within(pane).getByRole('radio', { name: 'Internal note' }).getAttribute('aria-checked')).toBe('true'));
@@ -354,3 +354,10 @@ describe('the parts', () => {
     expect(newSinceIndex(ms, 3, 1)).toBe(-1);
   });
 });
+
+function editReply(box: HTMLElement, value: string): void {
+  box.textContent = value; box.focus();
+  const range = document.createRange(); range.selectNodeContents(box); range.collapse(false);
+  const selection = window.getSelection(); selection?.removeAllRanges(); selection?.addRange(range);
+  fireEvent.input(box);
+}

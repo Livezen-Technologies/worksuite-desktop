@@ -79,11 +79,22 @@ export const TRANSITIONS: Record<SupportStatus, readonly SupportStatus[]> = {
 
 export const PRIORITIES = ['low', 'normal', 'high', 'urgent'] as const;
 export type SupportPriority = (typeof PRIORITIES)[number];
-export const PRIORITY_LABEL: Record<SupportPriority, string> = { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' };
+export const PRIORITY_LABEL: Record<SupportPriority, string> = {
+  low: 'Low',
+  normal: 'Normal',
+  high: 'High',
+  urgent: 'Urgent',
+};
 
 export const TYPES = ['question', 'incident', 'problem', 'request', 'complaint'] as const;
 export type SupportType = (typeof TYPES)[number];
-export const TYPE_LABEL: Record<SupportType, string> = { question: 'Question', incident: 'Incident', problem: 'Problem', request: 'Request', complaint: 'Complaint' };
+export const TYPE_LABEL: Record<SupportType, string> = {
+  question: 'Question',
+  incident: 'Incident',
+  problem: 'Problem',
+  request: 'Request',
+  complaint: 'Complaint',
+};
 
 /** Where a ticket came from (`TicketService::SOURCES`; `walk_in` since worksuite-desktop#298). */
 export const SOURCES = ['manual', 'email', 'chat', 'widget_offline', 'form', 'portal', 'whatsapp', 'phone', 'walk_in', 'api', 'module', 'desktop'] as const;
@@ -110,7 +121,11 @@ export type ManualSource = (typeof MANUAL_SOURCES)[number];
 /** `none`: no SLA policy applies to the ticket. */
 export type SlaState = 'ok' | 'at_risk' | 'breached' | 'met' | 'paused' | 'none';
 export type SlaTarget = 'first_response' | 'next_response' | 'resolution';
-export const SLA_TARGET_LABEL: Record<SlaTarget, string> = { first_response: 'First response', next_response: 'Next response', resolution: 'Resolution' };
+export const SLA_TARGET_LABEL: Record<SlaTarget, string> = {
+  first_response: 'First response',
+  next_response: 'Next response',
+  resolution: 'Resolution',
+};
 
 /** The system views (`TicketQuery::VIEWS`), in the rail's order, with the server's labels for a server that sends none. */
 export const VIEWS = ['mine', 'unassigned', 'assigned', 'mentioned', 'watching', 'overdue', 'escalated', 'pending', 'live', 'resolved', 'closed', 'all', 'needs_organization', 'trash'] as const;
@@ -134,7 +149,12 @@ export const VIEW_LABEL: Record<SupportView, string> = {
 
 export const SORTS = ['updated', 'created', 'sla', 'priority'] as const;
 export type SupportSort = (typeof SORTS)[number];
-export const SORT_LABEL: Record<SupportSort, string> = { updated: 'Last updated', created: 'Newest', sla: 'SLA due', priority: 'Priority' };
+export const SORT_LABEL: Record<SupportSort, string> = {
+  updated: 'Last updated',
+  created: 'Newest',
+  sla: 'SLA due',
+  priority: 'Priority',
+};
 
 /** "18m", "3h 20m", "1d 4h": a span as the desk's chips say it. */
 export function spanShort(ms: number): string {
@@ -146,7 +166,11 @@ export function spanShort(ms: number): string {
   return h % 24 ? `${d}d ${h % 24}h` : `${d}d`;
 }
 
-export const SLA_TARGET_SHORT: Record<SlaTarget, string> = { first_response: 'FRT', next_response: 'Next', resolution: 'Res' };
+export const SLA_TARGET_SHORT: Record<SlaTarget, string> = {
+  first_response: 'FRT',
+  next_response: 'Next',
+  resolution: 'Res',
+};
 
 /**
  * An SLA in a few words, as the tray and a pop-up say it where no chip can be drawn: "Next 18m", "Res overdue 5m",
@@ -246,7 +270,12 @@ export interface Ticket {
  * says in which mailbox and folder, since a uid is only unique there), or a website chat.
  */
 export type TicketOrigin =
-  | { type: 'email'; mail_message_id: number | null; mailbox_id?: number | null; folder?: string | null }
+  | {
+      type: 'email';
+      mail_message_id: number | null;
+      mailbox_id?: number | null;
+      folder?: string | null;
+    }
   | { type: 'chat'; conversation_id: number };
 
 /** One ticket in full (`GET tickets/{id}`, and every write's answer). */
@@ -297,6 +326,9 @@ export interface TicketLink {
 }
 
 export interface Message {
+  local_status?: 'sending' | 'failed';
+  local_ticket_id?: number;
+  retry_input?: MessageInput;
   id: number;
   body: string;
   body_html: string | null;
@@ -432,14 +464,33 @@ export interface Meta {
   views: string[];
   sorts: string[];
   organizations: MetaOrganization[];
-  departments: Array<{ id: number; name: string; organization_id: number | null }>;
-  teams: Array<{ id: number; name: string; organization_id: number | null; department_id: number | null; tier: number }>;
-  categories: Array<{ id: number; name: string; organization_id: number | null; parent_id: number | null }>;
+  departments: Array<{
+    id: number;
+    name: string;
+    organization_id: number | null;
+  }>;
+  teams: Array<{
+    id: number;
+    name: string;
+    organization_id: number | null;
+    department_id: number | null;
+    tier: number;
+  }>;
+  categories: Array<{
+    id: number;
+    name: string;
+    organization_id: number | null;
+    parent_id: number | null;
+  }>;
   tags: Array<{ name: string; organization_id: number | null }>;
   /** What I may do anywhere at the desk; `create` raises a ticket by hand (#298). An older server may send none. */
   can?: Caps & { convert_chat?: boolean; convert_email?: boolean };
   /** What this server can do at all (#298); absent from an older one. */
-  capabilities?: { convert_chat?: boolean; convert_email?: boolean; mail_intake?: boolean };
+  capabilities?: {
+    convert_chat?: boolean;
+    convert_email?: boolean;
+    mail_intake?: boolean;
+  };
   /** Built here for a server without the v1 API. */
   legacy?: boolean;
 }
@@ -453,7 +504,12 @@ export interface Agent {
   /** Live tickets of theirs in this organization. */
   open: number;
   capacity: number | null;
-  teams: Array<{ id: number; name: string; role: string | null; capacity: number | null }>;
+  teams: Array<{
+    id: number;
+    name: string;
+    role: string | null;
+    capacity: number | null;
+  }>;
 }
 
 export interface Canned {
@@ -488,6 +544,7 @@ export interface MessageInput {
   /** "Send · Pending customer": the status moves after the message is in. */
   status?: SupportStatus;
   body_html?: string;
+  send_at?: string;
 }
 
 export interface MessageAnswer {
@@ -560,7 +617,13 @@ export interface NewTicketInput {
   description?: string;
   /** The description as formatted, for a server that keeps a message's HTML. */
   description_html?: string;
-  requester: { name?: string | null; email?: string | null; phone?: string | null; contact_id?: number | null; company_id?: number | null };
+  requester: {
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    contact_id?: number | null;
+    company_id?: number | null;
+  };
   organization_id?: number | null;
   source: ManualSource;
   priority: SupportPriority;
@@ -580,16 +643,41 @@ export interface NewTicketInput {
 
 /** `GET conversions/{conversation_id}`: what the conversion sheet opens with, and the chat's back-link to its ticket. */
 export interface ConversionPreview {
-  conversation: { id: number; status: string | null; website: string | null; widget: string | null; offline: boolean; started_at: string | null };
-  visitor: { id: number | null; name: string | null; email: string | null; phone: string | null; company: string | null };
+  conversation: {
+    id: number;
+    status: string | null;
+    website: string | null;
+    widget: string | null;
+    offline: boolean;
+    started_at: string | null;
+  };
+  visitor: {
+    id: number | null;
+    name: string | null;
+    email: string | null;
+    phone: string | null;
+    company: string | null;
+  };
   /** The ticket the chat already became (FR-LCH-03), or null. */
   ticket: { id: number; reference: string; status: SupportStatus } | null;
   /** The visitor's live tickets at that desk, to append to instead (FR-LCH-06). */
   candidates: Ticket[];
-  prefill: { subject: string; organization_id: number | null; priority: SupportPriority; source: string };
+  prefill: {
+    subject: string;
+    organization_id: number | null;
+    priority: SupportPriority;
+    source: string;
+  };
   /** The visitor's page, location and browser, as the ticket's first internal line (FR-LCH-04). */
   details: string;
-  transcript: Array<{ id: number; from: 'visitor' | 'agent' | 'assistant' | 'website'; name: string; body: string; at: string | null; files: Array<{ name: string; mime: string | null; size: number }> }>;
+  transcript: Array<{
+    id: number;
+    from: 'visitor' | 'agent' | 'assistant' | 'website';
+    name: string;
+    body: string;
+    at: string | null;
+    files: Array<{ name: string; mime: string | null; size: number }>;
+  }>;
 }
 
 /** `POST conversions`. */
@@ -652,7 +740,12 @@ export interface AiSummary {
 
 export const AI_TONES = ['friendly', 'professional', 'concise', 'empathetic'] as const;
 export type AiTone = (typeof AI_TONES)[number];
-export const AI_TONE_LABEL: Record<AiTone, string> = { friendly: 'Friendly', professional: 'Professional', concise: 'Concise', empathetic: 'Empathetic' };
+export const AI_TONE_LABEL: Record<AiTone, string> = {
+  friendly: 'Friendly',
+  professional: 'Professional',
+  concise: 'Concise',
+  empathetic: 'Empathetic',
+};
 
 /** `POST tickets/{id}/ai/reply`: a draft for the composer, grounded on the thread and these articles. */
 export interface AiReplyDraft {
@@ -685,7 +778,11 @@ export const REWRITE_LABEL: Record<RewriteMode, string> = {
 };
 
 /** The ticket languages the desk knows (FR-KB-10). */
-export const LANGUAGE_LABEL: Record<string, string> = { en: 'English', si: 'Sinhala', ta: 'Tamil' };
+export const LANGUAGE_LABEL: Record<string, string> = {
+  en: 'English',
+  si: 'Sinhala',
+  ta: 'Tamil',
+};
 
 /** My draft of a ticket kept by the server (FR-CRT-10, `GET/PUT/DELETE tickets/{id}/draft`): one per person and ticket. */
 export interface ServerDraft {
@@ -731,7 +828,16 @@ export function ringRoute(id: number | string): string {
   return `${SUPPORT_ROUTE}/ring/${id}`;
 }
 
-export type SupportRoute = { kind: 'ticket'; key: string } | { kind: 'quick'; key: string } | { kind: 'ring'; key: string } | { kind: 'inbox'; view: string | null; saved: string | null; q: string | null };
+export type SupportRoute =
+  | { kind: 'ticket'; key: string }
+  | { kind: 'quick'; key: string }
+  | { kind: 'ring'; key: string }
+  | {
+      kind: 'inbox';
+      view: string | null;
+      saved: string | null;
+      q: string | null;
+    };
 
 /**
  * Where a support route goes. A ticket's tab is `/support/ticket/{id}` (or a reference in place of the id); the
@@ -752,7 +858,12 @@ export function parseSupportRoute(route: string): SupportRoute {
     const asked = query.get('ticket') ?? query.get('open');
     if (rest.length === 0 && isTicketKey(asked)) return { kind: 'ticket', key: asked };
   }
-  return { kind: 'inbox', view: query.get('view'), saved: query.get('saved'), q: query.get('q') };
+  return {
+    kind: 'inbox',
+    view: query.get('view'),
+    saved: query.get('saved'),
+    q: query.get('q'),
+  };
 }
 
 /** Whether a route is a ticket's own tab (in any of its forms). */
@@ -822,7 +933,13 @@ function present(raw: unknown): Present[] {
     const r = p as Record<string, unknown>;
     const id = posInt(r.user_id);
     if (!id) continue;
-    out.push({ user_id: id, name: typeof r.name === 'string' ? r.name : '', state: r.state === 'typing' ? 'typing' : 'viewing', mode: r.mode === 'reply' || r.mode === 'note' ? r.mode : null, since: typeof r.since === 'string' ? r.since : null });
+    out.push({
+      user_id: id,
+      name: typeof r.name === 'string' ? r.name : '',
+      state: r.state === 'typing' ? 'typing' : 'viewing',
+      mode: r.mode === 'reply' || r.mode === 'note' ? r.mode : null,
+      since: typeof r.since === 'string' ? r.since : null,
+    });
   }
   return out;
 }
@@ -832,7 +949,11 @@ export function supportHint(e: unknown): SupportHint | null {
   if (!e || typeof e !== 'object') return null;
   const r = e as Record<string, unknown>;
   if (r.type === 'support.changed') {
-    return { type: 'support.changed', organization_id: posInt(r.organization_id), kind: typeof r.kind === 'string' ? r.kind : 'updated' };
+    return {
+      type: 'support.changed',
+      organization_id: posInt(r.organization_id),
+      kind: typeof r.kind === 'string' ? r.kind : 'updated',
+    };
   }
   if (r.type === 'support.ticket') {
     const id = posInt(r.ticket_id);
@@ -895,13 +1016,27 @@ export function fromLegacyTicket(raw: Raw): TicketFull {
     type: (TYPES as readonly string[]).includes(String(raw.type)) ? (raw.type as SupportType) : null,
     source: str(raw.source) ?? 'manual',
     organization: org ? { id: org, name: null } : null,
-    requester: { name: str(raw.requester_name), email: str(raw.requester_email), phone: str(raw.requester_phone), kind: 'guest', user_id: null, contact_id: null, company_id: null },
+    requester: {
+      name: str(raw.requester_name),
+      email: str(raw.requester_email),
+      phone: str(raw.requester_phone),
+      kind: 'guest',
+      user_id: null,
+      contact_id: null,
+      company_id: null,
+    },
     assignee: assignee ? { id: assignee, name: str(raw.assignee_name) } : null,
     team: num(raw.team_id) ? { id: Number(raw.team_id), name: null } : null,
     category: num(raw.category_id) ? { id: Number(raw.category_id), name: null } : null,
     department: null,
     tags: Array.isArray(raw.tags) ? raw.tags.filter((t): t is string => typeof t === 'string') : [],
-    sla: { state: null, target: null, due_at: null, policy_id: null, paused_ms: 0 },
+    sla: {
+      state: null,
+      target: null,
+      due_at: null,
+      policy_id: null,
+      paused_ms: 0,
+    },
     due_at: stamp(raw.due_at),
     confidential: raw.confidential === true,
     unread: 0,
@@ -976,7 +1111,18 @@ export function fromLegacyCaps(raw: unknown): Caps {
   }
   const manage = on('manage');
   const reply = on('reply') || manage;
-  return { view: on('view') || reply, reply, notes: reply, assign: manage, edit: manage, close: manage, reopen: manage, escalate: manage, delete: manage, manage };
+  return {
+    view: on('view') || reply,
+    reply,
+    notes: reply,
+    assign: manage,
+    edit: manage,
+    close: manage,
+    reopen: manage,
+    escalate: manage,
+    delete: manage,
+    manage,
+  };
 }
 
 /** Which permission a move needs (`TicketService::permissionFor`). */
@@ -1014,7 +1160,10 @@ export function fromLegacyShow(raw: Raw): TicketShow {
  * A v1 list's question as the as-built API takes it (`status`, `mine`, `priority`, `search`; 200 rows, no pages),
  * and what it cannot ask that is then filtered here: `unassigned` and `assigned`.
  */
-export function legacyListQuery(p: ListParams): { query: Record<string, string>; keep: (t: Ticket) => boolean } {
+export function legacyListQuery(p: ListParams): {
+  query: Record<string, string>;
+  keep: (t: Ticket) => boolean;
+} {
   const query: Record<string, string> = {};
   let keep = (_t: Ticket) => true;
   switch (p.view) {
@@ -1070,20 +1219,40 @@ export function legacyListQuery(p: ListParams): { query: Record<string, string>;
 /** `GET /api/tickets` in the v1 page shape: every row at once, no next page. */
 export function fromLegacyList(raw: Raw, p: ListParams, keep: (t: Ticket) => boolean = () => true): TicketPage {
   const rows = Array.isArray(raw.tickets) ? raw.tickets.map((t) => fromLegacyTicket(t as Raw)) : [];
-  return { items: rows.filter(keep), next_cursor: null, has_more: false, sort: 'updated', view: String(p.view) };
+  return {
+    items: rows.filter(keep),
+    next_cursor: null,
+    has_more: false,
+    sort: 'updated',
+    view: String(p.view),
+  };
 }
 
 /** What the rail shows for a server without views: the views it can answer, without counts. */
 export const LEGACY_VIEWS: SupportView[] = ['mine', 'unassigned', 'assigned', 'escalated', 'pending', 'live', 'resolved', 'closed', 'all'];
 
 export function legacyViews(): ViewsAnswer {
-  return { views: LEGACY_VIEWS.map((key) => ({ key, label: VIEW_LABEL[key], count: null })), saved: [], badges: null };
+  return {
+    views: LEGACY_VIEWS.map((key) => ({
+      key,
+      label: VIEW_LABEL[key],
+      count: null,
+    })),
+    saved: [],
+    badges: null,
+  };
 }
 
 /** The desk's vocabulary for a server without `GET meta`: the statuses and their moves, no organizations or teams. */
 export function legacyMeta(): Meta {
   return {
-    statuses: STATUSES.map((key) => ({ key, label: STATUS_LABEL[key], category: STATUS_CATEGORY[key], live: LIVE_STATUSES.includes(key), next: [...TRANSITIONS[key]] })),
+    statuses: STATUSES.map((key) => ({
+      key,
+      label: STATUS_LABEL[key],
+      category: STATUS_CATEGORY[key],
+      live: LIVE_STATUSES.includes(key),
+      next: [...TRANSITIONS[key]],
+    })),
     priorities: [...PRIORITIES],
     types: [...TYPES],
     sources: [...SOURCES],
@@ -1149,7 +1318,10 @@ export const SUPPORT_NOTICE_DEFAULTS: SupportNoticePrefs = {
 /** The choices made, with the defaults for the rest (a choice saved before a kind existed takes its default). */
 export function supportNoticePrefs(p: Partial<SupportNoticePrefs> | null | undefined): SupportNoticePrefs {
   const d = SUPPORT_NOTICE_DEFAULTS;
-  const one = (k: SupportNoticeKind): SupportNoticeChoice => ({ ...d[k], ...(p?.[k] ?? {}) });
+  const one = (k: SupportNoticeKind): SupportNoticeChoice => ({
+    ...d[k],
+    ...(p?.[k] ?? {}),
+  });
   return {
     assigned: one('assigned'),
     reply: one('reply'),

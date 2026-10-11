@@ -2,6 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import * as imageTools from '../../../src/modules/mail/editor/images';
 import type * as CoreApi from '../../../src/core/api';
 
 /**
@@ -123,7 +124,7 @@ function serve(over: Record<string, unknown> = {}) {
   vi.mocked(request).mockImplementation((async (method: string, path: string, opts: { query?: Record<string, unknown>; body?: unknown } = {}) => {
     log.push({ method, path, query: opts.query, body: opts.body });
     const hit = served[`${method} ${path}`];
-    const data = typeof hit === 'function' ? (hit as (q: Record<string, unknown>, body: unknown) => unknown)(opts.query ?? {}, opts.body) : hit;
+    const data = await (typeof hit === 'function' ? (hit as (q: Record<string, unknown>, body: unknown) => unknown)(opts.query ?? {}, opts.body) : hit);
     if (data instanceof Error) throw data;
     if (data === undefined) return new Promise(() => undefined);
     return { data, offline: false, cachedAt: null, message: null };
@@ -447,7 +448,7 @@ describe('the composer', () => {
     expect(screen.getByRole('button', { name: 'Remove it@acmelanka.lk' })).toBeTruthy();
     fireEvent.change(screen.getByRole('textbox', { name: 'CC addresses' }), { target: { value: '' } });
     await pick('Status after sending', 'Then: Pending customer');
-    fireEvent.change(composerBox(), { target: { value: 'Three seats were not re-assigned; done now.' } });
+    editReply(composerBox(), 'Three seats were not re-assigned; done now.');
     fireEvent.keyDown(composerBox(), { key: 'Enter', ctrlKey: true });
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(1));
     const body = calls('POST', '/api/support/v1/tickets/1284/messages')[0]!.body as Record<string, unknown>;
@@ -458,11 +459,52 @@ describe('the composer', () => {
     await waitFor(() => expect(drafts['support:ticket:1284']).toBeUndefined());
   });
 
+  it('shows a pending message and preserves edits made before its send finishes', async () => {
+    let finish!: (value: unknown) => void;
+    served['POST /api/support/v1/tickets/1284/messages'] = () => new Promise((resolve) => { finish = resolve; });
+    renderTab(); await screen.findByRole('heading', { name: /Microsoft 365/ });
+    editReply(composerBox(), 'First answer');
+    fireEvent.click(screen.getByRole('button', { name: /^Add note/ }));
+    await screen.findByText(/Sending…/);
+    editReply(composerBox(), 'Next answer');
+    await act(async () => finish({ message: msg(90, { body: 'First answer' }), duplicate: false, ticket: ticket(1284), status_refused: null }));
+    await waitFor(() => expect(screen.queryByText(/Sending…/)).toBeNull());
+    expect(composerBox().textContent).toBe('Next answer');
+  });
+
+  it('retries a failed message with its original idempotency key', async () => {
+    served['POST /api/support/v1/tickets/1284/messages'] = new Error('Temporary failure');
+    renderTab(); await screen.findByRole('heading', { name: /Microsoft 365/ });
+    editReply(composerBox(), 'Retry this answer');
+    fireEvent.click(screen.getByRole('button', { name: /^Add note/ }));
+    await screen.findByText(/Not sent/);
+    const first = calls('POST', '/api/support/v1/tickets/1284/messages')[0]!.body;
+    served['POST /api/support/v1/tickets/1284/messages'] = { message: msg(91), duplicate: false, ticket: ticket(1284), status_refused: null };
+    fireEvent.click(within(screen.getByRole('list', { name: 'Conversation' })).getByRole('button', { name: 'Retry' }));
+    await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(2));
+    expect(calls('POST', '/api/support/v1/tickets/1284/messages')[1]!.body).toEqual(first);
+  });
+
+  it('keeps separate reply and internal note drafts, including formatting', async () => {
+    renderTab();
+    await screen.findByRole('heading', { name: /Microsoft 365/ });
+    const box = composerBox();
+    box.innerHTML = '<p><strong>Private finding</strong></p>';
+    fireEvent.input(box);
+    fireEvent.click(screen.getByRole('radio', { name: 'Reply to requester' }));
+    expect(composerBox().textContent).toBe('');
+    editReply(composerBox(), 'Public answer');
+    fireEvent.click(screen.getByRole('radio', { name: 'Internal note' }));
+    expect(composerBox().innerHTML).toContain('<strong>Private finding</strong>');
+    fireEvent.click(screen.getByRole('radio', { name: 'Reply to requester' }));
+    expect(composerBox().textContent).toBe('Public answer');
+  });
+
   it('says when the message went but the status could not move', async () => {
     serve({ 'POST /api/support/v1/tickets/1284/messages': { message: msg(9), duplicate: false, ticket: ticket(1284), status_refused: { code: 'TRANSITION_REFUSED', message: 'Open it first' } } });
     renderTab();
     await screen.findByRole('heading', { name: /Microsoft 365/ });
-    fireEvent.change(composerBox(), { target: { value: 'Noted' } });
+    editReply(composerBox(), 'Noted');
     fireEvent.click(screen.getByRole('button', { name: /^Add note/ }));
     await waitFor(() => expect(toast).toHaveBeenCalledWith('warning', 'Sent, but the status did not change: Open it first'));
   });
@@ -470,12 +512,12 @@ describe('the composer', () => {
   it('"/" offers the canned responses, filled in for this ticket by the server', async () => {
     renderTab();
     await screen.findByRole('heading', { name: /Microsoft 365/ });
-    fireEvent.change(composerBox(), { target: { value: '/sign' } });
+    editReply(composerBox(), '/sign');
     const picker = await screen.findByRole('listbox', { name: 'Canned responses' });
     expect(await within(picker).findByRole('option', { name: /Sign out and back in/ })).toBeTruthy();
     expect(calls('GET', '/api/support/v1/canned')[0]?.query).toEqual({ q: 'sign' });
     fireEvent.keyDown(composerBox(), { key: 'Enter' });
-    await waitFor(() => expect((composerBox() as HTMLTextAreaElement).value).toBe('Hi Saman, please sign out of Office and back in.'));
+    await waitFor(() => expect(composerBox().textContent).toBe('Hi Saman, please sign out of Office and back in.'));
     expect(calls('POST', '/api/support/v1/canned/5/render')[0]?.body).toEqual({ ticket_id: 1284 });
     expect(screen.queryByRole('listbox', { name: 'Canned responses' })).toBeNull();
   });
@@ -488,27 +530,27 @@ describe('the composer', () => {
     expect(ids).toEqual(expect.arrayContaining(['support-canned', 'support-quick', 'support-copy-link']));
     act(() => allCommands().find((c) => c.id === 'support-canned')!.run());
     expect(await screen.findByRole('listbox', { name: 'Canned responses' })).toBeTruthy();
-    expect((composerBox() as HTMLTextAreaElement).value).toBe('/');
+    expect(composerBox().textContent).toBe('/');
     expect(screen.getByRole('radio', { name: /Reply to requester/ }).getAttribute('aria-checked')).toBe('true');
   });
 
   it('Escape closes the canned list and leaves the text as typed', async () => {
     renderTab();
     await screen.findByRole('heading', { name: /Microsoft 365/ });
-    fireEvent.change(composerBox(), { target: { value: '/' } });
+    editReply(composerBox(), '/');
     await screen.findByRole('listbox', { name: 'Canned responses' });
     fireEvent.keyDown(composerBox(), { key: 'Escape' });
     expect(screen.queryByRole('listbox', { name: 'Canned responses' })).toBeNull();
-    expect((composerBox() as HTMLTextAreaElement).value).toBe('/');
+    expect(composerBox().textContent).toBe('/');
   });
 
   it('"@" in a note mentions somebody who works the ticket', async () => {
     renderTab();
     await screen.findByRole('heading', { name: /Microsoft 365/ });
-    fireEvent.change(composerBox(), { target: { value: 'Can you check, @Kav' } });
+    editReply(composerBox(), 'Can you check, @Kav');
     const picker = await screen.findByRole('listbox', { name: 'People to mention' });
     fireEvent.click(await within(picker).findByRole('option', { name: /Kavindi Silva/ }));
-    await waitFor(() => expect((composerBox() as HTMLTextAreaElement).value).toBe('Can you check, @Kavindi Silva '));
+    await waitFor(() => expect(composerBox().textContent).toBe('Can you check, @Kavindi Silva '));
     fireEvent.click(screen.getByRole('button', { name: /^Add note/ }));
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')[0]?.body).toMatchObject({ internal: true, mentions: [5] }));
   });
@@ -524,7 +566,7 @@ describe('the composer', () => {
     const files = await screen.findByRole('list', { name: 'Files to send' });
     expect(within(files).getByText('Screenshot.png')).toBeTruthy();
     expect(screen.getByText(/1 files · .* · max 25 MB each · scanned before sending/)).toBeTruthy();
-    fireEvent.change(composerBox(), { target: { value: 'The list is attached' } });
+    editReply(composerBox(), 'The list is attached');
     fireEvent.click(screen.getByRole('button', { name: /^Add note/ }));
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')[0]?.body).toMatchObject({ attachments: [70] }));
   });
@@ -538,14 +580,40 @@ describe('the composer', () => {
     expect(screen.queryByRole('list', { name: 'Files to send' })).toBeNull();
   });
 
-  it('turns a pasted screenshot into a named PNG', async () => {
+  it('pastes a readable image inline and sends its HTML with a plain fallback', async () => {
+    const prepare = vi.spyOn(imageTools, 'prepareImage').mockResolvedValue({ src: 'data:image/png;base64,AAAA', width: 100, height: 100, bytes: 3, shrunk: false });
+    const previous = document.execCommand;
+    document.execCommand = vi.fn((command, _show, value) => {
+      if (command === 'insertHTML') { const box = composerBox(); box.insertAdjacentHTML('beforeend', value ?? ''); }
+      return true;
+    });
+    try {
+      renderTab(); await screen.findByRole('heading', { name: /Microsoft 365/ });
+      fireEvent.paste(composerBox(), { clipboardData: { files: [new File(['png'], 'screen.png', { type: 'image/png' })], getData: () => '' } });
+      await waitFor(() => expect(composerBox().querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,AAAA'));
+      expect(calls('POST', '/api/support/v1/tickets/1284/attachments')).toHaveLength(0);
+      fireEvent.click(screen.getByRole('button', { name: /^Add note/ }));
+      await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')[0]?.body).toMatchObject({ body: '[screen]', body_html: expect.stringContaining('data:image/png;base64,AAAA') }));
+    } finally { prepare.mockRestore(); document.execCommand = previous; }
+  });
+
+  it('warns about a mentioned but missing attachment before sending', async () => {
+    renderTab(); await screen.findByRole('heading', { name: /Microsoft 365/ });
+    editReply(composerBox(), 'Please see the attached document');
+    fireEvent.click(screen.getByRole('button', { name: /^Add note/ }));
+    expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(0);
+    fireEvent.click(await screen.findByRole('button', { name: 'Send anyway' }));
+    await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(1));
+  });
+
+  it('attaches an unreadable pasted image rather than losing it', async () => {
     renderTab();
     await screen.findByRole('heading', { name: /Microsoft 365/ });
     const shot = new File(['png'], 'image.png', { type: 'image/png' });
     fireEvent.paste(composerBox(), { clipboardData: { files: [shot], getData: () => '' } });
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/attachments')).toHaveLength(1));
     const form = calls('POST', '/api/support/v1/tickets/1284/attachments')[0]!.body as FormData;
-    expect((form.get('file') as File).name).toMatch(/^Screenshot \d{4}-\d{2}-\d{2} at \d{2}\.\d{2}\.\d{2}\.png$/);
+    expect((form.get('file') as File).name).toBe('image.png');
   });
 
   it('shows a drop target naming the ticket while files are dragged over it, and attaches what is dropped', async () => {
@@ -577,10 +645,10 @@ describe('the composer', () => {
     drafts['support:ticket:1284'] = { content: { body: 'Half-written reply', mode: 'reply', status: 'pending_customer', cc: ['it@acmelanka.lk'] } };
     renderTab();
     await screen.findByRole('heading', { name: /Microsoft 365/ });
-    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Reply to Saman Kumara' }) as HTMLTextAreaElement).value).toBe('Half-written reply'));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Reply to Saman Kumara' }).textContent).toBe('Half-written reply'));
     expect(screen.getByRole('combobox', { name: 'Status after sending' }).textContent).toContain('Then: Pending customer');
     expect(screen.getByRole('button', { name: 'Remove it@acmelanka.lk' })).toBeTruthy();
-    fireEvent.change(composerBox(), { target: { value: 'Half-written reply, now longer' } });
+    editReply(composerBox(), 'Half-written reply, now longer');
     await waitFor(() => expect((drafts['support:ticket:1284'] as { content: { body: string } }).content.body).toBe('Half-written reply, now longer'), { timeout: 3000 });
     expect(await screen.findByText(/^Draft saved /)).toBeTruthy();
   });
@@ -592,7 +660,7 @@ describe('the composer', () => {
     key('r');
     await waitFor(() => expect(screen.getByRole('radio', { name: 'Reply to requester' }).getAttribute('aria-checked')).toBe('true'));
     expect(screen.getByRole('tab', { name: /Conversation/ }).getAttribute('aria-selected')).toBe('true');
-    expect(document.activeElement?.tagName).toBe('TEXTAREA');
+    expect(document.activeElement?.getAttribute('contenteditable')).toBe('true');
     // Typed into the composer, the letters are letters.
     fireEvent.keyDown(document.activeElement!, { key: 'e' });
     expect(screen.queryByRole('dialog')).toBeNull();
@@ -615,7 +683,7 @@ describe('who else is here (FR-COM-11)', () => {
       vi.advanceTimersByTime(30_000);
     });
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/presence')).toHaveLength(2));
-    fireEvent.change(composerBox(), { target: { value: 'Checking' } });
+    editReply(composerBox(), 'Checking');
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/presence').at(-1)?.body).toEqual({ state: 'typing', mode: 'note' }));
     view.unmount();
     expect(calls('POST', '/api/support/v1/tickets/1284/presence').at(-1)?.body).toEqual({ state: 'left' });
@@ -650,3 +718,11 @@ describe('an older server', () => {
     expect(screen.getByText(/Your WorkSuite server is older/)).toBeTruthy();
   });
 });
+
+function editReply(element: HTMLElement, value: string) {
+  element.textContent = value;
+  element.focus();
+  const range = document.createRange(); range.selectNodeContents(element); range.collapse(false);
+  window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
+  fireEvent.input(element);
+}

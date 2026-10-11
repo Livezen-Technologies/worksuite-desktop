@@ -1,3 +1,5 @@
+import { FormattedMessage } from '../../components/FormattedMessage';
+import { linkReplyUrls, replyHtml } from './richReply';
 import { Fragment } from 'react';
 import type { Attachment, Message } from '@shared/support';
 import { bytes, timeLabel, stampDayLabel } from '../../core/time';
@@ -44,10 +46,19 @@ export function messageChannel(m: Message, first: boolean, source?: string | nul
 
 /** Where a public reply got to (G-01): not sent until delivery exists on the server, then emailed and delivered. */
 function delivery(m: Message): string | null {
+  if (m.local_status) return m.local_status === 'sending' ? text('Sending…') : text('Not sent');
   if (m.internal || m.from !== 'staff' || !m.delivery_status) return null;
   return (
-    ({ not_sent: text('Not emailed'), queued: text('Sending'), sent: text('Emailed'), delivered: text('Delivered'), failed: text('Not delivered'), bounced: text('Bounced') } as Record<string, string>)[m.delivery_status] ??
-    m.delivery_status
+    (
+      {
+        not_sent: text('Not emailed'),
+        queued: text('Queued for delivery'),
+        sent: text('Emailed'),
+        delivered: text('Delivered'),
+        failed: text('Not delivered'),
+        bounced: text('Bounced'),
+      } as Record<string, string>
+    )[m.delivery_status] ?? m.delivery_status
   );
 }
 
@@ -143,7 +154,25 @@ export function Thread({
                   {sent ? ` · ${sent}` : ''}
                 </span>
               </div>
-              <p className={cx('break-words whitespace-pre-wrap text-ink', compact ? 'text-[12.5px]' : 'text-[13.5px] leading-relaxed')}>{m.body}</p>
+              <FormattedMessage html={m.body_html || linkReplyUrls(replyHtml(m.body))} className={compact ? 'text-[12.5px]' : 'text-[13.5px] leading-relaxed'} />
+              {m.local_status === 'failed' && m.retry_input ? (
+                <button
+                  type="button"
+                  className="mt-2 text-primary underline"
+                  onClick={() =>
+                    window.dispatchEvent(
+                      new CustomEvent('support:retry-message', {
+                        detail: {
+                          ticketId: m.local_ticket_id ?? 0,
+                          input: m.retry_input,
+                        },
+                      }),
+                    )
+                  }
+                >
+                  {text('Retry')}
+                </button>
+              ) : null}
               {files.length ? (
                 <ul aria-label={text('Files')} className="mt-2 flex flex-wrap gap-1.5">
                   {files.map((a) => (

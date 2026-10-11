@@ -118,7 +118,7 @@ describe('the window', () => {
     renderQuick();
     await screen.findByRole('article', { name: 'Quick reply to CFX-001284' });
     fireEvent.click(screen.getByRole('radio', { name: /Reply to requester/ }));
-    fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Please sign out and in again.' } });
+    editReply(screen.getByRole('textbox'), 'Please sign out and in again.');
     fireEvent.click(screen.getByRole('button', { name: /Send/ }));
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(1));
     expect(calls('POST', '/api/support/v1/tickets/1284/messages')[0]!.body).toMatchObject({ body: 'Please sign out and in again.', internal: false });
@@ -149,3 +149,11 @@ describe('the window', () => {
     expect(screen.queryByRole('textbox')).toBeNull();
   });
 });
+
+function editReply(element: HTMLElement, value: string) {
+  element.textContent = value;
+  element.focus();
+  const range = document.createRange(); range.selectNodeContents(element); range.collapse(false);
+  window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
+  fireEvent.input(element);
+}

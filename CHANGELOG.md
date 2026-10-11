@@ -11,6 +11,16 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.236 — 2026-10-11
+
+- **Helpdesk replies keep their formatting (#331, support 1.3.0).** A compact toolbar adds lists, links, quotes,
+  code and resizable inline images. Reply and internal note drafts stay separate and persist per ticket. The reply
+  bar keeps AI labels readable, offers an expanded editor, scheduled sends and a missing attachment reminder.
+  Large attachments resume through chunks; pending replies show sending or retry feedback. Conversation messages
+  use a sanitized formatted viewer. HEIC pictures convert locally to JPEG (mail 1.30.1).
+- Deploy the companion server Support/Mail/Uploads update before using inline email images, scheduled sends or
+  chunked Helpdesk attachments. Older servers retain plain text replies and refuse unsupported image sends.
+
 ## 0.2.235 — 2026-10-11
 
 - **Adding a Microsoft 365 mailbox explains what went wrong (#154).** "OAuth sign-in failed — check the server log" is gone. A failed sign-in now says what happened and what to do next, with a button where one helps:
