@@ -11,7 +11,7 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## 0.2.239 — 2026-10-11
+## 0.2.240 — 2026-10-11
 
 - **Ubuntu and other Linux .deb/.rpm installs update themselves (#345, settings 1.36.0).** A copy installed from a
   `.deb` turned its updater off ("update it with your package manager") although there was nothing to update from.
@@ -35,6 +35,13 @@ person who has to live with the change — what it does, and where it bites.
     line while the window is closed opens it on the right page. Status changed in the window shows in the tray.
   - Ubuntu without tray-icon support is told once how to add it, and the launcher's right-click menu has Open
     WorkSuite and New email.
+
+## 0.2.239 — 2026-10-11
+
+- **Mail opens again.** Mail showed "Mail failed to load" when the selected message came from a mailbox outside mail
+  protection: the server answers "no verdict" for it, and the reader read a verdict from that empty answer and
+  crashed. That answer now means no verdict, and the message opens as it did before protection, with no banner and
+  no "Checking". (Mail 1.32.1)
 
 ## 0.2.238 — 2026-10-11
 
