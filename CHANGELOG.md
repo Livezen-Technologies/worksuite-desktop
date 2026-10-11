@@ -11,6 +11,20 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.239 — 2026-10-11
+
+- **Ubuntu and other Linux .deb/.rpm installs update themselves (#345, settings 1.36.0).** A copy installed from a
+  `.deb` turned its updater off ("update it with your package manager") although there was nothing to update from.
+  - WorkSuite now knows how it was installed (AppImage, `.deb` or `.rpm`) and asks the Update Center for that exact
+    format, so a `.deb` install is never offered an AppImage.
+  - **Update now** on a `.deb`/`.rpm` installs the downloaded, checksum-verified package with one password prompt,
+    then restarts on the new version. If the prompt is closed or this computer has no `pkexec`, the package opens in
+    the software installer instead.
+  - Settings › Updates on Linux: "Release signature (Ed25519)" replaces "Code signature", packages have no Stage step,
+    an **Installed as** tile replaces the duplicate Channel tile, and empty release notes say "Release notes not
+    available". Diagnostics names the install type.
+  - Releases must upload the `.deb` and `.rpm` to the Update Center along with the AppImage (docs/RELEASING.md).
+
 ## 0.2.238 — 2026-10-11
 
 - **One alert, on the right device (#339).** An active desktop gets attention first; an active browser wins when the desktop is idle. Other devices keep their badges without another popup. Viewing the conversation suppresses its alert everywhere.
