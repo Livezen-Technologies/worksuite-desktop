@@ -133,7 +133,7 @@ describe('task reminder native notifications', () => {
       },
     ];
     await poll.refreshList(true);
-    expect(notes).toHaveLength(1);
+    await vi.waitFor(() => expect(notes).toHaveLength(1));
     expect(notes[0]!.options.title).toBe('Polled reminder');
     notes[0]!.events.action!({}, 0);
     await vi.waitFor(() => expect(http.post).toHaveBeenCalledWith('/api/task-reminder-runs/17/snooze', { minutes: 15 }));

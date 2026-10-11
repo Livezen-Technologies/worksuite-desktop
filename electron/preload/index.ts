@@ -329,6 +329,7 @@ const api = {
     saveAs: call('image:saveAs'),
   },
   notifications: {
+    context: call('notifications:context'),
     list: call('notifications:list'),
     markRead: call('notifications:markRead'),
     markAllRead: call('notifications:markAllRead'),
