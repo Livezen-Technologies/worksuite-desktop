@@ -4,6 +4,20 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-11
+
+**Added**
+
+- New project starts from a template (#337) — search, Blank, Copy an existing project, Company templates, My templates and the built-in Template packs by category; each card with icon, one line and tags
+- choosing a template fills the form (name, category, priority, billable, estimated hours, budget, description, start as), with what to include, a person for each role, a tender to link, and a Preview tab that lays the phases and tasks on the chosen dates — working days, skipping public holidays — the same way the server builds them (templates.ts schedule())
+- Create project builds the whole project in one call (POST /api/projects/from-library), shows progress for a large template, says what was not applied, and opens the project; the footer reads 'Created from template X vN'
+- Templates page — packs, company, mine and archived; duplicate, edit (name, scope, plan as JSON), version history and restore, archive, export and import as JSON, usage count
+- Save as template from any project with the parts to include and personal or company scope; the project page names the template it was made from
+
+**Fixed**
+
+- New project's Budget shows the amount beside the currency; Starts and Ends use the app's date field (DateField, '11 Oct 2026', typed day first or picked) instead of yyyy-mm-dd
+
 ## 1.2.0 — 2026-10-10
 
 **Added**

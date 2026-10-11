@@ -22,7 +22,7 @@ import { TaskPanel } from './TaskPanel';
 import { MiniTimer } from './Timer';
 // ── PORTFOLIO ──
 import { PortfolioDashboard } from './screens/Dashboard';
-import { NewProjectDialog } from './screens/NewProject';
+import { NewProjectDialog, startKey } from './screens/NewProject';
 import { PortfolioScreen, isPortfolio, portfolioTitle } from './screens/Portfolio';
 import { ProjectTabs } from './screens/ProjectPage';
 import { usePermission } from './portfolio';
@@ -114,7 +114,7 @@ function Workspace() {
   useEffect(() => {
     if (!offline) void keepOffline();
   }, [offline, pins.length]);
-  // `?new=blank` or `?new={template}` (the web's New project): the dialog, over whatever view is open.
+  // `?new=blank`, `?new={template key}` or `?new={template id}` (the web's New project): the dialog, over whatever view is open.
   const newParam = query.get('new');
   const setNew = (value: string | null) => {
     const p = new URLSearchParams(query);
@@ -254,7 +254,7 @@ function Workspace() {
       </div>
       {jump ? <JumpTo projects={[...projects.values()]} onClose={() => setJump(false)} onPick={(id) => (setJump(false), go(view.kind === 'board-home' ? `/projects/${id}/board` : `/projects/${id}`))} /> : null}
       {logFor ? <LogTime task={logFor.task} project={current ? { id: current.id, code: current.code } : boardProject ? { id: boardProject } : null} onClose={() => setLogFor(null)} /> : null}
-      {newParam ? <NewProjectDialog templateId={Number(newParam) > 0 ? Number(newParam) : null} offline={offline} onClose={() => setNew(null)} onGo={go} /> : null}
+      {newParam ? <NewProjectDialog start={startKey(newParam)} offline={offline} onClose={() => setNew(null)} onGo={go} /> : null}
       {newIn && boardProject ? <NewTask projectId={boardProject} status={newIn} me={me} onClose={() => setNewIn(null)} onCreated={(id) => (setNewIn(null), void qc.invalidateQueries({ queryKey: qk.tasks(boardProject) }), go(boardRoute(boardProject, id)))} /> : null}
     </div>
   );
