@@ -1,5 +1,9 @@
 {
     "module": "mail",
     "version": "1.32.0",
-    "paths": []
+    "paths": [
+        "electron/services/mail-alerts.ts",
+        "electron/services/mail-alerts-api.ts",
+        "shared/mail-alerts.ts"
+    ]
 }
