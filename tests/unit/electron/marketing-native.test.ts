@@ -167,18 +167,20 @@ describe('Marketing in the tray', () => {
 
   it('shows the queue, today’s callbacks, what is sending and Next contact, just above Open WorkSuite', () => {
     const a = actions();
-    const items = trayMenu(model, a);
-    const labels = items.map((i) => i.label ?? i.type);
-    const at = labels.indexOf('Call queue waiting 38');
-    expect(labels.slice(at, at + 6)).toEqual(['Call queue waiting 38', 'Callbacks today 9', 'Sending now 1 · 62%', 'Next contact', 'separator', 'Open WorkSuite']);
+    // One line, "Calls · 38 waiting", with the queue's lines in its submenu (#346).
+    const line = trayMenu(model, a).find((i) => i.label === 'Calls · 38 waiting')!;
+    const items = line.submenu as Array<{ label?: string; type?: string; click?: () => void; accelerator?: string; enabled?: boolean }>;
+    expect(items.map((i) => i.label ?? i.type)).toEqual(['Call queue waiting 38', 'Callbacks today 9', 'Sending now 1 · 62%', 'Next contact']);
     const by = (label: string) => items.find((i) => i.label === label)!;
     (by('Call queue waiting 38').click as () => void)();
     expect(a.openRoute).toHaveBeenLastCalledWith('/marketing?view=queue');
     (by('Callbacks today 9').click as () => void)();
     expect(a.openRoute).toHaveBeenLastCalledWith('/marketing?view=queue&tab=callbacks');
     expect(by('Sending now 1 · 62%').enabled).toBe(false);
-    // The key is shown, never registered by the menu: main holds it only while WorkSuite is not in front.
-    expect(by('Next contact')).toMatchObject({ accelerator: 'CmdOrCtrl+Shift+N', registerAccelerator: false });
+    // The key is shown, never registered by the menu: main holds it only while WorkSuite is not in front. Shown on
+    // Windows and macOS; Ubuntu's tray cannot right-align it, so the Linux menu leaves it out (#346).
+    expect(trayMarketingItems(model, a).find((i) => i.label === 'Next contact')).toMatchObject({ accelerator: 'CmdOrCtrl+Shift+N', registerAccelerator: false });
+    if (process.platform === 'linux') expect(by('Next contact').accelerator).toBeUndefined();
     (by('Next contact').click as () => void)();
     expect(a.marketingNextContact).toHaveBeenCalledTimes(1);
   });
