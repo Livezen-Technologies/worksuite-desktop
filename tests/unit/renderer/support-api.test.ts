@@ -182,3 +182,38 @@ describe('a server with only the as-built routes', () => {
     await expect(api.ticketIdForReference('TKT-000006')).resolves.toBeNull();
   });
 });
+
+describe('chunked Helpdesk attachments', () => {
+  it('resumes missing chunks and recovers a lost completion response without uploading again', async () => {
+    const file = new Blob([new Uint8Array(8 * 1024 * 1024)], { type: 'application/pdf' });
+    const received = new Set<number>();
+    let completed = false;
+    let failChunk = true;
+    let loseAnswer = true;
+    handler = (_method, path, opts) => {
+      if (path === '/api/uploads/init') {
+        expect(opts.body).toMatchObject({ purpose: 'support', ticket_id: 9, total_size: file.size, sha256: expect.stringMatching(/^[a-f0-9]{64}$/) });
+        return { upload_id: 'support-session', chunk_size: 2 * 1024 * 1024, total_chunks: 4 };
+      }
+      if (path.endsWith('/status')) return { status: completed ? 'completed' : 'uploading', received_chunks: [...received] };
+      if (path.endsWith('/chunk')) {
+        const index = Number((opts.body as FormData).get('chunk_index'));
+        if (index === 1 && failChunk) { failChunk = false; throw new ApiError(500, 'Try again', null); }
+        received.add(index); return {};
+      }
+      if (path.endsWith('/attachments/from-upload')) {
+        completed = true;
+        if (loseAnswer) { loseAnswer = false; throw new ApiError(500, 'Response lost', null); }
+        return { attachment: { id: 70, name: 'large.pdf' } };
+      }
+      throw new Error(`unexpected ${path}`);
+    };
+    await expect(api.uploadAttachment(9, file, 'large.pdf')).rejects.toThrow('Try again');
+    await expect(api.uploadAttachment(9, file, 'large.pdf')).rejects.toThrow('Response lost');
+    const before = calls().filter((c) => c.endsWith('/chunk')).length;
+    await expect(api.uploadAttachment(9, file, 'large.pdf')).resolves.toMatchObject({ id: 70 });
+    expect(calls().filter((c) => c.endsWith('/chunk'))).toHaveLength(before);
+    expect(calls().filter((c) => c.endsWith('/init'))).toHaveLength(1);
+    expect(received.size).toBe(4);
+  });
+});

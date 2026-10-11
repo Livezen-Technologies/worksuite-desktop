@@ -186,7 +186,7 @@ export interface MailEditorProps {
    * font, size, bold, italic, underline, colour, clear; alignment and line
    * spacing; links (tel: too), pictures, tables and dividers.
    */
-  variant?: 'compose' | 'signature';
+  variant?: 'compose' | 'signature' | 'support';
   /** How big a picture may be once made smaller (a signature's: about 500 KB). */
   imageMaxBytes?: number;
   /** More tool groups after the editor's own. */
@@ -205,6 +205,7 @@ export interface MailEditorProps {
 }
 
 /** The tools a signature keeps. */
+const SUPPORT_TOOLS = new Set(['bold', 'italic', 'underline', 'strike', 'bullets', 'numbers', 'checklist', 'link', 'image', 'ai']);
 const SIGNATURE_TOOLS = new Set(['undo', 'redo', 'font', 'size', 'bold', 'italic', 'underline', 'colour', 'clear', 'align', 'spacing', 'link', 'image', 'table', 'divider']);
 
 type Panel = 'link' | 'colour' | 'highlight' | 'table' | 'emoji' | 'chars' | 'image-url' | null;
@@ -517,7 +518,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
   };
 
   const filesIn = (files: File[]) => {
-    const pics = files.filter((f) => /^image\/(png|jpeg|gif|webp|bmp|svg\+xml)$/.test(f.type));
+    const pics = files.filter((f) => /^image\/(png|jpeg|gif|webp|bmp|heic|heif|svg\+xml)$/.test(f.type));
     const others = files.filter((f) => !pics.includes(f));
     if (pics.length) void insertImages(pics);
     if (others.length) onFiles?.(others);
@@ -775,7 +776,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
   const leading = leadingGroups?.() ?? [];
   const groups: ToolGroup[] = [...leading, ...allGroups, ...(extraGroups ?? [])];
   const extraIds = new Set([...(extraGroups ?? []), ...leading].flatMap((g) => g.items.map((i) => i.id)));
-  const keepTool = (id: string) => (signature ? SIGNATURE_TOOLS.has(id) || extraIds.has(id) : id !== 'divider');
+  const keepTool = (id: string) => (variant === 'support' ? SUPPORT_TOOLS.has(id) || extraIds.has(id) : signature ? SIGNATURE_TOOLS.has(id) || extraIds.has(id) : id !== 'divider');
 
   /** The keys (worksuite-desktop#188); they stop here so the app's own (Mod+K is Search) do not also run. */
   const onKey = (e: React.KeyboardEvent<HTMLDivElement>) => {
@@ -819,6 +820,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
     }
     if (e.key === ' ' && !mod && !e.altKey && shortcut()) return done();
     if (e.key === '*' && !mod && boldShortcut()) return done();
+    if (variant === 'support' && e.key === '`' && !mod && codeShortcut()) return done();
     if (e.key === 'Enter' && !mod && here.checklist && checkNewLine()) return done();
     if (!mod) return;
     const key = e.key.toLowerCase();
@@ -878,12 +880,13 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
     before.setStart(scope, 0);
     before.setEnd(s.anchorNode!, s.anchorOffset);
     const typed = before.toString().split('\n').pop() ?? '';
-    const cmd = typed === '-' || typed === '*' ? 'insertUnorderedList' : typed === '1.' ? 'insertOrderedList' : typed === '>' ? 'quote' : null;
+    const cmd = typed === '-' || typed === '*' ? 'insertUnorderedList' : typed === '1.' ? 'insertOrderedList' : typed === '>' ? 'quote' : variant === 'support' && typed === '```' ? 'code' : null;
     if (!cmd || before.cloneContents().querySelector?.('br')) return false;
     s.removeAllRanges();
     s.addRange(before);
     document.execCommand('delete');
     if (cmd === 'quote') document.execCommand('formatBlock', false, 'blockquote');
+    else if (cmd === 'code') document.execCommand('formatBlock', false, 'pre');
     else document.execCommand(cmd);
     changed();
     return true;
@@ -906,6 +909,20 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
     return true;
   };
 
+  const codeShortcut = (): boolean => {
+    const s = window.getSelection();
+    if (!s?.rangeCount || !s.isCollapsed || s.anchorNode?.nodeType !== Node.TEXT_NODE || !box.current?.contains(s.anchorNode)) return false;
+    const t = s.anchorNode as Text;
+    if (t.parentElement?.closest('code, pre')) return false;
+    const m = /`([^`\n]+)$/.exec(t.data.slice(0, s.anchorOffset));
+    if (!m) return false;
+    const r = document.createRange();
+    r.setStart(t, s.anchorOffset - m[0].length); r.setEnd(t, s.anchorOffset);
+    s.removeAllRanges(); s.addRange(r);
+    document.execCommand('insertHTML', false, inlineCodeHtml(m[1]!) + '&nbsp;');
+    changed(); return true;
+  };
+
   const fileList = (list: FileList | null | undefined): File[] => (list ? [...list] : []);
   const cellNow = here.cell?.isConnected ? here.cell : null;
   const picked = img?.isConnected ? img : null;
@@ -915,7 +932,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
     <div data-editor-fill={fill || undefined} className={cx(fill ? 'relative flex min-h-0 flex-1 flex-col bg-surface' : 'relative flex flex-col rounded-[10px] border border-line bg-surface transition-shadow focus-within:border-primary focus-within:ring-2 focus-within:ring-primary/25', className)}>
       <div className={cx('z-10 flex shrink-0 flex-col border-b border-line bg-surface', fill ? '' : 'sticky top-0 rounded-t-[10px]')}>
         <div className="flex min-w-0 items-center px-1.5 py-1">
-          <ToolbarRow groups={groups} keep={keepTool} label={text('{label} formatting', { label })} request={request} className="min-w-0 flex-1" />
+          <ToolbarRow groups={groups} keep={keepTool} label={text('{label} formatting', { label })} size={variant === 'support' ? 'sm' : 'md'} request={request} className="min-w-0 flex-1" />
         </div>
         {panel === 'link' ? (
           <FieldStrip
@@ -1131,7 +1148,7 @@ export function MailEditor({ value, onChange, clean, label, placeholder, editorR
       </div>
       </ScrollIf>
       {footer}
-      <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml" multiple hidden aria-hidden onChange={(e) => void insertImages(fileList(e.target.files)).then(() => (e.target.value = ''))} />
+      <input ref={imageInput} type="file" accept="image/png,image/jpeg,image/gif,image/webp,image/svg+xml,image/heic,image/heif,.heic,.heif" multiple hidden aria-hidden onChange={(e) => void insertImages(fileList(e.target.files)).then(() => (e.target.value = ''))} />
       <input
         ref={replaceInput}
         type="file"

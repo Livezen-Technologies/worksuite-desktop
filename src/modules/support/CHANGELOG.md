@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-11
+
+**Added**
+
+- compact rich ticket replies, separate reply/note drafts, inline images, resumable attachment uploads, scheduling and retry feedback (#331).
+
 ## 1.2.1 — 2026-10-08
 
 - New ticket — the Company picker, Type, Category, Assignee and Team are named above them as the text fields are, and Company sits in line with Subject's box, wider, searchable past six companies

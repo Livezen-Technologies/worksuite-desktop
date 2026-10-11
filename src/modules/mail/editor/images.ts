@@ -51,7 +51,14 @@ export interface Fitted {
  * quality and then the size down until it is under the limit.
  */
 export async function fitImage(src: Source, encode: Encoder, maxBytes = IMAGE_MAX_BYTES, maxWidth = IMAGE_MAX_WIDTH): Promise<Fitted> {
-  if (SAFE_TYPES.includes(src.type) && src.bytes <= maxBytes && src.width <= maxWidth) return { blob: null, width: src.width, height: src.height, type: src.type, shrunk: false };
+  if (SAFE_TYPES.includes(src.type) && src.bytes <= maxBytes && src.width <= maxWidth)
+    return {
+      blob: null,
+      width: src.width,
+      height: src.height,
+      type: src.type,
+      shrunk: false,
+    };
   let scale = Math.min(1, maxWidth / Math.max(1, src.width));
   const type = src.transparent ? 'image/png' : 'image/jpeg';
   let last: Blob | null = null;
@@ -65,11 +72,24 @@ export async function fitImage(src: Source, encode: Encoder, maxBytes = IMAGE_MA
     // A PNG that will not get small enough goes as a JPEG after all.
     if (type === 'image/png' && round === 1) {
       last = await encode(w, h, 'image/jpeg', 0.8);
-      if (last.size <= maxBytes) return { blob: last, width: w, height: h, type: 'image/jpeg', shrunk: true };
+      if (last.size <= maxBytes)
+        return {
+          blob: last,
+          width: w,
+          height: h,
+          type: 'image/jpeg',
+          shrunk: true,
+        };
     }
     scale *= 0.75;
   }
-  return { blob: last, width: Math.round(src.width * scale), height: Math.round(src.height * scale), type, shrunk: true };
+  return {
+    blob: last,
+    width: Math.round(src.width * scale),
+    height: Math.round(src.height * scale),
+    type,
+    shrunk: true,
+  };
 }
 
 export function blobToDataUrl(blob: Blob): Promise<string> {
@@ -218,6 +238,15 @@ export interface Prepared {
  * as a PNG (no mail client can be trusted with SVG).
  */
 export async function prepareImage(file: Blob, maxBytes = IMAGE_MAX_BYTES, maxWidth = IMAGE_MAX_WIDTH): Promise<Prepared> {
+  if (/^image\/(heic|heif)$/i.test(file.type) || ('name' in file && /\.(heic|heif)$/i.test(String(file.name)))) {
+    const convert = (await import('heic2any')).default;
+    const jpeg = await convert({
+      blob: file,
+      toType: 'image/jpeg',
+      quality: 0.85,
+    });
+    file = Array.isArray(jpeg) ? jpeg[0]! : jpeg;
+  }
   const img = await load(file);
   try {
     // An SVG without a size of its own draws at 300 px wide.
@@ -226,7 +255,13 @@ export async function prepareImage(file: Blob, maxBytes = IMAGE_MAX_BYTES, maxWi
     const transparent = file.type !== 'image/jpeg' && (file.type === 'image/svg+xml' || hasTransparency(img));
     const fitted = await fitImage({ width, height, bytes: file.size, type: file.type, transparent }, canvasEncoder(img), maxBytes, maxWidth);
     const blob = fitted.blob ?? file;
-    return { src: await blobToDataUrl(blob), width: fitted.width, height: fitted.height, bytes: blob.size, shrunk: fitted.shrunk };
+    return {
+      src: await blobToDataUrl(blob),
+      width: fitted.width,
+      height: fitted.height,
+      bytes: blob.size,
+      shrunk: fitted.shrunk,
+    };
   } finally {
     URL.revokeObjectURL(img.src);
   }
@@ -271,7 +306,10 @@ export async function cropImage(src: string, box: CropBox): Promise<string> {
 export type ImageSize = 'small' | 'medium' | 'original' | 'full';
 export type ImageAlign = 'inline' | 'left' | 'center' | 'right';
 
-const PRESET_PX: Record<'small' | 'medium', number> = { small: 200, medium: 400 };
+const PRESET_PX: Record<'small' | 'medium', number> = {
+  small: 200,
+  medium: 400,
+};
 
 /** How wide a picture shows, written both ways Outlook and the rest read it. */
 export function sizeImage(img: HTMLImageElement, size: ImageSize | number): void {

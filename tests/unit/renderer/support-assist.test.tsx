@@ -149,10 +149,10 @@ describe('the panel in a ticket', () => {
     expect((within(internal).getByRole('button', { name: 'Insert link' }) as HTMLButtonElement).disabled).toBe(true);
     const pub = within(list).getByText('Fix 0xC004C003 after M365 renewal').closest('li')!;
     fireEvent.click(within(pub).getByRole('button', { name: 'Insert link' }));
-    await waitFor(() => expect((composer() as HTMLTextAreaElement).value).toBe('Fix 0xC004C003 after M365 renewal: https://help.cfx.lk/kb/fix-0xc004c003'));
+    await waitFor(() => expect(composer().textContent).toBe('Fix 0xC004C003 after M365 renewal: https://help.cfx.lk/kb/fix-0xc004c003'));
     expect(calls('POST', '/api/support/v1/tickets/1284/kb/insert')[0]!.body).toEqual({ article_id: 31, mode: 'link' });
     fireEvent.click(within(internal).getByRole('button', { name: 'Insert text' }));
-    await waitFor(() => expect((composer() as HTMLTextAreaElement).value).toContain('Internal steps in full.'));
+    await waitFor(() => expect(composer().textContent).toContain('Internal steps in full.'));
     // Nothing went out.
     expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(0);
 
@@ -179,7 +179,7 @@ describe('the panel in a ticket', () => {
     expect(within(panel()).getByText('Fix 0xC004C003 after M365 renewal')).toBeTruthy();
     fireEvent.change(draft, { target: { value: 'Hi Saman, done.' } });
     fireEvent.click(within(panel()).getByRole('button', { name: 'Insert into composer' }));
-    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Reply to Requester 1284' }) as HTMLTextAreaElement).value).toBe('Hi Saman, done.'));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Reply to Requester 1284' }).textContent).toBe('Hi Saman, done.'));
     expect(screen.getByRole('radio', { name: 'Reply to requester' }).getAttribute('aria-checked')).toBe('true');
     expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(0);
   });
@@ -211,14 +211,14 @@ describe('the panel in a ticket', () => {
   it('rewrites the composer’s text only when asked, and replaces it only on Replace', async () => {
     renderTab();
     await screen.findByRole('heading', { name: 'Subject 1284' });
-    fireEvent.change(composer(), { target: { value: 'pls sign out and in' } });
+    editReply(composer(), 'pls sign out and in');
     fireEvent.click(screen.getByRole('combobox', { name: 'Writing assistant' }));
     fireEvent.click(await within(await screen.findByRole('listbox', { name: 'Writing assistant' })).findByRole('option', { name: 'More professional' }));
     const box = await screen.findByRole('region', { name: 'Writing assistant' });
     expect(await within(box).findByText('professional: pls sign out and in')).toBeTruthy();
-    expect((composer() as HTMLTextAreaElement).value).toBe('pls sign out and in');
+    expect(composer().textContent).toBe('pls sign out and in');
     fireEvent.click(within(box).getByRole('button', { name: 'Replace my text' }));
-    expect((composer() as HTMLTextAreaElement).value).toBe('professional: pls sign out and in');
+    expect(composer().textContent).toBe('professional: pls sign out and in');
   });
 });
 
@@ -226,23 +226,23 @@ describe('the draft on the server (FR-CRT-10)', () => {
   it('offers the server’s draft when this computer has none, and keeps it in step after typing stops', async () => {
     serve({ 'GET /api/support/v1/tickets/1284/draft': { draft: { mode: 'reply', body: 'Started on my phone', body_html: null, cc: [], updated_at: null } } });
     renderTab();
-    await waitFor(() => expect((screen.getByRole('textbox', { name: 'Reply to Requester 1284' }) as HTMLTextAreaElement).value).toBe('Started on my phone'));
+    await waitFor(() => expect(screen.getByRole('textbox', { name: 'Reply to Requester 1284' }).textContent).toBe('Started on my phone'));
     vi.useFakeTimers({ shouldAdvanceTime: true });
-    fireEvent.change(composer(), { target: { value: 'Started on my phone, finished here' } });
+    editReply(composer(), 'Started on my phone, finished here');
     expect(calls('PUT', '/api/support/v1/tickets/1284/draft')).toHaveLength(0);
     await act(async () => {
       vi.advanceTimersByTime(SERVER_DRAFT_MS + 50);
     });
-    await waitFor(() => expect(calls('PUT', '/api/support/v1/tickets/1284/draft').at(-1)?.body).toEqual({ mode: 'reply', body: 'Started on my phone, finished here' }));
+    await waitFor(() => expect(calls('PUT', '/api/support/v1/tickets/1284/draft').at(-1)?.body).toEqual({ mode: 'reply', body: 'Started on my phone, finished here', body_html: 'Started on my phone, finished here' }));
   });
 
   it('keeps this computer’s draft over the server’s', async () => {
     drafts['support:ticket:1284'] = { content: { body: 'Mine here', mode: 'note' } };
     serve({ 'GET /api/support/v1/tickets/1284/draft': { draft: { mode: 'reply', body: 'From the server', body_html: null, cc: [], updated_at: null } } });
     renderTab();
-    await waitFor(() => expect((composer() as HTMLTextAreaElement).value).toBe('Mine here'));
+    await waitFor(() => expect(composer().textContent).toBe('Mine here'));
     await waitFor(() => expect(calls('GET', '/api/support/v1/tickets/1284/draft')).toHaveLength(1));
-    expect((composer() as HTMLTextAreaElement).value).toBe('Mine here');
+    expect(composer().textContent).toBe('Mine here');
   });
 });
 
@@ -258,3 +258,11 @@ describe('knowledge in the palette', () => {
     expect(await searchArticles('v')).toEqual({ ticket: null, articles: [] });
   });
 });
+
+function editReply(element: HTMLElement, value: string) {
+  element.textContent = value;
+  element.focus();
+  const range = document.createRange(); range.selectNodeContents(element); range.collapse(false);
+  window.getSelection()?.removeAllRanges(); window.getSelection()?.addRange(range);
+  fireEvent.input(element);
+}
