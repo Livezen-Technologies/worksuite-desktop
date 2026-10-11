@@ -11,6 +11,24 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.237 — 2026-10-11
+
+- **New-mail alerts you can act on (ENH-MAIL-05).** When WorkSuite isn't in front (another program, minimised, or in the tray), a new email shows a system notification:
+  - the sender, subject and a two-line preview, plus high importance, attachments and "Checked";
+  - **Reply** right in the notification on macOS and Windows, **Mark as read**, **Archive** and **Flag**;
+  - a click opens that exact message;
+  - a reply in the same thread replaces the older notification, and Windows groups them per account.
+- **When WorkSuite is in front,** you get a card at the bottom right instead, never both. It has the same actions, a quick reply and Open Inbox, and it closes after 8 seconds (15 for high importance) unless you're hovering. In Mail, looking at that folder, the new row is just marked **New**.
+- **Quiet under load:** a burst becomes one grouped alert ("5 new emails · 3 accounts", or "3 new emails in Sales · shared") with at most one sound. Imports and first syncs never alert.
+- **Tray menu:** connection state, unread per account (and which account needs signing in again), New email, and **Pause mail alerts**: for 1 hour, until tomorrow 08:00, outside your working hours from HR, or until you turn them on.
+  - Mail keeps syncing and badges keep counting; only pop-ups and sounds stop.
+  - On resume you get one summary ("While alerts were paused: 12 new emails").
+  - The taskbar or dock badge shows your unread count.
+- **Privacy:** choose **Sender and preview**, **Sender only** or **Hidden** in Mail settings; your organisation can set a minimum. Previews hide while you share your screen. Confidential mail never shows a preview, and Hidden writes nothing private to the system's notification history.
+- **Cleared everywhere:** reading, archiving or moving a message anywhere (here, the web, Outlook or your phone) closes its alert.
+- **Ctrl+Shift+N** opens the latest alert.
+- Needs the server's Mail 1.28.0.
+
 ## 0.2.236 — 2026-10-11
 
 - **Helpdesk replies keep their formatting (#331, support 1.3.0).** A compact toolbar adds lists, links, quotes,
