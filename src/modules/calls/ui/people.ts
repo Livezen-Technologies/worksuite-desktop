@@ -41,15 +41,18 @@ export function personOf(p: Participant, self: boolean, extra: { host?: boolean;
 
 /**
  * Who the PiP box or the big picture shows: the person sharing (their face
- * beside their screen), else whoever spoke last, else the first other person.
- * `last` is the previous choice, so the picture does not flick between two
- * people talking over each other.
+ * beside their screen), else whoever is pinned or spotlighted (`focus`), else
+ * whoever spoke last, else the first other person. `last` is the previous
+ * choice, so the picture does not flick between two people talking over each
+ * other.
  */
-export function featured(people: CallPerson[], last: string | null): CallPerson | null {
+export function featured(people: CallPerson[], last: string | null, focus: string | null = null): CallPerson | null {
   const others = people.filter((p) => !p.self);
   if (others.length === 0) return people[0] ?? null;
   const sharer = others.find((p) => p.screen);
   if (sharer) return sharer;
+  const pinned = focus ? people.find((p) => p.id === focus) : undefined;
+  if (pinned) return pinned;
   const speaking = others.find((p) => p.speaking);
   if (speaking) return speaking;
   return others.find((p) => p.id === last) ?? others[0]!;

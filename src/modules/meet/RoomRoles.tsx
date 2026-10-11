@@ -41,7 +41,9 @@ export function RoomSettingsFields({ value, onChange, disabled }: { value: RoomS
 /**
  * The Settings tab in the meeting: room name, passcode and lock; the activity
  * for hosts and co-hosts. What participants may do and who may come in are in
- * Host controls (`onHostControls`); everybody else sees them here, to read.
+ * Host controls (`onHostControls`). Somebody who cannot change them is told
+ * whether the meeting has a passcode and is locked, and is shown no switch
+ * at all, not even a disabled one (worksuite-desktop#348).
  */
 export function RoomSettingsPanel({ onHostControls }: { onHostControls?: () => void }) {
   const t = useMeetT();
@@ -87,13 +89,17 @@ export function RoomSettingsPanel({ onHostControls }: { onHostControls?: () => v
       ) : (
         <p className="text-ink-2">{view.has_passcode ? 'This meeting has a passcode.' : 'No passcode.'}</p>
       )}
-      <div className="flex items-start gap-2.5">
-        <span className="flex min-w-0 flex-1 flex-col">
-          <b className="text-ink">Lock the meeting</b>
-          <span className="text-[11.5px] text-ink-3">No one new can join, even with the link.</span>
-        </span>
-        <Switch checked={view.locked} disabled={!edit || saving} label="Lock the meeting" onChange={(locked) => void save({ locked })} />
-      </div>
+      {edit ? (
+        <div className="flex items-start gap-2.5">
+          <span className="flex min-w-0 flex-1 flex-col">
+            <b className="text-ink">Lock the meeting</b>
+            <span className="text-[11.5px] text-ink-3">No one new can join, even with the link.</span>
+          </span>
+          <Switch checked={view.locked} disabled={saving} label="Lock the meeting" onChange={(locked) => void save({ locked })} />
+        </div>
+      ) : (
+        <p className="text-ink-2">{t(view.locked ? 'hc.locked' : 'hc.unlocked')}</p>
+      )}
       {edit ? (
         <div className="flex flex-col items-start gap-2 rounded-[9px] bg-subtle px-2.5 py-2">
           <span className="text-ink-2">{t('hc.settingsTab')}</span>
@@ -103,9 +109,7 @@ export function RoomSettingsPanel({ onHostControls }: { onHostControls?: () => v
             </Button>
           ) : null}
         </div>
-      ) : (
-        <RoomSettingsFields value={view.settings} disabled onChange={() => undefined} />
-      )}
+      ) : null}
       {edit ? <ActivityList /> : null}
     </div>
   );
@@ -199,9 +203,11 @@ export function HostLeaveDialog({ onClose, onEndAll }: { onClose: () => void; on
       <div className="flex flex-col gap-2.5 text-[13px] text-ink-2">
         {!choosing ? (
           <p>
-            {cohostsHere.length
+            {cohostsHere.length === 1
               ? `The meeting goes on, and ${cohostsHere[0]!.name} becomes the host.`
-              : 'The meeting goes on. A co-host becomes the host; with none, you choose who.'}
+              : cohostsHere.length
+                ? 'The meeting goes on, and the co-host who has been here longest becomes the host.'
+                : 'The meeting goes on. With no co-host here, whoever signed in has been here longest becomes the host — never a guest.'}
           </p>
         ) : candidates.length ? (
           <>
