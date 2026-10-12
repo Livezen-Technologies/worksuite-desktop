@@ -16,6 +16,9 @@ import { LocalRecorder, RecordingError } from './recorder';
 import { LiveTranscriber } from './transcribe/live';
 import type { SpeechLanguage } from './transcribe/engine';
 import type { AutoEmail, Transcript } from '../meetings/transcripts/api';
+import { queryClient } from '../../core/query';
+import { isInviteEvent } from './invites';
+import { can, meetingRoleOf, type MeetAction, type MeetingRole } from './permissions';
 
 /**
  * One Meet meeting, in its window (MeetLobby → MeetRoom). Like a call, kept
@@ -41,6 +44,8 @@ type Board = { t: 'stroke'; s: Stroke } | { t: 'clear' };
 /** What the server says about a connection: its role, and whether it waits at the door (and why). */
 export interface Meta {
   role?: MeetRole;
+  /** The one role of the permission table (#348): host, co_host, participant or guest. */
+  meeting_role?: MeetingRole;
   host?: boolean;
   cohost?: boolean;
   waiting?: boolean;
@@ -121,6 +126,21 @@ export function userIdOf(p: Participant): number {
 export function isGuest(p: Participant): boolean {
   return p.identity.startsWith('g-');
 }
+
+/** A connection's one role in the permission table (#348). A guest's connection is a guest's whatever it says. */
+export function meetingRoleOfParticipant(p: Participant): MeetingRole {
+  if (isGuest(p)) return 'guest';
+  const said = metaOf(p).meeting_role;
+  return said === 'host' || said === 'co_host' || said === 'participant' ? said : meetingRoleOf(roleOf(p), false);
+}
+
+/** The event the server sends every device in the meeting when somebody's role changes (#348). */
+export function isRoleChangedEvent(e: unknown): e is { type: 'meeting.role_changed'; meeting: string; subject_id?: number; meeting_role?: MeetingRole } {
+  return !!e && typeof e === 'object' && (e as { type?: unknown }).type === 'meeting.role_changed' && typeof (e as { meeting?: unknown }).meeting === 'string';
+}
+
+/** How long a host's connection has to come back before the room asks the server to pass the host role on. */
+export const HOST_GONE_MS = 5_000;
 
 /** Who a connection is in Q&A, polls and raised hands: `u12` for a person signed in, on any connection of theirs; a guest by their identity. */
 export function handKey(p: Participant): string {
@@ -210,6 +230,9 @@ export class MeetSession {
   private lastNotice: { key: string; at: number } | null = null;
   /** Reactions on screen now (worksuite-desktop#91), newest last. */
   reactions: Reaction[] = [];
+  /** Somebody I pinned large for myself (#348): only this window knows. */
+  pinned: string | null = null;
+  private hostGone: ReturnType<typeof setTimeout> | null = null;
   private reactionId = 0;
 
   subscribe = (fn: () => void): (() => void) => {
@@ -239,9 +262,40 @@ export class MeetSession {
     return this.role === 'host';
   }
 
+  /**
+   * My one role in the permission table (#348): what my connection carries,
+   * else what the meeting said when it loaded. Never decided here.
+   */
+  get meetingRole(): MeetingRole {
+    const lp = this.room?.localParticipant;
+    if (lp && metaOf(lp).meeting_role) return meetingRoleOfParticipant(lp);
+    return this.info?.meeting_role ?? meetingRoleOf(this.role, false);
+  }
+
+  /** May I do this here? The one table every control is built from; the server checks again. */
+  can(action: MeetAction): boolean {
+    return can(this.meetingRole, action, this.settings);
+  }
+
   /** Host or co-host: admits, removes, mutes, locks, names presenters and changes the room settings. */
   get canManage(): boolean {
     return may.manage(this.role);
+  }
+
+  /** Whom a host spotlighted for everyone (#348): the room's metadata, which only the server writes. */
+  get spotlight(): string | null {
+    try {
+      const m = this.room?.metadata ? (JSON.parse(this.room.metadata) as { spotlight?: string | null }) : null;
+      return m?.spotlight ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Who is large on my screen: whom I pinned, else whom a host spotlighted — while they are still here. */
+  get focus(): string | null {
+    const here = (id: string | null) => (id && this.present.some((p) => p.identity === id) ? id : null);
+    return here(this.pinned) ?? here(this.spotlight);
   }
 
   get settings(): RoomSettings {
@@ -369,7 +423,14 @@ export class MeetSession {
     const refresh = () => this.changed();
     room
       .on(RoomEvent.ParticipantConnected, refresh)
-      .on(RoomEvent.ParticipantDisconnected, refresh)
+      .on(RoomEvent.ParticipantDisconnected, (p: RemoteParticipant) => {
+        // The host's connection went (#348): the server passes the host role on if it does not come back.
+        if (roleOf(p) === 'host' && !isGuest(room.localParticipant)) this.watchHostGone();
+        if (this.pinned === p.identity) this.pinned = null;
+        refresh();
+      })
+      // A host spotlighted somebody for everyone, or took it off (#348).
+      .on(RoomEvent.RoomMetadataChanged, refresh)
       .on(RoomEvent.ParticipantMetadataChanged, (_prev, p) => {
         // My role changed (made co-host or presenter, handed the host role, or it was taken back): the lists and settings follow.
         if (p === room.localParticipant) void this.reload();
@@ -451,6 +512,17 @@ export class MeetSession {
           }
           return;
         }
+        // A host asking me to unmute or turn my camera on (#348): from the media server only, never another participant.
+        if (topic === 'meet.ask') {
+          if (!p) {
+            try {
+              this.onAsk(JSON.parse(new TextDecoder().decode(payload)) as { source?: string; by?: string });
+            } catch {
+              /* not an ask */
+            }
+          }
+          return;
+        }
         // A reaction (#91): from somebody in the room, one of the set, while the host allows them.
         if (topic === 'meet.reaction') {
           if (p && may.react(roleOf(p), this.settings)) {
@@ -503,7 +575,7 @@ export class MeetSession {
     void this.loadBoard();
     this.offRoles?.();
     // Roles and settings changed by someone else reach everyone in the meeting at once (`meet.control`, what: roles).
-    this.offRoles = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
+    const offControl = on<{ type?: string; meeting?: string; what?: string }>('realtime:event', (e) => {
       if (e?.type !== 'meet.control' || e.meeting !== this.uuid) return;
       // A settings change (#91) comes as both: what it changed for me is told when the settings are read again.
       if (e.what === 'roles' || e.what === 'settings') void this.reload().then(() => this.refreshActivities());
@@ -528,11 +600,42 @@ export class MeetSession {
         this.changed();
       }
     });
+    const offInvites = this.watchInvites();
+    // Somebody's role changed (#348): mine, and so my controls, follow at once; everybody's badges too.
+    const offRole = on('realtime:event', (e) => {
+      if (isRoleChangedEvent(e) && e.meeting === this.uuid) void this.reload();
+    });
+    this.offRoles = () => {
+      offControl();
+      offInvites();
+      offRole();
+    };
     if (this.admitted) await this.enter();
     else {
       this.phase = 'waiting';
       this.changed();
     }
+  }
+
+  /**
+   * The invitations, kept to the server's word (worksuite-desktop#347): read
+   * again the moment one moves (`meeting.invite_state_changed`), and after a
+   * reconnect — what they said before the connection dropped is not kept.
+   * Nothing is patched from the event (FR-RT-03); the server has already
+   * ignored an answer to an earlier ring.
+   */
+  watchInvites(): () => void {
+    const offEvent = on('realtime:event', (e) => {
+      if (isInviteEvent(e) && e.meeting === this.uuid) void queryClient.invalidateQueries({ queryKey: ['meet', this.uuid, 'rings'] });
+    });
+    const offResync = on('realtime:resync', () => {
+      this.ringsVersion++;
+      this.changed();
+    });
+    return () => {
+      offEvent();
+      offResync();
+    };
   }
 
   /** The meeting's roles and settings again, after somebody changed them. */
@@ -779,6 +882,40 @@ export class MeetSession {
   admit = (p: Participant) => this.host('admit', { identity: p.identity });
   remove = (p: Participant) => this.host('remove', { identity: p.identity });
   mute = (p: Participant) => this.host('mute', { identity: p.identity });
+  // Host controls of #348: the server checks each against the same table.
+  muteAll = () => this.host('mute', { all: true }, () => toast('success', mt('hc.mutedAll')));
+  cameraOff = (p: Participant) => this.host('mute', { identity: p.identity, source: 'camera' });
+  stopShare = (p: Participant) => this.host('mute', { identity: p.identity, source: 'screen_share' });
+  askToTurnOn = (p: Participant, source: 'microphone' | 'camera') => this.host('ask', { identity: p.identity, source }, () => toast('success', mt(source === 'camera' ? 'hc.askedCamera' : 'hc.askedUnmute', { name: p.name || 'Guest' })));
+  spotlightFor = (p: Participant | null) => this.host('spotlight', { identity: p?.identity ?? null });
+  pin = (p: Participant | null) => {
+    this.pinned = p?.identity ?? null;
+    this.changed();
+  };
+
+  /** A host asked me to unmute or turn my camera on: only I can, so it is a question with a button. */
+  private onAsk(ask: { source?: string; by?: string }): void {
+    const camera = ask.source === 'camera';
+    toast('info', mt(camera ? 'hc.askCamera' : 'hc.askUnmute', { name: ask.by || mt('hc.theHost') }), {
+      label: mt(camera ? 'hc.turnCameraOn' : 'hc.unmute'),
+      run: () => void (camera ? this.toggleCamera() : this.toggleMic()),
+    });
+  }
+
+  /**
+   * The host's connection went. If it has not come back in a few seconds the
+   * room asks the server to pass the host role on (#348); the server checks
+   * that the host really has no connection left and chooses who takes it —
+   * a co-host, else whoever signed in has been here longest, never a guest.
+   */
+  private watchHostGone(): void {
+    if (this.hostGone) clearTimeout(this.hostGone);
+    this.hostGone = setTimeout(() => {
+      this.hostGone = null;
+      if (this.phase !== 'in' || this.present.some((p) => roleOf(p) === 'host')) return;
+      void apiPost(`/api/meet/${this.uuid}/host-left`).then(() => this.reload(), () => undefined);
+    }, HOST_GONE_MS);
+  }
   lock = (locked: boolean) => this.host('lock', { locked }, () => (this.locked = locked));
   // ── recording (worksuite-desktop#68) ─────────────────────────────────────
 

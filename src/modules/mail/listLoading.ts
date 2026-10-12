@@ -34,7 +34,7 @@ export interface ListPageParam {
 export const FIRST_PAGE: ListPageParam = { page: 1, cursor: null };
 
 export function nextListParam(last: ApiResult<MessagePage>, pages: Array<ApiResult<MessagePage>>): ListPageParam | undefined {
-  if (!last.data.has_more) return undefined;
+  if (!last?.data?.has_more) return undefined;
   return { page: pages.length + 1, cursor: last.data.next_cursor ?? null };
 }
 

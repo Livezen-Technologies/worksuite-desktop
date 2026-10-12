@@ -31,6 +31,7 @@ const { call } = await import('../../../src/core/bridge');
 const { app } = await import('../../../src/core/app-state');
 const { default: ProjectsPage } = await import('../../../src/modules/projects/ProjectsPage');
 const { withOrg } = await import('../../../src/modules/projects/company');
+const { setRegional } = await import('../../../src/core/time');
 
 const project = (over: Record<string, unknown> = {}) => ({
   id: 18, code: 'PRJ-0018', name: 'Ceylon Tea Board — e-Auction portal', org_id: 3, org_name: 'TechHubiz', client: 'Ceylon Tea Board', client_id: 5, category: 'Web platform', category_id: 2, category_color: null,
@@ -59,6 +60,48 @@ const detail = (can: Record<string, boolean> = { manage: true, time: true, budge
   can,
 });
 
+const counts0 = { phases: 3, tasks: 4, subtasks: 2, checklist: 2, dependencies: 1, roles: 2, folders: 2, documents: 1, budget_lines: 2, automations: 1, risks: 0, weeks: 2 };
+const libItem = (over: Record<string, unknown> = {}) => ({
+  key: 'pack.website-development', kind: 'pack', id: null, group: 'pack', name: 'Website development', icon: 'globe', category: 'Web development', summary: 'A company website, discovery to handover.',
+  line: '3 phases · 6 tasks · 2 weeks', tags: ['Web', 'WordPress'], scope: 'builtin', version: 3, status: 'active', usage: 2, owner: null, org_id: null, org_name: null, editable: false,
+  based_on: null, updated_at: null, code: null, anchor: 'start', anchor_label: '', duration_days: 10, counts: counts0, hours: 24, budget: 83500, ...over,
+});
+const LIBRARY = [
+  libItem(),
+  libItem({ key: 'pack.tender-bid', name: 'Tender bid submission', icon: 'landmark', category: 'Tenders', summary: 'A bid counted back from the closing date.', tags: ['Tender', 'Government'], line: '8 phases · 23 tasks · 3 weeks' }),
+  libItem({ key: 'project.12', kind: 'project', id: 12, group: 'company', scope: 'company', name: 'Website build', code: 'TPL-0002', version: 1, icon: 'copy', tags: [], category: '' }),
+  libItem({ key: 'tpl.31', kind: 'template', id: 31, group: 'mine', scope: 'personal', name: 'Our AMC', version: 2, editable: true, icon: 'life-buoy', category: 'Support', tags: ['AMC'], usage: 0, based_on: 'pack.it-support-amc' }),
+  libItem({ key: 'tpl.40', kind: 'template', id: 40, group: 'company', scope: 'company', name: 'Old campaign', status: 'archived', editable: true, icon: 'megaphone', category: 'Marketing', tags: [] }),
+];
+const t = (key: string, phase: string, start: number, days: number, more: Record<string, unknown> = {}) => ({
+  key, phase, title: key, description: '', role: null, hours: 0, priority: 'medium', from: 'start', start, days, depends_on: [], checklist: [], tags: [], subtasks: [], repeat: null, ...more,
+});
+const WEB_SPEC = {
+  schema: 1, key: 'website-development', version: 3, name: 'Website development', icon: 'globe', category: 'Web development', summary: '', tags: ['Web'], anchor: 'start', anchor_label: '', duration_days: 10,
+  roles: [
+    { key: 'pm', name: 'Project manager', member_role: 'lead', rate: 5000, hours_per_week: 8 },
+    { key: 'developer', name: 'Web developer', member_role: 'member', rate: 4000, hours_per_week: 30 },
+  ],
+  phases: [
+    { key: 'discovery', name: 'Discovery', description: '', from: 'start', start: 0, days: 3 },
+    { key: 'build', name: 'Development', description: '', from: 'start', start: 3, days: 5 },
+    { key: 'launch', name: 'Launch', description: '', from: 'start', start: 8, days: 2 },
+  ],
+  tasks: [
+    t('Kick-off meeting', 'discovery', 0, 1, { role: 'pm', hours: 2, checklist: ['Goals', 'Approvers'] }),
+    t('Build the theme', 'build', 3, 5, { role: 'developer', hours: 16, depends_on: ['Kick-off meeting'], subtasks: [{ title: 'Header', description: '', role: 'developer', hours: 6, checklist: [] }, { title: 'Pages', description: '', role: 'developer', hours: 10, checklist: [] }] }),
+    t('Point DNS and install SSL', 'launch', 8, 1, { role: 'developer', hours: 3 }),
+    t('Go live', 'launch', 9, 1, { role: 'pm', hours: 3 }),
+  ],
+  folders: [{ path: '01 Brief', documents: [{ name: 'Project brief', type: 'docx' }] }, { path: '02 Design', documents: [] }],
+  budget: [
+    { label: 'Development', kind: 'labour', role: 'developer', hours: 20, rate: null, amount: null, note: '' },
+    { label: '.lk domain', kind: 'expense', role: null, hours: 0, rate: null, amount: 3500, note: '' },
+  ],
+  risks: [], custom_fields: [{ name: 'Store URL', type: 'url' }], statuses: [], automations: [{ when: 'milestone_achieved', do: 'notify_client', title: 'Tell the client' }], portal: { client_can_view: ['milestones'] }, links: {},
+  defaults: { name_pattern: '{client} website', category: 'Web platform', priority: 'high', billable: true, status: 'active', estimated_hours: null, budget: null, currency: 'LKR', description: 'Website for {client}.' },
+};
+
 let offline = false;
 let can: Record<string, boolean> = { manage: true, time: true, budget: true };
 let clientCan: Record<string, boolean> = { manage: true };
@@ -69,6 +112,13 @@ function answers(path: string): unknown {
   if (path === '/api/projects/counts') return { projects: 24, my_work: 7, milestones_due: 0, time_waiting: 0, risks_open: 0, changes_waiting: 0 };
   if (path === '/api/projects/18') return detail(can);
   if (path === '/api/projects/18/workload') return { weeks: ['2026-10-05', '2026-10-12'], people: [{ user_id: 8, name: 'Asha Fernando', cells: [{ hours: '26', capacity: '20', percent: 130 }, { hours: '4', capacity: '20', percent: 20 }] }] };
+  if (path === '/api/projects/template-library') return { templates: LIBRARY, can: { create: true, company: true, organisation: true } };
+  if (path === '/api/projects/template-library/pack.website-development') return { template: LIBRARY[0], spec: WEB_SPEC };
+  if (path === '/api/projects/template-library/project.18') return { template: libItem({ key: 'project.18', kind: 'project', id: 18, group: 'project', name: 'Ceylon Tea Board — e-Auction portal' }), spec: { ...WEB_SPEC, name: 'Ceylon Tea Board — e-Auction portal', defaults: { ...WEB_SPEC.defaults, name_pattern: '' } } };
+  if (path === '/api/projects/template-library/tpl.31') return { template: LIBRARY[3], spec: { ...WEB_SPEC, name: 'Our AMC' } };
+  if (path === '/api/projects/template-library/31/versions') return { versions: [{ version: 2, name: 'Our AMC', note: 'Quarterly reviews added', by: 'Nimal Perera', at: '2026-10-10 09:00:00', line: '3 phases · 6 tasks · 2 weeks' }, { version: 1, name: 'Our AMC', note: 'Duplicated', by: 'Nimal Perera', at: '2026-10-01 09:00:00', line: '3 phases · 5 tasks · 2 weeks' }], current: 2 };
+  if (path === '/api/projects/template-library/pack.website-development/export') return { file_name: 'website-development-v3.worksuite-template.json', content: { worksuite_template: 1, template: WEB_SPEC } };
+  if (path === '/api/projects/holidays') return { holidays: [{ date: '2026-10-20', name: 'Deepavali' }], working_days: [1, 2, 3, 4, 5] };
   if (path === '/api/projects/templates') return { templates: [{ id: 12, code: 'TPL-0002', name: 'Website build', description: 'Discovery to launch', milestones: 6, tasks: 38, checklists: 2, dependencies: 9, roles: 4, risks: 3, sprints: 0 }] };
   if (path === '/api/projects/people') return { people: [{ id: 7, name: 'Nimal Perera', email: 'nimal@x.lk', employee_no: 'E-7' }, { id: 10, name: 'Dilani Jayawardena', email: 'dilani@x.lk', employee_no: null }] };
   if (path === '/api/projects/clients') return { clients: [{ id: 5, name: 'Ceylon Tea Board', org_id: null, org_name: null, contact_person: 'R. Silva', email: 'r@tea.lk', phone: null, address: null, website: null, notes: null, status: 'active', live: 1, projects: 2, crm: { linked: true, account_id: 1, label: null }, contact_visible: true }, { id: 6, name: 'Mobitel', org_id: 3, org_name: 'TechHubiz', contact_person: null, email: null, phone: null, address: null, website: null, notes: null, status: 'active', live: 1, projects: 1, crm: { linked: false, account_id: null, label: null }, contact_visible: false }], can: clientCan };
@@ -179,7 +229,15 @@ describe('All projects (W02)', () => {
   });
 });
 
+const pick = (within_: HTMLElement, name: string | RegExp, option: string | RegExp) => {
+  fireEvent.click(within(within_).getByRole('combobox', { name }));
+  fireEvent.click(screen.getByRole('option', { name: option }));
+};
+
 describe('New project (W03)', () => {
+  beforeEach(() => setRegional({ locale: 'en-GB' }));
+  afterEach(() => setRegional({ locale: null }));
+
   it('creates a blank project in the chosen company and opens it', async () => {
     at('/projects/all', 'new=blank');
     vi.mocked(apiPost).mockResolvedValue({ id: 77, code: 'PRJ-0028' });
@@ -196,27 +254,219 @@ describe('New project (W03)', () => {
     await waitFor(() => expect(tab.go).toHaveBeenCalledWith('/projects/77'));
   });
 
-  it('from a template: copies the parts chosen, through from-template', async () => {
-    at('/projects/templates', 'new=12');
-    vi.mocked(apiPost).mockResolvedValue({ id: 78, code: 'PRJ-0029' });
+  it('has the budget amount beside the currency, and the app’s date picker in the local format', async () => {
+    at('/projects/all', 'new=blank');
+    vi.mocked(apiPost).mockResolvedValue({ id: 77, code: 'PRJ-0028' });
     show();
     const dialog = await screen.findByRole('dialog');
-    await within(dialog).findByText('From the template “Website build”');
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Standard risks/ }));
-    fireEvent.change(within(dialog).getByRole('textbox', { name: /Project name/ }), { target: { value: 'TSHDA site' } });
+    expect(within(dialog).getByRole('combobox', { name: 'Currency' })).toBeTruthy();
+    const amount = within(dialog).getByRole('textbox', { name: 'Budget amount' }) as HTMLInputElement;
+    expect(amount.className).toContain('flex-1');
+    expect(amount.className).not.toContain('w-full');
+    expect(dialog.querySelectorAll('input[type="date"]').length).toBe(0);
+
+    const starts = within(dialog).getByRole('textbox', { name: 'Starts' }) as HTMLInputElement;
+    fireEvent.change(starts, { target: { value: '11/10/2026' } });
+    fireEvent.blur(starts);
+    expect(starts.value).toBe('11 Oct 2026');
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Ends: open the calendar' }));
+    const cal = await screen.findByRole('dialog', { name: 'Ends: calendar' });
+    expect((within(cal).getByRole('gridcell', { name: /^Saturday,? 10 October 2026$/ }) as HTMLButtonElement).disabled).toBe(true); // before the start
+    fireEvent.click(within(cal).getByRole('gridcell', { name: /^Friday,? 30 October 2026$/ }));
+    expect((within(dialog).getByRole('textbox', { name: 'Ends' }) as HTMLInputElement).value).toBe('30 Oct 2026');
+
+    fireEvent.change(amount, { target: { value: '1,250,000' } });
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /Project name/ }), { target: { value: 'NSB' } });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/projects/from-template', expect.objectContaining({ template_id: 12, name: 'TSHDA site', copy: { milestones: true, tasks: true, dependencies: true, roles: true, risks: true } })));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/projects', expect.objectContaining({ start_date: '2026-10-11', end_date: '2026-10-30', budget: '1250000' })));
+  });
+
+  it('Start from: blank, copy, company templates, my templates and the packs — with search', async () => {
+    at('/projects/all', 'new=blank');
+    show();
+    const dialog = await screen.findByRole('dialog');
+    expect(within(dialog).getByRole('radio', { name: 'Blank project' })).toBeTruthy();
+    expect(within(dialog).getByRole('radio', { name: 'Copy an existing project' })).toBeTruthy();
+    const company = await within(dialog).findByRole('region', { name: 'Company templates' });
+    expect(within(company).getByRole('radio', { name: 'Website build' })).toBeTruthy();
+    expect(within(company).queryByRole('radio', { name: 'Old campaign' })).toBeNull(); // archived
+    expect(within(within(dialog).getByRole('region', { name: 'My templates' })).getByRole('radio', { name: 'Our AMC' })).toBeTruthy();
+    const packs = within(dialog).getByRole('region', { name: 'Template packs' });
+    expect(packs.textContent).toContain('Web development');
+    expect(packs.textContent).toContain('3 phases · 6 tasks · 2 weeks');
+    expect(packs.textContent).toContain('WordPress');
+    expect(within(packs).getByRole('radio', { name: 'Tender bid submission' })).toBeTruthy();
+
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Find a template' }), { target: { value: 'tender' } });
+    expect(within(dialog).queryByRole('region', { name: 'Company templates' })).toBeNull();
+    expect(within(dialog).getByRole('radio', { name: 'Tender bid submission' })).toBeTruthy();
+    expect(within(dialog).queryByRole('radio', { name: 'Website development' })).toBeNull();
+  });
+
+  it('a pack fills the form, previews on the chosen dates, takes people for roles, and builds in one call', async () => {
+    at('/projects/all', 'new=blank');
+    settingsCan = { settings: true, budget: true };
+    vi.mocked(apiPost).mockResolvedValue({ id: 79, code: 'PRJ-0030', start_date: '2026-10-12', end_date: '2026-10-26', template: { key: 'pack.website-development', name: 'Website development', version: 3 }, made: { phases: 3, tasks: 4, subtasks: 2 }, adapted: [], kept: [{ what: 'Client portal settings', why: 'No portal' }] });
+    show();
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(await within(dialog).findByRole('radio', { name: 'Website development' }));
+    await waitFor(() => expect((within(dialog).getByRole('textbox', { name: /Project name/ }) as HTMLInputElement).value).toBe('Website development'));
+    expect(within(dialog).getByText('From the template “Website development”')).toBeTruthy();
+    expect(within(dialog).getByRole('combobox', { name: 'Priority' }).getAttribute('data-value')).toBe('high');
+    expect(within(dialog).getByRole('combobox', { name: 'Category' }).getAttribute('data-value')).toBe('2');
+    expect((within(dialog).getByRole('textbox', { name: 'Budget amount' }) as HTMLInputElement).value).toBe('83500');
+    expect((within(dialog).getByRole('textbox', { name: /Estimated hours/ }) as HTMLInputElement).value).toBe('24');
+    expect((within(dialog).getByRole('radio', { name: 'Active now' }) as HTMLInputElement).checked).toBe(true);
+    expect((within(dialog).getByRole('checkbox', { name: 'Billable' }) as HTMLInputElement).checked).toBe(true);
+    expect((within(dialog).getByRole('textbox', { name: /Description/ }) as HTMLTextAreaElement).value).toBe('Website for the client.');
+    expect(dialog.textContent).toContain('Created from template Website development v3');
+
+    const starts = within(dialog).getByRole('textbox', { name: 'Starts' });
+    fireEvent.change(starts, { target: { value: '12/10/2026' } });
+    fireEvent.blur(starts);
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Preview' }));
+    const preview = await within(dialog).findByRole('region', { name: 'Preview' });
+    // Ten working days from Monday 12 October, skipping Deepavali (20 October).
+    await waitFor(() => expect(preview.textContent).toContain('12 Oct 2026 → 26 Oct 2026'));
+    expect(preview.textContent).toContain('Deepavali');
+    const timeline = within(preview).getByRole('list', { name: 'Timeline' });
+    expect(timeline.textContent).toContain('Discovery12 Oct 2026 – 14 Oct 2026 · Day 0');
+    expect(timeline.textContent).toContain('Development15 Oct 2026 – 22 Oct 2026');
+    expect(preview.textContent).toContain('LKR 83,500');
+    expect(preview.textContent).toContain('Adapted: Projects cannot email a client');
+
+    // The dates move with the start.
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Details' }));
+    fireEvent.change(within(dialog).getByRole('textbox', { name: 'Starts' }), { target: { value: '2/11/2026' } });
+    fireEvent.blur(within(dialog).getByRole('textbox', { name: 'Starts' }));
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Preview' }));
+    expect((await within(dialog).findByRole('region', { name: 'Preview' })).textContent).toContain('2 Nov 2026 → 13 Nov 2026');
+
+    fireEvent.click(within(dialog).getByRole('tab', { name: 'Details' }));
+    fireEvent.click(within(dialog).getByRole('checkbox', { name: /Folders and documents in Files \(2\)/ }));
+    pick(dialog, 'Person for Web developer', /Dilani Jayawardena/);
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    await waitFor(() =>
+      expect(apiPost).toHaveBeenCalledWith(
+        '/api/projects/from-library',
+        expect.objectContaining({
+          template: 'pack.website-development', name: 'Website development', start_date: '2026-11-02', status: 'active', is_billable: true, priority: 'high', budget: '83500',
+          include: { phases: true, tasks: true, folders: false, budget: true, automations: true, risks: true }, people: { developer: 10 }, skip_holidays: true,
+        }),
+      ),
+    );
+    await waitFor(() => expect(tab.go).toHaveBeenCalledWith('/projects/79'));
+  });
+
+  it('copies an existing project with the parts chosen', async () => {
+    at('/projects/all', 'new=blank');
+    vi.mocked(apiPost).mockResolvedValue({ id: 80, code: 'PRJ-0031', template: { key: 'project.18', name: 'Ceylon Tea Board — e-Auction portal', version: 1 }, made: {}, adapted: [], kept: [] });
+    show();
+    const dialog = await screen.findByRole('dialog');
+    fireEvent.click(within(dialog).getByRole('radio', { name: 'Copy an existing project' }));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    expect(await within(dialog).findByText('Choose the project to copy.')).toBeTruthy();
+    await waitFor(() => expect(within(dialog).getByRole('combobox', { name: 'Project to copy' })).toBeTruthy());
+    fireEvent.click(within(dialog).getByRole('combobox', { name: 'Project to copy' }));
+    fireEvent.click(await screen.findByRole('option', { name: /PRJ-0018/ }));
+    const what = await within(dialog).findByRole('group', { name: 'What to copy' });
+    fireEvent.click(within(what).getByRole('checkbox', { name: /Budget lines/ }));
+    fireEvent.change(within(dialog).getByRole('textbox', { name: /Project name/ }), { target: { value: 'Tea auction phase 2' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/projects/from-library', expect.objectContaining({ template: 'project.18', name: 'Tea auction phase 2', include: expect.objectContaining({ budget: false }) })));
+  });
+
+  it('shows what it is building while a large template is created', async () => {
+    at('/projects/all', 'new=pack.website-development');
+    const big = { ...WEB_SPEC, tasks: Array.from({ length: 24 }, (_, i) => t(`Task ${i + 1}`, 'build', 3, 2)) };
+    vi.mocked(apiGetMeta).mockImplementation(async (path: string) => ({ data: (path === '/api/projects/template-library/pack.website-development' ? { template: LIBRARY[0], spec: big } : answers(path)) as never, offline: false, cachedAt: null }));
+    vi.mocked(apiPost).mockReturnValue(new Promise(() => undefined));
+    show();
+    const dialog = await screen.findByRole('dialog');
+    await waitFor(() => expect((within(dialog).getByRole('textbox', { name: /Project name/ }) as HTMLInputElement).value).toBe('Website development'));
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Create project' }));
+    expect(await within(dialog).findByRole('progressbar', { name: 'Creating the project' })).toBeTruthy();
+    expect(within(dialog).getByRole('status').textContent).toContain('Building 3 phases, 24 tasks, 2 budget lines, 2 folders');
+  });
+
+  it('opens on a template from the address: a number is a project marked as a template', async () => {
+    at('/projects/templates', 'new=pack.website-development');
+    show();
+    const dialog = await screen.findByRole('dialog');
+    await within(dialog).findByText('From the template “Website development”');
+    expect((within(dialog).getByRole('radio', { name: 'Website development' }) as HTMLInputElement).checked).toBe(true);
   });
 });
 
 describe('Templates', () => {
-  it('lists what each template brings and starts a project from one', async () => {
+  beforeEach(() => {
+    URL.createObjectURL = vi.fn(() => 'blob:x');
+    URL.revokeObjectURL = vi.fn();
+  });
+
+  it('lists the packs, the company’s and mine, with usage and versions, and starts a project from one', async () => {
     at('/projects/templates');
     show();
     const list = await screen.findByRole('list', { name: 'Templates' });
-    expect(list.textContent).toContain('6 milestones · 38 tasks · 4 roles · 3 risks');
-    fireEvent.click(within(list).getByRole('button', { name: 'Use template Website build' }));
-    expect(tab.go).toHaveBeenCalledWith('/projects/templates?new=12');
+    expect(list.textContent).toContain('Website development');
+    expect(list.textContent).toContain('3 phases · 6 tasks · 2 weeks · used 2 times');
+    expect(list.textContent).toContain('Our AMC');
+    expect(list.textContent).not.toContain('Old campaign');
+    fireEvent.click(within(list).getByRole('button', { name: 'Use template Website development' }));
+    expect(tab.go).toHaveBeenCalledWith('/projects/templates?new=pack.website-development');
+    fireEvent.click(screen.getByRole('tab', { name: /Archived/ }));
+    expect((await screen.findByRole('list', { name: 'Templates' })).textContent).toContain('Old campaign');
+  });
+
+  it('duplicates a built-in pack to customise it, and exports it as JSON', async () => {
+    at('/projects/templates');
+    vi.mocked(apiPost).mockResolvedValue({ template: libItem({ key: 'tpl.50', name: 'Copy of Website development' }) });
+    show();
+    const list = await screen.findByRole('list', { name: 'Templates' });
+    fireEvent.click(within(list).getByRole('button', { name: 'More for Website development' }));
+    expect(screen.queryByRole('menuitem', { name: 'Edit…' })).toBeNull(); // packs are never edited in place
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Duplicate…' }));
+    const ask = await screen.findByRole('dialog');
+    fireEvent.click(within(ask).getByRole('button', { name: 'Duplicate' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/projects/template-library/pack.website-development/duplicate', { name: 'Copy of Website development', scope: 'personal' }));
+
+    fireEvent.click(within(list).getByRole('button', { name: 'More for Website development' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Export as JSON' }));
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalled());
+  });
+
+  it('edits, versions, restores and archives a template of my own, and imports a file', async () => {
+    at('/projects/templates');
+    vi.mocked(apiPost).mockResolvedValue({ version: 3, template: libItem({ key: 'tpl.60', name: 'Imported' }) });
+    vi.mocked(apiPut).mockResolvedValue({ version: 2, template: libItem({ key: 'tpl.31', name: 'Our AMC 2027' }) });
+    show();
+    const list = await screen.findByRole('list', { name: 'Templates' });
+    fireEvent.click(within(list).getByRole('button', { name: 'More for Our AMC' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Edit…' }));
+    const edit = await screen.findByRole('dialog', { name: /Edit “Our AMC”/ });
+    fireEvent.change(within(edit).getByRole('textbox', { name: /^Name/ }), { target: { value: 'Our AMC 2027' } });
+    fireEvent.click(within(edit).getByRole('button', { name: 'Save template' }));
+    await waitFor(() => expect(apiPut).toHaveBeenCalledWith('/api/projects/template-library/31', expect.objectContaining({ name: 'Our AMC 2027' })));
+
+    fireEvent.click(within(list).getByRole('button', { name: 'More for Our AMC' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Version history' }));
+    const versions = await screen.findByRole('list', { name: 'Versions' });
+    expect(versions.textContent).toContain('Quarterly reviews added');
+    fireEvent.click(within(versions).getByRole('button', { name: 'Restore' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/projects/template-library/31/versions/1/restore'));
+    fireEvent.click(within(versions.closest('[role="dialog"]') as HTMLElement).getAllByRole('button', { name: 'Close' })[0]!);
+
+    fireEvent.click(within(list).getByRole('button', { name: 'More for Our AMC' }));
+    fireEvent.click(await screen.findByRole('menuitem', { name: 'Archive…' }));
+    fireEvent.click(within(await screen.findByRole('dialog')).getByRole('button', { name: 'Archive' }));
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/projects/template-library/31/archive', { archived: true }));
+
+    const json = JSON.stringify({ worksuite_template: 1, template: WEB_SPEC });
+    const fileInput = screen.getByLabelText('Template file to import') as HTMLInputElement;
+    const file = new File([json], 'web.worksuite-template.json', { type: 'application/json' });
+    Object.defineProperty(file, 'text', { value: async () => json });
+    fireEvent.change(fileInput, { target: { files: [file] } });
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/projects/template-library/import', { json }));
   });
 });
 
@@ -313,15 +563,22 @@ describe('A project’s page (W04)', () => {
     expect(await screen.findByText(/You’re working offline\./)).toBeTruthy();
   });
 
-  it('saves as a template with the name asked for', async () => {
+  it('saves as a template: the parts chosen, dates made relative, for me or the company', async () => {
     at('/projects/18');
-    vi.mocked(apiPost).mockResolvedValue({ id: 30, code: 'TPL-0003' });
+    vi.mocked(apiPost).mockResolvedValue({ template: libItem({ key: 'tpl.70', name: 'e-Auction template', line: '1 phase · 40 tasks · 22 weeks' }) });
     show();
     fireEvent.click(await screen.findByRole('button', { name: 'More actions' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: 'Save as template…' }));
-    const ask = await screen.findByRole('dialog');
+    const ask = await screen.findByRole('dialog', { name: 'Save as template' });
+    fireEvent.click(within(ask).getByRole('checkbox', { name: 'Budget lines' }));
+    pick(ask, 'Who can use it', /Company templates/);
     fireEvent.click(within(ask).getByRole('button', { name: 'Save template' }));
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/projects/18/save-as-template', { name: 'Ceylon Tea Board — e-Auction portal template' }));
+    await waitFor(() =>
+      expect(apiPost).toHaveBeenCalledWith('/api/projects/18/save-as-library-template', {
+        name: 'Ceylon Tea Board — e-Auction portal template', scope: 'company',
+        include: { phases: true, tasks: true, roles: true, budget: false, folders: true, automations: true, risks: true },
+      }),
+    );
   });
 });
 

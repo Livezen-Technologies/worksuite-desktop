@@ -206,14 +206,20 @@ export class MailBodies {
     if (!this.ok()) return;
     const user = this.deps.userId()!;
     const listed = await this.deps.http.get<{ mailboxes?: ListedMailbox[] }>('/api/mail/mailboxes');
-    const boxes = (listed?.mailboxes ?? []).filter((b) => !b.archived && (b.protocol ?? 'imap') === 'imap');
+    // An account at a time (#338): a record that is not one is passed over, and a mailbox that fails is caught in its own pass.
+    const boxes = (Array.isArray(listed?.mailboxes) ? listed.mailboxes : []).filter((b) => !!b && typeof b === 'object' && Number.isSafeInteger(Number(b.id)) && Number(b.id) > 0 && !b.archived && (b.protocol ?? 'imap') === 'imap');
     const seen = new Set<string>();
     let budget = PER_PASS;
     for (const b of boxes) {
       const box = String(b.id);
       seen.add(box);
       if (!this.ok()) return;
-      budget -= await this.mailbox(user, box, budget);
+      try {
+        budget -= await this.mailbox(user, box, budget);
+      } catch (e) {
+        // This account's pass failed: the next account's goes on.
+        log.warn('a mailbox body pass failed', { mailbox: box, error: e instanceof Error ? e.message : String(e) });
+      }
     }
     for (const k of [...this.state.keys()]) if (!seen.has(k)) this.state.delete(k);
   }

@@ -235,7 +235,9 @@ export interface ProtectionView {
  * open a file without the server.
  */
 export function protectionView(answer: { data: MessageProtection; offline: boolean; local?: boolean } | { unavailable: true } | null | undefined, opts: { offline: boolean; failed: boolean }): ProtectionView {
-  if (answer && 'unavailable' in answer) return { protection: null, unavailable: true, fromCache: false, waitingOnline: false };
+  // No verdict at all (the server's empty answer: this mailbox is outside protection, or the mail came before the
+  // gateway kept records): the reader behaves as it did before protection, never "Checking" for ever.
+  if (answer && ('unavailable' in answer || !answer.data)) return { protection: null, unavailable: true, fromCache: false, waitingOnline: false };
   const checking = (waiting: boolean): ProtectionView => ({
     protection: { verdict: 'CHECKING', score: null, path: null, action: null, policy: null, reasons: [], banner: null, attachments: [], images_blocked: false, links_as_text: false, quarantine_id: null, release: null },
     unavailable: false,

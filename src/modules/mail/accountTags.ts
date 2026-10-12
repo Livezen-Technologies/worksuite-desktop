@@ -71,7 +71,7 @@ export function defaultTagLabel(b: Pick<Mailbox, 'email' | 'display_name'>): str
   const name = (b.display_name ?? '').trim();
   const first = name && !name.includes('@') ? (name.split(/\s+/)[0] ?? '').replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '') : '';
   if (first && !ROLES.has(first.toLowerCase())) return clip(capital(first));
-  const local = (b.email.split('@')[0] ?? '').split(/[._+-]/).find(Boolean) ?? b.email;
+  const local = ((b.email ?? '').split('@')[0] ?? '').split(/[._+-]/).find(Boolean) ?? b.email ?? '';
   return clip(capital(local));
 }
 
@@ -125,8 +125,8 @@ export function accountTags(boxes: Mailbox[], prefs: Pick<MailPrefs, 'accountTag
     let label = mine.label?.trim() ? clip(mine.label) : auto;
     if (!mine.label?.trim() && taken.has(label.toLowerCase())) {
       const first = sorted.find((x) => x.id === taken.get(label.toLowerCase()));
-      const domain = (b.email.split('@')[1] ?? '')[0]?.toUpperCase() ?? '';
-      const otherDomain = (first?.email.split('@')[1] ?? '')[0]?.toUpperCase() ?? '';
+      const domain = ((b.email ?? '').split('@')[1] ?? '')[0]?.toUpperCase() ?? '';
+      const otherDomain = ((first?.email ?? '').split('@')[1] ?? '')[0]?.toUpperCase() ?? '';
       const base = clip(auto, TAG_MAX - 3).replace(/…$/, '');
       if (domain && domain !== otherDomain && !taken.has(`${base} ${domain}`.toLowerCase())) label = `${base} ${domain}`;
       else {

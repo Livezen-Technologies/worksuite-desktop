@@ -1,5 +1,6 @@
-import { Component, useEffect, useRef, useState, type ButtonHTMLAttributes, type ErrorInfo, type InputHTMLAttributes, type ReactNode } from 'react';
+import { Component, Fragment, useEffect, useRef, useState, type ButtonHTMLAttributes, type ErrorInfo, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Icon } from './Icon';
+import { recordScreenError } from '../core/screen-errors';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
   return parts.filter(Boolean).join(' ');
@@ -376,33 +377,55 @@ export function Modal({ title, children, onClose, width = 520, footer, labelledB
   );
 }
 
-/** Contains a module failure to its tab (FR-REG-03): Retry and Diagnostics, shell unaffected. */
-export class ModuleBoundary extends Component<{ children: ReactNode; name: string; onDiagnostics: () => void; resetKey?: unknown }, { error: Error | null }> {
-  override state: { error: Error | null } = { error: null };
+/**
+ * Contains a module failure to its tab (FR-REG-03): Retry and Diagnostics, shell unaffected.
+ *
+ * Each catch gets a short reference ID (worksuite-desktop#338), shown here and logged with the module and — where
+ * the module said which — the account on screen; Diagnostics opens on it. Retry starts the module again: `onRetry`
+ * drops what it had asked the server and the module is mounted afresh, rather than drawing the same answer — and the
+ * same error — a second time. A module may offer its own way out beside them (`recover`: Mail's Repair local mail data).
+ */
+export class ModuleBoundary extends Component<
+  { children: ReactNode; name: string; onDiagnostics: (ref: string | null) => void; resetKey?: unknown; onRetry?: () => void; recover?: (retry: () => void) => ReactNode },
+  { error: Error | null; ref: string | null; gen: number }
+> {
+  override state: { error: Error | null; ref: string | null; gen: number } = { error: null, ref: null, gen: 0 };
   static getDerivedStateFromError(error: Error) {
     return { error };
   }
   override componentDidCatch(error: Error, info: ErrorInfo) {
-    console.error(`[module:${this.props.name}]`, error, info.componentStack);
+    this.setState({ ref: recordScreenError({ module: this.props.name, where: 'module', error, componentStack: info.componentStack ?? null }).ref });
   }
   override componentDidUpdate(prev: { resetKey?: unknown }) {
-    if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState({ error: null });
+    if (prev.resetKey !== this.props.resetKey && this.state.error) this.setState((s) => ({ error: null, ref: null, gen: s.gen + 1 }));
   }
+  retry = () => {
+    this.props.onRetry?.();
+    this.setState((s) => ({ error: null, ref: null, gen: s.gen + 1 }));
+  };
   override render() {
-    if (!this.state.error) return this.props.children;
+    // A new generation is a new mount: nothing the module held in its state survives a Retry.
+    if (!this.state.error) return <Fragment key={this.state.gen}>{this.props.children}</Fragment>;
+    const ref = this.state.ref;
     return (
       <Empty
         icon="alert"
         title={`${this.props.name} failed to load`}
-        hint="The rest of WorkSuite is still running. Try again, or open Diagnostics to see what happened."
+        hint={
+          <>
+            The rest of WorkSuite is still running. Try again, or open Diagnostics to see what happened.
+            {ref ? <span className="selectable mt-1 block font-mono text-[12px] text-ink-2">{`Reference ${ref}`}</span> : null}
+          </>
+        }
         action={
-          <div className="mt-2 flex gap-2">
-            <Button variant="primary" icon="refresh" onClick={() => this.setState({ error: null })}>
+          <div className="mt-2 flex flex-wrap justify-center gap-2">
+            <Button variant="primary" icon="refresh" onClick={this.retry}>
               Retry
             </Button>
-            <Button icon="stethoscope" onClick={this.props.onDiagnostics}>
+            <Button icon="stethoscope" onClick={() => this.props.onDiagnostics(ref)}>
               Open Diagnostics
             </Button>
+            {this.props.recover?.(this.retry)}
           </div>
         }
       />

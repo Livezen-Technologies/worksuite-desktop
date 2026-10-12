@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.33.0 — 2026-10-11
+
+**Added**
+
+- One broken account, message or answer never takes Mail down (#338) — each account read on its own and marked red with Reconnect and Remove in a bar above the list; a message that cannot be drawn shows inline (Try again · Details) while the list and folders keep working; Retry on the error screen really restarts Mail; Repair local mail data (Settings › Mail and the error screen) rebuilds the local copy and keeps unsent mail, drafts and settings
+
+## 1.32.1 — 2026-10-11
+
+- Mail no longer fails to load when the server has no protection verdict for a message (its empty answer is read as no verdict, the reader as before)
+
 ## 1.32.0 — 2026-10-11
 
 **Added**

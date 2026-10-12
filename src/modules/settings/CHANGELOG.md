@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.37.0 — 2026-10-11
+
+**Added**
+
+- A module's error screen shows a reference ID, opens Diagnostics on that error, offers the module's own way out, and Retry starts the module again instead of drawing the same error (#338)
+
+## 1.36.0 — 2026-10-11
+
+- Settings › Updates on Linux: a .deb or .rpm install updates itself (one password prompt), the step reads 'Release signature (Ed25519)' instead of Code signature, packages have no Stage step, an 'Installed as' tile replaces the duplicate Channel tile, and empty release notes say so.
+
 ## 1.35.0 — 2026-10-11
 
 - Tray menu: unread per account, sign-in problems, New email, Pause mail alerts (1 hour, until tomorrow 08:00, outside working hours, until I turn them on) (ENH-MAIL-05).

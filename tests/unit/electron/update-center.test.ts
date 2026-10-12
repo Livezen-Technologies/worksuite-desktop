@@ -139,10 +139,12 @@ describe('the update check', () => {
   });
 
   it('installs the exe on Windows, the dmg on a Mac, and only an AppImage on Linux', () => {
-    expect(ucInstallType('windows', false)).toBe('exe');
-    expect(ucInstallType('macos', false)).toBe('dmg');
-    expect(ucInstallType('linux', true)).toBe('appimage');
-    expect(ucInstallType('linux', false)).toBeNull();
+    expect(ucInstallType('windows', null)).toBe('exe');
+    expect(ucInstallType('macos', null)).toBe('dmg');
+    expect(ucInstallType('linux', 'appimage')).toBe('appimage');
+    expect(ucInstallType('linux', 'deb')).toBe('deb');
+    expect(ucInstallType('linux', 'rpm')).toBe('rpm');
+    expect(ucInstallType('linux', null)).toBeNull();
   });
 });
 

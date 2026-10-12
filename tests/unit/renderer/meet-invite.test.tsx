@@ -58,14 +58,14 @@ describe('being rung into a meeting', () => {
     expect(screen.getByText(/invites you to join “Design review”/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: /Accept/ }));
     await waitFor(() => expect(bridge.call).toHaveBeenCalledWith('windows:open', expect.objectContaining({ kind: 'meet', route: `/meet/${UUID}?quiet=1` })));
-    expect(api.apiPost).toHaveBeenCalledWith('/api/meet/rings/31/answer', { answer: 'accept' });
+    expect(api.apiPost).toHaveBeenCalledWith('/api/meet/rings/31/answer', { answer: 'accept', event: 'ring.accepted' });
     expect(bridge.call).toHaveBeenCalledWith('windows:close');
   });
 
   it('declining opens nothing', async () => {
     api.apiPost.mockResolvedValue({ state: 'declined', uuid: UUID });
     render(<MeetRingScreen />);
-    fireEvent.click(screen.getByRole('button', { name: /Decline/ }));
+    fireEvent.click(screen.getByRole('button', { name: /^Decline$/ }));
     await waitFor(() => expect(bridge.call).toHaveBeenCalledWith('windows:close'));
     expect(bridge.call).not.toHaveBeenCalledWith('windows:open', expect.anything());
   });
@@ -76,6 +76,34 @@ describe('being rung into a meeting', () => {
     expect(bridge.call).not.toHaveBeenCalledWith('windows:close');
     for (const fn of bridge.listeners) fn({ type: 'meet.ring.stopped', ring_id: 31 });
     expect(bridge.call).toHaveBeenCalledWith('windows:close');
+  });
+
+  // worksuite-desktop#347: every answer is the server's to record, naming this ring.
+  it('stops on every device when the host cancels', () => {
+    render(<MeetRingScreen />);
+    for (const fn of bridge.listeners) fn({ type: 'meeting.invite_state_changed', meeting: UUID, invitee_id: 7, ring_id: 31, invite_state: 'ringing' });
+    expect(bridge.call).not.toHaveBeenCalledWith('windows:close');
+    for (const fn of bridge.listeners) fn({ type: 'meeting.invite_state_changed', meeting: UUID, invitee_id: 7, ring_id: 30, invite_state: 'cancelled' });
+    expect(bridge.call).not.toHaveBeenCalledWith('windows:close');
+    for (const fn of bridge.listeners) fn({ type: 'meeting.invite_state_changed', meeting: UUID, invitee_id: 7, ring_id: 31, invite_state: 'cancelled' });
+    expect(bridge.call).toHaveBeenCalledWith('windows:close');
+  });
+
+  it('declines with a message the person inviting sees', async () => {
+    api.apiPost.mockResolvedValue({ state: 'declined', uuid: UUID });
+    render(<MeetRingScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Decline with a message' }));
+    fireEvent.click(screen.getByRole('button', { name: 'In another meeting' }));
+    await waitFor(() => expect(bridge.call).toHaveBeenCalledWith('windows:close'));
+    expect(api.apiPost).toHaveBeenCalledWith('/api/meet/rings/31/answer', { answer: 'decline', event: 'ring.declined', reason: 'In another meeting' });
+  });
+
+  it('Not now tells the server, so the host sees Didn’t answer at once, and closes even when that fails', async () => {
+    api.apiPost.mockRejectedValue(new Error('offline'));
+    render(<MeetRingScreen />);
+    fireEvent.click(screen.getByRole('button', { name: 'Not now' }));
+    await waitFor(() => expect(bridge.call).toHaveBeenCalledWith('windows:close'));
+    expect(api.apiPost).toHaveBeenCalledWith('/api/meet/rings/31/answer', { answer: 'dismiss', event: 'ring.dismissed' });
   });
 });
 
@@ -94,13 +122,47 @@ describe('inviting people into the meeting', () => {
     wrap(<Invitations />);
     expect(await screen.findByText('Ringing…')).toBeTruthy();
     expect(screen.getByText('Declined')).toBeTruthy();
-    expect(screen.getByText(/Unavailable/)).toBeTruthy();
+    expect(screen.getByText('Offline · invite sent by notification')).toBeTruthy();
     expect(screen.queryByText('Ruwan')).toBeNull();
     const again = screen.getAllByRole('button', { name: 'Ring again' });
+    expect(again).toHaveLength(1);
     expect((again[0] as HTMLButtonElement).disabled).toBe(true);
-    expect((again[1] as HTMLButtonElement).disabled).toBe(false);
+    expect(screen.getByRole('button', { name: 'Copy link' })).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
     await waitFor(() => expect(api.apiDelete).toHaveBeenCalledWith(`/api/meet/${UUID}/rings/1`));
+  });
+
+  // worksuite-desktop#347: what the host sees follows what actually happened.
+  it('shows Declined with their reason, Didn’t answer and Couldn’t join, each with Ring again; never Accepted while it rings', async () => {
+    meet.info = { room_settings: { invite: 'everyone' }, join_url: 'https://x/meet/a' } as never;
+    const row = { invited_by: { id: 1, name: 'Me' }, rang_at: '', retry_in: 0 };
+    api.apiGet.mockResolvedValue({
+      rings: [
+        { id: 11, ring_id: 11, user_id: 5, name: 'Dimuthu', state: 'declined', invite_state: 'declined', reason: 'In another meeting', ...row },
+        { id: 12, ring_id: 12, user_id: 6, name: 'Kamal', state: 'no_answer', invite_state: 'no_answer', ...row },
+        { id: 13, ring_id: 13, user_id: 7, name: 'Saman', state: 'no_answer', invite_state: 'failed', ...row },
+        { id: 14, ring_id: 14, user_id: 8, name: 'Nimal', state: 'ringing', invite_state: 'ringing', ...row },
+        { id: 15, ring_id: 15, user_id: 9, name: 'Ruwan', state: 'accepted', invite_state: 'joining', ...row },
+        { id: 16, ring_id: 16, user_id: 10, name: 'Amal', state: 'unavailable', invite_state: 'busy', ...row },
+      ],
+    });
+    api.apiDelete.mockResolvedValue(null);
+    api.apiPost.mockResolvedValue({ rings: [{ user_id: 6, ring_id: 17, state: 'ringing', invite_state: 'ringing' }] });
+    wrap(<Invitations />);
+    expect(await screen.findByText('Declined · In another meeting')).toBeTruthy();
+    expect(screen.getByText('Didn’t answer')).toBeTruthy();
+    expect(screen.getByText('Couldn’t join')).toBeTruthy();
+    expect(screen.getByText('Joining…')).toBeTruthy();
+    expect(screen.getByText('Busy in another call')).toBeTruthy();
+    expect(screen.queryByText(/Accepted/)).toBeNull();
+    expect(screen.getAllByRole('button', { name: 'Ring again' })).toHaveLength(4);
+    expect(screen.getAllByRole('button', { name: 'Remove' })).toHaveLength(2);
+    expect(screen.getAllByRole('button', { name: 'Cancel' })).toHaveLength(2);
+    expect(screen.getByRole('button', { name: 'Message' })).toBeTruthy();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Ring again' })[1]!);
+    await waitFor(() => expect(api.apiPost).toHaveBeenCalledWith(`/api/meet/${UUID}/ring`, { user_ids: [6] }));
+    fireEvent.click(screen.getAllByRole('button', { name: 'Remove' })[0]!);
+    await waitFor(() => expect(api.apiDelete).toHaveBeenCalledWith(`/api/meet/${UUID}/invitees/5`));
   });
 
   it('picks several people, never someone already in the meeting, and rings them', async () => {

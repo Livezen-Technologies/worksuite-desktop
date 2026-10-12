@@ -1106,6 +1106,8 @@ export interface UpdateStatus {
   download?: DownloadProgress | null;
   /** Manifest signature → Download → SHA-256 → Code signature → Stage, each with where it stands. */
   pipeline?: PipelineStep[] | null;
+  /** How this copy updates: exe, dmg, appimage, deb or rpm (null: it cannot update itself). worksuite-desktop#345. */
+  installKind?: string | null;
   /** This version must be replaced: since when, by when, and whether modules are locked now. */
   mandatory?: MandatoryUpdate | null;
   /** The last update that failed: a code, the rollback state and a reference for support. */
@@ -1825,6 +1827,23 @@ export interface MailStoreStats {
    * (`wanted`), and whether it is downloading them now.
    */
   bodies?: Record<string, MailBodiesProgress>;
+}
+
+/**
+ * Repair local mail data (offline:repairMail, worksuite-desktop#338): the database's own check, and what was done —
+ * Mail's copy cleared to be downloaded again, or (the check failed) a rebuild on restart. The outbox of unsent mail
+ * and the drafts are counted to show they were kept.
+ */
+export interface MailRepairResult {
+  /** `ok`, or what the check found. */
+  check: string;
+  healthy: boolean;
+  action: 'cleared' | 'restart';
+  /** Mail's saved answers removed. */
+  removed: number;
+  kept: { outbox: number; drafts: number };
+  /** Where the old database is kept; null when no copy could be made. */
+  backup: string | null;
 }
 
 /** One mailbox's body download on this computer (#190). */

@@ -11,7 +11,7 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## 0.2.239 — 2026-10-12
+## 0.2.245 — 2026-10-12
 
 - **A website chat made a ticket reads as the chat (#332).** The visitor's messages are the customer's, never "Internal note"; amber is only for notes staff wrote. The website's own lines (the visitor details, "chat started") are small grey lines in the middle, the assistant has its own look, visitor lines say "via Website chat" and staff lines "Sent in chat". Lines from the same person within five minutes are grouped, and "Visitor" gives way to the customer's real name.
 - **Pictures in the thread.** PNG, JPEG, GIF and WebP attachments show inline, several as a grid, and open in the picture viewer with previous/next, zoom and download. The "[Screenshot….png]" line above a picture is gone. HEIC and PDF files stay as file chips: the server makes no previews.
@@ -19,6 +19,89 @@ person who has to live with the change — what it does, and where it bites.
 - **List keys:** J/K move, X selects, E resolves, A assigns to me, P priority, # tag, Esc clears. The list title counts its tickets ("Resolved · 1 ticket") and each status dot says what it means.
 - A chat ticket's subject is the visitor's question, not "Hi,".
 - Where it bites: needs the server's Support 1.3.1 and its migration `SupportChatTranscriptPublic` for chats converted before. Snooze, spam and "select all matching" wait on the server.
+## 0.2.244 — 2026-10-11
+
+- **Meet host controls only for the people who may use them (#348).** Guests and participants no longer see Mute all,
+  Remove, Admit/Deny, Make co-host, Lock, Recording or End meeting for all — not even greyed out; their row menu is Pin
+  for me. The People tab, row menus, waiting room and ⋯ More are drawn from one permission table shared with the
+  server (host, co-host, participant, guest), so a co-host's controls appear the moment they're made co-host and go
+  when it's removed, and only the host sees End meeting for all and Make co-host. New for hosts and co-hosts: Mute
+  all, mute someone's camera or screen share, ask someone to unmute or turn their camera on, and Spotlight for
+  everyone. If the host's app drops, host passes to a co-host or a signed-in person, never a guest. (Meet 1.25.0,
+  Calls 1.9.0; needs WorkSuite server Communication 1.73.0, which also enforces all of this)
+
+## 0.2.243 — 2026-10-11
+
+- **One broken mail account, message or answer never takes Mail down (#338).** Mail could show only "Mail failed to
+  load" when a single account or message was broken (the protection crash fixed in 0.2.239 was one such case).
+  - An account with no address, no token or no server is set aside with a red marker and **Reconnect** (sign in
+    again, the password, or Add a mailbox, whichever it needs) and **Remove**; every other account keeps working.
+  - The reading pane, the message list and the sidebar each fail on their own: "This message couldn't be shown ·
+    Try again · Details", and the rest of Mail stays usable. Accounts are read one at a time, and Sync all no longer
+    stops at the first failure.
+  - The "failed to load" screen now shows a reference (e.g. E-7F3A9C), Open Diagnostics goes to that error, and
+    **Retry** really starts the module again instead of redrawing the same error.
+  - **Repair local mail data** (Settings › Mail › Accounts & offline, and on Mail's error screen) checks the local
+    database and rebuilds Mail's copy from the server, keeping unsent mail, drafts and settings; a damaged database
+    is rebuilt at the next start with everything readable kept and the old file kept as .bak.
+  - Mail opens from this computer's copy when the server or an account is failing.
+  (Mail 1.33.0, Diagnostics 1.4.0, Settings 1.37.0)
+
+## 0.2.242 — 2026-10-11
+
+- **New project from a template (#337).** "Start from" in New project now has search and five groups: Blank project,
+  Copy an existing project, Company templates, My templates and ten built-in Template packs (Tender bid submission,
+  Website development, E-commerce store, Software licence deployment, IT support / AMC, Hosting / email migration,
+  Mobile app, Marketing campaign, Training / course delivery, Event). Choosing one fills the form and shows a Preview
+  of its phases on a timeline that follows Starts and Ends, its tasks, budget lines, folders and automations. Tick what
+  to include, pick a person for each role (or leave it open), and Create project builds it all in one step; the
+  project footer says which template and version it came from. Save as template works from any project, and
+  Projects › Templates manages them (duplicate, edit, versions, archive, import and export as JSON).
+- The Budget field has its amount box back next to the currency, and Starts/Ends use a date picker that shows dates
+  as "11 Oct 2026". (Projects 1.3.0; needs WorkSuite server Project 2.2.0)
+
+## 0.2.241 — 2026-10-11
+
+- **Meet invitations show what actually happened (#347).** The People tab could say "Accepted · joining" for good
+  after the person declined, closed the ring or let it ring out. Each invitation now follows the server: 🔔 Ringing…
+  with a timer and Cancel; Didn't answer, Declined (with their reason) or Invite cancelled with Ring again and Remove;
+  Joining… with Cancel; Couldn't join with Ring again; Offline with Copy link; Busy in another call with Ring again and
+  Message. "Accepted" only shows once they tap Accept. The ring window gains Decline with a message, and Not now tells
+  the host at once and stops the ringing on the person's other devices. Ringing again into the same meeting now shows
+  (it used to be blocked on that computer). The meeting's creator shows as Host. (Meet 1.24.0, Calls 1.8.1; needs
+  WorkSuite server Communication 1.72.0)
+
+## 0.2.240 — 2026-10-11
+
+- **Ubuntu and other Linux .deb/.rpm installs update themselves (#345, settings 1.36.0).** A copy installed from a
+  `.deb` turned its updater off ("update it with your package manager") although there was nothing to update from.
+  - WorkSuite now knows how it was installed (AppImage, `.deb` or `.rpm`) and asks the Update Center for that exact
+    format, so a `.deb` install is never offered an AppImage.
+  - **Update now** on a `.deb`/`.rpm` installs the downloaded, checksum-verified package with one password prompt,
+    then restarts on the new version. If the prompt is closed or this computer has no `pkexec`, the package opens in
+    the software installer instead.
+  - Settings › Updates on Linux: "Release signature (Ed25519)" replaces "Code signature", packages have no Stage step,
+    an **Installed as** tile replaces the duplicate Channel tile, and empty release notes say "Release notes not
+    available". Diagnostics names the install type.
+  - Releases must upload the `.deb` and `.rpm` to the Update Center along with the AppImage (docs/RELEASING.md).
+- **A tray menu that fits the screen and stays current (#346).** On Ubuntu the menu was about 30 lines and ran off
+  smaller screens, Quit included.
+  - It is now about fifteen lines: your name, your status (● Away ▸ Online, Away, Busy, Do not disturb, Appear
+    offline — sent at once; offline shows here too), Open WorkSuite, Quick Ask, New ▸, one line per app with the
+    detail in a submenu ("Support · 1 unassigned", "Calls · nothing waiting"), Pause notifications, Restart to update
+    (only when one is ready), and Settings, Check for updates, Lock and Quit, always last.
+  - Duplicates are gone: two Live dashboard lines, Update Now beside Check for Updates, Online/Away twice, Connected.
+  - The menu refreshes within two seconds of a change, also on Ubuntu, where it used to keep old counts. Clicking a
+    line while the window is closed opens it on the right page. Status changed in the window shows in the tray.
+  - Ubuntu without tray-icon support is told once how to add it, and the launcher's right-click menu has Open
+    WorkSuite and New email.
+
+## 0.2.239 — 2026-10-11
+
+- **Mail opens again.** Mail showed "Mail failed to load" when the selected message came from a mailbox outside mail
+  protection: the server answers "no verdict" for it, and the reader read a verdict from that empty answer and
+  crashed. That answer now means no verdict, and the message opens as it did before protection, with no banner and
+  no "Checking". (Mail 1.32.1)
 
 ## 0.2.238 — 2026-10-11
 

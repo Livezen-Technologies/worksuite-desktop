@@ -51,6 +51,8 @@ export interface WorkspaceProps {
   pinnable?: boolean;
   /** Who spoke last (the session keeps it), so the big picture does not flick between two voices. */
   lastSpeaker?: string | null;
+  /** Whoever is pinned or spotlighted (Meet #348): large, ahead of whoever is speaking. */
+  focus?: string | null;
   /** Drawn over another person's shared screen on the stage (Meet's remote control). */
   screenLayer?: (sharer: CallPerson) => ReactNode;
   /** The session owns stopping its local screen track. */
@@ -169,7 +171,7 @@ export function CallWorkspace(props: WorkspaceProps) {
     return () => { void call('media:screenIndicator', { active: false }).catch(() => undefined); };
   }, [localScreen]);
   const primary = !!props.board || !!presenter;
-  const star = featured(people, props.lastSpeaker ?? null);
+  const star = featured(people, props.lastSpeaker ?? null, props.focus ?? null);
 
   const layout = computeLayout({
     width: size.width,

@@ -56,7 +56,7 @@ vi.mock('electron', () => ({
 
 import { DesktopError } from '../../../electron/main/errors';
 import { hideOutcome, participantOutcome, WebchatRinger, type PendingAnswer, type RingingEntry } from '../../../electron/services/webchat-ring';
-import { ringingCount, trayMenu, TrayService, type TrayActions, type TrayModel } from '../../../electron/tray/tray';
+import { ringingCount, MENU_EVERY_MS, trayMenu, TrayService, type TrayActions, type TrayModel } from '../../../electron/tray/tray';
 import { ringTrayBounds } from '../../../electron/windows/manager';
 import { NotificationService } from '../../../electron/services/notifications';
 import type { HttpClient } from '../../../electron/services/http';
@@ -229,13 +229,15 @@ describe('R-06: the tray, its ringing menu and the badge (RING-43, RING-44, UX-A
 
   it('the menu lists the ringing chats with Join, Reply from here…, Open Website Chats and Ringing settings…', () => {
     const a = actions();
-    const items = trayMenu(model, a);
-    const labels = items.map((i) => i.label);
-    expect(labels.slice(0, 7)).toEqual(['3 website chats ringing', 'Join — Anne · Acme Ltd', 'Join — Kasun P.', 'Join — Visitor 4F2A', 'Reply from here…', 'Open Website Chats', 'Ringing settings…']);
-    (items.find((i) => i.label === 'Reply from here…')!.click as () => void)();
+    // First while it rings: one line, its chats and actions in the submenu (#346).
+    const ring = trayMenu(model, a)[0]!;
+    expect(ring.label).toBe('3 website chats ringing');
+    const items = ring.submenu as Array<{ label?: string; type?: string; click?: () => void }>;
+    expect(items.map((i) => i.label ?? i.type)).toEqual(['Join — Anne · Acme Ltd', 'Join — Kasun P.', 'Join — Visitor 4F2A', 'Reply from here…', 'separator', 'Open Website Chats', 'Ringing settings…']);
+    items.find((i) => i.label === 'Reply from here…')!.click!();
     expect(a.showRingMenu).toHaveBeenCalledWith(null);
     // An older caller without the ringing menu keeps the plain one.
-    expect(trayMenu(model, { ...a, showRingMenu: undefined }).some((i) => i.label === 'Reply from here…')).toBe(false);
+    expect((trayMenu(model, { ...a, showRingMenu: undefined })[0]!.submenu as Array<{ label?: string }>).some((i) => i.label === 'Reply from here…')).toBe(false);
   });
 
   it('counts what rings and is not silenced on the badge, beside what is unread (RING-44)', () => {
@@ -268,10 +270,13 @@ describe('R-06: the tray, its ringing menu and the badge (RING-43, RING-44, UX-A
 
   it('on macOS, while chats ring, the click opens the ringing menu and a right-click the plain one', () => {
     onPlatform('darwin');
+    vi.useFakeTimers();
     const a = actions();
     const t = new TrayService(a);
     t.start();
     t.update(model);
+    // The menu follows within two seconds (#346).
+    vi.advanceTimersByTime(MENU_EVERY_MS);
     expect(trays[0]!.menu).toBeNull();
     trays[0]!.handlers.click!({}, { x: 0, y: 0, width: 0, height: 0 });
     // No bounds from the click: the icon's own.
@@ -279,7 +284,9 @@ describe('R-06: the tray, its ringing menu and the badge (RING-43, RING-44, UX-A
     trays[0]!.handlers['right-click']!();
     expect(trays[0]!.popped).toHaveLength(1);
     t.update({ webchatRinging: [] });
+    vi.advanceTimersByTime(MENU_EVERY_MS);
     expect(trays[0]!.menu).not.toBeNull();
+    vi.useRealTimers();
   });
 
   it('places the ringing menu under the menu-bar icon, over a bottom taskbar, or in the usual corner', () => {

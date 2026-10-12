@@ -148,17 +148,25 @@ describe('the tray section', () => {
     expect(actions.supportQuickLatest).toHaveBeenCalled();
   });
 
-  it('switches Online / Away', () => {
-    const items = supportItems(figures, actions);
-    expect(label(items, 'Online')).toMatchObject({ type: 'radio', checked: true });
-    label(items, 'Away').click!({} as never, undefined, {} as never);
-    expect(actions.supportPresence).toHaveBeenCalledWith('away');
+  it('switches Online / Away from the menu’s status line, not a second switch in Support (#346)', () => {
+    expect(supportItems(figures, actions).some((i) => i.label === 'Online' || i.label === 'Away')).toBe(false);
+    const base = { signedIn: true, userName: 'Ayesha', organization: 'CreativeFX', offline: false, pending: 0, error: null, unreadChat: 0, unreadMail: 0, unreadOther: 0, badge: true, notificationsPausedUntil: null, attendance: null, updateReady: false, remoteControl: null, webchatRinging: [], quickAsk: null, aiChanges: 0, support: figures, apps: ['support'] } as TrayModel;
+    const all = { open: vi.fn(), openRoute: vi.fn(), clockIn: vi.fn(), clockOut: vi.fn(), pauseNotifications: vi.fn(), openSettings: vi.fn(), checkUpdates: vi.fn(), quit: vi.fn(), lock: vi.fn(), pauseRemoteControl: vi.fn(), stopRemoteControl: vi.fn(), joinWebchat: vi.fn(), quickAsk: vi.fn(), aiChanges: vi.fn(), ringingSettings: vi.fn(), supportPresence: vi.fn() };
+    const status = trayMenu(base, all).find((i) => i.label === '● Online')!;
+    const choices = status.submenu as Array<{ label: string; type?: string; checked?: boolean; click: () => void }>;
+    expect(choices.map((c) => c.label)).toEqual(['Online', 'Away']);
+    expect(choices[0]).toMatchObject({ type: 'radio', checked: true });
+    choices[1]!.click();
+    expect(all.supportPresence).toHaveBeenCalledWith('away');
   });
 
   it('is in the tray menu only for somebody with Support', () => {
     const base = { signedIn: true, userName: 'Ayesha', organization: 'CreativeFX', offline: false, pending: 0, error: null, unreadChat: 0, unreadMail: 0, unreadOther: 0, badge: true, notificationsPausedUntil: null, attendance: null, updateReady: false, remoteControl: null, webchatRinging: [], quickAsk: null, aiChanges: 0, support: figures, apps: [] } as TrayModel;
     const all = { open: vi.fn(), openRoute: vi.fn(), clockIn: vi.fn(), clockOut: vi.fn(), pauseNotifications: vi.fn(), openSettings: vi.fn(), checkUpdates: vi.fn(), quit: vi.fn(), lock: vi.fn(), pauseRemoteControl: vi.fn(), stopRemoteControl: vi.fn(), joinWebchat: vi.fn(), quickAsk: vi.fn(), aiChanges: vi.fn(), ringingSettings: vi.fn() };
-    const has = (apps: string[]) => trayMenu({ ...base, apps }, all).some((i) => typeof i.label === 'string' && i.label.startsWith('My open'));
+    // One line, "Support · 2 at risk", with my numbers in its submenu.
+    const line = (apps: string[]) => trayMenu({ ...base, apps }, all).find((i) => typeof i.label === 'string' && i.label.startsWith('Support ·'));
+    const has = (apps: string[]) => !!line(apps) && (line(apps)!.submenu as Array<{ label?: string }>).some((i) => String(i.label).startsWith('My open'));
+    expect(line(['support'])!.label).toBe('Support · 3 overdue ⚠');
     expect(has(['support'])).toBe(true);
     expect(has(['chat'])).toBe(false);
   });
