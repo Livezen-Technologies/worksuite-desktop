@@ -9,14 +9,17 @@ import { useStore } from '../../core/store';
 import { useNow } from '../../core/use-now';
 import { Avatar, Button, Empty, ErrorNote, IconButton, Spinner } from '../../components/ui';
 import type { TicketShow } from '@shared/support';
-import { K, errorText, getTicket, openQuickReply, take } from './api';
-import { Composer, type ComposerMode } from './Composer';
+import { K, errorText, getTicket, meta, openQuickReply, take } from './api';
+import { Composer, type ComposerMode, type InsertRequest } from './Composer';
 import { openAttachment } from './files';
 import { usePollInterval } from './live';
 import { ChannelIcon, OriginLink, PriorityChip, Reference, SlaChip, StatusChip, channelLabel } from './parts';
 import { Collision, useTicketPresence } from './presence';
 import { useMarkRead } from './reading';
+import { useTab } from '../../core/tab-context';
+import { WIDE_INBOX } from './details';
 import { EditableSubject } from './Subject';
+import { DrawerButton, TicketDrawer, useDetailsDrawer } from './TicketDrawer';
 import { Thread } from './Thread';
 
 /**
@@ -54,6 +57,11 @@ export function ReadingPane({
   }, []);
   useMarkRead(ticketId, q.data, active);
   const present = useTicketPresence(ticketId, { here: active && settled, typing });
+  // The details drawer (#334), as in a ticket's tab: beside the pane on a wide window, over it on a narrower one.
+  const drawer = useDetailsDrawer(WIDE_INBOX, active);
+  const metaQ = useQuery({ queryKey: K.meta, queryFn: ({ signal }) => meta(signal), staleTime: 5 * 60_000 });
+  const { navigate, openLink } = useTab();
+  const [insert, setInsert] = useState<InsertRequest | null>(null);
 
   if (q.isLoading) return <Spinner />;
   if (q.error instanceof ApiError && q.error.status === 404) return <Empty icon="life-buoy" title={text('Ticket not found')} hint={text('It may have been deleted, merged, or moved out of your organizations.')} />;
@@ -83,7 +91,8 @@ export function ReadingPane({
   };
 
   return (
-    <article aria-label={text('Ticket {ref}', { ref: t.reference })} className="flex h-full min-w-0 flex-col bg-ground">
+    <div className="relative flex h-full min-h-0 min-w-0">
+      <article aria-label={text('Ticket {ref}', { ref: t.reference })} className="flex h-full min-w-0 flex-1 flex-col bg-ground">
       <header className="flex shrink-0 flex-col gap-1.5 border-b border-line bg-surface px-5 pt-3 pb-3">
         <div className="flex min-w-0 items-center gap-2 text-[12px] text-ink-3">
           <Reference className="font-semibold text-ink">{t.reference}</Reference>
@@ -125,6 +134,7 @@ export function ReadingPane({
             </Button>
             {/* The quick-reply window (D-04): this ticket floating over other apps while the desk goes on. */}
             <IconButton icon="app-window" label={text('Quick reply window')} onClick={() => openQuickReply(t.id)} />
+            <DrawerButton drawer={drawer} />
           </span>
         </div>
         {t.merged_into ? (
@@ -140,7 +150,17 @@ export function ReadingPane({
         <Thread compact messages={show.messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} source={show.has_earlier ? null : t.source} onOpenAttachment={(a) => void openAttachment(a)} />
         {show.legacy ? <p className="pt-3 text-center text-[11.5px] text-ink-3">{text('Your WorkSuite server is older: read markers, files and who else is here show once it is updated.')}</p> : null}
       </div>
-      {!t.merged_into && !t.deleted_at ? <Composer compact ticket={t} can={show.can} transitions={show.transitions} legacy={show.legacy === true} focusRequest={focusRequest} onTyping={setTyping} /> : null}
-    </article>
+      {!t.merged_into && !t.deleted_at ? <Composer compact ticket={t} can={show.can} transitions={show.transitions} legacy={show.legacy === true} focusRequest={focusRequest} insertRequest={insert} onTyping={setTyping} /> : null}
+      </article>
+      <TicketDrawer
+        drawer={drawer}
+        show={show}
+        meta={metaQ.data}
+        onResolve={() => onResolve(show)}
+        onReply={show.can.reply && !t.merged_into ? (body) => setInsert((x) => ({ text: body, how: 'insert', mode: 'reply', n: (x?.n ?? 0) + 1 })) : undefined}
+        onOpenLink={openLink}
+        onNavigate={navigate}
+      />
+    </div>
   );
 }

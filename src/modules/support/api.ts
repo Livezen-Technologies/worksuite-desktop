@@ -21,6 +21,9 @@ import {
   type AssignInput,
   type BulkAction,
   type BulkResult,
+  type ClientChanges,
+  type RelatedOrder,
+  type TicketClient,
   type Badges,
   type Canned,
   type ConversionPreview,
@@ -671,6 +674,31 @@ export function links(ticketId: number, signal?: AbortSignal): Promise<TicketLin
 }
 
 /** Follow a ticket: told whenever it changes (FR-ASN-07). Watchers do not change the version. */
+/* ── the ticket details drawer (#334) ────────────────────────────────── */
+
+/** Where the drawer's client and related parts are read (with the local copy first: `useLocalFirstQuery`). */
+export const clientPath = (ticketId: number) => `${BASE}/tickets/${ticketId}/client`;
+export const relatedPath = (ticketId: number) => `${BASE}/tickets/${ticketId}/related`;
+
+/** An edit in place: `422` names the fields that are wrong (`errors`), and the answer is the client afterwards. */
+export async function saveClient(ticketId: number, changes: ClientChanges, version?: number): Promise<{ client: TicketClient; ticket: TicketFull; changed: string[] }> {
+  return v1Only(() => send('PATCH', `${BASE}/tickets/${ticketId}/client`, { ...changes, ...(version ? { version } : {}) }));
+}
+
+/** Link the client to a contact, or make one from the requester's details. */
+export async function linkContact(ticketId: number, to: { contact_id: number } | { create: true }): Promise<{ client: TicketClient; ticket: TicketFull }> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/contact`, to));
+}
+
+export async function unlinkContact(ticketId: number): Promise<{ client: TicketClient; ticket: TicketFull }> {
+  return v1Only(() => send('DELETE', `${BASE}/tickets/${ticketId}/contact`));
+}
+
+/** The store sends the order's licence email again. */
+export async function resendLicence(ticketId: number, orderId: number): Promise<{ order: RelatedOrder }> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/orders/${orderId}/resend-licence`, {}));
+}
+
 /** Link a ticket to another ticket, a chat or a record (`POST tickets/{id}/links`, FR-TKT-05; the list's Link to…, #333). */
 export function addLink(ticketId: number, kind: string, id: number, relation: 'related' | 'duplicate' | 'follow_up' = 'related'): Promise<unknown> {
   return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/links`, { kind, id, relation }));
@@ -995,6 +1023,8 @@ export const K = {
   conversion: (conversationId: number) => ['support', 'conversion', conversationId] as const,
   kb: (ticketId: number, q: string) => ['support', 'kb', ticketId, q] as const,
   summary: (ticketId: number) => ['support', 'ai-summary', ticketId] as const,
+  client: (ticketId: number) => ['support', 'client', ticketId] as const,
+  related: (ticketId: number) => ['support', 'related', ticketId] as const,
   dashboard: ['support', 'dashboard'] as const,
   myPresence: ['chat', 'presence', 'me'] as const,
 };

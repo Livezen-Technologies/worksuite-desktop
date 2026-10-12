@@ -15,7 +15,7 @@ import { useWriter, write, writerProblem, WRITER_MAX, type WriterInfo } from './
  * Online, a tool uses the writing assistant's own action when the server offers it (`improve`, `shorten`,
  * `professional`, `grammar`, `reply`, `summarize`, `minutes`), and otherwise asks the AI Assistant.
  */
-export type TextTask = 'improve' | 'shorten' | 'professional' | 'grammar' | 'reply' | 'summarize' | 'minutes' | 'translate' | 'actions' | 'draft' | 'friendly' | 'longer' | 'coach' | 'subject';
+export type TextTask = 'improve' | 'shorten' | 'professional' | 'grammar' | 'reply' | 'summarize' | 'minutes' | 'translate' | 'actions' | 'draft' | 'friendly' | 'longer' | 'coach' | 'subject' | 'brief';
 
 export const WRITING_TASKS: Array<{ task: Extract<TextTask, 'improve' | 'shorten' | 'professional' | 'grammar'>; label: string }> = [
   { task: 'improve', label: 'Improve writing' },
@@ -47,6 +47,8 @@ const INSTRUCTIONS: Record<TextTask, string> = {
   longer: 'Rewrite the text a little longer and fuller, explaining its points more clearly. Add no new facts, names, numbers or dates. Keep its language and tone.',
   subject:
     'Write a short subject line (at most 10 words) for this support conversation that says what the customer needs, as a helpdesk agent would title the ticket — e.g. "Order 46497 – download/activation error". Lead with an order or invoice number when the conversation gives one. No greeting, no quotation marks, no full stop. Never invent a number or a product.',
+  brief:
+    'Read the support conversation and answer with exactly these four headings, each on its own line, and nothing before them:\nSUMMARY:\n(2 to 4 short lines: who the customer is, what they need, what has been done, and what it is waiting for)\nFACTS:\n(the key facts, one per line starting with "- ", such as "- Order 46497" or "- Product: Microsoft Project 2024", or "- None")\nNEXT:\n(the one next step for the agent, as one short line)\nURGENCY:\n(a few words on how urgent it is or how the customer feels, such as "Wants it fixed today", or "None")\nUse only what the conversation says. Never invent a number, a name, a product or a date.',
   coach: 'Do not rewrite the text. Give short coaching on it: how its tone may come across, anything unclear or ambiguous, anything that may be missing (a request, a date, a next step), each as one line starting with "- ". If it reads well, say so in one line.',
   reply: 'Write the reply the person (marked "me") could send next. Write it as them, in the language and tone of the conversation, short and ready to send, with no greeting line unless the conversation uses one.',
   summarize: 'Summarise the conversation for someone who missed it, in a few short bullet points: what it is about, what was decided, and what is still open or who is doing what next.',
@@ -157,7 +159,7 @@ export function runText(task: TextTask, input: string, o: { local: boolean; onli
     if (!input.trim()) throw new Error('There is nothing to work on yet.');
     if (o.local) {
       try {
-        const job = askLocal(localPrompt(task, input), (t) => o.onText?.(t), { maxTokens: task === 'minutes' || task === 'summarize' ? 700 : 500, temperature: 0.4 });
+        const job = askLocal(localPrompt(task, input), (t) => o.onText?.(t), { maxTokens: task === 'minutes' || task === 'summarize' || task === 'brief' ? 700 : 500, temperature: 0.4 });
         cancelLocal = job.cancel;
         const r = await job.done;
         if (r.cancelled || stopped) return { text: cleanAnswer(r.text), engine: 'local' };
@@ -183,7 +185,8 @@ export function runText(task: TextTask, input: string, o: { local: boolean; onli
 
 /** Online: the writing assistant's own action when the server has it, the AI Assistant otherwise. */
 export async function onlineText(task: TextTask, input: string, writer?: WriterInfo): Promise<string> {
-  const action = task === 'summarize' ? (writer?.actions.find((a) => a.key === 'summarize' || a.key === 'summary')?.key ?? null) : writer?.actions.some((a) => a.key === task) ? task : null;
+  // The ticket brief keeps its own headings: the writer's plain summary would drop them, so it goes to the assistant.
+  const action = task === 'summarize' ? (writer?.actions.find((a) => a.key === 'summarize' || a.key === 'summary')?.key ?? null) : task !== 'brief' && writer?.actions.some((a) => a.key === task) ? task : null;
   try {
     if (writer?.available && action) return await write(action, input);
     const t = await ask(`${INSTRUCTIONS[task]} ${ONLY}\n\n"""\n${input.slice(0, WRITER_MAX)}\n"""`, { surface: 'assistant.panel' });

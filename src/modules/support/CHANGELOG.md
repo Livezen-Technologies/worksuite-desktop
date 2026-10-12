@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-12
+
+**Added**
+
+- the ticket details drawer — Website chats' side panel (its splitter, sections and look) in a ticket's tab and the inbox's reading pane, ⌘⇧I or the header's panel button, its width kept, open by itself on a wide window and over the conversation on a narrow one; A. the AI summary from the same text tools as Website chats and Mail (key facts, next step with Reply with this, urgency, Refresh, made again when a message arrives, the desk's summary without AI), B. the client edited in place (name, email, phone with Call and WhatsApp, company, tags, notes; checked, Saved, +94 by default), Found in conversation · Add, the WorkSuite contact created or linked, read-only without contact rights, C. the ticket's properties with Type and Source, D. related orders from the store (Resend licence email, Open order), earlier tickets and chats, website activity and the files as a grid, E. the activity timeline; loaded from the copy on this computer first (#334)
+
 ## 1.4.0 — 2026-10-12
 
 **Added**

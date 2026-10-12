@@ -1,6 +1,6 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
-import { PRIORITIES, PRIORITY_LABEL, statusLabel, type Meta, type SupportPriority, type SupportStatus, type TicketChanges, type TicketFull, type TicketShow } from '@shared/support';
+import { PRIORITIES, PRIORITY_LABEL, TYPES, TYPE_LABEL, statusLabel, type Meta, type SupportPriority, type SupportStatus, type SupportType, type TicketChanges, type TicketFull, type TicketShow } from '@shared/support';
 import { text } from '../../core/i18n';
 import { stampDayLabel, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -8,7 +8,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Button, Modal, cx } from '../../components/ui';
 import { K, agents, assign, conflictTicket, errorText, transition, updateTicket } from './api';
-import { presenceLabel } from './parts';
+import { channelLabel, presenceLabel } from './parts';
 
 /**
  * The ticket's properties (D-02, FR-TKT-03/10): the status through the moves the state machine allows this person
@@ -29,6 +29,7 @@ const FIELD_LABEL: Record<string, string> = {
   status: 'Status',
   assignee: 'Assignee',
   priority: 'Priority',
+  type: 'Type',
   team_id: 'Team',
   category_id: 'Category',
   department_id: 'Department',
@@ -55,6 +56,7 @@ export function describe(change: Change, meta: Meta | undefined, value: unknown,
     }
     case 'field':
       if (change.field === 'priority') return text(PRIORITY_LABEL[value as SupportPriority] ?? String(value));
+      if (change.field === 'type') return value ? text(TYPE_LABEL[value as SupportType] ?? String(value)) : text('None');
       if (change.field === 'team_id') return named(meta?.teams, value);
       if (change.field === 'category_id') return named(meta?.categories, value);
       if (change.field === 'department_id') return named(meta?.departments, value);
@@ -182,8 +184,9 @@ export function tagOf(raw: string): string {
   return raw.trim().replace(/\s+/g, ' ').toLowerCase().slice(0, 40);
 }
 
-export function Properties({ show, meta, onResolve }: { show: TicketShow; meta: Meta | undefined; onResolve: () => void }) {
+export function Properties({ show, meta, onResolve, website }: { show: TicketShow; meta: Meta | undefined; onResolve: () => void; /** Where a chat's ticket came from ("Website chat · techubiz.com", #334). */ website?: string | null }) {
   const t = show.ticket;
+  const source = website ? `${channelLabel(t.source)} · ${website}` : channelLabel(t.source);
   const ch = useTicketChange(show);
   const [tag, setTag] = useState('');
   const readOnly = !!t.merged_into;
@@ -236,6 +239,22 @@ export function Properties({ show, meta, onResolve }: { show: TicketShow; meta: 
           }}
           options={PRIORITIES.map((p) => ({ value: p, label: text(PRIORITY_LABEL[p]) }))}
         />
+      </Row>
+      <Row label={text('Type')}>
+        {canEdit ? (
+          <Select<string>
+            className="h-7 w-full text-[12.5px]"
+            aria-label={text('Type')}
+            value={t.type ?? ''}
+            disabled={ch.busy === 'type'}
+            onValueChange={(to) => {
+              if (to !== (t.type ?? '')) void ch.run({ kind: 'field', field: 'type', to: (to || null) as SupportType | null });
+            }}
+            options={[{ value: '', label: text('None') }, ...(meta?.types?.length ? meta.types : TYPES).map((x) => ({ value: x, label: text(TYPE_LABEL[x as SupportType] ?? x) }))]}
+          />
+        ) : (
+          <span className={cx(!t.type && 'text-ink-3')}>{t.type ? text(TYPE_LABEL[t.type] ?? t.type) : text('None')}</span>
+        )}
       </Row>
       <Row label={text('Assignee')}>
         {canAssign ? (
@@ -344,6 +363,11 @@ export function Properties({ show, meta, onResolve }: { show: TicketShow; meta: 
           ) : null}
         </span>
       </Row>
+      {source ? (
+        <Row label={text('Source')}>
+          <span className="text-ink-2">{source}</span>
+        </Row>
+      ) : null}
       {ch.conflict ? <ConflictReview conflict={ch.conflict} meta={meta} onKeepTheirs={ch.keepTheirs} onUseMine={() => void ch.run(ch.conflict!.change, ch.conflict!.theirs.version)} /> : null}
     </section>
   );

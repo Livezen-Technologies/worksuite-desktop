@@ -10,7 +10,6 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { stampDayLabel, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { useNow } from '../../core/use-now';
-import { SidePanel } from '../../components/SidePanel';
 import { useStickToBottom } from '../../components/useStickToBottom';
 import { Avatar, Button, Empty, ErrorNote, IconButton, Kbd, Spinner, cx } from '../../components/ui';
 import { K, assign, assistError, errorText, getTicket, insertArticle, links, messagesBefore, meta, take, ticketIdForReference, transition, unwatch, watch } from './api';
@@ -22,11 +21,12 @@ import { openAttachment } from './files';
 import { usePollInterval, useSupportLive } from './live';
 import { ChannelIcon, OriginLink, PriorityChip, Reference, SlaChip, StatusChip, channelLabel } from './parts';
 import { Collision, useTicketPresence } from './presence';
-import { Properties } from './Properties';
 import { useMarkRead } from './reading';
 import { OutboxBar } from './Outbox';
 import { ResolveDialog } from './ResolveDialog';
-import { FileRow, FilesPanel, LinkRow, RelatedPanel, RemotePanel, RequesterPanel, SlaPanel, connectRustDesk } from './TicketSide';
+import { FileRow, LinkRow, connectRustDesk } from './TicketSide';
+import { WIDE_TAB } from './details';
+import { DrawerButton, TicketDrawer, useDetailsDrawer } from './TicketDrawer';
 import { EditableSubject } from './Subject';
 import { Thread } from './Thread';
 
@@ -105,6 +105,7 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
   };
   const toggleAssist = () => setAssist((a) => ({ ...a, open: !a.open }));
   const present = useTicketPresence(t.id, { here: active, typing });
+  const drawer = useDetailsDrawer(WIDE_TAB, active);
   const messages = [...earlier.filter((m) => !show.messages.some((x) => x.id === m.id)), ...show.messages];
   const { scroller, content, unseen, toEnd, onScroll } = useStickToBottom(`${view}:${messages.length}`);
   const readOnly = !!t.merged_into || !!t.deleted_at;
@@ -222,7 +223,7 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
   ];
 
   return (
-    <div className="flex h-full min-h-0 bg-ground">
+    <div className="relative flex h-full min-h-0 bg-ground">
       <div className="flex min-w-0 flex-1 flex-col">
         <OutboxBar />
         <header className="flex shrink-0 flex-col gap-1.5 border-b border-line bg-surface px-5 pt-3">
@@ -292,6 +293,7 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
                   <Kbd aria-hidden>{isMac ? '⌘J' : 'Ctrl+J'}</Kbd>
                 </Button>
               )}
+              <DrawerButton drawer={drawer} />
               <IconButton icon="globe" label={text('Open on the web: merge, split and the rest of the desk')} onClick={() => void call('app:openInBrowser', { path: `/tickets?ticket=${t.id}` }).catch((e: unknown) => toast('error', errorMessage(e)))} />
             </span>
           </div>
@@ -375,16 +377,18 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
         {!readOnly ? <Composer ticket={t} can={show.can} transitions={show.transitions} legacy={legacy} hidden={view !== 'conversation'} focusRequest={focusRequest} insertRequest={insert} onTyping={setTyping} onSent={() => toEnd()} /> : null}
       </div>
       {assist.open && !legacy ? <Assist show={show} tab={assist.tab} onTab={(tab) => setAssist((a) => ({ ...a, tab }))} searchRequest={assist.search} onInsert={toInsert} onClose={() => setAssist((a) => ({ ...a, open: false }))} /> : null}
-      <SidePanel id="support.ticket" side="right" label={text('the ticket’s details')}>
-        <aside aria-label={text('Ticket details')} className="flex h-full w-[300px] flex-col gap-3 overflow-y-auto border-l border-line bg-surface px-4 py-3 scroll-thin">
-          <Properties show={show} meta={metaQ.data} onResolve={() => setResolveOpen(true)} />
-          <SlaPanel t={t} now={now} />
-          <RequesterPanel t={t} onOpen={(x) => navigate(ticketRoute(x))} onOpenLink={openLink} />
-          <FilesPanel files={show.attachments} onAll={() => setView('files')} />
-          <RelatedPanel links={linkList} onOpen={openLinked} />
-          <RemotePanel show={show} />
-        </aside>
-      </SidePanel>
+      {/* The details drawer (#334): Website chats' side panel, its splitter and cards; ⌘⇧I. */}
+      <TicketDrawer
+        drawer={drawer}
+        show={show}
+        meta={metaQ.data}
+        links={linkList}
+        onResolve={() => setResolveOpen(true)}
+        onReply={composing ? (body) => toInsert({ text: body, how: 'insert', mode: 'reply' }) : undefined}
+        onOpenLink={openLink}
+        onNavigate={navigate}
+        onOpenLinked={openLinked}
+      />
       {resolveOpen ? <ResolveDialog ticket={t} onClose={() => setResolveOpen(false)} /> : null}
     </div>
   );

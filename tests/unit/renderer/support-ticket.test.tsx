@@ -150,6 +150,9 @@ async function pick(label: string, option: string | RegExp) {
 
 beforeEach(() => {
   resetApiFamily();
+  // A wide window: the ticket details drawer opens by itself beside the conversation (#334).
+  Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
+  localStorage.removeItem('ws.support.drawer');
   realtime.length = 0;
   nav.navigate.mockReset();
   nav.openLink.mockReset();
