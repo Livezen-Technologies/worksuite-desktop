@@ -4,6 +4,19 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-12
+
+**Added**
+
+- ticket list right-click menu with status, assign, priority, tags, reply, merge, copy and delete, current values ticked and hidden without the right (#333)
+- multi-select (checkbox, Ctrl/Cmd-click, Shift-click, X, Ctrl/Cmd+A) and a bulk bar for status, assign, priority, tag, merge and delete with Undo and a refusal summary; Resolve, Close, Delete and Merge ask first (#333)
+- list keys E resolve, A assign to me, P priority, # tag, Esc clear; the list title counts its tickets (Resolved · 1 ticket); status dots say what they mean (#333)
+- pictures in a ticket's messages inline as a grid, opened in the picture viewer (#332)
+
+**Fixed**
+
+- a converted website chat reads as the chat: the visitor's lines as the requester's, website lines as centred events, the assistant as itself, Internal note only on staff notes, 'via Website chat' and 'Sent in chat', the requester's name, consecutive lines grouped, and no '[file name]' line over its own attachment (#332)
+
 ## 1.3.0 — 2026-10-11
 
 **Added**

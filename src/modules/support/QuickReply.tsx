@@ -123,7 +123,7 @@ export function QuickReply({ ticketKey }: { ticketKey: string }) {
         {show.messages.length > recent.length ? (
           <p className="pb-2 text-[11.5px] font-semibold text-ink-3">{text('Last {n} of {total} messages', { n: recent.length, total: show.messages.length + (show.has_earlier ? '+' : '') })}</p>
         ) : null}
-        <Thread compact messages={recent} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} onOpenAttachment={(a) => void openAttachment(a)} />
+        <Thread compact messages={recent} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} requester={t.requester?.name} onOpenAttachment={(a) => void openAttachment(a)} />
       </div>
       {readOnly ? (
         <p role="status" className="border-t border-line bg-surface px-4 py-3 text-[12.5px] text-ink-3">

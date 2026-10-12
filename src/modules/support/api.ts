@@ -961,3 +961,73 @@ export const K = {
   dashboard: ['support', 'dashboard'] as const,
   myPresence: ['chat', 'presence', 'me'] as const,
 };
+
+/* ── the bulk bar (FR-WSP-04, #333) ─────────────────────────────────────── */
+
+/** What the bulk endpoint can do (`TicketBulk::ACTIONS`). */
+export type BulkAction = 'assign' | 'status' | 'priority' | 'tag' | 'untag' | 'delete' | 'restore' | 'merge';
+
+/**
+ * `POST tickets/bulk`: the action's own fields beside `ids` — `user_id` (and `team_id`) to assign, `status` (and
+ * `override`) for a status, `priority`, `tags` to tag or untag, `primary_id` to merge into. `versions` (id → the version
+ * the screen showed) refuses a ticket changed meanwhile as `VERSION_CONFLICT`, that ticket only.
+ */
+export interface BulkInput {
+  ids: number[];
+  action: BulkAction;
+  user_id?: number | null;
+  team_id?: number | null;
+  status?: string;
+  override?: boolean;
+  priority?: string;
+  tags?: string[];
+  primary_id?: number;
+  reason?: string;
+  versions?: Record<number, number>;
+}
+
+/** One ticket's answer: done, or refused with the code and the reason. */
+export interface BulkResult {
+  id: number;
+  ok: boolean;
+  code?: string;
+  message?: string;
+  version?: number;
+}
+
+export interface BulkAnswer {
+  results: BulkResult[];
+  done: number;
+  refused: number;
+}
+
+/** The most tickets one bulk call takes (`TicketBulk::MAX`). */
+export const BULK_MAX = 200;
+
+/** Each ticket checked and changed as if alone; one refused is that ticket's answer. A server without v1 refuses. */
+export async function bulkTickets(input: BulkInput): Promise<BulkAnswer> {
+  const a = await v1Only(() => send<Partial<BulkAnswer>>('POST', `${BASE}/tickets/bulk`, input));
+  const results = (a?.results ?? []).map((r) => ({ ...r, id: Number(r.id), ok: r.ok === true }));
+  const done = results.filter((r) => r.ok).length;
+  return { results, done, refused: results.length - done };
+}
+
+/**
+ * Resolve or close one ticket without its satisfaction survey (`transition`'s `csat: false`), which the bulk endpoint
+ * cannot be told: the bulk bar's "Don't send the survey" goes ticket by ticket through here, answered in the bulk's
+ * shape. Not queued offline: the bulk bar is not.
+ */
+export async function transitionQuietly(ids: number[], status: 'resolved' | 'closed', versions: Record<number, number> = {}): Promise<BulkAnswer> {
+  const results: BulkResult[] = [];
+  for (const id of ids) {
+    try {
+      const body = { status, csat: false, ...(versions[id] ? { version: versions[id] } : {}) };
+      const t = (await v1Only(() => send<{ ticket?: TicketFull }>('POST', `${BASE}/tickets/${id}/transition`, body)))?.ticket;
+      results.push({ id, ok: true, ...(t?.version ? { version: t.version } : {}) });
+    } catch (e) {
+      results.push({ id, ok: false, code: refusalCode(e) ?? 'FAILED', message: errorText(e) });
+    }
+  }
+  const done = results.filter((r) => r.ok).length;
+  return { results, done, refused: results.length - done };
+}

@@ -23,3 +23,41 @@ export async function openAttachment(a: Pick<Attachment, 'id' | 'name'>): Promis
     toast('error', errorText(e, text('{name} could not be opened.', { name: a.name })));
   }
 }
+
+/** The server's links last ten minutes: one is used again for eight, then asked for afresh. */
+const LINK_TTL = 8 * 60_000;
+const links = new Map<number, { path: string | null; at: number }>();
+const asking = new Map<number, Promise<string | null>>();
+
+/**
+ * A file's signed `/media/{token}` path, to show a picture inline or in the viewer (#332): the same link Open uses,
+ * kept for a while so a thread of pictures asks once for each. Null when the server gives none (no Drive file).
+ */
+export function mediaPath(id: number): Promise<string | null> {
+  const kept = links.get(id);
+  if (kept && Date.now() - kept.at < LINK_TTL) return Promise.resolve(kept.path);
+  const busy = asking.get(id);
+  if (busy) return busy;
+  const ask = attachmentLink(id)
+    .then((r) => {
+      const token = mediaToken(r.url);
+      const path = token ? `/media/${token}` : null;
+      links.set(id, { path, at: Date.now() });
+      return path;
+    })
+    .finally(() => asking.delete(id));
+  asking.set(id, ask);
+  return ask;
+}
+
+/** The link already known for a file and still good, if any: a picture drawn again is not asked for again. */
+export function keptMediaPath(id: number): string | null | undefined {
+  const kept = links.get(id);
+  return kept && Date.now() - kept.at < LINK_TTL ? kept.path : undefined;
+}
+
+/** Forgets the links (for tests). */
+export function forgetMediaPaths(): void {
+  links.clear();
+  asking.clear();
+}
