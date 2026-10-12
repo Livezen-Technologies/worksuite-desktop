@@ -128,7 +128,7 @@ export const SLA_TARGET_LABEL: Record<SlaTarget, string> = {
 };
 
 /** The system views (`TicketQuery::VIEWS`), in the rail's order, with the server's labels for a server that sends none. */
-export const VIEWS = ['mine', 'unassigned', 'assigned', 'mentioned', 'watching', 'overdue', 'escalated', 'pending', 'live', 'resolved', 'closed', 'all', 'needs_organization', 'trash'] as const;
+export const VIEWS = ['mine', 'unassigned', 'assigned', 'mentioned', 'watching', 'overdue', 'escalated', 'pending', 'live', 'resolved', 'closed', 'all', 'needs_organization', 'trash', 'snoozed'] as const;
 export type SupportView = (typeof VIEWS)[number];
 export const VIEW_LABEL: Record<SupportView, string> = {
   mine: 'My tickets',
@@ -145,6 +145,7 @@ export const VIEW_LABEL: Record<SupportView, string> = {
   all: 'All tickets',
   needs_organization: 'Needs organization',
   trash: 'Trash',
+  snoozed: 'Snoozed',
 };
 
 export const SORTS = ['updated', 'created', 'sla', 'priority'] as const;
@@ -263,6 +264,10 @@ export interface Ticket {
   deleted_at: string | null;
   /** What it was raised from, when that is something the desktop can open (#298): absent from an older server. */
   origin?: TicketOrigin | null;
+  /** Snoozed until then (#333): out of the working views until it wakes. Absent from an older server. */
+  snoozed_until?: string | null;
+  /** I follow it (#333): the right-click menu's Follow / Unfollow. Absent from an older server. */
+  watching?: boolean;
 }
 
 /**
@@ -588,6 +593,31 @@ export interface TicketChanges {
   requester_name?: string | null;
   requester_email?: string | null;
   requester_phone?: string | null;
+}
+
+/** What the bulk bar and the right-click menu can do to tickets (`POST tickets/bulk`, #333). */
+export const BULK_ACTIONS = ['assign', 'status', 'priority', 'tag', 'untag', 'delete', 'restore', 'merge', 'team', 'snooze', 'unsnooze', 'watch', 'unwatch', 'read', 'unread', 'spam'] as const;
+export type BulkAction = (typeof BULK_ACTIONS)[number];
+
+/** What a ticket was before a bulk change: what Undo puts back. */
+export interface BulkBefore {
+  status: SupportStatus;
+  priority: SupportPriority;
+  assignee_id: number | null;
+  team_id: number | null;
+  tags: string[];
+  snoozed_until: string | null;
+  deleted: boolean;
+}
+
+/** One ticket's answer to a bulk change: done, or refused with why. */
+export interface BulkResult {
+  id: number;
+  ok: boolean;
+  code?: string;
+  message?: string;
+  version?: number;
+  before?: BulkBefore;
 }
 
 /** A list's question: one view, filtered and sorted, a page at a time. */

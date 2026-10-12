@@ -178,7 +178,8 @@ describe('the list', () => {
     expect(within(row).getByText('CFX-001284').className).toContain('font-mono');
     expect(within(row).getByText('Urgent')).toBeTruthy();
     expect(within(row).getByText('Requester 1284 · Guest')).toBeTruthy();
-    expect(screen.getByText('12 open')).toBeTruthy();
+    // The count says the view's own tickets ("My tickets · 12 tickets"), never "open" over another view (#333).
+    expect(screen.getByText('· 12 tickets')).toBeTruthy();
     expect(screen.getByText('live')).toBeTruthy();
     // Near the end of the page: the next one, with the server's cursor.
     expect(await within(list).findByText('Subject 1300')).toBeTruthy();

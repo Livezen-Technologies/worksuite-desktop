@@ -27,6 +27,7 @@ import { useMarkRead } from './reading';
 import { OutboxBar } from './Outbox';
 import { ResolveDialog } from './ResolveDialog';
 import { FileRow, FilesPanel, LinkRow, RelatedPanel, RemotePanel, RequesterPanel, SlaPanel, connectRustDesk } from './TicketSide';
+import { EditableSubject } from './Subject';
 import { Thread } from './Thread';
 
 /** A ticket's key as its route names it: its id, or a reference looked up once. */
@@ -238,7 +239,7 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
             <OriginLink origin={t.origin} />
             <Collision present={present} className="ml-auto" />
           </div>
-          <h1 className="text-[19px] leading-snug font-extrabold text-ink">{t.subject}</h1>
+          <EditableSubject show={show} level="h1" />
           <div className="flex flex-wrap items-center gap-2">
             <StatusChip status={t.status} />
             <PriorityChip priority={t.priority} />

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-12
+
+**Added**
+
+- the ticket list's right-click menu (Open, Status, Assign, Priority, Organise, Link, Respond, Other, Danger — filtered by permission, current values ticked) and picking several tickets (hover checkbox, ⇧ range, ⌘ toggle, X / ⇧X, ⌘A, Select all matching) with the shared bulk bar (Status, Assign, Priority, Tag, Merge, Snooze, more); changes show at once with one Undo toast, more than 50 run in the background in batches with progress, a bulk Solve or Close asks before emailing customers (Send / Change quietly), merge chooses the main ticket and can tell the requesters; J/K/X/⇧X/E/A/P/#/Esc and the ? shortcuts popover; Snooze and the Snoozed view; the count says the view's tickets (Resolved · 1 ticket); the status dot explains itself; the subject is editable in place with Suggest (AI, or the first meaningful message) (#333)
+
 ## 1.3.0 — 2026-10-11
 
 **Added**

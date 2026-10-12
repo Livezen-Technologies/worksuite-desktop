@@ -19,6 +19,8 @@ import {
   type AiTone,
   type Attachment,
   type AssignInput,
+  type BulkAction,
+  type BulkResult,
   type Badges,
   type Canned,
   type ConversionPreview,
@@ -298,6 +300,36 @@ export function getTicket(id: number, opts: { peek?: boolean } = {}, signal?: Ab
 export async function ticketIdForReference(reference: string, signal?: AbortSignal): Promise<number | null> {
   const page = await listTickets({ view: 'all', q: reference, limit: 10 }, signal);
   return page.items.find((t) => t.reference.toLowerCase() === reference.toLowerCase())?.id ?? null;
+}
+
+/**
+ * One bulk change (`POST tickets/bulk`, #333): each ticket checked and changed as if alone, refusals per ticket. At most
+ * 200 a call — `bulkInBatches` (bulk.ts) sends more in batches. `of` is the whole change's size, so the journal says
+ * "bulk, 128 tickets" on every batch.
+ */
+export async function bulk(action: BulkAction, ids: number[], fields: Record<string, unknown> = {}, of?: number): Promise<{ results: BulkResult[]; done: number; refused: number }> {
+  return v1Only(() => send('POST', `${BASE}/tickets/bulk`, { ...fields, action, ids, ...(of && of > ids.length ? { of } : {}) }));
+}
+
+/** Every ticket a list matches, up to `limit`, with how many there are (#333's "Select all 128 resolved tickets"). */
+export async function matchingIds(p: ListParams, limit = 1000, signal?: AbortSignal): Promise<{ ids: number[]; total: number }> {
+  const r = await v1Only(() =>
+    get<{ ids: number[]; total: number }>(
+      `${BASE}/tickets/ids`,
+      {
+        ...(p.extra ?? {}),
+        view: p.view,
+        q: p.q?.trim() || undefined,
+        status: list(p.status),
+        priority: list(p.priority),
+        source: list(p.source) ?? p.extra?.source,
+        organization: list(p.organization) ?? p.extra?.organization,
+        limit,
+      },
+      signal,
+    ),
+  );
+  return { ids: r.ids ?? [], total: r.total ?? 0 };
 }
 
 /** Messages newer than one, oldest first (the delta after a realtime hint). */
@@ -639,6 +671,11 @@ export function links(ticketId: number, signal?: AbortSignal): Promise<TicketLin
 }
 
 /** Follow a ticket: told whenever it changes (FR-ASN-07). Watchers do not change the version. */
+/** Link a ticket to another ticket, a chat or a record (`POST tickets/{id}/links`, FR-TKT-05; the list's Link to…, #333). */
+export function addLink(ticketId: number, kind: string, id: number, relation: 'related' | 'duplicate' | 'follow_up' = 'related'): Promise<unknown> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/links`, { kind, id, relation }));
+}
+
 export function watch(ticketId: number): Promise<unknown> {
   return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/watchers`, {}));
 }

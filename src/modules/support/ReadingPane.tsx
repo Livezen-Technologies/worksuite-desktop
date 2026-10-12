@@ -16,6 +16,7 @@ import { usePollInterval } from './live';
 import { ChannelIcon, OriginLink, PriorityChip, Reference, SlaChip, StatusChip, channelLabel } from './parts';
 import { Collision, useTicketPresence } from './presence';
 import { useMarkRead } from './reading';
+import { EditableSubject } from './Subject';
 import { Thread } from './Thread';
 
 /**
@@ -95,7 +96,7 @@ export function ReadingPane({
           <OriginLink origin={t.origin} />
           <Collision present={present} className="ml-auto" />
         </div>
-        <h2 className="text-[17px] leading-snug font-extrabold text-ink">{t.subject}</h2>
+        <EditableSubject show={show} />
         <div className="flex flex-wrap items-center gap-2">
           <StatusChip status={t.status} />
           <PriorityChip priority={t.priority} />

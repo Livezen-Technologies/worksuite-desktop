@@ -15,7 +15,7 @@ import { useWriter, write, writerProblem, WRITER_MAX, type WriterInfo } from './
  * Online, a tool uses the writing assistant's own action when the server offers it (`improve`, `shorten`,
  * `professional`, `grammar`, `reply`, `summarize`, `minutes`), and otherwise asks the AI Assistant.
  */
-export type TextTask = 'improve' | 'shorten' | 'professional' | 'grammar' | 'reply' | 'summarize' | 'minutes' | 'translate' | 'actions' | 'draft' | 'friendly' | 'longer' | 'coach';
+export type TextTask = 'improve' | 'shorten' | 'professional' | 'grammar' | 'reply' | 'summarize' | 'minutes' | 'translate' | 'actions' | 'draft' | 'friendly' | 'longer' | 'coach' | 'subject';
 
 export const WRITING_TASKS: Array<{ task: Extract<TextTask, 'improve' | 'shorten' | 'professional' | 'grammar'>; label: string }> = [
   { task: 'improve', label: 'Improve writing' },
@@ -45,6 +45,8 @@ const INSTRUCTIONS: Record<TextTask, string> = {
   draft: 'Write an email from the notes or bullet points below, as the person who wrote them, in their language. Use only what the notes say: never invent a fact, a name, a number or a date. Short paragraphs, no subject line.',
   friendly: 'Rewrite the text in a warmer, friendlier tone that is still suitable for work. Keep its meaning and language.',
   longer: 'Rewrite the text a little longer and fuller, explaining its points more clearly. Add no new facts, names, numbers or dates. Keep its language and tone.',
+  subject:
+    'Write a short subject line (at most 10 words) for this support conversation that says what the customer needs, as a helpdesk agent would title the ticket — e.g. "Order 46497 – download/activation error". Lead with an order or invoice number when the conversation gives one. No greeting, no quotation marks, no full stop. Never invent a number or a product.',
   coach: 'Do not rewrite the text. Give short coaching on it: how its tone may come across, anything unclear or ambiguous, anything that may be missing (a request, a date, a next step), each as one line starting with "- ". If it reads well, say so in one line.',
   reply: 'Write the reply the person (marked "me") could send next. Write it as them, in the language and tone of the conversation, short and ready to send, with no greeting line unless the conversation uses one.',
   summarize: 'Summarise the conversation for someone who missed it, in a few short bullet points: what it is about, what was decided, and what is still open or who is doing what next.',
