@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ app: { getPath: () => tmpdir(), getVersion: () => '0.2.252', isPackaged: false } }));
 
 import type { AccountRecord } from '@shared/accounts';
+import type { DiscoveredServer } from '@shared/discovery';
 import { parseDeepLink } from '@shared/deeplink';
 import type { Bootstrap } from '@shared/types';
 import { SessionController, type SessionHooks } from '../../../../electron/main/session';
@@ -16,7 +17,7 @@ import { AccountsService, type AccountsHost } from '../../../../electron/service
 import { routeLink, withoutServerParam } from '../../../../electron/services/accounts/links';
 import { DEFAULT_PROFILE_DIR, partitionDir, profilePaths } from '../../../../electron/services/accounts/profile';
 import { AccountRegistry, newAccountId } from '../../../../electron/services/accounts/registry';
-import { processPendingRemovals, removeAccount } from '../../../../electron/services/accounts/removal';
+import { processPendingRemovals, queueRemoval, removeAccount, unqueueRemoval } from '../../../../electron/services/accounts/removal';
 import { exportUnsyncedZip, pendingCount, unsyncedSummary } from '../../../../electron/services/accounts/unsynced';
 import type { AuthService } from '../../../../electron/services/auth';
 import type { BootstrapService } from '../../../../electron/services/bootstrap';
@@ -227,6 +228,113 @@ describe('remove from this device (§5)', () => {
     processPendingRemovals(w.appDb, w.root);
     expect(existsSync(w.root)).toBe(true);
     expect(w.appDb.all('SELECT path FROM pending_removals')).toEqual([]);
+  });
+});
+
+describe('connect:confirm and the run partition', () => {
+  const server = (origin: string) =>
+    ({ origin, apiOrigin: origin, serverId: null, name: new URL(origin).hostname, deployment: 'ENTERPRISE', schema: 'v1', branding: { logo: null, accent: null }, linkHosts: [], signed: false, passkey: null, minimumVersion: null, endpoints: {}, authMode: 'legacy', browserSignIn: null }) as unknown as DiscoveredServer;
+
+  it('the first account takes profiles/default and account #1’s partitions, and its run partition goes at the next start; a later one keeps its own', async () => {
+    const root = tmp();
+    const appDb = openAppDb(join(root, 'app.db'));
+    const registry = new AccountRegistry(appDb);
+    const queued = () => appDb.all<{ path: string }>('SELECT path FROM pending_removals').map((r) => r.path);
+    const host = {
+      registry,
+      switcher: { switching: () => null, switchTo: vi.fn(async (id: string) => (registry.setActive(id), { switched: true, ms: 1 })) },
+      background: { unread: () => 0, release: async () => undefined },
+      trusted: () => ({ allowPersonal: true, lockServer: false }),
+      unsynced: () => ({ items: [] }),
+      reachable: () => true,
+      seedServer: vi.fn(),
+      emit: vi.fn(),
+      reservePartition: (partition: string) => queueRemoval(appDb, partitionDir(root, partition)!, partition),
+      adoptPartition: (partition: string) => unqueueRemoval(appDb, partitionDir(root, partition)!),
+    } as unknown as AccountsHost;
+    const service = new AccountsService(host);
+
+    // The first account on this computer: the run's partition was used for the checks only.
+    const run1 = service.partitionFor('enterprise');
+    mkdirSync(partitionDir(root, run1)!, { recursive: true });
+    expect(queued()).toEqual([partitionDir(root, run1)]);
+    const first = await service.createAccount(server('https://a.example'), 'enterprise', null);
+    const rec1 = registry.get(first.id)!;
+    expect(rec1.profileDir).toBe(DEFAULT_PROFILE_DIR);
+    expect(rec1.partition).toBe('');
+    expect(`persist:acct-${rec1.id}-net`).toBe(run1);
+    expect(queued()).toEqual([partitionDir(root, run1)]);
+
+    // The second: the run's partition is its own network partition from now on.
+    const run2 = service.partitionFor('enterprise');
+    const second = await service.createAccount(server('https://b.example'), 'enterprise', null);
+    const rec2 = registry.get(second.id)!;
+    expect(rec2.partition).toBe(`persist:acct-${rec2.id}`);
+    expect(`persist:acct-${rec2.id}-net`).toBe(run2);
+    expect(queued()).toEqual([partitionDir(root, run1)]);
+
+    // A run never confirmed leaves nothing behind either.
+    const run3 = service.partitionFor('enterprise');
+    expect(queued()).toContain(partitionDir(root, run3));
+
+    processPendingRemovals(appDb, root);
+    expect(existsSync(partitionDir(root, run1)!)).toBe(false);
+    expect(queued()).toEqual([]);
+    appDb.close();
+  });
+});
+
+describe('worksuite://setup links (§4 step 5)', () => {
+  const LINK = 'worksuite://setup?d=eyJ2IjoyfQ&s=c2ln';
+  function service(lockServer = false) {
+    const root = tmp();
+    const appDb = openAppDb(join(root, 'app.db'));
+    const registry = new AccountRegistry(appDb);
+    const host = {
+      registry,
+      switcher: { switching: () => null, switchTo: vi.fn(async (id: string) => (registry.setActive(id), { switched: true, ms: 1 })) },
+      background: { unread: () => 0, release: async () => undefined },
+      trusted: () => ({ allowPersonal: true, lockServer }),
+      unsynced: () => ({ items: [] }),
+      reachable: () => true,
+      seedServer: vi.fn(),
+      emit: vi.fn(),
+      showMain: vi.fn(),
+    } as unknown as AccountsHost;
+    return { s: new AccountsService(host), host, appDb };
+  }
+
+  it('waits in the state for Add Account › Enterprise, and goes when Add Account is cancelled', () => {
+    const { s, host, appDb } = service();
+    expect(s.state().pendingSetup).toBeNull();
+    expect(s.setupLink(LINK)).toBe(true);
+    expect(s.state().pendingSetup).toBe(LINK);
+    expect(host.emit).toHaveBeenLastCalledWith(expect.objectContaining({ pendingSetup: LINK }));
+    expect(host.showMain).toHaveBeenCalled();
+    s.addCancel();
+    expect(s.state().pendingSetup).toBeNull();
+    appDb.close();
+  });
+
+  it('is consumed when the account is added', async () => {
+    const { s, appDb } = service();
+    s.setupLink(LINK);
+    const origin = 'https://a.example';
+    await s.createAccount({ origin, apiOrigin: origin, serverId: null, name: 'A', deployment: 'ENTERPRISE', schema: 'v1', branding: { logo: null, accent: null }, linkHosts: [], signed: true, passkey: null, minimumVersion: null, endpoints: {}, authMode: 'legacy', browserSignIn: null } as unknown as DiscoveredServer, 'enterprise', null);
+    expect(s.state().pendingSetup).toBeNull();
+    appDb.close();
+  });
+
+  it('is refused when the organization manages the server, or when it is not a setup link', () => {
+    const locked = service(true);
+    expect(locked.s.setupLink(LINK)).toBe(false);
+    expect(locked.s.state().pendingSetup).toBeNull();
+    const open = service();
+    expect(open.s.setupLink('worksuite://tasks/1')).toBe(false);
+    expect(open.s.setupLink(`${LINK}${'x'.repeat(9000)}`)).toBe(false);
+    expect(open.s.state().pendingSetup).toBeNull();
+    locked.appDb.close();
+    open.appDb.close();
   });
 });
 

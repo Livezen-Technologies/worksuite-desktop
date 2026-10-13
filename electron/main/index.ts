@@ -44,9 +44,9 @@ import { BackgroundAccounts, type BackgroundClient } from '../services/accounts/
 import { AccountsService, serverInfoOf } from '../services/accounts/handlers';
 import { routeLink, withoutServerParam } from '../services/accounts/links';
 import { migrateAccounts } from '../services/accounts/migrate';
-import { allPartitions, DEFAULT_PROFILE_DIR, partitionsFor, profilePaths } from '../services/accounts/profile';
+import { allPartitions, DEFAULT_PROFILE_DIR, partitionDir, partitionsFor, profilePaths } from '../services/accounts/profile';
 import { AccountRegistry } from '../services/accounts/registry';
-import { processPendingRemovals, removeAccount } from '../services/accounts/removal';
+import { processPendingRemovals, queueRemoval, removeAccount, unqueueRemoval } from '../services/accounts/removal';
 import { ScopeHolder, ShellSessions } from '../services/accounts/scope';
 import { AccountSwitcher, switchModeFrom } from '../services/accounts/switcher';
 import { exportUnsyncedZip, pendingCount, unsyncedSummary } from '../services/accounts/unsynced';
@@ -156,7 +156,7 @@ import { Vault } from '../services/vault';
 import { indicatorHostRunning, NO_TRAY_HINT, TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
 import { linuxInstallKind } from '../updater/linux';
-import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, setDiscoveryKeysSink, ucInstallType, updateCheckUrl, reportProblemUrl } from '../updater/update-center';
+import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, setDiscoveryKeysSink, setEntitlementKeysSink, ucInstallType, updateCheckUrl, reportProblemUrl } from '../updater/update-center';
 import { announce, noticeText } from '../updater/notice';
 import { runUpdateDiagnostics } from '../updater/diagnostics';
 import type { TrayUpdate } from '../tray/tray';
@@ -1400,7 +1400,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // A setup link from IT (§4 step 5): Add Account › Enterprise with it filled in; it still takes a click on Continue.
     if (/^worksuite:\/\/setup\?/i.test(url)) {
       windows.showMain();
-      broadcast('toast', { kind: 'info', text: 'Your organization sent a setup link. Choose Add Account › Enterprise to continue.' });
+      if (!accountsService.setupLink(url)) broadcast('toast', { kind: 'info', text: trustedNow().lockServer ? 'Your organization manages the server this computer connects to.' : 'That setup link could not be used.' });
       return;
     }
     // A passkey sign-in coming back from the browser. Handled before the link
@@ -3368,6 +3368,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Livezen discovery keys rotated in through a verified Update Center answer (WP2), kept in app.db.
   const rotatedKeys = (): Readonly<Record<string, string>> => appDb.getConfig<Record<string, string>>('discovery_keys') ?? {};
   setDiscoveryKeysSink((keys) => appDb.setConfig('discovery_keys', { ...rotatedKeys(), ...keys }));
+  // The same for Cloud's entitlement keys (Connection & Startup §3), read back by `rotatedEntitlementKeys` below.
+  const rotatedEntitlementKeys = (): Readonly<Record<string, string>> => appDb.getConfig<Record<string, string>>('entitlement_keys') ?? {};
+  setEntitlementKeysSink((keys) => appDb.setConfig('entitlement_keys', { ...rotatedEntitlementKeys(), ...keys }));
 
   /**
    * Who refreshes and revokes an account's tokens: OneAuth for a Personal (Cloud) account (WP3's OIDC endpoint),
@@ -3689,6 +3692,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     emit: (state) => emitAccounts('accounts:changed', state),
     showMain: () => void windows.showMain(),
+    reservePartition: (partition) => {
+      const dir = partitionDir(p.userData, partition);
+      if (dir) queueRemoval(appDb, dir, partition);
+    },
+    adoptPartition: (partition) => {
+      const dir = partitionDir(p.userData, partition);
+      if (dir) unqueueRemoval(appDb, dir);
+    },
   });
   sessionCtl.accountView = () => {
     const a = registry.active();
@@ -3758,7 +3769,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
           else broadcast('toast', { kind: 'error', text: error.message });
         },
         store: () => ({ get: (key) => db.getConfig<string>(key) ?? null, set: (key, value) => db.setConfig(key, value) }),
-        rotatedEntitlementKeys: () => appDb.getConfig<Record<string, string>>('entitlement_keys') ?? {},
+        rotatedEntitlementKeys,
         onQuotaRoom: () => {
           transfers.releaseQuota();
           void officeLocal.retryQuota().catch(() => undefined);

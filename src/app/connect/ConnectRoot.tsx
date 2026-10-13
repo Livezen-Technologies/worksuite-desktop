@@ -108,7 +108,8 @@ export function ConnectRoot({ auth }: { auth: AuthState }) {
     case 'provisioning':
       return <Provisioning auth={auth} />;
     case 'enterprise-address':
-      return <EnterpriseAddress prefill={adding?.prefill} />;
+      // Keyed by the prefill: a setup link arriving while the screen is open fills it in afresh.
+      return <EnterpriseAddress key={adding?.prefill ?? ''} prefill={adding?.prefill} />;
     case 'checks':
       return connect ? <ChecksScreen run={connect} /> : <Onboarding auth={auth} />;
     case 'branded-sign-in':

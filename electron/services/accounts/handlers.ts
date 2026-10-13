@@ -5,7 +5,7 @@ import type { AuthState, ServerInfo } from '@shared/types';
 import { DesktopError } from '../../main/errors';
 import type { IpcRouter } from '../../ipc/router';
 import type { BackgroundAccounts } from './background';
-import { DEFAULT_PROFILE_DIR } from './profile';
+import { DEFAULT_PROFILE_DIR, partitionsFor } from './profile';
 import type { AccountRegistry } from './registry';
 import { hostOf, kindForOrigin, newAccountId } from './registry';
 import type { AccountSwitcher } from './switcher';
@@ -50,6 +50,13 @@ export interface AccountsHost {
   probe: (input: string) => Promise<ServerInfo>;
   emit: (state: AccountsState) => void;
   showMain: () => void;
+  /**
+   * A connect run's network partition (`partitionFor`) is queued for removal at the next start as soon as it is
+   * handed out (crash-safe: a run never confirmed, cancelled or failed leaves nothing behind), and taken off that
+   * queue when the account it was reserved for keeps it (`adoptPartition`).
+   */
+  reservePartition?: (partition: string) => void;
+  adoptPartition?: (partition: string) => void;
 }
 
 /** A server record for the account's database (what AuthService and the session read). */
@@ -102,6 +109,8 @@ export class AccountsService {
   /** The id a connect run's partition was made for (`partitionFor`), taken by the account it confirms. */
   private reserved: { target: AccountKind; id: string } | null = null;
   private chooserDone = false;
+  /** A setup link waiting for Add Account › Enterprise (`AccountsState.pendingSetup`). */
+  private pendingSetup: string | null = null;
 
   constructor(private readonly h: AccountsHost) {}
 
@@ -163,6 +172,7 @@ export class AccountsService {
       allowPersonal: t.allowPersonal,
       allowAddEnterprise: !t.lockServer,
       guestAvailable: true,
+      pendingSetup: this.pendingSetup,
     };
   }
 
@@ -259,10 +269,34 @@ export class AccountsService {
     this.h.showMain();
   }
 
+  /**
+   * A `worksuite://setup` link arrived (§4 step 5): it waits in the state for the window, which opens Add Account ›
+   * Enterprise with it filled in. Nothing connects until the person clicks Continue. False, and nothing kept, when the
+   * organization manages the server (no other enterprise server may be added) or the link is not one.
+   */
+  setupLink(link: string): boolean {
+    const v = link.trim();
+    if (!/^worksuite:\/\/setup\?/i.test(v) || v.length > 8192) return false;
+    if (this.h.trusted().lockServer) return false;
+    this.pendingSetup = v;
+    this.h.showMain();
+    this.emit();
+    return true;
+  }
+
+  /** Add Account cancelled (`accounts:addCancel`): a waiting setup link is let go. */
+  addCancel(): void {
+    if (this.pendingSetup === null) return;
+    this.pendingSetup = null;
+    this.emit();
+  }
+
   /** A fresh network partition for a connect run: `persist:acct-<id>-net`, the id kept for the account it makes. */
   partitionFor(target: AccountKind): string {
     this.reserved = { target, id: newAccountId() };
-    return `persist:acct-${this.reserved.id}-net`;
+    const partition = partitionsFor({ id: this.reserved.id, partition: `persist:acct-${this.reserved.id}` }).net;
+    this.h.reservePartition?.(partition);
+    return partition;
   }
 
   /** The account already added for this server and organization, by origin or server id (`ACCOUNT_EXISTS`). */
@@ -273,6 +307,12 @@ export class AccountsService {
   /**
    * A successful connect run becomes an account (`connect:confirm`), opened signed out. The first account on a
    * computer takes `profiles/default` and the default session, so it opens in the window already showing.
+   *
+   * Partitions: the account takes the id its run's partition was reserved under. A later account keeps that
+   * partition as its own network partition (`persist:acct-<id>-net`, taken off the removal queue). The first account
+   * (`profiles/default`) uses account #1's partitions (`''`, `persist:ws-net`, `persist:ws-bulk`) — the record's
+   * `partition: ''` is what `partitionsFor` reads, so record and partitions agree — and the reserved run partition
+   * stays queued, so its folder goes at the next start instead of being stranded.
    */
   async createAccount(server: DiscoveredServer, target: AccountKind, trust: TrustedConfig | null, base?: Partial<ServerInfo>): Promise<AccountView> {
     const t = this.h.trusted();
@@ -289,6 +329,7 @@ export class AccountsService {
     this.reserved = null;
     const record = this.h.registry.build(server, kind, trust, { useDefaultProfile: free, id: reserved });
     this.h.registry.insert(record);
+    if (reserved && record.id === reserved && record.partition !== '') this.h.adoptPartition?.(partitionsFor(record).net);
     this.h.seedServer(record, serverInfoOf(record, { passkey: server.passkey, minimumVersion: server.minimumVersion, endpoints: server.endpoints, authMode: server.authMode, browserSignIn: server.browserSignIn, api: base?.api ?? (server.schema === 'legacy-desktop' ? 'desktop-v1' : 'core') }));
     try {
       await this.h.switcher.switchTo(record.id);
@@ -298,6 +339,8 @@ export class AccountsService {
       throw e;
     }
     this.chooserDone = true;
+    // The setup link that brought the person here (or one they chose not to use) is done with.
+    this.pendingSetup = null;
     this.emit();
     return this.view(this.need(record.id), this.h.registry.activeId());
   }
@@ -353,5 +396,5 @@ export function registerAccountsHandlers(router: IpcRouter, s: AccountsService):
   router.handle('accounts:remove', (input) => s.remove(input));
   router.handle('accounts:health', (input) => s.health(input?.accountId));
   router.handle('accounts:addStart', (input) => s.addStart(input?.kind));
-  router.handle('accounts:addCancel', () => undefined);
+  router.handle('accounts:addCancel', () => s.addCancel());
 }

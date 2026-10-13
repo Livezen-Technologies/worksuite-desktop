@@ -90,6 +90,25 @@ export function startAdding(step: AddingAccount['step'], prefill?: string): void
   void call('accounts:addStart', kind ? { kind } : {}).catch(() => undefined);
 }
 
+/** The setup link last opened in Add Account, so the same one is not opened again with every accounts update. */
+let setupShown: string | null = null;
+
+/**
+ * Takes the desktop's accounts state. A `worksuite://setup` link waiting there (`pendingSetup`, §4 step 5) opens Add
+ * Account › Enterprise with it filled in — once per link. Nothing connects: the address screen names the server it
+ * points at, and only Continue starts the checks.
+ */
+export function applyAccounts(a: AccountsState): void {
+  app.set({ accounts: a });
+  const link = typeof a.pendingSetup === 'string' && a.pendingSetup ? a.pendingSetup : null;
+  if (link && link !== setupShown && a.allowAddEnterprise) {
+    setupShown = link;
+    startAdding('enterprise', link);
+  } else if (!link) {
+    setupShown = null;
+  }
+}
+
 /** Leaves Add Account: back to the account that is open (or the startup selector when there is none). */
 export function cancelAdding(): void {
   const run = app.get().connect;
@@ -188,12 +207,14 @@ export async function initAppState(): Promise<void> {
   void (async () => {
     try {
       const a = await call('accounts:state');
-      if (a && typeof a === 'object') app.set({ accounts: a });
+      if (a && typeof a === 'object') applyAccounts(a);
     } catch {
       // Not available in this version.
     }
   })();
-  on<AccountsState>('accounts:changed', (a) => app.set({ accounts: a }));
+  on<AccountsState>('accounts:changed', (a) => {
+    if (a && typeof a === 'object') applyAccounts(a);
+  });
   on<ConnectRun>('connect:progress', (r) => {
     if (r && typeof r === 'object' && acceptsRun(app.get().connect, r)) app.set({ connect: r });
   });

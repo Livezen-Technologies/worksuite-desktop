@@ -1,5 +1,5 @@
 // @vitest-environment jsdom
-import { cleanup, render, screen } from '@testing-library/react';
+import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import type { AccountsState, AccountView } from '@shared/accounts';
 import type { ConnectRun } from '@shared/discovery';
@@ -116,6 +116,35 @@ describe('ConnectRoot', () => {
     rerender(<ConnectRoot auth={auth('no-server')} />);
     expect(screen.getByRole('heading', { name: 'Checking ws.example' })).toBeTruthy();
     app.set({ accounts: null, connect: null, session: { mode: 'account', signingIn: false, moveOffer: false, adding: null } });
+  });
+
+  it('opens Add Account › Enterprise with a setup link the desktop holds, once, and never connects on its own', async () => {
+    const LINK = 'worksuite://setup?d=eyJ2IjoyfQ&s=c2ln';
+    const { applyAccounts } = await import('../../../src/core/app-state');
+    bridge.call.mockClear();
+    bridge.call.mockImplementation((async (channel: string) => (channel === 'connect:parseSetup' ? { payload: { v: 2, server_url: 'https://worksuite.livezentech.com', server_id: 'x', name: 'Livezen Technologies', exp: 9e9 } } : null)) as never);
+    app.set({ prefs: { language: 'en' } as Preferences, auth: auth('ready'), connect: null, session: { mode: 'account', signingIn: false, moveOffer: false, adding: null } });
+    applyAccounts(accounts({ pendingSetup: LINK }));
+    expect(app.get().session.adding).toEqual({ step: 'enterprise', prefill: LINK });
+    render(<ConnectRoot auth={auth('ready')} />);
+    expect(screen.getByRole('heading', { name: 'Connect to your organization' })).toBeTruthy();
+    expect((screen.getByRole('textbox') as HTMLInputElement).value).toBe(LINK);
+    await waitFor(() => expect(screen.getByText(/Livezen Technologies/)).toBeTruthy());
+    // Back to the choices: the same link held by the desktop does not open it again.
+    app.set({ session: { mode: 'account', signingIn: false, moveOffer: false, adding: { step: 'choose' } } });
+    applyAccounts(accounts({ pendingSetup: LINK }));
+    expect(app.get().session.adding).toEqual({ step: 'choose' });
+    // Nothing connected: only the link was read for its server's name.
+    const channels = (bridge.call.mock.calls as unknown as Array<[string]>).map(([c]) => c);
+    expect(channels).not.toContain('connect:start');
+    expect(channels).not.toContain('connect:confirm');
+    // Not when the organization manages the server.
+    applyAccounts(accounts({ pendingSetup: null }));
+    app.set({ session: { mode: 'account', signingIn: false, moveOffer: false, adding: null } });
+    applyAccounts(accounts({ pendingSetup: LINK, allowAddEnterprise: false }));
+    expect(app.get().session.adding).toBeNull();
+    app.set({ accounts: null, auth: null, session: { mode: 'account', signingIn: false, moveOffer: false, adding: null } });
+    bridge.call.mockImplementation(async () => null);
   });
 
   it('keeps the steps after sign-in in Onboarding', () => {

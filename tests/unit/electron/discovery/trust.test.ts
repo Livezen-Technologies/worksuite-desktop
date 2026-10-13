@@ -21,7 +21,7 @@ import {
   type SourceEnv,
 } from '../../../../electron/services/discovery/trusted-config';
 import { readEnterpriseConfig } from '../../../../electron/services/enterprise';
-import { acceptUpdateResponse, setDiscoveryKeysSink } from '../../../../electron/updater/update-center';
+import { acceptUpdateResponse, setDiscoveryKeysSink, setEntitlementKeysSink } from '../../../../electron/updater/update-center';
 
 const F = join(__dirname, '../../../fixtures/discovery');
 const read = (f: string) => readFileSync(join(F, f));
@@ -108,6 +108,28 @@ describe('Update Center discovery_keys rotation', () => {
       expect(sink).not.toHaveBeenCalled();
     } finally {
       setDiscoveryKeysSink(null);
+    }
+  });
+
+  it('stores rotated entitlement keys the same way, apart from the discovery keys', () => {
+    const discovery = vi.fn();
+    const entitlements = vi.fn();
+    setDiscoveryKeysSink(discovery);
+    setEntitlementKeysSink(entitlements);
+    try {
+      expect(acceptUpdateResponse(doc({ discovery_keys: null, entitlement_keys: { 'ent-2027': keys.raw, junk: 'abc' } }), ucKeys, '0.3.0').ok).toBe(true);
+      expect(entitlements).toHaveBeenCalledWith({ 'ent-2027': keys.raw });
+      expect(discovery).not.toHaveBeenCalled();
+      entitlements.mockClear();
+      // Absent from an older Update Center: nothing stored.
+      expect(acceptUpdateResponse(doc(), ucKeys, '0.3.0').ok).toBe(true);
+      expect(entitlements).not.toHaveBeenCalled();
+      const forged = { ...doc(), entitlement_keys: { evil: keys.raw } };
+      expect(acceptUpdateResponse(forged, ucKeys, '0.3.0')).toEqual({ ok: false, reason: 'signature' });
+      expect(entitlements).not.toHaveBeenCalled();
+    } finally {
+      setDiscoveryKeysSink(null);
+      setEntitlementKeysSink(null);
     }
   });
 

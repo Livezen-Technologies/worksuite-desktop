@@ -76,6 +76,12 @@ export interface AccountsState {
   allowPersonal: boolean;
   allowAddEnterprise: boolean;
   guestAvailable: boolean;
+  /**
+   * A `worksuite://setup` link that arrived (§4 step 5) and waits for the person: the window opens Add Account ›
+   * Enterprise with it filled in, and it still takes a click on Continue. Cleared when an account is added or Add
+   * Account is cancelled. Absent from desktops before it.
+   */
+  pendingSetup?: string | null;
 }
 
 /** One thing not yet on the server, listed on screen 14. */

@@ -62,6 +62,11 @@ export function queueRemoval(appDb: AppDb, path: string, partition: string | nul
   appDb.run('INSERT OR REPLACE INTO pending_removals (path, partition, queued_at) VALUES (?, ?, ?)', path, partition, now.toISOString());
 }
 
+/** Takes a path off the removal queue (a connect run's partition that became an account's own). */
+export function unqueueRemoval(appDb: AppDb, path: string): void {
+  appDb.run('DELETE FROM pending_removals WHERE path = ?', path);
+}
+
 export async function removeAccount(d: RemovalDeps, id: string, opts: { keepOfflineFiles: boolean }): Promise<void> {
   const account = d.registry.get(id);
   if (!account) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
