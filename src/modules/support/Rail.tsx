@@ -28,6 +28,7 @@ const VIEW_ICON: Record<string, string> = {
   all: 'list',
   needs_organization: 'building',
   trash: 'trash',
+  snoozed: 'snooze',
 };
 
 export interface OrgChoice {

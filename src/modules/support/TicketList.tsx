@@ -1,16 +1,16 @@
-import { useRef, useState, type ReactNode, type RefObject } from 'react';
-import { PRIORITIES, PRIORITY_LABEL, SORTS, SORT_LABEL, STATUSES, statusLabel, type SupportSort, type SupportStatus, type Ticket } from '@shared/support';
+import { useRef, useState, type MouseEvent, type ReactNode, type RefObject } from 'react';
+import { PRIORITIES, PRIORITY_LABEL, SORTS, SORT_LABEL, STATUSES, statusLabel, type SupportSort, type Ticket } from '@shared/support';
 import { text } from '../../core/i18n';
 import { conversationStamp } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Menu, type MenuSection } from '../../components/Menu';
+import { Select } from '../../components/Select';
 import { RowLead } from '../../components/RowLead';
 import { pickOf, type PickHow } from '../../components/useListSelection';
-import { Select } from '../../components/Select';
 import { VirtualList } from '../../components/VirtualList';
 import { Button, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { ticketCount } from './bulk';
-import { ChannelIcon, PriorityChip, Reference, STATUS_TONE, SlaChip, channelIcon, channelLabel, requesterLine } from './parts';
+import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusDot, channelIcon, channelLabel, requesterLine, statusDotTitle } from './parts';
 
 /**
  * The inbox's list (D-01, FR-WSP-05): compact rows — the status dot, the channel's icon, the reference in monospace,
@@ -18,11 +18,6 @@ import { ChannelIcon, PriorityChip, Reference, STATUS_TONE, SlaChip, channelIcon
  * asked for as the list nears its end (`next_cursor`), drawn only where it shows, so a long view scrolls as a short
  * one does. Filtered by status, priority and channel (`source=`, #298); New ticket (C) beside the filters for
  * whoever may raise one.
- *
- * Picking several (#333): each row's checkbox (the lead column, as in Mail), ⌘/Ctrl-click toggles a row and ⇧-click
- * picks the run from the last one picked; the bulk bar (`bulk`) shows over the rows while any is picked. A right-click
- * opens the row's menu — on the rows picked, when it is one of them. The heading says the view and how many tickets it
- * has, the server's count: "Open · 12 tickets", "Resolved · 1 ticket".
  */
 export interface ListFilters {
   status: string[];
@@ -35,6 +30,32 @@ export const NO_FILTERS: ListFilters = { status: [], priority: [], source: [] };
 
 /** The channels the filter offers, in this order, of those the server knows (`GET meta`'s `sources`). */
 export const CHANNEL_FILTERS = ['email', 'chat', 'phone', 'walk_in', 'manual', 'portal', 'form', 'widget_offline', 'whatsapp', 'api'] as const;
+
+/**
+ * Picking tickets (worksuite-desktop#333), as Mail's list does: the checkbox in the row's lead column on hover, ⇧ for a
+ * range, ⌘ / Ctrl to toggle; once anything is picked every row shows its box and `bar` (the bulk bar) stands in place
+ * of the list's title.
+ */
+export interface ListSelection {
+  selected: ReadonlySet<number>;
+  selecting: boolean;
+  onPick: (id: number, how: PickHow) => void;
+  /** The bulk bar and "Select all matching", shown while anything is picked. */
+  bar: ReactNode;
+}
+
+/**
+ * What the count beside the title says (worksuite-desktop#333): the view's own count, in the view's terms — "Resolved ·
+ * 1 ticket", never "1 open" over a list of resolved tickets. Searched or filtered, how many are listed ("12+ listed"
+ * while more pages wait).
+ */
+export function countWords(count: number | null, narrowed: boolean, listed: number, more: boolean): string | null {
+  if (narrowed) return listed || !more ? text('{count} listed', { count: `${listed}${more ? '+' : ''}` }) : null;
+  return count === null ? null : ticketCount(count);
+}
+
+/** The row's status dot's tooltip and name: "Status: Resolved — Solved: …" (`statusDotTitle`). */
+export const statusDotLabel = statusDotTitle;
 
 /** The channels to filter by: the desk's own, as far as this server has them (all of them when it says nothing). */
 export function channelChoices(sources: readonly string[] | null | undefined): string[] {
@@ -67,16 +88,12 @@ export function TicketList({
   onNew,
   searchRef,
   now,
-  countMore = false,
-  picked,
-  onPick = null,
-  onRowMenu = null,
-  bulk = null,
+  selection,
+  onRowMenu,
+  onShortcuts,
 }: {
   title: string;
   count: number | null;
-  /** The count is only of the tickets loaded and more match ("50+ tickets"): a search or a filter the server does not count. */
-  countMore?: boolean;
   live: boolean;
   offline: boolean;
   rows: Ticket[];
@@ -102,13 +119,12 @@ export function TicketList({
   onNew?: (() => void) | null;
   searchRef: RefObject<HTMLInputElement | null>;
   now: number;
-  /** The tickets picked for the bulk bar (#333). */
-  picked?: ReadonlySet<number>;
-  onPick?: ((id: number, how: PickHow) => void) | null;
-  /** A right-click on a row, at the mouse. */
-  onRowMenu?: ((t: Ticket, x: number, y: number) => void) | null;
-  /** The bulk bar, shown over the rows while any is picked. */
-  bulk?: ReactNode;
+  /** Several tickets picked at once (#333); none for a list that only reads. */
+  selection?: ListSelection;
+  /** The right-click menu on a row (#333). */
+  onRowMenu?: (e: MouseEvent, id: number) => void;
+  /** The keyboard shortcuts popover (`?`). */
+  onShortcuts?: () => void;
 }) {
   const [menu, setMenu] = useState(false);
   const filterButton = useRef<HTMLButtonElement>(null);
@@ -127,15 +143,17 @@ export function TicketList({
     },
   ];
   const sortChoices = (SORTS as readonly string[]).filter((s) => sorts.includes(s)) as SupportSort[];
+  const words = countWords(count, !!q.trim() || filtered > 0, rows.length, hasMore);
 
   return (
     <section aria-label={title} className="flex h-full min-w-0 flex-col bg-surface">
       <header className="flex shrink-0 flex-col gap-2 border-b border-line px-3 pt-3 pb-2">
-        <div className="flex min-w-0 items-center gap-2">
+        {selection?.selecting ? selection.bar : null}
+        <div className={cx('flex min-w-0 items-center gap-2', selection?.selecting && 'hidden')}>
           <h2 className="truncate text-[15px] font-extrabold text-ink">{title}</h2>
-          {count !== null ? (
+          {words ? (
             <span data-list-count className="shrink-0 text-[12px] text-ink-3">
-              · {ticketCount(count, countMore)}
+              · {words}
             </span>
           ) : null}
           {offline ? (
@@ -198,9 +216,13 @@ export function TicketList({
               {text('Clear filters')}
             </button>
           ) : null}
+          {onShortcuts ? (
+            <button type="button" onClick={onShortcuts} aria-keyshortcuts="?" title={text('Keyboard shortcuts (?)')} aria-label={text('Keyboard shortcuts')} className="ml-auto flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-3 hover:bg-subtle hover:text-ink">
+              <Icon name="keyboard" size={14} />
+            </button>
+          ) : null}
         </div>
       </header>
-      {bulk}
       {menu ? <Menu label={text('Filters')} anchor={filterButton} prefer="bottom" align="end" width={240} sections={sections} onClose={() => setMenu(false)} /> : null}
       <div className="flex min-h-0 flex-1 flex-col">
         {loading ? <Spinner /> : null}
@@ -213,26 +235,14 @@ export function TicketList({
           <Empty icon="inbox" title={q || filtered ? text('No tickets match') : text('Nothing in this view')} hint={q || filtered ? text('Try other words, or clear the filters.') : text('Tickets show here as they arrive.')} />
         ) : null}
         {rows.length ? (
-          <div role="listbox" aria-label={title} aria-activedescendant={selectedId ? `support-row-${selectedId}` : undefined} className="min-h-0 flex-1">
+          <div role="listbox" aria-label={title} aria-multiselectable={selection ? true : undefined} aria-activedescendant={selectedId ? `support-row-${selectedId}` : undefined} className="min-h-0 flex-1">
             <VirtualList
               className="h-full overflow-y-auto scroll-thin"
               items={rows}
               estimate={76}
               getKey={(t) => t.id}
               onEndReached={hasMore && !loadingMore ? onMore : undefined}
-              render={(t) => (
-                <Row
-                  t={t}
-                  selected={t.id === selectedId}
-                  picked={picked?.has(t.id) ?? false}
-                  selecting={(picked?.size ?? 0) > 0}
-                  now={now}
-                  onSelect={onSelect}
-                  onOpen={onOpen}
-                  onPick={onPick}
-                  onMenu={onRowMenu}
-                />
-              )}
+              render={(t) => <Row t={t} selected={t.id === selectedId} now={now} onSelect={onSelect} onOpen={onOpen} selection={selection} onMenu={onRowMenu} />}
             />
           </div>
         ) : null}
@@ -242,97 +252,67 @@ export function TicketList({
   );
 }
 
-/** What a row's status dot means, said under the mouse and to a screen reader: the dot is the status's colour alone. */
-const STATUS_MEANING: Record<SupportStatus, string> = {
-  new: 'Nobody has answered it yet',
-  open: 'Waiting for the desk',
-  in_progress: 'Somebody is working on it',
-  pending_customer: 'Waiting for the requester',
-  pending_internal: 'Waiting for a colleague',
-  escalated: 'Escalated for more help',
-  resolved: 'Fixed: waiting to be closed, or for the requester to write back',
-  closed: 'Finished',
-};
-
-/** "Status: Resolved — Fixed: …": the row's status dot's tooltip and name. */
-export function statusDotLabel(status: SupportStatus): string {
-  const meaning = STATUS_MEANING[status];
-  return meaning ? text('Status: {status} — {meaning}', { status: text(statusLabel(status)), meaning: text(meaning) }) : text('Status: {status}', { status: text(statusLabel(status)) });
-}
-
-function RowStatusDot({ status }: { status: SupportStatus }) {
-  const tone = STATUS_TONE[status] ?? STATUS_TONE.open;
-  const label = statusDotLabel(status);
-  return <span role="img" aria-label={label} title={label} data-status-dot={status} className={cx('inline-block h-2 w-2 shrink-0 rounded-full', tone.dot)} />;
-}
-
 function Row({
   t,
   selected,
-  picked,
-  selecting,
   now,
   onSelect,
   onOpen,
-  onPick,
+  selection,
   onMenu,
 }: {
   t: Ticket;
   selected: boolean;
-  picked: boolean;
-  selecting: boolean;
   now: number;
   onSelect: (id: number) => void;
   onOpen: (id: number) => void;
-  onPick: ((id: number, how: PickHow) => void) | null;
-  onMenu: ((t: Ticket, x: number, y: number) => void) | null;
+  selection?: ListSelection;
+  onMenu?: (e: MouseEvent, id: number) => void;
 }) {
   const unread = t.unread > 0;
-  // The lines under the first start where its reference does, past the lead column.
-  const indent = onPick ? 'pl-[34px]' : 'pl-[18px]';
+  const picked = selection?.selected.has(t.id) ?? false;
   return (
     <div
       id={`support-row-${t.id}`}
       role="option"
-      aria-selected={selected}
+      aria-selected={selected || picked}
       data-ticket={t.id}
       data-picked={picked || undefined}
       onClick={(e) => {
-        // ⌘/Ctrl-click picks the row, ⇧-click the run to it (#333); a plain click reads it.
-        const how = onPick ? pickOf(e) : null;
-        if (how && onPick) {
+        // ⌘ / Ctrl toggles, ⇧ picks the range (#333); a plain click reads the ticket.
+        const how = selection ? pickOf(e) : null;
+        if (how) {
           e.preventDefault();
-          onPick(t.id, how);
-          return;
-        }
-        onSelect(t.id);
+          selection!.onPick(t.id, how);
+        } else onSelect(t.id);
       }}
       onDoubleClick={() => onOpen(t.id)}
       onContextMenu={
         onMenu
           ? (e) => {
               e.preventDefault();
-              onMenu(t, e.clientX, e.clientY);
+              onMenu(e, t.id);
             }
           : undefined
       }
       className={cx(
-        'group relative flex cursor-default flex-col gap-0.5 border-b border-line py-2 pr-3 pl-1.5',
-        selected ? 'bg-selection' : picked ? 'bg-selection/50' : 'hover:bg-subtle',
+        'group relative flex cursor-default flex-col gap-0.5 border-b border-line py-2 pr-3 pl-1',
+        picked ? 'bg-selection/70' : selected ? 'bg-selection' : 'hover:bg-subtle',
         // Unread: bold, with a blue edge (D-01).
-        unread && 'before:absolute before:inset-y-1.5 before:left-1 before:w-[3px] before:rounded-full before:bg-[#2563EB]',
+        unread && 'before:absolute before:inset-y-1.5 before:left-0.5 before:w-[3px] before:rounded-full before:bg-[#2563EB]',
       )}
     >
       <span className="flex min-w-0 items-center gap-1.5">
-        {onPick ? <RowLead checked={picked} selecting={selecting} onPick={(how) => onPick(t.id, how)} label={text('Select {ref}', { ref: t.reference })} className="-mr-1" /> : <span className="w-2 shrink-0" />}
-        <RowStatusDot status={t.status} />
+        {selection ? <RowLead checked={picked} selecting={selection.selecting} onPick={(how) => selection.onPick(t.id, how)} label={text('Select {ref}', { ref: t.reference })} /> : <RowLead />}
+        <StatusDot status={t.status} />
         <ChannelIcon source={t.source} size={12} />
         <Reference>{t.reference}</Reference>
         <PriorityChip priority={t.priority} quiet className="py-0 text-[10.5px]" />
+        {t.snoozed_until && Date.parse(t.snoozed_until) > now ? <Icon name="snooze" size={12} className="text-ink-3" label={text('Snoozed')} /> : null}
         <span className="ml-auto shrink-0 text-[11px] text-ink-3">{conversationStamp(t.updated_at)}</span>
       </span>
-      <span className={cx('truncate text-[13px]', indent, unread ? 'font-bold text-ink' : 'text-ink')}>{t.subject}</span>
-      <span className={cx('flex min-w-0 items-center gap-2 text-[11.5px] text-ink-3', indent)}>
+      <span className={cx('truncate pl-[34px] text-[13px]', unread ? 'font-bold text-ink' : 'text-ink')}>{t.subject}</span>
+      <span className="flex min-w-0 items-center gap-2 pl-[34px] text-[11.5px] text-ink-3">
         <span className="min-w-0 flex-1 truncate">{requesterLine(t.requester)}</span>
         <SlaChip sla={t.sla} now={now} className="py-0 text-[10.5px]" />
       </span>

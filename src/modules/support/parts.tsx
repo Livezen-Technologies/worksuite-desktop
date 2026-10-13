@@ -37,10 +37,28 @@ export function StatusChip({ status, className }: { status: SupportStatus; class
   return <span className={cx(CHIP, tone.chip, className)}>{text(statusLabel(status))}</span>;
 }
 
-/** The status as a dot, for a row where the chip would crowd it; the words are its label. */
+/** What a status dot means, said on hover (worksuite-desktop#333: the green dot by the reference had no explanation). */
+export const STATUS_MEANING: Record<SupportStatus, string> = {
+  new: 'Nobody has answered yet',
+  open: 'Being worked on',
+  in_progress: 'Somebody is working on it now',
+  pending_customer: 'Waiting for the customer to reply',
+  pending_internal: 'On hold, waiting on the team',
+  escalated: 'Escalated for attention',
+  resolved: 'Solved: waiting for the customer to confirm, or to close by itself',
+  closed: 'Closed: a reply starts a follow-up',
+};
+
+/** The tooltip of a status dot: the status and what it means ("Status: Resolved — Solved: …"). */
+export function statusDotTitle(status: SupportStatus): string {
+  return text('Status: {status} — {meaning}', { status: text(statusLabel(status)), meaning: text(STATUS_MEANING[status] ?? '') });
+}
+
+/** The status as a dot, for a row where the chip would crowd it; its name and tooltip say the status and what it means. */
 export function StatusDot({ status, className }: { status: SupportStatus; className?: string }) {
   const tone = STATUS_TONE[status] ?? STATUS_TONE.open;
-  return <span role="img" aria-label={text(statusLabel(status))} title={text(statusLabel(status))} className={cx('inline-block h-2 w-2 shrink-0 rounded-full', tone.dot, className)} />;
+  const label = statusDotTitle(status);
+  return <span role="img" aria-label={label} title={label} className={cx('inline-block h-2 w-2 shrink-0 cursor-help rounded-full', tone.dot, className)} />;
 }
 
 export function PriorityChip({ priority, quiet = false, className }: { priority: SupportPriority; /** Normal and Low not shown at all. */ quiet?: boolean; className?: string }) {

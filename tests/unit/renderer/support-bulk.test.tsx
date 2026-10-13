@@ -6,9 +6,10 @@ import type * as CoreApi from '../../../src/core/api';
 
 /**
  * The inbox's actions on tickets (#333): the right-click menu (only what I may do, the tickets' own values ticked),
- * picking several (checkbox, ⌘/Ctrl-click, ⇧-click, X, ⌘A, Esc), the bulk bar's `POST tickets/bulk` with its per-ticket
- * refusals and Undo, the confirmation before requesters may be emailed, the list's keys, the heading's count, and the
- * status dot's tooltip.
+ * picking several (checkbox, ⌘/Ctrl-click, ⇧-click, X, ⌘A, Esc), the bulk bar's `POST tickets/bulk` with the versions
+ * the list showed, its per-ticket refusals and Undo, the confirmation before requesters may be emailed, the list's keys,
+ * the heading's count, and the status dot's tooltip. The words, the menu's groups and the dialogs are those of
+ * support-list-actions.test.tsx (the issue's); this file keeps the scenarios of the first, smaller version.
  */
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), request: vi.fn() }));
 vi.mock('../../../src/core/bridge', () => ({
@@ -20,7 +21,7 @@ vi.mock('../../../src/core/bridge', () => ({
   platform: 'linux',
   registerDropped: vi.fn(),
 }));
-vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
+vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn(), dismissKey: vi.fn() }));
 const nav = vi.hoisted(() => ({ navigate: vi.fn(), go: vi.fn() }));
 vi.mock('../../../src/core/tab-context', () => ({
   useTab: () => ({ tabId: 't1', route: '/support', active: true, path: ['support'], query: new URLSearchParams(), go: nav.go, navigate: nav.navigate, openInNewTab: () => undefined, openInWindow: () => undefined, setTitle: () => undefined, openLink: () => undefined }),
@@ -98,7 +99,9 @@ const renderInbox = (route = '/support') => {
 const key = (k: string, init: KeyboardEventInit = {}) => fireEvent.keyDown(window, { key: k, ...init });
 const row = (id: number) => document.getElementById(`support-row-${id}`) as HTMLElement;
 const box = (id: number) => within(row(id)).getByRole('checkbox', { name: `Select CFX-00${id}` });
-const bar = () => screen.queryByRole('toolbar', { name: 'Selected tickets' });
+const bar = () => screen.queryByRole('toolbar', { name: 'Bulk actions' });
+/** A menu item by its name, whichever kind of item it is (plain, checkbox or radio). */
+const itemIn = (menu: HTMLElement, name: RegExp | string) => [...within(menu).queryAllByRole('menuitem', { name }), ...within(menu).queryAllByRole('menuitemcheckbox', { name }), ...within(menu).queryAllByRole('menuitemradio', { name })][0] ?? null;
 
 beforeEach(() => {
   resetApiFamily();
@@ -182,8 +185,9 @@ describe('the parts', () => {
   });
 
   it('explains the status dot', () => {
-    expect(statusDotLabel('resolved')).toBe('Status: Resolved — Fixed: waiting to be closed, or for the requester to write back');
-    expect(statusDotLabel('open')).toBe('Status: Open — Waiting for the desk');
+    // The words are the issue's (support-list-actions.test.tsx): Resolved reads as Solved.
+    expect(statusDotLabel('resolved')).toBe('Status: Resolved — Solved: waiting for the customer to confirm, or to close by itself');
+    expect(statusDotLabel('open')).toBe('Status: Open — Being worked on');
   });
 });
 
@@ -204,14 +208,15 @@ describe('the heading', () => {
     await ready();
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search tickets' }), { target: { value: 'licence' } });
     await waitFor(() => expect(calls('GET', '/api/support/v1/tickets').at(-1)!.query).toMatchObject({ q: 'licence' }));
-    await waitFor(() => expect(document.querySelector('[data-list-count]')?.textContent).toBe('· 3 tickets'));
+    // Searched, the count is how many are listed ("12+ listed" while more pages wait), never the view's own.
+    await waitFor(() => expect(document.querySelector('[data-list-count]')?.textContent).toBe('· 3 listed'));
   });
 
   it('gives each row’s status dot a tooltip and a name', async () => {
     renderInbox();
     await ready();
-    const dot = within(row(1284)).getByRole('img', { name: 'Status: Open — Waiting for the desk' });
-    expect(dot.getAttribute('title')).toBe('Status: Open — Waiting for the desk');
+    const dot = within(row(1284)).getByRole('img', { name: 'Status: Open — Being worked on' });
+    expect(dot.getAttribute('title')).toBe('Status: Open — Being worked on');
     expect(screen.getByText('live').getAttribute('title')).toContain('updates as tickets change');
   });
 });
@@ -221,28 +226,28 @@ describe('the right-click menu', () => {
     renderInbox();
     await ready();
     fireEvent.contextMenu(screen.getByText('Subject 1284'));
-    const menu = await screen.findByRole('menu', { name: 'Actions for CFX-001284' });
-    const names = within(menu).getAllByRole('menuitem').map((m) => m.getAttribute('aria-labelledby') && document.getElementById(m.getAttribute('aria-labelledby')!)?.textContent);
-    expect(names).toEqual(['Open', 'Open in a new tab', 'Status', 'Assign', 'Priority', 'Organise', 'Reply', 'Add internal note', 'Copy reference', 'Copy link', 'Delete…']);
+    const menu = await screen.findByRole('menu', { name: 'Ticket actions' });
+    for (const name of ['Open', 'Open in new tab', 'Status', 'Assign to me', 'Assign to…', 'Priority', 'Add tag…', 'Reply', 'Add internal note', 'Copy ticket ID', 'Copy link', 'Delete…'])
+      expect(itemIn(menu, new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`)), name).toBeTruthy();
 
-    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Status' }));
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^Status/ }));
     const status = await screen.findByRole('menu', { name: 'Status' });
     expect(within(status).getByRole('menuitemradio', { name: 'Open' }).getAttribute('aria-checked')).toBe('true');
-    expect(within(status).getByRole('menuitemradio', { name: 'Resolved' }).getAttribute('aria-checked')).toBe('false');
+    expect(within(status).getByRole('menuitemradio', { name: 'Solved' }).getAttribute('aria-checked')).toBe('false');
     // New is not a move the state machine allows from Open.
     expect(within(status).queryByRole('menuitemradio', { name: 'New' })).toBeNull();
 
-    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Priority' }));
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^Priority/ }));
     const priority = await screen.findByRole('menu', { name: 'Priority' });
     expect(within(priority).getByRole('menuitemradio', { name: 'Urgent' }).getAttribute('aria-checked')).toBe('true');
 
-    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Assign' }));
-    const assign = await screen.findByRole('menu', { name: 'Assign' });
-    expect(within(assign).getByRole('menuitemradio', { name: 'Me' }).getAttribute('aria-checked')).toBe('true');
-    await within(assign).findByRole('menuitemradio', { name: 'Nimal Perera' });
-    fireEvent.click(within(assign).getByRole('menuitemradio', { name: 'Nimal Perera' }));
+    // Assigned to me: ticked. Assign to… finds somebody else.
+    expect(within(menu).getByRole('menuitemcheckbox', { name: /^Assign to me/ }).getAttribute('aria-checked')).toBe('true');
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^Assign to…/ }));
+    const assign = await screen.findByRole('dialog', { name: 'Assign to…' });
+    fireEvent.click(await within(assign).findByRole('button', { name: /Nimal Perera/ }));
     await waitFor(() => expect(bulkCalls()[0]).toEqual({ ids: [1284], action: 'assign', user_id: 4, versions: { 1284: 7 } }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', 'Assigned to Nimal Perera · 1 ticket', expect.objectContaining({ label: 'Undo' }), 8000, { key: 'support-bulk' }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', '1 ticket assigned to Nimal Perera', expect.objectContaining({ label: 'Undo' }), 5000, { key: 'support-bulk' }));
   });
 
   it('hides what I may not do', async () => {
@@ -250,19 +255,19 @@ describe('the right-click menu', () => {
     renderInbox();
     await ready();
     fireEvent.contextMenu(screen.getByText('Subject 1284'));
-    const menu = await screen.findByRole('menu', { name: 'Actions for CFX-001284' });
-    expect(within(menu).queryByRole('menuitem', { name: 'Status' })).toBeNull();
-    expect(within(menu).queryByRole('menuitem', { name: 'Priority' })).toBeNull();
-    expect(within(menu).queryByRole('menuitem', { name: 'Assign' })).toBeNull();
-    expect(within(menu).queryByRole('menuitem', { name: 'Delete…' })).toBeNull();
-    expect(within(menu).queryByRole('menuitem', { name: 'Add internal note' })).toBeNull();
-    expect(within(menu).getByRole('menuitem', { name: 'Reply' })).toBeTruthy();
-    // An unassigned ticket I may reply to, I may take.
+    const menu = await screen.findByRole('menu', { name: 'Ticket actions' });
+    expect(within(menu).queryByRole('menuitem', { name: /^Status/ })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: /^Priority/ })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: /^Assign to…/ })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: /^Delete/ })).toBeNull();
+    expect(within(menu).queryByRole('menuitem', { name: /^Add internal note/ })).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: /^Reply/ })).toBeTruthy();
+    // An unassigned ticket I may reply to, I may take — and give to nobody else.
     fireEvent.keyDown(menu, { key: 'Escape' });
     fireEvent.contextMenu(screen.getByText('Subject 1292'));
-    const other = await screen.findByRole('menu', { name: 'Actions for CFX-001292' });
-    fireEvent.click(within(other).getByRole('menuitem', { name: 'Assign' }));
-    expect(within(await screen.findByRole('menu', { name: 'Assign' })).getAllByRole('menuitemradio').map((m) => m.textContent)).toEqual(['MeA']);
+    const other = await screen.findByRole('menu', { name: 'Ticket actions' });
+    expect(within(other).getByRole('menuitemcheckbox', { name: /^Assign to me/ }).getAttribute('aria-checked')).toBe('false');
+    expect(within(other).queryByRole('menuitem', { name: /^Assign to…/ })).toBeNull();
   });
 
   it('Reply opens the ticket at its composer; Open in a new tab opens its tab', async () => {
@@ -270,7 +275,7 @@ describe('the right-click menu', () => {
     renderInbox();
     await ready();
     fireEvent.contextMenu(screen.getByText('Subject 1292'));
-    fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: 'Open in a new tab' }));
+    fireEvent.click(within(await screen.findByRole('menu')).getByRole('menuitem', { name: /^Open in new tab/ }));
     expect(nav.navigate).toHaveBeenCalledWith('/support/ticket/1292');
   });
 
@@ -281,14 +286,13 @@ describe('the right-click menu', () => {
     fireEvent.click(box(1292));
     fireEvent.contextMenu(screen.getByText('Subject 1292'));
     const menu = await screen.findByRole('menu', { name: 'Actions for 2 tickets' });
-    expect(within(menu).queryByRole('menuitem', { name: 'Open' })).toBeNull();
-    expect(within(menu).getByRole('menuitem', { name: 'Merge 2 tickets…' })).toBeTruthy();
-    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Organise' }));
-    const tags = await screen.findByRole('menu', { name: 'Organise' });
-    // vip is on one of the two only: not ticked, and choosing it tags both.
-    const vip = within(tags).getByRole('menuitemcheckbox', { name: 'vip' });
-    expect(vip.getAttribute('aria-checked')).toBe('false');
-    fireEvent.click(vip);
+    expect(within(menu).queryByRole('menuitem', { name: /^Open$/ })).toBeNull();
+    expect(within(menu).getByRole('menuitem', { name: /^Merge 2 tickets…/ })).toBeTruthy();
+    fireEvent.click(within(menu).getByRole('menuitem', { name: /^Add tag…/ }));
+    const tags = await screen.findByRole('dialog', { name: 'Tag 2 tickets' });
+    // vip is on one of the two only: adding it tags both.
+    fireEvent.change(within(tags).getByRole('combobox', { name: /^Tags/ }), { target: { value: 'vip' } });
+    fireEvent.click(within(tags).getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(bulkCalls()[0]).toEqual({ ids: [1284, 1292], action: 'tag', tags: ['vip'], versions: { 1284: 7, 1292: 7 } }));
   });
 });
@@ -334,17 +338,17 @@ describe('picking several', () => {
     expect(bar()).toBeNull();
   });
 
-  it('offers to load the rest when all loaded are picked and more match, and to pick all loaded otherwise', () => {
-    const actions = { can: () => ({ status: [], assign: false, take: false, edit: false, merge: false, delete: false, restore: false }), openMenu: vi.fn(), run: vi.fn() } as never;
-    const more = vi.fn();
+  it('offers to pick every match when all loaded are picked and more match, and to pick all loaded otherwise', () => {
+    const may = { status: false, assign: false, priority: false, tag: false, merge: false, snooze: false };
+    const matching = vi.fn();
     const all = vi.fn();
-    const ts = ROWS() as never[];
-    const { rerender } = render(<BulkBar targets={ts} loaded={3} more actions={actions} onSelectAll={all} onLoadMore={more} onClear={() => undefined} />);
-    expect(screen.getByText(/All 3 tickets loaded are selected; more match this view/)).toBeTruthy();
-    fireEvent.click(screen.getByRole('button', { name: 'Load more' }));
-    expect(more).toHaveBeenCalled();
-    rerender(<BulkBar targets={ts.slice(0, 1)} loaded={3} more actions={actions} onSelectAll={all} onLoadMore={more} onClear={() => undefined} />);
-    fireEvent.click(screen.getByRole('button', { name: 'Select all 3+ tickets' }));
+    const props = { may, loaded: 3, more: true, matching: null, matchingLabel: 'Select all 12 tickets in My tickets', progress: null, onMenu: vi.fn(), onTag: vi.fn(), onMerge: vi.fn(), onSnooze: vi.fn(), onSelectAll: all, onSelectAllMatching: matching, onClear: () => undefined };
+    const { rerender } = render(<BulkBar {...props} count={3} all />);
+    expect(screen.getByText(/All 3 on this page selected/)).toBeTruthy();
+    fireEvent.click(screen.getByRole('button', { name: 'Select all 12 tickets in My tickets' }));
+    expect(matching).toHaveBeenCalled();
+    rerender(<BulkBar {...props} count={1} all={false} />);
+    fireEvent.click(screen.getByRole('button', { name: 'Select all 3 tickets loaded' }));
     expect(all).toHaveBeenCalled();
   });
 });
@@ -363,15 +367,18 @@ describe('the bulk bar', () => {
     fireEvent.click(within(bar()!).getByRole('button', { name: /Priority/ }));
     fireEvent.click(within(await screen.findByRole('menu', { name: 'Priority for 3 tickets' })).getByRole('menuitemradio', { name: 'High' }));
     await waitFor(() => expect(bulkCalls()[0]).toEqual({ ids: [1284, 1292, 1293], action: 'priority', priority: 'high', versions: { 1284: 7, 1292: 7, 1293: 7 } }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('warning', 'Priority: High · 2 of 3 done — 1 refused: Changed by somebody else (CFX-001292)', expect.objectContaining({ label: 'Undo' }), 12000, { key: 'support-bulk' }));
-    const undo = vi.mocked(toast).mock.calls.find((c) => c[0] === 'warning')![2]!;
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', '2 tickets set to High', expect.objectContaining({ label: 'Undo' }), 5000, { key: 'support-bulk' }));
+    expect(toast).toHaveBeenCalledWith('error', '1 ticket could not be changed: Changed by somebody else (CFX-001292)');
+    // This answer has no `before`: Undo is planned from the tickets as listed, at the versions the change left.
+    const undo = vi.mocked(toast).mock.calls.find((c) => c[1] === '2 tickets set to High')![2]!;
     act(() => undo.run());
     await waitFor(() => expect(bulkCalls()).toHaveLength(3));
     expect(bulkCalls().slice(1)).toEqual([
-      { action: 'priority', priority: 'urgent', ids: [1284], versions: { 1284: 8 } },
-      { action: 'priority', priority: 'normal', ids: [1293], versions: { 1293: 9 } },
+      { action: 'priority', priority: 'urgent', ids: [1284], versions: { 1284: 8 }, reason: 'Undo' },
+      { action: 'priority', priority: 'normal', ids: [1293], versions: { 1293: 9 }, reason: 'Undo' },
     ]);
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', 'Undone · 2 tickets', undefined, undefined, { key: 'support-bulk' }));
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', '1 ticket set to Normal', undefined, 5000, { key: 'support-bulk' }));
+    expect(toast).toHaveBeenCalledWith('success', '1 ticket set to Urgent', undefined, 5000, { key: 'support-bulk' });
   });
 
   it('shows only what I may do, and Merge for two or more', async () => {
@@ -379,26 +386,35 @@ describe('the bulk bar', () => {
     renderInbox();
     await ready();
     fireEvent.click(box(1284));
-    const names = () => within(bar()!).getAllByRole('button').map((b) => b.textContent?.trim());
-    expect(names()).toEqual(['Status', 'Priority', 'Tag', 'Clear']);
+    const names = () => within(bar()!).getAllByRole('button').map((b) => b.getAttribute('aria-label') ?? b.textContent?.replace('▾', '').trim());
+    expect(names()).toEqual(['Status', 'Assign', 'Priority', 'Tag', 'Snooze', 'More actions', 'Clear']);
+    // No "merge": no Merge, however many are picked.
+    fireEvent.click(box(1292));
+    expect(names()).toEqual(['Status', 'Assign', 'Priority', 'Tag', 'Snooze', 'More actions', 'Clear']);
+    cleanup();
+    serve({ 'GET /api/support/v1/meta': meta({ view: true }) });
+    renderInbox();
+    await ready();
+    fireEvent.click(box(1284));
+    expect(names()).toEqual(['More actions', 'Clear']);
     cleanup();
     serve();
     renderInbox();
     await ready();
     fireEvent.click(box(1284));
-    expect(names()).toEqual(['Status', 'Assign', 'Priority', 'Tag', 'Delete', 'Clear']);
+    expect(names()).toEqual(['Status', 'Assign', 'Priority', 'Tag', 'Snooze', 'More actions', 'Clear']);
     fireEvent.click(box(1292));
-    expect(names()).toEqual(['Status', 'Assign', 'Priority', 'Tag', 'Merge', 'Delete', 'Clear']);
+    expect(names()).toEqual(['Status', 'Assign', 'Priority', 'Tag', 'Merge', 'Snooze', 'More actions', 'Clear']);
   });
 
-  it('adds a new tag typed into the tag menu', async () => {
+  it('adds a new tag typed into the tag dialog', async () => {
     renderInbox();
     await ready();
     fireEvent.click(box(1292));
     fireEvent.click(within(bar()!).getByRole('button', { name: /Tag/ }));
-    const menu = await screen.findByRole('menu', { name: 'Tags for CFX-001292' });
-    fireEvent.change(screen.getByRole('textbox', { name: 'Find or add a tag' }), { target: { value: 'Refund' } });
-    fireEvent.click(await within(menu).findByRole('menuitem', { name: 'Add tag “refund”' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Add tag' });
+    fireEvent.change(within(dialog).getByRole('combobox', { name: /^Tags/ }), { target: { value: 'Refund' } });
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Add' }));
     await waitFor(() => expect(bulkCalls()[0]).toMatchObject({ ids: [1292], action: 'tag', tags: ['refund'] }));
   });
 
@@ -407,58 +423,63 @@ describe('the bulk bar', () => {
     await ready();
     fireEvent.click(box(1284));
     fireEvent.click(box(1292));
-    fireEvent.click(within(bar()!).getByRole('button', { name: /Delete/ }));
+    fireEvent.click(within(bar()!).getByRole('button', { name: 'More actions' }));
+    fireEvent.click(within(await screen.findByRole('menu', { name: 'More actions for 2 tickets' })).getByRole('menuitem', { name: /^Delete 2 tickets…/ }));
     const dialog = await screen.findByRole('dialog', { name: 'Delete 2 tickets?' });
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }));
     await waitFor(() => expect(bulkCalls()[0]).toEqual({ ids: [1284, 1292], action: 'delete', versions: { 1284: 7, 1292: 7 } }));
     // Deleted: out of the selection.
     await waitFor(() => expect(bar()).toBeNull());
 
-    fireEvent.click(box(1292));
+    // The list is read again (this server still lists them).
+    fireEvent.click(await screen.findByRole('checkbox', { name: 'Select CFX-001292' }));
     fireEvent.click(box(1293));
-    fireEvent.click(within(bar()!).getByRole('button', { name: /Merge/ }));
+    fireEvent.click(within(bar()!).getByRole('button', { name: 'Merge' }));
     const merge = await screen.findByRole('dialog', { name: 'Merge 2 tickets' });
     fireEvent.click(within(merge).getByRole('radio', { name: /CFX-001293/ }));
     fireEvent.click(within(merge).getByRole('button', { name: 'Merge' }));
-    await waitFor(() => expect(bulkCalls()[1]).toEqual({ ids: [1292, 1293], action: 'merge', primary_id: 1293 }));
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', 'Merged into CFX-001293 · 2 tickets', undefined, 8000, { key: 'support-bulk' }));
+    await waitFor(() => expect(bulkCalls()[1]).toEqual({ ids: [1293, 1292], action: 'merge', primary_id: 1293, notify: false }));
+    // A merge cannot be undone.
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', '2 tickets merged', undefined, 5000, { key: 'support-bulk' }));
   });
 });
 
 describe('the keys on what is picked', () => {
-  it('E asks before resolving — the survey can be held back, ticket by ticket', async () => {
+  it('E asks before resolving — the customers can be left unwritten to', async () => {
     serve({ 'POST /api/support/v1/tickets/1284/transition': { ticket: ticket(1284, { status: 'resolved', version: 8 }) }, 'POST /api/support/v1/tickets/1292/transition': { ticket: ticket(1292, { status: 'resolved', version: 8 }) } });
     renderInbox();
     await ready();
     fireEvent.click(box(1284));
     fireEvent.click(box(1292));
     key('e');
-    const dialog = await screen.findByRole('dialog', { name: 'Resolve 2 tickets?' });
-    expect(within(dialog).getByText(/Each requester may be emailed a satisfaction survey/)).toBeTruthy();
-    fireEvent.click(within(dialog).getByRole('checkbox', { name: 'Don’t send the satisfaction survey' }));
-    fireEvent.click(within(dialog).getByRole('button', { name: 'Resolve' }));
-    await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1292/transition')[0]?.body).toEqual({ status: 'resolved', csat: false, version: 7 }));
-    expect(calls('POST', '/api/support/v1/tickets/1284/transition')[0]?.body).toEqual({ status: 'resolved', csat: false, version: 7 });
-    expect(bulkCalls()).toHaveLength(0);
-    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', 'Moved to Resolved · 2 tickets', expect.objectContaining({ label: 'Undo' }), 8000, { key: 'support-bulk' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Send solved notifications to 2 customers?' });
+    expect(within(dialog).getByText(/tells their customers by email \(the survey and any automatic replies\)/)).toBeTruthy();
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Change quietly' }));
+    await waitFor(() => expect(bulkCalls()[0]).toEqual({ ids: [1284, 1292], action: 'status', status: 'resolved', notify: false, versions: { 1284: 7, 1292: 7 } }));
+    // One bulk call, not one transition per ticket.
+    expect(calls('POST', '/api/support/v1/tickets/1284/transition')).toHaveLength(0);
+    expect(calls('POST', '/api/support/v1/tickets/1292/transition')).toHaveLength(0);
+    await waitFor(() => expect(toast).toHaveBeenCalledWith('success', '2 tickets marked Solved', expect.objectContaining({ label: 'Undo' }), 5000, { key: 'support-bulk' }));
   });
 
-  it('E resolves through the bulk endpoint when the survey may go', async () => {
+  it('E resolves through the bulk endpoint, telling the customers when asked to', async () => {
     renderInbox();
     await ready();
     fireEvent.click(box(1284));
     fireEvent.click(box(1293));
     key('e');
-    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Resolve 2 tickets?' })).getByRole('button', { name: 'Resolve' }));
-    await waitFor(() => expect(bulkCalls()[0]).toEqual({ ids: [1284, 1293], action: 'status', status: 'resolved', versions: { 1284: 7, 1293: 7 } }));
+    fireEvent.click(within(await screen.findByRole('dialog', { name: 'Send solved notifications to 2 customers?' })).getByRole('button', { name: 'Send' }));
+    await waitFor(() => expect(bulkCalls()[0]).toEqual({ ids: [1284, 1293], action: 'status', status: 'resolved', notify: true, versions: { 1284: 7, 1293: 7 } }));
   });
 
-  it('A gives the picked tickets to me; P and # open their menus', async () => {
+  it('A assigns the picked tickets (to me, here); P opens the priority menu and # asks before deleting', async () => {
     renderInbox();
     await ready();
     fireEvent.click(box(1292));
     fireEvent.click(box(1293));
     key('a');
+    const assign = await screen.findByRole('dialog', { name: 'Assign 2 tickets to…' });
+    fireEvent.click(await within(assign).findByRole('button', { name: /Ayesha Fernando/ }));
     await waitFor(() => expect(bulkCalls()[0]).toEqual({ ids: [1292, 1293], action: 'assign', user_id: 1, versions: { 1292: 7, 1293: 7 } }));
     key('p');
     expect(await screen.findByRole('menu', { name: 'Priority for 2 tickets' })).toBeTruthy();
@@ -467,7 +488,7 @@ describe('the keys on what is picked', () => {
     // Escape closed the menu only: the picks stay.
     expect(bar()).toBeTruthy();
     key('#');
-    expect(await screen.findByRole('menu', { name: 'Tags for 2 tickets' })).toBeTruthy();
+    expect(await screen.findByRole('dialog', { name: 'Delete 2 tickets?' })).toBeTruthy();
   });
 
   it('Shift+F10 opens the menu on the ticket in front, and E on one ticket opens the Resolve dialog', async () => {
@@ -475,7 +496,7 @@ describe('the keys on what is picked', () => {
     await ready();
     key('j');
     key('F10', { shiftKey: true });
-    expect(await screen.findByRole('menu', { name: 'Actions for CFX-001284' })).toBeTruthy();
+    expect(await screen.findByRole('menu', { name: 'Ticket actions' })).toBeTruthy();
     fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' });
     key('x');
     key('e');

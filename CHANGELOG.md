@@ -11,6 +11,24 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.246 — 2026-10-13
+
+- **The ticket details drawer (#334).** A ticket's tab and the inbox's reading pane get Website chats' side panel (⌘⇧I or the header's panel button, its width kept). It has five sections:
+  - an AI summary with key facts, a next step you can reply with, and urgency;
+  - the client, edited in place (name, email, phone with Call and WhatsApp, company, tags, notes), linked to or creating a WorkSuite contact;
+  - the ticket's properties;
+  - related store orders (Resend licence email, Open order), earlier tickets and chats, website activity, and the files;
+  - the activity timeline.
+- **More of the ticket list (#333).** The full right-click menu as the issue lays it out:
+  - Assign to people and teams, Snooze and the Snoozed view, watch, read/unread, spam, and "Select all matching" (up to 1000 tickets).
+  - More than 50 tickets change in the background with progress.
+  - A bulk Solve or Close asks before emailing customers (Send / Change quietly).
+  - `#` deletes, after asking, as the issue specifies. 0.2.245 used it for tags.
+- Changes made from the list send the versions the list showed, so a ticket somebody else just changed is refused and named, not overwritten.
+- Where it bites:
+  - Needs the server's Support 1.4.0 (migration `SupportTicketListTools`) and Billing 1.3.0 for Resend licence.
+  - Not yet available: undo from the activity log, undo of a merge, and SLA editing in the drawer.
+
 ## 0.2.245 — 2026-10-12
 
 - **A website chat made a ticket reads as the chat (#332).** The visitor's messages are the customer's, never "Internal note"; amber is only for notes staff wrote. The website's own lines (the visitor details, "chat started") are small grey lines in the middle, the assistant has its own look, visitor lines say "via Website chat" and staff lines "Sent in chat". Lines from the same person within five minutes are grouped, and "Visitor" gives way to the customer's real name.

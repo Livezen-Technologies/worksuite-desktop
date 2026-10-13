@@ -128,7 +128,7 @@ export const SLA_TARGET_LABEL: Record<SlaTarget, string> = {
 };
 
 /** The system views (`TicketQuery::VIEWS`), in the rail's order, with the server's labels for a server that sends none. */
-export const VIEWS = ['mine', 'unassigned', 'assigned', 'mentioned', 'watching', 'overdue', 'escalated', 'pending', 'live', 'resolved', 'closed', 'all', 'needs_organization', 'trash'] as const;
+export const VIEWS = ['mine', 'unassigned', 'assigned', 'mentioned', 'watching', 'overdue', 'escalated', 'pending', 'live', 'resolved', 'closed', 'all', 'needs_organization', 'trash', 'snoozed'] as const;
 export type SupportView = (typeof VIEWS)[number];
 export const VIEW_LABEL: Record<SupportView, string> = {
   mine: 'My tickets',
@@ -145,6 +145,7 @@ export const VIEW_LABEL: Record<SupportView, string> = {
   all: 'All tickets',
   needs_organization: 'Needs organization',
   trash: 'Trash',
+  snoozed: 'Snoozed',
 };
 
 export const SORTS = ['updated', 'created', 'sla', 'priority'] as const;
@@ -263,6 +264,10 @@ export interface Ticket {
   deleted_at: string | null;
   /** What it was raised from, when that is something the desktop can open (#298): absent from an older server. */
   origin?: TicketOrigin | null;
+  /** Snoozed until then (#333): out of the working views until it wakes. Absent from an older server. */
+  snoozed_until?: string | null;
+  /** I follow it (#333): the right-click menu's Follow / Unfollow. Absent from an older server. */
+  watching?: boolean;
 }
 
 /**
@@ -592,6 +597,92 @@ export interface TicketChanges {
   requester_name?: string | null;
   requester_email?: string | null;
   requester_phone?: string | null;
+}
+
+/** What the bulk bar and the right-click menu can do to tickets (`POST tickets/bulk`, #333). */
+export const BULK_ACTIONS = ['assign', 'status', 'priority', 'tag', 'untag', 'delete', 'restore', 'merge', 'team', 'snooze', 'unsnooze', 'watch', 'unwatch', 'read', 'unread', 'spam'] as const;
+export type BulkAction = (typeof BULK_ACTIONS)[number];
+
+/** What a ticket was before a bulk change: what Undo puts back. */
+export interface BulkBefore {
+  status: SupportStatus;
+  priority: SupportPriority;
+  assignee_id: number | null;
+  team_id: number | null;
+  tags: string[];
+  snoozed_until: string | null;
+  deleted: boolean;
+}
+
+/** One ticket's answer to a bulk change: done, or refused with why. */
+export interface BulkResult {
+  id: number;
+  ok: boolean;
+  code?: string;
+  message?: string;
+  version?: number;
+  before?: BulkBefore;
+}
+
+/** A WorkSuite contact as the ticket details drawer shows it (#334). */
+export interface ClientContact {
+  id: number;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  company: string | null;
+  tags: string[];
+  notes: string | null;
+  /** Where it opens: `/contacts/{id}`. */
+  link: string;
+}
+
+/** `GET tickets/{id}/client` (#334): the client as the ticket has them, their contact, and what I may change. */
+export interface TicketClient {
+  requester: { name: string | null; email: string | null; phone: string | null };
+  contact: ClientContact | null;
+  /** Linked to a contact I may not open: the ticket's snapshot only. */
+  contact_hidden: boolean;
+  /** Contacts with the requester's email or phone, to link. */
+  matches: ClientContact[];
+  /** Where the chat says they are. */
+  visitor: { id: number; language: string | null; timezone: string | null; country: string | null; city: string | null; website: string | null } | null;
+  can: { edit: boolean; create_contact: boolean; link_contact: boolean; unlink_contact: boolean };
+  default_country: string;
+}
+
+/** The fields the drawer edits in place (`PATCH tickets/{id}/client`). */
+export interface ClientChanges {
+  name?: string;
+  email?: string | null;
+  phone?: string | null;
+  company?: string | null;
+  tags?: string[];
+  notes?: string | null;
+}
+
+export interface RelatedOrder {
+  id: number;
+  number: string | null;
+  store_number: string | null;
+  source: string | null;
+  date: string | null;
+  status: string | null;
+  total: number | null;
+  currency: string | null;
+  payment_status: string | null;
+  products: string[];
+  licence: 'active' | 'revoked' | 'none';
+  can_resend: boolean;
+  link: string;
+}
+
+/** `GET tickets/{id}/related` (#334). A part is null when its module is not here or not mine to open. */
+export interface TicketRelated {
+  orders: RelatedOrder[] | null;
+  tickets: Array<{ id: number; reference: string; subject: string; status: SupportStatus; source: string; created_at: string | null }>;
+  chats: Array<{ id: number; status: string; started_at: string | null; website: string | null }> | null;
+  pages: Array<{ url: string | null; title: string | null; at: string | null }> | null;
 }
 
 /** A list's question: one view, filtered and sorted, a page at a time. */

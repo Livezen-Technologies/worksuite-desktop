@@ -1,101 +1,110 @@
 import type { MouseEvent } from 'react';
-import type { Ticket } from '@shared/support';
 import { text } from '../../core/i18n';
-import { Icon } from '../../components/Icon';
-import { cx } from '../../components/ui';
-import { ticketCount } from './bulk';
-import type { MenuOnly, useTicketActions } from './TicketActions';
+import { BulkBar as Bar, BulkButton } from '../chat/BulkBar';
+import { ticketCount, type BarCaps, type BulkProgress } from './bulk';
+
+/** The bar's buttons that open one part of the right-click menu. */
+export type BarPart = 'status' | 'priority' | 'assign' | 'more';
 
 /**
- * The bulk bar (#333, FR-WSP-04): over the list while any ticket is picked — how many, then Status, Assign, Priority
- * and Tag (each the right-click menu's part on its own), Merge for two or more, Delete (Restore in the bin), and Clear.
- * Only what the person may do to the tickets picked is there.
+ * The ticket list's bulk bar (worksuite-desktop#333, FR-WSP-04): over the list while any ticket is picked — how many,
+ * then Status, Assign, Priority (each the right-click menu's part on its own), Tag, Merge for two or more, Snooze, and
+ * ⋯ for the rest of the menu (Follow, Copy, Delete…). Only what the person may do to every ticket picked is there
+ * (`barCaps`, the menu's own rule).
  *
- * Select all takes the tickets loaded: the list's API pages with a cursor and has no "every id matching" answer, so
- * when a whole page is picked and more match, the bar says the rest are not picked and offers to load them.
+ * Under it: with every loaded ticket picked and more matching, "Select all 128 tickets in Resolved" (the server's ids,
+ * `matchingIds`); with only some picked, "Select all 50 tickets loaded"; and a batched change's progress.
  */
 export function BulkBar({
-  targets,
+  count,
+  may,
   loaded,
+  all,
   more,
-  actions,
+  matching,
+  matchingLabel,
+  progress,
+  onMenu,
+  onTag,
+  onMerge,
+  onSnooze,
   onSelectAll,
-  onLoadMore,
+  onSelectAllMatching,
   onClear,
 }: {
-  targets: Ticket[];
+  /** How many are picked. */
+  count: number;
+  may: BarCaps;
   /** How many tickets the list has loaded. */
   loaded: number;
-  /** More match than are loaded. */
+  /** Every loaded ticket is picked. */
+  all: boolean;
+  /** More tickets match the view than are loaded. */
   more: boolean;
-  actions: ReturnType<typeof useTicketActions>;
+  /** How many match, once "Select all matching" has picked them; else null. */
+  matching: number | null;
+  /** "Select all 128 tickets in Resolved", or "Select all matching tickets" under a search. */
+  matchingLabel: string;
+  progress: BulkProgress | null;
+  onMenu: (part: BarPart, e: MouseEvent<HTMLButtonElement>) => void;
+  onTag: () => void;
+  onMerge: () => void;
+  onSnooze: () => void;
   onSelectAll: () => void;
-  onLoadMore: (() => void) | null;
+  onSelectAllMatching: () => void;
   onClear: () => void;
 }) {
-  const may = actions.can(targets);
-  const n = targets.length;
-  const at = (only: MenuOnly) => (e: MouseEvent<HTMLButtonElement>) => {
-    const r = e.currentTarget.getBoundingClientRect();
-    actions.openMenu(targets, r.left, r.bottom + 4, only);
-  };
-  const all = n > 0 && n === loaded;
+  const at = (part: BarPart) => (e: MouseEvent<HTMLButtonElement>) => onMenu(part, e);
   return (
-    <div className="shrink-0 border-b border-line bg-selection/60">
-      <div role="toolbar" aria-label={text('Selected tickets')} className="flex flex-wrap items-center gap-1 px-2 py-1.5">
-        <span className="mr-1 px-1 text-[12.5px] font-bold text-ink" aria-live="polite">
-          {text('{count} selected', { count: n })}
-        </span>
-        {may.status.length ? <BarButton icon="circle-dot" label={text('Status')} onClick={at('status')} menu /> : null}
-        {may.assign || may.take ? <BarButton icon="user" label={text('Assign')} onClick={at('assign')} menu keys="A" /> : null}
-        {may.edit ? <BarButton icon="flag" label={text('Priority')} onClick={at('priority')} menu keys="P" /> : null}
-        {may.edit ? <BarButton icon="tag" label={text('Tag')} onClick={at('tags')} menu keys="#" /> : null}
-        {may.merge ? <BarButton icon="merge" label={text('Merge')} onClick={() => actions.run(targets, { action: 'merge', primary_id: targets[0]?.id })} /> : null}
-        {may.delete ? <BarButton icon="trash" label={text('Delete')} danger onClick={() => actions.run(targets, { action: 'delete' })} /> : null}
-        {may.restore ? <BarButton icon="undo" label={text('Restore')} onClick={() => actions.run(targets, { action: 'restore' })} /> : null}
-        <button
-          type="button"
-          onClick={onClear}
-          aria-keyshortcuts="Escape"
-          title={text('Clear the selection (Esc)')}
-          className="ml-auto inline-flex h-7 items-center gap-1 rounded-[6px] px-2 text-[12px] font-semibold text-ink-2 hover:bg-subtle hover:text-ink"
-        >
-          <Icon name="x" size={13} /> {text('Clear')}
-        </button>
-      </div>
-      {all && more ? (
-        <p className="flex flex-wrap items-center gap-x-2 px-3 pb-1.5 text-[12px] text-ink-2">
-          {text('All {count} loaded are selected; more match this view and are not.', { count: ticketCount(n) })}
-          {onLoadMore ? (
-            <button type="button" onClick={onLoadMore} className="font-semibold text-primary hover:underline">
-              {text('Load more')}
-            </button>
-          ) : null}
+    <div className="flex flex-col gap-1.5">
+      <Bar count={count} onClear={onClear} label={text('Bulk actions')}>
+        {may.status ? (
+          <BulkButton menu onClick={at('status')}>
+            {text('Status')}
+          </BulkButton>
+        ) : null}
+        {may.assign ? (
+          <BulkButton menu aria-keyshortcuts="A" onClick={at('assign')}>
+            {text('Assign')}
+          </BulkButton>
+        ) : null}
+        {may.priority ? (
+          <BulkButton menu aria-keyshortcuts="P" onClick={at('priority')}>
+            {text('Priority')}
+          </BulkButton>
+        ) : null}
+        {may.tag ? (
+          <BulkButton menu onClick={onTag}>
+            {text('Tag')}
+          </BulkButton>
+        ) : null}
+        {may.merge ? <BulkButton onClick={onMerge}>{text('Merge')}</BulkButton> : null}
+        {may.snooze ? <BulkButton onClick={onSnooze}>{text('Snooze')}</BulkButton> : null}
+        <BulkButton aria-label={text('More actions')} title={text('More actions')} onClick={at('more')}>
+          ⋯
+        </BulkButton>
+      </Bar>
+      {all && more && matching === null ? (
+        <p className="text-[12px] text-ink-2">
+          {text('All {n} on this page selected.', { n: loaded })}{' '}
+          <button type="button" className="font-semibold text-primary hover:underline" onClick={onSelectAllMatching}>
+            {matchingLabel}
+          </button>
         </p>
-      ) : null}
-      {!all && loaded > n && n > 0 ? (
-        <p className="px-3 pb-1.5 text-[12px] text-ink-3">
-          <button type="button" onClick={onSelectAll} aria-keyshortcuts="Control+A Meta+A" className="font-semibold text-primary hover:underline">
-            {text('Select all {count}', { count: ticketCount(loaded, more) })}
+      ) : matching !== null ? (
+        <p className="text-[12px] text-ink-2">{text('All {count} matching selected.', { count: ticketCount(count) })}</p>
+      ) : !all && count > 0 && loaded > count ? (
+        <p className="text-[12px] text-ink-2">
+          <button type="button" aria-keyshortcuts="Control+A Meta+A" className="font-semibold text-primary hover:underline" onClick={onSelectAll}>
+            {text('Select all {count} loaded', { count: ticketCount(loaded) })}
           </button>
         </p>
       ) : null}
+      {progress ? (
+        <div role="progressbar" aria-label={text('Changing tickets')} aria-valuemin={0} aria-valuemax={progress.total} aria-valuenow={progress.done} className="h-1 overflow-hidden rounded-full bg-subtle">
+          <div className="h-full bg-primary transition-[width]" style={{ width: `${(100 * progress.done) / Math.max(1, progress.total)}%` }} />
+        </div>
+      ) : null}
     </div>
-  );
-}
-
-function BarButton({ icon, label, onClick, menu = false, danger = false, keys }: { icon: string; label: string; onClick: (e: MouseEvent<HTMLButtonElement>) => void; menu?: boolean; danger?: boolean; keys?: string }) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      aria-haspopup={menu ? 'menu' : undefined}
-      aria-keyshortcuts={keys}
-      title={keys ? `${label} (${keys})` : label}
-      className={cx('inline-flex h-7 items-center gap-1 rounded-[6px] border border-line bg-surface px-2 text-[12px] font-semibold hover:bg-subtle', danger ? 'text-danger' : 'text-ink')}
-    >
-      <Icon name={icon} size={13} /> {label}
-      {menu ? <Icon name="chevron-down" size={12} className="text-ink-3" /> : null}
-    </button>
   );
 }

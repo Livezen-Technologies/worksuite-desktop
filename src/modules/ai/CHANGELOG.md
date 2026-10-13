@@ -4,6 +4,18 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.0 — 2026-10-12
+
+**Added**
+
+- the brief task — a ticket's summary, key facts, next step and urgency under fixed headings, for Support's details drawer (#334)
+
+## 1.10.0 — 2026-10-12
+
+**Added**
+
+- the subject task — a short helpdesk subject from a support conversation, used by Support's Suggest (#333)
+
 ## 1.9.1 — 2026-10-10
 
 **Changed**

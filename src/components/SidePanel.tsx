@@ -29,11 +29,34 @@ function remember(id: string, open: boolean): void {
  * Which panels are hidden is remembered on this computer (a view preference,
  * not data).
  */
-export function SidePanel({ id, label, side = 'left', defaultOpen = true, children }: { id: string; label: string; side?: 'left' | 'right'; defaultOpen?: boolean; children: ReactNode }) {
-  const [open, setOpen] = useState(() => remembered(id, defaultOpen));
+export function SidePanel({
+  id,
+  label,
+  side = 'left',
+  defaultOpen = true,
+  open: shownOpen,
+  onOpenChange,
+  children,
+}: {
+  id: string;
+  label: string;
+  side?: 'left' | 'right';
+  defaultOpen?: boolean;
+  /**
+   * Shown or hidden by the screen around it (worksuite-desktop#334: a ticket's details drawer opens with ⌘⇧I and by
+   * itself on a wide window): `onOpenChange` hears the handle and the strip, and the screen remembers what it likes.
+   */
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  children: ReactNode;
+}) {
+  const [own, setOwn] = useState(() => remembered(id, defaultOpen));
+  const controlled = shownOpen !== undefined;
+  const open = controlled ? shownOpen : own;
   const toggle = () => {
+    if (controlled) return onOpenChange?.(!open);
     remember(id, !open);
-    setOpen(!open);
+    setOwn(!open);
   };
   const left = side === 'left';
   if (!open) {

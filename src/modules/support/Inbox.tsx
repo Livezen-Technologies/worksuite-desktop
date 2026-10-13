@@ -1,5 +1,5 @@
 import { useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from 'react';
 import { VIEW_LABEL, isView, parseSupportRoute, ticketRoute, type SavedView, type SupportSort, type Ticket, type TicketShow } from '@shared/support';
 import { app } from '../../core/app-state';
 import { useOrgSelection } from '../../core/org-prefs';
@@ -12,9 +12,11 @@ import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider
 import { SidePanel } from '../../components/SidePanel';
 import { useListSelection } from '../../components/useListSelection';
 import { Empty } from '../../components/ui';
-import { K, listTickets, meta, views } from './api';
+import { K, listTickets, matchingIds, meta, views } from './api';
+import { barCaps, ticketCount } from './bulk';
+import { BulkBar, type BarPart } from './BulkBar';
+import { ShortcutsPopover, useTicketActions } from './TicketActions';
 import { Availability } from './Availability';
-import { BulkBar } from './BulkBar';
 import type { ComposerMode } from './Composer';
 import { usePollInterval, useRealtimeLive, useSupportLive } from './live';
 import { NewTicketSheet } from './NewTicket';
@@ -24,7 +26,6 @@ import { Rail } from './Rail';
 import { ReadingPane } from './ReadingPane';
 import { OutboxBar } from './Outbox';
 import { ResolveDialog } from './ResolveDialog';
-import { useTicketActions } from './TicketActions';
 import { NO_FILTERS, TicketList, channelChoices, type ListFilters } from './TicketList';
 import { WallboardChooser, mayReadReports } from './Wallboard';
 import { isMac } from '../../core/bridge';
@@ -35,11 +36,6 @@ import { Button } from '../../components/ui';
  * kept current by the realtime gateway (live.ts), with the keyboard of FR-WSP-06: j/k move, Enter opens the ticket's
  * tab, R replies, N writes a note, E resolves, / searches, ⌘↵ sends from the reading pane — and C raises a new ticket
  * (#298).
- *
- * Several at once (#333): X picks the ticket in front (⇧X the run to it), ⌘A / Ctrl+A every ticket loaded, Esc clears;
- * with tickets picked the bulk bar shows, and E resolves them (closes them, when all are resolved), A gives them to me,
- * P and # open their priority and tag menus, Shift+F10 (or the menu key) the whole menu — on the ticket in front when
- * none is picked. A right-click on a row opens the same menu (TicketActions.tsx).
  *
  * The view and its search live in the route (`/support?view=unassigned&q=…`), so the quick actions, a deep link and a
  * restored tab open on them; the filters, the sort and the ticket being read are this tab's own. `?new=1` (⌘K's Create
@@ -80,7 +76,7 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   useSupportLive();
   const qc = useQueryClient();
   const me = Number(useStore(app, (s) => s.auth?.user?.id ?? 0)) || null;
-  const { go, navigate } = useTab();
+  const { go, navigate, openInWindow } = useTab();
   const r = parseSupportRoute(route);
   const routeView = r.kind === 'inbox' ? r.view : null;
   const savedId = r.kind === 'inbox' && r.saved && /^\d+$/.test(r.saved) ? Number(r.saved) : null;
@@ -134,17 +130,8 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   const [sel, setSel] = useState<{ key: string; id: number } | null>(null);
   const selectedId = sel && sel.key === listKey ? sel.id : null;
   const select = (id: number | null) => setSel(id === null ? null : { key: listKey, id });
-  const [focusRequest, setFocusRequest] = useState<{ mode: ComposerMode; n: number } | null>(null);
-  const [resolving, setResolving] = useState<Pick<TicketShow['ticket'], 'id' | 'reference' | 'subject' | 'version'> | null>(null);
-
-  // The tickets picked for the bulk bar (#333): this list's, cleared when the list asked for changes.
-  const picks = useListSelection(rows.map((t) => t.id));
-  const [selKey, setSelKey] = useState(listKey);
-  if (selKey !== listKey) {
-    setSelKey(listKey);
-    picks.clear();
-  }
-  const picked = rows.filter((t) => picks.selected.has(t.id));
+  const [focusRequest, setFocusRequest] = useState<{ mode: ComposerMode; n: number; canned?: boolean } | null>(null);
+  const [resolving, setResolving] = useState<TicketShow['ticket'] | null>(null);
   // New ticket (#298): for whoever may raise one, once the desk has said (or could not be asked).
   const [creating, setCreating] = useState(false);
   const metaKnown = metaQ.isSuccess || metaQ.isError;
@@ -153,27 +140,61 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   const width = useResizableWidth('support.list', { defaultWidth: 380, min: 300, max: () => Math.max(300, window.innerWidth - 760) });
 
   const openTab = (id: number) => navigate(ticketRoute(id));
+
+  // Several tickets at once (worksuite-desktop#333): the rows picked, and every ticket the list matches on request.
+  const order = rows.map((t) => t.id);
+  const pickedList = useListSelection<number>(order);
+  const [showKeys, setShowKeys] = useState(false);
+  const [allMatching, setAllMatching] = useState<{ key: string; total: number } | null>(null);
+  // A new view, search or filter starts with nothing picked.
+  const [pickedFor, setPickedFor] = useState(listKey);
+  if (pickedFor !== listKey) {
+    setPickedFor(listKey);
+    if (pickedList.selecting) pickedList.clear();
+    setAllMatching(null);
+  }
+  const picked = [...pickedList.selected];
+  /** What an action acts on: the tickets picked, else the one being read. */
+  const targets = (): number[] => (picked.length ? picked : selectedId !== null ? [selectedId] : []);
   const actions = useTicketActions({
+    rows,
     meta: metaQ.data,
     me,
-    onOpen: (t) => select(t.id),
-    onOpenTab: (t) => openTab(t.id),
-    onRespond: (t, mode) => {
-      select(t.id);
-      setFocusRequest((f) => ({ mode, n: (f?.n ?? 0) + 1 }));
+    onOpen: (id) => select(id),
+    onOpenTab: openTab,
+    onOpenWindow: (id) => openInWindow(ticketRoute(id), rows.find((t) => t.id === id)?.reference ?? text('Ticket')),
+    onCompose: (id, mode, canned) => {
+      select(id);
+      setFocusRequest((f) => ({ mode, n: (f?.n ?? 0) + 1, canned }));
     },
-    onResolveOne: (t) => setResolving(t),
-    onChanged: (action, answer) => {
-      // Gone from the list: deleted, restored out of the bin, merged away.
-      if (action !== 'delete' && action !== 'restore' && action !== 'merge') return;
-      const gone = new Set(answer.results.filter((r) => r.ok).map((r) => r.id));
-      picks.setSelected((now) => new Set([...now].filter((id) => !gone.has(id))));
+    onNavigate: navigate,
+    onGone: (ids) => {
+      const next = new Set(pickedList.selected);
+      for (const id of ids) next.delete(id);
+      if (next.size !== pickedList.selected.size) pickedList.setSelected(next);
     },
   });
-  /** Where a menu opened from the keyboard goes: under the ticket in front. */
-  const menuAt = (id: number | null): { x: number; y: number } => {
-    const r = id === null ? null : document.getElementById(`support-row-${id}`)?.getBoundingClientRect();
-    return r ? { x: r.left + 24, y: r.top + Math.min(r.height, 28) } : { x: window.innerWidth / 3, y: window.innerHeight / 3 };
+  /** The menu for a row: the selection when the row is one of it, else that row alone. */
+  const rowMenu = (e: ReactMouseEvent, id: number) => actions.openMenu(e.clientX, e.clientY, pickedList.selected.has(id) ? picked : [id]);
+  const atRow = (id: number | null): { x: number; y: number } => {
+    const r = id !== null ? document.getElementById(`support-row-${id}`)?.getBoundingClientRect() : null;
+    return r ? { x: r.left + 40, y: r.top + 24 } : { x: 120, y: 160 };
+  };
+  const barMenu = (part: BarPart, e: ReactMouseEvent<HTMLButtonElement>) => {
+    const r = e.currentTarget.getBoundingClientRect();
+    actions.openPart(r.left, r.bottom + 4, picked, part);
+  };
+  const viewTotal = saved ? saved.count : (rail.data?.views.find((v) => v.key === view)?.count ?? null);
+  const narrowed = !!q || filters.status.length + filters.priority.length + filters.source.length > 0;
+  const selectAllMatching = async () => {
+    try {
+      const m = await matchingIds({ ...params, cursor: undefined });
+      pickedList.setSelected(new Set(m.ids));
+      setAllMatching({ key: listKey, total: m.total });
+      if (m.total > m.ids.length) toast('info', text('The first {n} of {total} are picked: a change goes to at most {n} at a time.', { n: m.ids.length, total: m.total }));
+    } catch (e) {
+      toast('error', e instanceof Error ? e.message : text('That could not be done. Try again.'));
+    }
   };
   const pick = (to: { view?: string; saved?: number }) => {
     const query = new URLSearchParams();
@@ -187,46 +208,63 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   useEffect(() => {
     keys.current = (e: KeyboardEvent) => {
       if (e.defaultPrevented || isTyping(e)) return;
-      const k = e.key;
-      // ⌘A / Ctrl+A: every ticket loaded (#333).
-      if ((e.metaKey || e.ctrlKey) && !e.altKey && !e.shiftKey && k.toLowerCase() === 'a') {
-        if (!rows.length) return;
+      // ⌘A / Ctrl+A: every ticket in the view (#333).
+      if ((isMac ? e.metaKey : e.ctrlKey) && !e.altKey && !e.shiftKey && e.key.toLowerCase() === 'a' && rows.length) {
         e.preventDefault();
-        picks.selectAll();
+        pickedList.selectAll();
         return;
       }
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const at = selectedId === null ? -1 : rows.findIndex((t) => t.id === selectedId);
-      const current = at >= 0 ? rows[at]! : null;
-      // What a key acts on: the tickets picked, else the one in front.
-      const targets = picked.length ? picked : current ? [current] : [];
-      const may = actions.can(targets);
-      if (k === 'Escape') {
-        if (picks.escape(e)) e.preventDefault();
-      } else if ((k === 'x' || k === 'X') && current) {
+      const k = e.key;
+      // ⇧F10 or the menu key: the right-click menu, on the tickets picked or the one in front.
+      if (((k === 'F10' && e.shiftKey) || k === 'ContextMenu') && targets().length) {
         e.preventDefault();
-        picks.pick(current.id, e.shiftKey ? 'range' : 'toggle', current.id);
-      } else if ((k === 'F10' && e.shiftKey) || k === 'ContextMenu') {
-        if (!targets.length) return;
+        const p = atRow(selectedId);
+        actions.openMenu(p.x, p.y, targets());
+        return;
+      }
+      // The list's own keys (#333): X picks, ⇧X picks the range, A assigns, P sets the priority, # deletes, Esc clears, ? lists them.
+      if (k === 'Escape' && pickedList.escape(e)) {
         e.preventDefault();
-        const p = menuAt(current?.id ?? targets[0]!.id);
-        actions.openMenu(targets, p.x, p.y);
-      } else if ((k === 'a' || k === 'A') && targets.length && (may.assign || may.take)) {
+        setAllMatching(null);
+        return;
+      }
+      if ((k === 'x' || k === 'X') && selectedId !== null) {
         e.preventDefault();
-        actions.assignToMe(targets);
-      } else if ((k === 'p' || k === 'P') && targets.length && may.edit) {
+        pickedList.pick(selectedId, e.shiftKey ? 'range' : 'toggle', selectedId);
+        return;
+      }
+      if (k === '?') {
         e.preventDefault();
-        const p = menuAt(current?.id ?? targets[0]!.id);
-        actions.openMenu(targets, p.x, p.y, 'priority');
-      } else if (k === '#' && targets.length && may.edit) {
+        setShowKeys(true);
+        return;
+      }
+      if ((k === 'a' || k === 'A') && targets().length) {
         e.preventDefault();
-        const p = menuAt(current?.id ?? targets[0]!.id);
-        actions.openMenu(targets, p.x, p.y, 'tags');
-      } else if ((k === 'e' || k === 'E') && picked.length) {
-        // The picked tickets: resolved — or closed, when they all are resolved already.
+        actions.assignTo(targets());
+        return;
+      }
+      if ((k === 'p' || k === 'P') && targets().length) {
         e.preventDefault();
-        actions.setStatus(picked, picked.every((t) => t.status === 'resolved') ? 'closed' : 'resolved');
-      } else if (k === 'j' || k === 'k') {
+        const p = atRow(selectedId);
+        actions.openPart(p.x, p.y, targets(), 'priority');
+        return;
+      }
+      if (k === '#' && targets().length) {
+        e.preventDefault();
+        actions.remove(targets());
+        return;
+      }
+      if ((k === 'e' || k === 'E') && picked.length) {
+        e.preventDefault();
+        // One ticket picked: the Resolve dialog, as for the ticket in front; several: the bulk Solve, which asks first.
+        const one = picked.length === 1 ? rows.find((t) => t.id === picked[0]) : null;
+        if (one) setResolving(one);
+        else actions.apply('status', picked, { status: 'resolved' });
+        return;
+      }
+      if (k === 'j' || k === 'k') {
         e.preventDefault();
         const next = k === 'j' ? Math.min(rows.length - 1, at + 1) : Math.max(0, at === -1 ? 0 : at - 1);
         if (rows[next]) select(rows[next]!.id);
@@ -291,12 +329,30 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   }, [active, wallAllowed]);
 
   const title = saved ? saved.name : text(rail.data?.views.find((v) => v.key === view)?.label ?? VIEW_LABEL[view as keyof typeof VIEW_LABEL] ?? view);
-  // The server's count for the view (or saved view); a search or a filter on top of it is not one it counts, so then
-  // the tickets loaded, "50+" while more match.
-  const narrowed = !!q || filters.status.length + filters.priority.length + filters.source.length > 0;
-  const viewCount = saved ? saved.count : (rail.data?.views.find((v) => v.key === view)?.count ?? null);
-  const count = narrowed ? (list.isSuccess ? rows.length : null) : viewCount;
-  const countMore = narrowed && !!list.hasNextPage;
+  const count = viewTotal;
+  // "All 50 on this page selected · Select all 128 resolved tickets" (#333).
+  const matchingTotal = allMatching?.key === listKey ? allMatching.total : null;
+  const moreThanListed = !narrowed && count !== null ? count > rows.length : list.hasNextPage;
+  const pickedRows = rows.filter((t) => pickedList.selected.has(t.id));
+  const bulkBar = (
+    <BulkBar
+      count={picked.length}
+      may={barCaps(pickedRows, metaQ.data)}
+      loaded={rows.length}
+      all={pickedList.state === 'all'}
+      more={moreThanListed}
+      matching={matchingTotal}
+      matchingLabel={narrowed || count === null ? text('Select all matching tickets') : text('Select all {count} in {view}', { count: ticketCount(count), view: title })}
+      progress={actions.progress}
+      onMenu={barMenu}
+      onTag={() => actions.addTag(picked)}
+      onMerge={() => actions.merge(picked)}
+      onSnooze={() => actions.snoozePick(picked)}
+      onSelectAll={() => pickedList.selectAll()}
+      onSelectAllMatching={() => void selectAllMatching()}
+      onClear={() => (pickedList.clear(), setAllMatching(null))}
+    />
+  );
   const single = orgs.length === 1 ? Number(orgs[0]) : orgOptions.length === 1 ? Number(orgOptions[0]!.id) : null;
 
   return (
@@ -331,7 +387,6 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
             <TicketList
               title={title}
               count={count}
-              countMore={countMore}
               live={live}
               offline={list.data?.pages[0]?.offline === true}
               rows={rows}
@@ -355,22 +410,9 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
               onNew={canCreate ? () => setCreating(true) : null}
               searchRef={searchRef}
               now={now}
-              picked={picks.selected}
-              onPick={(id, how) => picks.pick(id, how, selectedId)}
-              onRowMenu={(t, x, y) => actions.openMenu(picks.selected.has(t.id) ? picked : [t], x, y)}
-              bulk={
-                picked.length ? (
-                  <BulkBar
-                    targets={picked}
-                    loaded={rows.length}
-                    more={!!list.hasNextPage}
-                    actions={actions}
-                    onSelectAll={picks.selectAll}
-                    onLoadMore={list.hasNextPage && !list.isFetchingNextPage ? () => void list.fetchNextPage() : null}
-                    onClear={picks.clear}
-                  />
-                ) : null
-              }
+              selection={{ selected: pickedList.selected, selecting: pickedList.selecting, onPick: (id, how) => pickedList.pick(id, how, selectedId), bar: bulkBar }}
+              onRowMenu={rowMenu}
+              onShortcuts={() => setShowKeys(true)}
             />
           </div>
           <ResizeDivider state={width} label={text('Resize the ticket list')} />
@@ -387,7 +429,6 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
           )}
         </div>
       </div>
-      {actions.elements}
       {resolving ? <ResolveDialog ticket={resolving} onClose={() => setResolving(null)} /> : null}
       {creating ? (
         <NewTicketSheet
@@ -402,6 +443,8 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
         />
       ) : null}
       {wallOpen ? <WallboardChooser onClose={() => setWallOpen(false)} /> : null}
+      {actions.dialogs}
+      {showKeys ? <ShortcutsPopover onClose={() => setShowKeys(false)} /> : null}
     </div>
   );
 }

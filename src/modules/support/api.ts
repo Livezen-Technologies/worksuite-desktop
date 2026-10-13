@@ -19,6 +19,11 @@ import {
   type AiTone,
   type Attachment,
   type AssignInput,
+  type BulkAction,
+  type BulkResult,
+  type ClientChanges,
+  type RelatedOrder,
+  type TicketClient,
   type Badges,
   type Canned,
   type ConversionPreview,
@@ -298,6 +303,36 @@ export function getTicket(id: number, opts: { peek?: boolean } = {}, signal?: Ab
 export async function ticketIdForReference(reference: string, signal?: AbortSignal): Promise<number | null> {
   const page = await listTickets({ view: 'all', q: reference, limit: 10 }, signal);
   return page.items.find((t) => t.reference.toLowerCase() === reference.toLowerCase())?.id ?? null;
+}
+
+/**
+ * One bulk change (`POST tickets/bulk`, #333): each ticket checked and changed as if alone, refusals per ticket. At most
+ * 200 a call — `bulkInBatches` (bulk.ts) sends more in batches. `of` is the whole change's size, so the journal says
+ * "bulk, 128 tickets" on every batch.
+ */
+export async function bulk(action: BulkAction, ids: number[], fields: Record<string, unknown> = {}, of?: number): Promise<{ results: BulkResult[]; done: number; refused: number }> {
+  return v1Only(() => send('POST', `${BASE}/tickets/bulk`, { ...fields, action, ids, ...(of && of > ids.length ? { of } : {}) }));
+}
+
+/** Every ticket a list matches, up to `limit`, with how many there are (#333's "Select all 128 resolved tickets"). */
+export async function matchingIds(p: ListParams, limit = 1000, signal?: AbortSignal): Promise<{ ids: number[]; total: number }> {
+  const r = await v1Only(() =>
+    get<{ ids: number[]; total: number }>(
+      `${BASE}/tickets/ids`,
+      {
+        ...(p.extra ?? {}),
+        view: p.view,
+        q: p.q?.trim() || undefined,
+        status: list(p.status),
+        priority: list(p.priority),
+        source: list(p.source) ?? p.extra?.source,
+        organization: list(p.organization) ?? p.extra?.organization,
+        limit,
+      },
+      signal,
+    ),
+  );
+  return { ids: r.ids ?? [], total: r.total ?? 0 };
 }
 
 /** Messages newer than one, oldest first (the delta after a realtime hint). */
@@ -639,6 +674,36 @@ export function links(ticketId: number, signal?: AbortSignal): Promise<TicketLin
 }
 
 /** Follow a ticket: told whenever it changes (FR-ASN-07). Watchers do not change the version. */
+/* ── the ticket details drawer (#334) ────────────────────────────────── */
+
+/** Where the drawer's client and related parts are read (with the local copy first: `useLocalFirstQuery`). */
+export const clientPath = (ticketId: number) => `${BASE}/tickets/${ticketId}/client`;
+export const relatedPath = (ticketId: number) => `${BASE}/tickets/${ticketId}/related`;
+
+/** An edit in place: `422` names the fields that are wrong (`errors`), and the answer is the client afterwards. */
+export async function saveClient(ticketId: number, changes: ClientChanges, version?: number): Promise<{ client: TicketClient; ticket: TicketFull; changed: string[] }> {
+  return v1Only(() => send('PATCH', `${BASE}/tickets/${ticketId}/client`, { ...changes, ...(version ? { version } : {}) }));
+}
+
+/** Link the client to a contact, or make one from the requester's details. */
+export async function linkContact(ticketId: number, to: { contact_id: number } | { create: true }): Promise<{ client: TicketClient; ticket: TicketFull }> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/contact`, to));
+}
+
+export async function unlinkContact(ticketId: number): Promise<{ client: TicketClient; ticket: TicketFull }> {
+  return v1Only(() => send('DELETE', `${BASE}/tickets/${ticketId}/contact`));
+}
+
+/** The store sends the order's licence email again. */
+export async function resendLicence(ticketId: number, orderId: number): Promise<{ order: RelatedOrder }> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/orders/${orderId}/resend-licence`, {}));
+}
+
+/** Link a ticket to another ticket, a chat or a record (`POST tickets/{id}/links`, FR-TKT-05; the list's Link to…, #333). */
+export function addLink(ticketId: number, kind: string, id: number, relation: 'related' | 'duplicate' | 'follow_up' = 'related'): Promise<unknown> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/links`, { kind, id, relation }));
+}
+
 export function watch(ticketId: number): Promise<unknown> {
   return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/watchers`, {}));
 }
@@ -958,76 +1023,8 @@ export const K = {
   conversion: (conversationId: number) => ['support', 'conversion', conversationId] as const,
   kb: (ticketId: number, q: string) => ['support', 'kb', ticketId, q] as const,
   summary: (ticketId: number) => ['support', 'ai-summary', ticketId] as const,
+  client: (ticketId: number) => ['support', 'client', ticketId] as const,
+  related: (ticketId: number) => ['support', 'related', ticketId] as const,
   dashboard: ['support', 'dashboard'] as const,
   myPresence: ['chat', 'presence', 'me'] as const,
 };
-
-/* ── the bulk bar (FR-WSP-04, #333) ─────────────────────────────────────── */
-
-/** What the bulk endpoint can do (`TicketBulk::ACTIONS`). */
-export type BulkAction = 'assign' | 'status' | 'priority' | 'tag' | 'untag' | 'delete' | 'restore' | 'merge';
-
-/**
- * `POST tickets/bulk`: the action's own fields beside `ids` — `user_id` (and `team_id`) to assign, `status` (and
- * `override`) for a status, `priority`, `tags` to tag or untag, `primary_id` to merge into. `versions` (id → the version
- * the screen showed) refuses a ticket changed meanwhile as `VERSION_CONFLICT`, that ticket only.
- */
-export interface BulkInput {
-  ids: number[];
-  action: BulkAction;
-  user_id?: number | null;
-  team_id?: number | null;
-  status?: string;
-  override?: boolean;
-  priority?: string;
-  tags?: string[];
-  primary_id?: number;
-  reason?: string;
-  versions?: Record<number, number>;
-}
-
-/** One ticket's answer: done, or refused with the code and the reason. */
-export interface BulkResult {
-  id: number;
-  ok: boolean;
-  code?: string;
-  message?: string;
-  version?: number;
-}
-
-export interface BulkAnswer {
-  results: BulkResult[];
-  done: number;
-  refused: number;
-}
-
-/** The most tickets one bulk call takes (`TicketBulk::MAX`). */
-export const BULK_MAX = 200;
-
-/** Each ticket checked and changed as if alone; one refused is that ticket's answer. A server without v1 refuses. */
-export async function bulkTickets(input: BulkInput): Promise<BulkAnswer> {
-  const a = await v1Only(() => send<Partial<BulkAnswer>>('POST', `${BASE}/tickets/bulk`, input));
-  const results = (a?.results ?? []).map((r) => ({ ...r, id: Number(r.id), ok: r.ok === true }));
-  const done = results.filter((r) => r.ok).length;
-  return { results, done, refused: results.length - done };
-}
-
-/**
- * Resolve or close one ticket without its satisfaction survey (`transition`'s `csat: false`), which the bulk endpoint
- * cannot be told: the bulk bar's "Don't send the survey" goes ticket by ticket through here, answered in the bulk's
- * shape. Not queued offline: the bulk bar is not.
- */
-export async function transitionQuietly(ids: number[], status: 'resolved' | 'closed', versions: Record<number, number> = {}): Promise<BulkAnswer> {
-  const results: BulkResult[] = [];
-  for (const id of ids) {
-    try {
-      const body = { status, csat: false, ...(versions[id] ? { version: versions[id] } : {}) };
-      const t = (await v1Only(() => send<{ ticket?: TicketFull }>('POST', `${BASE}/tickets/${id}/transition`, body)))?.ticket;
-      results.push({ id, ok: true, ...(t?.version ? { version: t.version } : {}) });
-    } catch (e) {
-      results.push({ id, ok: false, code: refusalCode(e) ?? 'FAILED', message: errorText(e) });
-    }
-  }
-  const done = results.filter((r) => r.ok).length;
-  return { results, done, refused: results.length - done };
-}
