@@ -18,6 +18,14 @@ import { createPublicKey, type KeyObject } from 'node:crypto';
 /** Livezen's pinned discovery keys, `kid` → raw base64url Ed25519 key. Empty until the Cloud team issues them (plan §8.1 item 5). */
 export const LIVEZEN_DISCOVERY_KEYS: Readonly<Record<string, string>> = Object.freeze({});
 
+/**
+ * The test key of tests/fixtures/discovery (keys.json), trusted for Cloud discovery in unpackaged builds only, so the
+ * mock-cloud e2e can sign as "Livezen". Never consulted when `app.isPackaged`.
+ */
+export const TEST_DISCOVERY_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  '397D:6320:671B:3B9B:8246:18E4:E379:2DEA': '5fCSK_lwWNcfMHIFcS6dAsILeZPVMynVFV1CbV4sBdY',
+});
+
 /** Livezen's pinned entitlement keys (`purpose:'entitlements'`), `kid` → raw base64url Ed25519 key. */
 export const LIVEZEN_ENTITLEMENT_KEYS: Readonly<Record<string, string>> = Object.freeze({});
 
@@ -50,4 +58,33 @@ export function parseEd25519Key(key: string): KeyObject | null {
 export function livezenKeyring(purpose: 'discovery' | 'entitlements', rotated: Readonly<Record<string, string>> = {}): Record<string, string> {
   const pinned = purpose === 'discovery' ? LIVEZEN_DISCOVERY_KEYS : LIVEZEN_ENTITLEMENT_KEYS;
   return { ...rotated, ...pinned };
+}
+
+/** The Cloud discovery keyring for this build: pinned + rotated, and the test key when unpackaged. */
+export function discoveryKeyring(rotated: Readonly<Record<string, string>>, isPackaged: boolean): Record<string, string> {
+  const ring = livezenKeyring('discovery', rotated);
+  return isPackaged ? ring : { ...TEST_DISCOVERY_KEYS, ...ring };
+}
+
+/**
+ * Rotated keys as an Update Center response carries them (`discovery_keys`, `kid` → key): only well-formed kids and
+ * keys parseable as Ed25519 are kept, at most 16. Pure; the caller has already verified the Update Center document.
+ */
+export function sanitizeRotatedKeys(raw: unknown): Record<string, string> {
+  const out: Record<string, string> = {};
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return out;
+  for (const [kid, key] of Object.entries(raw as Record<string, unknown>)) {
+    if (Object.keys(out).length >= 16) break;
+    if (!/^[A-Za-z0-9:._-]{1,64}$/.test(kid) || typeof key !== 'string' || !parseEd25519Key(key)) continue;
+    out[kid] = key.trim();
+  }
+  return out;
+}
+
+/** Two keys in any accepted format are the same Ed25519 key. */
+export function sameKey(a: string | null | undefined, b: string | null | undefined): boolean {
+  if (!a || !b) return false;
+  const x = parseEd25519Key(a);
+  const y = parseEd25519Key(b);
+  return !!x && !!y && x.export({ type: 'spki', format: 'der' }).equals(y.export({ type: 'spki', format: 'der' }));
 }

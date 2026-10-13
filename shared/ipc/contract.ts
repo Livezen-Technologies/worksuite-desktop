@@ -2082,7 +2082,10 @@ export type DesktopErrorCode =
   | 'CLOUD_UNAVAILABLE'
   | 'PERSONAL_NOT_ALLOWED'
   | 'ACCOUNT_EXISTS'
-  | 'TLS_UNTRUSTED';
+  | 'TLS_UNTRUSTED'
+  /** `connect:parseSetup`: a setup link that is malformed or not signed by its server / one past its expiry. */
+  | 'SETUP_LINK_INVALID'
+  | 'SETUP_LINK_EXPIRED';
 
 export interface IpcFailure {
   __wsError: true;

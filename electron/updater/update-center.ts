@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { canonicalJson } from '@shared/canonical-json';
 import type { Arch, Platform, UpdateChannel } from '@shared/types';
 import { updateCenterChannel } from '@shared/updates';
+import { sanitizeRotatedKeys } from '../services/discovery/keys';
 
 /**
  * The WorkSuite Update Center (download.worksuitecloud.com) — where desktop
@@ -103,6 +104,11 @@ export const updateResponseSchema = z.object({
   /** "Security: 1 fix · Known issues: none". */
   security_fixes: z.number().int().min(0).max(1000).nullable().optional(),
   known_issues: z.array(z.string().max(300)).max(20).nullable().optional(),
+  /**
+   * Livezen discovery keys rotated in (`kid` → Ed25519 key), Connection & Startup §2 step 5. Only ever read from a
+   * response that verified against the pinned response keys; stored through `setDiscoveryKeysSink`.
+   */
+  discovery_keys: z.record(z.string().max(64), z.string().max(512)).nullable().optional(),
   issued_at: z.string(),
   expires_at: z.string(),
   key_id: z.string(),
@@ -212,7 +218,25 @@ export function acceptUpdateResponse(
   // the Update Center once signed for this very version.
   const grace = 12 * 3600_000;
   if (!Number.isFinite(expires) || expires < now - grace || !Number.isFinite(issued) || issued > now + grace) return { ok: false, reason: 'expired' };
+  if (r.discovery_keys && discoveryKeysSink) {
+    const keys = sanitizeRotatedKeys(r.discovery_keys);
+    try {
+      if (Object.keys(keys).length) discoveryKeysSink(keys);
+    } catch {
+      /* storing rotated keys never fails an update check */
+    }
+  }
   return { ok: true, response: r };
+}
+
+let discoveryKeysSink: ((keys: Record<string, string>) => void) | null = null;
+
+/**
+ * Where rotated Livezen discovery keys go (WP1: app.db, read back as `DiscoveryDeps.rotatedKeys`). Called only for a
+ * response `acceptUpdateResponse` accepted — signature verified with `verifyUcDocument`, for this app, not expired.
+ */
+export function setDiscoveryKeysSink(sink: ((keys: Record<string, string>) => void) | null): void {
+  discoveryKeysSink = sink;
 }
 
 /**

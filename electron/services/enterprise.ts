@@ -1,9 +1,4 @@
-import { execFileSync } from 'node:child_process';
-import { existsSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
-import { logger } from '../main/log';
-
-const log = logger('enterprise');
+import { managedSource, readManagedSource, type SourceEnv } from './discovery/trusted-config';
 
 /**
  * Enterprise preconfiguration (§16.2, FR-AUTH-01). Read once at start-up from
@@ -12,7 +7,11 @@ const log = logger('enterprise');
  *   Windows  HKLM\Software\Policies\WorkSuite           (GPO / Intune)
  *   macOS    /Library/Managed Preferences/com.livezen.worksuite.plist (MDM)
  *   Linux    /etc/worksuite/policy.json
+ *   any      managed.json (/etc/worksuite, %ProgramData%\WorkSuite, /Library/Application Support/WorkSuite)
  *   any      <resources>/enterprise.json                  (custom builds)
+ *
+ * The trust keys (pins, discovery key, require_signed, allow_personal, org_id) are read by
+ * discovery/trusted-config.ts `readTrustedConfig()`; this wrapper keeps the keys the rest of the app used before.
  */
 export interface EnterpriseConfig {
   server_url?: string;
@@ -44,60 +43,12 @@ function clean(raw: Record<string, unknown>, source: string): EnterpriseConfig {
   return out;
 }
 
-function readJson(path: string): Record<string, unknown> | null {
-  try {
-    if (!existsSync(path)) return null;
-    const v = JSON.parse(readFileSync(path, 'utf8')) as unknown;
-    return v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
-  } catch (e) {
-    log.warn('enterprise config unreadable', { path, error: String(e) });
-    return null;
-  }
-}
-
-function readMacManaged(): Record<string, unknown> | null {
-  const path = '/Library/Managed Preferences/com.livezen.worksuite.plist';
-  if (!existsSync(path)) return null;
-  try {
-    const out = execFileSync('/usr/bin/plutil', ['-convert', 'json', '-o', '-', path], { timeout: 3000, encoding: 'utf8' });
-    return JSON.parse(out) as Record<string, unknown>;
-  } catch (e) {
-    log.warn('managed preferences unreadable', { error: String(e) });
-    return null;
-  }
-}
-
-function readWindowsPolicy(): Record<string, unknown> | null {
-  try {
-    const out = execFileSync('reg', ['query', 'HKLM\\Software\\Policies\\WorkSuite'], { timeout: 3000, encoding: 'utf8', windowsHide: true });
-    const values: Record<string, unknown> = {};
-    for (const line of out.split(/\r?\n/)) {
-      const m = /^\s+(\S+)\s+(REG_SZ|REG_DWORD|REG_EXPAND_SZ)\s+(.*)$/.exec(line);
-      if (!m) continue;
-      const [, name, type, data] = m;
-      values[name!] = type === 'REG_DWORD' ? Number.parseInt(data!, 16) : data!.trim();
-    }
-    if (typeof values.proxy_mode === 'string') {
-      values.proxy = { mode: values.proxy_mode, url: values.proxy_url, rules: values.proxy_rules, bypass: values.proxy_bypass };
-    }
-    return Object.keys(values).length ? values : null;
-  } catch {
-    return null; // key absent: not managed
-  }
-}
-
-export function readEnterpriseConfig(): EnterpriseConfig {
-  const candidates: Array<[string, () => Record<string, unknown> | null]> = [];
-  if (process.platform === 'win32') candidates.push(['registry', readWindowsPolicy]);
-  if (process.platform === 'darwin') candidates.push(['mdm-profile', readMacManaged]);
-  if (process.platform === 'linux') candidates.push(['/etc/worksuite/policy.json', () => readJson('/etc/worksuite/policy.json')]);
-  if (process.resourcesPath) candidates.push(['enterprise.json', () => readJson(join(process.resourcesPath, 'enterprise.json'))]);
-  for (const [source, read] of candidates) {
-    const raw = read();
-    if (raw) {
-      log.info('enterprise configuration found', { source });
-      return clean(raw, source);
-    }
-  }
-  return { source: null };
+/**
+ * The enterprise configuration as before, read through discovery/trusted-config.ts (which now owns the sources, the
+ * ownership check and managed.json). The Linux policy file keeps its old source name.
+ */
+export function readEnterpriseConfig(env?: SourceEnv): EnterpriseConfig {
+  const src = env ? readManagedSource(env) : managedSource();
+  if (!src) return { source: null };
+  return clean(src.raw, src.source === 'policy.json' ? '/etc/worksuite/policy.json' : src.source);
 }
