@@ -220,19 +220,33 @@ describe('ServiceBanner', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
     });
     expect(bridge.call).toHaveBeenCalledWith('connection:reconnect');
-    fireEvent.click(screen.getByRole('button', { name: 'Work Offline' }));
+    // Work Offline turns the desktop's Work Offline on; the banner gives way to the strip that turns it off.
+    const unavailable = { state: 'unavailable', label: 'WorkSuite Cloud', since: '2026-10-13T09:58:00Z', nextRetryAt: null } as const;
+    bridge.call.mockImplementation(async (channel: string, input?: { on: boolean }) => (channel === 'connection:workOffline' ? { ...unavailable, workOffline: !!input?.on } : undefined));
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Work Offline' }));
+    });
+    expect(bridge.call).toHaveBeenCalledWith('connection:workOffline', { on: true });
     expect(screen.queryByTestId('service-banner')).toBeNull();
-    // A new outage shows it again.
+    expect(screen.getByTestId('work-offline-strip').textContent).toContain('Working offline.');
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Go online' }));
+    });
+    expect(bridge.call).toHaveBeenCalledWith('connection:workOffline', { on: false });
+    expect(screen.getByTestId('service-banner')).toBeTruthy();
+    // Another outage shows its own words.
     act(() => app.set({ status: snapshot({ service: { state: 'unreachable', label: 'worksuite.abc.com', since: '2026-10-13T10:30:00Z', nextRetryAt: null, workOffline: false } }) }));
     expect(screen.getByTestId('service-banner').textContent).toContain('Can’t reach worksuite.abc.com.');
   });
 
-  it('stays away while healthy, with no service state, or when working offline', () => {
+  it('stays away while healthy or with no service state; working offline shows only the strip', () => {
     app.set({ status: snapshot() });
     const { rerender } = render(<ServiceBanner />);
     expect(screen.queryByTestId('service-banner')).toBeNull();
+    expect(screen.queryByTestId('work-offline-strip')).toBeNull();
     act(() => app.set({ status: snapshot({ service: { state: 'unavailable', label: 'WorkSuite Cloud', since: null, nextRetryAt: null, workOffline: true } }) }));
     rerender(<ServiceBanner />);
     expect(screen.queryByTestId('service-banner')).toBeNull();
+    expect(screen.getByTestId('work-offline-strip')).toBeTruthy();
   });
 });

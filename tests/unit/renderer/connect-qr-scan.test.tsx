@@ -8,6 +8,10 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
  */
 const qr = vi.hoisted(() => ({ result: null as { data: string } | null }));
 vi.mock('jsqr', () => ({ default: vi.fn(() => qr.result) }));
+// The order of the desktop's camera gate and the camera itself.
+const order = vi.hoisted(() => [] as string[]);
+const bridge = vi.hoisted(() => ({ call: vi.fn(async (channel: string, input?: { open: boolean }) => void order.push(`${channel}:${String(input?.open)}`)) }));
+vi.mock('../../../src/core/bridge', () => ({ call: bridge.call }));
 
 const { QrScan, setupLinkIn, decodePixels } = await import('../../../src/app/connect/QrScan');
 
@@ -16,8 +20,10 @@ let stop: ReturnType<typeof vi.fn>;
 
 beforeEach(() => {
   qr.result = null;
+  order.length = 0;
+  bridge.call.mockClear();
   stop = vi.fn();
-  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn(async () => ({ getTracks: () => [{ stop }] })) } });
+  Object.defineProperty(navigator, 'mediaDevices', { configurable: true, value: { getUserMedia: vi.fn(async () => (order.push('getUserMedia'), { getTracks: () => [{ stop }] })) } });
   Object.defineProperty(HTMLMediaElement.prototype, 'play', { configurable: true, value: vi.fn(() => Promise.resolve()) });
   // jsdom draws nothing: a canvas whose context hands back blank pixels.
   HTMLCanvasElement.prototype.getContext = vi.fn(() => ({ drawImage: vi.fn(), getImageData: (_x: number, _y: number, w: number, h: number) => ({ data: new Uint8ClampedArray(w * h * 4), width: w, height: h }) })) as never;
@@ -53,6 +59,16 @@ describe('QrScan', () => {
     expect(onClose).toHaveBeenCalled();
     cleanup();
     expect(stop).toHaveBeenCalled();
+    // The desktop lets the window use the camera only while the dialog is open: asked before getUserMedia, closed after.
+    expect(order).toEqual(['connect:scanCamera:true', 'getUserMedia', 'connect:scanCamera:false']);
+  });
+
+  it('closes the camera gate when the dialog closes before the camera opened', async () => {
+    const { unmount } = render(<QrScan onLink={vi.fn()} onClose={vi.fn()} />);
+    unmount();
+    await waitFor(() => expect(bridge.call).toHaveBeenCalledWith('connect:scanCamera', { open: false }));
+    await Promise.resolve();
+    expect(navigator.mediaDevices.getUserMedia).not.toHaveBeenCalled();
   });
 
   it('closes on Escape', () => {

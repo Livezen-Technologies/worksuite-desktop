@@ -16,18 +16,15 @@ export interface BrandedSignInProps {
   auth: AuthState;
 }
 
-/** What the server record may say about its sign-in (the desktop fills these in where it knows them). */
-type ServerAuthHints = ServerInfo & { authMode?: 'oidc' | 'legacy'; browserSignIn?: { url: string } | null };
-
 /**
  * Whether this account signs in through the browser: WorkSuite Cloud always (OIDC); an enterprise server when its
- * discovery says `auth.mode: oidc` or offers `browser_sign_in` (Core's AppHandoff) — from the server record, or from
- * the connect run that just added it. Otherwise the in-app password form (legacy servers).
+ * discovery says `auth.mode: oidc` or offers `browser_sign_in` (Core's AppHandoff). The saved server record
+ * (`ServerInfo.authMode` / `browserSignIn`, kept across restarts) decides when it carries them; a record saved before
+ * them falls back to the connect run that just added the server. Otherwise the in-app password form (legacy servers).
  */
 export function signsInWithBrowser(account: AccountView | null | undefined, server: ServerInfo | null | undefined, run: ConnectRun | null | undefined): boolean {
   if (account?.deployment === 'CLOUD' || account?.kind === 'personal') return true;
-  const hints = server as ServerAuthHints | null | undefined;
-  if (hints?.authMode === 'oidc' || hints?.browserSignIn) return true;
+  if (server && (server.authMode !== undefined || server.browserSignIn !== undefined)) return server.authMode === 'oidc' || !!server.browserSignIn;
   const found = run?.server;
   if (found && account && hostOf(found.origin) === hostOf(account.serverOrigin)) return found.authMode === 'oidc' || !!found.browserSignIn;
   return false;

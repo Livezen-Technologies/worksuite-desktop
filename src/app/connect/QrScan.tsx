@@ -1,6 +1,7 @@
 import jsQR from 'jsqr';
 import { useEffect, useId, useRef, useState } from 'react';
 import { SETUP_LINK_PREFIX } from '@shared/trusted-config';
+import { call } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
 import { Button, IconButton } from '../../components/ui';
 
@@ -54,7 +55,9 @@ export async function decodeImageFile(file: File, canvas: HTMLCanvasElement): Pr
 /**
  * Screen 6's dialog — scan the setup QR from Admin Center with the camera, choose an image of it, or paste the setup
  * link. Only a `worksuite://setup` link is taken; nothing connects from here (the address screen shows the server it
- * names, and Continue starts the checks). The camera runs only while this dialog is open.
+ * names, and Continue starts the checks). The camera runs only while this dialog is open: the desktop lets the window
+ * use it (before sign-in) only between `connect:scanCamera {open:true}`, sent before `getUserMedia`, and
+ * `{open:false}`, sent when the dialog closes.
  */
 export function QrScan({ onLink, onClose }: QrScanProps) {
   const titleId = useId();
@@ -97,7 +100,14 @@ export function QrScan({ onLink, onClose }: QrScanProps) {
     let live = true;
     const media = typeof navigator !== 'undefined' ? navigator.mediaDevices : undefined;
     if (!media?.getUserMedia) return;
-    media.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false }).then(
+    const gate = (open: boolean) => call('connect:scanCamera', { open }).catch(() => undefined);
+    // The desktop's camera gate first (an older desktop without it keeps its own rule), then the camera.
+    void gate(true)
+      .then(() => {
+        if (!live) throw new Error('closed');
+        return media.getUserMedia({ video: { facingMode: 'environment', width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false });
+      })
+      .then(
       (s) => {
         if (!live) {
           s.getTracks().forEach((t) => t.stop());
@@ -126,6 +136,7 @@ export function QrScan({ onLink, onClose }: QrScanProps) {
       live = false;
       if (timer) clearInterval(timer);
       stream?.getTracks().forEach((t) => t.stop());
+      void gate(false);
     };
     // Once: the camera opens with the dialog and stops with it.
   }, []);

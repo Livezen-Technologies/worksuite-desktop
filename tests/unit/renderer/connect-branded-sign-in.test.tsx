@@ -37,6 +37,15 @@ describe('signsInWithBrowser', () => {
     expect(signsInWithBrowser(abc(), SERVER, browserRun)).toBe(true);
     expect(signsInWithBrowser(abc({ serverOrigin: 'https://other.example' }), SERVER, browserRun)).toBe(false);
   });
+
+  it('follows the saved server record after a restart, when no connect run is left', () => {
+    const bsi = { url: '/desktop/sign-in', exchange: '/api/auth/apps/exchange', client: 'worksuite-desktop' };
+    expect(signsInWithBrowser(abc(), { ...SERVER, authMode: 'legacy', browserSignIn: bsi }, null)).toBe(true);
+    expect(signsInWithBrowser(abc(), { ...SERVER, authMode: 'oidc', browserSignIn: null }, null)).toBe(true);
+    expect(signsInWithBrowser(abc(), { ...SERVER, authMode: 'legacy', browserSignIn: null }, null)).toBe(false);
+    // The record decides once it carries them: a stale run does not override it.
+    expect(signsInWithBrowser(abc(), { ...SERVER, authMode: 'legacy', browserSignIn: null }, browserRun)).toBe(false);
+  });
 });
 
 describe('BrandedSignIn', () => {
