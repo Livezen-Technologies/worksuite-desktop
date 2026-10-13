@@ -395,6 +395,18 @@ export function UpdateDiagnosticsPage() {
       .catch((e) => toast('error', errorMessage(e)));
   };
   const fix = result ? suggestedFix(result.checks) : null;
+  // Fix on a package repository check (worksuite-desktop#351): the source file and key, behind one password prompt.
+  const [fixing, setFixing] = useState(false);
+  const fixRepo = () => {
+    setFixing(true);
+    void call('updates:fixRepo')
+      .then((r) => {
+        toast(r.ok ? 'success' : 'error', r.message);
+        if (r.ok) run();
+      })
+      .catch((e) => toast('error', errorMessage(e)))
+      .finally(() => setFixing(false));
+  };
   return (
     <div className="space-y-4">
       {u?.failure ? <UpdateFailedPanel u={u} /> : null}
@@ -426,6 +438,13 @@ export function UpdateDiagnosticsPage() {
                     {c.label}
                   </th>
                   <td className="py-2.5 pr-4 text-ink-2">{c.detail}</td>
+                  <td className="py-2.5 pr-2 text-right">
+                    {c.action === 'fix-repo' && (c.status === 'fail' || c.status === 'low') ? (
+                      <Button size="sm" loading={fixing} disabled={running} onClick={fixRepo} aria-label={`Fix: ${c.label}`}>
+                        Fix
+                      </Button>
+                    ) : null}
+                  </td>
                   <td className={cx('py-2.5 pr-5 text-right font-semibold', STATUS_WORD[c.status].tone)}>{STATUS_WORD[c.status].word}</td>
                 </tr>
               ))}

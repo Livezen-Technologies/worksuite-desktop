@@ -19,6 +19,7 @@ import { UpdaterService, type UpdaterDeps } from '../../../electron/updater/upda
 import { UpdateHistory, UpdateNotifier, UpdateScheduler, CHECK_AFTER_LAUNCH_MS, CHECK_EVERY_MS } from '../../../electron/updater/update-flow';
 import { runUpdateDiagnostics, spaceNeeded, type UpdateDiagnosticsDeps } from '../../../electron/updater/diagnostics';
 import { noticeText, updateNotice } from '../../../electron/updater/notice';
+import { LinuxRepo, debSources } from '../../../electron/updater/linux-repo';
 import type { FetchLike } from '../../../electron/services/http';
 import type { BusyReport, UpdateStatus } from '../../../shared/types';
 
@@ -409,5 +410,125 @@ describe('a .deb or .rpm install updates itself (worksuite-desktop#345)', () => 
     await t.updater.check();
     await vi.waitFor(() => expect(t.updater.get().state).toBe('STAGED'));
     expect(t.updater.installOnQuitSync()).toBe(false);
+  });
+});
+
+describe('the WorkSuite APT/DNF repository on a .deb install (worksuite-desktop#351)', () => {
+  const URL = 'https://download.worksuitecloud.com';
+  const debAnswer = () => answer({ package: { id: 'pkg', type: 'deb', size: PACKAGE.length, sha256: SHA, file_name: 'WorkSuite-2.7.0-amd64.deb', download_url: 'https://cdn.example/WorkSuite-2.7.0-amd64.deb' } });
+  const policyOut = (candidate: string) => `worksuite:\n  Installed: 2.6.1\n  Candidate: ${candidate}\n  Version table:\n     ${candidate} 500\n        500 ${URL}/apt stable/main amd64 Packages\n`;
+  type Cb = (e: unknown, out: string, err: string) => void;
+
+  /** A LinuxRepo over a fake filesystem: `on` is a build made with WORKSUITE_LINUX_REPO=1. */
+  const repoWith = (opts: { on: boolean; suite?: string | null; candidate?: string; apt?: 'ok' | 'fail' | 'cancel' }) => {
+    const files: Record<string, string> = {};
+    if (opts.on) Object.assign(files, { '/res/linux-repo': `url=${URL}\nchannel=stable\n`, '/res/worksuite-repo': '#!/bin/sh', '/usr/share/keyrings/worksuite.gpg': 'k' });
+    if (opts.suite !== null) files['/etc/apt/sources.list.d/worksuite.sources'] = debSources(URL, (opts.suite ?? 'stable') as 'stable');
+    const exec = vi.fn((cmd: string, args: string[], _o: unknown, cb: Cb) => {
+      if (cmd === '/usr/bin/apt-cache') return cb(null, policyOut(opts.candidate ?? '2.7.0'), '');
+      if (args[0] === '/usr/bin/apt-get') {
+        if (opts.apt === 'fail') return cb(Object.assign(new Error('x'), { code: 100 }), '', 'E: broken');
+        if (opts.apt === 'cancel') return cb(Object.assign(new Error('x'), { code: 126 }), '', '');
+      }
+      cb(null, '', '');
+    });
+    const read = (p: string) => {
+      if (p in files) return files[p]!;
+      throw new Error('ENOENT');
+    };
+    const exists = (p: string) => p in files || ['/usr/bin/pkexec', '/usr/bin/apt-get', '/usr/bin/apt-cache'].includes(p);
+    return { repo: new LinuxRepo({ resources: '/res', read, exists, exec: exec as never }), exec };
+  };
+  const asDeb = (repo: LinuxRepo, over: Partial<UpdaterDeps> = {}) => {
+    const t = setup({ answer: debAnswer(), deps: { linuxKind: () => 'deb', linuxRepo: repo, ...over } });
+    delete process.env.APPIMAGE;
+    return t;
+  };
+  const pkexecCalls = (exec: ReturnType<typeof vi.fn>) => exec.mock.calls.filter(([c]) => c === '/usr/bin/pkexec').map(([, a]) => a as string[]);
+
+  it('switch off: the channel change, Update now and Diagnostics are as before, and pkexec only installs the download', async () => {
+    const { repo, exec } = repoWith({ on: false, suite: 'stable' });
+    const installPackage = vi.fn(async () => ({ ok: true as const }));
+    let channel: 'stable' | 'beta' = 'stable';
+    const t = asDeb(repo, { installPackage, channel: () => channel });
+    await t.updater.setChannel('beta', true, () => (channel = 'beta'));
+    channel = 'stable';
+    await t.updater.setChannel('stable', true, () => (channel = 'stable'));
+    await t.updater.check();
+    await vi.waitFor(() => expect(t.updater.get().state).toBe('STAGED'));
+    expect((await t.updater.install(true)).started).toBe(true);
+    expect(installPackage).toHaveBeenCalledWith('deb', expect.any(String));
+    expect(exec).not.toHaveBeenCalled();
+    expect((await t.updater.repoDiagnostics('2.7.0')).map((c) => c.status)).toEqual(['skip', 'skip', 'skip']);
+    expect(await t.updater.fixRepo()).toMatchObject({ ok: false });
+    expect(exec).not.toHaveBeenCalled();
+  });
+
+  it('switch on: changing the channel rewrites the source to that suite through pkexec', async () => {
+    const { repo, exec } = repoWith({ on: true, suite: 'stable' });
+    let channel: 'stable' | 'beta' = 'stable';
+    const t = asDeb(repo, { channel: () => channel });
+    await t.updater.setChannel('beta', true, (c) => (channel = c as 'beta'));
+    await vi.waitFor(() => expect(pkexecCalls(exec)).toEqual([['/res/worksuite-repo', 'setup', 'deb', 'beta']]));
+  });
+
+  it('switch on: Update now installs from the repository when apt offers exactly that version', async () => {
+    const { repo, exec } = repoWith({ on: true, candidate: '2.7.0' });
+    const installPackage = vi.fn(async () => ({ ok: true as const }));
+    const t = asDeb(repo, { installPackage });
+    await t.updater.check();
+    await vi.waitFor(() => expect(t.updater.get().state).toBe('STAGED'));
+    expect((await t.updater.install(true)).started).toBe(true);
+    expect(pkexecCalls(exec)).toEqual([['/usr/bin/apt-get', 'install', '--only-upgrade', '-y', 'worksuite']]);
+    expect(installPackage).not.toHaveBeenCalled();
+  });
+
+  it('switch on: apt failing, or apt not offering this version, falls back to the downloaded package', async () => {
+    for (const opts of [{ apt: 'fail' as const }, { candidate: '2.6.9' }]) {
+      const { repo } = repoWith({ on: true, ...opts });
+      const installPackage = vi.fn(async () => ({ ok: true as const }));
+      const t = asDeb(repo, { installPackage });
+      await t.updater.check();
+      await vi.waitFor(() => expect(t.updater.get().state).toBe('STAGED'));
+      expect((await t.updater.install(true)).started).toBe(true);
+      expect(installPackage).toHaveBeenCalledTimes(1);
+    }
+  });
+
+  it('switch on: Diagnostics checks the source, key and version, and Fix rewrites them behind one prompt', async () => {
+    const { repo, exec } = repoWith({ on: true, suite: 'beta' });
+    const t = asDeb(repo);
+    const checks = await t.updater.repoDiagnostics('2.7.0');
+    expect(checks.map((c) => [c.id, c.status])).toEqual([
+      ['repo-file', 'fail'],
+      ['repo-key', 'pass'],
+      ['repo-version', 'pass'],
+    ]);
+    expect(checks[0]!.action).toBe('fix-repo');
+    expect(await t.updater.fixRepo()).toEqual({ ok: true, message: 'The WorkSuite package source follows stable.' });
+    expect(pkexecCalls(exec)).toEqual([['/res/worksuite-repo', 'setup', 'deb', 'stable', '--refresh']]);
+  });
+
+  it('adds the repository checks to Diagnostics only when given them', async () => {
+    const base: UpdateDiagnosticsDeps = {
+      now: () => new Date('2026-10-13T08:00:00Z'),
+      host: 'download.worksuitecloud.com',
+      probe: async () => ({ reached: true, ms: 50, status: 200, verified: true, keyId: 'k', reason: null, pkg: null, download: null, latest: '2.7.0' }),
+      version: '2.6.1',
+      platform: 'linux',
+      arch: 'x64',
+      installType: '.deb package',
+      required: null,
+      channel: { label: 'Stable', source: 'You chose it', fallback: false },
+      freeBytes: async () => 10 * 1024 ** 3,
+      installWritable: async () => null,
+      database: () => ({ result: 'ok', schema: 1 }),
+      license: () => ({ signedIn: true, offline: false, lastVerifiedAt: '2026-10-13T07:00:00Z' }),
+    };
+    expect((await runUpdateDiagnostics(base)).checks).toHaveLength(9);
+    const repo = vi.fn(async () => [{ id: 'repo-file' as const, label: 'Package repository', status: 'skip' as const, detail: 'Not set up yet' }]);
+    const r = await runUpdateDiagnostics({ ...base, repo });
+    expect(r.checks.map((c) => c.id).slice(-1)).toEqual(['repo-file']);
+    expect(repo).toHaveBeenCalledWith('2.7.0');
   });
 });

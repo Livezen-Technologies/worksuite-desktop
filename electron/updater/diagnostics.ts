@@ -3,7 +3,8 @@ import type { UpdateDiagnosticCheck, UpdateDiagnostics } from '@shared/types';
 /**
  * Settings › Updates › Diagnostics: the nine checks that say why an update would not arrive or install, each Pass,
  * Low or Fail (or Skip when it does not apply), from what this computer can find out by itself. Nothing here
- * changes anything; Run again repeats them.
+ * changes anything; Run again repeats them. A .deb or .rpm install adds three for its package repository
+ * (worksuite-desktop#351), whose Fix buttons are the only changes, each behind a password prompt.
  */
 
 export interface UpdateProbe {
@@ -18,6 +19,8 @@ export interface UpdateProbe {
   /** The package on offer, if any, and whether its download URL answers. */
   pkg: { size: number } | null;
   download: { ok: boolean; status: number | null } | null;
+  /** The channel's newest version in the verified answer (the package repository check compares against it). */
+  latest?: string | null;
 }
 
 export interface UpdateDiagnosticsDeps {
@@ -36,6 +39,11 @@ export interface UpdateDiagnosticsDeps {
   installWritable: () => Promise<{ ok: boolean; detail: string } | null>;
   database: () => { result: string; schema: number | null };
   license: () => { signedIn: boolean; offline: boolean; lastVerifiedAt: string | null };
+  /**
+   * A .deb or .rpm install (worksuite-desktop#351): the package repository's checks (source file, key, version),
+   * given the newest version. Absent elsewhere, so other installs keep the nine checks.
+   */
+  repo?: (latest: string | null) => Promise<UpdateDiagnosticCheck[]>;
 }
 
 const GB = 1024 ** 3;
@@ -128,6 +136,8 @@ export async function runUpdateDiagnostics(d: UpdateDiagnosticsDeps): Promise<Up
         ? { id: 'license', label: 'License status', status: 'low', detail: `Offline · last verified ${ago(l.lastVerifiedAt, d.now())}` }
         : { id: 'license', label: 'License status', status: 'pass', detail: `Signed in · verified ${ago(l.lastVerifiedAt, d.now())}` },
   );
+
+  if (d.repo) checks.push(...(await d.repo(probe.latest ?? null).catch((): UpdateDiagnosticCheck[] => [])));
 
   return { ranAt: d.now().toISOString(), checks };
 }

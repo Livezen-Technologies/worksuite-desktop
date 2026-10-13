@@ -6,7 +6,7 @@ import { dirname, join } from 'node:path';
 import { promisify } from 'node:util';
 import { canonicalJson } from '@shared/canonical-json';
 import { DEADLINE_WARNINGS_MS, isNewer, resolveArtifactUrl } from '@shared/release';
-import type { Arch, BusyReport, MandatoryUpdate, PipelineStep, PipelineStepId, Platform, ReleaseInfo, ReleaseNotes, UpdateActivity, UpdateChannel, UpdateFailure, UpdateStatus } from '@shared/types';
+import type { Arch, BusyReport, MandatoryUpdate, PipelineStep, PipelineStepId, Platform, ReleaseInfo, ReleaseNotes, UpdateActivity, UpdateChannel, UpdateDiagnosticCheck, UpdateFailure, UpdateStatus } from '@shared/types';
 import { CHANNEL_INFO, DEFAULT_MAX_DEFERRALS, acceptsVersion, channelChange, failureRef, laterUntil, mandatoryView, restartImpact, restartWaits, waitingFor, type LaterChoice } from '@shared/updates';
 import { compareVersions, isBelowMinimum } from '@shared/version';
 import { createHash, createPublicKey, verify } from 'node:crypto';
@@ -14,7 +14,8 @@ import { logger } from '../main/log';
 import type { FetchLike } from '../services/http';
 import { DEFAULT_GRACE_MINUTES, acceptUpdateResponse, isCriticalRelease, isRequired, isSecurityRelease, isTestChannel, ucInstallType, type UcPackage } from './update-center';
 import { ResumableDownload } from './downloader';
-import { installPackage, linuxInstallKind, type LinuxInstallKind } from './linux';
+import { installPackage, linuxInstallKind, type LinuxInstallKind, type PackageInstallResult } from './linux';
+import { LinuxRepo, repoChecks, repoOffers, repoSuite } from './linux-repo';
 import type { UpdateProbe } from './diagnostics';
 import { linuxWatchdogScript, macRestoreScript, macSwapScript, UpdateScheduler, type UpdateHealth, type UpdateHistory, type UpdateNotifier } from './update-flow';
 
@@ -65,6 +66,8 @@ export interface UpdaterDeps {
   linuxKind?: () => LinuxInstallKind | null;
   /** Linux .deb/.rpm: installs the package behind a password prompt (tests replace it). */
   installPackage?: typeof installPackage;
+  /** Linux .deb/.rpm: the WorkSuite package repository, off unless the build turned it on (worksuite-desktop#351). */
+  linuxRepo?: LinuxRepo;
   /** Opens a file in its desktop handler (shell.openPath): '' when it opened. */
   openPath?: (path: string) => Promise<string>;
   /** Pinned Update Center response keys, key_id → base64url raw Ed25519. */
@@ -192,6 +195,7 @@ export class UpdaterService {
   private partialPath: string | null = null;
   private graceTimer: NodeJS.Timeout | null = null;
   private freeTimer: NodeJS.Timeout | null = null;
+  private linuxRepo: LinuxRepo | null = null;
 
   constructor(private readonly deps: UpdaterDeps) {
     this.status = {
@@ -439,6 +443,7 @@ export class UpdaterService {
     save(to);
     this.record('channel', `${from} → ${to}`, null);
     log.info('update channel changed', { from, to });
+    if (change.direction !== 'same') void this.syncRepoChannel();
     if (change.direction !== 'same' && this.status.state !== 'INSTALLING') this.forgetOffer();
     return this.check();
   }
@@ -636,6 +641,66 @@ export class UpdaterService {
     return this.downloading;
   }
 
+  // ── The WorkSuite package repository (worksuite-desktop#351) ───────────────
+
+  private repo(): LinuxRepo {
+    return this.deps.linuxRepo ?? (this.linuxRepo ??= new LinuxRepo());
+  }
+
+  /**
+   * The channel changed: a .deb/.rpm install whose package source follows another suite is rewritten to this one
+   * (pkexec). Only where the build uses the repository and the source file is there; a missing file is left to
+   * Diagnostics › Fix rather than asking for a password here. A closed prompt leaves the channel changed.
+   */
+  private async syncRepoChannel(): Promise<void> {
+    const kind = this.systemPackage();
+    const repo = this.repo();
+    if (!kind || !repo.enabled()) return;
+    const channel = this.deps.channel();
+    const st = repo.state(kind, channel);
+    if (!st.file.exists || st.file.suite === st.expected) return;
+    const r = await repo.setup(kind, channel);
+    this.record('repo-channel', r.ok ? `${st.file.suite ?? 'none'} → ${st.expected}` : `${st.expected}: ${r.reason} (${r.detail})`, null);
+    if (!r.ok) this.deps.onWarning(`The WorkSuite package source still follows ${st.file.suite ?? 'another channel'}. Settings › Updates › Diagnostics can switch it to ${st.expected}.`);
+  }
+
+  /** Diagnostics' three package repository checks on a .deb/.rpm install; none elsewhere. */
+  async repoDiagnostics(latest: string | null): Promise<UpdateDiagnosticCheck[]> {
+    const kind = this.systemPackage();
+    if (!kind) return [];
+    const repo = this.repo();
+    const st = repo.state(kind, this.deps.channel());
+    return repoChecks(st, st.marker && st.file.exists ? await repo.policy(kind) : null, latest);
+  }
+
+  /** Diagnostics › Fix: the key and the source file for this channel, and fresh package lists, behind one prompt. */
+  async fixRepo(): Promise<{ ok: boolean; message: string }> {
+    const kind = this.systemPackage();
+    const repo = this.repo();
+    if (!kind || !repo.enabled()) return { ok: false, message: 'The WorkSuite package repository is not set up in this build.' };
+    const r = await repo.setup(kind, this.deps.channel(), true);
+    this.record('repo-fix', r.ok ? repoSuite(this.deps.channel()) : `${r.reason} (${r.detail})`, null);
+    if (r.ok) return { ok: true, message: `The WorkSuite package source follows ${repoSuite(this.deps.channel())}.` };
+    return { ok: false, message: r.reason === 'cancelled' ? 'The password prompt was closed; nothing was changed.' : r.reason === 'no-pkexec' ? 'This computer has no pkexec to ask for your password.' : `The package source could not be written: ${r.detail}` };
+  }
+
+  /**
+   * Update now on a .deb (worksuite-desktop#351): when the repository is set up for this channel and apt already
+   * offers exactly `version` from it, `pkexec apt-get install --only-upgrade -y worksuite`. Null when it is not, and
+   * the downloaded package is installed as before.
+   */
+  private async installFromRepo(version: string): Promise<PackageInstallResult | null> {
+    const repo = this.repo();
+    if (!repo.enabled()) return null;
+    const st = repo.state('deb', this.deps.channel());
+    if (!st.marker || !st.file.exists) return null;
+    const policy = await repo.policy('deb').catch(() => null);
+    if (!repoOffers(st, policy, version)) return null;
+    const r = await repo.aptUpgrade();
+    if (!r.ok) log.warn('apt-get from the WorkSuite repository did not install the update', { reason: r.reason, detail: r.detail });
+    return r;
+  }
+
   // ── Diagnostics (Settings › Updates › Diagnostics) ─────────────────────────
 
   /**
@@ -666,7 +731,7 @@ export class UpdaterService {
     if (!accepted.ok) return { reached: true, ms, status: res.status, verified: false, keyId, reason: accepted.reason, pkg: null, download: null };
     const pkg = accepted.response.package ?? null;
     const latest = accepted.response.latest_version ?? null;
-    if (!pkg || !latest || !isNewer(latest, app.getVersion())) return { reached: true, ms, status: res.status, verified: true, keyId, reason: null, pkg: null, download: null };
+    if (!pkg || !latest || !isNewer(latest, app.getVersion())) return { reached: true, ms, status: res.status, verified: true, keyId, reason: null, pkg: null, download: null, latest };
     const dl = resolveArtifactUrl(pkg.download_url, url, this.deps.allowInsecure);
     let download: UpdateProbe['download'] = { ok: false, status: null };
     if (dl) {
@@ -678,7 +743,7 @@ export class UpdaterService {
         download = { ok: false, status: null };
       }
     }
-    return { reached: true, ms, status: res.status, verified: true, keyId, reason: null, pkg: { size: pkg.size }, download };
+    return { reached: true, ms, status: res.status, verified: true, keyId, reason: null, pkg: { size: pkg.size }, download, latest };
   }
 
   /** Free space where updates are downloaded. */
@@ -1093,9 +1158,12 @@ export class UpdaterService {
    * the desktop's software installer instead, and WorkSuite keeps running until the person installs it there.
    */
   private async installSystemPackage(kind: 'deb' | 'rpm', path: string, version: string, relaunch: boolean, busy: BusyReport): Promise<{ started: boolean; busy: BusyReport | null; message: string | null }> {
-    const r = await (this.deps.installPackage ?? installPackage)(kind, path);
+    // From the WorkSuite repository when apt already offers this version there (#351); a closed prompt stays closed,
+    // anything else falls back to the downloaded, checked package.
+    const viaRepo = kind === 'deb' ? await this.installFromRepo(version) : null;
+    const r = viaRepo && (viaRepo.ok || viaRepo.reason === 'cancelled') ? viaRepo : await (this.deps.installPackage ?? installPackage)(kind, path);
     if (r.ok) {
-      this.record('install', `${kind} installed by the package manager`, version);
+      this.record('install', r === viaRepo ? 'deb installed from the WorkSuite repository (apt-get)' : `${kind} installed by the package manager`, version);
       if (relaunch) {
         await this.deps.beforeQuit();
         app.relaunch({ args: ['--updated'] });

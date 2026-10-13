@@ -11,6 +11,16 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.249 — 2026-10-13
+
+- **Linux: .deb and .rpm installs can update themselves again (#345).** The package now records how it was installed (`resources/package-type`). Before this, the in-app update added in 0.2.240 could not tell a .deb or .rpm install apart, because nothing wrote that file.
+- **Ready for the WorkSuite APT and DNF repositories (#351), switched off.** When a build is made with the repository switch on:
+  - The package adds the WorkSuite package source and its signing key, so `sudo apt upgrade` and dnf also bring new versions. On Debian/Ubuntu these are `/etc/apt/sources.list.d/worksuite.sources` and `/usr/share/keyrings/worksuite.gpg`; on Fedora/RHEL, `/etc/yum.repos.d/worksuite.repo`.
+  - Changing the update channel moves the source to the matching suite, after one password prompt.
+  - Diagnostics gains three checks, each with **Fix**: the package repository, its signing key, and the version it offers.
+  - On a .deb, **Update now** installs through apt when the repository already offers the new version, and falls back to the downloaded package as before.
+- Where it bites: nothing changes for the repository until the download server has the repositories (worksite-download 0.6.0) and a build sets `WORKSUITE_LINUX_REPO=1` with the public key. Adding the source earlier would break `apt update`, so this build adds none. Steps are in `docs/RELEASING.md`.
+
 ## 0.2.248 — 2026-10-13
 
 - **See what happened to an email reply (#335).** Each emailed reply shows its latest state on the right of its header, e.g. "12:04 PM · Opened 12:30 PM (3×) · Clicked 1 link".

@@ -77,6 +77,14 @@ export type PackageInstallResult = { ok: true } | { ok: false; reason: 'no-pkexe
 export function installPackage(kind: 'deb' | 'rpm', file: string, exec: typeof execFile = execFile, exists: (p: string) => boolean = existsSync): Promise<PackageInstallResult> {
   const c = packageInstallCommand(kind, file, exists);
   if (!c) return Promise.resolve({ ok: false, reason: 'no-pkexec', detail: 'pkexec or a package manager is not installed' });
+  return runAsRoot(c, exec);
+}
+
+/**
+ * Runs one command behind pkexec's password prompt (a package install, or the WorkSuite repository helper,
+ * worksuite-desktop#351), reading its exit the same way: 126/127 is a closed prompt, anything else a failure.
+ */
+export function runAsRoot(c: { cmd: string; args: string[] }, exec: typeof execFile = execFile): Promise<PackageInstallResult> {
   return new Promise((resolve) => {
     exec(c.cmd, c.args, { timeout: 15 * 60_000, env: { ...process.env, DEBIAN_FRONTEND: 'noninteractive' } }, (err, _stdout, stderr) => {
       if (!err) return resolve({ ok: true });

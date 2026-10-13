@@ -288,6 +288,26 @@ describe('Settings › Updates › Diagnostics', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Run again' }));
     await waitFor(() => expect(mocked.mock.calls.filter(([c]) => c === 'updates:diagnostics').length).toBe(2));
   });
+
+  it('a package repository check that fails has Fix, which rewrites it and runs the checks again (worksuite-desktop#351)', async () => {
+    app.set({ update: status() });
+    handlers.set('updates:diagnostics', () => ({
+      ranAt: '2026-10-13T09:41:00Z',
+      checks: [
+        { id: 'repo-file', label: 'Package repository', status: 'fail', detail: '/etc/apt/sources.list.d/worksuite.sources follows stable, the channel is Beta', action: 'fix-repo' },
+        { id: 'repo-key', label: 'Repository signing key', status: 'pass', detail: '/usr/share/keyrings/worksuite.gpg', action: 'fix-repo' },
+        { id: 'repo-version', label: 'Repository version', status: 'skip', detail: 'Not set up yet' },
+      ],
+    }));
+    handlers.set('updates:fixRepo', () => ({ ok: true, message: 'The WorkSuite package source follows beta.' }));
+    wrap(<UpdateDiagnosticsPage />);
+    await screen.findByText(/follows stable, the channel is Beta/);
+    expect(screen.queryByRole('button', { name: 'Fix: Repository signing key' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Fix: Repository version' })).toBeNull();
+    fireEvent.click(screen.getByRole('button', { name: 'Fix: Package repository' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:fixRepo'));
+    await waitFor(() => expect(mocked.mock.calls.filter(([c]) => c === 'updates:diagnostics').length).toBe(2));
+  });
 });
 
 describe('after updating, and a critical release', () => {

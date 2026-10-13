@@ -90,6 +90,13 @@ if apparmor_status --enabled >/dev/null 2>&1; then
     echo "Skipping the AppArmor profile: this AppArmor does not support it."
   fi
 fi
+
+# As build/linux/after-install-deb.tpl: the package type for the in-app updater (#345), and the WorkSuite package
+# source only in a WORKSUITE_LINUX_REPO=1 build, which carries resources/linux-repo and the helper (#351).
+[ -s '/opt/WorkSuite/resources/package-type' ] || echo deb > '/opt/WorkSuite/resources/package-type' || true
+if [ -f '/opt/WorkSuite/resources/linux-repo' ] && [ -x '/opt/WorkSuite/resources/worksuite-repo' ]; then
+  '/opt/WorkSuite/resources/worksuite-repo' setup deb || echo 'WorkSuite: the package repository was not set up; Settings > Updates > Diagnostics can fix it.' >&2
+fi
 exit 0
 """
 
@@ -104,6 +111,10 @@ case "$1" in
       if hash apparmor_parser 2>/dev/null; then apparmor_parser --remove '/etc/apparmor.d/worksuite' >/dev/null 2>&1 || true; fi
       rm -f '/etc/apparmor.d/worksuite'
     fi
+    rm -f '/opt/WorkSuite/resources/package-type'
+    rmdir '/opt/WorkSuite/resources' '/opt/WorkSuite' 2>/dev/null || true
+    if grep -qs '^# Written by WorkSuite' '/etc/apt/sources.list.d/worksuite.sources'; then rm -f '/etc/apt/sources.list.d/worksuite.sources'; fi
+    if [ ! -e '/etc/apt/sources.list.d/worksuite.sources' ]; then rm -f '/usr/share/keyrings/worksuite.gpg'; fi
     ;;
 esac
 exit 0

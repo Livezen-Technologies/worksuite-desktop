@@ -13,7 +13,9 @@
  *            or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID
  *   Windows  WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD, or Azure Trusted Signing
  *            (AZURE_TRUSTED_SIGNING_* — the Q8 default in the SRS)
- *   Linux    GPG signing of packages happens in the repository pipeline
+ *   Linux    GPG signing of packages happens in the repository pipeline. The WorkSuite APT/DNF repositories
+ *            (worksuite-desktop#351) are OFF unless WORKSUITE_LINUX_REPO=1 with WORKSUITE_REPO_GPG_PUBLIC_KEY
+ *            (build/linux-repo.cjs, docs/RELEASING.md)
  *
  * An unsigned build still packages; it just cannot update itself (the
  * updater refuses to trust a publisher it cannot identify).
@@ -26,6 +28,7 @@
  * WS_RELEASE_BUILD=1) and warns loudly for any other build.
  */
 const macSigning = require('./mac-signing.cjs');
+const linuxRepo = require('./linux-repo.cjs');
 // Universal Links (worksuite-desktop#170): with a provisioning profile that grants Associated Domains for
 // app.worksuite.lk (Team ID + lk.worksuite.desktop), the app is signed with it and claims those links. Without one
 // the build is as before: worksuite:// still works, and the web fallback page hands links over through it.
@@ -89,6 +92,8 @@ module.exports = {
 
   beforePack: macSigning.beforePack,
   afterSign: macSigning.afterSign,
+  // Linux, only with WORKSUITE_LINUX_REPO=1: the package repository's marker, key and helper (worksuite-desktop#351).
+  afterPack: linuxRepo.afterPack,
 
   mac: {
     category: 'public.app-category.business',
@@ -180,8 +185,20 @@ module.exports = {
     artifactName: 'WorkSuite-${version}-${arch}.${ext}',
   },
   // Remote control on X11: xdotool injects; xwininfo (x11-utils) tells a shared window from one covering it.
-  deb: { depends: ['libsecret-1-0', 'libnotify4', 'libxss1', 'libnss3'], recommends: ['xdotool', 'x11-utils'] },
-  rpm: { depends: ['libsecret', 'libnotify', 'libXScrnSaver', 'nss'] },
+  // The install scripts are electron-builder's own plus two steps (build/linux/): resources/package-type for the
+  // in-app updater (worksuite-desktop#345), and the WorkSuite package source, which only a WORKSUITE_LINUX_REPO=1
+  // build adds (#351); uninstall removes both, an upgrade neither.
+  deb: {
+    depends: ['libsecret-1-0', 'libnotify4', 'libxss1', 'libnss3'],
+    recommends: ['xdotool', 'x11-utils'],
+    afterInstall: 'build/linux/after-install-deb.tpl',
+    afterRemove: 'build/linux/after-remove-deb.tpl',
+  },
+  rpm: {
+    depends: ['libsecret', 'libnotify', 'libXScrnSaver', 'nss'],
+    afterInstall: 'build/linux/after-install-rpm.tpl',
+    afterRemove: 'build/linux/after-remove-rpm.tpl',
+  },
 
   // Releases are published to the WorkSuite Update Center (docs/RELEASING.md, one channel each:
   // STABLE, BETA, DEV), not by electron-updater feeds.

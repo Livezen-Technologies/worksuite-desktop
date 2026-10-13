@@ -96,6 +96,11 @@ jobs:
           AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
           AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
           CSC_IDENTITY_AUTO_DISCOVERY: ${{ secrets.MAC_CSC_LINK != '' }}
+          # Linux: the WorkSuite APT/DNF repositories (worksuite-desktop#351) stay OFF until the repository is live.
+          # Turn them on with the repository VARIABLES (not secrets: nothing here is private) WORKSUITE_LINUX_REPO=1
+          # and WORKSUITE_REPO_GPG_PUBLIC_KEY (the ASCII-armoured public key). Unset, the .deb/.rpm add no package source.
+          WORKSUITE_LINUX_REPO: ${{ vars.WORKSUITE_LINUX_REPO }}
+          WORKSUITE_REPO_GPG_PUBLIC_KEY: ${{ vars.WORKSUITE_REPO_GPG_PUBLIC_KEY }}
       - uses: actions/upload-artifact@v4
         with:
           name: worksuite-${{ runner.os }}

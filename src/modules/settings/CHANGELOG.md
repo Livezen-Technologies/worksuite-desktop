@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.38.0 — 2026-10-13
+
+**Added**
+
+- Settings › Updates › Diagnostics on a .deb or .rpm install checks the WorkSuite package repository (source file and its suite, signing key, apt-cache policy / dnf version), each problem with a Fix button that rewrites it through pkexec; 'Not set up yet' while the build does not use the repository (#351)
+
 ## 1.37.0 — 2026-10-11
 
 **Added**
