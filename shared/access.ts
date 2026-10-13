@@ -43,11 +43,11 @@ export function guestLockedApp(idOrRoute: string): string | null {
 const CATALOGUE_IDS = new Set(APP_CATALOGUE.map((a) => a.id));
 
 /** What of a bootstrap decides access. */
-export type Grantable = { apps: AccessGrant['apps']; permissions: string[]; serverApps?: string[] | null; selfService?: string[] | null };
+export type Grantable = { apps: AccessGrant['apps']; permissions: string[]; serverApps?: string[] | null; selfService?: string[] | null; lockedApps?: string[] | null };
 
 /** The grant a bootstrap carries, self-service apps included (absent on older servers and cached copies). */
 export function grantOf(b: Grantable): AccessGrant {
-  return { apps: b.apps, permissions: b.permissions, serverApps: b.serverApps ?? null, selfService: b.selfService ?? [] };
+  return { apps: b.apps, permissions: b.permissions, serverApps: b.serverApps ?? null, selfService: b.selfService ?? [], locked: b.lockedApps ?? [] };
 }
 
 /** The catalogue ids of the apps a bootstrap allows (self-service ones included); none without one. */
