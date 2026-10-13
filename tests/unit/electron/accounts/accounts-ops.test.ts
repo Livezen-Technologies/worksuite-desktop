@@ -254,3 +254,16 @@ describe('links by account (§4 step 5)', () => {
     for (const u of ['mailto:a@b.c', 'worksuite://auth/callback?code=1', 'worksuite://setup?d=x&s=y', 'https://x.example/meet/123']) expect(routeLink(u, [a, b], a.id)).toBeNull();
   });
 });
+
+describe('Work Offline (screen 16)', () => {
+  it('sends nothing while on: the request fails as unreachable, so the queue keeps the write', async () => {
+    const { HttpClient } = await import('../../../../electron/services/http');
+    let on = true;
+    const fetch = vi.fn(async () => new Response(JSON.stringify({ status: 'success', data: 1 }), { headers: { 'Content-Type': 'application/json' } }));
+    const http = new HttpClient({ fetch, origin: () => 'https://a.example', tokens: { accessToken: () => 't', refresh: async () => 'ok' }, clientHeaders: () => ({}), onReachability: () => undefined, onAuthLost: () => undefined, workOffline: () => on });
+    await expect(http.get('/api/x')).rejects.toMatchObject({ code: 'NETWORK_UNREACHABLE' });
+    expect(fetch).not.toHaveBeenCalled();
+    on = false;
+    await expect(http.get('/api/x')).resolves.toBe(1);
+  });
+});

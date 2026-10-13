@@ -55,6 +55,8 @@ export interface AccountsRuntime {
   accountPins?: (host: string) => string[];
   /** The service banner's monitor, built by discovery (`DiscoveryHandle.health`). */
   health?: HealthMonitorDeps;
+  /** Cloud's optional dependencies (WP3): stages, activation, the account's store, quota, keys. */
+  cloud?: Partial<Pick<CloudDeps, 'server' | 'acceptLogin' | 'onStage' | 'activated' | 'onSignInFailed' | 'store' | 'isPackaged' | 'rotatedEntitlementKeys' | 'onQuotaRoom' | 'onQuotaWarning' | 'cloudOrigin' | 'deviceName'>>;
 }
 
 export interface AccountsWiringDeps {
@@ -180,6 +182,9 @@ export function installAccounts(deps: AccountsWiringDeps): AccountsWiring {
     copyText,
     isDefaultProtocolClient: () => app.isDefaultProtocolClient('worksuite'),
     focused: () => BrowserWindow.getFocusedWindow() !== null,
+    isPackaged: app.isPackaged,
+    cloudOrigin: cloudOrigin(app.isPackaged),
+    ...(accounts?.cloud ?? {}),
   };
 
   const discovery = registerDiscoveryHandlers(router, discoveryDeps);

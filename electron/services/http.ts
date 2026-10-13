@@ -332,7 +332,8 @@ export class HttpClient {
     // A version the server no longer accepts may be refused with 426 or with any error carrying UPDATE_REQUIRED.
     if (res.status === 403 || res.status === 426 || (res.status >= 400 && res.status !== 401 && res.status < 500)) {
       const body = await readEnvelope(res.clone());
-      if (body?.code === 'DESKTOP_ACCESS_DISABLED' || body?.code === 'VERSION_UNSUPPORTED' || body?.code === 'UPDATE_REQUIRED') {
+      // WorkSuite Cloud's gateway: a suspended or unknown organization makes Cloud fetch /me again (§3).
+      if (body?.code === 'DESKTOP_ACCESS_DISABLED' || body?.code === 'VERSION_UNSUPPORTED' || body?.code === 'UPDATE_REQUIRED' || body?.code === 'ORG_SUSPENDED' || body?.code === 'ORG_NOT_FOUND') {
         this.deps.onDeviceDirective?.(body.code as DesktopErrorCode, body.message ?? body.code);
       }
     }

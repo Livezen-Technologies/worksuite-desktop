@@ -673,6 +673,7 @@ const api = {
     details: call('connection:details'),
     speedTest: call('connection:speedTest'),
     reconnect: call('connection:reconnect'),
+    workOffline: call('connection:workOffline'),
   },
   // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (accounts-channels.ts).
   accounts: {
@@ -692,6 +693,7 @@ const api = {
   },
   connect: {
     start: call('connect:start'),
+    scanCamera: call('connect:scanCamera'),
     get: call('connect:get'),
     cancel: call('connect:cancel'),
     confirm: call('connect:confirm'),

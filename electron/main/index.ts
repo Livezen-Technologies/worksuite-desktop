@@ -35,7 +35,7 @@ import { broadcast, guestWindowIds, sendTo } from './events';
 import { installAppearance } from '../windows/appearance';
 import { AppearanceSync } from '../services/appearance-sync';
 import { registerHandlers } from './handlers';
-import { cloudOrigin, emitAccounts, installAccounts, policyKeyFor, seedServerConfig, trustedWithEnterprise } from './accounts-wiring';
+import { cloudOrigin, emitAccounts, installAccounts, type AccountsWiring, policyKeyFor, seedServerConfig, trustedWithEnterprise } from './accounts-wiring';
 import type { AccountRecord, ServiceHealthState } from '@shared/accounts';
 import type { TrustedConfig } from '@shared/trusted-config';
 import type { AuthState } from '@shared/types';
@@ -66,7 +66,7 @@ import { registerAppProtocol } from '../protocols/app-protocol';
 import { devOrigin, hardenSession, isTrustedShellUrl, openExternalSafely, registerPrivilegedSchemes, hardenWebContents, setExternalAllowList, setMediaGate } from '../security/hardening';
 import { createApiProxy } from '../services/api-proxy';
 import { AuditService } from '../services/audit';
-import { AuthService, normalizeServerUrl, probeServer, type PublicUser } from '../services/auth';
+import { AuthService, normalizeServerUrl, probeServer, type PublicUser, type SignInPayload } from '../services/auth';
 import { DesktopAccountsFile, OfficeSignIn } from '../services/office-signin';
 import { OfficeApp } from '../services/office-app';
 import { BootstrapService } from '../services/bootstrap';
@@ -292,6 +292,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const askedAccount = process.argv.find((a) => a.startsWith('--account='))?.slice('--account='.length) ?? null;
   if (askedAccount && registry.get(askedAccount)) registry.setActive(askedAccount);
   const scopes = new ScopeHolder(p.userData);
+  /** Discovery's and Cloud's handles (installAccounts, below); null until then. */
+  let accountsWiring: AccountsWiring | null = null;
   const firstAccount = registry.active();
   const firstScope = firstAccount ? scopes.bind(firstAccount) : null;
   const profile = firstScope?.paths ?? defaultProfile;
@@ -370,7 +372,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     Object.assign(h, auth.deviceHeader());
     // A Personal account: WorkSuite Cloud runs Core for its organization (Connection & Startup §3).
     const open = scopes.current()?.account;
-    if (open?.kind === 'personal' && open.organizationId) h['X-WS-Org'] = open.organizationId;
+    const org = open?.kind === 'personal' ? (accountsWiring?.cloud.organizationId() ?? open.organizationId) : null;
+    if (org) h['X-WS-Org'] = org;
     return h;
   };
 
@@ -453,6 +456,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (code === 'DEVICE_REVOKED') void sessionCtl?.wipe(message);
       else if (code === 'DESKTOP_ACCESS_DISABLED') sessionCtl?.handleDirective({ kind: 'block', reason: message });
       else if (code === 'VERSION_UNSUPPORTED' || code === 'UPDATE_REQUIRED') updater.serverRejected();
+      // WorkSuite Cloud's gateway: the organization was suspended or is gone — Cloud reads /me again (§3).
+      else if (code === 'ORG_SUSPENDED' || code === 'ORG_NOT_FOUND') accountsWiring?.cloud.refetchMe();
     },
   });
   const http = new HttpClient(httpDeps(timeFetch(fetchImpl, apiTimings)));
@@ -688,6 +693,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const hash = (path: string) => hashWith('hash', path);
 
   const transfers: TransferManager = new TransferManager({
+    // A Personal account's storage is full: the upload waits, and Cloud asks for the usage more often (§3).
+    onQuotaHeld: () => accountsWiring?.cloud.quotaExceeded(),
     db,
     vault: getVault,
     http: bulkHttp,
@@ -966,6 +973,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Office files on this computer for WorkSuite DOC / Sheet / Slides tabs (office-local.ts): handles, never paths.
   const officeFiles = new OfficeLocalFiles({ forbidden: () => [p.userData] });
   const officeLocal = new OfficeExternal({
+    onQuota: () => accountsWiring?.cloud.quotaExceeded(),
     db,
     vault: getVault,
     http,
@@ -3361,8 +3369,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const rotatedKeys = (): Readonly<Record<string, string>> => appDb.getConfig<Record<string, string>>('discovery_keys') ?? {};
   setDiscoveryKeysSink((keys) => appDb.setConfig('discovery_keys', { ...rotatedKeys(), ...keys }));
 
-  const tokenEndpointFor = (_account: AccountRecord | null): TokenEndpoint | null => null;
-  auth.rebind(tokenEndpointFor(firstAccount));
+  /**
+   * Who refreshes and revokes an account's tokens: OneAuth for a Personal (Cloud) account (WP3's OIDC endpoint),
+   * WorkSuite's own `/api/auth/refresh` (null) otherwise. Asked before the session starts, never inside a switch's
+   * bind budget (it may read the issuer's metadata).
+   */
+  const tokenEndpointFor = async (account: AccountRecord | null): Promise<TokenEndpoint | null> => {
+    if (!account || (account.kind !== 'personal' && account.deployment !== 'CLOUD')) return null;
+    return (await accountsWiring?.cloud.tokenEndpoint(account.id).catch(() => null)) ?? null;
+  };
+  const useTokenEndpointFor = async (account: AccountRecord | null): Promise<void> => {
+    const ep = await tokenEndpointFor(account);
+    if (scopes.current()?.id === account?.id) auth.setTokenEndpoint(ep);
+  };
+  auth.rebind(null);
   sessionCtl.managedServerApplies = () => {
     const a = registry.active();
     return !a || a.managed;
@@ -3378,7 +3398,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     secrets.rebind(scope.paths.secrets);
     dbKey = vaultKey();
     vault = new Vault(Buffer.from(dbKey, 'base64'));
-    auth.rebind(tokenEndpointFor(account));
+    auth.rebind(null);
     device.rebind();
     settings.setUserLanguageScope(null, null);
     shellSessions.ensureAll(scope.partitions);
@@ -3414,7 +3434,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const server = serverInfoOf(account);
     const config = { getConfig: <T>(key: string) => (key === 'server' ? (server as T) : undefined), setConfig: () => undefined, deleteConfig: () => undefined } as unknown as Database;
     const holder = new AuthService(config, store, f, () => ({ [CLIENT_TYPE_HEADER]: CLIENT_TYPE }));
-    holder.rebind(tokenEndpointFor(account));
+    holder.rebind(null);
+    let endpointAsked = false;
     const client = new HttpClient({
       fetch: f,
       origin: () => server.origin,
@@ -3423,7 +3444,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       onReachability: () => undefined,
       onAuthLost: () => undefined,
     });
-    return { refresh: () => holder.refresh(), get: (path) => client.get(path), dispose: () => holder.rebind(null) };
+    const refresh = async (): Promise<'ok' | 'offline' | 'lost'> => {
+      if (!endpointAsked) {
+        endpointAsked = true;
+        holder.setTokenEndpoint(await tokenEndpointFor(account));
+      }
+      return holder.refresh();
+    };
+    return { refresh, get: (path) => client.get(path), dispose: () => holder.rebind(null) };
   }
 
   /** The session's sign-in state, on the open account's record (the switcher's "Signed out", the chooser). */
@@ -3438,6 +3466,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (signInState === a.signInState && JSON.stringify(user) === JSON.stringify(a.user) && organizationId === a.organizationId && organizationName === a.organizationName) return;
     const next = registry.update(a.id, { signInState, user, organizationId, organizationName });
     if (next) scopes.refresh(next);
+    // Cloud follows the open account signing in or out (WP3).
+    if (signInState !== a.signInState) accountsWiring?.cloud.accountChanged();
     accountsService?.emit();
   }
 
@@ -3484,7 +3514,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     background,
     bind: (account) => bindAccount(account),
-    init: () => sessionCtl.init({ cachedFirst: true }),
+    init: async () => {
+      const open = registry.active();
+      await useTokenEndpointFor(open);
+      accountsWiring?.cloud.accountChanged();
+      await sessionCtl.init({ cachedFirst: true });
+    },
     show: (handle) => handle.commit(),
     discard: (handle) => handle.discard(),
     relaunch: (id) => relaunch(false, [`--account=${id}`]),
@@ -3498,7 +3533,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     store.init();
     const token = store.get('auth:refresh');
     if (!token) return;
-    const endpoint = tokenEndpointFor(account);
+    const endpoint = await tokenEndpointFor(account);
     if (endpoint) await endpoint.revoke(token).catch(() => undefined);
     else {
       await fetchFor(account.id)(`${account.apiOrigin}/api/auth/logout`, {
@@ -3668,7 +3703,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   }
 
   // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (Connection & Startup).
-  const accountsWiring = installAccounts({
+  accountsWiring = installAccounts({
     router,
     ctx,
     accounts: {
@@ -3688,16 +3723,56 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       fetchFor,
       acceptTokens: async (accountId, tokens) => {
         if (registry.activeId() !== accountId) await accountsService.switchTo(accountId);
-        auth.acceptTokens(tokens);
-        const me = await http.get<{ user?: PublicUser } & Partial<PublicUser>>('/api/auth/me');
-        const user = (me && typeof me === 'object' && 'user' in me && me.user ? me.user : me) as PublicUser;
-        await sessionCtl.acceptSession({ user, tokens: { access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_in: tokens.expires_in } });
         const a = registry.get(accountId);
         if (!a) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
-        return accountsService.view(a, registry.activeId());
+        await useTokenEndpointFor(a);
+        auth.acceptTokens(tokens);
+        registry.update(a.id, { signInState: 'signed-in' });
+        // A Personal account's workspace opens once Cloud says it is ready (`activated`); any other's now.
+        if (a.kind !== 'personal') await sessionCtl.acceptSession({ user: await currentUser(), tokens: { access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_in: tokens.expires_in } });
+        accountsService.emit();
+        return accountsService.view(registry.get(accountId) ?? a, registry.activeId());
+      },
+      cloud: {
+        acceptLogin: async (accountId, payload) => {
+          if (registry.activeId() !== accountId) await accountsService.switchTo(accountId);
+          const tokens = payload.tokens as { access_token: string; refresh_token: string; expires_in: number };
+          auth.acceptTokens(tokens);
+          await sessionCtl.acceptSession(payload as unknown as SignInPayload);
+          const a = registry.get(accountId);
+          if (!a) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+          return accountsService.view(a, registry.activeId());
+        },
+        onStage: (accountId, stage) => {
+          if (accountId !== registry.activeId() || stage === 'ready') return;
+          if (stage === 'browser' || stage === 'verify-email' || stage === 'provisioning' || stage === 'bootstrapping' || stage === 'signed-out') sessionCtl.setStage(stage);
+        },
+        activated: async (accountId, me) => {
+          if (accountId !== registry.activeId() || sessionCtl.isReady()) return;
+          if (me.active_organization_id) accountsWiring?.setOrganization(accountId, me.active_organization_id, me.organizations.find((o) => o.id === me.active_organization_id)?.name ?? null);
+          const user = await currentUser();
+          await sessionCtl.acceptSession({ user } as SignInPayload);
+        },
+        onSignInFailed: (accountId, error) => {
+          if (accountId === registry.activeId()) sessionCtl.setStage('signed-out', error.message);
+          else broadcast('toast', { kind: 'error', text: error.message });
+        },
+        store: () => ({ get: (key) => db.getConfig<string>(key) ?? null, set: (key, value) => db.setConfig(key, value) }),
+        rotatedEntitlementKeys: () => appDb.getConfig<Record<string, string>>('entitlement_keys') ?? {},
+        onQuotaRoom: () => {
+          transfers.releaseQuota();
+          void officeLocal.retryQuota().catch(() => undefined);
+        },
+        onQuotaWarning: (level) => broadcast('toast', { kind: level === 'full' ? 'error' : 'warning', text: level === 'full' ? 'Your WorkSuite Cloud storage is full. Uploads wait until there is room.' : 'Your WorkSuite Cloud storage is almost full.' }),
+        deviceName: () => device.deviceName(),
       },
     },
   });
+  /** Who is signed in, from the server (a browser sign-in brings tokens, not the user). */
+  async function currentUser(): Promise<PublicUser> {
+    const me = await http.get<{ user?: PublicUser } & Partial<PublicUser>>('/api/auth/me');
+    return (me && typeof me === 'object' && 'user' in me && me.user ? me.user : me) as PublicUser;
+  }
   pinsFor = accountsWiring.discovery.pinsFor;
   if (accountsWiring.discovery.health) {
     health.stop();
@@ -3871,7 +3946,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   mainWindow.webContents.once('did-finish-load', () => setTimeout(() => updater.healthy(), 10_000).unref?.());
   if (devOrigin()) log.info('development renderer', { url: process.env.ELECTRON_RENDERER_URL });
 
-  void sessionCtl.init().then(() => {
+  void useTokenEndpointFor(firstAccount).then(() => sessionCtl.init()).then(() => {
     for (const link of pendingLinks.splice(0)) handleDeepLink(link);
     emitStatus();
   });

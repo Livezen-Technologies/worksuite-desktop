@@ -148,7 +148,10 @@ export class SessionController {
   get(): AuthState {
     const out: AuthState = { ...this.state };
     if (this.accountView) out.account = this.accountView() ?? null;
-    if (this.cloudStatus) out.cloud = this.cloudStatus() ?? null;
+    if (this.cloudStatus) {
+      out.cloud = this.cloudStatus() ?? null;
+      out.readOnly = out.cloud?.readOnly ?? null;
+    }
     return out;
   }
 
@@ -480,6 +483,17 @@ export class SessionController {
   cancelPasskey(): AuthState {
     this.auth.cancelPasskey();
     if (this.state.stage === 'passkey') this.set({ stage: 'signed-out', message: null });
+    return this.get();
+  }
+
+  /**
+   * A browser sign-in's and Cloud's own stages (Connection & Startup §3, WP3): `browser` while the browser is out,
+   * `verify-email` / `provisioning` while Cloud gets the account ready, `bootstrapping` while tokens are exchanged,
+   * `signed-out` when it ended without a sign-in. `ready` is reached through `acceptSession`, never set here.
+   */
+  setStage(stage: 'browser' | 'verify-email' | 'provisioning' | 'bootstrapping' | 'signed-out', message: string | null = null): AuthState {
+    if (this.state.stage === 'ready') return this.get();
+    this.set({ stage, message });
     return this.get();
   }
 
