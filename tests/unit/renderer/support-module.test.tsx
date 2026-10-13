@@ -104,7 +104,7 @@ describe('the Support module', () => {
     });
     // A wide window: the details drawer, with the properties, opens beside the conversation by itself (#334).
     Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
-    localStorage.removeItem('ws.support.drawer');
+    for (const k of Object.keys(localStorage)) if (k === 'ws.support.drawer' || k.startsWith('ws.drawer.')) localStorage.removeItem(k);
     renderPage('/support/ticket/1284');
     expect(await screen.findByRole('heading', { name: 'Subject 1284' })).toBeTruthy();
     // The status, in its chip and in the properties beside the conversation (T20).

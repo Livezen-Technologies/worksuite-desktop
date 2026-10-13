@@ -147,18 +147,41 @@ afterEach(() => {
 });
 
 describe('the drawer', () => {
-  it('opens by itself on a wide window with its five sections, and ⌘⇧I (Ctrl+Shift+I) hides and shows it', async () => {
+  it('opens by itself on a wide window with its sections in order, and ⌘⇧I (Ctrl+Shift+I) hides and shows it', async () => {
     renderTab();
     const side = await drawer();
-    for (const name of ['Summary', 'Client', 'Ticket properties', 'Related', 'Activity']) expect(within(side).getByRole('region', { name })).toBeTruthy();
+    await within(side).findByRole('region', { name: 'Linked contact' });
+    await within(side).findByRole('region', { name: 'Website activity' });
+    const order = ['Summary', 'Client', 'Linked contact', 'Ticket properties', 'Related', 'Website activity', 'Attachments', 'Activity', 'Audit log'];
+    expect([...side.querySelectorAll(':scope > section')].map((x) => x.getAttribute('aria-label'))).toEqual(order);
     fireEvent.keyDown(window, { key: 'I', ctrlKey: true, shiftKey: true });
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Ticket details' })).toBeNull());
-    // Closed on a wide window: remembered, and the panel's strip brings it back.
-    expect(localStorage.getItem('ws.support.drawer')).toBe('closed');
+    // Closed on a wide window: remembered for this person, and the panel's strip brings it back.
+    expect(localStorage.getItem('ws.drawer.support.details.1')).toBe('closed');
     // The header's panel button and the panel's own strip both say it.
     expect(screen.getAllByRole('button', { name: 'Show the ticket details' })).toHaveLength(2);
     fireEvent.click(screen.getAllByRole('button', { name: 'Show the ticket details' })[1]!);
     expect(await drawer()).toBeTruthy();
+  });
+
+  it('stays closed when the tab is opened again, as the person left it', async () => {
+    const first = renderTab();
+    await drawer();
+    // The header's button and the panel's own handle both hide it.
+    expect(screen.getAllByRole('button', { name: 'Hide the ticket details', expanded: true })).toHaveLength(2);
+    fireEvent.click(screen.getAllByRole('button', { name: 'Hide the ticket details' })[0]!);
+    await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Ticket details' })).toBeNull());
+    first.unmount();
+    renderTab();
+    await screen.findByRole('heading', { name: /Order 46497/ });
+    expect(screen.queryByRole('complementary', { name: 'Ticket details' })).toBeNull();
+    // A choice made before it was kept per person still counts.
+    cleanup();
+    localStorage.clear();
+    localStorage.setItem('ws.support.drawer', 'closed');
+    renderTab();
+    await screen.findByRole('heading', { name: /Order 46497/ });
+    expect(screen.queryByRole('complementary', { name: 'Ticket details' })).toBeNull();
   });
 
   it('on a narrow window opens only on request, over the conversation', async () => {
@@ -178,8 +201,28 @@ describe('the drawer', () => {
     const side = await drawer();
     const divider = screen.getByRole('separator', { name: 'Resize the ticket details' });
     fireEvent.keyDown(divider, { key: 'ArrowLeft' });
-    await waitFor(() => expect(Number(side.style.width.replace('px', ''))).toBeGreaterThan(320));
-    expect(Object.keys(localStorage).some((k) => k.includes('support.details'))).toBe(true);
+    await waitFor(() => expect(side.style.width).toBe('336px'));
+    expect(localStorage.getItem('ws.width.drawer.support.details.1')).toBe('336');
+    // Never past its limits: End is the most, Home the least.
+    fireEvent.keyDown(divider, { key: 'End' });
+    fireEvent.keyDown(divider, { key: 'ArrowLeft' });
+    expect(side.style.width).toBe('520px');
+    fireEvent.keyDown(divider, { key: 'Home' });
+    fireEvent.keyDown(divider, { key: 'ArrowRight' });
+    expect(side.style.width).toBe('280px');
+  });
+
+  it('shows only the sections that have something to show', async () => {
+    serve({
+      'GET /api/support/v1/tickets/1284': show({ messages: [], attachments: [], events: [], ticket: ticket({ requester: { name: null, email: null, phone: null, kind: 'guest', user_id: null, contact_id: null, company_id: null } }) }),
+      'GET /api/support/v1/tickets/1284/client': CLIENT({ requester: { name: null, email: null, phone: null }, matches: [], visitor: null, can: { edit: true, create_contact: false, link_contact: false, unlink_contact: false } }),
+      'GET /api/support/v1/tickets/1284/related': { orders: [], tickets: [], chats: [], pages: [] },
+    });
+    renderTab();
+    const side = await drawer();
+    await waitFor(() => expect(calls('GET', '/api/support/v1/tickets/1284/related')).toHaveLength(1));
+    await within(side).findByRole('button', { name: /^Name: none — change/ });
+    expect([...side.querySelectorAll(':scope > section')].map((x) => x.getAttribute('aria-label'))).toEqual(['Client', 'Ticket properties']);
   });
 });
 
@@ -253,12 +296,16 @@ describe('B. the client', () => {
 
   it('creates the contact or links an existing one', async () => {
     renderTab();
-    const client = within(await drawer()).getByRole('region', { name: 'Client' });
-    fireEvent.click(await within(client).findByRole('button', { name: /Link to existing/ }));
-    fireEvent.click(within(client).getByRole('button', { name: /Zacky Hannan/ }));
+    const contact = await within(await drawer()).findByRole('region', { name: 'Linked contact' });
+    expect(within(contact).getByText('Not linked to a contact')).toBeTruthy();
+    expect(within(contact).getByRole('button', { name: 'Create contact' })).toBeTruthy();
+    fireEvent.click(within(contact).getByRole('button', { name: /Link to existing/ }));
+    fireEvent.click(within(contact).getByRole('button', { name: /Zacky Hannan/ }));
     await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/contact')[0]?.body).toEqual({ contact_id: 31 }));
-    expect(await within(client).findByRole('button', { name: 'WorkSuite contact · Open' })).toBeTruthy();
-    fireEvent.click(within(client).getByRole('button', { name: 'WorkSuite contact · Open' }));
+    expect(await within(contact).findByRole('button', { name: 'WorkSuite contact · Open' })).toBeTruthy();
+    expect(within(contact).getByText('zacky.hannan@gmail.com · +94 77 058 4763 · Hannan Traders')).toBeTruthy();
+    expect(within(contact).getByRole('button', { name: 'Unlink the contact' })).toBeTruthy();
+    fireEvent.click(within(contact).getByRole('button', { name: 'WorkSuite contact · Open' }));
     expect(nav.openLink).toHaveBeenCalledWith('/contacts/31');
   });
 
@@ -268,7 +315,9 @@ describe('B. the client', () => {
     const client = within(await drawer()).getByRole('region', { name: 'Client' });
     expect(await within(client).findByText('Read-only: changing the client needs the contacts edit permission.')).toBeTruthy();
     expect(within(client).queryByRole('button', { name: /— change/ })).toBeNull();
-    expect(within(client).queryByRole('button', { name: 'Create contact' })).toBeNull();
+    expect(screen.queryByRole('button', { name: 'Create contact' })).toBeNull();
+    // Nothing linked and nothing this person may do about it: no Linked contact section.
+    expect(screen.queryByRole('region', { name: 'Linked contact' })).toBeNull();
   });
 });
 
@@ -286,7 +335,8 @@ describe('C–E. properties, related and activity', () => {
 
   it('shows the orders with Resend licence and Open order, earlier tickets and chats, website activity and the files', async () => {
     renderTab();
-    const rel = within(await drawer()).getByRole('region', { name: 'Related' });
+    const side = await drawer();
+    const rel = await within(side).findByRole('region', { name: 'Related' });
     expect(await within(rel).findByText('Order 46497')).toBeTruthy();
     expect(within(rel).getByText('Microsoft Project 2024 Professional LTSC')).toBeTruthy();
     expect(within(rel).getByText('Paid')).toBeTruthy();
@@ -299,15 +349,30 @@ describe('C–E. properties, related and activity', () => {
     fireEvent.click(within(rel).getByRole('button', { name: /TKT-000001/ }));
     expect(nav.navigate).toHaveBeenCalledWith('/support/ticket/1201');
     expect(within(rel).getByText('Previous chats · 1')).toBeTruthy();
-    expect(within(rel).getByText('Downloads')).toBeTruthy();
-    expect(within(within(rel).getByRole('region', { name: 'Files on this ticket' })).getAllByRole('button')).toHaveLength(1);
+    expect(within(within(side).getByRole('region', { name: 'Website activity' })).getByText('Downloads')).toBeTruthy();
+    // Every file in the thread, a picture as its thumbnail through the thread's own link.
+    const files = within(side).getByRole('region', { name: 'Attachments' });
+    expect(within(files).getByRole('button', { name: 'View error.png' })).toBeTruthy();
   });
 
-  it('has the activity timeline', async () => {
+  it('has the activity timeline and the audit log', async () => {
+    serve({
+      'GET /api/support/v1/tickets/1284': show({
+        events: [
+          { id: 10, action: 'edited', detail: null, field: 'tags', old: null, new: 'vip', source: 'agent', reason: null, user: { id: 1, name: 'Ayesha Fernando' }, created_at: '2026-10-10T06:35:00Z' },
+          { id: 9, action: 'opened', detail: 'chat', field: null, old: null, new: null, source: 'agent', reason: null, user: { id: 1, name: 'Ayesha Fernando' }, created_at: '2026-10-10T06:30:00Z' },
+        ],
+      }),
+    });
     renderTab();
     const act2 = within(await drawer()).getByRole('region', { name: 'Activity' });
     fireEvent.click(within(act2).getByRole('button', { name: 'Activity' }));
-    expect(within(act2).getByRole('list', { name: 'Activity timeline' }).textContent).toContain('Ayesha Fernando');
+    const timeline = within(act2).getByRole('list', { name: 'Activity timeline' });
+    expect(timeline.textContent).toContain('Ayesha Fernando raised the ticket');
+    expect(timeline.textContent).not.toContain('changed the tags');
+    const audit = screen.getByRole('region', { name: 'Audit log' });
+    fireEvent.click(within(audit).getByRole('button', { name: 'Audit log' }));
+    expect(within(audit).getByRole('list', { name: 'Activity' }).textContent).toContain('changed the tags');
   });
 });
 

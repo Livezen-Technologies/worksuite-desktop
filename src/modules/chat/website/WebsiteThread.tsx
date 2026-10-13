@@ -24,7 +24,7 @@ import { useViewing } from './viewing';
 import { ContactFormButton, ContactFormWaiting } from './ContactForm';
 import type { ReplyTarget } from '../Thread';
 import { Select } from '../../../components/Select';
-import { SidePanel } from '../../../components/SidePanel';
+import { DetailsDrawer, DrawerToggle, useDrawer, type Drawer } from '../../../components/DetailsDrawer';
 import { WEBSITE_CAPS } from '../kit/caps';
 import type { MessageHandlers } from '../kit/MessageActions';
 import { MessageList, PendingBubble, TypingLine } from '../kit/MessageList';
@@ -76,6 +76,9 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
   // The composer writes to the visitor, or a note only staff see (TEAM-60); null until chosen (see `mode` below).
   const [tab, setTab] = useState<'reply' | 'note' | null>(null);
   const { active: tabActive, query: tabQuery } = useTab();
+  // The visitor details on the right: the shared details drawer a ticket has too (#334) — dragged wider or narrower,
+  // hidden and shown with ⌘⇧I / Ctrl+Shift+I or the header's button, both kept for the person. Not in the mini window.
+  const visitorDrawer = useDrawer('website-visitor', { active: tabActive && !mini, legacyKey: 'ws.panel.website-visitor' });
   // From the ringing card's Transfer (#225), or a visitor's Invite a colleague (#231): the chat opens with that dialog up.
   // Merge this visitor with another (#222), from the header.
   const [merging, setMerging] = useState(false);
@@ -301,6 +304,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
                 <Icon name="external" size={14} />
               </button>
             ) : null}
+            {!mini ? <DrawerToggle drawer={visitorDrawer} label={text('the visitor details')} /> : null}
           </span>
         </div>
         {/* A voice call in this chat (ENH-WCHAT-05): over the transcript, which goes on under it. */}
@@ -393,6 +397,7 @@ export function WebsiteThread({ id, row, mini = false }: { id: string; row?: Web
       </section>
       {!mini ? (
         <VisitorPanel
+          drawer={visitorDrawer}
           v={v}
           data={data}
           online={online}
@@ -547,7 +552,10 @@ interface Stop {
  * site, Email and Block; how to reach them and their local time; Site, Device, Visits and Came from; this visit's
  * journey with dwell times and where the chat started; the chat's tags; and the files shared, as a grid.
  */
-function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, peopleFirst = false, foot }: { v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; top?: ReactNode; people?: ReactNode; peopleFirst?: boolean; foot?: ReactNode }) {
+/** The visitor panel's width as it first was, and the least it takes. */
+const VISITOR_WIDTH = 240;
+
+function VisitorPanel({ drawer, v, data, online, canReply, files, onDone, top, people, peopleFirst = false, foot }: { drawer: Drawer; v: WebsiteVisitor | null; data: WebsiteConversation; online: boolean; canReply: boolean; files: SharedFile[]; onDone: () => void; top?: ReactNode; people?: ReactNode; peopleFirst?: boolean; foot?: ReactNode }) {
   const [blocking, setBlocking] = useState(false);
   const [editing, setEditing] = useState(false);
   // A ticket is raised in, and opened by, Support: offered only to whoever has it.
@@ -596,121 +604,119 @@ function VisitorPanel({ v, data, online, canReply, files, onDone, top, people, p
 
   const action = 'flex h-[30px] flex-1 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface text-[11.5px] font-semibold text-ink hover:bg-subtle';
   return (
-    <SidePanel id="website-visitor" label="the visitor details" side="right">
-      <aside aria-label="Visitor details" className="flex w-[240px] shrink-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-ground px-3 py-3.5 text-[12px] scroll-thin">
-        {top}
-        {/* With several staff in it the people card leads, as the C-08 panel has it; otherwise it follows the facts. */}
-        {peopleFirst ? people : null}
-        <h3 className={HEADING}>Visitor</h3>
-        <div className={cx(CARD, 'items-center pt-3.5 text-center')}>
-          <Avatar name={name} size={52} presence={c.status === 'closed' ? null : online ? 'online' : 'away'} />
-          <b className="flex items-center gap-1.5 text-[14px] text-ink">
-            <span className="break-words">{name}</span>
-            {v?.is_blocked ? <Chip tone="danger">Blocked</Chip> : null}
-          </b>
-          {v?.company ? <span className="-mt-1 text-[11.5px] text-ink-3">{v.company}</span> : null}
-          <span className={cx('-mt-1 flex items-center gap-1.5 text-[11.5px] font-semibold', online ? 'text-success' : 'text-ink-3')}>
-            <span className={cx('h-1.5 w-1.5 rounded-full', online ? 'bg-success' : 'bg-ink-3')} />
-            {online ? (onSite ? text('On the site · {time}', { time: onSite }) : text('On the site')) : text('Left the site')}
-          </span>
-          {v?.email || (canReply && v) || (data.can?.manage && v && !v.is_blocked) ? (
-            <div className="mt-0.5 flex flex-wrap gap-1.5 self-stretch">
-              {canReply && v ? (
-                <button type="button" onClick={() => setEditing(true)} className={action} title={text('Name, email, phone and company — and save them to Contacts')}>
-                  <Icon name="pen" size={13} className="text-ink-2" /> {text('Edit details')}
-                </button>
-              ) : null}
-              {v?.email ? (
-                <button type="button" onClick={email} className={action} title={text('Write to {email}', { email: v.email })}>
-                  <Icon name="mail" size={13} className="text-ink-2" /> {text('Email')}
-                </button>
-              ) : null}
-              {data.can?.manage && v && !v.is_blocked ? (
-                <button type="button" aria-label="Block this visitor" onClick={() => setBlocking(true)} className={cx(action, 'text-danger hover:bg-danger-bg')}>
-                  <Icon name="user-x" size={13} /> {text('Block')}
-                </button>
-              ) : null}
+    <DetailsDrawer drawer={drawer} title="Visitor details" label={text('the visitor details')} defaultWidth={VISITOR_WIDTH} min={VISITOR_WIDTH} max={440}>
+      {top}
+      {/* With several staff in it the people card leads, as the C-08 panel has it; otherwise it follows the facts. */}
+      {peopleFirst ? people : null}
+      <h3 className={HEADING}>Visitor</h3>
+      <div className={cx(CARD, 'items-center pt-3.5 text-center')}>
+        <Avatar name={name} size={52} presence={c.status === 'closed' ? null : online ? 'online' : 'away'} />
+        <b className="flex items-center gap-1.5 text-[14px] text-ink">
+          <span className="break-words">{name}</span>
+          {v?.is_blocked ? <Chip tone="danger">Blocked</Chip> : null}
+        </b>
+        {v?.company ? <span className="-mt-1 text-[11.5px] text-ink-3">{v.company}</span> : null}
+        <span className={cx('-mt-1 flex items-center gap-1.5 text-[11.5px] font-semibold', online ? 'text-success' : 'text-ink-3')}>
+          <span className={cx('h-1.5 w-1.5 rounded-full', online ? 'bg-success' : 'bg-ink-3')} />
+          {online ? (onSite ? text('On the site · {time}', { time: onSite }) : text('On the site')) : text('Left the site')}
+        </span>
+        {v?.email || (canReply && v) || (data.can?.manage && v && !v.is_blocked) ? (
+          <div className="mt-0.5 flex flex-wrap gap-1.5 self-stretch">
+            {canReply && v ? (
+              <button type="button" onClick={() => setEditing(true)} className={action} title={text('Name, email, phone and company — and save them to Contacts')}>
+                <Icon name="pen" size={13} className="text-ink-2" /> {text('Edit details')}
+              </button>
+            ) : null}
+            {v?.email ? (
+              <button type="button" onClick={email} className={action} title={text('Write to {email}', { email: v.email })}>
+                <Icon name="mail" size={13} className="text-ink-2" /> {text('Email')}
+              </button>
+            ) : null}
+            {data.can?.manage && v && !v.is_blocked ? (
+              <button type="button" aria-label="Block this visitor" onClick={() => setBlocking(true)} className={cx(action, 'text-danger hover:bg-danger-bg')}>
+                <Icon name="user-x" size={13} /> {text('Block')}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <ContactCard v={v} />
+      {facts.some(([, val]) => val) ? (
+        <div className={CARD}>
+          {facts.filter(([, val]) => val).map(([k, val]) => (
+            <div key={k} className="flex justify-between gap-2">
+              <span className="shrink-0 text-ink-3">{k}</span>
+              <span className="min-w-0 truncate text-right font-semibold text-ink-2 selectable" title={val ?? undefined}>{val}</span>
             </div>
-          ) : null}
+          ))}
         </div>
-        <ContactCard v={v} />
-        {facts.some(([, val]) => val) ? (
+      ) : null}
+      {peopleFirst ? null : people}
+      {recent.length ? (
+        <div className={CARD}>
+          <div className="flex items-center">
+            <h3 className={cx(HEADING, 'flex-1')}>Journey</h3>
+            <span className="text-[11px] text-ink-3">{text('this visit')}</span>
+          </div>
+          <ol className="ml-1 flex flex-col gap-2 border-l-2 border-line pl-3">
+            {recent.map((p, i) => {
+              const current = i === 0 && online;
+              const first = i === recent.length - 1;
+              const when = current ? text('Reading now') : p.seconds !== null ? dwell(p.seconds) : timeLabel(p.at);
+              const notes = [when, i === chatStop ? text('chat started here') : null, first && v?.referrer ? text('Arrived from {site}', { site: hostOf(v.referrer) }) : null].filter(Boolean).join(' · ');
+              return (
+                <li key={`${p.at}-${i}`} className="relative">
+                  <div className={cx('truncate', current ? 'font-bold text-primary' : 'text-ink-2')} title={p.url ?? p.title ?? undefined}>
+                    {p.url ? pathOf(p.url) : (p.title ?? 'page')}
+                  </div>
+                  <div className="text-[11px] text-ink-3">{notes}</div>
+                  <span aria-hidden="true" className={cx('absolute top-[4px] -left-[17px] rounded-full', current ? 'h-2 w-2 bg-primary shadow-[0_0_0_3px_var(--color-selection)]' : 'h-1.5 w-1.5 -translate-x-px bg-[#C3CCF6] dark:bg-primary/50')} />
+                </li>
+              );
+            })}
+          </ol>
+        </div>
+      ) : null}
+      <TagsCard conversationId={c.id} tags={c.tags} canEdit={canReply} onDone={onDone} />
+      <SharedFilesCard files={files} />
+      {/* The profile (#222): how we know them, visits, devices, Previous chats with links, possible duplicates and
+          merges; on a server without it, the list it had before. */}
+      <ProfileCards
+        visitorId={data.profile?.visitor_id}
+        conversationId={c.id}
+        legacy={
           <div className={CARD}>
-            {facts.filter(([, val]) => val).map(([k, val]) => (
-              <div key={k} className="flex justify-between gap-2">
-                <span className="shrink-0 text-ink-3">{k}</span>
-                <span className="min-w-0 truncate text-right font-semibold text-ink-2 selectable" title={val ?? undefined}>{val}</span>
-              </div>
+            <h3 className={HEADING}>Previous chats · {history.length}</h3>
+            {history.slice(0, 5).map((h) => (
+              <span key={h.id} className="text-ink-2">
+                {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
+              </span>
             ))}
           </div>
-        ) : null}
-        {peopleFirst ? null : people}
-        {recent.length ? (
-          <div className={CARD}>
-            <div className="flex items-center">
-              <h3 className={cx(HEADING, 'flex-1')}>Journey</h3>
-              <span className="text-[11px] text-ink-3">{text('this visit')}</span>
-            </div>
-            <ol className="ml-1 flex flex-col gap-2 border-l-2 border-line pl-3">
-              {recent.map((p, i) => {
-                const current = i === 0 && online;
-                const first = i === recent.length - 1;
-                const when = current ? text('Reading now') : p.seconds !== null ? dwell(p.seconds) : timeLabel(p.at);
-                const notes = [when, i === chatStop ? text('chat started here') : null, first && v?.referrer ? text('Arrived from {site}', { site: hostOf(v.referrer) }) : null].filter(Boolean).join(' · ');
-                return (
-                  <li key={`${p.at}-${i}`} className="relative">
-                    <div className={cx('truncate', current ? 'font-bold text-primary' : 'text-ink-2')} title={p.url ?? p.title ?? undefined}>
-                      {p.url ? pathOf(p.url) : (p.title ?? 'page')}
-                    </div>
-                    <div className="text-[11px] text-ink-3">{notes}</div>
-                    <span aria-hidden="true" className={cx('absolute top-[4px] -left-[17px] rounded-full', current ? 'h-2 w-2 bg-primary shadow-[0_0_0_3px_var(--color-selection)]' : 'h-1.5 w-1.5 -translate-x-px bg-[#C3CCF6] dark:bg-primary/50')} />
-                  </li>
-                );
-              })}
-            </ol>
-          </div>
-        ) : null}
-        <TagsCard conversationId={c.id} tags={c.tags} canEdit={canReply} onDone={onDone} />
-        <SharedFilesCard files={files} />
-        {/* The profile (#222): how we know them, visits, devices, Previous chats with links, possible duplicates and
-            merges; on a server without it, the list it had before. */}
-        <ProfileCards
-          visitorId={data.profile?.visitor_id}
-          conversationId={c.id}
-          legacy={
-            <div className={CARD}>
-              <h3 className={HEADING}>Previous chats · {history.length}</h3>
-              {history.slice(0, 5).map((h) => (
-                <span key={h.id} className="text-ink-2">
-                  {h.started_at ? dateLabel(h.started_at) : 'Earlier'} · {h.status}{h.rating ? ` · rated ${h.rating}/5` : ''}{h.other_device ? ' · another device' : ''}
-                </span>
-              ))}
-            </div>
-          }
-        />
-        <div className="mt-auto flex flex-col gap-1.5 pt-2">
-          {support && linked ? (
-            <>
-              <span className="flex flex-wrap items-center justify-center gap-1.5 text-[11.5px] text-ink-3">
-                {text('This chat is ticket')}
-                <TicketChip ticket={linked} />
-              </span>
-              <button type="button" onClick={() => navigate(ticketRoute(linked.id))} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle" title={text('Open ticket {ref}', { ref: linked.reference })}>
-                <Icon name="life-buoy" size={13} className="text-ink-2" /> {text('View ticket')}
-              </button>
-            </>
-          ) : support && offer !== 'no' ? (
-            <button type="button" onClick={() => setRaising(true)} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle">
-              <Icon name="life-buoy" size={13} className="text-ink-2" /> {text('Convert to ticket')}
+        }
+      />
+      <div className="mt-auto flex flex-col gap-1.5 pt-2">
+        {support && linked ? (
+          <>
+            <span className="flex flex-wrap items-center justify-center gap-1.5 text-[11.5px] text-ink-3">
+              {text('This chat is ticket')}
+              <TicketChip ticket={linked} />
+            </span>
+            <button type="button" onClick={() => navigate(ticketRoute(linked.id))} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle" title={text('Open ticket {ref}', { ref: linked.reference })}>
+              <Icon name="life-buoy" size={13} className="text-ink-2" /> {text('View ticket')}
             </button>
-          ) : null}
-          {raising ? <ConvertSheet conversationId={c.id} onClose={() => setRaising(false)} /> : null}
-          {/* Leave chat, with the owner's warning, at the panel's foot (C-08, TEAM-06). */}
-          {foot}
-        </div>
-        {blocking ? <BlockDialog conversationId={c.id} name={v?.name || v?.label || 'This visitor'} onClose={() => setBlocking(false)} onDone={onDone} /> : null}
-        {editing && v ? <VisitorDetailsDialog v={v} onClose={() => setEditing(false)} onDone={onDone} /> : null}
-      </aside>
-    </SidePanel>
+          </>
+        ) : support && offer !== 'no' ? (
+          <button type="button" onClick={() => setRaising(true)} className="flex h-8 items-center justify-center gap-1.5 rounded-[8px] border border-line bg-surface font-semibold text-ink hover:bg-subtle">
+            <Icon name="life-buoy" size={13} className="text-ink-2" /> {text('Convert to ticket')}
+          </button>
+        ) : null}
+        {raising ? <ConvertSheet conversationId={c.id} onClose={() => setRaising(false)} /> : null}
+        {/* Leave chat, with the owner's warning, at the panel's foot (C-08, TEAM-06). */}
+        {foot}
+      </div>
+      {blocking ? <BlockDialog conversationId={c.id} name={v?.name || v?.label || 'This visitor'} onClose={() => setBlocking(false)} onDone={onDone} /> : null}
+      {editing && v ? <VisitorDetailsDialog v={v} onClose={() => setEditing(false)} onDone={onDone} /> : null}
+    </DetailsDrawer>
   );
 }

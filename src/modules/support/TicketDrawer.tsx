@@ -1,157 +1,80 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
-import { ticketRoute, type ClientChanges, type Meta, type RelatedOrder, type TicketClient, type TicketLink, type TicketRelated, type TicketShow } from '@shared/support';
+import { ticketRoute, type Attachment, type ClientChanges, type Meta, type RelatedOrder, type TicketClient, type TicketEvent, type TicketLink, type TicketRelated, type TicketShow } from '@shared/support';
 import { whatsappRoute } from '@shared/channels';
 import { ApiError } from '../../core/api';
 import { useCanOpen } from '../../core/access';
-import { app } from '../../core/app-state';
-import { isMac } from '../../core/bridge';
 import { text } from '../../core/i18n';
 import { useLocalFirstQuery } from '../../core/local-first-query';
-import { useStore } from '../../core/store';
 import { dateLabel, stampDayLabel, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { useNow } from '../../core/use-now';
-import { recallSection, rememberSection } from '../../components/Collapsible';
+import { DRAWER_DEFAULT, DetailsDrawer, DrawerSection, DrawerToggle, useDrawer, type Drawer } from '../../components/DetailsDrawer';
 import { Icon } from '../../components/Icon';
-import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
-import { SidePanel } from '../../components/SidePanel';
-import { Avatar, Button, FileBadge, Spinner, cx } from '../../components/ui';
+import { Avatar, Button, Spinner, cx } from '../../components/ui';
 import { useTextAi } from '../ai/textTools';
-import { PANEL_CARD as CARD, PANEL_HEADING as HEADING } from '../chat/website/rowParts';
-import { K, aiSummary, assistError, attachmentLink, clientPath, errorText, findRequesters, linkContact, relatedPath, resendLicence, saveClient, unlinkContact } from './api';
-import { eventWho, eventWords } from './Activity';
-import { DRAWER_DEFAULT, DRAWER_MAX, DRAWER_MIN, briefInput, drawerState, fieldError, formatPhone, foundInConversation, lastMessageId, parseBrief, readBrief, readChoice, writeBrief, writeChoice, type Brief, type DrawerChoice } from './details';
+import { K, aiSummary, assistError, clientPath, errorText, findRequesters, linkContact, relatedPath, resendLicence, saveClient, unlinkContact } from './api';
+import { Activity, eventWho, eventWords } from './Activity';
+import { LEGACY_CHOICE_KEY, LEGACY_WIDTH_KEY, briefInput, fieldError, formatPhone, foundInConversation, lastMessageId, parseBrief, readBrief, writeBrief, type Brief } from './details';
 import { openAttachment } from './files';
+import { MessageFiles, isPicture } from './MessageFiles';
 import { StatusChip } from './parts';
 import { Properties } from './Properties';
 import { LinkRow, RemotePanel, RequesterPanel, SlaPanel } from './TicketSide';
 
 /**
  * The ticket details drawer (worksuite-desktop#334): the right side panel a ticket's tab and the inbox's reading pane
- * share, built from Website chats' own side panel — the same `SidePanel` (its handle and strip), the same splitter
- * (`ResizeDivider`, the width kept on this computer), the same card look (`PANEL_CARD`, `PANEL_HEADING`). ⌘⇧I /
- * Ctrl+Shift+I or the header's panel button shows and hides it. On a wide window it opens by itself beside the
- * conversation; on a narrow one it opens over it, on request.
+ * share. It is the shared `DetailsDrawer` that Website chats' visitor panel is too — the same splitter (dragged, or
+ * ← → on it; the width kept per person), the same handle and strip, the same section cards — shown and hidden with
+ * ⌘⇧I / Ctrl+Shift+I or the header's panel button. On a wide window it opens by itself beside the conversation; on a
+ * narrow one it opens over it, on request.
  *
- * Its sections, each folded or not as the person left it:
+ * Its sections, each folded or not as the person left it, each there only when it has something to show:
  *
  *  A. Summary — the AI brief (2–4 lines, key facts as chips, the next step with "Reply with this", the urgency),
  *     from the same text tools as Website chats and Mail (the model on this computer first, online as the AI
  *     settings allow; the desk's own summary otherwise). Kept on this computer, shown at once, made again when a new
  *     message arrives, and on Refresh. Labelled "AI summary · may be wrong".
  *  B. Client — name, email, phone (Call, WhatsApp), company, tags and notes, edited in place (Enter or a click away
- *     saves, Esc cancels, "Saved"), checked as typed; details found in the conversation offered with Add; the linked
- *     WorkSuite contact, or Create contact / Link to existing — edits change the contact everywhere. Read-only
+ *     saves, Esc cancels, "Saved"), checked as typed; details found in the conversation offered with Add. Read-only
  *     without contact rights.
+ *     Linked contact — the WorkSuite contact, or Create contact / Link to existing; edits change it everywhere.
  *  C. Ticket properties — status, priority, type, assignee, team, category, department, due, tags, source; the SLA
  *     timers; remote support.
- *  D. Related — orders from the store (Resend licence email, Open order), earlier tickets and chats, the pages read
- *     before the chat, what it is linked to, and its files as a grid.
- *  E. Activity — the journal: who did what, when.
+ *  D. Related — orders from the store (Resend licence email, Open order), earlier tickets and chats, what it is
+ *     linked to. Website activity — the pages read before the chat. Attachments — every file in the thread.
+ *  E. Activity — the journal's milestones; Audit log — every entry, a hundred at a time.
  *
  * The client and related parts load from the copy kept on this computer first, then the server
  * (`useLocalFirstQuery`), like the other modules. Every edit is in the ticket's history and the audit log (server).
  */
 
-/** The window's width, as it changes. */
-function useWindowWidth(): number {
-  const [w, setW] = useState(() => (typeof window === 'undefined' ? 1440 : window.innerWidth));
-  useEffect(() => {
-    const on = () => setW(window.innerWidth);
-    window.addEventListener('resize', on);
-    return () => window.removeEventListener('resize', on);
-  }, []);
-  return w;
-}
+const DRAWER_ID = 'support.details';
+/** The drawer's sections remember whether they are open under this name. */
+const SECTIONS = 'support.details';
 
 /**
- * Whether the drawer shows and how, and its toggle — ⌘⇧I / Ctrl+Shift+I while `active`. On a wide window the choice
- * is kept; on a narrow one it opens over the conversation, this time.
+ * Whether the drawer shows and how, and its toggle — ⌘⇧I / Ctrl+Shift+I while `active` — as the shared drawer has it:
+ * beside the conversation from `wideAt` (the person's choice kept), over it on a narrower window.
  */
 export function useDetailsDrawer(wideAt: number, active: boolean) {
-  const width = useWindowWidth();
-  const [choice, setChoice] = useState<DrawerChoice>(() => readChoice());
-  const [askedNarrow, setAskedNarrow] = useState(false);
-  const { open, overlay } = drawerState(width, wideAt, choice, askedNarrow);
-  const setOpen = useCallback(
-    (next: boolean) => {
-      if (overlay) setAskedNarrow(next);
-      else {
-        const v: DrawerChoice = next ? 'open' : 'closed';
-        writeChoice(v);
-        setChoice(v);
-      }
-    },
-    [overlay],
-  );
-  useEffect(() => {
-    if (!active) return;
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key.toLowerCase() !== 'i' || !e.shiftKey || e.altKey || !(isMac ? e.metaKey : e.ctrlKey)) return;
-      e.preventDefault();
-      e.stopPropagation();
-      setOpen(!open);
-    };
-    window.addEventListener('keydown', onKey, true);
-    return () => window.removeEventListener('keydown', onKey, true);
-  }, [active, open, setOpen]);
-  return { open, overlay, setOpen, toggle: () => setOpen(!open) };
+  return useDrawer(DRAWER_ID, { wideAt, active, legacyKey: LEGACY_CHOICE_KEY });
 }
 
-export type DetailsDrawer = ReturnType<typeof useDetailsDrawer>;
+export type DetailsDrawer = Drawer;
 
 /** The header's panel button: shows and hides the drawer. */
-export function DrawerButton({ drawer, className }: { drawer: DetailsDrawer; className?: string }) {
-  const label = drawer.open ? text('Hide the ticket details') : text('Show the ticket details');
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={`${label} (${isMac ? '⌘⇧I' : 'Ctrl+Shift+I'})`}
-      aria-pressed={drawer.open}
-      aria-keyshortcuts={isMac ? 'Meta+Shift+I' : 'Control+Shift+I'}
-      onClick={drawer.toggle}
-      className={cx('inline-flex h-8 w-8 items-center justify-center rounded-[8px] transition-colors', drawer.open ? 'bg-selection text-primary' : 'text-ink-2 hover:bg-subtle hover:text-ink', className)}
-    >
-      <Icon name={drawer.open ? 'panel-right-close' : 'panel-right-open'} size={17} />
-    </button>
-  );
+export function DrawerButton({ drawer, className }: { drawer: Drawer; className?: string }) {
+  return <DrawerToggle drawer={drawer} label={text('the ticket details')} className={className} />;
 }
 
-/** One section of the drawer, folded or not as the person left it (Collapsible's memory), in the panel's card look. */
-function Section({ id, title, action, children, defaultOpen = true }: { id: string; title: string; action?: ReactNode; children: ReactNode; defaultOpen?: boolean }) {
-  const uid = useStore(app, (s) => s.auth?.user?.id ?? '');
-  const key = `support.details.${id}`;
-  const [open, setOpen] = useState(() => recallSection(uid, key) ?? defaultOpen);
-  const bodyId = `support-details-${id}`;
-  return (
-    <section aria-label={title} className={cx(CARD, 'gap-2')}>
-      <div className="flex items-center gap-1">
-        <button
-          type="button"
-          aria-expanded={open}
-          aria-controls={bodyId}
-          onClick={() => {
-            rememberSection(uid, key, !open);
-            setOpen(!open);
-          }}
-          className={cx(HEADING, 'flex flex-1 items-center gap-1 text-left hover:text-ink')}
-        >
-          <Icon name={open ? 'chevron-down' : 'chevron-right'} size={12} />
-          {title}
-        </button>
-        {open ? action : null}
-      </div>
-      <div id={bodyId} hidden={!open} className="flex flex-col gap-2">
-        {open ? children : null}
-      </div>
-    </section>
-  );
+/** One section of the drawer, folded or not as the person left it. */
+function Section(props: { id: string; title: string; count?: number; action?: ReactNode; children: ReactNode; defaultOpen?: boolean }) {
+  return <DrawerSection drawer={SECTIONS} {...props} />;
 }
 
 export interface TicketDrawerProps {
-  drawer: DetailsDrawer;
+  drawer: Drawer;
   show: TicketShow;
   meta: Meta | undefined;
   links?: TicketLink[];
@@ -163,62 +86,51 @@ export interface TicketDrawerProps {
   onOpenLinked?: (l: TicketLink) => void;
 }
 
+/** The journal's milestones, for the timeline: the audit log below it has every entry. */
+const MILESTONES = new Set(['opened', 'converted', 'assigned', 'status', 'replied', 'merged', 'split', 'deleted', 'restored', 'acknowledged']);
+
 export function TicketDrawer({ drawer, show, meta, links = [], onResolve, onReply, onOpenLink, onNavigate, onOpenLinked }: TicketDrawerProps) {
-  const size = useResizableWidth('support.details', { defaultWidth: DRAWER_DEFAULT, min: DRAWER_MIN, max: () => Math.min(DRAWER_MAX, Math.max(DRAWER_MIN, window.innerWidth - 560)) });
   const t = show.ticket;
   const legacy = show.legacy === true;
   const now = useNow(30_000).getTime();
   const client = useLocalFirstQuery<{ client: TicketClient }>({ queryKey: K.client(t.id), path: clientPath(t.id), interval: 60_000, enabled: !legacy, accept: (h) => !!(h as { client?: unknown } | null)?.client });
   const related = useLocalFirstQuery<TicketRelated>({ queryKey: K.related(t.id), path: relatedPath(t.id), interval: 120_000, enabled: !legacy, accept: (h) => Array.isArray((h as TicketRelated | null)?.tickets) });
   const website = client.data?.client.visitor?.website ?? null;
+  const r = related.data ?? null;
+  const milestones = show.events.filter((e) => MILESTONES.has(e.action));
 
-  if (!drawer.open) {
-    // Beside the conversation, the panel's strip brings it back; over it, the header's button does.
-    return drawer.overlay ? null : <SidePanel id="support.details" side="right" label={text('the ticket details')} open={false} onOpenChange={drawer.setOpen}>{null}</SidePanel>;
-  }
-
-  const body = (
-    <aside aria-label={text('Ticket details')} className="flex h-full min-h-0 flex-col gap-2.5 overflow-y-auto border-l border-line bg-ground px-3 py-3.5 text-[12px] scroll-thin" style={{ width: size.width }}>
+  return (
+    <DetailsDrawer drawer={drawer} title={text('Ticket details')} label={text('the ticket details')} defaultWidth={DRAWER_DEFAULT} legacyWidthKey={LEGACY_WIDTH_KEY}>
       {legacy ? null : <SummarySection show={show} onReply={onReply} />}
-      {legacy ? null : <ClientSection show={show} q={client} onNavigate={onNavigate} onOpenLink={onOpenLink} />}
+      {legacy ? null : <ClientSection show={show} q={client} onNavigate={onNavigate} />}
+      {legacy ? null : <ContactSection show={show} q={client} onOpenLink={onOpenLink} />}
       <Section id="properties" title={text('Ticket properties')}>
         <Properties show={show} meta={meta} onResolve={onResolve} website={website} />
         <SlaPanel t={t} now={now} />
         <RemotePanel show={show} />
       </Section>
-      <RelatedSection show={show} related={related.data ?? null} relatedLoading={related.isLoading} links={links} onNavigate={onNavigate} onOpenLink={onOpenLink} onOpenLinked={onOpenLinked} />
-      <Section id="activity" title={text('Activity')} defaultOpen={false}>
-        <ActivityTimeline show={show} />
-      </Section>
-    </aside>
-  );
-
-  if (drawer.overlay) {
-    return (
-      <>
-        <div aria-hidden data-support-scrim onMouseDown={() => drawer.setOpen(false)} className="absolute inset-0 z-30 bg-scrim/40" />
-        <div
-          className="absolute inset-y-0 right-0 z-30 flex shadow-[-12px_0_32px_-16px_rgb(0_0_0/.45)]"
-          onKeyDown={(e) => {
-            if (e.key === 'Escape') {
-              e.stopPropagation();
-              drawer.setOpen(false);
-            }
-          }}
-        >
-          <ResizeDivider state={size} side="left" label={text('Resize the ticket details')} />
-          {body}
-        </div>
-      </>
-    );
-  }
-  return (
-    <SidePanel id="support.details" side="right" label={text('the ticket details')} open onOpenChange={drawer.setOpen}>
-      <div className="relative flex h-full min-h-0 shrink-0">
-        <ResizeDivider state={size} side="left" label={text('Resize the ticket details')} />
-        {body}
-      </div>
-    </SidePanel>
+      <RelatedSection show={show} related={r} relatedLoading={related.isLoading} links={links} onNavigate={onNavigate} onOpenLink={onOpenLink} onOpenLinked={onOpenLinked} />
+      {r?.pages?.length ? (
+        <Section id="website" title={text('Website activity')} count={r.pages.length}>
+          <WebsiteActivity pages={r.pages} />
+        </Section>
+      ) : null}
+      {show.attachments.length ? (
+        <Section id="files" title={text('Attachments')} count={show.attachments.length}>
+          <ThreadFiles files={show.attachments} />
+        </Section>
+      ) : null}
+      {milestones.length ? (
+        <Section id="activity" title={text('Activity')} defaultOpen={false}>
+          <ActivityTimeline events={milestones} />
+        </Section>
+      ) : null}
+      {show.events.length ? (
+        <Section id="audit" title={text('Audit log')} defaultOpen={false}>
+          <Activity ticketId={t.id} events={show.events} />
+        </Section>
+      ) : null}
+    </DetailsDrawer>
   );
 }
 
@@ -274,6 +186,8 @@ export function useTicketBrief(show: TicketShow, enabled: boolean) {
 function SummarySection({ show, onReply }: { show: TicketShow; onReply?: (body: string) => void }) {
   const b = useTicketBrief(show, true);
   const canReply = show.can.reply === true && !show.ticket.merged_into && !!onReply;
+  // Nothing written yet and nothing to read: no section.
+  if (!show.messages.length && !b.brief) return null;
   return (
     <Section
       id="summary"
@@ -322,8 +236,6 @@ function SummarySection({ show, onReply }: { show: TicketShow; onReply?: (body: 
         </>
       ) : b.busy ? (
         <Spinner label={text('Reading the conversation…')} className="p-2" />
-      ) : !show.messages.length ? (
-        <p className="text-[12px] text-ink-3">{text('Nothing to summarise yet.')}</p>
       ) : null}
       {b.error ? (
         <p role="status" className="text-[11.5px] text-ink-3">
@@ -456,20 +368,24 @@ function InlineField({
   );
 }
 
-function ClientSection({ show, q, onNavigate, onOpenLink }: { show: TicketShow; q: ClientQuery; onNavigate: (route: string) => void; onOpenLink: (link: string) => void }) {
+/** The client's copy and the ticket's after a change the server took: everything that shows them, at once. */
+function useSettleClient(ticketId: number) {
   const qc = useQueryClient();
+  return (fresh: { client: TicketClient; ticket?: TicketShow['ticket'] }) => {
+    qc.setQueriesData<{ client: TicketClient }>({ queryKey: K.client(ticketId) }, () => ({ client: fresh.client }));
+    if (fresh.ticket) qc.setQueryData<TicketShow>(K.ticket(ticketId), (d) => (d ? { ...d, ticket: { ...d.ticket, ...fresh.ticket } } : d));
+    void qc.invalidateQueries({ queryKey: K.ticket(ticketId) });
+    void qc.invalidateQueries({ queryKey: K.related(ticketId) });
+    void qc.invalidateQueries({ queryKey: K.lists });
+  };
+}
+
+function ClientSection({ show, q, onNavigate }: { show: TicketShow; q: ClientQuery; onNavigate: (route: string) => void }) {
   const t = show.ticket;
   const c = q.data?.client ?? null;
   const canWhatsapp = useCanOpen('whatsapp');
-  const [linking, setLinking] = useState(false);
   const editable = c?.can.edit === true && !t.merged_into;
-  const settle = (fresh: { client: TicketClient; ticket?: TicketShow['ticket'] }) => {
-    qc.setQueriesData<{ client: TicketClient }>({ queryKey: K.client(t.id) }, () => ({ client: fresh.client }));
-    if (fresh.ticket) qc.setQueryData<TicketShow>(K.ticket(t.id), (d) => (d ? { ...d, ticket: { ...d.ticket, ...fresh.ticket } } : d));
-    void qc.invalidateQueries({ queryKey: K.ticket(t.id) });
-    void qc.invalidateQueries({ queryKey: K.related(t.id) });
-    void qc.invalidateQueries({ queryKey: K.lists });
-  };
+  const settle = useSettleClient(t.id);
   /** Saves one change; the server's word on a field it refused, or null. */
   const save = async (changes: ClientChanges): Promise<string | null> => {
     try {
@@ -483,23 +399,6 @@ function ClientSection({ show, q, onNavigate, onOpenLink }: { show: TicketShow; 
       return errorText(e);
     }
   };
-  const link = async (to: { contact_id: number } | { create: true }) => {
-    try {
-      settle(await linkContact(t.id, to));
-      setLinking(false);
-      toast('success', 'create' in to ? text('Contact created and linked.') : text('Linked to the contact.'));
-    } catch (e) {
-      toast('error', errorText(e));
-    }
-  };
-  const unlink = async () => {
-    try {
-      settle(await unlinkContact(t.id));
-    } catch (e) {
-      toast('error', errorText(e));
-    }
-  };
-
   const found = c ? foundInConversation(show.messages, c) : [];
   const name = c?.contact?.name ?? c?.requester.name ?? t.requester.name;
   const email = c?.contact?.email ?? c?.requester.email ?? t.requester.email;
@@ -512,13 +411,7 @@ function ClientSection({ show, q, onNavigate, onOpenLink }: { show: TicketShow; 
         <Avatar name={name || email || '?'} size={32} />
         <div className="min-w-0 flex-1">
           <b className="block truncate text-[13px] text-ink">{name || email || text('Unknown')}</b>
-          {c?.contact ? (
-            <button type="button" onClick={() => onOpenLink(c.contact!.link)} className="text-[11px] font-semibold text-primary hover:underline">
-              {text('WorkSuite contact · Open')}
-            </button>
-          ) : (
-            <span className="text-[11px] text-ink-3">{c?.contact_hidden ? text('Linked to a contact you cannot open') : text('Not linked to a contact')}</span>
-          )}
+          {c ? <span className="text-[11px] text-ink-3">{c.contact ? text('Saved to the WorkSuite contact') : text('Saved on this ticket')}</span> : null}
         </div>
       </div>
       <InlineField label={text('Name')} value={name} placeholder={text('Add a name')} editable={editable} check={(x) => fieldError('name', x)} onSave={(x) => save({ name: x })} />
@@ -581,12 +474,62 @@ function ClientSection({ show, q, onNavigate, onOpenLink }: { show: TicketShow; 
         </ul>
       ) : null}
       {c && !c.can.edit ? <p className="text-[11px] text-ink-3">{text('Read-only: changing the client needs the contacts edit permission.')}</p> : null}
-      {c?.can.unlink_contact ? (
+    </Section>
+  );
+}
+
+/**
+ * The WorkSuite contact the client is (`contact_id`): shown with Open and, where allowed, Unlink; or, when there is
+ * none, Create contact and Link to existing (the contacts that match the requester first). Not there when the server
+ * has said nothing yet, or when there is neither a contact nor anything this person may do about it.
+ */
+function ContactSection({ show, q, onOpenLink }: { show: TicketShow; q: ClientQuery; onOpenLink: (link: string) => void }) {
+  const t = show.ticket;
+  const c = q.data?.client ?? null;
+  const settle = useSettleClient(t.id);
+  const [linking, setLinking] = useState(false);
+  if (!c || (!c.contact && !c.contact_hidden && !c.can.link_contact)) return null;
+  const link = async (to: { contact_id: number } | { create: true }) => {
+    try {
+      settle(await linkContact(t.id, to));
+      setLinking(false);
+      toast('success', 'create' in to ? text('Contact created and linked.') : text('Linked to the contact.'));
+    } catch (e) {
+      toast('error', errorText(e));
+    }
+  };
+  const unlink = async () => {
+    try {
+      settle(await unlinkContact(t.id));
+    } catch (e) {
+      toast('error', errorText(e));
+    }
+  };
+  const k = c.contact;
+  return (
+    <Section id="contact" title={text('Linked contact')}>
+      {k ? (
+        <div className="flex items-center gap-2">
+          <Avatar name={k.name || k.email || '?'} size={28} />
+          <div className="min-w-0 flex-1">
+            <b className="block truncate text-ink">{k.name || k.email}</b>
+            <span className="block truncate text-[11px] text-ink-3">{[k.email, k.phone ? formatPhone(k.phone) : null, k.company].filter(Boolean).join(' · ')}</span>
+          </div>
+          <button type="button" onClick={() => onOpenLink(k.link)} className="shrink-0 text-[11px] font-semibold text-primary hover:underline">
+            {text('WorkSuite contact · Open')}
+          </button>
+        </div>
+      ) : c.contact_hidden ? (
+        <p className="text-[11.5px] text-ink-3">{text('Linked to a contact you cannot open')}</p>
+      ) : (
+        <p className="text-[11.5px] text-ink-3">{text('Not linked to a contact')}</p>
+      )}
+      {c.can.unlink_contact ? (
         <button type="button" onClick={() => void unlink()} className="self-start text-[11px] text-ink-3 hover:text-ink hover:underline">
           {text('Unlink the contact')}
         </button>
       ) : null}
-      {c?.can.link_contact ? (
+      {c.can.link_contact ? (
         linking ? (
           <LinkContact matches={c.matches} onPick={(id) => void link({ contact_id: id })} onCancel={() => setLinking(false)} />
         ) : (
@@ -721,15 +664,15 @@ function OrderCard({ o, ticketId, canReply, onOpenLink }: { o: RelatedOrder; tic
   );
 }
 
-/** One file as a tile: a picture's own thumbnail (its short-lived link), else the file's badge. */
-function FileTile({ a }: { a: TicketShow['attachments'][number] }) {
-  const image = /^image\//.test(a.mime ?? '') && a.scan_status !== 'infected';
-  const link = useQuery({ queryKey: ['support', 'attachment-link', a.id], queryFn: () => attachmentLink(a.id), enabled: image, staleTime: 5 * 60_000, retry: false });
+/**
+ * Every file on the ticket, across the whole thread: pictures as a grid of thumbnails through the thread's own signed
+ * links (`MessageFiles`, ‹ › through them in the viewer), other files as chips that open on this computer.
+ */
+function ThreadFiles({ files }: { files: Attachment[] }) {
   return (
-    <button type="button" onClick={() => void openAttachment(a)} title={text('Open {name}', { name: a.name })} className="flex aspect-square min-w-0 flex-col items-center justify-center gap-1 overflow-hidden rounded-[8px] border border-line bg-surface p-1 hover:border-primary">
-      {image && link.data?.url ? <img src={link.data.url} alt="" className="h-full w-full rounded-[6px] object-cover" /> : <FileBadge name={a.name} size={28} />}
-      {image && link.data?.url ? null : <span className="w-full truncate text-center text-[10px] text-ink-3">{a.name}</span>}
-    </button>
+    <section aria-label={text('Files on this ticket')}>
+      <MessageFiles files={files} pictures={files.filter(isPicture)} onOpen={(a) => void openAttachment(a)} />
+    </section>
   );
 }
 
@@ -752,6 +695,11 @@ function RelatedSection({
 }) {
   const t = show.ticket;
   const sub = 'text-[10.5px] font-bold tracking-[.4px] text-ink-3 uppercase';
+  // Until the related records come, or from an older server without them: the requester and their other tickets as
+  // the desk lists them.
+  const fallback = !related && (relatedLoading || !!t.requester.email?.trim() || !!t.requester.name);
+  const any = !!related?.orders?.length || !!related?.tickets.length || !!related?.chats?.length || links.length > 0;
+  if (!any && !fallback) return null;
   return (
     <Section id="related" title={text('Related')}>
       {related?.orders?.length ? (
@@ -764,23 +712,19 @@ function RelatedSection({
           </ul>
         </div>
       ) : null}
-      {related ? (
-        related.tickets.length ? (
-          <div className="flex flex-col gap-1">
-            <h4 className={sub}>{text('Previous tickets · {n}', { n: related.tickets.length })}</h4>
-            {related.tickets.map((x) => (
-              <button key={x.id} type="button" onClick={() => onNavigate(ticketRoute(x.id))} className="flex min-w-0 items-center gap-1.5 rounded-[6px] px-1 py-0.5 text-left hover:bg-subtle">
-                <span className="shrink-0 font-mono text-[11px] text-ink-2">{x.reference}</span>
-                <span className="min-w-0 flex-1 truncate text-ink">{x.subject}</span>
-                <StatusChip status={x.status} className="py-0 text-[10px]" />
-              </button>
-            ))}
-          </div>
-        ) : null
-      ) : (
-        // An older server, or until the related records come: the requester's other tickets as the desk lists them.
-        <RequesterPanel t={t} onOpen={(id) => onNavigate(ticketRoute(id))} onOpenLink={onOpenLink} />
-      )}
+      {related?.tickets.length ? (
+        <div className="flex flex-col gap-1">
+          <h4 className={sub}>{text('Previous tickets · {n}', { n: related.tickets.length })}</h4>
+          {related.tickets.map((x) => (
+            <button key={x.id} type="button" onClick={() => onNavigate(ticketRoute(x.id))} className="flex min-w-0 items-center gap-1.5 rounded-[6px] px-1 py-0.5 text-left hover:bg-subtle">
+              <span className="shrink-0 font-mono text-[11px] text-ink-2">{x.reference}</span>
+              <span className="min-w-0 flex-1 truncate text-ink">{x.subject}</span>
+              <StatusChip status={x.status} className="py-0 text-[10px]" />
+            </button>
+          ))}
+        </div>
+      ) : null}
+      {fallback ? <RequesterPanel t={t} onOpen={(id) => onNavigate(ticketRoute(id))} onOpenLink={onOpenLink} /> : null}
       {related?.chats?.length ? (
         <div className="flex flex-col gap-1">
           <h4 className={sub}>{text('Previous chats · {n}', { n: related.chats.length })}</h4>
@@ -793,21 +737,6 @@ function RelatedSection({
           ))}
         </div>
       ) : null}
-      {related?.pages?.length ? (
-        <div className="flex flex-col gap-1">
-          <h4 className={sub}>{text('Website activity')}</h4>
-          <ol className="ml-1 flex flex-col gap-1 border-l-2 border-line pl-2.5">
-            {related.pages.map((p, i) => (
-              <li key={`${p.at}-${i}`} className="min-w-0">
-                <div className="truncate text-ink-2" title={p.url ?? undefined}>
-                  {p.title || (p.url ? new URL(p.url, 'https://x').pathname : text('A page'))}
-                </div>
-                {p.at ? <div className="text-[10.5px] text-ink-3">{timeLabel(p.at)}</div> : null}
-              </li>
-            ))}
-          </ol>
-        </div>
-      ) : null}
       {links.length ? (
         <div className="flex flex-col gap-1">
           <h4 className={sub}>{text('Linked · {n}', { n: links.length })}</h4>
@@ -816,29 +745,33 @@ function RelatedSection({
           ))}
         </div>
       ) : null}
-      {show.attachments.length ? (
-        <section aria-label={text('Files on this ticket')} className="flex flex-col gap-1">
-          <h4 className={sub}>{text('Attachments · {n}', { n: show.attachments.length })}</h4>
-          <div className="grid grid-cols-3 gap-1.5">
-            {show.attachments.slice(0, 12).map((a) => (
-              <FileTile key={a.id} a={a} />
-            ))}
-          </div>
-        </section>
-      ) : null}
-      {!related?.orders?.length && !related?.tickets.length && !related?.chats?.length && !related?.pages?.length && !links.length && !show.attachments.length && !relatedLoading ? <p className="text-[11.5px] text-ink-3">{text('Nothing related yet.')}</p> : null}
     </Section>
+  );
+}
+
+/** The pages the visitor read before and during the chat the ticket came from, oldest first. */
+function WebsiteActivity({ pages }: { pages: NonNullable<TicketRelated['pages']> }) {
+  return (
+    <ol aria-label={text('Pages visited')} className="ml-1 flex flex-col gap-1 border-l-2 border-line pl-2.5">
+      {pages.map((p, i) => (
+        <li key={`${p.at}-${i}`} className="min-w-0">
+          <div className="truncate text-ink-2" title={p.url ?? undefined}>
+            {p.title || (p.url ? new URL(p.url, 'https://x').pathname : text('A page'))}
+          </div>
+          {p.at ? <div className="text-[10.5px] text-ink-3">{timeLabel(p.at)}</div> : null}
+        </li>
+      ))}
+    </ol>
   );
 }
 
 /* ── E. Activity ────────────────────────────────────────────────────────── */
 
-function ActivityTimeline({ show }: { show: TicketShow }) {
-  const events = show.events.slice(0, 30);
-  if (!events.length) return <p className="text-[11.5px] text-ink-3">{text('Nothing has happened yet.')}</p>;
+/** The journal's milestones, newest first: who raised, assigned, answered and closed it, and when. */
+function ActivityTimeline({ events }: { events: TicketEvent[] }) {
   return (
     <ol aria-label={text('Activity timeline')} className="ml-1 flex flex-col gap-2 border-l-2 border-line pl-3">
-      {events.map((e) => (
+      {events.slice(0, 30).map((e) => (
         <li key={e.id} className="relative">
           <span aria-hidden className="absolute top-[5px] -left-[17px] h-1.5 w-1.5 rounded-full bg-[#C3CCF6] dark:bg-primary/50" />
           <div className="text-ink-2">
