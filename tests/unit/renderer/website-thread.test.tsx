@@ -146,6 +146,41 @@ describe('the website thread (CHAT-UI-01)', () => {
   });
 });
 
+describe('the visitor panel is the shared details drawer (#334)', () => {
+  beforeEach(() => localStorage.clear());
+
+  it('resizes from its edge, hides with Ctrl+Shift+I or the header button, and stays as it was left', async () => {
+    const first = mount();
+    const panel = await screen.findByRole('complementary', { name: 'Visitor details' });
+    // The same drawer a ticket's details are in: its frame, its splitter, its handle.
+    expect(panel.closest('[data-drawer="website-visitor"]')).toBeTruthy();
+    expect(panel.style.width).toBe('240px');
+    const edge = screen.getByRole('separator', { name: 'Resize the visitor details' });
+    fireEvent.keyDown(edge, { key: 'ArrowLeft' });
+    expect(panel.style.width).toBe('256px');
+    fireEvent.keyDown(edge, { key: 'ArrowRight', shiftKey: true });
+    expect(panel.style.width).toBe('240px');
+    const header = screen.getAllByRole('button', { name: 'Hide the visitor details' })[0]!;
+    expect(header.getAttribute('aria-expanded')).toBe('true');
+    fireEvent.keyDown(window, { key: 'I', ctrlKey: true, shiftKey: true });
+    expect(screen.queryByRole('complementary', { name: 'Visitor details' })).toBeNull();
+    first.unmount();
+    mount();
+    await screen.findByText('Yearly, renewed each March.');
+    expect(screen.queryByRole('complementary', { name: 'Visitor details' })).toBeNull();
+    fireEvent.click(screen.getAllByRole('button', { name: 'Show the visitor details' })[0]!);
+    expect(await screen.findByRole('complementary', { name: 'Visitor details' })).toBeTruthy();
+  });
+
+  it('is not in the small window, where the shortcut does nothing', async () => {
+    mount(true);
+    await screen.findByText('Yearly, renewed each March.');
+    fireEvent.keyDown(window, { key: 'I', ctrlKey: true, shiftKey: true });
+    expect(screen.queryByRole('complementary', { name: 'Visitor details' })).toBeNull();
+    expect(screen.queryByRole('button', { name: /the visitor details/ })).toBeNull();
+  });
+});
+
 describe('a callback in its conversation (worksuite-desktop#223, #224)', () => {
   it('sits at the top with what the visitor asked for and the actions; a WhatsApp chat they continued on is linked', async () => {
     const data = {
