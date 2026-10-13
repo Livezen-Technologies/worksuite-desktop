@@ -311,6 +311,54 @@ describe('the bootstrap says which apps are self-service', () => {
   });
 });
 
+describe('the server’s licence locks apps (/api/system/entitlements)', () => {
+  const answer = (routes: Record<string, unknown>) =>
+    ({
+      get: async (path: string) => {
+        if (path in routes) return routes[path];
+        throw new Error(`no ${path}`);
+      },
+    }) as unknown as HttpClient;
+  const service = (routes: Record<string, unknown>) => new BootstrapService(new Database(':memory:'), () => new Vault(Vault.generateKey()), answer(routes), null);
+  const user = { id: 7, name: 'Nuwan', email: 'n@ws.example' };
+  const me = { '/api/auth/me': { user, permissions: ['*'], apps: '*' } };
+
+  it('changes nothing on a server without the endpoint (older WorkSuite Server)', async () => {
+    const b = await service(me).fetch('core');
+    expect(b.lockedApps).toBeUndefined();
+    expect(canOpenApp('crm', visibleAppIds(b))).toBe(true);
+  });
+
+  it('hides a locked app from every gate — the app, its links, its notifications — and records what is entitled', async () => {
+    const b = await service({
+      ...me,
+      '/api/system/entitlements': {
+        license: { status: 'ACTIVE', edition: 'business', enforcement: 'enforce', update_eligible: true },
+        entitlements: { 'crm.enabled': true, 'payroll.enabled': false },
+        apps: [
+          { app: 'crm', module: 'Crm', entitled: true, can_open: true, locked: false },
+          { app: 'payroll', module: 'Payroll', entitled: false, can_open: true, locked: true },
+          { app: 'tender', module: 'Tender', entitled: false, can_open: true, locked: false },
+        ],
+      },
+    }).fetch('core');
+    expect(b.lockedApps).toEqual(['payroll']);
+    expect(b.entitlements).toMatchObject({ crm: true, payroll: false, tender: false });
+    const visible = visibleAppIds(b);
+    expect(canOpenApp('crm', visible)).toBe(true);
+    expect(canOpenApp('payroll', visible)).toBe(false);
+    expect(canOpenLink('/payroll?tab=runs', visible)).toBe(false);
+    expect(notificationAllowed({ module: 'payroll', category: 'payroll', link: '/payroll?tab=runs' }, visible)).toBe(false);
+    // Not entitled but not locked (the server does not enforce entitlements yet): still open.
+    expect(canOpenApp('tenders', visible)).toBe(true);
+  });
+
+  it('fails open on an odd answer', async () => {
+    const b = await service({ ...me, '/api/system/entitlements': { apps: 'nope' } }).fetch('core');
+    expect(b.lockedApps).toBeUndefined();
+  });
+});
+
 describe('own payslips without Payroll', () => {
   it('lets the payslip notification (HR’s My pay) through, and keeps payroll runs out', () => {
     expect(notificationAllowed({ module: 'payroll', category: 'payroll', link: '/hr?tab=mypay' }, everyday)).toBe(true);

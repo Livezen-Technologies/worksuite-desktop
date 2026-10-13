@@ -183,7 +183,16 @@ export interface Bootstrap {
    */
   selfService: string[];
   permissions: string[];
+  /**
+   * Server app slug → whether the server's WorkSuite licence includes it (GET /api/system/entitlements),
+   * or the organisation plan's modules from /desktop/v1. Empty when the server does not say.
+   */
   entitlements: Record<string, boolean>;
+  /**
+   * App slugs the server's licence locks (it enforces entitlements and does not include them): hidden
+   * everywhere — sidebar, launcher, home, search, links, notifications. Absent on older servers.
+   */
+  lockedApps?: string[];
   featureFlags: Record<string, boolean>;
   policy: DesktopPolicy;
   monitoringPolicy: MonitoringPolicySummary | null;

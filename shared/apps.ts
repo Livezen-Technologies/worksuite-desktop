@@ -198,6 +198,8 @@ export interface AccessGrant {
   serverApps?: string[] | null;
   /** App slugs the person may open only in self-service mode, lacking the full app (the bootstrap's `self_service`). */
   selfService?: string[] | null;
+  /** App slugs the server's licence locks (Bootstrap.lockedApps): never visible, whatever else allows them. */
+  locked?: string[] | null;
 }
 
 export function hasPermission(grant: AccessGrant, perm: string | readonly string[] | undefined): boolean {
@@ -231,6 +233,7 @@ export function isSelfService(def: AppDefinition, grant: AccessGrant): boolean {
 }
 
 export function isAppVisible(def: AppDefinition, grant: AccessGrant): boolean {
+  if (def.app && grant.locked?.includes(def.app)) return false;
   return hasFullApp(def, grant) || isSelfService(def, grant);
 }
 

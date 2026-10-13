@@ -76,10 +76,34 @@ export class BootstrapService {
   }
 
   async fetch(api: ServerApi, organizationId: string | null = null): Promise<Bootstrap> {
-    const b = api === 'desktop-v1' ? await this.fetchV1(organizationId) : await this.compose();
+    const base = api === 'desktop-v1' ? await this.fetchV1(organizationId) : await this.compose();
+    const lic = await this.licence();
+    const b: Bootstrap = lic ? { ...base, entitlements: { ...base.entitlements, ...lic.entitlements }, lockedApps: lic.locked } : base;
     this.current = b;
     this.save(b);
     return b;
+  }
+
+  /**
+   * What the server's WorkSuite licence includes, per app (GET /api/system/entitlements, WorkSuite Server
+   * Core 1.7.0+). Fails open: an older server (404), an error or an odd answer leaves every app as it was.
+   */
+  private async licence(): Promise<{ entitlements: Record<string, boolean>; locked: string[] } | null> {
+    try {
+      const d = await this.http.get<{ apps?: unknown }>('/api/system/entitlements');
+      if (!d || !Array.isArray(d.apps)) return null;
+      const entitlements: Record<string, boolean> = {};
+      const locked: string[] = [];
+      for (const a of d.apps as Array<Record<string, unknown>>) {
+        if (typeof a?.app !== 'string') continue;
+        entitlements[a.app] = a.entitled !== false;
+        if (a.locked === true) locked.push(a.app);
+      }
+      return { entitlements, locked };
+    } catch (e) {
+      log.debug('licence entitlements unavailable; every app as the server grants it', { code: isDesktopError(e) ? e.code : String(e) });
+      return null;
+    }
   }
 
   private async fetchV1(organizationId: string | null): Promise<Bootstrap> {

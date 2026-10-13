@@ -11,6 +11,11 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.252 — 2026-10-14
+
+- **Apps follow the server's licence (IMPL-LIC-01 P0).** On a WorkSuite Server that enforces its licence's entitlements, an app the licence does not include is gone everywhere the app list reaches: the sidebar, the launcher, Home, search, `worksuite://` and pasted links, notifications and the tray — the same gates a missing permission uses. The bootstrap reads `GET /api/system/entitlements` next to `/api/auth/me`; Settings › License lists what the licence includes, app by app.
+- Where it bites: nothing changes until the server enforces entitlements (`license.enforcement = enforce` with `license.enforceEntitlements` on, WorkSuite Server Core 1.7.0 or later); an app that is merely not entitled stays as it was. A server without the endpoint, or an odd answer, leaves every app as before.
+
 ## 0.2.251 — 2026-10-13
 
 - **One details drawer, everywhere (#334).** A ticket's details and a website chat's visitor panel are now the same drawer: drag its edge or use the arrow keys to resize it, show or hide it from the header or with Ctrl/⌘+Shift+I, and it remembers its width and whether it was open — for you, not for everyone on this computer. In a narrow window it slides over the conversation and Esc closes it.
