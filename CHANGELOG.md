@@ -11,6 +11,13 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.250 — 2026-10-13
+
+- **Meetings, redrawn (Meetings SRS v1.1, D01–D08).** The home has a seven-day strip with a count per day, paging, and rows that say Going, Organiser, Waiting for you or Happening now; invitations show "Clashes with …". A meeting opens on its Summary — details, your answer, agenda, emails sent or failed with Retry, recording and files — and its buttons are only the ones the server lets you use: no Start, Complete, Reschedule or Delete you would be refused. Minutes, transcripts, Q&A & polls and the Schedule dialog (Free / Busy / Maybe busy, Schedule anyway) follow the new design.
+- **Meeting reminders and invitations you can act on.** "Starts in 15 minutes" comes with Join, Snooze 5 min and Open; an invitation with Going, Maybe and Propose time. They go through the normal notification rules (mutes, quiet hours, one device). The tray has a Meetings menu: today's meetings with Join, and waiting invitations.
+- **Agenda mini window.** An always-on-top window with the live agenda item, its time left (red once over), Pause and Next item for whoever runs the meeting, and quick notes that go into the minutes — kept offline and added when back online.
+- Where it bites: needs the server's Meeting 1.10.0 for abilities, the shared calendar and signed file links; older servers keep the previous buttons. Notifications module 2.1.0.
+
 ## 0.2.249 — 2026-10-13
 
 - **Linux: .deb and .rpm installs can update themselves again (#345).** The package now records how it was installed (`resources/package-type`). Before this, the in-app update added in 0.2.240 could not tell a .deb or .rpm install apart, because nothing wrote that file.
