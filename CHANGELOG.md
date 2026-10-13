@@ -50,7 +50,7 @@ servers — each with its own data, sign-in and settings, and switches between t
 - **Links and outages.** A link to a server you haven't added asks first — the app never contacts a new server on its
   own. When WorkSuite Cloud or your server is down, a banner says so, retries with backoff up to every 5 minutes,
   and offers **Work Offline**.
-- Needs WorkSuite Server with Desktop 1.8.0 / Auth 2.4.0 for signed discovery, the Admin Center trusted
+- Needs WorkSuite Server with Desktop 1.8.0 / Auth 2.5.0 for signed discovery, the Admin Center trusted
   configuration and browser sign-in; older servers still connect as before.
 
 ## 0.2.252 — 2026-10-14
