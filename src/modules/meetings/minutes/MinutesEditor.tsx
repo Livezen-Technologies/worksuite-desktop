@@ -212,6 +212,63 @@ export function MinutesEditor({ meetingId, compact, material }: { meetingId: num
     }
   };
 
+  const sections = SECTIONS.map((s) => {
+    const c = conflicts[s];
+    const ed = v.edited[s];
+    return (
+      <section key={s} className={cx('flex flex-col gap-1.5', !compact && 'rounded-[12px] border border-line bg-surface p-3')}>
+        <div className="flex items-center gap-2">
+          <b className="flex-1 text-ink">{SECTION_LABEL[s]}</b>
+          {state[s] === 'saving' ? <Chip>Saving</Chip> : state[s] === 'error' ? <Chip tone="danger">Not saved</Chip> : null}
+          {ed ? <span className="text-[11px] text-ink-3">Last changed by {ed.name || 'someone'} · {timeLabel(ed.at)}</span> : null}
+        </div>
+        {c ? (
+          <div role="alert" className="flex flex-col gap-1.5 rounded-[9px] border border-[#F1D9B5] bg-[#FFF9EC] p-2.5 text-[12.5px] dark:bg-warning-bg">
+            <span className="font-semibold text-[#78350F] dark:text-warning">
+              {c.edited?.name ?? 'Somebody'} changed {SECTION_LABEL[s]} meanwhile. Nothing has been overwritten.
+            </span>
+            <div className="flex flex-wrap gap-1.5">
+              <Button size="sm" variant="primary" onClick={() => resolve(s, 'both')}>
+                Keep both
+              </Button>
+              <Button size="sm" onClick={() => resolve(s, 'theirs')}>
+                Use theirs
+              </Button>
+              <Button size="sm" onClick={() => resolve(s, 'mine')}>
+                Replace with mine
+              </Button>
+            </div>
+          </div>
+        ) : null}
+        <RichText label={SECTION_LABEL[s]} value={htmlOfSection(s)} disabled={!editable} onChange={(html) => change(s, html)} placeholder={editable ? PLACEHOLDER[s] : 'Nothing written.'} />
+      </section>
+    );
+  });
+  const side = (
+    <>
+      {editable && !compact ? (
+        <section className="flex flex-col gap-1.5 rounded-[12px] border border-line bg-surface p-3 text-[12.5px]">
+          <div className="flex items-center gap-2">
+            <b className="flex-1 text-ink">AI draft</b>
+            <Chip tone="indigo">Preview first</Chip>
+          </div>
+          <span className="text-ink-2">From the agenda, what is written, the chat and the transcript. It never invents decisions, owners or dates.</span>
+          <Button size="sm" icon="sparkles" loading={gathering} onClick={() => void generate()} className="self-start">
+            Draft the minutes
+          </Button>
+        </section>
+      ) : null}
+      <div className={cx(!compact && 'rounded-[12px] border border-line bg-surface p-3')}>
+        <ActionItems v={v} editable={editable} />
+      </div>
+      {v.can.manage ? (
+        <div className={cx(!compact && 'rounded-[12px] border border-line bg-surface p-3')}>
+          <AccessSettings meetingId={meetingId} access={v.access} />
+        </div>
+      ) : null}
+    </>
+  );
+
   return (
     <div className={cx('flex flex-col gap-3 text-[13px]', compact && 'p-3.5')}>
       <div className="flex flex-wrap items-center gap-2">
@@ -219,7 +276,12 @@ export function MinutesEditor({ meetingId, compact, material }: { meetingId: num
           <h2 className="truncate text-[15px] font-bold text-ink">{v.meeting.title}</h2>
           <span className="text-[12px] text-ink-3">{v.meeting.when || `${dateLabel(v.meeting.start_at)} ${timeLabel(v.meeting.start_at)}`}</span>
         </div>
-        {final ? <Chip tone="success">Final · {dateLabel(v.finalised_at!)}</Chip> : null}
+      </div>
+      <p className="text-[12px] text-ink-2">
+        <b className="text-ink">Participants:</b> {v.people.map((p) => p.name).filter(Boolean).join(', ') || '—'}
+      </p>
+      <div className="flex flex-wrap items-center gap-1.5">
+        {final ? <Chip tone="success">Final · {dateLabel(v.finalised_at!)}</Chip> : <Chip tone="warning">Draft</Chip>}
         {status ? (
           <span className={cx('text-[12px] font-semibold', status.tone)} role="status" aria-live="polite">
             {status.text}
@@ -230,11 +292,7 @@ export function MinutesEditor({ meetingId, compact, material }: { meetingId: num
             ) : null}
           </span>
         ) : null}
-      </div>
-      <p className="text-[12px] text-ink-2">
-        <b className="text-ink">Participants:</b> {v.people.map((p) => p.name).filter(Boolean).join(', ') || '—'}
-      </p>
-      <div className="flex flex-wrap gap-1.5">
+        <span className="flex-1" />
         {editable ? (
           <Button size="sm" icon="sparkles" loading={gathering} onClick={() => void generate()} title="Draft from what is written, the agenda and the meeting's chat or transcript">
             Generate with AI
@@ -243,13 +301,13 @@ export function MinutesEditor({ meetingId, compact, material }: { meetingId: num
         <Button size="sm" icon="copy" onClick={copy}>
           Copy
         </Button>
+        <span className="ml-1 text-[11.5px] text-ink-3">Export</span>
         <Button size="sm" icon="download" onClick={() => exportAs('pdf')}>
           PDF
         </Button>
         <Button size="sm" icon="download" onClick={() => exportAs('docx')}>
           Word
         </Button>
-        <span className="flex-1" />
         {v.can.manage ? (
           final ? (
             <>
@@ -270,40 +328,18 @@ export function MinutesEditor({ meetingId, compact, material }: { meetingId: num
       {!v.can.edit ? <p className="rounded-[9px] bg-subtle px-2.5 py-2 text-[12.5px] text-ink-2">You can read these minutes. The organiser decides who edits them.</p> : null}
       {final && v.can.edit ? <p className="rounded-[9px] bg-subtle px-2.5 py-2 text-[12.5px] text-ink-2">These minutes are final.{v.can.manage ? ' Reopen them to change anything.' : ''}</p> : null}
 
-      {SECTIONS.map((s) => {
-        const c = conflicts[s];
-        const ed = v.edited[s];
-        return (
-          <section key={s} className="flex flex-col gap-1.5">
-            <div className="flex items-center gap-2">
-              <b className="flex-1 text-ink">{SECTION_LABEL[s]}</b>
-              {ed ? <span className="text-[11px] text-ink-3">Last changed by {ed.name || 'someone'} · {timeLabel(ed.at)}</span> : null}
-            </div>
-            {c ? (
-              <div role="alert" className="flex flex-col gap-1.5 rounded-[9px] border border-[#F1D9B5] bg-[#FFF9EC] p-2.5 text-[12.5px] dark:bg-warning-bg">
-                <span className="text-ink">
-                  <b>{c.edited?.name ?? 'Somebody'}</b> changed {SECTION_LABEL[s]} while you were writing. Nothing has been overwritten.
-                </span>
-                <div className="flex flex-wrap gap-1.5">
-                  <Button size="sm" variant="primary" onClick={() => resolve(s, 'both')}>
-                    Keep both
-                  </Button>
-                  <Button size="sm" onClick={() => resolve(s, 'theirs')}>
-                    Use theirs
-                  </Button>
-                  <Button size="sm" onClick={() => resolve(s, 'mine')}>
-                    Replace with mine
-                  </Button>
-                </div>
-              </div>
-            ) : null}
-            <RichText label={SECTION_LABEL[s]} value={htmlOfSection(s)} disabled={!editable} onChange={(html) => change(s, html)} placeholder={editable ? PLACEHOLDER[s] : 'Nothing written.'} />
-          </section>
-        );
-      })}
-
-      <ActionItems v={v} editable={editable} />
-      {v.can.manage ? <AccessSettings meetingId={meetingId} access={v.access} /> : null}
+      {compact ? (
+        <>
+          {sections}
+          {side}
+        </>
+      ) : (
+        // D03: the sections, and beside them the AI draft, the action items and who may see and edit.
+        <div className="flex items-start gap-4">
+          <div className="flex min-w-0 flex-[2] flex-col gap-3">{sections}</div>
+          <aside className="flex min-w-0 flex-1 flex-col gap-3">{side}</aside>
+        </div>
+      )}
 
       {drafting !== null ? (
         <AiTextDialog title="Generate minutes" task="minutes" input={() => drafting} actions={[{ label: 'Use in the minutes', primary: true, run: (t) => applyDraft(t) }]} onClose={() => setDrafting(null)} />
@@ -443,7 +479,7 @@ function AccessSettings({ meetingId, access }: { meetingId: number; access: Minu
   };
   const field = 'h-9 rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink';
   return (
-    <section className="grid grid-cols-2 gap-2.5 border-t border-line pt-3">
+    <section className="flex flex-col gap-2.5">
       <label className="flex flex-col gap-1 text-[12.5px] font-semibold text-ink">
         Who can see the minutes
         <Select<MinutesAccess['view']>

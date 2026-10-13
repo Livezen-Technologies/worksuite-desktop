@@ -1,19 +1,20 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
+import { Fragment, useEffect, useRef, useState, type ReactNode } from 'react';
 import { useCanOpen } from '../../core/access';
-import { apiGet, apiPost, apiPut, request } from '../../core/api';
+import { apiDelete, apiGet, apiPost, apiPut, request } from '../../core/api';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
-import { bytes, dateLabel, parseTs, relative, timeLabel } from '../../core/time';
+import { bytes, dateLabel, relative, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Button, Chip, Empty, ErrorNote, FileBadge, Modal, Spinner, cx } from '../../components/ui';
 import { useNow } from '../calls/parts';
 import { openMeeting } from '../meet/api';
 import { RecordingProgress } from '../meet/RecordingProgress';
 import type { Stroke } from '../meet/session';
-import { openRelatedLabel, providerLabel, RSVP_LABEL, typeLabel, zoneNote, type AgendaItem, type Delivery, type Detail, type Person, type Rsvp } from './api';
+import { abilitiesOf, meetingProblem, openRelatedLabel, providerLabel, RSVP_LABEL, serverAbilities, typeLabel, zoneNote, type Delivery, type Detail, type MeetingAbilities, type Person, type Rsvp } from './api';
+import { elapsedOf, mmss } from './agenda';
 import { Select } from '../../components/Select';
 import { MinutesEditor } from './minutes/MinutesEditor';
 import { TranscriptsTab } from './transcripts/TranscriptsTab';
@@ -23,7 +24,6 @@ import { invitationsChanged, useInvitationAnswer } from '../calendar/conflicts';
 import type { ChatMessage } from '../chat/types';
 
 const TABS = ['Summary', 'Agenda', 'People', 'Minutes', 'Transcripts', 'Q&A & Polls', 'Files', 'Board', 'Activity'] as const;
-const TAB_LABEL: Partial<Record<(typeof TABS)[number], string>> = { Minutes: 'Notes & Minutes' };
 type Tab = (typeof TABS)[number];
 
 const MAY: Array<[string, string]> = [
@@ -37,16 +37,11 @@ const MAY: Array<[string, string]> = [
 
 const ROLE: Record<string, string> = { organizer: 'Organiser', host: 'Host', presenter: 'Presenter', required: 'Required attendee', optional: 'Optional attendee' };
 
-/** Seconds spent on an item: what was banked, plus the stretch running now. */
-export function elapsedOf(item: AgendaItem, now: number): number {
-  const banked = item.elapsed_seconds ?? 0;
-  if (item.status !== 'running' || !item.started_at) return banked;
-  return banked + Math.max(0, (now - parseTs(item.started_at).getTime()) / 1000);
-}
+export { elapsedOf };
 
-function mmss(s: number): string {
-  const v = Math.max(0, Math.round(s));
-  return `${Math.floor(v / 60)}:${String(v % 60).padStart(2, '0')}`;
+/** Opens the always-on-top agenda window (D08) for a meeting; one window per meeting. */
+export function openAgendaWindow(id: number, title: string): void {
+  void call('windows:open', { kind: 'agenda', route: `/meetings?agenda=${id}`, title: `Agenda · ${title}`.slice(0, 200), alwaysOnTop: true }).catch((e) => toast('error', errorMessage(e)));
 }
 
 export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }) {
@@ -59,27 +54,41 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
   // A link may name the tab: `?tab=Transcripts`, or a transcript (`?transcript=`, from a transcript's email — #81).
   const [tab, setTab] = useState<Tab>(() => {
     const asked = query.get('tab') ?? (query.get('transcript') ? 'Transcripts' : null);
-    return (TABS as readonly string[]).includes(asked ?? '') ? (asked as Tab) : 'Agenda';
+    return (TABS as readonly string[]).includes(asked ?? '') ? (asked as Tab) : 'Summary';
   });
-  const [cancelling, setCancelling] = useState(false);
+  const [confirm, setConfirm] = useState<'cancel' | 'delete' | null>(null);
   const [reason, setReason] = useState('');
   const q = useQuery({ queryKey: ['meetings', 'detail', id], queryFn: ({ signal }) => apiGet<Detail>(`/api/meetings/${id}`, undefined, signal), refetchOnMount: 'always', refetchInterval: (query) => query.state.data?.recordings?.some(r => !['ready', 'failed'].includes(r.status)) ? 10_000 : 30_000 });
   useTabTitle(q.data ? `Meeting · ${q.data.meeting.title}` : 'Meeting');
   // A cancelled or moved meeting no longer overlaps anything: the calendar and its conflict answers are read again (#99),
   // and an answer here leaves Home's Waiting for me and Meetings' Invitations at once (#97).
   const refresh = () => invitationsChanged(qc);
-  const act = async (fn: () => Promise<unknown>, done?: string) => {
+  const act: Act = async (fn, done) => {
     try {
       await fn();
       if (done) toast('success', done);
+      return true;
     } catch (e) {
-      toast('error', errorMessage(e));
+      // The meeting moved on meanwhile — cancelled or completed elsewhere, or over (409, 410): said, and shown as it is now.
+      const problem = meetingProblem(e);
+      toast(problem ? 'info' : 'error', problem?.message ?? errorMessage(e));
+      return false;
     } finally {
       refresh();
     }
   };
   // Your answer, when it is an invitation still waiting: accepting one that overlaps something asks first (#99).
   const invitation = useInvitationAnswer('meeting', id, (r) => act(() => apiPost(`/api/meetings/${id}/rsvp`, { rsvp: r })));
+  // Propose time from an invitation's banner (D07) opens the meeting with its dialog.
+  const proposeAsked = query.get('propose') === '1';
+  const proposed = useRef(false);
+  const propose = invitation.propose;
+  useEffect(() => {
+    if (proposeAsked && !proposed.current && propose) {
+      proposed.current = true;
+      propose();
+    }
+  }, [proposeAsked, propose]);
 
   if (q.isLoading) return <Spinner />;
   if (q.error || !q.data) return <div className="p-6"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div>;
@@ -87,12 +96,19 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
   const m = d.meeting;
   const mine = d.participants.find((p) => p.user_id === me) ?? null;
   const organiser = m.organizer_id === me;
-  const canEdit = organiser || d.can.manage || mine?.role === 'host';
-  const joinable = m.live_status !== 'cancelled' && m.live_status !== 'completed' && (m.meet_uuid ? canMeet : m.online_url);
+  // What this person may do here: the server's word when it gives it (MTG-U03), else as this app always worked it out.
+  const can = abilitiesOf(m, { me, mine, manage: d.can.manage });
+  const told = serverAbilities(m);
+  const open = m.live_status !== 'cancelled' && m.live_status !== 'completed';
+  const joinable = open && can.attend && (m.meet_uuid ? canMeet : m.online_url);
   // Booked on another clock (a tender's meeting, on the buyer's company's): the time there as well (#100).
   const booked = zoneNote(m.start_at, m.timezone);
-  const rsvps = d.participants.reduce<Record<string, number>>((n, p) => ((n[p.rsvp] = (n[p.rsvp] ?? 0) + 1), n), {});
   const btn = 'h-9 rounded-[8px] border border-line bg-surface px-3 font-semibold text-ink hover:bg-subtle';
+  const status = (action: 'start' | 'complete') => act(() => apiPost(`/api/meetings/${m.id}/${action}`), action === 'start' ? 'Meeting started.' : 'Meeting completed.');
+  const remove = async () => {
+    setConfirm(null);
+    if (await act(() => apiDelete(`/api/meetings/${m.id}`), 'Meeting deleted.')) onBack();
+  };
 
   return (
     <div className="h-full overflow-y-auto scroll-thin">
@@ -105,7 +121,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
               <Chip tone="indigo">{typeLabel(m.type)}</Chip>
               {m.source ? <Chip tone="teal">{m.source.kind_label}{m.source.label ? ` · ${m.source.label}` : ''}</Chip> : null}
               {m.priority === 'high' || m.priority === 'urgent' ? <Chip tone="danger">{m.priority === 'urgent' ? 'Urgent' : 'High priority'}</Chip> : null}
-              {m.live_status === 'ongoing' ? <Chip tone="danger">Happening now</Chip> : m.live_status === 'cancelled' ? <Chip>Cancelled</Chip> : m.live_status === 'completed' ? <Chip tone="success">Completed</Chip> : null}
+              {m.live_status === 'ongoing' ? <Chip tone="danger">Happening now</Chip> : m.live_status === 'cancelled' ? <Chip>Cancelled</Chip> : m.live_status === 'completed' ? <Chip tone="success">Completed</Chip> : m.live_status === 'draft' ? <Chip tone="warning">Draft</Chip> : null}
             </div>
             <span className="text-ink-2">
               {dateLabel(m.start_at)} {timeLabel(m.start_at)}–{timeLabel(m.end_at)}
@@ -113,6 +129,7 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
               {m.project ? ` · Project: ${m.project}` : ''}
             </span>
           </div>
+          {/* The header offers only what this person may do (MTG-U03): each control behind its own flag. */}
           {m.source?.can_open && m.source.link ? (
             // The record it is about (#100, #101) — offered only to someone who may open it.
             <button type="button" className={btn} onClick={() => openLink(m.source!.link!)}>
@@ -120,9 +137,15 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
             </button>
           ) : null}
           {d.chat?.room_id && canChat ? <button type="button" className={btn} onClick={() => navigate(`/chat?room=${d.chat!.room_id}`)}>Open in Chat</button> : null}
-          {canEdit ? <button type="button" className={btn} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/meetings?meeting=${m.id}` })}>Edit ↗</button> : null}
-          {canEdit && m.live_status !== 'cancelled' && m.live_status !== 'completed' ? (
-            <button type="button" className="h-9 rounded-[8px] border border-[#F1B8A8] bg-surface px-3 font-semibold text-danger hover:bg-danger-bg" onClick={() => setCancelling(true)}>Cancel meeting</button>
+          {can.edit ? <button type="button" className={btn} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/meetings?meeting=${m.id}` })}>Edit ↗</button> : null}
+          {told && can.reschedule && open ? <button type="button" className={btn} title="Opens on the web" onClick={() => void call('app:openInBrowser', { path: `/meetings?meeting=${m.id}&reschedule=1` })}>Reschedule ↗</button> : null}
+          {can.start ? <button type="button" className={btn} onClick={() => void status('start')}>Start</button> : null}
+          {can.complete ? <button type="button" className={btn} onClick={() => void status('complete')}>Complete</button> : null}
+          {can.cancel && open ? (
+            <button type="button" className="h-9 rounded-[8px] border border-[#F1B8A8] bg-surface px-3 font-semibold text-danger hover:bg-danger-bg" onClick={() => setConfirm('cancel')}>Cancel meeting</button>
+          ) : null}
+          {can.delete ? (
+            <button type="button" className="h-9 rounded-[8px] border border-[#F1B8A8] bg-surface px-3 font-semibold text-danger hover:bg-danger-bg" onClick={() => setConfirm('delete')}>Delete</button>
           ) : null}
           {joinable ? (
             <button
@@ -141,71 +164,34 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
         <div role="tablist" className="flex border-b border-line">
           {TABS.map((t) => (
             <button key={t} type="button" role="tab" aria-selected={tab === t} onClick={() => setTab(t)} className={cx('h-10 px-3', tab === t ? 'font-bold text-primary shadow-[inset_0_-2px_0_var(--color-primary)]' : 'font-medium text-ink-2')}>
-              {TAB_LABEL[t] ?? t}
+              {t}
             </button>
           ))}
         </div>
-        <div className="grid items-start gap-4 [grid-template-columns:1fr_300px]">
+        {tab === 'Summary' ? (
+          <SummaryTab d={d} can={can} mine={mine} invitation={invitation} act={act} onTab={setTab} />
+        ) : (
           <section className="flex min-w-0 flex-col gap-2.5 rounded-[12px] border border-line bg-surface p-4">
-            {tab === 'Summary' ? <SummaryTab d={d} /> : null}
-            {tab === 'Agenda' ? <AgendaTab d={d} canEdit={canEdit || !!mine?.permissions?.edit_agenda} act={act} /> : null}
-            {tab === 'People' ? <PeopleTab d={d} canEdit={canEdit} act={act} /> : null}
+            {tab === 'Agenda' ? <AgendaTab d={d} canRun={can.run_agenda && open} act={act} /> : null}
+            {tab === 'People' ? <PeopleTab d={d} canInvite={can.invite && open} canMark={can.edit} act={act} /> : null}
             {tab === 'Minutes' ? <MinutesTab d={d} /> : null}
             {tab === 'Transcripts' ? <TranscriptsTab d={d} /> : null}
             {tab === 'Q&A & Polls' ? <QaPollsTab d={d} /> : null}
-            {tab === 'Files' ? <FilesTab d={d} act={act} /> : null}
+            {tab === 'Files' ? <FilesTab d={d} canUpload={can.upload} act={act} /> : null}
             {tab === 'Board' ? <BoardTab uuid={m.meet_uuid} /> : null}
             {tab === 'Activity' ? <ActivityTab id={m.id} /> : null}
           </section>
-          <aside className="flex flex-col gap-3">
-            {mine && !organiser ? (
-              <section className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface p-3.5">
-                <b className="text-ink">Your answer</b>
-                <div className="flex gap-1.5">
-                  {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
-                    <button key={r} type="button" aria-pressed={mine.rsvp === r} onClick={() => void invitation.answer(r)} className={cx('h-8 flex-1 rounded-[8px] text-[12px] font-semibold', mine.rsvp === r ? 'bg-primary text-white' : 'border border-line text-ink hover:bg-subtle')}>
-                      {RSVP_LABEL[r]}
-                    </button>
-                  ))}
-                </div>
-                {invitation.flag}
-                {invitation.propose ? (
-                  <button type="button" onClick={invitation.propose} className="self-start text-[12px] font-semibold text-primary hover:underline">
-                    Propose new time
-                  </button>
-                ) : null}
-                <span className="text-[12px] text-ink-3">Answers: {rsvps.accepted ?? 0} going · {rsvps.tentative ?? 0} maybe · {rsvps.no_response ?? 0} awaiting</span>
-                {invitation.dialogs}
-              </section>
-            ) : (
-              <section className="flex flex-col gap-1 rounded-[12px] border border-line bg-surface p-3.5">
-                <b className="text-ink">Answers</b>
-                <span className="text-[12px] text-ink-2">{rsvps.accepted ?? 0} going · {rsvps.tentative ?? 0} maybe · {rsvps.declined ?? 0} not going · {rsvps.no_response ?? 0} awaiting</span>
-              </section>
-            )}
-            <section className="flex flex-col gap-1 rounded-[12px] border border-line bg-surface p-3.5">
-              <b className="text-ink">Where</b>
-              <span className="break-words text-ink">{m.where || providerLabel(m)}</span>
-              {m.online_url && !(m.where ?? '').includes(m.online_url) ? <span className="truncate text-[12px] text-ink-3">Online: {m.online_url.replace(/^https?:\/\//, '')}</span> : null}
-            </section>
-            {d.deliveries?.rows.length ? <Deliveries meetingId={m.id} rows={d.deliveries.rows} act={act} /> : null}
-            <section className="flex flex-col gap-1 rounded-[12px] border border-line bg-surface p-3.5">
-              <b className="text-ink">Files</b>
-              <span className="text-[12px] text-ink-2">{d.files.length ? d.files.slice(0, 4).map((f) => f.filename).join(' · ') : 'None yet'}</span>
-              <button type="button" className="self-start text-[12px] font-semibold text-primary hover:underline" onClick={() => setTab('Files')}>Add files</button>
-            </section>
-          </aside>
-        </div>
+        )}
       </main>
-      {cancelling ? (
+      {confirm === 'cancel' ? (
         <Modal
           title="Cancel this meeting?"
-          onClose={() => setCancelling(false)}
+          onClose={() => setConfirm(null)}
           width={440}
           footer={
             <>
-              <Button onClick={() => setCancelling(false)}>Keep it</Button>
-              <Button variant="danger" onClick={() => (setCancelling(false), void act(() => apiPost(`/api/meetings/${m.id}/cancel`, { reason: reason.trim() || undefined }), 'Meeting cancelled; everyone is told.'))}>
+              <Button onClick={() => setConfirm(null)}>Keep it</Button>
+              <Button variant="danger" onClick={() => (setConfirm(null), void act(() => apiPost(`/api/meetings/${m.id}/cancel`, { reason: reason.trim() || undefined }), 'Meeting cancelled; everyone is told.'))}>
                 Cancel meeting
               </Button>
             </>
@@ -217,15 +203,42 @@ export function MeetingDetail({ id, onBack }: { id: number; onBack: () => void }
           </label>
         </Modal>
       ) : null}
+      {confirm === 'delete' ? (
+        <Modal
+          title="Delete this meeting?"
+          onClose={() => setConfirm(null)}
+          width={440}
+          footer={
+            <>
+              <Button onClick={() => setConfirm(null)}>Keep it</Button>
+              <Button variant="danger" onClick={() => void remove()}>
+                Delete
+              </Button>
+            </>
+          }
+        >
+          <p className="text-[13px] text-ink-2">The meeting, its agenda, minutes and files are removed. People who were invited are not told; cancel it instead to tell them.</p>
+        </Modal>
+      ) : null}
     </div>
   );
 }
 
-type Act = (fn: () => Promise<unknown>, done?: string) => Promise<void>;
+type Act = (fn: () => Promise<unknown>, done?: string) => Promise<boolean>;
+type Invitation = ReturnType<typeof useInvitationAnswer>;
 
-function SummaryTab({ d }: { d: Detail }) {
+const ANSWER_TONE: Record<Rsvp, 'success' | 'warning' | 'muted' | 'danger'> = { accepted: 'success', tentative: 'warning', declined: 'muted', no_response: 'danger' };
+
+/**
+ * The meeting's summary (D02): when, where, who runs it and what it is about; your answer; the agenda at a glance —
+ * and beside them the invitation emails, your recording and the reminder this computer gives.
+ */
+function SummaryTab({ d, can, mine, invitation, act, onTab }: { d: Detail; can: MeetingAbilities; mine: Person | null; invitation: Invitation; act: Act; onTab: (t: Tab) => void }) {
   const q = useQuery({ queryKey: ['meetings', 'summary', d.meeting.id], queryFn: ({ signal }) => apiGet<Record<string, number>>(`/api/meetings/${d.meeting.id}/summary`, undefined, signal) });
   const m = d.meeting;
+  const open = m.live_status !== 'cancelled' && m.live_status !== 'completed';
+  const host = d.participants.find((p) => p.role === 'host' && p.user_id !== m.organizer_id);
+  const rsvps = d.participants.reduce<Record<string, number>>((n, p) => ((n[p.rsvp] = (n[p.rsvp] ?? 0) + 1), n), {});
   const facts: Array<[string, string | number | undefined]> = [
     ['Invited', q.data?.invited],
     ['Attended', q.data?.attended],
@@ -234,43 +247,143 @@ function SummaryTab({ d }: { d: Detail }) {
     ['Actions', q.data ? `${q.data.actions_open ?? 0} open · ${q.data.actions_done ?? 0} done` : undefined],
     ['Tasks created', q.data?.tasks_created],
   ];
+  const card = 'flex flex-col rounded-[12px] border border-line bg-surface';
+  const head = 'flex items-center gap-2 border-b border-line px-4 py-3';
+  const kv: Array<[string, ReactNode]> = [
+    ['When', <>{dateLabel(m.start_at)}, {timeLabel(m.start_at)} – {timeLabel(m.end_at)}{m.timezone ? ` · booked in ${m.timezone}` : ''}{m.recur_freq && m.recur_freq !== 'none' ? ` · repeats ${m.recur_freq}` : ''}</>],
+    ['Where', <>{m.where || providerLabel(m)}{m.online_url && !(m.where ?? '').includes(m.online_url) ? ` · ${m.online_url.replace(/^https?:\/\//, '')}` : ''}</>],
+    ['Organiser', <>{m.organizer ?? '—'}{host ? ` · host ${host.name ?? host.email}` : m.host && m.host !== m.organizer ? ` · host ${m.host}` : ''}</>],
+  ];
+  if (m.source) kv.push(['Related', <>{m.source.kind_label}{m.source.label ? ` · ${m.source.label}` : ''}</>]);
+  if (m.project || m.client) kv.push(['For', [m.project ? `Project ${m.project}` : null, m.client].filter(Boolean).join(' · ')]);
   return (
-    <>
-      <h2 className="text-[15px] font-bold text-ink">Summary</h2>
-      <span className="text-ink-2">
-        {typeLabel(m.type)} · priority {m.priority} · {m.recur_freq === 'none' ? 'does not repeat' : `repeats ${m.recur_freq}`}
-        {m.project ? ` · Project ${m.project}` : ''}
-        {m.client ? ` · ${m.client}` : ''}
-      </span>
-      {m.description ? <p className="whitespace-pre-wrap text-ink selectable">{m.description}</p> : null}
-      {q.isLoading ? <Spinner /> : (
-        <div className="grid grid-cols-3 gap-2">
-          {facts.map(([k, v]) => (
-            <div key={k} className="rounded-[10px] bg-subtle px-3 py-2">
-              <span className="block text-[11.5px] text-ink-3">{k}</span>
-              <b className="text-ink">{v ?? '—'}</b>
+    <div className="flex items-start gap-4">
+      <div className="flex min-w-0 flex-[2] flex-col gap-3.5">
+        <section className={cx(card, 'p-4')}>
+          <dl className="grid grid-cols-[110px_1fr] gap-x-3 gap-y-2">
+            {kv.map(([k, v]) => (
+              <Fragment key={k}>
+                <dt className="text-ink-3">{k}</dt>
+                <dd className="m-0 text-ink selectable">{v}</dd>
+              </Fragment>
+            ))}
+          </dl>
+          {m.description ? <p className="mt-3 whitespace-pre-wrap border-t border-line pt-3 text-ink selectable">{m.description}</p> : null}
+        </section>
+        {mine && can.rsvp ? (
+          <section className={card} aria-label="Your answer">
+            <div className={head}>
+              <h2 className="flex-1 text-[15px] font-bold text-ink">Your answer</h2>
+              <Chip tone={ANSWER_TONE[mine.rsvp]}>{mine.rsvp === 'no_response' ? 'Waiting for you' : RSVP_LABEL[mine.rsvp]}</Chip>
+            </div>
+            <div className="flex flex-col gap-2 px-4 py-3">
+              <div className="flex flex-wrap items-center gap-1.5">
+                {(['accepted', 'tentative', 'declined'] as Rsvp[]).map((r) => (
+                  <Button key={r} size="sm" variant={mine.rsvp === r ? 'primary' : 'secondary'} aria-pressed={mine.rsvp === r} disabled={!open} onClick={() => void invitation.answer(r)}>
+                    {RSVP_LABEL[r]}
+                  </Button>
+                ))}
+                {invitation.propose && open ? (
+                  <Button size="sm" variant="ghost" onClick={invitation.propose}>
+                    Propose new time
+                  </Button>
+                ) : null}
+              </div>
+              {invitation.flag}
+              <span className="text-[12px] text-ink-3">Answers: {rsvps.accepted ?? 0} going · {rsvps.tentative ?? 0} maybe · {rsvps.no_response ?? 0} awaiting</span>
+              {invitation.dialogs}
+            </div>
+          </section>
+        ) : (
+          <section className={cx(card, 'gap-1 px-4 py-3')}>
+            <b className="text-ink">Answers</b>
+            <span className="text-[12px] text-ink-2">{rsvps.accepted ?? 0} going · {rsvps.tentative ?? 0} maybe · {rsvps.declined ?? 0} not going · {rsvps.no_response ?? 0} awaiting</span>
+          </section>
+        )}
+        <section className={card}>
+          <div className={head}>
+            <h2 className="flex-1 text-[15px] font-bold text-ink">Agenda</h2>
+            {open && d.agenda.length ? <Button size="sm" onClick={() => openAgendaWindow(m.id, m.title)} title="A small window that stays on top, with the shared timer and quick notes">Agenda window</Button> : null}
+            <Button size="sm" variant="ghost" onClick={() => onTab('Agenda')}>Open agenda</Button>
+          </div>
+          {!d.agenda.length ? <p className="px-4 py-3 text-ink-3">No agenda yet.</p> : null}
+          {d.agenda.map((a, i) => (
+            <div key={a.id} className="flex items-center gap-3 border-b border-line px-4 py-2 last:border-0">
+              <span className={cx('flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-[11.5px] font-bold', a.status === 'done' ? 'bg-success text-white' : a.status === 'running' ? 'bg-primary text-white' : 'bg-subtle text-ink-2')}>{a.status === 'done' ? '✓' : i + 1}</span>
+              <span className={cx('min-w-0 flex-1 truncate text-ink', a.status === 'skipped' && 'line-through opacity-60')}>{a.title}</span>
+              <span className="font-mono text-[12px] text-ink-2">{a.minutes}′</span>
             </div>
           ))}
-        </div>
-      )}
-    </>
+        </section>
+        <section className={cx(card, 'p-4')}>
+          {q.isLoading ? <Spinner /> : (
+            <div className="grid grid-cols-3 gap-2">
+              {facts.map(([k, v]) => (
+                <div key={k} className="rounded-[10px] bg-subtle px-3 py-2">
+                  <span className="block text-[11.5px] text-ink-3">{k}</span>
+                  <b className="text-ink">{v ?? '—'}</b>
+                </div>
+              ))}
+            </div>
+          )}
+        </section>
+      </div>
+      <aside className="flex min-w-0 flex-1 flex-col gap-3.5">
+        {d.deliveries?.rows.length ? <Deliveries meetingId={m.id} rows={d.deliveries.rows} act={act} /> : null}
+        {d.recordings?.length ? (
+          <section className={card}>
+            <h2 className={cx(head, 'text-[15px] font-bold text-ink')}>Recording</h2>
+            <div className="flex flex-col gap-2 px-4 py-3">
+              {d.recordings.map((r) => (
+                // The same status, words and actions as in Meet (worksuite-desktop#89).
+                <div key={r.id} className="flex flex-col gap-1 text-[12.5px]">
+                  <span className="min-w-0 truncate text-ink">{r.title}</span>
+                  <RecordingProgress recording={{ ...r, ready: r.playable === true }} />
+                </div>
+              ))}
+            </div>
+          </section>
+        ) : null}
+        <section className={card}>
+          <div className={head}>
+            <h2 className="flex-1 text-[15px] font-bold text-ink">Files</h2>
+            {can.upload ? <Button size="sm" variant="ghost" onClick={() => onTab('Files')}>Add files</Button> : null}
+          </div>
+          <span className="px-4 py-3 text-[12px] text-ink-2">{d.files.length ? d.files.slice(0, 4).map((f) => f.filename).join(' · ') : 'None yet'}</span>
+        </section>
+        {open ? (
+          <section className={cx(card, 'gap-1 px-4 py-3 text-[12.5px]')}>
+            <b className="text-ink">Reminder</b>
+            <span className="text-ink-2">Its reminder comes to this computer with Join, Snooze 5 min and Open{can.rsvp ? '; a change to it with Going and Maybe' : ''}. Quiet hours and your notification settings apply.</span>
+          </section>
+        ) : null}
+      </aside>
+    </div>
   );
 }
 
-function AgendaTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act }) {
+function AgendaTab({ d, canRun, act }: { d: Detail; canRun: boolean; act: Act }) {
   const [adding, setAdding] = useState('');
   const now = useNow();
   const id = d.meeting.id;
+  const open = d.meeting.live_status !== 'cancelled' && d.meeting.live_status !== 'completed';
   const planned = d.agenda.reduce((n, a) => n + (a.minutes || 0), 0);
+  const timer = (itemId: number, action: string) => act(() => apiPost(`/api/meetings/${id}/agenda/${itemId}/timer`, { action }));
   return (
     <>
-      <div className="flex items-center">
+      <div className="flex items-center gap-2">
         <h2 className="flex-1 text-[15px] font-bold text-ink">Agenda · {planned} of {d.meeting.duration_minutes} min planned</h2>
+        {open && d.agenda.length ? (
+          <Button size="sm" onClick={() => openAgendaWindow(id, d.meeting.title)} title="A small window that stays on top, with the shared timer and quick notes">
+            Agenda window
+          </Button>
+        ) : null}
       </div>
       {!d.agenda.length ? <p className="text-ink-3">No agenda yet.</p> : null}
       {d.agenda.map((a, i) => {
         const status = a.status ?? 'pending';
         const spent = elapsedOf(a, now);
+        const over = (a.minutes || 0) > 0 && spent > a.minutes * 60;
         return (
           <div key={a.id} className={cx('flex items-center gap-3 rounded-[10px] border px-3 py-2.5', status === 'running' ? 'border-primary bg-selection' : 'border-line')}>
             <span className={cx('flex h-[26px] w-[26px] shrink-0 items-center justify-center rounded-full text-[12px] font-bold', status === 'done' ? 'bg-success text-white' : status === 'running' ? 'bg-primary text-white' : 'bg-subtle text-ink-2')}>
@@ -280,22 +393,22 @@ function AgendaTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act 
               <b className={cx('truncate text-ink', status === 'skipped' && 'line-through opacity-60')}>{a.title}</b>
               <span className="text-[11.5px] text-ink-3">{a.presenter ?? ''}</span>
             </span>
-            <span className={cx('font-mono text-[12px]', status === 'running' ? 'font-semibold text-[#B45309] dark:text-warning' : 'text-ink-2')}>
+            <span className={cx('font-mono text-[12px]', over ? 'font-semibold text-danger' : status === 'running' ? 'font-semibold text-[#B45309] dark:text-warning' : 'text-ink-2')}>
               {spent > 0 || status === 'running' ? `${mmss(spent)} / ` : ''}{a.minutes} min
             </span>
-            {canEdit ? (
+            {canRun ? (
               <span className="flex shrink-0 gap-2 text-[12px] font-semibold text-primary">
                 {status === 'running' ? (
                   <>
-                    <button type="button" className="hover:underline" onClick={() => void act(() => apiPost(`/api/meetings/${id}/agenda/${a.id}/timer`, { action: 'pause' }))}>Pause</button>
-                    <button type="button" className="hover:underline" onClick={() => void act(() => apiPost(`/api/meetings/${id}/agenda/${a.id}/timer`, { action: 'done' }))}>Done</button>
+                    <button type="button" className="hover:underline" onClick={() => void timer(a.id, 'pause')}>Pause</button>
+                    <button type="button" className="hover:underline" onClick={() => void timer(a.id, 'done')}>Done</button>
                   </>
                 ) : status === 'done' || status === 'skipped' ? (
-                  <button type="button" className="text-ink-3 hover:underline" onClick={() => void act(() => apiPost(`/api/meetings/${id}/agenda/${a.id}/timer`, { action: 'reset' }))}>Reset</button>
+                  <button type="button" className="text-ink-3 hover:underline" onClick={() => void timer(a.id, 'reset')}>Reset</button>
                 ) : (
                   <>
-                    <button type="button" className="hover:underline" onClick={() => void act(() => apiPost(`/api/meetings/${id}/agenda/${a.id}/timer`, { action: 'start' }))}>{spent > 0 ? 'Resume' : 'Start this item'}</button>
-                    <button type="button" className="text-ink-3 hover:underline" onClick={() => void act(() => apiPost(`/api/meetings/${id}/agenda/${a.id}/timer`, { action: 'skip' }))}>Skip</button>
+                    <button type="button" className="hover:underline" onClick={() => void timer(a.id, 'start')}>{spent > 0 ? 'Resume' : 'Start this item'}</button>
+                    <button type="button" className="text-ink-3 hover:underline" onClick={() => void timer(a.id, 'skip')}>Skip</button>
                   </>
                 )}
               </span>
@@ -303,7 +416,7 @@ function AgendaTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act 
           </div>
         );
       })}
-      {canEdit ? (
+      {canRun ? (
         <form
           onSubmit={(e) => {
             e.preventDefault();
@@ -320,13 +433,13 @@ function AgendaTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act 
   );
 }
 
-function PeopleTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act }) {
+function PeopleTab({ d, canInvite, canMark, act }: { d: Detail; canInvite: boolean; canMark: boolean; act: Act }) {
   const id = d.meeting.id;
   const [q, setQ] = useState('');
   const cands = useQuery({
     queryKey: ['meetings', 'candidates', id, q.trim()],
     queryFn: ({ signal }) => apiGet<Record<'users' | 'contacts' | 'departments', Array<{ key: string; kind: string; id: number; name: string; sub: string | null; taken: boolean }>>>(`/api/meetings/${id}/people/candidates`, { q: q.trim() }, signal),
-    enabled: canEdit && q.trim().length >= 2,
+    enabled: canInvite && q.trim().length >= 2,
   });
   const options = cands.data ? [...cands.data.users, ...cands.data.contacts, ...cands.data.departments].filter((c) => !c.taken).slice(0, 8) : [];
   const may = (p: Person) => {
@@ -340,7 +453,7 @@ function PeopleTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act 
     <>
       <div className="relative flex items-center gap-2">
         <h2 className="flex-1 text-[15px] font-bold text-ink">People · attendance</h2>
-        {canEdit ? <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Add people" placeholder="Search people, contacts or departments" className="h-8 w-72 rounded-[8px] border border-line bg-surface px-2.5 text-[12.5px] text-ink outline-none focus:border-primary" /> : null}
+        {canInvite ? <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Add people" placeholder="Search people, contacts or departments" className="h-8 w-72 rounded-[8px] border border-line bg-surface px-2.5 text-[12.5px] text-ink outline-none focus:border-primary" /> : null}
         {options.length ? (
           <div className="absolute top-full right-0 z-10 mt-1 w-72 rounded-[10px] border border-line bg-surface py-1 shadow-xl">
             {options.map((c) => (
@@ -367,7 +480,7 @@ function PeopleTab({ d, canEdit, act }: { d: Detail; canEdit: boolean; act: Act 
           <span className="text-[12px] text-ink-2">{may(p)}</span>
           <Select
             aria-label={`Attendance for ${p.name || p.email}`}
-            disabled={!canEdit}
+            disabled={!canMark}
             value={p.attendance ?? ''}
             onChange={(e) => void act(() => apiPut(`/api/meetings/${id}/people/${p.id}`, { attendance: e.target.value || null }))}
             className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink disabled:opacity-70"
@@ -403,9 +516,28 @@ function MinutesTab({ d }: { d: Detail }) {
   return <MinutesEditor meetingId={d.meeting.id} material={material} />;
 }
 
-function FilesTab({ d, act }: { d: Detail; act: Act }) {
+/**
+ * A file's address to open: a short-lived signed link from a newer server (MTG-U06, `GET …/files/{id}/link`), else
+ * the address the list gave. Null when there is neither.
+ */
+export async function fileLink(meetingId: number, f: { id: number; url?: string | null }): Promise<string | null> {
+  try {
+    const r = await apiGet<{ url?: string | null }>(`/api/meetings/${meetingId}/files/${f.id}/link`);
+    // The server signs a path on itself (`/api/meetings/signed-files/…`), or a whole address.
+    if (r?.url && (/^https?:\/\//i.test(r.url) || r.url.startsWith('/'))) return r.url;
+  } catch (e) {
+    const status = (e as { status?: unknown } | null)?.status;
+    // Refused (403, 404): not to be opened by another way either.
+    if (status === 403) throw e;
+    if (status !== 404 && status !== 405) throw e;
+  }
+  return f.url && /^https?:\/\//i.test(f.url) ? f.url : null;
+}
+
+function FilesTab({ d, canUpload, act }: { d: Detail; canUpload: boolean; act: Act }) {
   const input = useRef<HTMLInputElement>(null);
   const upload = (files: FileList | null) => {
+    if (!canUpload) return;
     for (const f of Array.from(files ?? [])) {
       const form = new FormData();
       form.append('file', f, f.name);
@@ -413,10 +545,20 @@ function FilesTab({ d, act }: { d: Detail; act: Act }) {
       void act(() => request('POST', `/api/meetings/${d.meeting.id}/files`, { body: form }), `${f.name} uploaded.`);
     }
   };
+  const openFile = async (f: Detail['files'][number]) => {
+    try {
+      const url = await fileLink(d.meeting.id, f);
+      if (url?.startsWith('/')) await call('app:openInBrowser', { path: url });
+      else if (url) await call('app:openExternal', { url });
+      else toast('info', 'This file cannot be opened from here.');
+    } catch (e) {
+      toast('error', errorMessage(e));
+    }
+  };
   return (
     <div
       className="flex flex-col gap-2"
-      onDragOver={(e) => e.dataTransfer.types.includes('Files') && e.preventDefault()}
+      onDragOver={(e) => canUpload && e.dataTransfer.types.includes('Files') && e.preventDefault()}
       onDrop={(e) => {
         e.preventDefault();
         upload(e.dataTransfer.files);
@@ -436,18 +578,23 @@ function FilesTab({ d, act }: { d: Detail; act: Act }) {
         </div>
       ) : null}
       <h2 className="text-[15px] font-bold text-ink">Files</h2>
-      {!d.files.length ? <Empty icon="file" title="No files yet" hint="Drag files here or upload them." /> : null}
+      {!d.files.length ? <Empty icon="file" title="No files yet" hint={canUpload ? 'Drag files here or upload them.' : undefined} /> : null}
       {d.files.map((f) => (
         <div key={f.id} className="flex items-center gap-2.5 rounded-[9px] border border-line px-3 py-2">
           <FileBadge name={f.filename} size={30} />
           <span className="flex min-w-0 flex-1 flex-col">
             <b className="truncate text-ink">{f.filename}</b>
-            <span className="text-[11.5px] text-ink-3">{bytes(f.size)} · {relative(f.at)}</span>
+            <span className="text-[11.5px] text-ink-3">{bytes(f.size)} · {relative(f.at ?? f.created_at ?? '')}</span>
           </span>
+          <Button size="sm" onClick={() => void openFile(f)}>Open</Button>
         </div>
       ))}
-      <input ref={input} type="file" multiple hidden onChange={(e) => (upload(e.target.files), (e.target.value = ''))} />
-      <button type="button" onClick={() => input.current?.click()} className="h-9 self-start rounded-[8px] border border-line px-3 font-semibold text-ink hover:bg-subtle">Upload files</button>
+      {canUpload ? (
+        <>
+          <input ref={input} type="file" multiple hidden onChange={(e) => (upload(e.target.files), (e.target.value = ''))} />
+          <button type="button" onClick={() => input.current?.click()} className="h-9 self-start rounded-[8px] border border-line px-3 font-semibold text-ink hover:bg-subtle">Upload files</button>
+        </>
+      ) : null}
     </div>
   );
 }
@@ -528,27 +675,33 @@ const DELIVERY_KIND: Record<string, string> = { invitation: 'Invitation', update
  * What the invitation emails did (worksuite-desktop#97), for whoever runs the meeting: how many went, which are
  * still on their way, and each one that failed — with why, and Retry.
  */
-export function Deliveries({ meetingId, rows, act }: { meetingId: number; rows: Delivery[]; act: (fn: () => Promise<unknown>, done?: string) => Promise<void> }) {
+export function Deliveries({ meetingId, rows, act }: { meetingId: number; rows: Delivery[]; act: (fn: () => Promise<unknown>, done?: string) => Promise<unknown> }) {
   const mail = rows.filter((r) => r.channel === 'email');
   if (!mail.length) return null;
   const failed = mail.filter((r) => r.state === 'failed');
   const sent = mail.filter((r) => r.state === 'sent').length;
   const waiting = mail.filter((r) => r.state === 'queued' || r.state === 'sending').length;
   return (
-    <section className="flex flex-col gap-1.5 rounded-[12px] border border-line bg-surface p-3.5" data-deliveries>
-      <b className="text-ink">Emails</b>
-      <span className="text-[12px] text-ink-2">
-        {sent} sent{waiting ? ` · ${waiting} on the way` : ''}{failed.length ? ` · ${failed.length} not delivered` : ''}
-      </span>
+    <section className="flex flex-col rounded-[12px] border border-line bg-surface" data-deliveries>
+      <h2 className="border-b border-line px-4 py-3 text-[15px] font-bold text-ink">Emails</h2>
+      <div className="flex items-center gap-2 border-b border-line px-4 py-2 text-[12px] last:border-0">
+        <span className="flex-1 text-ink-2">
+          {sent} sent{waiting ? ` · ${waiting} on the way` : ''}{failed.length ? ` · ${failed.length} not delivered` : ''}
+        </span>
+        {waiting ? <Chip tone="indigo">Sending</Chip> : <Chip tone="success">Sent</Chip>}
+      </div>
       {failed.map((r) => (
-        <div key={r.id} className="flex flex-col gap-0.5 rounded-[8px] bg-danger-bg px-2.5 py-1.5 text-[12px]">
-          <span className="text-ink">
-            <b>{DELIVERY_KIND[r.kind] ?? r.kind}</b> to {r.name || r.email}
+        <div key={r.id} className="flex items-center gap-2 border-b border-line px-4 py-2 text-[12px] last:border-0">
+          <span className="flex min-w-0 flex-1 flex-col">
+            <span className="truncate text-ink">
+              <b>{DELIVERY_KIND[r.kind] ?? r.kind}</b> to {r.name || r.email}
+            </span>
+            {r.error ? <span className="truncate text-ink-3">{r.error}</span> : null}
           </span>
-          {r.error ? <span className="text-ink-2">{r.error}</span> : null}
-          <button type="button" className="self-start font-semibold text-primary hover:underline" onClick={() => void act(() => apiPost(`/api/meetings/${meetingId}/deliveries/${r.id}/retry`), 'It will be sent again in a minute.')}>
+          <Chip tone="danger">Failed</Chip>
+          <Button size="sm" onClick={() => void act(() => apiPost(`/api/meetings/${meetingId}/deliveries/${r.id}/retry`), 'It will be sent again in a minute.')}>
             Retry
-          </button>
+          </Button>
         </div>
       ))}
     </section>

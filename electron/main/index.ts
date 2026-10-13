@@ -89,6 +89,8 @@ import { CallbackReminders } from '../services/marketing-reminders';
 import { NextContactKey, nextContactRoute } from '../services/marketing-shortcut';
 import { MeetKeys } from '../services/meet-keys';
 import { MeetNext } from '../services/meet-next';
+import { MeetingsDesk } from '../services/meetings-desk';
+import { touchesInvitations } from '@shared/meeting-invitations';
 import { ShareBar } from '../services/share-bar';
 import { MEET_GLOBAL_IDS, electronAccelerator, meetShortcutDefaults, type MeetGlobalKey } from '@shared/shortcuts';
 import * as fsp from 'node:fs/promises';
@@ -1464,7 +1466,20 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     tray: (t) => tray.update({ projectTimer: t }),
   });
   // A new email's bell entry is the new-mail alerts' to show (ENH-MAIL-05): never a plain banner as well.
-  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n) || mailAlerts.claim(n);
+  // Meetings' reminders and invitations (Meetings D07): their own buttons, and today's meetings in the tray.
+  const meetingsDesk = new MeetingsDesk({
+    get: (path, query, timeoutMs) => http.get(path, { query, timeoutMs }),
+    post: (path, body) => http.post(path, body),
+    notify: (n) => notifications.notify(n),
+    markRead: (ids) => notifications.markRead(ids),
+    allowed: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('meetings', sessionCtl.visibleApps()),
+    canMeet: () => canOpenApp('meet', sessionCtl.visibleApps()),
+    open: (route) => notifications.onClick(route, 'meetings'),
+    joinMeet: (uuid, title) => void windows.open('meet', `/meet/${uuid}`, title || 'WorkSuite Meet', false),
+    openExternal: (url) => void openExternalSafely(url),
+    onChange: (meetings) => tray.update({ meetings }),
+  });
+  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n) || mailAlerts.claim(n) || meetingsDesk.claim(n);
   notifications.onRefresh = () => void supportNotices.refreshBadges();
 
   // ── status ─────────────────────────────────────────────────────────────
@@ -1552,6 +1567,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.handleRealtime(e);
     mailAlerts.handleRealtime(e);
     supportNotices.handle(e);
+    // An invitation answered, moved or cancelled anywhere: the tray's Meetings lines follow (Meetings D07).
+    if (touchesInvitations(e as { type: string; event?: unknown })) meetingsDesk.poke();
     supportDesk.handle(e);
     supportUrgent.handle(e);
     webchat.handle(e);
@@ -1792,6 +1809,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
     marketingNextContact: () => openNextContact('tray'),
     meetJoinNext: () => meetAction('meet-join-next', 'tray'),
+    meetingOpen: (id) => meetingsDesk.openFromTray(id),
     meetStart: () => meetAction('meet-new', 'tray'),
     meetShare: () => meetAction('meet-share-screen', 'tray'),
     meetMute: () => meetAction('meet-mute', 'tray'),
@@ -2404,6 +2422,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     nextContactKey.sync();
     meetKeys.sync();
     meetNext.poke();
+    meetingsDesk.poke();
     if (b) {
       const closed = windows.closeWhere((route) => !canOpenRoute(route, visible));
       if (closed) log.info('windows closed: app no longer available', { closed });
@@ -2443,6 +2462,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     });
     marketingPulse.start();
     meetNext.start();
+    meetingsDesk.start();
     callbackReminders.start();
     device.start();
     device.extras = () => {
@@ -2498,6 +2518,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     aiPending.stop();
     marketingPulse.stop();
     meetNext.stop();
+    meetingsDesk.stop();
     callbackReminders.stop();
     nextContactKey.release();
     meetKeys.releaseAll();
@@ -3217,6 +3238,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     meetKeys.releaseAll();
     marketingPulse.stop();
     meetNext.stop();
+    meetingsDesk.stop();
     callbackReminders.stop();
     void askHelper?.then((h) => h?.stop());
     // Windows' places are saved while the database is open; timers that read it stop first.

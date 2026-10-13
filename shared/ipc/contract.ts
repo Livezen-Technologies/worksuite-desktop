@@ -470,7 +470,7 @@ export const contract = {
 
   'windows:open': ch(
     z.object({
-      kind: z.enum(['chat-mini', 'timer', 'record', 'call', 'video-call', 'ring', 'meet', 'phone', 'support-quick']),
+      kind: z.enum(['chat-mini', 'timer', 'agenda', 'record', 'call', 'video-call', 'ring', 'meet', 'phone', 'support-quick']),
       route,
       title: z.string().max(200).optional(),
       alwaysOnTop: z.boolean().optional(),

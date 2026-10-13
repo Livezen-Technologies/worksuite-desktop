@@ -7,6 +7,7 @@ import { liveTitle } from '../services/live-desk';
 import type { SupportPulseFigures } from '../services/support-desk';
 import type { TrayMarketing } from '../services/marketing-pulse';
 import type { TrayMeet } from '../services/meet-next';
+import type { TrayMeetings } from '../services/meetings-desk';
 import { NEXT_CONTACT_LABEL } from '../services/marketing-shortcut';
 import { clockOf, hhmm as hm, stampMs, targetLabel, type ProjectTimerState, type TimerTarget } from '@shared/projects';
 import { inboxRoute, mailTooltip, type PauseMode, type TrayMailAccount } from '@shared/mail-alerts';
@@ -75,6 +76,8 @@ export interface TrayModel {
   marketing?: TrayMarketing | null;
   /** Meet's lines (WS-MEET-ENH-01 D04): the next meeting to join, and whether this computer is in one. Null: no Meet lines. */
   meet?: TrayMeet | null;
+  /** Meetings' lines (Meetings D07): today's meetings and the invitations waiting. Null: no Meetings lines. */
+  meetings?: TrayMeetings | null;
   /** Each shortcut's key as a menu shows it, by command id: shown beside a line, never registered here. */
   shortcutLabels?: Record<string, string>;
   /**
@@ -169,6 +172,8 @@ export interface TrayActions {
   /** Mute or unmute, and the camera — the same actions the global keys press. */
   meetMute?: () => void;
   meetCamera?: () => void;
+  /** One of today's meetings (Meetings D07): joined when it can be, else its details. Optional for older callers. */
+  meetingOpen?: (id: number) => void;
   ringingSettings: () => void;
   /**
    * The ringing menu with its reply box (R-06, UX-ALR-02), by the tray icon (`anchor`, or null where it is not known):
@@ -340,6 +345,34 @@ export function trayMeetItems(
   }
 
   return items;
+}
+
+/**
+ * Meetings' lines (Meetings D07, the tray the design draws): "Today", then each of today's meetings — "09:30  Daily
+ * stand-up — Live", "11:00  Acme Lanka — Q4 review — Join" — each joining when it can be joined and opening its
+ * details otherwise; "3 invitations waiting — Answer", and Open Meetings. Only for somebody who has Meetings.
+ */
+export function trayMeetingsItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'meetings'>, a: Pick<TrayActions, 'openRoute' | 'meetingOpen'>): MenuItemConstructorOptions[] {
+  const mt = m.meetings;
+  if (!m.signedIn || !m.apps.includes('meetings') || !mt) return [];
+  const items: MenuItemConstructorOptions[] = [{ label: 'Today', enabled: false }];
+  for (const x of mt.today.slice(0, 8)) {
+    const tail = x.live ? ' — Live' : x.join ? ' — Join' : '';
+    items.push({ label: `${x.time}  ${short(x.title)}${tail}`, click: () => (a.meetingOpen ? a.meetingOpen(x.id) : a.openRoute(`/meetings?meeting=${x.id}`)) });
+  }
+  if (!mt.today.length) items.push({ label: 'No more meetings today', enabled: false });
+  if (mt.waiting) items.push({ type: 'separator' }, { label: `${mt.waiting === 1 ? '1 invitation' : `${mt.waiting} invitations`} waiting — Answer`, click: () => a.openRoute('/meetings?tab=invitations') });
+  items.push({ type: 'separator' }, { label: 'Open Meetings', click: () => a.openRoute('/meetings') }, { type: 'separator' });
+  return items;
+}
+
+/** The Meetings section's line: what is live, or what is next today, or the invitations waiting. */
+export function meetingsSummary(mt: TrayMeetings): string {
+  const live = mt.today.find((x) => x.live);
+  if (live) return fit(`Meetings · live: ${live.title}`);
+  const next = mt.today[0];
+  if (next) return fit(`Meetings · ${next.time} ${next.title}`);
+  return mt.waiting ? `Meetings · ${mt.waiting} waiting` : 'Meetings';
 }
 
 /**
@@ -734,6 +767,10 @@ export function trayMenu(m: TrayModel, a: TrayActions, now = new Date()): MenuIt
   if (has('meet') && m.meet) {
     const lines = inner(trayMeetItems(m, a, m.shortcutLabels ?? {}));
     if (lines.length) items.push({ label: m.meet.inCall ? 'Meet · in a meeting' : m.meet.next ? fit(`Meet · next: ${m.meet.next.title}`) : 'Meet', submenu: lines });
+  }
+  if (has('meetings') && m.meetings) {
+    const lines = inner(trayMeetingsItems(m, a));
+    if (lines.length) items.push({ label: meetingsSummary(m.meetings), submenu: lines });
   }
   if (has('projects') && m.projectTimer?.available) {
     const lines = inner(trayProjectItems(m, a, now.getTime()));

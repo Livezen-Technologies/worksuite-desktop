@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.0 — 2026-10-13
+
+**Added**
+
+- the new Meetings design (D01–D06). The home has a week's day strip, date badges and answer chips, and its list pages and filters on the server (search, type, related record, day) when the server can. A meeting opens on its Summary: when, where, who runs it and what it is about, your answer, the agenda, and beside them the invitation emails, your recording and the reminder. Notes & Minutes, Transcripts, Q&A & Polls and Schedule a meeting follow the new layouts; Schedule marks each person Free, Busy, Maybe busy or Unknown, and over a clash offers Schedule anyway or Find another time.
+- controls follow what the server says you may do with each meeting (its abilities): Edit, Reschedule, Start, Complete, Cancel, Delete, Join, your answer, running the agenda, inviting people, marking attendance and uploading files each appear only when allowed. An older server without abilities gets what the app worked out before, and never Start, Complete or Delete.
+- a change refused because the meeting moved on meanwhile (already cancelled or completed, or over for answers) is said plainly, and the meeting is shown as it is now. Files open by a short-lived signed link where the server has one.
+- reminder and invitation notifications of their own (D07). A reminder says when the meeting starts and where, with Join, Snooze 5 min and Open; an invitation says when, from whom and what it clashes with, with Going, Maybe and Propose time. They keep to your notification settings, quiet hours and the one-device rule. The tray lists today's meetings, joining the live ones, and the invitations waiting.
+- the agenda window (D08), a small window that stays on top with the meeting's shared agenda timer: the live item, the time left or how far it ran over, Pause and Next item for whoever runs the agenda, and quick notes that go into the minutes, kept on this computer until the server can be reached.
+
 ## 1.5.0 — 2026-10-02
 
 **Added**
