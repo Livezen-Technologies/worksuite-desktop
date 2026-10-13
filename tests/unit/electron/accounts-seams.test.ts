@@ -111,11 +111,14 @@ describe('Cloud account stages', () => {
 });
 
 describe('installAccounts', () => {
-  it('registers only the discovery channels yet (WP2), so every other new channel answers UNSUPPORTED, and hooks the bootstrap licence', () => {
+  it('registers the browser sign-in and Cloud channels (WP3); the others still answer UNSUPPORTED', () => {
     const handle = vi.fn();
     const setLicenceSource = vi.fn();
     const w = installAccounts({ router: { handle } as unknown as IpcRouter, ctx: { http: {}, bootstrap: { setLicenceSource } } as unknown as AppContext });
-    expect(handle.mock.calls.map((c) => c[0]).sort()).toEqual(['accounts:rediscover', 'connect:cancel', 'connect:confirm', 'connect:copyDetails', 'connect:get', 'connect:parseSetup', 'connect:start']);
+    const names = handle.mock.calls.map(([ch]) => String(ch));
+    expect(names.filter((ch) => ch.startsWith('connect:') || ch === 'accounts:rediscover').sort()).toEqual(['accounts:rediscover', 'connect:cancel', 'connect:confirm', 'connect:copyDetails', 'connect:get', 'connect:parseSetup', 'connect:start']);
+    const cloudChannels = handle.mock.calls.map(([ch]) => String(ch)).filter((ch) => ch.startsWith('signin:') || ch.startsWith('cloud:'));
+    expect(cloudChannels.sort()).toEqual(['cloud:openWeb', 'cloud:plans', 'cloud:refresh', 'cloud:resendVerification', 'cloud:retryProvisioning', 'cloud:status', 'cloud:storage', 'signin:cancel', 'signin:copyLink', 'signin:reopen', 'signin:start']);
     expect(w.handleAuthCallback('worksuite://auth/callback?code=1&state=2')).toBe(false);
     expect(w.discovery.pinsFor('ws.example')).toBeNull();
     expect(w.cloud.status()).toBeNull();

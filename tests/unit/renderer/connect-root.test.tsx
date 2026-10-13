@@ -32,6 +32,9 @@ const screens = [
   await import('../../../src/app/connect/Compatibility'),
   await import('../../../src/app/connect/WorkspaceChooser'),
   await import('../../../src/app/connect/UnknownServerLink'),
+];
+// WP3 built the Personal screens (personal-screens.test.tsx): no longer placeholders.
+const built = [
   await import('../../../src/app/connect/personal/PersonalWelcome'),
   await import('../../../src/app/connect/personal/BrowserWait'),
   await import('../../../src/app/connect/personal/CheckEmail'),
@@ -74,11 +77,12 @@ describe('connectRoute', () => {
 });
 
 describe('ConnectRoot', () => {
-  it('marks every WP0 screen as a placeholder', () => {
+  it('marks every WP0 screen still to be built as a placeholder', () => {
     for (const mod of screens) {
       const [component] = Object.values(mod).filter((v) => typeof v === 'function');
       expect(isPlaceholder(component)).toBe(true);
     }
+    for (const mod of built) for (const v of Object.values(mod)) expect(isPlaceholder(v)).toBe(false);
   });
 
   it('shows the existing Onboarding, whatever the route, until the screens land', () => {

@@ -67,6 +67,8 @@ export interface OfficeExternalDeps {
   audit: (action: string, details: Record<string, unknown>) => void;
   /** The list changed: the tabs and Files show it. */
   onChanged: (copies: OfficeLocalCopy[]) => void;
+  /** A new version was refused because the account's storage is full (Cloud's QUOTA_EXCEEDED): ask Cloud more often. */
+  onQuota?: () => void;
   pollMs?: number;
 }
 
@@ -79,6 +81,9 @@ interface Stored extends OfficeLocalCopy {
 }
 
 const WATCHED = new Set(['open', 'uploaded']);
+
+/** Screen 13's promise, on a copy whose new version the account's full storage refused. */
+export const QUOTA_COPY_MESSAGE = 'Your storage is full. Your edits are safe on this computer and upload as a new version as soon as there is room.';
 
 function runFile(file: string, args: string[]): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -265,7 +270,7 @@ export class OfficeExternal {
     }
 
     // A copy already here (with edits waiting, perhaps) opens again rather than being downloaded over.
-    const mine = copies.find((x) => x.fileId === spec.fileId && !x.syncOwned && x.path && this.exists(x.path) && ['open', 'changed', 'uploaded', 'conflict'].includes(x.state));
+    const mine = copies.find((x) => x.fileId === spec.fileId && !x.syncOwned && x.path && this.exists(x.path) && ['open', 'changed', 'uploaded', 'conflict', 'quota'].includes(x.state));
     if (mine?.path) {
       await this.launch(spec.app, mine.path);
       this.touch(mine, { app: spec.app });
@@ -364,8 +369,15 @@ export class OfficeExternal {
       form.set('file', await openAsBlob(c.path), c.name);
       form.set('base_version', String(base));
       const res = await this.deps.http.raw('POST', this.deps.http.url(`/api/files/${c.fileId}/versions`), { body: form, timeoutMs: 15 * 60_000 });
-      const body = (await res.json().catch(() => null)) as { message?: string; data?: { current?: { version?: number } }; errors?: Record<string, unknown> } | null;
+      const body = (await res.json().catch(() => null)) as { message?: string; code?: string; data?: { current?: { version?: number } }; errors?: Record<string, unknown> } | null;
       const errors = body?.errors ?? null;
+      // The account's storage is full (Cloud): the edits stay here, in `quota`, and go up when there is room.
+      if (body?.code === 'QUOTA_EXCEEDED' || errors?.code === 'QUOTA_EXCEEDED' || res.status === 507) {
+        this.touch(c, { state: 'quota', error: QUOTA_COPY_MESSAGE });
+        this.deps.audit('office.local_copy.quota', { file_id: c.fileId });
+        this.deps.onQuota?.();
+        throw new DesktopError('QUOTA_EXCEEDED', body?.message ?? 'Your storage is full.', res.status);
+      }
       if (res.status === 409 && errors?.code === 'OFFICE_VERSION_CONFLICT') {
         const conflict = {
           message: body?.message ?? 'The cloud file changed while you were editing.',
@@ -384,10 +396,33 @@ export class OfficeExternal {
       this.schedule();
       return { state: 'uploaded', version };
     } catch (e) {
+      if (isDesktopError(e) && e.code === 'QUOTA_EXCEEDED') {
+        if (c.state !== 'quota') this.touch(c, { state: 'quota', error: QUOTA_COPY_MESSAGE });
+        throw e;
+      }
       const message = isDesktopError(e) ? e.message : String((e as Error).message ?? e);
       this.touch(c, { state: 'changed', error: message });
       throw isDesktopError(e) ? e : new DesktopError('INTERNAL', message);
     }
+  }
+
+  /**
+   * There is room again: each copy waiting in `quota` goes up as a new version, against the version it was made
+   * from (a conflict comes back to be decided, as ever). One that cannot go up yet stays as it is.
+   */
+  async retryQuota(): Promise<number> {
+    let sent = 0;
+    for (const c of [...this.load()]) {
+      if (c.state !== 'quota' || c.syncOwned) continue;
+      try {
+        await this.upload(c.id, 'version');
+        sent++;
+      } catch (e) {
+        log.debug('copy still waiting for room', { error: String((e as Error)?.message ?? e) });
+        if (isDesktopError(e) && e.code === 'QUOTA_EXCEEDED') break;
+      }
+    }
+    return sent;
   }
 
   /** Stop watching a copy; the file stays in the downloads folder (it is the person's). */

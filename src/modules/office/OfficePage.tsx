@@ -230,7 +230,7 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
     };
   }, [ext]);
 
-  const copies = useLocalCopies().filter((c) => c.fileId === fileId && (c.state === 'changed' || c.state === 'conflict'));
+  const copies = useLocalCopies().filter((c) => c.fileId === fileId && (c.state === 'changed' || c.state === 'conflict' || c.state === 'quota'));
   const p = boot?.permissions;
   const line = saveLine(s);
   const others = s.collaborators.filter((c) => String(c.user.id) !== String(me));

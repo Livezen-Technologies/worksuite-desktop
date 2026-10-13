@@ -4,6 +4,7 @@ import { call, errorMessage, hasDesktop, on } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, cx } from '../../components/ui';
+import { StorageFullDialog } from './StorageFullDialog';
 
 /**
  * Office files opened in another app on this computer (OO-DSK-050,
@@ -74,14 +75,18 @@ export function useLocalCopies(): OfficeLocalCopy[] {
   return list;
 }
 
-/** Takes a copy back as the person chose; a conflict comes back to be decided, never resolved here. */
-export async function uploadCopy(copy: OfficeLocalCopy, how: OfficeUploadHow): Promise<'uploaded' | 'conflict' | 'queued' | 'failed'> {
+/**
+ * Takes a copy back as the person chose; a conflict comes back to be decided, never resolved here. `quota`: the
+ * account's storage is full — the copy waits on this computer and goes up when there is room (screen 13).
+ */
+export async function uploadCopy(copy: OfficeLocalCopy, how: OfficeUploadHow): Promise<'uploaded' | 'conflict' | 'queued' | 'failed' | 'quota'> {
   try {
     const r = await call('office:uploadLocal', { id: copy.id, how });
     if (r.state === 'uploaded') toast('success', `“${copy.name}” is now version ${r.version ?? 'the latest'} in Drive.`);
     if (r.state === 'queued') toast('info', `Uploading your copy of “${copy.name}” as a new file beside it — see Transfers.`);
     return r.state;
   } catch (e) {
+    if ((e as { code?: unknown } | null)?.code === 'QUOTA_EXCEEDED') return 'quota';
     toast('error', errorMessage(e));
     return 'failed';
   }
@@ -99,7 +104,7 @@ export function ConflictDialog({ copy, onClose, onReview }: { copy: OfficeLocalC
     setBusy(how);
     const r = await uploadCopy(copy, how);
     setBusy(null);
-    if (r !== 'failed' && r !== 'conflict') onClose();
+    if (r === 'uploaded' || r === 'queued') onClose();
   };
   return (
     <Modal
@@ -149,21 +154,24 @@ const WORDS: Record<OfficeLocalCopy['state'], string> = {
   conflict: 'The cloud file changed',
   failed: 'Could not open',
   missing: 'Moved or deleted here',
+  quota: 'Waiting for room in your storage',
 };
 
 /** A copy that wants the person: changed, in conflict, uploading or failed. */
 export function needsAttention(c: OfficeLocalCopy): boolean {
-  return !c.syncOwned && (c.state === 'changed' || c.state === 'conflict' || c.state === 'uploading' || c.state === 'failed');
+  return !c.syncOwned && (c.state === 'changed' || c.state === 'conflict' || c.state === 'uploading' || c.state === 'failed' || c.state === 'quota');
 }
 
 /** One copy's line with its actions (the Files tray and the document's banner). */
 export function LocalCopyRow({ copy, onConflict, compact }: { copy: OfficeLocalCopy; onConflict: (c: OfficeLocalCopy) => void; compact?: boolean }) {
   const [busy, setBusy] = useState(false);
+  const [full, setFull] = useState(false);
   const upload = async () => {
     setBusy(true);
     const r = await uploadCopy(copy, 'version');
     setBusy(false);
     if (r === 'conflict') onConflict(copy);
+    if (r === 'quota') setFull(true);
   };
   return (
     <div className={cx('flex items-center gap-2', compact ? '' : 'rounded-[9px] border border-line px-2.5 py-2')}>
@@ -184,6 +192,12 @@ export function LocalCopyRow({ copy, onConflict, compact }: { copy: OfficeLocalC
           Decide…
         </Button>
       ) : null}
+      {copy.state === 'quota' ? (
+        <Button size="sm" onClick={() => setFull(true)}>
+          Storage full…
+        </Button>
+      ) : null}
+      {full ? <StorageFullDialog copy={copy} onClose={() => setFull(false)} /> : null}
       <button type="button" aria-label={`Show “${copy.name}” in its folder`} title="Show in folder" onClick={() => void call('office:revealLocal', { id: copy.id }).catch((e) => toast('error', errorMessage(e)))} className="flex h-7 w-7 items-center justify-center rounded-[7px] text-ink-3 hover:bg-subtle">
         <Icon name="folder-open" size={14} />
       </button>

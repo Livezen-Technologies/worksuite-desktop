@@ -1078,8 +1078,11 @@ export interface Transfer {
   attempts?: number;
   /** While it runs: when bytes last moved, so one that has stopped moving can be told from one that is slow (worksuite-desktop#89). */
   movedAt?: string | null;
-  /** Waiting in the queue because the connection is lost, or a metered connection is set to wait. */
-  held?: 'connection' | 'metered' | null;
+  /**
+   * Waiting in the queue because the connection is lost, or a metered connection is set to wait — or, for an upload
+   * to a Personal account, because its storage is full (`quota`: it goes on by itself when there is room).
+   */
+  held?: 'connection' | 'metered' | 'quota' | null;
   /** A mail attachment's staged copy once its parts are in (worksuite-desktop#249): what Compose attaches. */
   attachment?: { token: string; name: string; size: number } | null;
   /** Where a tender's upload goes, so the tender's tabs show it as it moves — also after a restart (#249). */

@@ -11,8 +11,9 @@ import type { AvatarStyle } from './avatarArt';
  * ending `_at` are UTC ("2026-09-26 08:31:00"): read them with `parseTs`.
  */
 
-export type Section = 'profile' | 'general' | 'preferences' | 'notifications' | 'security' | 'pictures' | 'access';
-export const SECTIONS: readonly Section[] = ['profile', 'general', 'preferences', 'notifications', 'security', 'pictures', 'access'];
+/** `storage`: WorkSuite Cloud's storage (Connection & Startup screen 12), for a Personal account only. */
+export type Section = 'profile' | 'general' | 'preferences' | 'notifications' | 'security' | 'pictures' | 'access' | 'storage';
+export const SECTIONS: readonly Section[] = ['profile', 'general', 'preferences', 'notifications', 'security', 'pictures', 'access', 'storage'];
 
 export interface MyProfile {
   id: number;
