@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-13
+
+**Added**
+
+- the ticket drawer is the shared details drawer: resizable by mouse or keyboard, Ctrl/Cmd+Shift+I, remembered per person; Linked contact, Website activity, Attachments and Audit log are sections of their own, each shown only with something in it (#334)
+
+**Fixed**
+
+- attachment tiles in the drawer used the raw link instead of the signed media path (#334)
+
 ## 1.7.0 — 2026-10-13
 
 - Email tracking (#335): each emailed reply says Sending, Sent, Delivered, Opened (time) or Opened (automatic), Clicked n links, or Bounced with the reason and Retry / Edit address; hovering or clicking the status shows the timeline with the approximate client and that tracking is not always accurate; links show a small click count; the ticket list marks a ticket whose requester opened or clicked the latest reply, or whose reply bounced; Track this email in the reply options; API calls for the timeline, resend and the requester's tracking opt-out

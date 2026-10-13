@@ -85,9 +85,11 @@ export function useMe(): number | null {
 /** A site's name from a link, as "Came from" says it: no scheme, no www, no path. */
 export const hostOf = (url: string) => url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/.*$/, '');
 
-/** The visitor panels' card and its heading — the thread's dossier and the missed chat's (C-04) — drawn alike. */
-export const PANEL_HEADING = 'text-[10.5px] font-bold tracking-[0.6px] text-ink-3 uppercase';
-export const PANEL_CARD = 'flex flex-col gap-[7px] rounded-[12px] border border-line bg-surface px-3 py-2.5';
+/**
+ * The visitor panels' card and its heading — the thread's dossier and the missed chat's (C-04) — drawn alike: the
+ * shared details drawer's own (#334), so a ticket's details look the same.
+ */
+export { DRAWER_CARD as PANEL_CARD, DRAWER_HEADING as PANEL_HEADING } from '../../../components/DetailsDrawer';
 
 /**
  * The full-width tables' frame, header row and picked row — the conversation lists (C-03, WebsiteTable) and Visitors

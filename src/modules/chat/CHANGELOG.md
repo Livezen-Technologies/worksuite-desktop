@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.78.0 — 2026-10-13
+
+**Added**
+
+- the Website chat visitor panel is the shared details drawer: resizable, toggled from the thread header or Ctrl/Cmd+Shift+I, remembered per person (#334)
+
 ## 1.77.0 — 2026-10-10
 
 **Added**

@@ -13,42 +13,12 @@ import { cleanAnswer } from '../ai/textTools';
 export const WIDE_TAB = 1280;
 export const WIDE_INBOX = 1440;
 
-/** The drawer's width range and default; the width is kept on this computer (`useResizableWidth`). */
-export const DRAWER_MIN = 280;
-export const DRAWER_MAX = 520;
-export const DRAWER_DEFAULT = 320;
+// Showing it, its width and the shortcut are the shared details drawer's (components/DetailsDrawer), as in Website chats.
+export { drawerState, type DrawerChoice } from '../../components/DetailsDrawer';
 
-/** What the person last chose on a wide window: kept, so a drawer they closed stays closed. */
-export type DrawerChoice = 'open' | 'closed' | null;
-
-/**
- * Whether the drawer shows, and how: beside the conversation on a wide window (open unless closed there), over it on a
- * narrow one (only once asked for, this time).
- */
-export function drawerState(width: number, wideAt: number, choice: DrawerChoice, askedNarrow: boolean): { open: boolean; overlay: boolean } {
-  if (width >= wideAt) return { open: choice !== 'closed', overlay: false };
-  return { open: askedNarrow, overlay: true };
-}
-
-const CHOICE_KEY = 'ws.support.drawer';
-
-export function readChoice(): DrawerChoice {
-  try {
-    const v = localStorage.getItem(CHOICE_KEY);
-    return v === 'open' || v === 'closed' ? v : null;
-  } catch {
-    return null;
-  }
-}
-
-export function writeChoice(v: DrawerChoice): void {
-  try {
-    if (v) localStorage.setItem(CHOICE_KEY, v);
-    else localStorage.removeItem(CHOICE_KEY);
-  } catch {
-    // A preference; it is asked again next time.
-  }
-}
+/** Where the choice and the width were kept before they were kept per person: read once, for a choice made then. */
+export const LEGACY_CHOICE_KEY = 'ws.support.drawer';
+export const LEGACY_WIDTH_KEY = 'ws.width.support.details';
 
 /* ── the AI brief ───────────────────────────────────────────────────────── */
 

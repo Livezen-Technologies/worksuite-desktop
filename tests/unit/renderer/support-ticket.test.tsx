@@ -152,7 +152,7 @@ beforeEach(() => {
   resetApiFamily();
   // A wide window: the ticket details drawer opens by itself beside the conversation (#334).
   Object.defineProperty(window, 'innerWidth', { configurable: true, value: 1440 });
-  localStorage.removeItem('ws.support.drawer');
+  for (const k of Object.keys(localStorage)) if (k === 'ws.support.drawer' || k.startsWith('ws.drawer.')) localStorage.removeItem(k);
   realtime.length = 0;
   nav.navigate.mockReset();
   nav.openLink.mockReset();
