@@ -109,6 +109,146 @@ export interface Meeting {
   my_rsvp?: Rsvp | null;
   /** Newer servers (#100, #101): the record it was scheduled from. */
   source?: MeetingSource | null;
+  /** Newer servers (MTG-U02/U03): what the reader may do with this meeting. Absent from an older server. */
+  can?: Partial<MeetingAbilities> | null;
+}
+
+/**
+ * What the reader may do with one meeting (SRS v1.1 MTG-U02/U03), as the server works it out from
+ * `MeetingAccess::runsMeeting()`, the meeting's status and the reader's participant permissions. A control is shown
+ * only when its flag is true. `agenda` is the server's older name for `run_agenda`.
+ */
+export interface MeetingAbilities {
+  edit: boolean;
+  reschedule: boolean;
+  cancel: boolean;
+  delete: boolean;
+  start: boolean;
+  complete: boolean;
+  run_agenda: boolean;
+  minutes: boolean;
+  actions: boolean;
+  upload: boolean;
+  /** Join it, and be counted as attending. */
+  attend: boolean;
+  invite: boolean;
+  rsvp: boolean;
+}
+
+export type Ability = keyof MeetingAbilities;
+
+const ABILITIES: Ability[] = ['edit', 'reschedule', 'cancel', 'delete', 'start', 'complete', 'run_agenda', 'minutes', 'actions', 'upload', 'attend', 'invite', 'rsvp'];
+
+/**
+ * The abilities to show a meeting's controls by. From the server's `can` when it sends one — a flag it leaves out is
+ * false, so nothing is offered that the server would refuse. From an older server, worked out the way this app always
+ * did: whoever organises it, hosts it or manages meetings runs it, and a participant's permissions add to that. Start,
+ * Complete and Delete are never offered without the server's word.
+ */
+export function abilitiesOf(m: Pick<Meeting, 'can' | 'live_status' | 'organizer_id'>, ctx: { me: number | null; mine: Pick<Person, 'role' | 'permissions'> | null; manage: boolean }): MeetingAbilities {
+  const can = m.can;
+  if (can && typeof can === 'object') {
+    const out = Object.fromEntries(ABILITIES.map((k) => [k, can[k] === true])) as unknown as MeetingAbilities;
+    out.run_agenda = can.run_agenda === true || (can.run_agenda === undefined && (can as { agenda?: boolean }).agenda === true);
+    return out;
+  }
+  const runs = (ctx.me !== null && m.organizer_id === ctx.me) || ctx.manage || ctx.mine?.role === 'host' || ctx.mine?.role === 'organizer';
+  const open = m.live_status !== 'cancelled' && m.live_status !== 'completed';
+  const perms = ctx.mine?.permissions ?? null;
+  return {
+    edit: runs,
+    reschedule: runs && open,
+    cancel: runs && open,
+    delete: false,
+    start: false,
+    complete: false,
+    run_agenda: runs || !!perms?.edit_agenda,
+    minutes: runs || !!perms?.edit_minutes,
+    actions: runs || !!perms?.create_actions,
+    upload: runs || (!!ctx.mine && perms?.upload !== false),
+    attend: open,
+    invite: runs,
+    rsvp: !!ctx.mine && !(ctx.me !== null && m.organizer_id === ctx.me),
+  };
+}
+
+/** Whether the server sent its own abilities for this meeting. */
+export const serverAbilities = (m: Pick<Meeting, 'can'>): boolean => !!m.can && typeof m.can === 'object';
+
+/**
+ * A refusal that means the meeting moved on under the reader (MTG-U07/U08): a status change on a meeting already
+ * cancelled or completed (409 `INVALID_STATUS`), an answer after it ended (410 `MEETING_OVER`), a check-in out of
+ * its window. What to say, and that the meeting should be read again. Null for any other error.
+ */
+export function meetingProblem(e: unknown): { message: string; refresh: true } | null {
+  const x = e as { status?: unknown; code?: unknown; message?: unknown } | null;
+  const status = typeof x?.status === 'number' ? x.status : null;
+  const code = typeof x?.code === 'string' ? x.code : null;
+  const said = typeof x?.message === 'string' && x.message.trim() && !/^Request failed|^HTTP \d+/.test(x.message) ? x.message.trim() : null;
+  if (status === 410 || code === 'MEETING_OVER') return { message: said ?? 'This meeting is over: answers are closed.', refresh: true };
+  if (status === 409 && (code === 'INVALID_STATUS' || code === null || code === 'CHECK_IN_CLOSED')) return { message: said ?? 'This meeting has changed since you opened it. It is shown as it is now.', refresh: true };
+  return null;
+}
+
+/** The paging the server sends with a list (MTG-U11); absent from an older one, which sends everything. */
+export interface PageMeta {
+  page: number;
+  per_page: number;
+  total: number;
+  last_page: number;
+}
+
+/** A list answer: `meetings` from this app's server so far, `data` from the paged list; `meta` when it pages. */
+export function listOf(r: { meetings?: Meeting[]; data?: Meeting[]; meta?: PageMeta | null } | null | undefined): { rows: Meeting[]; meta: PageMeta | null } {
+  const rows = Array.isArray(r?.meetings) ? r.meetings : Array.isArray(r?.data) ? r.data : [];
+  const meta = r?.meta && typeof r.meta.page === 'number' && typeof r.meta.last_page === 'number' ? r.meta : null;
+  return { rows, meta };
+}
+
+/** One occurrence of a meeting on the calendar (MTG-U12), a repeating one's each its own. */
+export interface Occurrence {
+  meeting_id: number;
+  occurrence_date: string;
+  start_at: string;
+  end_at: string;
+  title: string;
+  status: string;
+  room_id: number | null;
+  room: string | null;
+  type: string;
+  can?: Partial<MeetingAbilities> | null;
+}
+
+/**
+ * The home's day strip: the next `days` days from `today`, each with how many meetings it has. From the calendar's
+ * occurrences when the server has them (a repeating meeting on every day it happens), else from the list's rows.
+ * Cancelled ones are not counted. `dayOf` puts a stamp on the reader's calendar.
+ */
+export function dayStrip(today: string, days: number, items: Array<{ start_at: string; status?: string; live_status?: string }>, dayOf: (stamp: string) => string, addDays: (ymd: string, n: number) => string): Array<{ day: string; count: number }> {
+  const out = Array.from({ length: days }, (_, i) => ({ day: addDays(today, i), count: 0 }));
+  for (const it of items) {
+    if (it.status === 'cancelled' || it.live_status === 'cancelled') continue;
+    const slot = out.find((d) => d.day === dayOf(it.start_at));
+    if (slot) slot.count++;
+  }
+  return out;
+}
+
+/**
+ * The status chip a row of the home shows (D01): live, cancelled, yours to run, or your answer — "Waiting for you"
+ * while you have not answered.
+ */
+export function rowChip(m: Pick<Meeting, 'live_status' | 'my_role' | 'my_rsvp'>): [string, 'muted' | 'indigo' | 'success' | 'warning' | 'danger'] {
+  if (m.live_status === 'ongoing') return ['Happening now', 'danger'];
+  if (m.live_status === 'cancelled') return ['Cancelled', 'muted'];
+  if (m.live_status === 'completed') return ['Completed', 'muted'];
+  if (m.my_role === 'organizer') return ['Organiser', 'indigo'];
+  if (m.my_role === 'host') return ['Host', 'indigo'];
+  const r = m.my_rsvp ?? 'no_response';
+  if (r === 'accepted') return ['Going', 'success'];
+  if (r === 'tentative') return ['Tentative', 'warning'];
+  if (r === 'declined') return ['Not going', 'muted'];
+  return ['Waiting for you', 'danger'];
 }
 
 export interface Person {
@@ -171,7 +311,8 @@ export interface Detail {
   agenda: AgendaItem[];
   minutes: { summary: string | null; decisions: string | null; notes: string | null; finalised_at: string | null } | null;
   action_items: ActionItem[];
-  files: Array<{ id: number; kind: string; filename: string; size: number; mime: string; url: string; at: string }>;
+  /** Newer servers (MTG-U06, U15) open a file by a short-lived signed link and keep it in Drive; `url` and `at` are older. */
+  files: Array<{ id: number; kind: string; filename: string; size: number; mime: string; url?: string | null; at?: string | null; created_at?: string | null; uploaded_by?: string | null; drive_file_id?: number | null }>;
   /** Your recordings of this meeting held on Meet (worksuite-desktop#68); only their owner sees them. */
   recordings?: Array<{ id: number; client_id?: string | null; title: string; status: string; method: 'cloud' | 'local'; error: string | null; drive_file_id: number | null; size: number | null; created_at: string; stalled?: boolean; guidance?: string | null; playable?: boolean }>;
   chat: { room_id: number; meet_uuid: string | null; join_url: string | null; member: boolean } | null;

@@ -114,7 +114,7 @@ describe('the minutes editor', () => {
     await screen.findByText('Budget review');
     type('Discussion', '<p>My point</p>');
     const alert = await screen.findByRole('alert', {}, { timeout: 3000 });
-    expect(alert.textContent).toContain('Ben changed Discussion while you were writing. Nothing has been overwritten.');
+    expect(alert.textContent).toContain('Ben changed Discussion meanwhile. Nothing has been overwritten.');
     expect(screen.getByText('Needs your check')).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Keep both' }));
     await waitFor(() => expect(api.apiPut).toHaveBeenCalledTimes(2));
