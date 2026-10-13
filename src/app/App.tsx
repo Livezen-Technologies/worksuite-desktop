@@ -17,6 +17,8 @@ import { Shell } from '../layouts/Shell';
 import { Spinner } from '../components/ui';
 import { SetupWizard } from './onboarding/Onboarding';
 import { ConnectRoot } from './connect/ConnectRoot';
+import { UnknownLinkHost } from './connect/UnknownServerLink';
+import { AccountDialogsHost } from './accounts/dialogs';
 import { Toasts } from './overlays/Toasts';
 import { OfficeOpenHost } from '../modules/office/open-with';
 import { ShowMeHost } from '../modules/ai/help/ShowMe';
@@ -69,6 +71,8 @@ export function App() {
   // Guest mode (#149): this window, this shell; `signingIn` shows sign-in in front of it.
   const session = useStore(app, (s) => s.session);
   const local = useStore(app, (s) => s.local);
+  // The workspace chooser at startup (screen 11) shows over a signed-in account too ("Always show this at startup").
+  const chooser = useStore(app, (s) => !!s.accounts?.chooserPending && (s.accounts.accounts.length ?? 0) > 0);
   const hash = window.location.hash;
 
   if (!hasDesktop()) {
@@ -97,7 +101,7 @@ export function App() {
   // A guest never meets the account's picture gate or setup wizard: guest mode is the shell with its own apps.
   else if (guest && !session.signingIn) body = !local?.profile || local.locked ? <GuestGate /> : <Shell key="guest" />;
   // Connection & Startup: sign-in, the connect flows and the workspace chooser; adding an account shows it signed in too.
-  else if (auth.stage !== 'ready' || (session.adding && !hash.startsWith('#/window/'))) body = <ConnectRoot auth={auth} />;
+  else if (auth.stage !== 'ready' || ((session.adding || chooser) && !hash.startsWith('#/window/'))) body = <ConnectRoot auth={auth} />;
   else if (hash.startsWith('#/window/quick-ask')) body = <QuickAskWindow />;
   // The Live map window and wall mode on a display (L-04, L-05; MAP-21, MAP-24): Chat's, so only with Chat.
   // The support wallboard on a display (WS-SUPPORT-SRS-001 D-12): the desk's, so only with Support.
@@ -139,6 +143,10 @@ export function App() {
       ) : null}
       {/* "Open with" for Office files asks here: Ask every time, Save to Drive first?, not installed (#322). */}
       {auth.stage === 'ready' && !locked ? <OfficeOpenHost /> : null}
+      {/* A link to a server that is not added (Connection & Startup screen 16): asked here, nothing fetched from it. */}
+      {!locked && !hash.startsWith('#/window/') ? <UnknownLinkHost /> : null}
+      {/* Sign out with unsynced changes and Remove from this device (screen 14), whichever screen opened them. */}
+      {!hash.startsWith('#/window/') ? <AccountDialogsHost /> : null}
       <Toasts />
       <ShowMeHost />
     </Suspense>

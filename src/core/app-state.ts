@@ -4,7 +4,7 @@ import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, Status
 import { grantOf } from '@shared/access';
 import { visibleApps, type AppDefinition } from '@shared/apps';
 import type { LocalStatus } from '@shared/local-workspace';
-import type { AccountsState, AddingAccount } from '@shared/accounts';
+import type { AccountKind, AccountsState, AddingAccount, UnknownLink } from '@shared/accounts';
 import type { BrowserSignIn, CloudStatus } from '@shared/cloud';
 import type { ConnectRun } from '@shared/discovery';
 import { call, hasDesktop, on } from './bridge';
@@ -50,6 +50,8 @@ export interface AppState {
   signin: BrowserSignIn | null;
   /** The active Personal account's Cloud side, from `cloud:changed`. */
   cloud: CloudStatus | null;
+  /** A link to a server that is not added (screen 16), from `accounts:unknownLink`; null once answered. */
+  unknownLink: UnknownLink | null;
 }
 
 export const app = createStore<AppState>({
@@ -73,7 +75,36 @@ export const app = createStore<AppState>({
   connect: null,
   signin: null,
   cloud: null,
+  unknownLink: null,
 });
+
+/**
+ * Add Account (Connection & Startup screens 1, 2, 6): the startup selector (`choose`), Personal or Enterprise, with an
+ * address or setup link to start from. The desktop is told too (`accounts:addStart`), so a `worksuite://setup` link
+ * arriving now lands in this flow; a desktop without accounts answers UNSUPPORTED, which changes nothing here.
+ */
+export function startAdding(step: AddingAccount['step'], prefill?: string): void {
+  const adding: AddingAccount = prefill ? { step, prefill } : { step };
+  app.set({ session: { ...app.get().session, adding }, connect: null });
+  const kind: AccountKind | undefined = step === 'choose' ? undefined : step;
+  void call('accounts:addStart', kind ? { kind } : {}).catch(() => undefined);
+}
+
+/** Leaves Add Account: back to the account that is open (or the startup selector when there is none). */
+export function cancelAdding(): void {
+  const run = app.get().connect;
+  if (run?.state === 'running') void call('connect:cancel', { runId: run.runId }).catch(() => undefined);
+  app.set({ session: { ...app.get().session, adding: null }, connect: null });
+  void call('accounts:addCancel').catch(() => undefined);
+}
+
+/**
+ * Which `connect:progress` runs this window follows: the one on screen 7 (same runId), or any when none is on screen.
+ * A run started elsewhere (Settings' Re-run discovery) never replaces the one being looked at.
+ */
+export function acceptsRun(current: ConnectRun | null, next: ConnectRun): boolean {
+  return !current || current.runId === next.runId;
+}
 
 /** Whether this window is in guest mode (#149). */
 export function isGuest(): boolean {
@@ -163,7 +194,12 @@ export async function initAppState(): Promise<void> {
     }
   })();
   on<AccountsState>('accounts:changed', (a) => app.set({ accounts: a }));
-  on<ConnectRun>('connect:progress', (r) => app.set({ connect: r }));
+  on<ConnectRun>('connect:progress', (r) => {
+    if (r && typeof r === 'object' && acceptsRun(app.get().connect, r)) app.set({ connect: r });
+  });
+  on<UnknownLink>('accounts:unknownLink', (l) => {
+    if (l && typeof l === 'object' && typeof l.host === 'string') app.set({ unknownLink: l });
+  });
   on<BrowserSignIn | null>('signin:changed', (b) => app.set({ signin: b }));
   on<CloudStatus>('cloud:changed', (c) => app.set({ cloud: c }));
   on<StatusSnapshot>('status:changed', (s) => app.set({ status: s }));

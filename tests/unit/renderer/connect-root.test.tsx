@@ -6,8 +6,8 @@ import type { ConnectRun } from '@shared/discovery';
 import type { AuthState, Preferences } from '@shared/types';
 
 /**
- * Connection & Startup's renderer skeleton (WP0): ConnectRoot's routing, and that it changes nothing for anyone
- * today — every screen still to be built falls through to the existing Onboarding.
+ * Connection & Startup's renderer routing: ConnectRoot's routes, the WP4 screens it shows (startup selector, enterprise
+ * address, checks, branded sign-in, compatibility, chooser) and WP3's Personal screens, none of them placeholders now.
  */
 const bridge = vi.hoisted(() => ({ call: vi.fn(async () => null) }));
 vi.mock('../../../src/core/bridge', () => ({
@@ -23,22 +23,23 @@ vi.mock('../../../src/core/bridge', () => ({
 const { app } = await import('../../../src/core/app-state');
 const { ConnectRoot, connectRoute, isPlaceholder } = await import('../../../src/app/connect/ConnectRoot');
 const { ConnectFrame, ConnectCard } = await import('../../../src/app/connect/ConnectFrame');
-const screens = [
-  await import('../../../src/app/connect/StartupSelector'),
-  await import('../../../src/app/connect/EnterpriseAddress'),
-  await import('../../../src/app/connect/QrScan'),
-  await import('../../../src/app/connect/ChecksScreen'),
-  await import('../../../src/app/connect/BrandedSignIn'),
-  await import('../../../src/app/connect/Compatibility'),
-  await import('../../../src/app/connect/WorkspaceChooser'),
-  await import('../../../src/app/connect/UnknownServerLink'),
+// WP4's screens (Enterprise, startup, chooser, version gates, unknown link).
+const wp4Screens = [
+  (await import('../../../src/app/connect/StartupSelector')).StartupSelector,
+  (await import('../../../src/app/connect/EnterpriseAddress')).EnterpriseAddress,
+  (await import('../../../src/app/connect/QrScan')).QrScan,
+  (await import('../../../src/app/connect/ChecksScreen')).ChecksScreen,
+  (await import('../../../src/app/connect/BrandedSignIn')).BrandedSignIn,
+  (await import('../../../src/app/connect/Compatibility')).Compatibility,
+  (await import('../../../src/app/connect/WorkspaceChooser')).WorkspaceChooser,
+  (await import('../../../src/app/connect/UnknownServerLink')).UnknownServerLink,
 ];
-// WP3 built the Personal screens (personal-screens.test.tsx): no longer placeholders.
-const built = [
-  await import('../../../src/app/connect/personal/PersonalWelcome'),
-  await import('../../../src/app/connect/personal/BrowserWait'),
-  await import('../../../src/app/connect/personal/CheckEmail'),
-  await import('../../../src/app/connect/personal/Provisioning'),
+// WP3's Personal screens (personal-screens.test.tsx).
+const wp3Screens = [
+  (await import('../../../src/app/connect/personal/PersonalWelcome')).PersonalWelcome,
+  (await import('../../../src/app/connect/personal/BrowserWait')).BrowserWait,
+  (await import('../../../src/app/connect/personal/CheckEmail')).CheckEmail,
+  (await import('../../../src/app/connect/personal/Provisioning')).Provisioning,
 ];
 
 const auth = (stage: AuthState['stage'], extra: Partial<AuthState> = {}): AuthState => ({ stage, server: null, user: null, message: null, setupPending: false, ...extra });
@@ -49,10 +50,15 @@ const route = (a: AuthState, more: Partial<Parameters<typeof connectRoute>[0]> =
 afterEach(() => cleanup());
 
 describe('connectRoute', () => {
-  it('leaves every stage there is today to Onboarding while accounts are not known', () => {
-    for (const stage of ['no-server', 'signed-out', 'mfa', 'device-code', 'passkey', 'registering', 'bootstrapping', 'expired', 'blocked', 'revoked'] as const) {
+  it('leaves the stages after the server is chosen to Onboarding while accounts are not known', () => {
+    for (const stage of ['signed-out', 'mfa', 'device-code', 'passkey', 'registering', 'bootstrapping', 'expired', 'blocked', 'revoked'] as const) {
       expect(route(auth(stage)), stage).toBe('onboarding');
     }
+  });
+
+  it('starts with the startup selector when there is no account, known or not', () => {
+    expect(route(auth('no-server'))).toBe('startup');
+    expect(route(auth('no-server'), { accounts: accounts() })).toBe('startup');
   });
 
   it('routes the new stages to their screens', () => {
@@ -69,7 +75,11 @@ describe('connectRoute', () => {
     expect(route(auth('no-server'), { adding: { step: 'enterprise' } })).toBe('enterprise-address');
     expect(route(auth('no-server'), { adding: { step: 'enterprise' }, connect: run })).toBe('checks');
     expect(route(auth('no-server'), { adding: { step: 'enterprise' }, connect: { ...run, state: 'cancelled' } })).toBe('enterprise-address');
-    expect(route(auth('signed-out'), { accounts: accounts({ chooserPending: true }) })).toBe('chooser');
+    const one = { id: 'acc_aaaaaaaaaaaaaaaaaaaa', kind: 'enterprise' } as AccountView;
+    expect(route(auth('signed-out'), { accounts: accounts({ chooserPending: true, accounts: [one] }) })).toBe('chooser');
+    // "Always show this at startup": over an account that is signed in too.
+    expect(route(auth('ready'), { accounts: accounts({ chooserPending: true, accounts: [one] }) })).toBe('chooser');
+    expect(route(auth('signed-out'), { accounts: accounts({ chooserPending: true }) })).toBe('onboarding');
     expect(route(auth('no-server'), { accounts: accounts() })).toBe('startup');
     expect(route(auth('signed-out', { account: { kind: 'enterprise' } as AccountView }))).toBe('branded-sign-in');
     expect(route(auth('expired', { account: { kind: 'personal' } as AccountView }))).toBe('personal-welcome');
@@ -77,20 +87,41 @@ describe('connectRoute', () => {
 });
 
 describe('ConnectRoot', () => {
-  it('marks every WP0 screen still to be built as a placeholder', () => {
-    for (const mod of screens) {
-      const [component] = Object.values(mod).filter((v) => typeof v === 'function');
-      expect(isPlaceholder(component)).toBe(true);
+  it('shows every built screen: no WP0 placeholder is left', () => {
+    for (const component of [...wp4Screens, ...wp3Screens]) {
+      expect(component, 'exported').toBeTypeOf('function');
+      expect(isPlaceholder(component), (component as { name: string }).name).toBe(false);
     }
-    for (const mod of built) for (const v of Object.values(mod)) expect(isPlaceholder(v)).toBe(false);
   });
 
-  it('shows the existing Onboarding, whatever the route, until the screens land', () => {
+  it('shows the Personal welcome for Add Account › Personal (WP3)', () => {
+    app.set({ prefs: { language: 'en' } as Preferences, accounts: accounts(), session: { mode: 'account', signingIn: false, moveOffer: false, adding: { step: 'personal' } } });
+    render(<ConnectRoot auth={auth('no-server')} />);
+    expect(screen.getByTestId('connect-frame')).toBeTruthy();
+    app.set({ accounts: null, session: { mode: 'account', signingIn: false, moveOffer: false, adding: null } });
+  });
+
+  it('shows the startup selector for Add Account', () => {
     app.set({ prefs: { language: 'en' } as Preferences, accounts: accounts(), session: { mode: 'account', signingIn: false, moveOffer: false, adding: { step: 'choose' } } });
     render(<ConnectRoot auth={auth('no-server')} />);
-    expect(screen.getByText('Continue as Guest')).toBeTruthy();
-    expect(screen.queryByTestId('connect-frame')).toBeNull();
+    expect(screen.getByRole('heading', { name: 'How would you like to use WorkSuite?' })).toBeTruthy();
     app.set({ accounts: null, session: { mode: 'account', signingIn: false, moveOffer: false, adding: null } });
+  });
+
+  it('shows the enterprise address, then the checks once a run starts', () => {
+    app.set({ prefs: { language: 'en' } as Preferences, accounts: accounts(), connect: null, session: { mode: 'account', signingIn: false, moveOffer: false, adding: { step: 'enterprise' } } });
+    const { rerender } = render(<ConnectRoot auth={auth('no-server')} />);
+    expect(screen.getByRole('heading', { name: 'Connect to your organization' })).toBeTruthy();
+    app.set({ connect: run });
+    rerender(<ConnectRoot auth={auth('no-server')} />);
+    expect(screen.getByRole('heading', { name: 'Checking ws.example' })).toBeTruthy();
+    app.set({ accounts: null, connect: null, session: { mode: 'account', signingIn: false, moveOffer: false, adding: null } });
+  });
+
+  it('keeps the steps after sign-in in Onboarding', () => {
+    app.set({ prefs: { language: 'en' } as Preferences });
+    render(<ConnectRoot auth={auth('mfa')} />);
+    expect(screen.queryByTestId('connect-frame')).toBeNull();
   });
 });
 

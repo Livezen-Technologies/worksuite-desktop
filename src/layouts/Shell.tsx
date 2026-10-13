@@ -33,6 +33,7 @@ import { SearchOverlay } from '../app/overlays/SearchOverlay';
 import { UpdateBanner, UpdatePopover } from '../app/screens/UpdateScreens';
 import { UpdateNotices } from '../app/overlays/UpdateControls';
 import { MandatoryBanner } from '../app/screens/MandatoryUpdate';
+import { ServiceBanner } from '../app/accounts/ServiceBanner';
 import { UpdateDialogs } from '../app/screens/UpdateDialogs';
 import { ChatDrawer, MinimisedChats, useDrawerShown } from '../modules/chat/ChatDrawer';
 import { RingingBar } from '../modules/chat/website/Ringing';
@@ -311,6 +312,8 @@ export function Shell() {
         <Sidebar />
         <div className="flex min-w-0 flex-1 flex-col">
           <MandatoryBanner />
+          {/* The open account's server unavailable or out of reach (Connection & Startup screen 16). */}
+          <ServiceBanner />
           <UpdateBanner />
           <UpdateNotices />
           <UpdateDialogs />

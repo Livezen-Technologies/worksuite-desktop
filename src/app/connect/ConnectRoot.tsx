@@ -21,8 +21,9 @@ import { Provisioning } from './personal/Provisioning';
  * the Personal and Enterprise connect flows, the browser wait, Cloud's email check and setup, the version gates and
  * the workspace chooser — from `auth.stage`, `accounts.chooserPending`, `session.adding` and the connect run.
  *
- * Every screen not built yet is a placeholder (`placeholder = true` on its component), and ConnectRoot falls through
- * to the existing Onboarding instead of showing it — so until the screens land, every stage looks as it did.
+ * A screen not built yet is a placeholder (`placeholder = true` on its component), and ConnectRoot falls through to
+ * the existing Onboarding instead of showing it. The steps after the server is chosen (two-step verification, the
+ * device code, the passkey wait, registering, loading) are still Onboarding's.
  */
 
 export type ConnectScreen =
@@ -60,10 +61,12 @@ export function connectRoute(s: ConnectRouteState): ConnectScreen {
     if (s.adding.step === 'enterprise') return 'enterprise-address';
     return 'startup';
   }
+  // The chooser at startup, before any account opens — also over an account that is signed in ("Always show this").
+  if (s.accounts?.chooserPending && s.accounts.accounts.length > 0) return 'chooser';
   if (stage === 'ready') return 'onboarding';
-  if (s.accounts?.chooserPending) return 'chooser';
-  // `no-server`: no active account. Known only once the desktop answers `accounts:state`.
-  if (stage === 'no-server' && s.accounts) return 'startup';
+  // `no-server`: no active account — the startup selector, Personal or Enterprise. A desktop without accounts gets
+  // it too: the enterprise address falls back to `auth:setServer` there.
+  if (stage === 'no-server') return 'startup';
   if ((stage === 'signed-out' || stage === 'expired') && s.auth.account) return s.auth.account.kind === 'personal' ? 'personal-welcome' : 'branded-sign-in';
   return 'onboarding';
 }
