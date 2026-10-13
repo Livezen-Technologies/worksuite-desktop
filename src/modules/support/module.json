@@ -1,6 +1,6 @@
 {
     "module": "support",
-    "version": "1.7.0",
+    "version": "1.8.0",
     "paths": [
         "shared/support.ts",
         "electron/services/support-notices.ts",

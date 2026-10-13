@@ -11,6 +11,13 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.251 — 2026-10-13
+
+- **One details drawer, everywhere (#334).** A ticket's details and a website chat's visitor panel are now the same drawer: drag its edge or use the arrow keys to resize it, show or hide it from the header or with Ctrl/⌘+Shift+I, and it remembers its width and whether it was open — for you, not for everyone on this computer. In a narrow window it slides over the conversation and Esc closes it.
+- **The ticket drawer, in order:** Summary, Client, Linked contact (open, unlink, create or link one), Ticket properties, Related, Website activity, Attachments (every file in the thread, with thumbnails), Activity and the full Audit log. A section with nothing in it is not shown, and each one folds and stays folded.
+- Fixed: picture tiles in the drawer loaded the raw link instead of the signed media path, so they could fail to show.
+- Where it bites: the audit log reads the ticket's own history (there is no separate audit endpoint), and the SLA is still not editable from the drawer. Support module 1.8.0, Chat 1.78.0.
+
 ## 0.2.250 — 2026-10-13
 
 - **Meetings, redrawn (Meetings SRS v1.1, D01–D08).** The home has a seven-day strip with a count per day, paging, and rows that say Going, Organiser, Waiting for you or Happening now; invitations show "Clashes with …". A meeting opens on its Summary — details, your answer, agenda, emails sent or failed with Retry, recording and files — and its buttons are only the ones the server lets you use: no Start, Complete, Reschedule or Delete you would be refused. Minutes, transcripts, Q&A & polls and the Schedule dialog (Free / Busy / Maybe busy, Schedule anyway) follow the new design.
