@@ -121,7 +121,8 @@ export class RestaurantSync {
   private lastSeq = 0;
 
   constructor(private readonly d: RestaurantSyncDeps) {
-    d.db.raw.exec(SCHEMA);
+    // Made again in another account's database after a switch (Database.swap).
+    d.db.onOpen((db) => db.raw.exec(SCHEMA));
   }
 
   private now(): number {

@@ -35,7 +35,27 @@ export interface HttpDeps {
   onReachability: (reachable: boolean) => void;
   onAuthLost: (reason: string) => void;
   onDeviceDirective?: (code: DesktopErrorCode, message: string) => void;
+  /**
+   * The active account's scope (Connection & Startup §1.3, the leak guard): every request carries its signal, and an
+   * answer that arrives after the account was switched away (its epoch moved on) is CANCELLED, never handed to code
+   * that would write it into the next account's database. Absent: no guard (a client bound to one account).
+   */
+  scope?: () => RequestScope | null;
+  /** "Work Offline" (the service banner): nothing is sent; writes queue as when the server is out of reach. */
+  workOffline?: () => boolean;
 }
+
+/** Said for a request not sent because the person chose Work Offline. */
+export const WORK_OFFLINE_MESSAGE = 'You are working offline. This will be sent when you go back online.';
+
+/** What an account switch ends: requests are aborted with `signal`, and answers compared by `epoch`. */
+export interface RequestScope {
+  signal: AbortSignal;
+  epoch: number;
+}
+
+/** Said when an answer for the account that was open before a switch comes back. */
+export const SWITCHED_MESSAGE = 'The request was for the account open before the switch.';
 
 export interface RequestOptions {
   body?: unknown;
@@ -224,6 +244,14 @@ export class HttpClient {
    */
   async raw(method: string, url: string, init: RequestInit & { auth?: boolean; timeoutMs?: number; bodyFactory?: () => { body: BodyInit; contentType: string } } = {}): Promise<Response> {
     const auth = init.auth !== false;
+    // The account this request is for: an answer that comes back after a switch is not handed on (the leak guard).
+    const scope = this.deps.scope?.() ?? null;
+    const epoch = scope?.epoch ?? null;
+    const sameScope = (): void => {
+      if (!scope) return;
+      const now = this.deps.scope?.() ?? null;
+      if (scope.signal.aborted || !now || now.epoch !== epoch) throw new DesktopError('CANCELLED', SWITCHED_MESSAGE);
+    };
     // A streamed body is read once: built afresh for every send, the one after a token refresh included (#249).
     const { bodyFactory, ...rest } = init;
     init = rest;
@@ -254,11 +282,17 @@ export class HttpClient {
       const limit = init.timeoutMs === 0 ? null : AbortSignal.timeout(init.timeoutMs ?? 30_000);
       const signals: AbortSignal[] = limit ? [limit] : [];
       if (init.signal) signals.push(init.signal);
+      if (scope) signals.push(scope.signal);
+      sameScope();
+      if (this.deps.workOffline?.()) throw new DesktopError('NETWORK_UNREACHABLE', WORK_OFFLINE_MESSAGE);
       try {
         const res = await this.deps.fetch(url, { ...init, body, method, headers, signal: signals.length ? AbortSignal.any(signals) : undefined, redirect: 'manual' });
+        sameScope();
         this.deps.onReachability(true);
         return res;
       } catch (e) {
+        // Switched away while it was under way: neither the network's fault nor anything to hand on.
+        if (scope && (scope.signal.aborted || (this.deps.scope?.() ?? null)?.epoch !== epoch)) throw new DesktopError('CANCELLED', SWITCHED_MESSAGE);
         // Out of time, not cancelled by anybody: said so (#249). A slow answer is no sign the server is gone.
         if (limit?.aborted && !init.signal?.aborted) throw new DesktopError('NETWORK_UNREACHABLE', TIMEOUT_MESSAGE);
         const err = classifyNetworkError(e);
@@ -294,6 +328,7 @@ export class HttpClient {
       refreshed = true;
       res = await attempt();
     }
+    sameScope();
     // A version the server no longer accepts may be refused with 426 or with any error carrying UPDATE_REQUIRED.
     if (res.status === 403 || res.status === 426 || (res.status >= 400 && res.status !== 401 && res.status < 500)) {
       const body = await readEnvelope(res.clone());

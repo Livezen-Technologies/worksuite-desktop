@@ -352,6 +352,21 @@ export class DeviceService {
     this.timer = null;
   }
 
+  /**
+   * Another account's database and secrets were bound (Connection & Startup §1.3): what was held in memory for the
+   * account before — its registration, trust, heartbeat — is dropped; the next `load` / `ensureRegistered` reads the
+   * new account's own (its `install-id`, its `trust:*`), so nothing registers again.
+   */
+  rebind(): void {
+    this.stop();
+    this.record = null;
+    this.userId = null;
+    this.trust = 'STANDARD';
+    this.classification = 'UNKNOWN';
+    this.lastHeartbeatAt = null;
+    this.handled.clear();
+  }
+
   /** Forgets this device for the user (sign-out with wipe, revoke). */
   forget(userId: string): void {
     this.secrets.delete(this.key(userId));

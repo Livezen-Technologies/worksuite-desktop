@@ -131,9 +131,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   // ── auth / session ─────────────────────────────────────────────────────
   router.handle('auth:state', () => ctx.session.get());
   router.handle('auth:setServer', async (input) => {
-    if (input.url === '') return ctx.session.forgetServer();
+    // With accounts side by side, a server is an account: connect, then confirm (Connection & Startup §7.2).
+    if (input.url === '') return ctx.accounts ? ctx.accounts.forgetServer() : ctx.session.forgetServer();
     const before = ctx.auth.getServer()?.origin ?? null;
-    const state = await ctx.session.setServer(input.url);
+    const state = ctx.accounts ? await ctx.accounts.setServer(input.url) : await ctx.session.setServer(input.url);
     // The CSP names the server (its media links); a new one takes a reload.
     if ((ctx.auth.getServer()?.origin ?? null) !== before) setTimeout(() => ctx.windows.reloadAll(), 50);
     return state;

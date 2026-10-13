@@ -83,8 +83,13 @@ export class BootstrapService {
     private readonly db: Database,
     private readonly vault: () => Vault,
     private readonly http: HttpClient,
-    private readonly policyPublicKey: string | null,
+    /** The key the server's policy is signed with: per account (its trusted `discovery_key`), so a getter. */
+    private readonly policyPublicKey: string | null | (() => string | null),
   ) {}
+
+  private policyKey(): string | null {
+    return typeof this.policyPublicKey === 'function' ? this.policyPublicKey() : this.policyPublicKey;
+  }
 
   get(): Bootstrap | null {
     return this.current;
@@ -139,7 +144,7 @@ export class BootstrapService {
     const user = toUserSummary((d.user ?? {}) as PublicUser);
     const orgs = Array.isArray(d.organizations) ? d.organizations.map(toOrg).filter((o): o is Organization => o !== null) : [];
     const signedPolicy = (d.desktop_policy ?? null) as Record<string, unknown> | null;
-    let policy = signedPolicy ? acceptSignedPolicy(signedPolicy, this.policyPublicKey) : null;
+    let policy = signedPolicy ? acceptSignedPolicy(signedPolicy, this.policyKey()) : null;
     if (!policy) {
       if (signedPolicy) log.warn('POLICY_SIGNATURE_INVALID: keeping the last valid desktop policy');
       policy = this.lastValidPolicy ?? { ...DEFAULT_POLICY };

@@ -122,6 +122,23 @@ describe('installAccounts', () => {
     w.dispose();
   });
 
+  it('with the accounts runtime (WP1), registers every accounts:* channel but rediscover (discovery’s) and routes the legacy server step', async () => {
+    const handle = vi.fn();
+    const service = { setServer: vi.fn(async () => ({ stage: 'signed-out' })), forgetServer: vi.fn(() => ({ stage: 'no-server' })), existing: () => null };
+    const ctx = { http: {}, bootstrap: { setLicenceSource: vi.fn() } } as unknown as AppContext;
+    const w = installAccounts({
+      router: { handle } as unknown as IpcRouter,
+      ctx,
+      accounts: { service, registry: { get: () => null, active: () => null }, trusted: () => ({}), sessionFor: vi.fn(), connectPartition: 'persist:ws-connect', fetchFor: vi.fn(), acceptTokens: vi.fn() } as never,
+    });
+    const names = handle.mock.calls.map((c) => c[0] as string);
+    for (const c of ['accounts:state', 'accounts:switch', 'accounts:startupChoice', 'accounts:setChooser', 'accounts:unsynced', 'accounts:syncNow', 'accounts:exportUnsynced', 'accounts:signOut', 'accounts:remove', 'accounts:health', 'accounts:addStart', 'accounts:addCancel']) expect(names).toContain(c);
+    expect(names.filter((n) => n === 'accounts:rediscover')).toHaveLength(1);
+    await ctx.accounts!.setServer('ws.example');
+    expect(service.setServer).toHaveBeenCalledWith('ws.example');
+    w.dispose();
+  });
+
   it('honours WS_CLOUD_ORIGIN only in unpackaged builds', () => {
     expect(cloudOrigin(false, { WS_CLOUD_ORIGIN: 'https://localhost:8443/x' })).toBe('https://localhost:8443');
     expect(cloudOrigin(true, { WS_CLOUD_ORIGIN: 'https://localhost:8443' })).toBe('https://worksuitecloud.com');

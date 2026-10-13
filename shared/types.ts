@@ -81,6 +81,10 @@ export interface ServerInfo {
   /** The account this server record belongs to (`acc_…`). */
   accountId?: string;
   deployment?: DiscoveredServer['deployment'];
+  /** How the server signs people in (its discovery): `oidc` or a `browserSignIn` means the browser, else the form. */
+  authMode?: DiscoveredServer['authMode'];
+  /** Core's AppHandoff browser sign-in (server-relative paths), when the server offers it. */
+  browserSignIn?: DiscoveredServer['browserSignIn'];
 }
 
 export interface UserSummary {

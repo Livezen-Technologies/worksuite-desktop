@@ -69,7 +69,7 @@ import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
 import { projectsContract, projectsReportSchema, type ProjectsOutputs } from '../projects';
 import { phoneContract, type PhoneOutputs } from '../phone';
-import { accountsContract, type AccountsOutputs } from '../accounts';
+import { accountsContract, type AccountsOutputs, type ServiceHealthState } from '../accounts';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
@@ -1522,6 +1522,10 @@ export const contract = {
   'connection:details': ch(none, { session: true, rate: 2 }),
   'connection:speedTest': ch(none, { session: true, rate: 1 }),
   'connection:reconnect': ch(none, { session: true, rate: 1 }),
+  /** Work Offline on the service banner: writes queue, nothing is tried on the network until it is turned off. */
+  'connection:workOffline': ch(z.strictObject({ on: z.boolean() })),
+  /** The QR scan dialog is open (the camera may be used by the shell) or closed. */
+  'connect:scanCamera': ch(z.strictObject({ open: z.boolean() })),
 
   // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
   ...posContract,
@@ -2034,6 +2038,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'connection:details': ConnectionDetails;
   'connection:speedTest': SpeedTestResult;
   'connection:reconnect': void;
+  'connection:workOffline': ServiceHealthState;
+  'connect:scanCamera': void;
 }
 
 /** Typed error codes returned across IPC (§8.3 plus IPC-specific ones). */

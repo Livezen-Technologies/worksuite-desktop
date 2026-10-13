@@ -6,7 +6,7 @@ import { LocalApi } from '../services/local-api';
 import { LocalWorkspaceMove, type MoveAccount } from '../services/local-workspace-move';
 import { createHash, randomUUID } from 'node:crypto';
 import { localize } from '@shared/localization';
-import { existsSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, rmSync, statSync, writeFileSync } from 'node:fs';
 import { GuestMeetService } from '../services/guest-meet';
 import { app, net as electronNet, Notification, clipboard, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, nativeTheme, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
@@ -35,7 +35,27 @@ import { broadcast, guestWindowIds, sendTo } from './events';
 import { installAppearance } from '../windows/appearance';
 import { AppearanceSync } from '../services/appearance-sync';
 import { registerHandlers } from './handlers';
-import { installAccounts } from './accounts-wiring';
+import { cloudOrigin, emitAccounts, installAccounts, policyKeyFor, seedServerConfig, trustedWithEnterprise } from './accounts-wiring';
+import type { AccountRecord, ServiceHealthState } from '@shared/accounts';
+import type { TrustedConfig } from '@shared/trusted-config';
+import type { AuthState } from '@shared/types';
+import { appDbPath, openAppDb } from '../services/accounts/app-db';
+import { BackgroundAccounts, type BackgroundClient } from '../services/accounts/background';
+import { AccountsService, serverInfoOf } from '../services/accounts/handlers';
+import { routeLink, withoutServerParam } from '../services/accounts/links';
+import { migrateAccounts } from '../services/accounts/migrate';
+import { allPartitions, DEFAULT_PROFILE_DIR, partitionsFor, profilePaths } from '../services/accounts/profile';
+import { AccountRegistry } from '../services/accounts/registry';
+import { processPendingRemovals, removeAccount } from '../services/accounts/removal';
+import { ScopeHolder, ShellSessions } from '../services/accounts/scope';
+import { AccountSwitcher, switchModeFrom } from '../services/accounts/switcher';
+import { exportUnsyncedZip, pendingCount, unsyncedSummary } from '../services/accounts/unsynced';
+import type { TokenEndpoint } from '../services/auth-tokens';
+import { netFetchWithRedirects } from '../services/discovery/handlers';
+import { HealthMonitor } from '../services/discovery/health';
+import { installPinning, type PinsFor } from '../services/discovery/pinning';
+import { runDiscovery } from '../services/discovery/pipeline';
+import { readTrustedConfig } from '../services/discovery/trusted-config';
 import { initLog, logger } from './log';
 import { DesktopError, isDesktopError } from './errors';
 import { buildMenu } from './menu';
@@ -43,10 +63,10 @@ import { paths } from './paths';
 import { SessionController, syncRefusal } from './session';
 import { IpcRouter } from '../ipc/router';
 import { registerAppProtocol } from '../protocols/app-protocol';
-import { devOrigin, hardenSession, isTrustedShellUrl, openExternalSafely, registerPrivilegedSchemes, hardenWebContents, setExternalAllowList } from '../security/hardening';
+import { devOrigin, hardenSession, isTrustedShellUrl, openExternalSafely, registerPrivilegedSchemes, hardenWebContents, setExternalAllowList, setMediaGate } from '../security/hardening';
 import { createApiProxy } from '../services/api-proxy';
 import { AuditService } from '../services/audit';
-import { AuthService } from '../services/auth';
+import { AuthService, normalizeServerUrl, probeServer, type PublicUser } from '../services/auth';
 import { DesktopAccountsFile, OfficeSignIn } from '../services/office-signin';
 import { OfficeApp } from '../services/office-app';
 import { BootstrapService } from '../services/bootstrap';
@@ -136,7 +156,7 @@ import { Vault } from '../services/vault';
 import { indicatorHostRunning, NO_TRAY_HINT, TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
 import { linuxInstallKind } from '../updater/linux';
-import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ucInstallType, updateCheckUrl, reportProblemUrl } from '../updater/update-center';
+import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, setDiscoveryKeysSink, ucInstallType, updateCheckUrl, reportProblemUrl } from '../updater/update-center';
 import { announce, noticeText } from '../updater/notice';
 import { runUpdateDiagnostics } from '../updater/diagnostics';
 import type { TrayUpdate } from '../tray/tray';
@@ -249,29 +269,63 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   hardenSession(session.defaultSession);
 
   const enterprise = readEnterpriseConfig();
-  // Repair local mail data asked for a rebuild (worksuite-desktop#338): done before anything opens the database.
-  rebuildIfAsked(p.database, (msg, data) => log.warn(msg, data));
-  const db = new Database(p.database);
-  const secrets = new SecureStore(p.secrets);
+
+  // ── accounts (Connection & Startup §1): app.db, the registry, account #1 from the legacy profile ─────────
+  // Removals a previous run could not finish (Chromium held the partition), before any partition or window opens.
+  const appDb = openAppDb(appDbPath(p.userData));
+  const leftovers = processPendingRemovals(appDb, p.userData);
+  if (leftovers.removed || leftovers.left) log.info('pending removals', leftovers);
+  const registry = new AccountRegistry(appDb);
+  const trustedNow = (): TrustedConfig => trustedWithEnterprise(readTrustedConfig(), enterprise);
+  const defaultProfile = profilePaths(p.userData, DEFAULT_PROFILE_DIR);
+  // One SecureStore, read first for the legacy profile (its refresh token, its db-key), then bound to the open account.
+  const secrets = new SecureStore(defaultProfile.secrets);
   secrets.init();
+  try {
+    const result = migrateAccounts({ userData: p.userData, appDb, registry, readLegacySecret: (name) => secrets.get(name), trusted: trustedNow(), log: (m, d) => log.info(m, d) });
+    if (result.migrated || result.reconciled) log.info('accounts', { migrated: result.migrated, reconciled: result.reconciled, legacy: !!result.legacyId, managed: !!result.managedId });
+  } catch (e) {
+    // Never a reason not to start: the legacy profile stays account #1's place whatever app.db says.
+    log.error('account migration failed; starting with the profile as it is', { error: String((e as Error)?.message ?? e) });
+  }
+  // `--account=<id>` (a relaunch into another account, §1.3 step 9).
+  const askedAccount = process.argv.find((a) => a.startsWith('--account='))?.slice('--account='.length) ?? null;
+  if (askedAccount && registry.get(askedAccount)) registry.setActive(askedAccount);
+  const scopes = new ScopeHolder(p.userData);
+  const firstAccount = registry.active();
+  const firstScope = firstAccount ? scopes.bind(firstAccount) : null;
+  const profile = firstScope?.paths ?? defaultProfile;
+  mkdirSync(profile.dir, { recursive: true, mode: 0o700 });
+  if (profile.secrets !== secrets.path) secrets.rebind(profile.secrets);
+
+  // Repair local mail data asked for a rebuild (worksuite-desktop#338): done before anything opens the database.
+  rebuildIfAsked(profile.database, (msg, data) => log.warn(msg, data));
+  const db = new Database(profile.database);
+  if (firstAccount) seedServerConfig(db, firstAccount);
 
   // The database key lives in the OS credential store; without one it lives
   // in memory, and nothing encrypted outlives the session.
-  let dbKey = secrets.get('db-key');
-  if (!dbKey) {
-    dbKey = Vault.generateKey().toString('base64');
-    secrets.set('db-key', dbKey);
-  }
-  const vault = new Vault(Buffer.from(dbKey, 'base64'));
+  const vaultKey = (): string => {
+    let key = secrets.get('db-key');
+    if (!key) {
+      key = Vault.generateKey().toString('base64');
+      secrets.set('db-key', key);
+    }
+    return key;
+  };
+  let dbKey = vaultKey();
+  let vault = new Vault(Buffer.from(dbKey, 'base64'));
   const getVault = () => vault;
+  /** The open account's profile folders (getters follow a switch, §1.3 "Profile paths"). */
+  const accountPaths = () => scopes.current()?.paths ?? defaultProfile;
 
-  // A dedicated network session for API traffic: its own cookie jar and proxy.
-  const net = session.fromPartition('persist:ws-net');
-  // Bulk traffic (uploads, downloads, mail pictures and bodies fetched ahead) has its own connection pool
-  // (worksuite-desktop#252): Chromium allows 6 connections per host per session, and an upload's parts used to take
-  // all of them, so every chat list, thread and reply waited behind an 8 MB part. Auth is a header, not a cookie, so
-  // the second session needs no shared cookie jar.
-  const bulkNet = session.fromPartition('persist:ws-bulk');
+  // The open account's network partitions (§1.1): API traffic, and bulk traffic (uploads, downloads, mail pictures
+  // and bodies fetched ahead) with its own connection pool (worksuite-desktop#252): Chromium allows 6 connections per
+  // host per session, and an upload's parts used to take all of them. Auth is a header, not a cookie, so the second
+  // session needs no shared cookie jar. Account #1 keeps `persist:ws-net` / `persist:ws-bulk`.
+  const firstPartitions = firstScope?.partitions ?? { shell: '', net: 'persist:ws-net', bulk: 'persist:ws-bulk' };
+  let net = session.fromPartition(firstPartitions.net);
+  let bulkNet = session.fromPartition(firstPartitions.bulk);
   const proxyConfig = enterprise.proxy && enterprise.proxy.mode !== 'system' ? (enterprise.proxy.mode === 'pac' ? { pacScript: enterprise.proxy.url ?? '' } : { proxyRules: enterprise.proxy.rules ?? enterprise.proxy.url ?? '', proxyBypassRules: enterprise.proxy.bypass ?? '' }) : null;
   if (proxyConfig) {
     void net.setProxy(proxyConfig);
@@ -280,17 +334,26 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   }
   // Every main-process request's headers go through the header-safety helper (#238): nothing above 255 reaches undici.
   // And every response's (#253): not `net.fetch`, whose own listener throws on a raw UTF-8 file name and never settles.
-  const netFetch = createNetFetch((o) => electronNet.request(o), net);
+  // The fetches delegate to the open account's partitions: a switch rebinds them (§1.3 "Network").
+  let netFetch = createNetFetch((o) => electronNet.request(o), net);
+  let bulkNetFetch = createNetFetch((o) => electronNet.request(o), bulkNet);
   const fetchImpl: FetchLike = withSafeHeaders((url, init) => netFetch(url, init as RequestInit));
-  const bulkNetFetch = createNetFetch((o) => electronNet.request(o), bulkNet);
   const bulkFetchImpl: FetchLike = withSafeHeaders((url, init) => bulkNetFetch(url, init as RequestInit));
+  const bindNetwork = (partitions: { net: string; bulk: string }): void => {
+    net = session.fromPartition(partitions.net);
+    bulkNet = session.fromPartition(partitions.bulk);
+    netFetch = createNetFetch((o) => electronNet.request(o), net);
+    bulkNetFetch = createNetFetch((o) => electronNet.request(o), bulkNet);
+  };
 
-  const local = new LocalWorkspace(join(p.profile, 'guest-workspace.sqlite'));
+  // Guest mode's workspace is the computer's, never an account's (§1.6): always profiles/default.
+  const local = new LocalWorkspace(join(defaultProfile.dir, 'guest-workspace.sqlite'));
   // Guest mode runs in the main window (#149): which window is in it and past its PIN, and where a move may go.
   const localSession = new LocalSession(local);
   let localAccountKey: () => string | null = () => null;
   let wasSignedIn = false;
-  const settings = new SettingsService(db);
+  // Device preferences are the computer's (§1.1): app.db, where the migration copied them.
+  const settings = new SettingsService(appDb);
   /** Media servers (LiveKit) the WorkSuite server announced; allowed in the page's CSP. */
   let pendingGuest: { input: string; server?: string } | null = null;
   const guests = new GuestMeetService({ fetch: fetchImpl, server: () => auth.getServer()?.origin ?? null });
@@ -305,6 +368,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (dev) h['X-WS-Device'] = dev.id;
     // The remembered computer (worksuite-desktop#301): the server marks it as this one in the account's devices.
     Object.assign(h, auth.deviceHeader());
+    // A Personal account: WorkSuite Cloud runs Core for its organization (Connection & Startup §3).
+    const open = scopes.current()?.account;
+    if (open?.kind === 'personal' && open.organizationId) h['X-WS-Org'] = open.organizationId;
     return h;
   };
 
@@ -314,7 +380,35 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Set once the transfer manager exists (below); the server can drop out before then.
   let transfersOnline: (ok: boolean) => void = () => undefined;
   let reachabilityProbe: NodeJS.Timeout | null = null;
+  // The service banner's monitor (Connection & Startup §2 "Health monitor", WP2) in place of the fixed probe: it tells
+  // offline, unreachable and unavailable apart and backs off up to five minutes. Discovery's own monitor replaces this
+  // one once it has one (`installAccounts`); until then a monitor that does not probe keeps the old 15 s probe as the
+  // way back.
+  let healthFromDiscovery = false;
+  /** Work Offline (the service banner, screen 16): writes queue and nothing is tried on the network until it is off. */
+  let workOffline = false;
+  const healthDeps = {
+    healthUrl: (): string | null => {
+      const server = auth.getServer();
+      if (!server) return null;
+      return server.endpoints?.health ?? `${server.origin}/api/health`;
+    },
+    fetch: (url: string, init: RequestInit) => fetchImpl(url, init),
+    internetOnline: () => electronNet.isOnline(),
+    onChange: (state: ServiceHealthState) => {
+      if (state.state === 'ok') onReachability(true);
+      emitStatus();
+    },
+    componentUrls: () => {
+      const e = auth.getServer()?.endpoints;
+      const origin = auth.getServer()?.origin ?? null;
+      return { auth: origin ? `${origin}/api/auth/config` : null, realtime: e?.realtime ?? null, files: e?.files ?? null, office: e?.office ?? null };
+    },
+  };
+  let health: HealthMonitor = new HealthMonitor(healthDeps);
   const onReachability = (ok: boolean): void => {
+    // Working offline by choice: the server answering a probe does not end it.
+    if (ok && workOffline) return;
     if (ok === apiReachable) return;
     apiReachable = ok;
     log.info(ok ? 'server reachable again' : 'server unreachable');
@@ -325,7 +419,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (reachabilityProbe) clearInterval(reachabilityProbe);
       reachabilityProbe = null;
       onReconnect();
-    } else if (!reachabilityProbe) {
+      return;
+    }
+    void health.retryNow().catch(() => undefined);
+    if (!healthFromDiscovery && !reachabilityProbe) {
       reachabilityProbe = setInterval(() => {
         const origin = auth.getServer()?.origin;
         if (!origin) return;
@@ -348,6 +445,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     tokens: { accessToken: () => auth.accessToken(), refresh: () => auth.refresh() },
     clientHeaders,
     onReachability,
+    // The leak guard (§1.3): a request for the account that was open before a switch never lands in the next one.
+    scope: () => scopes.requestScope(),
+    workOffline: () => workOffline,
     onAuthLost: (reason) => sessionCtl?.expired(reason === 'Session ended' ? 'Your session has ended. Sign in again to continue.' : reason),
     onDeviceDirective: (code, message) => {
       if (code === 'DEVICE_REVOKED') void sessionCtl?.wipe(message);
@@ -362,7 +462,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const device: DeviceService = new DeviceService(db, secrets, http);
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
   const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null, desk: () => salonDesk.pairing()?.desk_id ?? null });
-  const bootstrap = new BootstrapService(db, getVault, http, POLICY_PUBLIC_KEY);
+  // The policy is verified with the account's own key when IT configured one (its trusted `discovery_key`).
+  const bootstrap = new BootstrapService(db, getVault, http, () => policyKeyFor(scopes.current()?.account ?? null, POLICY_PUBLIC_KEY));
   const cache = new OfflineCache(db, getVault);
   const mailLimits = () => {
     const caps = sessionCtl.capabilities();
@@ -392,7 +493,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const supervisor = new ServiceSupervisor();
   const lock = new LockService();
   const lockPin = new LockPin(db, getVault);
-  const windows = new WindowManager(db, join(__dirname, '../preload/index.js'));
+  // Where windows were is the computer's (app.db); each account's windows open in its own partition.
+  const windows = new WindowManager(appDb, join(__dirname, '../preload/index.js'));
+  windows.partition = firstPartitions.shell;
   windows.minimizeToTray = () => settings.effective().minimizeToTray;
   // Colour profiles (worksuite-desktop#234): on every page before its first paint, to every page on a change, and
   // between the person's devices.
@@ -421,7 +524,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (source) shareBar.start(webContentsId, source);
     else shareBar.stop(webContentsId);
   };
-  screenShare.install(session.defaultSession);
+  // Screen sharing's display-media handler goes on every account partition (installShellSession, below).
   // Meet remote control on this computer (WS-MEET-ENH-01): the share, consent, grant and input live here.
   // A meeting, call, share or remote control started or ended: update notices wait for it (#205; set below).
   let onUpdateActivity: () => void = () => undefined;
@@ -684,7 +787,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     vault: getVault,
     http,
     transfers,
-    root: join(p.profile, 'elearning'),
+    root: () => accountPaths().elearning,
     userId: () => (sessionCtl.isReady() ? sessionCtl.userId() : null),
     allowed: () =>
       sessionCtl.capabilities().offlineCache
@@ -740,7 +843,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       emitStatus();
     },
     // The products' small pictures, kept for the till's grid offline (worksuite-desktop#296).
-    thumbsDir: join(paths().profile, 'pos-thumbs'),
+    thumbsDir: () => accountPaths().posThumbs,
   });
 
   // The Phone (WS-VOIP-SRS-001): its switch's WebSocket in the page policy, the compact phone's global shortcuts and
@@ -942,7 +1045,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const updateHistory = new UpdateHistory(p.updates);
   const updateHealth = new UpdateHealth(p.updates);
   const updateNotifier: UpdateNotifier = new UpdateNotifier({
-    store: { get: (k) => db.getConfig(k), set: (k, v) => db.setConfig(k, v) },
+    store: { get: (k) => appDb.getConfig(k), set: (k, v) => appDb.setConfig(k, v) },
     now: () => new Date(),
     activity: updateActivity,
     setTimeout: (fn, ms) => {
@@ -966,7 +1069,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       held: () => updateNotifier.quietReason() !== null,
       silent: () => !app.isPackaged || (p.dndEnabled && inDnd(p.dndFrom, p.dndTo, new Date())) || notifications.pausedUntilIso() !== null,
       systemEnabled: () => p.notificationsEnabled && p.updateNotifications !== false && Notification.isSupported(),
-      told: { get: () => db.getConfig<string[]>('update_notices') ?? [], set: (keys) => db.setConfig('update_notices', keys) },
+      told: { get: () => appDb.getConfig<string[]>('update_notices') ?? [], set: (keys) => appDb.setConfig('update_notices', keys) },
       show: (n) => {
         // What's new under the body; View What's New is the click, and Update Now a button where the system has them (macOS).
         const note = new Notification({
@@ -1281,6 +1384,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       else windows.showMain();
       return;
     }
+    // A browser sign-in (OIDC, Core's AppHandoff) coming back: its attempt takes it first (Connection & Startup §3).
+    if (/^worksuite:\/\/auth\/(oidc|callback)\?/i.test(url) && accountsWiring?.handleAuthCallback(url)) {
+      windows.showMain();
+      return;
+    }
+    // A setup link from IT (§4 step 5): Add Account › Enterprise with it filled in; it still takes a click on Continue.
+    if (/^worksuite:\/\/setup\?/i.test(url)) {
+      windows.showMain();
+      broadcast('toast', { kind: 'info', text: 'Your organization sent a setup link. Choose Add Account › Enterprise to continue.' });
+      return;
+    }
     // A passkey sign-in coming back from the browser. Handled before the link
     // grammar, and never logged: it carries a one-time code.
     if (/^worksuite:\/\/auth\/callback\?/i.test(url)) {
@@ -1321,6 +1435,29 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       });
       return;
     }
+    // Which account the link is for (§4 step 5): another account's opens there once the person agrees; a server not
+    // added on this computer is screen 16, and nothing is fetched from it.
+    const routed = routeLink(url, registry.list(), registry.activeId());
+    if (routed?.kind === 'unknown') {
+      log.info('link for a server not added', { host: routed.host });
+      windows.showMain();
+      emitAccounts('accounts:unknownLink', { url: redactUrl(url), host: routed.host, label: routed.label });
+      return;
+    }
+    if (routed?.kind === 'account') {
+      const target = registry.get(routed.accountId);
+      if (!target) return;
+      const parent = windows.showMain();
+      void dialog
+        .showMessageBox(parent, { type: 'question', buttons: [`Open in ${target.organizationName ?? target.serverName}`, 'Cancel'], defaultId: 0, cancelId: 1, message: `Open in ${target.organizationName ?? target.serverName}?`, detail: 'This link belongs to another account on this computer.' })
+        .then(({ response }) => {
+          if (response !== 0) return;
+          return accountsService.switchTo(target.id).then(() => handleDeepLink(withoutServerParam(url)));
+        })
+        .catch((e: unknown) => broadcast('toast', { kind: 'error', text: e instanceof Error ? e.message : 'That account could not be opened.' }));
+      return;
+    }
+    if (routed?.kind === 'active' && url !== withoutServerParam(url)) url = withoutServerParam(url);
     // An item link (#170): worksuite://{org}/{type}/{id} or https://app.worksuite.lk/o/{org}/{type}/{id}.
     if (looksLikeItemLink(url)) {
       const serverHost = (() => {
@@ -1331,7 +1468,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
           return null;
         }
       })();
-      const item = parseItemLink(url, { hosts: [serverHost] });
+      const item = parseItemLink(url, { hosts: [serverHost, ...(registry.active()?.linkHosts ?? [])] });
       if (!item.ok) {
         log.warn('item link rejected', { reason: item.reason, url: redactUrl(url) });
         windows.showMain();
@@ -1504,6 +1641,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       network: networkStatus(apiReachable, realtime.getState(), realtimeDownSince),
       realtime: realtime.getState(),
       connection: connection.stats(),
+      // The service banner (screen 16) and the switcher's dot for the accounts not open now.
+      service: health.state(),
+      otherAccountsUnread: background.totalUnread(),
       pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() + projects.pending() : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
@@ -2574,7 +2714,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   sessionCtl = new SessionController(db, auth, device, bootstrap, fetchImpl, enterprise, {
     started: (b) => startServices(b),
     stopped: () => stopServices(),
-    wiped: (uid, scope, includeDrafts) => {
+    wiped: (uid, scope, includeDrafts, keepUnsynced) => {
       // WF-24 / FR-SEC-08: WorkSuite's own data only. Nothing outside the
       // profile is touched; downloaded files the user saved are theirs.
       cache.clearUser(uid);
@@ -2587,12 +2727,17 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       restaurant.signedOut(uid);
       db.run('DELETE FROM tab_sessions WHERE user_id = ?', uid);
       if (scope !== 'tokens') {
-        queue.wipeUser(uid, includeDrafts);
-        // Projects' outbox and snoozed banners, as the offline queue's (PRJ-DSK-04: cleared on sign-out).
-        projects.wipeUser(uid);
-        transfers.wipe(uid);
-        // Copies opened in other apps are no longer watched; the files stay the person's.
-        officeLocal.forgetUser(uid);
+        // A plain sign-out keeps what has not reached the server (Connection & Startup §5, "N pending changes
+        // kept"): the queue, the Projects outbox, queued uploads and Office copies with edits wait for the next
+        // sign-in. They go only when the person discards them, with a wipe, or by the `sign_out_wipe` policy.
+        if (!keepUnsynced) {
+          queue.wipeUser(uid, includeDrafts);
+          // Projects' outbox and snoozed banners, as the offline queue's (PRJ-DSK-04: cleared on sign-out).
+          projects.wipeUser(uid);
+          transfers.wipe(uid);
+          // Copies opened in other apps are no longer watched; the files stay the person's.
+          officeLocal.forgetUser(uid);
+        }
         officeFiles.forget();
         // The app-lock PIN goes with the rest of what this computer kept for the person.
         lockPin.clear(uid);
@@ -2630,7 +2775,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       else if (s.stage !== 'ready' && wasSignedIn) localSession.signedOut();
       wasSignedIn = s.stage === 'ready';
       lockPin.setServerScope(s.server?.origin ?? null);
-      settings.setUserLanguageScope(s.server?.origin ?? null, s.user?.id ?? null);
+      // Per person and account (`<account>:<uid>`, §1.5 step 4); the server's origin before any account exists.
+      settings.setUserLanguageScope(registry.activeId() ?? s.server?.origin ?? null, s.user?.id ?? null);
+      accountFollowsSession(s);
       broadcast('auth:changed', s);
       emitStatus();
       if (s.stage === 'ready') {
@@ -2752,10 +2899,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // PDF Studio (services/pdf): engine workers, working copies, its IPC. Read-only viewing in this version.
   const pdfStudio = createPdfStudio({
-    profile: p.profile,
+    profile: () => accountPaths().dir,
     userData: p.userData,
     http,
-    cacheKey: secrets.getStatus().persistent ? Buffer.from(hkdfSync('sha256', Buffer.from(dbKey, 'base64'), 'worksuite-pdf', 'thumbnail-cache', 32)) : null,
+    cacheKey: () => (secrets.getStatus().persistent ? Buffer.from(hkdfSync('sha256', Buffer.from(dbKey, 'base64'), 'worksuite-pdf', 'thumbnail-cache', 32)) : null),
     // The organisation's PDF policies (§21.2) come with the server's PDF Studio service (stage D2).
     policy: () => DEFAULT_PDF_POLICY,
     desktop: () => ({
@@ -2854,8 +3001,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   // ── protocol + IPC ─────────────────────────────────────────────────────
-  registerAppProtocol(
-    createApiProxy({
+  // app:// for every account's windows (installShellSession): the API proxy, the page policy, what is kept locally.
+  const apiProxy = createApiProxy({
       http,
       cache,
       userId: () => sessionCtl.userId(),
@@ -2879,12 +3026,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         // A restaurant terminal's calls carry its key too (restaurant/terminal.ts).
         return key ? { 'X-Salon-Desk-Key': key } : restaurant.headers(path);
       },
-    }),
-    // Read on each page load: the server chosen, and the media servers it announced.
-    () => ({ server: auth.getServer()?.origin ?? null, media: [...mediaServers(), ...guests.media, ...phone.origins()] }),
-    // A course's lessons kept offline, played by the app's own pages.
-    (request, path) =>
-      path.startsWith('/chat-media/')
+    });
+  // Read on each page load: the server chosen, and the media servers it announced.
+  const cspSources = () => ({ server: auth.getServer()?.origin ?? null, media: [...mediaServers(), ...guests.media, ...phone.origins()] });
+  // A course's lessons kept offline, played by the app's own pages.
+  const localHandler = (request: Request, path: string): Promise<Response> =>
+    path.startsWith('/chat-media/')
         ? (sessionCtl.isReady() ? transfers.serveMediaPreview(request, path) : Promise.resolve(new Response('Not found', { status: 404 })))
         : path.startsWith('/elearning/')
         ? elearning.serve(request, path)
@@ -2894,8 +3041,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         : // The speech model, for the speech page only (worksuite-desktop#81).
           path === '/speech/model.bin'
           ? speech.serveModel()
-          : Promise.resolve(new Response('Not found', { status: 404 })),
-  );
+          : Promise.resolve(new Response('Not found', { status: 404 }));
 
   const pasteGestures = new Map<number, number>();
   app.on('web-contents-created', (_e, contents: WebContents) => {
@@ -2937,7 +3083,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   const relaunch = (safe: boolean, extraArgs: string[] = []): void => {
-    const args = process.argv.slice(1).filter((a) => a !== '--safe-mode' && a !== '--updated' && a !== '--hidden' && a !== AX_RESTARTED_ARG);
+    const args = process.argv.slice(1).filter((a) => a !== '--safe-mode' && a !== '--updated' && a !== '--hidden' && a !== AX_RESTARTED_ARG && !a.startsWith('--account='));
     if (safe) args.push('--safe-mode');
     else clearCrashes(p.crashState);
     args.push(...extraArgs);
@@ -3019,7 +3165,29 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   registerHandlers(router, ctx);
   router.handle('connection:details', () => connection.details());
   router.handle('connection:speedTest', () => connection.speedTest());
-  router.handle('connection:reconnect', () => connection.reconnect());
+  router.handle('connection:reconnect', () => {
+    // Retry on the banner: the monitor probes now (backoff reset), and the realtime connection is tried again.
+    void health.retryNow().catch(() => undefined);
+    return connection.reconnect();
+  });
+  router.handle('connection:workOffline', (input) => {
+    workOffline = input.on;
+    health.setWorkOffline(input.on);
+    if (input.on) onReachability(false);
+    else void health.retryNow().then((st) => st.state === 'ok' && onReachability(true)).catch(() => undefined);
+    emitStatus();
+    return health.state();
+  });
+  // The QR scan dialog (screen 6): the main window may use the camera while it is open, before anyone signs in.
+  let scanCamera = false;
+  router.handle('connect:scanCamera', (input) => {
+    scanCamera = input.open;
+  });
+  setMediaGate((wc, types) => {
+    const main = windows.getMain();
+    if (!wc || !main || wc.id !== main.webContents.id || sessionCtl.isReady()) return true;
+    return scanCamera && types.length > 0 && types.every((t) => t === 'video');
+  });
   pdfStudio.register(router);
   mailFiles.register(router);
   pos.register(router);
@@ -3029,8 +3197,6 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   restaurant.register(router);
   projects.register(router);
   localAI.register(router);
-  // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (Connection & Startup).
-  installAccounts({ router, ctx });
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
   router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));
   router.handle('ai:ocrStatus', () => ocr.status());
@@ -3159,7 +3325,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   router.handle('guest:info', (_input, c) => guests.info(c.sender.id));
   router.handle('guest:join', (input, c) => guests.join(c.sender.id, input.name, input.pass));
   router.handle('guest:signIn', (_input, c) => { windows.showMain(); BrowserWindow.fromWebContents(c.sender)?.close(); });
-  session.defaultSession.webRequest.onBeforeRequest({ urls: ['app://bundle/__api/*', 'app://bundle/__local/*'] }, (details, callback) => {
+  // The app's own API and local files, per window: refused while locked (but what the lock allows), and never for a
+  // guest meeting window or a window in guest mode (#149).
+  const apiHook = (details: Electron.OnBeforeRequestListenerDetails, callback: (response: Electron.CallbackResponse) => void): void => {
     const id = details.webContentsId;
     const sender = id === undefined ? null : webContents.fromId(id);
     let body: unknown;
@@ -3167,7 +3335,385 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     const allowed = !lock.isLocked() || lockedApi(sender ? scopeFor(sender) : null, details.url, details.method, settings.effective(), body);
     // Guest meeting windows and a window in guest mode (#149) never reach the account's API or its local cache.
     callback({ cancel: !allowed || id !== undefined && (guestWindowIds.has(id) || localSession.isGuest(id)) });
+  };
+
+  // ── accounts side by side (Connection & Startup §1, WP1) ───────────────
+  /*
+   * installShellSession: everything every partition gets, once — hardening and the permission handler, app://, the
+   * __api hook, screen sharing, the proxy, and certificate pinning (WP2). `shellSessions.ensure` is the only way a
+   * partition is used (risk 2): the open account's three, the default session (guest mode), connect runs, background
+   * pollers.
+   */
+  let pinsFor: PinsFor = () => null;
+  const installShellSession = (ses: Electron.Session): void => {
+    hardenSession(ses);
+    registerAppProtocol(apiProxy, cspSources, localHandler, ses);
+    ses.webRequest.onBeforeRequest({ urls: ['app://bundle/__api/*', 'app://bundle/__local/*'] }, apiHook);
+    screenShare.install(ses);
+    if (proxyConfig) void ses.setProxy(proxyConfig);
+    installPinning(ses, (host) => pinsFor(host));
+  };
+  const shellSessions = new ShellSessions<Electron.Session>((partition) => (partition === '' ? session.defaultSession : session.fromPartition(partition)), (ses) => installShellSession(ses));
+  shellSessions.ensure('');
+  shellSessions.ensureAll(firstPartitions);
+  const CONNECT_PARTITION = 'persist:ws-connect';
+  // Livezen discovery keys rotated in through a verified Update Center answer (WP2), kept in app.db.
+  const rotatedKeys = (): Readonly<Record<string, string>> => appDb.getConfig<Record<string, string>>('discovery_keys') ?? {};
+  setDiscoveryKeysSink((keys) => appDb.setConfig('discovery_keys', { ...rotatedKeys(), ...keys }));
+
+  const tokenEndpointFor = (_account: AccountRecord | null): TokenEndpoint | null => null;
+  auth.rebind(tokenEndpointFor(firstAccount));
+  sessionCtl.managedServerApplies = () => {
+    const a = registry.active();
+    return !a || a.managed;
+  };
+
+  /** The open account's database, secrets, vault, token holder, settings scope and partitions (§1.3 step 6). */
+  const bindAccount = (account: AccountRecord): void => {
+    const scope = scopes.bind(account);
+    mkdirSync(scope.paths.dir, { recursive: true, mode: 0o700 });
+    if (db.path !== scope.paths.database) rebuildIfAsked(scope.paths.database, (msg, data) => log.warn(msg, data));
+    db.swap(scope.paths.database);
+    seedServerConfig(db, account);
+    secrets.rebind(scope.paths.secrets);
+    dbKey = vaultKey();
+    vault = new Vault(Buffer.from(dbKey, 'base64'));
+    auth.rebind(tokenEndpointFor(account));
+    device.rebind();
+    settings.setUserLanguageScope(null, null);
+    shellSessions.ensureAll(scope.partitions);
+    bindNetwork(scope.partitions);
+    windows.partition = scope.partitions.shell;
+    updater.setMinimum(null);
+    apiReachable = true;
+    emitStatus();
+  };
+
+  const background = new BackgroundAccounts({
+    account: (id) => registry.get(id),
+    client: (account) => backgroundClient(account),
+    lastRefresh: (id) => appDb.getConfig<number>(`bg_refresh:${id}`) ?? null,
+    setLastRefresh: (id, at) => appDb.setConfig(`bg_refresh:${id}`, at),
+    onUnread: () => {
+      accountsService.emit();
+      emitStatus();
+    },
+    onSignedOut: (id) => {
+      registry.update(id, { signInState: 'expired' });
+      accountsService.emit();
+    },
   });
+  /** A background account's own token holder and client (§1.4): its secrets, its server, its partition. */
+  function backgroundClient(account: AccountRecord): BackgroundClient {
+    const paths = profilePaths(p.userData, account.profileDir);
+    const store = new SecureStore(paths.secrets);
+    store.init();
+    const ses = shellSessions.ensure(partitionsFor(account).net);
+    const nf = createNetFetch((o) => electronNet.request(o), ses);
+    const f: FetchLike = withSafeHeaders((url, init) => nf(url, init as RequestInit));
+    const server = serverInfoOf(account);
+    const config = { getConfig: <T>(key: string) => (key === 'server' ? (server as T) : undefined), setConfig: () => undefined, deleteConfig: () => undefined } as unknown as Database;
+    const holder = new AuthService(config, store, f, () => ({ [CLIENT_TYPE_HEADER]: CLIENT_TYPE }));
+    holder.rebind(tokenEndpointFor(account));
+    const client = new HttpClient({
+      fetch: f,
+      origin: () => server.origin,
+      tokens: { accessToken: () => holder.accessToken(), refresh: () => holder.refresh() },
+      clientHeaders: () => ({ ...(account.kind === 'personal' && account.organizationId ? { 'X-WS-Org': account.organizationId } : {}) }),
+      onReachability: () => undefined,
+      onAuthLost: () => undefined,
+    });
+    return { refresh: () => holder.refresh(), get: (path) => client.get(path), dispose: () => holder.rebind(null) };
+  }
+
+  /** The session's sign-in state, on the open account's record (the switcher's "Signed out", the chooser). */
+  function accountFollowsSession(s: AuthState): void {
+    const id = registry.activeId();
+    const a = id ? registry.get(id) : null;
+    if (!a) return;
+    const signInState = s.stage === 'ready' ? 'signed-in' : s.stage === 'expired' ? 'expired' : s.stage === 'revoked' ? 'revoked' : s.stage === 'no-server' ? a.signInState : 'signed-out';
+    const user = s.user ? { id: String(s.user.id), name: s.user.name, email: s.user.email, avatar: s.user.avatar ?? null } : a.user;
+    const organizationId = a.kind === 'personal' ? a.organizationId : (s.user?.organizationId ?? a.organizationId);
+    const organizationName = s.user?.organizationName ?? a.organizationName;
+    if (signInState === a.signInState && JSON.stringify(user) === JSON.stringify(a.user) && organizationId === a.organizationId && organizationName === a.organizationName) return;
+    const next = registry.update(a.id, { signInState, user, organizationId, organizationName });
+    if (next) scopes.refresh(next);
+    accountsService?.emit();
+  }
+
+  /** The update / draft-saving handshake, capped (§1.3 step 3). */
+  const prepareCapped = async (capMs: number): Promise<void> => {
+    const token = Math.random().toString(36).slice(2, 12);
+    const answered = new Promise<void>((resolve) => prepareWaits.set(token, resolve));
+    broadcast('update:prepare', { token });
+    await Promise.race([answered, new Promise((r) => setTimeout(r, capMs))]);
+    prepareWaits.delete(token);
+  };
+
+  const switcher = new AccountSwitcher<ReturnType<WindowManager['prepareMain']>>({
+    account: (id) => registry.get(id),
+    activeId: () => registry.activeId(),
+    setActive: (id) => registry.setActive(id),
+    guard: () => {
+      if (lock.isLocked()) return { code: 'APP_LOCKED', reason: 'Unlock WorkSuite first.' };
+      const a = updateActivity();
+      const until = a.meeting ? 'the meeting ends' : a.call ? 'the call ends' : a.screenShare ? 'screen sharing stops' : a.remoteControl ? 'remote control stops' : null;
+      return until ? { code: 'SWITCH_BLOCKED', reason: `Another account can open once ${until}.` } : null;
+    },
+    switching: () => accountsService.emit(),
+    prepare: (cap) => prepareCapped(cap),
+    createWindow: (account) => {
+      const shell = partitionsFor(account).shell;
+      if (shell === windows.partition && windows.getMain()) return null;
+      shellSessions.ensure(shell);
+      return windows.prepareMain(shell);
+    },
+    suspend: () => {
+      const was = registry.active();
+      if (was) {
+        try {
+          accountsService.rememberPending(was.id, pendingCount(activeUnsynced(was)));
+        } catch {
+          /* the count is a convenience */
+        }
+      }
+      sessionCtl.suspend();
+      scopes.release();
+      transfers.stopAll();
+      windows.closeAllButMain();
+    },
+    background,
+    bind: (account) => bindAccount(account),
+    init: () => sessionCtl.init({ cachedFirst: true }),
+    show: (handle) => handle.commit(),
+    discard: (handle) => handle.discard(),
+    relaunch: (id) => relaunch(false, [`--account=${id}`]),
+    mode: () => switchModeFrom(process.env),
+    timing: (ms, how, failed) => log.info('accounts.switch', { ms, how, failed }),
+  });
+
+  /** An account not open now signs out: its refresh token revoked at its server and removed from its secrets. */
+  async function signOutOther(account: AccountRecord): Promise<void> {
+    const store = new SecureStore(profilePaths(p.userData, account.profileDir).secrets);
+    store.init();
+    const token = store.get('auth:refresh');
+    if (!token) return;
+    const endpoint = tokenEndpointFor(account);
+    if (endpoint) await endpoint.revoke(token).catch(() => undefined);
+    else {
+      await fetchFor(account.id)(`${account.apiOrigin}/api/auth/logout`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Accept: 'application/json', [CLIENT_TYPE_HEADER]: CLIENT_TYPE },
+        body: JSON.stringify({ refresh_token: token }),
+        signal: AbortSignal.timeout(10_000),
+      }).catch(() => undefined);
+    }
+    store.delete('auth:refresh');
+  }
+
+  /** The open account's unsynced summary, live from the bound database. */
+  const activeUnsynced = (account: AccountRecord) => unsyncedSummary({ db, vault, accountId: account.id, userId: sessionCtl.userId() ?? account.user?.id ?? null });
+  /** Another account's, from its own database (opened for the read, closed after). */
+  const otherUnsynced = (account: AccountRecord) => {
+    const paths = profilePaths(p.userData, account.profileDir);
+    if (!existsSync(paths.database)) return { accountId: account.id, items: [], offlineFiles: { count: 0, bytes: 0 }, cachedBytes: 0 };
+    const other = new Database(paths.database);
+    try {
+      const store = new SecureStore(paths.secrets);
+      store.init();
+      const key = store.get('db-key');
+      return unsyncedSummary({ db: other, vault: key ? new Vault(Buffer.from(key, 'base64')) : null, accountId: account.id, userId: account.user?.id ?? null });
+    } finally {
+      other.close();
+    }
+  };
+
+  const accountsService: AccountsService = new AccountsService({
+    registry,
+    switcher: switcher as unknown as AccountSwitcher<unknown>,
+    background,
+    trusted: trustedNow,
+    session: {
+      get: () => sessionCtl.get(),
+      signOut: (wipe, message, opts) => sessionCtl.signOut(wipe, message, opts),
+      setServer: (input) => sessionCtl.setServer(input),
+      forgetServer: () => sessionCtl.forgetServer(),
+    },
+    unsynced: (account) => (account.id === registry.activeId() ? activeUnsynced(account) : otherUnsynced(account)),
+    syncNow: async () => {
+      const uid = sessionCtl.userId();
+      if (!uid) return;
+      await queue.replay(uid);
+      void projects.reconnected();
+      sync.kick('sync-now');
+      transfers.setOnline(true);
+    },
+    exportUnsynced: async (account) => {
+      const parent = windows.getMain();
+      const opts = { title: 'Export changes not yet synced', defaultPath: `worksuite-unsynced-${account.serverName.replace(/[^A-Za-z0-9.-]+/g, '-')}.zip`, filters: [{ name: 'Zip archive', extensions: ['zip'] }] };
+      const chosen = parent ? await dialog.showSaveDialog(parent, opts) : await dialog.showSaveDialog(opts);
+      if (chosen.canceled || !chosen.filePath) return { path: null };
+      const active = account.id === registry.activeId();
+      const summary = active ? activeUnsynced(account) : otherUnsynced(account);
+      const zip = active ? exportUnsyncedZip({ db, vault, accountId: account.id, userId: sessionCtl.userId() ?? account.user?.id ?? null }, summary) : exportUnsyncedZip({ db: new Database(':memory:'), vault: null, accountId: account.id, userId: null }, summary);
+      await fsp.writeFile(chosen.filePath, zip, { mode: 0o600 });
+      return { path: chosen.filePath };
+    },
+    signOutOther: (account) => signOutOther(account),
+    remove: async (account, keepOfflineFiles) => {
+      const wasActive = account.id === registry.activeId();
+      if (wasActive) {
+        // Another account opens first; with none left, the session ends and nothing is open.
+        const next = registry.list().find((a) => a.id !== account.id && !accountsService.blockedReason(a));
+        if (next) await switcher.switchTo(next.id);
+      }
+      const stillBound = scopes.current()?.id === account.id;
+      await removeAccount(
+        {
+          userData: p.userData,
+          appDb,
+          registry,
+          revoke: async (a) => {
+            if (stillBound) await auth.signOut().catch(() => undefined);
+            else await signOutOther(a);
+          },
+          clearStorage: async (partition) => {
+            const ses = partition === '' ? session.defaultSession : session.fromPartition(partition);
+            // The default session is guest mode's too: its localStorage stays (the guest workspace is the computer's).
+            await ses.clearStorageData(partition === '' ? { storages: ['cookies', 'indexdb', 'cachestorage', 'serviceworkers', 'shadercache', 'filesystem'] } : {});
+            await ses.clearCache().catch(() => undefined);
+          },
+          release: () => {
+            if (!stillBound) return;
+            sessionCtl.suspend();
+            scopes.release();
+            db.swap(':memory:');
+            secrets.rebind(join(defaultProfile.dir, 'secrets.json'));
+          },
+          trash: (path) => shell.trashItem(path),
+        },
+        account.id,
+        { keepOfflineFiles },
+      );
+      for (const partition of allPartitions(account)) shellSessions.forget(partition);
+      if (stillBound) {
+        // Nothing open: the computer's default profile, as on a fresh install.
+        mkdirSync(defaultProfile.dir, { recursive: true, mode: 0o700 });
+        db.swap(defaultProfile.database);
+        secrets.rebind(defaultProfile.secrets);
+        dbKey = vaultKey();
+        vault = new Vault(Buffer.from(dbKey, 'base64'));
+        auth.rebind(null);
+        device.rebind();
+        windows.partition = '';
+        await sessionCtl.init();
+      }
+    },
+    reachable: () => apiReachable,
+    health: (accountId) => health.components(accountId),
+    seedServer: (account, server) => {
+      if (scopes.current()?.paths.database === profilePaths(p.userData, account.profileDir).database || (!scopes.current() && account.profileDir === DEFAULT_PROFILE_DIR && db.path === defaultProfile.database)) {
+        db.setConfig('server', server);
+        return;
+      }
+      const paths = profilePaths(p.userData, account.profileDir);
+      mkdirSync(paths.dir, { recursive: true, mode: 0o700 });
+      const other = new Database(paths.database);
+      try {
+        other.setConfig('server', server);
+      } finally {
+        other.close();
+      }
+    },
+    discover: async (input, target) => {
+      try {
+        const run = await runDiscovery(
+          { runId: randomUUID().replace(/-/g, ''), input, target },
+          {
+            fetch: netFetchWithRedirects(shellSessions.ensure(CONNECT_PARTITION)),
+            trusted: trustedNow,
+            rotatedKeys,
+            existingAccount: (server) => accountsService.existing(server),
+            appVersion: app.getVersion(),
+            platform: platformName() as 'windows' | 'macos' | 'linux',
+            isPackaged: app.isPackaged,
+            cloudOrigin: cloudOrigin(app.isPackaged),
+          },
+          () => undefined,
+          AbortSignal.timeout(60_000),
+        );
+        return run.state === 'ok' ? run.server : null;
+      } catch {
+        // Discovery not in this build (or the server is legacy): the probe's answer stands.
+        return null;
+      }
+    },
+    probe: async (input) => {
+      const origin = normalizeServerUrl(input, allowInsecure);
+      return { ...(await probeServer(origin, fetchImpl)), locked: false };
+    },
+    emit: (state) => emitAccounts('accounts:changed', state),
+    showMain: () => void windows.showMain(),
+  });
+  sessionCtl.accountView = () => {
+    const a = registry.active();
+    return a ? accountsService.view(a, a.id) : null;
+  };
+  /** Plain network (no credentials) in an account's network partition (OneAuth, a logout for an account not open). */
+  function fetchFor(accountId: string): (url: string, init: RequestInit) => Promise<Response> {
+    const a = registry.get(accountId);
+    const ses = shellSessions.ensure(a ? partitionsFor(a).net : CONNECT_PARTITION);
+    const nf = createNetFetch((o) => electronNet.request(o), ses);
+    return withSafeHeaders((url, init) => nf(url, init as RequestInit)) as (url: string, init: RequestInit) => Promise<Response>;
+  }
+
+  // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (Connection & Startup).
+  const accountsWiring = installAccounts({
+    router,
+    ctx,
+    accounts: {
+      service: accountsService,
+      registry,
+      trusted: trustedNow,
+      sessionFor: (partition) => shellSessions.ensure(partition),
+      connectPartition: CONNECT_PARTITION,
+      partitionFor: (target) => accountsService.partitionFor(target),
+      rotatedKeys,
+      accountPins: (host) => {
+        const out: string[] = [];
+        for (const a of registry.list()) if (a.trust?.source === 'setup-link' && a.linkHosts.includes(host.toLowerCase())) out.push(...a.trust.spkiPins);
+        return out;
+      },
+      health: healthDeps,
+      fetchFor,
+      acceptTokens: async (accountId, tokens) => {
+        if (registry.activeId() !== accountId) await accountsService.switchTo(accountId);
+        auth.acceptTokens(tokens);
+        const me = await http.get<{ user?: PublicUser } & Partial<PublicUser>>('/api/auth/me');
+        const user = (me && typeof me === 'object' && 'user' in me && me.user ? me.user : me) as PublicUser;
+        await sessionCtl.acceptSession({ user, tokens: { access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_in: tokens.expires_in } });
+        const a = registry.get(accountId);
+        if (!a) throw new DesktopError('NOT_FOUND', 'That account is no longer on this computer.');
+        return accountsService.view(a, registry.activeId());
+      },
+    },
+  });
+  pinsFor = accountsWiring.discovery.pinsFor;
+  if (accountsWiring.discovery.health) {
+    health.stop();
+    health = accountsWiring.discovery.health;
+    healthFromDiscovery = true;
+  }
+  sessionCtl.cloudStatus = () => accountsWiring.cloud.status();
+  health.start();
+  app.on('before-quit', () => {
+    background.stopAll();
+    health.stop();
+    accountsWiring.dispose();
+  });
+  // The other signed-in accounts poll in the background (§1.4).
+  for (const a of registry.list()) if (a.id !== registry.activeId()) background.adopt(a.id);
+
   router.install();
   const missing = router.missingHandlers();
   if (missing.length) log.warn('IPC channels without handlers', { missing });

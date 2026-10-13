@@ -5,7 +5,7 @@ import type { MailMedia } from '../services/mail-media';
 import type { QuickAsk } from '../services/quick-ask';
 import type { AiService } from '../services/ai';
 import type { WebchatRinger } from '../services/webchat-ring';
-import type { NavigateRequest } from '@shared/types';
+import type { AuthState, NavigateRequest } from '@shared/types';
 import type { AuditService } from '../services/audit';
 import type { AuthService } from '../services/auth';
 import type { CallService } from '../services/calls';
@@ -60,6 +60,11 @@ import type { Vault } from '../services/vault';
 /** Every main-process service, for the IPC handlers. */
 export interface AppContext {
   boot: BootState;
+  /**
+   * Accounts side by side (Connection & Startup, WP1): the legacy server step (`auth:setServer`) goes through them —
+   * connect and confirm. Set by `installAccounts`; absent, the session's own server step runs as before.
+   */
+  accounts?: { setServer: (url: string) => Promise<AuthState>; forgetServer: () => AuthState };
   db: Database;
   vault: () => Vault;
   secrets: SecureStore;

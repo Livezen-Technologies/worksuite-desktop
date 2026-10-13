@@ -460,6 +460,9 @@ export const INVOKE_CHANNELS = [
   'connection:details',
   'connection:speedTest',
   'connection:reconnect',
+  // Connection & Startup: the service banner's Work Offline (screen 16), and the QR scan's camera (screen 6).
+  'connection:workOffline',
+  'connect:scanCamera',
   // POS: the till on this computer (pos-channels.ts).
   ...POS_INVOKE_CHANNELS,
   // The Phone: its switch in the page policy, global shortcuts, call notifications (phone-channels.ts).
