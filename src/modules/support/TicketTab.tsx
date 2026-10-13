@@ -337,7 +337,7 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
                       </Button>
                     </div>
                   ) : null}
-                  <Thread messages={messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} source={(hasEarlier ?? show.has_earlier) ? null : t.source} onOpenAttachment={(a) => void openAttachment(a)} />
+                  <Thread messages={messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} source={(hasEarlier ?? show.has_earlier) ? null : t.source} requester={t.requester?.name} onOpenAttachment={(a) => void openAttachment(a)} />
                   {legacy ? <p className="pt-3 text-center text-[11.5px] text-ink-3">{text('Your WorkSuite server is older: read markers, files and who else is here show once it is updated.')}</p> : null}
                 </>
               ) : view === 'activity' ? (

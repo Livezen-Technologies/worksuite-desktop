@@ -54,10 +54,11 @@ export function statusDotTitle(status: SupportStatus): string {
   return text('Status: {status} — {meaning}', { status: text(statusLabel(status)), meaning: text(STATUS_MEANING[status] ?? '') });
 }
 
-/** The status as a dot, for a row where the chip would crowd it; the words are its label, the tooltip says what it means. */
+/** The status as a dot, for a row where the chip would crowd it; its name and tooltip say the status and what it means. */
 export function StatusDot({ status, className }: { status: SupportStatus; className?: string }) {
   const tone = STATUS_TONE[status] ?? STATUS_TONE.open;
-  return <span role="img" aria-label={text(statusLabel(status))} title={statusDotTitle(status)} className={cx('inline-block h-2 w-2 shrink-0 cursor-help rounded-full', tone.dot, className)} />;
+  const label = statusDotTitle(status);
+  return <span role="img" aria-label={label} title={label} className={cx('inline-block h-2 w-2 shrink-0 cursor-help rounded-full', tone.dot, className)} />;
 }
 
 export function PriorityChip({ priority, quiet = false, className }: { priority: SupportPriority; /** Normal and Low not shown at all. */ quiet?: boolean; className?: string }) {

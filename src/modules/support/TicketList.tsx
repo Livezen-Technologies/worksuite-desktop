@@ -10,7 +10,7 @@ import { pickOf, type PickHow } from '../../components/useListSelection';
 import { VirtualList } from '../../components/VirtualList';
 import { Button, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { ticketCount } from './bulk';
-import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusDot, channelIcon, channelLabel, requesterLine } from './parts';
+import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusDot, channelIcon, channelLabel, requesterLine, statusDotTitle } from './parts';
 
 /**
  * The inbox's list (D-01, FR-WSP-05): compact rows — the status dot, the channel's icon, the reference in monospace,
@@ -53,6 +53,9 @@ export function countWords(count: number | null, narrowed: boolean, listed: numb
   if (narrowed) return listed || !more ? text('{count} listed', { count: `${listed}${more ? '+' : ''}` }) : null;
   return count === null ? null : ticketCount(count);
 }
+
+/** The row's status dot's tooltip and name: "Status: Resolved — Solved: …" (`statusDotTitle`). */
+export const statusDotLabel = statusDotTitle;
 
 /** The channels to filter by: the desk's own, as far as this server has them (all of them when it says nothing). */
 export function channelChoices(sources: readonly string[] | null | undefined): string[] {
@@ -148,14 +151,18 @@ export function TicketList({
         {selection?.selecting ? selection.bar : null}
         <div className={cx('flex min-w-0 items-center gap-2', selection?.selecting && 'hidden')}>
           <h2 className="truncate text-[15px] font-extrabold text-ink">{title}</h2>
-          {words ? <span className="shrink-0 text-[12px] text-ink-3">· {words}</span> : null}
+          {words ? (
+            <span data-list-count className="shrink-0 text-[12px] text-ink-3">
+              · {words}
+            </span>
+          ) : null}
           {offline ? (
             <span className="ml-auto inline-flex shrink-0 items-center gap-1 rounded-full bg-warning-bg px-2 py-0.5 text-[11px] font-semibold text-warning-ink">
               <Icon name="cloud-off" size={12} /> {text('Saved copy')}
             </span>
           ) : live ? (
-            <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-success" title={text('Updates arrive as they happen')}>
-              <span className="h-1.5 w-1.5 rounded-full bg-success" /> {text('live')}
+            <span className="ml-auto inline-flex shrink-0 items-center gap-1 text-[11px] font-semibold text-success" title={text('Live: this list updates as tickets change, without refreshing')}>
+              <span aria-hidden className="h-1.5 w-1.5 rounded-full bg-success" /> {text('live')}
             </span>
           ) : null}
         </div>

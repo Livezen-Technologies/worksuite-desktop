@@ -59,9 +59,15 @@ export const PRIORITY_DOT: Record<SupportPriority, string> = {
   urgent: 'bg-[#DC2626]',
 };
 
-/** "1 ticket", "3 tickets": the list's count and the toasts. */
-export function ticketCount(n: number): string {
+/** "1 ticket", "3 tickets": the list's count and the toasts; `more`: there are more than these ("50+ tickets"). */
+export function ticketCount(n: number, more = false): string {
+  if (more) return text('{n}+ tickets', { n });
   return n === 1 ? text('1 ticket') : text('{n} tickets', { n });
+}
+
+/** A heading with its count: "Resolved · 1 ticket", "Open · 12 tickets" — the title alone while the count is unknown. */
+export function countTitle(title: string, count: number | null, more = false): string {
+  return count === null ? title : `${title} · ${ticketCount(count, more)}`;
 }
 
 /** Split ids into batches of `size`. */
@@ -92,7 +98,10 @@ export async function bulkInBatches(
   const parts = batches(ids);
   for (const part of parts) {
     try {
-      const r = await send(action, part, fields, ids.length);
+      // Each batch carries the versions of its own tickets only.
+      const versions = fields.versions as Record<number, number> | undefined;
+      const own = versions ? { ...fields, versions: Object.fromEntries(part.filter((id) => versions[id] !== undefined).map((id) => [id, versions[id]!])) } : fields;
+      const r = await send(action, part, own, ids.length);
       out.push(...r.results);
     } catch (e) {
       // A merge is one call; anything else, one batch's refusal.
@@ -106,7 +115,7 @@ export async function bulkInBatches(
 }
 
 /** The caps that count for a ticket: its organization's, else what I may do anywhere at the desk. */
-export function capsFor(t: Pick<Ticket, 'organization'>, meta: Meta | undefined): Caps {
+export function capsFor(meta: Pick<Meta, 'organizations' | 'can'> | null | undefined, t: Pick<Ticket, 'organization'>): Caps {
   const org = t.organization?.id ?? null;
   return (org !== null ? meta?.organizations?.find((o) => o.id === org)?.can : undefined) ?? meta?.can ?? {};
 }
@@ -114,19 +123,54 @@ export function capsFor(t: Pick<Ticket, 'organization'>, meta: Meta | undefined)
 /** May I do this on every ticket picked? An older server that says nothing about caps reads as yes. */
 export function mayAll(targets: readonly Pick<Ticket, 'organization'>[], meta: Meta | undefined, cap: keyof Caps): boolean {
   if (!meta || meta.legacy) return true;
-  return targets.length > 0 && targets.every((t) => capsFor(t, meta)[cap] === true);
+  return targets.length > 0 && targets.every((t) => capsFor(meta, t)[cap] === true);
 }
 
-/** The statuses the menu offers: those some ticket picked may move to, as the state machine and my caps allow. */
-export function statusChoices(targets: readonly Pick<Ticket, 'status' | 'organization'>[], meta: Meta | undefined): SupportStatus[] {
-  return MENU_STATUSES.map((s) => s.status).filter((to) =>
-    targets.some((t) => {
-      if (t.status === to) return true;
-      if (!TRANSITIONS[t.status]?.includes(to)) return false;
-      const caps = capsFor(t, meta);
-      return !meta || meta.legacy || caps[capForMove(t.status, to)] === true;
-    }),
-  );
+/** The moves the state machine allows from a status: the desk's own (`GET meta`'s `next`), else the as-built table. */
+function movesFrom(meta: Pick<Meta, 'statuses'> | null | undefined, from: SupportStatus): readonly SupportStatus[] {
+  return meta?.statuses?.find((s) => s.key === from)?.next ?? TRANSITIONS[from] ?? [];
+}
+
+/**
+ * The statuses the menu offers: each ticket's own, and those some ticket picked may move to, as the state machine and
+ * my caps allow. None at all when no ticket may be moved anywhere: then there is no Status menu.
+ */
+export function statusChoices(meta: Meta | null | undefined, targets: readonly Pick<Ticket, 'status' | 'organization'>[]): SupportStatus[] {
+  const ok = new Set<SupportStatus>();
+  let moves = 0;
+  for (const t of targets) {
+    ok.add(t.status);
+    const caps = capsFor(meta, t);
+    for (const to of movesFrom(meta, t.status)) {
+      if (meta && !meta.legacy && caps[capForMove(t.status, to)] !== true) continue;
+      ok.add(to);
+      moves += 1;
+    }
+  }
+  if (!moves) return [];
+  return MENU_STATUSES.map((s) => s.status).filter((s) => ok.has(s));
+}
+
+/** What the bulk bar offers for the tickets picked: the menu's parts, by the same caps. */
+export interface BarCaps {
+  status: boolean;
+  assign: boolean;
+  priority: boolean;
+  tag: boolean;
+  merge: boolean;
+  snooze: boolean;
+}
+
+export function barCaps(targets: readonly Ticket[], meta: Meta | undefined): BarCaps {
+  const may = (cap: keyof Caps) => mayAll(targets, meta, cap);
+  return {
+    status: statusChoices(meta, targets).length > 0,
+    assign: may('assign') || may('reply'),
+    priority: may('edit'),
+    tag: may('edit'),
+    merge: targets.length > 1 && may('merge'),
+    snooze: may('reply'),
+  };
 }
 
 /** The one value every ticket picked has, or null when they differ — what the menu ticks. */
@@ -241,6 +285,120 @@ export function undoCalls(action: BulkAction, fields: Record<string, unknown>, r
   }
 }
 
+/**
+ * One bulk call as the client plans it: the action's fields beside `ids`, and `versions` (id → the version the screen
+ * showed), which refuses a ticket changed meanwhile as `VERSION_CONFLICT`, that ticket only.
+ */
+export interface BulkInput {
+  ids: number[];
+  action: BulkAction;
+  user_id?: number | null;
+  team_id?: number | null;
+  status?: string;
+  override?: boolean;
+  priority?: string;
+  tags?: string[];
+  primary_id?: number;
+  reason?: string;
+  versions?: Record<number, number>;
+}
+
+/** `POST tickets/bulk`'s answer. */
+export interface BulkAnswer {
+  results: BulkResult[];
+  done: number;
+  refused: number;
+}
+
+/** A tag as the server keeps it (trimmed, lower-cased). */
+export function tagKey(name: string): string {
+  return name.trim().toLowerCase().slice(0, 60);
+}
+
+/** The actions `undoInputs` can take back. */
+const UNDOABLE: readonly BulkAction[] = ['status', 'assign', 'priority', 'tag', 'untag', 'delete'];
+
+/**
+ * Undo for a server whose answer carries no `before`: planned from the tickets as the list showed them before the
+ * change, one call per earlier value, each with the version the change left the ticket at — so a ticket changed again
+ * meanwhile is refused rather than overwritten. Nothing for what cannot be taken back, or when nothing was done.
+ */
+export function undoInputs(input: BulkInput, before: readonly Ticket[], answer: Pick<BulkAnswer, 'results'>): BulkInput[] {
+  if (!UNDOABLE.includes(input.action)) return [];
+  const done = new Map(answer.results.filter((r) => r.ok).map((r) => [r.id, r.version ?? 0]));
+  const tickets = before.filter((t) => done.has(t.id));
+  const groups = new Map<string, { fields: Partial<BulkInput>; ids: number[] }>();
+  const add = (key: string, fields: Partial<BulkInput>, id: number) => {
+    const g = groups.get(key) ?? { fields, ids: [] };
+    g.ids.push(id);
+    groups.set(key, g);
+  };
+  const given = (input.tags ?? []).map(tagKey).filter(Boolean);
+  for (const t of tickets) {
+    const had = new Set(t.tags.map(tagKey));
+    switch (input.action) {
+      case 'status':
+        // Back over the state machine's one-way moves: the server lets the override through for whoever may.
+        if (t.status !== input.status && isStatus(t.status)) add(`s:${t.status}`, { action: 'status', status: t.status, override: true }, t.id);
+        break;
+      case 'assign': {
+        const was = t.assignee?.id ?? null;
+        if (was !== (input.user_id ?? null)) add(`a:${was ?? ''}`, { action: 'assign', user_id: was }, t.id);
+        break;
+      }
+      case 'priority':
+        if (t.priority !== input.priority) add(`p:${t.priority}`, { action: 'priority', priority: t.priority }, t.id);
+        break;
+      case 'tag': {
+        const added = given.filter((g) => !had.has(g));
+        if (added.length) add(`u:${added.join(',')}`, { action: 'untag', tags: added }, t.id);
+        break;
+      }
+      case 'untag': {
+        const removed = given.filter((g) => had.has(g));
+        if (removed.length) add(`t:${removed.join(',')}`, { action: 'tag', tags: removed }, t.id);
+        break;
+      }
+      case 'delete':
+        add('r', { action: 'restore' }, t.id);
+        break;
+    }
+  }
+  return [...groups.values()].map((g) => ({
+    ...g.fields,
+    action: g.fields.action!,
+    ids: g.ids,
+    // A restore takes no version: the ticket was in the bin.
+    ...(g.fields.action === 'restore' ? {} : { versions: Object.fromEntries(g.ids.filter((id) => (done.get(id) ?? 0) > 0).map((id) => [id, done.get(id)!])) }),
+  }));
+}
+
+/** Why tickets were refused, the reasons grouped with the tickets each one names, three at most: "Changed by somebody else (CFX-001292)". */
+export function refusalReasons(results: readonly BulkResult[], refOf: (id: number) => string): string {
+  const reasons = new Map<string, string[]>();
+  for (const r of results) {
+    if (r.ok) continue;
+    const why = r.message?.trim() || r.code || text('Refused');
+    reasons.set(why, [...(reasons.get(why) ?? []), refOf(r.id)]);
+  }
+  const listed = [...reasons].slice(0, 3).map(([why, refs]) => `${why} (${refs.length > 3 ? `${refs.slice(0, 3).join(', ')} +${refs.length - 3}` : refs.join(', ')})`);
+  const rest = reasons.size - listed.length;
+  return listed.join('; ') + (rest > 0 ? text('; {count} more reasons', { count: rest }) : '');
+}
+
+/**
+ * An answer in one line: "Moved to Open · 5 tickets" when all were done; "… · 3 of 5 done — 2 refused: <why> (<refs>)"
+ * when some were refused; "Nothing changed — 2 refused: …" when none was done.
+ */
+export function bulkSummary(answer: BulkAnswer, what: string, refOf: (id: number) => string): { kind: 'success' | 'warning' | 'error'; text: string } {
+  const total = answer.results.length;
+  const refused = answer.results.filter((r) => !r.ok).length;
+  if (!refused) return { kind: 'success', text: `${what} · ${ticketCount(answer.done)}` };
+  const why = refusalReasons(answer.results, refOf);
+  if (!answer.done) return { kind: 'error', text: text('Nothing changed — {refused} refused: {why}', { refused, why }) };
+  return { kind: 'warning', text: text('{what} · {done} of {total} done — {refused} refused: {why}', { what, done: answer.done, total, refused, why }) };
+}
+
 /** What a change says it did ("3 tickets marked Solved"). */
 export function doneWords(action: BulkAction, n: number, fields: Record<string, unknown>, names: { assignee?: string | null; team?: string | null } = {}): string {
   const count = ticketCount(n);
@@ -329,7 +487,7 @@ export function ticketMenu(targets: readonly Ticket[], ctx: { meta: Meta | undef
 
   // Status ▸: the moves allowed; the current one ticked.
   const now = common(targets as Ticket[], (t) => t.status);
-  const statuses = statusChoices(targets, meta);
+  const statuses = statusChoices(meta, targets);
   if (statuses.length) {
     sections.push({
       id: 'status',
@@ -432,7 +590,8 @@ export function ticketMenu(targets: readonly Ticket[], ctx: { meta: Meta | undef
   if (one && (may('reply') || may('notes'))) {
     const respond: MenuItem[] = [];
     if (may('reply')) respond.push({ id: 'reply', label: text('Reply'), icon: 'reply', shortcut: 'R', onSelect: h.reply });
-    if (may('notes') || may('reply')) respond.push({ id: 'note', label: text('Add internal note'), icon: 'compose', shortcut: 'N', onSelect: h.note });
+    // A note needs "notes", as the composer's Note tab does.
+    if (may('notes')) respond.push({ id: 'note', label: text('Add internal note'), icon: 'compose', shortcut: 'N', onSelect: h.note });
     if (may('reply')) respond.push({ id: 'macro', label: text('Apply macro / saved reply…'), icon: 'zap', onSelect: h.macro });
     sections.push({ id: 'respond', label: text('Respond'), items: respond });
   }

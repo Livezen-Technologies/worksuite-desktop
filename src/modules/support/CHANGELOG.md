@@ -8,13 +8,21 @@ the root CHANGELOG.md.
 
 **Added**
 
+- more of the ticket list's right-click menu (Open, Status, Assign, Priority, Organise, Link, Respond, Other, Danger — filtered by permission, current values ticked) and picking several tickets (hover checkbox, ⇧ range, ⌘ toggle, X / ⇧X, ⌘A, Select all matching) with the shared bulk bar (Status, Assign, Priority, Tag, Merge, Snooze, more); changes show at once with one Undo toast, more than 50 run in the background in batches with progress, a bulk Solve or Close asks before emailing customers (Send / Change quietly), merge chooses the main ticket and can tell the requesters; J/K/X/⇧X/E/A/P/#/Esc and the ? shortcuts popover; Snooze and the Snoozed view; the count says the view's tickets (Resolved · 1 ticket); the status dot explains itself; the subject is editable in place with Suggest (AI, or the first meaningful message) (#333)
 - the ticket details drawer — Website chats' side panel (its splitter, sections and look) in a ticket's tab and the inbox's reading pane, ⌘⇧I or the header's panel button, its width kept, open by itself on a wide window and over the conversation on a narrow one; A. the AI summary from the same text tools as Website chats and Mail (key facts, next step with Reply with this, urgency, Refresh, made again when a message arrives, the desk's summary without AI), B. the client edited in place (name, email, phone with Call and WhatsApp, company, tags, notes; checked, Saved, +94 by default), Found in conversation · Add, the WorkSuite contact created or linked, read-only without contact rights, C. the ticket's properties with Type and Source, D. related orders from the store (Resend licence email, Open order), earlier tickets and chats, website activity and the files as a grid, E. the activity timeline; loaded from the copy on this computer first (#334)
 
 ## 1.4.0 — 2026-10-12
 
 **Added**
 
-- the ticket list's right-click menu (Open, Status, Assign, Priority, Organise, Link, Respond, Other, Danger — filtered by permission, current values ticked) and picking several tickets (hover checkbox, ⇧ range, ⌘ toggle, X / ⇧X, ⌘A, Select all matching) with the shared bulk bar (Status, Assign, Priority, Tag, Merge, Snooze, more); changes show at once with one Undo toast, more than 50 run in the background in batches with progress, a bulk Solve or Close asks before emailing customers (Send / Change quietly), merge chooses the main ticket and can tell the requesters; J/K/X/⇧X/E/A/P/#/Esc and the ? shortcuts popover; Snooze and the Snoozed view; the count says the view's tickets (Resolved · 1 ticket); the status dot explains itself; the subject is editable in place with Suggest (AI, or the first meaningful message) (#333)
+- ticket list right-click menu with status, assign, priority, tags, reply, merge, copy and delete, current values ticked and hidden without the right (#333)
+- multi-select (checkbox, Ctrl/Cmd-click, Shift-click, X, Ctrl/Cmd+A) and a bulk bar for status, assign, priority, tag, merge and delete with Undo and a refusal summary; Resolve, Close, Delete and Merge ask first (#333)
+- list keys E resolve, A assign to me, P priority, # tag, Esc clear; the list title counts its tickets (Resolved · 1 ticket); status dots say what they mean (#333)
+- pictures in a ticket's messages inline as a grid, opened in the picture viewer (#332)
+
+**Fixed**
+
+- a converted website chat reads as the chat: the visitor's lines as the requester's, website lines as centred events, the assistant as itself, Internal note only on staff notes, 'via Website chat' and 'Sent in chat', the requester's name, consecutive lines grouped, and no '[file name]' line over its own attachment (#332)
 
 ## 1.3.0 — 2026-10-11
 

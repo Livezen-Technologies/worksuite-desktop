@@ -13,7 +13,7 @@ import { Icon } from '../../components/Icon';
 import type { MenuSection } from '../../components/Menu';
 import { Button, Kbd, Modal, Spinner, TextField, cx } from '../../components/ui';
 import { K, addLink, agents, errorText, getTicket, listTickets } from './api';
-import { BATCH, PRIORITY_DOT, bulkInBatches, doneWords, notifyCount, statusWord, ticketCount, ticketMenu, undoCalls, type BulkProgress, type TicketMenuHandlers } from './bulk';
+import { BATCH, PRIORITY_DOT, bulkInBatches, bulkSummary, doneWords, notifyCount, refusalReasons, statusWord, ticketCount, ticketMenu, undoCalls, undoInputs, type BulkInput, type BulkProgress, type TicketMenuHandlers, type UndoCall } from './bulk';
 import { ticketDeepLink } from './palette';
 import { presenceLabel } from './parts';
 
@@ -40,6 +40,8 @@ export interface TicketActionsContext {
   /** Reply, note, or a saved reply in the reading pane's composer. */
   onCompose: (id: number, mode: 'reply' | 'note', canned?: boolean) => void;
   onNavigate: (route: string) => void;
+  /** Tickets a change took out of the list (deleted, spam, snoozed, merged away): out of the selection too. */
+  onGone?: (ids: number[]) => void;
 }
 
 type Dialog =
@@ -122,6 +124,23 @@ ${show.messages
   .join('')}`;
 }
 
+/**
+ * The calls that take a change back, each with the version the change left its tickets at: from the server's `before`
+ * where its answer has it, else from the tickets as the list showed them (`undoInputs`).
+ */
+export function planUndo(action: BulkAction, ids: number[], fields: Record<string, unknown>, was: readonly Ticket[], results: readonly BulkResult[]): UndoCall[] {
+  const done = results.filter((r) => r.ok);
+  if (done.length && done.every((r) => r.before)) {
+    const left = new Map(done.filter((r) => r.version).map((r) => [r.id, r.version!]));
+    return undoCalls(action, fields, results).map((c) => {
+      const versions = Object.fromEntries(c.ids.filter((id) => left.has(id)).map((id) => [id, left.get(id)!]));
+      return c.action === 'restore' || !Object.keys(versions).length ? c : { ...c, fields: { ...c.fields, versions } };
+    });
+  }
+  const { versions: _versions, ...rest } = fields;
+  return undoInputs({ ...(rest as Omit<BulkInput, 'ids' | 'action'>), ids, action }, was, { results: [...results] }).map(({ action: a, ids: back, ...f }) => ({ action: a, ids: back, fields: { reason: 'Undo', ...f } }));
+}
+
 /** Each background change has a toast of its own. */
 let bulkSeq = 0;
 
@@ -143,20 +162,36 @@ export function useTicketActions(ctx: TicketActionsContext) {
     team: fields.team_id ? (ctx.meta?.teams.find((t) => t.id === Number(fields.team_id))?.name ?? null) : null,
   });
 
-  /** Says what was refused, with the reasons on request. */
+  /** The reference a refusal names: the ticket's, as the list showed it. */
+  const refOf = (id: number) => ctx.rows.find((t) => t.id === id)?.reference ?? `#${id}`;
+
+  /** Says what was refused and why, each reason with the tickets it names; "Nothing changed" when none was done. */
   const sayRefused = (results: BulkResult[]) => {
     const refused = results.filter((r) => !r.ok);
     if (!refused.length) return;
-    const reasons = [...new Set(refused.map((r) => r.message ?? r.code ?? ''))].filter(Boolean);
-    toast('error', text('{count} could not be changed: {why}', { count: ticketCount(refused.length), why: reasons.slice(0, 2).join('; ') || text('refused') }));
+    const done = results.length - refused.length;
+    if (!done) toast('error', bulkSummary({ results, done, refused: refused.length }, '', refOf).text);
+    else toast('error', text('{count} could not be changed: {why}', { count: ticketCount(refused.length), why: refusalReasons(results, refOf) }));
   };
+
+  /** The version each ticket was listed at, so one changed meanwhile is refused rather than overwritten. */
+  const versionsOf = (tickets: readonly Ticket[]) => Object.fromEntries(tickets.filter((t) => t.version > 0).map((t) => [t.id, t.version]));
 
   /** Run a change now: patched in the list, sent (in batches when large), told with Undo. */
   const run = async (action: BulkAction, ids: number[], fields: Record<string, unknown> = {}, opts: { undo?: boolean } = {}) => {
     if (!ids.length) return;
     const n = names(fields);
+    // The tickets as they were: an Undo without the server's `before` is planned from these.
+    const was = byId(ids);
+    // A merge or a restore is not refused for a version; anything else goes with the version each ticket was listed at.
+    if (fields.versions === undefined && action !== 'merge' && action !== 'restore' && was.length) fields = { ...fields, versions: versionsOf(was) };
     const patch = patchOf(action, fields, n);
     if (patch) patchLists(qc, ids, patch);
+    // Out of the view, out of the selection.
+    if (patch && ctx.onGone) {
+      const gone = was.filter((t) => patch(t) === null).map((t) => t.id);
+      if (gone.length) ctx.onGone(gone);
+    }
     const big = ids.length > BATCH;
     const key = big ? `support-bulk-${++bulkSeq}` : 'support-bulk';
     if (big) {
@@ -185,7 +220,7 @@ export function useTicketActions(ctx: TicketActionsContext) {
       if (big) dismissKey(key);
       return;
     }
-    const undo = opts.undo === false ? [] : undoCalls(action, fields, results);
+    const undo = opts.undo === false ? [] : planUndo(action, ids, fields, was, results);
     toast(
       'success',
       doneWords(action, done, fields, n),
@@ -285,7 +320,10 @@ export function useTicketActions(ctx: TicketActionsContext) {
       if (!s) return toast('info', text('You cannot change that on these tickets.'));
       sections = s.items.length === 1 && s.items[0]!.submenu ? s.items[0]!.submenu : [s];
     }
-    setMenu({ x, y, sections, label: text('Ticket actions') });
+    // "Priority for 3 tickets", "Status for CFX-001284": what the menu changes, and on which.
+    const what = ids.length > 1 ? ticketCount(ids.length) : (byId(ids)[0]?.reference ?? ticketCount(1));
+    const name = { status: text('Status for {what}', { what }), priority: text('Priority for {what}', { what }), assign: text('Assign {what}', { what }), more: text('More actions for {what}', { what }) }[part];
+    setMenu({ x, y, sections, label: name });
   };
 
   const close = () => setDialog(null);

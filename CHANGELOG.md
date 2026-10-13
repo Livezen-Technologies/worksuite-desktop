@@ -11,6 +11,14 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.245 — 2026-10-12
+
+- **A website chat made a ticket reads as the chat (#332).** The visitor's messages are the customer's, never "Internal note"; amber is only for notes staff wrote. The website's own lines (the visitor details, "chat started") are small grey lines in the middle, the assistant has its own look, visitor lines say "via Website chat" and staff lines "Sent in chat". Lines from the same person within five minutes are grouped, and "Visitor" gives way to the customer's real name.
+- **Pictures in the thread.** PNG, JPEG, GIF and WebP attachments show inline, several as a grid, and open in the picture viewer with previous/next, zoom and download. The "[Screenshot….png]" line above a picture is gone. HEIC and PDF files stay as file chips: the server makes no previews.
+- **Work on many tickets at once (#333).** Right-click a ticket for status, assignee, priority, tags, reply or note, copy reference or link, merge and delete — the current values ticked, what you may not do hidden. Pick tickets with the checkbox, Ctrl/⌘-click, ⇧-click, X or Ctrl/⌘+A; the bulk bar changes them together, says which were refused and why, and offers Undo. Resolve, Close, Delete and Merge ask first; resolving can skip the satisfaction survey.
+- **List keys:** J/K move, X selects, E resolves, A assigns to me, P priority, # tag, Esc clears. The list title counts its tickets ("Resolved · 1 ticket") and each status dot says what it means.
+- A chat ticket's subject is the visitor's question, not "Hi,".
+- Where it bites: needs the server's Support 1.3.1 and its migration `SupportChatTranscriptPublic` for chats converted before. Snooze, spam and "select all matching" wait on the server.
 ## 0.2.244 — 2026-10-11
 
 - **Meet host controls only for the people who may use them (#348).** Guests and participants no longer see Mute all,

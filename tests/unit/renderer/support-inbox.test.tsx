@@ -173,7 +173,7 @@ describe('the list', () => {
     expect(first.className).toContain('font-bold');
     expect(within(list).getByText('Subject 1292').className).not.toContain('font-bold');
     const row = first.closest('[role="option"]') as HTMLElement;
-    expect(within(row).getByRole('img', { name: 'Open' })).toBeTruthy();
+    expect(within(row).getByRole('img', { name: /^Status: Open/ })).toBeTruthy();
     expect(within(row).getByRole('img', { name: 'Email' })).toBeTruthy();
     expect(within(row).getByText('CFX-001284').className).toContain('font-mono');
     expect(within(row).getByText('Urgent')).toBeTruthy();

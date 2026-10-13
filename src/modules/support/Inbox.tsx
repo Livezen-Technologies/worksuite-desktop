@@ -11,10 +11,10 @@ import { useNow } from '../../core/use-now';
 import { ResizeDivider, useResizableWidth } from '../../components/ResizeDivider';
 import { SidePanel } from '../../components/SidePanel';
 import { useListSelection } from '../../components/useListSelection';
-import { BulkBar, BulkButton } from '../chat/BulkBar';
 import { Empty } from '../../components/ui';
 import { K, listTickets, matchingIds, meta, views } from './api';
-import { ticketCount } from './bulk';
+import { barCaps, ticketCount } from './bulk';
+import { BulkBar, type BarPart } from './BulkBar';
 import { ShortcutsPopover, useTicketActions } from './TicketActions';
 import { Availability } from './Availability';
 import type { ComposerMode } from './Composer';
@@ -168,6 +168,11 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
       setFocusRequest((f) => ({ mode, n: (f?.n ?? 0) + 1, canned }));
     },
     onNavigate: navigate,
+    onGone: (ids) => {
+      const next = new Set(pickedList.selected);
+      for (const id of ids) next.delete(id);
+      if (next.size !== pickedList.selected.size) pickedList.setSelected(next);
+    },
   });
   /** The menu for a row: the selection when the row is one of it, else that row alone. */
   const rowMenu = (e: ReactMouseEvent, id: number) => actions.openMenu(e.clientX, e.clientY, pickedList.selected.has(id) ? picked : [id]);
@@ -175,7 +180,7 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
     const r = id !== null ? document.getElementById(`support-row-${id}`)?.getBoundingClientRect() : null;
     return r ? { x: r.left + 40, y: r.top + 24 } : { x: 120, y: 160 };
   };
-  const barMenu = (part: 'status' | 'priority' | 'assign' | 'more') => (e: ReactMouseEvent<HTMLButtonElement>) => {
+  const barMenu = (part: BarPart, e: ReactMouseEvent<HTMLButtonElement>) => {
     const r = e.currentTarget.getBoundingClientRect();
     actions.openPart(r.left, r.bottom + 4, picked, part);
   };
@@ -212,6 +217,13 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const at = selectedId === null ? -1 : rows.findIndex((t) => t.id === selectedId);
       const k = e.key;
+      // ⇧F10 or the menu key: the right-click menu, on the tickets picked or the one in front.
+      if (((k === 'F10' && e.shiftKey) || k === 'ContextMenu') && targets().length) {
+        e.preventDefault();
+        const p = atRow(selectedId);
+        actions.openMenu(p.x, p.y, targets());
+        return;
+      }
       // The list's own keys (#333): X picks, ⇧X picks the range, A assigns, P sets the priority, # deletes, Esc clears, ? lists them.
       if (k === 'Escape' && pickedList.escape(e)) {
         e.preventDefault();
@@ -246,7 +258,10 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
       }
       if ((k === 'e' || k === 'E') && picked.length) {
         e.preventDefault();
-        actions.apply('status', picked, { status: 'resolved' });
+        // One ticket picked: the Resolve dialog, as for the ticket in front; several: the bulk Solve, which asks first.
+        const one = picked.length === 1 ? rows.find((t) => t.id === picked[0]) : null;
+        if (one) setResolving(one);
+        else actions.apply('status', picked, { status: 'resolved' });
         return;
       }
       if (k === 'j' || k === 'k') {
@@ -318,43 +333,25 @@ export function Inbox({ route, active }: { route: string; active: boolean }) {
   // "All 50 on this page selected · Select all 128 resolved tickets" (#333).
   const matchingTotal = allMatching?.key === listKey ? allMatching.total : null;
   const moreThanListed = !narrowed && count !== null ? count > rows.length : list.hasNextPage;
+  const pickedRows = rows.filter((t) => pickedList.selected.has(t.id));
   const bulkBar = (
-    <div className="flex flex-col gap-1.5">
-      <BulkBar count={picked.length} onClear={() => (pickedList.clear(), setAllMatching(null))} label={text('Bulk actions')}>
-        <BulkButton menu onClick={barMenu('status')}>
-          {text('Status')}
-        </BulkButton>
-        <BulkButton menu onClick={barMenu('assign')}>
-          {text('Assign')}
-        </BulkButton>
-        <BulkButton menu onClick={barMenu('priority')}>
-          {text('Priority')}
-        </BulkButton>
-        <BulkButton menu onClick={() => actions.addTag(picked)}>
-          {text('Tag')}
-        </BulkButton>
-        {picked.length > 1 ? <BulkButton onClick={() => actions.merge(picked)}>{text('Merge')}</BulkButton> : null}
-        <BulkButton onClick={() => actions.snoozePick(picked)}>{text('Snooze')}</BulkButton>
-        <BulkButton aria-label={text('More actions')} title={text('More actions')} onClick={barMenu('more')}>
-          ⋯
-        </BulkButton>
-      </BulkBar>
-      {pickedList.state === 'all' && moreThanListed && matchingTotal === null ? (
-        <p className="text-[12px] text-ink-2">
-          {text('All {n} on this page selected.', { n: rows.length })}{' '}
-          <button type="button" className="font-semibold text-primary hover:underline" onClick={() => void selectAllMatching()}>
-            {narrowed || count === null ? text('Select all matching tickets') : text('Select all {count} in {view}', { count: ticketCount(count), view: title })}
-          </button>
-        </p>
-      ) : matchingTotal !== null ? (
-        <p className="text-[12px] text-ink-2">{text('All {count} matching selected.', { count: ticketCount(picked.length) })}</p>
-      ) : null}
-      {actions.progress ? (
-        <div role="progressbar" aria-label={text('Changing tickets')} aria-valuemin={0} aria-valuemax={actions.progress.total} aria-valuenow={actions.progress.done} className="h-1 overflow-hidden rounded-full bg-subtle">
-          <div className="h-full bg-primary transition-[width]" style={{ width: `${(100 * actions.progress.done) / Math.max(1, actions.progress.total)}%` }} />
-        </div>
-      ) : null}
-    </div>
+    <BulkBar
+      count={picked.length}
+      may={barCaps(pickedRows, metaQ.data)}
+      loaded={rows.length}
+      all={pickedList.state === 'all'}
+      more={moreThanListed}
+      matching={matchingTotal}
+      matchingLabel={narrowed || count === null ? text('Select all matching tickets') : text('Select all {count} in {view}', { count: ticketCount(count), view: title })}
+      progress={actions.progress}
+      onMenu={barMenu}
+      onTag={() => actions.addTag(picked)}
+      onMerge={() => actions.merge(picked)}
+      onSnooze={() => actions.snoozePick(picked)}
+      onSelectAll={() => pickedList.selectAll()}
+      onSelectAllMatching={() => void selectAllMatching()}
+      onClear={() => (pickedList.clear(), setAllMatching(null))}
+    />
   );
   const single = orgs.length === 1 ? Number(orgs[0]) : orgOptions.length === 1 ? Number(orgOptions[0]!.id) : null;
 
