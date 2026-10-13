@@ -1,0 +1,45 @@
+{
+  "limit": 2147483648,
+  "used": 2093796557,
+  "reserved": 0,
+  "categories": [
+    {
+      "key": "files",
+      "bytes": 1245540515,
+      "label": "Files"
+    },
+    {
+      "key": "versions",
+      "bytes": 429916160,
+      "label": "Versions",
+      "policy": "keeps 20 versions or 30 days"
+    },
+    {
+      "key": "attachments",
+      "bytes": 188743680,
+      "label": "Attachments saved to Drive"
+    },
+    {
+      "key": "trash",
+      "bytes": 178257920,
+      "label": "Trash"
+    },
+    {
+      "key": "other",
+      "bytes": 41943040,
+      "label": "Other"
+    }
+  ],
+  "largest": [
+    {
+      "id": "f_1",
+      "name": "Site survey.mp4",
+      "bytes": 412000000
+    },
+    {
+      "id": "f_2",
+      "name": "Proposal.docx",
+      "bytes": 2100000
+    }
+  ]
+}

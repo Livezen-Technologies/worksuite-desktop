@@ -64,6 +64,11 @@ const KNOWN_CODES = new Set<DesktopErrorCode>([
   'ORG_ACCESS_DENIED',
   'FILE_LOCKED',
   'RATE_LIMITED',
+  // WorkSuite Cloud's gateway (Connection & Startup §3): a full account refuses uploads (transfers hold, nothing is
+  // lost); a suspended or unknown organization makes the Cloud service fetch /me again.
+  'QUOTA_EXCEEDED',
+  'ORG_SUSPENDED',
+  'ORG_NOT_FOUND',
 ]);
 
 /**

@@ -60,9 +60,24 @@ export function mediaServersOf(media: unknown): string[] {
   }
 }
 
+/** What a licence says, per app: entitled or not, and the slugs it locks (hidden everywhere). */
+export interface LicenceSnapshot {
+  entitlements: Record<string, boolean>;
+  locked: string[];
+}
+
+/**
+ * Where the licence comes from when it is not the server's own `/api/system/entitlements`: a Personal account's
+ * signed Cloud entitlements (electron/services/cloud/entitlements.ts, Connection & Startup §3). Null: no answer from
+ * this source, and the server's licence applies as before.
+ */
+export type LicenceSource = () => Promise<LicenceSnapshot | null>;
+
 export class BootstrapService {
   private current: Bootstrap | null = null;
   private lastValidPolicy: DesktopPolicy | null = null;
+  /** Set by the accounts wiring for a Personal (Cloud) account; null for every other server. */
+  private licenceSource: LicenceSource | null = null;
 
   constructor(
     private readonly db: Database,
@@ -73,6 +88,11 @@ export class BootstrapService {
 
   get(): Bootstrap | null {
     return this.current;
+  }
+
+  /** The licence for the next bootstraps comes from `source` first (Cloud entitlements); null puts the server's back. */
+  setLicenceSource(source: LicenceSource | null): void {
+    this.licenceSource = source;
   }
 
   async fetch(api: ServerApi, organizationId: string | null = null): Promise<Bootstrap> {
@@ -88,7 +108,15 @@ export class BootstrapService {
    * What the server's WorkSuite licence includes, per app (GET /api/system/entitlements, WorkSuite Server
    * Core 1.7.0+). Fails open: an older server (404), an error or an odd answer leaves every app as it was.
    */
-  private async licence(): Promise<{ entitlements: Record<string, boolean>; locked: string[] } | null> {
+  private async licence(): Promise<LicenceSnapshot | null> {
+    if (this.licenceSource) {
+      try {
+        const own = await this.licenceSource();
+        if (own) return { entitlements: { ...own.entitlements }, locked: [...own.locked] };
+      } catch (e) {
+        log.debug('licence source failed; the server licence applies', { error: String((e as Error)?.message ?? e) });
+      }
+    }
     try {
       const d = await this.http.get<{ apps?: unknown }>('/api/system/entitlements');
       if (!d || !Array.isArray(d.apps)) return null;

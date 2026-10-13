@@ -35,6 +35,7 @@ import { broadcast, guestWindowIds, sendTo } from './events';
 import { installAppearance } from '../windows/appearance';
 import { AppearanceSync } from '../services/appearance-sync';
 import { registerHandlers } from './handlers';
+import { installAccounts } from './accounts-wiring';
 import { initLog, logger } from './log';
 import { DesktopError, isDesktopError } from './errors';
 import { buildMenu } from './menu';
@@ -3028,6 +3029,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   restaurant.register(router);
   projects.register(router);
   localAI.register(router);
+  // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (Connection & Startup).
+  installAccounts({ router, ctx });
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
   router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));
   router.handle('ai:ocrStatus', () => ocr.status());

@@ -4,6 +4,9 @@ import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, Status
 import { grantOf } from '@shared/access';
 import { visibleApps, type AppDefinition } from '@shared/apps';
 import type { LocalStatus } from '@shared/local-workspace';
+import type { AccountsState, AddingAccount } from '@shared/accounts';
+import type { BrowserSignIn, CloudStatus } from '@shared/cloud';
+import type { ConnectRun } from '@shared/discovery';
 import { call, hasDesktop, on } from './bridge';
 import { createStore } from './store';
 import { setRegional } from './time';
@@ -33,11 +36,20 @@ export interface AppState {
   /**
    * Guest mode or an account (#149): the same window, shell and module screens either way; guest mode's apps are
    * `GUEST_APPS` and their data the Local Profile's. `signingIn`: a guest on the sign-in screen, guest mode still
-   * open behind it. `moveOffer`: signed in from guest mode, so the move-your-data question is due.
+   * open behind it. `moveOffer`: signed in from guest mode, so the move-your-data question is due. `adding`: the
+   * add-account flow is open (Connection & Startup screens 1, 2, 6) — null (or absent) when it is not.
    */
-  session: { mode: 'guest' | 'account'; signingIn: boolean; moveOffer: boolean };
+  session: { mode: 'guest' | 'account'; signingIn: boolean; moveOffer: boolean; adding?: AddingAccount | null };
   /** The Local Profile, in guest mode. */
   local: LocalStatus | null;
+  /** Accounts side by side (Connection & Startup): null until the desktop answers `accounts:state`. */
+  accounts: AccountsState | null;
+  /** The connect run on screen 7, from `connect:progress`. */
+  connect: ConnectRun | null;
+  /** The browser sign-in in progress (screen 3), from `signin:changed`. */
+  signin: BrowserSignIn | null;
+  /** The active Personal account's Cloud side, from `cloud:changed`. */
+  cloud: CloudStatus | null;
 }
 
 export const app = createStore<AppState>({
@@ -55,8 +67,12 @@ export const app = createStore<AppState>({
   transfers: [],
   sync: null,
   resolvedTheme: 'light',
-  session: { mode: 'account', signingIn: false, moveOffer: false },
+  session: { mode: 'account', signingIn: false, moveOffer: false, adding: null },
   local: null,
+  accounts: null,
+  connect: null,
+  signin: null,
+  cloud: null,
 });
 
 /** Whether this window is in guest mode (#149). */
@@ -137,6 +153,19 @@ export async function initAppState(): Promise<void> {
     }
   });
   on<Bootstrap | null>('session:changed', (b) => applyBootstrap(b));
+  // Accounts side by side (Connection & Startup). A desktop without them answers UNSUPPORTED: the store stays null.
+  void (async () => {
+    try {
+      const a = await call('accounts:state');
+      if (a && typeof a === 'object') app.set({ accounts: a });
+    } catch {
+      // Not available in this version.
+    }
+  })();
+  on<AccountsState>('accounts:changed', (a) => app.set({ accounts: a }));
+  on<ConnectRun>('connect:progress', (r) => app.set({ connect: r }));
+  on<BrowserSignIn | null>('signin:changed', (b) => app.set({ signin: b }));
+  on<CloudStatus>('cloud:changed', (c) => app.set({ cloud: c }));
   on<StatusSnapshot>('status:changed', (s) => app.set({ status: s }));
   if (info.platform === 'windows') {
     // The taskbar button's overlay with the count (ENH-MAIL-05 MNA-TRY-03): Windows draws no badge count itself.

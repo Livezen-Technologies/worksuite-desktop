@@ -69,6 +69,7 @@ import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
 import { projectsContract, projectsReportSchema, type ProjectsOutputs } from '../projects';
 import { phoneContract, type PhoneOutputs } from '../phone';
+import { accountsContract, type AccountsOutputs } from '../accounts';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
@@ -298,6 +299,10 @@ export const preferencesPatchSchema = z
       notifyComplete: z.boolean(),
       notifyFailed: z.boolean(),
     }).partial(),
+    // Connection & Startup: the workspace chooser at every start, the desktop cache limit, other accounts' banners.
+    chooserAlways: z.boolean(),
+    desktopCacheLimitMb: z.union([z.literal('auto'), z.number().int().min(256).max(1_048_576)]),
+    otherAccountNotifications: z.boolean(),
   })
   .partial();
 
@@ -1526,6 +1531,8 @@ export const contract = {
   ...contactSyncContract,
   // WorkSuite Projects: the tray timer and the offline outbox (shared/projects.ts, electron/services/projects).
   ...projectsContract,
+  // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (shared/accounts.ts, electron/main/accounts-wiring.ts).
+  ...accountsContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
 
 export type Contract = typeof contract;
@@ -1597,7 +1604,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, AccountsOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;
@@ -2061,7 +2068,21 @@ export type DesktopErrorCode =
   | 'SERVER_ERROR'
   | 'CANCELLED'
   | 'UNSUPPORTED'
-  | 'INTERNAL';
+  | 'INTERNAL'
+  // Connection & Startup: accounts side by side and WorkSuite Cloud.
+  /** An account switch refused: a call, meeting, screen share or remote control is on. */
+  | 'SWITCH_BLOCKED'
+  /** The account's storage is full (Cloud gateway, at upload create / new version). */
+  | 'QUOTA_EXCEEDED'
+  /** The Cloud organization is suspended: `/me` is fetched again. */
+  | 'ORG_SUSPENDED'
+  /** The Cloud organization named in X-WS-Org does not exist (any more). */
+  | 'ORG_NOT_FOUND'
+  | 'SERVER_TOO_OLD'
+  | 'CLOUD_UNAVAILABLE'
+  | 'PERSONAL_NOT_ALLOWED'
+  | 'ACCOUNT_EXISTS'
+  | 'TLS_UNTRUSTED';
 
 export interface IpcFailure {
   __wsError: true;

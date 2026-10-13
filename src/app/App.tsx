@@ -15,7 +15,8 @@ import { toast } from '../core/toasts';
 import { closePanelsOnSessionChange } from '../core/ui';
 import { Shell } from '../layouts/Shell';
 import { Spinner } from '../components/ui';
-import { Onboarding, SetupWizard } from './onboarding/Onboarding';
+import { SetupWizard } from './onboarding/Onboarding';
+import { ConnectRoot } from './connect/ConnectRoot';
 import { Toasts } from './overlays/Toasts';
 import { OfficeOpenHost } from '../modules/office/open-with';
 import { ShowMeHost } from '../modules/ai/help/ShowMe';
@@ -95,7 +96,8 @@ export function App() {
   if (required && auth.stage !== 'revoked') body = <ModulesLocked />;
   // A guest never meets the account's picture gate or setup wizard: guest mode is the shell with its own apps.
   else if (guest && !session.signingIn) body = !local?.profile || local.locked ? <GuestGate /> : <Shell key="guest" />;
-  else if (auth.stage !== 'ready') body = <Onboarding auth={auth} />;
+  // Connection & Startup: sign-in, the connect flows and the workspace chooser; adding an account shows it signed in too.
+  else if (auth.stage !== 'ready' || (session.adding && !hash.startsWith('#/window/'))) body = <ConnectRoot auth={auth} />;
   else if (hash.startsWith('#/window/quick-ask')) body = <QuickAskWindow />;
   // The Live map window and wall mode on a display (L-04, L-05; MAP-21, MAP-24): Chat's, so only with Chat.
   // The support wallboard on a display (WS-SUPPORT-SRS-001 D-12): the desk's, so only with Support.

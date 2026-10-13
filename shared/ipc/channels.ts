@@ -3,6 +3,7 @@
  * process and only these can be reached from the preload. This file is plain
  * data so the sandboxed preload can import it without pulling in zod.
  */
+import { ACCOUNTS_EVENT_CHANNELS, ACCOUNTS_INVOKE_CHANNELS } from './accounts-channels';
 import { CONTACT_SYNC_INVOKE_CHANNELS } from './contact-sync-channels';
 import { PMS_LOCKS_INVOKE_CHANNELS } from './pms-locks-channels';
 import { PHONE_EVENT_CHANNELS, PHONE_INVOKE_CHANNELS } from './phone-channels';
@@ -469,6 +470,8 @@ export const INVOKE_CHANNELS = [
   ...CONTACT_SYNC_INVOKE_CHANNELS,
   // WorkSuite Projects: the tray timer, the mini timer window and the offline outbox (projects-channels.ts).
   ...PROJECTS_INVOKE_CHANNELS,
+  // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (accounts-channels.ts).
+  ...ACCOUNTS_INVOKE_CHANNELS,
 ] as const;
 
 export type InvokeChannel = (typeof INVOKE_CHANNELS)[number];
@@ -537,6 +540,7 @@ export const EVENT_CHANNELS = [
   ...POS_EVENT_CHANNELS,
   ...PHONE_EVENT_CHANNELS,
   ...PROJECTS_EVENT_CHANNELS,
+  ...ACCOUNTS_EVENT_CHANNELS,
 ] as const;
 
 export type EventChannel = (typeof EVENT_CHANNELS)[number];

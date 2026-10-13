@@ -5,6 +5,9 @@ import type { MailMediaPrefs } from './mail-media';
 import type { MailPause } from './mail-alerts';
 import type { ConnectionStats } from './connection';
 import type { SupportNoticePrefs } from './support';
+import type { AccountView, ServiceHealthState } from './accounts';
+import type { BrowserSignIn, CloudStatus } from './cloud';
+import type { CompatInfo, DiscoveredServer } from './discovery';
 /**
  * Types shared by the main process and the renderer. Everything crossing the
  * IPC boundary is described here and validated by the zod schemas in
@@ -71,6 +74,13 @@ export interface ServerInfo {
    * servers without the desktop API, and on server records saved before it.
    */
   passkey?: { url: string; exchange: string } | null;
+  /** Hosts whose links belong to this server (Connection & Startup); absent on records saved before. */
+  linkHosts?: string[];
+  /** The other services the discovery document names. */
+  endpoints?: DiscoveredServer['endpoints'];
+  /** The account this server record belongs to (`acc_…`). */
+  accountId?: string;
+  deployment?: DiscoveredServer['deployment'];
 }
 
 export interface UserSummary {
@@ -226,6 +236,7 @@ export interface SecureStorageStatus {
   persistent: boolean;
 }
 
+/** `no-server`: no active account (Connection & Startup). */
 export type AuthStage =
   | 'no-server'
   | 'signed-out'
@@ -239,7 +250,14 @@ export type AuthStage =
   | 'ready'
   | 'expired'
   | 'blocked'
-  | 'revoked';
+  | 'revoked'
+  // Connection & Startup: a browser sign-in (screen 3), Cloud's email check and workspace setup (screens 4, 5), and
+  // the account's version gates (screen 9) — per account, the other accounts keep working.
+  | 'browser'
+  | 'verify-email'
+  | 'provisioning'
+  | 'update-required'
+  | 'server-too-old';
 
 export type CaptchaProvider = 'turnstile' | 'hcaptcha' | 'recaptcha';
 
@@ -312,6 +330,16 @@ export interface AuthState {
   deviceCode?: DeviceCodeStep | null;
   /** The `mfa` stage on a computer the account has not verified: the code verifies it too. */
   mfaNewDevice?: boolean;
+  /** The active account (Connection & Startup); absent before accounts. */
+  account?: AccountView | null;
+  /** A Personal account's Cloud side: account state, provisioning, storage, entitlements. */
+  cloud?: CloudStatus | null;
+  /** The `browser` stage's sign-in in progress. */
+  browser?: BrowserSignIn | null;
+  /** The `update-required` / `server-too-old` stages' versions. */
+  compat?: CompatInfo | null;
+  /** Signed in, but the workspace is read-only (suspended, restricted, pending deletion). */
+  readOnly?: CloudStatus['readOnly'];
 }
 
 export interface Preferences {
@@ -427,6 +455,12 @@ export interface Preferences {
   meetBehaviour: MeetBehaviourPrefs;
   /** Drive › Settings: transfers, bandwidth and what this computer keeps (worksuite-desktop#95). */
   drive: DrivePrefs;
+  /** Show the workspace chooser at every start (screen 11, "Always show this at startup"). Unset: off. */
+  chooserAlways?: boolean;
+  /** How much this computer keeps cached for the account, MB; `auto` follows the policy's `offline_storage_max_mb`. Unset: auto. */
+  desktopCacheLimitMb?: number | 'auto';
+  /** Banners for accounts other than the open one. Unset: on. */
+  otherAccountNotifications?: boolean;
 }
 
 /** A bandwidth cap: off (Unlimited) or a number of KB/s or MB/s, kept as the person typed it. */
@@ -1005,6 +1039,10 @@ export interface StatusSnapshot {
   safeMode: boolean;
   /** Connection strength's measurements (worksuite-desktop#254): pings, reconnects and the API's median. */
   connection?: ConnectionStats;
+  /** The active account's server, for the service banner (screen 16). */
+  service?: ServiceHealthState;
+  /** Unread in the accounts not open now, for the switcher's dot. */
+  otherAccountsUnread?: number;
 }
 
 export type TransferDirection = 'upload' | 'download';
