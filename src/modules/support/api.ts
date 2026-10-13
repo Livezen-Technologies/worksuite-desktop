@@ -32,6 +32,7 @@ import {
   type KbInsert,
   type KbSuggestion,
   type ListParams,
+  type HeldReply,
   type Message,
   type MessageAnswer,
   type MessageInput,
@@ -692,6 +693,34 @@ export async function linkContact(ticketId: number, to: { contact_id: number } |
 
 export async function unlinkContact(ticketId: number): Promise<{ client: TicketClient; ticket: TicketFull }> {
   return v1Only(() => send('DELETE', `${BASE}/tickets/${ticketId}/contact`));
+}
+
+/* ── the customer channels (#336) ───────────────────────────────────────── */
+
+/** Replies from an "Unverified sender" waiting for review, on the tickets I see and read notes on. */
+export async function heldReplies(signal?: AbortSignal): Promise<HeldReply[]> {
+  const r = await v1Only(() => get<{ held?: HeldReply[] }>(`${BASE}/held`, undefined, signal));
+  return r.held ?? [];
+}
+
+/** Release a held reply into the conversation: the requester's side from then on, and its sender with it. */
+export function releaseHeld(ticketId: number, messageId: number): Promise<{ message: Message | null }> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/messages/${messageId}/release`, {}));
+}
+
+/** Discard a held reply: it stays an internal note, out of review. */
+export function discardHeld(ticketId: number, messageId: number): Promise<{ message: Message | null }> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/messages/${messageId}/discard`, {}));
+}
+
+/** "Show original": the whole email a reply was cut from (quoted history and signature included). */
+export function messageOriginal(ticketId: number, messageId: number): Promise<{ id: number; original: string; cut: boolean }> {
+  return v1Only(() => get(`${BASE}/tickets/${ticketId}/messages/${messageId}/original`));
+}
+
+/** Every ticket-page link and session the requester holds for this ticket stops working. */
+export function revokeTicketLinks(ticketId: number): Promise<unknown> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/access/revoke`, {}));
 }
 
 /** The store sends the order's licence email again. */
