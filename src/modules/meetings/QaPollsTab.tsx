@@ -31,55 +31,62 @@ export function QaPollsTab({ d }: { d: Detail }) {
   if (q.error) return <ErrorNote error={q.error} />;
   const data = q.data ?? { questions: [], polls: [], full: false };
   return (
-    <div className="flex flex-col gap-5 text-[12.5px]">
+    <div className="flex flex-col gap-3 text-[12.5px]">
       {data.full ? <p className="rounded-[9px] bg-subtle px-2.5 py-2 text-ink-2">You ran this meeting: hidden questions, polls that were not shared, and who asked anonymous questions are shown to you. Participants see only what the room showed them.</p> : null}
-      <section className="flex flex-col gap-2" aria-label={t('act.qa')}>
-        <h2 className="text-[15px] font-bold text-ink">{t('act.qa')}</h2>
-        {data.questions.length ? (
-          <ul className="flex flex-col gap-2">
-            {data.questions.map((x) => (
-              <li key={x.id} className={cx('flex flex-col gap-1 rounded-[10px] border border-line p-2.5', x.hidden && 'border-dashed opacity-75')}>
-                <p className="whitespace-pre-wrap break-words text-ink selectable">{x.text}</p>
-                <span className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-3">
-                  {x.author ?? t('act.anonymous')}
-                  {x.anonymous && x.author ? <Chip>{t('act.anonymous')}</Chip> : null}
-                  <span>· {t('act.upvotes', { n: x.votes })}</span>
-                  {x.created_at ? <span>· {dateLabel(x.created_at)}</span> : null}
-                  {x.status === 'answered' ? <Chip tone="success">{t('act.answered')}</Chip> : null}
-                  {x.hidden ? <Chip tone="warning">{t('act.hidden')}</Chip> : null}
+      <div className="grid items-start gap-4 [grid-template-columns:repeat(2,minmax(0,1fr))]">
+        <section className="flex flex-col gap-2.5" aria-label={t('act.qa')}>
+          <h2 className="text-[15px] font-bold text-ink">
+            {t('act.qa')} ({data.questions.length})
+          </h2>
+          {data.questions.length ? (
+            <ul className="flex flex-col gap-2.5">
+              {data.questions.map((x) => (
+                <li key={x.id} className={cx('flex flex-col gap-1.5 rounded-[12px] border border-line bg-surface p-3', x.hidden && 'border-dashed opacity-75')}>
+                  <span className="flex flex-wrap items-center gap-1.5 text-[11.5px] text-ink-3">
+                    {x.author ?? t('act.anonymous')}
+                    {x.anonymous && x.author ? <Chip>{t('act.anonymous')}</Chip> : null}
+                    <span>· {t('act.upvotes', { n: x.votes })}</span>
+                    {x.created_at ? <span>· {dateLabel(x.created_at)}</span> : null}
+                  </span>
+                  <p className={cx('whitespace-pre-wrap break-words selectable', x.hidden ? 'text-ink-3' : 'text-ink')}>{x.text}</p>
+                  {x.answer ? (
+                    <p className="rounded-[8px] bg-subtle px-2 py-1.5 text-ink-2">
+                      <b className="text-ink">{x.answered_by ? t('act.answeredBy', { name: x.answered_by }) : t('act.answered')}</b> · {x.answer}
+                    </p>
+                  ) : null}
+                  <span className="flex gap-1.5">
+                    {x.hidden ? <Chip tone="warning">{t('act.hidden')}</Chip> : x.status === 'answered' ? <Chip tone="success">{x.answer ? t('act.answered') : 'Answered live'}</Chip> : <Chip tone="indigo">Open</Chip>}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="text-ink-3">{t('act.noQuestions')}</p>
+          )}
+        </section>
+        <section className="flex flex-col gap-2.5" aria-label={t('act.polls')}>
+          <h2 className="text-[15px] font-bold text-ink">
+            {t('act.polls')} ({data.polls.length})
+          </h2>
+          {data.polls.length ? (
+            data.polls.map((p) => (
+              <div key={p.id} className="flex flex-col gap-2.5 rounded-[12px] border border-line bg-surface p-3">
+                <div className="flex items-start gap-2">
+                  <b className="min-w-0 flex-1 break-words text-ink">{p.question}</b>
+                  <Chip tone={p.status === 'live' ? 'success' : p.status === 'draft' ? 'warning' : 'muted'}>{t(p.status === 'live' ? 'act.live' : p.status === 'draft' ? 'act.draft' : 'act.closed')}</Chip>
+                </div>
+                <PollResults poll={p} />
+                <span className="text-[11.5px] text-ink-3">
+                  {t(p.kind === 'single' ? 'act.single' : 'act.multiple')} · {t('act.voters', { n: p.voters })} · {p.anonymous ? t('act.pollAnonymousChoice') : 'Not anonymous'}
+                  {data.full ? ` · ${p.shared ? t('act.resultsShared') : 'Results not shared'}` : ''}
                 </span>
-                {x.answer ? (
-                  <p className="rounded-[8px] bg-subtle px-2 py-1.5 text-ink-2">
-                    <b className="text-ink">{x.answered_by ? t('act.answeredBy', { name: x.answered_by }) : t('act.answered')}</b> · {x.answer}
-                  </p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="text-ink-3">{t('act.noQuestions')}</p>
-        )}
-      </section>
-      <section className="flex flex-col gap-2" aria-label={t('act.polls')}>
-        <h2 className="text-[15px] font-bold text-ink">{t('act.polls')}</h2>
-        {data.polls.length ? (
-          data.polls.map((p) => (
-            <div key={p.id} className="flex flex-col gap-2 rounded-[10px] border border-line p-2.5">
-              <div className="flex items-start gap-2">
-                <b className="min-w-0 flex-1 break-words text-ink">{p.question}</b>
-                <Chip tone={p.status === 'live' ? 'success' : p.status === 'draft' ? 'warning' : 'muted'}>{t(p.status === 'live' ? 'act.live' : p.status === 'draft' ? 'act.draft' : 'act.closed')}</Chip>
               </div>
-              <span className="text-[11.5px] text-ink-3">
-                {t(p.kind === 'single' ? 'act.single' : 'act.multiple')} · {t('act.voters', { n: p.voters })} · {p.anonymous ? t('act.pollAnonymousChoice') : 'Not anonymous'}
-                {data.full ? ` · ${p.shared ? t('act.resultsShared') : 'Results not shared'}` : ''}
-              </span>
-              <PollResults poll={p} />
-            </div>
-          ))
-        ) : (
-          <p className="text-ink-3">{t('act.noPolls')}</p>
-        )}
-      </section>
+            ))
+          ) : (
+            <p className="text-ink-3">{t('act.noPolls')}</p>
+          )}
+        </section>
+      </div>
     </div>
   );
 }

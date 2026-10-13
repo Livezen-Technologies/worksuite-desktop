@@ -99,6 +99,16 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
   });
   const busyOf = (uid: number) => availability.data?.people.find((x) => x.user_id === uid);
   const mine = (availability.data?.conflicts ?? []).filter((c) => !people.some((p) => p.id === c.user_id));
+  // Each person as D06 marks them: Busy, Maybe busy, Free — or Unknown, when their time could not be checked.
+  const unknown = new Set((availability.data?.unknown ?? []).map((u) => u.user_id ?? u.id).filter((x): x is number => typeof x === 'number'));
+  const availabilityOf = (uid: number): [string, 'danger' | 'warning' | 'success' | 'muted'] | null => {
+    if (unknown.has(uid)) return ['Unknown', 'muted'];
+    const b = busyOf(uid);
+    if (b?.busy) return b.tentative_only ? ['Maybe busy', 'warning'] : ['Busy', 'danger'];
+    return availability.data ? ['Free', 'success'] : null;
+  };
+  const busyPeople = people.filter((p) => busyOf(p.id)?.busy);
+  const clash = busyPeople.length > 0 || mine.length > 0;
   const startField = useRef<HTMLInputElement>(null);
   const gate = useConflictGate('Schedule anyway', () => startField.current?.focus());
   const needle = q.trim().toLowerCase();
@@ -142,13 +152,19 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
     }
   };
 
+  const ready = !!title.trim() && !!start && !!end && end > start && !(isOnline && paste && !link.trim());
   const field = 'h-9 w-full rounded-[8px] border border-line bg-surface px-2.5 text-[13px] font-normal text-ink outline-none focus:border-primary';
   const label = 'flex flex-col gap-1 text-[12.5px] font-semibold text-ink';
   return (
     <Modal
-      title="Schedule a meeting"
+      title={
+        <span className="flex items-baseline gap-2">
+          Schedule a meeting
+          {builtin ? <span className="text-[12px] font-normal text-ink-3">Starts from your Meet defaults</span> : null}
+        </span>
+      }
       onClose={onClose}
-      width={760}
+      width={720}
       footer={
         <>
           <label className="mr-auto flex items-center gap-2 text-[12.5px] text-ink">
@@ -156,9 +172,21 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
             Add to Calendar and send invitations
           </label>
           <Button onClick={onClose}>Cancel</Button>
-          <Button variant="primary" loading={busy} disabled={!title.trim() || !start || !end || end <= start || (isOnline && paste && !link.trim())} onClick={() => void gate.guard(conflictQuery, save)}>
-            {invite ? 'Schedule & invite' : 'Schedule'}
-          </Button>
+          {clash ? (
+            // The clash is on the form already: the person chooses, with nothing more to confirm (D06).
+            <>
+              <Button loading={busy} disabled={!ready} onClick={() => void save()}>
+                Schedule anyway
+              </Button>
+              <Button variant="primary" onClick={() => startField.current?.focus()}>
+                Find another time
+              </Button>
+            </>
+          ) : (
+            <Button variant="primary" loading={busy} disabled={!ready} onClick={() => void gate.guard(conflictQuery, save)}>
+              {invite ? 'Schedule & invite' : 'Schedule'}
+            </Button>
+          )}
         </>
       }
     >
@@ -261,9 +289,15 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
               <span key={p.id} className="flex items-center gap-1 rounded-full bg-selection py-0.5 pr-2 pl-1 text-[12px] font-semibold text-primary">
                 <Avatar name={p.name} size={18} />
                 {p.name}
-                {busyOf(p.id)?.busy ? (
-                  <span title="They have something else then. What it is stays theirs." className="rounded-full bg-warning-bg px-1.5 text-[10.5px] font-bold text-warning">
-                    {busyOf(p.id)!.tentative_only ? 'Maybe busy' : 'Busy'}
+                {availabilityOf(p.id) ? (
+                  <span
+                    title={availabilityOf(p.id)![0] === 'Unknown' ? 'Their time could not be checked.' : 'What they have stays theirs.'}
+                    className={cx(
+                      'rounded-full px-1.5 text-[10.5px] font-bold',
+                      { danger: 'bg-danger-bg text-danger', warning: 'bg-warning-bg text-warning', success: 'bg-success-bg text-success', muted: 'bg-subtle text-ink-2' }[availabilityOf(p.id)![1]],
+                    )}
+                  >
+                    {availabilityOf(p.id)![0]}
                   </span>
                 ) : null}
                 {builtin ? (
@@ -293,6 +327,11 @@ export function ScheduleDialog({ onClose, online, onCreated, preset }: { onClose
             </div>
           ) : null}
         </div>
+        {busyPeople.length ? (
+          <p role="status" className="m-0 rounded-[8px] border border-[#F1D9B5] bg-[#FFF9EC] px-2.5 py-2 text-[12.5px] text-[#78350F] dark:bg-warning-bg dark:text-warning">
+            {busyPeople.length === 1 ? `${busyPeople[0]!.name} is busy then.` : `${busyPeople.length} people are busy then.`} What they have is not shown unless you could open it.
+          </p>
+        ) : null}
         {builtin ? (
           <div className="rounded-[10px] border border-line">
             <button type="button" aria-expanded={roomOpen} onClick={() => setRoomOpen(!roomOpen)} className="flex w-full items-center gap-2 px-3 py-2 text-left text-[12.5px] font-semibold text-ink">

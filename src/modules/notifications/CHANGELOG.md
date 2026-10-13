@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.1.0 — 2026-10-13
+
+**Added**
+
+- a module's own banner for a bell entry (Meetings' reminders and invitations) claims attention under that entry's key, so one device shows it, and is handed the notification's own actions.
+
 ## 2.0.0 — 2026-10-11
 
 **Added**

@@ -86,6 +86,11 @@ export interface Incoming {
   custom?: CustomNotice | null;
   /** The bell's notification this banner stands for, when its id is not that one's: read when it is clicked. */
   readId?: string | null;
+  /**
+   * The key this banner claims attention under (docs/NOTIFICATION_DELIVERY.md), when it is not its id's: a module's
+   * banner for a bell entry claims the entry's own `notification:{id}`, so one device shows it, as for any other.
+   */
+  attentionKey?: string | null;
   /** Social Media Manager's post, approval or inbox thread (SMM-DSK-002): View post, Approve, Reply, Copy caption. */
   social?: SocialNotice | null;
   /** A call the agent promised, due now (WS-MKT-SRS-001 MKT-CAL-12): Call now and Snooze 15 min on the banner. */
@@ -119,6 +124,10 @@ export interface ClaimedNotice {
   link: string | null;
   category: string | null;
   priority: string | null;
+  /** The notification's own buttons as the server sent them (a meeting's answers and Join, worksuite-desktop#97). */
+  actions?: unknown;
+  /** The app it is filed under here, as a plain banner of it would be: its switch and the person's access apply. */
+  module?: string;
 }
 
 /** The callback a Marketing reminder is about: its queue row and the time promised (the server's UTC stamp). */
@@ -624,7 +633,7 @@ export class NotificationService {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
           if (n.desktop_allowed === false) return;
-          if (this.claim({ id: i.id, event: n.event_key ?? n.type ?? null, title: i.title, body: i.body, link: i.link, category: n.category ?? null, priority: n.priority ?? null })) return;
+          if (this.claim({ id: i.id, event: n.event_key ?? n.type ?? null, title: i.title, body: i.body, link: i.link, category: n.category ?? null, priority: n.priority ?? null, actions: n.actions, module: i.module })) return;
           this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), social: socialNoticeActions(n.event_key ?? n.type, n.link, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
@@ -738,7 +747,7 @@ export class NotificationService {
         if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
         if (moduleOf({ category, link }) === 'mail' || e.event === 'mail.received') this.mailUnread.add(id);
         // Shown its module's way (Support's banners): remembered, so the list does not show it again.
-        if (!this.shown.includes(id) && this.claim({ id, event: typeof e.event === 'string' ? e.event : null, title: String(e.title ?? 'Notification'), body: String(e.body ?? ''), link, category, priority: typeof e.priority === 'string' ? e.priority : null })) {
+        if (!this.shown.includes(id) && this.claim({ id, event: typeof e.event === 'string' ? e.event : null, title: String(e.title ?? 'Notification'), body: String(e.body ?? ''), link, category, priority: typeof e.priority === 'string' ? e.priority : null, actions: e.actions, module: moduleOf({ category: e.category as string, link }) })) {
           this.remember(id);
           this.onChanged();
           void this.refreshList(true);
@@ -995,7 +1004,7 @@ export class NotificationService {
     }
     const device = this.device;
     if (device && !n.id.startsWith('test:') && !n.id.startsWith('local:')) {
-      const key = /^\d+$/.test(n.id) ? `notification:${n.id}` : n.id;
+      const key = n.attentionKey || (/^\d+$/.test(n.id) ? `notification:${n.id}` : n.id);
       void device.decision(key, notificationContext(n.link)).then((decision) => { if (decision.notify && this.device === device) this.showNative({ ...n, sound: decision.sound }); });
       return;
     }

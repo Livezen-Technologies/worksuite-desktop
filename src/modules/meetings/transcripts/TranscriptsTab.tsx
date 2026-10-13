@@ -38,29 +38,31 @@ export function TranscriptsTab({ d }: { d: Detail }) {
   const recordings = (d.recordings ?? []).filter((r) => r.status === 'ready');
   if (open) return <TranscriptView id={open} title={d.meeting.title} onBack={() => setOpen(null)} />;
   return (
-    <div className="flex flex-col gap-3">
-      <h2 className="text-[15px] font-bold text-ink">Transcripts</h2>
-      {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
-      {q.isSuccess && !rows.length ? <p className="text-ink-3">No transcripts yet. Start one during the meeting, or make one from a recording below.</p> : null}
-      {rows.map((t) => (
-        <button key={t.id} type="button" onClick={() => setOpen(t.id)} className="flex items-center gap-2.5 rounded-[10px] border border-line px-3 py-2 text-left hover:bg-subtle">
-          <span className="flex min-w-0 flex-1 flex-col">
-            <b className="text-ink">{t.source === 'live' ? 'During the meeting' : 'From a recording'} · {LANGUAGE_LABEL[t.language]}</b>
-            <span className="text-[12px] text-ink-3">{[t.started_at ? `${dateLabel(t.started_at)} ${timeLabel(t.started_at)}` : null, `${t.segments_count} segments`, t.engine === 'local' ? 'transcribed on a computer' : t.engine === 'online' ? 'transcribed online' : null].filter(Boolean).join(' · ')}</span>
-            {t.status === 'failed' && t.error ? <span className="text-[12px] text-danger">{t.error}</span> : null}
-          </span>
-          {t.status === 'processing' ? <span className="text-[12px] font-semibold text-primary">{t.progress}%</span> : null}
-          <Chip tone={STATUS[t.status][1]}>{STATUS[t.status][0]}</Chip>
-        </button>
-      ))}
-      {recordings.length ? (
-        <div className="flex flex-col gap-2 border-t border-line pt-3">
-          <b className="text-ink">Make a transcript from a recording</b>
-          {recordings.map((r) => (
-            <GenerateFromRecording key={r.id} meetingId={id} recording={r} onDone={(tid) => (void q.refetch(), setOpen(tid))} />
-          ))}
-        </div>
-      ) : null}
+    <div className="flex items-start gap-4">
+      <div className="flex min-w-0 flex-[2] flex-col gap-2.5">
+        <h2 className="text-[15px] font-bold text-ink">Transcripts</h2>
+        {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
+        {q.isSuccess && !rows.length ? <p className="text-ink-3">No transcripts yet. Start one during the meeting, or make one from a recording.</p> : null}
+        {rows.map((t) => (
+          <button key={t.id} type="button" onClick={() => setOpen(t.id)} className="flex items-center gap-2.5 rounded-[10px] border border-line px-3 py-2 text-left hover:bg-subtle">
+            <span className="flex min-w-0 flex-1 flex-col">
+              <b className="text-ink">{LANGUAGE_LABEL[t.language]} · {t.source === 'live' ? 'during the meeting' : 'from a recording'} · v{t.version}</b>
+              <span className="text-[12px] text-ink-3">{[t.started_at ? `${dateLabel(t.started_at)} ${timeLabel(t.started_at)}` : null, `${t.segments_count} segments`, t.engine === 'local' ? 'transcribed on a computer' : t.engine === 'online' ? 'transcribed online' : null].filter(Boolean).join(' · ')}</span>
+              {t.status === 'failed' && t.error ? <span className="text-[12px] text-danger">{t.error}</span> : null}
+            </span>
+            {t.status === 'processing' ? <span className="text-[12px] font-semibold text-primary">{t.progress}%</span> : null}
+            <Chip tone={STATUS[t.status][1]}>{STATUS[t.status][0]}</Chip>
+          </button>
+        ))}
+      </div>
+      <aside className="flex min-w-0 flex-1 flex-col gap-2 rounded-[12px] border border-line bg-surface p-3">
+        <b className="text-ink">Transcribe a recording</b>
+        {recordings.length ? (
+          recordings.map((r) => <GenerateFromRecording key={r.id} meetingId={id} recording={r} onDone={(tid) => (void q.refetch(), setOpen(tid))} />)
+        ) : (
+          <span className="text-[12px] text-ink-3">Your recordings of this meeting can be transcribed here, on this computer first, once they are ready.</span>
+        )}
+      </aside>
     </div>
   );
 }
@@ -200,15 +202,16 @@ export function TranscriptView({ id, title, onBack }: { id: number; title: strin
             <Button size="sm" icon="copy" onClick={() => void navigator.clipboard.writeText(transcriptText(segments)).then(() => toast('success', 'Transcript copied.'))}>
               Copy
             </Button>
+            <span className="flex-1" />
             <Button size="sm" icon="download" onClick={() => exportAs('txt')}>
-              TXT
+              Export TXT
             </Button>
             <Button size="sm" icon="download" onClick={() => exportAs('pdf')}>
-              PDF
+              Export PDF
             </Button>
             {t.can.email && t.status === 'ready' ? (
               <Button size="sm" variant="primary" icon="send" onClick={() => setEmailing(true)}>
-                Email transcript…
+                Email transcript
               </Button>
             ) : null}
           </>
@@ -217,33 +220,54 @@ export function TranscriptView({ id, title, onBack }: { id: number; title: strin
       {t.auto_email.enabled ? (
         <p className="text-[12px] text-ink-2">{t.auto_emailed_at ? `Emailed automatically ${dateLabel(t.auto_emailed_at)} to the people chosen.` : `It will be emailed automatically to ${t.auto_email.participant_ids.length} ${t.auto_email.participant_ids.length === 1 ? 'person' : 'people'} once it is ready.`}</p>
       ) : null}
-      {!segments.length ? <p className="text-ink-3">{working ? 'Nothing transcribed yet.' : 'Nothing was transcribed.'}</p> : null}
-      <ol className="flex flex-col gap-1.5">
-        {segments.map((s, i) => (
-          <li key={`${s.start_ms}-${i}`} className={cx('grid gap-2 rounded-[8px] px-2 py-1.5 [grid-template-columns:64px_150px_1fr]', s.uncertain && 'bg-[#FFF9EC] dark:bg-warning-bg')}>
-            <span className="pt-0.5 font-mono text-[12px] text-ink-3">{stamp(s.start_ms)}</span>
-            {editing ? (
-              <input aria-label={`Speaker at ${stamp(s.start_ms)}`} value={s.speaker} placeholder={UNIDENTIFIED} onChange={(e) => set(i, { speaker: e.target.value })} className="h-8 rounded-[7px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
-            ) : (
-              <b className={cx('truncate', s.speaker ? 'text-ink' : 'text-ink-3 italic')}>{s.speaker || UNIDENTIFIED}</b>
-            )}
-            {editing ? (
-              <span className="flex flex-col gap-1">
-                <textarea aria-label={`What was said at ${stamp(s.start_ms)}`} value={s.text} rows={Math.min(5, Math.ceil(s.text.length / 70) || 1)} onChange={(e) => set(i, { text: e.target.value })} className="rounded-[7px] border border-line bg-surface px-2 py-1 text-[13px] text-ink" />
-                <label className="flex items-center gap-1.5 text-[11.5px] text-ink-3">
-                  <Checkbox checked={s.uncertain} onChange={(e) => set(i, { uncertain: e.target.checked })} /> Unclear
-                </label>
-              </span>
-            ) : (
-              <span className="text-ink selectable">
-                {s.text}
-                {s.uncertain ? <span className="ml-1 text-[11.5px] font-semibold text-[#9A5B00]">(unclear)</span> : null}
-              </span>
-            )}
-          </li>
-        ))}
-      </ol>
-      {t.can.email ? <Deliveries id={id} /> : null}
+      <div className="flex items-start gap-4">
+        <div className="flex min-w-0 flex-[2] flex-col">
+          {!segments.length ? <p className="text-ink-3">{working ? 'Nothing transcribed yet.' : 'Nothing was transcribed.'}</p> : null}
+          {segments.length ? (
+            <ol className="flex flex-col rounded-[12px] border border-line bg-surface">
+              {segments.map((s, i) => (
+                <li key={`${s.start_ms}-${i}`} className={cx('grid gap-2 border-b border-line px-3 py-2 last:border-0 [grid-template-columns:72px_1fr]', s.uncertain && 'bg-[#FFF9EC] dark:bg-warning-bg')}>
+                  <span className="pt-0.5 font-mono text-[12px] text-ink-3">{stamp(s.start_ms)}</span>
+                  <span className="flex min-w-0 flex-col gap-0.5">
+                    {editing ? (
+                      <input aria-label={`Speaker at ${stamp(s.start_ms)}`} value={s.speaker} placeholder={UNIDENTIFIED} onChange={(e) => set(i, { speaker: e.target.value })} className="h-8 max-w-[240px] rounded-[7px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
+                    ) : (
+                      <span className="flex items-center gap-1.5 text-[12px]">
+                        <b className={cx('truncate', s.speaker ? 'text-ink' : 'text-[#B45309] dark:text-warning')}>{s.speaker || UNIDENTIFIED}</b>
+                        {!s.speaker && t.can.correct && !working ? (
+                          <button type="button" onClick={() => setEditing(t.segments ?? [])} className="font-semibold text-primary hover:underline">
+                            name speaker
+                          </button>
+                        ) : null}
+                      </span>
+                    )}
+                    {editing ? (
+                      <span className="flex flex-col gap-1">
+                        <textarea aria-label={`What was said at ${stamp(s.start_ms)}`} value={s.text} rows={Math.min(5, Math.ceil(s.text.length / 70) || 1)} onChange={(e) => set(i, { text: e.target.value })} className="rounded-[7px] border border-line bg-surface px-2 py-1 text-[13px] text-ink" />
+                        <label className="flex items-center gap-1.5 text-[11.5px] text-ink-3">
+                          <Checkbox checked={s.uncertain} onChange={(e) => set(i, { uncertain: e.target.checked })} /> Unclear
+                        </label>
+                      </span>
+                    ) : (
+                      <span className="text-ink selectable">
+                        {s.text}
+                        {s.uncertain ? <span className="ml-1 text-[11.5px] font-semibold text-[#9A5B00]">(unclear)</span> : null}
+                      </span>
+                    )}
+                  </span>
+                </li>
+              ))}
+            </ol>
+          ) : null}
+        </div>
+        {t.can.email ? (
+          <aside className="flex min-w-0 flex-1 flex-col gap-1.5 rounded-[12px] border border-line bg-surface p-3">
+            <b className="text-ink">Email deliveries</b>
+            <Deliveries id={id} />
+            <span className="text-[11.5px] text-ink-3">Only people who may see the transcript can be chosen.</span>
+          </aside>
+        ) : null}
+      </div>
       {emailing ? <EmailTranscriptDialog t={t} title={title} onClose={() => setEmailing(false)} /> : null}
     </div>
   );
@@ -252,7 +276,7 @@ export function TranscriptView({ id, title, onBack }: { id: number; title: strin
 function Deliveries({ id }: { id: number }) {
   const q = useQuery({ queryKey: ['meetings', 'transcript', id, 'deliveries'], queryFn: ({ signal }) => apiGet<{ deliveries: Delivery[] }>(`/api/meetings/transcripts/${id}/deliveries`, undefined, signal) });
   const rows = q.data?.deliveries ?? [];
-  if (!rows.length) return null;
+  if (!rows.length) return <span className="text-[12px] text-ink-3">Not emailed yet.</span>;
   const retry = async (d: Delivery) => {
     try {
       const r = await apiPost<Delivery>(`/api/meetings/transcripts/${id}/deliveries/${d.id}/retry`);
@@ -263,26 +287,24 @@ function Deliveries({ id }: { id: number }) {
     void q.refetch();
   };
   return (
-    <div className="flex flex-col gap-1.5 border-t border-line pt-3">
-      <b className="text-ink">Emailed</b>
+    <div className="flex flex-col">
       {rows.map((d) => (
-        <div key={d.id} className="flex items-center gap-2 text-[12.5px]">
-          <span className="min-w-0 flex-1 truncate text-ink">
-            {d.name} <span className="text-ink-3">{d.email}</span>
+        <div key={d.id} className="flex items-center gap-2 border-b border-line py-1.5 text-[12.5px] last:border-0">
+          <span className="min-w-0 flex-1 truncate text-ink" title={d.email ?? undefined}>
+            {d.name} <span className="text-ink-3">· {d.format === 'link' ? 'link' : d.format.toUpperCase()} · v{d.version}{d.automatic ? ' · automatic' : ''}</span>
           </span>
-          <span className="text-ink-3">{d.format === 'link' ? 'link' : d.format.toUpperCase()} · v{d.version}{d.automatic ? ' · automatic' : ''}</span>
-          {d.status === 'sent' ? <span className="font-semibold text-success">Sent{d.sent_at ? ` ${timeLabel(d.sent_at)}` : ''}</span> : null}
+          {d.status === 'sent' ? <Chip tone="success">Sent{d.sent_at ? ` ${timeLabel(d.sent_at)}` : ''}</Chip> : null}
           {d.status === 'failed' ? (
             <>
-              <span className="font-semibold text-danger" title={d.error ?? undefined}>
-                Failed
+              <span title={d.error ?? undefined}>
+                <Chip tone="danger">Failed</Chip>
               </span>
-              <button type="button" onClick={() => void retry(d)} className="font-semibold text-primary hover:underline">
+              <Button size="sm" onClick={() => void retry(d)}>
                 Retry
-              </button>
+              </Button>
             </>
           ) : null}
-          {d.status === 'queued' ? <span className="text-ink-3">Sending…</span> : null}
+          {d.status === 'queued' ? <Chip tone="indigo">Sending…</Chip> : null}
         </div>
       ))}
     </div>
