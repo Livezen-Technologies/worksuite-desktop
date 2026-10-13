@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-13
+
+**Added**
+
+- storage full while saving — edits kept on this computer and uploaded as a new version once there is room (Connection & Startup)
+
 ## 1.2.0 — 2026-10-10
 
 **Added**

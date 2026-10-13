@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-13
+
+**Added**
+
+- Storage page for WorkSuite Cloud accounts — 2 GB breakdown, what isn't counted, desktop cache limit (Connection & Startup)
+
 ## 1.2.0 — 2026-10-10
 
 **Added**

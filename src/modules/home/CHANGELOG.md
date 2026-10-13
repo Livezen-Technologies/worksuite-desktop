@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-13
+
+**Added**
+
+- storage card for WorkSuite Cloud accounts; app tiles follow the signed entitlements (Connection & Startup)
+
 ## 1.7.0 — 2026-10-09
 
 - Announcements on Home: one you have acknowledged leaves the widget (See all still lists it); with nothing left it reads 'You're all caught up.'

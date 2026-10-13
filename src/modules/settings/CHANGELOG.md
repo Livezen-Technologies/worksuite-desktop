@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.39.0 — 2026-10-13
+
+**Added**
+
+- Settings › Accounts & Servers — every account, sign out, remove from this device, connection health, Re-run discovery (Connection & Startup)
+
 ## 1.38.0 — 2026-10-13
 
 **Added**
