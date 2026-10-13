@@ -11,6 +11,17 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.248 — 2026-10-13
+
+- **See what happened to an email reply (#335).** Each emailed reply shows its latest state on the right of its header, e.g. "12:04 PM · Opened 12:30 PM (3×) · Clicked 1 link".
+- Hover the state for a summary, or click it for the full timeline with the approximate email client.
+- A bounced reply is red, with the reason, **Retry** and **Edit address**.
+- Links the customer followed show how many times.
+- Opens by mail apps' image proxies and clicks by link scanners are marked "Opened (automatic)" and "Scanned". Tracking is a hint, not proof, and the tooltip says so.
+- The ticket list marks tickets whose latest reply was opened, clicked or bounced.
+- The reply options have **Track this email**.
+- Where it bites: needs the server's Support 1.6.0, Notifications 2.1.0 and the `SupportEmailTracking` migration. Tracking is on by default; switch it off or set exclusions in Support settings › Email tracking on the web.
+
 ## 0.2.247 — 2026-10-13
 
 - **Customers' own channels on a ticket (#336).** Each customer message says how it came in: via Form, Email, Portal or Website chat.

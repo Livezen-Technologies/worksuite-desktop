@@ -8,7 +8,8 @@ import { Icon } from '../../components/Icon';
 import { Avatar, cx } from '../../components/ui';
 import { channelIcon, channelLabel } from './parts';
 import { MessageFiles, isPicture, onlyFileNames } from './MessageFiles';
-import { errorText, messageOriginal } from './api';
+import { errorText, messageOriginal, messageTracking } from './api';
+import { ACCURACY, emailStatus, eventLine, trackingSummary, untrackedReason, withClickCounts, type Tone } from './tracking';
 
 /**
  * A ticket's conversation (FR-COM-10): every message, oldest first — the requester's, the replies they were sent and
@@ -28,6 +29,11 @@ import { errorText, messageOriginal } from './api';
  * chat". A reply from an "Unverified sender" — not the requester, not copied — is an internal note held for review,
  * with Release (into the conversation) and Discard where the tab can act; an email reply cut down to what the
  * customer wrote this time offers "Show original".
+ *
+ * Email tracking (#335): a reply the desk emailed says the latest word on the right of its header — Sending, Sent,
+ * Delivered, "Opened 12:30 PM · Clicked 1 link", Opened (automatic), Bounced — and hovering or clicking it shows the
+ * whole timeline with the approximate client. A link the requester followed carries a small click count. A reply that
+ * bounced or did not go says why, with Retry and Edit address where the tab can send it again.
  */
 export function newSinceIndex(messages: Message[], lastRead: number, me: number | null): number {
   if (!lastRead) return -1;
@@ -149,6 +155,8 @@ function delivery(m: Message): string | null {
   if (m.internal || speaker(m) !== 'staff') return null;
   if (saidInChat(m)) return text('Sent in chat');
   if (!m.delivery_status) return null;
+  // What came back about it (#335), on a server that tracks; an older one keeps its own words.
+  if (m.tracking !== undefined || m.delivery_status === 'bounced') return emailStatus(m)?.label ?? null;
   return (
     (
       {
@@ -160,6 +168,112 @@ function delivery(m: Message): string | null {
         bounced: text('Bounced'),
       } as Record<string, string>
     )[m.delivery_status] ?? m.delivery_status
+  );
+}
+
+const TONE: Record<Tone, string> = {
+  muted: 'text-ink-3',
+  ok: 'text-ink-3',
+  good: 'text-success',
+  warn: 'text-warning-ink',
+  bad: 'text-danger',
+};
+
+/** The latest word on a reply's email (#335): its tooltip says the steps; a click opens the timeline. */
+function EmailStatus({ m, ticketId, label }: { m: Message; ticketId?: number; label: string }) {
+  const [open, setOpen] = useState(false);
+  const [steps, setSteps] = useState<string[] | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const tone = emailStatus(m)?.tone ?? 'muted';
+  const t = m.tracking ?? null;
+  const toggle = async () => {
+    if (open) return setOpen(false);
+    setOpen(true);
+    if (steps !== null || !ticketId) return;
+    try {
+      const r = await messageTracking(ticketId, m.id);
+      setSteps(r.timeline.map((e) => `${timeLabel(e.at)} · ${eventLine(e)}`));
+    } catch (e) {
+      setFailed(errorText(e, text('The timeline could not be loaded.')));
+    }
+  };
+  return (
+    <span className="relative">
+      <button
+        type="button"
+        data-email-status={t?.state ?? m.delivery_status ?? undefined}
+        aria-expanded={open}
+        title={trackingSummary(t) || undefined}
+        onClick={() => void toggle()}
+        className={cx('font-medium hover:underline', TONE[tone])}
+      >
+        {label}
+      </button>
+      {open ? (
+        <span role="dialog" aria-label={text('Email timeline')} data-email-timeline className="absolute right-0 top-5 z-20 flex w-[300px] flex-col gap-1 rounded-[10px] border border-line bg-surface p-2.5 text-left text-[12px] font-normal text-ink-2 shadow-lg">
+          {t && !t.tracked ? <span className="text-ink-3">{untrackedReason(t.untracked_reason)}</span> : null}
+          {(steps ?? (t ? trackingSummary(t).split('\n').filter((l) => l !== ACCURACY()) : [])).map((line, i) => (
+            <span key={i} className="block">
+              {line}
+            </span>
+          ))}
+          {failed ? <span className="text-danger">{failed}</span> : null}
+          <span className="mt-1 border-t border-line pt-1 text-[11px] text-ink-3">{ACCURACY()}</span>
+        </span>
+      ) : null}
+    </span>
+  );
+}
+
+/** A reply whose email bounced or did not go (#335): why, and Retry / Edit address when the tab can send it again. */
+function BounceBar({ m, requesterEmail, onResend }: { m: Message; requesterEmail?: string | null; onResend?: (m: Message, email?: string) => void }) {
+  const [editing, setEditing] = useState(false);
+  const [email, setEmail] = useState(requesterEmail ?? '');
+  const bounced = m.delivery_status === 'bounced' || m.tracking?.state === 'bounced';
+  const why = m.delivery_error || m.tracking?.reason || null;
+  const valid = /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim());
+  return (
+    <div data-bounce className="mt-2 flex flex-wrap items-center gap-2 rounded-[8px] bg-danger-bg px-2 py-1.5 text-[12px] text-danger">
+      <Icon name="warning" size={13} />
+      <span className="min-w-0 flex-1">
+        <b>{bounced ? text('The email bounced') : text('The email did not go')}</b>
+        {why ? ` · ${why}` : ''}
+      </span>
+      {onResend && !editing ? (
+        <>
+          <button type="button" onClick={() => onResend(m)} className="rounded-[6px] border border-line bg-surface px-2 py-0.5 font-semibold text-ink-2 hover:bg-subtle">
+            {text('Retry')}
+          </button>
+          <button type="button" onClick={() => setEditing(true)} className="rounded-[6px] border border-line bg-surface px-2 py-0.5 font-semibold text-ink-2 hover:bg-subtle">
+            {text('Edit address')}
+          </button>
+        </>
+      ) : null}
+      {onResend && editing ? (
+        <form
+          className="flex w-full items-center gap-1.5"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!valid) return;
+            onResend(m, email.trim());
+            setEditing(false);
+          }}
+        >
+          <input
+            aria-label={text('Requester’s email address')}
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            className="h-7 min-w-0 flex-1 rounded-[6px] border border-line bg-surface px-2 text-[12px] text-ink outline-none focus:border-primary"
+          />
+          <button type="submit" disabled={!valid} className="rounded-[6px] bg-primary px-2 py-0.5 font-semibold text-white disabled:opacity-50">
+            {text('Send again')}
+          </button>
+          <button type="button" onClick={() => setEditing(false)} className="px-1 text-ink-3 hover:text-ink-2">
+            {text('Cancel')}
+          </button>
+        </form>
+      ) : null}
+    </div>
   );
 }
 
@@ -252,6 +366,8 @@ export function Thread({
   className,
   ticketId,
   onHeld,
+  requesterEmail = null,
+  onResend,
 }: {
   messages: Message[];
   attachments?: Attachment[];
@@ -269,6 +385,10 @@ export function Thread({
   ticketId?: number;
   /** Release or discard a reply held from an unverified sender (#336); without it the bar only says so. */
   onHeld?: (m: Message, action: HeldAction) => void;
+  /** The requester's address, for Edit address on a bounced reply (#335). */
+  requesterEmail?: string | null;
+  /** Send a bounced or failed reply again, to a corrected address when given (#335); without it the bar only says why. */
+  onResend?: (m: Message, email?: string) => void;
 }) {
   const divider = newSinceIndex(messages, lastRead, me);
   const filesOf = new Map<number, Attachment[]>();
@@ -320,6 +440,9 @@ export function Thread({
         }
         const name = authorName(m, requester);
         const sent = delivery(m);
+        // A server that tracks says what came back about the email (#335): the status opens its timeline.
+        const tracked = !m.local_status && who === 'staff' && !m.internal && (m.tracking != null || m.delivery_status === 'bounced');
+        const failedEmail = !m.local_status && who === 'staff' && !m.internal && !saidInChat(m) && (m.delivery_status === 'bounced' || m.delivery_status === 'failed');
         const channel = messageChannel(m, i === 0, source);
         // A server that sends no copy list sends no copies.
         const cc = m.cc ?? [];
@@ -377,12 +500,24 @@ export function Thread({
                   {m.held === 'discarded' ? <span className="truncate text-ink-3">· {text('Discarded · unverified sender')}</span> : null}
                   <span className="ml-auto shrink-0 text-ink-3" title={m.created_at ? stampDayLabel(m.created_at, 'long') : undefined}>
                     {timeLabel(m.created_at)}
-                    {sent ? ` · ${sent}` : ''}
+                    {sent && tracked ? (
+                      <>
+                        {' · '}
+                        <EmailStatus m={m} ticketId={ticketId} label={sent} />
+                      </>
+                    ) : sent ? (
+                      ` · ${sent}`
+                    ) : (
+                      ''
+                    )}
                   </span>
                 </div>
               )}
               {m.held === 'unverified' ? <HeldBar m={m} onHeld={onHeld} /> : null}
-              {hideBody ? null : <FormattedMessage html={m.body_html || linkReplyUrls(replyHtml(m.body))} className={compact ? 'text-[12.5px]' : 'text-[13.5px] leading-relaxed'} />}
+              {hideBody ? null : (
+                <FormattedMessage html={withClickCounts(m.body_html || linkReplyUrls(replyHtml(m.body)), m.tracking?.links)} className={compact ? 'text-[12.5px]' : 'text-[13.5px] leading-relaxed'} />
+              )}
+              {failedEmail ? <BounceBar m={m} requesterEmail={requesterEmail} onResend={onResend} /> : null}
               {m.local_status === 'failed' && m.retry_input ? (
                 <button
                   type="button"

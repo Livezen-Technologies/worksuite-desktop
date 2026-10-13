@@ -10,6 +10,7 @@ import { pickOf, type PickHow } from '../../components/useListSelection';
 import { VirtualList } from '../../components/VirtualList';
 import { Button, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { ticketCount } from './bulk';
+import { latestReplyMark } from './tracking';
 import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusDot, channelIcon, channelLabel, requesterLine, statusDotTitle } from './parts';
 
 /**
@@ -17,7 +18,8 @@ import { ChannelIcon, PriorityChip, Reference, SlaChip, StatusDot, channelIcon, 
  * the subject, the requester and the SLA chip — unread in bold with a blue edge. A page of fifty at a time, the next
  * asked for as the list nears its end (`next_cursor`), drawn only where it shows, so a long view scrolls as a short
  * one does. Filtered by status, priority and channel (`source=`, #298); New ticket (C) beside the filters for
- * whoever may raise one.
+ * whoever may raise one. A ticket whose requester opened (or clicked a link in) the latest emailed reply says so with a
+ * small mark, and one whose latest reply bounced with a warning (#335).
  */
 export interface ListFilters {
   status: string[];
@@ -271,6 +273,7 @@ function Row({
 }) {
   const unread = t.unread > 0;
   const picked = selection?.selected.has(t.id) ?? false;
+  const reply = latestReplyMark(t);
   return (
     <div
       id={`support-row-${t.id}`}
@@ -309,6 +312,11 @@ function Row({
         <Reference>{t.reference}</Reference>
         <PriorityChip priority={t.priority} quiet className="py-0 text-[10.5px]" />
         {t.snoozed_until && Date.parse(t.snoozed_until) > now ? <Icon name="snooze" size={12} className="text-ink-3" label={text('Snoozed')} /> : null}
+        {reply ? (
+          <span data-latest-reply={t.latest_reply?.state} title={reply.label} className={cx('inline-flex shrink-0', reply.tone === 'bad' ? 'text-danger' : 'text-success')}>
+            <Icon name={reply.icon} size={12} label={reply.label} />
+          </span>
+        ) : null}
         <span className="ml-auto shrink-0 text-[11px] text-ink-3">{conversationStamp(t.updated_at)}</span>
       </span>
       <span className={cx('truncate pl-[34px] text-[13px]', unread ? 'font-bold text-ink' : 'text-ink')}>{t.subject}</span>

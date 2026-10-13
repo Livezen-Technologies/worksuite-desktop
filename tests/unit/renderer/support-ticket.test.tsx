@@ -462,6 +462,24 @@ describe('the composer', () => {
     await waitFor(() => expect(drafts['support:ticket:1284']).toBeUndefined());
   });
 
+  it('sends "Track this email" off for one reply, and says nothing when it stays on (#335)', async () => {
+    renderTab();
+    await screen.findByRole('heading', { name: /Microsoft 365/ });
+    fireEvent.click(screen.getByRole('radio', { name: 'Reply to requester' }));
+    const track = screen.getByRole('checkbox', { name: 'Track this email' }) as HTMLInputElement;
+    expect(track.checked).toBe(true);
+    fireEvent.click(track);
+    editReply(composerBox(), 'Here is the installer.');
+    fireEvent.keyDown(composerBox(), { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(1));
+    expect(calls('POST', '/api/support/v1/tickets/1284/messages')[0]!.body).toMatchObject({ internal: false, track: false });
+    await waitFor(() => expect((screen.getByRole('checkbox', { name: 'Track this email' }) as HTMLInputElement).checked).toBe(true));
+    editReply(composerBox(), 'And the guide.');
+    fireEvent.keyDown(composerBox(), { key: 'Enter', ctrlKey: true });
+    await waitFor(() => expect(calls('POST', '/api/support/v1/tickets/1284/messages')).toHaveLength(2));
+    expect(calls('POST', '/api/support/v1/tickets/1284/messages')[1]!.body).not.toHaveProperty('track');
+  });
+
   it('shows a pending message and preserves edits made before its send finishes', async () => {
     let finish!: (value: unknown) => void;
     served['POST /api/support/v1/tickets/1284/messages'] = () => new Promise((resolve) => { finish = resolve; });

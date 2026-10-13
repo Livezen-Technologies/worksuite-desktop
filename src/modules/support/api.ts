@@ -47,6 +47,7 @@ import {
   type TicketLink,
   type TicketPage,
   type TicketShow,
+  type TrackingTimeline,
   type TransitionInput,
   type ViewsAnswer,
 } from '@shared/support';
@@ -716,6 +717,25 @@ export function discardHeld(ticketId: number, messageId: number): Promise<{ mess
 /** "Show original": the whole email a reply was cut from (quoted history and signature included). */
 export function messageOriginal(ticketId: number, messageId: number): Promise<{ id: number; original: string; cut: boolean }> {
   return v1Only(() => get(`${BASE}/tickets/${ticketId}/messages/${messageId}/original`));
+}
+
+/** A reply's email, step by step (#335): queued, delivered or bounced, each open and click, with the approximate client. */
+export function messageTracking(ticketId: number, messageId: number, signal?: AbortSignal): Promise<TrackingTimeline> {
+  return v1Only(() => get(`${BASE}/tickets/${ticketId}/messages/${messageId}/tracking`, undefined, signal));
+}
+
+/** Retry a reply whose email bounced or did not go (#335) — to a corrected address when one is given ("Edit address"). */
+export function resendReply(ticketId: number, messageId: number, email?: string): Promise<{ message: Message }> {
+  return v1Only(() => send('POST', `${BASE}/tickets/${ticketId}/messages/${messageId}/resend`, email ? { email } : {}));
+}
+
+/** Whether this desk tracks email to the requester's address (#335). */
+export function trackingOptOut(ticketId: number): Promise<{ email: string | null; opted_out: boolean }> {
+  return v1Only(() => get(`${BASE}/tickets/${ticketId}/tracking-optout`));
+}
+
+export function setTrackingOptOut(ticketId: number, optedOut: boolean): Promise<{ email: string; opted_out: boolean }> {
+  return v1Only(() => send('PUT', `${BASE}/tickets/${ticketId}/tracking-optout`, { opted_out: optedOut }));
 }
 
 /** Every ticket-page link and session the requester holds for this ticket stops working. */
