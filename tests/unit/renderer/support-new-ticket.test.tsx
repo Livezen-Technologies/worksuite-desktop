@@ -363,7 +363,8 @@ describe('the channel', () => {
     ];
     render(<Thread messages={messages as never} source="walk_in" />);
     const labels = Array.from(document.querySelectorAll('[data-message]')).map((li) => li.querySelector('[data-channel]')?.textContent ?? null);
-    expect(labels).toEqual(['Walk-in', 'Internal note', null, 'Email', 'Phone']);
+    // A requester's message by a customer channel says "via" (#336); a call or a visit is just its name.
+    expect(labels).toEqual(['Walk-in', 'Internal note', null, 'via Email', 'Phone']);
     expect(screen.getByText('Replied to requester')).toBeTruthy();
     expect(messageChannel(msg(1, { channel: null }) as never, true, null)).toBeNull();
     expect(messageChannel(msg(1, { channel: 'agent', from: 'staff', delivery_channel: 'email' }) as never, false)).toBe('email');

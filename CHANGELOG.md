@@ -11,6 +11,13 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.247 — 2026-10-13
+
+- **Customers' own channels on a ticket (#336).** Each customer message says how it came in: via Form, Email, Portal or Website chat.
+- A reply from somebody who is not the requester or on copy is held. It shows like an internal note, with **Release** (it becomes public) and **Discard**.
+- An email reply cut down to its new text has **Show original**.
+- Where it bites: needs the server's Support 1.5.0 and its migration `SupportCustomerChannels`. The public form, the customer ticket page and the channel settings live on the server and the web app. The desktop has no Helpdesk settings screen and no list of held replies yet; they show on their tickets.
+
 ## 0.2.246 — 2026-10-13
 
 - **The ticket details drawer (#334).** A ticket's tab and the inbox's reading pane get Website chats' side panel (⌘⇧I or the header's panel button, its width kept). It has five sections:

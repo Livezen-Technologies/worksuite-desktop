@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.0 — 2026-10-13
+
+- The customer channels (#336): requester messages say via Form, Email, Portal or Website chat; replies from an unverified sender are held with Release and Discard; Show original for email replies; API calls for held replies and revoking ticket links
+
 ## 1.5.0 — 2026-10-12
 
 **Added**

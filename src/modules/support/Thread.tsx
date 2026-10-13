@@ -8,6 +8,7 @@ import { Icon } from '../../components/Icon';
 import { Avatar, cx } from '../../components/ui';
 import { channelIcon, channelLabel } from './parts';
 import { MessageFiles, isPicture, onlyFileNames } from './MessageFiles';
+import { errorText, messageOriginal } from './api';
 
 /**
  * A ticket's conversation (FR-COM-10): every message, oldest first — the requester's, the replies they were sent and
@@ -22,6 +23,11 @@ import { MessageFiles, isPicture, onlyFileNames } from './MessageFiles';
  *
  * "New since you last viewed" sits above the first message after my read marker that somebody else wrote. A ticket
  * never opened has no marker and no line: all of it is new.
+ *
+ * The customer channels (#336): a requester's message says "via Form", "via Email", "via Portal" or "via Website
+ * chat". A reply from an "Unverified sender" — not the requester, not copied — is an internal note held for review,
+ * with Release (into the conversation) and Discard where the tab can act; an email reply cut down to what the
+ * customer wrote this time offers "Show original".
  */
 export function newSinceIndex(messages: Message[], lastRead: number, me: number | null): number {
   if (!lastRead) return -1;
@@ -37,9 +43,12 @@ export function speaker(m: Pick<Message, 'from' | 'channel'>): Speaker {
   return m.from === 'requester' ? 'requester' : 'staff';
 }
 
-/** An internal note: the desk's own words, never the requester's, a chat's events or its bot's (#332). */
-export function isNote(m: Pick<Message, 'from' | 'channel' | 'internal'>): boolean {
-  return m.internal && speaker(m) === 'staff';
+/**
+ * An internal note: the desk's own words, never the requester's, a chat's events or its bot's (#332) — and a reply held
+ * from an unverified sender (#336), which nobody outside the desk has seen and must not look as if they had.
+ */
+export function isNote(m: Pick<Message, 'from' | 'channel' | 'internal' | 'held'>): boolean {
+  return m.internal && (speaker(m) === 'staff' || !!m.held);
 }
 
 /** What a message is, in words: who wrote it and to whom. */
@@ -67,6 +76,68 @@ export function messageChannel(m: Message, first: boolean, source?: string | nul
   if (m.channel && !NO_CHANNEL.has(m.channel)) return m.channel;
   if (m.from === 'staff' && m.delivery_channel && !NO_CHANNEL.has(m.delivery_channel)) return m.delivery_channel;
   return first && source ? source : null;
+}
+
+/** The channels a customer writes in by themselves (#336): their messages say "via …"; a call or a visit is just its name. */
+export const VIA_CHANNELS = new Set(['form', 'email', 'portal', 'chat', 'widget_offline', 'whatsapp']);
+
+/** How a channel badge reads (#336): "via Email" for a requester's message by a customer channel, else the channel's name. */
+export function channelBadge(who: Speaker, channel: string): string {
+  return who === 'requester' && VIA_CHANNELS.has(channel) ? text('via {channel}', { channel: channelLabel(channel) }) : channelLabel(channel);
+}
+
+/** What the tab does with a held reply (#336). */
+export type HeldAction = 'release' | 'discard';
+
+/** "Unverified sender" (#336): who wrote, and Release / Discard when the tab can act on it. */
+function HeldBar({ m, onHeld }: { m: Message; onHeld?: (m: Message, action: HeldAction) => void }) {
+  return (
+    <div data-held={m.held} className="mb-2 flex flex-wrap items-center gap-2 rounded-[8px] bg-surface/80 px-2 py-1.5 text-[12px] text-warning-ink">
+      <Icon name="warning" size={13} />
+      <span className="min-w-0 flex-1">
+        <b>{text('Unverified sender')}</b> · {text('{from} is not the requester or copied on this ticket.', { from: m.held_from ?? text('The sender') })}
+      </span>
+      {onHeld ? (
+        <>
+          <button type="button" onClick={() => onHeld(m, 'release')} className="rounded-[6px] bg-warning px-2 py-0.5 font-semibold text-white hover:opacity-90">
+            {text('Release')}
+          </button>
+          <button type="button" onClick={() => onHeld(m, 'discard')} className="rounded-[6px] border border-line px-2 py-0.5 font-semibold text-ink-2 hover:bg-subtle">
+            {text('Discard')}
+          </button>
+        </>
+      ) : null}
+    </div>
+  );
+}
+
+/** "Show original" (#336): the whole email, loaded when asked for. */
+function Original({ ticketId, m }: { ticketId: number; m: Message }) {
+  const [open, setOpen] = useState(false);
+  const [body, setBody] = useState<string | null>(null);
+  const [failed, setFailed] = useState<string | null>(null);
+  const toggle = async () => {
+    if (open) return setOpen(false);
+    setOpen(true);
+    if (body !== null) return;
+    try {
+      setBody((await messageOriginal(ticketId, m.id)).original);
+    } catch (e) {
+      setFailed(errorText(e, text('The original could not be loaded.')));
+    }
+  };
+  return (
+    <div className="mt-1.5">
+      <button type="button" aria-expanded={open} onClick={() => void toggle()} className="text-[11.5px] font-semibold text-ink-3 hover:text-ink-2">
+        {open ? text('Hide original') : text('Show original')}
+      </button>
+      {open ? (
+        <pre data-original className="mt-1 max-h-80 overflow-auto rounded-[8px] bg-subtle p-2 font-sans text-[12px] whitespace-pre-wrap text-ink-2 selectable">
+          {failed ?? body ?? text('Loading…')}
+        </pre>
+      ) : null}
+    </div>
+  );
 }
 
 /** Said to the visitor in a website chat (#332): delivered there as it was said, never emailed. */
@@ -179,6 +250,8 @@ export function Thread({
   compact = false,
   onOpenAttachment,
   className,
+  ticketId,
+  onHeld,
 }: {
   messages: Message[];
   attachments?: Attachment[];
@@ -192,6 +265,10 @@ export function Thread({
   compact?: boolean;
   onOpenAttachment?: (a: Attachment) => void;
   className?: string;
+  /** The ticket, for "Show original" (#336). */
+  ticketId?: number;
+  /** Release or discard a reply held from an unverified sender (#336); without it the bar only says so. */
+  onHeld?: (m: Message, action: HeldAction) => void;
 }) {
   const divider = newSinceIndex(messages, lastRead, me);
   const filesOf = new Map<number, Attachment[]>();
@@ -288,7 +365,7 @@ export function Thread({
                       {channel ? (
                         <span data-channel={channel} className="inline-flex shrink-0 items-center gap-1 rounded-[5px] bg-subtle px-1.5 text-[11px] font-semibold text-ink-3">
                           <Icon name={channelIcon(channel)} size={11} />
-                          {who === 'requester' && channel === 'chat' ? text('via {channel}', { channel: channelLabel(channel) }) : channelLabel(channel)}
+                          {channelBadge(who, channel)}
                         </span>
                       ) : null}
                       {/* The channel says how a requester's message came; a reply still says it went to them, unless it was said in the chat. */}
@@ -296,12 +373,15 @@ export function Thread({
                     </>
                   )}
                   {cc.length && !m.internal ? <span className="truncate text-ink-3">· {text('CC {list}', { list: cc.join(', ') })}</span> : null}
+                  {m.held === 'released' ? <span className="truncate text-success">· {text('Released from review')}</span> : null}
+                  {m.held === 'discarded' ? <span className="truncate text-ink-3">· {text('Discarded · unverified sender')}</span> : null}
                   <span className="ml-auto shrink-0 text-ink-3" title={m.created_at ? stampDayLabel(m.created_at, 'long') : undefined}>
                     {timeLabel(m.created_at)}
                     {sent ? ` · ${sent}` : ''}
                   </span>
                 </div>
               )}
+              {m.held === 'unverified' ? <HeldBar m={m} onHeld={onHeld} /> : null}
               {hideBody ? null : <FormattedMessage html={m.body_html || linkReplyUrls(replyHtml(m.body))} className={compact ? 'text-[12.5px]' : 'text-[13.5px] leading-relaxed'} />}
               {m.local_status === 'failed' && m.retry_input ? (
                 <button
@@ -322,6 +402,7 @@ export function Thread({
                 </button>
               ) : null}
               {files.length ? <MessageFiles files={files} pictures={pictures} onOpen={onOpenAttachment} className={hideBody ? undefined : 'mt-2'} /> : null}
+              {m.has_original && ticketId ? <Original ticketId={ticketId} m={m} /> : null}
             </li>
           </Fragment>
         );

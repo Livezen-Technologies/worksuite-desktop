@@ -353,6 +353,25 @@ export interface Message {
   client_id: string | null;
   edited_at: string | null;
   created_at: string | null;
+  /** How a requester's message came, in words: Form, Email, Portal, Website chat… (#336; absent from an older server). */
+  via?: string | null;
+  /** A reply from an "Unverified sender", held for review: unverified · released · discarded (#336). */
+  held?: 'unverified' | 'released' | 'discarded' | null;
+  held_from?: string | null;
+  /** The whole email this reply was cut from can be shown ("Show original", #336). */
+  has_original?: boolean;
+}
+
+/** A reply held for review (`GET held`, #336). */
+export interface HeldReply {
+  message_id: number;
+  ticket_id: number;
+  reference: string;
+  subject: string;
+  from: string | null;
+  name: string | null;
+  excerpt: string;
+  created_at: string | null;
 }
 
 export interface Attachment {

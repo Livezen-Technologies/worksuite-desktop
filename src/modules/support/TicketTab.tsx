@@ -12,7 +12,7 @@ import { toast } from '../../core/toasts';
 import { useNow } from '../../core/use-now';
 import { useStickToBottom } from '../../components/useStickToBottom';
 import { Avatar, Button, Empty, ErrorNote, IconButton, Kbd, Spinner, cx } from '../../components/ui';
-import { K, assign, assistError, errorText, getTicket, insertArticle, links, messagesBefore, meta, take, ticketIdForReference, transition, unwatch, watch } from './api';
+import { K, assign, assistError, discardHeld, errorText, getTicket, insertArticle, links, messagesBefore, meta, releaseHeld, take, ticketIdForReference, transition, unwatch, watch } from './api';
 import { useTicketCommands } from './palette';
 import { Activity } from './Activity';
 import { Assist, kbInsertText, type AssistTab } from './Assist';
@@ -28,7 +28,7 @@ import { FileRow, LinkRow, connectRustDesk } from './TicketSide';
 import { WIDE_TAB } from './details';
 import { DrawerButton, TicketDrawer, useDetailsDrawer } from './TicketDrawer';
 import { EditableSubject } from './Subject';
-import { Thread } from './Thread';
+import { Thread, type HeldAction } from './Thread';
 
 /** A ticket's key as its route names it: its id, or a reference looked up once. */
 export function useTicketId(key: string): { id: number | null; resolving: boolean; missing: boolean } {
@@ -196,6 +196,9 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
       refresh();
     }
   };
+  // A reply held from an unverified sender (#336): into the conversation, or out of review.
+  const onHeld = (m: Message, action: HeldAction) =>
+    void act(`held-${m.id}`, () => (action === 'release' ? releaseHeld(t.id, m.id) : discardHeld(t.id, m.id)), action === 'release' ? text('Released into the conversation') : text('Discarded'));
   const loadEarlier = async () => {
     const first = messages[0];
     if (!first) return;
@@ -337,7 +340,7 @@ function TicketView({ show, active }: { show: TicketShow & { offline?: boolean }
                       </Button>
                     </div>
                   ) : null}
-                  <Thread messages={messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} source={(hasEarlier ?? show.has_earlier) ? null : t.source} requester={t.requester?.name} onOpenAttachment={(a) => void openAttachment(a)} />
+                  <Thread messages={messages} attachments={show.attachments} lastRead={show.last_read_message_id} me={me} source={(hasEarlier ?? show.has_earlier) ? null : t.source} requester={t.requester?.name} onOpenAttachment={(a) => void openAttachment(a)} ticketId={t.id} onHeld={onHeld} />
                   {legacy ? <p className="pt-3 text-center text-[11.5px] text-ink-3">{text('Your WorkSuite server is older: read markers, files and who else is here show once it is updated.')}</p> : null}
                 </>
               ) : view === 'activity' ? (
