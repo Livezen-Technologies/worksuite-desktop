@@ -650,6 +650,7 @@ const api = {
     installWhenFree: call('updates:installWhenFree'),
     diagnostics: call('updates:diagnostics'),
     exportDiagnostics: call('updates:exportDiagnostics'),
+    fixRepo: call('updates:fixRepo'),
   },
   settings: {
     get: call('settings:get'),

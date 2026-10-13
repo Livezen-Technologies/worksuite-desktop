@@ -1300,6 +1300,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('updates:cancelDownload', () => ctx.updater.cancelDownload());
   router.handle('updates:installWhenFree', () => ctx.updater.installWhenFree());
   router.handle('updates:diagnostics', () => ctx.updateDiagnostics());
+  // Diagnostics › Fix on a package repository check (worksuite-desktop#351): one password prompt.
+  router.handle('updates:fixRepo', () => ctx.updater.fixRepo());
   router.handle('updates:exportDiagnostics', async (input, c) => {
     const stamp = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19);
     const opts = { title: 'Save update diagnostics', defaultPath: `WorkSuite-update-diagnostics-${stamp}.txt`, filters: [{ name: 'Text', extensions: ['txt'] }] };

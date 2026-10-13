@@ -441,6 +441,7 @@ export const INVOKE_CHANNELS = [
   'updates:installWhenFree',
   'updates:diagnostics',
   'updates:exportDiagnostics',
+  'updates:fixRepo',
 
   'settings:get',
   'settings:set',

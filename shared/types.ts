@@ -1231,12 +1231,15 @@ export interface BusyDetails {
 
 /** One check on Settings › Updates › Diagnostics. */
 export interface UpdateDiagnosticCheck {
-  id: 'service' | 'version' | 'channel' | 'signature' | 'download' | 'disk' | 'permissions' | 'database' | 'license';
+  // repo-*: a .deb/.rpm install's WorkSuite package repository (worksuite-desktop#351).
+  id: 'service' | 'version' | 'channel' | 'signature' | 'download' | 'disk' | 'permissions' | 'database' | 'license' | 'repo-file' | 'repo-key' | 'repo-version';
   label: string;
   status: 'pass' | 'low' | 'fail' | 'skip';
   detail: string;
   /** A fix for this check in particular, when the generic one does not fit. */
   fix?: string;
+  /** A Fix button next to the check: `fix-repo` rewrites the package source and key through pkexec (`updates:fixRepo`). */
+  action?: 'fix-repo';
 }
 
 export interface UpdateDiagnostics {

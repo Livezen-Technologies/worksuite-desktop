@@ -1112,6 +1112,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         }
       },
       license: () => ({ signedIn: sessionCtl?.isReady() ?? false, offline: !!boot?.offline, lastVerifiedAt: boot?.cachedAt ?? null }),
+      // A .deb/.rpm install's package repository (worksuite-desktop#351): "Not set up yet" unless the build uses it.
+      ...(platform === 'linux' && app.isPackaged ? { repo: (latest: string | null) => updater.repoDiagnostics(latest) } : {}),
     }).then((r) => {
       updateHistory.add('diagnostics', { detail: r.checks.map((c) => `${c.id}:${c.status}`).join(' '), channel: prefsNow.updateChannel });
       return r;

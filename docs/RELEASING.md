@@ -89,6 +89,45 @@ never offered another. A release without the `.deb` leaves every `.deb` install 
 updates with one password prompt (`pkexec apt-get install` / `dnf install` of the downloaded, SHA-256-checked
 package), or opens the package in the software installer when that prompt cannot be shown.
 
+### APT and DNF repositories (worksuite-desktop#351) — off until the repository is live
+
+A `.deb`/`.rpm` install can also list `https://download.worksuitecloud.com/apt` (suites `stable`, `beta`, `dev`,
+component `main`) or `/rpm/<channel>` as a package source, so WorkSuite updates arrive with the system's own updates.
+**This is off by default and must stay off until the repository answers**: a package source that does not exist yet
+breaks `apt update` on every computer that has it.
+
+Off (today's builds), nothing changes: the packages add no source, the channel switch rewrites nothing, Update now
+installs the downloaded package, and Diagnostics shows the three repository checks as *Not set up yet*.
+
+On, a build made with `WORKSUITE_LINUX_REPO=1` (`build/linux-repo.cjs`) carries `resources/linux-repo` (the address
+and the build's channel), the repository's public key and the root-side helper `resources/worksuite-repo`:
+
+| What | With the switch on |
+|---|---|
+| `.deb` after-install | `/usr/share/keyrings/worksuite.gpg` and `/etc/apt/sources.list.d/worksuite.sources` (deb822: `Types: deb`, `URIs: …/apt`, `Suites:` the channel, `Components: main`, `Signed-By:` the keyring). An upgrade keeps the suite the file already has. |
+| `.rpm` after-install | `/etc/pki/rpm-gpg/RPM-GPG-KEY-worksuite` and `/etc/yum.repos.d/worksuite.repo` (`baseurl=…/rpm/<channel>`, `repo_gpgcheck=1`). |
+| Uninstall / purge / erase | Both files go (only a source file carrying WorkSuite's header line; one an administrator wrote stays). Not on an upgrade. |
+| Changing the channel | `pkexec resources/worksuite-repo setup <deb\|rpm> <suite>` rewrites `Suites:` / the baseurl. A closed prompt leaves the channel changed and Diagnostics offers Fix. |
+| Diagnostics | *Package repository* (the file exists and follows the channel), *Repository signing key*, *Repository version* (`apt-cache policy worksuite` / `dnf repoquery` has the newest version). Each problem has **Fix**: the helper rewrites the key and file and re-reads the lists, behind one password prompt. |
+| Update now (`.deb`) | When the source follows this channel and apt already offers exactly the new version from it: `pkexec apt-get install --only-upgrade -y worksuite`. Otherwise, or if that fails, the downloaded package as before. |
+
+**Turning it on** (once the portal's repository is published and `curl -fsI https://download.worksuitecloud.com/apt/dists/stable/InRelease` answers 200, see the portal's `docs/linux-repositories.md`):
+
+1. In this repository's *Settings › Secrets and variables › Actions › Variables*, set `WORKSUITE_REPO_GPG_PUBLIC_KEY`
+   to the ASCII-armoured **public** key (`gpg --armor --export <key id>`; the same file as
+   `https://download.worksuitecloud.com/apt/worksuite.asc`) and `WORKSUITE_LINUX_REPO` to `1`. A local build takes
+   the same two environment variables (the key as a file path or the armoured text); `WORKSUITE_LINUX_REPO_URL`
+   overrides the address for a staging repository.
+2. Build. The build refuses `WORKSUITE_LINUX_REPO=1` without the key, and refuses a private key.
+3. Check a package before publishing it: `dpkg-deb -c WorkSuite-*.deb | grep -E 'resources/(linux-repo|worksuite-repo)'`.
+4. Publish the release as usual, then add its `.deb`/`.rpm` to the repository (the portal's *Linux repositories*
+   workflow, with the version and channel). Copies installed before the switch get the source with their next
+   package update.
+
+To turn it off again, unset `WORKSUITE_LINUX_REPO`: the next package's after-install adds nothing, and Diagnostics'
+Fix stops offering itself. Sources already written stay until the package is removed (or `sudo rm
+/etc/apt/sources.list.d/worksuite.sources`).
+
 The script stops at **READY_FOR_TEST**; people approve and publish in the
 Update Center's `/admin`. Unsigned installers are accepted on BETA, DEV and
 INTERNAL only; STABLE needs Authenticode, Developer ID + notarization and GPG

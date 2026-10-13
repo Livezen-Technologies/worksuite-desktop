@@ -1459,6 +1459,8 @@ export const contract = {
   // Settings › Updates › Diagnostics: run the checks, and save the report.
   'updates:diagnostics': ch(none, { whileLocked: true, rate: 1 }),
   'updates:exportDiagnostics': ch(z.object({ report: z.string().max(100_000) }), { whileLocked: true, rate: 1 }),
+  // Diagnostics › Fix for the package repository checks (worksuite-desktop#351): rewrites the source and key via pkexec.
+  'updates:fixRepo': ch(none, { rate: 1 }),
   'updates:reinstall': ch(none, { rate: 1 }),
   'updates:dismissNotice': ch(none),
   // A window saved its drafts and tabs before an update's restart (`update:prepare`).
@@ -2010,6 +2012,7 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'updates:installWhenFree': UpdateStatus;
   'updates:diagnostics': UpdateDiagnostics;
   'updates:exportDiagnostics': string | null;
+  'updates:fixRepo': { ok: boolean; message: string };
   'settings:get': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:set': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:launcherDefaults': { pinned: string[]; order: string[] };
