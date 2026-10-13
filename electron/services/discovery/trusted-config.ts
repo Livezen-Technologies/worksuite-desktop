@@ -19,10 +19,12 @@ const log = logger('trusted-config');
  *  - `managed.json` at `/etc/worksuite/managed.json`, `%ProgramData%\WorkSuite\managed.json`,
  *    `/Library/Application Support/WorkSuite/managed.json`,
  *  - `<resources>/enterprise.json` (custom builds).
- * A system file is ignored unless it is owned by root / an administrator and not writable by everyone; a custom
- * build's `enterprise.json` (inside the app, which a per-user install owns) only has to be not world-writable.
+ * A system file must be owned by root / an administrator and not writable by everyone; a custom build's
+ * `enterprise.json` (inside the app, which a per-user install owns) only has to be not world-writable. A file that
+ * fails the check keeps working for its server settings (as before), but cannot widen trust: its `spki_pins` and
+ * `discovery_key` are ignored and a warning goes to the log (Diagnostics). See `mergeSources`.
  *
- * Keys: `server_url`, `disable_server_change` (→ lockServer), `org_id`, `update_channel`, `spki_pins`,
+ * Keys: `server_url`, `disable_server_change` / `lock_server` (→ lockServer), `org_id`, `update_channel`, `spki_pins`,
  * `discovery_key`, `require_signed`, `allow_personal`, and `disable_personal` (legacy, inverted).
  */
 
@@ -31,6 +33,12 @@ export interface ManagedSource {
   /** Where it was read from (a path, or the registry key). */
   where: string;
   raw: Record<string, unknown>;
+  /**
+   * Passed the ownership check (root / administrator owned, not world-writable; the registry always). An
+   * unprotected source keeps its server settings but cannot widen trust: its `spki_pins` and `discovery_key` are
+   * ignored, and its `require_signed:false` / `allow_personal:true` never relax a protected source's stricter value.
+   */
+  protected: boolean;
 }
 
 /** What reading the sources may touch; every field defaults to the real thing (tests replace them). */
@@ -91,31 +99,43 @@ export function fileIsProtected(path: string, env: SourceEnv, requireAdminOwner 
   }
 }
 
-function readJsonFile(path: string, env: SourceEnv, requireAdminOwner: boolean): Record<string, unknown> | null {
+type Read = { raw: Record<string, unknown>; protected: boolean } | null;
+
+/** A failed ownership check goes to the log (Diagnostics); sources are read once per run of the app. */
+function warnUnprotected(where: string): void {
+  log.warn('managed configuration is not protected: its server settings still apply, but its pins and signing key are ignored', {
+    path: where,
+    fix: 'make it owned by root / an administrator and not writable by everyone',
+  });
+}
+
+/**
+ * A JSON configuration file. One that fails the ownership check is still read — existing deployments rely on its
+ * server settings — but marked unprotected, so it cannot widen trust (pins, signing key).
+ */
+function readJsonFile(path: string, env: SourceEnv, requireAdminOwner: boolean): Read {
   try {
     if (!env.exists(path)) return null;
-    if (!fileIsProtected(path, env, requireAdminOwner)) {
-      log.warn('managed configuration ignored: not protected', { path });
-      return null;
-    }
     const v = JSON.parse(env.readFile(path)) as unknown;
-    return v && typeof v === 'object' && !Array.isArray(v) ? (v as Record<string, unknown>) : null;
+    if (!v || typeof v !== 'object' || Array.isArray(v)) return null;
+    const prot = fileIsProtected(path, env, requireAdminOwner);
+    if (!prot) warnUnprotected(path);
+    return { raw: v as Record<string, unknown>, protected: prot };
   } catch (e) {
     log.warn('managed configuration unreadable', { path, error: String(e) });
     return null;
   }
 }
 
-function readMacManaged(env: SourceEnv): Record<string, unknown> | null {
+function readMacManaged(env: SourceEnv): Read {
   if (!env.exists(MAC_PLIST)) return null;
   try {
-    if (!fileIsProtected(MAC_PLIST, env)) {
-      log.warn('managed preferences ignored: not protected');
-      return null;
-    }
     const out = env.exec('/usr/bin/plutil', ['-convert', 'json', '-o', '-', MAC_PLIST]);
     const v = JSON.parse(out) as unknown;
-    return v && typeof v === 'object' ? (v as Record<string, unknown>) : null;
+    if (!v || typeof v !== 'object') return null;
+    const prot = fileIsProtected(MAC_PLIST, env);
+    if (!prot) warnUnprotected(MAC_PLIST);
+    return { raw: v as Record<string, unknown>, protected: prot };
   } catch (e) {
     log.warn('managed preferences unreadable', { error: String(e) });
     return null;
@@ -139,18 +159,19 @@ export function parseRegQuery(out: string): Record<string, unknown> {
   return values;
 }
 
-function readWindowsPolicy(env: SourceEnv): Record<string, unknown> | null {
+function readWindowsPolicy(env: SourceEnv): Read {
   try {
     const values = parseRegQuery(env.exec('reg', ['query', REGISTRY_KEY]));
-    return Object.keys(values).length ? values : null;
+    // HKLM\Software\Policies is writable by administrators only.
+    return Object.keys(values).length ? { raw: values, protected: true } : null;
   } catch {
     return null; // key absent: not managed
   }
 }
 
-/** The first managed source found, raw. */
-export function readManagedSource(env: SourceEnv = realEnv()): ManagedSource | null {
-  const candidates: Array<[ManagedSource['source'], string, () => Record<string, unknown> | null]> = [];
+/** Every managed source found, in precedence order (the first one is the one the app has always used). */
+export function readManagedSources(env: SourceEnv = realEnv()): ManagedSource[] {
+  const candidates: Array<[ManagedSource['source'], string, () => Read]> = [];
   if (env.platform === 'win32') candidates.push(['registry', REGISTRY_KEY, () => readWindowsPolicy(env)]);
   if (env.platform === 'darwin') candidates.push(['mdm-profile', MAC_PLIST, () => readMacManaged(env)]);
   if (env.platform === 'linux') candidates.push(['policy.json', '/etc/worksuite/policy.json', () => readJsonFile('/etc/worksuite/policy.json', env, true)]);
@@ -160,14 +181,18 @@ export function readManagedSource(env: SourceEnv = realEnv()): ManagedSource | n
     const p = join(env.resourcesPath, 'enterprise.json');
     candidates.push(['enterprise.json', p, () => readJsonFile(p, env, false)]);
   }
+  const out: ManagedSource[] = [];
   for (const [source, where, read] of candidates) {
-    const raw = read();
-    if (raw) {
-      log.info('managed configuration found', { source });
-      return { source, where, raw };
-    }
+    const r = read();
+    if (r) out.push({ source, where, raw: r.raw, protected: r.protected });
   }
-  return null;
+  if (out.length) log.info('managed configuration found', { sources: out.map((s) => `${s.source}${s.protected ? '' : ' (unprotected)'}`) });
+  return out;
+}
+
+/** The first managed source found, raw: what enterprise.ts has always read. */
+export function readManagedSource(env: SourceEnv = realEnv()): ManagedSource | null {
+  return readManagedSources(env)[0] ?? null;
 }
 
 function flag(v: unknown): boolean | null {
@@ -203,8 +228,8 @@ function httpsOrigin(v: unknown): string | null {
 }
 
 /** A raw managed source as a TrustedConfig. */
-export function trustedFromRaw(raw: Record<string, unknown>, source: ManagedSource['source']): TrustedConfig {
-  const key = str(raw.discovery_key);
+export function trustedFromRaw(raw: Record<string, unknown>, source: ManagedSource['source'], isProtected = true): TrustedConfig {
+  const key = isProtected ? str(raw.discovery_key) : null;
   if (key && !parseEd25519Key(key)) log.warn('managed discovery_key ignored: not an Ed25519 key');
   const allow = flag(raw.allow_personal);
   const disable = flag(raw.disable_personal);
@@ -213,32 +238,64 @@ export function trustedFromRaw(raw: Record<string, unknown>, source: ManagedSour
     serverUrl: httpsOrigin(raw.server_url),
     organizationId: str(raw.org_id, 128),
     updateChannel: str(raw.update_channel, 32),
-    spkiPins: parsePins(raw.spki_pins),
+    spkiPins: isProtected ? parsePins(raw.spki_pins) : [],
     discoveryKey: key && parseEd25519Key(key) ? key : null,
     requireSigned: flag(raw.require_signed) === true,
     allowPersonal: allow !== null ? allow : disable !== null ? !disable : true,
-    lockServer: flag(raw.disable_server_change) === true,
+    lockServer: flag(raw.disable_server_change) === true || flag(raw.lock_server) === true,
     expiresAt: null,
   };
 }
 
-let cached: { source: ManagedSource | null } | null = null;
-
-/** The managed source, read once per run of the app. */
-export function managedSource(): ManagedSource | null {
-  if (!cached) cached = { source: readManagedSource() };
-  return cached.source;
+/**
+ * Every source as one configuration. The first source found gives the server settings, as it always has. Trust that
+ * widens what this computer accepts (pins, signing key) comes only from a protected source — the first one, or a
+ * later protected one naming the same server. The flags only ever get stricter across sources: any source may require
+ * signatures or forbid personal accounts, and none can undo that.
+ */
+export function mergeSources(sources: readonly ManagedSource[]): TrustedConfig {
+  const first = sources[0];
+  if (!first) return { ...EMPTY_TRUSTED_CONFIG, spkiPins: [] };
+  const base = trustedFromRaw(first.raw, first.source, first.protected);
+  if (!first.protected) {
+    const vouch = sources
+      .filter((s) => s.protected)
+      .map((s) => trustedFromRaw(s.raw, s.source, true))
+      .find((t) => t.serverUrl === null || t.serverUrl === base.serverUrl);
+    if (vouch) {
+      base.spkiPins = vouch.spkiPins;
+      base.discoveryKey = vouch.discoveryKey;
+    }
+  }
+  for (const s of sources) {
+    const t = trustedFromRaw(s.raw, s.source, s.protected);
+    if (t.requireSigned) base.requireSigned = true;
+    if (!t.allowPersonal) base.allowPersonal = false;
+  }
+  return base;
 }
 
-/** Forgets the cached source (tests, or a policy refresh). */
+let cached: { sources: ManagedSource[] } | null = null;
+
+/** The managed sources, read once per run of the app. */
+export function managedSources(): ManagedSource[] {
+  if (!cached) cached = { sources: readManagedSources() };
+  return cached.sources;
+}
+
+/** The first managed source, as enterprise.ts reads it. */
+export function managedSource(): ManagedSource | null {
+  return managedSources()[0] ?? null;
+}
+
+/** Forgets the cached sources (tests, or a policy refresh). */
 export function resetTrustedConfigCache(): void {
   cached = null;
 }
 
 /** This computer's trusted configuration; nothing configured when no source is found. */
 export function readTrustedConfig(env?: SourceEnv): TrustedConfig {
-  const src = env ? readManagedSource(env) : managedSource();
-  return src ? trustedFromRaw(src.raw, src.source) : { ...EMPTY_TRUSTED_CONFIG, spkiPins: [] };
+  return mergeSources(env ? readManagedSources(env) : managedSources());
 }
 
 type OkLink = Extract<ParsedSetupLink, { ok: true }>;

@@ -1,3 +1,4 @@
+import { errorText } from './pinning';
 import { DISCOVERY_MAX_BYTES, DISCOVERY_PATH, LEGACY_CORE_PATH, LEGACY_DESKTOP_PATH, discoveryDocumentV1, type DiscoveryDocument } from '@shared/discovery';
 
 /**
@@ -5,8 +6,33 @@ import { DISCOVERY_MAX_BYTES, DISCOVERY_PATH, LEGACY_CORE_PATH, LEGACY_DESKTOP_P
  * `probeServer` logic, moved here.
  *
  * Every request: `redirect:'error'` (a document is read where it was asked for, never where a redirect points),
- * a byte cap, and the run's AbortSignal.
+ * a byte cap, and the run's AbortSignal. The two legacy probes alone follow redirects that stay on the same origin
+ * (scheme, host and port), up to MAX_REDIRECTS hops — as the former probeServer effectively did for servers that
+ * add a trailing slash or route through a front controller; one that would leave the origin is refused
+ * (CrossOriginRedirect).
+ *
+ * The Fetch contract: with `redirect:'manual'` a 3xx answer comes back as a Response carrying its `Location`
+ * (Node's fetch does this; handlers.ts adapts Chromium's `net`).
  */
+
+export const MAX_REDIRECTS = 3;
+
+export class CrossOriginRedirect extends Error {
+  constructor(
+    readonly from: string,
+    readonly to: string,
+  ) {
+    super(`redirected from ${from} to ${to}`);
+    this.name = 'CrossOriginRedirect';
+  }
+}
+
+export class TooManyRedirects extends Error {
+  constructor(readonly url: string) {
+    super(`more than ${MAX_REDIRECTS} redirects at ${url}`);
+    this.name = 'TooManyRedirects';
+  }
+}
 
 export type Fetch = (url: string, init: RequestInit) => Promise<Response>;
 
@@ -62,13 +88,50 @@ export async function get(fetch: Fetch, url: string, signal: AbortSignal, accept
   }
 }
 
+/**
+ * GET that follows same-origin redirects only, at most MAX_REDIRECTS hops. A redirect elsewhere throws
+ * CrossOriginRedirect; a 3xx without a usable Location comes back as it is (not ok).
+ */
+export async function getSameOrigin(fetch: Fetch, url: string, signal: AbortSignal, accept = 'application/json', timeoutMs = 15_000): Promise<Response> {
+  const origin = new URL(url).origin;
+  let current = url;
+  for (let hop = 0; ; hop++) {
+    let res: Response;
+    try {
+      res = await fetch(current, { method: 'GET', headers: { Accept: accept }, redirect: 'manual', signal: AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]) });
+    } catch (e) {
+      throw new FetchFailed(e);
+    }
+    if (res.status < 300 || res.status >= 400 || res.status === 304) return res;
+    const location = res.headers.get('location');
+    await res.body?.cancel().catch(() => undefined);
+    let next: URL | null = null;
+    try {
+      next = location ? new URL(location, current) : null;
+    } catch {
+      next = null;
+    }
+    if (!next) return new Response(null, { status: res.status });
+    if (next.origin !== origin) throw new CrossOriginRedirect(origin, next.origin);
+    if (hop >= MAX_REDIRECTS) throw new TooManyRedirects(url);
+    current = next.toString();
+  }
+}
+
 export type DocumentResult =
   | { kind: 'v1'; doc: DiscoveryDocument; raw: Uint8Array }
   | { kind: 'missing'; status: number }
   | { kind: 'invalid'; reason: string };
 
 export async function fetchDiscoveryDocument(fetch: Fetch, origin: string, signal: AbortSignal): Promise<DocumentResult> {
-  const res = await get(fetch, origin + DISCOVERY_PATH, signal);
+  let res: Response;
+  try {
+    res = await get(fetch, origin + DISCOVERY_PATH, signal);
+  } catch (e) {
+    // The unified document is never read through a redirect; a server that redirects it gets the legacy probes.
+    if (e instanceof FetchFailed && /redirect/i.test(errorText(e.original)) && !signal.aborted) return { kind: 'missing', status: 302 };
+    throw e;
+  }
   if (res.status === 404 || res.status === 410) {
     await res.body?.cancel().catch(() => undefined);
     return { kind: 'missing', status: res.status };
@@ -163,14 +226,14 @@ export type LegacyResult =
 
 /** The legacy documents, in the former probeServer's order. */
 export async function fetchLegacy(fetch: Fetch, origin: string, signal: AbortSignal): Promise<LegacyResult> {
-  const wk = await get(fetch, origin + LEGACY_DESKTOP_PATH, signal);
+  const wk = await getSameOrigin(fetch, origin + LEGACY_DESKTOP_PATH, signal);
   if (wk.ok) {
     const info = readLegacyDesktop(await jsonOrNull(wk));
     if (info) return { kind: 'legacy-desktop', info };
   } else {
     await wk.body?.cancel().catch(() => undefined);
   }
-  const cfg = await get(fetch, origin + LEGACY_CORE_PATH, signal);
+  const cfg = await getSameOrigin(fetch, origin + LEGACY_CORE_PATH, signal);
   const body = await jsonOrNull(cfg);
   if (cfg.ok && body && body.status === 'success') {
     const data = (body.data ?? {}) as Record<string, unknown>;
@@ -187,7 +250,7 @@ export async function fetchLegacy(fetch: Fetch, origin: string, signal: AbortSig
 export async function fetchLegacyPasskey(fetch: Fetch, origin: string, path: unknown, signal: AbortSignal): Promise<LegacyDesktop | null> {
   if (typeof path !== 'string' || !/^\/[A-Za-z0-9/._-]+$/.test(path)) return null;
   try {
-    const res = await get(fetch, origin + path, signal, 'application/json', 5_000);
+    const res = await getSameOrigin(fetch, origin + path, signal, 'application/json', 5_000);
     if (!res.ok) {
       await res.body?.cancel().catch(() => undefined);
       return null;

@@ -1,11 +1,13 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
-vi.mock('electron', () => ({ net: { request: vi.fn() } }));
+const electron = vi.hoisted(() => ({ request: vi.fn() }));
+vi.mock('electron', () => ({ net: { request: electron.request } }));
 
 import { EMPTY_TRUSTED_CONFIG, type TrustedConfig } from '@shared/trusted-config';
 import type { ConnectRun } from '@shared/discovery';
 import type { IpcRouter } from '../../../../electron/ipc/router';
-import { registerDiscoveryHandlers, runDetails, type DiscoveryDeps } from '../../../../electron/services/discovery/handlers';
+import { EventEmitter } from 'node:events';
+import { netFetchWithRedirects, registerDiscoveryHandlers, runDetails, type DiscoveryDeps } from '../../../../electron/services/discovery/handlers';
 import { chromiumLikeFetch, discoveryDoc, makePki, makeSetupLink, startServer, TEST_KEYS, type TestPki, type TestServer } from './tls-server';
 
 /** The connect:* channels over the pipeline, and the handle WP1 uses (pinsFor). */
@@ -150,5 +152,26 @@ describe('connect:* handlers', () => {
   it('runDetails without a failure lists the checks', () => {
     const text = runDetails({ runId: 'r', input: 'x', target: 'enterprise', host: 'h', candidates: [], steps: [{ id: 'dns', status: 'ok', ms: 3, note: null }], state: 'ok', server: null, failure: null }, '0.3.0');
     expect(text).toContain('Address found (DNS): ok (3 ms)');
+  });
+});
+
+describe('Chromium net adapter', () => {
+  it('never lets Chromium follow a redirect: manual gets the 3xx with its Location, error mode an error', async () => {
+    const options: Array<Record<string, unknown>> = [];
+    electron.request.mockImplementation((o: Record<string, unknown>) => {
+      options.push(o);
+      const cr = Object.assign(new EventEmitter(), {
+        setHeader: () => undefined,
+        abort: vi.fn(),
+        end: () => setImmediate(() => cr.emit('redirect', 301, 'GET', 'https://ws.example.com/api/auth/config/', {})),
+      });
+      return cr;
+    });
+    const f = netFetchWithRedirects({} as never);
+    const res = await f('https://ws.example.com/api/auth/config', { method: 'GET', redirect: 'manual' });
+    expect(res.status).toBe(301);
+    expect(res.headers.get('location')).toBe('https://ws.example.com/api/auth/config/');
+    await expect(f('https://ws.example.com/x', { method: 'GET', redirect: 'error' })).rejects.toThrow(/redirect mode is set to error/);
+    expect(options.every((o) => o.redirect === 'manual')).toBe(true);
   });
 });

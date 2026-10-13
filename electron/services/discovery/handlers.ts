@@ -113,6 +113,44 @@ export function runDetails(run: ConnectRun, appVersion: string): string {
   return lines.join('\n');
 }
 
+interface RedirectSeen {
+  status: number;
+  url: string;
+}
+
+/**
+ * Chromium's `net` as the pipeline's Fetch, with redirects never followed by Chromium itself: every request runs
+ * with `redirect:'manual'` and the redirect is stopped at the 'redirect' event. `redirect:'manual'` callers get the
+ * 3xx as a Response with its Location (document.ts decides whether to follow, same origin only); `'error'` callers
+ * get an error naming the redirect; `'follow'` is never used by discovery and is treated as `'error'`.
+ */
+export function netFetchWithRedirects(ses: Session): PipelineDeps['fetch'] {
+  const f = createNetFetch((o) => {
+    const cr = net.request({ ...o, redirect: 'manual' });
+    cr.on('redirect', (status: number, _method: string, url: string) => {
+      const r = { status, url };
+      const e = Object.assign(new Error(`redirect ${status} to ${url}`), { redirect: r });
+      try {
+        cr.abort();
+      } catch {
+        /* already gone */
+      }
+      cr.emit('error', e);
+    });
+    return cr;
+  }, ses);
+  return async (url, init) => {
+    try {
+      return await f(url, init);
+    } catch (e) {
+      const r = (e as { redirect?: RedirectSeen }).redirect ?? null;
+      if (!r) throw e;
+      if (init.redirect === 'manual') return new Response(null, { status: r.status, headers: { location: r.url } });
+      throw new Error(`redirect mode is set to error: ${url} redirected to ${r.url}`);
+    }
+  };
+}
+
 export function registerDiscoveryHandlers(router: IpcRouter, deps: DiscoveryDeps, overrides: DiscoveryOverrides = {}): DiscoveryHandle {
   const now = overrides.now ?? Date.now;
   const runs = new Map<string, RunEntry>();
@@ -140,9 +178,7 @@ export function registerDiscoveryHandlers(router: IpcRouter, deps: DiscoveryDeps
 
   const fetchFor = (partition: string): PipelineDeps['fetch'] => {
     if (overrides.fetchFor) return overrides.fetchFor(partition);
-    const ses = deps.sessionFor(partition);
-    const f = createNetFetch((o) => net.request(o), ses);
-    return (url, init) => f(url, init);
+    return netFetchWithRedirects(deps.sessionFor(partition));
   };
 
   const start = (input: string, target: AccountKind, rediscover = false): RunEntry => {

@@ -18,7 +18,7 @@ import {
 import { parseSetupLink, type ParsedSetupLink, type TrustedConfig } from '@shared/trusted-config';
 import { logger } from '../../main/log';
 import { checkCompat } from './compat';
-import { fetchDiscoveryDocument, fetchJws, fetchLegacy, fetchLegacyPasskey, FetchFailed, get, type LegacyDesktop } from './document';
+import { CrossOriginRedirect, fetchDiscoveryDocument, fetchJws, fetchLegacy, fetchLegacyPasskey, FetchFailed, get, TooManyRedirects, type LegacyDesktop } from './document';
 import { emailCandidates, type ResolveTxt } from './email-lookup';
 import { verifyDetachedJws } from './jws';
 import { discoveryKeyring, parseEd25519Key } from './keys';
@@ -315,6 +315,12 @@ async function stepDocument(ctx: Context, origin: string): Promise<Found> {
       throw failure('document', doc.status === 404 || doc.status === 410 ? 'NOT_WORKSUITE' : 'DISCOVERY_MISSING', host);
     } catch (e) {
       if (e instanceof StepFailure || e instanceof Cancelled) throw e;
+      if (e instanceof CrossOriginRedirect) {
+        throw failure('document', 'ORIGIN_MISMATCH', host, {
+          message: `${host} redirected WorkSuite Desktop to ${new URL(e.to).host}, a different server. Only redirects that stay on the same server are followed — use the server's own address.`,
+        });
+      }
+      if (e instanceof TooManyRedirects) throw failure('document', 'DISCOVERY_MISSING', host, { message: `${host} redirected too many times. Check the address with your administrator.` });
       throw networkFailure(ctx, 'document', e, host);
     }
   });

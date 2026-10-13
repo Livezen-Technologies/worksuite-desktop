@@ -9,6 +9,7 @@ import { discoveryKeyring, sameKey, sanitizeRotatedKeys } from '../../../../elec
 import {
   fileIsProtected,
   managedJsonPath,
+  mergeSources,
   parsePins,
   parseRegQuery,
   readManagedSource,
@@ -164,14 +165,47 @@ describe('trusted configuration', () => {
     });
   });
 
-  it('ignores a file not owned by root, or writable by everyone', () => {
+  it('a file failing the ownership check keeps its server settings but cannot widen trust, and says so', () => {
     const body = JSON.stringify(managed);
-    expect(readTrustedConfig(env({ '/etc/worksuite/managed.json': { body, uid: 1000 } })).source).toBeNull();
-    expect(readTrustedConfig(env({ '/etc/worksuite/managed.json': { body, mode: 0o100666 } })).source).toBeNull();
-    // A custom build's enterprise.json is inside the app (a per-user install owns it): only world-writable is refused.
+    const warn = vi.spyOn(console, 'log');
+    for (const bad of [{ uid: 1000 }, { mode: 0o100666 }]) {
+      const e = env({ '/etc/worksuite/managed.json': { body, ...bad } });
+      const t = readTrustedConfig(e);
+      expect(t).toMatchObject({ source: 'managed.json', serverUrl: 'https://ws.corp.example', organizationId: '17', updateChannel: 'beta', lockServer: true, allowPersonal: false, requireSigned: true });
+      expect(t.spkiPins).toEqual([]);
+      expect(t.discoveryKey).toBeNull();
+    }
+    expect(warn.mock.calls.some((c) => String(c[0]).includes('not protected'))).toBe(true);
+    // The legacy reader sees exactly what it saw before.
+    const legacy = { server_url: 'https://ws.corp.example', disable_server_change: true, update_channel: 'beta', sync_folder: '/data/ws' };
+    const e = env({ '/etc/worksuite/policy.json': { body: JSON.stringify(legacy), uid: 1000, mode: 0o100666 } });
+    expect(readEnterpriseConfig(e)).toEqual({ source: '/etc/worksuite/policy.json', server_url: 'https://ws.corp.example', disable_server_change: true, update_channel: 'beta', sync_folder: '/data/ws' });
+    // A custom build's enterprise.json is inside the app (a per-user install owns it): only world-writable counts.
     const custom = '/opt/WorkSuite/resources/enterprise.json';
-    expect(readTrustedConfig(env({ [custom]: { body, uid: 1000 } })).source).toBe('enterprise.json');
-    expect(readTrustedConfig(env({ [custom]: { body, uid: 1000, mode: 0o100666 } })).source).toBeNull();
+    expect(readTrustedConfig(env({ [custom]: { body, uid: 1000 } })).spkiPins).toHaveLength(1);
+    expect(readTrustedConfig(env({ [custom]: { body, uid: 1000, mode: 0o100666 } })).spkiPins).toEqual([]);
+  });
+
+  it('an unprotected file never relaxes a protected one: require_signed and allow_personal only get stricter', () => {
+    const loose = JSON.stringify({ server_url: 'https://ws.corp.example', require_signed: false, allow_personal: true, spki_pins: ['sha256/VNANhndYzvgWvEaF9Y4ye5SXErB+vRfDSF8//J6fUTM='] });
+    const strict = JSON.stringify(managed);
+    const t = readTrustedConfig(env({ '/etc/worksuite/policy.json': { body: loose, uid: 1000 }, '/etc/worksuite/managed.json': { body: strict } }));
+    expect(t).toMatchObject({ source: 'policy.json', serverUrl: 'https://ws.corp.example', requireSigned: true, allowPersonal: false });
+    // Pins and key come from the protected file that names the same server, never from the unprotected one.
+    expect(t.spkiPins).toEqual(['sha256/n5EWH0NDPkmm3m22gNefYBWfLkrJFyYhoShGQoFYRAs=']);
+    expect(t.discoveryKey).toBe(keys.discovery_key);
+    // A protected file for another server lends nothing.
+    const other = JSON.stringify({ ...managed, server_url: 'https://other.example' });
+    const u = readTrustedConfig(env({ '/etc/worksuite/policy.json': { body: loose, uid: 1000 }, '/etc/worksuite/managed.json': { body: other } }));
+    expect(u).toMatchObject({ serverUrl: 'https://ws.corp.example', spkiPins: [], discoveryKey: null, requireSigned: true, allowPersonal: false });
+    // Stricter values from an unprotected file still apply.
+    const v = readTrustedConfig(env({ '/etc/worksuite/policy.json': { body: JSON.stringify({ require_signed: true, allow_personal: false }), uid: 1000 } }));
+    expect(v).toMatchObject({ requireSigned: true, allowPersonal: false });
+    expect(mergeSources([])).toMatchObject({ source: null });
+  });
+
+  it('lock_server is read as disable_server_change', () => {
+    expect(trustedFromRaw({ lock_server: 1 }, 'registry').lockServer).toBe(true);
   });
 
   it('macOS admin group ownership, Windows ACLs', () => {
@@ -184,11 +218,11 @@ describe('trusted configuration', () => {
     expect(fileIsProtected('C:\\x', acl('C:\\x BUILTIN\\Users:(I)(M)\n'))).toBe(false);
   });
 
-  it('the first source wins: policy.json before managed.json on Linux', () => {
+  it('the first source gives the server settings: policy.json before managed.json on Linux; flags merge stricter', () => {
     const t = readTrustedConfig(
       env({ '/etc/worksuite/policy.json': { body: JSON.stringify({ server_url: 'https://a.example' }) }, '/etc/worksuite/managed.json': { body: JSON.stringify(managed) } }),
     );
-    expect(t).toMatchObject({ source: 'policy.json', serverUrl: 'https://a.example', allowPersonal: true, requireSigned: false, spkiPins: [] });
+    expect(t).toMatchObject({ source: 'policy.json', serverUrl: 'https://a.example', lockServer: false, spkiPins: [], discoveryKey: null, allowPersonal: false, requireSigned: true });
   });
 
   it('reads the registry: DWORD flags and comma-separated pins', () => {

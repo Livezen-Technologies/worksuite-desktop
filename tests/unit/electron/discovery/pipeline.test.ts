@@ -204,6 +204,48 @@ describe('document and signature', () => {
     expect(r.server).toMatchObject({ schema: 'legacy-desktop', minimumVersion: '0.2.0', passkey: { url: '/desktop/passkey', exchange: '/api/auth/passkeys/desktop/exchange' } });
   });
 
+  it('legacy probes follow same-origin redirects (≤3 hops) and refuse cross-origin ones', async () => {
+    const reset = () => {
+      for (const k of Object.keys(good.routes)) delete good.routes[k];
+    };
+    const cfg = { body: JSON.stringify({ status: 'success', data: { brand: 'ABC Company' } }) };
+    const to = (location: string) => ({ status: 302, body: '', headers: { location } });
+
+    // The unified document redirected: never read through it, the legacy probes run instead.
+    reset();
+    good.routes['/.well-known/worksuite'] = to('/login');
+    good.routes['/api/auth/config'] = to('/api/auth/config/');
+    good.routes['/api/auth/config/'] = to(`${good.origin}/index.php/api/auth/config`);
+    good.routes['/index.php/api/auth/config'] = cfg;
+    good.hits.length = 0;
+    const ok = (await run(good.origin, deps())).run;
+    expect(ok.state).toBe('ok');
+    expect(ok.server).toMatchObject({ schema: 'legacy-core', name: 'ABC Company' });
+    expect(good.hits).toContain('GET /index.php/api/auth/config');
+    expect(good.hits).not.toContain('GET /login');
+
+    // A redirect to another origin (another host, or the same host on another port) is refused, clearly.
+    reset();
+    good.routes['/api/auth/config'] = to('https://evil.example/api/auth/config');
+    const cross = (await run(good.origin, deps())).run;
+    expect(cross.failure).toMatchObject({ code: 'ORIGIN_MISMATCH', step: 'document' });
+    expect(cross.failure?.message).toMatch(/evil\.example.*different server/);
+    good.routes['/api/auth/config'] = to(`https://localhost:${good.port + 1}/api/auth/config`);
+    expect((await run(good.origin, deps())).run.failure?.code).toBe('ORIGIN_MISMATCH');
+    good.routes['/.well-known/worksuite-desktop'] = to('https://evil.example/x');
+    good.routes['/api/auth/config'] = cfg;
+    expect((await run(good.origin, deps())).run.failure?.code).toBe('ORIGIN_MISMATCH');
+
+    // More than three hops.
+    reset();
+    for (const n of [0, 1, 2, 3]) good.routes[`/r${n}`] = to(`/r${n + 1}`);
+    good.routes['/api/auth/config'] = to('/r0');
+    good.routes['/r4'] = cfg;
+    expect((await run(good.origin, deps())).run.failure?.code).toBe('DISCOVERY_MISSING');
+    good.routes['/api/auth/config'] = to('/r2'); // r2 → r3 → r4: three hops in all
+    expect((await run(good.origin, deps())).run.state).toBe('ok');
+  });
+
   it('something that is not WorkSuite is NOT_WORKSUITE', async () => {
     for (const k of Object.keys(good.routes)) delete good.routes[k];
     expect((await run(good.origin, deps())).run.failure?.code).toBe('NOT_WORKSUITE');
