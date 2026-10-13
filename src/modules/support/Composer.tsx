@@ -21,6 +21,7 @@ import { useDraft } from '../../core/drafts';
 import { text } from '../../core/i18n';
 import { bytes, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Avatar, Button, FileBadge, IconButton, Modal, cx } from '../../components/ui';
@@ -195,6 +196,8 @@ function TicketComposer({
   const [previews, setPreviews] = useState<Record<number, string>>({});
   const [ccOpen, setCcOpen] = useState(false);
   const [ccText, setCcText] = useState('');
+  // "Track this email" (#335): on follows the desk's setting; off is said for this one reply.
+  const [track, setTrack] = useState(true);
   const box = useRef<HTMLDivElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
   const clientId = useRef<string | null>(null);
@@ -563,6 +566,7 @@ function TicketComposer({
       ...(!internal && cc.length ? { cc } : {}),
       ...(mentions.length ? { mentions } : {}),
       ...(then ? { status: then } : {}),
+      ...(!internal && !legacy && !track ? { track: false } : {}),
     };
     const paint = (message: Message) =>
       qc.setQueryData<TicketShow>(K.ticket(ticket.id), (show) =>
@@ -598,6 +602,7 @@ function TicketComposer({
       });
       clientId.current = null;
       scheduleRequested.current = undefined;
+      setTrack(true);
 
       // Emptied, then cleared: nothing of it is kept on this computer.
       if (latest.current === sentDraft && (!retryInput || (retryInput.body === sentDraft.body && (retryInput.body_html ?? '') === (sentDraft.html ?? '')))) {
@@ -726,6 +731,12 @@ function TicketComposer({
           <button type="button" onClick={() => setCcOpen(true)} className="shrink-0 text-[11.5px] font-semibold text-primary hover:underline">
             {text('CC')}
           </button>
+        ) : null}
+        {mode === 'reply' && !legacy && ticket.requester.email ? (
+          <label className="flex shrink-0 items-center gap-1 text-[11.5px] text-ink-3" title={text('Delivered, opened and clicked on this reply. Open and click tracking isn’t always accurate.')}>
+            <Checkbox checked={track} onChange={(e) => setTrack(e.target.checked)} />
+            {text('Track this email')}
+          </label>
         ) : null}
         {draft.savedAt && (typed || files.length) ? <span className="ml-auto shrink-0 text-[11px] text-ink-3">{text('Draft saved {time}', { time: timeLabel(draft.savedAt) })}</span> : null}
       </div>

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.0 — 2026-10-13
+
+- Email tracking (#335): each emailed reply says Sending, Sent, Delivered, Opened (time) or Opened (automatic), Clicked n links, or Bounced with the reason and Retry / Edit address; hovering or clicking the status shows the timeline with the approximate client and that tracking is not always accurate; links show a small click count; the ticket list marks a ticket whose requester opened or clicked the latest reply, or whose reply bounced; Track this email in the reply options; API calls for the timeline, resend and the requester's tracking opt-out
+
 ## 1.6.0 — 2026-10-13
 
 - The customer channels (#336): requester messages say via Form, Email, Portal or Website chat; replies from an unverified sender are held with Release and Discard; Show original for email replies; API calls for held replies and revoking ticket links

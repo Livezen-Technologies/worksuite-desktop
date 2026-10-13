@@ -268,6 +268,8 @@ export interface Ticket {
   snoozed_until?: string | null;
   /** I follow it (#333): the right-click menu's Follow / Unfollow. Absent from an older server. */
   watching?: boolean;
+  /** The latest emailed reply's state and when (#335): "opened the latest reply" in the list. Absent from an older server. */
+  latest_reply?: { state: TrackingState | null; at: string | null; message_id: number; tracked?: boolean } | null;
 }
 
 /**
@@ -360,6 +362,74 @@ export interface Message {
   held_from?: string | null;
   /** The whole email this reply was cut from can be shown ("Show original", #336). */
   has_original?: boolean;
+  /** Why the relay held, refused or failed it, or why it bounced (#335; absent from an older server). */
+  delivery_error?: string | null;
+  /** What came back about its email: delivered or bounced, opened, clicked (#335); null when it was not emailed. */
+  tracking?: EmailTracking | null;
+}
+
+/** A tracked reply's state (#335): the latest thing known about its email. */
+export type TrackingState = 'sent' | 'delivered' | 'opened_auto' | 'opened' | 'clicked' | 'bounced';
+
+/**
+ * One emailed reply's delivery, opens and clicks (#335). An "automatic" open is an image proxy's or Apple Mail Privacy
+ * Protection's, a scan is a link checker's: neither is the requester. Only a time and an approximate client are kept.
+ */
+export interface EmailTracking {
+  tracked: boolean;
+  opens_tracked: boolean;
+  clicks_tracked: boolean;
+  /** Why nothing is measured: off · agent · opted_out · internal. */
+  untracked_reason: string | null;
+  state: TrackingState | null;
+  sent_at: string | null;
+  delivered_at: string | null;
+  bounced_at: string | null;
+  reason: string | null;
+  opened_at: string | null;
+  opens: number;
+  auto_opened_at: string | null;
+  auto_opens: number;
+  last_opened_at: string | null;
+  clicked_at: string | null;
+  clicks: number;
+  scans: number;
+  client: string | null;
+  device: string | null;
+  /** Opens and clicks were purged after the desk's retention. */
+  purged: boolean;
+  links: TrackedLink[];
+}
+
+export interface TrackedLink {
+  id: number;
+  url: string;
+  label: string | null;
+  kind: 'download' | 'licence' | 'payment' | 'other' | string;
+  clicks: number;
+  scans: number;
+  last_click_at: string | null;
+}
+
+/** One step of a reply's email (`GET tickets/{id}/messages/{mid}/tracking`, #335). */
+export interface TrackingEvent {
+  kind: 'queued' | 'delivered' | 'deferred' | 'bounced' | 'complaint' | 'opened' | 'clicked' | string;
+  at: string | null;
+  automatic: boolean;
+  client: string | null;
+  device: string | null;
+  source: string | null;
+  detail: string | null;
+  link: { url: string; label: string | null } | null;
+}
+
+export interface TrackingTimeline {
+  message_id: number;
+  delivery_status: string | null;
+  delivery_error: string | null;
+  tracking: EmailTracking | null;
+  timeline: TrackingEvent[];
+  note: string;
 }
 
 /** A reply held for review (`GET held`, #336). */
@@ -573,6 +643,10 @@ export interface MessageInput {
   status?: SupportStatus;
   body_html?: string;
   send_at?: string;
+  /** "Track this email" (#335): false turns tracking off for this reply; absent, the desk's setting. */
+  track?: boolean;
+  /** Links in this reply that are never tracked (#335). */
+  untracked_links?: string[];
 }
 
 export interface MessageAnswer {
