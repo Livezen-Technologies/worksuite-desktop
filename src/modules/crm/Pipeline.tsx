@@ -3,23 +3,29 @@ import { useState, type DragEvent } from 'react';
 import { apiGet, apiPost } from '../../core/api';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
-import { call, errorMessage } from '../../core/bridge';
+import { errorMessage } from '../../core/bridge';
 import { dateLabel, todayInZone } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Caps, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import { btn, btnPrimary, Caps, Field, input, Sheet, SidePanel } from '../hr/parts';
 import type { Account, Board, BoardColumn, Deal, Pipeline as PipelineT, TimelineEntry } from './api';
 import { TimelineList, useOwners } from './Leads';
-import { crmCan, money, moneyFull, stageColour } from './parts';
+import { crmCan, money, moneyFull, stageColour, StatusBar } from './parts';
+import { boardTotals } from './logic';
+import { ScheduleFollowUp } from './Schedule';
+import { CompanyField, orgIdFor, useCrmScope } from './scope';
 
 /**
- * The pipeline board (CrmPipeline, CrmDealSheet): deals in columns by stage,
- * each with its value, owner, expected close and how long it has sat in the
- * stage. Drag a card to move it — into Lost asks why, which is recorded on the
- * deal and the customer's timeline. A deal opens in a drawer with its figures,
- * details, quotes and timeline; New deal starts one in the first stage.
+ * The pipeline board (CrmPipeline, CrmDealSheet, desk-pipeline): deals in
+ * columns by stage for the company the CRM is showing, each column with its
+ * probability, total and weighted total, each card with its value, owner,
+ * expected close and how long it has sat in the stage; Open and Weighted for
+ * the board at the top and its StatusBar under it. Drag a card to move it —
+ * into Lost asks why, which is recorded on the deal and the customer's
+ * timeline. A deal opens in a drawer with its figures, details, quotes, its
+ * timeline and Schedule a follow-up; New deal starts one in the first stage.
  */
 interface DealDetail {
   deal: Deal & { stage_name: string; stage_kind: string; probability: number };
@@ -27,7 +33,8 @@ interface DealDetail {
   quotes: Array<{ id: number; quote_no: string; status: string; total: number; currency: string }>;
 }
 
-export default function Pipeline({ openId, onOpen }: { openId: number | null; onOpen: (id: number | null) => void }) {
+export default function Pipeline({ openId, onOpen, onOpenQuote }: { openId: number | null; onOpen: (id: number | null) => void; onOpenQuote: (id: number) => void }) {
+  const scope = useCrmScope();
   const qc = useQueryClient();
   const owners = useOwners();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
@@ -39,13 +46,12 @@ export default function Pipeline({ openId, onOpen }: { openId: number | null; on
   const [over, setOver] = useState<number | null>(null);
   const [losing, setLosing] = useState<{ deal: Deal; stageId: number } | null>(null);
   const [creating, setCreating] = useState(false);
-  const pipelines = useQuery({ queryKey: ['crm', 'pipelines'], queryFn: ({ signal }) => apiGet<{ pipelines: PipelineT[] }>('/api/crm/pipelines', undefined, signal), staleTime: 5 * 60_000 });
-  const params = { pipeline: pipelineId || undefined, q: q.trim() || undefined, mine: owner === 'me' ? 1 : undefined, owner: owner && owner !== 'me' ? owner : undefined };
+  const pipelines = useQuery({ queryKey: ['crm', 'pipelines', scope.orgId ?? 0], queryFn: ({ signal }) => apiGet<{ pipelines: PipelineT[] }>('/api/crm/pipelines', scope.params, signal), staleTime: 5 * 60_000 });
+  const params = { pipeline: pipelineId || undefined, q: q.trim() || undefined, mine: owner === 'me' ? 1 : undefined, owner: owner && owner !== 'me' ? owner : undefined, ...scope.params };
   const board = useQuery({ queryKey: ['crm', 'board', params], queryFn: ({ signal }) => apiGet<Board>('/api/crm/deals/board', params, signal) });
   const columns = board.data?.columns ?? [];
-  const open = columns.filter((c) => c.kind === 'open');
-  const openTotal = open.reduce((a, c) => a + c.total, 0);
-  const weighted = open.reduce((a, c) => a + c.weighted, 0);
+  const totals = boardTotals(board.data);
+  const pipelineName = pipelines.data?.pipelines.find((p) => p.id === (pipelineId ? Number(pipelineId) : board.data?.pipeline?.id))?.name ?? 'Sales';
   const currency = columns.flatMap((c) => c.deals)[0]?.currency ?? 'LKR';
   const refresh = () => void qc.invalidateQueries({ queryKey: ['crm'] });
 
@@ -73,39 +79,48 @@ export default function Pipeline({ openId, onOpen }: { openId: number | null; on
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <PageHead title="Pipeline">
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="m-0 mr-2 text-[20px] font-bold text-ink">Pipeline</h1>
+        {(pipelines.data?.pipelines.length ?? 0) > 1 ? (
+          <Select label="Pipeline" value={pipelineId || String(board.data?.pipeline?.id ?? '')} onValueChange={setPipelineId} options={(pipelines.data?.pipelines ?? []).map((p) => ({ value: String(p.id), label: `${p.name} · ${scope.name}` }))} />
+        ) : (
+          <span className="rounded-[8px] border border-line bg-surface px-3 py-1.5 text-[13px] font-semibold text-ink">{`${pipelineName} · ${scope.name}`}</span>
+        )}
+        <Select label="Owner" value={owner} onValueChange={setOwner} options={[{ value: '', label: 'Everyone' }, { value: 'me', label: 'Mine' }, ...(owners.data?.owners ?? []).map((o) => ({ value: String(o.id), label: o.name }))]} />
+        <label className="flex h-[34px] w-[200px] items-center gap-2 rounded-[8px] border border-line bg-surface px-2.5 focus-within:border-primary">
+          <Icon name="search" size={14} className="text-ink-3" />
+          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search deals" aria-label="Search deals" className="bare-focus min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3" />
+        </label>
+        <span className="flex-1" />
+        <span className="flex flex-col items-end leading-tight" aria-label="Board totals">
+          <span className="text-[11.5px] text-ink-3">Open · Weighted</span>
+          <b className="text-[14px] text-ink tabular-nums">
+            {money(totals.open, currency)} · {money(totals.weighted, currency)}
+          </b>
+        </span>
         {canDeal ? (
           <button type="button" className={btnPrimary} onClick={() => setCreating(true)}>
             <Icon name="plus" size={15} /> New deal
           </button>
         ) : null}
-      </PageHead>
-      <div className="flex flex-wrap items-center gap-2">
-        <label className="flex h-[34px] w-[220px] items-center gap-2 rounded-[8px] border border-line bg-surface px-2.5 focus-within:border-primary">
-          <Icon name="search" size={14} className="text-ink-3" />
-          <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search deals" aria-label="Search deals" className="bare-focus min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none placeholder:text-ink-3" />
-        </label>
-        {(pipelines.data?.pipelines.length ?? 0) > 1 ? <Select label="Pipeline" value={pipelineId || String(board.data?.pipeline?.id ?? '')} onValueChange={setPipelineId} options={(pipelines.data?.pipelines ?? []).map((p) => ({ value: String(p.id), label: p.name }))} /> : null}
-        <Select label="Owner" value={owner} onValueChange={setOwner} options={[{ value: '', label: 'Everyone' }, { value: 'me', label: 'Mine' }, ...(owners.data?.owners ?? []).map((o) => ({ value: String(o.id), label: o.name }))]} />
-        <span className="flex-1" />
-        <span className="text-[12.5px] text-ink-2">
-          Open <b className="text-ink">{money(openTotal, currency)}</b> · Weighted <b className="text-ink">{money(weighted, currency)}</b>
-        </span>
       </div>
       {board.isLoading ? <Spinner /> : board.error ? <ErrorNote error={board.error} onRetry={() => void board.refetch()} /> : null}
-      <div className="grid min-h-0 flex-1 auto-cols-[minmax(210px,1fr)] grid-flow-col gap-2.5 overflow-x-auto pb-2 scroll-thin">
-        {columns.map((c) => (
-          <Column key={c.id} c={c} canMove={canDeal} over={over === c.id} dragging={dragging} onDragOver={() => setOver(c.id)} onDrop={() => dropOn(c.id)} onDragStart={setDragging} onDragEnd={() => (setDragging(null), setOver(null))} onOpen={onOpen} />
-        ))}
+      <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-[12px] border border-line">
+        <div className="grid min-h-0 flex-1 auto-cols-[minmax(210px,1fr)] grid-flow-col gap-2.5 overflow-x-auto p-2.5 scroll-thin">
+          {columns.map((c) => (
+            <Column key={c.id} c={c} currency={currency} canMove={canDeal} over={over === c.id} dragging={dragging} onDragOver={() => setOver(c.id)} onDrop={() => dropOn(c.id)} onDragStart={setDragging} onDragEnd={() => (setDragging(null), setOver(null))} onOpen={onOpen} />
+          ))}
+        </div>
+        <StatusBar>{board.data ? `${totals.deals} ${totals.deals === 1 ? 'deal' : 'deals'} · Open ${money(totals.open, currency)} · Weighted ${money(totals.weighted, currency)}` : null}</StatusBar>
       </div>
-      {openId ? <DealDrawer key={openId} id={openId} canDeal={canDeal} columns={columns} onClose={() => onOpen(null)} onMove={move} onLose={(deal, stageId) => setLosing({ deal, stageId })} onChanged={refresh} /> : null}
+      {openId ? <DealDrawer key={openId} id={openId} canDeal={canDeal} columns={columns} onClose={() => onOpen(null)} onMove={move} onLose={(deal, stageId) => setLosing({ deal, stageId })} onChanged={refresh} onOpenQuote={onOpenQuote} /> : null}
       {losing ? <LostReason deal={losing.deal} onClose={() => setLosing(null)} onSave={async (why) => (await move(losing.deal, losing.stageId, why)) && setLosing(null)} /> : null}
       {creating && canDeal ? <NewDeal onClose={() => setCreating(false)} onCreated={() => (setCreating(false), refresh())} /> : null}
     </div>
   );
 }
 
-function Column({ c, canMove, over, dragging, onDragOver, onDrop, onDragStart, onDragEnd, onOpen }: { c: BoardColumn; canMove: boolean; over: boolean; dragging: Deal | null; onDragOver: () => void; onDrop: () => void; onDragStart: (d: Deal) => void; onDragEnd: () => void; onOpen: (id: number) => void }) {
+function Column({ c, currency, canMove, over, dragging, onDragOver, onDrop, onDragStart, onDragEnd, onOpen }: { c: BoardColumn; currency: string; canMove: boolean; over: boolean; dragging: Deal | null; onDragOver: () => void; onDrop: () => void; onDragStart: (d: Deal) => void; onDragEnd: () => void; onOpen: (id: number) => void }) {
   const today = todayInZone();
   return (
     <div
@@ -116,17 +131,19 @@ function Column({ c, canMove, over, dragging, onDragOver, onDrop, onDragStart, o
         onDragOver();
       }}
       onDrop={(e) => (e.preventDefault(), onDrop())}
-      className={cx('flex min-h-0 flex-col gap-2 rounded-[12px] bg-[#E9ECF3] p-2 dark:bg-subtle', over && dragging && dragging.stage_id !== c.id && 'ring-2 ring-primary')}
+      className={cx('flex min-h-0 flex-col gap-2 rounded-[10px] bg-[#E9ECF3] p-2 dark:bg-well', over && dragging && dragging.stage_id !== c.id && 'ring-2 ring-primary')}
     >
-      <div className="flex flex-col gap-0.5 px-1 pt-0.5">
+      <div className="flex flex-col gap-0.5 px-1 pt-0.5" data-column-head>
         <span className="flex items-center gap-1.5">
           <span className="h-2 w-2 shrink-0 rounded-full" style={{ background: stageColour(c.colour) }} />
-          <b className="min-w-0 flex-1 truncate text-ink">{c.name}</b>
-          <span className="rounded-full bg-surface px-1.5 text-[11px] font-bold text-ink-2 tabular-nums">{c.count}</span>
+          <b className="min-w-0 truncate text-ink">{c.name}</b>
+          <span className="text-[12px] font-bold text-ink-2 tabular-nums">{c.count}</span>
+          <span className="flex-1" />
+          <span className="text-[11.5px] text-ink-3 tabular-nums">{c.probability}%</span>
         </span>
-        <span className="text-[11.5px] text-ink-3">
-          {c.probability}% · {money(c.total, c.deals[0]?.currency)}
-          {c.kind === 'open' && c.weighted ? ` ≈ ${money(c.weighted)}` : ''}
+        <span className="text-[11.5px] text-ink-3 tabular-nums">
+          {money(c.total, c.deals[0]?.currency ?? currency)}
+          {c.kind === 'open' && c.weighted ? ` · ≈ ${money(c.weighted)}` : ''}
         </span>
       </div>
       <div className="flex min-h-0 flex-col gap-1.5 overflow-y-auto scroll-thin">
@@ -147,8 +164,12 @@ function Column({ c, canMove, over, dragging, onDragOver, onDrop, onDragStart, o
               <b className="text-[12.5px] leading-snug text-ink">{d.name}</b>
               <span className="truncate text-[11.5px] text-ink-3">{d.account_name ?? 'No account'}</span>
               <span className="flex items-center gap-1.5">
-                <b className="text-[12.5px] text-ink tabular-nums">{money(d.amount, d.currency)}</b>
-                {stale ? <span className="rounded-full bg-[#FFF4E0] px-1.5 text-[10.5px] font-bold text-[#9A4A06] dark:bg-warning-bg dark:text-warning">{d.days_in_stage}d in stage</span> : null}
+                <b className="min-w-0 flex-1 text-[12.5px] text-ink tabular-nums">{money(d.amount, d.currency)}</b>
+                {stale ? (
+                  <span title={`${d.days_in_stage} days in this stage`} className="rounded-full bg-[#FFF4E0] px-1.5 text-[10.5px] font-bold text-[#9A4A06] dark:bg-warning-bg dark:text-warning">
+                    {d.days_in_stage}d
+                  </span>
+                ) : null}
               </span>
               <span className="flex items-center gap-1.5 text-[11.5px]">
                 <span className={cx('min-w-0 flex-1 truncate', d.owner_name ? 'text-ink-2' : 'font-bold text-[#9A4A06] dark:text-warning')}>{d.owner_name ?? 'Unassigned'}</span>
@@ -175,20 +196,23 @@ function LostReason({ deal, onClose, onSave }: { deal: Deal; onClose: () => void
           <button type="button" className={btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className={btnPrimary} disabled={!why.trim()} onClick={() => onSave(why.trim())}>
+          <button type="button" className={cx(btnPrimary, 'bg-danger hover:bg-danger')} disabled={!why.trim()} onClick={() => onSave(why.trim())}>
             Mark as lost
           </button>
         </>
       }
     >
-      <input autoFocus aria-label="Why was it lost?" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Went with a cheaper local vendor" className={input} maxLength={255} />
+      <span className="-mt-1.5 text-[12.5px] text-ink-3">The one piece of pipeline data worth keeping.</span>
+      <input autoFocus aria-label="Why was it lost?" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="Budget moved to next year" className={input} maxLength={255} />
       <span className="text-[11.5px] text-ink-3">Recorded on the deal and on the customer’s timeline.</span>
     </Sheet>
   );
 }
 
-function DealDrawer({ id, canDeal, columns, onClose, onMove, onLose, onChanged }: { id: number; canDeal: boolean; columns: BoardColumn[]; onClose: () => void; onMove: (d: Deal, stageId: number) => Promise<boolean>; onLose: (d: Deal, stageId: number) => void; onChanged: () => void }) {
+function DealDrawer({ id, canDeal, columns, onClose, onMove, onLose, onChanged, onOpenQuote }: { id: number; canDeal: boolean; columns: BoardColumn[]; onClose: () => void; onMove: (d: Deal, stageId: number) => Promise<boolean>; onLose: (d: Deal, stageId: number) => void; onChanged: () => void; onOpenQuote: (id: number) => void }) {
   const qc = useQueryClient();
+  const perms = useStore(app, (s) => s.bootstrap?.permissions);
+  const [scheduling, setScheduling] = useState(false);
   const [kind, setKind] = useState('note');
   const [title, setTitle] = useState('');
   const q = useQuery({ queryKey: ['crm', 'deal', id], queryFn: ({ signal }) => apiGet<DealDetail>(`/api/crm/deals/${id}`, undefined, signal), staleTime: 0, refetchOnMount: 'always' });
@@ -233,6 +257,11 @@ function DealDrawer({ id, canDeal, columns, onClose, onMove, onLose, onChanged }
               </div>
             ))}
           </div>
+          {crmCan(perms, 'crm.followup.create') && d.stage_kind === 'open' ? (
+            <button type="button" className={cx(btn, 'self-start')} onClick={() => setScheduling(true)}>
+              <Icon name="calendar-plus" size={14} /> Schedule a follow-up
+            </button>
+          ) : null}
           <Field label="Stage">
             <Select
               label="Stage"
@@ -273,7 +302,7 @@ function DealDrawer({ id, canDeal, columns, onClose, onMove, onLose, onChanged }
             <Caps>Quotes</Caps>
             {q.data.quotes.length ? (
               q.data.quotes.map((x) => (
-                <button key={x.id} type="button" onClick={() => void call('app:openInBrowser', { path: '/crm' })} className="flex w-full items-center gap-2 border-b border-line/60 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
+                <button key={x.id} type="button" onClick={() => onOpenQuote(x.id)} className="flex w-full items-center gap-2 border-b border-line/60 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
                   <span className="font-semibold text-primary">{x.quote_no}</span>
                   <span className="text-ink-3 capitalize">{x.status}</span>
                   <span className="flex-1" />
@@ -297,25 +326,29 @@ function DealDrawer({ id, canDeal, columns, onClose, onMove, onLose, onChanged }
           </section>
         </>
       ) : null}
+      {scheduling && d ? <ScheduleFollowUp subject={{ type: 'deal', id: d.id, label: [d.name, d.account_name].filter(Boolean).join(' · ') }} onClose={() => setScheduling(false)} onDone={() => (setScheduling(false), refresh())} /> : null}
     </SidePanel>
   );
 }
 
-function NewDeal({ onClose, onCreated }: { onClose: () => void; onCreated: () => void }) {
+/** New deal: from the board, or from an account's 360 page (`account`, fixed). */
+export function NewDeal({ account: fixed, onClose, onCreated }: { account?: { id: number; name: string }; onClose: () => void; onCreated: () => void }) {
   const owners = useOwners();
-  const accounts = useQuery({ queryKey: ['crm', 'accounts-pick'], queryFn: ({ signal }) => apiGet<{ accounts: Account[] }>('/api/crm/accounts', { per_page: 200 }, signal), staleTime: 60_000 });
+  const scope = useCrmScope();
+  const [org, setOrg] = useState('');
+  const accounts = useQuery({ queryKey: ['crm', 'accounts-pick', scope.orgId ?? 0], queryFn: ({ signal }) => apiGet<{ accounts: Account[] }>('/api/crm/accounts', { per_page: 200, ...scope.params }, signal), staleTime: 60_000, enabled: !fixed });
   const [name, setName] = useState('');
-  const [account, setAccount] = useState('');
+  const [account, setAccount] = useState(fixed ? String(fixed.id) : '');
   const [amount, setAmount] = useState('');
   const [close, setClose] = useState('');
   const [owner, setOwner] = useState('');
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const create = async () => {
-    if (!name.trim()) return;
+    if (!name.trim() || (scope.needsOrg && !org)) return;
     setBusy(true);
     try {
-      await apiPost('/api/crm/deals', { name: name.trim(), account_id: account ? Number(account) : null, amount: amount ? Number(amount) : 0, close_date: close || null, owner_id: owner ? Number(owner) : null, description: notes });
+      await apiPost('/api/crm/deals', { name: name.trim(), account_id: account ? Number(account) : null, amount: amount ? Number(amount) : 0, close_date: close || null, owner_id: owner ? Number(owner) : null, description: notes, org_id: orgIdFor(org, scope) });
       toast('success', 'Deal created.');
       onCreated();
     } catch (e) {
@@ -337,11 +370,12 @@ function NewDeal({ onClose, onCreated }: { onClose: () => void; onCreated: () =>
       }
     >
       <form className="flex flex-col gap-3" onSubmit={(e) => (e.preventDefault(), void create())}>
+        <CompanyField scope={scope} value={org} onChange={setOrg} what="deal" />
         <Field label="Deal name">
           <input autoFocus aria-label="Deal name" value={name} onChange={(e) => setName(e.target.value)} className={input} maxLength={200} />
         </Field>
         <Field label="Account">
-          <Select label="Account" value={account} onValueChange={setAccount} searchable options={[{ value: '', label: 'No account' }, ...(accounts.data?.accounts ?? []).map((a) => ({ value: String(a.id), label: a.name }))]} />
+          {fixed ? <span className="text-[13px] font-semibold text-ink">{fixed.name}</span> : <Select label="Account" value={account} onValueChange={setAccount} searchable options={[{ value: '', label: 'No account' }, ...(accounts.data?.accounts ?? []).map((a) => ({ value: String(a.id), label: a.name }))]} />}
         </Field>
         <div className="grid grid-cols-2 gap-2.5">
           <Field label="Amount">
@@ -361,7 +395,7 @@ function NewDeal({ onClose, onCreated }: { onClose: () => void; onCreated: () =>
           <button type="button" className={btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="submit" className={btnPrimary} disabled={!name.trim() || busy}>
+          <button type="submit" className={btnPrimary} disabled={!name.trim() || busy || (scope.needsOrg && !org)}>
             {busy ? 'Creating…' : 'Create deal'}
           </button>
         </div>
