@@ -80,7 +80,7 @@ export interface TaskViewPrefs {
   /** "due", "-priority": a `-` sorts that key descending; first key first. */
   sort: string[];
   columns: ListColumn[];
-  /** Collapsed groups, as `{group}:{key}` ("status:completed"). */
+  /** Collapsed groups, as `{group}:{key}` ("status:completed", "sprint:none"), as the web stores them. */
   collapsed: string[];
   chips: QuickChip[];
 }
@@ -130,7 +130,10 @@ const PRIORITY_RANK: Record<string, number> = {
 };
 /** Board order: backlog, the columns (blocked with In progress), then cancelled. */
 const STATUS_ORDER: TaskStatus[] = ['backlog', ...BOARD_COLUMNS, 'cancelled'];
+/** A status group's place: the board's columns (blocked work under In progress). */
 export const statusRank = (s: TaskStatus): number => STATUS_ORDER.indexOf(columnOf(s) ?? s);
+/** Sorting by status, as the server sorts (TaskListOrder::STATUS_ORDER): blocked right after In progress. */
+const SORT_STATUS: TaskStatus[] = ['backlog', 'todo', 'in_progress', 'blocked', 'in_review', 'testing', 'completed', 'cancelled'];
 
 const num = (v: string | number | null | undefined): number | null => {
   if (v === null || v === undefined || v === '') return null;
@@ -148,7 +151,7 @@ function sortValue(t: Task, key: string): string | number | null {
     case 'title':
       return t.title.toLowerCase();
     case 'status':
-      return statusRank(t.status);
+      return SORT_STATUS.indexOf(t.status);
     case 'assignee':
       return t.assignee ? t.assignee.toLowerCase() : null;
     case 'priority':
@@ -317,7 +320,7 @@ export function groupTasks(
         note = [`${open.length} open`, load !== null && load !== undefined && k ? `load ${load}%` : null].filter(Boolean).join(' · ');
       }
       return {
-        key: `${group}:${k}`,
+        key: `${group}:${k || 'none'}`,
         label: b.label,
         tasks: b.tasks,
         points: pointsOf(b.tasks),

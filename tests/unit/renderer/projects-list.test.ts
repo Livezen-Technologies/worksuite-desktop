@@ -55,6 +55,9 @@ describe('the list’s sorting (PRJ-LST-05)', () => {
     expect(nums(L.sortTasks([a, b, c], ['priority']))).toEqual(nums([b, c, a]));
     expect(nums(L.sortTasks([a, b, c], ['-priority']))).toEqual(nums([a, c, b]));
     expect(nums(L.sortTasks([a, b, c], ['status']))).toEqual(nums([b, c, a]));
+    // As the server sorts: blocked right after In progress.
+    const ip = task({ status: 'in_progress', position: 999 });
+    expect(nums(L.sortTasks([c, ip], ['status']))).toEqual(nums([ip, c]));
     expect(nums(L.sortTasks([a, b, c], ['due']))).toEqual(nums([c, a, b]));
     expect(nums(L.sortTasks([a, b, c], ['-due']))).toEqual(nums([a, c, b]));
     expect(nums(L.sortTasks([a, b, c], ['-points']))).toEqual(nums([b, a, c]));
@@ -96,6 +99,8 @@ describe('the list’s groups and filters (PRJ-LST-04, 06)', () => {
       ['Kasun', '1 open'],
       ['Unassigned', '0 open'],
     ]);
+    // The empty value's key is the web's: "assignee:none".
+    expect(g[2]!.key).toBe('assignee:none');
   });
   it('applies the quick filters, and the board’s text filter', () => {
     expect(L.chipFilter(tasks, ['mine'], 7, today)).toHaveLength(2);
