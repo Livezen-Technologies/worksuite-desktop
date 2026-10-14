@@ -36,7 +36,7 @@ describe('Projects links land in the native app', () => {
     expect(resolveWebLink('/projects/my-work')).toEqual({ kind: 'tab', route: '/projects/my-work', app: 'projects' });
     expect(resolveWebLink('/projects/changes/7')).toEqual({ kind: 'tab', route: '/projects/changes/7', app: 'projects' });
     // The portfolio is native (PORTFOLIO): the register, templates, clients, a project's own pages, activity, settings.
-    for (const path of ['/projects/all?status=active', '/projects/templates', '/projects/clients/5', '/projects/activity', '/projects/settings', '/projects/18/team', '/projects/18/settings', '/projects/18/activity', '/projects/18/files', '/projects/18/board', '/projects/board'])
+    for (const path of ['/projects/all?status=active', '/projects/templates', '/projects/clients/5', '/projects/activity', '/projects/settings', '/projects/18/team', '/projects/18/settings', '/projects/18/activity', '/projects/18/files', '/projects/18/board', '/projects/18/list', '/projects/18/board?view=list', '/projects/board'])
       expect(resolveWebLink(path)).toEqual({ kind: 'tab', route: path, app: 'projects' });
     // DELIVERY: the timeline, milestones, sprints and workload are drawn here.
     expect(resolveWebLink('/projects/18/timeline')).toEqual({ kind: 'tab', route: '/projects/18/timeline', app: 'projects' });

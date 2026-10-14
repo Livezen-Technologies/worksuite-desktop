@@ -9,17 +9,30 @@ import { Icon } from '../../components/Icon';
 import { Button, ErrorNote, Kbd, Spinner, cx, initials } from '../../components/ui';
 import { qk, read, type Task, type TaskStatus } from './api';
 import { setTimerState, submit, togglePin, useProjectTimer } from './desk';
+import { textFilter, type TaskViewPrefs } from './list';
 import { activeSprint, boardKey, buildColumns, dueOf, isBlocked, lastChange, nextColumn, sprintDay, withPending, type BoardKey } from './logic';
 import { Ref, fieldClass } from './parts';
+import { boardRoute, type TaskDisplay } from './routes';
+import { TaskList, isSwitchKey } from './TaskList';
 
 /**
- * A project's board in a tab (PRJ-DSK-01, D01): "PRJ-0018 · Sprint 7 · day 4 of 9", the columns with their counts,
+ * A project's tasks in a tab — the board, or (PRJ-LST-01, D05) the same tasks as a list: the Board | List switch
+ * beside the title (⌘⇧L / Ctrl+Shift+L) keeps the filter and the selected task, and each view keeps the other's
+ * rules — a status change in the list is this board's move, outbox and all (TaskList.tsx).
+ *
+ * The board (PRJ-DSK-01, D01): "PRJ-0018 · Sprint 7 · day 4 of 9", the columns with their counts,
  * cards with their number, title, assignee, due or how late, blocked; and the keyboard — J/K down and up, ←/→ across
  * the columns, Shift+←/→ moves the card, Enter opens it, T starts its timer, L logs time, N a new task, ⌘F filter,
  * ⌘2 the timeline, ⌥⌘O this project in a window of its own.
  */
-export function Board({ projectId, selected, today, me, active, pinned, offline, outbox, onOpen, onSelect, onNewTask, onLogTime, onOffline }: {
+export function Board({ projectId, display = 'board', prefs, onDisplay, onPrefs, selected, today, me, active, pinned, offline, outbox, onOpen, onSelect, onNewTask, onLogTime, onOffline }: {
   projectId: number;
+  /** Cards in columns or rows (PRJ-LST-01). */
+  display?: TaskDisplay;
+  /** The list's remembered layout (PRJ-LST-02). */
+  prefs?: TaskViewPrefs;
+  onDisplay?: (d: TaskDisplay) => void;
+  onPrefs?: (patch: Partial<TaskViewPrefs>) => void;
   selected: number | null;
   today: string;
   me: number;
@@ -49,9 +62,10 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
   useEffect(() => onOffline(fromCache), [fromCache, onOffline]);
 
   const { tasks, marks } = useMemo(() => withPending(list.data?.data.tasks ?? [], outbox), [list.data, outbox]);
-  const needle = (filter ?? '').trim().toLowerCase();
-  const shown = needle ? tasks.filter((t) => `${t.task_number ?? ''} ${t.title} ${t.assignee ?? ''} ${t.tags ?? ''}`.toLowerCase().includes(needle)) : tasks;
+  const shown = useMemo(() => textFilter(tasks, filter), [tasks, filter]);
   const columns = useMemo(() => buildColumns(shown), [shown]);
+  const isList = display === 'list' && !!prefs;
+  const wip = list.data?.data.wip_limits;
   const ids = columns.map((c) => c.tasks.map((t) => t.id));
   const byId = useMemo(() => new Map(tasks.map((t) => [t.id, t])), [tasks]);
   const sel = selected !== null && byId.has(selected) ? selected : null;
@@ -60,15 +74,20 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
   const changed = lastChange(tasks);
 
   const refresh = () => void qc.invalidateQueries({ queryKey: qk.tasks(projectId) });
-  const move = async (t: Task, status: TaskStatus) => {
-    if (t.status === status) return;
+  /** A card moved — dragged, ⇧←/→, or a status picked in the list: one path, one outbox entry (acceptance #14). */
+  const move = async (t: Task, status: TaskStatus, blockedReason?: string): Promise<boolean> => {
+    if (t.status === status) return false;
     // Shown in its new column at once; the server has the last word.
-    qc.setQueryData(qk.tasks(projectId), (old: typeof list.data) => (old ? { ...old, data: { ...old.data, tasks: old.data.tasks.map((x) => (x.id === t.id ? { ...x, status } : x)) } } : old));
+    qc.setQueryData(qk.tasks(projectId), (old: typeof list.data) =>
+      old ? { ...old, data: { ...old.data, tasks: old.data.tasks.map((x) => (x.id === t.id ? { ...x, status, ...(blockedReason ? { blocked_reason: blockedReason } : {}) } : x)) } } : old,
+    );
     try {
-      const r = await submit({ kind: 'move', taskId: t.id, status, baseUpdatedAt: t.updated_at, label: `Move ${t.task_number ?? t.title} to ${TASK_STATUS_LABEL[status]}` });
+      const r = await submit({ kind: 'move', taskId: t.id, status, ...(blockedReason ? { blockedReason } : {}), baseUpdatedAt: t.updated_at, label: `Move ${t.task_number ?? t.title} to ${TASK_STATUS_LABEL[status]}` });
       if (r.error && !r.queued) throw new Error(r.error);
+      return true;
     } catch (e) {
       toast('error', errorMessage(e));
+      return false;
     } finally {
       refresh();
     }
@@ -81,7 +100,9 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
       toast('error', errorMessage(e));
     }
   };
-  const newWindow = () => openRouteInWindow(`/projects/${projectId}/board`, project ? `${project.code} · ${project.name}` : 'Project');
+  // The window keeps the view (PRJ-LST-01).
+  const newWindow = () => openRouteInWindow(boardRoute(projectId, null, display), project ? `${project.code} · ${project.name}` : 'Project');
+  const switchTo = (d: TaskDisplay) => d !== display && onDisplay?.(d);
   // DELIVERY: the timeline is drawn here now.
   const timeline = () => go(`/projects/${projectId}/timeline`);
   const toggleFilter = (show?: boolean) => {
@@ -103,7 +124,9 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
     if (mod && !e.altKey && !e.shiftKey && e.code === 'KeyF') return (take(), toggleFilter(true));
     if (mod && !e.altKey && !e.shiftKey && e.code === 'Digit2') return (take(), timeline());
     if (mod && e.altKey && !e.shiftKey && e.code === 'KeyO') return (take(), newWindow());
-    if (typing || mod || e.altKey) return;
+    if (onDisplay && isSwitchKey(e)) return (take(), switchTo(display === 'list' ? 'board' : 'list'));
+    // The list has its own keys (TaskList.tsx).
+    if (typing || mod || e.altKey || isList) return;
     const k = e.key;
     const nav: Record<string, BoardKey> = { j: 'down', J: 'down', k: 'up', K: 'up', ArrowDown: 'down', ArrowUp: 'up', ArrowLeft: 'left', ArrowRight: 'right' };
     if (e.shiftKey && (k === 'ArrowLeft' || k === 'ArrowRight') && sel) {
@@ -143,20 +166,33 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
   return (
     <div className="flex min-h-0 min-w-0 flex-1 flex-col">
       <div className="flex shrink-0 flex-wrap items-center gap-2 px-5 pt-3.5 pb-2.5">
-        <div className="flex min-w-0 flex-1 flex-col">
+        <div className="flex min-w-0 flex-col">
           <span className="truncate font-mono text-[11.5px] text-ink-3">
             {[project?.code, sprint?.name, day ? `day ${day.day} of ${day.of}` : null].filter(Boolean).join(' · ') || ' '}
           </span>
-          <h1 className="truncate text-[19px] font-bold text-ink">{project ? `${project.name} — Board` : 'Board'}</h1>
+          <h1 className="truncate text-[19px] font-bold text-ink">{project ? `${project.name} — ${isList ? 'List' : 'Board'}` : isList ? 'List' : 'Board'}</h1>
         </div>
+        {onDisplay ? (
+          <div className="flex items-center gap-1.5">
+            <div role="group" aria-label="View" className="flex h-[30px] items-center rounded-[8px] border border-line bg-subtle p-0.5">
+              {(['board', 'list'] as const).map((d) => (
+                <button key={d} type="button" aria-pressed={display === d} onClick={() => switchTo(d)} className={cx('h-[24px] rounded-[6px] px-2.5 text-[12.5px] font-semibold', display === d ? 'bg-surface text-primary shadow-sm' : 'text-ink-2 hover:text-ink')}>
+                  {d === 'board' ? 'Board' : 'List'}
+                </button>
+              ))}
+            </div>
+            <Kbd tone="key">{prettyAccelerator('Mod+Shift+L')}</Kbd>
+          </div>
+        ) : null}
+        <span className="flex-1" />
         {filter !== null ? (
           <input
             ref={filterRef}
             value={filter}
             onChange={(e) => setFilter(e.target.value)}
             onKeyDown={(e) => e.key === 'Escape' && (e.stopPropagation(), setFilter(null))}
-            aria-label="Filter cards"
-            placeholder="Filter cards…"
+            aria-label={isList ? 'Filter tasks' : 'Filter cards'}
+            placeholder={isList ? 'Filter tasks…' : 'Filter cards…'}
             className={cx(fieldClass, 'w-[180px]')}
           />
         ) : null}
@@ -174,7 +210,35 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
           <ErrorNote error={list.error} onRetry={() => void list.refetch()} />
         </div>
       ) : null}
-      {list.data ? (
+      {list.data && isList && prefs && onPrefs ? (
+        <TaskList
+          code={project?.code ?? null}
+          tasks={shown}
+          marks={marks}
+          statuses={columns.map((c) => c.status)}
+          wip={wip}
+          members={detail.data?.data.members ?? []}
+          sprints={detail.data?.data.sprints ?? []}
+          today={today}
+          me={me}
+          selected={sel}
+          active={active}
+          offline={offline}
+          footer={`${pinned ? 'Cached for offline' : 'Pin to keep offline'}${changed ? ` · last change ${new Date(changed).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}`}
+          truncated={list.data.data.truncated && list.data.data.total ? { shown: tasks.length, total: list.data.data.total } : null}
+          prefs={prefs}
+          runningTaskId={timer.running?.taskId ?? null}
+          onPrefs={onPrefs}
+          onSelect={onSelect}
+          onOpen={onOpen}
+          onMove={move}
+          onStartTimer={(t) => void startTimer(t)}
+          onLogTime={onLogTime}
+          onNewTask={onNewTask}
+          onEscape={() => (filter !== null ? (setFilter(null), true) : false)}
+          onChanged={refresh}
+        />
+      ) : list.data ? (
         <div role="grid" aria-label="Board" aria-keyshortcuts="J K ArrowLeft ArrowRight Enter T L N" className="grid min-h-0 flex-1 auto-cols-[minmax(200px,1fr)] grid-flow-col gap-2.5 overflow-x-auto px-5 pb-2 scroll-thin">
           {columns.map((c) => (
             <section
@@ -198,6 +262,7 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
             >
               <div className="flex items-center gap-1.5 px-1 pt-0.5">
                 <b className="flex-1 text-[12.5px] text-ink">{TASK_STATUS_LABEL[c.status]}</b>
+                {wip?.[c.status] && c.tasks.length > wip[c.status]! ? <span className="rounded-full bg-warning-bg px-1.5 py-px text-[10.5px] font-semibold text-warning-ink">WIP {c.tasks.length} of {wip[c.status]}</span> : null}
                 <span className="text-[11.5px] text-ink-3">{c.tasks.length}</span>
               </div>
               <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto scroll-thin">
@@ -255,13 +320,15 @@ export function Board({ projectId, selected, today, me, active, pinned, offline,
           ))}
         </div>
       ) : null}
-      <div className="flex shrink-0 items-center gap-3 border-t border-line px-5 py-1.5 text-[11.5px] text-ink-3">
-        <span className="min-w-0 flex-1 truncate">J / K move · ←/→ change column · ⇧←/→ move card · Enter open · T start timer · L log time</span>
-        <span className="shrink-0">
-          {pinned ? 'Cached for offline' : 'Pin to keep offline'}
-          {changed ? ` · last change ${new Date(changed).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
-        </span>
-      </div>
+      {isList ? null : (
+        <div className="flex shrink-0 items-center gap-3 border-t border-line px-5 py-1.5 text-[11.5px] text-ink-3">
+          <span className="min-w-0 flex-1 truncate">J / K move · ←/→ change column · ⇧←/→ move card · Enter open · T start timer · L log time</span>
+          <span className="shrink-0">
+            {pinned ? 'Cached for offline' : 'Pin to keep offline'}
+            {changed ? ` · last change ${new Date(changed).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false })}` : ''}
+          </span>
+        </div>
+      )}
       {!list.data && !list.isLoading && !list.error ? <Button onClick={() => void list.refetch()}>Load the board</Button> : null}
     </div>
   );

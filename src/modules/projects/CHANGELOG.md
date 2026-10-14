@@ -4,6 +4,21 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-14
+
+**Added**
+
+- a project's tasks as a list (PRJ-LST-01..10, D05) — the Board | List switch beside the title and ⌘⇧L / Ctrl+Shift+L, /projects/<id>/board?view=list and /projects/<id>/list; switching keeps the filter and the selected task, a task opened from the list and New window keep the view
+- the view a project opens in and the list's layout (group, sort, columns, collapsed groups, quick filters) remembered per person and per project in /api/prefs/projects.task_view(.p<id>), shared with the web, with a copy on this computer for offline
+- columns Number, Title (Bug, blocked reason, what waits in the outbox), Status, Assignee, Priority, Due (late in words), Sprint, Milestone, Points, Logged / estimate (over in red) and Updated, with a column chooser; group by Status (board order, counts, points, WIP warning, Completed collapsed), Assignee (open count, load), Sprint, Milestone, Priority or None; header sort asc → desc → off, shift-click adds a key; quick filters Mine, Overdue, Blocked, Bugs, Hide completed
+- inline Status — the board's own move and outbox entry, a reason asked for Blocked — and Assignee, Priority and Due; ticked rows (Space, Shift-click for a range) moved, assigned, prioritised, put in a sprint, given a due date or deleted together through POST tasks/bulk, the answer read as '2 updated, 1 refused' naming each refused task (one by one on a server without tasks/bulk); offline, status moves still queue and every other edit and bulk say they need a connection
+- the list's keys — J/K and ↑/↓, Home/End, Enter, Space, ⇧←/→ change status, T timer, L log time, N new task in the focused group, ←/→ on a group header, Esc; a treegrid with aria-sort and aria-expanded, moves and bulk results announced, 150 rows drawn at a time; Export CSV of the rows and columns as shown (UTF-8 with a BOM) through the save dialog
+- the board's column headers show the WIP warning ('WIP 4 of 3') when the server sets a limit (PRJ-TSK-04)
+
+**Changed**
+
+- web links to /projects/<id>/list open here
+
 ## 1.3.1 — 2026-10-13
 
 **Changed**

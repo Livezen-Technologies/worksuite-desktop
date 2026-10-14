@@ -187,8 +187,15 @@ describe('the Projects app’s addresses (PRJ-INT-02)', () => {
   it('reads the web’s addresses', () => {
     expect(at('/projects')).toEqual({ view: { kind: 'dashboard' }, taskId: null });
     expect(at('/projects/18')).toEqual({ view: { kind: 'project', projectId: 18, tab: 'overview' }, taskId: null });
-    expect(at('/projects/18/tasks/412')).toEqual({ view: { kind: 'board', projectId: 18 }, taskId: 412 });
-    expect(at('/projects/18/board')).toEqual({ view: { kind: 'board', projectId: 18 }, taskId: null });
+    expect(at('/projects/18/tasks/412')).toEqual({ view: { kind: 'board', projectId: 18, display: null }, taskId: 412 });
+    expect(at('/projects/18/board')).toEqual({ view: { kind: 'board', projectId: 18, display: null }, taskId: null });
+    // The list (PRJ-LST-01): `?view=list` and its alias; a task open over it keeps the view.
+    expect(at('/projects/18/board?view=list')).toEqual({ view: { kind: 'board', projectId: 18, display: 'list' }, taskId: null });
+    expect(at('/projects/18/list')).toEqual({ view: { kind: 'board', projectId: 18, display: 'list' }, taskId: null });
+    expect(at('/projects/18/tasks/412?view=list')).toEqual({ view: { kind: 'board', projectId: 18, display: 'list' }, taskId: 412 });
+    expect(at('/projects/18/board?view=board').view).toEqual({ kind: 'board', projectId: 18, display: 'board' });
+    expect(boardRoute(18, 412, 'list')).toBe('/projects/18/tasks/412?view=list');
+    expect(boardRoute(18, null, 'board')).toBe('/projects/18/board');
     // The web's Board (no project in the address): the board of the project last worked in.
     expect(at('/projects/board')).toEqual({ view: { kind: 'board-home' }, taskId: null });
     expect(at('/projects/board/x').view).toEqual({ kind: 'web', path: '/projects/board/x' });

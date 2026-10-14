@@ -16,8 +16,9 @@ const BROWSER_PAGES = [
   /^\/finance\/(print|shared)\//,
   // Projects is native end to end (PRJ-DSK-01: the portfolio, a project's page and its tabs, the board, My work, the
   // delivery and governance screens): the one page the desktop does not draw is a project's Time tab — and any
-  // project sub-page this app does not know — which open on the web. (Time & approvals itself is native.)
-  /^\/projects\/\d+\/(?!tasks\/|(?:board|team|settings|activity|files|timeline|milestones|sprints|budget|risks|changes)(?:[/?#]|$))[a-z]/,
+  // project sub-page this app does not know — which open on the web. (Time & approvals itself is native; a project's
+  // list, `/projects/<id>/list` or `board?view=list`, is drawn here too.)
+  /^\/projects\/\d+\/(?!tasks\/|(?:board|list|team|settings|activity|files|timeline|milestones|sprints|budget|risks|changes)(?:[/?#]|$))[a-z]/,
 ];
 
 /**

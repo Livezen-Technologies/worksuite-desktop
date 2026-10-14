@@ -19,6 +19,7 @@ import { openWeb } from './parts';
 import { Rail } from './Rail';
 import { boardRoute, viewOf } from './routes';
 import { TaskPanel } from './TaskPanel';
+import { rememberTaskView, syncTaskView, useTaskView } from './view-prefs';
 import { MiniTimer } from './Timer';
 // ── PORTFOLIO ──
 import { PortfolioDashboard } from './screens/Dashboard';
@@ -80,6 +81,12 @@ function Workspace() {
   // `/projects/board` (the web's Board) shows the board of the project last worked in: the most recent, else a pinned one.
   const boardProject = view.kind === 'board' ? view.projectId : view.kind === 'board-home' ? (recent[0] ?? pins[0] ?? null) : null;
   const current = boardProject ? (projects.get(boardProject) ?? null) : null;
+  // Board or list (PRJ-LST-01/02): the address's, else the one last used for this project.
+  const taskView = useTaskView(boardProject ?? 0);
+  const display = view.kind === 'board' && view.display ? view.display : taskView.view;
+  useEffect(() => {
+    if (boardProject && !offline) void syncTaskView(boardProject);
+  }, [boardProject, offline]);
 
   // The project this view is about (its page, board or one of its own screens): noted as recent, named in the title.
   const pageProject = view.kind === 'project' ? view.projectId : boardProject ?? ('projectId' in view ? (view.projectId ?? null) : null);
@@ -89,7 +96,7 @@ function Workspace() {
   useTabTitle(
     portfolioTitle(view, projects) ??
       governanceTitle(view, pageCode) ??
-      (deliveryTitle ? `${('projectId' in view && view.projectId ? pageCode : null) ?? 'Projects'} · ${deliveryTitle}` : boardProject || view.kind === 'board-home' ? (current ? `${current.code} · Board` : 'Projects · Board') : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : 'Projects'),
+      (deliveryTitle ? `${('projectId' in view && view.projectId ? pageCode : null) ?? 'Projects'} · ${deliveryTitle}` : boardProject || view.kind === 'board-home' ? (current ? `${current.code} · ${display === 'list' ? 'List' : 'Board'}` : `Projects · ${display === 'list' ? 'List' : 'Board'}`) : view.kind === 'my-work' ? 'Projects · My work' : view.kind === 'time' ? 'Projects · Time' : 'Projects'),
   );
   const may = usePermission();
   // A project's own screens sit under its tab strip (W04), as on the web: its board, and the delivery and governance
@@ -133,11 +140,11 @@ function Workspace() {
     return `${base}${p.toString() ? `?${p}` : ''}`;
   };
   const openTask = (id: number, projectId?: number | null) => {
-    if (boardProject) go(boardRoute(boardProject, id));
+    if (boardProject) go(boardRoute(boardProject, id, display));
     else if (projectId && view.kind !== 'my-work') go(boardRoute(projectId, id));
     else go(withTask(id));
   };
-  const closeTask = () => go(boardProject ? boardRoute(boardProject) : withTask(null));
+  const closeTask = () => go(boardProject ? boardRoute(boardProject, null, display) : withTask(null));
 
   // ⌘P jumps to a project and Esc closes the open task, while this tab is in front.
   useEffect(() => {
@@ -179,6 +186,14 @@ function Workspace() {
               <Board
                 key={boardProject}
                 projectId={boardProject}
+                display={display}
+                prefs={taskView}
+                onDisplay={(d) => {
+                  rememberTaskView(boardProject, { view: d });
+                  // The task open stays open, the filter and selection stay with the board (acceptance #13).
+                  go(boardRoute(boardProject, taskId, d));
+                }}
+                onPrefs={(patch) => void rememberTaskView(boardProject, patch)}
                 selected={selected}
                 today={today}
                 me={me}
@@ -255,7 +270,7 @@ function Workspace() {
       {jump ? <JumpTo projects={[...projects.values()]} onClose={() => setJump(false)} onPick={(id) => (setJump(false), go(view.kind === 'board-home' ? `/projects/${id}/board` : `/projects/${id}`))} /> : null}
       {logFor ? <LogTime task={logFor.task} project={current ? { id: current.id, code: current.code } : boardProject ? { id: boardProject } : null} onClose={() => setLogFor(null)} /> : null}
       {newParam ? <NewProjectDialog start={startKey(newParam)} offline={offline} onClose={() => setNew(null)} onGo={go} /> : null}
-      {newIn && boardProject ? <NewTask projectId={boardProject} status={newIn} me={me} onClose={() => setNewIn(null)} onCreated={(id) => (setNewIn(null), void qc.invalidateQueries({ queryKey: qk.tasks(boardProject) }), go(boardRoute(boardProject, id)))} /> : null}
+      {newIn && boardProject ? <NewTask projectId={boardProject} status={newIn} me={me} onClose={() => setNewIn(null)} onCreated={(id) => (setNewIn(null), void qc.invalidateQueries({ queryKey: qk.tasks(boardProject) }), go(boardRoute(boardProject, id, display)))} /> : null}
     </div>
   );
 }
