@@ -41,6 +41,7 @@ import {
 } from './list';
 import { isBlocked, nextColumn, type PendingMark } from './logic';
 import { Ref } from './parts';
+import { usePublishTaskOrder } from './task-editor';
 
 /**
  * A project's tasks as a list (PRJ-LST-01..10, D05): the same tasks, filter and keys as the board, as rows — grouped
@@ -162,6 +163,8 @@ export function TaskList({
     return out;
   }, [groups, grouped, collapsed]);
   const rowOrder = useMemo(() => items.flatMap((i) => (i.type === 'row' ? [i.id] : [])), [items]);
+  // J/K in the task modal walk the rows as shown (PRJ-TED-09).
+  usePublishTaskOrder(rowOrder);
   const groupOf = useMemo(() => new Map(groups.flatMap((g) => g.tasks.map((t) => [t.id, g] as const))), [groups]);
   const at = focusGroup !== null ? items.findIndex((i) => i.type === 'group' && i.key === focusGroup) : selected !== null ? items.findIndex((i) => i.type === 'row' && i.id === selected) : -1;
   const tickedIds = [...ticked].filter((id) => byId.has(id));
@@ -873,8 +876,9 @@ export function TaskList({
   );
 }
 
-function ReasonDialog({ title, required, onClose, onDone }: { title: string; required: boolean; onClose: () => void; onDone: (reason: string) => void }) {
-  const [v, setV] = useState('');
+/** Why a task is blocked, asked before the move (the list, the bulk bar and the task modal). */
+export function ReasonDialog({ title, required, initial = '', onClose, onDone }: { title: string; required: boolean; initial?: string; onClose: () => void; onDone: (reason: string) => void }) {
+  const [v, setV] = useState(initial);
   const empty = required && !v.trim();
   return (
     <Modal

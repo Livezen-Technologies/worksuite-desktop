@@ -13,6 +13,7 @@ import { textFilter, type TaskViewPrefs } from './list';
 import { activeSprint, boardKey, buildColumns, dueOf, isBlocked, lastChange, nextColumn, sprintDay, withPending, type BoardKey } from './logic';
 import { Ref, fieldClass } from './parts';
 import { boardRoute, type TaskDisplay } from './routes';
+import { usePublishTaskOrder } from './task-editor';
 import { TaskList, isSwitchKey } from './TaskList';
 
 /**
@@ -72,6 +73,8 @@ export function Board({ projectId, display = 'board', prefs, onDisplay, onPrefs,
   const sprint = activeSprint(detail.data?.data.sprints, today);
   const day = sprint ? sprintDay(sprint, today) : null;
   const changed = lastChange(tasks);
+  // J/K in the task modal walk the cards column by column (PRJ-TED-09); the list says its own order.
+  usePublishTaskOrder(isList ? null : ids.flat());
 
   const refresh = () => void qc.invalidateQueries({ queryKey: qk.tasks(projectId) });
   /** A card moved — dragged, ⇧←/→, or a status picked in the list: one path, one outbox entry (acceptance #14). */

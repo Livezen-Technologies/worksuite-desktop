@@ -9,6 +9,7 @@ import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import { qk, read } from './api';
 import { elapsedOf, useProjectTimer } from './desk';
 import { openWeb } from './parts';
+import { usePublishTaskOrder } from './task-editor';
 // DELIVERY: my week's entries say why they are locked or sent back, and one of mine can be deleted (online).
 import { dwrite, fmtDay, type QueueEntry } from './delivery';
 import { Confirm, NEEDS_CONNECTION } from './screens/kit';
@@ -19,7 +20,7 @@ import { Confirm, NEEDS_CONNECTION } from './screens/kit';
  */
 
 /** My time this week (PRJ-TIM), the running timer with it, and the approvals waiting for me (the queue, online). */
-export function TimeView({ today, waiting, offline, onLogTime, onOffline, onReview }: { today: string; waiting: number; offline: boolean; onLogTime: () => void; onOffline: (o: boolean) => void; onReview?: () => void }) {
+export function TimeView({ today, waiting, offline, onLogTime, onOpenTask, onOffline, onReview }: { today: string; waiting: number; offline: boolean; onLogTime: () => void; onOpenTask?: (taskId: number) => void; onOffline: (o: boolean) => void; onReview?: () => void }) {
   const [day, setDay] = useState(today);
   const qc = useQueryClient();
   const [deleting, setDeleting] = useState<QueueEntry | null>(null);
@@ -47,6 +48,8 @@ export function TimeView({ today, waiting, offline, onLogTime, onOffline, onRevi
   const days = Array.from({ length: 7 }, (_, i) => addDays(monday, i));
   const running = timer.running && mondayOf(today) === monday ? Math.floor(elapsedOf(timer.running.startedAt, now) / 60) : 0;
   const total = entries.reduce((n, e) => n + e.minutes, 0) + running;
+  // J/K in the task modal walk the week's tasks in the order shown (PRJ-TED-09).
+  usePublishTaskOrder([...new Set(days.flatMap((d) => entries.filter((e) => e.on_date === d && e.task_id).map((e) => e.task_id as number)))]);
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-4 scroll-thin">
       <div className="flex flex-wrap items-center gap-2">
@@ -98,7 +101,13 @@ export function TimeView({ today, waiting, offline, onLogTime, onOffline, onRevi
                 <div key={e.id} className="flex flex-col border-b border-line/60 px-3.5 py-1.5 text-[12.5px] last:border-b-0">
                   <div className="flex items-center gap-2">
                     <span className="w-[70px] font-mono text-[11px] text-ink-3">{e.task_number ?? e.project_code ?? '—'}</span>
-                    <span className="min-w-0 flex-1 truncate text-ink">{e.task ?? e.project ?? 'Internal · not on a project'}</span>
+                    {e.task_id && e.task && onOpenTask ? (
+                      <button type="button" onClick={() => onOpenTask(e.task_id!)} className="min-w-0 flex-1 truncate text-left text-ink hover:text-primary hover:underline">
+                        {e.task}
+                      </button>
+                    ) : (
+                      <span className="min-w-0 flex-1 truncate text-ink">{e.task ?? e.project ?? 'Internal · not on a project'}</span>
+                    )}
                     {e.note ? <span className="max-w-[30%] truncate text-ink-3">{e.note}</span> : null}
                     <span className="text-[11px] text-ink-3">{e.is_billable ? 'billable' : 'non-billable'}</span>
                     <span className="text-[11px] text-ink-3">{e.approved ? 'approved' : e.state === 'submitted' ? 'in HR timesheet' : (e.state ?? '').replace(/_/g, ' ')}</span>

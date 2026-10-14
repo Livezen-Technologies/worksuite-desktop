@@ -4,6 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-14
+
+**Added**
+
+- a project task opens in the task modal (PRJ-TED-01..10, D06) — the Tasks app's editor, centred (up to 1180 × 860) over a dimmed board, list, My work, Time, Milestones or a notification's link, /projects/<id>/tasks/<task> and ?task=; it replaces the side panel (TaskPanel), which is gone
+- its header — Project › number, the type, Saving…/Saved, Copy link (⌘L / Ctrl+L), a window of its own (⌥⌘O / Ctrl+Alt+O), ⋯ Duplicate, Convert to sub-task of…, Move to another project…, Save as template task, Archive, Delete…, and Complete / Reopen (completed / to do, never the Tasks app's done; ⌘Enter / Ctrl+Enter)
+- the Tasks editor's title, description, checklist, attachments and conversation, with Dependencies (waits on / blocks, a picker on the same project, a loop refused with the tasks named) and Time (logged against the estimate, Start timer, Log time, entries Pending / Approved / Sent back / Invoiced with a lock); the side panel's Status in the project's words (Blocked asks why first), Priority, Assignee and Reviewer from the members, Start, Due, Reminders, the Project group (Project read-only, Type, Sprint, Milestone, Parent, Points, Estimate, Billable, the blocked reason), Tags, Progress, Company (read-only), Watchers and Review
+- one read, GET /api/tasks/{id} with its project block (GET /api/projects/tasks/{id} on an older server); each change through the endpoint that owns its rule — Tasks fields to /api/tasks/{id}, the project's to PUT /api/projects/tasks/{id}, the status as the board's move; what the reader may not change is shown read-only with the reason, never hidden (PRJ-TED-08)
+- offline it opens from the copy kept on this computer with a banner; the status, a comment and logged time go to the outbox, everything else says it needs a connection, and what waits or needs your choice is named in the modal
+- T timer, L log time, J/K the next and previous task of the view behind without closing; Time's entries and a milestone's tasks open the modal
+
 ## 1.4.0 — 2026-10-14
 
 **Added**
