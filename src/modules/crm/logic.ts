@@ -182,17 +182,21 @@ export function lateLabel(minutes: number | null | undefined): string | null {
   return `${d} ${d === 1 ? 'day' : 'days'} late`;
 }
 
-/** What a follow-up is about: the server's `subject`, or (servers before it) its lead. */
-export function subjectOf(f: { subject?: unknown; lead_id: number | null; lead: string | null; company?: string | null }): RecordRef | null {
-  const s = f.subject;
-  if (s && typeof s === 'object' && 'type' in s && 'id' in s) {
-    const o = s as { type: string; id: number | string; label?: string | null };
-    return { type: o.type, id: Number(o.id), label: o.label ?? null };
+/**
+ * What a follow-up is about: the server's `record` ({type, id, label}, CRM 1.2), an object `subject` from a
+ * pre-release build, or (older servers) its lead.
+ */
+export function subjectOf(f: { record?: unknown; subject?: unknown; lead_id: number | null; lead: string | null; company?: string | null }): RecordRef | null {
+  for (const s of [f.record, f.subject]) {
+    if (s && typeof s === 'object' && 'type' in s && 'id' in s) {
+      const o = s as { type: string; id: number | string; label?: string | null };
+      return { type: o.type, id: Number(o.id), label: o.label ?? null };
+    }
   }
   return f.lead_id ? { type: 'lead', id: f.lead_id, label: f.lead } : null;
 }
 
-/** What a follow-up is for: `subject` when it is text (servers before subjects), else `title`. */
+/** What a follow-up is for: its `subject` text, or `title` where `subject` was the record. */
 export function whatFor(f: { subject?: unknown; title?: string | null }): string | null {
   return typeof f.subject === 'string' ? f.subject || null : (f.title ?? null);
 }

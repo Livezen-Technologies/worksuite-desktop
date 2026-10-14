@@ -107,6 +107,9 @@ describe('follow-ups', () => {
     expect(subjectOf(now)).toEqual({ type: 'deal', id: 7, label: 'Cold Room Upgrade' });
     expect(whatFor(now)).toBe('Confirm the spec');
     expect(subjectOf({ lead_id: null, lead: null, subject: null })).toBeNull();
+    const server = { lead_id: null, lead: null, subject: 'Confirm the spec', record: { type: 'account', id: 3, label: 'Ceylon Spice' } };
+    expect(subjectOf(server)).toEqual({ type: 'account', id: 3, label: 'Ceylon Spice' });
+    expect(whatFor(server)).toBe('Confirm the spec');
   });
 });
 

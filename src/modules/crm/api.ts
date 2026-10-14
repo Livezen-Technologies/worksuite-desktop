@@ -320,12 +320,10 @@ export interface FollowUp {
   company: string | null;
   kind: string;
   kind_label: string;
-  /**
-   * What it is for ("Confirm the seat count"); on servers with follow-ups on
-   * deals and accounts, what it is about instead — `{type, id, label}` — with
-   * what it is for in `title`. `subjectOf()` and `whatFor()` read either.
-   */
+  /** What it is for ("Confirm the seat count"). */
   subject: string | { type: 'lead' | 'deal' | 'account'; id: number; label: string | null } | null;
+  /** What it is about (CRM 1.2): the lead, deal or account. `subjectOf()` reads it. */
+  record?: { type: 'lead' | 'deal' | 'account'; id: number; label: string | null } | null;
   title?: string | null;
   notes: string | null;
   assigned_to: number | null;
