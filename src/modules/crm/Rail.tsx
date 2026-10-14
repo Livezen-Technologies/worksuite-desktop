@@ -5,17 +5,20 @@ import { call } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { PrimaryActionButton } from '../../components/PrimaryAction';
+import { normaliseSearch, type Hit } from './logic';
+import { useCrmScope } from './scope';
 
 /**
- * The CRM rail (CrmRail): New lead, Search the CRM, and the sections — Sales
- * and Catalogue — with the counts that matter (open deals, new leads, late
- * follow-ups in red), what is due today from Tasks and Meetings, and My
- * access. Screens the desktop does not draw yet open in the browser, marked.
+ * The CRM rail (CrmRail): New lead, Search the CRM, and the groups of the
+ * shared rail (W6) — the top, Sales, Catalogue, Insight and Set up — with the
+ * counts that matter (open deals, new leads, late follow-ups in red), what is
+ * due today from Tasks and Meetings, and the company the CRM is showing.
+ * Screens the desktop does not draw yet open in the browser, marked.
  */
-export type CrmView = 'dash' | 'pipe' | 'leads' | 'fu' | 'acc' | 'quotes' | 'price' | 'intake' | 'set' | 'access';
+export type CrmView = 'dash' | 'pipe' | 'leads' | 'fu' | 'acc' | 'quotes' | 'price' | 'reports' | 'intake' | 'set' | 'access';
 
 /** Drawn here; the rest opens WorkSuite CRM in the browser for now. */
-export const NATIVE = new Set<CrmView>(['dash', 'pipe', 'leads', 'fu', 'acc', 'quotes', 'price', 'intake', 'set', 'access']);
+export const NATIVE = new Set<CrmView>(['dash', 'pipe', 'leads', 'fu', 'acc', 'quotes', 'price', 'reports', 'intake', 'set', 'access']);
 
 interface Item {
   id: CrmView;
@@ -33,15 +36,8 @@ export interface RailCounts {
   meetingsToday: number;
 }
 
-interface SearchHit {
-  type: string;
-  id: number;
-  title: string;
-  subtitle: string | null;
-  meta: string | null;
-}
-
-export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: CrmView; onPick: (v: CrmView) => void; onNewLead: () => void; onOpenHit: (hit: SearchHit) => void; counts: RailCounts }) {
+export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: CrmView; onPick: (v: CrmView) => void; onNewLead: () => void; onOpenHit: (hit: Hit) => void; counts: RailCounts }) {
+  const scope = useCrmScope();
   const sections: Array<{ label: string | null; items: Item[] }> = [
     {
       label: null,
@@ -59,12 +55,14 @@ export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: 
         { id: 'quotes', label: 'Quotes', icon: 'file-text' },
       ],
     },
+    { label: 'Catalogue', items: [{ id: 'price', label: 'Price list', icon: 'list' }] },
+    { label: 'Insight', items: [{ id: 'reports', label: 'Reports', icon: 'chart' }] },
     {
-      label: 'Catalogue',
+      label: 'Set up',
       items: [
-        { id: 'price', label: 'Price list', icon: 'list' },
         { id: 'intake', label: 'Lead intake', icon: 'inbox' },
         { id: 'set', label: 'Settings', icon: 'settings' },
+        { id: 'access', label: 'My access', icon: 'key' },
       ],
     },
   ];
@@ -97,7 +95,11 @@ export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: 
     <nav aria-label="CRM" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
       <div className="flex flex-col gap-2 px-2.5 pt-3.5 pb-1">
         <PrimaryActionButton data-guide="crm.new-lead" label="New lead" onClick={onNewLead} />
-        <CrmSearch onOpen={onOpenHit} />
+        <CrmSearch onOpen={onOpenHit} params={scope.params} orgKey={scope.orgId ?? 0} />
+        <span className="truncate px-1 text-[11.5px] text-ink-3" title="The company the CRM is showing — change it with the organization switcher">
+          <Icon name="building" size={12} className="mr-1 inline align-[-2px]" />
+          {scope.name}
+        </span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-2.5 scroll-thin">
         {sections.map((s) => (
@@ -121,25 +123,23 @@ export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: 
             ) : null}
           </>
         ) : null}
-        <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">Administration</div>
-        {item({ id: 'access', label: 'My access', icon: 'key' })}
       </div>
     </nav>
   );
 }
 
-/** Search the CRM: accounts, leads, deals and contacts as you type. */
-function CrmSearch({ onOpen }: { onOpen: (hit: SearchHit) => void }) {
+/** Search the CRM (W10): leads, deals, accounts, contacts and quotes as you type, grouped; each opens its record. */
+function CrmSearch({ onOpen, params, orgKey }: { onOpen: (hit: Hit) => void; params: Record<string, number>; orgKey: number }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
   const needle = q.trim();
   const res = useQuery({
-    queryKey: ['crm', 'search', needle],
-    queryFn: ({ signal }) => apiGet<{ results: SearchHit[] }>('/api/crm/search', { q: needle }, signal),
+    queryKey: ['crm', 'search', needle, orgKey],
+    queryFn: ({ signal }) => apiGet<unknown>('/api/crm/search', { q: needle, ...params }, signal),
     enabled: needle.length >= 2,
     staleTime: 30_000,
   });
-  const hits = res.data?.results ?? [];
+  const groups = normaliseSearch(res.data);
   return (
     <div className="relative">
       <label className="flex h-8 items-center gap-2 rounded-[8px] border border-line bg-surface px-2.5 focus-within:border-primary">
@@ -156,26 +156,28 @@ function CrmSearch({ onOpen }: { onOpen: (hit: SearchHit) => void }) {
         />
       </label>
       {open && needle.length >= 2 ? (
-        <div role="listbox" aria-label="CRM results" className="absolute top-full right-0 left-0 z-30 mt-1 max-h-80 overflow-y-auto rounded-[10px] border border-line bg-surface py-1 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)] scroll-thin">
-          {hits.length === 0 ? (
-            <p className="m-0 px-3 py-2 text-[12px] text-ink-3">{res.isLoading ? 'Searching…' : 'Nothing found'}</p>
+        <div role="listbox" aria-label="CRM results" className="absolute top-full left-0 z-30 mt-1 max-h-96 w-[300px] overflow-y-auto rounded-[10px] border border-line bg-surface py-1 shadow-[0_12px_32px_rgb(var(--ws-shadow-rgb)/.18)] scroll-thin">
+          {groups.length === 0 ? (
+            <p className="m-0 px-3 py-2 text-[12px] text-ink-3">{res.isLoading ? 'Searching…' : res.error ? 'Search is not available.' : 'Nothing found'}</p>
           ) : (
-            hits.map((h) => (
-              <button
-                key={`${h.type}-${h.id}`}
-                type="button"
-                role="option"
-                aria-selected={false}
-                onMouseDown={(e) => e.preventDefault()}
-                onClick={() => (setQ(''), setOpen(false), onOpen(h))}
-                className="flex w-full items-start gap-2 px-3 py-1.5 text-left hover:bg-subtle"
-              >
-                <span className="mt-0.5 w-12 shrink-0 text-[10px] font-semibold tracking-wide text-ink-3 uppercase">{h.type}</span>
-                <span className="min-w-0 flex-1">
-                  <span className="block truncate text-[12.5px] font-semibold text-ink">{h.title}</span>
-                  {h.subtitle || h.meta ? <span className="block truncate text-[11.5px] text-ink-3">{[h.subtitle, h.meta].filter(Boolean).join(' · ')}</span> : null}
-                </span>
-              </button>
+            groups.map((g) => (
+              <div key={g.type} role="group" aria-label={g.label}>
+                <div className="px-3 pt-1.5 pb-0.5 text-[10px] font-bold tracking-[.6px] text-ink-3 uppercase">{g.label}</div>
+                {g.hits.map((h) => (
+                  <button
+                    key={`${h.type}-${h.id}`}
+                    type="button"
+                    role="option"
+                    aria-selected={false}
+                    onMouseDown={(e) => e.preventDefault()}
+                    onClick={() => (setQ(''), setOpen(false), onOpen(h))}
+                    className="flex w-full flex-col px-3 py-1.5 text-left hover:bg-subtle"
+                  >
+                    <span className="block truncate text-[12.5px] font-semibold text-ink">{h.title}</span>
+                    {h.sub ? <span className="block truncate text-[11.5px] text-ink-3">{h.sub}</span> : null}
+                  </button>
+                ))}
+              </div>
             ))
           )}
         </div>

@@ -4,30 +4,45 @@ import { apiGet, apiPost, apiPut } from '../../core/api';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { call, errorMessage } from '../../core/bridge';
-import { addDays, dateLabel, relative, todayInZone } from '../../core/time';
+import { dateLabel, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
-import type { FollowUpOptions, Lead, LeadDetail, Owner, TimelineEntry } from './api';
-import { crmCan, LeadStatus, money, moneyFull, Rating } from './parts';
+import { btn, btnGood, btnPrimary, btnSmall, Caps, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
+import type { Lead, LeadDetail, Owner, TimelineEntry } from './api';
+import { Chips, crmCan, LeadStatus, money, moneyFull, Rating, StatusBar } from './parts';
 import { Checkbox } from '../../components/Checkbox';
+import { bulkSummary, isMissing, pageOf, statusLine, type BulkAnswer, type PageMeta } from './logic';
+import { exportCrmCsv } from './exportCsv';
+import { ScheduleFollowUp } from './Schedule';
+import { CompanyField, orgIdFor, useCrmScope } from './scope';
 
 /**
- * Leads (CrmLeads, CrmLeadDrawer, CrmLeadExtras): the list with its four
- * working views (Late, Due today, Nothing scheduled, Unassigned), filters,
- * sorting and bulk reassign; one lead in a drawer — contact, qualification,
+ * Leads (CrmLeads, CrmLeadDrawer, CrmLeadExtras, desk-leads): the list for
+ * the company the CRM is showing, with its working views (Late, Due today,
+ * Nothing scheduled, Unassigned) and their counts, filters, sorting, the bulk
+ * bar (assign, status, schedule a follow-up, delete — W2), the StatusBar
+ * tallies (W3) and Export; one lead in a drawer — contact, qualification,
  * why it scored what it did, possible duplicates to merge, status and owner,
- * notes and its timeline; New lead; and Convert, which makes an account and a
- * contact (and a deal if wanted). A converted lead is read-only.
+ * the next follow-up, notes and its timeline; New lead; and Convert, which
+ * makes an account and a contact (and a deal if wanted). A converted lead is
+ * read-only.
  */
 interface LeadList {
   leads: Lead[];
-  total: number;
-  page: number;
-  has_more: boolean;
+  total?: number;
+  page?: number;
+  has_more?: boolean;
   views?: Record<string, number>;
+  meta?: Partial<PageMeta>;
+}
+
+/** A view's count: the tallies by view key, or the StatusBar's names for the same thing. */
+export function viewCount(meta: PageMeta | null | undefined, key: string): number | undefined {
+  const c = meta?.counts;
+  if (!c || !key) return undefined;
+  return c[key] ?? (key === 'none' ? c.no_followup : key === 'overdue' ? c.late : undefined);
 }
 
 const VIEWS: Array<{ key: string; label: string; red?: boolean }> = [
@@ -53,10 +68,10 @@ export function useOwners() {
   return useQuery({ queryKey: ['crm', 'owners'], queryFn: ({ signal }) => apiGet<{ owners: Owner[] }>('/api/crm/owners', undefined, signal), staleTime: 5 * 60_000 });
 }
 
-export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCloseNew, onOpenDeal }: { openId: number | null; creating: boolean; onOpen: (id: number | null) => void; onNew: () => void; onCreated: (id: number) => void; onCloseNew: () => void; onOpenDeal: (id: number) => void }) {
+export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCloseNew, onOpenDeal, onOpenAccount }: { openId: number | null; creating: boolean; onOpen: (id: number | null) => void; onNew: () => void; onCreated: (id: number) => void; onCloseNew: () => void; onOpenDeal: (id: number) => void; onOpenAccount: (id: number) => void }) {
   const qc = useQueryClient();
   const owners = useOwners();
-  const orgId = useStore(app, (s) => s.organizationId);
+  const scope = useCrmScope();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const canLead = crmCan(perms, 'crm.lead');
   const canManage = crmCan(perms, 'crm.manage');
@@ -69,6 +84,10 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
   const [dir, setDir] = useState<'asc' | 'desc'>('desc');
   const [selected, setSelected] = useState<Set<number>>(new Set());
   const [assignTo, setAssignTo] = useState<string | null>(null);
+  const [bulkStatus, setBulkStatus] = useState<string | null>(null);
+  const [bulkFollowUp, setBulkFollowUp] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const canExport = crmCan(perms, 'crm.export');
 
   const params: Record<string, string | number | undefined> = {
     view: view || undefined,
@@ -77,7 +96,7 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
     rating: rating || undefined,
     mine: owner === 'me' ? 1 : undefined,
     unassigned: owner === 'none' ? 1 : undefined,
-    org: orgId ?? undefined,
+    ...scope.params,
     sort,
     dir,
     per_page: 50,
@@ -86,10 +105,14 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
     queryKey: ['crm', 'leads', params],
     queryFn: ({ pageParam, signal }) => apiGet<LeadList>('/api/crm/leads', { ...params, page: pageParam }, signal),
     initialPageParam: 1,
-    getNextPageParam: (last) => (last.has_more ? last.page + 1 : undefined),
+    getNextPageParam: (last) => {
+      const m = pageOf(last, last.leads.length);
+      return m.has_more ? m.page + 1 : undefined;
+    },
   });
   const rows = list.data?.pages.flatMap((p) => p.leads) ?? [];
   const first = list.data?.pages[0];
+  const meta = first ? pageOf(first, rows.length) : null;
   const refresh = () => void qc.invalidateQueries({ queryKey: ['crm'] });
 
   const toggle = (id: number) =>
@@ -101,40 +124,59 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
     });
   const all = rows.length > 0 && rows.every((r) => selected.has(r.id));
 
-  const assign = async () => {
+  /** One bulk action on the chosen leads (`leads/bulk`); each lead is done or refused on its own. */
+  const bulk = async (action: 'assign' | 'status' | 'delete' | 'followup', extra: Record<string, unknown>) => {
+    const ids = [...selected];
     try {
-      await apiPost('/api/crm/leads/assign', { ids: [...selected], owner_id: assignTo ? Number(assignTo) : null });
-      toast('success', `Reassigned ${selected.size} ${selected.size === 1 ? 'lead' : 'leads'}.`);
-      setSelected(new Set());
-      setAssignTo(null);
-      refresh();
+      const r = await apiPost<BulkAnswer>('/api/crm/leads/bulk', { ids, action, ...extra });
+      const said = bulkSummary(r);
+      toast(said.tone, said.text);
     } catch (e) {
-      toast('error', errorMessage(e));
+      // A server before `leads/bulk` can still reassign, one request for them all.
+      if (action === 'assign' && isMissing(e)) {
+        try {
+          await apiPost('/api/crm/leads/assign', { ids, owner_id: extra.owner_id ?? null });
+          toast('success', `Reassigned ${ids.length} ${ids.length === 1 ? 'lead' : 'leads'}.`);
+        } catch (e2) {
+          toast('error', errorMessage(e2));
+          return false;
+        }
+      } else {
+        toast('error', isMissing(e) ? 'This WorkSuite server cannot do that to several leads at once yet.' : errorMessage(e));
+        return false;
+      }
     }
+    setSelected(new Set());
+    refresh();
+    return true;
+  };
+  const assign = async () => {
+    if (await bulk('assign', { owner_id: assignTo ? Number(assignTo) : null })) setAssignTo(null);
+  };
+  const exportList = () => {
+    const { per_page: _perPage, ...filters } = params;
+    void exportCrmCsv('/api/crm/leads/export', filters, 'leads', () => [
+      ['Lead no', 'Name', 'Company', 'Email', 'Phone', 'Score', 'Rating', 'Status', 'Owner', 'Next follow-up', 'Estimated value', 'Currency', 'Source', 'Created'],
+      ...rows.map((r) => [r.lead_no, r.name, r.company, r.email, r.phone, r.score, r.rating, r.status, r.owner_name, r.next_followup_at, r.est_value, r.currency, r.source, r.created_at]),
+    ]);
   };
   const ownerName = (id: string | null) => (id ? (owners.data?.owners.find((o) => String(o.id) === id)?.name ?? 'them') : 'nobody');
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <PageHead title="Leads">
+      <PageHead title="Leads" sub={scope.name}>
+        {canExport ? (
+          <button type="button" className={btn} onClick={exportList} title="Exports this list as it is filtered">
+            <Icon name="download" size={14} /> Export
+          </button>
+        ) : null}
         {canLead ? (
           <button type="button" className={btnPrimary} onClick={onNew}>
             New lead
           </button>
         ) : null}
       </PageHead>
-      <div role="tablist" aria-label="Views" className="flex flex-wrap gap-1.5">
-        {VIEWS.map((v) => {
-          const on = view === v.key;
-          const n = v.key ? first?.views?.[v.key] : undefined;
-          return (
-            <button key={v.key} type="button" role="tab" aria-selected={on} onClick={() => setView(v.key)} className={cx('h-[30px] rounded-full px-3 text-[12.5px] font-semibold', on ? 'bg-[#0F1B3D] text-white dark:bg-primary' : 'border border-line bg-surface text-ink hover:bg-subtle')}>
-              {v.label}
-              {n ? <span className={cx('ml-1.5 font-bold', v.red ? (on ? 'text-[#FFB4A6]' : 'text-danger') : on ? 'text-white/70' : 'text-ink-3')}>{n}</span> : null}
-            </button>
-          );
-        })}
-      </div>
+      <Chips label="Views" value={view} onChange={setView} options={VIEWS.map((v) => ({ id: v.key, label: v.label, count: viewCount(meta, v.key), red: v.red }))} />
       <div className="flex flex-wrap items-center gap-2">
         <label className="flex h-[34px] w-[260px] items-center gap-2 rounded-[8px] border border-line bg-surface px-2.5 focus-within:border-primary">
           <Icon name="search" size={14} className="text-ink-3" />
@@ -148,18 +190,32 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
         <button type="button" className={cx(btn, 'w-[34px] justify-center px-0')} aria-label={dir === 'desc' ? 'Descending' : 'Ascending'} title={dir === 'desc' ? 'Descending' : 'Ascending'} onClick={() => setDir(dir === 'desc' ? 'asc' : 'desc')}>
           {dir === 'desc' ? '↓' : '↑'}
         </button>
-        <span className="flex-1" />
-        {selected.size && canManage ? (
-          <>
-            <b className="text-primary">{selected.size} selected</b>
-            <Select<string> label="Assign to" placeholder="Assign to…" value={null} onValueChange={(v) => setAssignTo(v === 'none' ? '' : v)} options={[{ value: 'none', label: 'Nobody' }, ...(owners.data?.owners ?? []).map((o) => ({ value: String(o.id), label: o.name }))]} />
-          </>
-        ) : null}
       </div>
+      {selected.size && (canManage || canLead) ? (
+        <div role="toolbar" aria-label="With the chosen leads" className="flex flex-wrap items-center gap-2 rounded-[10px] border border-primary/40 bg-selection/50 px-3 py-1.5">
+          <b className="text-[13px] text-primary">{selected.size} selected</b>
+          {canManage ? <Select<string> label="Assign to" placeholder="Assign to…" className="h-[30px]" value={null} onValueChange={(v) => setAssignTo(v === 'none' ? '' : v)} options={[{ value: 'none', label: 'Nobody' }, ...(owners.data?.owners ?? []).map((o) => ({ value: String(o.id), label: o.name }))]} /> : null}
+          {canLead ? <Select<string> label="Change status" placeholder="Status…" className="h-[30px]" value={null} onValueChange={setBulkStatus} options={['new', 'contacted', 'qualified', 'unqualified'].map((x) => ({ value: x, label: x }))} /> : null}
+          {crmCan(perms, 'crm.followup.create') ? (
+            <button type="button" className={btnSmall} onClick={() => setBulkFollowUp(true)}>
+              <Icon name="calendar-plus" size={13} /> Schedule follow-up
+            </button>
+          ) : null}
+          {canManage ? (
+            <button type="button" className={cx(btnSmall, 'text-danger')} onClick={() => setDeleting(true)}>
+              <Icon name="trash" size={13} /> Delete
+            </button>
+          ) : null}
+          <span className="flex-1" />
+          <button type="button" className={btnSmall} onClick={() => setSelected(new Set())}>
+            Clear
+          </button>
+        </div>
+      ) : null}
 
       <div className="flex min-h-0 flex-col overflow-hidden rounded-[12px] border border-line bg-surface">
         <div className="flex shrink-0 items-center gap-2.5 border-b border-line bg-[#F7F8FB] px-3.5 py-2 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase dark:bg-well">
-          <Checkbox aria-label="Select all" disabled={!canManage} checked={all} indeterminate={!all && rows.some((r) => selected.has(r.id))} onChange={() => setSelected(all ? new Set() : new Set(rows.map((r) => r.id)))} />
+          <Checkbox aria-label="Select all" disabled={!canManage && !canLead} checked={all} indeterminate={!all && rows.some((r) => selected.has(r.id))} onChange={() => setSelected(all ? new Set() : new Set(rows.map((r) => r.id)))} />
           <span className="w-[210px] shrink-0">Lead</span>
           <span className="w-[140px] shrink-0">Company</span>
           <span className="w-[120px] shrink-0">Score</span>
@@ -173,7 +229,7 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
           {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
           {rows.map((r) => (
             <div key={r.id} data-lead={r.id} className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle', selected.has(r.id) && 'bg-[#F4F6FE] dark:bg-selection/40', openId === r.id && 'bg-selection')} onClick={() => onOpen(r.id)}>
-              <Checkbox aria-label={`Select ${r.name}`} disabled={!canManage} checked={selected.has(r.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.id)} />
+              <Checkbox aria-label={`Select ${r.name}`} disabled={!canManage && !canLead} checked={selected.has(r.id)} onClick={(e) => e.stopPropagation()} onChange={() => toggle(r.id)} />
               <span className="flex w-[210px] min-w-0 shrink-0 flex-col">
                 <b className="truncate text-ink">{r.name}</b>
                 <span className="truncate text-[11.5px] text-ink-3">{r.email ?? r.job_title ?? r.phone ?? ''}</span>
@@ -198,18 +254,21 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
             </div>
           ))}
           {list.data && !rows.length ? <p className="m-0 px-3.5 py-8 text-center text-[12.5px] text-ink-3">No leads match.</p> : null}
-          <div className="flex items-center gap-3 px-3.5 py-2.5 text-[12px] text-ink-3">
-            {first ? `${rows.length} of ${first.total} leads` : null}
-            {list.hasNextPage ? (
-              <button type="button" className={btnSmall} disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
-                {list.isFetchingNextPage ? 'Loading…' : 'Show more'}
-              </button>
-            ) : null}
-          </div>
         </div>
+        <StatusBar
+          right={
+            list.hasNextPage ? (
+              <button type="button" className={btnSmall} disabled={list.isFetchingNextPage} onClick={() => void list.fetchNextPage()}>
+                {list.isFetchingNextPage ? 'Loading…' : 'Load more'}
+              </button>
+            ) : null
+          }
+        >
+          {meta ? `${rows.length} of ${statusLine(['lead', 'leads'], meta, [['new', 'new'], ['no_followup', 'with no follow-up'], ['unassigned', 'unassigned']])}` : null}
+        </StatusBar>
       </div>
 
-      {openId ? <LeadDrawer key={openId} id={openId} onClose={() => onOpen(null)} onChanged={refresh} onOpenDeal={onOpenDeal} /> : null}
+      {openId ? <LeadDrawer key={openId} id={openId} onClose={() => onOpen(null)} onChanged={refresh} onOpenDeal={onOpenDeal} onOpenAccount={onOpenAccount} /> : null}
       {creating && canLead ? <NewLead onClose={onCloseNew} onCreated={(id) => (refresh(), onCreated(id))} /> : null}
       {assignTo !== null ? (
         <Sheet
@@ -228,6 +287,27 @@ export default function Leads({ openId, creating, onOpen, onNew, onCreated, onCl
           }
         >
           <p className="m-0 text-[13px] text-ink-2">{assignTo ? `They will be owned by ${ownerName(assignTo)}.` : 'They will be unassigned.'}</p>
+        </Sheet>
+      ) : null}
+      {bulkStatus ? <BulkStatus count={selected.size} status={bulkStatus} onClose={() => setBulkStatus(null)} onSave={async (reason) => (await bulk('status', { status: bulkStatus, ...(reason ? { reason } : {}) })) && setBulkStatus(null)} /> : null}
+      {bulkFollowUp ? <ScheduleFollowUp subject={null} count={selected.size} submit={async (followup) => (await bulk('followup', { followup })) && setBulkFollowUp(false)} onClose={() => setBulkFollowUp(false)} onDone={() => setBulkFollowUp(false)} /> : null}
+      {deleting ? (
+        <Sheet
+          title={`Delete ${selected.size} ${selected.size === 1 ? 'lead' : 'leads'}?`}
+          width={420}
+          onClose={() => setDeleting(false)}
+          footer={
+            <>
+              <button type="button" className={btn} onClick={() => setDeleting(false)}>
+                Cancel
+              </button>
+              <button type="button" className={cx(btnPrimary, 'bg-danger hover:bg-danger')} onClick={() => void bulk('delete', {}).then((ok) => ok && setDeleting(false))}>
+                Delete
+              </button>
+            </>
+          }
+        >
+          <p className="m-0 text-[13px] text-ink-2">Converted leads are kept: the server refuses those, and says so.</p>
         </Sheet>
       ) : null}
     </div>
@@ -255,7 +335,7 @@ function FollowUpCell({ lead }: { lead: Lead }) {
 
 const KIND_ICON: Record<string, string> = { call: 'phone', note: 'file-text', email: 'mail', meeting: 'calendar', whatsapp: 'chat', status: 'activity', convert: 'check-circle', merge: 'copy' };
 
-function LeadDrawer({ id, onClose, onChanged, onOpenDeal }: { id: number; onClose: () => void; onChanged: () => void; onOpenDeal: (id: number) => void }) {
+function LeadDrawer({ id, onClose, onChanged, onOpenDeal, onOpenAccount }: { id: number; onClose: () => void; onChanged: () => void; onOpenDeal: (id: number) => void; onOpenAccount: (id: number) => void }) {
   const qc = useQueryClient();
   const owners = useOwners();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
@@ -313,6 +393,7 @@ function LeadDrawer({ id, onClose, onChanged, onOpenDeal }: { id: number; onClos
           onSaveNotes={async (v) => (await save({ description: v }, 'Notes saved.')) && setEditingNotes(null)}
           onRecorded={refresh}
           onOpenDeal={onOpenDeal}
+          onOpenAccount={onOpenAccount}
         />
       ) : null}
       {converting && q.data ? <Convert lead={q.data.lead} onClose={() => setConverting(false)} onDone={() => (setConverting(false), refresh())} /> : null}
@@ -343,7 +424,7 @@ function LeadDrawer({ id, onClose, onChanged, onOpenDeal }: { id: number; onClos
           <p className="m-0 text-[13px] text-ink-2">Details from “{merging.name}” fill any blanks on this one, its activity moves across, and it is kept as a merged record. This cannot be undone.</p>
         </Sheet>
       ) : null}
-      {scheduling && q.data ? <Schedule lead={q.data.lead} onClose={() => setScheduling(false)} onDone={() => (setScheduling(false), refresh())} /> : null}
+      {scheduling && q.data ? <ScheduleFollowUp subject={{ type: 'lead', id: q.data.lead.id, label: [q.data.lead.name, q.data.lead.company].filter(Boolean).join(' · ') }} onClose={() => setScheduling(false)} onDone={() => (setScheduling(false), refresh())} /> : null}
       {unqualifying ? <Unqualify onClose={() => setUnqualifying(false)} onSave={async (why) => (await save({ status: 'unqualified', unqualified_reason: why }, 'Marked unqualified.')) && setUnqualifying(false)} /> : null}
     </SidePanel>
   );
@@ -365,6 +446,7 @@ function LeadBody({
   onSaveNotes,
   onRecorded,
   onOpenDeal,
+  onOpenAccount,
 }: {
   d: LeadDetail;
   can: { lead: boolean; manage: boolean; schedule: boolean };
@@ -381,6 +463,7 @@ function LeadBody({
   onSaveNotes: (v: string) => void;
   onRecorded: () => void;
   onOpenDeal: (id: number) => void;
+  onOpenAccount: (id: number) => void;
 }) {
   const l = d.lead;
   const done = l.converted || l.status === 'converted';
@@ -397,7 +480,7 @@ function LeadBody({
         </span>
         <span className="flex-1" />
         {!done && can.lead ? (
-          <button type="button" className={btnPrimary} onClick={onConvert}>
+          <button type="button" className={btnGood} onClick={onConvert}>
             Convert
           </button>
         ) : null}
@@ -411,8 +494,8 @@ function LeadBody({
             </button>
           ) : null}
           {l.converted_account_id ? (
-            <button type="button" className={btnSmall} onClick={() => void call('app:openInBrowser', { path: `/crm?account=${l.converted_account_id}` })}>
-              Open account <Icon name="external" size={11} />
+            <button type="button" className={btnSmall} onClick={() => onOpenAccount(l.converted_account_id!)}>
+              Open account
             </button>
           ) : null}
         </div>
@@ -697,69 +780,27 @@ function Convert({ lead, onClose, onDone }: { lead: Lead; onClose: () => void; o
   );
 }
 
-/** Put the next follow-up on the lead: what, when (on your clock), how urgent, and a reminder. */
-function Schedule({ lead, onClose, onDone }: { lead: Lead; onClose: () => void; onDone: () => void }) {
-  const options = useQuery({ queryKey: ['crm', 'followup-options'], queryFn: ({ signal }) => apiGet<FollowUpOptions>('/api/crm/followups/options', undefined, signal), staleTime: 10 * 60_000 });
-  const [kind, setKind] = useState('call');
-  const [date, setDate] = useState(addDays(todayInZone(), 1));
-  const [time, setTime] = useState('09:00');
-  const [subject, setSubject] = useState('');
-  const [priority, setPriority] = useState('normal');
-  const [reminder, setReminder] = useState('30');
-  const [busy, setBusy] = useState(false);
-  const o = options.data;
-  const save = async () => {
-    setBusy(true);
-    try {
-      await apiPost(`/api/crm/leads/${lead.id}/followups`, { kind, date, time, subject: subject.trim() || null, priority, reminders: reminder === '' ? [] : [Number(reminder)] });
-      toast('success', 'Follow-up set.');
-      onDone();
-    } catch (e) {
-      toast('error', errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
+/** Change the status of the chosen leads; Unqualified asks why, once for them all. */
+function BulkStatus({ count, status, onClose, onSave }: { count: number; status: string; onClose: () => void; onSave: (reason: string) => void }) {
+  const [why, setWhy] = useState('');
+  const needs = status === 'unqualified';
   return (
     <Sheet
-      title="Schedule a follow-up"
-      width={480}
+      title={`Mark ${count} ${count === 1 ? 'lead' : 'leads'} ${status}?`}
+      width={420}
       onClose={onClose}
       footer={
         <>
           <button type="button" className={btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className={btnPrimary} disabled={busy || !date} onClick={() => void save()}>
-            {busy ? 'Saving…' : 'Schedule'}
+          <button type="button" className={btnPrimary} disabled={needs && !why.trim()} onClick={() => onSave(why.trim())}>
+            Change status
           </button>
         </>
       }
     >
-      <span className="-mt-1.5 text-ink-3">{[lead.name, lead.company].filter(Boolean).join(' · ')}</span>
-      <div className="grid grid-cols-3 gap-2">
-        <Field label="Kind">
-          <Select label="Kind" value={kind} onValueChange={setKind} options={Object.entries(o?.kinds ?? { call: 'Phone call' }).map(([value, label]) => ({ value, label }))} />
-        </Field>
-        <Field label="Date">
-          <input type="date" aria-label="Date" value={date} min={todayInZone()} onChange={(e) => setDate(e.target.value)} className={input} />
-        </Field>
-        <Field label="Time">
-          <input type="time" aria-label="Time" value={time} onChange={(e) => setTime(e.target.value)} className={input} />
-        </Field>
-      </div>
-      <Field label="What for">
-        <input aria-label="What for" value={subject} onChange={(e) => setSubject(e.target.value)} placeholder="Confirm the seat count before the revised quote" className={input} maxLength={200} />
-      </Field>
-      <div className="grid grid-cols-2 gap-2">
-        <Field label="Priority">
-          <Select label="Priority" value={priority} onValueChange={setPriority} options={Object.entries(o?.priorities ?? { low: 'Low', normal: 'Normal', high: 'High', urgent: 'Urgent' }).map(([value, label]) => ({ value, label }))} />
-        </Field>
-        <Field label="Remind me">
-          <Select label="Remind me" value={reminder} onValueChange={setReminder} options={[{ value: '', label: 'No reminder' }, ...Object.entries(o?.reminders ?? { '30': '30 minutes before' }).map(([value, label]) => ({ value, label }))]} />
-        </Field>
-      </div>
-      <span className="text-[11.5px] text-ink-3">At the time where you are. It goes to the lead’s owner.</span>
+      {needs ? <input autoFocus aria-label="Why are they unqualified?" value={why} onChange={(e) => setWhy(e.target.value)} placeholder="No budget this year" className={input} maxLength={255} /> : <p className="m-0 text-[13px] text-ink-2">Converted leads keep their status.</p>}
     </Sheet>
   );
 }
@@ -767,11 +808,10 @@ function Schedule({ lead, onClose, onDone }: { lead: Lead; onClose: () => void; 
 // ── new lead ────────────────────────────────────────────────────────────
 
 function NewLead({ onClose, onCreated }: { onClose: () => void; onCreated: (id: number) => void }) {
-  const orgs = useStore(app, (s) => s.bootstrap?.organizations ?? []);
-  const current = useStore(app, (s) => s.organizationId);
   // With several companies and "All organizations" showing, the server needs to be told which one files it.
-  const [org, setOrg] = useState<string>(current ?? '');
-  const needsOrg = orgs.length > 1 && !current;
+  const scope = useCrmScope();
+  const [org, setOrg] = useState('');
+  const needsOrg = scope.needsOrg;
   const [f, setF] = useState({ first_name: '', last_name: '', company: '', job_title: '', email: '', phone: '', source: '', industry: '', employees: '', est_value: '', city: '', country: '', description: '' });
   const [busy, setBusy] = useState(false);
   const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setF((p) => ({ ...p, [k]: e.target.value }));
@@ -780,7 +820,7 @@ function NewLead({ onClose, onCreated }: { onClose: () => void; onCreated: (id: 
     if (!valid) return;
     setBusy(true);
     try {
-      const r = await apiPost<{ lead: { id: number } }>('/api/crm/leads', { ...f, employees: f.employees ? Number(f.employees) : null, est_value: f.est_value ? Number(f.est_value) : null, org_id: org && /^\d+$/.test(org) ? Number(org) : undefined });
+      const r = await apiPost<{ lead: { id: number } }>('/api/crm/leads', { ...f, employees: f.employees ? Number(f.employees) : null, est_value: f.est_value ? Number(f.est_value) : null, org_id: orgIdFor(org, scope) });
       toast('success', 'Lead created.');
       onCreated(Number(r.lead.id));
     } catch (e) {
@@ -807,11 +847,7 @@ function NewLead({ onClose, onCreated }: { onClose: () => void; onCreated: (id: 
       }
     >
       <form className="flex flex-col gap-3" onSubmit={(e) => (e.preventDefault(), void create())}>
-        {needsOrg ? (
-          <Field label="Company it belongs to" hint="Which of your organizations files this lead.">
-            <Select label="Company it belongs to" placeholder="Choose…" value={org || null} onValueChange={setOrg} options={orgs.map((o) => ({ value: o.id, label: o.name }))} />
-          </Field>
-        ) : null}
+        <CompanyField scope={scope} value={org} onChange={setOrg} what="lead" />
         <div className="grid grid-cols-2 gap-2.5">
           {field('first_name', 'First name')}
           {field('last_name', 'Last name')}

@@ -11,12 +11,14 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btnPrimary, Caps, Field, input, PageHead } from '../hr/parts';
 import type { CrmSettings } from './api';
 import { crmCan } from './parts';
+import { PipelinesEditor } from './Pipelines';
 
 /**
  * CRM settings (CrmAdminSheet · General): quote numbering, the default
  * currency, how long a quote is valid, when a deal counts as stalled, and the
  * company details printed on quotes. They are the installation's, not one
- * company's. Only somebody with CRM settings can change them; everyone else
+ * company's. Below them, Pipelines and stages (W12) for the company the CRM
+ * is showing. Only somebody with CRM settings can change them; everyone else
  * sees them read-only.
  */
 export default function Settings() {
@@ -98,6 +100,11 @@ export default function Settings() {
               <textarea value={s.quote_terms} disabled={!canEdit} onChange={(e) => set('quote_terms', e.target.value)} rows={4} aria-label="Quote terms" className={cx(input, 'h-auto py-2')} />
             </Field>
           </section>
+        </div>
+      ) : null}
+      {q.data || q.error ? (
+        <div className="flex max-w-[760px] flex-col gap-3 rounded-[12px] border border-line bg-surface p-5">
+          <PipelinesEditor canEdit={canEdit} />
         </div>
       ) : null}
     </div>
