@@ -11,6 +11,15 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.257 — 2026-10-14
+
+- **Proposals in the CRM (CRM SRS v1.3 §17).** A new Proposals screen under Sales lists every proposal for the company you are showing, filtered by status, with its value, how often it was opened, when it was last opened, a green "now" while the customer is reading it and how many questions are open. Pick one and it previews on the right: its sections and their text, the pricing packages and total, the version, who opened it and from where, how long they spent on each section, and the customer's questions with your replies — you can answer a question from here and the customer gets it by email and on their page.
+- **From the preview:** Remind, Withdraw, Duplicate, Copy link, and Approve or Send back when it is waiting for you. Writing and editing a proposal stays on the web — Edit on web opens it there.
+- **Estimates**, also under Sales: the list and each estimate read-only — the range and how sure, or its lines and packages, cost and margin where you may see them — with Send (email, link, WhatsApp or PDF), Convert to a quote or a proposal (an estimate on a lead offers to make the deal first), and Edit on web.
+- **"Your customer is reading."** While you are signed in, the desktop checks every 30 seconds who is reading your proposals and tells you once per visit — "Asanka Dias is reading PRP-0021 — Pricing" — as a toast while you are looking at WorkSuite, as a system notification when you are not. Click it to open the proposal. Hidden, it checks every two minutes; offline, not at all. The server's proposal notifications (opened, a question, accepted, declined, expiring, approval needed or decided) open the same screen.
+- **Approvals waiting for you** sit at the top of the CRM dashboard and the Proposals screen, with Approve (a note if you like) and Send back (a note saying what to change). Their count is the Proposals badge in the rail.
+- Where it bites: needs the server's Crm 1.3.0; on an older server the two screens say they cannot load and the reading check stops asking. Every proposal and estimate action needs a connection and is off offline. CRM module 1.2.0.
+
 ## 0.2.256 — 2026-10-14
 
 - **A project task opens in the full task editor (Projects SRS v1.2).** From the board, the list, My work, Time, Milestones, a notification or a link, a project task now opens in a centred window — the same editor the Tasks app uses — instead of the narrow side panel. Title, description with @mentions, checklist, attachments and conversation sit beside the project's own fields: type, sprint, milestone, reviewer, parent, points, estimate, billable, and the blocked reason. Dependencies (waits on / blocks) and time (logged against the estimate, Start timer, Log time, each entry marked Pending, Approved, Sent back or Invoiced) are in the main column.
