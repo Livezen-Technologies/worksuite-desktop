@@ -11,6 +11,14 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.255 — 2026-10-14
+
+- **A project's tasks as a list (Projects SRS v1.1).** Next to the board there is now a Board | List switch (Ctrl/⌘+Shift+L). The list shows number, title, status, assignee, priority, due (late in words), sprint, milestone, points, logged against estimate and last update; you choose the columns, group by status, assignee, sprint, milestone or priority, sort by any column (shift-click for a second), and filter with the board's search plus Mine, Overdue, Blocked, Bugs and Hide completed.
+- **Change many at once.** Tick tasks and move, assign, prioritise, re-sprint, re-date or delete them together; the result says how many changed and names any task refused, and why. Status changed in the list goes the same way as on the board, offline queue included; a task moved to Blocked asks why.
+- **Keyboard first:** J/K or the arrows, Space to tick, Enter to open, Shift+←/→ to change status, T timer, L log time, N new task in the group. Export the list as shown to CSV.
+- **It remembers.** Each project reopens on the view you used last — on this computer and on the web — and the list works offline for pinned projects (bulk and other edits wait for a connection, and say so). Board columns now warn when over their WIP limit.
+- Where it bites: needs the server's Project 2.4.0 for bulk edits and the remembered view; on an older server bulk falls back to one task at a time. Projects module 1.4.0.
+
 ## 0.2.254 — 2026-10-14
 
 - **CRM, redrawn (CRM SRS v1.2).** The dashboard, leads, pipeline board, follow-ups, Customer 360 and quote screens follow the new design. A customer and a quote now open as full pages; the board shows Open and Weighted totals per column and days in stage on each card; follow-ups say how late they are and close with How did it go?, Move or Call off.
