@@ -53,7 +53,11 @@ export function syncRefusal(policy: Bootstrap['policy'], trust: DeviceTrust, cla
 export interface SessionHooks {
   started: (b: Bootstrap) => void;
   stopped: () => void;
-  wiped: (userId: string, scope: 'tokens' | 'cache' | 'cache+offline_files', includeDrafts: boolean) => void;
+  /**
+   * `keepUnsynced`: a plain sign-out (Connection & Startup §5) — the offline queue, the outboxes, queued uploads and
+   * Office copies with edits wait for the person to sign in again ("N pending changes kept"); only cached data goes.
+   */
+  wiped: (userId: string, scope: 'tokens' | 'cache' | 'cache+offline_files', includeDrafts: boolean, keepUnsynced?: boolean) => void;
   /** An administrator's DISABLE_SYNC: every synced folder on this computer stops. */
   syncDisabled: (reason: string) => void;
   changed: (s: AuthState) => void;
@@ -89,6 +93,11 @@ export class SessionController {
   private signingInUser: string | null = null;
   /** The pauses before a sign-in step is asked again after a passing failure (tests shorten them). */
   retryDelaysMs: number[] = [1_000, 3_000];
+  /**
+   * Whether IT's managed server (`enterprise.server_url`) is this account's (Connection & Startup §1.7): with
+   * accounts side by side it replaces the stored server only in the managed account, never in another one.
+   */
+  managedServerApplies: () => boolean = () => true;
 
   constructor(
     private readonly db: Database,
@@ -131,8 +140,19 @@ export class SessionController {
     }
   }
 
+  /** The open account as the renderer sees it (Connection & Startup), on every state; unset before accounts. */
+  accountView: (() => AuthState['account']) | null = null;
+  /** A Personal account's Cloud side (WP3), on every state. */
+  cloudStatus: (() => AuthState['cloud']) | null = null;
+
   get(): AuthState {
-    return { ...this.state };
+    const out: AuthState = { ...this.state };
+    if (this.accountView) out.account = this.accountView() ?? null;
+    if (this.cloudStatus) {
+      out.cloud = this.cloudStatus() ?? null;
+      out.readOnly = out.cloud?.readOnly ?? null;
+    }
+    return out;
   }
 
   current(): Bootstrap | null {
@@ -186,10 +206,15 @@ export class SessionController {
 
   // ── start-up ───────────────────────────────────────────────────────────
 
-  async init(): Promise<void> {
+  /**
+   * Start-up, and after an account switch. `cachedFirst` (a switch, Connection & Startup §1.3 step 7): `ready` at once
+   * from the cached bootstrap when there is one, the token and the bootstrap refreshed behind it — a refresh first
+   * is too slow for a two-second switch. Otherwise as before: refresh, then the bootstrap.
+   */
+  async init(opts: { cachedFirst?: boolean } = {}): Promise<void> {
     let server = this.auth.getServer();
     const ent = this.enterprise;
-    if (ent.server_url) {
+    if (ent.server_url && this.managedServerApplies()) {
       const origin = normalizeServerUrl(ent.server_url, this.allowInsecure());
       if (!server || server.origin !== origin) {
         // FR-AUTH-01: a preconfigured server replaces whatever was stored.
@@ -207,7 +232,9 @@ export class SessionController {
     }
     this.set({ server });
     const last = this.bootstrap.lastUserId();
-    if (last && this.auth.hasRefreshToken()) {
+    if (last && this.auth.hasRefreshToken() && opts.cachedFirst && this.fromCache(last)) {
+      void this.revalidate();
+    } else if (last && this.auth.hasRefreshToken()) {
       await this.resume(last);
     } else {
       // What the server offers can change between runs; set() re-reads it.
@@ -218,12 +245,52 @@ export class SessionController {
   private async probeInBackground(origin: string): Promise<void> {
     try {
       const info = await probeServer(origin, this.rawFetch);
-      const locked = this.auth.getServer()?.locked ?? false;
-      this.auth.setServer({ ...info, locked });
-      this.set({ server: { ...info, locked } });
+      const had = this.auth.getServer();
+      const locked = had?.locked ?? false;
+      // What discovery said about the account (its id, link hosts, how it signs in) stays; the probe adds to it.
+      const next: ServerInfo = had && had.origin === info.origin ? { ...had, ...info, locked } : { ...info, locked };
+      this.auth.setServer(next);
+      this.set({ server: next });
     } catch {
       /* reachable later */
     }
+  }
+
+  /** `ready` from the cached bootstrap (offline until revalidated); false when there is none. */
+  private fromCache(userId: string): boolean {
+    const cached = this.bootstrap.loadCached(userId);
+    if (!cached) return false;
+    this.boot = cached;
+    this.device.load(userId);
+    this.set({ stage: 'ready', user: cached.user, message: null, setupPending: false });
+    this.hooks.bootstrapChanged(cached);
+    this.hooks.started(cached);
+    return true;
+  }
+
+  /**
+   * Another account is being opened (Connection & Startup §1.3 step 4): this one's services stop, with nothing wiped
+   * and no token revoked — it stays signed in, in the background. Whatever sign-in was under way is over.
+   */
+  suspend(): void {
+    this.endAttempt();
+    this.hooks.stopped();
+    this.boot = null;
+    this.orgScope = null;
+    this.revalidating = false;
+    this.state = { stage: 'no-server', server: null, user: null, message: null, setupPending: false };
+    this.hooks.bootstrapChanged(null);
+    this.hooks.changed(this.get());
+  }
+
+  /**
+   * The account's version gates (screen 9), per account: the server needs a newer desktop, or the server is older
+   * than this desktop supports. The other accounts keep working. Null clears it.
+   */
+  setCompat(kind: 'update-required' | 'server-too-old' | null, compat: AuthState['compat'] = null): AuthState {
+    if (kind) this.set({ stage: kind, compat });
+    else if (this.state.stage === 'update-required' || this.state.stage === 'server-too-old') this.set({ stage: this.state.server ? 'signed-out' : 'no-server', compat: null });
+    return this.get();
   }
 
   private async resume(userId: string): Promise<void> {
@@ -256,7 +323,8 @@ export class SessionController {
     if (this.state.server?.locked) throw new DesktopError('POLICY_DENIED', 'Your organization manages the server address.');
     const origin = normalizeServerUrl(input, this.allowInsecure());
     const info = await probeServer(origin, this.rawFetch);
-    const server: ServerInfo = { ...info, locked: false };
+    const had = this.auth.getServer();
+    const server: ServerInfo = had && had.origin === info.origin ? { ...had, ...info, locked: false } : { ...info, locked: false };
     this.auth.setServer(server);
     this.lastProbe = Date.now();
     this.set({ stage: 'signed-out', server, message: null, gate: null, deviceCode: null });
@@ -416,6 +484,29 @@ export class SessionController {
     this.auth.cancelPasskey();
     if (this.state.stage === 'passkey') this.set({ stage: 'signed-out', message: null });
     return this.get();
+  }
+
+  /**
+   * A browser sign-in's and Cloud's own stages (Connection & Startup §3, WP3): `browser` while the browser is out,
+   * `verify-email` / `provisioning` while Cloud gets the account ready, `bootstrapping` while tokens are exchanged,
+   * `signed-out` when it ended without a sign-in. `ready` is reached through `acceptSession`, never set here.
+   */
+  setStage(stage: 'browser' | 'verify-email' | 'provisioning' | 'bootstrapping' | 'signed-out', message: string | null = null): AuthState {
+    if (this.state.stage === 'ready') return this.get();
+    this.set({ stage, message });
+    return this.get();
+  }
+
+  /**
+   * Tokens a browser sign-in brought (OIDC, Core's AppHandoff — Connection & Startup §3), already held by
+   * AuthService (`acceptTokens`): the computer registers and the bootstrap loads, as after a password sign-in.
+   */
+  acceptSession(payload: SignInPayload): Promise<AuthState> {
+    return this.once(async () => {
+      this.set({ gate: null, deviceCode: null, mfaNewDevice: false, message: null });
+      await this.afterSignIn(payload);
+      return this.get();
+    });
   }
 
   /** The browser sent the code back. Anything wrong returns to the sign-in screen, saying what. */
@@ -716,14 +807,22 @@ export class SessionController {
     this.hooks.audit(uid, 'desktop.local_wipe', { scope, device_id: deviceId });
   }
 
-  /** `message` says why on the sign-in screen when it was not the person's own choice. */
-  async signOut(wipe: boolean, message: string | null = null): Promise<AuthState> {
+  /**
+   * `message` says why on the sign-in screen when it was not the person's own choice.
+   *
+   * What has not reached the server yet is never discarded silently (Connection & Startup §5): a plain sign-out keeps
+   * the offline queue and the outboxes for the next sign-in. They go only with `wipe`, `discardUnsynced` (the person
+   * chose so on the sign-out dialog), or the organization's `sign_out_wipe` policy.
+   */
+  async signOut(wipe: boolean, message: string | null = null, opts: { discardUnsynced?: boolean } = {}): Promise<AuthState> {
     const uid = this.state.user?.id ?? null;
+    const policyWipe = (this.boot?.policy as { sign_out_wipe?: unknown } | undefined)?.sign_out_wipe === true;
+    const keepUnsynced = !wipe && !opts.discardUnsynced && !policyWipe;
     this.endAttempt();
     this.hooks.stopped();
     await this.auth.signOut();
     if (uid) {
-      this.hooks.wiped(uid, wipe ? 'cache+offline_files' : 'cache', wipe);
+      this.hooks.wiped(uid, wipe ? 'cache+offline_files' : 'cache', wipe, keepUnsynced);
       this.bootstrap.clear(uid);
       if (wipe) this.device.forget(uid);
       this.hooks.audit(uid, 'desktop.logout', { wipe });

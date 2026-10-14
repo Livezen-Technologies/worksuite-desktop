@@ -1,0 +1,23 @@
+{
+  "identity": {
+    "id": "u_7f3a9c",
+    "email": "hasarinda@email.example",
+    "name": "Hasarinda Manjula",
+    "email_verified": true,
+    "avatar": null
+  },
+  "account_state": "ACTIVE",
+  "organizations": [
+    {
+      "id": "org_4b2e81",
+      "name": "Hasarinda's Workspace",
+      "plan": "professional-free",
+      "state": "ACTIVE"
+    }
+  ],
+  "active_organization_id": "org_4b2e81",
+  "onboarding": {
+    "complete": true,
+    "step": null
+  }
+}

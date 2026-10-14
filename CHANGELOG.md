@@ -11,6 +11,48 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.253 — 2026-10-14
+
+**Connection & Startup: Personal (WorkSuite Cloud) and Enterprise accounts side by side.** The app was built for one
+server and one account. It now keeps several — your personal WorkSuite Cloud account and any number of company
+servers — each with its own data, sign-in and settings, and switches between them in about two seconds.
+
+- **Your existing account carries over untouched.** It becomes the first account: same sign-in, same offline
+  changes, drafts, Drive folder and device registration — nothing is re-registered. The old profile is copied from,
+  never moved or rewritten, so going back to an older version still works.
+- **Startup.** A new install asks how you want to use WorkSuite: **Personal** (a free WorkSuite Cloud account with 2 GB)
+  or **Enterprise** (your company's server), with "Use without an account" still there. With two or more accounts,
+  a workspace chooser can open at startup ("Always show this at startup").
+- **Personal.** Sign-in and sign-up open in your browser (email, Google, Microsoft, Apple or passkey); WorkSuite
+  Desktop never sees your password. The app waits for the browser, then for your email to be verified, then while
+  your workspace is set up — and says plainly if setup is still retrying or the workspace is read-only. The apps you
+  see follow the plan's **signed** entitlements; a tampered document is ignored. **Storage** (Account › Storage, a
+  sidebar meter and a Home card) shows the 2 GB breakdown and what is *not* counted (cache, offline copies, local AI).
+  When storage is full, uploads wait instead of failing and a document you are editing stays safe on this computer
+  until there is room — nothing is ever deleted. *WorkSuite Cloud itself is not live yet; until it is, Personal shows
+  "WorkSuite Cloud is temporarily unavailable".*
+- **Enterprise.** Enter the server address, your work email, or scan the setup QR from Admin Center. Every server is
+  checked before you sign in — address, secure connection, discovery document, signature, product, version, health —
+  step by step on screen. An untrusted certificate stops there with the details your IT team needs (issuer, expiry,
+  key pin) and **no "proceed anyway"**; only a trusted configuration from IT can allow a private certificate. The
+  sign-in page shows the organization's name, logo and colour. A server that needs a newer app, or is too old for this
+  one, says so — and only that account waits; the others keep working.
+- **Trusted configuration** from the installer, MDM (`managed.json`, `.mobileconfig`, ADMX) or a signed setup QR: the
+  server, organization, update channel, certificate pins, the discovery signing key, "require signed discovery" and
+  whether Personal accounts are allowed. Pins from a QR can only restrict, never allow. Existing policy files keep
+  working; the new trust-widening keys (pins, signing key) are only read from files only an administrator can write.
+- **Switching and accounts.** The account switcher in your profile menu groups Personal and Enterprise, with unread
+  counts for the others. **Settings › Accounts & Servers** lists every account (Open, Sign out, Remove from this
+  device — or "Removal set by IT policy") and a connection-health panel with Re-run discovery.
+- **Signing out no longer drops unsynced work.** Before, a plain sign-out threw away changes still waiting to sync.
+  Now the app lists them first — Sync Now, Export unsynced — and keeps them unless you choose otherwise (or your
+  organization's policy wipes on sign-out). "Remove from this device" and "Delete WorkSuite account" are kept apart.
+- **Links and outages.** A link to a server you haven't added asks first — the app never contacts a new server on its
+  own. When WorkSuite Cloud or your server is down, a banner says so, retries with backoff up to every 5 minutes,
+  and offers **Work Offline**.
+- Needs WorkSuite Server with Desktop 1.8.0 / Auth 2.5.0 for signed discovery, the Admin Center trusted
+  configuration and browser sign-in; older servers still connect as before.
+
 ## 0.2.252 — 2026-10-14
 
 - **Apps follow the server's licence (IMPL-LIC-01 P0).** On a WorkSuite Server that enforces its licence's entitlements, an app the licence does not include is gone everywhere the app list reaches: the sidebar, the launcher, Home, search, `worksuite://` and pasted links, notifications and the tray — the same gates a missing permission uses. The bootstrap reads `GET /api/system/entitlements` next to `/api/auth/me`; Settings › License lists what the licence includes, app by app.

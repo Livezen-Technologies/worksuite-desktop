@@ -23,7 +23,21 @@ export class SecureStore {
   private memory = new Map<string, string>();
   private status: SecureStorageStatus = { available: false, backend: 'unknown', persistent: false };
 
-  constructor(private readonly file: string) {}
+  constructor(private file: string) {}
+
+  /**
+   * Another account's secrets file (Connection & Startup §1.3): what was read into memory is dropped, and the
+   * next read comes from `file`. The OS store's status is the computer's, so it stays.
+   */
+  rebind(file: string): void {
+    this.memory.clear();
+    this.file = file;
+  }
+
+  /** The secrets file this store reads and writes. */
+  get path(): string {
+    return this.file;
+  }
 
   init(): SecureStorageStatus {
     let backend = process.platform === 'darwin' ? 'keychain' : process.platform === 'win32' ? 'dpapi' : 'unknown';

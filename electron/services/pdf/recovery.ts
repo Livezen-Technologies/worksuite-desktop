@@ -39,14 +39,19 @@ const NONCE = 12;
 const TAG = 16;
 
 export class PdfRecovery {
-  readonly root: string;
+  private readonly base: () => string;
 
   constructor(
-    base: string,
+    base: string | (() => string),
     private readonly master: () => Buffer | null,
     private readonly retentionDays: () => number = () => 14,
   ) {
-    this.root = join(base, 'recovery');
+    this.base = typeof base === 'function' ? base : () => base;
+  }
+
+  /** Under the open account's PDF folder (a getter: it follows account switches). */
+  get root(): string {
+    return join(this.base(), 'recovery');
   }
 
   get enabled(): boolean {

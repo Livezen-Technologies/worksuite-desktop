@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.1 — 2026-10-13
+
+**Changed**
+
+- offline courses are kept per account (Connection & Startup)
+
 ## 1.1.0 — 2026-10-03
 
 - The organisation filter is the shared compact switcher (#214): one pill, search, several at once, a default organisation, remembered per person.

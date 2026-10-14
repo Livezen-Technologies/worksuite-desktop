@@ -278,7 +278,8 @@ export interface ElearningOfflineDeps {
   http: Pick<HttpClient, 'get' | 'post'>;
   transfers: Pick<TransferManager, 'keep' | 'cancel' | 'list'>;
   /** Where copies live: inside the profile, never beside the person's own files. */
-  root: string;
+  /** Where the sealed copies go: a getter, so it follows the open account (Connection & Startup §1.3). */
+  root: string | (() => string);
   userId: () => string | null;
   /** The device policy's word on offline data (a device may be barred from keeping any). */
   allowed: () => { ok: boolean; reason: string | null };
@@ -297,7 +298,8 @@ export class ElearningOffline {
 
   private dir(uid: string, courseId?: number): string {
     const who = createHash('sha256').update(uid).digest('hex').slice(0, 24);
-    return courseId === undefined ? join(this.deps.root, who) : join(this.deps.root, who, String(courseId));
+    const root = typeof this.deps.root === 'function' ? this.deps.root() : this.deps.root;
+    return courseId === undefined ? join(root, who) : join(root, who, String(courseId));
   }
 
   private pathOf(uid: string, courseId: number, f: Pick<KeptFile, 'fileId' | 'lessonId'>): string {

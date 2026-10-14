@@ -69,6 +69,7 @@ import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
 import { projectsContract, projectsReportSchema, type ProjectsOutputs } from '../projects';
 import { phoneContract, type PhoneOutputs } from '../phone';
+import { accountsContract, type AccountsOutputs, type ServiceHealthState } from '../accounts';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
 import type { InvokeChannel } from './channels';
 import type {
@@ -298,6 +299,10 @@ export const preferencesPatchSchema = z
       notifyComplete: z.boolean(),
       notifyFailed: z.boolean(),
     }).partial(),
+    // Connection & Startup: the workspace chooser at every start, the desktop cache limit, other accounts' banners.
+    chooserAlways: z.boolean(),
+    desktopCacheLimitMb: z.union([z.literal('auto'), z.number().int().min(256).max(1_048_576)]),
+    otherAccountNotifications: z.boolean(),
   })
   .partial();
 
@@ -1517,6 +1522,10 @@ export const contract = {
   'connection:details': ch(none, { session: true, rate: 2 }),
   'connection:speedTest': ch(none, { session: true, rate: 1 }),
   'connection:reconnect': ch(none, { session: true, rate: 1 }),
+  /** Work Offline on the service banner: writes queue, nothing is tried on the network until it is turned off. */
+  'connection:workOffline': ch(z.strictObject({ on: z.boolean() })),
+  /** The QR scan dialog is open (the camera may be used by the shell) or closed. */
+  'connect:scanCamera': ch(z.strictObject({ open: z.boolean() })),
 
   // POS: the till on this computer — its credential stays in the main process (shared/pos.ts, pos-ipc.ts).
   ...posContract,
@@ -1526,6 +1535,8 @@ export const contract = {
   ...contactSyncContract,
   // WorkSuite Projects: the tray timer and the offline outbox (shared/projects.ts, electron/services/projects).
   ...projectsContract,
+  // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (shared/accounts.ts, electron/main/accounts-wiring.ts).
+  ...accountsContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
 
 export type Contract = typeof contract;
@@ -1597,7 +1608,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, AccountsOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;
@@ -2027,6 +2038,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'connection:details': ConnectionDetails;
   'connection:speedTest': SpeedTestResult;
   'connection:reconnect': void;
+  'connection:workOffline': ServiceHealthState;
+  'connect:scanCamera': void;
 }
 
 /** Typed error codes returned across IPC (§8.3 plus IPC-specific ones). */
@@ -2061,7 +2074,24 @@ export type DesktopErrorCode =
   | 'SERVER_ERROR'
   | 'CANCELLED'
   | 'UNSUPPORTED'
-  | 'INTERNAL';
+  | 'INTERNAL'
+  // Connection & Startup: accounts side by side and WorkSuite Cloud.
+  /** An account switch refused: a call, meeting, screen share or remote control is on. */
+  | 'SWITCH_BLOCKED'
+  /** The account's storage is full (Cloud gateway, at upload create / new version). */
+  | 'QUOTA_EXCEEDED'
+  /** The Cloud organization is suspended: `/me` is fetched again. */
+  | 'ORG_SUSPENDED'
+  /** The Cloud organization named in X-WS-Org does not exist (any more). */
+  | 'ORG_NOT_FOUND'
+  | 'SERVER_TOO_OLD'
+  | 'CLOUD_UNAVAILABLE'
+  | 'PERSONAL_NOT_ALLOWED'
+  | 'ACCOUNT_EXISTS'
+  | 'TLS_UNTRUSTED'
+  /** `connect:parseSetup`: a setup link that is malformed or not signed by its server / one past its expiry. */
+  | 'SETUP_LINK_INVALID'
+  | 'SETUP_LINK_EXPIRED';
 
 export interface IpcFailure {
   __wsError: true;

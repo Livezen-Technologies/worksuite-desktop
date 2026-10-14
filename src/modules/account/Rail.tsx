@@ -4,6 +4,7 @@ import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { useMe, UserPicture } from '../../components/UserPicture';
 import { useMfa, usePasskeys, useSignIns, type Section } from './api';
+import { usePersonal } from './Storage';
 
 /**
  * The My account rail (AcctRail): who you are, the sections, how well the
@@ -21,6 +22,8 @@ const ITEMS: Array<{ id: Section; label: string; icon: string } | { head: string
   { id: 'pictures', label: 'Profile pictures', icon: 'image' },
   { head: 'Access' },
   { id: 'access', label: 'My access', icon: 'key' },
+  // WorkSuite Cloud's storage (Connection & Startup screen 12): a Personal account's only.
+  { id: 'storage', label: 'Storage', icon: 'cloud' },
 ];
 
 export function AccountRail({ section, onPick }: { section: Section; onPick: (s: Section) => void }) {
@@ -34,6 +37,7 @@ export function AccountRail({ section, onPick }: { section: Section; onPick: (s:
   const on = !!mfa.data?.enabled;
   const known = mfa.data !== undefined;
   const protectedWell = on || keys > 0;
+  const personal = usePersonal();
 
   return (
     <nav aria-label="My account" className="flex w-[220px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
@@ -45,7 +49,7 @@ export function AccountRail({ section, onPick }: { section: Section; onPick: (s:
         </span>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 scroll-thin">
-        {ITEMS.map((it) => {
+        {ITEMS.filter((it) => !('id' in it) || it.id !== 'storage' || personal).map((it) => {
           if ('head' in it) {
             return (
               <div key={it.head} className="mt-2.5 flex h-6 shrink-0 items-center px-2 text-[11px] font-bold tracking-[.3px] text-ink-3">

@@ -27,16 +27,27 @@ const NONCE = 12;
 const TAG = 16;
 
 export class PdfStorage {
-  readonly work: string;
-  readonly cache: string;
+  private readonly base: () => string;
 
   constructor(
-    readonly root: string,
+    root: string | (() => string),
     private readonly key: () => Buffer | null,
     private readonly limits: PdfStorageLimits = { cacheBytes: 256 * 1024 * 1024, maxAgeDays: 14 },
   ) {
-    this.work = join(root, 'work');
-    this.cache = join(root, 'cache');
+    this.base = typeof root === 'function' ? root : () => root;
+  }
+
+  /** The open account's PDF folder (a getter: it follows account switches, Connection & Startup §1.3). */
+  get root(): string {
+    return this.base();
+  }
+
+  get work(): string {
+    return join(this.base(), 'work');
+  }
+
+  get cache(): string {
+    return join(this.base(), 'cache');
   }
 
   /** Start-up: folders made, a previous run's working copies removed, the cache trimmed. */

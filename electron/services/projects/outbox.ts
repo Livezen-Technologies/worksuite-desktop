@@ -102,7 +102,8 @@ export class ProjectsOutbox {
   private readonly now: () => number;
 
   constructor(private readonly d: ProjectsOutboxDeps) {
-    d.db.raw.exec(SCHEMA);
+    // Made again in another account's database after a switch (Database.swap).
+    d.db.onOpen((db) => db.raw.exec(SCHEMA));
     this.now = d.now ?? Date.now;
   }
 

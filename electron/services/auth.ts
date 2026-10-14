@@ -6,6 +6,7 @@ import type { Database } from './db';
 import { classifyNetworkError, errorFromResponse, type FetchLike } from './http';
 import type { SecureStore } from './secure-store';
 import { challengeIsNewDevice, deviceStepFrom, gateFrom, isDeviceToken, SignInGateError } from './sign-in-gate';
+import type { RefreshOutcome, TokenEndpoint, Tokens } from './auth-tokens';
 
 const log = logger('auth');
 
@@ -19,11 +20,6 @@ const log = logger('auth');
  * would revoke each other.
  */
 
-interface Tokens {
-  access_token: string;
-  refresh_token: string;
-  expires_in: number;
-}
 
 export interface PublicUser {
   id: number | string;
@@ -189,6 +185,11 @@ export class AuthService {
   private refreshing: Promise<'ok' | 'offline' | 'lost'> | null = null;
   private refreshTimer: NodeJS.Timeout | null = null;
   private server: ServerInfo | null = null;
+  /**
+   * Who refreshes and revokes this account's tokens when it is not WorkSuite's own `/api/auth/refresh` (a Personal
+   * account's OneAuth, Connection & Startup §3). Null: WorkSuite's, as before.
+   */
+  private endpoint: TokenEndpoint | null = null;
   onTokens: (() => void) | null = null;
   /** The server refused a refresh because this device was revoked (WF-24). */
   onDeviceRevoked: ((message: string) => void) | null = null;
@@ -204,6 +205,54 @@ export class AuthService {
 
   getServer(): ServerInfo | null {
     return this.server;
+  }
+
+  /**
+   * The account's database and secrets were swapped underneath (Connection & Startup §1.3): everything this held
+   * for the account before — the access token, the refresh timer, a refresh under way, any sign-in step — is
+   * dropped, and the server is read again from the swapped database. The new account's refresh token is read from
+   * its own secrets when first asked for.
+   */
+  rebind(endpoint: TokenEndpoint | null = null): void {
+    this.access = null;
+    this.challenge = null;
+    this.deviceChallenge = null;
+    this.captcha = null;
+    this.passkeyPending = null;
+    this.refreshing = null;
+    if (this.held) {
+      const held = this.held;
+      this.held = null;
+      try {
+        held('ok');
+      } catch {
+        /* nobody waits on it any more */
+      }
+    }
+    if (this.refreshTimer) clearTimeout(this.refreshTimer);
+    this.refreshTimer = null;
+    this.endpoint = endpoint;
+    this.server = this.db.getConfig<ServerInfo>('server') ?? null;
+  }
+
+  /** Sets who refreshes and revokes (null: WorkSuite's own endpoints). */
+  setTokenEndpoint(endpoint: TokenEndpoint | null): void {
+    this.endpoint = endpoint;
+  }
+
+  tokenEndpointKind(): TokenEndpoint['kind'] {
+    return this.endpoint?.kind ?? 'worksuite';
+  }
+
+  /**
+   * Tokens from somewhere other than this service's own sign-in — a browser sign-in's exchange (OIDC, Core's
+   * AppHandoff) — taken as this account's session: stored as a sign-in's are, a refresh under way for the session
+   * they replace let go.
+   */
+  acceptTokens(tokens: Tokens): void {
+    if (!tokens?.access_token || !tokens.refresh_token) throw new DesktopError('SERVER_ERROR', 'The server did not return a session.');
+    this.storeTokens({ access_token: tokens.access_token, refresh_token: tokens.refresh_token, expires_in: tokens.expires_in });
+    if (!this.held) this.refreshing = null;
   }
 
   setServer(info: ServerInfo): void {
@@ -580,6 +629,7 @@ export class AuthService {
       if (!token || !this.server) return 'lost' as const;
       const replaced = () => this.secrets.get(REFRESH_KEY) !== token;
       const now = () => (this.secrets.get(REFRESH_KEY) ? ('ok' as const) : ('lost' as const));
+      if (this.endpoint) return this.refreshThrough(this.endpoint, token, replaced, now);
       try {
         const { res, json } = await this.post('/api/auth/refresh', { refresh_token: token });
         if (replaced()) {
@@ -614,6 +664,39 @@ export class AuthService {
     });
     this.refreshing = flight;
     return flight;
+  }
+
+  /** A refresh through the account's own token endpoint (OIDC): the same rules as WorkSuite's, above. */
+  private async refreshThrough(endpoint: TokenEndpoint, token: string, replaced: () => boolean, now: () => 'ok' | 'lost'): Promise<'ok' | 'offline' | 'lost'> {
+    let outcome: RefreshOutcome;
+    try {
+      outcome = await endpoint.refresh(token);
+    } catch (e) {
+      if (replaced()) return now();
+      log.info('refresh could not reach the token endpoint', { error: String((e as Error)?.message ?? e) });
+      return 'offline';
+    }
+    if (replaced()) {
+      log.info('refresh answered for a session already replaced; ignored', { status: outcome.status });
+      return now();
+    }
+    switch (outcome.status) {
+      case 'ok':
+        this.storeTokens(outcome.tokens);
+        return 'ok';
+      case 'offline':
+        return 'offline';
+      case 'revoked':
+        this.secrets.delete(REFRESH_KEY);
+        this.access = null;
+        this.onDeviceRevoked?.(outcome.message ?? 'This computer was removed from WorkSuite.');
+        return 'lost';
+      default:
+        log.info('refresh refused; session ended');
+        this.secrets.delete(REFRESH_KEY);
+        this.access = null;
+        return 'lost';
+    }
   }
 
   /**
@@ -736,7 +819,9 @@ export class AuthService {
   async signOut(): Promise<void> {
     const token = this.secrets.get(REFRESH_KEY);
     const bearer = this.access?.token;
-    if (token && this.server) {
+    if (token && this.endpoint) {
+      await this.endpoint.revoke(token, bearer).catch(() => undefined);
+    } else if (token && this.server) {
       try {
         await this.post('/api/auth/logout', { refresh_token: token }, bearer);
       } catch (e) {

@@ -25,6 +25,25 @@ export interface DeepLink {
   newWindow: boolean;
   /** Organization hint carried by the link (`?org=`), validated as an id. */
   organizationId: string | null;
+  /**
+   * The server the link belongs to (`?server=<host>`, Connection & Startup §4): with several accounts on this
+   * computer, the one whose link hosts include it opens it. Absent: the open account.
+   */
+  server?: string | null;
+}
+
+/** A `server=` value: a host name, nothing more (no scheme, port, path or credentials). */
+export const SERVER_HOST = /^(?=.{1,253}$)[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?(?:\.[a-z0-9](?:[a-z0-9-]{0,62}[a-z0-9])?)*$/i;
+
+/** The `server=` host a worksuite:// link names, lower-cased, or null (none, or not a host). */
+export function linkServer(raw: string): string | null {
+  try {
+    const u = new URL(raw);
+    const s = u.searchParams.get('server');
+    return s && SERVER_HOST.test(s) ? s.toLowerCase() : null;
+  } catch {
+    return null;
+  }
 }
 
 export type DeepLinkResult = { ok: true; link: DeepLink } | { ok: false; reason: DeepLinkError };
@@ -161,12 +180,14 @@ export function parseDeepLink(raw: string, extraRules: RouteRule[] = []): DeepLi
   const segments = path === '' ? ['home'] : path.split('/');
   if (segments.some((s) => s === '' || s === '.' || s === '..')) return { ok: false, reason: 'malformed' };
 
-  const allowedParams = new Set(['window', 'org']);
+  const allowedParams = new Set(['window', 'org', 'server']);
   for (const key of url.searchParams.keys()) {
     if (!allowedParams.has(key)) return { ok: false, reason: 'malformed' };
   }
   const org = url.searchParams.get('org');
   if (org !== null && !SEGMENT.test(org)) return { ok: false, reason: 'malformed' };
+  const server = url.searchParams.get('server');
+  if (server !== null && !SERVER_HOST.test(server)) return { ok: false, reason: 'malformed' };
 
   for (const rule of [...DEEP_LINK_RULES, ...extraRules]) {
     const params = matchRule(rule, segments);
@@ -180,6 +201,7 @@ export function parseDeepLink(raw: string, extraRules: RouteRule[] = []): DeepLi
           params,
           newWindow: url.searchParams.get('window') === '1',
           organizationId: org,
+          ...(server !== null ? { server: server.toLowerCase() } : {}),
         },
       };
     }

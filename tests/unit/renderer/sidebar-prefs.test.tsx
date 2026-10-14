@@ -833,3 +833,23 @@ describe('the launcher’s sidebar pins from before', () => {
     expect(sidebarPrefs.get().confirmed.items).toEqual([row('crm', { pinned: true, pinned_position: 0 })]);
   });
 });
+
+describe('the storage card (Connection & Startup screen 10)', () => {
+  const GiB = 1024 ** 3;
+  it('shows Cloud storage for a Personal account in place of the Drive card; an Enterprise account keeps the card', async () => {
+    signIn([...ALL, 'drive'], PERMS, {
+      auth: { stage: 'ready', user: { id: '7', name: 'Asha' }, server: { origin: SERVER }, account: { kind: 'personal' } },
+      cloud: { accountState: 'ACTIVE', orgState: 'ACTIVE', provisioning: null, storage: { used: 620 * 1024 * 1024, limit: 2 * GiB, level: 'ok' }, entitlements: null, readOnly: null, unavailable: false },
+    });
+    await start();
+    const { unmount } = render(wrap(<Sidebar />));
+    expect(screen.getByTestId('storage-meter').textContent).toMatch(/Storage 620 MB of 2 GB/);
+    expect(screen.queryByText('WorkSuite Drive')).toBeNull();
+    expect(api.get.mock.calls.some(([path]) => path === '/api/dashboard/home')).toBe(false);
+    unmount();
+    signIn([...ALL, 'drive'], PERMS, { auth: { stage: 'ready', user: { id: '7', name: 'Asha' }, server: { origin: SERVER }, account: { kind: 'enterprise' } } });
+    render(wrap(<Sidebar />));
+    expect(screen.queryByTestId('storage-meter')).toBeNull();
+    expect(screen.getByText('WorkSuite Drive')).toBeTruthy();
+  });
+});

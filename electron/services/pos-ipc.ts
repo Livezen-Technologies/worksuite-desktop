@@ -41,13 +41,14 @@ export interface PosDeps {
   appVersion: string;
   changed: () => void;
   /** Where the products' pictures are kept for offline (the profile's `pos-thumbs`); none: they load live. */
-  thumbsDir?: string;
+  /** A getter follows account switches (Connection & Startup §1.3). */
+  thumbsDir?: string | (() => string);
 }
 
 export function createPos(d: PosDeps) {
   const desk = new PosDesk({ secrets: d.secrets, http: d.http, origin: d.origin, installId: d.installId, device: d.device, appVersion: d.appVersion });
   // worksuite-desktop#296: the products' small pictures, for the grid offline.
-  const thumbs = new PosThumbs({ db: d.db, dir: () => d.thumbsDir ?? null, fetch: (id) => desk.thumbBytes(`products/${id}/image`, { size: 'thumb' }) });
+  const thumbs = new PosThumbs({ db: d.db, dir: () => (typeof d.thumbsDir === 'function' ? d.thumbsDir() : d.thumbsDir) ?? null, fetch: (id) => desk.thumbBytes(`products/${id}/image`, { size: 'thumb' }) });
   const till = new PosTill({ db: d.db, vault: d.vault, http: d.http, desk, origin: d.origin, caps: d.caps, changed: d.changed, config: d.db, thumbs });
   // The company's receipt template (the till's door), when one is published: ESC/POS follows it.
   const print = new PosPrint({ config: d.db, origin: d.origin, template: () => till.template() });

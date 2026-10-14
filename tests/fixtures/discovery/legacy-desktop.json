@@ -1,0 +1,13 @@
+{
+  "api": "desktop-v1",
+  "name": "ABC Company",
+  "minimum_versions": {
+    "windows": "0.2.0",
+    "macos": "0.2.0",
+    "linux": "0.2.0"
+  },
+  "passkey_sign_in": {
+    "url": "/desktop/passkey",
+    "exchange": "/api/auth/passkeys/desktop/exchange"
+  }
+}

@@ -19,6 +19,7 @@ import { OrgTile } from '../app/overlays/OrgSwitcher';
 import { Icon } from '../components/Icon';
 import { CountBadge, cx } from '../components/ui';
 import { bytes } from '../core/time';
+import { StorageMeter } from '../modules/account/Storage';
 
 /** Where Settings › Sidebar is: the sidebar's footer and each item's menu open it. */
 export const SIDEBAR_SETTINGS_ROUTE = '/settings/sidebar';
@@ -54,6 +55,7 @@ export function Sidebar() {
   const apps = useStore(app, (s) => s.apps);
   const status = useStore(app, (s) => s.status);
   const prefs = useStore(app, (s) => s.prefs);
+  const personal = useStore(app, (s) => s.auth?.account?.kind === 'personal');
   const activeApp = useStore(tabsStore, (s) => s.tabs.find((x) => x.id === s.activeId)?.app ?? 'home');
   const [hover, setHover] = useState(false);
   const [menu, setMenu] = useState<MenuState | null>(null);
@@ -214,7 +216,8 @@ export function Sidebar() {
         </ul>
       </div>
 
-      {!collapsed ? <FilesCard /> : null}
+      {/* A Personal account's Cloud storage (screen 10) in place of the Drive card; an Enterprise account keeps the card. */}
+      {!collapsed ? personal ? <StorageMeter /> : <FilesCard /> : null}
 
       <div className="px-2.5 pt-2">
         <button

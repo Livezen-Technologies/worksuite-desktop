@@ -64,10 +64,23 @@ export function mediaTypesAllowed(types: readonly string[] | undefined): boolean
   return (types ?? []).every((t) => t === 'audio' || t === 'video');
 }
 
+/**
+ * A further say over the camera and microphone (Connection & Startup, screen 6): before anyone is signed in, the
+ * main window's only use for the camera is scanning a setup QR, so `media` is granted there only while the scan
+ * dialog is open. Set by index.ts; the default allows what the rules above allow.
+ */
+export type MediaGate = (wc: WebContents | null, mediaTypes: readonly string[]) => boolean;
+let mediaGate: MediaGate = () => true;
+
+export function setMediaGate(gate: MediaGate | null): void {
+  mediaGate = gate ?? (() => true);
+}
+
 export function hardenSession(ses: Session): void {
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
     const trusted = isTrustedShellUrl(details.requestingUrl ?? wc?.getURL() ?? '');
-    const media = permission === 'media' ? mediaTypesAllowed((details as { mediaTypes?: string[] }).mediaTypes) : true;
+    const types = (details as { mediaTypes?: string[] }).mediaTypes ?? [];
+    const media = permission === 'media' ? mediaTypesAllowed(types) && mediaGate(wc ?? null, types) : true;
     const allow = trusted && ALLOWED_PERMISSIONS.has(permission) && media;
     if (!allow) log.info('permission denied', { permission, url: details.requestingUrl });
     callback(allow);

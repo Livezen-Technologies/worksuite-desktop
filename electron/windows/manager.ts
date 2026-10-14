@@ -175,6 +175,11 @@ export class WindowManager {
   onRecordsChanged: (windows: DetachedWindow[]) => void = () => undefined;
   minimizeToTray: () => boolean = () => true;
   onMainShown: () => void = () => undefined;
+  /**
+   * The open account's window partition (Connection & Startup §1.1): '' is the default session (account #1, guest
+   * mode), `persist:acct-<id>` another account's. Every window made from now on uses it.
+   */
+  partition = '';
 
   constructor(
     private readonly db: Database,
@@ -328,6 +333,8 @@ export class WindowManager {
       devTools: !app.isPackaged || process.argv.includes('--diagnostics-devtools'),
       // Unpackaged test runs only: lets test-only surfaces (the call layout preview) show.
       additionalArguments: !app.isPackaged && process.env.WS_E2E_FAKE_MEDIA ? ['--ws-e2e'] : [],
+      // Each account's own storage (localStorage, IndexedDB); account #1 keeps the default session's.
+      ...(this.partition ? { partition: this.partition } : {}),
     };
   }
 
@@ -959,6 +966,63 @@ export class WindowManager {
     });
     win.on('show', () => this.onMainShown());
     return win;
+  }
+
+  /**
+   * An account switch (Connection & Startup §1.3 steps 3 and 8): the next account's main window is made, hidden, in
+   * its partition while the current one stays. `commit` puts it where the old one was and closes the old one;
+   * `discard` drops it and keeps everything as it was.
+   */
+  prepareMain(partition: string): { win: BrowserWindow; commit: () => void; discard: () => void } {
+    const old = this.getMain();
+    const previous = this.partition;
+    this.partition = partition;
+    this.main = null;
+    const win = this.createMain(false);
+    this.main = old;
+    let settled = false;
+    return {
+      win,
+      commit: () => {
+        if (settled) return;
+        settled = true;
+        const live = old && !old.isDestroyed() ? old : null;
+        const visible = !live || live.isVisible();
+        if (live) {
+          const maximized = live.isMaximized();
+          win.setBounds(maximized ? live.getNormalBounds() : live.getBounds());
+          if (maximized) win.maximize();
+        }
+        this.main = win;
+        if (visible) {
+          if (win.webContents.isLoading()) win.once('ready-to-show', () => !win.isDestroyed() && win.show());
+          else win.show();
+        }
+        if (live) {
+          this.forced.add(live.id);
+          live.destroy();
+        }
+      },
+      discard: () => {
+        if (settled) return;
+        settled = true;
+        this.partition = previous;
+        if (this.main === win) this.main = old;
+        if (!win.isDestroyed()) win.destroy();
+      },
+    };
+  }
+
+  /** Every window but the main one, closed for an account switch (they show the account's data). */
+  closeAllButMain(): void {
+    this.closeRecords();
+    for (const w of BrowserWindow.getAllWindows()) {
+      // The main window stays, and so does the next account's, made hidden for the switch.
+      if (w.isDestroyed() || w === this.main || this.kinds.get(w.id) === 'main') continue;
+      if (!this.kinds.has(w.id)) continue;
+      this.forced.add(w.id);
+      w.close();
+    }
   }
 
   showMain(): BrowserWindow {

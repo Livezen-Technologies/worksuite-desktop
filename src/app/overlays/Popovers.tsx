@@ -16,6 +16,9 @@ import { apiGet, apiPost } from '../../core/api';
 import { useMfa } from '../../modules/account/api';
 import { attendanceTime, useAttendance } from '../../modules/hr/attendance';
 import { Popover, PopoverHeader } from './Popover';
+import { AccountSwitcher } from '../accounts/AccountSwitcher';
+import { openSignOut } from '../accounts/dialogs';
+import { accountName } from '../accounts/labels';
 
 /** The bell's drawer is the Notifications module's (NotifDrawer). */
 export { NotifDrawer as NotificationCenter } from '../../modules/notifications/Drawer';
@@ -52,6 +55,9 @@ export function ProfileMenu() {
   const mfa = useMfa();
   const { today, clockedIn } = useAttendance(hasHr);
   const [confirm, setConfirm] = useState(false);
+  // Accounts side by side (Connection & Startup): the switcher, and Sign out with what has not synced (screen 14).
+  const accounts = useStore(app, (s) => (s.accounts && s.accounts.accounts.length > 0 ? s.accounts : null));
+  const active = accounts?.accounts.find((a) => a.id === accounts.activeId) ?? null;
   const [picking, setPicking] = useState(false);
   const go = (route: string) => (closeOverlay(), navigate(route));
   const shownAs = shownPresence(presence.data, network);
@@ -78,6 +84,7 @@ export function ProfileMenu() {
         <span className="flex min-w-0 flex-col">
           <b className="truncate text-[14.5px] text-ink">{me?.name}</b>
           <span className="truncate text-[12px] text-ink-3">{me?.email}</span>
+          {active ? <span className="truncate text-[12px] text-ink-3">{active.kind === 'personal' ? 'Personal · WorkSuite Cloud' : `Enterprise · ${accountName(active)}`}</span> : null}
         </span>
       </div>
       {shown || working ? (
@@ -111,6 +118,7 @@ export function ProfileMenu() {
           ) : null}
         </div>
       ) : null}
+      {accounts ? <AccountSwitcher accounts={accounts} /> : null}
       <div className="flex flex-col border-t border-line px-2 py-1">
         <MenuRow icon="user" label="My profile" onClick={() => go('/account/profile')} />
         <MenuRow icon="id-card" label="Profile settings" onClick={() => go('/account/general')} />
@@ -125,6 +133,7 @@ export function ProfileMenu() {
       </div>
       <div className="flex flex-col border-t border-line px-2 py-1">
         {orgs > 1 ? <MenuRow icon="building" label="Switch organisation" onClick={() => openOverlay('org')} extra={<span className="max-w-[110px] truncate text-[12px] text-ink-3">{organizationName(orgId)}</span>} /> : null}
+        {accounts ? <MenuRow icon="server" label="Account Settings" onClick={() => go('/settings/accounts')} /> : null}
         <MenuRow icon="settings" label="Settings for this computer" onClick={() => go('/settings')} />
         <MenuRow icon="help" label="Help & diagnostics" onClick={() => go('/diagnostics')} />
         <MenuRow icon="lock" label="Lock WorkSuite" onClick={() => (closeOverlay(), void call('security:lock'))} />
@@ -143,7 +152,7 @@ export function ProfileMenu() {
             </div>
           </div>
         ) : (
-          <button type="button" onClick={() => setConfirm(true)} className="flex h-9 w-full items-center gap-[11px] rounded-[9px] px-2.5 text-[13px] font-medium text-[#B42318] hover:bg-danger-bg dark:text-danger">
+          <button type="button" onClick={() => (active ? (closeOverlay(), openSignOut(active.id)) : setConfirm(true))} className="flex h-9 w-full items-center gap-[11px] rounded-[9px] px-2.5 text-[13px] font-medium text-[#B42318] hover:bg-danger-bg dark:text-danger">
             <Icon name="logout" size={17} /> Sign out
           </button>
         )}

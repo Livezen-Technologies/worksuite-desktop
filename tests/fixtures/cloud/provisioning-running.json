@@ -1,0 +1,6 @@
+{
+  "state": "PROVISIONING",
+  "step": "drive",
+  "attempts": 1,
+  "retry_at": null
+}

@@ -2,7 +2,7 @@ import { toast } from '../../core/toasts';
 import { GuestJoinForm } from '../../modules/meet/GuestJoinForm';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import type { AuthState } from '@shared/types';
-import { app } from '../../core/app-state';
+import { app, startAdding } from '../../core/app-state';
 import { backToGuest, enterGuestMode } from '../../core/session';
 import { call, errorMessage, isMac, on } from '../../core/bridge';
 import { t, LANGUAGES, useLanguage } from '../../core/i18n';
@@ -16,8 +16,9 @@ import { useNow } from '../../core/use-now';
 import { BlockedPanel, CaptchaBox, DeviceCodeStep, gateFor, WaitPanel } from './SignInProtection';
 
 /**
- * Welcome, server selection, sign-in and two-step verification (UI-01,
- * UI-02, WF-01 steps 1–5). Everything that can fail says what to do next.
+ * Welcome, sign-in and two-step verification (UI-01, UI-02, WF-01 steps 1–5). Everything that can fail says what to
+ * do next. Choosing a server is Connection & Startup's now (the startup selector and the enterprise address, screens
+ * 1 and 6); this keeps the steps after it, and the password form for servers without a browser sign-in.
  */
 export function Onboarding({ auth }: { auth: AuthState }) {
   const language = useLanguage();
@@ -47,7 +48,8 @@ export function Onboarding({ auth }: { auth: AuthState }) {
         </div> : null}
         {guest ? <GuestJoinForm key={destination?.input} initialInput={destination?.input} server={destination?.server ?? auth.server?.origin} onBack={() => setGuest(false)} /> : null}
         {!guest ? <>
-        {auth.stage === 'no-server' ? <ServerStep /> : null}
+        {/* No account yet: the startup selector (Connection & Startup screen 1) chooses Personal or Enterprise. */}
+        {auth.stage === 'no-server' ? <Button className="w-full" variant="primary" size="lg" onClick={() => startAdding('choose')}>Add an account</Button> : null}
         {auth.stage === 'signed-out' || auth.stage === 'expired' ? <SignInStep auth={auth} /> : null}
         {auth.stage === 'mfa' ? <MfaStep newDevice={!!auth.mfaNewDevice} /> : null}
         {auth.stage === 'device-code' ? <DeviceCodeStep auth={auth} /> : null}
@@ -62,43 +64,13 @@ export function Onboarding({ auth }: { auth: AuthState }) {
   );
 }
 
-function ServerStep() {
-  const [url, setUrl] = useState('');
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const submit = async () => {
-    setBusy(true);
-    setError(null);
-    try {
-      await call('auth:setServer', { url });
-    } catch (e) {
-      setError(errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        void submit();
-      }}
-      className="flex flex-col gap-4"
-    >
-      <div>
-        <h1 className="text-[22px] font-bold text-ink">{t('auth.serverTitle')}</h1>
-        <p className="mt-1 text-[13.5px] text-ink-3">{t('auth.serverHint')}</p>
-      </div>
-      <TextField label="Server address" placeholder="app.yourcompany.com" value={url} onChange={(e) => setUrl(e.target.value)} autoFocus error={error} spellCheck={false} autoCapitalize="off" />
-      <Button variant="primary" size="lg" type="submit" loading={busy} disabled={!url.trim()}>
-        {t('auth.continue')}
-      </Button>
-      <p className="text-[12px] text-ink-3">WorkSuite connects only over HTTPS and never ignores a certificate error.</p>
-    </form>
-  );
-}
-
-function SignInStep({ auth }: { auth: AuthState }) {
+/**
+ * The in-app password form, for servers without a browser sign-in (legacy auth): email, password, the CAPTCHA, wait
+ * or block the server answered with (SignInProtection), Forgot your password, and a passkey through the browser
+ * where the server offers one. `onChangeServer`: what Change does (the branded sign-in's "Use a different server");
+ * without it, Change starts Add Account › Enterprise when accounts are known, else clears the server as before.
+ */
+export function SignInStep({ auth, onChangeServer, hideServer }: { auth: AuthState; onChangeServer?: () => void; hideServer?: boolean }) {
   const [email, setEmail] = useState(auth.user?.email ?? '');
   const [password, setPassword] = useState('');
   const [busy, setBusy] = useState(false);
@@ -155,18 +127,18 @@ function SignInStep({ auth }: { auth: AuthState }) {
       }}
       className="flex flex-col gap-4"
     >
-      <div>
+      {hideServer ? null : <div>
         <h1 className="text-[22px] font-bold text-ink">{t('auth.signIn')}</h1>
         <p className="mt-1 flex items-center gap-1.5 text-[13.5px] text-ink-3">
           <Icon name="server" size={14} /> {auth.server?.name && auth.server.name !== host ? `${auth.server.name} · ` : ''}
           {host}
           {!auth.server?.locked ? (
-            <button type="button" className="ml-1 font-semibold text-primary hover:underline" onClick={() => void call('auth:setServer', { url: '' })}>
+            <button type="button" className="ml-1 font-semibold text-primary hover:underline" onClick={() => (onChangeServer ? onChangeServer() : changeServer())}>
               Change
             </button>
           ) : null}
         </p>
-      </div>
+      </div>}
       {auth.message ? <div className="rounded-[8px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning">{auth.message}</div> : null}
       <TextField label={t('auth.email')} type="email" autoComplete="username" value={email} onChange={(e) => setEmail(e.target.value)} autoFocus={!email} />
       <TextField label={t('auth.password')} type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus={!!email} error={error ?? (captcha && !captcha.solved ? captcha.message : null)} />
@@ -192,6 +164,12 @@ function SignInStep({ auth }: { auth: AuthState }) {
       ) : null}
     </form>
   );
+}
+
+/** Change on the sign-in form: another server is another account once accounts are known; before, the old way. */
+function changeServer(): void {
+  if (app.get().accounts) startAdding('enterprise');
+  else void call('auth:setServer', { url: '' });
 }
 
 /**

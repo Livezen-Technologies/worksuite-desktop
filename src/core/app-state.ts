@@ -4,6 +4,9 @@ import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, Status
 import { grantOf } from '@shared/access';
 import { visibleApps, type AppDefinition } from '@shared/apps';
 import type { LocalStatus } from '@shared/local-workspace';
+import type { AccountKind, AccountsState, AddingAccount, UnknownLink } from '@shared/accounts';
+import type { BrowserSignIn, CloudStatus } from '@shared/cloud';
+import type { ConnectRun } from '@shared/discovery';
 import { call, hasDesktop, on } from './bridge';
 import { createStore } from './store';
 import { setRegional } from './time';
@@ -33,11 +36,22 @@ export interface AppState {
   /**
    * Guest mode or an account (#149): the same window, shell and module screens either way; guest mode's apps are
    * `GUEST_APPS` and their data the Local Profile's. `signingIn`: a guest on the sign-in screen, guest mode still
-   * open behind it. `moveOffer`: signed in from guest mode, so the move-your-data question is due.
+   * open behind it. `moveOffer`: signed in from guest mode, so the move-your-data question is due. `adding`: the
+   * add-account flow is open (Connection & Startup screens 1, 2, 6) — null (or absent) when it is not.
    */
-  session: { mode: 'guest' | 'account'; signingIn: boolean; moveOffer: boolean };
+  session: { mode: 'guest' | 'account'; signingIn: boolean; moveOffer: boolean; adding?: AddingAccount | null };
   /** The Local Profile, in guest mode. */
   local: LocalStatus | null;
+  /** Accounts side by side (Connection & Startup): null until the desktop answers `accounts:state`. */
+  accounts: AccountsState | null;
+  /** The connect run on screen 7, from `connect:progress`. */
+  connect: ConnectRun | null;
+  /** The browser sign-in in progress (screen 3), from `signin:changed`. */
+  signin: BrowserSignIn | null;
+  /** The active Personal account's Cloud side, from `cloud:changed`. */
+  cloud: CloudStatus | null;
+  /** A link to a server that is not added (screen 16), from `accounts:unknownLink`; null once answered. */
+  unknownLink: UnknownLink | null;
 }
 
 export const app = createStore<AppState>({
@@ -55,9 +69,61 @@ export const app = createStore<AppState>({
   transfers: [],
   sync: null,
   resolvedTheme: 'light',
-  session: { mode: 'account', signingIn: false, moveOffer: false },
+  session: { mode: 'account', signingIn: false, moveOffer: false, adding: null },
   local: null,
+  accounts: null,
+  connect: null,
+  signin: null,
+  cloud: null,
+  unknownLink: null,
 });
+
+/**
+ * Add Account (Connection & Startup screens 1, 2, 6): the startup selector (`choose`), Personal or Enterprise, with an
+ * address or setup link to start from. The desktop is told too (`accounts:addStart`), so a `worksuite://setup` link
+ * arriving now lands in this flow; a desktop without accounts answers UNSUPPORTED, which changes nothing here.
+ */
+export function startAdding(step: AddingAccount['step'], prefill?: string): void {
+  const adding: AddingAccount = prefill ? { step, prefill } : { step };
+  app.set({ session: { ...app.get().session, adding }, connect: null });
+  const kind: AccountKind | undefined = step === 'choose' ? undefined : step;
+  void call('accounts:addStart', kind ? { kind } : {}).catch(() => undefined);
+}
+
+/** The setup link last opened in Add Account, so the same one is not opened again with every accounts update. */
+let setupShown: string | null = null;
+
+/**
+ * Takes the desktop's accounts state. A `worksuite://setup` link waiting there (`pendingSetup`, §4 step 5) opens Add
+ * Account › Enterprise with it filled in — once per link. Nothing connects: the address screen names the server it
+ * points at, and only Continue starts the checks.
+ */
+export function applyAccounts(a: AccountsState): void {
+  app.set({ accounts: a });
+  const link = typeof a.pendingSetup === 'string' && a.pendingSetup ? a.pendingSetup : null;
+  if (link && link !== setupShown && a.allowAddEnterprise) {
+    setupShown = link;
+    startAdding('enterprise', link);
+  } else if (!link) {
+    setupShown = null;
+  }
+}
+
+/** Leaves Add Account: back to the account that is open (or the startup selector when there is none). */
+export function cancelAdding(): void {
+  const run = app.get().connect;
+  if (run?.state === 'running') void call('connect:cancel', { runId: run.runId }).catch(() => undefined);
+  app.set({ session: { ...app.get().session, adding: null }, connect: null });
+  void call('accounts:addCancel').catch(() => undefined);
+}
+
+/**
+ * Which `connect:progress` runs this window follows: the one on screen 7 (same runId), or any when none is on screen.
+ * A run started elsewhere (Settings' Re-run discovery) never replaces the one being looked at.
+ */
+export function acceptsRun(current: ConnectRun | null, next: ConnectRun): boolean {
+  return !current || current.runId === next.runId;
+}
 
 /** Whether this window is in guest mode (#149). */
 export function isGuest(): boolean {
@@ -137,6 +203,26 @@ export async function initAppState(): Promise<void> {
     }
   });
   on<Bootstrap | null>('session:changed', (b) => applyBootstrap(b));
+  // Accounts side by side (Connection & Startup). A desktop without them answers UNSUPPORTED: the store stays null.
+  void (async () => {
+    try {
+      const a = await call('accounts:state');
+      if (a && typeof a === 'object') applyAccounts(a);
+    } catch {
+      // Not available in this version.
+    }
+  })();
+  on<AccountsState>('accounts:changed', (a) => {
+    if (a && typeof a === 'object') applyAccounts(a);
+  });
+  on<ConnectRun>('connect:progress', (r) => {
+    if (r && typeof r === 'object' && acceptsRun(app.get().connect, r)) app.set({ connect: r });
+  });
+  on<UnknownLink>('accounts:unknownLink', (l) => {
+    if (l && typeof l === 'object' && typeof l.host === 'string') app.set({ unknownLink: l });
+  });
+  on<BrowserSignIn | null>('signin:changed', (b) => app.set({ signin: b }));
+  on<CloudStatus>('cloud:changed', (c) => app.set({ cloud: c }));
   on<StatusSnapshot>('status:changed', (s) => app.set({ status: s }));
   if (info.platform === 'windows') {
     // The taskbar button's overlay with the count (ENH-MAIL-05 MNA-TRY-03): Windows draws no badge count itself.

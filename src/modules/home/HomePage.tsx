@@ -33,6 +33,7 @@ import { TodaysWork } from './TodaysWork';
 import { inOrgs, useWaitingSources, waitingItems, type WaitingItem } from './waiting';
 import { WaitingPage, WaitingRows } from './WaitingItems';
 import { HeaderLink, Widget } from './Widget';
+import { StorageCard } from '../account/Storage';
 import {
   CARDS,
   DEFAULT_LAYOUT,
@@ -534,6 +535,9 @@ export default function HomePage(_props: ModuleProps) {
             ) : null}
           </div>
         </header>
+
+        {/* A Personal account's WorkSuite Cloud storage (Connection & Startup screen 10); nothing for any other. */}
+        <StorageCard onManage={() => navigate('/account/storage')} />
 
         {/*
           One bordered row; the hairlines between tiles are the gaps. Four across where four fit, else two by two, else

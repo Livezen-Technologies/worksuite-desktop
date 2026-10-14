@@ -54,12 +54,13 @@ import { SyncButton } from '../../components/SyncButton';
 import { UpdatesRow } from './UpdatesCard';
 import { UpdateDiagnosticsPage, UpdatesPage } from './UpdatesPage';
 import { LicensePage } from './LicensePage';
+import { AccountsServers } from './AccountsServers';
 import { ADMIN_RINGING_ROUTE, AdminRinging } from './AdminRinging';
 import { ADMIN_PROTECTION_ROUTE, useHasPermission } from './AdminNav';
 import { AdminProtection } from '../mail/protection/admin/AdminProtection';
 
 /** Pages laid out in cards side by side get the wider column. */
-const WIDE: ReadonlySet<string> = new Set(['updates', 'update-diagnostics', 'license']);
+const WIDE: ReadonlySet<string> = new Set(['updates', 'update-diagnostics', 'license', 'accounts']);
 
 /** Settings / profile tree (§4.9). Anything the organization's policy decides is shown locked, with the reason. */
 const SECTIONS = [
@@ -72,6 +73,8 @@ const SECTIONS = [
   { id: 'sidebar', label: 'Sidebar', icon: 'sliders', group: 'Account' },
   { id: 'security', label: 'Security', icon: 'lock', group: 'Account' },
   { id: 'devices', label: 'Devices', icon: 'laptop', group: 'Account' },
+  // Personal and Enterprise accounts side by side, and each one's connection health (Connection & Startup screen 15).
+  { id: 'accounts', label: 'Accounts & Servers', icon: 'server', group: 'Desktop' },
   { id: 'desktop', label: 'Desktop', icon: 'monitor', group: 'Desktop' },
   { id: 'files', label: 'Files & Sync', icon: 'folder', group: 'Desktop' },
   { id: 'offline', label: 'Offline', icon: 'cloud-off', group: 'Desktop' },
@@ -169,6 +172,7 @@ function SettingsSections(_props: ModuleProps) {
           {section === 'sidebar' ? <SidebarSettings /> : null}
           {section === 'security' ? <SecuritySection prefs={prefs} /> : null}
           {section === 'devices' ? <Devices /> : null}
+          {section === 'accounts' ? <AccountsServers /> : null}
           {section === 'desktop' ? <DesktopSection prefs={prefs} /> : null}
           {section === 'files' ? <FilesSection /> : null}
           {section === 'offline' ? <OfflineSection prefs={prefs} /> : null}

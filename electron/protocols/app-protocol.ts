@@ -1,4 +1,4 @@
-import { app, protocol } from 'electron';
+import { app, protocol, type Session } from 'electron';
 import { readFile, stat } from 'node:fs/promises';
 import { extname, join, normalize, resolve, sep } from 'node:path';
 import { isSafeHeaderValue, normalizeContentDisposition, sanitizeHeaderValue } from '@shared/http-headers';
@@ -176,6 +176,12 @@ export function createAppHandler(root: string, apiProxy: ApiProxyHandler, cspSou
   };
 }
 
-export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () => CspSources = () => ({}), local?: LocalHandler): void {
-  protocol.handle('app', createAppHandler(rendererRoot(), apiProxy, cspSources, local));
+/**
+ * `app://` for a session's pages. Without `ses`, the default session's (`protocol` is its). Each account's window
+ * partition gets its own (Connection & Startup §1.1, `installShellSession`): a protocol handler belongs to a session.
+ */
+export function registerAppProtocol(apiProxy: ApiProxyHandler, cspSources: () => CspSources = () => ({}), local?: LocalHandler, ses?: Session): void {
+  const target = ses?.protocol ?? protocol;
+  if (target.isProtocolHandled?.('app')) return;
+  target.handle('app', createAppHandler(rendererRoot(), apiProxy, cspSources, local));
 }

@@ -74,8 +74,11 @@ interface Meta {
   attempts?: number;
   /** Its last failure was the network's or a busy server's: worth trying again once the connection is back. */
   temporary?: boolean;
-  /** Paused because the connection was lost, to be resumed by hand (Drive › Settings › auto-resume off). */
-  waitingFor?: 'connection' | null;
+  /**
+   * Paused because the connection was lost, to be resumed by hand (Drive › Settings › auto-resume off) — or, still
+   * queued, an upload the account's storage refused (QUOTA_EXCEEDED): it waits for `releaseQuota()`, nothing lost.
+   */
+  waitingFor?: 'connection' | 'quota' | null;
   /** The place the person chose for it, when they were asked where to save (main-process dialog only). */
   exactPath?: string | null;
   /** The server has the whole upload (`complete` answered): trying again never sends it a second time. */
@@ -141,6 +144,11 @@ export interface TransferDeps {
   downloaded?: (path: string, source: string) => void | Promise<void>;
   /** How long before the n-th automatic retry (0 first); tests make it short. */
   retryDelay?: (attempt: number) => number;
+  /**
+   * An upload was refused because the account's storage is full (Cloud's QUOTA_EXCEEDED): it waits, queued, for
+   * `releaseQuota()` — the quota watcher asks Cloud more often meanwhile (Connection & Startup §3).
+   */
+  onQuotaHeld?: () => void;
   /** How long a request may go without moving a byte or answering before it counts as stalled (#249); tests make it short. */
   stallMs?: number;
   /** Between two questions about an upload the server is still putting together (#249); tests make it short. */
@@ -220,6 +228,11 @@ export function isConnectionFailure(e: unknown): boolean {
 }
 
 class Stalled extends Error {}
+
+/** The words on an upload waiting for room (screen 13's promise: nothing is lost, it goes on by itself). */
+export const QUOTA_HELD = 'Your storage is full. This upload continues as soon as there is room.';
+/** An upload waiting for room tries again by itself this often, in case nobody says there is room. */
+export const QUOTA_RETRY_MS = 30 * 60_000;
 
 /** A refusal from the upload API in words a person can act on: the size limit, the file's type (#249). */
 function refusal(e: unknown): unknown {
@@ -574,7 +587,7 @@ export class TransferManager {
 
   private view(l: Live): Transfer {
     const at = this.queue.indexOf(l.t.id);
-    const held = l.t.state === 'queued' ? (this.offline ? 'connection' : this.metered && this.cfg.metered === 'pause' ? 'metered' : null) : null;
+    const held = l.t.state === 'queued' ? (l.meta.waitingFor === 'quota' ? 'quota' : this.offline ? 'connection' : this.metered && this.cfg.metered === 'pause' ? 'metered' : null) : null;
     return {
       ...l.t,
       fileId: l.meta.fileId,
@@ -754,6 +767,48 @@ export class TransferManager {
     this.finish(l, state, error);
   }
 
+  /** QUOTA_EXCEEDED: back in the queue, where it was, waiting for `releaseQuota()`; what was sent stays. */
+  private holdForQuota(l: Live, abort: AbortController): void {
+    if (abort.signal.aborted || l.abort !== abort) return;
+    l.meta.waitingFor = 'quota';
+    l.meta.attempts = 0;
+    l.meta.temporary = false;
+    l.meta.retryAt = new Date(Date.now() + QUOTA_RETRY_MS).toISOString();
+    l.t.state = 'queued';
+    l.t.error = QUOTA_HELD;
+    l.t.speed = 0;
+    l.abort = null;
+    this.dequeue(l.t.id);
+    this.queue.push(l.t.id);
+    this.persist(l);
+    this.emit();
+    this.deps.onQuotaHeld?.();
+    this.pump();
+  }
+
+  /** Uploads waiting for room. */
+  quotaHeld(): number {
+    let n = 0;
+    for (const l of this.live.values()) if (l.t.state === 'queued' && l.meta.waitingFor === 'quota') n++;
+    return n;
+  }
+
+  /** There is room again (the quota watcher says usage is below full): every upload waiting for it goes on, in order. */
+  releaseQuota(): void {
+    let any = false;
+    for (const l of this.live.values()) {
+      if (l.meta.waitingFor !== 'quota') continue;
+      l.meta.waitingFor = null;
+      l.meta.retryAt = null;
+      if (l.t.error === QUOTA_HELD) l.t.error = null;
+      this.persist(l);
+      any = true;
+    }
+    if (!any) return;
+    this.emit();
+    this.pump();
+  }
+
   private retryLater(l: Live, error: string | null): void {
     const attempt = l.meta.attempts ?? 0;
     l.meta.attempts = attempt + 1;
@@ -845,6 +900,16 @@ export class TransferManager {
       if (!l || l.t.state !== 'queued') {
         this.dequeue(id);
         continue;
+      }
+      // Waiting for room in the account's storage: `releaseQuota()` lets it go — or, should nobody say, a try of its
+      // own now and then (refused again, it waits again).
+      if (l.meta.waitingFor === 'quota') {
+        const at = l.meta.retryAt ? Date.parse(l.meta.retryAt) : Infinity;
+        if (at > now) {
+          soonest = Math.min(soonest, at);
+          continue;
+        }
+        l.meta.waitingFor = null;
       }
       const due = l.meta.retryAt ? Date.parse(l.meta.retryAt) : 0;
       if (due > now) {
@@ -1230,6 +1295,8 @@ export class TransferManager {
       this.settle(l, abort, 'done');
     } catch (e) {
       if (abort.signal.aborted) return;
+      // The account's storage is full: held, queued, until there is room — never failed, never thrown away.
+      if (isDesktopError(e) && e.code === 'QUOTA_EXCEEDED') return this.holdForQuota(l, abort);
       // Never a bare "The request was cancelled." (#249): a dropped or stalled connection is said as what it is,
       // and the upload waits for the connection, then carries on from the last part the server has.
       const connection = isConnectionFailure(e);

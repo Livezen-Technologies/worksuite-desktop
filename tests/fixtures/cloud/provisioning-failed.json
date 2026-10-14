@@ -1,0 +1,6 @@
+{
+  "state": "PROVISIONING_FAILED",
+  "step": "apps",
+  "attempts": 3,
+  "retry_at": "2026-10-13T10:04:00Z"
+}

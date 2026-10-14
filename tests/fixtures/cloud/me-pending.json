@@ -1,0 +1,16 @@
+{
+  "identity": {
+    "id": "u_7f3a9c",
+    "email": "hasarinda@email.example",
+    "name": "Hasarinda Manjula",
+    "email_verified": false,
+    "avatar": null
+  },
+  "account_state": "EMAIL_VERIFICATION_PENDING",
+  "organizations": [],
+  "active_organization_id": null,
+  "onboarding": {
+    "complete": false,
+    "step": "workspace"
+  }
+}

@@ -1,0 +1,24 @@
+{
+  "iss": "https://worksuitecloud.com",
+  "org": "org_4b2e81",
+  "plan": "professional-free",
+  "apps": {
+    "mail": true,
+    "chat": true,
+    "calendar": true,
+    "tasks": true,
+    "files": true,
+    "contacts": true,
+    "doc": true,
+    "sheet": true,
+    "slides": true,
+    "ai": true,
+    "crm": false,
+    "payroll": false
+  },
+  "limits": {
+    "storage_bytes": 2147483648
+  },
+  "iat": 1767225600,
+  "exp": 4102444800
+}

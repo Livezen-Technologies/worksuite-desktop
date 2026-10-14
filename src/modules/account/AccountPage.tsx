@@ -6,6 +6,7 @@ import { SECTIONS, type Section } from './api';
 import { AccountRail } from './Rail';
 import type { AvatarStyle } from './avatarArt';
 import { PictureEditor, type EditorTab } from './PictureEditor';
+import { usePersonal } from './Storage';
 
 /**
  * My account (the "19 · My account" designs): my profile, how people reach
@@ -22,6 +23,7 @@ const Notifications = lazy(() => import('./Notifications'));
 const Security = lazy(() => import('./Security'));
 const Pictures = lazy(() => import('./Pictures'));
 const Access = lazy(() => import('./Access'));
+const Storage = lazy(() => import('./Storage'));
 
 const TITLES: Record<Section, string> = {
   profile: 'My profile',
@@ -31,6 +33,7 @@ const TITLES: Record<Section, string> = {
   security: 'Security',
   pictures: 'Profile pictures',
   access: 'My access',
+  storage: 'Storage',
 };
 
 /** Opens the picture editor on a tab; every screen that shows your picture can ask for it. */
@@ -39,7 +42,9 @@ export type OpenEditor = (tab: EditorTab, style?: Partial<AvatarStyle> | null) =
 export default function AccountPage(_props: ModuleProps) {
   const { path, query, go } = useTab();
   const asked = (path[1] ?? query.get('tab') ?? 'profile') as Section;
-  const section: Section = SECTIONS.includes(asked) ? asked : 'profile';
+  // Storage is WorkSuite Cloud's: a Personal account's only.
+  const personal = usePersonal();
+  const section: Section = SECTIONS.includes(asked) && (asked !== 'storage' || personal) ? asked : 'profile';
   const opened = query.get('edit');
   const [editor, setEditor] = useState<{ tab: EditorTab; style: Partial<AvatarStyle> | null } | null>(opened === 'photo' || opened === 'avatar' ? { tab: opened, style: null } : null);
   useTabTitle(`My account · ${TITLES[section]}`);
@@ -58,6 +63,7 @@ export default function AccountPage(_props: ModuleProps) {
           {section === 'security' ? <Security /> : null}
           {section === 'pictures' ? <Pictures onEdit={open} /> : null}
           {section === 'access' ? <Access /> : null}
+          {section === 'storage' ? <Storage /> : null}
         </Suspense>
       </main>
       {editor ? <PictureEditor tab={editor.tab} style={editor.style} onTab={(tab) => setEditor({ tab, style: editor.style })} onClose={() => (setEditor(null), opened ? go(`/account/${section}`) : undefined)} /> : null}

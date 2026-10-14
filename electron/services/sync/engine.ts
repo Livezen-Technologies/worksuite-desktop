@@ -66,6 +66,16 @@ export interface DriveSyncDeps {
   home?: () => string;
   /** Not to be synced into: the app's own data. */
   protectedPaths?: () => string[];
+  /**
+   * The default sync folder's name for the open account (Connection & Startup §1.1): "WorkSuite Drive" for account
+   * #1, "WorkSuite Drive (<label>)" for the others. Absent: "WorkSuite Drive".
+   */
+  rootName?: () => string;
+  /**
+   * The other accounts' sync folders on this computer: a folder inside (or around) one of them is refused, so two
+   * accounts never sync into each other's files.
+   */
+  otherAccountRoots?: () => string[];
   settleMs?: number;
   /**
    * A file this computer sent reached Drive (a new version of `fileId`, or a new file): its bytes' hash, so whatever
@@ -229,7 +239,7 @@ export class DriveSync {
   // ── status ─────────────────────────────────────────────────────────────
 
   defaultRoot(): string {
-    return join(this.deps.home?.() ?? homedir(), 'WorkSuite Drive');
+    return join(this.deps.home?.() ?? homedir(), this.deps.rootName?.() || 'WorkSuite Drive');
   }
 
   private rt(id: string): Runtime {
@@ -499,6 +509,9 @@ export class DriveSync {
     }
     for (const f of existing) {
       if (isUnder(real, f.localPath) || isUnder(f.localPath, real)) throw new DesktopError('CONFLICT', `That folder overlaps ${this.display(f.localPath)}, where ${f.folderName} is synced.`);
+    }
+    for (const other of this.deps.otherAccountRoots?.() ?? []) {
+      if (isUnder(real, other) || isUnder(other, real)) throw new DesktopError('CONFLICT', `That folder overlaps ${this.display(other)}, which another account on this computer syncs. Choose another.`);
     }
     if (looksRemovable(real, this.deps.platform) && !this.deps.removableAllowed()) {
       throw new DesktopError('POLICY_DENIED', 'Your organization does not allow syncing to removable or external disks.');

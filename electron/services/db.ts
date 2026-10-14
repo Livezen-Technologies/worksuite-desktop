@@ -316,29 +316,80 @@ const MIGRATIONS: string[] = [
 
 export type Row = Record<string, unknown>;
 
+export interface DatabaseOptions {
+  /** The schema, one step per entry (default: the account database's). `app.db` brings its own. */
+  migrations?: readonly string[];
+}
+
 export class Database {
-  readonly raw: DatabaseSync;
+  private db: DatabaseSync;
   private closed = false;
+  private file: string;
+  private readonly migrations: readonly string[];
+  /** Run after each open (the first, and every `swap`): modules whose tables live beside the schema make them here. */
+  private readonly openers: Array<(db: Database) => void> = [];
   /** The schema version this start found, before its migrations ran ("What's New" after an update says what changed). */
   migratedFrom = 0;
 
-  constructor(path: string) {
-    this.raw = new DatabaseSync(path);
-    this.raw.exec('PRAGMA journal_mode = WAL;');
-    this.raw.exec('PRAGMA synchronous = FULL;');
-    this.raw.exec('PRAGMA foreign_keys = ON;');
-    this.raw.exec('PRAGMA busy_timeout = 3000;');
+  constructor(path: string, opts: DatabaseOptions = {}) {
+    this.migrations = opts.migrations ?? MIGRATIONS;
+    this.file = path;
+    this.db = this.open(path);
+  }
+
+  /** The open connection. A getter: `swap` replaces it, and everything holding this object follows. */
+  get raw(): DatabaseSync {
+    return this.db;
+  }
+
+  /** The file this database is (`:memory:` in tests). */
+  get path(): string {
+    return this.file;
+  }
+
+  private open(path: string): DatabaseSync {
+    const raw = new DatabaseSync(path);
+    raw.exec('PRAGMA journal_mode = WAL;');
+    raw.exec('PRAGMA synchronous = FULL;');
+    raw.exec('PRAGMA foreign_keys = ON;');
+    raw.exec('PRAGMA busy_timeout = 3000;');
+    this.db = raw;
     this.migrate();
+    return raw;
+  }
+
+  /**
+   * Another account's database in place of this one (Connection & Startup §1.3): the connection closes, the other
+   * file opens and is migrated, and every `onOpen` runs again. Object identity is kept, so the ~60 services holding
+   * this `Database` follow without being rebuilt. Called only once the account's services were stopped.
+   */
+  swap(path: string): void {
+    if (path === this.file && !this.closed) return;
+    try {
+      this.db.close();
+    } catch {
+      /* already closed */
+    }
+    this.closed = false;
+    this.file = path;
+    this.open(path);
+    for (const fn of this.openers) fn(this);
+  }
+
+  /** `fn` now, and again after every `swap`. */
+  onOpen(fn: (db: Database) => void): void {
+    this.openers.push(fn);
+    if (!this.closed) fn(this);
   }
 
   private migrate(): void {
     const row = this.raw.prepare('PRAGMA user_version').get() as { user_version: number };
     const current = row.user_version;
     this.migratedFrom = current;
-    for (let v = current; v < MIGRATIONS.length; v++) {
+    for (let v = current; v < this.migrations.length; v++) {
       this.raw.exec('BEGIN');
       try {
-        this.raw.exec(MIGRATIONS[v]!);
+        this.raw.exec(this.migrations[v]!);
         this.raw.exec(`PRAGMA user_version = ${v + 1}`);
         this.raw.exec('COMMIT');
       } catch (e) {

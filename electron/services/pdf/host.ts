@@ -26,11 +26,12 @@ const log = logger('pdf');
  * by a few lines only.
  */
 export interface PdfStudioDeps {
-  profile: string;
+  /** The open account's profile folder: a getter follows account switches (Connection & Startup §1.3). */
+  profile: string | (() => string);
   userData: string;
   http: HttpLike;
   /** Seals the thumbnail cache; null when there is no lasting key (no keyring): nothing is cached on disk then. */
-  cacheKey: Buffer | null;
+  cacheKey: Buffer | null | (() => Buffer | null);
   policy: () => PdfPolicy;
   desktop: () => { downloads: boolean; diskCache: boolean };
   audit: (action: string, details: Record<string, unknown>) => void;
@@ -94,11 +95,16 @@ const winOf = (sender: number): BrowserWindow | null => {
 };
 
 export function createPdfStudio(deps: PdfStudioDeps): PdfStudio {
-  const storage = new PdfStorage(join(deps.profile, 'PDF'), () => deps.cacheKey);
+  const profile = (): string => (typeof deps.profile === 'function' ? deps.profile() : deps.profile);
+  const cacheKey = (): Buffer | null => (typeof deps.cacheKey === 'function' ? deps.cacheKey() : deps.cacheKey);
+  const storage = new PdfStorage(() => join(profile(), 'PDF'), cacheKey);
   void storage.prepare().catch((e) => log.warn('pdf storage not prepared', { error: String(e) }));
   const local = new PdfLocalFiles({ maxBytes: () => deps.policy().maxBytes, forbidden: () => [deps.userData] });
   // Unsaved work kept on this computer (PDF-SAVE-020), sealed under a key from the credential store; none without one.
-  const recovery = new PdfRecovery(join(deps.profile, 'PDF'), () => (deps.cacheKey ? Buffer.from(hkdfSync('sha256', deps.cacheKey, 'worksuite-pdf', 'recovery', 32)) : null));
+  const recovery = new PdfRecovery(() => join(profile(), 'PDF'), () => {
+    const key = cacheKey();
+    return key ? Buffer.from(hkdfSync('sha256', key, 'worksuite-pdf', 'recovery', 32)) : null;
+  });
   void recovery.trim().catch(() => undefined);
 
   // Once PDF Studio has been used, a warm engine waits for the next document, so opening one does not wait for the

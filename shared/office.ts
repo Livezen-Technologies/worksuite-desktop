@@ -393,7 +393,8 @@ export interface ExternalApp {
   label: string;
 }
 
-export type LocalCopyState = 'downloading' | 'open' | 'changed' | 'uploading' | 'uploaded' | 'conflict' | 'failed' | 'missing';
+/** `quota`: the edits could not go up because the account's storage is full; they wait on this computer (screen 13). */
+export type LocalCopyState = 'downloading' | 'open' | 'changed' | 'uploading' | 'uploaded' | 'conflict' | 'failed' | 'missing' | 'quota';
 
 /** A copy of a Drive file opened in another app on this computer, watched for edits to bring back. */
 export interface OfficeLocalCopy {
