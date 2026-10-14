@@ -11,6 +11,15 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.256 — 2026-10-14
+
+- **A project task opens in the full task editor (Projects SRS v1.2).** From the board, the list, My work, Time, Milestones, a notification or a link, a project task now opens in a centred window — the same editor the Tasks app uses — instead of the narrow side panel. Title, description with @mentions, checklist, attachments and conversation sit beside the project's own fields: type, sprint, milestone, reviewer, parent, points, estimate, billable, and the blocked reason. Dependencies (waits on / blocks) and time (logged against the estimate, Start timer, Log time, each entry marked Pending, Approved, Sent back or Invoiced) are in the main column.
+- **Every field saves on its own**, with Saving… / Saved in the header. A field you may not change is shown read-only with the reason, never hidden: someone on the project without task rights can change status, progress, description and checklist; a manager can change everything.
+- **From the header:** Copy link, open in a window of its own, Duplicate, Convert to sub-task of…, Move to another project…, Save as template task, Archive, Delete, and Complete / Reopen. Blocked asks why first; Complete moves the card on the board straight away.
+- **Keys:** Esc closes, ⌘/Ctrl+Enter completes, ⌘/Ctrl+L copies the link, T starts the timer, L logs time, J/K step to the next or previous task of the view behind without closing.
+- **Offline:** the task opens from the cache with a banner; status, a comment and logged time queue and are sent when you are back; everything else says it needs a connection.
+- Where it bites: needs the server's Tasks 1.5.0 and Project 2.5.0; on an older server the editor reads the project task the old way. Projects module 1.5.0, Tasks module 1.3.0.
+
 ## 0.2.255 — 2026-10-14
 
 - **A project's tasks as a list (Projects SRS v1.1).** Next to the board there is now a Board | List switch (Ctrl/⌘+Shift+L). The list shows number, title, status, assignee, priority, due (late in words), sprint, milestone, points, logged against estimate and last update; you choose the columns, group by status, assignee, sprint, milestone or priority, sort by any column (shift-click for a second), and filter with the board's search plus Mine, Overdue, Blocked, Bugs and Hide completed.
