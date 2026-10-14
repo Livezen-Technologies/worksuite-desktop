@@ -8,6 +8,7 @@ import { useDashboard, type DashboardDetail } from './api';
 import { BarRow, Kpi, ListLine, money, stageColour } from './parts';
 import type { CrmView } from './Rail';
 import { useCrmScope } from './scope';
+import { ApprovalsPanel } from './Approvals';
 
 /**
  * The CRM dashboard (CrmDashboard, desk-dashboard): my pipeline or the
@@ -15,10 +16,11 @@ import { useCrmScope } from './scope';
  * deals, weighted forecast, won this month, win rate) and four more under
  * them, then the pipeline by stage beside follow-ups and stalled deals, and
  * recent activity; leads by status, quotes out, who is carrying the
- * pipeline, lead sources and where leads arrive below. Two requests, as on
+ * pipeline, lead sources and where leads arrive below. Estimates and
+ * proposals waiting for my approval sit at the top, when there are any. Two requests, as on
  * the web: the first half paints at once, the heavier second half fills in.
  */
-export default function Dashboard({ onPick, onNewLead, onOpenDeal, onOpenLead }: { onPick: (v: CrmView) => void; onNewLead: () => void; onOpenDeal: (id: number) => void; onOpenLead: (id: number) => void }) {
+export default function Dashboard({ onPick, onNewLead, onOpenDeal, onOpenLead, onOpenProposal, onOpenEstimate }: { onPick: (v: CrmView) => void; onNewLead: () => void; onOpenDeal: (id: number) => void; onOpenLead: (id: number) => void; onOpenProposal?: (id: number) => void; onOpenEstimate?: (id: number) => void }) {
   const [mine, setMine] = useState(true);
   const scope = useCrmScope();
   const q = useDashboard(mine, scope.params);
@@ -49,6 +51,8 @@ export default function Dashboard({ onPick, onNewLead, onOpenDeal, onOpenLead }:
           Pipeline board
         </button>
       </PageHead>
+
+      <ApprovalsPanel onOpen={(r) => (r.doc === 'proposal' ? onOpenProposal?.(r.doc_id) : onOpenEstimate?.(r.doc_id))} />
 
       <div className="grid grid-cols-2 gap-2.5 @min-[760px]:grid-cols-4">
         <Kpi label="Open deals" value={k.open_deals} sub={money(k.open_value, currency)} onClick={() => onPick('pipe')} />

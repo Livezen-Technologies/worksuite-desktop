@@ -97,6 +97,8 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'files/:id', module: 'files', route: (p) => `/files/file/${p.id}` },
   { pattern: 'crm', module: 'crm', route: () => '/crm' },
   { pattern: 'crm/leads/:id', module: 'crm', route: (p) => `/crm/leads/${p.id}` },
+  { pattern: 'crm/proposals/:id', module: 'crm', route: (p) => `/crm?tab=proposals&proposal=${p.id}` },
+  { pattern: 'crm/estimates/:id', module: 'crm', route: (p) => `/crm?tab=estimates&estimate=${p.id}` },
   // Marketing (WS-MKT-SRS-001 MKT-DSK-01): the module, my call queue, a contact and an email campaign — in the web's
   // address grammar, which the Marketing shell reads (`?view=`), so a link and a notification land on the same screen.
   { pattern: 'marketing', module: 'marketing', route: () => '/marketing' },

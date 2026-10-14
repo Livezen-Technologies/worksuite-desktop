@@ -39,6 +39,7 @@ import { WallSheetWindow } from '../modules/chat/website/live/WallSheet';
 import { QuickAskWindow } from './QuickAskWindow';
 import { MailLinkGuard } from '../modules/mail/LinkGuard';
 import { MailReminders } from '../modules/mail/Reminders';
+import { ProposalLiveWatch } from '../modules/crm/LiveWatch';
 import { MailBackgroundSync } from '../modules/mail/BackgroundSync';
 import { canOpen } from '../core/access';
 
@@ -133,6 +134,8 @@ export function App() {
       {auth.stage === 'ready' && !locked ? <MailLinkGuard /> : null}
       {/* Due flags, snoozes and events, in the main window only (ENH-MAIL-03 DMO-NTF-05). */}
       {auth.stage === 'ready' && !locked && !guest && !hash.startsWith('#/window/') && canOpen('mail') ? <MailReminders /> : null}
+      {/* "Your customer is reading" (CRM SRS v1.3 §17): polls while signed in with the CRM, in the main window only. */}
+      {auth.stage === 'ready' && !locked && !guest && !hash.startsWith('#/window/') && canOpen('crm') ? <ProposalLiveWatch /> : null}
       {/* Keeps mail syncing while the server's sync service is not running, on every screen. */}
       {auth.stage === 'ready' && !guest && !hash.startsWith('#/window/') && canOpen('mail') ? <MailBackgroundSync /> : null}
       {/* The phone stays registered while locked, so a call in progress is not cut off; it rings only when unlocked. */}

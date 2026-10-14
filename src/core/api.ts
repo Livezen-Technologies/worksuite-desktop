@@ -43,6 +43,8 @@ export interface ApiResult<T> {
   local?: boolean;
   /** Fetched ahead with `peek`, so opening it has not marked it read at the server. */
   peeked?: boolean;
+  /** The envelope's `meta` (paging, tallies), for the lists that send it beside `data` rather than in it. */
+  meta?: unknown;
 }
 
 export type Query = Record<string, string | number | boolean | null | undefined>;
@@ -122,6 +124,7 @@ export async function request<T = unknown>(method: string, path: string, opts: {
     offline: res.headers.get('x-ws-offline') === '1',
     cachedAt: res.headers.get('x-ws-cached-at'),
     message: typeof json?.message === 'string' ? json.message : null,
+    ...(json && typeof json === 'object' && 'meta' in json ? { meta: json.meta } : {}),
   };
 }
 

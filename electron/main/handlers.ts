@@ -1017,7 +1017,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return ctx.mailAlerts.state();
   });
   router.handle('notifications:reminder', (input) =>
-    ctx.notifications.notify({ id: `reminder:${input.id}`, module: 'mail', title: input.title, body: input.body, sender: null, link: input.route, critical: false, flag: input.flag ?? null }),
+    ctx.notifications.notify({ id: `reminder:${input.id}`, module: input.route.startsWith('/crm') ? 'crm' : 'mail', title: input.title, body: input.body, sender: null, link: input.route, critical: false, flag: input.flag ?? null }),
   );
 
   // ── clipboard (FR-XFR-05; never monitored, FR-XFR-06) ──────────────────
