@@ -1,4 +1,4 @@
-import { apiGetMeta, apiPost, type ApiResult } from '../../core/api';
+import { apiDelete, apiGetMeta, apiPost, apiPut, type ApiResult } from '../../core/api';
 import { TASK_STATUS_LABEL, type ProjectTaskStatus } from '@shared/projects';
 
 /**
@@ -60,7 +60,7 @@ export interface SprintLite {
 export interface ProjectDetail {
   project: Project;
   progress?: { total: number; done: number; overdue: number; blocked: number; progress: number };
-  members?: Array<{ id: number; user_id: number; name: string; role: string }>;
+  members?: Array<{ id: number; user_id: number; name: string; role: string; capacity_hours?: string | null; load_percent?: number | null }>;
   sprints?: SprintLite[];
   can?: Can;
 }
@@ -78,6 +78,11 @@ export interface Task {
   project_code: string | null;
   sprint_id: number | null;
   sprint: string | null;
+  /** The list view's Milestone and Points columns (TaskRows::shape); absent on an older server. */
+  milestone_id?: number | null;
+  milestone?: string | null;
+  story_points?: number | null;
+  over_estimate?: boolean;
   assignee_id: number | null;
   assignee: string | null;
   reviewer_id: number | null;
@@ -103,6 +108,25 @@ export interface TaskListResponse {
   tasks: Task[];
   wip_limits?: Partial<Record<TaskStatus, number>>;
   can?: Can;
+  /** Project 2.4.0 (PRJ-LST-10): how many tasks match, and whether this answer holds only part of them. */
+  total?: number;
+  truncated?: boolean;
+}
+
+/** What `POST tasks/bulk` changes on every ticked task (PRJ-LST-08). */
+export interface BulkSet {
+  status?: TaskStatus;
+  blocked_reason?: string | null;
+  assignee_id?: number | null;
+  priority?: string;
+  sprint_id?: number | null;
+  due_date?: string | null;
+}
+
+/** Its answer: not all-or-nothing — each task done or refused with the single edit's reason. */
+export interface BulkResult {
+  done: number[];
+  refused: Array<{ id: number; number: string | null; reason: string }>;
 }
 
 export interface Comment {
@@ -238,6 +262,11 @@ export const read = {
 export const write = {
   createTask: (body: { project_id: number; title: string; status: TaskStatus; task_type?: string; priority?: string; due_date?: string | null; assignee_id?: number | null }) =>
     apiPost<{ id: number; task_number: string }>(`${API}/tasks`, body),
+  /** An inline edit in the list (assignee, priority, due): the task's own PUT, online only (PRJ-LST-07). */
+  updateTask: (id: number, body: { assignee_id?: number | null; priority?: string; due_date?: string | null; sprint_id?: number | null }) => apiPut<{ id: number }>(`${API}/tasks/${id}`, body),
+  /** Bulk on ticked rows (PRJ-LST-08): each id through the single-edit code; online only. */
+  bulk: (body: { ids: number[]; set: BulkSet } | { ids: number[]; delete: true }) => apiPost<BulkResult>(`${API}/tasks/bulk`, body),
+  deleteTask: (id: number) => apiDelete(`${API}/tasks/${id}`),
   /** An approval: online only (PRJ-DSK-04). Reject needs a note. */
   decideChange: (id: number, body: { decision: 'approve' | 'reject'; note?: string }) => apiPost(`${API}/changes/${id}/decide`, body),
 };

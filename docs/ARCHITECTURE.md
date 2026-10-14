@@ -492,7 +492,14 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   the counts), pinned projects (kept per server and person in `localStorage`, a view preference) and recent ones on
   the left; a project's board (`Board.tsx` — the columns, J/K, ←/→, Shift+←/→ moves the card, Enter opens, T timer,
   L log time, N new task, ⌘F filter, ⌘2 its timeline, ⌥⌘O a window of its own; the keys are caught in the capture
-  phase while the tab is in front, so ⌘2 is not the shell's "tab 2" here), a task's panel (`TaskPanel.tsx`), My work
+  phase while the tab is in front, so ⌘2 is not the shell's "tab 2" here) and, since projects 1.4.0, the same tasks
+  as a list (`TaskList.tsx`, rules in `list.ts`, PRJ-LST-01..10, D05: the Board | List switch and ⌘⇧L / Ctrl+Shift+L,
+  `/projects/<id>/board?view=list` or `/projects/<id>/list`, groups, sorting, quick filters, a column chooser, a
+  treegrid drawn 150 rows at a time; a status change is the board's own move and outbox entry, a reason with Blocked;
+  assignee, priority and due are the task's PUT and bulk is `POST tasks/bulk` — falling back to single edits on a
+  server without it — both online only; CSV with a BOM through `files:saveText`). Which view a project opens in, and
+  the list's layout, are remembered in `/api/prefs/projects.task_view[.p<id>]` with a copy in `localStorage` read
+  synchronously and for offline (`view-prefs.ts`, as `core/org-prefs.ts`); a task's panel (`TaskPanel.tsx`), My work
   grouped by the reader's own day (`logic.ts: groupMyWork`) and the day's time line. Its addresses are the web's
   (`routes.ts`, one `ProjectsView` kind per screen): `/projects/<id>` is a project's overview and its board
   `/projects/<id>/board` (`/tasks/<task>` a task over it; `/projects/board` the board of the project last worked in);
