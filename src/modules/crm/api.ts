@@ -1,5 +1,6 @@
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '../../core/api';
+import type { PageMeta } from './logic';
 
 /**
  * The CRM's server side — the shapes the CRM API returns, copied from the
@@ -140,6 +141,8 @@ export interface BoardColumn extends Stage {
 export interface Board {
   pipeline: { id: number } | null;
   columns: BoardColumn[];
+  /** The board's StatusBar, from servers that send it; else worked out from the open columns. */
+  meta?: { deals?: number; open_value?: number; weighted?: number } | null;
 }
 
 export interface Account {
@@ -221,6 +224,12 @@ export interface Quote {
   contact?: string | null;
   contact_email?: string | null;
   billing_address?: string | null;
+  decline_reason?: string | null;
+  /** The Billing invoice made from it, once one is. */
+  invoice_id?: number | null;
+  invoice_no?: string | null;
+  /** What the server offers on it; `invoice` false where Billing cannot make one. */
+  can?: { accept?: boolean; decline?: boolean; invoice?: boolean } | null;
   notes?: string | null;
   terms?: string | null;
   lines?: QuoteLine[];
@@ -311,7 +320,11 @@ export interface FollowUp {
   company: string | null;
   kind: string;
   kind_label: string;
-  subject: string | null;
+  /** What it is for ("Confirm the seat count"). */
+  subject: string | { type: 'lead' | 'deal' | 'account'; id: number; label: string | null } | null;
+  /** What it is about (CRM 1.2): the lead, deal or account. `subjectOf()` reads it. */
+  record?: { type: 'lead' | 'deal' | 'account'; id: number; label: string | null } | null;
+  title?: string | null;
   notes: string | null;
   assigned_to: number | null;
   assignee: string | null;
@@ -335,6 +348,7 @@ export interface FollowUp {
 
 export interface FollowUpList {
   items: FollowUp[];
+  meta?: PageMeta | null;
   counts: { overdue: number; today: number; upcoming: number };
   can: { create: boolean; complete: boolean; view_all: boolean };
 }
@@ -349,12 +363,24 @@ export interface FollowUpOptions {
   statuses: Record<string, string>;
 }
 
-/** The dashboard's first half; `mine` narrows it to the caller's own work. */
-export function useDashboard(mine: boolean) {
-  return useQuery({ queryKey: ['crm', 'dashboard', mine], queryFn: ({ signal }) => apiGet<DashboardData>('/api/crm/dashboard', mine ? { mine: 1 } : undefined, signal) });
+/** Reports (W5): won against forecast by month, wins and losses, sources, the sales cycle and each owner. */
+export interface CrmReports {
+  won_vs_forecast: Array<{ month: string; won: number; forecast: number }>;
+  win_loss: { won: number; lost: number; reasons: Array<{ reason: string; count: number }> };
+  sources: Array<{ source: string; leads: number; converted: number; rate: number | null }>;
+  cycle: { avg_days: number | null; by_stage: Array<{ stage: string; avg_days: number | null }> };
+  owners: Array<{ owner_id: number | null; name: string; open: number; won: number; won_value: number; win_rate: number | null }>;
+  currency?: string | null;
+}
+
+type Scope = { org_id?: number; org?: number };
+
+/** The dashboard's first half; `mine` narrows it to the caller's own work, `scope` to one company. */
+export function useDashboard(mine: boolean, scope: Scope = {}) {
+  return useQuery({ queryKey: ['crm', 'dashboard', mine, scope.org_id ?? 0], queryFn: ({ signal }) => apiGet<DashboardData>('/api/crm/dashboard', { ...(mine ? { mine: 1 } : {}), ...scope }, signal) });
 }
 
 /** Today's follow-ups and the late count — the rail's red badge. */
-export function useFollowUpCounts() {
-  return useQuery({ queryKey: ['crm', 'followups', 'today', false], queryFn: ({ signal }) => apiGet<FollowUpList>('/api/crm/followups', { view: 'today' }, signal), refetchInterval: 120_000 });
+export function useFollowUpCounts(scope: Scope = {}) {
+  return useQuery({ queryKey: ['crm', 'followups', 'today', false, scope.org_id ?? 0], queryFn: ({ signal }) => apiGet<FollowUpList>('/api/crm/followups', { view: 'today', ...scope }, signal), refetchInterval: 120_000 });
 }

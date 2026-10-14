@@ -9,60 +9,65 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Field, input, PageHead, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
 import type { FollowUp, FollowUpList, FollowUpOptions } from './api';
-import { crmCan } from './parts';
+import { Chips, crmCan } from './parts';
+import { exportCrmCsv } from './exportCsv';
+import { lateLabel, subjectOf, whatFor, type RecordRef } from './logic';
+import { ScheduleFollowUp, useFollowUpOptions } from './Schedule';
+import { useCrmScope } from './scope';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
- * Follow-ups (CrmFollowUps): what is due today, late, to come, done or called
- * off — mine, or everybody's for whoever may see them. Each one can be closed
- * with "How did it go?" (which may set the next), moved, or called off with a
- * reason. A follow-up's time is on the clock it was agreed in (`due_local`),
- * so it is shown as written.
+ * Follow-ups (CrmFollowUps, desk-followups): late, due today, to come, done
+ * or called off — mine, or everybody's for whoever may see them — for the
+ * company the CRM is showing. A follow-up is about a lead, a deal or an
+ * account, and its name opens that record. Each one can be closed with "How
+ * did it go?" (which may set the next), moved, or called off with a reason;
+ * Schedule sets a new one on any of the three; Export saves the list. A
+ * follow-up's time is on the clock it was agreed in (`due_local`), so it is
+ * shown as written.
  */
-const VIEWS: Array<{ key: string; label: string }> = [
-  { key: 'today', label: 'Due today' },
-  { key: 'overdue', label: 'Late' },
+const VIEWS: Array<{ key: string; label: string; red?: boolean }> = [
+  { key: 'overdue', label: 'Late', red: true },
+  { key: 'today', label: 'Today' },
   { key: 'upcoming', label: 'To come' },
   { key: 'completed', label: 'Done' },
   { key: 'cancelled', label: 'Called off' },
 ];
 
-const KIND_ICON: Record<string, string> = { call: 'phone', meeting: 'calendar', email: 'mail', whatsapp: 'chat', visit: 'map-pin', task: 'tasks' };
+const KIND_ICON: Record<string, string> = { call: 'phone', meeting: 'calendar', email: 'mail', whatsapp: 'chat', visit: 'map-pin', task: 'tasks', demo: 'monitor', quotation: 'file-text' };
 
-export default function FollowUps({ onOpenLead }: { onOpenLead: (id: number) => void }) {
+export default function FollowUps({ onOpen }: { onOpen: (r: RecordRef) => void }) {
   const qc = useQueryClient();
   const [view, setView] = useState('today');
   const [all, setAll] = useState(false);
   const [closing, setClosing] = useState<FollowUp | null>(null);
   const [moving, setMoving] = useState<FollowUp | null>(null);
   const [calling, setCalling] = useState<FollowUp | null>(null);
-  const orgId = useStore(app, (s) => s.organizationId);
+  const [scheduling, setScheduling] = useState(false);
+  const scope = useCrmScope();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const canEdit = crmCan(perms, 'crm.followup.edit');
-  const q = useQuery({ queryKey: ['crm', 'followups', view, all, orgId], queryFn: ({ signal }) => apiGet<FollowUpList>('/api/crm/followups', { view, all: all ? 1 : undefined, org: orgId ?? undefined }, signal), staleTime: 0 });
-  const options = useQuery({ queryKey: ['crm', 'followup-options'], queryFn: ({ signal }) => apiGet<FollowUpOptions>('/api/crm/followups/options', undefined, signal), staleTime: 10 * 60_000 });
+  const canExport = crmCan(perms, 'crm.export');
+  const filters = { view, all: all ? 1 : undefined, ...scope.params };
+  const q = useQuery({ queryKey: ['crm', 'followups', view, all, scope.orgId ?? 0], queryFn: ({ signal }) => apiGet<FollowUpList>('/api/crm/followups', filters, signal), staleTime: 0 });
+  const options = useFollowUpOptions();
   const refresh = () => void qc.invalidateQueries({ queryKey: ['crm'] });
-  const counts = q.data?.counts;
+  const counts: Record<string, number | undefined> = { ...(q.data?.counts ?? {}), ...(q.data?.meta?.counts ?? {}) };
   const can = q.data?.can;
+  const items = q.data?.items ?? [];
+  const exportList = () =>
+    void exportCrmCsv('/api/crm/followups/export', filters, 'follow-ups', () => [
+      ['Due', 'Time zone', 'Kind', 'About', 'Company', 'What for', 'Assigned to', 'Priority', 'Standing', 'Outcome'],
+      ...items.map((f) => [f.due_local, f.timezone, f.kind_label, subjectOf(f)?.label ?? f.lead, f.company, whatFor(f), f.assignee, f.priority, f.standing, f.outcome_label]),
+    ]);
 
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-3">
-      <PageHead title="Follow-ups" />
-      <div className="flex flex-wrap items-center gap-1.5">
-        <div role="tablist" aria-label="Follow-ups" className="flex flex-wrap gap-1.5">
-          {VIEWS.map((v) => {
-            const on = view === v.key;
-            const n = v.key === 'overdue' ? counts?.overdue : v.key === 'today' ? counts?.today : undefined;
-            return (
-              <button key={v.key} type="button" role="tab" aria-selected={on} onClick={() => setView(v.key)} className={cx('h-[30px] rounded-full px-3 text-[12.5px] font-semibold', on ? 'bg-[#0F1B3D] text-white dark:bg-primary' : 'border border-line bg-surface text-ink hover:bg-subtle')}>
-                {v.label}
-                {n ? <span className={cx('ml-1.5 font-bold', v.key === 'overdue' ? (on ? 'text-[#FFB4A6]' : 'text-danger') : on ? 'text-white/70' : 'text-ink-3')}>{n}</span> : null}
-              </button>
-            );
-          })}
-        </div>
+      <div className="flex flex-wrap items-center gap-2">
+        <h1 className="m-0 mr-3 text-[20px] font-bold text-ink">Follow-ups</h1>
+        <Chips label="Follow-ups" value={view} onChange={setView} options={VIEWS.map((v) => ({ id: v.key, label: v.label, count: counts[v.key], red: v.red }))} />
         <span className="flex-1" />
         {can?.view_all ? (
           <label className="flex items-center gap-1.5 text-[13px] font-semibold text-ink">
@@ -70,81 +75,92 @@ export default function FollowUps({ onOpenLead }: { onOpenLead: (id: number) => 
             Everybody’s
           </label>
         ) : null}
+        {canExport ? (
+          <button type="button" className={btn} onClick={exportList}>
+            <Icon name="download" size={14} /> Export
+          </button>
+        ) : null}
+        {can?.create ?? crmCan(perms, 'crm.followup.create') ? (
+          <button type="button" className={btnPrimary} onClick={() => setScheduling(true)}>
+            <Icon name="calendar-plus" size={14} /> Schedule
+          </button>
+        ) : null}
       </div>
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       <div className="flex flex-col gap-2">
-        {(q.data?.items ?? []).map((f) => (
-          <Card key={f.id} f={f} canComplete={!!can?.complete} canEdit={canEdit} onOpenLead={onOpenLead} onClose={() => setClosing(f)} onMove={() => setMoving(f)} onCallOff={() => setCalling(f)} />
+        {items.map((f) => (
+          <Card key={f.id} f={f} canComplete={!!can?.complete} canEdit={canEdit} onOpen={onOpen} onClose={() => setClosing(f)} onMove={() => setMoving(f)} onCallOff={() => setCalling(f)} />
         ))}
-        {q.data && !q.data.items.length ? (
+        {q.data && !items.length ? (
           <div className="rounded-[12px] border border-dashed border-line bg-surface px-6 py-10 text-center">
             <b className="text-[14px] text-ink">{view === 'overdue' ? 'Nothing is late' : view === 'today' ? 'Nothing is due today' : 'Nothing here'}</b>
-            {view === 'today' || view === 'overdue' ? <p className="m-0 mt-1 text-[12.5px] text-ink-3">Follow-ups you schedule on a lead appear here.</p> : null}
+            {view === 'today' || view === 'overdue' ? <p className="m-0 mt-1 text-[12.5px] text-ink-3">Follow-ups you schedule on a lead, a deal or an account appear here.</p> : null}
           </div>
         ) : null}
       </div>
       {closing ? <HowItWent f={closing} options={options.data} onClose={() => setClosing(null)} onDone={() => (setClosing(null), refresh())} /> : null}
       {moving ? <Move f={moving} onClose={() => setMoving(null)} onDone={() => (setMoving(null), refresh())} /> : null}
       {calling ? <CallOff f={calling} onClose={() => setCalling(null)} onDone={() => (setCalling(null), refresh())} /> : null}
+      {scheduling ? <ScheduleFollowUp subject={null} onClose={() => setScheduling(false)} onDone={() => (setScheduling(false), refresh())} /> : null}
     </div>
   );
 }
 
-function lateText(minutes: number | null): string | null {
-  if (!minutes || minutes <= 0) return null;
-  if (minutes < 60) return `${minutes} min late`;
-  if (minutes < 1440) return `${Math.round(minutes / 60)} h late`;
-  const d = Math.floor(minutes / 1440);
-  return `${d} ${d === 1 ? 'day' : 'days'} late`;
-}
-
-/** "9:30 AM", or "21 Sep, 3:00 PM" when not today — on the follow-up's own clock. */
+/** "14:00", or "21 Sep, 3:00 PM" when not today — on the follow-up's own clock. */
 function when(local: string): string {
   const day = local.slice(0, 10);
   const time = wallTimeLabel(local);
-  return day === todayInZone() ? time : `${dayLabel(day, 'short')}, ${time}`;
+  return day === todayInZone() ? `Today ${time}` : `${dayLabel(day, 'short')}, ${time}`;
 }
 
-const STANDING: Record<FollowUp['standing'], [string, string]> = {
-  overdue: ['Late', 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger'],
-  due: ['Due', 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning'],
-  upcoming: ['To come', 'bg-selection text-primary'],
-  completed: ['Done', 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success'],
-  cancelled: ['Called off', 'bg-subtle text-ink-2'],
+const STANDING: Record<FollowUp['standing'], string> = {
+  overdue: 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger',
+  due: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning',
+  upcoming: 'bg-selection text-primary',
+  completed: 'bg-[#E4F4EA] text-[#145C39] dark:bg-success-bg dark:text-success',
+  cancelled: 'bg-subtle text-ink-2',
 };
 
-function Card({ f, canComplete, canEdit, onOpenLead, onClose, onMove, onCallOff }: { f: FollowUp; canComplete: boolean; canEdit: boolean; onOpenLead: (id: number) => void; onClose: () => void; onMove: () => void; onCallOff: () => void }) {
+const SUBJECT_WORD: Record<string, string> = { lead: 'Lead', deal: 'Deal', account: 'Account' };
+
+function Card({ f, canComplete, canEdit, onOpen, onClose, onMove, onCallOff }: { f: FollowUp; canComplete: boolean; canEdit: boolean; onOpen: (r: RecordRef) => void; onClose: () => void; onMove: () => void; onCallOff: () => void }) {
   const late = f.standing === 'overdue';
   const open = f.status === 'scheduled';
-  const [label, tone] = STANDING[f.standing];
-  const line = f.status === 'completed' ? [f.outcome_label, f.result_notes].filter(Boolean).join(' — ') : f.status === 'cancelled' ? (f.cancel_reason ?? 'Called off.') : f.subject || f.notes || 'No note was left with it.';
+  const about = subjectOf(f);
+  const name = about?.label ?? f.lead ?? f.company ?? 'Follow-up';
+  const pill = f.status === 'completed' ? 'Done' : f.status === 'cancelled' ? 'Called off' : late ? (lateLabel(f.late_minutes) ?? 'Late') : when(f.due_local);
+  const line =
+    f.status === 'completed'
+      ? [f.outcome_label, f.result_notes].filter(Boolean).join(' — ')
+      : f.status === 'cancelled'
+        ? (f.cancel_reason ?? 'Called off.')
+        : [whatFor(f) || f.notes, f.company && f.company !== name ? f.company : null, f.assignee, f.priority && f.priority !== 'normal' ? f.priority[0]!.toUpperCase() + f.priority.slice(1) : null].filter(Boolean).join(' · ');
   return (
-    <div data-followup={f.id} className="flex items-center gap-3 rounded-[12px] border border-line bg-surface px-3.5 py-3">
-      <span className={cx('flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-full', late ? 'bg-[#FCE9E4] text-[#B42318] dark:bg-danger-bg dark:text-danger' : 'bg-selection text-primary')}>
-        <Icon name={late ? 'clock' : (KIND_ICON[f.kind] ?? 'phone')} size={16} />
+    <div data-followup={f.id} className={cx('flex items-center gap-3 rounded-[10px] border bg-surface px-3.5 py-2.5', late && open ? 'border-danger/50' : 'border-line')}>
+      <span aria-hidden className={cx('flex h-[34px] w-[34px] shrink-0 items-center justify-center rounded-[8px]', late && open ? 'bg-[#FCE9E4] text-[#B42318] dark:bg-danger-bg dark:text-danger' : 'bg-selection text-primary')}>
+        <Icon name={KIND_ICON[f.kind] ?? 'phone'} size={16} />
       </span>
-      <span className="flex min-w-0 flex-1 flex-col gap-[3px]">
-        <span className="flex flex-wrap items-center gap-1.5">
-          {f.lead_id ? (
-            <button type="button" className="font-bold text-ink hover:underline" onClick={() => onOpenLead(f.lead_id!)}>
-              {f.lead ?? 'Lead'}
+      <span className="flex min-w-0 flex-1 flex-col gap-[2px]">
+        <span className="flex min-w-0 flex-wrap items-center gap-1 text-[13px]">
+          <b className="text-ink">{f.kind_label}</b>
+          <span className="text-ink-3">·</span>
+          {about ? (
+            <button type="button" className="truncate font-bold text-ink hover:text-primary hover:underline" title={`Open the ${SUBJECT_WORD[about.type]?.toLowerCase() ?? 'record'}`} onClick={() => onOpen(about)}>
+              {name}
             </button>
           ) : (
-            <b className="text-ink">{f.lead ?? f.subject ?? 'Follow-up'}</b>
+            <b className="truncate text-ink">{name}</b>
           )}
-          {f.company && f.company !== f.lead ? <span className="text-ink-3">{f.company}</span> : null}
-          <span className={cx('rounded-full px-2 py-0.5 text-[11.5px] font-bold', tone)}>{label}</span>
-          <span className="rounded-full bg-subtle px-2 py-0.5 text-[11.5px] font-bold text-ink-2">{f.kind_label}</span>
-          {f.priority && f.priority !== 'normal' ? <span className={cx('rounded-full px-2 py-0.5 text-[11.5px] font-bold capitalize', f.priority === 'urgent' ? 'bg-[#FCE9E4] text-[#8C2A14] dark:bg-danger-bg dark:text-danger' : 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning')}>{f.priority}</span> : null}
+          {about && about.type !== 'lead' ? <span className="rounded-full bg-subtle px-1.5 text-[10.5px] font-bold text-ink-2">{SUBJECT_WORD[about.type] ?? about.type}</span> : null}
         </span>
-        <span className="truncate text-[12.5px] text-ink-2">{line}</span>
-        <span className="text-[12px] text-ink-3">{[when(f.due_local), open ? lateText(f.late_minutes) : null, f.assignee].filter(Boolean).join(' · ')}</span>
+        <span className="truncate text-[12px] text-ink-3">{line || 'No note was left with it.'}</span>
       </span>
+      <span className={cx('shrink-0 rounded-full px-2.5 py-0.5 text-[11.5px] font-bold whitespace-nowrap', STANDING[f.standing])}>{pill}</span>
       {open ? (
         <>
           {canComplete ? (
-            <button type="button" className={cx(btnPrimary, 'h-[30px]')} onClick={onClose}>
-              How it went
+            <button type="button" className={cx(late ? btnPrimary : btn, 'h-[30px]')} onClick={onClose}>
+              How did it go?
             </button>
           ) : null}
           {canEdit ? (
@@ -152,8 +168,8 @@ function Card({ f, canComplete, canEdit, onOpenLead, onClose, onMove, onCallOff 
               <button type="button" className={cx(btn, 'h-[30px]')} onClick={onMove}>
                 Move
               </button>
-              <button type="button" aria-label="Call it off" title="Call it off" className={cx(btn, 'h-[30px] w-[30px] justify-center px-0')} onClick={onCallOff}>
-                <Icon name="x" size={14} />
+              <button type="button" className={cx(btn, 'h-[30px]')} onClick={onCallOff}>
+                Call off
               </button>
             </>
           ) : null}
@@ -201,7 +217,7 @@ function HowItWent({ f, options, onClose, onDone }: { f: FollowUp; options: Foll
         </>
       }
     >
-      <span className="-mt-1.5 text-ink-3">{[f.lead, f.company].filter(Boolean).join(' · ')}</span>
+      <span className="-mt-1.5 text-ink-3">{[subjectOf(f)?.label ?? f.lead, f.company].filter(Boolean).join(' · ')}</span>
       <Field label="What happened">
         <Select label="What happened" value={outcome} onValueChange={setOutcome} options={Object.entries(outcomes).map(([value, label]) => ({ value, label }))} />
       </Field>
@@ -209,7 +225,7 @@ function HowItWent({ f, options, onClose, onDone }: { f: FollowUp; options: Foll
         <textarea aria-label="Notes" value={notes} onChange={(e) => setNotes(e.target.value)} rows={3} placeholder="What was said, and anything the next person needs to know" className={cx(input, 'h-auto py-2')} />
       </Field>
       {closes ? (
-        <p className="m-0 rounded-[8px] bg-well px-3 py-2 text-[12px] text-ink-3">That outcome closes the lead, so nothing is scheduled after it.</p>
+        <p className="m-0 rounded-[8px] bg-well px-3 py-2 text-[12px] text-ink-3">That outcome closes it, so nothing is scheduled after it.</p>
       ) : (
         <>
           <label className="flex items-center gap-2 font-semibold text-ink">
@@ -271,7 +287,7 @@ function Move({ f, onClose, onDone }: { f: FollowUp; onClose: () => void; onDone
         </>
       }
     >
-      <p className="m-0 text-[12.5px] text-ink-2">When should {f.lead ?? 'this'} be followed up instead?</p>
+      <p className="m-0 text-[12.5px] text-ink-2">When should {subjectOf(f)?.label ?? f.lead ?? 'this'} be followed up instead?</p>
       <div className="grid grid-cols-2 gap-2">
         <Field label="Date">
           <input type="date" aria-label="Date" value={date} min={todayInZone()} onChange={(e) => setDate(e.target.value)} className={input} />
@@ -315,7 +331,7 @@ function CallOff({ f, onClose, onDone }: { f: FollowUp; onClose: () => void; onD
         </>
       }
     >
-      <p className="m-0 text-[12.5px] text-ink-2">Why is this follow-up not happening? Whoever reads the lead later sees this.</p>
+      <p className="m-0 text-[12.5px] text-ink-2">Why is this follow-up not happening? Whoever reads the record later sees this.</p>
       <input autoFocus aria-label="Why?" value={reason} onChange={(e) => setReason(e.target.value)} placeholder="They bought elsewhere" className={input} maxLength={255} />
     </Sheet>
   );

@@ -11,6 +11,14 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.254 — 2026-10-14
+
+- **CRM, redrawn (CRM SRS v1.2).** The dashboard, leads, pipeline board, follow-ups, Customer 360 and quote screens follow the new design. A customer and a quote now open as full pages; the board shows Open and Weighted totals per column and days in stage on each card; follow-ups say how late they are and close with How did it go?, Move or Call off.
+- **One company at a time.** Every CRM list, the board, the dashboard, search and reports follow the company the desktop is showing; a new lead, deal, account or quote asks which company it is for when you are in several.
+- **Follow-ups on deals and accounts**, not only leads — scheduled from the deal, the account or the Follow-ups view, and each one opens the record it is about.
+- **New:** CRM search grouped by type that opens the right record, a Reports view (won vs forecast, win/loss reasons, lead sources, sales cycle, by owner), CSV export of leads, follow-ups, accounts, quotes and reports, quote Accept / Decline / Convert to invoice, and a Pipelines and stages editor in CRM Settings.
+- Where it bites: the new features need the server's Crm 1.2.0; on an older server each one falls back or says it needs a newer server. CRM module 1.1.0.
+
 ## 0.2.253 — 2026-10-14
 
 **Connection & Startup: Personal (WorkSuite Cloud) and Enterprise accounts side by side.** The app was built for one

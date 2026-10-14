@@ -100,3 +100,67 @@ export function crmCan(perms: readonly string[] | undefined, slug: string): bool
   if (!perms) return false;
   return perms.includes(slug) || perms.includes('*') || (slug !== 'crm.view' && perms.includes('crm.manage'));
 }
+
+const KPI_TONE: Record<string, [string, string]> = {
+  blue: ['bg-primary', 'text-primary'],
+  green: ['bg-[#1F7A4D] dark:bg-success', 'text-[#145C39] dark:text-success'],
+  red: ['bg-danger', 'text-[#B42318] dark:text-danger'],
+  amber: ['bg-[#B45309] dark:bg-warning', 'text-[#9A4A06] dark:text-warning'],
+  plain: ['bg-line', 'text-ink'],
+};
+
+/** A figure tile (the shared Kpi): a 4 px accent rule on the left, the label, the figure and a line under it. */
+export function Kpi({ label, value, sub, tone = 'plain', onClick, size = 'lg' }: { label: string; value: ReactNode; sub?: ReactNode; tone?: keyof typeof KPI_TONE; onClick?: () => void; size?: 'lg' | 'sm' }) {
+  const [rule, text] = KPI_TONE[tone] ?? KPI_TONE.plain!;
+  const body = (
+    <>
+      <span aria-hidden className={cx('absolute top-0 bottom-0 left-0 w-1', rule)} />
+      <span className="text-[12px] font-semibold text-ink-3">{label}</span>
+      <b className={cx('truncate tabular-nums', size === 'lg' ? 'text-[22px] leading-tight' : 'text-[17px]', text)}>{value}</b>
+      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
+    </>
+  );
+  const cls = 'relative flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-[10px] border border-line bg-surface py-3 pr-3.5 pl-[18px] text-left';
+  return onClick ? (
+    <button type="button" data-kpi={label} onClick={onClick} className={cx(cls, 'hover:border-primary/50')}>
+      {body}
+    </button>
+  ) : (
+    <div data-kpi={label} className={cls}>
+      {body}
+    </div>
+  );
+}
+
+/** The count line under a list or board ("300 leads · 60 new · 12 unassigned"). */
+export function StatusBar({ children, right }: { children: ReactNode; right?: ReactNode }) {
+  return (
+    <div role="status" className="flex min-h-[34px] shrink-0 items-center gap-3 border-t border-line bg-well/60 px-3.5 py-1.5 text-[12px] text-ink-3">
+      <span className="min-w-0 flex-1 truncate">{children}</span>
+      {right}
+    </div>
+  );
+}
+
+/** The views and tabs inside a screen, as chips: the chosen one filled, a count after each, late ones in red. */
+export function Chips<T extends string>({ label, options, value, onChange }: { label: string; options: Array<{ id: T; label: string; count?: number | null; red?: boolean }>; value: T; onChange: (v: T) => void }) {
+  return (
+    <div role="tablist" aria-label={label} className="flex flex-wrap gap-1.5">
+      {options.map((o) => {
+        const on = o.id === value;
+        return (
+          <button key={o.id} type="button" role="tab" aria-selected={on} onClick={() => onChange(o.id)} className={cx('h-[30px] rounded-full px-3 text-[12.5px] font-semibold', on ? 'bg-primary text-white' : 'border border-line bg-surface text-ink hover:bg-subtle')}>
+            {o.label}
+            {o.count ? <span className={cx('ml-1.5 font-bold tabular-nums', o.red ? (on ? 'text-white' : 'text-danger') : on ? 'text-white/75' : 'text-ink-3')}>{o.count}</span> : null}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
+
+/** Two letters for a record's tile ("Highland Traders Holdings" → "HT"). */
+export function initialsOf(name: string | null | undefined): string {
+  const words = String(name ?? '').trim().split(/\s+/).filter(Boolean);
+  return ((words[0]?.[0] ?? '') + (words[1]?.[0] ?? '')).toUpperCase() || '?';
+}

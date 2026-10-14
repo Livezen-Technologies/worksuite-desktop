@@ -77,7 +77,7 @@ export default function Intake() {
   const [rotating, setRotating] = useState<Source | null>(null);
   const [removing, setRemoving] = useState<Source | null>(null);
   const [importing, setImporting] = useState(false);
-  const q = useQuery({ queryKey: ['crm', 'intake', orgId], queryFn: ({ signal }) => apiGet<{ sources: Source[]; fields: string[] }>('/api/crm/intake-sources', { org: orgId ?? undefined }, signal), enabled: canSources, retry: false });
+  const q = useQuery({ queryKey: ['crm', 'intake', orgId], queryFn: ({ signal }) => apiGet<{ sources: Source[]; fields: string[] }>('/api/crm/intake-sources', { org: orgId ?? undefined, org_id: orgId ?? undefined }, signal), enabled: canSources, retry: false });
   const refresh = () => void qc.invalidateQueries({ queryKey: ['crm', 'intake'] });
   const sources = q.data?.sources ?? [];
   const act = async (fn: () => Promise<unknown>, done: string) => {
