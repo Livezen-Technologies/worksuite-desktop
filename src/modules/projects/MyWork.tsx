@@ -11,6 +11,7 @@ import { qk, read, type Task } from './api';
 import { elapsedOf, setTimerState, submit, useProjectTimer } from './desk';
 import { daySegments, dueOf, filterMyWork, groupMyWork, perProject, withPending, type MyWorkFilter } from './logic';
 import { Ref, SectionTitle, StatusChip } from './parts';
+import { usePublishTaskOrder } from './task-editor';
 import type { ProjectsOutboxItem } from '@shared/projects';
 
 /**
@@ -47,6 +48,7 @@ export function MyWork({ me, today, offline, outbox, onOpenTask, onGo, onOffline
   const all = useMemo(() => (d ? [...d.overdue, ...d.today, ...d.this_week, ...d.later] : []), [d]);
   const { tasks, marks } = useMemo(() => withPending(all, outbox), [all, outbox]);
   const groups = groupMyWork(filterMyWork(tasks, filter, me, d?.waiting.reviews ?? []), today);
+  usePublishTaskOrder([...groups.overdue, ...groups.today, ...groups.week, ...groups.later].map((t) => t.id));
   const openCount = groups.overdue.length + groups.today.length + groups.week.length + groups.later.length;
   const projects = new Set(tasks.filter((t) => t.status !== 'completed').map((t) => t.project_id)).size;
 
