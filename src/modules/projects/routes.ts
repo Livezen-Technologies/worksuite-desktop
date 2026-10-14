@@ -17,7 +17,9 @@
  *   /projects/changes[/<id>]          Change requests, one open
  *   /projects/reports[/<kind>]        Reports, one address per report
  *   /projects/<id>                    A project's overview
- *   /projects/<id>/board              Its board; /projects/<id>/tasks/<task> a task open over it
+ *   /projects/<id>/board              Its tasks as the board or the list: `?view=list|board`, `/projects/<id>/list` the
+ *                                     list's alias; with no view, the one last used for the project (PRJ-LST-01/02);
+ *                                     /projects/<id>/tasks/<task> a task open over it (keeps `?view=`)
  *   /projects/<id>/<tab>              Its team, settings, activity, files, timeline, milestones, sprints[/<s>], budget,
  *                                     risks or changes[/<c>] — each under the project's tab strip
  *   ?new=blank | ?new=<template>      The New project dialog, over any view
@@ -34,7 +36,8 @@ export type ProjectsView =
   | { kind: 'my-work' }
   | { kind: 'time' }
   | { kind: 'changes'; id: number | null; projectId?: number | null }
-  | { kind: 'board'; projectId: number }
+  /** A project's tasks: `display` is the address's view, null when it names none (the remembered one then). */
+  | { kind: 'board'; projectId: number; display: TaskDisplay | null }
   /** `/projects/board`: the board of the project last worked in (the web's remembered project), else a choice. */
   | { kind: 'board-home' }
   | { kind: 'timer' }
@@ -55,6 +58,11 @@ export type ProjectsView =
   | { kind: 'risks'; projectId: number | null }
   | { kind: 'reports'; report: string | null }
   | { kind: 'web'; path: string };
+
+/** A project's tasks as cards in columns or as rows (PRJ-LST-01). */
+export type TaskDisplay = 'board' | 'list';
+
+const displayOf = (v: string | null): TaskDisplay | null => (v === 'list' || v === 'board' ? v : null);
 
 /** A project's own sections drawn here (PORTFOLIO); its board is `board`. */
 export type ProjectTab = 'overview' | 'team' | 'settings' | 'activity' | 'files';
@@ -91,7 +99,8 @@ export function viewOf(path: readonly string[], query: URLSearchParams): { view:
   // ── one project: its overview, board and own tabs, and its delivery and governance screens ──
   const [, , , , d] = path;
   const project = num(a);
-  if (project && (b === 'board' || b === 'tasks')) return { view: { kind: 'board', projectId: project }, taskId };
+  if (project && b === 'list' && !c) return { view: { kind: 'board', projectId: project, display: 'list' }, taskId };
+  if (project && (b === 'board' || b === 'tasks')) return { view: { kind: 'board', projectId: project, display: displayOf(query.get('view')) }, taskId };
   if (project && !b) return { view: { kind: 'project', projectId: project, tab: 'overview' }, taskId };
   if (project && b && PROJECT_TABS.includes(b) && !c) return { view: { kind: 'project', projectId: project, tab: b as ProjectTab }, taskId };
   if (project && b === 'timeline' && !c) return { view: { kind: 'timeline', projectId: project }, taskId };
@@ -102,4 +111,6 @@ export function viewOf(path: readonly string[], query: URLSearchParams): { view:
   return { view: { kind: 'web', path: `/${path.join('/')}` }, taskId: null };
 }
 
-export const boardRoute = (projectId: number, taskId?: number | null): string => (taskId ? `/projects/${projectId}/tasks/${taskId}` : `/projects/${projectId}/board`);
+/** A project's board — or, with `display: 'list'`, its list — with a task open over it or not. */
+export const boardRoute = (projectId: number, taskId?: number | null, display?: TaskDisplay | null): string =>
+  `${taskId ? `/projects/${projectId}/tasks/${taskId}` : `/projects/${projectId}/board`}${display === 'list' ? '?view=list' : ''}`;
