@@ -45,9 +45,10 @@ import { RisksScreen } from './screens/Risks';
  * the left; in the middle the whole module — the Dashboard, All projects, Templates, Clients, the Activity log and
  * Module settings, a project's page with its tabs (overview, board, timeline, sprints, milestones, team, budget, risks,
  * changes, files, activity, settings), My work, Timeline & Gantt, Milestones, Sprints, Time & approvals, Team
- * workload, Budget & cost, Risks, Change requests and Reports; a task open in the task modal over any of them
- * (ProjectTaskModal, PRJ-TED-01: `/projects/<id>/tasks/<task>` or `?task=`); the New project dialog over any of them — and, offline, the banner, the outbox and the choices a reconnect may need. A project's Time tab is
- * the one page still on the web. `/projects/timer` is the mini timer window (D02).
+ * workload, Budget & cost, Risks, Change requests and Reports; a task in the task modal over any of them
+ * (ProjectTaskModal, PRJ-TED-01: `/projects/<id>/tasks/<task>` or `?task=`); the New project dialog over any of them —
+ * and, offline, the banner, the outbox and the choices a reconnect may need. A project's Time tab is the one page
+ * still on the web. `/projects/timer` is the mini timer window (D02).
  */
 export default function ProjectsPage(_props: ModuleProps) {
   const { path, query } = useTab();
