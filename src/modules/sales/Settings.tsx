@@ -9,6 +9,7 @@ import { cx } from '../../components/ui';
 import { input, PageHead } from '../hr/parts';
 import { warehouses } from './api';
 import Channels from './Channels';
+import Printers from './Printers';
 import { KM } from './manage';
 
 /**
@@ -17,9 +18,10 @@ import { KM } from './manage';
  * appears here without a desktop release — the advanced ones for those who
  * may see them, and the sales channels. Who may do what, screens,
  * notifications and the history are the installation's settings shell,
- * which opens in the browser (marked).
+ * which opens in the browser (marked). Printers are this computer's: which
+ * printer takes labels and which delivery notes (FR-DSK-06, FR-LBL-06).
  */
-type Section = 'general' | 'advanced' | 'channels' | 'access' | 'screens' | 'organization' | 'notifications' | 'history' | 'changelog';
+type Section = 'general' | 'advanced' | 'channels' | 'printers' | 'access' | 'screens' | 'organization' | 'notifications' | 'history' | 'changelog';
 
 const NAV: Array<{ id: Section; label: string; native?: boolean }> = [
   { id: 'general', label: 'General', native: true },
@@ -29,12 +31,13 @@ const NAV: Array<{ id: Section; label: string; native?: boolean }> = [
   { id: 'notifications', label: 'Notifications' },
   { id: 'advanced', label: 'Advanced', native: true },
   { id: 'channels', label: 'Sales Channels', native: true },
+  { id: 'printers', label: 'Printers', native: true },
   { id: 'history', label: 'History' },
   { id: 'changelog', label: 'Change log' },
 ];
 
 export default function Settings({ org, section: asked }: { org: string; section?: string | null }) {
-  const [section, setSection] = useState<Section>(asked === 'channels' || asked === 'advanced' ? asked : 'general');
+  const [section, setSection] = useState<Section>(asked === 'channels' || asked === 'advanced' || asked === 'printers' ? asked : 'general');
   const spec = useQuery({ queryKey: KM.settings, queryFn: ({ signal }) => apiGet<ModuleSettings>('/api/module-settings/oms', undefined, signal) });
   const advanced = (spec.data?.spec.advanced ?? []).length > 0;
   const houses = useQuery({ queryKey: ['sales', 'warehouses'], queryFn: ({ signal }) => warehouses(signal), staleTime: 300_000 });
@@ -87,6 +90,7 @@ export default function Settings({ org, section: asked }: { org: string; section
             />
           ) : null}
           {section === 'channels' ? <Channels org={org} /> : null}
+          {section === 'printers' ? <Printers /> : null}
         </div>
       </div>
     </div>

@@ -1,12 +1,18 @@
-import { useQueryClient, type UseQueryResult } from '@tanstack/react-query';
+import { useQuery, useQueryClient, type UseQueryResult } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
-import { errorMessage } from '../../core/bridge';
+import { deliveryNoteHtml } from '@shared/sales';
+import { call, errorMessage } from '../../core/bridge';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { Icon } from '../../components/Icon';
+import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { btn, btnPrimary, Empty, Field, input, PageHead, Panel, Sheet } from '../hr/parts';
-import { cancelNote, deliveredNote, dispatchNote, K, raiseDelivery, ymd, type BoardNote, type BoardOrder, type Fulfilment as Board } from './api';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Panel, Sheet } from '../hr/parts';
+import { assignees, cancelNote, deliveredNote, dispatchNote, fetchFulfilmentBy, K, raiseDelivery, warehouses, ymd, type BoardNote, type BoardOrder, type Fulfilment as Board } from './api';
+import { OFFLINE_WRITE, useSalesOffline } from './offline';
 import { moneyFull, PriorityPill } from './parts';
+import { printNote, printSettings } from './print';
+import { fetchDelivery } from './ship';
 
 /**
  * Fulfilment (OmsFulfilment): the queue — picking, dispatch and delivery
@@ -14,17 +20,44 @@ import { moneyFull, PriorityPill } from './parts';
  * note for everything still to go; a note is sent (which issues the stock
  * and cannot be undone — a note can only be cancelled before it goes); a
  * note out with the customer is confirmed as received.
+ *
+ * D-06 (v1.1): narrowed to a warehouse or a person (FUL-06); a delivery note
+ * prints on this computer's delivery-note printer (FR-DSK-06), or is saved as a
+ * PDF where you choose.
  */
 type Asking = { kind: 'raise'; o: BoardOrder } | { kind: 'dispatch'; n: BoardNote } | { kind: 'cancel'; n: BoardNote } | { kind: 'received'; n: BoardNote };
 
-export default function Fulfilment({ board, onOpen }: { org: string; board: UseQueryResult<Board>; onOpen: (orderId: number) => void }) {
+export default function Fulfilment({ org, board: all, onOpen }: { org: string; board: UseQueryResult<Board>; onOpen: (orderId: number) => void }) {
   const qc = useQueryClient();
   const [asking, setAsking] = useState<Asking | null>(null);
   const [f, setF] = useState<Record<string, string>>({});
   const [busy, setBusy] = useState(false);
+  const [house, setHouse] = useState('');
+  const [who, setWho] = useState('');
+  const offline = useSalesOffline();
+  const houses = useQuery({ queryKey: ['sales', 'warehouses'], queryFn: ({ signal }) => warehouses(signal), staleTime: 300_000 });
+  const people = useQuery({ queryKey: ['sales', 'assignees'], queryFn: assignees, staleTime: 300_000, retry: false });
+  const ps = useQuery({ queryKey: ['sales', 'print-settings'], queryFn: printSettings, staleTime: 60_000 });
+  const narrowed = useQuery({ queryKey: [...K.fulfilment(org), house, who], queryFn: ({ signal }) => fetchFulfilmentBy(org, { warehouse: Number(house) || null, assignee: Number(who) || null }, signal), enabled: !!(house || who), refetchInterval: 60_000 });
+  const board = house || who ? narrowed : all;
   if (board.isLoading) return <Spinner />;
   if (board.error) return <ErrorNote error={board.error} onRetry={() => void board.refetch()} />;
   const b = board.data!.board;
+  const printTo = ps.data?.note_printer;
+  const savePdf = (n: BoardNote) =>
+    void fetchDelivery(n.id)
+      .then((d) => call('print:toPdf', { html: deliveryNoteHtml({ ...d.delivery, dn_number: n.number, so_number: n.order_number, client_name: n.client }, d.lines), title: n.number }))
+      .then((path) => path && toast('success', `Saved ${n.number}.`), (e) => toast('error', errorMessage(e)));
+  const noteButtons = (n: BoardNote) => (
+    <>
+      <button type="button" className={btnSmall} disabled={offline} title={offline ? OFFLINE_WRITE : `Print delivery note${printTo ? ` on ${printTo}` : ''}`} onClick={() => void printNote(n.id)}>
+        <Icon name="printer" size={13} /> Print
+      </button>
+      <button type="button" className={btnSmall} disabled={offline} onClick={() => savePdf(n)}>
+        Save as PDF…
+      </button>
+    </>
+  );
   const v = (k: string, d = '') => f[k] ?? d;
   const set = (k: string) => (e: { target: { value: string } }) => setF({ ...f, [k]: e.target.value });
   const ask = (a: Asking) => (setF({}), setAsking(a));
@@ -45,7 +78,24 @@ export default function Fulfilment({ board, onOpen }: { org: string; board: UseQ
 
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
-      <PageHead title="Fulfilment" sub="Picking, dispatch and delivery all happen in Inventory — this is the queue for them." />
+      <PageHead title="Fulfilment" sub={`Picking, dispatch and delivery all happen in Inventory — this is the queue for them.${printTo ? ` Delivery notes print to “${printTo}”.` : ''}`}>
+        <Select<string>
+          aria-label="Warehouse"
+          value={house}
+          onValueChange={setHouse}
+          options={[{ value: '', label: 'Every warehouse' }, ...(houses.data ?? []).map((h) => ({ value: String(h.id), label: h.name }))]}
+          className={input + ' !w-[180px]'}
+        />
+        <Select<string>
+          aria-label="Assigned to"
+          searchable
+          value={who}
+          onValueChange={setWho}
+          options={[{ value: '', label: 'Anyone' }, ...(people.data ?? []).map((p) => ({ value: String(p.id), label: p.name }))]}
+          className={input + ' !w-[180px]'}
+        />
+      </PageHead>
+      {offline ? <p className="m-0 rounded-[9px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning">{OFFLINE_WRITE}</p> : null}
       <Group title="Waiting to be picked" n={b.to_pick.length} sub="Confirmed, with stocked lines still undelivered and no open delivery note.">
         {b.to_pick.map((o) => (
           <Row
@@ -56,7 +106,7 @@ export default function Fulfilment({ board, onOpen }: { org: string; board: UseQ
             who={o.client ?? 'No customer'}
             meta={[o.warehouse, `${o.outstanding_lines} ${o.outstanding_lines === 1 ? 'line' : 'lines'} to send`, o.expected_date ? `due ${dateLabel(o.expected_date)}` : null, o.assigned_name ?? 'unassigned'].filter(Boolean).join(' · ')}
             right={moneyFull(o.total, o.currency)}
-            actions={<button type="button" className={btnPrimary + ' !h-[30px]'} onClick={() => ask({ kind: 'raise', o })}>Raise delivery note</button>}
+            actions={<button type="button" className={btnPrimary + ' !h-[30px]'} disabled={offline} onClick={() => ask({ kind: 'raise', o })}>Raise delivery note</button>}
           />
         ))}
       </Group>
@@ -72,8 +122,9 @@ export default function Fulfilment({ board, onOpen }: { org: string; board: UseQ
             meta={[`${n.line_count} ${n.line_count === 1 ? 'line' : 'lines'}`, n.ship_to].filter(Boolean).join(' · ')}
             actions={
               <>
-                <button type="button" className={btn + ' !h-[30px]'} onClick={() => ask({ kind: 'cancel', n })}>Cancel</button>
-                <button type="button" className={btnPrimary + ' !h-[30px]'} onClick={() => ask({ kind: 'dispatch', n })}>Dispatch</button>
+                {noteButtons(n)}
+                <button type="button" className={btn + ' !h-[30px]'} disabled={offline} onClick={() => ask({ kind: 'cancel', n })}>Cancel</button>
+                <button type="button" className={btnPrimary + ' !h-[30px]'} disabled={offline} onClick={() => ask({ kind: 'dispatch', n })}>Dispatch…</button>
               </>
             }
           />
@@ -88,7 +139,7 @@ export default function Fulfilment({ board, onOpen }: { org: string; board: UseQ
             onNumber={() => onOpen(n.order_id)}
             who={`${n.client ?? 'No customer'} · ${n.order_number}`}
             meta={[n.carrier ? `${n.carrier}${n.tracking_no ? ` · ${n.tracking_no}` : ''}` : 'no carrier recorded', n.dispatched_at ? `sent ${dateLabel(n.dispatched_at)}` : null].filter(Boolean).join(' · ')}
-            actions={<button type="button" className={btn + ' !h-[30px]'} onClick={() => ask({ kind: 'received', n })}>Confirm delivered</button>}
+            actions={<button type="button" className={btn + ' !h-[30px]'} disabled={offline} onClick={() => ask({ kind: 'received', n })}>Confirm delivered</button>}
           />
         ))}
       </Group>

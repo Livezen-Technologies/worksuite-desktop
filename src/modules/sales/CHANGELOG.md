@@ -4,6 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-15
+
+- Sales (OMS) SRS v1.1: D-01…D-14, shipping desk, dispatch
+  - Approvals (D-05): the queue waiting on me, decided with A / R / Enter; native banners with Approve and Open (`oms.approval`), Approve decides from the banner; the tray, the Dock and the rail count the queue (`/api/badges` `sales`), once.
+  - Keyboard (FR-DSK-03): ↑/↓, Enter, Space, ⌘/Ctrl+N, ⌘/Ctrl+F, Esc; an order opens in a new tab or its own window (FR-DSK-04).
+  - Orders and the drawer: overdue, payment and date filters, saved views, comments with mentions, cancel with a reason, retry a failed hand-off, payment link, re-order, approval preview and coupon check on New order.
+  - Printing on this computer (FR-DSK-06, FR-LBL-06): a printer per kind (Settings › Printers); labels as raw ZPL through the system's raw print path, or PDF; delivery notes laid out from Inventory's record; reports saved as the server's PDF.
+  - Offline (FR-DSK-07): order lists, orders, the dashboard and the companies read from this computer's copy; every write waits for the connection.
+  - Shipping desk (D-13): scan the note, check items, weigh, choose a courier, book, label prints by itself; close the day with the manifest. Dispatch board (D-14): live routes, stops, ETA and cash.
+  - New main-process service `electron/services/sales-desk.ts` (+ `shared/sales.ts`, `shared/ipc/sales-channels.ts`), now this module's paths.
+
 ## 1.1.0 — 2026-10-03
 
 - The organisation filter is the shared compact switcher (#214): one pill, search, several at once, a default organisation, remembered per person.

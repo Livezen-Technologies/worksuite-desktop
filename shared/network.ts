@@ -62,12 +62,13 @@ export function trayTooltip(s: {
  * Accounts only: not every inbox the person can open, so a busy shared inbox
  * left out of All Accounts never puts "99+" on the icon.
  */
-export function attentionCount(chat: number, notifications: number, support = 0, supportNotices = 0, mail = 0, mailNotices = 0): number {
+export function attentionCount(chat: number, notifications: number, support = 0, supportNotices = 0, mail = 0, mailNotices = 0, approvals = 0, approvalNotices = 0): number {
   // Support tickets count by the desk's own measure (unread or newly assigned, FR-DSK-04): their notifications in the
   // bell are not counted again. So does mail (ENH-MAIL-05 MNA-TRY-03): the included inboxes' unread, and not the bell's
-  // "New email" entries as well.
-  const bell = Math.max(0, (notifications || 0) - Math.max(0, supportNotices || 0) - (mail > 0 ? Math.max(0, mailNotices || 0) : 0));
-  return Math.max(0, chat || 0) + bell + Math.max(0, support || 0) + Math.max(0, mail || 0);
+  // "New email" entries as well. And orders waiting on my approval (WS-OMS-SRS-001 FR-DSK-05): the shared queue as the
+  // server counts it, not the bell's "needs your approval" entries as well.
+  const bell = Math.max(0, (notifications || 0) - Math.max(0, supportNotices || 0) - (mail > 0 ? Math.max(0, mailNotices || 0) : 0) - Math.max(0, approvalNotices || 0));
+  return Math.max(0, chat || 0) + bell + Math.max(0, support || 0) + Math.max(0, mail || 0) + Math.max(0, approvals || 0);
 }
 
 /** OS offline evidence is separate from failure to reach the configured server. */

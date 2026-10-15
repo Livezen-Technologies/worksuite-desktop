@@ -236,8 +236,13 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
   {
     input: defineDesktopManifest({
       id: 'sales', name: 'Sales & Orders', icon: 'trending-up', contractVersion: 1, desktop: { enabled: true },
-      offline: { mode: 'READ_CACHE', entities: ['order'], cache: ['/api/oms/orders'] },
-      quickActions: [{ id: 'new-order', label: 'New Order', route: '/sales?tab=orders&new=1' }],
+      offline: { mode: 'READ_CACHE', entities: ['order'], cache: ['/api/oms/orders', '/api/oms/overview', '/api/oms/organizations'] },
+      native: ['notifications', 'printing'],
+      quickActions: [
+        { id: 'new-order', label: 'New Order', route: '/sales?tab=orders&new=1' },
+        { id: 'sales-approvals', label: 'Orders to approve', route: '/sales?tab=appr' },
+        { id: 'sales-shipping-desk', label: 'Shipping desk', route: '/sales?tab=desk' },
+      ],
     }),
     load: () => import('./sales/SalesShell'),
   },

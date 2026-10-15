@@ -5,38 +5,48 @@ import { app } from '../../core/app-state';
 import { apiDelete, apiGet, apiPost } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
-import { openWebLink } from '../../core/tab-context';
-import { dateLabel, timeLabel } from '../../core/time';
+import { openWebLink, useTab } from '../../core/tab-context';
+import { dateLabel, relative, timeLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Caps, Empty, Field, Grid, input, Seg, Sheet, SidePanel } from '../hr/parts';
-import { approve, assign, assignees, cancel, confirm, fetchOrder, fetchTimeline, K, mayInvoice, movesFor, raiseInvoice, reject, submit, transition, type Move, type OrderDetail } from './api';
+import { addComment, approve, assign, assignees, cancel, commentText, confirm, deleteComment, duplicateOrder, editComment, fetchComments, fetchOrder, fetchTimeline, K, KV, mayInvoice, mention, movesFor, paymentLink, raiseInvoice, reject, retryIntegration, submit, transition, type Comment, type Move, type OrderDetail } from './api';
+import { OFFLINE_WRITE, offlineLine, useSalesOffline } from './offline';
+import { printNote } from './print';
 import { moneyFull, PaymentPill, PriorityPill, StatusPill } from './parts';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
- * One order (OmsOrderDrawer + OmsOrderSheet): the facts, the money and the
+ * One order (OmsOrderDrawer + OmsOrderSheet, D-03): the facts, the money and the
  * payment, then its lines (ordered / reserved / delivered / invoiced), the
- * approval steps, the timeline and what it produced (deliveries, invoices).
- * The buttons are what this person may do next: submit, approve or reject,
- * confirm (Inventory reserves the stock), move on, cancel (Inventory releases
- * it), assign, and share — email, WhatsApp, a chat, a link, the PDF.
+ * approval steps, the comments, the timeline and what it produced (deliveries,
+ * invoices). The buttons are what this person may do next: submit, approve or
+ * reject, confirm (Inventory reserves the stock), move on, cancel with a reason
+ * (Inventory releases it), assign, re-order, a payment link, and share — email,
+ * WhatsApp, a chat, a link, the PDF. A failed hand-off can be tried again. It
+ * opens in a tab or its own window (FR-DSK-04), and a delivery note prints on
+ * this computer's delivery-note printer (FR-DSK-06).
+ *
+ * Offline it is this computer's copy as last seen (FR-DSK-07): every button that
+ * changes the order waits for the connection.
  */
-type Tab = 'overview' | 'items' | 'approval' | 'activity' | 'linked';
+type Tab = 'overview' | 'items' | 'approval' | 'comments' | 'activity' | 'linked';
 const has = (perms: readonly string[] | undefined, p: string) => !!perms && (perms.includes('*') || perms.includes(p));
 
 export default function OrderDrawer({ id, onClose }: { id: number; onClose: () => void }) {
   const qc = useQueryClient();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const [tab, setTab] = useState<Tab>('overview');
-  const [asking, setAsking] = useState<null | 'reject' | 'cancel' | 'approve'>(null);
+  const [asking, setAsking] = useState<null | 'reject' | 'cancel' | 'approve' | 'reorder' | 'paylink'>(null);
+  const { openInNewTab, openInWindow } = useTab();
   const [sharing, setSharing] = useState<null | 'email' | 'whatsapp' | 'chat' | 'link'>(null);
   const [menu, setMenu] = useState(false);
   const [busy, setBusy] = useState(false);
   const q = useQuery({ queryKey: K.order(id), queryFn: ({ signal }) => fetchOrder(id, signal) });
   const o = q.data;
+  const offline = useSalesOffline(o?.offline);
   const refresh = () => void qc.invalidateQueries({ queryKey: K.all });
 
   const run = async (fn: () => Promise<unknown>, done: string) => {
@@ -73,9 +83,10 @@ export default function OrderDrawer({ id, onClose }: { id: number; onClose: () =
   if (q.isLoading) return <SidePanel label="Order" width={620} onClose={onClose} head={<b className="text-ink">Loading…</b>}><Spinner /></SidePanel>;
   if (q.error || !o) return <SidePanel label="Order" width={620} onClose={onClose} head={<b className="text-ink">Order</b>}><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></SidePanel>;
 
-  const moves = movesFor(o);
-  const pending = o.status === 'pending_approval';
-  const canSubmit = o.status === 'draft' && has(perms, 'oms.orders.edit');
+  const moves = offline ? [] : movesFor(o);
+  const pending = o.status === 'pending_approval' && !offline;
+  const canSubmit = o.status === 'draft' && has(perms, 'oms.orders.edit') && !offline;
+  const here = `/sales?tab=orders&order=${o.id}`;
   const pdf = () => void call('transfers:download', { orderPdf: o.id, name: `${o.number}.pdf`, open: true }).then(() => toast('success', 'Downloading the PDF — see Transfers.'), (e) => toast('error', errorMessage(e)));
   const copy = () =>
     void apiGet<{ text: string }>(`/api/share/oms/${o.id}/copy`).then(
@@ -95,7 +106,13 @@ export default function OrderDrawer({ id, onClose }: { id: number; onClose: () =
         </span>
       }
     >
+      {offline ? (
+        <p className="m-0 flex items-center gap-2 rounded-[9px] bg-warning-bg px-3 py-2 text-[12.5px] text-warning" role="status">
+          <Icon name="cloud-off" size={14} /> {offlineLine(o.cachedAt)} · read only.
+        </p>
+      ) : null}
       <div className="flex flex-wrap items-center gap-1.5" data-order-head>
+        {o.overdue ? <span className="inline-flex h-[22px] items-center rounded-[11px] bg-danger-bg px-2 text-[11.5px] font-bold text-danger">Overdue</span> : null}
         <StatusPill status={o.status} label={o.status_label} />
         <PriorityPill priority={o.priority} />
         <PaymentPill status={o.payment_status} />
@@ -144,12 +161,18 @@ export default function OrderDrawer({ id, onClose }: { id: number; onClose: () =
             {m.via === 'inventory-confirm' ? 'Confirm' : m.status === 'cancelled' ? 'Cancel order' : m.label}
           </button>
         ))}
-        {mayInvoice(o, perms) ? (
+        {!offline && mayInvoice(o, perms) ? (
           <button type="button" className={btn} disabled={busy} onClick={() => void run(() => raiseInvoice(o.id), `A draft invoice for ${o.number} is in Billing — see Linked.`)} title="A draft invoice for what was delivered and not yet invoiced">
             Raise invoice
           </button>
         ) : null}
         <span className="flex-1" />
+        <button type="button" className={btnSmall} onClick={() => openInNewTab(here, o.number)} title="Open in a new tab" aria-label="Open in a new tab">
+          <Icon name="external" size={14} />
+        </button>
+        <button type="button" className={btnSmall} onClick={() => openInWindow(here, o.number)} title="Open in its own window" aria-label="Open in its own window">
+          <Icon name="app-window" size={14} />
+        </button>
         <button type="button" className={btnSmall} onClick={copy} title="Copy the order’s details">
           <Icon name="copy" size={14} />
         </button>
@@ -170,11 +193,24 @@ export default function OrderDrawer({ id, onClose }: { id: number; onClose: () =
                   ['link', 'Shareable link', 'link'],
                 ] as const
               ).map(([k, label, icon]) => (
-                <button key={k} type="button" role="menuitem" onClick={() => (setMenu(false), setSharing(k))} className="flex h-8 w-full items-center gap-2 rounded-[7px] px-2 text-left text-[12.5px] font-semibold text-ink hover:bg-subtle">
+                <button key={k} type="button" role="menuitem" disabled={offline} onClick={() => (setMenu(false), setSharing(k))} className="flex h-8 w-full items-center gap-2 rounded-[7px] px-2 text-left text-[12.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50">
                   <Icon name={icon} size={14} className="text-ink-3" />
                   {label}
                 </button>
               ))}
+              <div className="my-1 border-t border-line" />
+              {has(perms, 'oms.orders.edit') || has(perms, 'billing.invoice') ? (
+                <button type="button" role="menuitem" disabled={offline || o.payment_status === 'paid'} onClick={() => (setMenu(false), setAsking('paylink'))} className="flex h-8 w-full items-center gap-2 rounded-[7px] px-2 text-left text-[12.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50">
+                  <Icon name="credit-card" size={14} className="text-ink-3" />
+                  Payment link
+                </button>
+              ) : null}
+              {has(perms, 'inventory.sell') ? (
+                <button type="button" role="menuitem" disabled={offline} onClick={() => (setMenu(false), setAsking('reorder'))} className="flex h-8 w-full items-center gap-2 rounded-[7px] px-2 text-left text-[12.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50">
+                  <Icon name="repeat" size={14} className="text-ink-3" />
+                  Re-order
+                </button>
+              ) : null}
             </div>
           ) : null}
         </span>
@@ -188,42 +224,87 @@ export default function OrderDrawer({ id, onClose }: { id: number; onClose: () =
           { id: 'overview', label: 'Overview' },
           { id: 'items', label: `Items · ${o.lines.length}` },
           { id: 'approval', label: `Approval${o.approval.steps.length ? ` · ${o.approval.steps.length}` : ''}` },
+          { id: 'comments', label: 'Comments' },
           { id: 'activity', label: 'Activity' },
           { id: 'linked', label: 'Linked' },
         ]}
       />
-      {tab === 'overview' ? <Overview o={o} canAssign={has(perms, 'oms.orders.assign')} onAssigned={refresh} /> : null}
+      {tab === 'overview' ? <Overview o={o} canAssign={has(perms, 'oms.orders.assign') && !offline} canRetry={!offline && (has(perms, 'oms.orders.edit') || has(perms, 'oms.settings'))} onAssigned={refresh} /> : null}
       {tab === 'items' ? <Items o={o} /> : null}
       {tab === 'approval' ? <Approval o={o} /> : null}
+      {tab === 'comments' ? <Comments id={o.id} offline={offline} /> : null}
       {tab === 'activity' ? <Activity id={o.id} /> : null}
-      {tab === 'linked' ? <Linked o={o} /> : null}
+      {tab === 'linked' ? <Linked o={o} offline={offline} /> : null}
 
       {asking === 'approve' ? <ReasonSheet title={`Approve ${o.number}?`} label="A note, if you like" optional busy={busy} onClose={() => setAsking(null)} onOk={(r) => void run(() => approve(o.id, r || undefined), `${o.number}: your step is approved.`).then((ok) => ok && setAsking(null))} okLabel="Approve" /> : null}
       {asking === 'reject' ? <ReasonSheet title={`Reject ${o.number}`} label="Why is it rejected? The person who raised it has to know what to change." busy={busy} onClose={() => setAsking(null)} onOk={(r) => void run(() => reject(o.id, r), `${o.number} rejected.`).then((ok) => ok && setAsking(null))} okLabel="Reject" danger /> : null}
       {asking === 'cancel' ? (
+        <ReasonSheet
+          title={`Cancel ${o.number}?`}
+          label="Why is it cancelled? The reason is kept on the order’s timeline."
+          note="Cancelling releases any reserved stock. An invoice or payment already made is a separate document in Billing and Finance and is not undone here. An order with anything delivered cannot be cancelled."
+          busy={busy}
+          onClose={() => setAsking(null)}
+          onOk={(r) => void run(() => (moves.find((m) => m.status === 'cancelled')?.via === 'transition' ? transition(o.id, 'cancelled', r) : cancel(o.id, r)), `${o.number} cancelled — reserved stock released.`).then((ok) => ok && setAsking(null))}
+          okLabel="Cancel order"
+          cancelLabel="Keep it"
+          danger
+        />
+      ) : null}
+      {asking === 'reorder' ? (
         <Sheet
-          title="Cancel this order?"
+          title={`Re-order ${o.number}?`}
           onClose={() => setAsking(null)}
           footer={
             <>
               <button type="button" className={btn} onClick={() => setAsking(null)}>
-                Keep it
+                Cancel
               </button>
-              <button type="button" className={btnPrimary + ' !bg-danger'} disabled={busy} onClick={() => void run(() => (moves.find((m) => m.status === 'cancelled')?.via === 'transition' ? transition(o.id, 'cancelled') : cancel(o.id)), `${o.number} cancelled — reserved stock released.`).then((ok) => ok && setAsking(null))}>
-                Cancel order
+              <button
+                type="button"
+                className={btnPrimary}
+                disabled={busy}
+                onClick={() =>
+                  void (async () => {
+                    setBusy(true);
+                    try {
+                      const r = await duplicateOrder(o.id);
+                      refresh();
+                      toast('success', `A new draft from ${o.number} is ready.`, { label: 'Open it', run: () => openInNewTab(`/sales?tab=orders&order=${r.id}`) });
+                      setAsking(null);
+                    } catch (e) {
+                      toast('error', errorMessage(e));
+                    } finally {
+                      setBusy(false);
+                    }
+                  })()
+                }
+              >
+                Make the draft
               </button>
             </>
           }
         >
-          <p className="m-0 text-[13px] leading-[1.5] text-ink-2">Cancelling releases any reserved stock. An invoice or payment already made is a separate document in Billing and Finance and is not undone here. An order with anything delivered cannot be cancelled.</p>
+          <p className="m-0 text-[13px] leading-[1.5] text-ink-2">A new draft order for {o.client ?? 'the same customer'} with the same lines, made in Inventory at today’s prices. Nothing is reserved until it is confirmed.</p>
         </Sheet>
       ) : null}
+      {asking === 'paylink' ? <PaymentLinkSheet o={o} onClose={() => setAsking(null)} /> : null}
       {sharing ? <ShareSheet o={o} how={sharing} onClose={() => setSharing(null)} /> : null}
     </SidePanel>
   );
 }
 
-function Overview({ o, canAssign, onAssigned }: { o: OrderDetail; canAssign: boolean; onAssigned: () => void }) {
+function Overview({ o, canAssign, canRetry, onAssigned }: { o: OrderDetail; canAssign: boolean; canRetry: boolean; onAssigned: () => void }) {
+  const [retrying, setRetrying] = useState<number | null>(null);
+  const retry = (integrationId: number) => {
+    setRetrying(integrationId);
+    void retryIntegration(o.id, integrationId)
+      .then(
+        () => (onAssigned(), toast('success', 'Tried again — see Hand-offs.')),
+        (e) => toast('error', errorMessage(e)),
+      )
+      .finally(() => setRetrying(null));
+  };
   const people = useQuery({ queryKey: ['sales', 'assignees'], queryFn: assignees, enabled: canAssign, staleTime: 300_000 });
   const d = (v: string | null | undefined) => (v ? dateLabel(v) : '—');
   const cur = o.currency;
@@ -277,7 +358,7 @@ function Overview({ o, canAssign, onAssigned }: { o: OrderDetail; canAssign: boo
         <div className="flex flex-col rounded-[10px] border border-line text-[13px]">
           <Money k="Lines, after their discounts" v={moneyFull(o.subtotal, cur)} />
           {o.discount_total ? <Money k="Line discounts given" v={moneyFull(o.discount_total, cur)} note="already in the lines" /> : null}
-          {o.coupon_code ? <Money k={`Coupon ${o.coupon_code}`} v={`− ${moneyFull(o.coupon_discount, cur)}`} tone="text-danger" /> : null}
+          {o.coupons?.length ? o.coupons.map((c) => <Money key={c.code} k={`Coupon ${c.code}`} v={`− ${moneyFull(c.discount, cur)}`} tone="text-danger" />) : o.coupon_code ? <Money k={`Coupon ${o.coupon_code}`} v={`− ${moneyFull(o.coupon_discount, cur)}`} tone="text-danger" /> : null}
           <Money k="Tax" v={moneyFull(o.tax_total, cur)} />
           <Money k="Shipping" v={moneyFull(o.shipping, cur)} />
           <Money k="Total" v={moneyFull(o.total, cur)} strong />
@@ -307,8 +388,19 @@ function Overview({ o, canAssign, onAssigned }: { o: OrderDetail; canAssign: boo
                 {x.error ? <span className="block text-[11.5px] text-danger">{x.error}</span> : null}
               </span>
               <span className={cx('rounded-full px-2 py-0.5 text-[11px] font-bold', x.status === 'failed' ? 'bg-danger-bg text-danger' : x.status === 'retrying' ? 'bg-warning-bg text-warning' : 'bg-subtle text-ink-2')}>{x.status}</span>
+              {canRetry && x.id && x.status === 'failed' ? (
+                <button type="button" className={btnSmall + ' !h-6 !px-2 !text-[11.5px]'} disabled={retrying === x.id} onClick={() => retry(x.id!)}>
+                  Retry
+                </button>
+              ) : null}
             </div>
           ))}
+        </div>
+      ) : null}
+      {o.cancel_reason ? (
+        <div>
+          <Caps>Why it was cancelled</Caps>
+          <p className="m-0 text-[13px] whitespace-pre-wrap text-ink-2">{o.cancel_reason}</p>
         </div>
       ) : null}
       {o.notes ? (
@@ -408,7 +500,7 @@ function Activity({ id }: { id: number }) {
   );
 }
 
-function Linked({ o }: { o: OrderDetail }) {
+function Linked({ o, offline }: { o: OrderDetail; offline: boolean }) {
   const { deliveries, invoices } = o.links;
   // An invoice opens in Invoices: listed for everyone, a way in only for whoever has that app.
   const billing = useCanOpen('billing');
@@ -422,6 +514,11 @@ function Linked({ o }: { o: OrderDetail }) {
               <b className="flex-1 text-ink">{d.dn_number}</b>
               <span className="text-ink-3">{d.delivered_at ? `delivered ${dateLabel(d.delivered_at)}` : ''}</span>
               <span className="rounded-full bg-subtle px-2 py-0.5 text-[11.5px] font-bold text-ink-2">{d.status}</span>
+              {d.status !== 'cancelled' ? (
+                <button type="button" className={btnSmall + ' !h-6 !px-2 !text-[11.5px]'} disabled={offline} title={offline ? OFFLINE_WRITE : 'Print on the delivery-note printer'} onClick={() => void printNote(d.id)}>
+                  <Icon name="printer" size={12} /> Print
+                </button>
+              ) : null}
             </div>
           ))
         ) : (
@@ -459,7 +556,7 @@ function Linked({ o }: { o: OrderDetail }) {
   );
 }
 
-function ReasonSheet({ title, label, optional, danger, okLabel, busy, onOk, onClose }: { title: string; label: string; optional?: boolean; danger?: boolean; okLabel: string; busy: boolean; onOk: (reason: string) => void; onClose: () => void }) {
+function ReasonSheet({ title, label, note, optional, danger, okLabel, cancelLabel = 'Cancel', busy, onOk, onClose }: { title: string; label: string; note?: string; optional?: boolean; danger?: boolean; okLabel: string; cancelLabel?: string; busy: boolean; onOk: (reason: string) => void; onClose: () => void }) {
   const [r, setR] = useState('');
   return (
     <Sheet
@@ -468,7 +565,7 @@ function ReasonSheet({ title, label, optional, danger, okLabel, busy, onOk, onCl
       footer={
         <>
           <button type="button" className={btn} onClick={onClose}>
-            Cancel
+            {cancelLabel}
           </button>
           <button type="button" className={btnPrimary + (danger ? ' !bg-danger' : '')} disabled={busy || (!optional && !r.trim())} onClick={() => onOk(r.trim())}>
             {okLabel}
@@ -476,10 +573,179 @@ function ReasonSheet({ title, label, optional, danger, okLabel, busy, onOk, onCl
         </>
       }
     >
+      {note ? <p className="m-0 text-[13px] leading-[1.5] text-ink-2">{note}</p> : null}
       <Field label={label}>
         <textarea autoFocus value={r} onChange={(e) => setR(e.target.value)} rows={3} className={input + ' !h-auto py-2'} />
       </Field>
     </Sheet>
+  );
+}
+
+/** A payment link through Billing (PAY-06): sent to the customer, or made to copy. The order's payment updates when it is paid. */
+function PaymentLinkSheet({ o, onClose }: { o: OrderDetail; onClose: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const [url, setUrl] = useState<string | null>(null);
+  const send = async (channel: 'email' | 'whatsapp' | 'copy') => {
+    setBusy(true);
+    try {
+      const r = await paymentLink(o.id, channel);
+      if (channel === 'copy') {
+        setUrl(r.url);
+        await navigator.clipboard.writeText(r.url).catch(() => undefined);
+        toast('success', 'Payment link copied.');
+      } else {
+        toast('success', channel === 'email' ? 'Payment link emailed to the customer.' : 'Payment link sent on WhatsApp.');
+        onClose();
+      }
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet
+      title={`Payment link · ${moneyFull(o.total, o.currency)}`}
+      onClose={onClose}
+      footer={
+        <button type="button" className={btn} onClick={onClose}>
+          {url ? 'Done' : 'Cancel'}
+        </button>
+      }
+    >
+      <p className="m-0 text-[13px] leading-[1.5] text-ink-2">The customer pays through Billing’s payment page; the order shows as paid when the payment comes in.</p>
+      <div className="flex flex-wrap gap-2">
+        <button type="button" className={btnPrimary} disabled={busy} onClick={() => void send('email')}>
+          Email it
+        </button>
+        <button type="button" className={btn} disabled={busy} onClick={() => void send('whatsapp')}>
+          WhatsApp
+        </button>
+        <button type="button" className={btn} disabled={busy} onClick={() => void send('copy')}>
+          Copy link
+        </button>
+      </div>
+      {url ? <code className="block truncate rounded-[9px] bg-subtle px-3 py-2 font-mono text-[12px] text-ink">{url}</code> : null}
+    </Sheet>
+  );
+}
+
+/**
+ * The order's comments (Ph2): newest last, mine to edit or delete. `@` picks somebody to mention — the server tells
+ * them. Offline they are read as last seen and nothing can be added.
+ */
+function Comments({ id, offline }: { id: number; offline: boolean }) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: KV.comments(id), queryFn: ({ signal }) => fetchComments(id, signal) });
+  const people = useQuery({ queryKey: ['sales', 'assignees'], queryFn: assignees, staleTime: 300_000, retry: false });
+  const [body, setBody] = useState('');
+  const [editing, setEditing] = useState<{ id: number; body: string } | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [mentioning, setMentioning] = useState(false);
+  const again = () => void qc.invalidateQueries({ queryKey: KV.comments(id) });
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true);
+    try {
+      await fn();
+      again();
+      return true;
+    } catch (e) {
+      toast('error', errorMessage(e));
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  if (q.isLoading) return <Spinner />;
+  if (q.error) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
+  const list: Comment[] = q.data ?? [];
+  return (
+    <div className="flex flex-col gap-2.5">
+      {!list.length ? <Empty text="No comments yet." /> : null}
+      {list.map((c) => (
+        <div key={c.id} data-comment={c.id} className="rounded-[10px] border border-line px-3 py-2 text-[12.5px]">
+          <div className="flex items-center gap-2 text-[11.5px] text-ink-3">
+            <b className="text-ink">{c.user?.name ?? 'Somebody'}</b>
+            <span>{relative(c.at)}</span>
+            {c.edited_at ? <span>· edited</span> : null}
+            <span className="flex-1" />
+            {c.can?.edit && !offline ? (
+              <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setEditing({ id: c.id, body: c.body })}>
+                Edit
+              </button>
+            ) : null}
+            {c.can?.delete && !offline ? (
+              <button type="button" className="font-semibold text-danger hover:underline" disabled={busy} onClick={() => void run(() => deleteComment(c.id))}>
+                Delete
+              </button>
+            ) : null}
+          </div>
+          {editing?.id === c.id ? (
+            <div className="mt-1.5 flex flex-col gap-1.5">
+              <textarea rows={3} value={editing.body} onChange={(e) => setEditing({ id: c.id, body: e.target.value })} className={input + ' !h-auto py-2'} />
+              <span className="flex justify-end gap-1.5">
+                <button type="button" className={btnSmall} onClick={() => setEditing(null)}>
+                  Cancel
+                </button>
+                <button type="button" className={btnSmall + ' !bg-primary !text-white'} disabled={busy || !editing.body.trim()} onClick={() => void run(() => editComment(c.id, editing.body.trim())).then((ok) => ok && setEditing(null))}>
+                  Save
+                </button>
+              </span>
+            </div>
+          ) : (
+            <p className="m-0 mt-1 whitespace-pre-wrap text-ink">{commentText(c.body)}</p>
+          )}
+        </div>
+      ))}
+      {offline ? (
+        <p className="m-0 text-[12px] text-ink-3">{OFFLINE_WRITE}</p>
+      ) : (
+        <div className="flex flex-col gap-1.5">
+          <textarea
+            rows={3}
+            value={body}
+            placeholder="Write a comment — @ to mention somebody"
+            aria-label="Write a comment"
+            onChange={(e) => {
+              setBody(e.target.value);
+              setMentioning(/(^|\s)@$/.test(e.target.value));
+            }}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && body.trim()) {
+                e.preventDefault();
+                void run(() => addComment(id, body.trim())).then((ok) => ok && setBody(''));
+              }
+            }}
+            className={input + ' !h-auto py-2'}
+          />
+          {mentioning && (people.data ?? []).length ? (
+            <div role="listbox" aria-label="Mention" className="flex max-h-40 flex-col overflow-y-auto rounded-[9px] border border-line bg-surface py-1 scroll-thin">
+              {(people.data ?? []).map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  role="option"
+                  aria-selected={false}
+                  className="px-3 py-1 text-left text-[12.5px] text-ink hover:bg-subtle"
+                  onClick={() => {
+                    setBody((b) => `${b.replace(/@$/, '')}${mention(p)} `);
+                    setMentioning(false);
+                  }}
+                >
+                  {p.name}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <span className="flex items-center justify-end gap-2">
+            <span className="text-[11.5px] text-ink-3">⌘↵ / Ctrl+Enter</span>
+            <button type="button" className={btnPrimary} disabled={busy || !body.trim()} onClick={() => void run(() => addComment(id, body.trim())).then((ok) => ok && setBody(''))}>
+              Comment
+            </button>
+          </span>
+        </div>
+      )}
+    </div>
   );
 }
 

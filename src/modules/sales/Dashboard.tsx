@@ -34,6 +34,8 @@ export default function Dashboard({ overview, onOpen, onList, onPick }: {
   const need: Array<[number, string, () => void, 'amber' | 'red']> = [
     [o.attention.pending_approval, 'waiting for approval', () => onList('pending_approval'), 'amber'],
     [o.attention.unassigned, 'in progress with nobody assigned', () => onList(null), 'amber'],
+    // Past their expected date (Ph1): the list narrowed to them.
+    [o.attention.overdue ?? 0, 'past their expected date', () => onPick('orders', '__overdue'), 'red'],
     [o.attention.stale, 'open for more than 30 days', () => onList(null), 'red'],
     [o.attention.integration_failures, 'hand-offs failed or retrying', () => onList(null), 'red'],
   ];

@@ -747,6 +747,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/billing/payments/${input.paymentSlip.payment}/slips/${input.paymentSlip.slip}`
       : rep
       ? `/api/oms/reports/${rep.report}?${new URLSearchParams({ from: rep.from, to: rep.to, format: 'csv', ...(rep.org ? { org: rep.org } : {}), ...(rep.report === 'sales' && rep.group ? { group: rep.group } : {}) })}`
+      : input.omsRouteSheet
+      ? `/api/oms/routes/${input.omsRouteSheet}/sheet`
       : input.websiteInsights
       ? `/api/chat/widget-admin/insights/export?${new URLSearchParams({ period: input.websiteInsights.period, ...(input.websiteInsights.widget ? { widget_id: String(input.websiteInsights.widget) } : {}) })}`
       : oc

@@ -93,6 +93,12 @@ export interface TrayModel {
   /** The included inboxes' unread, on the badge with the rest (MNA-TRY-03), and the bell's mail entries it stands for. */
   mailBadge?: number;
   mailNotices?: number;
+  /**
+   * Orders waiting on an approval decision I may make (WS-OMS-SRS-001 FR-DSK-05, the server's shared queue), and the
+   * unread bell entries about them it stands for: on the badge once, and a line in the menu that opens the queue.
+   */
+  salesApprovals?: number;
+  salesNotices?: number;
   /** The status chosen (Chat's presence: available, away, busy, dnd, offline), for the status line. Optional. */
   presence?: string | null;
 }
@@ -504,7 +510,8 @@ export class TrayService {
     const hasChat = m.apps.includes('chat');
     const hasSupport = m.apps.includes('support');
     const hasMail = m.apps.includes('mail');
-    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther, hasSupport ? (m.unreadSupport ?? 0) : 0, hasSupport ? (m.unreadSupportNotices ?? 0) : 0, hasMail ? (m.mailBadge ?? 0) : 0, hasMail ? (m.mailNotices ?? 0) : 0);
+    const hasSales = m.apps.includes('sales');
+    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther, hasSupport ? (m.unreadSupport ?? 0) : 0, hasSupport ? (m.unreadSupportNotices ?? 0) : 0, hasMail ? (m.mailBadge ?? 0) : 0, hasMail ? (m.mailNotices ?? 0) : 0, hasSales ? (m.salesApprovals ?? 0) : 0, hasSales ? (m.salesNotices ?? 0) : 0);
     // A website chat ringing shows as something waiting for you, whatever else is going on (RING-43) — Chat's, so only with Chat.
     const ringing = m.signedIn && hasChat ? m.webchatRinging.length + (m.webchatCalls?.length ?? 0) : 0;
     const state = ringing ? 'unread' : trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
@@ -759,6 +766,11 @@ export function trayMenu(m: TrayModel, a: TrayActions, now = new Date()): MenuIt
   } else if (has('support') && m.unreadSupport) {
     // Before the desk's figures arrive: the tickets waiting for me, from the badge's count.
     items.push({ label: `Support · ${m.unreadSupport} waiting`, submenu: [{ label: 'My tickets', click: () => a.openRoute('/support?view=mine') }, { label: 'Open Support', click: () => a.openRoute('/support') }] });
+  }
+  // Orders waiting on my approval (WS-OMS-SRS-001 D-05): the badge counts them; this opens the queue.
+  if (has('sales') && (m.salesApprovals ?? 0) > 0) {
+    const n = m.salesApprovals ?? 0;
+    items.push({ label: `Orders to approve · ${n}`, click: () => a.openRoute('/sales?tab=appr') });
   }
   if (has('marketing') && m.marketing) {
     const lines = inner(trayMarketingItems(m, a));
