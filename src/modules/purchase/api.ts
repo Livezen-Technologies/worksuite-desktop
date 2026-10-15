@@ -70,20 +70,22 @@ export interface PurchaseCan {
 }
 
 /**
- * The narrow permissions of G-04, each also allowed by the `inventory.purchase` umbrella (and Inventory's own
- * `inventory.manage` and super-admin, through Inventory's `can`). The server checks every one again.
+ * The narrow permissions of G-04 (docs/purchasing-core.md). `inventory.purchase` is the umbrella for the buying side
+ * (request, order, receive) but not for paying: `payables.*` stand alone, which is what separates buying from paying.
+ * `inventory.manage` and super-admin allow everything (Inventory's `can`). The server checks every one again.
  */
 export function purchaseCan(perms: readonly string[] | undefined): PurchaseCan {
   const has = (p: string) => !!perms && (perms.includes('*') || perms.includes(p));
-  const umbrella = can(perms, 'inventory.purchase');
+  const buyer = can(perms, 'inventory.purchase');
+  const manager = can(perms, 'inventory.manage');
   return {
-    request: umbrella || has('purchase.request') || has('purchase.order'),
-    order: umbrella || has('purchase.order'),
-    receive: umbrella || has('purchase.receive'),
-    approve: can(perms, 'inventory.approve') || has('purchase.approve'),
-    bill: umbrella || has('payables.bill'),
-    pay: umbrella || has('payables.pay'),
-    allocate: umbrella || has('payables.allocate') || has('payables.pay'),
+    request: buyer || has('purchase.request') || has('purchase.order'),
+    order: buyer || has('purchase.order'),
+    receive: buyer || has('purchase.receive'),
+    approve: can(perms, 'inventory.approve'),
+    bill: manager || has('payables.bill'),
+    pay: manager || has('payables.pay'),
+    allocate: manager || has('payables.allocate'),
     settings: can(perms, 'inventory.settings') || has('purchase.settings'),
     cost: can(perms, 'inventory.cost'),
   };
@@ -143,7 +145,7 @@ export interface QueueItem {
 export function queueItemOf(r: unknown): QueueItem | null {
   if (!r || typeof r !== 'object') return null;
   const x = r as Record<string, unknown>;
-  const doc = docOf(x.doc ?? x.document ?? x.type ?? x.entity_type);
+  const doc = docOf(x.doc_type ?? x.doc ?? x.document ?? x.type ?? x.entity_type);
   const id = num(x.id ?? x.entity_id);
   if (!doc || !id) return null;
   const str = (v: unknown) => (typeof v === 'string' && v.trim() ? v : null);
@@ -152,19 +154,19 @@ export function queueItemOf(r: unknown): QueueItem | null {
     id,
     number: str(x.number) ?? str(x.reference) ?? str(x.po_number) ?? str(x.bill_number) ?? `#${id}`,
     vendor: str(x.vendor),
-    total: num(x.total),
+    total: num(x.amount ?? x.total),
     currency: str(x.currency),
-    step: num(x.step),
+    step: num(x.step) || null,
     steps: num(x.steps ?? x.step_count),
-    label: str(x.label) ?? str(x.level),
-    requested_by: str(x.requested_by) ?? str(x.requested_by_name) ?? str(x.created_by_name),
-    created_at: str(x.created_at),
+    label: str(x.step_label) ?? str(x.label) ?? str(x.level),
+    requested_by: str(x.requester) ?? str(x.requested_by) ?? str(x.requested_by_name) ?? str(x.created_by_name),
+    created_at: str(x.submitted_at) ?? str(x.created_at),
   };
 }
 
 export const fetchApprovals = (org: string, signal?: AbortSignal) =>
-  apiGet<{ approvals?: unknown[] } | unknown[]>(`${PURCHASE_API}/approvals`, withOrg(org, { mine: 1 }), signal).then((r) =>
-    (Array.isArray(r) ? r : (r.approvals ?? [])).map(queueItemOf).filter((x): x is QueueItem => !!x),
+  apiGet<{ items?: unknown[]; approvals?: unknown[] } | unknown[]>(`${PURCHASE_API}/approvals`, withOrg(org, { mine: 1 }), signal).then((r) =>
+    (Array.isArray(r) ? r : (r.items ?? r.approvals ?? [])).map(queueItemOf).filter((x): x is QueueItem => !!x),
   );
 
 // ── orders: what the purchasing build adds (G-01, G-05, G-06, G-13, G-02, G-03) ─────
@@ -218,7 +220,9 @@ export type OrderFull = OrderDetail & {
 export const fetchOrderFull = (id: number, signal?: AbortSignal) => apiGet<OrderFull>(`/api/inventory/purchase-orders/${id}`, undefined, signal);
 export const fetchMatch = (id: number, signal?: AbortSignal) =>
   apiGet<{ lines?: MatchRow[]; rows?: MatchRow[]; matched: boolean }>(`/api/inventory/purchase/match/${id}`, undefined, signal).then((r) => ({ rows: r.rows ?? r.lines ?? [], matched: !!r.matched }));
-export const sendOrder = (id: number, body: { to: string[]; cc: string[]; message: string; attach_pdf: boolean; portal_link: boolean }) => apiPost<{ order?: PurchaseOrder }>(`${PURCHASE_API}/orders/${id}/send`, body);
+/** Send (G-05): 422 `not_sent` when no channel delivered it, unless `mark_sent` (it went another way). */
+export const sendOrder = (id: number, body: { to: string[]; cc: string[]; subject?: string; message: string; attach_pdf: boolean; portal_link: boolean; whatsapp?: boolean; whatsapp_to?: string; mark_sent?: boolean }) =>
+  apiPost<{ order?: PurchaseOrder; result?: unknown }>(`${PURCHASE_API}/orders/${id}/send`, body);
 export const closeOrder = (id: number, reason: string) => apiPost<{ order?: PurchaseOrder }>(`${PURCHASE_API}/orders/${id}/close`, { reason: reason.trim() });
 
 /** What an order's money is in the company's own: the rate captured on it (G-02). Null when it is in base already. */
@@ -326,9 +330,11 @@ export interface Payables {
   currencies?: Array<{ currency: string; buckets: Record<string, { label: string; amount: number; count: number }>; total: number; base_total?: number | null }>;
   base_currency?: string | null;
   base_total?: number | null;
+  /** Owed in more than one currency. */
+  mixed?: boolean;
   on_account?: number;
 }
-export const fetchPayables = (org: string, signal?: AbortSignal) => apiGet<Payables>('/api/inventory/payables', withOrg(org), signal);
+export const fetchPayables = (org: string, signal?: AbortSignal) => apiGet<Payables>(`${PURCHASE_API}/payables`, withOrg(org), signal);
 
 export interface Payment {
   id: number;
@@ -367,13 +373,39 @@ export interface PaymentRun {
   paid_at: string | null;
   /** True for whoever proposed it: somebody else approves it. */
   mine?: boolean;
+  /** The server's answer: may I approve it (an approver, and not whoever proposed it). */
+  can_approve?: boolean;
   bills?: Array<{ id: number; bill_number: string; vendor: string | null; due_date: string | null; amount: number; currency: string | null; bank?: string | null }>;
 }
 
+/** A run as the server's row has it (`pay_date`, `created_by`, `approved_by` as names, `can_approve`), in the screen's words. */
+export function runOf(raw: unknown, bills?: unknown): PaymentRun {
+  const r = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+  const out = { ...(r as unknown as PaymentRun) };
+  out.pay_on = str(r.pay_on) ?? str(r.pay_date);
+  out.due_by = str(r.due_by) ?? str((r.filters as Record<string, unknown> | null)?.due_by);
+  out.created_by_name = str(r.created_by_name) ?? str(r.created_by);
+  out.approved_by_name = str(r.approved_by_name) ?? str(r.approved_by);
+  if (typeof r.can_approve === 'boolean') out.can_approve = r.can_approve;
+  if (Array.isArray(bills ?? r.bills)) {
+    out.bills = ((bills ?? r.bills) as Array<Record<string, unknown>>).map((b) => ({
+      id: Number(b.id),
+      bill_number: String(b.bill_number ?? ''),
+      vendor: b.vendor && typeof b.vendor === 'object' ? String((b.vendor as { name?: unknown }).name ?? '') : str(b.vendor),
+      due_date: str(b.due_date),
+      amount: Number(b.amount ?? 0),
+      currency: str(b.currency),
+      bank: str(b.bank),
+    }));
+  }
+  return out;
+}
 export const fetchRuns = (org: string, signal?: AbortSignal) =>
-  apiGet<{ runs?: PaymentRun[]; payment_runs?: PaymentRun[] }>(`${PURCHASE_API}/payment-runs`, withOrg(org), signal).then((r) => r.runs ?? r.payment_runs ?? []);
-export const fetchRun = (id: number, signal?: AbortSignal) => apiGet<{ run?: PaymentRun; payment_run?: PaymentRun }>(`${PURCHASE_API}/payment-runs/${id}`, undefined, signal).then((r) => (r.run ?? r.payment_run)!);
-export const proposeRun = (org: string, body: { due_by: string; pay_on: string; vendor_id?: number | null; currency?: string | null }) => apiPost<{ run?: PaymentRun; id?: number }>(`${PURCHASE_API}/payment-runs`, bodyOrg(org, body));
+  apiGet<{ runs?: unknown[] }>(`${PURCHASE_API}/payment-runs`, withOrg(org), signal).then((r) => (r.runs ?? []).map((x) => runOf(x)));
+export const fetchRun = (id: number, signal?: AbortSignal) => apiGet<{ run: unknown; bills?: unknown[] }>(`${PURCHASE_API}/payment-runs/${id}`, undefined, signal).then((r) => runOf(r.run, r.bills ?? []));
+export const proposeRun = (org: string, body: { due_by: string; pay_date: string; vendor_id?: number | null; currency?: string | null }) =>
+  apiPost<{ run?: { id: number } }>(`${PURCHASE_API}/payment-runs`, bodyOrg(org, body));
 export const approveRun = (id: number) => apiPost<{ run?: PaymentRun }>(`${PURCHASE_API}/payment-runs/${id}/approve`, {});
 export const markRunPaid = (id: number, body: { paid_on: string; bank_reference: string | null }) => apiPost<{ run?: PaymentRun }>(`${PURCHASE_API}/payment-runs/${id}/mark-paid`, body);
 
@@ -442,10 +474,35 @@ export interface QcItem {
   held_at: string | null;
   note: string | null;
 }
+
+/** One hold as `GET /api/purchase/qc` sends it (`receipt_id`, `qty` still open, `vendor {id, name}`, `batch`). */
+export function qcItemOf(raw: unknown): QcItem {
+  const x = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+  const vendor = x.vendor && typeof x.vendor === 'object' ? str((x.vendor as { name?: unknown }).name) : str(x.vendor);
+  return {
+    id: Number(x.id),
+    grn_id: num(x.receipt_id ?? x.grn_id),
+    grn_number: str(x.receipt_number) ?? str(x.grn_number),
+    po_id: num(x.po_id),
+    po_number: str(x.po_number),
+    vendor,
+    product: str(x.product) ?? str(x.code) ?? 'Item',
+    code: str(x.code),
+    quantity: num(x.qty ?? x.quantity) ?? 0,
+    unit: str(x.unit),
+    warehouse: str(x.warehouse),
+    bin: str(x.bin),
+    batch_no: str(x.batch) ?? str(x.batch_no),
+    status: str(x.status) ?? 'held',
+    held_at: str(x.received_at) ?? str(x.held_at),
+    note: str(x.note),
+  };
+}
 export const fetchQc = (org: string, status: string, signal?: AbortSignal) =>
-  apiGet<{ items?: QcItem[]; qc?: QcItem[] }>(`${PURCHASE_API}/qc`, withOrg(org, { status: status || undefined } as Q), signal).then((r) => r.items ?? r.qc ?? []);
+  apiGet<{ items?: unknown[]; reasons?: string[] }>(`${PURCHASE_API}/qc`, withOrg(org, { status: status || 'all' } as Q), signal).then((r) => ({ items: (r.items ?? []).map(qcItemOf), reasons: r.reasons ?? [] }));
 export const releaseQc = (id: number) => apiPost<unknown>(`${PURCHASE_API}/qc/${id}/release`, {});
-export const rejectQc = (id: number, body: { reason: string; return: boolean }) => apiPost<{ return_id?: number | null }>(`${PURCHASE_API}/qc/${id}/reject`, body);
+export const rejectQc = (id: number, body: { reason: string; note?: string | null; return: boolean }) => apiPost<{ return_id?: number | null }>(`${PURCHASE_API}/qc/${id}/reject`, body);
 
 // ── agreements (G-18) ───────────────────────────────────────────────────
 
@@ -466,12 +523,46 @@ export interface Agreement {
   next_run: string | null;
   lines?: Array<{ id: number; product_id: number | null; product: string | null; code: string | null; unit_price: number | null; max_qty: number | null; released_qty: number | null }>;
 }
+
+/** An agreement as the server sends it (`type`, `vendor {id, name}`, lines with `unit_cost`, a schedule object). */
+export function agreementOf(raw: unknown): Agreement {
+  const a = (raw ?? {}) as Record<string, unknown>;
+  const str = (v: unknown) => (typeof v === 'string' && v ? v : null);
+  const sched = a.schedule && typeof a.schedule === 'object' ? (a.schedule as Record<string, unknown>) : null;
+  return {
+    id: Number(a.id),
+    reference: str(a.reference) ?? str(a.number) ?? `#${String(a.id)}`,
+    kind: str(a.type) ?? str(a.kind) ?? 'blanket',
+    vendor_id: Number(a.vendor_id),
+    vendor: a.vendor && typeof a.vendor === 'object' ? str((a.vendor as { name?: unknown }).name) : str(a.vendor),
+    status: str(a.status) ?? 'active',
+    valid_from: str(a.valid_from),
+    valid_to: str(a.valid_to),
+    currency: str(a.currency),
+    cap: num(a.cap),
+    released: num(a.released),
+    remaining: num(a.remaining),
+    schedule: sched ? (sched.active === false ? null : `${str(sched.frequency) ?? 'on a schedule'}`) : str(a.schedule),
+    next_run: sched ? str(sched.next_run) : str(a.next_run),
+    lines: Array.isArray(a.lines)
+      ? (a.lines as Array<Record<string, unknown>>).map((l) => ({
+          id: Number(l.id),
+          product_id: num(l.product_id),
+          product: str(l.product) ?? str(l.description),
+          code: str(l.code),
+          unit_price: num(l.unit_price ?? l.unit_cost),
+          max_qty: num(l.max_qty ?? l.qty_cap),
+          released_qty: num(l.released_qty),
+        }))
+      : undefined,
+  };
+}
 export const fetchAgreements = (org: string, status: string, signal?: AbortSignal) =>
-  apiGet<{ agreements: Agreement[] }>(`${PURCHASE_API}/agreements`, withOrg(org, { status: status || undefined } as Q), signal).then((r) => r.agreements ?? []);
-export const fetchAgreement = (id: number, signal?: AbortSignal) => apiGet<{ agreement: Agreement }>(`${PURCHASE_API}/agreements/${id}`, undefined, signal).then((r) => r.agreement);
+  apiGet<{ agreements: unknown[] }>(`${PURCHASE_API}/agreements`, withOrg(org, { status: status || undefined } as Q), signal).then((r) => (r.agreements ?? []).map(agreementOf));
+export const fetchAgreement = (id: number, signal?: AbortSignal) => apiGet<{ agreement: unknown }>(`${PURCHASE_API}/agreements/${id}`, undefined, signal).then((r) => agreementOf(r.agreement));
 export const saveAgreement = (org: string, id: number | null, body: Record<string, unknown>) =>
-  id ? apiPut<{ agreement: Agreement }>(`${PURCHASE_API}/agreements/${id}`, body) : apiPost<{ agreement: Agreement }>(`${PURCHASE_API}/agreements`, bodyOrg(org, body));
-export const releaseAgreement = (id: number, lines: Array<{ agreement_line_id: number; quantity: number }>) =>
+  (id ? apiPut<{ agreement: unknown }>(`${PURCHASE_API}/agreements/${id}`, body) : apiPost<{ agreement: unknown }>(`${PURCHASE_API}/agreements`, bodyOrg(org, body))).then((r) => ({ agreement: agreementOf(r.agreement) }));
+export const releaseAgreement = (id: number, lines: Array<{ agreement_line_id: number; qty: number }>) =>
   apiPost<{ order?: { id: number; number?: string; po_number?: string } }>(`${PURCHASE_API}/agreements/${id}/release`, { lines });
 
 // ── vendor scorecard (G-25) ─────────────────────────────────────────────
@@ -493,6 +584,9 @@ export interface ReportTable {
   columns: Array<{ key: string; label: string; kind?: 'money' | 'number' | 'percent' | 'text' | 'days' }>;
   rows: Array<Record<string, unknown>>;
   total?: Record<string, unknown> | null;
+  /** The server's words on how it was worked out (`basis`), and the formats it can export. */
+  basis?: string | null;
+  formats?: string[];
 }
 
 const LABELS: Record<string, string> = {
@@ -519,15 +613,20 @@ const LABELS: Record<string, string> = {
 export function reportTable(r: unknown): ReportTable {
   const x = (r && typeof r === 'object' ? r : {}) as Record<string, unknown>;
   const rows = (Array.isArray(x.rows) ? x.rows : Array.isArray(x.data) ? x.data : Array.isArray(r) ? r : []).filter((v): v is Record<string, unknown> => !!v && typeof v === 'object');
-  if (Array.isArray(x.columns) && x.columns.length) {
-    const columns = (x.columns as Array<Record<string, unknown>>).map((c) => ({ key: String(c.key), label: String(c.label ?? c.key), kind: (c.kind ?? c.type) as ReportTable['columns'][number]['kind'] }));
-    return { columns, rows, total: (x.total as Record<string, unknown> | undefined) ?? null };
-  }
   const first = rows[0] ?? {};
+  // A column's kind: the server's when it names one, else what its key and first value say.
+  const kindOf = (k: string): ReportTable['columns'][number]['kind'] =>
+    k.endsWith('pct') || k === 'share' ? 'percent' : typeof first[k] === 'number' ? (/(net|spend|amount|total|value|savings|cost|ordered|received|billed|committed)/.test(k) ? 'money' : /(days|_to_)/.test(k) ? 'days' : 'number') : 'text';
+  const total = ((x.totals ?? x.total) as Record<string, unknown> | undefined) ?? null;
+  const extra = { basis: typeof x.basis === 'string' ? x.basis : null, formats: Array.isArray(x.formats) ? (x.formats as string[]) : undefined };
+  if (Array.isArray(x.columns) && x.columns.length) {
+    const columns = (x.columns as Array<Record<string, unknown>>).map((c) => ({ key: String(c.key), label: String(c.label ?? c.key), kind: ((c.kind ?? c.type) as ReportTable['columns'][number]['kind']) ?? kindOf(String(c.key)) }));
+    return { columns, rows, total, ...extra };
+  }
   const columns = Object.keys(first)
     .filter((k) => k !== 'id' && !k.endsWith('_id'))
-    .map((k) => ({ key: k, label: LABELS[k] ?? k.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()), kind: (k.endsWith('pct') || k === 'share' ? 'percent' : typeof first[k] === 'number' ? (/(net|spend|amount|total|value|savings|cost)/.test(k) ? 'money' : 'number') : 'text') as ReportTable['columns'][number]['kind'] }));
-  return { columns, rows, total: (x.total as Record<string, unknown> | undefined) ?? null };
+    .map((k) => ({ key: k, label: LABELS[k] ?? k.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()), kind: kindOf(k) }));
+  return { columns, rows, total, ...extra };
 }
 
 export const fetchReport = (key: string, org: string, f: { from: string; to: string; by?: string }, signal?: AbortSignal) => {

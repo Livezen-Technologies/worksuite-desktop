@@ -30,6 +30,16 @@ const chain = (over: Record<string, unknown> = {}) => ({
 const online = { raise: true, approve: true, offline: false };
 
 describe('the approval chain', () => {
+  it('reads the server’s not_submitted and not_required as nothing in the chain yet, and offers Submit', () => {
+    const notSubmitted = approvalOf({ approval: { required: true, status: 'not_submitted', steps: [], can_approve: false, mine: true, threshold: 100000, value: 486200, currency: 'LKR' } }, true);
+    expect(notSubmitted).toMatchObject({ status: 'none', required: true, mine: true });
+    expect(approvalActions(notSubmitted, 'draft', online).submit).toBe(true);
+    // A request waits as `pending` until it is submitted.
+    expect(approvalActions(notSubmitted, 'pending', online).submit).toBe(true);
+    const below = approvalOf({ approval: { required: false, status: 'not_required', steps: [], can_approve: false, mine: false } }, true);
+    expect(below).toMatchObject({ status: 'none', required: false });
+  });
+
   it('reads the chain the purchasing build sends', () => {
     const a = approvalOf(chain(), true);
     expect(a).toMatchObject({ required: true, status: 'pending', canApprove: true, mine: false });
@@ -81,6 +91,11 @@ describe('the server’s refusals', () => {
     expect(refusalText(self)).toBe('You raised this, so someone else has to approve it.');
     expect(refusalText(taken)).toMatch(/already decided this step/);
     expect(refusalCode(new ApiError(409, 'possible duplicate', 'possible_duplicate'))).toBe('possible_duplicate');
+    // The server's envelope: `{status: 'error', message, errors: {code}}` — the code arrives in the error's data.
+    expect(refusalCode(new ApiError(403, 'You signed step 1.', null, { code: 'same_approver' }))).toBe('same_approver');
+    expect(refusalCode(new ApiError(403, 'Not yours.', null, { code: 'not_approver' }))).toBe('not_approver');
+    expect(refusalCode(new ApiError(422, 'Nothing was sent.', null, { code: 'not_sent', result: {} }))).toBe('not_sent');
+    expect(refusalText(new ApiError(403, 'x', null, { code: 'same_approver' }))).toMatch(/approved an earlier step/);
   });
 
   it('leaves any other refusal in the server’s own words', () => {
@@ -110,11 +125,13 @@ describe('the calls', () => {
     expect(decisionBody('bill', 'approve')).toEqual({ approve: true });
   });
 
-  it('respects the narrow permissions, with inventory.purchase still the umbrella', () => {
+  it('respects the narrow permissions: inventory.purchase is the umbrella for buying, not for paying', () => {
     expect(purchaseCan(['purchase.receive'])).toMatchObject({ receive: true, order: false, request: false, bill: false, pay: false, approve: false });
-    expect(purchaseCan(['payables.pay'])).toMatchObject({ pay: true, allocate: true, bill: false, order: false });
+    expect(purchaseCan(['payables.pay'])).toMatchObject({ pay: true, allocate: false, bill: false, order: false });
+    expect(purchaseCan(['payables.allocate'])).toMatchObject({ allocate: true, pay: false });
     expect(purchaseCan(['purchase.order'])).toMatchObject({ order: true, request: true, receive: false });
-    expect(purchaseCan(['inventory.purchase'])).toMatchObject({ request: true, order: true, receive: true, bill: true, pay: true, allocate: true, approve: false });
+    expect(purchaseCan(['inventory.purchase'])).toMatchObject({ request: true, order: true, receive: true, bill: false, pay: false, allocate: false, approve: false });
+    expect(purchaseCan(['inventory.manage'])).toMatchObject({ order: true, bill: true, pay: true, allocate: true, approve: true });
     expect(purchaseCan(['inventory.approve'])).toMatchObject({ approve: true, order: false });
     expect(purchaseCan(['*'])).toMatchObject({ order: true, approve: true, settings: true });
     expect(purchaseCan(undefined)).toMatchObject({ order: false, receive: false, approve: false });

@@ -42,6 +42,7 @@ const ReturnSheet = lazy(() => import('./Returns').then((m) => ({ default: m.Ret
 const Vendors = lazy(() => import('./Vendors'));
 const VendorSheet = lazy(() => import('./Vendors').then((m) => ({ default: m.VendorSheet })));
 const Reports = lazy(() => import('./Reports'));
+const LandedCosts = lazy(() => import('./LandedCosts'));
 
 const ORG_KEY = 'purchase.org';
 const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
@@ -61,7 +62,7 @@ const BY_PATH: Record<string, [PurView, string]> = {
   agreements: ['agr', 'agreement'],
 };
 /** Which screen an address key belongs to, when no tab is named. */
-const KEY_VIEW: Array<[string, PurView]> = [['po', 'po'], ['grn', 'grn'], ['request', 'req'], ['rfq', 'rfq'], ['bill', 'bill'], ['run', 'run'], ['return', 'ret'], ['vendor', 'ven'], ['agreement', 'agr']];
+const KEY_VIEW: Array<[string, PurView]> = [['po', 'po'], ['order', 'po'], ['grn', 'grn'], ['request', 'req'], ['rfq', 'rfq'], ['bill', 'bill'], ['run', 'run'], ['return', 'ret'], ['vendor', 'ven'], ['agreement', 'agr']];
 
 function savedOrg(): string {
   try {
@@ -77,7 +78,8 @@ export default function PurchaseShell(_props: ModuleProps) {
   const [org, setOrg] = useState(savedOrg);
   const fromPath = BY_PATH[path[1] ?? ''];
   const pathId = num(path[2]);
-  const id = (key: string) => num(query.get(key)) ?? (fromPath && fromPath[1] === key ? pathId : null);
+  // The server's own links name an order `?order=<id>` (PurchaseApprovals::DOCS).
+  const id = (key: string) => num(query.get(key)) ?? (key === 'po' ? num(query.get('order')) : null) ?? (fromPath && fromPath[1] === key ? pathId : null);
   const asked = (query.get('tab') ?? '') as PurView;
   const implied = (fromPath && pathId ? fromPath[0] : null) ?? KEY_VIEW.find(([k]) => num(query.get(k)))?.[1] ?? null;
   const view: PurView = asked && NATIVE.has(asked) ? asked : (implied ?? 'dash');
@@ -192,10 +194,11 @@ export default function PurchaseShell(_props: ModuleProps) {
               onOpenReceipt={to.receipt}
             />
           ) : null}
+          {view === 'lcv' ? <LandedCosts org={scope} currency={currency} onOrder={to.order} onReceipt={to.receipt} /> : null}
           {view === 'rep' ? <Reports org={scope} currency={currency} report={query.get('r')} onReport={(r) => go(`/purchase?tab=rep&r=${r}`)} /> : null}
         </Suspense>
         <Suspense fallback={null}>
-          {view === 'grn' && id('grn') ? <ReceiptPanel key={id('grn')} id={id('grn')!} currency={currency} onClose={() => nav({ grn: null })} onOrder={to.order} onReturn={c.bill ? (gid) => nav({ make: 'return', grn: String(gid) }) : null} /> : null}
+          {view === 'grn' && id('grn') ? <ReceiptPanel key={id('grn')} id={id('grn')!} currency={currency} onClose={() => nav({ grn: null })} onOrder={to.order} onReturn={c.order ? (gid) => nav({ make: 'return', grn: String(gid) }) : null} /> : null}
           {make === 'po' ? (
             <OrderSheet
               key={query.get('poedit') ?? 'new'}

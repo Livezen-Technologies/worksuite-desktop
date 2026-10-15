@@ -61,6 +61,10 @@ describe('per-line award', () => {
     expect(c.lines[2]!.bids[1]).toMatchObject({ bid_id: 23, unit_price: 33600, total: 67200, lead_days: 7, cheapest: false });
     expect(c.lines[2]!.bids[0]).toMatchObject({ bid_id: 13, unit_price: null, total: null });
     expect(comparisonOf(null)).toEqual({ lines: [], vendors: [], currency: null });
+    // The server's own: the product as an object, the target as `target_cost`, the currency on the RFQ.
+    const server = comparisonOf({ rfq: { id: 31, currency: 'LKR' }, vendors: [], lines: [{ rfq_line_id: 7, product: { id: 1, code: 'SW-24', name: '24-port switch' }, qty: 4, target_cost: 95000, bids: [] }] });
+    expect(server.lines[0]).toMatchObject({ product: '24-port switch', target: 95000 });
+    expect(server.currency).toBe('LKR');
   });
 
   it('awards each line to its cheapest bid by default — the server’s mark first, else the lowest priced', () => {

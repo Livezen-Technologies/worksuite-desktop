@@ -30,16 +30,19 @@ export interface RunActions {
 }
 
 /** What may be done to a run now: `pay` holds `payables.pay`; `approve` an approve permission; offline nothing. */
-export function runActions(run: Pick<PaymentRun, 'status' | 'mine'>, c: { pay: boolean; approve: boolean; offline: boolean }): RunActions {
+export function runActions(run: Pick<PaymentRun, 'status' | 'mine' | 'can_approve'>, c: { pay: boolean; approve: boolean; offline: boolean }): RunActions {
   const s = run.status;
   const proposed = s === 'proposed' || s === 'draft' || s === 'pending';
   const approved = s === 'approved' || s === 'exported';
   if (c.offline) return { approve: false, export: false, markPaid: false, note: proposed || approved ? 'This waits for the connection.' : null };
+  // The server's `can_approve` (an approver who did not propose it) where it sends one; else the permission and `mine`.
+  const mayApprove = run.can_approve ?? (c.approve && run.mine !== true);
+  const mineNow = run.mine === true || (run.can_approve === false && c.approve);
   return {
-    approve: proposed && c.approve && run.mine !== true,
+    approve: proposed && mayApprove,
     export: approved && c.pay,
     markPaid: approved && c.pay,
-    note: proposed && c.approve && run.mine === true ? 'You proposed this run, so someone else approves it.' : proposed && !c.approve ? 'Waiting on approval.' : null,
+    note: proposed && !mayApprove ? (mineNow ? 'You proposed this run, so someone else approves it.' : 'Waiting on approval.') : null,
   };
 }
 

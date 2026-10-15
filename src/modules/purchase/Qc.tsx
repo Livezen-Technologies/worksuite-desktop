@@ -27,7 +27,9 @@ export default function Qc({ org, onReceipt, onReturn }: { org: string; onReceip
   const [rejecting, setRejecting] = useState<QcItem | null>(null);
   const [reason, setReason] = useState('');
   const [back, setBack] = useState(true);
-  const rows = q.data ?? [];
+  const rows = q.data?.items ?? [];
+  const reasons = q.data?.reasons?.length ? q.data.reasons : ['damaged', 'wrong_item', 'expired', 'quality', 'documentation', 'other'];
+  const [why, setWhy] = useState('quality');
   const may = c.receive && !offline;
   const run = async (fn: () => Promise<unknown>, ok: string, after?: (r: unknown) => void) => {
     setBusy(true);
@@ -56,7 +58,7 @@ export default function Qc({ org, onReceipt, onReturn }: { org: string; onReceip
             { value: 'held', label: 'On hold' },
             { value: 'released', label: 'Released' },
             { value: 'rejected', label: 'Rejected' },
-            { value: '', label: 'Everything' },
+            { value: 'all', label: 'Everything' },
           ]}
           className={pick + ' !w-[160px]'}
         />
@@ -133,8 +135,8 @@ export default function Qc({ org, onReceipt, onReturn }: { org: string; onReceip
               <button
                 type="button"
                 className={btnPrimary}
-                disabled={busy || !reason.trim()}
-                onClick={() => void run(() => rejectQc(rejecting.id, { reason: reason.trim(), return: back }), back ? 'Rejected — a return to the vendor is started' : 'Rejected', (r) => {
+                disabled={busy || (why === 'other' && !reason.trim())}
+                onClick={() => void run(() => rejectQc(rejecting.id, { reason: why, note: reason.trim() || null, return: back }), back ? 'Rejected — a return to the vendor is started' : 'Rejected', (r) => {
                   const rid = (r as { return_id?: number | null } | null)?.return_id;
                   if (rid) onReturn(rid);
                 })}
@@ -146,7 +148,10 @@ export default function Qc({ org, onReceipt, onReturn }: { org: string; onReceip
         >
           <div className="flex flex-col gap-2.5">
             <Field label="Why it failed">
-              <input className={input} value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Why it failed" maxLength={300} autoFocus />
+              <Select aria-label="Why it failed" value={why} onValueChange={setWhy} options={reasons.map((r) => ({ value: r, label: r.replace(/_/g, ' ').replace(/^./, (x) => x.toUpperCase()) }))} className={pick} />
+            </Field>
+            <Field label="Note" hint={why === 'other' ? 'Say what was wrong' : undefined}>
+              <input className={input} value={reason} onChange={(e) => setReason(e.target.value)} aria-label="Note" maxLength={400} autoFocus />
             </Field>
             <label className="flex items-center gap-2 text-[12.5px] text-ink">
               <Checkbox checked={back} onChange={(e) => setBack(e.target.checked)} /> Send it back to the vendor (starts a return)

@@ -219,10 +219,10 @@ function ProposeSheet({ org, onClose, onSaved }: { org: string; onClose: () => v
     setError(null);
     setSaving(true);
     try {
-      const r = await proposeRun(org, { due_by: dueBy, pay_on: payOn, currency: cur.trim().toUpperCase() || null });
+      const r = await proposeRun(org, { due_by: dueBy, pay_date: payOn, currency: cur.trim().toUpperCase() || null });
       refreshPurchase(qc);
       toast('success', 'Run proposed — somebody else approves it');
-      onSaved(Number(r.run?.id ?? r.id));
+      onSaved(Number(r.run?.id));
     } catch (e) {
       setError(refusalText(e));
     } finally {

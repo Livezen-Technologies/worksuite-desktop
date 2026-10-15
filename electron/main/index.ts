@@ -2622,6 +2622,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/purchase/qc', 'purchase'],
     ['/api/purchase/agreements', 'purchase'],
     ['/api/purchase/payment-runs', 'purchase'],
+    ['/api/purchase/payables', 'purchase'],
+    ['/api/purchase/landed-costs', 'purchase'],
     // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
     // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];

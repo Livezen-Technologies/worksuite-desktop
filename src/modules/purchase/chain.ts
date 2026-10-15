@@ -67,8 +67,9 @@ export function approvalOf(d: { approval?: unknown; approvals?: unknown; may_app
         note: str(s.note),
       };
     });
+    // `not_required` and `not_submitted` (the server's words) are "nothing in the chain yet" here.
     const st = str(a.status);
-    const status = st === 'pending' || st === 'approved' || st === 'rejected' ? st : statusOf(steps);
+    const status = st === 'pending' || st === 'approved' || st === 'rejected' ? st : st === 'not_required' || st === 'not_submitted' ? 'none' : statusOf(steps);
     return { required: a.required !== false && (a.required === true || steps.length > 0), status, steps, canApprove: a.can_approve === true && status === 'pending', mine: a.mine === true };
   }
   const steps = (Array.isArray(d?.approvals) ? d.approvals : []).map((raw, i): ApprovalStep => {
@@ -111,7 +112,8 @@ export interface ApprovalActions {
  * `offline`: every decision waits for the connection.
  */
 export function approvalActions(a: ApprovalState, docStatus: string, c: { raise: boolean; approve: boolean; offline: boolean }): ApprovalActions {
-  const open = ['draft', 'rejected', 'returned'].includes(docStatus);
+  // A request waits as `pending` until it is submitted; orders and returns as drafts (a rejection sends them back).
+  const open = ['draft', 'rejected', 'returned'].includes(docStatus) || (docStatus === 'pending' && a.status === 'none');
   const submit = c.raise && !c.offline && open && a.status !== 'pending';
   const decide = c.approve && a.status === 'pending' && a.canApprove && !c.offline;
   let note: string | null = null;
@@ -125,11 +127,14 @@ export function approvalActions(a: ApprovalState, docStatus: string, c: { raise:
 
 // ── refusals ─────────────────────────────────────────────────────────────
 
-export type RefusalCode = 'approval_required' | 'self_approval' | 'already_decided' | 'possible_duplicate' | 'budget_exceeded';
+export type RefusalCode = 'approval_required' | 'self_approval' | 'same_approver' | 'not_approver' | 'already_decided' | 'possible_duplicate' | 'not_sent' | 'budget_exceeded';
 
 const REFUSALS: Record<RefusalCode, string> = {
   approval_required: 'This needs approval first. Submit it; it can go on once every step has approved it.',
   self_approval: 'You raised this, so someone else has to approve it.',
+  same_approver: 'You approved an earlier step, so someone else has to approve this one.',
+  not_approver: 'This step is not yours to decide.',
+  not_sent: 'Nothing was sent: no channel delivered it, and the order is unchanged. Check the address, or mark it sent if it went another way.',
   already_decided: 'Somebody has already decided this step. The chain has been refreshed to show where it stands.',
   possible_duplicate: 'This looks like an order already raised. Check the possible duplicates, then save again to confirm.',
   budget_exceeded: 'This goes over the budget left for it, and Purchasing is set to stop that.',

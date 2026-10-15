@@ -677,6 +677,7 @@ answers 404 and the screen says so.
 | S-02 requests, RFQs; G-17 | Done · Server | `Requests.tsx`, `Rfqs.tsx`, `rfq.ts` (per-line award; `purchase-award.test.ts`) |
 | S-03/S-05 orders; G-01, G-02, G-03, G-05, G-06, G-13 | Done · Server | `Orders.tsx` (grid + pane, match, chain, send, close, FX, landed share), `chain.ts` (`purchase-approvals.test.ts`), `Purchasing.tsx` order form |
 | S-06 receiving; G-07 | Done · Server | `Receive.tsx`, `scan.ts` (scan, wrong-PO refusal, F2/F3; `purchase-receive.test.ts`), `Qc.tsx` |
+| G-03 landed-cost vouchers | Done · Server | `LandedCosts.tsx` over `/api/purchase/landed-costs` |
 | S-07 returns; G-19 | Done · Server | `Returns.tsx` |
 | S-08/S-09 bills, payments; G-20 | Done · Server | `Bills.tsx`, `Payments.tsx`, `PaymentRuns.tsx`, `payrun.ts` (bank file CSV / pain.001 through `transfers:download {purchaseExport}`; `purchase-payrun.test.ts`) |
 | S-10 vendors; G-25 | Done · Server | `Vendors.tsx`, `Scorecard.tsx` |

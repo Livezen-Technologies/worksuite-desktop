@@ -3,7 +3,7 @@ import { z } from 'zod';
 /**
  * WorkSuite Purchasing on this computer (SRS-PUR-001 G-21): what the main process does for the Purchasing app.
  *
- *  - A purchase document waiting on my decision (an order, a request, a return or a bill; `purchase.approval`) arrives
+ *  - A purchase document waiting on my decision (an order, a request, a return or a bill; `inventory.po_awaiting`, `inventory.purchase_awaiting`) arrives
  *    through the notification service, which hands it here instead of showing it plainly. Its banner has Approve and
  *    Open. Approve decides my step through the document's own approve call — the Approve button's, behind the same
  *    permission and the same rules (one person, one step; never my own document) — and a refusal opens the document
@@ -22,8 +22,12 @@ export const PURCHASE_API = '/api/purchase';
 export const APPROVAL_DOCS = ['order', 'request', 'return', 'bill'] as const;
 export type ApprovalDoc = (typeof APPROVAL_DOCS)[number];
 
-/** The server's events for a purchase document waiting on a decision of mine. */
-const APPROVAL_EVENTS = new Set(['purchase.approval', 'purchase.approval_required', 'purchase.approval.waiting', 'inventory.approval', 'inventory.purchase.approval']);
+/**
+ * The server's events for a purchase document waiting on a decision of mine: `inventory.po_awaiting` for an order,
+ * `inventory.purchase_awaiting` for a request, a return or a bill (PurchaseApprovals::tellApprovers), with the
+ * document as `entity_type`/`entity_id` and a `/purchase?order=<id>` link; the others are accepted too.
+ */
+const APPROVAL_EVENTS = new Set(['inventory.po_awaiting', 'inventory.purchase_awaiting', 'purchase.approval', 'purchase.approval_required', 'purchase.approval.waiting', 'inventory.approval']);
 
 export const isPurchaseApprovalEvent = (event: string | null | undefined): boolean => APPROVAL_EVENTS.has((event ?? '').toLowerCase().trim());
 
@@ -220,10 +224,10 @@ export class PurchaseApprovalBanners {
     }
   }
 
-  /** The realtime events that change the count (`purchase.approval*`, `purchase.badge`): asked again once for a burst. */
+  /** The realtime events that change the count (an approval asked for or decided, `purchase.badge`): asked again once for a burst. */
   handle(e: { type?: string }): void {
     const t = e.type ?? '';
-    if ((t !== 'purchase.badge' && !t.startsWith('purchase.approval')) || this.timer) return;
+    if ((t !== 'purchase.badge' && !t.startsWith('purchase.approval') && !isPurchaseApprovalEvent(t) && t !== 'inventory.po_approved' && t !== 'inventory.purchase_decided') || this.timer) return;
     this.timer = setTimeout(() => {
       this.timer = null;
       this.d.refreshCounts();
@@ -234,7 +238,8 @@ export class PurchaseApprovalBanners {
 
 // ── exports (G-20, G-27) ────────────────────────────────────────────────
 
-export const PURCHASE_REPORTS = ['spend', 'department-spend', 'project-spend', 'cycle-time', 'rfq-savings', 'maverick', 'vendor-performance', 'price-trend', 'committed'] as const;
+/** The reports the server builds and exports (`api/purchase/reports/{key}`, Purchasing's SpendReports). */
+export const PURCHASE_REPORTS = ['spend-department', 'spend-project', 'cycle-time', 'rfq-savings', 'maverick'] as const;
 export type PurchaseReport = (typeof PURCHASE_REPORTS)[number];
 
 const ymd = z.string().regex(/^\d{4}-\d{2}-\d{2}$/);
@@ -248,7 +253,6 @@ export const purchaseExportSchema = z.union([
     from: ymd.optional(),
     to: ymd.optional(),
     org: z.string().regex(/^(\d+(,\d+)*)?$/).optional(),
-    by: z.string().regex(/^[a-z_]{1,30}$/).optional(),
   }),
   z.strictObject({ what: z.literal('payment-run'), run: z.number().int().positive(), format: z.enum(['csv', 'pain001']) }),
 ]);
@@ -258,7 +262,8 @@ export type PurchaseExport = z.infer<typeof purchaseExportSchema>;
 export function purchaseExportPath(x: PurchaseExport): string {
   if (x.what === 'payment-run') return `${PURCHASE_API}/payment-runs/${x.run}/export?format=${x.format}`;
   const params = new URLSearchParams({ format: x.format });
-  for (const k of ['from', 'to', 'org', 'by'] as const) if (x[k]) params.set(k, String(x[k]));
+  for (const k of ['from', 'to'] as const) if (x[k]) params.set(k, String(x[k]));
+  if (x.org) params.set('org_id', x.org);
   return `${PURCHASE_API}/reports/${x.report}/export?${params}`;
 }
 

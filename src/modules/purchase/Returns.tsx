@@ -102,7 +102,8 @@ function ReturnPanel({ id, onClose, onOrder, onReceipt }: { id: number; onClose:
       refreshPurchase(qc);
     }
   };
-  const may = c.bill && !offline;
+  // Returns are the buying side's (`purchase.order`, the server's submit capability for them).
+  const may = c.order && !offline;
   return (
     <SidePanel
       label={r ? `Return ${r.reference}` : 'Return'}
@@ -152,7 +153,7 @@ function ReturnPanel({ id, onClose, onOrder, onReceipt }: { id: number; onClose:
             <b className="text-[13px] text-ink">Approvals</b>
             <Chain a={a} />
             {d.approval !== undefined ? (
-              <DecisionBar doc="return" id={id} a={a} status={r.status} raise={c.bill} approve={c.approve} offline={offline} />
+              <DecisionBar doc="return" id={id} a={a} status={r.status} raise={c.order} approve={c.approve} offline={offline} />
             ) : c.approve && ['draft', 'pending'].includes(r.status) && d.may_approve !== false ? (
               // A server before the purchasing build: the return's own approve.
               <button type="button" className={btnSmall + ' self-start'} disabled={busy || offline} title={offline ? OFFLINE_WRITE : undefined} onClick={() => void act(() => returnAct(id, 'approve'), 'Return approved')}>

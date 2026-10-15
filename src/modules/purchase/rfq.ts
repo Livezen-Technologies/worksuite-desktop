@@ -50,10 +50,11 @@ export function comparisonOf(raw: unknown): Comparison {
     const qty = n(l.qty ?? l.quantity) ?? 0;
     return {
       rfq_line_id: Number(l.rfq_line_id ?? l.id),
-      product: s(l.product) ?? s(l.description) ?? 'Item',
+      // The server sends the product as `{id, code, name}`, the target as `target_cost` per unit.
+      product: (l.product && typeof l.product === 'object' ? s((l.product as Record<string, unknown>).name) : s(l.product)) ?? s(l.description) ?? 'Item',
       qty,
       unit: s(l.unit),
-      target: n(l.target ?? l.target_cost),
+      target: n(l.target_cost ?? l.target),
       bids: (Array.isArray(l.bids) ? l.bids : []).map((y): CompareBid => {
         const b = (y ?? {}) as Record<string, unknown>;
         const unit = n(b.unit_price ?? b.unit_cost);
@@ -75,7 +76,8 @@ export function comparisonOf(raw: unknown): Comparison {
     const v = (x ?? {}) as Record<string, unknown>;
     return { bid_id: n(v.bid_id ?? v.id), vendor: s(v.vendor) ?? s(v.name) ?? 'Vendor', currency: s(v.currency), lead_days: n(v.lead_days ?? v.lead_time_days), status: s(v.status) };
   });
-  return { lines, vendors, currency: s(r.currency) };
+  const rfq = r.rfq && typeof r.rfq === 'object' ? (r.rfq as Record<string, unknown>) : {};
+  return { lines, vendors, currency: s(r.currency) ?? s(rfq.currency) };
 }
 
 const priced = (b: CompareBid) => b.total !== null && b.unit_price !== null;

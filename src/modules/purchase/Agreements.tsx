@@ -19,9 +19,9 @@ import { VendorPick } from './Purchasing';
 /**
  * Agreements (G-18): blanket and contract orders with a vendor — what may be bought, at what price, up to what cap, and
  * how long for — with what has been released against them and what is left. A release raises a purchase order from the
- * agreement's lines; a recurring agreement raises its own on a schedule (the server's purchase sweep).
+ * agreement's lines; an agreement with a schedule raises its own (the server's purchase sweep — set on the web).
  */
-const KIND: Record<string, string> = { blanket: 'Blanket order', contract: 'Contract', recurring: 'Recurring order' };
+const KIND: Record<string, string> = { blanket: 'Blanket order', contract: 'Contract' };
 
 export default function Agreements({ org, openId, onOpen, onOrder }: { org: string; openId: number | null; onOpen: (id: number | null) => void; onOrder: (id: number) => void }) {
   const c = usePurchaseCan();
@@ -100,7 +100,7 @@ function AgreementPanel({ id, onClose, onOrder }: { id: number; onClose: () => v
   const [release, setRelease] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
   const go = async (ag: Agreement) => {
-    const lines = (ag.lines ?? []).map((l) => ({ agreement_line_id: l.id, quantity: Number((release[l.id] ?? '').replace(/,/g, '')) })).filter((l) => Number.isFinite(l.quantity) && l.quantity > 0);
+    const lines = (ag.lines ?? []).map((l) => ({ agreement_line_id: l.id, qty: Number((release[l.id] ?? '').replace(/,/g, '')) })).filter((l) => Number.isFinite(l.qty) && l.qty > 0);
     if (!lines.length) return toast('error', 'Say how much of at least one line to release.');
     setBusy(true);
     try {
@@ -179,7 +179,6 @@ function AgreementSheet({ org, onClose, onSaved }: { org: string; onClose: () =>
   const [to, setTo] = useState('');
   const [cap, setCap] = useState('');
   const [currency, setCurrency] = useState('');
-  const [schedule, setSchedule] = useState('');
   const [lines, setLines] = useState<LineDraft[]>([{ key: 0, product: null, price: '', max: '' }]);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -201,7 +200,7 @@ function AgreementSheet({ org, onClose, onSaved }: { org: string; onClose: () =>
     if (capN !== null && (!Number.isFinite(capN) || capN <= 0)) return setError('The cap must be a number above zero, or blank for none.');
     setSaving(true);
     try {
-      const r = await saveAgreement(org, null, { vendor_id: vendor.id, kind, valid_from: from || null, valid_to: to, cap: capN, currency: currency.trim().toUpperCase() || null, schedule: kind === 'recurring' ? schedule || null : null, lines: out });
+      const r = await saveAgreement(org, null, { vendor_id: vendor.id, type: kind, valid_from: from || null, valid_to: to, cap: capN, currency: currency.trim().toUpperCase() || null, lines: out });
       refreshPurchase(qc);
       toast('success', 'Agreement saved');
       onSaved(r.agreement.id);
@@ -250,21 +249,6 @@ function AgreementSheet({ org, onClose, onSaved }: { org: string; onClose: () =>
             <input className={input + ' uppercase'} value={currency} onChange={(e) => setCurrency(e.target.value.slice(0, 3))} aria-label="Currency" maxLength={3} />
           </Field>
         </div>
-        {kind === 'recurring' ? (
-          <Field label="Repeats">
-            <Select
-              aria-label="Repeats"
-              value={schedule}
-              onValueChange={setSchedule}
-              options={[
-                { value: 'weekly', label: 'Every week' },
-                { value: 'monthly', label: 'Every month' },
-                { value: 'quarterly', label: 'Every quarter' },
-              ]}
-              className={pick}
-            />
-          </Field>
-        ) : null}
         <b className="mt-1 text-[13px] text-ink">Products and agreed prices</b>
         {lines.map((l, i) => (
           <div key={l.key} className="flex items-center gap-2">

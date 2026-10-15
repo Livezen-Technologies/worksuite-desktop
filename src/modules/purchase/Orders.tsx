@@ -513,12 +513,18 @@ const emails = (s: string) =>
     .filter(Boolean);
 
 /** Send to the vendor (G-05): to and cc, a message, the PDF, the portal link. Blank "to" goes to the vendor's purchasing contact. */
-function SendSheet({ number, busy, onClose, onSend }: { number: string; busy: boolean; onClose: () => void; onSend: (body: { to: string[]; cc: string[]; message: string; attach_pdf: boolean; portal_link: boolean }) => void }) {
+type SendBody = Parameters<typeof sendOrder>[1];
+
+function SendSheet({ number, busy, onClose, onSend }: { number: string; busy: boolean; onClose: () => void; onSend: (body: SendBody) => void }) {
   const [to, setTo] = useState('');
   const [cc, setCc] = useState('');
   const [message, setMessage] = useState('');
   const [pdf, setPdf] = useState(true);
   const [portal, setPortal] = useState(true);
+  const [subject, setSubject] = useState('');
+  const [wa, setWa] = useState(false);
+  const [waTo, setWaTo] = useState('');
+  const [markSent, setMarkSent] = useState(false);
   const bad = [...emails(to), ...emails(cc)].find((x) => !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(x));
   return (
     <Sheet
@@ -530,7 +536,7 @@ function SendSheet({ number, busy, onClose, onSend }: { number: string; busy: bo
           <button type="button" className={btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className={btnPrimary} disabled={busy || !!bad} onClick={() => onSend({ to: emails(to), cc: emails(cc), message: message.trim(), attach_pdf: pdf, portal_link: portal })}>
+          <button type="button" className={btnPrimary} disabled={busy || !!bad} onClick={() => onSend({ to: emails(to), cc: emails(cc), ...(subject.trim() ? { subject: subject.trim() } : {}), message: message.trim(), attach_pdf: pdf, portal_link: portal, ...(wa ? { whatsapp: true, ...(waTo.trim() ? { whatsapp_to: waTo.trim() } : {}) } : {}), ...(markSent ? { mark_sent: true } : {}) })}>
             {busy ? 'Sending…' : 'Send'}
           </button>
         </>
@@ -543,6 +549,9 @@ function SendSheet({ number, busy, onClose, onSend }: { number: string; busy: bo
         <Field label="Cc">
           <input className={input} value={cc} onChange={(e) => setCc(e.target.value)} aria-label="Cc" />
         </Field>
+        <Field label="Subject" hint="Blank: the order's number">
+          <input className={input} value={subject} onChange={(e) => setSubject(e.target.value)} aria-label="Subject" maxLength={200} />
+        </Field>
         <Field label="Message">
           <textarea className={input + ' !h-[90px] py-1.5'} value={message} onChange={(e) => setMessage(e.target.value)} aria-label="Message" maxLength={4000} />
         </Field>
@@ -551,6 +560,13 @@ function SendSheet({ number, busy, onClose, onSend }: { number: string; busy: bo
         </label>
         <label className="flex items-center gap-2 text-[12.5px] text-ink">
           <Checkbox checked={portal} onChange={(e) => setPortal(e.target.checked)} /> Include a link where they accept, decline or give a date
+        </label>
+        <label className="flex items-center gap-2 text-[12.5px] text-ink">
+          <Checkbox checked={wa} onChange={(e) => setWa(e.target.checked)} /> Send on WhatsApp too, where WorkSuite has it
+        </label>
+        {wa ? <input className={input} value={waTo} onChange={(e) => setWaTo(e.target.value)} aria-label="WhatsApp number" placeholder="Blank: the vendor's mobile" /> : null}
+        <label className="flex items-center gap-2 text-[12.5px] text-ink">
+          <Checkbox checked={markSent} onChange={(e) => setMarkSent(e.target.checked)} /> Mark it sent even if nothing is delivered (it went another way)
         </label>
         {bad ? <span className="text-[12px] font-semibold text-danger">“{bad}” is not an e-mail address.</span> : null}
         <span className="text-[12px] text-ink-3">Sending marks the order sent. An order still waiting on approval cannot be sent.</span>

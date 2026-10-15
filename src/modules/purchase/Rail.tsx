@@ -11,9 +11,9 @@ import { HIT_LABEL, K, searchInventory, type Company, type SearchHit } from '../
  * search, then the screens in the order the work runs — before the order, buying, paying, who we buy from — as the
  * web's module rail does (SRS-PUR-001 §10). Counts come from the dashboard and the approvals queue.
  */
-export type PurView = 'dash' | 'appr' | 'req' | 'rfq' | 'po' | 'rcv' | 'grn' | 'qc' | 'rpl' | 'agr' | 'bill' | 'pay' | 'run' | 'ret' | 'ven' | 'rep';
+export type PurView = 'dash' | 'appr' | 'req' | 'rfq' | 'po' | 'rcv' | 'grn' | 'qc' | 'lcv' | 'rpl' | 'agr' | 'bill' | 'pay' | 'run' | 'ret' | 'ven' | 'rep';
 
-export const NATIVE = new Set<PurView>(['dash', 'appr', 'req', 'rfq', 'po', 'rcv', 'grn', 'qc', 'rpl', 'agr', 'bill', 'pay', 'run', 'ret', 'ven', 'rep']);
+export const NATIVE = new Set<PurView>(['dash', 'appr', 'req', 'rfq', 'po', 'rcv', 'grn', 'qc', 'lcv', 'rpl', 'agr', 'bill', 'pay', 'run', 'ret', 'ven', 'rep']);
 
 export const TITLES: Record<PurView, string> = {
   dash: 'Dashboard',
@@ -24,6 +24,7 @@ export const TITLES: Record<PurView, string> = {
   rcv: 'Receiving',
   grn: 'Goods received',
   qc: 'Quality hold',
+  lcv: 'Landed costs',
   rpl: 'Replenishment',
   agr: 'Agreements',
   bill: 'Vendor bills',
@@ -146,6 +147,7 @@ export function PurRail({
         {item('rcv', 'Receiving', 'scan', counts.receiving)}
         {item('grn', 'Goods received', 'package')}
         {item('qc', 'Quality hold', 'shield-alert')}
+        {item('lcv', 'Landed costs', 'truck')}
         {item('rpl', 'Replenishment', 'refresh')}
         {head('Paying')}
         {item('bill', 'Vendor bills', 'receipt', counts.bills, 'red')}
