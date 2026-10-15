@@ -32,28 +32,36 @@ import {
   type Mode,
 } from './more';
 import { Checkbox } from '../../components/Checkbox';
+import { Reminders, Templates } from './SettingsComms';
+import { Crm, Gateways, Members, Woo } from './SettingsNative';
 
 /**
  * Billing settings (BillSettings, BillSettingsSheet): numbering, money,
  * letterhead and branding (per company, from the server's own field list),
  * tax rates, exchange rates, payment modes and currencies, and what the
- * company picker narrows. Payment gateways, the CRM connector, WooCommerce
- * stores and members hold credentials and stay in the browser (marked).
+ * company picker narrows — and, natively since SRS-BIL-001 G-37, payment
+ * gateways, the CRM connector, WooCommerce stores and members (their
+ * credentials write-only), payment reminders and message templates.
  * Changing any of it needs `billing.settings`.
  */
-type Section = 'general' | 'taxes' | 'rates' | 'modes' | 'currencies' | 'access';
-const NAV: Array<{ id: Section | 'gateways' | 'crm' | 'woo' | 'members'; label: string; native: boolean }> = [
+type Section = 'general' | 'taxes' | 'rates' | 'modes' | 'currencies' | 'access' | 'gateways' | 'reminders' | 'templates' | 'crm' | 'woo' | 'members';
+const NAV: Array<{ id: Section; label: string; native: boolean; group?: string }> = [
   { id: 'general', label: 'General', native: true },
   { id: 'taxes', label: 'Tax rates', native: true },
   { id: 'rates', label: 'Exchange rates', native: true },
   { id: 'modes', label: 'Payment modes', native: true },
   { id: 'currencies', label: 'Currencies', native: true },
+  { id: 'gateways', label: 'Payment gateways', native: true, group: 'Getting paid' },
+  { id: 'reminders', label: 'Payment reminders', native: true },
+  { id: 'templates', label: 'Message templates', native: true },
+  { id: 'crm', label: 'CRM connector', native: true, group: 'Connections' },
+  { id: 'woo', label: 'WooCommerce stores', native: true },
+  { id: 'members', label: 'Members', native: true, group: 'People' },
   { id: 'access', label: 'Data access', native: true },
-  { id: 'gateways', label: 'Payment gateways', native: false },
-  { id: 'crm', label: 'CRM connector', native: false },
-  { id: 'woo', label: 'WooCommerce stores', native: false },
-  { id: 'members', label: 'Members', native: false },
 ];
+
+/** The sections whose settings belong to one company: the company chooser shows above them. */
+const PER_COMPANY = new Set<Section>(['general', 'modes', 'gateways', 'reminders', 'templates']);
 
 export default function BillSettings({ org }: { org: string }) {
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
@@ -72,7 +80,12 @@ export default function BillSettings({ org }: { org: string }) {
         <nav aria-label="Settings sections" className="flex w-[200px] shrink-0 flex-col gap-0.5">
           {NAV.map((n) => {
             const on = n.native && section === n.id;
-            return (
+            return [
+              n.group ? (
+                <span key={`${n.id}-group`} className="mt-2.5 mb-0.5 px-2.5 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">
+                  {n.group}
+                </span>
+              ) : null,
               <button
                 key={n.id}
                 type="button"
@@ -83,18 +96,26 @@ export default function BillSettings({ org }: { org: string }) {
               >
                 <span className="min-w-0 flex-1 truncate">{n.label}</span>
                 {n.native ? null : <Icon name="external" size={12} className="shrink-0 text-ink-3" />}
-              </button>
-            );
+              </button>,
+            ];
           })}
         </nav>
         <div className="flex min-w-0 flex-1 flex-col gap-3">
+          {PER_COMPANY.has(section) && (orgs.data ?? []).length > 1 ? (
+            <Field label="Company" hint={section === 'general' ? 'These settings can differ per company: numbering, letterhead, terms.' : 'These settings are per company.'}>
+              <Select<string>
+                aria-label="Settings company"
+                searchable
+                value={company}
+                onValueChange={setCompany}
+                placeholder="Choose the company"
+                options={(orgs.data ?? []).map((o) => ({ value: String(o.id), label: o.name }))}
+                className={input + ' !w-[300px]'}
+              />
+            </Field>
+          ) : null}
           {section === 'general' ? (
             <>
-              {(orgs.data ?? []).length > 1 ? (
-                <Field label="Company" hint="These settings can differ per company: numbering, letterhead, terms.">
-                  <Select<string> aria-label="Settings company" searchable value={company} onValueChange={setCompany} placeholder="Choose the company" options={(orgs.data ?? []).map((o) => ({ value: String(o.id), label: o.name }))} className={input + ' !w-[300px]'} />
-                </Field>
-              ) : null}
               {whose || !(orgs.data ?? []).length ? (
                 <ModuleSettingsForm
                   key={whose}
@@ -131,6 +152,12 @@ export default function BillSettings({ org }: { org: string }) {
           {section === 'modes' ? <Modes may={may} org={whose} /> : null}
           {section === 'currencies' ? <Currencies may={may} /> : null}
           {section === 'access' ? <Access /> : null}
+          {section === 'gateways' ? <Gateways may={may} org={whose} orgs={orgs.data ?? []} /> : null}
+          {section === 'reminders' ? <Reminders may={may} org={whose} /> : null}
+          {section === 'templates' ? <Templates may={may} org={whose} /> : null}
+          {section === 'crm' ? <Crm may={may} orgs={orgs.data ?? []} /> : null}
+          {section === 'woo' ? <Woo may={may} orgs={orgs.data ?? []} /> : null}
+          {section === 'members' ? <Members org={whose} orgs={orgs.data ?? []} /> : null}
         </div>
       </div>
     </div>

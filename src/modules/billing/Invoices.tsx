@@ -1,23 +1,29 @@
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { errorMessage } from '../../core/bridge';
+import { useRef, useState } from 'react';
+import { call, errorMessage } from '../../core/bridge';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet } from '../hr/parts';
-import { amount, bulkInvoices, fetchInvoices, invoiceName, K, PER_PAGE, SORTS, STATUS, STATUSES, type Invoice, type ListFilters } from './api';
+import { Menu } from '../../components/Menu';
+import { BULK_LABEL, bulkAct, bulkSummary, exportRequest, type BulkAction, type BulkResult, type ExportFormat } from './actions';
+import { amount, fetchInvoices, invoiceName, K, PER_PAGE, SORTS, STATUS, STATUSES, type Invoice, type ListFilters } from './api';
+import { OFFLINE_WRITE, useBillingOffline } from './offline';
 import { money, StatusChip } from './parts';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
- * Invoices (BillInvoices): the list, with the per-status tallies over every
- * invoice (not just this page), filters, and — for those who may issue — the
- * two bulk acts the server allows: recording several as sent, and cancelling
- * them. Issuing is never a bulk act; each draft is issued on its own.
+ * Invoices (BillInvoices, W2): the list, with the per-status tallies over
+ * every invoice (not just this page), filters, export (G-13: CSV, XLSX or
+ * PDF, saved to disk through Transfers, filtered as the list is) and — for
+ * those who may issue — the bulk bar: issue, send, one PDF of them all, mark
+ * as sent, record each as paid in full, and cancel. The server does each one
+ * on its own and says, per invoice, what it did or why it refused; that
+ * answer is shown as it came.
  */
-type Bulk = { action: 'sent' | 'cancel'; ids: number[] };
+type Bulk = { action: BulkAction; ids: number[] };
 
 export default function Invoices({ org, narrow, salesDate, outstanding, currency, canCreate, canIssue, onOpen, onNew }: {
   org: string;
@@ -40,8 +46,12 @@ export default function Invoices({ org, narrow, salesDate, outstanding, currency
   const [page, setPage] = useState(1);
   const [chosen, setChosen] = useState<number[]>([]);
   const [bulk, setBulk] = useState<Bulk | null>(null);
+  const [result, setResult] = useState<{ action: BulkAction; r: BulkResult } | null>(null);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const exportRef = useRef<HTMLButtonElement | null>(null);
+  const offline = useBillingOffline();
   // The rail's "drafts" and the dashboard's tiles land here narrowed; a new narrowing replaces the filters.
   const scope = `${org}:${narrow ?? ''}:${salesDate ?? ''}`;
   const [seen, setSeen] = useState(scope);
@@ -68,21 +78,30 @@ export default function Invoices({ org, narrow, salesDate, outstanding, currency
     if (!bulk) return;
     setBusy(true);
     try {
-      const r = await bulkInvoices(bulk.action, bulk.ids, reason);
-      const did = r.done.length;
-      const word = bulk.action === 'sent' ? 'recorded as sent' : 'cancelled';
-      if (did) toast('success', `${did} ${did === 1 ? 'invoice' : 'invoices'} ${word}.`);
-      for (const x of r.failed.slice(0, 4)) toast('error', `${x.number ?? `Draft #${x.id}`}: ${x.why}`);
-      if (r.failed.length > 4) toast('error', `${r.failed.length - 4} more could not be ${word}.`);
+      const r = await bulkAct(bulk.action, bulk.ids, bulk.action === 'cancel' && reason.trim() ? { reason: reason.trim() } : {});
+      toast(r.done ? 'success' : 'error', bulkSummary(bulk.action, r));
+      if (r.file_url) await call('transfers:download', { billingFile: r.file_url, name: `invoices-${new Date().toISOString().slice(0, 10)}.pdf`, open: true }).catch((e) => toast('error', errorMessage(e)));
+      if (r.refused) setResult({ action: bulk.action, r });
       setBulk(null);
       setReason('');
-      setChosen([]);
+      setChosen(r.results.filter((x) => !x.ok).map((x) => x.id));
       void qc.invalidateQueries({ queryKey: K.all });
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
       setBusy(false);
     }
+  };
+  const doExport = (format: ExportFormat) => {
+    const x = exportRequest('invoices', format, { org, q: q.trim() || undefined, status: status || (unpaid ? 'sent,viewed,partial,overdue' : undefined) });
+    void call('transfers:download', x).then(
+      () => toast('success', `Exporting ${format.toUpperCase()} — see Transfers.`),
+      (e) => toast('error', errorMessage(e)),
+    );
+  };
+  const nameOf = (id: number) => {
+    const r = rows.find((x) => x.id === id);
+    return r ? invoiceName(r) : `#${id}`;
   };
 
   return (
@@ -95,8 +114,33 @@ export default function Invoices({ org, narrow, salesDate, outstanding, currency
             <b className="text-ink tabular-nums">{money(outstanding, currency)}</b>
           </span>
         ) : null}
+        <button ref={exportRef} type="button" className={btn} aria-haspopup="menu" aria-expanded={exporting} onClick={() => setExporting((v) => !v)}>
+          <Icon name="download" size={14} /> Export
+        </button>
+        {exporting ? (
+          <Menu
+            label="Export the invoices"
+            anchor={exportRef}
+            prefer="bottom"
+            align="end"
+            width={240}
+            sections={[
+              {
+                id: 'fmt',
+                label: 'As filtered, every page',
+                items: (['csv', 'xlsx', 'pdf'] as ExportFormat[]).map((f) => ({
+                  id: f,
+                  label: f === 'csv' ? 'CSV' : f === 'xlsx' ? 'Excel (XLSX)' : 'PDF',
+                  description: f === 'xlsx' ? 'CSV where the server has no Excel writer' : undefined,
+                  onSelect: () => doExport(f),
+                })),
+              },
+            ]}
+            onClose={() => setExporting(false)}
+          />
+        ) : null}
         {canCreate ? (
-          <button type="button" className={btnPrimary} onClick={onNew}>
+          <button type="button" className={btnPrimary} disabled={offline} title={offline ? OFFLINE_WRITE : undefined} onClick={onNew}>
             <Icon name="plus" size={15} /> New invoice
           </button>
         ) : null}
@@ -123,14 +167,20 @@ export default function Invoices({ org, narrow, salesDate, outstanding, currency
         </div>
       ) : null}
       {chosen.length && canIssue ? (
-        <div className="flex items-center gap-2 self-start rounded-[9px] border border-[#C7D0F5] bg-[#EEF1FC] px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
+        <div role="toolbar" aria-label="With the chosen invoices" className="flex flex-wrap items-center gap-2 self-start rounded-[9px] border border-[#C7D0F5] bg-[#EEF1FC] px-2.5 py-1.5 dark:border-primary/40 dark:bg-selection">
           <b className="text-[12.5px] text-primary">{chosen.length} selected</b>
-          <button type="button" className={btnSmall + ' !h-7'} onClick={() => setBulk({ action: 'sent', ids: chosen })}>
-            Mark as sent
-          </button>
-          <button type="button" className={btnSmall + ' !h-7 !text-danger'} onClick={() => setBulk({ action: 'cancel', ids: chosen })}>
-            Cancel
-          </button>
+          {(['issue', 'send', 'pdf', 'mark_sent', 'record_payment', 'cancel'] as BulkAction[]).map((a) => (
+            <button
+              key={a}
+              type="button"
+              disabled={offline && a !== 'pdf'}
+              title={offline && a !== 'pdf' ? OFFLINE_WRITE : undefined}
+              className={btnSmall + ' !h-7' + (a === 'cancel' ? ' !text-danger' : '')}
+              onClick={() => setBulk({ action: a, ids: chosen })}
+            >
+              {BULK_LABEL[a].verb}
+            </button>
+          ))}
           <button type="button" className="text-[12px] font-semibold text-primary hover:underline" onClick={() => setChosen([])}>
             Clear the selection
           </button>
@@ -171,33 +221,74 @@ export default function Invoices({ org, narrow, salesDate, outstanding, currency
 
       {bulk ? (
         <Sheet
-          title={bulk.action === 'sent' ? `Record ${bulk.ids.length} ${bulk.ids.length === 1 ? 'invoice' : 'invoices'} as sent?` : `Cancel ${bulk.ids.length} ${bulk.ids.length === 1 ? 'invoice' : 'invoices'}?`}
-          width={440}
+          title={bulkTitle(bulk)}
+          width={460}
           onClose={() => setBulk(null)}
           footer={
             <>
               <button type="button" className={btn} onClick={() => setBulk(null)}>
-                {bulk.action === 'sent' ? 'Cancel' : 'Back'}
+                {bulk.action === 'cancel' ? 'Back' : 'Cancel'}
               </button>
               <button type="button" className={btnPrimary + (bulk.action === 'cancel' ? ' !bg-danger hover:!opacity-90' : '')} disabled={busy} onClick={() => void runBulk()}>
-                {busy ? 'Working…' : bulk.action === 'sent' ? 'Record' : 'Cancel them'}
+                {busy ? 'Working…' : bulk.action === 'cancel' ? 'Cancel them' : BULK_LABEL[bulk.action].verb}
               </button>
             </>
           }
         >
-          {bulk.action === 'sent' ? (
-            <p className="m-0 text-[13px] text-ink-2">This records that they were sent. It does not send anything. Drafts are refused: a draft is issued first.</p>
-          ) : (
-            <>
-              <p className="m-0 text-[13px] text-ink-2">Cancelling is not deleting — they stay on the record, marked cancelled. Any with payments against them are refused and named.</p>
-              <Field label="Why?">
-                <input aria-label="Why?" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={250} placeholder="Raised against the wrong company" className={input} />
-              </Field>
-            </>
-          )}
+          <p className="m-0 text-[13px] text-ink-2">{BULK_HELP[bulk.action]} Each one is done on its own; any refused are named with the reason.</p>
+          {bulk.action === 'cancel' ? (
+            <Field label="Why?">
+              <input aria-label="Why?" value={reason} onChange={(e) => setReason(e.target.value)} maxLength={250} placeholder="Raised against the wrong company" className={input} />
+            </Field>
+          ) : null}
         </Sheet>
       ) : null}
+      {result ? <BulkResults action={result.action} r={result.r} nameOf={nameOf} onOpen={(id) => (setResult(null), onOpen(id))} onClose={() => setResult(null)} /> : null}
     </div>
+  );
+}
+
+const BULK_HELP: Record<BulkAction, string> = {
+  issue: 'Drafts are numbered and frozen, and posted. Ones that need approval are refused.',
+  send: 'Each is emailed to its customer with its PDF and a pay link, by the invoice template.',
+  pdf: 'Their PDFs are put in one file, saved to Transfers.',
+  mark_sent: 'This records that they were sent. It does not send anything. Drafts are refused: a draft is issued first.',
+  record_payment: 'Each is recorded as paid in full today, by bank transfer to the company’s default account.',
+  cancel: 'Their journals are reversed and they stay on the record, marked cancelled. Any with payments, or in a locked period, are refused and named.',
+};
+
+const bulkTitle = (b: Bulk) => {
+  const n = `${b.ids.length} ${b.ids.length === 1 ? 'invoice' : 'invoices'}`;
+  return b.action === 'pdf' ? `One PDF of ${n}?` : b.action === 'mark_sent' ? `Record ${n} as sent?` : b.action === 'record_payment' ? `Record ${n} as paid?` : `${BULK_LABEL[b.action].verb} ${n}?`;
+};
+
+/** What a bulk act did, invoice by invoice: those refused first, with the server's reason, each one openable. */
+export function BulkResults({ action, r, nameOf, onOpen, onClose }: { action: BulkAction; r: BulkResult; nameOf: (id: number) => string; onOpen: (id: number) => void; onClose: () => void }) {
+  const sorted = [...r.results].sort((a, b) => Number(a.ok) - Number(b.ok));
+  return (
+    <Sheet
+      title={`${BULK_LABEL[action].verb}: ${r.done} done, ${r.refused} refused`}
+      width={500}
+      onClose={onClose}
+      footer={
+        <button type="button" className={btnPrimary} onClick={onClose}>
+          Done
+        </button>
+      }
+    >
+      <p className="m-0 text-[12.5px] text-ink-2">{bulkSummary(action, r)} The refused ones stay chosen in the list.</p>
+      <div role="list" aria-label="Results" className="flex flex-col">
+        {sorted.map((x) => (
+          <div role="listitem" key={x.id} data-ok={x.ok ? '1' : '0'} className="flex items-start gap-2 border-b border-line/60 py-1.5 text-[12.5px] last:border-b-0">
+            <Icon name={x.ok ? 'check' : 'x'} size={14} className={cx('mt-0.5 shrink-0', x.ok ? 'text-success' : 'text-danger')} />
+            <button type="button" className="w-[110px] shrink-0 truncate text-left font-bold text-primary hover:underline" onClick={() => onOpen(x.id)}>
+              {x.number ?? nameOf(x.id)}
+            </button>
+            <span className={cx('min-w-0 flex-1', x.ok ? 'text-ink-3' : 'text-danger')}>{x.ok ? (x.message ?? 'Done') : (x.message ?? x.code ?? 'Refused')}</span>
+          </div>
+        ))}
+      </div>
+    </Sheet>
   );
 }
 

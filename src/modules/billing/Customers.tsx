@@ -1,5 +1,11 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
+import { errorMessage } from '../../core/bridge';
+import { addDays, todayInZone } from '../../core/time';
+import { toast } from '../../core/toasts';
+import { btnSmall } from '../hr/parts';
+import { exportRequest, sendStatement } from './actions';
+import { can } from './api';
 import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { call } from '../../core/bridge';
@@ -18,7 +24,9 @@ import { Checkbox } from '../../components/Checkbox';
  * Customers (BillCustomers): who owes what, largest first — outstanding,
  * overdue, billed and money held on account — and one customer's picture:
  * how old their debt is, their invoices, payments and recurring billing.
- * The company picker narrows the money, not the names.
+ * The company picker narrows the money, not the names. A customer's
+ * statement of account (G-05) for a period is saved as a PDF or emailed to
+ * them from their panel.
  */
 export default function Customers({ org, openId, onOpen, onOpenInvoice, onOpenPayment, onOpenProfile }: {
   org: string;
@@ -36,7 +44,21 @@ export default function Customers({ org, openId, onOpen, onOpenInvoice, onOpenPa
 
   return (
     <div className="flex flex-col gap-3 px-6 py-5">
-      <PageHead title="Customers" sub="Largest outstanding first" />
+      <PageHead title="Customers" sub="Largest outstanding first">
+        <button
+          type="button"
+          className={btnSmall}
+          title="Saved to disk as CSV — see Transfers"
+          onClick={() =>
+            void call('transfers:download', exportRequest('customers', 'csv', { org })).then(
+              () => toast('success', 'Exporting — see Transfers.'),
+              (e) => toast('error', errorMessage(e)),
+            )
+          }
+        >
+          <Icon name="download" size={13} className="mr-1" /> Export
+        </button>
+      </PageHead>
       <div className="flex items-center gap-2">
         <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search customers" aria-label="Search customers" className={input + ' !w-[260px]'} />
         <label className="flex items-center gap-1.5 font-semibold text-ink">
@@ -117,6 +139,7 @@ function CustomerPanel({ id, org, onClose, onOpenInvoice, onOpenPayment, onOpenP
             <Kpi label="On account" value={amount(d.summary.on_account, cur)} sub="unallocated" tone={d.summary.on_account > 0 ? 'amber' : undefined} />
           </div>
           {d.customer.billing_address ? <span className="text-[12px] text-ink-3">{d.customer.billing_address}</span> : null}
+          <Statement customer={d.customer} org={org} canSend={can(perms, 'billing.invoice')} />
           <Section title="How old the money is">
             <div className="flex h-3 overflow-hidden rounded-[6px] bg-subtle">{aging.map((a) => (a.pct > 0 ? <span key={a.key} style={{ width: `${a.pct}%`, background: a.colour }} title={`${a.label}: ${amount(a.value, cur)}`} /> : null))}</div>
             <div className="grid grid-cols-5 gap-1">
@@ -185,5 +208,52 @@ function CustomerPanel({ id, org, onClose, onOpenInvoice, onOpenPayment, onOpenP
         </>
       ) : null}
     </SidePanel>
+  );
+}
+
+/** A statement of account for a period: saved to disk as the server's PDF, or emailed to the customer. */
+function Statement({ customer, org, canSend }: { customer: { id: number; name: string; email: string | null }; org: string; canSend: boolean }) {
+  const today = todayInZone();
+  const [from, setFrom] = useState(addDays(today, -90));
+  const [to, setTo] = useState(today);
+  const [busy, setBusy] = useState(false);
+  const ok = /^\d{4}-\d{2}-\d{2}$/.test(from) && /^\d{4}-\d{2}-\d{2}$/.test(to) && from <= to;
+  const download = () => {
+    void call('transfers:download', {
+      billingExport: { what: 'statement' as const, customer: customer.id, format: 'pdf' as const, from, to, ...(org ? { org } : {}) },
+      name: `statement-${customer.name.replace(/[^A-Za-z0-9]+/g, '-').slice(0, 40)}-${to}.pdf`,
+      open: true,
+    }).then(
+      () => toast('success', 'Saving the statement — see Transfers.'),
+      (e) => toast('error', errorMessage(e)),
+    );
+  };
+  const send = async () => {
+    setBusy(true);
+    try {
+      const r = await sendStatement(customer.id, { from, to });
+      toast('success', r.message ?? `Statement emailed to ${customer.email ?? customer.name}.`);
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Section title="Statement of account">
+      <div className="flex flex-wrap items-center gap-1.5 text-[12.5px] text-ink-2">
+        <input aria-label="Statement from" type="date" value={from} max={to} onChange={(e) => setFrom(e.target.value)} className={input + ' !h-[30px] !w-[140px]'} />
+        to
+        <input aria-label="Statement to" type="date" value={to} min={from} max={today} onChange={(e) => setTo(e.target.value)} className={input + ' !h-[30px] !w-[140px]'} />
+        <button type="button" className={btnSmall} disabled={!ok} onClick={download}>
+          PDF
+        </button>
+        {canSend ? (
+          <button type="button" className={btnSmall} disabled={!ok || busy || !customer.email} title={customer.email ? `Email it to ${customer.email}` : 'This customer has no email address'} onClick={() => void send()}>
+            {busy ? 'Sending…' : 'Email it'}
+          </button>
+        ) : null}
+      </div>
+    </Section>
   );
 }

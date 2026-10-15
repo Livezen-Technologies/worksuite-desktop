@@ -10,6 +10,7 @@ import { writeFile } from 'node:fs/promises';
 import { canOpenApp, notificationAllowed } from '@shared/access';
 import { tabRecordSchema, type TabRecord } from '@shared/ipc/contract';
 import { garageDocPath } from '@shared/garage-docs';
+import { billingExportPath } from '@shared/billing';
 import { projectsReportPath } from '@shared/projects';
 import { safeFileName } from '@shared/filename';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
@@ -743,6 +744,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/tender/library/${input.tenderLibrary}/file`
       : input.invoicePdf
       ? `/api/share/billing/${input.invoicePdf}/pdf`
+      : input.billingExport
+      ? billingExportPath(input.billingExport)
+      : input.billingFile
+      ? input.billingFile
       : input.paymentSlip
       ? `/api/billing/payments/${input.paymentSlip.payment}/slips/${input.paymentSlip.slip}`
       : rep

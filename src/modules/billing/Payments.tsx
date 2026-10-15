@@ -10,25 +10,10 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
 import { amount, can, K, METHODS, methodLabel, unallocate } from './api';
-import {
-  allocatePayment,
-  deletePayment,
-  fetchPayment,
-  fetchPayments,
-  fetchSlips,
-  KB,
-  oldestFirst,
-  openInvoicesOf,
-  PER_PAGE,
-  receiptPdf,
-  refundable,
-  refundPayment,
-  removeSlip,
-  uploadSlip,
-  type PaymentDetail,
-} from './more';
+import { allocatePayment, converted, deletePayment, fetchPayment, fetchPayments, fetchSlips, KB, oldestFirst, openInvoicesOf, PER_PAGE, receiptPdf, refundable, refundPayment, removeSlip, uploadSlip, type PaymentDetail } from './more';
 import { money, StatusChip } from './parts';
 import { Checkbox } from '../../components/Checkbox';
+import { exportRequest } from './actions';
 
 /**
  * Payments (BillPayments, BillPaymentSheet): money received and money given
@@ -75,6 +60,19 @@ export default function Payments({ org, openId, onlyUnallocated, onOpen, onOpenI
             </b>
           </span>
         ) : null}
+        <button
+          type="button"
+          className={btn}
+          title="Saved to disk as CSV, filtered as the list is — see Transfers"
+          onClick={() =>
+            void call('transfers:download', exportRequest('payments', 'csv', { org, q: q.trim() || undefined })).then(
+              () => toast('success', 'Exporting — see Transfers.'),
+              (e) => toast('error', errorMessage(e)),
+            )
+          }
+        >
+          <Icon name="download" size={14} /> Export
+        </button>
         {can(perms, 'billing.payment') ? (
           <button type="button" className={btnPrimary} onClick={onRecord}>
             <Icon name="plus" size={15} /> Record payment
@@ -351,14 +349,20 @@ export function PaymentPanel({ id, onClose, onOpenInvoice, onOpenPayment }: { id
 function AllocateSheet({ p, onClose }: { p: PaymentDetail; onClose: () => void }) {
   const qc = useQueryClient();
   const open = useQuery({ queryKey: ['billing', 'open-invoices', p.client_id], queryFn: ({ signal }) => openInvoicesOf(p.client_id!, signal), enabled: !!p.client_id });
-  const invoices = (open.data ?? []).filter((i) => i.currency === p.currency && i.due > 0);
+  const same = (open.data ?? []).filter((i) => i.currency === p.currency && i.due > 0);
+  // Invoices in other currencies too (G-17): each settles at a rate, and the server posts the realised gain or loss.
+  const other = (open.data ?? []).filter((i) => i.currency !== p.currency && i.due > 0);
+  const invoices = [...same, ...other];
   const [amounts, setAmounts] = useState<Record<number, string> | null>(null);
+  const [rates, setRates] = useState<Record<number, string>>({});
   const [busy, setBusy] = useState(false);
-  const plan = oldestFirst(invoices, p.unallocated);
+  const plan = oldestFirst(same, p.unallocated);
   const value = (id: number) => amounts?.[id] ?? (plan[id] ? plan[id]!.toFixed(2) : '');
+  const rateOf = (id: number) => Number((rates[id] ?? '').replace(/,/g, '')) || 0;
   const entered = invoices.reduce((s, i) => s + (Number(value(i.id)) || 0), 0);
   const over = entered > p.unallocated + 0.005;
-  const send = async (spec: 'auto' | Array<{ invoice_id: number; amount: number }>) => {
+  const missingRate = other.some((i) => (Number(value(i.id)) || 0) > 0 && !(rateOf(i.id) > 0));
+  const send = async (spec: 'auto' | Array<{ invoice_id: number; amount: number; rate?: number }>) => {
     setBusy(true);
     try {
       const r = await allocatePayment(p.id, spec);
@@ -391,22 +395,19 @@ function AllocateSheet({ p, onClose }: { p: PaymentDetail; onClose: () => void }
           <button
             type="button"
             className={btnPrimary}
-            disabled={busy || over || entered <= 0}
-            onClick={() =>
-              void send(
-                invoices
-                  .map((i) => ({ invoice_id: i.id, amount: Number(value(i.id)) || 0 }))
-                  .filter((x) => x.amount > 0),
-              )
-            }
+            disabled={busy || over || entered <= 0 || missingRate}
+            title={missingRate ? 'Give the rate for each invoice in another currency' : undefined}
+            onClick={() => void send(invoices.map((i) => ({ invoice_id: i.id, amount: Number(value(i.id)) || 0, ...(i.currency !== p.currency ? { rate: rateOf(i.id) } : {}) })).filter((x) => x.amount > 0))}
           >
             Allocate
           </button>
         </>
       }
     >
-      <p className="m-0 text-[12.5px] text-ink-3">{p.client} · only invoices in {p.currency} still owing</p>
-      <button type="button" className={btn + ' self-start'} disabled={busy || !invoices.length} onClick={() => void send('auto')}>
+      <p className="m-0 text-[12.5px] text-ink-3">
+        {p.client} · invoices still owing; amounts are in {p.currency}
+      </p>
+      <button type="button" className={btn + ' self-start'} disabled={busy || !same.length} onClick={() => void send('auto')}>
         Settle the oldest invoices first
       </button>
       <b className="text-[12.5px] text-ink">Or choose amounts</b>
@@ -421,11 +422,30 @@ function AllocateSheet({ p, onClose }: { p: PaymentDetail; onClose: () => void }
                 {i.due_date ? `due ${dateLabel(i.due_date)} · ` : ''}owes {amount(i.due, i.currency)}
               </span>
             </span>
-            <input aria-label={`Allocate to ${i.number}`} inputMode="decimal" value={value(i.id)} onChange={(e) => setAmounts({ ...Object.fromEntries(invoices.map((x) => [x.id, value(x.id)])), [i.id]: e.target.value })} className={input + ' !h-[30px] !w-[130px] tabular-nums'} />
+            {i.currency !== p.currency ? (
+              <span className="flex flex-col items-end">
+                <input
+                  aria-label={`Rate for ${i.number}: 1 ${p.currency} in ${i.currency}`}
+                  inputMode="decimal"
+                  placeholder={`1 ${p.currency} = ? ${i.currency}`}
+                  value={rates[i.id] ?? ''}
+                  onChange={(e) => setRates({ ...rates, [i.id]: e.target.value })}
+                  className={input + ' !h-[30px] !w-[130px] tabular-nums'}
+                />
+                {rateOf(i.id) > 0 && Number(value(i.id)) > 0 ? <span className="text-[11px] text-ink-3">settles {amount(Math.min(i.due, converted(Number(value(i.id)), rateOf(i.id))), i.currency)}</span> : null}
+              </span>
+            ) : null}
+            <input
+              aria-label={`Allocate to ${i.number}`}
+              inputMode="decimal"
+              value={value(i.id)}
+              onChange={(e) => setAmounts({ ...Object.fromEntries(invoices.map((x) => [x.id, value(x.id)])), [i.id]: e.target.value })}
+              className={input + ' !h-[30px] !w-[130px] tabular-nums'}
+            />
           </div>
         ))
       ) : (
-        <Empty text={`${p.client ?? 'This customer'} has no invoice in ${p.currency} still owing.`} />
+        <Empty text={`${p.client ?? 'This customer'} has no invoice still owing.`} />
       )}
     </Sheet>
   );
@@ -439,12 +459,16 @@ function RefundSheet({ p, onClose }: { p: PaymentDetail; onClose: () => void }) 
   const [value, setValue] = useState(free.toFixed(2));
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
+  // Money taken through a gateway can go back the same way (G-02): the gateway refunds the card and the refund is recorded with its reference.
+  const viaGatewayPossible = !!p.gateway && !!p.gateway_ref && p.direction === 'in';
+  const [viaGateway, setViaGateway] = useState(viaGatewayPossible);
   const sum = Number(value.replace(/,/g, '')) || 0;
   const send = async () => {
     setBusy(true);
     try {
-      await refundPayment(p.id, { amount: sum, ...(reason.trim() ? { reason: reason.trim() } : {}) });
-      toast('success', `Refund of ${amount(sum, p.currency)} recorded.`);
+      const r = await refundPayment(p.id, { amount: sum, ...(reason.trim() ? { reason: reason.trim() } : {}), ...(viaGateway ? { via_gateway: true } : {}) });
+      if (viaGateway && r.gateway && !r.gateway.ok) toast('error', r.gateway.message ?? `${p.gateway} refused the refund.`);
+      toast('success', viaGateway ? `Refund of ${amount(sum, p.currency)} sent back through ${p.gateway}${r.gateway?.reference ? ` (${r.gateway.reference})` : ''}.` : `Refund of ${amount(sum, p.currency)} recorded.`);
       void qc.invalidateQueries({ queryKey: K.all });
       onClose();
     } catch (e) {
@@ -464,7 +488,7 @@ function RefundSheet({ p, onClose }: { p: PaymentDetail; onClose: () => void }) 
             Cancel
           </button>
           <button type="button" className={btnPrimary} disabled={busy || sum <= 0 || sum > free + 0.005} onClick={() => void send()}>
-            Refund {amount(sum, p.currency)}
+            {viaGateway ? `Refund ${amount(sum, p.currency)} through ${p.gateway}` : `Refund ${amount(sum, p.currency)}`}
           </button>
         </>
       }
@@ -483,7 +507,18 @@ function RefundSheet({ p, onClose }: { p: PaymentDetail; onClose: () => void }) 
       <Field label="Why is the money going back?">
         <textarea aria-label="Why is the money going back?" value={reason} maxLength={400} onChange={(e) => setReason(e.target.value)} className={input + ' !h-[52px] resize-none py-2'} />
       </Field>
-      <p className="m-0 rounded-[8px] bg-subtle px-3 py-2 text-[12px] text-ink-2">This records money that has already gone back. Nothing here sends it.</p>
+      {viaGatewayPossible ? (
+        <label className="flex items-start gap-2 text-[12.5px] text-ink">
+          <Checkbox checked={viaGateway} onChange={(e) => setViaGateway(e.target.checked)} className="mt-0.5" />
+          <span>
+            <b>Refund through {p.gateway}</b>
+            <span className="block text-ink-3">The money goes back to the card or account it came from ({p.gateway_ref}). Leave this off if it was already returned another way.</span>
+          </span>
+        </label>
+      ) : null}
+      <p className="m-0 rounded-[8px] bg-subtle px-3 py-2 text-[12px] text-ink-2">
+        {viaGateway ? `${p.gateway} is asked to send it back now; its answer is recorded on the refund.` : 'This records money that has already gone back. Nothing here sends it.'}
+      </p>
     </Sheet>
   );
 }
