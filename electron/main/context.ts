@@ -65,6 +65,8 @@ export interface AppContext {
    * connect and confirm. Set by `installAccounts`; absent, the session's own server step runs as before.
    */
   accounts?: { setServer: (url: string) => Promise<AuthState>; forgetServer: () => AuthState };
+  /** WorkSuite OS mode (os-mode.ts): sign-in goes through the OS credentials broker. Absent: the standalone flow. */
+  osMode?: { signIn: () => Promise<AuthState> };
   db: Database;
   vault: () => Vault;
   secrets: SecureStore;

@@ -455,6 +455,8 @@ export const contract = {
   'auth:clearGate': ch(none),
   // Opens the server's passkey page in the browser; the result returns through worksuite://auth/callback.
   'auth:passkeyStart': ch(none, { rate: 2 }),
+  /** WorkSuite OS mode: sign in through the OS credentials broker (the system browser), never a password. */
+  'auth:osSignIn': ch(none, { rate: 2 }),
   'auth:passkeyCancel': ch(none),
   /**
    * A page of the WorkSuite web app that needs nobody signed in — resetting a
@@ -1682,6 +1684,7 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'auth:requestUnblock': { message: string };
   'auth:clearGate': AuthState;
   'auth:passkeyStart': AuthState;
+  'auth:osSignIn': AuthState;
   'auth:passkeyCancel': AuthState;
   'auth:openPage': boolean;
   'hr:clock': { ok: true };

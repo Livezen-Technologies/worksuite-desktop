@@ -11,6 +11,15 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+
+- **WorkSuite OS mode.** On WorkSuite OS (`/etc/worksuite/os-release`, or `--worksuite-os` / `WORKSUITE_OS=1`) the app signs in with the account you signed in to WorkSuite OS with, through the OS credentials broker. If nobody is signed in, the broker signs in through the system browser. The app never asks for a password there.
+  - The app uses the OS device enrolment instead of registering itself.
+  - It leaves updates to the OS package manager and the lock to the OS screen lock.
+  - `--module=<mail|chat|calendar|tasks|files|crm|hr|home>` opens a module, in the running WorkSuite if there is one.
+  - See [docs/WORKSUITE_OS.md](docs/WORKSUITE_OS.md).
+- Where it bites: in OS mode, Settings › Updates says the system updates WorkSuite, and the app-lock settings have no effect.
+
 ## 0.2.261 — 2026-10-15
 
 - **Inventory on the desktop, as designed (D1–D5).** A dashboard with **This computer** — whether a barcode scanner has been heard, the label printer, the offline copy and changes waiting to sync — beside the 14-day received/issued chart; the rail grouped Workspace / Control / Trade / Insight / Setup / Administration / Desktop, with **Receiving** under Trade.

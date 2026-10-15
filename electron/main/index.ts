@@ -14,6 +14,7 @@ import { hkdfSync } from 'node:crypto';
 import { join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
+import { isOsMode, moduleLinkInArgv } from '@shared/os-mode';
 import { isOfficeSignInLink, OFFICE_CLIENT } from '@shared/office-signin';
 import { itemApp, itemRoute, looksLikeItemLink, parseItemLink } from '@shared/item-links';
 import { linkPrefs } from '@shared/link-prefs';
@@ -133,6 +134,7 @@ import { MeetRecorder } from '../services/meet-recorder';
 import { SpeechService } from '../services/speech';
 import { TransferManager, queueConfig, type DownloadSink } from '../services/transfers';
 import { ElearningOffline } from '../services/elearning-offline';
+import { createBrokerCall, osDeviceServer, readOsDevice, startOsSession, type BrokerTokenEndpoint } from '../services/os-mode';
 import { EventDesk } from '../services/event-desk';
 import { EventDeskPrint } from '../services/event-desk-print';
 import { createRestaurant } from '../services/restaurant';
@@ -200,6 +202,12 @@ let handOffice: (paths: string[]) => void = (paths) => void pendingOffice.push(.
 const pendingMailFiles: string[] = [];
 let handMailFiles: (paths: string[]) => void = (paths) => void pendingMailFiles.push(...paths);
 
+/**
+ * WorkSuite OS mode (docs/WORKSUITE_OS.md): the OS's credentials broker, device enrolment, package manager and screen
+ * lock take the place of the app's own sign-in, registration, updater and app lock.
+ */
+const OS_MODE = isOsMode(process.argv, process.env, existsSync);
+
 if (!app.requestSingleInstanceLock()) {
   // FR-DL-04: a second launch hands its arguments (and deep link) to the first.
   app.quit();
@@ -228,7 +236,9 @@ function main(): void {
   // FR-DL-01: worksuite:// on every platform. A development build registers
   // itself only when asked, so running tests never takes over the system's
   // handler from an installed copy.
-  if (app.isPackaged) {
+  if (OS_MODE) {
+    // WorkSuite OS registers the handler itself (the package's .desktop entry and the start menu's mimeapps.list).
+  } else if (app.isPackaged) {
     app.setAsDefaultProtocolClient('worksuite');
   } else if (process.env.WS_REGISTER_PROTOCOL === '1' && process.argv.length >= 2) {
     app.setAsDefaultProtocolClient('worksuite', process.execPath, [resolve(process.argv[1]!)]);
@@ -248,7 +258,8 @@ function main(): void {
     e.preventDefault();
     handleLink(url);
   });
-  const argvLink = findDeepLinkInArgv(process.argv) ?? findMailtoInArgv(process.argv);
+  // `--module=<id>` (the WorkSuite OS start menu) opens through the same path as worksuite://<id>.
+  const argvLink = findDeepLinkInArgv(process.argv) ?? findMailtoInArgv(process.argv) ?? moduleLinkInArgv(process.argv);
   if (argvLink) pendingLinks.push(argvLink);
   // PDFs the operating system hands over ("Open with"; a file dropped on the Dock icon): PDF Studio opens each.
   app.on('open-file', (e, path) => {
@@ -371,7 +382,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       [CLIENT_TYPE_HEADER]: CLIENT_TYPE,
     };
     const dev = device?.current();
-    if (dev) h['X-WS-Device'] = dev.id;
+    if (dev) h['X-WS-Device'] = device.headerValue() ?? dev.id;
     // The remembered computer (worksuite-desktop#301): the server marks it as this one in the account's devices.
     Object.assign(h, auth.deviceHeader());
     // A Personal account: WorkSuite Cloud runs Core for its organization (Connection & Startup §3).
@@ -444,6 +455,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // Forward-declared so the HTTP client's callbacks can reach the session.
   // eslint-disable-next-line prefer-const
   let sessionCtl: SessionController;
+  /** WorkSuite OS mode: the credentials broker, and the open account's token endpoint through it. */
+  const brokerCall = createBrokerCall();
+  let osEndpoint: BrokerTokenEndpoint | null = null;
   // The API's last 20 requests, for connection strength's median (worksuite-desktop#254).
   const apiTimings = new ApiTimings();
   const httpDeps = (fetch: FetchLike): ConstructorParameters<typeof HttpClient>[0] => ({
@@ -469,6 +483,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const bulkHttp = new HttpClient(httpDeps(bulkFetchImpl));
 
   const device: DeviceService = new DeviceService(db, secrets, http);
+  if (OS_MODE) device.osEnrolment = () => readOsDevice();
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
   const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null, desk: () => salonDesk.pairing()?.desk_id ?? null });
   // The policy is verified with the account's own key when IT configured one (its trusted `discovery_key`).
@@ -501,6 +516,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const audit = new AuditService(db, getVault, http, () => auth.getServer()?.api === 'desktop-v1');
   const supervisor = new ServiceSupervisor();
   const lock = new LockService();
+  lock.disabled = OS_MODE;
   const lockPin = new LockPin(db, getVault);
   // Where windows were is the computer's (app.db); each account's windows open in its own partition.
   const windows = new WindowManager(appDb, join(__dirname, '../preload/index.js'));
@@ -3202,6 +3218,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const ctx: AppContext = {
     boot,
+    osMode: OS_MODE ? { signIn: () => openOsSession() } : undefined,
     db,
     vault: getVault,
     secrets,
@@ -3478,6 +3495,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
    * bind budget (it may read the issuer's metadata).
    */
   const tokenEndpointFor = async (account: AccountRecord | null): Promise<TokenEndpoint | null> => {
+    if (OS_MODE) return osEndpoint;
     if (!account || (account.kind !== 'personal' && account.deployment !== 'CLOUD')) return null;
     return (await accountsWiring?.cloud.tokenEndpoint(account.id).catch(() => null)) ?? null;
   };
@@ -3801,6 +3819,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (dir) unqueueRemoval(appDb, dir);
     },
   });
+  sessionCtl.osManaged = OS_MODE;
   sessionCtl.accountView = () => {
     const a = registry.active();
     return a ? accountsService.view(a, a.id) : null;
@@ -3879,6 +3898,34 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       },
     },
   });
+  /** WorkSuite OS: the broker's account, opened in this app (os-mode.ts). One at a time. */
+  let osOpening: Promise<AuthState> | null = null;
+  function openOsSession(): Promise<AuthState> {
+    if (osOpening) return osOpening;
+    const run = startOsSession({
+      call: brokerCall,
+      deviceServer: () => osDeviceServer(),
+      currentOrigin: () => auth.getServer()?.origin ?? null,
+      setServer: async (url) => void (await accountsService.setServer(url)),
+      useEndpoint: (ep) => {
+        osEndpoint = ep;
+        auth.setTokenEndpoint(ep);
+      },
+      acceptTokens: (t) => auth.acceptTokens(t),
+      hasPreviousUser: () => !!bootstrap.lastUserId(),
+      resume: () => sessionCtl.init(),
+      acceptSession: async () => void (await sessionCtl.acceptSession({ user: await currentUser() } as SignInPayload)),
+      setStage: (stage, message = null) => {
+        if (!sessionCtl.isReady()) sessionCtl.setStage(stage, message);
+      },
+    })
+      .then(() => sessionCtl.get())
+      .finally(() => {
+        osOpening = null;
+      });
+    osOpening = run;
+    return run;
+  }
   /** Who is signed in, from the server (a browser sign-in brings tokens, not the user). */
   async function currentUser(): Promise<PublicUser> {
     const me = await http.get<{ user?: PublicUser } & Partial<PublicUser>>('/api/auth/me');
@@ -3941,7 +3988,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   // ── lifecycle ──────────────────────────────────────────────────────────
   app.on('second-instance', (_e, argv) => {
-    const link = findDeepLinkInArgv(argv) ?? findMailtoInArgv(argv);
+    const link = findDeepLinkInArgv(argv) ?? findMailtoInArgv(argv) ?? moduleLinkInArgv(argv);
     const pdfs = pdfPathsInArgv(argv);
     if (pdfs.length) handPdfs(pdfs);
     const docs = officePathsInArgv(argv);
@@ -4045,6 +4092,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       });
     }
   }
+  if (OS_MODE) {
+    updater.disable("WorkSuite OS keeps WorkSuite up to date with the system's own updates.");
+    log.info('WorkSuite OS mode: sign-in through the OS, device from the OS enrolment, no self-updates, no app lock');
+  }
   lock.start();
   // The till sends its sales with its own credential, whoever is signed in (or nobody).
   pos.start();
@@ -4057,7 +4108,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   mainWindow.webContents.once('did-finish-load', () => setTimeout(() => updater.healthy(), 10_000).unref?.());
   if (devOrigin()) log.info('development renderer', { url: process.env.ELECTRON_RENDERER_URL });
 
-  void useTokenEndpointFor(firstAccount).then(() => sessionCtl.init()).then(() => {
+  const startSession = OS_MODE ? () => openOsSession().then(() => undefined) : () => useTokenEndpointFor(firstAccount).then(() => sessionCtl.init());
+  void startSession().then(() => {
     for (const link of pendingLinks.splice(0)) handleDeepLink(link);
     emitStatus();
   });

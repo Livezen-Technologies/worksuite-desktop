@@ -145,8 +145,12 @@ export class SessionController {
   /** A Personal account's Cloud side (WP3), on every state. */
   cloudStatus: (() => AuthState['cloud']) | null = null;
 
+  /** WorkSuite OS mode: sign-in is the OS's (the renderer shows the OS sign-in screen, never a password). */
+  osManaged = false;
+
   get(): AuthState {
     const out: AuthState = { ...this.state };
+    if (this.osManaged) out.osManaged = true;
     if (this.accountView) out.account = this.accountView() ?? null;
     if (this.cloudStatus) {
       out.cloud = this.cloudStatus() ?? null;

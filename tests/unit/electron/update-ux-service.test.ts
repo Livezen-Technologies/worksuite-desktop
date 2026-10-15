@@ -532,3 +532,22 @@ describe('the WorkSuite APT/DNF repository on a .deb install (worksuite-desktop#
     expect(repo).toHaveBeenCalledWith('2.7.0');
   });
 });
+
+describe('WorkSuite OS mode: the OS package manager updates WorkSuite', () => {
+  it('a disabled updater never checks, downloads or installs, and says why', async () => {
+    const { updater, fetch } = setup();
+    updater.disable('WorkSuite OS keeps WorkSuite up to date.');
+    updater.start();
+    const s = await updater.check();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(s.state).toBe('IDLE');
+    expect(s.installSupported).toBe(false);
+    expect(s.installBlockedReason).toBe('WorkSuite OS keeps WorkSuite up to date.');
+    await updater.download();
+    expect(fetch).not.toHaveBeenCalled();
+    expect(updater.installOnQuitSync()).toBe(false);
+    expect((await updater.install(true)).started).toBe(false);
+    expect(updater.isDisabled()).toBe(true);
+    updater.stop();
+  });
+});

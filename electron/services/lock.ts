@@ -34,6 +34,11 @@ export class LockService {
   hasPin: () => boolean = () => false;
   pinLength: () => number | null = () => null;
   user: () => { name: string | null; email: string | null } = () => ({ name: null, email: null });
+  /**
+   * WorkSuite OS mode (os-mode.ts): the OS screen lock covers the app, so the app's own lock never engages — not on
+   * a timer, not with the system, not when asked.
+   */
+  disabled = false;
 
   start(): void {
     this.lastActivity = Date.now();
@@ -94,6 +99,7 @@ export class LockService {
   }
 
   lock(reason: NonNullable<LockState['reason']>): LockState {
+    if (this.disabled) return this.state();
     if (reason !== 'manual' && !this.enabled()) return this.state();
     if (!this.locked) {
       this.locked = true;

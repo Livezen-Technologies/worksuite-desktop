@@ -344,6 +344,8 @@ export interface AuthState {
   compat?: CompatInfo | null;
   /** Signed in, but the workspace is read-only (suspended, restricted, pending deletion). */
   readOnly?: CloudStatus['readOnly'];
+  /** WorkSuite OS mode: the OS signs in (its credentials broker); there is no password sign-in in this app. */
+  osManaged?: boolean;
 }
 
 export interface Preferences {

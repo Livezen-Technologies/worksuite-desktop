@@ -38,6 +38,7 @@ export const INVOKE_CHANNELS = [
   'auth:requestUnblock',
   'auth:clearGate',
   'auth:passkeyStart',
+  'auth:osSignIn',
   'auth:passkeyCancel',
   'auth:openPage',
   'auth:signOut',

@@ -287,7 +287,18 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     w.focus();
     return true;
   });
-  router.handle('auth:signIn', (input) => ctx.session.signIn(input.email, input.password));
+  // WorkSuite OS mode: the OS signs in; this app never takes a password (docs/WORKSUITE_OS.md).
+  const osOnly = () => {
+    if (ctx.osMode) throw new DesktopError('POLICY_DENIED', 'WorkSuite OS signs you in. Use Sign in with WorkSuite OS.');
+  };
+  router.handle('auth:osSignIn', () => {
+    if (!ctx.osMode) throw new DesktopError('UNSUPPORTED', 'This is not WorkSuite OS.');
+    return ctx.osMode.signIn();
+  });
+  router.handle('auth:signIn', (input) => {
+    osOnly();
+    return ctx.session.signIn(input.email, input.password);
+  });
   router.handle('auth:verifyMfa', (input) => ctx.session.verifyMfa(input.code, input.remember ?? true));
   router.handle('auth:cancelMfa', () => ctx.session.cancelMfa());
   // A new computer, a CAPTCHA, a block (worksuite-desktop#301).
@@ -302,6 +313,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('auth:requestUnblock', async (input) => ({ message: await ctx.auth.requestUnblock(input.email.trim()) }));
   router.handle('auth:clearGate', () => ctx.session.clearGate());
   router.handle('auth:passkeyStart', async () => {
+    osOnly();
     const url = ctx.session.startPasskey(os.hostname());
     const origin = ctx.auth.getServer()?.origin;
     // Always a page on the configured server — whose address was vetted when it
