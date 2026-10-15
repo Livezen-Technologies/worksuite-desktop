@@ -137,6 +137,8 @@ import { EventDesk } from '../services/event-desk';
 import { EventDeskPrint } from '../services/event-desk-print';
 import { createRestaurant } from '../services/restaurant';
 import { createProjects } from '../services/projects';
+import { SalesDesk } from '../services/sales-desk';
+import { listPrinters } from '../services/print';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
 import { createPdfStudio } from '../services/pdf/host';
@@ -1625,7 +1627,30 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     openExternal: (url) => void openExternalSafely(url),
     onChange: (meetings) => tray.update({ meetings }),
   });
-  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n) || mailAlerts.claim(n) || meetingsDesk.claim(n);
+  // Sales' approvals (WS-OMS-SRS-001 D-05, FR-APR-10): Approve and Open on the banner; printing on this computer.
+  const salesDesk = new SalesDesk({
+    http,
+    config: db,
+    origin: () => auth.getServer()?.origin ?? null,
+    notify: (n) => notifications.notify(n),
+    markRead: (ids) => notifications.markRead(ids),
+    enabled: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('sales', sessionCtl.visibleApps()),
+    open: (route) => navigate({ route, source: 'notification' }),
+    refreshCounts: () => void notifications.refreshCounts(),
+    toast: (kind, text) => broadcast('toast', { kind, text }),
+    printers: async (sender) => (await listPrinters(BrowserWindow.fromWebContents(sender))).map((p) => p.name),
+    saveDialog: async (sender, defaultPath) => {
+      const w = BrowserWindow.fromWebContents(sender);
+      const opts: Electron.SaveDialogOptions = { title: 'Save as PDF', defaultPath, filters: [{ name: 'PDF', extensions: ['pdf'] }] };
+      const res = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
+      return res.canceled || !res.filePath ? null : res.filePath;
+    },
+    documents: () => app.getPath('documents'),
+    temp: () => app.getPath('temp'),
+    openPath: async (path) => void (await shell.openPath(path)),
+    reveal: (path) => shell.showItemInFolder(path),
+  });
+  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n) || mailAlerts.claim(n) || meetingsDesk.claim(n) || salesDesk.claim(n);
   notifications.onRefresh = () => void supportNotices.refreshBadges();
 
   // ── status ─────────────────────────────────────────────────────────────
@@ -1641,7 +1666,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
     const hasMail = canOpenApp('mail', visible);
-    const counts = { ...raw, mailBadge: hasMail ? mailAlerts.unread() : 0, mailNotices: hasMail ? raw.mailNotices : 0, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: hasMail ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0 };
+    const counts = { ...raw, mailBadge: hasMail ? mailAlerts.unread() : 0, mailNotices: hasMail ? raw.mailNotices : 0, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: hasMail ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0, salesApprovals: canOpenApp('sales', visible) ? raw.salesApprovals : 0, salesNotices: canOpenApp('sales', visible) ? raw.salesNotices : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -1686,6 +1711,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         notificationsPausedUntil: s.notificationsPausedUntil,
         mailBadge: s.unread.mailBadge ?? 0,
         mailNotices: s.unread.mailNotices ?? 0,
+        salesApprovals: s.unread.salesApprovals ?? 0,
+        salesNotices: s.unread.salesNotices ?? 0,
         mail: trayMail(),
       });
     }, 300);
@@ -1716,6 +1743,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     notifications.handleRealtime(e);
     mailAlerts.handleRealtime(e);
     supportNotices.handle(e);
+    salesDesk.handle(e as { type?: string });
     // An invitation answered, moved or cancelled anywhere: the tray's Meetings lines follow (Meetings D07).
     if (touchesInvitations(e as { type: string; event?: unknown })) meetingsDesk.poke();
     supportDesk.handle(e);
@@ -2539,6 +2567,11 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/support/v1/tickets', 'support'],
     ['/api/support/v1/agents', 'support'],
     ['/api/support/v1/canned', 'support'],
+    // Sales (WS-OMS-SRS-001 FR-DSK-07): the dashboard, the companies and every order list and order opened, so recent
+    // orders read offline as last seen. Read only: every write in the app waits for the connection.
+    ['/api/oms/overview', 'sales'],
+    ['/api/oms/organizations', 'sales'],
+    ['/api/oms/orders', 'sales'],
     // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
     // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];
@@ -2765,6 +2798,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         // Every event this computer was a check-in device at: the keys, the copies, the queues, the badge printer.
         eventDesk.forgetAll();
         eventDeskPrint.forgetAll();
+        salesDesk.forgetAll();
         // The till this computer was: its credential, catalogue, sales (sent or not) and printer settings.
         pos.forgetAll();
         // The restaurant terminal this computer was: its key, copy, outbox and printer mapping.
@@ -3204,6 +3238,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   contactSync.register(router);
   restaurant.register(router);
   projects.register(router);
+  salesDesk.register(router);
   localAI.register(router);
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
   router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));

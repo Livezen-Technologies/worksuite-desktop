@@ -9,6 +9,7 @@ import { PMS_LOCKS_INVOKE_CHANNELS } from './pms-locks-channels';
 import { PHONE_EVENT_CHANNELS, PHONE_INVOKE_CHANNELS } from './phone-channels';
 import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
 import { PROJECTS_EVENT_CHANNELS, PROJECTS_INVOKE_CHANNELS } from './projects-channels';
+import { SALES_INVOKE_CHANNELS } from './sales-channels';
 
 export const INVOKE_CHANNELS = [
   'app:info',
@@ -473,6 +474,8 @@ export const INVOKE_CHANNELS = [
   ...CONTACT_SYNC_INVOKE_CHANNELS,
   // WorkSuite Projects: the tray timer, the mini timer window and the offline outbox (projects-channels.ts).
   ...PROJECTS_INVOKE_CHANNELS,
+  // WorkSuite Sales: approvals from a banner, labels and delivery notes on this computer's printers (sales-channels.ts).
+  ...SALES_INVOKE_CHANNELS,
   // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (accounts-channels.ts).
   ...ACCOUNTS_INVOKE_CHANNELS,
 ] as const;

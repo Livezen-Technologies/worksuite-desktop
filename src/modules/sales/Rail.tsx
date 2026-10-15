@@ -3,6 +3,7 @@ import { cx } from '../../components/ui';
 import { FINISHED, MOVING, statusOf, type Status } from './api';
 import { PrimaryActionButton } from '../../components/PrimaryAction';
 import { OrgSwitcher } from '../../components/OrgSwitcher';
+import { call } from '../../core/bridge';
 
 /**
  * The Orders rail (OmsRail): a company picker, then the orders by who they
@@ -11,17 +12,23 @@ import { OrgSwitcher } from '../../components/OrgSwitcher';
  * coupons, and the set-up screens. A screen you lack the permission for is
  * left out rather than shown and refused.
  */
-export type SalesView = 'dash' | 'orders' | 'ful' | 'ret' | 'act' | 'rep' | 'cou' | 'rules' | 'set' | 'acc';
+export type SalesView = 'dash' | 'orders' | 'appr' | 'ful' | 'desk' | 'dispatch' | 'ret' | 'act' | 'rep' | 'cou' | 'chan' | 'rules' | 'set' | 'acc';
 
-export const NATIVE = new Set<SalesView>(['dash', 'orders', 'ful', 'ret', 'act', 'rep', 'cou', 'rules', 'set', 'acc']);
+export const NATIVE = new Set<SalesView>(['dash', 'orders', 'appr', 'ful', 'desk', 'dispatch', 'ret', 'act', 'rep', 'cou', 'chan', 'rules', 'set', 'acc']);
 
-/** The screens that need more than `oms.view`; the rail leaves out what you cannot open. */
-export const NEEDS: Partial<Record<SalesView, string>> = { rep: 'oms.reports.view', cou: 'oms.coupons.view', set: 'oms.settings' };
+/**
+ * The screens that need more than `oms.view`; the rail leaves out what you cannot open. The approvals queue is for
+ * whoever may decide (D-05); the Shipping desk for whoever books and prints labels (D-13); the dispatch board for
+ * whoever plans the own fleet (D-14).
+ */
+export const NEEDS: Partial<Record<SalesView, string>> = { appr: 'oms.orders.approve', desk: 'oms.shipping.labels', dispatch: 'oms.delivery.plan', rep: 'oms.reports.view', cou: 'oms.coupons.view', set: 'oms.settings' };
 
 export interface RailCounts {
   byStatus: Partial<Record<Status, number>>;
   total: number;
   pending: number;
+  /** Orders waiting on a decision I may make: the tray and Dock badge's number (FR-DSK-05). */
+  approvals: number;
   fulfilment: number;
   returns: number;
 }
@@ -78,6 +85,13 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
       </button>
     );
   };
+  // The web's own screens (W-19 Shipments, W-23 Couriers), opened in the browser and marked so.
+  const web = (label: string, path: string) => (
+    <button key={path} type="button" title={`${label} — opens in your browser`} onClick={() => void call('app:openInBrowser', { path })} className="flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left font-medium text-ink hover:bg-subtle">
+      <Icon name="external" size={16} className="shrink-0 text-ink-3" />
+      <span className="min-w-0 flex-1 truncate">{label}</span>
+    </button>
+  );
   const head = (label: string) => <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>;
 
   return (
@@ -93,13 +107,18 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-2.5 scroll-thin">
         {item('dash', 'Dashboard', 'grid')}
         {head('Waiting on a person')}
-        {item('orders', 'Pending approval', 'hourglass', counts.pending, { status: 'pending_approval', tone: 'amber' })}
+        {allowed('appr') ? item('appr', 'Pending approval', 'hourglass', counts.approvals, { tone: 'amber' }) : item('orders', 'Pending approval', 'hourglass', counts.pending, { status: 'pending_approval', tone: 'amber' })}
         {head('Waiting on us')}
         {item('orders', 'All orders', 'list', counts.total)}
         {MOVING.map((s) => sub(s))}
         <div className="px-2 pt-1.5 pb-0.5 pl-[26px] text-[10.5px] font-bold text-ink-3">Finished</div>
         {FINISHED.map((s) => sub(s, true))}
         {item('ful', 'Fulfilment', 'package', counts.fulfilment)}
+        {allowed('desk') || allowed('dispatch') ? head('Shipping & delivery') : null}
+        {item('desk', 'Shipping desk', 'scan')}
+        {item('dispatch', 'Dispatch board', 'truck')}
+        {allowed('desk') ? web('Shipments', '/oms?view=shipments') : null}
+        {allowed('desk') ? web('Couriers', '/oms?view=couriers') : null}
         {head('Coming back')}
         {item('ret', 'Returns', 'undo', counts.returns)}
         {item('act', 'Activity', 'activity')}
@@ -107,6 +126,7 @@ export function SalesRail({ view, status, onPick, onNew, counts, org, orgs, onOr
         {allowed('cou') ? head('Pricing') : null}
         {item('cou', 'Coupons', 'receipt')}
         {head('Set up')}
+        {item('chan', 'Channels', 'link')}
         {item('rules', 'Approval rules', 'check-circle')}
         {item('set', 'Settings', 'settings')}
         {item('acc', 'My access', 'key')}

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.2.0 — 2026-10-15
+
+**Added**
+
+- a claimed notification carries the event's own facts (`data`: an order approval's `order_id` and `step`), and the count of orders waiting on my approval (`/api/badges` `sales`) with the bell's approval entries it stands for, so the badge counts them once (WS-OMS-SRS-001 FR-DSK-05)
+
 ## 2.1.0 — 2026-10-13
 
 **Added**

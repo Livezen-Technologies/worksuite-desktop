@@ -6,7 +6,8 @@ import { useStore } from '../../core/store';
 import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, Empty, PageHead, Panel, Sheet } from '../hr/parts';
+import { btn, btnPrimary, Empty, PageHead, Panel, Seg, Sheet } from '../hr/parts';
+import { OFFLINE_WRITE, useSalesOffline } from './offline';
 import { approveReturn, creditReturn, K, receiveReturn, type ReturnRow, type Returns as Board } from './api';
 import { moneyFull } from './parts';
 
@@ -20,12 +21,15 @@ const has = (perms: readonly string[] | undefined, p: string) => !!perms && (per
 const REASON: Record<string, string> = { damaged: 'Damaged', expired: 'Expired', wrong_item: 'Wrong item', over_supply: 'Too many sent', quality: 'Quality', not_required: 'Not needed', other: 'Other' };
 
 type Asking = { kind: 'approve' | 'receive' | 'credit'; r: ReturnRow };
+type Lane = 'open' | 'ask' | 'goods' | 'credit' | 'settled';
 
 export default function Returns({ board }: { org: string; board: UseQueryResult<Board> }) {
   const qc = useQueryClient();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const [asking, setAsking] = useState<Asking | null>(null);
   const [busy, setBusy] = useState(false);
+  const [lane, setLane] = useState<Lane>('open');
+  const offline = useSalesOffline();
   if (board.isLoading) return <Spinner />;
   if (board.error) return <ErrorNote error={board.error} onRetry={() => void board.refetch()} />;
   const b = board.data!.board;
@@ -60,11 +64,26 @@ export default function Returns({ board }: { org: string; board: UseQueryResult<
       {action}
     </div>
   );
-  const act = (label: string, a: Asking, allowed: boolean) => (allowed ? <button type="button" className={btnPrimary + ' !h-[30px]'} onClick={() => setAsking(a)}>{label}</button> : null);
+  const act = (label: string, a: Asking, allowed: boolean) => (allowed ? <button type="button" className={btnPrimary + ' !h-[30px]'} disabled={offline} title={offline ? OFFLINE_WRITE : undefined} onClick={() => setAsking(a)}>{label}</button> : null);
+  const open = b.to_approve.length + b.to_receive.length + b.to_credit.length;
+  const owed = b.to_credit.reduce((t, r) => t + (Number(r.total_value) || 0), 0);
+  const show = (l: Lane) => lane === l || (lane === 'open' && l !== 'settled');
 
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
-      <PageHead title="Returns" sub="The goods and the money are two events. Stock comes back when a return is received; crediting the customer is a separate step, and often a later one." />
+      <PageHead title="Returns" sub={`${open} open${owed ? ` · ${moneyFull(owed)} to credit` : ''}. The goods and the money are two events: stock comes back when a return is received; crediting the customer is a separate step, and often a later one.`} />
+      <Seg<Lane>
+        label="Returns"
+        value={lane}
+        onChange={setLane}
+        options={[
+          { id: 'open', label: `All open · ${open}` },
+          { id: 'ask', label: `Asked for · ${b.to_approve.length}` },
+          { id: 'goods', label: `Waiting for goods · ${b.to_receive.length}` },
+          { id: 'credit', label: `Owed a credit · ${b.to_credit.length}` },
+          { id: 'settled', label: 'Settled' },
+        ]}
+      />
       {b.no_document.length ? (
         <div className="rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3.5 py-2.5 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
           <b>
@@ -73,10 +92,10 @@ export default function Returns({ board }: { org: string; board: UseQueryResult<
           Nothing has come back into stock for {b.no_document.length === 1 ? 'it' : 'them'}. Raise a return against each in Inventory → Sales returns: {b.no_document.slice(0, 5).map((d) => `${d.number} · ${d.client ?? '—'} · ${moneyFull(d.total, d.currency)}`).join('; ')}
         </div>
       ) : null}
-      <Group title="Asked for" n={b.to_approve.length} sub="Requested by the customer and not yet agreed.">{b.to_approve.map((r) => row(r, act('Approve', { kind: 'approve', r }, canApprove)))}</Group>
-      <Group title="Waiting for the goods" n={b.to_receive.length} sub="Agreed. Receiving puts the stock back and records its condition.">{b.to_receive.map((r) => row(r, act('Receive back', { kind: 'receive', r }, canSell)))}</Group>
-      <Group title="Owed a credit" n={b.to_credit.length} sub="The goods are back and the customer has not been credited.">{b.to_credit.map((r) => row(r, act('Raise credit note', { kind: 'credit', r }, canSell)))}</Group>
-      <Group title="Settled" n={b.settled.length} sub="Goods back, customer credited.">{b.settled.map((r) => row(r))}</Group>
+      {show('ask') ? <Group title="Asked for" n={b.to_approve.length} sub="Requested by the customer and not yet agreed.">{b.to_approve.map((r) => row(r, act('Approve', { kind: 'approve', r }, canApprove)))}</Group> : null}
+      {show('goods') ? <Group title="Waiting for the goods" n={b.to_receive.length} sub="Agreed. Receiving puts the stock back and records its condition.">{b.to_receive.map((r) => row(r, act('Receive back', { kind: 'receive', r }, canSell)))}</Group> : null}
+      {show('credit') ? <Group title="Owed a credit" n={b.to_credit.length} sub="The goods are back and the customer has not been credited.">{b.to_credit.map((r) => row(r, act('Raise credit note', { kind: 'credit', r }, canSell)))}</Group> : null}
+      {lane === 'settled' ? <Group title="Settled" n={b.settled.length} sub="Goods back, customer credited.">{b.settled.map((r) => row(r))}</Group> : null}
 
       {asking ? (
         <Sheet

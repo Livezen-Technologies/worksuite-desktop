@@ -514,6 +514,15 @@ const api = {
     discard: call('projects:discard'),
     replay: call('projects:replay'),
   },
+  // WorkSuite Sales (sales-channels.ts): labels and delivery notes on this computer's printers, reports saved as PDF.
+  sales: {
+    printSettings: call('sales:printSettings'),
+    printSettingsSet: call('sales:printSettingsSet'),
+    printNote: call('sales:printNote'),
+    printLabel: call('sales:printLabel'),
+    saveReport: call('sales:saveReport'),
+    reveal: call('sales:reveal'),
+  },
   // Contact sync (contact-sync-channels.ts): iCloud, CardDAV and Mac Contacts on this computer; passwords never come back.
   contactSync: {
     status: call('contactSync:status'),

@@ -28,15 +28,23 @@ const Coupons = lazy(() => import('./Coupons'));
 const ApprovalRules = lazy(() => import('./ApprovalRules'));
 const Settings = lazy(() => import('./Settings'));
 const MyAccess = lazy(() => import('./MyAccess'));
+const Approvals = lazy(() => import('./Approvals'));
+const ShippingDesk = lazy(() => import('./ShippingDesk'));
+const Dispatch = lazy(() => import('./Dispatch'));
+const Channels = lazy(() => import('./Channels'));
 
 const TITLES: Record<SalesView, string> = {
   dash: 'Dashboard',
   orders: 'Orders',
+  appr: 'Approvals',
   ful: 'Fulfilment',
+  desk: 'Shipping desk',
+  dispatch: 'Dispatch board',
   ret: 'Returns',
   act: 'Activity',
   rep: 'Reports',
   cou: 'Coupons',
+  chan: 'Channels',
   rules: 'Approval rules',
   set: 'Settings',
   acc: 'My access',
@@ -55,7 +63,7 @@ function savedOrg(): string {
 }
 
 export default function SalesShell(_props: ModuleProps) {
-  const { query, go } = useTab();
+  const { query, go, openInNewTab } = useTab();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const [org, setOrg] = useState(savedOrg);
   const order = num(query.get('order'));
@@ -64,6 +72,8 @@ export default function SalesShell(_props: ModuleProps) {
   const status = query.get('status');
   const allowed = (v: SalesView) => !NEEDS[v] || has(perms, NEEDS[v]!);
   const view: SalesView = asked && NATIVE.has(asked) && allowed(asked) ? asked : order || creating || status ? 'orders' : 'dash';
+  // Orders waiting on a decision I may make: the same number as the tray and the Dock (FR-DSK-05).
+  const approvals = useStore(app, (s) => s.status?.unread.salesApprovals ?? null);
   useTabTitle(`Orders · ${TITLES[view]}`);
 
   const orgs = useOrgs();
@@ -84,10 +94,11 @@ export default function SalesShell(_props: ModuleProps) {
     byStatus,
     total: o?.total ?? 0,
     pending: o?.attention.pending_approval ?? 0,
+    approvals: approvals ?? o?.attention.pending_approval ?? 0,
     fulfilment: (fb?.to_pick.length ?? 0) + (fb?.to_dispatch.length ?? 0),
     returns: (rb?.to_approve.length ?? 0) + (rb?.to_receive.length ?? 0) + (rb?.to_credit.length ?? 0),
   };
-  const pick = (v: SalesView, s?: string | null) => go(v === 'orders' && s ? `/sales?tab=orders&status=${s}` : `/sales?tab=${v}`);
+  const pick = (v: SalesView, s?: string | null) => go(v === 'orders' && s === '__overdue' ? '/sales?tab=orders&overdue=1' : v === 'orders' && s ? `/sales?tab=orders&status=${s}` : `/sales?tab=${v}`);
   const chooseOrg = (v: string) => {
     setOrg(v);
     rememberOrgChoice('sales', v);
@@ -122,6 +133,7 @@ export default function SalesShell(_props: ModuleProps) {
             <Orders
               org={org}
               status={status}
+              overdue={query.get('overdue') === '1'}
               openId={order}
               creating={creating}
               canCreate={canCreate}
@@ -130,9 +142,13 @@ export default function SalesShell(_props: ModuleProps) {
               onCloseNew={(id) => go(`/sales?tab=orders${status ? `&status=${status}` : ''}${id ? `&order=${id}` : ''}`)}
             />
           ) : null}
+          {view === 'appr' ? <Approvals org={org} openId={order} onOpen={(id) => go(`/sales?tab=appr${id ? `&order=${id}` : ''}`)} /> : null}
           {view === 'ful' ? <Fulfilment org={org} board={ful} onOpen={(id) => go(`/sales?tab=orders&order=${id}`)} /> : null}
+          {view === 'desk' ? <ShippingDesk org={org} /> : null}
+          {view === 'dispatch' ? <Dispatch org={org} onOpen={(id) => go(`/sales?tab=orders&order=${id}`)} /> : null}
+          {view === 'chan' ? <div className="flex flex-col gap-3.5 px-6 py-5"><Channels org={org} /></div> : null}
           {view === 'ret' ? <Returns org={org} board={ret} /> : null}
-          {view === 'act' ? <Activity org={org} onOpen={(id) => go(`/sales?tab=orders&order=${id}`)} /> : null}
+          {view === 'act' ? <Activity org={org} onOpen={(id) => openInNewTab(`/sales?tab=orders&order=${id}`)} /> : null}
           {view === 'rep' ? <Reports org={org} /> : null}
           {view === 'cou' ? <Coupons org={org} /> : null}
           {view === 'rules' ? <ApprovalRules org={org} /> : null}

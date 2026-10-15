@@ -44,6 +44,8 @@ interface ServerNotification {
   type?: string | null;
   event_key?: string | null;
   actions?: unknown;
+  /** The event's own facts (`order_id`, `step` on an order's approval), for a module that acts on the notification. */
+  data?: unknown;
   desktop_allowed?: boolean;
   title?: string | null;
   body?: string | null;
@@ -126,6 +128,8 @@ export interface ClaimedNotice {
   priority: string | null;
   /** The notification's own buttons as the server sent them (a meeting's answers and Join, worksuite-desktop#97). */
   actions?: unknown;
+  /** The event's own facts as the server sent them (an approval's `order_id` and `step`, WS-OMS-SRS-001 FR-APR-10). */
+  data?: unknown;
   /** The app it is filed under here, as a plain banner of it would be: its switch and the person's access apply. */
   module?: string;
 }
@@ -353,7 +357,7 @@ export class NotificationService {
   private liveNotices = new Map<string, Incoming>();
   private nativeGroups = new Map<string, { note: Notification; at: number; count: number }>();
   private programmaticClose = new WeakSet<Notification>();
-  private unread = { mail: 0, chat: 0, notifications: 0, tasks: 0 };
+  private unread = { mail: 0, chat: 0, notifications: 0, tasks: 0, salesApprovals: 0 };
   private lastMailCount: number | null = null;
   private pollTimer: NodeJS.Timeout | null = null;
   private mailTimer: NodeJS.Timeout | null = null;
@@ -396,6 +400,11 @@ export class NotificationService {
   private supportUnread = new Set<string>();
   /** The unread bell entries about new mail: the badge counts mail by its inboxes, so these are not counted twice. */
   private mailUnread = new Set<string>();
+  /**
+   * The unread bell entries about an order waiting on my approval: the badge counts the approval queue itself
+   * (`/api/badges`' `sales`, WS-OMS-SRS-001 FR-DSK-05), so these are not counted twice.
+   */
+  private salesUnread = new Set<string>();
   /**
    * New-mail alerts (ENH-MAIL-05), when main has them: new mail found by the count going up goes there, as the rows
    * the list shows — the same path as the server's push, so a message found both ways alerts once. `quiet`: a jump
@@ -451,14 +460,15 @@ export class NotificationService {
     this.live.clear();
     this.userId = null;
     this.lastMailCount = null;
-    this.unread = { mail: 0, chat: 0, notifications: 0, tasks: 0 };
+    this.unread = { mail: 0, chat: 0, notifications: 0, tasks: 0, salesApprovals: 0 };
     this.supportUnread.clear();
     this.mailUnread.clear();
+    this.salesUnread.clear();
     this.gapSince = null;
   }
 
   counts() {
-    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length, supportNotices: this.supportUnread.size, mailNotices: this.mailUnread.size };
+    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length, supportNotices: this.supportUnread.size, mailNotices: this.mailUnread.size, salesNotices: this.salesUnread.size };
   }
 
   /**
@@ -510,7 +520,11 @@ export class NotificationService {
       ]);
       if (chat.status === 'fulfilled') this.unread.chat = Number(chat.value.count ?? 0);
       if (notif.status === 'fulfilled') this.unread.notifications = Number(notif.value.count ?? 0);
-      if (badges.status === 'fulfilled') this.unread.tasks = Number(badges.value.badges?.tasks ?? 0);
+      if (badges.status === 'fulfilled') {
+        this.unread.tasks = Number(badges.value.badges?.tasks ?? 0);
+        // Orders waiting on a decision I may make (the server's Badge::pending, keyed by the sidebar's `sales`).
+        this.unread.salesApprovals = Math.max(0, Number(badges.value.badges?.sales ?? 0) || 0);
+      }
       this.onChanged();
     } catch (e) {
       log.debug('count refresh failed', { error: String(e) });
@@ -626,6 +640,7 @@ export class NotificationService {
       this.unread.notifications = Number(data.unread ?? items.filter((i) => !i.read).length);
       this.supportUnread = new Set(items.filter((i) => !i.read && i.module === 'support').map((i) => i.id));
       this.mailUnread = new Set(items.filter((i) => !i.read && i.module === 'mail').map((i) => i.id));
+      this.salesUnread = new Set(items.filter((i, k) => !i.read && (raw[k]!.event_key ?? raw[k]!.type) === 'oms.approval').map((i) => i.id));
       this.cache(items);
       if (announce && this.listed) {
         const since = Date.now() - MISSED_WINDOW_MS;
@@ -633,7 +648,7 @@ export class NotificationService {
           const i = items[k]!;
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
           if (n.desktop_allowed === false) return;
-          if (this.claim({ id: i.id, event: n.event_key ?? n.type ?? null, title: i.title, body: i.body, link: i.link, category: n.category ?? null, priority: n.priority ?? null, actions: n.actions, module: i.module })) return;
+          if (this.claim({ id: i.id, event: n.event_key ?? n.type ?? null, title: i.title, body: i.body, link: i.link, category: n.category ?? null, priority: n.priority ?? null, actions: n.actions, data: n.data, module: i.module })) return;
           this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), social: socialNoticeActions(n.event_key ?? n.type, n.link, n.actions), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
@@ -692,6 +707,7 @@ export class NotificationService {
     for (const id of ids) {
       this.supportUnread.delete(id);
       this.mailUnread.delete(id);
+      this.salesUnread.delete(id);
     }
     await Promise.allSettled(ids.map((id) => this.http.post(`/api/notifications/${encodeURIComponent(id)}/read`)));
     if (this.userId) for (const id of ids) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ? AND id = ?', this.userId, id);
@@ -703,6 +719,7 @@ export class NotificationService {
     this.markLocalRead('all');
     this.supportUnread.clear();
     this.mailUnread.clear();
+    this.salesUnread.clear();
     await this.http.post('/api/notifications/read-all');
     if (this.userId) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ?', this.userId);
     for (const n of this.live.values()) this.closeNative(n);
@@ -746,8 +763,9 @@ export class NotificationService {
         const category = typeof e.category === 'string' ? e.category : null;
         if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
         if (moduleOf({ category, link }) === 'mail' || e.event === 'mail.received') this.mailUnread.add(id);
+        if (e.event === 'oms.approval' && e.transient !== true) this.salesUnread.add(id);
         // Shown its module's way (Support's banners): remembered, so the list does not show it again.
-        if (!this.shown.includes(id) && this.claim({ id, event: typeof e.event === 'string' ? e.event : null, title: String(e.title ?? 'Notification'), body: String(e.body ?? ''), link, category, priority: typeof e.priority === 'string' ? e.priority : null, actions: e.actions, module: moduleOf({ category: e.category as string, link }) })) {
+        if (!this.shown.includes(id) && this.claim({ id, event: typeof e.event === 'string' ? e.event : null, title: String(e.title ?? 'Notification'), body: String(e.body ?? ''), link, category, priority: typeof e.priority === 'string' ? e.priority : null, actions: e.actions, data: e.data ?? (e.order_id !== undefined ? { order_id: e.order_id, step: e.step } : undefined), module: moduleOf({ category: e.category as string, link }) })) {
           this.remember(id);
           this.onChanged();
           void this.refreshList(true);

@@ -3,12 +3,15 @@ import { useEffect, useRef, useState } from 'react';
 import { app } from '../../core/app-state';
 import { errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
+import { useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
+import { apiPost } from '../../core/api';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx } from '../../components/ui';
 import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
-import { bulk, createOrder, customers, K, lookupProducts, orderDefaults, PRIORITIES, scanUnit, useOrgs, warehouses, ymd, type ProductHit } from './api';
+import { bulk, createOrder, customers, K, lookupProducts, orderDefaults, previewApproval, PRIORITIES, scanUnit, submit, useOrgs, warehouses, ymd, type PreviewStep, type ProductHit } from './api';
+import { OFFLINE_WRITE, useSalesOffline } from './offline';
 import { moneyFull } from './parts';
 
 /**
@@ -19,6 +22,12 @@ import { moneyFull } from './parts';
  * held on the line). A price left empty is the price list's. Totals are
  * worked out by the server when it is saved, so they cannot disagree with
  * the lines; nothing is reserved until the order is confirmed.
+ *
+ * D-04 (v1.1): a coupon is checked against the server as it is typed, and who
+ * would have to approve an order like this is previewed before it is submitted
+ * (CRT-10) — from the lines at their list prices, as a preview only. Submit
+ * (⌘↵ / Ctrl+Enter) creates it and sends it for approval straight away. It
+ * opens as a sheet over the list, or in its own window.
  */
 interface Line {
   key: string;
@@ -32,6 +41,7 @@ interface Line {
 }
 
 const has = (perms: readonly string[] | undefined, p: string) => !!perms && (perms.includes('*') || perms.includes(p));
+type CouponCheck = { ok: boolean; why: string | null; amount: number; coupon: { code: string; name: string; kind: string; value: number } | null };
 let seq = 0;
 const key = () => `l${++seq}`;
 
@@ -56,6 +66,9 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
   const [lines, setLines] = useState<Line[]>([]);
   const [scanning, setScanning] = useState(false);
   const [busy, setBusy] = useState(false);
+  const [coupon, setCoupon] = useState('');
+  const offline = useSalesOffline();
+  const { openInWindow } = useTab();
   const several = (orgs.data?.length ?? 0) > 1;
   const houseList = (houses.data ?? []).filter((h) => !company || h.org_id == null || String(h.org_id) === company);
   const chosenHouse = house ?? (houseList.find((h) => h.id === defaultHouse) ?? houseList.find((h) => h.is_default) ?? houseList[0])?.id ?? null;
@@ -69,8 +82,37 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
       return [...ls, { key: key(), productId: p.id, name: p.variant_label ? `${p.name} — ${p.variant_label}` : p.name, code: p.code, quantity: 1, price: '', listPrice: p.unit_price ?? null, serial }];
     });
 
-  const ready = !!client && !!chosenHouse && lines.length > 0 && lines.every((l) => l.quantity > 0 && (l.productId || l.name.trim())) && (!several || !!company);
-  const create = async () => {
+  const ready = !offline && !!client && !!chosenHouse && lines.length > 0 && lines.every((l) => l.quantity > 0 && (l.productId || l.name.trim())) && (!several || !!company);
+  // A preview from the list prices: the server prices the order when it is saved.
+  const estimate = lines.reduce((t, l) => t + l.quantity * (l.price.trim() !== '' ? Number(l.price) || 0 : (l.listPrice ?? 0)), 0);
+  const productIds = lines.map((l) => l.productId).filter((x): x is number => !!x);
+  // What the coupon check and the approval preview are asked with: settled a moment after the form stops changing.
+  const productKey = productIds.join(',');
+  const [ask, setAsk] = useState<{ total: number; client: number | null; company: string; code: string; products: number[] } | null>(null);
+  useEffect(() => {
+    const t = setTimeout(() => setAsk({ total: estimate, client: client?.id ?? null, company, code: coupon.trim(), products: productKey ? productKey.split(',').map(Number) : [] }), 450);
+    return () => clearTimeout(t);
+  }, [estimate, client?.id, company, coupon, productKey]);
+  // The coupon, checked as it is typed (a preview; it is applied once the order exists).
+  const couponQ = useQuery({
+    queryKey: ['sales', 'coupon-check', ask?.code, ask?.client, ask?.company, ask?.total, ask?.products.join(',')],
+    queryFn: () => apiPost<CouponCheck>('/api/oms/coupons/validate', { code: ask!.code, client_id: ask!.client, subtotal: ask!.total, source: 'manual', product_ids: ask!.products }, ask!.company ? { org: ask!.company } : undefined),
+    enabled: !!ask?.code && !!coupon.trim() && !offline,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const couponCheck: CouponCheck | null = !coupon.trim() ? null : couponQ.data ?? (couponQ.error ? { ok: false, why: errorMessage(couponQ.error), amount: 0, coupon: null } : null);
+  const off = couponCheck?.ok ? couponCheck.amount : 0;
+  // Who would approve an order like this (CRT-10).
+  const previewQ = useQuery({
+    queryKey: ['sales', 'approval-preview', ask ? ask.total - off : 0, ask?.client, ask?.company],
+    queryFn: ({ signal }) => previewApproval({ total: ask!.total - off, customer_id: ask!.client, channel: 'manual', org_id: ask!.company ? Number(ask!.company) : null }, signal),
+    enabled: !!ask && ask.total > 0 && lines.length > 0 && !offline,
+    retry: false,
+    staleTime: 30_000,
+  });
+  const preview: PreviewStep[] | null = previewQ.data ?? null;
+  const create = async (andSubmit = false) => {
     if (!ready || !client || !chosenHouse) return;
     setBusy(true);
     try {
@@ -93,7 +135,11 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
       const id = Number(r.order.id);
       // Priority is the workspace's, set once the order exists.
       if (priority !== 'normal' && has(perms, 'oms.orders.edit')) await bulk([id], 'priority', priority).catch(() => undefined);
-      toast('success', `Draft order ${r.order.so_number ?? ''} created. Nothing is reserved until it is confirmed.`.replace('  ', ' '));
+      if (coupon.trim() && couponCheck?.ok) await apiPost(`/api/oms/orders/${id}/coupon`, { code: coupon.trim() }).catch((e) => toast('warning', `The coupon was not applied: ${errorMessage(e)}`));
+      if (andSubmit) {
+        const sent = await submit(id).catch((e) => (toast('warning', `Created, but not sent for approval: ${errorMessage(e)}`), null));
+        if (sent) toast('success', sent.status === 'approved' ? `Order ${r.order.so_number ?? ''} created and approved — no approval rule applies to it.` : `Order ${r.order.so_number ?? ''} created and sent for approval.`);
+      } else toast('success', `Draft order ${r.order.so_number ?? ''} created. Nothing is reserved until it is confirmed.`.replace('  ', ' '));
       void qc.invalidateQueries({ queryKey: K.all });
       onClose(id);
     } catch (e) {
@@ -105,21 +151,42 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
 
   return (
     <Sheet
-      title="New order"
+      title={
+        <span className="flex items-center gap-2">
+          <span className="flex-1">New order</span>
+          <button type="button" className="inline-flex h-7 items-center gap-1 rounded-[7px] px-2 text-[12px] font-semibold text-ink-2 hover:bg-subtle" title="Open the new order in its own window" onClick={() => (openInWindow('/sales?tab=orders&new=1', 'New order'), onClose())}>
+            <Icon name="app-window" size={13} /> Own window
+          </button>
+        </span>
+      }
       width={760}
       onClose={() => onClose()}
       footer={
         <>
-          <span className="mr-auto max-w-[420px] text-[11.5px] text-ink-3">This creates a draft order marked as entered by hand, and its timeline says so. Nothing is reserved until it is confirmed.</span>
+          <span className="mr-auto max-w-[360px] text-[11.5px] text-ink-3">{offline ? OFFLINE_WRITE : 'This creates a draft order marked as entered by hand, and its timeline says so. Nothing is reserved until it is confirmed.'}</span>
           <button type="button" className={btn} onClick={() => onClose()}>
             Cancel
           </button>
-          <button type="button" className={btnPrimary} disabled={!ready || busy} onClick={() => void create()}>
-            {busy ? 'Creating…' : 'Create draft order'}
+          <button type="button" className={btn} disabled={!ready || busy} onClick={() => void create()}>
+            {busy ? 'Creating…' : 'Save draft'}
           </button>
+          {has(perms, 'oms.orders.edit') ? (
+            <button type="button" className={btnPrimary} disabled={!ready || busy} onClick={() => void create(true)} title="⌘↵ / Ctrl+Enter">
+              Submit ⌘↵
+            </button>
+          ) : null}
         </>
       }
     >
+      <span
+        className="contents"
+        onKeyDown={(e) => {
+          if (e.key === 'Enter' && (e.metaKey || e.ctrlKey) && ready && !busy) {
+            e.preventDefault();
+            void create(has(perms, 'oms.orders.edit'));
+          }
+        }}
+      >
       <div className="grid grid-cols-2 gap-3" data-new-order>
         {several ? (
           <Field label="Company">
@@ -195,9 +262,32 @@ export default function NewOrder({ org, onClose }: { org: string; onClose: (crea
         )}
         <p className="m-0 text-[11.5px] text-ink-3">Totals are worked out when the order is saved, so they cannot disagree with the lines.</p>
       </div>
+      <div className="grid grid-cols-2 gap-3">
+        <Field label="Coupon" hint={couponCheck ? <span className={couponCheck.ok ? 'text-success' : 'text-danger'}>{couponCheck.ok ? `${couponCheck.coupon?.code ?? coupon.trim().toUpperCase()} applies${couponCheck.amount ? `: about ${moneyFull(couponCheck.amount)} off` : ''}.` : (couponCheck.why ?? 'That coupon does not apply.')}</span> : undefined}>
+          <input className={input} value={coupon} onChange={(e) => setCoupon(e.target.value.toUpperCase())} placeholder="SAVE20" maxLength={40} />
+        </Field>
+        <div className="flex flex-col gap-1 text-[12.5px]">
+          <b className="text-ink">Approval</b>
+          {lines.length ? (
+            preview === null ? (
+              <span className="text-ink-3">{previewQ.error ? 'Who would approve it is worked out when it is submitted.' : 'Working out who would approve it…'}</span>
+            ) : preview.length ? (
+              <span className="text-[#9A4A06] dark:text-warning" data-approval-preview>
+                Needs {preview.length === 1 ? 'one approval' : `${preview.length} approvals`}: {preview.map((p) => `${p.step}. ${p.label}${p.approver ? ` (${p.approver})` : ''}`).join(' · ')}
+              </span>
+            ) : (
+              <span className="text-success" data-approval-preview>No approval needed — no rule matches this order. It goes straight to Approved when submitted.</span>
+            )
+          ) : (
+            <span className="text-ink-3">Add the lines to see who would approve it.</span>
+          )}
+          {lines.length ? <span className="text-[11.5px] text-ink-3">About {moneyFull(estimate)} at list prices, before tax — the server prices it when saved.</span> : null}
+        </div>
+      </div>
       <Field label="Notes">
         <textarea rows={2} className={input + ' !h-auto py-2'} value={notes} onChange={(e) => setNotes(e.target.value)} />
       </Field>
+      </span>
     </Sheet>
   );
 }

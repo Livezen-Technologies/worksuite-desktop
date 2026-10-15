@@ -1032,6 +1032,10 @@ export interface StatusSnapshot {
     mailBadge?: number;
     /** Unread bell entries about new mail: counted once, as mail, on the badge. */
     mailNotices?: number;
+    /** Orders waiting on an approval decision I may make (WS-OMS-SRS-001 FR-DSK-05, the server's Badge::pending). */
+    salesApprovals?: number;
+    /** Unread bell entries about those approvals: counted once, as the approval queue, on the badge. */
+    salesNotices?: number;
   };
   /** Mail alerts are paused on this computer (MNA-TRY-02): the Mail footer says so. */
   mailAlertsPaused?: string | null;

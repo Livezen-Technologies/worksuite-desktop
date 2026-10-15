@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { apiGet, apiPost } from '../../core/api';
+import { ApiError, apiDelete, apiGet, apiGetMeta, apiPost, apiPut } from '../../core/api';
 
 /**
  * Sales & Orders (the server's OMS module, "12 · Orders (OMS)" designs).
@@ -94,6 +94,8 @@ export interface Order {
   approved_at: string | null;
   confirmed_at: string | null;
   completed_at: string | null;
+  /** Past its expected date and not yet delivered (Ph1): the server says so, the screen only shows it. */
+  overdue?: boolean;
 }
 
 export interface OrderLine {
@@ -141,7 +143,12 @@ export interface OrderDetail extends Order {
    */
   confirm?: { endpoint: string; allowed: boolean; why: string | null } | null;
   approval: { steps: ApprovalStep[]; mine: boolean };
-  integrations: Array<{ module: string; operation: string; status: string; external_id: string | null; error: string | null; retries: number; at: string | null }>;
+  /** `id` names a hand-off to retry (ACT-06); an older server leaves it out, and then there is nothing to retry. */
+  integrations: Array<{ id?: number; module: string; operation: string; status: string; external_id: string | null; error: string | null; retries: number; at: string | null }>;
+  /** Why it was cancelled (Ph1: a cancel needs a reason, kept on the event). */
+  cancel_reason?: string | null;
+  /** Several coupons on one order (Ph6, CPN-09); an older server has `coupon_code` alone. */
+  coupons?: Array<{ code: string; discount: number }>;
   links: { deliveries: Array<{ id: number; dn_number: string; status: string; delivered_at: string | null }>; invoices: Array<{ id: number; number: string; status: string; total: number; issue_date: string | null }> };
 }
 
@@ -160,7 +167,7 @@ export interface Overview {
   stages: Array<{ status: Status; label: string; count: number; value: number }>;
   exits: Array<{ status: Status; label: string; count: number; value: number }>;
   recent: Array<{ id: number; number: string; status: Status; status_label: string; client: string | null; total: number; currency: string; date: string | null; priority: Priority }>;
-  attention: { pending_approval: number; unassigned: number; stale: number; integration_failures: number };
+  attention: { pending_approval: number; unassigned: number; stale: number; integration_failures: number; overdue?: number };
   total: number;
   today: number;
   draft: number;
@@ -235,6 +242,12 @@ export interface ListFilters {
   priority?: string;
   q?: string;
   mine?: boolean;
+  /** Past the expected date (Ph1). */
+  overdue?: boolean;
+  /** Payment status and order-date window (Ph2, ORD-06). */
+  payment?: string;
+  from?: string;
+  to?: string;
   page?: number;
   perPage?: number;
   sort?: string;
@@ -262,8 +275,11 @@ export function useOrgs() {
   return useQuery({ queryKey: K.orgs, queryFn: ({ signal }) => apiGet<{ items: Array<{ id: number; name: string; currency: string | null; role: string | null }> }>('/api/oms/organizations', undefined, signal).then((r) => r.items ?? []), staleTime: 300_000 });
 }
 
-export function fetchOrders(org: string, f: ListFilters, signal?: AbortSignal) {
-  return apiGet<{ orders: Order[]; total: number; page: number; per_page: number }>(
+export type OrderPage = { orders: Order[]; total: number; page: number; per_page: number; offline?: boolean; cachedAt?: string | null };
+
+/** A page of orders. `offline`: read from this computer's copy because WorkSuite could not be reached (FR-DSK-07). */
+export async function fetchOrders(org: string, f: ListFilters, signal?: AbortSignal): Promise<OrderPage> {
+  const r = await apiGetMeta<OrderPage>(
     '/api/oms/orders',
     withOrg(org, {
       status: f.status || undefined,
@@ -271,6 +287,10 @@ export function fetchOrders(org: string, f: ListFilters, signal?: AbortSignal) {
       priority: f.priority || undefined,
       q: f.q || undefined,
       mine: f.mine ? 1 : undefined,
+      overdue: f.overdue ? 1 : undefined,
+      payment_status: f.payment || undefined,
+      from: f.from || undefined,
+      to: f.to || undefined,
       page: f.page ?? 1,
       per_page: f.perPage ?? 50,
       sort: f.sort,
@@ -278,9 +298,11 @@ export function fetchOrders(org: string, f: ListFilters, signal?: AbortSignal) {
     }),
     signal,
   );
+  return { ...r.data, offline: r.offline, cachedAt: r.cachedAt };
 }
 
-export const fetchOrder = (id: number, signal?: AbortSignal) => apiGet<{ order: OrderDetail }>(`/api/oms/orders/${id}`, undefined, signal).then((r) => r.order);
+export type OrderRead = OrderDetail & { offline?: boolean; cachedAt?: string | null };
+export const fetchOrder = (id: number, signal?: AbortSignal): Promise<OrderRead> => apiGetMeta<{ order: OrderDetail }>(`/api/oms/orders/${id}`, undefined, signal).then((r) => ({ ...r.data.order, offline: r.offline, cachedAt: r.cachedAt }));
 export const fetchTimeline = (id: number, signal?: AbortSignal) => apiGet<{ events: TimelineEvent[] }>(`/api/oms/orders/${id}/timeline`, undefined, signal).then((r) => r.events ?? []);
 
 // ── writes ────────────────────────────────────────────────────────────────
@@ -290,8 +312,8 @@ export const approve = (id: number, reason?: string) => apiPost<{ status: Status
 export const reject = (id: number, reason: string) => apiPost<{ status: Status }>(`/api/oms/orders/${id}/reject`, { reason });
 /** Inventory's confirm: reserves the stock. Answers which lines were short. */
 export const confirm = (id: number) => apiPost<{ short?: string[] }>(`/api/inventory/sales-orders/${id}/confirm`, {});
-/** Inventory's cancel: releases what was reserved; refused once anything was delivered. */
-export const cancel = (id: number) => apiPost(`/api/inventory/sales-orders/${id}/cancel`, {});
+/** Inventory's cancel: releases what was reserved; refused once anything was delivered. The reason goes with it. */
+export const cancel = (id: number, reason?: string) => apiPost(`/api/inventory/sales-orders/${id}/cancel`, reason ? { reason } : {});
 /** Inventory's invoice: a draft invoice in Billing for what was delivered (stocked lines) or ordered (the rest), not yet invoiced. */
 export const raiseInvoice = (id: number) => apiPost<{ invoice_id: number; lines: number }>(`/api/inventory/sales-orders/${id}/invoice`, {});
 
@@ -308,7 +330,7 @@ export function mayInvoice(o: Pick<OrderDetail, 'status' | 'lines'>, perms: read
   const allowed = has('inventory.manage') || (has('inventory.sell') && has('billing.invoice'));
   return allowed && !UNBILLED_BEFORE.has(o.status) && o.lines.some((l) => l.invoiced_qty < l.quantity);
 }
-export const transition = (id: number, status: Status) => apiPost<{ status: Status }>(`/api/oms/orders/${id}/transition`, { status });
+export const transition = (id: number, status: Status, reason?: string) => apiPost<{ status: Status }>(`/api/oms/orders/${id}/transition`, reason ? { status, reason } : { status });
 export const assign = (id: number, userId: number, role: 'order' | 'sales' | 'fulfilment' | 'delivery' = 'order') => apiPost(`/api/oms/orders/${id}/assign`, { user_id: userId, role });
 export const bulk = (ids: number[], action: 'status' | 'priority' | 'delete', value?: string) =>
   apiPost<{ done: number; failed: Array<{ id: number; number: string; why: string }> }>('/api/oms/orders/bulk', { action, ids, ...(action === 'status' ? { status: value } : action === 'priority' ? { priority: value } : {}) });
@@ -375,3 +397,103 @@ export const createOrder = (body: Record<string, unknown>) => apiPost<{ order: {
 /** Orders' general defaults (`oms_default_priority`, `…_warehouse` as an id, `…_currency`, …), as the New order form starts from them. */
 export const orderDefaults = (org: string, signal?: AbortSignal) => apiGet<{ settings: Record<string, string> }>('/api/oms/settings', withOrg(org), signal).then((r) => r.settings ?? {});
 export const ymd = (d = new Date()) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+
+// ── v1.1: comments, saved views, hand-offs, payment links, re-order, approval preview, the approvals queue ──────
+
+export interface Comment {
+  id: number;
+  body: string;
+  user: { id: number; name: string } | null;
+  at: string;
+  edited_at?: string | null;
+  /** Mine to edit or delete (the server says so). */
+  can?: { edit?: boolean; delete?: boolean };
+}
+
+export const KV = {
+  comments: (id: number) => ['sales', 'order', id, 'comments'] as const,
+  views: ['sales', 'views'] as const,
+  approvals: (org: string) => ['sales', 'approvals', org] as const,
+};
+
+export const fetchComments = (id: number, signal?: AbortSignal) => apiGet<{ comments: Comment[] }>(`/api/oms/orders/${id}/comments`, undefined, signal).then((r) => r.comments ?? []);
+/** `@[Name](user:ID)` in the body mentions somebody; the server notifies them. */
+export const addComment = (id: number, body: string) => apiPost<{ comment: Comment }>(`/api/oms/orders/${id}/comments`, { body });
+export const editComment = (commentId: number, body: string) => apiPut(`/api/oms/comments/${commentId}`, { body });
+export const deleteComment = (commentId: number) => apiDelete(`/api/oms/comments/${commentId}`);
+
+/** A mention as the server reads it. */
+export const mention = (u: { id: number; name: string }) => `@[${u.name.replace(/[[\]()]/g, '')}](user:${u.id})`;
+/** A comment's body to read: mentions as "@Name". */
+export const commentText = (body: string) => body.replace(/@\[([^\]]+)\]\(user:\d+\)/g, '@$1');
+
+/** A saved list (ORD-14): its filters, columns and sort, by name. */
+export interface SavedView {
+  id: number;
+  name: string;
+  filters: Partial<Record<'status' | 'source' | 'priority' | 'q' | 'mine' | 'overdue' | 'payment' | 'from' | 'to', string | boolean>>;
+  columns?: string[] | null;
+  sort?: { by: string; dir: 'asc' | 'desc' } | null;
+}
+export const fetchViews = (signal?: AbortSignal) => apiGet<{ views: SavedView[] }>('/api/oms/views', undefined, signal).then((r) => r.views ?? []);
+export const saveView = (v: Omit<SavedView, 'id'>) => apiPost<{ view: SavedView }>('/api/oms/views', v);
+export const deleteView = (id: number) => apiDelete(`/api/oms/views/${id}`);
+
+/** Try a failed hand-off again (ACT-06). */
+export const retryIntegration = (orderId: number, integrationId: number) => apiPost(`/api/oms/orders/${orderId}/integrations/${integrationId}/retry`, {});
+/** A payment link through Billing (PAY-06): sent by email or WhatsApp, or only made, to copy. */
+export const paymentLink = (id: number, channel: 'email' | 'whatsapp' | 'copy') => apiPost<{ url: string }>(`/api/oms/orders/${id}/payment-link`, { channel });
+/** Re-order (CRT-12): a new draft through Inventory with the same customer and lines. */
+export const duplicateOrder = (id: number) => apiPost<{ id: number }>(`/api/oms/orders/${id}/duplicate`, {});
+
+export interface PreviewStep {
+  step: number;
+  label: string;
+  permission: string;
+  approver: string | null;
+}
+/** Who would have to approve an order like this (CRT-10), before it is submitted. An empty list: nobody. */
+export const previewApproval = (body: { total: number; discount_pct?: number; customer_id?: number | null; channel?: string; org_id?: number | null; order_type?: string | null }, signal?: AbortSignal) =>
+  apiPost<{ steps: PreviewStep[] }>('/api/oms/orders/preview-approval', body).then((r) => {
+    if (signal?.aborted) throw new DOMException('aborted', 'AbortError');
+    return r.steps ?? [];
+  });
+
+/** An order waiting on a decision I may make: the queue the badge counts (D-05). */
+export interface ApprovalRow {
+  order_id: number;
+  number: string;
+  client: string | null;
+  total: number;
+  currency: string;
+  priority: Priority;
+  /** The step waiting, of how many, and the rule that asked for it. */
+  step: number | null;
+  steps: number | null;
+  rule: string | null;
+  permission: string | null;
+  raised_by: string | null;
+  submitted_at: string | null;
+}
+
+/**
+ * The approvals waiting on me. `GET /api/oms/approvals` where the server has it; otherwise the orders pending approval
+ * (which the server already narrows to those I may see), with no step to name.
+ */
+export async function fetchApprovals(org: string, signal?: AbortSignal): Promise<ApprovalRow[]> {
+  try {
+    const r = await apiGet<{ rows?: ApprovalRow[]; approvals?: ApprovalRow[] }>('/api/oms/approvals', withOrg(org), signal);
+    return r.rows ?? r.approvals ?? [];
+  } catch (e) {
+    if (!(e instanceof ApiError) || (e.status !== 404 && e.status !== 405)) throw e;
+    const list = await fetchOrders(org, { status: 'pending_approval', perPage: 100, sort: 'order_date', dir: 'asc' }, signal);
+    return list.orders.map((o) => ({ order_id: o.id, number: o.number, client: o.client, total: o.total, currency: o.currency, priority: o.priority, step: null, steps: null, rule: null, permission: null, raised_by: o.sales_user, submitted_at: o.order_date }));
+  }
+}
+
+/** Orders' fulfilment board, narrowed to a warehouse or an assignee (FUL-06). */
+export const fetchFulfilmentBy = (org: string, f: { warehouse?: number | null; assignee?: number | null }, signal?: AbortSignal) =>
+  apiGet<Fulfilment>('/api/oms/fulfilment', withOrg(org, { warehouse_id: f.warehouse ?? undefined, assignee_id: f.assignee ?? undefined }), signal);
+
+export const has = (perms: readonly string[] | undefined, p: string) => !!perms && (perms.includes('*') || perms.includes(p));

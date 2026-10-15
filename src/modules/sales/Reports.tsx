@@ -13,6 +13,8 @@ import { BarRow } from '../crm/parts';
 import { statusOf } from './api';
 import { fetchReport, GROUPS, KM, periodLabel, rangeOf, RANGES, REPORTS, type RangePreset, type ReportData, type ReportKind, type ReportParams } from './manage';
 import { money, moneyFull, StatusPill } from './parts';
+import { saveReportPdf } from './print';
+import { cx } from '../../components/ui';
 
 /**
  * Reports (OmsReports, OmsReportsSales): seven reports over a date window,
@@ -21,6 +23,9 @@ import { money, moneyFull, StatusPill } from './parts';
  * report ends with the server's basis sentence, drawn in full, because
  * several figures rest on something a reader must know to quote them.
  * The window is remembered on this computer.
+ *
+ * D-09 (v1.1): the reports picked on the left; each exports as CSV, or is saved
+ * as the server's PDF wherever you choose, with Show in folder (FR-DSK-06).
  */
 const has = (perms: readonly string[] | undefined, p: string) => !!perms && (perms.includes('*') || perms.includes(p));
 const KEY = 'sales.reports.window';
@@ -70,11 +75,26 @@ export default function Reports({ org }: { org: string }) {
       (e) => toast('error', errorMessage(e)),
     );
 
+  const [saving, setSaving] = useState(false);
+  const label = REPORTS.find((r) => r.id === report)?.label ?? 'Report';
+  const savePdf = () => {
+    setSaving(true);
+    void saveReportPdf({ report, from: win.from, to: win.to, ...(org ? { org } : {}), ...(report === 'sales' ? { group: group as 'month' } : {}), name: `${label} — ${win.from} to ${win.to}` }).finally(() => setSaving(false));
+  };
+
   return (
-    <div className="flex flex-col gap-3.5 px-6 py-5">
-      <PageHead title="Reports" sub="Orders" />
+    <div className="flex items-start gap-3.5 px-6 py-5">
+      <nav aria-label="Reports" className="sticky top-0 flex w-[190px] shrink-0 flex-col gap-0.5">
+        <div className="mb-1 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">Reports</div>
+        {REPORTS.map((r) => (
+          <button key={r.id} type="button" aria-current={r.id === report ? 'page' : undefined} onClick={() => setReport(r.id)} className={cx('flex h-8 items-center rounded-[8px] px-2.5 text-left text-[13px]', r.id === report ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}>
+            {r.label}
+          </button>
+        ))}
+      </nav>
+      <div className="flex min-w-0 flex-1 flex-col gap-3.5">
+      <PageHead title={label} sub="Orders" />
       <div className="flex flex-wrap items-center gap-2">
-        <Select<ReportKind> aria-label="Report" value={report} onValueChange={setReport} options={REPORTS.map((r) => ({ value: r.id, label: r.label }))} className={input + ' !w-[200px]'} />
         {report === 'sales' ? <Select<string> aria-label="Grouped" value={group} onValueChange={setGroup} options={GROUPS.map((g) => ({ value: g.id, label: g.label }))} className={input + ' !w-[180px]'} /> : null}
         <Select<RangePreset>
           aria-label="Window"
@@ -93,9 +113,12 @@ export default function Reports({ org }: { org: string }) {
         <span className="flex-1" />
         {has(perms, 'oms.orders.export') ? (
           <button type="button" className={btn} onClick={exportCsv}>
-            <Icon name="download" size={14} /> Export
+            <Icon name="download" size={14} /> Export CSV
           </button>
         ) : null}
+        <button type="button" className={btn} disabled={saving} onClick={savePdf} title="The server's PDF of this report, saved where you choose">
+          <Icon name="printer" size={14} /> Save PDF…
+        </button>
       </div>
 
       {q.isLoading ? (
@@ -115,6 +138,7 @@ export default function Reports({ org }: { org: string }) {
           {d.basis ? <p className="m-0 rounded-[10px] bg-subtle px-3.5 py-2.5 text-[12px] leading-relaxed text-ink-2">{d.basis}</p> : null}
         </>
       ) : null}
+      </div>
     </div>
   );
 }

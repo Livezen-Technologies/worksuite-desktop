@@ -12,8 +12,8 @@ import { call } from './bridge';
  * count is drawn onto the icon itself, as the system badge would look, and
  * the main process swaps the Dock icon. When the count is 0 the plain icon
  * goes back. Same count as the tray: unread chat + unread notifications —
- * not mail, whose count covers every inbox including shared ones (see tray.ts) — and support tickets needing me,
- * counted once (FR-DSK-04).
+ * not mail, whose count covers every inbox including shared ones (see tray.ts) — support tickets needing me,
+ * counted once (FR-DSK-04), and orders waiting on my approval, counted once (WS-OMS-SRS-001 FR-DSK-05).
  */
 const SIZE = 512;
 
@@ -69,7 +69,7 @@ export async function paint(label: string): Promise<string> {
 
 /** The count on the icon: what needs you, and the included inboxes' unread mail (ENH-MAIL-05 MNA-TRY-03). */
 export function badgeCount(u: StatusSnapshot['unread']): number {
-  return attentionCount(u.chat + (u.webchat ?? 0) + (u.ringing ?? 0), u.notifications, u.support ?? 0, u.supportNotices ?? 0, u.mailBadge ?? 0, u.mailNotices ?? 0);
+  return attentionCount(u.chat + (u.webchat ?? 0) + (u.ringing ?? 0), u.notifications, u.support ?? 0, u.supportNotices ?? 0, u.mailBadge ?? 0, u.mailNotices ?? 0, u.salesApprovals ?? 0, u.salesNotices ?? 0);
 }
 
 /** Called with every status push; repaints only when the label changes. */
