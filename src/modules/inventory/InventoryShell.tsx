@@ -1,14 +1,14 @@
 import { useQuery } from '@tanstack/react-query';
-import { lazy, Suspense, useState } from 'react';
+import { lazy, Suspense, useEffect, useState } from 'react';
+import { useCanOpen } from '../../core/access';
 import { app } from '../../core/app-state';
 import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { can, currencyOf, fetchDashboard, fetchWarehouses, K, useCompanies } from './api';
-import { InvRail, NATIVE, type DocHit, type InvView } from './Rail';
+import { IN_PURCHASING, InvRail, NATIVE, purchasingRoute, type DocHit, type InvView } from './Rail';
 import type { TrackTab } from './Tracked';
-import type { BuyTab } from './Purchasing';
 import type { MakeTab } from './Manufacturing';
 import type { SetSection } from './Setup';
 import { SidePanel } from '../../components/SidePanel';
@@ -31,10 +31,13 @@ import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
  * - manufacturing as `?tab=mfg&mt=jobs|boms`, a job `&job=<id>`, a recipe
  *   `&bom=<id>`; `&make=job` (`&jobbom=<id>` from a recipe) starts a job,
  *   `&make=bom` a recipe (`&bomedit=<id>` edits one).
- * - reports as `?tab=rep&r=<report>`; replenishment `?tab=rpl`; brands,
- *   units and attributes `?tab=lk`; settings `?tab=set&ss=rules|warehouses`
- *   (`&whid=<id>` opens a warehouse); `?tab=acc` is My access.
- * Sales orders open in Sales & Orders for those who may use it.
+ * - reports as `?tab=rep&r=<report>`; brands, units and attributes
+ *   `?tab=lk`; settings `?tab=set&ss=rules|warehouses` (`&whid=<id>` opens a
+ *   warehouse); `?tab=acc` is My access.
+ * Sales orders open in Sales & Orders for those who may use it. Purchasing —
+ * orders, receipts, requests, vendors and replenishment — is its own app since
+ * SRS-PUR-001 G-21: its entries here open it, and the old addresses
+ * (`?tab=pur&bt=…&po=<id>`, `?tab=ven&vendor=<id>`, `?tab=rpl`) are sent there.
  */
 const Dashboard = lazy(() => import('./Dashboard'));
 const Products = lazy(() => import('./Products'));
@@ -51,15 +54,10 @@ const Opening = lazy(() => import('./Opening'));
 const AdjustmentSheet = lazy(() => import('./Adjustments').then((m) => ({ default: m.AdjustmentSheet })));
 const TransferSheet = lazy(() => import('./Transfers').then((m) => ({ default: m.TransferSheet })));
 const CountSheet = lazy(() => import('./Counts').then((m) => ({ default: m.CountSheet })));
-const Purchasing = lazy(() => import('./Purchasing'));
-const Vendors = lazy(() => import('./Vendors'));
-const OrderSheet = lazy(() => import('./Purchasing').then((m) => ({ default: m.OrderSheet })));
-const VendorSheet = lazy(() => import('./Vendors').then((m) => ({ default: m.VendorSheet })));
 const Manufacturing = lazy(() => import('./Manufacturing'));
 const JobSheet = lazy(() => import('./Manufacturing').then((m) => ({ default: m.JobSheet })));
 const BomSheet = lazy(() => import('./Manufacturing').then((m) => ({ default: m.BomSheet })));
 const Reports = lazy(() => import('./Reports'));
-const Replenishment = lazy(() => import('./Replenishment'));
 const Lookups = lazy(() => import('./Lookups'));
 const Setup = lazy(() => import('./Setup'));
 const MyAccess = lazy(() => import('./MyAccess'));
@@ -82,7 +80,6 @@ const TITLES: Record<InvView, string> = {
   set: 'Settings',
   acc: 'My access',
 };
-const BUY_TABS = ['orders', 'receipts', 'requests'] as const;
 const TRACK_TABS = ['batches', 'serials', 'expiring'] as const;
 const ORG_KEY = 'inventory.org';
 const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
@@ -97,7 +94,10 @@ function savedOrg(): string {
 }
 
 export default function InventoryShell(_props: ModuleProps) {
-  const { query, path, go } = useTab();
+  const { query, path, go, navigate } = useTab();
+  // Purchasing is its own app (SRS-PUR-001 G-21): its entries here open it, for whoever may.
+  const buysHere = useCanOpen('purchase');
+  const onPurchasing = buysHere ? (v: string, extra = '') => navigate(purchasingRoute(v, extra)) : null;
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   // Sales orders are Sales & Orders' screens, for whoever may open that app.
   const sellsHere = useStore(app, (s) => s.apps.some((a) => a.id === 'sales'));
@@ -115,17 +115,21 @@ export default function InventoryShell(_props: ModuleProps) {
   const serialId = num(query.get('serial'));
   const tt: TrackTab = (TRACK_TABS as readonly string[]).includes(query.get('tt') ?? '') ? (query.get('tt') as TrackTab) : serialId ? 'serials' : 'batches';
   const make = query.get('make');
-  const bt: BuyTab = (BUY_TABS as readonly string[]).includes(query.get('bt') ?? '') ? (query.get('bt') as BuyTab) : num(query.get('grn')) ? 'receipts' : 'orders';
-  const poId = num(query.get('po'));
-  const grnId = num(query.get('grn'));
-  const vendorId = num(query.get('vendor'));
   const jobId = num(query.get('job'));
   const bomId = num(query.get('bom'));
   const ss: SetSection = query.get('ss') === 'warehouses' || num(query.get('whid')) ? 'warehouses' : 'rules';
   const mt: MakeTab = query.get('mt') === 'boms' || (bomId && !jobId && query.get('mt') !== 'jobs') ? 'boms' : 'jobs';
   const st = query.get('st');
   const asked = (query.get('tab') ?? '') as InvView;
+  // An old purchasing address (a notification, a bookmark): it opens in Purchasing, and this tab goes to the dashboard.
+  const moved = asked in IN_PURCHASING ? asked : null;
   const view: InvView = asked && NATIVE.has(asked) ? asked : product ? 'prod' : 'dash';
+  useEffect(() => {
+    if (!moved || !onPurchasing) return;
+    onPurchasing(moved, `&${new URLSearchParams(query).toString()}`);
+    go('/inventory?tab=dash');
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [moved]);
   useTabTitle(`Inventory · ${TITLES[view]}`);
 
   const companies = useCompanies();
@@ -160,7 +164,6 @@ export default function InventoryShell(_props: ModuleProps) {
   const canCatalogue = d?.can.catalogue ?? has('inventory.catalogue');
   const canAdjust = d?.can.adjust ?? has('inventory.adjust');
   const canTransfer = d?.can.transfer ?? has('inventory.transfer');
-  const canPurchase = d?.can.purchase ?? has('inventory.purchase');
   const canMake = d?.can.manufacture ?? has('inventory.manufacture');
   const canSettings = d?.can.settings ?? has('inventory.settings');
   const onSales = sellsHere ? (order?: number) => go(order ? `/sales?tab=orders&order=${order}` : '/sales?tab=orders') : null;
@@ -194,18 +197,23 @@ export default function InventoryShell(_props: ModuleProps) {
     q.set('tab', tab);
     go(`/inventory?${q.toString()}`);
   };
-  const start = (what: 'adj' | 'trf' | 'cnt' | 'ops' | 'po' | 'vendor' | 'job' | 'bom') => nav({ make: what });
+  const start = (what: 'adj' | 'trf' | 'cnt' | 'ops' | 'job' | 'bom') => nav({ make: what });
   const DOC_ROUTES: Record<string, (id: number) => string> = {
     adj: (id) => `/inventory?tab=adj&adj=${id}`,
     trf: (id) => `/inventory?tab=trf&trf=${id}`,
     serial: (id) => `/inventory?tab=trk&tt=serials&serial=${id}`,
-    po: (id) => `/inventory?tab=pur&bt=orders&po=${id}`,
-    grn: (id) => `/inventory?tab=pur&bt=receipts&grn=${id}`,
-    vendor: (id) => `/inventory?tab=ven&vendor=${id}`,
     job: (id) => `/inventory?tab=mfg&mt=jobs&job=${id}`,
     bom: (id) => `/inventory?tab=mfg&mt=boms&bom=${id}`,
   };
-  const openDoc = (hit: DocHit) => go(hit.kind === 'batch' ? '/inventory?tab=trk&tt=batches' : DOC_ROUTES[hit.kind]!(hit.id));
+  // Orders, receipts and vendors are Purchasing's.
+  const PURCHASE_DOCS: Record<string, (id: number) => string> = {
+    po: (id) => `/purchase?tab=po&po=${id}`,
+    grn: (id) => `/purchase?tab=grn&grn=${id}`,
+    vendor: (id) => `/purchase?tab=ven&vendor=${id}`,
+  };
+  const openDoc = (hit: DocHit) => (hit.kind === 'batch' ? go('/inventory?tab=trk&tt=batches') : PURCHASE_DOCS[hit.kind] ? navigate(PURCHASE_DOCS[hit.kind]!(hit.id)) : go(DOC_ROUTES[hit.kind]!(hit.id)));
+  // A view of the dashboard's: Inventory's own here, a purchasing one in Purchasing.
+  const goView = (v: InvView, extra = '') => (v in IN_PURCHASING ? onPurchasing?.(v, extra) : go(`/inventory?tab=${v}${extra}`));
   // The categories open over whatever is showing — the product form
   // included — and closing them leaves it as it was.
   const cats = (on: boolean) => {
@@ -226,6 +234,7 @@ export default function InventoryShell(_props: ModuleProps) {
           onOpenDoc={openDoc}
           onOpening={canAdjust ? () => start('ops') : null}
           onSales={onSales}
+          onPurchasing={onPurchasing ? (v) => onPurchasing(v) : null}
           counts={counts}
           org={scope}
           companies={list}
@@ -244,7 +253,7 @@ export default function InventoryShell(_props: ModuleProps) {
               org={scope}
               warehouse={wh}
               currency={currency}
-              onGo={(v, extra = '') => go(`/inventory?tab=${v}${extra}`)}
+              onGo={goView}
               onStock={(filter) => go(`/inventory?tab=stock&filter=${filter}`)}
               onOpenProduct={(id) => openProduct(id)}
               onNewAdjustment={canAdjust ? () => start('adj') : null}
@@ -297,35 +306,6 @@ export default function InventoryShell(_props: ModuleProps) {
               onWriteOff={canAdjust ? () => start('adj') : null}
             />
           ) : null}
-          {view === 'pur' ? (
-            <Purchasing
-              org={scope}
-              warehouse={wh}
-              currency={currency}
-              canCost={canCost}
-              tab={bt}
-              onTab={(t) => go(`/inventory?tab=pur&bt=${t}`)}
-              orderId={poId}
-              onOrder={(id) => nav({ po: id ? String(id) : null, grn: null })}
-              receiptId={grnId}
-              onReceipt={(id) => nav(id ? { grn: String(id), po: null, bt: 'receipts' } : { grn: null })}
-              onNewOrder={canPurchase ? () => start('po') : null}
-              onEditOrder={(id) => nav({ make: 'po', poedit: String(id) })}
-              initialStatus={st}
-            />
-          ) : null}
-          {view === 'ven' ? (
-            <Vendors
-              org={scope}
-              currency={currency}
-              openId={vendorId}
-              onOpen={(id) => nav({ vendor: id ? String(id) : null })}
-              onNew={canPurchase ? () => start('vendor') : null}
-              onEdit={(id) => nav({ make: 'vendor', vedit: String(id) })}
-              onOpenOrder={(id) => go(DOC_ROUTES.po!(id))}
-              onOpenReceipt={(id) => go(DOC_ROUTES.grn!(id))}
-            />
-          ) : null}
           {view === 'mfg' ? (
             <Manufacturing
               org={scope}
@@ -346,7 +326,7 @@ export default function InventoryShell(_props: ModuleProps) {
             />
           ) : null}
           {view === 'rep' ? <Reports org={scope} warehouse={wh} warehouses={whs} currency={currency} canCost={canCost} report={query.get('r')} onReport={(r) => go(`/inventory?tab=rep&r=${r}`)} /> : null}
-          {view === 'rpl' ? <Replenishment org={scope} warehouse={wh} warehouses={whs} canPurchase={canPurchase} onRequests={() => go('/inventory?tab=pur&bt=requests')} /> : null}
+          {moved ? <p className="m-6 text-[13px] text-ink-2">{onPurchasing ? 'Opening Purchasing…' : 'Purchasing is an app of its own now, and it is not among yours. Ask whoever runs WorkSuite for it.'}</p> : null}
           {view === 'lk' ? <Lookups org={scope} canCatalogue={canCatalogue} canSettings={canSettings} /> : null}
           {view === 'set' ? (
             canSettings ? (
@@ -385,20 +365,6 @@ export default function InventoryShell(_props: ModuleProps) {
           {make === 'adj' ? <AdjustmentSheet org={scope} warehouses={whs} defaultWarehouse={wh} onClose={() => nav({ make: null })} onSaved={(id) => go(`/inventory?tab=adj&adj=${id}`)} /> : null}
           {make === 'trf' ? <TransferSheet org={scope} warehouses={whs} defaultFrom={wh} onClose={() => nav({ make: null })} onSaved={(id) => go(`/inventory?tab=trf&trf=${id}`)} /> : null}
           {make === 'cnt' ? <CountSheet org={scope} warehouses={whs} defaultWarehouse={wh} onClose={() => nav({ make: null })} onSaved={(id) => go(`/inventory?tab=cnt&cnt=${id}`)} /> : null}
-          {make === 'po' ? (
-            <OrderSheet
-              key={query.get('poedit') ?? 'new'}
-              org={scope}
-              warehouses={whs}
-              id={num(query.get('poedit'))}
-              defaultWarehouse={wh}
-              // Buyers set an order's prices, so its form shows them whether or not they see stock cost.
-              canCost={canCost || canPurchase}
-              onClose={() => nav({ make: null, poedit: null })}
-              onSaved={(id) => go(DOC_ROUTES.po!(id))}
-            />
-          ) : null}
-          {make === 'vendor' ? <VendorSheet key={query.get('vedit') ?? 'new'} id={num(query.get('vedit'))} onClose={() => nav({ make: null, vedit: null })} onSaved={(id) => go(DOC_ROUTES.vendor!(id))} /> : null}
           {make === 'ops' ? <Opening org={scope} warehouses={whs} defaultWarehouse={wh} canCost={canCost} onClose={() => nav({ make: null })} /> : null}
           {make === 'job' ? <JobSheet org={scope} warehouses={whs} defaultWarehouse={wh} bom={num(query.get('jobbom'))} onClose={() => nav({ make: null, jobbom: null })} onSaved={(id) => go(DOC_ROUTES.job!(id))} /> : null}
           {make === 'bom' ? <BomSheet key={query.get('bomedit') ?? 'new'} org={scope} id={num(query.get('bomedit'))} canCost={canCost} onClose={() => nav({ make: null, bomedit: null })} onSaved={(id) => go(DOC_ROUTES.bom!(id))} /> : null}

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.3.0 — 2026-10-15
+
+**Added**
+
+- Purchasing's approvals (SRS-PUR-001 G-21): an unread `purchase.approval` entry is counted once, as Purchasing's queue, on the badge (`purchaseNotices`); purchasing and payables notices are filed under Purchasing.
+
 ## 2.2.0 — 2026-10-15
 
 **Added**

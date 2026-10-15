@@ -662,6 +662,31 @@ work: [SOCIAL_MEDIA.md](SOCIAL_MEDIA.md). Tests: `tests/unit/renderer/social-*.t
 | ADM-001…007 | Done · Server | `admin/Settings.tsx`, `admin/settings/` |
 | MOB-001…004, LST-001/002 | Not here | WorkSuite Mobile; Listening is P5 |
 
+## Purchasing (SRS-PUR-001 v1.0, G-21 desktop)
+
+`src/modules/purchase` (its own app, `purchase`, over Inventory's tables), `shared/purchase.ts`,
+`electron/services/purchase-desk.ts`. Orders, receipts, requests, RFQs, bills, payments, returns and vendors use
+Inventory's `/api/inventory/…`; what the purchasing build adds is `/api/purchase/…` (pur-core, pur-depth). Tests:
+`tests/unit/renderer/purchase-*.test.ts`. **Server** = works once that server release is installed; an older server
+answers 404 and the screen says so.
+
+| Area | Status | Where / note |
+|---|---|---|
+| G-21 app and rail | Done | catalogue `purchase` (Inventory's app, any purchasing permission, its own `purchase` licence lock), registry, `Rail.tsx`; Inventory's entries open it (`inventory/Rail.tsx` `purchasingRoute`) |
+| S-01 dashboard | Done | `Dashboard.tsx` over `/api/inventory/purchase/dashboard` and the approvals queue |
+| S-02 requests, RFQs; G-17 | Done · Server | `Requests.tsx`, `Rfqs.tsx`, `rfq.ts` (per-line award; `purchase-award.test.ts`) |
+| S-03/S-05 orders; G-01, G-02, G-03, G-05, G-06, G-13 | Done · Server | `Orders.tsx` (grid + pane, match, chain, send, close, FX, landed share), `chain.ts` (`purchase-approvals.test.ts`), `Purchasing.tsx` order form |
+| S-06 receiving; G-07 | Done · Server | `Receive.tsx`, `scan.ts` (scan, wrong-PO refusal, F2/F3; `purchase-receive.test.ts`), `Qc.tsx` |
+| S-07 returns; G-19 | Done · Server | `Returns.tsx` |
+| S-08/S-09 bills, payments; G-20 | Done · Server | `Bills.tsx`, `Payments.tsx`, `PaymentRuns.tsx`, `payrun.ts` (bank file CSV / pain.001 through `transfers:download {purchaseExport}`; `purchase-payrun.test.ts`) |
+| S-10 vendors; G-25 | Done · Server | `Vendors.tsx`, `Scorecard.tsx` |
+| G-18 agreements | Done · Server | `Agreements.tsx` |
+| S-11 reports; G-26, G-27 | Done · Server | `Reports.tsx`, export to disk |
+| G-14 approvals, notifications | Done · Server | `Approvals.tsx`; `purchase.approval` banners with Approve and Open, the count on the tray and Dock (`PurchaseDesk`) |
+| G-04 permissions | Done | `purchaseCan` (`api.ts`): narrow permissions, `inventory.purchase` the umbrella |
+| Offline | Done | READ_CACHE of the purchasing lists and documents opened; every write disabled offline |
+| G-24 AI | Partial · Server | the RFQ summary where the server answers; bill OCR, anomalies and vendor risk are the web's and mobile's |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |

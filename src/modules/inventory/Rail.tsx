@@ -14,14 +14,34 @@ import { OrgSwitcher } from '../../components/OrgSwitcher';
  * Movements, the control screens (adjustments, transfers, counts, batches
  * and serials), trade, insight, setup and administration are all here; Sales
  * orders open in Sales & Orders for those who may use it, and in the browser
- * for anyone else. The warehouse is
+ * for anyone else. Purchasing, Vendors and Replenishment are the Purchasing
+ * app's own screens since SRS-PUR-001 G-21: their entries here open it. The warehouse is
  * a filter, not a mode: it narrows the dashboard, stock and movements, and a
  * document that names its own warehouse ignores it.
  */
 export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk' | 'pur' | 'ven' | 'mfg' | 'rep' | 'rpl' | 'lk' | 'set' | 'acc';
 export type WebView = keyof typeof WEB_VIEW;
 
-export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk', 'pur', 'ven', 'mfg', 'rep', 'rpl', 'lk', 'set', 'acc']);
+export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk', 'mfg', 'rep', 'lk', 'set', 'acc']);
+
+/** Inventory's purchasing entries, which open the Purchasing app (SRS-PUR-001 G-21): Inventory's view → Purchasing's. */
+export const IN_PURCHASING: Readonly<Record<string, string>> = { pur: 'po', ven: 'ven', rpl: 'rpl' };
+
+/**
+ * Where an Inventory purchasing address opens in Purchasing: `?tab=pur&bt=orders&po=4` → `/purchase?tab=po&po=4`,
+ * `bt=receipts` → Goods received, `bt=requests` → Requests; the document keys (`po`, `grn`, `vendor`, `st`) are the same.
+ */
+export function purchasingRoute(view: string, extra = ''): string {
+  const q = new URLSearchParams(extra.replace(/^[?&]+/, ''));
+  const bt = q.get('bt');
+  q.delete('bt');
+  q.delete('tab');
+  for (const k of ['poedit', 'vedit']) q.delete(k);
+  if (q.get('make') && !['po', 'vendor'].includes(q.get('make')!)) q.delete('make');
+  const tab = view === 'pur' ? (bt === 'requests' ? 'req' : bt === 'receipts' || q.has('grn') ? 'grn' : 'po') : (IN_PURCHASING[view] ?? 'dash');
+  const rest = q.toString();
+  return `/purchase?tab=${tab}${rest ? `&${rest}` : ''}`;
+}
 
 /** A search hit this app opens itself, other than a product. */
 export type DocHit = { kind: 'adj' | 'trf' | 'serial' | 'po' | 'grn' | 'vendor' | 'job'; id: number } | { kind: 'batch' };
@@ -52,6 +72,7 @@ export function InvRail({
   onOpenDoc,
   onOpening,
   onSales,
+  onPurchasing,
   counts,
   org,
   companies,
@@ -69,6 +90,8 @@ export function InvRail({
   onOpening: (() => void) | null;
   /** Sales orders, or one of them, in Sales & Orders — for those who may open it; the browser otherwise. */
   onSales: ((order?: number) => void) | null;
+  /** A purchasing entry, in the Purchasing app — for those who may open it; left out for anyone else. */
+  onPurchasing: ((view: string) => void) | null;
   counts: RailCounts;
   org: string;
   companies: Company[];
@@ -94,9 +117,9 @@ export function InvRail({
     if (h.type === 'transfer') return onOpenDoc({ kind: 'trf', id: h.id });
     if (h.type === 'serial') return onOpenDoc({ kind: 'serial', id: h.id });
     if (h.type === 'batch') return onOpenDoc({ kind: 'batch' });
-    if (h.type === 'purchase_order') return onOpenDoc({ kind: 'po', id: h.id });
-    if (h.type === 'receipt') return onOpenDoc({ kind: 'grn', id: h.id });
-    if (h.type === 'vendor') return onOpenDoc({ kind: 'vendor', id: h.id });
+    if (h.type === 'purchase_order' && onPurchasing) return onOpenDoc({ kind: 'po', id: h.id });
+    if (h.type === 'receipt' && onPurchasing) return onOpenDoc({ kind: 'grn', id: h.id });
+    if (h.type === 'vendor' && onPurchasing) return onOpenDoc({ kind: 'vendor', id: h.id });
     if (h.type === 'assembly') return onOpenDoc({ kind: 'job', id: h.id });
     if (h.type === 'sales_order' && onSales) return onSales(h.id);
     const pid = hitProduct(h);
@@ -106,16 +129,18 @@ export function InvRail({
 
   const item = (id: InvView | WebView, label: string, icon: string, badge?: number, tone?: 'amber') => {
     const inSales = id === 'so' && !!onSales;
-    const web = !NATIVE.has(id) && !inSales;
+    const inPurchasing = id in IN_PURCHASING;
+    if (inPurchasing && !onPurchasing) return null;
+    const web = !NATIVE.has(id) && !inSales && !inPurchasing;
     if (NEEDS[id as WebView] && !allowed(NEEDS[id as WebView]!)) return null;
     const on = view === id;
     return (
       <button
         key={id}
         type="button"
-        title={web ? `${label} — opens in your browser` : inSales ? `${label} — opens in Sales & Orders` : label}
+        title={web ? `${label} — opens in your browser` : inSales ? `${label} — opens in Sales & Orders` : inPurchasing ? `${label} — opens in Purchasing` : label}
         aria-current={on ? 'page' : undefined}
-        onClick={() => (inSales ? onSales!() : web ? openWeb(WEB_VIEW[id as WebView]) : onPick(id as InvView))}
+        onClick={() => (inSales ? onSales!() : inPurchasing ? onPurchasing!(id) : web ? openWeb(WEB_VIEW[id as WebView]) : onPick(id as InvView))}
         className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
       >
         <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
@@ -184,7 +209,7 @@ export function InvRail({
               {hits.isLoading ? <span className="px-3 py-2 text-[12px] text-ink-3">Searching…</span> : null}
               {!hits.isLoading && !results.length && !exact ? <span className="px-3 py-2 text-[12px] text-ink-3">Nothing matches.</span> : null}
               {[...(exact && !results.some((r) => r.type === exact.type && r.id === exact.id) ? [exact] : []), ...results].map((h) => {
-                const web = !hitProduct(h) && !['adjustment', 'transfer', 'serial', 'batch', 'purchase_order', 'receipt', 'vendor', 'assembly', ...(onSales ? ['sales_order'] : [])].includes(h.type);
+                const web = !hitProduct(h) && !['adjustment', 'transfer', 'serial', 'batch', 'assembly', ...(onPurchasing ? ['purchase_order', 'receipt', 'vendor'] : []), ...(onSales ? ['sales_order'] : [])].includes(h.type);
                 return (
                   <button key={`${h.type}-${h.id}`} type="button" role="option" aria-selected={exact?.type === h.type && exact.id === h.id} onClick={() => choose(h)} className="flex items-start gap-1.5 px-3 py-1.5 text-left hover:bg-subtle">
                     <span className="flex min-w-0 flex-1 flex-col">

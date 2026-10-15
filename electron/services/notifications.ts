@@ -14,6 +14,7 @@ import type { SubmitResult } from '@shared/ipc/contract';
 import type { NotificationItem, NotificationPermission, NotificationPrivacy, Preferences, RealtimeState, RingTestNotice } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
+import { isPurchaseApprovalEvent } from '@shared/purchase';
 import type { Database } from './db';
 import type { HttpClient } from './http';
 import { notificationPermission, presentLocked, testNoticeFor } from './locked-notifications';
@@ -289,7 +290,7 @@ function moduleOf(n: { category?: string | null; type?: string | null; entity_ty
   if (fromLink === 'social-media') return 'social-media';
   const raw = (n.category || n.entity_type || fromLink || n.type || 'system').toLowerCase();
   // `projects` is the server's category for tasks: without it, task alerts could not be muted by the Tasks switch.
-  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', projects: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat', social_media: 'social-media', 'social-media': 'social-media' };
+  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', projects: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat', social_media: 'social-media', 'social-media': 'social-media', purchasing: 'purchase', payables: 'purchase' };
   return map[raw] ?? raw.split(/[._:]/)[0] ?? 'system';
 }
 
@@ -334,6 +335,7 @@ const MODULE_LABELS: Record<string, string> = {
   'social-media': 'Social Media',
   ai: 'AI Assistant',
   marketing: 'Marketing',
+  purchase: 'Purchasing',
   system: 'WorkSuite',
 };
 
@@ -405,6 +407,8 @@ export class NotificationService {
    * (`/api/badges`' `sales`, WS-OMS-SRS-001 FR-DSK-05), so these are not counted twice.
    */
   private salesUnread = new Set<string>();
+  /** The unread bell entries about a purchase document waiting on my approval: the badge counts Purchasing's queue itself. */
+  private purchaseUnread = new Set<string>();
   /**
    * New-mail alerts (ENH-MAIL-05), when main has them: new mail found by the count going up goes there, as the rows
    * the list shows — the same path as the server's push, so a message found both ways alerts once. `quiet`: a jump
@@ -464,11 +468,12 @@ export class NotificationService {
     this.supportUnread.clear();
     this.mailUnread.clear();
     this.salesUnread.clear();
+    this.purchaseUnread.clear();
     this.gapSince = null;
   }
 
   counts() {
-    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length, supportNotices: this.supportUnread.size, mailNotices: this.mailUnread.size, salesNotices: this.salesUnread.size };
+    return { ...this.unread, notifications: this.unread.notifications + this.local().filter((i) => !i.read).length, supportNotices: this.supportUnread.size, mailNotices: this.mailUnread.size, salesNotices: this.salesUnread.size, purchaseNotices: this.purchaseUnread.size };
   }
 
   /**
@@ -641,6 +646,7 @@ export class NotificationService {
       this.supportUnread = new Set(items.filter((i) => !i.read && i.module === 'support').map((i) => i.id));
       this.mailUnread = new Set(items.filter((i) => !i.read && i.module === 'mail').map((i) => i.id));
       this.salesUnread = new Set(items.filter((i, k) => !i.read && (raw[k]!.event_key ?? raw[k]!.type) === 'oms.approval').map((i) => i.id));
+      this.purchaseUnread = new Set(items.filter((i, k) => !i.read && isPurchaseApprovalEvent(raw[k]!.event_key ?? raw[k]!.type)).map((i) => i.id));
       this.cache(items);
       if (announce && this.listed) {
         const since = Date.now() - MISSED_WINDOW_MS;
@@ -708,6 +714,7 @@ export class NotificationService {
       this.supportUnread.delete(id);
       this.mailUnread.delete(id);
       this.salesUnread.delete(id);
+      this.purchaseUnread.delete(id);
     }
     await Promise.allSettled(ids.map((id) => this.http.post(`/api/notifications/${encodeURIComponent(id)}/read`)));
     if (this.userId) for (const id of ids) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ? AND id = ?', this.userId, id);
@@ -720,6 +727,7 @@ export class NotificationService {
     this.supportUnread.clear();
     this.mailUnread.clear();
     this.salesUnread.clear();
+    this.purchaseUnread.clear();
     await this.http.post('/api/notifications/read-all');
     if (this.userId) this.db.run('UPDATE notification_cache SET read = 1 WHERE user_id = ?', this.userId);
     for (const n of this.live.values()) this.closeNative(n);
@@ -764,6 +772,7 @@ export class NotificationService {
         if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
         if (moduleOf({ category, link }) === 'mail' || e.event === 'mail.received') this.mailUnread.add(id);
         if (e.event === 'oms.approval' && e.transient !== true) this.salesUnread.add(id);
+        if (typeof e.event === 'string' && isPurchaseApprovalEvent(e.event) && e.transient !== true) this.purchaseUnread.add(id);
         // Shown its module's way (Support's banners): remembered, so the list does not show it again.
         if (!this.shown.includes(id) && this.claim({ id, event: typeof e.event === 'string' ? e.event : null, title: String(e.title ?? 'Notification'), body: String(e.body ?? ''), link, category, priority: typeof e.priority === 'string' ? e.priority : null, actions: e.actions, data: e.data ?? (e.order_id !== undefined ? { order_id: e.order_id, step: e.step } : undefined), module: moduleOf({ category: e.category as string, link }) })) {
           this.remember(id);

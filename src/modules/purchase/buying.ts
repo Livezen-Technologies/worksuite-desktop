@@ -1,12 +1,13 @@
 import { apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
-import { num, withOrg } from './api';
-import { serialList } from './control';
+import { num, withOrg } from '../inventory/api';
+import { serialList } from '../inventory/control';
 
 /**
- * Buying (the "Inv" Purchasing, TradeSheet and Vendor designs): purchase
- * orders, the goods received against them, the requests that come before
- * them, and the vendors they are raised with. Vendors are shared across the
- * companies by decision; orders, receipts and requests belong to one each.
+ * Buying (the "Inv" Purchasing, TradeSheet and Vendor designs, now Purchasing's
+ * own app — SRS-PUR-001 G-21; moved here from Inventory): purchase orders, the
+ * goods received against them, the requests that come before them, and the
+ * vendors they are raised with. Vendors are shared across the companies by
+ * decision; orders, receipts and requests belong to one each.
  *
  * Prices on an order are for whoever buys: the server masks unit costs for
  * anybody without `inventory.cost`, keeps an order's hidden costs when such
@@ -17,15 +18,15 @@ type Q = Record<string, string | number | boolean | undefined>;
 const bodyOrg = (org: string, body: object) => (org ? { org_id: Number(org), ...body } : body);
 
 export const KB = {
-  orders: (org: string, f: object) => ['inventory', 'pos', org, f] as const,
-  order: (id: number) => ['inventory', 'po', id] as const,
-  receipts: (org: string, f: object) => ['inventory', 'grns', org, f] as const,
-  receipt: (id: number) => ['inventory', 'grn', id] as const,
-  requests: (org: string, status: string) => ['inventory', 'prs', org, status] as const,
-  vendors: (f: object) => ['inventory', 'vendors', f] as const,
-  vendor: (id: number) => ['inventory', 'vendor', id] as const,
-  vendorRecords: (id: number, org: string) => ['inventory', 'vendor-records', id, org] as const,
-  vendorSearch: (q: string) => ['inventory', 'vendor-search', q] as const,
+  orders: (org: string, f: object) => ['purchase', 'pos', org, f] as const,
+  order: (id: number) => ['purchase', 'po', id] as const,
+  receipts: (org: string, f: object) => ['purchase', 'grns', org, f] as const,
+  receipt: (id: number) => ['purchase', 'grn', id] as const,
+  requests: (org: string, status: string) => ['purchase', 'prs', org, status] as const,
+  vendors: (f: object) => ['purchase', 'vendors', f] as const,
+  vendor: (id: number) => ['purchase', 'vendor', id] as const,
+  vendorRecords: (id: number, org: string) => ['purchase', 'vendor-records', id, org] as const,
+  vendorSearch: (q: string) => ['purchase', 'vendor-search', q] as const,
 };
 
 // ── purchase orders ─────────────────────────────────────────────────────
@@ -33,6 +34,9 @@ export const KB = {
 export const PO_LABEL: Record<string, string> = {
   draft: 'Draft',
   pending: 'Awaiting approval',
+  pending_approval: 'Awaiting approval',
+  submitted: 'Awaiting approval',
+  rejected: 'Rejected',
   approved: 'Approved',
   sent: 'Sent',
   acknowledged: 'Vendor accepted',
@@ -45,7 +49,11 @@ export const PO_LABEL: Record<string, string> = {
   ordered: 'Ordered',
 };
 export const poTone = (s: string): 'grey' | 'amber' | 'blue' | 'green' | 'red' =>
-  s === 'draft' || s === 'cancelled' || s === 'closed' ? 'grey' : s === 'pending' || s === 'partial' ? 'amber' : s === 'received' || s === 'posted' || s === 'billed' || s === 'ordered' ? 'green' : 'blue';
+  s === 'draft' || s === 'cancelled' || s === 'closed' ? 'grey'
+  : s === 'rejected' ? 'red'
+  : s === 'pending' || s === 'pending_approval' || s === 'submitted' || s === 'partial' ? 'amber'
+  : s === 'received' || s === 'posted' || s === 'billed' || s === 'ordered' ? 'green'
+  : 'blue';
 
 export interface PurchaseOrder {
   id: number | string;
@@ -110,31 +118,37 @@ export interface OrderDetail {
 
 export const PER = 30;
 
-export const fetchOrders = (org: string, wh: number | null, f: { status: string; q: string; page: number; vendor?: number | null }, signal?: AbortSignal) =>
+export const fetchOrders = (org: string, wh: number | null, f: { status: string; q: string; page: number; vendor?: number | null; late?: boolean }, signal?: AbortSignal) =>
   apiGet<{ orders: PurchaseOrder[]; total: number }>(
     '/api/inventory/purchase-orders',
-    withOrg(org, { status: f.status || undefined, q: f.q.trim() || undefined, vendor_id: f.vendor ?? undefined, ...(wh ? { warehouse_id: wh } : {}), page: f.page, per_page: PER } as Q),
+    withOrg(org, { status: f.status || undefined, q: f.q.trim() || undefined, vendor_id: f.vendor ?? undefined, late: f.late ? 1 : undefined, ...(wh ? { warehouse_id: wh } : {}), page: f.page, per_page: PER } as Q),
     signal,
   ).then((r) => ({ rows: r.orders ?? [], total: num(r.total) ?? 0 }));
 export const fetchOrder = (id: number, signal?: AbortSignal) => apiGet<OrderDetail>(`/api/inventory/purchase-orders/${id}`, undefined, signal);
+/** Save an order; `confirm_duplicate` after the server's `possible_duplicate` warning (G-13) says it is meant. */
 export const saveOrder = (org: string, id: number | null, body: Record<string, unknown>) =>
   id ? apiPut<{ order: PurchaseOrder }>(`/api/inventory/purchase-orders/${id}`, body) : apiPost<{ order: PurchaseOrder }>('/api/inventory/purchase-orders', bodyOrg(org, body));
 export const orderAct = (id: number, act: 'approve' | 'cancel' | 'receive' | 'pdf', body?: object) => apiPost<{ order?: PurchaseOrder; id?: number; file_id?: number; name?: string }>(`/api/inventory/purchase-orders/${id}/${act}`, body ?? {});
 export const deleteOrder = (id: number) => apiDelete<unknown>(`/api/inventory/purchase-orders/${id}`);
 
 /**
- * What may be done to an order now. Receiving needs `inventory.purchase`; approving `inventory.approve`, and
- * someone other than whoever raised it (`mayApprove`, the server's answer) — `waiting` says so instead of a button.
+ * What may be done to an order now. Editing, sending, closing and cancelling need `purchase.order` (or the
+ * `inventory.purchase` umbrella); receiving `purchase.receive` (`receive`, else the same); approving `inventory.approve`,
+ * and someone other than whoever raised it (`mayApprove`, the server's answer) — `waiting` says so instead of a button.
+ * Send (G-05/G-06) is for an approved order not yet sent; Close short-closes one partly received (or sent and waiting).
  */
-export function orderActions(o: Pick<PurchaseOrder, 'status'>, received: number, c: { purchase: boolean; approve: boolean; mayApprove?: boolean }) {
+export function orderActions(o: Pick<PurchaseOrder, 'status'>, received: number, c: { purchase: boolean; approve: boolean; mayApprove?: boolean; receive?: boolean }) {
   const s = o.status;
   const open = s === 'draft' || s === 'pending';
+  const receiver = c.receive ?? c.purchase;
   return {
     edit: c.purchase && open,
     approve: c.approve && open && c.mayApprove !== false,
     waiting: c.approve && open && c.mayApprove === false,
-    receive: c.purchase && ['approved', 'sent', 'acknowledged', 'partial'].includes(s),
-    cancel: c.purchase && !['cancelled', 'received', 'closed'].includes(s) && received <= 0,
+    receive: receiver && ['approved', 'sent', 'acknowledged', 'partial'].includes(s),
+    send: c.purchase && ['approved', 'sent', 'acknowledged'].includes(s),
+    close: c.purchase && ['sent', 'acknowledged', 'partial'].includes(s),
+    cancel: c.purchase && !['cancelled', 'received', 'closed', 'billed'].includes(s) && received <= 0,
     remove: c.purchase && (open || s === 'cancelled'),
   };
 }
@@ -150,6 +164,9 @@ export interface POLineDraft {
 export interface PODraft {
   vendor: { id: number; name: string } | null;
   warehouse: number | null;
+  /** The order's currency, when it is not the company's, and the rate captured for it (G-02): blank takes Finance's rate. */
+  currency?: string;
+  rate?: string;
   expected: string;
   reference: string;
   freight: string;
@@ -182,6 +199,15 @@ export function orderBody(d: PODraft, canCost: boolean): { body: Record<string, 
     if (n !== null && (!Number.isFinite(n) || n < 0)) return { body: {}, error: `${label} must be a number, zero or more.` };
     charges[k] = n ?? 0;
   }
+  const fx: Record<string, unknown> = {};
+  const cur = (d.currency ?? '').trim().toUpperCase();
+  if (cur) {
+    if (!/^[A-Z]{3}$/.test(cur)) return { body: {}, error: 'The currency is a three-letter code, such as USD.' };
+    fx.currency = cur;
+    const rate = amountOf(d.rate ?? '');
+    if (rate !== null && (!Number.isFinite(rate) || rate <= 0)) return { body: {}, error: 'The exchange rate must be a number above zero.' };
+    if (rate !== null) fx.exchange_rate = rate;
+  }
   const lines: Array<Record<string, unknown>> = [];
   for (const l of d.lines) {
     if (!l.product) continue;
@@ -197,7 +223,7 @@ export function orderBody(d: PODraft, canCost: boolean): { body: Record<string, 
   }
   if (!lines.length) return { body: {}, error: 'Add at least one product.' };
   return {
-    body: { vendor_id: d.vendor.id, warehouse_id: d.warehouse, expected_date: d.expected || null, reference_no: d.reference.trim() || null, notes: d.notes.trim() || null, ...charges, lines },
+    body: { vendor_id: d.vendor.id, warehouse_id: d.warehouse, expected_date: d.expected || null, reference_no: d.reference.trim() || null, notes: d.notes.trim() || null, ...fx, ...charges, lines },
     error: null,
   };
 }

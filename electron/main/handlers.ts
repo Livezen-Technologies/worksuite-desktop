@@ -11,6 +11,7 @@ import { canOpenApp, notificationAllowed } from '@shared/access';
 import { tabRecordSchema, type TabRecord } from '@shared/ipc/contract';
 import { garageDocPath } from '@shared/garage-docs';
 import { billingExportPath } from '@shared/billing';
+import { purchaseExportPath } from '@shared/purchase';
 import { projectsReportPath } from '@shared/projects';
 import { safeFileName } from '@shared/filename';
 import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
@@ -746,6 +747,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/share/billing/${input.invoicePdf}/pdf`
       : input.billingExport
       ? billingExportPath(input.billingExport)
+      : input.purchaseExport
+      ? purchaseExportPath(input.purchaseExport)
       : input.billingFile
       ? input.billingFile
       : input.paymentSlip

@@ -2,13 +2,13 @@ import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('../../../src/core/api', () => ({ apiGet: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn(), request: vi.fn() }));
 
-const { orderActions, orderBody, receiptBody, vendorChanges, vendorForm, PO_LABEL, poTone } = await import('../../../src/modules/inventory/buying');
+const { orderActions, orderBody, receiptBody, vendorChanges, vendorForm, PO_LABEL, poTone } = await import('../../../src/modules/purchase/buying');
 
 const nut = { id: 7, code: 'EPN1', name: 'Nut' };
 const line = (over: object = {}) => ({ id: 1, po_line_id: 3, product_id: 7, code: 'EPN1', product_name: 'Nut', unit: 'pcs', tracking: 'none', quantity: '10', rejected_qty: '0', reject_reason: null, unit_cost: '100', landed_cost: '100', batch_no: null, expiry_date: null, serials: null, bin: null, ...over });
 const draft = (over: object = {}) => ({ accepted: '10', rejected: '', reason: '', batch: '', expiry: '', serials: '', ...over });
 
-describe('inventory buying: orders', () => {
+describe('purchasing (moved from inventory): orders', () => {
   it('offers what each state allows, by who may buy and who may approve', () => {
     const c = { purchase: true, approve: true };
     expect(orderActions({ status: 'draft' }, 0, c)).toMatchObject({ edit: true, approve: true, receive: false, cancel: true, remove: true });
@@ -57,7 +57,7 @@ describe('inventory buying: orders', () => {
   });
 });
 
-describe('inventory buying: receipts', () => {
+describe('purchasing (moved from inventory): receipts', () => {
   const h = { invoice: ' INV-9 ', delivery: '', charges: '200', notes: '' };
 
   it('posts what was accepted and why the rest was turned away', () => {
@@ -74,7 +74,7 @@ describe('inventory buying: receipts', () => {
   });
 });
 
-describe('inventory buying: vendors', () => {
+describe('purchasing (moved from inventory): vendors', () => {
   it('saves only what changed, so nothing comes back as it went out', () => {
     const before = vendorForm({ name: 'Bosch', bank_name: 'HNB', payment_terms_days: 30 } as never);
     const after = { ...before, phone: '011 400 2020' };

@@ -51,7 +51,7 @@ describe('a web path belongs to an app', () => {
   it('maps the path to the catalogue app with the longest web path', () => {
     expect(appForWebPath('/tickets?ticket=4')?.id).toBe('support');
     expect(appForWebPath('/oms?order=9')?.id).toBe('sales');
-    expect(appForWebPath('/purchase/orders')?.id).toBe('purchasing');
+    expect(appForWebPath('/purchase/orders')?.id).toBe('purchase');
     expect(appForWebPath('/users/12')).toBeUndefined();
     expect(appForWebPath('/')).toBeUndefined();
   });

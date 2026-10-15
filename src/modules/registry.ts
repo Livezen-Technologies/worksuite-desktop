@@ -410,6 +410,26 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./inventory/InventoryShell'),
   },
   {
+    // Purchasing (SRS-PUR-001 G-21): its own app over Inventory — the dashboard, requests and RFQs with per-line award,
+    // the orders grid with its detail pane (three-way match, the approval chain, send, close, FX and landed cost),
+    // receiving by scan, the quality hold, bills, payments and payment runs, returns, vendors with their scorecard,
+    // replenishment, agreements and reports. Approvals arrive as banners with Approve and Open
+    // (electron/services/purchase-desk.ts). Offline, the lists and every document opened read as last seen; every
+    // write waits for the connection.
+    input: defineDesktopManifest({
+      id: 'purchase', name: 'Purchasing', icon: 'cart', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'READ_CACHE', entities: ['purchase_order', 'goods_receipt', 'vendor_bill'], cache: ['/api/inventory/purchase-orders', '/api/inventory/purchase/dashboard', '/api/inventory/bills', '/api/inventory/vendors', '/api/purchase/chain'] },
+      native: ['notifications', 'printing', 'barcode', 'file-drop'],
+      quickActions: [
+        { id: 'purchase-new-order', label: 'New purchase order', route: '/purchase?tab=po&new=1' },
+        { id: 'purchase-receive', label: 'Receive goods', route: '/purchase?tab=rcv' },
+        { id: 'purchase-approvals', label: 'Purchases to approve', route: '/purchase?tab=appr' },
+      ],
+      deepLinks: ['purchase', 'purchase/orders/:id', 'purchase/requests/:id', 'purchase/bills/:id', 'purchase/returns/:id', 'purchase/vendors/:id'],
+    }),
+    load: () => import('./purchase/PurchaseShell'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'hr', name: 'HR', icon: 'id-card', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', cache: ['/api/hr/attendance/me', '/api/hr/me/profile', '/api/hr/leave/balance', '/api/hr/leave/requests', '/api/hr/leave/approvals'] },

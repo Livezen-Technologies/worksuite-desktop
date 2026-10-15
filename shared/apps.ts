@@ -72,6 +72,11 @@ export interface AppDefinition {
   /** The desktop route the app opens at, when it is not `/<id>`. */
   route?: string;
   /**
+   * Another server slug for this app, over the one it is gated on (`app`): its licence locking it hides the app.
+   * Purchasing is Inventory's app on the server's gates, with its own `purchase` licence (SRS-PUR-001 G-29).
+   */
+  licence?: string;
+  /**
    * Guest mode (#149): `local` apps work on the Local Profile's data on this device; `locked` ones stay in the sidebar
    * with a lock and open the sign-in panel; any other app is not shown to a guest at all.
    */
@@ -79,6 +84,12 @@ export interface AppDefinition {
   /** What guest mode calls a locked app, when that says more than its name ("Drive & Files"). */
   guestLabel?: string;
 }
+
+/**
+ * Who may open Purchasing (SRS-PUR-001 G-04): the narrow purchasing and payables permissions, the `inventory.purchase`
+ * umbrella, approvers, and whoever reads Inventory (they see the lists; every write asks for its own permission).
+ */
+export const PURCHASE_PERMISSIONS: readonly string[] = ['inventory.view', 'inventory.purchase', 'inventory.approve', 'purchase.request', 'purchase.order', 'purchase.receive', 'purchase.approve', 'payables.bill', 'payables.pay', 'payables.allocate'];
 
 /** Who may open the support desk: `support.view` (WS-SUPPORT-SRS-001 §5.2), or the as-built slugs that granted it. */
 export const SUPPORT_PERMISSIONS: readonly string[] = ['support.view', 'ticket.view', 'ticket.reply', 'ticket.manage'];
@@ -148,7 +159,12 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'finance', label: 'Finance', group: 'business', icon: 'landmark', app: 'finance', perm: 'finance.view', webPath: '/finance', surface: 'native', sidebar: 'business', order: 130, keywords: 'accounts ledger journals general ledger trial balance chart of accounts periods books accounting', guest: 'locked', guestLabel: 'Company records' },
   // `/expenses?tab=<view>&org=<ids|all>`; `/expenses?claim=12` (notifications) opens that claim.
   { id: 'expenses', label: 'Expenses', group: 'business', icon: 'wallet', app: 'expenses', webPath: '/expenses', surface: 'native', sidebar: 'business', order: 135, keywords: 'expense claims receipts reimbursement advances petty cash corporate cards mileage per diem budgets policies subscriptions' },
-  { id: 'purchasing', label: 'Purchasing', group: 'business', icon: 'cart', app: 'inventory', webPath: '/purchase', surface: 'browser', order: 161 },
+  // Purchasing (SRS-PUR-001 G-21, G-29): native since 0.2.260 — requests, RFQs, orders, receiving, quality, bills, payments
+  // and payment runs, returns, vendors, replenishment, agreements and reports. An app over Inventory's own tables: its
+  // gate is Inventory's app with any purchasing permission (the narrow ones of G-04, or the `inventory.purchase` umbrella;
+  // `inventory.view` reads), and the server's own `purchase` slug, when its licence locks it, hides it. The web's
+  // `/purchase/orders/<id>` (notifications, shares) opens the order here.
+  { id: 'purchase', label: 'Purchasing', group: 'business', icon: 'cart', app: 'inventory', licence: 'purchase', perm: PURCHASE_PERMISSIONS, webPath: '/purchase', surface: 'native', sidebar: 'business', order: 128.5, keywords: 'purchasing purchase orders po procurement buying requests rfq quotation vendors suppliers receiving goods received grn bills payables payments payment run returns replenishment agreements' },
   { id: 'subscriptions', label: 'Subscriptions', group: 'business', icon: 'repeat', app: 'subscriptions', webPath: '/subscriptions', surface: 'browser', order: 165 },
   // Native since 0.2.193 (WS-MKT-SRS-001 v1.1, MKT-DSK-01): the web's fourteen screens, the call queue and its Next contact shortcut.
   { id: 'marketing', label: 'Marketing', group: 'business', icon: 'megaphone', app: 'marketing', webPath: '/marketing', surface: 'native', sidebar: 'business', order: 166, keywords: 'marketing campaigns email newsletter audience contacts segments lists consent suppression unsubscribe call queue call campaigns telemarketing' },
@@ -234,6 +250,7 @@ export function isSelfService(def: AppDefinition, grant: AccessGrant): boolean {
 
 export function isAppVisible(def: AppDefinition, grant: AccessGrant): boolean {
   if (def.app && grant.locked?.includes(def.app)) return false;
+  if (def.licence && grant.locked?.includes(def.licence)) return false;
   return hasFullApp(def, grant) || isSelfService(def, grant);
 }
 

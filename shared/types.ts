@@ -1036,6 +1036,10 @@ export interface StatusSnapshot {
     salesApprovals?: number;
     /** Unread bell entries about those approvals: counted once, as the approval queue, on the badge. */
     salesNotices?: number;
+    /** Purchase documents (orders, requests, returns, bills) waiting on my decision (SRS-PUR-001 G-21, `GET /api/purchase/approvals?mine=1`). */
+    purchaseApprovals?: number;
+    /** Unread bell entries about those: counted once, as Purchasing's queue, on the badge. */
+    purchaseNotices?: number;
   };
   /** Mail alerts are paused on this computer (MNA-TRY-02): the Mail footer says so. */
   mailAlertsPaused?: string | null;

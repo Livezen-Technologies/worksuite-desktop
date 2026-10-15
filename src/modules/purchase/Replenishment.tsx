@@ -4,17 +4,19 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btnPrimary, Empty, PageHead } from '../hr/parts';
-import { num, qty, type Warehouse } from './api';
-import { fetchReplenishment, KI, raiseRequests } from './insight';
-import { minWidth } from './parts';
+import { num, qty, type Warehouse } from '../inventory/api';
+import { fetchReplenishment, KI, raiseRequests } from '../inventory/insight';
+import { minWidth } from '../inventory/parts';
 import { Checkbox } from '../../components/Checkbox';
+import { refreshPurchase } from './api';
 
 /**
  * Replenishment (InvReplenishment): what is below its minimum, soonest to
  * run out first, with what to order to get back to it. Purchase requests
  * are raised from the lines ticked, or from all of them, for whoever may
  * buy; they go to Purchasing's requests to be approved and turned into
- * orders.
+ * orders. (Purchasing's own screen since SRS-PUR-001 G-21; Inventory's rail
+ * opens it here.)
  */
 export default function Replenishment({ org, warehouse, warehouses, canPurchase, onRequests }: { org: string; warehouse: number | null; warehouses: Warehouse[]; canPurchase: boolean; onRequests: () => void }) {
   const qc = useQueryClient();
@@ -32,7 +34,7 @@ export default function Replenishment({ org, warehouse, warehouses, canPurchase,
       const made = r.ids?.length ?? 0;
       toast('success', made === 1 ? 'One purchase request raised — see Purchasing › Requests' : `${made} purchase requests raised — see Purchasing › Requests`);
       setPicked([]);
-      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      refreshPurchase(qc);
       onRequests();
     } catch (e) {
       toast('error', errorMessage(e));
