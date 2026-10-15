@@ -1,14 +1,15 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
+import { Fragment, useState } from 'react';
 import { errorMessage } from '../../../core/bridge';
 import { useTab } from '../../../core/tab-context';
 import { toast } from '../../../core/toasts';
 import { Select } from '../../../components/Select';
 import { Button, ErrorNote, Modal, Spinner, cx } from '../../../components/ui';
-import { qk } from '../api';
+import { qk, read } from '../api';
 import { MoneyBasis, useProjectCompany } from '../company';
 import { INVOICE_STATE, MILESTONE_STATE, daysLeftText, dqk, dread, dwrite, fmtDay, num, statusOf, type Milestone, type MilestoneInvoiceResult } from '../delivery';
-import { openWeb } from '../parts';
+import { Ref, StatusChip, openWeb } from '../parts';
+import { usePublishTaskOrder } from '../task-editor';
 import { Chip, Confirm, Field, Mono, NEEDS_CONNECTION, PageHead, ProjectPick, Tabs, areaClass, inputClass, useLiveProjects, useMembers, useReportOffline } from './kit';
 
 /**
@@ -26,7 +27,7 @@ import { Chip, Confirm, Field, Mono, NEEDS_CONNECTION, PageHead, ProjectPick, Ta
 
 type Tab = 'open' | 'overdue' | 'achieved' | 'missed' | 'all';
 
-export function MilestonesScreen({ projectId, offline, onOffline }: { projectId: number | null; offline: boolean; onOffline: (o: boolean) => void }) {
+export function MilestonesScreen({ projectId, offline, onOpenTask, onOffline }: { projectId: number | null; offline: boolean; onOpenTask?: (taskId: number) => void; onOffline: (o: boolean) => void }) {
   const qc = useQueryClient();
   const { openLink } = useTab();
   const { current: company } = useProjectCompany();
@@ -38,6 +39,8 @@ export function MilestonesScreen({ projectId, offline, onOffline }: { projectId:
   const [busy, setBusy] = useState<string | null>(null);
   const [billingMsg, setBillingMsg] = useState<string | null>(null);
   const [drafted, setDrafted] = useState<MilestoneInvoiceResult | null>(null);
+  // A milestone's tasks, shown under its row; each opens in the task modal (PRJ-TED-01).
+  const [shown, setShown] = useState<number | null>(null);
 
   const pid = projectId ?? filter;
   const params = { status: tab, project_id: pid };
@@ -175,61 +178,70 @@ export function MilestonesScreen({ projectId, offline, onOffline }: { projectId:
                     const pct = m.tasks ? Math.round((m.tasks_done / m.tasks) * 100) : 0;
                     const billable = Number(m.bill_amount) > 0;
                     return (
-                      <tr key={m.id} className="border-t border-line/60 align-middle">
-                        <td className="px-3 py-2">
-                          <b className="text-ink">{m.name}</b>
-                          {!projectId ? (
-                            <div className="text-[11.5px] text-ink-3">
-                              <Mono>{m.project_code}</Mono> · {m.project}
+                      <Fragment key={m.id}>
+                        <tr className="border-t border-line/60 align-middle">
+                          <td className="px-3 py-2">
+                            <b className="text-ink">{m.name}</b>
+                            {!projectId ? (
+                              <div className="text-[11.5px] text-ink-3">
+                                <Mono>{m.project_code}</Mono> · {m.project}
+                              </div>
+                            ) : null}
+                            {m.achieved_note ? <div className="text-[11.5px] text-warning-ink">Achieved with open tasks: {m.achieved_note}</div> : null}
+                          </td>
+                          <td className="px-2 py-2 text-ink-2">{m.owner ?? '—'}</td>
+                          <td className="px-2 py-2 text-ink">
+                            {fmtDay(m.due_date)}
+                            {left.text ? <div className={cx('text-[11px]', left.late ? 'font-semibold text-danger' : 'text-ink-3')}>{left.text}</div> : null}
+                          </td>
+                          <td className="px-2 py-2">
+                            <div className="flex items-center gap-1.5">
+                              <div role="progressbar" aria-label={`${m.tasks_done} of ${m.tasks} tasks done`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="h-1.5 flex-1 overflow-hidden rounded-full bg-subtle">
+                                <div className={cx('h-full', m.status === 'achieved' ? 'bg-success' : state === 'overdue' ? 'bg-danger' : 'bg-primary')} style={{ width: `${pct}%` }} />
+                              </div>
+                              {onOpenTask && m.tasks ? (
+                                <button type="button" aria-expanded={shown === m.id} aria-label={`Tasks of ${m.name}: ${m.tasks_done} of ${m.tasks} done`} onClick={() => setShown(shown === m.id ? null : m.id)} className="font-mono text-[11.5px] text-primary hover:underline">
+                                  {m.tasks_done}/{m.tasks}
+                                </button>
+                              ) : (
+                                <Mono className="text-[11.5px] text-ink-2">
+                                  {m.tasks_done}/{m.tasks}
+                                </Mono>
+                              )}
                             </div>
-                          ) : null}
-                          {m.achieved_note ? <div className="text-[11.5px] text-warning-ink">Achieved with open tasks: {m.achieved_note}</div> : null}
-                        </td>
-                        <td className="px-2 py-2 text-ink-2">{m.owner ?? '—'}</td>
-                        <td className="px-2 py-2 text-ink">
-                          {fmtDay(m.due_date)}
-                          {left.text ? <div className={cx('text-[11px]', left.late ? 'font-semibold text-danger' : 'text-ink-3')}>{left.text}</div> : null}
-                        </td>
-                        <td className="px-2 py-2">
-                          <div className="flex items-center gap-1.5">
-                            <div role="progressbar" aria-label={`${m.tasks_done} of ${m.tasks} tasks done`} aria-valuemin={0} aria-valuemax={100} aria-valuenow={pct} className="h-1.5 flex-1 overflow-hidden rounded-full bg-subtle">
-                              <div className={cx('h-full', m.status === 'achieved' ? 'bg-success' : state === 'overdue' ? 'bg-danger' : 'bg-primary')} style={{ width: `${pct}%` }} />
-                            </div>
-                            <Mono className="text-[11.5px] text-ink-2">
-                              {m.tasks_done}/{m.tasks}
-                            </Mono>
-                          </div>
-                        </td>
-                        <td className="px-2 py-2 text-right">
-                          <Mono className="text-ink">{billable ? `${m.currency !== d.ready.currency ? `${m.currency} ` : ''}${num(m.bill_amount)}` : '—'}</Mono>
-                        </td>
-                        <td className="px-2 py-2 text-[12px] text-ink-2">{m.invoice_id ? invoiceLink(m.invoice_id, m.invoice_number, m.invoice_paid) : m.invoice_number ? `${m.invoice_number}${m.invoice_paid ? ' · paid' : ''}` : (INVOICE_STATE[m.invoice_status] ?? '—')}</td>
-                        <td className="px-2 py-2">
-                          <Chip tone={chip.tone}>{chip.label}</Chip>
-                        </td>
-                        <td className="px-3 py-2 text-right">
-                          {manage ? (
-                            <div className="flex flex-wrap justify-end gap-1">
-                              {m.status === 'open' ? (
-                                <Button size="sm" disabled={offline || !!busy} title={off} loading={busy === `achieve:${m.id}`} onClick={() => void achieve(m)}>
-                                  Mark achieved
+                          </td>
+                          <td className="px-2 py-2 text-right">
+                            <Mono className="text-ink">{billable ? `${m.currency !== d.ready.currency ? `${m.currency} ` : ''}${num(m.bill_amount)}` : '—'}</Mono>
+                          </td>
+                          <td className="px-2 py-2 text-[12px] text-ink-2">{m.invoice_id ? invoiceLink(m.invoice_id, m.invoice_number, m.invoice_paid) : m.invoice_number ? `${m.invoice_number}${m.invoice_paid ? ' · paid' : ''}` : (INVOICE_STATE[m.invoice_status] ?? '—')}</td>
+                          <td className="px-2 py-2">
+                            <Chip tone={chip.tone}>{chip.label}</Chip>
+                          </td>
+                          <td className="px-3 py-2 text-right">
+                            {manage ? (
+                              <div className="flex flex-wrap justify-end gap-1">
+                                {m.status === 'open' ? (
+                                  <Button size="sm" disabled={offline || !!busy} title={off} loading={busy === `achieve:${m.id}`} onClick={() => void achieve(m)}>
+                                    Mark achieved
+                                  </Button>
+                                ) : null}
+                                {m.invoice_status === 'ready' ? (
+                                  <Button size="sm" disabled={offline || !!busy} title={off} onClick={() => void invoice([m.id])}>
+                                    Raise invoice
+                                  </Button>
+                                ) : null}
+                                <Button size="sm" variant="ghost" aria-label={`Edit ${m.name}`} disabled={offline} title={off} onClick={() => setEditing(m)}>
+                                  Edit
                                 </Button>
-                              ) : null}
-                              {m.invoice_status === 'ready' ? (
-                                <Button size="sm" disabled={offline || !!busy} title={off} onClick={() => void invoice([m.id])}>
-                                  Raise invoice
+                                <Button size="sm" variant="ghost" aria-label={`Delete ${m.name}`} className="text-danger" disabled={offline} title={off} onClick={() => setDeleting(m)}>
+                                  Delete
                                 </Button>
-                              ) : null}
-                              <Button size="sm" variant="ghost" aria-label={`Edit ${m.name}`} disabled={offline} title={off} onClick={() => setEditing(m)}>
-                                Edit
-                              </Button>
-                              <Button size="sm" variant="ghost" aria-label={`Delete ${m.name}`} className="text-danger" disabled={offline} title={off} onClick={() => setDeleting(m)}>
-                                Delete
-                              </Button>
-                            </div>
-                          ) : null}
-                        </td>
-                      </tr>
+                              </div>
+                            ) : null}
+                          </td>
+                        </tr>
+                        {shown === m.id && onOpenTask ? <MilestoneTasks m={m} onOpenTask={onOpenTask} /> : null}
+                      </Fragment>
                     );
                   })}
                 </tbody>
@@ -386,5 +398,31 @@ function MilestoneDialog({ m, projectId, onClose, onSaved }: { m: Milestone | nu
         </Field>
       </div>
     </Modal>
+  );
+}
+
+/** The tasks under a milestone, as a row beneath it: each opens in the task modal, J/K walk them (PRJ-TED-01/09). */
+function MilestoneTasks({ m, onOpenTask }: { m: Milestone; onOpenTask: (taskId: number) => void }) {
+  const q = useQuery({ queryKey: qk.tasks(m.project_id), queryFn: ({ signal }) => read.tasks(m.project_id, { signal }), staleTime: 30_000 });
+  const tasks = (q.data?.data.tasks ?? []).filter((t) => t.milestone_id === m.id);
+  usePublishTaskOrder(tasks.map((t) => t.id));
+  return (
+    <tr className="bg-ground">
+      <td colSpan={8} className="px-3 py-2">
+        {q.isLoading ? <Spinner /> : null}
+        {q.data && !tasks.length ? <span className="text-[12px] text-ink-3">No task on this milestone is in the list.</span> : null}
+        <ul aria-label={`Tasks of ${m.name}`} className="flex flex-col gap-0.5">
+          {tasks.map((t) => (
+            <li key={t.id} className="flex items-center gap-2">
+              <Ref>{t.task_number ?? `#${t.id}`}</Ref>
+              <button type="button" onClick={() => onOpenTask(t.id)} className="min-w-0 flex-1 truncate text-left font-semibold text-ink hover:text-primary hover:underline">
+                {t.title}
+              </button>
+              <StatusChip status={t.status} />
+            </li>
+          ))}
+        </ul>
+      </td>
+    </tr>
   );
 }

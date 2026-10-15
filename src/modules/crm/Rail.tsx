@@ -15,10 +15,10 @@ import { useCrmScope } from './scope';
  * due today from Tasks and Meetings, and the company the CRM is showing.
  * Screens the desktop does not draw yet open in the browser, marked.
  */
-export type CrmView = 'dash' | 'pipe' | 'leads' | 'fu' | 'acc' | 'quotes' | 'price' | 'reports' | 'intake' | 'set' | 'access';
+export type CrmView = 'dash' | 'pipe' | 'leads' | 'fu' | 'acc' | 'estimates' | 'quotes' | 'proposals' | 'price' | 'reports' | 'intake' | 'set' | 'access';
 
 /** Drawn here; the rest opens WorkSuite CRM in the browser for now. */
-export const NATIVE = new Set<CrmView>(['dash', 'pipe', 'leads', 'fu', 'acc', 'quotes', 'price', 'reports', 'intake', 'set', 'access']);
+export const NATIVE = new Set<CrmView>(['dash', 'pipe', 'leads', 'fu', 'acc', 'estimates', 'quotes', 'proposals', 'price', 'reports', 'intake', 'set', 'access']);
 
 interface Item {
   id: CrmView;
@@ -34,6 +34,8 @@ export interface RailCounts {
   late: number;
   tasksToday: number;
   meetingsToday: number;
+  /** Estimates and proposals waiting for my approval. */
+  toApprove?: number;
 }
 
 export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: CrmView; onPick: (v: CrmView) => void; onNewLead: () => void; onOpenHit: (hit: Hit) => void; counts: RailCounts }) {
@@ -52,7 +54,9 @@ export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: 
         { id: 'leads', label: 'Leads', icon: 'user-plus', badge: counts.newLeads },
         { id: 'fu', label: 'Follow-ups', icon: 'phone', badge: counts.late, tone: 'red' },
         { id: 'acc', label: 'Accounts', icon: 'building' },
+        { id: 'estimates', label: 'Estimates', icon: 'file-sheet' },
         { id: 'quotes', label: 'Quotes', icon: 'file-text' },
+        { id: 'proposals', label: 'Proposals', icon: 'signature', badge: counts.toApprove, tone: 'red' },
       ],
     },
     { label: 'Catalogue', items: [{ id: 'price', label: 'Price list', icon: 'list' }] },

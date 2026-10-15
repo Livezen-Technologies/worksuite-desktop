@@ -499,7 +499,15 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   assignee, priority and due are the task's PUT and bulk is `POST tasks/bulk` — falling back to single edits on a
   server without it — both online only; CSV with a BOM through `files:saveText`). Which view a project opens in, and
   the list's layout, are remembered in `/api/prefs/projects.task_view[.p<id>]` with a copy in `localStorage` read
-  synchronously and for offline (`view-prefs.ts`, as `core/org-prefs.ts`); a task's panel (`TaskPanel.tsx`), My work
+  synchronously and for offline (`view-prefs.ts`, as `core/org-prefs.ts`). A task opens in the task modal
+  (`ProjectTaskModal.tsx`, since projects 1.5.0, PRJ-TED-01..10, D06) — the Tasks app's editor (`tasks/editor`:
+  `TaskEditorFrame` and its parts, which the Tasks app's `TaskDetail` composes too) with the project's own parts
+  (`TaskModalParts.tsx`: the Project group, Dependencies, Time). It reads `GET /api/tasks/{id}` with its `project`
+  block (falling back to `GET /api/projects/tasks/{id}` on an older server), and `patchTask()` takes the field router
+  of `task-editor.ts`: Tasks fields to `/api/tasks/{id}`, the project's fields to `PUT /api/projects/tasks/{id}`, the
+  status as the board's move through the outbox. Fields the reader may not change are shown read-only with the
+  reason; offline only the status, a comment and logged time go (the outbox) and the rest says it needs a
+  connection; J/K walk the ids the view behind publishes (`usePublishTaskOrder`). My work
   grouped by the reader's own day (`logic.ts: groupMyWork`) and the day's time line. Its addresses are the web's
   (`routes.ts`, one `ProjectsView` kind per screen): `/projects/<id>` is a project's overview and its board
   `/projects/<id>/board` (`/tasks/<task>` a task over it; `/projects/board` the board of the project last worked in);

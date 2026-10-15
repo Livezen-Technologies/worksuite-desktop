@@ -28,7 +28,7 @@ import { Chip, Field, Mono, NEEDS_CONNECTION, NoteDialog, PageHead, ProjectPick,
 
 type View = 'mine' | 'queue' | 'summary';
 
-export function TimeScreen({ today, waiting, offline, tab, onTab, onLogTime, onOffline }: { today: string; waiting: number; offline: boolean; tab: string | null; onTab: (tab: View) => void; onLogTime: () => void; onOffline: (o: boolean) => void }) {
+export function TimeScreen({ today, waiting, offline, tab, onTab, onLogTime, onOpenTask, onOffline }: { today: string; waiting: number; offline: boolean; tab: string | null; onTab: (tab: View) => void; onLogTime: () => void; onOpenTask?: (taskId: number) => void; onOffline: (o: boolean) => void }) {
   useProjectCompany();
   const [starting, setStarting] = useState(false);
   // The week's answer carries what the reader may do with time (the same read My week makes).
@@ -65,7 +65,7 @@ export function TimeScreen({ today, waiting, offline, tab, onTab, onLogTime, onO
       ) : view === 'summary' ? (
         <Summary today={today} onOffline={onOffline} />
       ) : (
-        <TimeView today={today} waiting={canApprove ? waiting : 0} offline={offline} onLogTime={onLogTime} onOffline={onOffline} onReview={() => onTab('queue')} />
+        <TimeView today={today} waiting={canApprove ? waiting : 0} offline={offline} onLogTime={onLogTime} onOpenTask={onOpenTask} onOffline={onOffline} onReview={() => onTab('queue')} />
       )}
       {starting ? <StartTimer onClose={() => setStarting(false)} /> : null}
     </div>

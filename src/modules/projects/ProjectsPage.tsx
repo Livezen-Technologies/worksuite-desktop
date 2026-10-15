@@ -18,7 +18,7 @@ import { OfflineBanner, OutboxPanel } from './Outbox';
 import { openWeb } from './parts';
 import { Rail } from './Rail';
 import { boardRoute, viewOf } from './routes';
-import { TaskPanel } from './TaskPanel';
+import { ProjectTaskModal } from './ProjectTaskModal';
 import { rememberTaskView, syncTaskView, useTaskView } from './view-prefs';
 import { MiniTimer } from './Timer';
 // ── PORTFOLIO ──
@@ -45,9 +45,10 @@ import { RisksScreen } from './screens/Risks';
  * the left; in the middle the whole module — the Dashboard, All projects, Templates, Clients, the Activity log and
  * Module settings, a project's page with its tabs (overview, board, timeline, sprints, milestones, team, budget, risks,
  * changes, files, activity, settings), My work, Timeline & Gantt, Milestones, Sprints, Time & approvals, Team
- * workload, Budget & cost, Risks, Change requests and Reports; a task open on the right; the New project dialog over
- * any of them — and, offline, the banner, the outbox and the choices a reconnect may need. A project's Time tab is
- * the one page still on the web. `/projects/timer` is the mini timer window (D02).
+ * workload, Budget & cost, Risks, Change requests and Reports; a task in the task modal over any of them
+ * (ProjectTaskModal, PRJ-TED-01: `/projects/<id>/tasks/<task>` or `?task=`); the New project dialog over any of them —
+ * and, offline, the banner, the outbox and the choices a reconnect may need. A project's Time tab is the one page
+ * still on the web. `/projects/timer` is the mini timer window (D02).
  */
 export default function ProjectsPage(_props: ModuleProps) {
   const { path, query } = useTab();
@@ -228,12 +229,13 @@ function Workspace() {
                 tab={query.get('tab')}
                 onTab={(t) => go(t === 'mine' ? '/projects/time' : `/projects/time?tab=${t}`)}
                 onLogTime={() => setLogFor({ task: null })}
+                onOpenTask={(id) => go(withTask(id))}
                 onOffline={onOffline}
               />
             ) : view.kind === 'timeline' ? (
               <TimelineScreen key={view.projectId ?? 0} projectId={view.projectId} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
             ) : view.kind === 'milestones' ? (
-              <MilestonesScreen key={view.projectId ?? 0} projectId={view.projectId} offline={offline} onOffline={onOffline} />
+              <MilestonesScreen key={view.projectId ?? 0} projectId={view.projectId} offline={offline} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
             ) : view.kind === 'sprints' ? (
               <SprintsScreen key={view.projectId ?? 0} projectId={view.projectId} sprintId={view.sprintId} offline={offline} onGo={go} onOpenTask={(id) => go(withTask(id))} onOffline={onOffline} />
             ) : view.kind === 'workload' ? (
@@ -263,10 +265,10 @@ function Workspace() {
               />
             )}
           </main>
-          {taskId ? <TaskPanel key={taskId} id={taskId} today={today} offline={offline} outbox={outbox} onClose={closeTask} onLogTime={(t) => setLogFor({ task: t })} onMoved={() => void counts.refetch()} /> : null}
           {showOutbox ? <OutboxPanel items={outbox} offline={offline} /> : null}
         </div>
       </div>
+      {taskId ? <ProjectTaskModal key={taskId} id={taskId} offline={offline} outbox={outbox} onClose={closeTask} onOpen={(id, to) => (to ? go(boardRoute(to, id)) : openTask(id))} onMoved={() => void counts.refetch()} /> : null}
       {jump ? <JumpTo projects={[...projects.values()]} onClose={() => setJump(false)} onPick={(id) => (setJump(false), go(view.kind === 'board-home' ? `/projects/${id}/board` : `/projects/${id}`))} /> : null}
       {logFor ? <LogTime task={logFor.task} project={current ? { id: current.id, code: current.code } : boardProject ? { id: boardProject } : null} onClose={() => setLogFor(null)} /> : null}
       {newParam ? <NewProjectDialog start={startKey(newParam)} offline={offline} onClose={() => setNew(null)} onGo={go} /> : null}

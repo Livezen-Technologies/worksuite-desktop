@@ -4,6 +4,22 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-14
+
+Proposals and estimates (CRM SRS v1.3 §17).
+
+**Added**
+
+- Proposals in the rail (Sales): the list for the company showing, filtered by status, with value, opens, last opened, a live "now" mark while the customer is reading and open questions; the selected one previewed on the right — its sections' titles and text, the pricing section's packages and total, the version, opens and viewers, time per section, the customer's questions with their replies (answered from the preview), and Remind, Withdraw, Duplicate, Approve or Send back where its `can` allows, Copy link and Edit on web
+- Estimates in the rail (Sales): the list and one estimate read-only (range, lines and packages, cost and margin where the server shows them, assumptions), with Send (email, link, WhatsApp, PDF; a rule that needs approval says so), Convert to a quote or a proposal (an estimate on a lead converts the lead first when asked), Approve or Send back for an approver, and Edit on web
+- Waiting for your approval: the estimates and proposals a rule sent to me, on the dashboard and above the proposals list, with Approve (an optional note) and Send back (a required note); the count is the Proposals badge
+- "Your customer is reading": `proposals/live` polled every 30 s while signed in (2 min while the window is hidden, not offline, slower after failures), each viewing session announced once — a toast with Open in front, the system notification otherwise — opening the proposal in the Proposals tab
+
+**Changed**
+
+- the CRM reads the web's `?view=` names as well as `?tab=`, so a server notification (`/crm?view=proposals&proposal=12`, `/crm?view=followups&…`) opens the screen it names; `?proposal=`, `?estimate=`, `/crm/proposals/<id>` and `/crm/estimates/<id>` open the record
+- every proposal and estimate action needs WorkSuite, so offline they are off and say so
+
 ## 1.1.0 — 2026-10-14
 
 **Added**

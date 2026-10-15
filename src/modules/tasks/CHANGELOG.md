@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-14
+
+**Added**
+
+- the task editor as a frame and parts (tasks/editor: TaskEditorFrame, Title, Description, Checklist, Attachments, Conversation and the side fields), composed by the Tasks app's TaskDetail and by Projects' task modal; patchTask() takes a field router (the Tasks app's: every field to /api/tasks/{id})
+
+**Changed**
+
+- nothing for the Tasks app's own editor — the same fields, saving and actions
+
 ## 1.2.3 — 2026-10-03
 
 - The sidebar's New button is the shared primary action button: same size, colour, plus icon and quiet shadow as every module; the shortcut is in its tooltip (#171).

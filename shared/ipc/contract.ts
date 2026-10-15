@@ -1025,7 +1025,8 @@ export const contract = {
       id: z.string().regex(/^[A-Za-z0-9:._\-/ ]{1,200}$/),
       title: z.string().max(200),
       body: z.string().max(300),
-      route: z.string().regex(/^\/(mail|calendar)\?[A-Za-z0-9%=&._\-:]{1,400}$/),
+      // Mail's and Calendar's reminders; CRM's "customer is reading" alert (CRM SRS v1.3 §17).
+      route: z.string().regex(/^\/(mail|calendar|crm)\?[A-Za-z0-9%=&._\-:]{1,400}$/),
       flag: z.strictObject({ mailbox: z.number().int().min(0), folder: z.string().regex(/^[A-Za-z0-9._\-/ :]{1,128}$/), uid: z.string().regex(/^\d{1,20}$/) }).optional(),
     }),
     { session: true, rate: 5 },
