@@ -1,26 +1,23 @@
 import { keepPreviousData, useInfiniteQuery, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { app } from '../../core/app-state';
-import { call, errorMessage } from '../../core/bridge';
+import { errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
-import { dateLabel, todayInZone } from '../../core/time';
+import { dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
-import { can, cost, num, qty, stampWords, whole, type Warehouse } from './api';
+import { btn, btnPrimary, btnSmall, Empty, Field, input, Sheet, SidePanel } from '../hr/parts';
+import { cost, num, qty, stampWords, whole, type Warehouse } from '../inventory/api';
+import { OFFLINE_WRITE, purchaseCan, refreshPurchase, usePurchaseOffline, type Duplicate } from './api';
+import { refusalCode, refusalText } from './chain';
 import {
   cancelReceipt,
-  deleteOrder,
   fetchOrder,
-  fetchOrders,
   fetchReceipt,
   fetchReceipts,
-  fetchRequests,
   KB,
-  orderActions,
-  orderAct,
   orderBody,
   PER,
   PO_LABEL,
@@ -28,8 +25,6 @@ import {
   postReceipt,
   receiptBody,
   REJECT_REASONS,
-  requestAct,
-  requestsFromReplenishment,
   saveOrder,
   searchVendors,
   type PODraft,
@@ -37,81 +32,20 @@ import {
   type ReceiptLine,
   type ReceiptLineDraft,
 } from './buying';
-import { minWidth, Pill } from './parts';
-import { pick, ProductPick, WarehousePick } from './pickers';
+import { minWidth, Pill } from '../inventory/parts';
+import { pick, ProductPick, WarehousePick } from '../inventory/pickers';
 
 /**
- * Purchasing (InvPurchasing): the orders raised with vendors, the goods
- * received against them, and the requests that come before them. An order
- * is approved, received — in one delivery or several — and each receipt is
- * checked and posted, which is the moment the stock is on the shelf.
+ * Purchasing's documents that came with it from Inventory (InvPurchasing, InvTradeSheet; SRS-PUR-001 G-21): the
+ * goods received — each receipt checked and posted, which is the moment the stock is on the shelf — and the order
+ * form. The orders grid is Orders.tsx; receiving by scan is Receive.tsx; requests are Requests.tsx.
  */
-export type BuyTab = 'orders' | 'receipts' | 'requests';
-
-const ORDER_STATUSES = [{ value: '', label: 'Every state' }, ...['draft', 'approved', 'acknowledged', 'partial', 'received', 'cancelled'].map((s) => ({ value: s, label: PO_LABEL[s]! }))];
 
 export function PoChip({ status }: { status: string }) {
   return <Pill tone={poTone(status)}>{PO_LABEL[status] ?? status.replace(/_/g, ' ')}</Pill>;
 }
 
 const rowCls = 'flex w-full items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-left text-[12.5px] last:border-b-0 hover:bg-subtle/60';
-
-export default function Purchasing({
-  org,
-  warehouse,
-  currency,
-  canCost,
-  tab,
-  onTab,
-  orderId,
-  onOrder,
-  receiptId,
-  onReceipt,
-  onNewOrder,
-  onEditOrder,
-  initialStatus,
-}: {
-  org: string;
-  warehouse: number | null;
-  currency: string | null;
-  canCost: boolean;
-  tab: BuyTab;
-  onTab: (t: BuyTab) => void;
-  orderId: number | null;
-  onOrder: (id: number | null) => void;
-  receiptId: number | null;
-  onReceipt: (id: number | null) => void;
-  onNewOrder: (() => void) | null;
-  onEditOrder: (id: number) => void;
-  initialStatus?: string | null;
-}) {
-  return (
-    <div className="flex h-full min-h-0 flex-col gap-3 px-6 py-5">
-      <PageHead title="Purchasing">
-        <Seg
-          label="Purchasing"
-          value={tab}
-          onChange={onTab}
-          options={[
-            { id: 'orders', label: 'Orders' },
-            { id: 'receipts', label: 'Receipts' },
-            { id: 'requests', label: 'Requests' },
-          ]}
-        />
-        {onNewOrder && tab === 'orders' ? (
-          <button type="button" className={btnPrimary} onClick={onNewOrder}>
-            <Icon name="plus" size={15} /> New order
-          </button>
-        ) : null}
-      </PageHead>
-      {tab === 'orders' ? <Orders key={initialStatus ?? ''} org={org} warehouse={warehouse} currency={currency} openId={orderId} onOpen={onOrder} initialStatus={initialStatus} /> : null}
-      {tab === 'receipts' ? <Receipts org={org} warehouse={warehouse} openId={receiptId} onOpen={onReceipt} /> : null}
-      {tab === 'requests' ? <Requests org={org} warehouse={warehouse} onOrdered={() => onTab('orders')} /> : null}
-      {orderId ? <OrderPanel key={orderId} id={orderId} currency={currency} canCost={canCost} onClose={() => onOrder(null)} onEdit={() => onEditOrder(orderId)} onReceipt={onReceipt} /> : null}
-      {receiptId ? <ReceiptPanel key={receiptId} id={receiptId} currency={currency} onClose={() => onReceipt(null)} onOrder={onOrder} /> : null}
-    </div>
-  );
-}
 
 function Frame({ min, head, children, more }: { min: number; head: ReactNode; children: ReactNode; more?: ReactNode }) {
   return (
@@ -127,276 +61,7 @@ function Frame({ min, head, children, more }: { min: number; head: ReactNode; ch
   );
 }
 
-function Orders({ org, warehouse, currency, openId, onOpen, initialStatus }: { org: string; warehouse: number | null; currency: string | null; openId: number | null; onOpen: (id: number) => void; initialStatus?: string | null }) {
-  const [status, setStatus] = useState(initialStatus ?? '');
-  const [q, setQ] = useState('');
-  const f = { status, q };
-  const list = useInfiniteQuery({
-    queryKey: KB.orders(org, { ...f, warehouse }),
-    initialPageParam: 1,
-    queryFn: ({ pageParam, signal }) => fetchOrders(org, warehouse, { ...f, page: pageParam }, signal),
-    getNextPageParam: (last, pages) => (pages.length * PER < last.total ? pages.length + 1 : undefined),
-    placeholderData: keepPreviousData,
-  });
-  const rows = useMemo(() => (list.data?.pages ?? []).flatMap((p) => p.rows), [list.data]);
-  const total = list.data?.pages[0]?.total ?? 0;
-  const today = todayInZone();
-  const W = { vendor: 170, wh: 140, st: 110, exp: 84, out: 90, tot: 110 };
-  return (
-    <>
-      <div className="flex items-center gap-2">
-        <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Order number, vendor, note…" aria-label="Search orders" className={input + ' !w-[240px]'} />
-        <Select aria-label="Order status" value={status} onValueChange={setStatus} options={ORDER_STATUSES} className={pick + ' !w-[170px]'} />
-        <span className="ml-auto text-[12.5px] text-ink-3" data-doc-count>
-          {list.isLoading ? '' : `${total.toLocaleString()} ${total === 1 ? 'order' : 'orders'}`}
-        </span>
-      </div>
-      <Frame
-        min={minWidth(110, Object.values(W))}
-        head={
-          <>
-            <span className="min-w-0 flex-1">Order</span>
-            <span style={{ width: W.vendor }}>Vendor</span>
-            <span style={{ width: W.wh }}>Deliver to</span>
-            <span style={{ width: W.st }}>Status</span>
-            <span style={{ width: W.exp }}>Expected</span>
-            <span className="text-right" style={{ width: W.out }}>
-              To come
-            </span>
-            <span className="text-right" style={{ width: W.tot }}>
-              Total
-            </span>
-          </>
-        }
-        more={
-          list.hasNextPage ? (
-            <div className="flex shrink-0 justify-center border-t border-line px-3.5 py-2 text-[12px]">
-              <button type="button" className="font-semibold text-primary hover:underline" onClick={() => void list.fetchNextPage()} disabled={list.isFetchingNextPage}>
-                {list.isFetchingNextPage ? 'Loading…' : 'Load more'}
-              </button>
-            </div>
-          ) : null
-        }
-      >
-        {list.isLoading ? (
-          <Spinner />
-        ) : list.error ? (
-          <ErrorNote error={list.error} onRetry={() => void list.refetch()} />
-        ) : rows.length ? (
-          rows.map((o) => {
-            const late = !!o.expected_date && o.expected_date < today && ['approved', 'acknowledged', 'partial'].includes(o.status);
-            const out = num(o.outstanding_qty) ?? 0;
-            return (
-              <button key={o.id} type="button" data-po={o.id} onClick={() => onOpen(Number(o.id))} className={cx(rowCls, openId === Number(o.id) && 'bg-[#F4F6FE] dark:bg-selection/40')}>
-                <b className="min-w-0 flex-1 truncate text-ink">{o.po_number}</b>
-                <span className="shrink-0 truncate text-ink" style={{ width: W.vendor }}>
-                  {o.vendor ?? '—'}
-                </span>
-                <span className="shrink-0 truncate text-ink-2" style={{ width: W.wh }}>
-                  {o.warehouse ?? '—'}
-                </span>
-                <span className="shrink-0" style={{ width: W.st }}>
-                  <PoChip status={o.status} />
-                </span>
-                <span className={cx('shrink-0', late ? 'font-bold text-danger' : 'text-ink-2')} style={{ width: W.exp }}>
-                  {o.expected_date ? dateLabel(o.expected_date) : '—'}
-                </span>
-                <span className="shrink-0 text-right text-ink-2 tabular-nums" style={{ width: W.out }}>
-                  {['cancelled', 'draft'].includes(o.status) ? '—' : out > 0 ? `${qty(out)} to come` : 'complete'}
-                </span>
-                <b className="shrink-0 text-right text-ink tabular-nums" style={{ width: W.tot }}>
-                  {whole(o.total, o.currency && o.currency !== currency ? o.currency : null)}
-                </b>
-              </button>
-            );
-          })
-        ) : (
-          <Empty text={q || status ? 'No orders match that.' : 'No purchase orders yet.'} />
-        )}
-      </Frame>
-    </>
-  );
-}
-
-function OrderPanel({ id, currency, canCost, onClose, onEdit, onReceipt }: { id: number; currency: string | null; canCost: boolean; onClose: () => void; onEdit: () => void; onReceipt: (id: number) => void }) {
-  const qc = useQueryClient();
-  const perms = useStore(app, (s) => s.bootstrap?.permissions);
-  const q = useQuery({ queryKey: KB.order(id), queryFn: ({ signal }) => fetchOrder(id, signal) });
-  const [busy, setBusy] = useState(false);
-  const [confirm, setConfirm] = useState<'cancel' | 'remove' | null>(null);
-  const d = q.data;
-  const o = d?.order;
-  const received = d ? d.lines.reduce((s, l) => s + (num(l.received_qty) ?? 0), 0) : 0;
-  const acts = o ? orderActions(o, received, { purchase: can(perms, 'inventory.purchase'), approve: can(perms, 'inventory.approve'), mayApprove: d?.may_approve }) : null;
-  // Buyers and cost holders see an order's prices; the server sends null to anyone else.
-  const prices = !!o && num(o.total) !== null;
-  const cur = o?.currency ?? currency;
-  const charges = o ? (num(o.freight_cost) ?? 0) + (num(o.insurance_cost) ?? 0) + (num(o.duty_cost) ?? 0) + (num(o.other_charges) ?? 0) : 0;
-
-  const run = async (label: string, fn: () => Promise<unknown>, after?: (r: unknown) => void) => {
-    setBusy(true);
-    try {
-      const r = await fn();
-      if (label) toast('success', label);
-      void qc.invalidateQueries({ queryKey: ['inventory'] });
-      after?.(r);
-    } catch (e) {
-      toast('error', errorMessage(e));
-    } finally {
-      setBusy(false);
-      setConfirm(null);
-    }
-  };
-  const pdf = () =>
-    void run('', async () => {
-      const f = (await orderAct(id, 'pdf')) as { file_id?: number; name?: string };
-      if (f.file_id) await call('transfers:download', { fileId: String(f.file_id), name: f.name || `${o?.po_number ?? 'order'}.pdf`, open: true });
-    });
-
-  return (
-    <>
-      <SidePanel
-        label={o ? `Order ${o.po_number}` : 'Order'}
-        width={640}
-        onClose={onClose}
-        head={
-          <span className="flex min-w-0 flex-1 flex-col">
-            <span className="flex items-center gap-2">
-              <b className="truncate text-[15px] text-ink">{o?.po_number ?? 'Order'}</b>
-              {o ? <PoChip status={o.status} /> : null}
-            </span>
-            {o ? <span className="truncate text-[12.5px] text-ink-3">{o.vendor}</span> : null}
-          </span>
-        }
-      >
-        {q.isLoading ? (
-          <Spinner />
-        ) : q.error ? (
-          <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
-        ) : o && d ? (
-          <>
-            <span className="text-[12.5px] text-ink-2">
-              {[o.warehouse, o.expected_date ? `expected ${dateLabel(o.expected_date)}` : null, o.reference_no ? `our ref ${o.reference_no}` : null, o.created_by_name ? `raised by ${o.created_by_name}` : null].filter(Boolean).join(' · ')}
-              {' · '}
-              <b className="text-ink">{cost(o.total, cur)}</b>
-            </span>
-            {o.vendor_response === 'accepted' ? <span className="text-[12.5px] font-semibold text-[#166534] dark:text-success">The vendor accepted it{o.vendor_promised_date ? `, promising ${dateLabel(o.vendor_promised_date)}` : ''}.</span> : null}
-            <div className="overflow-hidden rounded-[10px] border border-line">
-              <div className="flex gap-2 border-b border-line bg-ground px-3 py-1.5 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
-                <span className="min-w-0 flex-1">Item</span>
-                <span className="w-[62px] text-right">Ordered</span>
-                <span className="w-[66px] text-right">Received</span>
-                {prices ? <span className="w-[80px] text-right">Unit cost</span> : null}
-                <span className="w-[90px] text-right">Line total</span>
-              </div>
-              {d.lines.map((l) => {
-                const ord = num(l.quantity) ?? 0;
-                const got = num(l.received_qty) ?? 0;
-                return (
-                  <div key={l.id} className="flex items-center gap-2 border-b border-line/60 px-3 py-1.5 text-[12.5px] last:border-b-0">
-                    <span className="flex min-w-0 flex-1 flex-col">
-                      <b className="truncate text-ink">{l.product_name ?? l.description}</b>
-                      <span className="truncate text-[11px] text-ink-3">{[l.code, l.tracking && l.tracking !== 'none' ? l.tracking : null].filter(Boolean).join(' · ')}</span>
-                    </span>
-                    <span className="w-[62px] text-right text-ink tabular-nums">{qty(ord)}</span>
-                    <span className={cx('w-[66px] text-right tabular-nums', got >= ord ? 'text-[#166534] dark:text-success' : got > 0 ? 'text-[#9A4A06] dark:text-warning' : 'text-ink-3')}>{qty(got)}</span>
-                    {prices ? <span className="w-[80px] text-right text-ink-2 tabular-nums">{whole(l.unit_cost)}</span> : null}
-                    <span className="w-[90px] text-right text-ink tabular-nums">{whole(l.line_total)}</span>
-                  </div>
-                );
-              })}
-            </div>
-            {charges > 0 ? (
-              <span className="text-[12.5px] text-ink-2">
-                Freight, insurance and duty: <b className="text-ink">{cost(charges, cur)}</b> — each receipt brings its share into the cost of the stock.
-              </span>
-            ) : null}
-            {d.receipts.length ? (
-              <section className="flex flex-col gap-1">
-                <b className="text-[13px] text-ink">Receipts</b>
-                {d.receipts.map((g) => (
-                  <button key={g.id} type="button" onClick={() => onReceipt(Number(g.id))} className="flex items-center gap-2 border-b border-line/60 py-1.5 text-left text-[12.5px] last:border-b-0 hover:bg-subtle">
-                    <b className="text-primary">{g.grn_number}</b>
-                    <Pill tone={g.status === 'posted' ? 'green' : g.status === 'draft' ? 'amber' : 'grey'}>{g.status}</Pill>
-                    <span className="flex-1 text-ink-3">{g.posted_at ? stampWords(g.posted_at) : g.received_at ? stampWords(g.received_at) : ''}</span>
-                    {canCost ? <span className="text-ink-2 tabular-nums">{whole(g.total_value)}</span> : null}
-                  </button>
-                ))}
-              </section>
-            ) : null}
-            {acts ? (
-              <div className="flex flex-wrap gap-2">
-                {acts.edit ? (
-                  <button type="button" className={btnSmall} disabled={busy} onClick={onEdit}>
-                    Edit
-                  </button>
-                ) : null}
-                {acts.approve ? (
-                  <button type="button" className={btnSmall} disabled={busy || !d.lines.length} onClick={() => void run('Order approved', () => orderAct(id, 'approve'))}>
-                    Approve
-                  </button>
-                ) : null}
-                {acts.waiting ? <span className="self-center text-[12.5px] text-ink-3">You raised this order, so someone else approves it.</span> : null}
-                {acts.receive ? (
-                  <button
-                    type="button"
-                    className={btnPrimary + ' !h-[30px] !text-[12.5px]'}
-                    disabled={busy}
-                    onClick={() =>
-                      void run(
-                        'Draft receipt created — check the quantities, then post it',
-                        () => orderAct(id, 'receive'),
-                        (r) => onReceipt(Number((r as { id?: number }).id)),
-                      )
-                    }
-                  >
-                    Receive goods
-                  </button>
-                ) : null}
-                {prices ? (
-                  <button type="button" className={btnSmall} disabled={busy} onClick={pdf}>
-                    PDF
-                  </button>
-                ) : null}
-                {acts.cancel ? (
-                  <button type="button" className={btnSmall} disabled={busy} onClick={() => setConfirm('cancel')}>
-                    Cancel order
-                  </button>
-                ) : null}
-                {acts.remove ? (
-                  <button type="button" className={btnSmall + ' ml-auto text-danger'} disabled={busy} onClick={() => setConfirm('remove')}>
-                    Delete
-                  </button>
-                ) : null}
-              </div>
-            ) : null}
-          </>
-        ) : null}
-      </SidePanel>
-      {confirm && o ? (
-        <Sheet
-          title={confirm === 'cancel' ? `Cancel ${o.po_number}?` : `Delete ${o.po_number}?`}
-          width={440}
-          onClose={() => setConfirm(null)}
-          footer={
-            <>
-              <button type="button" className={btn} onClick={() => setConfirm(null)}>
-                Keep it
-              </button>
-              <button type="button" className={btnPrimary} disabled={busy} onClick={() => (confirm === 'cancel' ? void run('Order cancelled', () => orderAct(id, 'cancel')) : void run('Order removed', () => deleteOrder(id), onClose))}>
-                {confirm === 'cancel' ? 'Cancel the order' : 'Delete'}
-              </button>
-            </>
-          }
-        >
-          <span className="text-[13px] text-ink-2">{confirm === 'cancel' ? 'Cancelling releases whatever this order had booked as incoming stock, and any receipt not yet posted goes with it.' : 'It is removed from the list.'}</span>
-        </Sheet>
-      ) : null}
-    </>
-  );
-}
-
-function Receipts({ org, warehouse, openId, onOpen }: { org: string; warehouse: number | null; openId: number | null; onOpen: (id: number) => void }) {
+export function Receipts({ org, warehouse, openId, onOpen }: { org: string; warehouse: number | null; openId: number | null; onOpen: (id: number) => void }) {
   const [status, setStatus] = useState('');
   const list = useInfiniteQuery({
     queryKey: KB.receipts(org, { status, warehouse }),
@@ -486,7 +151,7 @@ function Receipts({ org, warehouse, openId, onOpen }: { org: string; warehouse: 
   );
 }
 
-function ReceiptPanel({ id, currency, onClose, onOrder }: { id: number; currency: string | null; onClose: () => void; onOrder: (id: number) => void }) {
+export function ReceiptPanel({ id, currency, onClose, onOrder, onReturn }: { id: number; currency: string | null; onClose: () => void; onOrder: (id: number) => void; onReturn?: ((grnId: number) => void) | null }) {
   const q = useQuery({ queryKey: KB.receipt(id), queryFn: ({ signal }) => fetchReceipt(id, signal) });
   const d = q.data;
   if (!d) {
@@ -497,15 +162,17 @@ function ReceiptPanel({ id, currency, onClose, onOrder }: { id: number; currency
     );
   }
   // Keyed by status: once it posts, the editor starts again as a record.
-  return <ReceiptEditor key={`${d.receipt.id}-${d.receipt.status}`} id={id} d={d} currency={currency} onClose={onClose} onOrder={onOrder} />;
+  return <ReceiptEditor key={`${d.receipt.id}-${d.receipt.status}`} id={id} d={d} currency={currency} onClose={onClose} onOrder={onOrder} onReturn={onReturn ?? null} />;
 }
 
-function ReceiptEditor({ id, d, currency, onClose, onOrder }: { id: number; d: Awaited<ReturnType<typeof fetchReceipt>>; currency: string | null; onClose: () => void; onOrder: (id: number) => void }) {
+function ReceiptEditor({ id, d, currency, onClose, onOrder, onReturn }: { id: number; d: Awaited<ReturnType<typeof fetchReceipt>>; currency: string | null; onClose: () => void; onOrder: (id: number) => void; onReturn: ((grnId: number) => void) | null }) {
   const qc = useQueryClient();
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
   const g = d.receipt;
   const draft = g.status === 'draft';
-  const mayPost = can(perms, 'inventory.purchase');
+  const offline = usePurchaseOffline();
+  // Receiving is `purchase.receive` (G-04), or the `inventory.purchase` umbrella; nothing posts from the offline copy.
+  const mayPost = purchaseCan(perms).receive && !offline;
   // What the draft says, to correct before posting.
   const [head, setHead] = useState(() => ({ invoice: g.vendor_invoice_no ?? '', delivery: g.delivery_note_no ?? '', charges: num(g.other_charges) ? String(num(g.other_charges)) : '', notes: g.notes ?? '' }));
   const [lines, setLines] = useState<Record<string, ReceiptLineDraft>>(() =>
@@ -537,7 +204,7 @@ function ReceiptEditor({ id, d, currency, onClose, onOrder }: { id: number; d: A
     try {
       const r = await postReceipt(id, body);
       toast(r.over_received?.length ? 'warning' : 'success', r.over_received?.length ? `Receipt posted — the stock is in. More arrived than was ordered on ${r.over_received.join('; ')}.` : 'Receipt posted — the stock is in');
-      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      refreshPurchase(qc);
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -550,7 +217,7 @@ function ReceiptEditor({ id, d, currency, onClose, onOrder }: { id: number; d: A
     try {
       await cancelReceipt(id);
       toast('success', 'Receipt discarded');
-      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      refreshPurchase(qc);
       onClose();
     } catch (e) {
       toast('error', errorMessage(e));
@@ -631,6 +298,11 @@ function ReceiptEditor({ id, d, currency, onClose, onOrder }: { id: number; d: A
               <span role="alert" className="rounded-[8px] bg-danger-bg px-3 py-2 text-[12.5px] font-semibold text-danger">
                 {error}
               </span>
+            ) : null}
+            {g.status === 'posted' && onReturn ? (
+              <button type="button" className={btnSmall + ' self-start'} disabled={offline} title={offline ? OFFLINE_WRITE : 'Send something from this receipt back to the vendor'} onClick={() => onReturn(Number(g.id))}>
+                Return goods
+              </button>
             ) : null}
             {draft && mayPost ? (
               <div className="flex gap-2">
@@ -719,131 +391,8 @@ function ReceiptRow({ line, draft, d, onChange, seesCost }: { line: ReceiptLine;
   );
 }
 
-function Requests({ org, warehouse, onOrdered }: { org: string; warehouse: number | null; onOrdered: () => void }) {
-  const qc = useQueryClient();
-  const perms = useStore(app, (s) => s.bootstrap?.permissions);
-  const [status, setStatus] = useState('');
-  const q = useQuery({ queryKey: KB.requests(org, status), queryFn: ({ signal }) => fetchRequests(org, status, signal) });
-  const [busy, setBusy] = useState(false);
-  const rows = q.data ?? [];
-  const mayBuy = can(perms, 'inventory.purchase');
-  const mayApprove = can(perms, 'inventory.approve');
-  const run = async (fn: () => Promise<unknown>, label: (r: unknown) => string, after?: () => void) => {
-    setBusy(true);
-    try {
-      const r = await fn();
-      toast('success', label(r));
-      void qc.invalidateQueries({ queryKey: ['inventory'] });
-      after?.();
-    } catch (e) {
-      toast('error', errorMessage(e));
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <>
-      <div className="flex items-center gap-2">
-        <Select
-          aria-label="Request status"
-          value={status}
-          onValueChange={setStatus}
-          options={[
-            { value: '', label: 'Every state' },
-            { value: 'pending', label: 'Pending' },
-            { value: 'approved', label: 'Approved' },
-            { value: 'ordered', label: 'Ordered' },
-          ]}
-          className={pick + ' !w-[160px]'}
-        />
-        <span className="text-[12.5px] text-ink-3">What people have asked for</span>
-        {mayBuy ? (
-          <button
-            type="button"
-            className={btn + ' ml-auto'}
-            disabled={busy}
-            onClick={() =>
-              void run(
-                () => requestsFromReplenishment(org, warehouse),
-                (r) => `${(r as { ids?: number[] }).ids?.length ?? 0} request(s) raised`,
-              )
-            }
-          >
-            Raise from what is below minimum
-          </button>
-        ) : null}
-      </div>
-      <div className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto scroll-thin">
-        {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
-        {!q.isLoading && !rows.length ? <Empty text={status ? 'No request matches.' : 'Nobody has asked for anything yet.'} /> : null}
-        {rows.map((r) => (
-          <section key={r.id} data-request={r.id} className="flex flex-col gap-1.5 rounded-[12px] border border-line bg-surface px-3.5 py-3">
-            <div className="flex items-center gap-2">
-              <b className="text-ink">{r.reference}</b>
-              <span className="text-[12.5px] text-ink-3">{r.warehouse ?? 'No warehouse'}</span>
-              <PoChip status={r.status} />
-              {r.source === 'reorder' ? <span className="text-[11.5px] text-ink-3">raised by the reorder rules</span> : null}
-              <span className="ml-auto flex gap-1.5">
-                {mayApprove && r.may_approve === false && (r.status === 'pending' || r.status === 'draft') ? (
-                  <span className="self-center text-[12px] text-ink-3">You raised it, so someone else approves it</span>
-                ) : null}
-                {mayApprove && r.may_approve !== false && (r.status === 'pending' || r.status === 'draft') ? (
-                  <button
-                    type="button"
-                    className={btnSmall}
-                    disabled={busy}
-                    onClick={() =>
-                      void run(
-                        () => requestAct(Number(r.id), 'approve'),
-                        () => 'Approved',
-                      )
-                    }
-                  >
-                    Approve
-                  </button>
-                ) : null}
-                {mayBuy && r.status === 'approved' ? (
-                  <button
-                    type="button"
-                    className={btnPrimary + ' !h-[30px] !text-[12.5px]'}
-                    disabled={busy}
-                    onClick={() =>
-                      void run(
-                        () => requestAct(Number(r.id), 'order'),
-                        (x) => `${(x as { ids?: number[] }).ids?.length ?? 0} draft order(s) created`,
-                        onOrdered,
-                      )
-                    }
-                  >
-                    Turn into draft orders
-                  </button>
-                ) : null}
-              </span>
-            </div>
-            {r.reason || r.needed_by ? (
-              <span className="text-[12px] text-ink-2">{[r.reason, r.needed_by ? `needed by ${dateLabel(r.needed_by)}` : null, r.requested_by_name ? `asked by ${r.requested_by_name}` : null].filter(Boolean).join(' · ')}</span>
-            ) : null}
-            <div className="flex flex-col">
-              {r.lines.map((l) => (
-                <span key={l.id} className="flex gap-2 border-t border-line/60 py-1 text-[12.5px]">
-                  <span className="min-w-0 flex-1 truncate text-ink">
-                    {l.name} <span className="text-ink-3">{l.code}</span>
-                  </span>
-                  <b className="w-[80px] text-right text-ink tabular-nums">{qty(l.quantity, l.unit)}</b>
-                  <span className="w-[160px] truncate text-ink-2">{l.vendor ?? <span className="text-[#9A4A06] dark:text-warning">no vendor set</span>}</span>
-                  <span className="w-[200px] truncate text-ink-3">{l.note ?? ''}</span>
-                </span>
-              ))}
-            </div>
-          </section>
-        ))}
-      </div>
-    </>
-  );
-}
-
 /** The vendor for an order, searched on the server among active vendors. */
-function VendorPick({ value, onChange }: { value: { id: number; name: string } | null; onChange: (v: { id: number; name: string } | null) => void }) {
+export function VendorPick({ value, onChange }: { value: { id: number; name: string } | null; onChange: (v: { id: number; name: string } | null) => void }) {
   const [q, setQ] = useState('');
   const [needle, setNeedle] = useState('');
   useEffect(() => {
@@ -902,6 +451,11 @@ export function OrderSheet({
     ? {
         vendor: { id: Number(d.order.vendor_id), name: d.order.vendor ?? '' },
         warehouse: Number(d.order.warehouse_id),
+        currency: d.order.currency ?? '',
+        rate: (() => {
+          const r = num((d.order as { exchange_rate?: unknown }).exchange_rate);
+          return r ? String(r) : '';
+        })(),
         expected: d.order.expected_date ?? '',
         reference: d.order.reference_no ?? '',
         freight: num(d.order.freight_cost) ? String(num(d.order.freight_cost)) : '',
@@ -916,7 +470,7 @@ export function OrderSheet({
           cost: l.unit_cost === null ? '' : String(num(l.unit_cost) ?? ''),
         })),
       }
-    : { vendor: null, warehouse: defaultWarehouse ?? null, expected: '', reference: '', freight: '', insurance: '', duty: '', notes: '', lines: [{ key: 0, id: null, product: null, qty: '', cost: '' }] };
+    : { vendor: null, warehouse: defaultWarehouse ?? null, currency: '', rate: '', expected: '', reference: '', freight: '', insurance: '', duty: '', notes: '', lines: [{ key: 0, id: null, product: null, qty: '', cost: '' }] };
   return <OrderForm org={org} warehouses={warehouses} id={id} poNumber={d?.order.po_number ?? null} initial={initial} canCost={canCost} onClose={onClose} onSaved={onSaved} />;
 }
 
@@ -943,6 +497,9 @@ function OrderForm({
   const [d, setD] = useState<PODraft>(initial);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  // The server's "this looks like one already raised" (G-13): saving again with confirm_duplicate says it is meant.
+  const [dupes, setDupes] = useState<Duplicate[] | null>(null);
+  const offline = usePurchaseOffline();
   const setLine = (key: number, patch: Partial<POLineDraft>) => setD((x) => ({ ...x, lines: x.lines.map((l) => (l.key === key ? { ...l, ...patch } : l)) }));
   const goods = d.lines.reduce((s, l) => s + (Number(l.qty.replace(/,/g, '')) || 0) * (Number(l.cost.replace(/,/g, '')) || 0), 0);
   const charges = [d.freight, d.insurance, d.duty].reduce((s, v) => s + (Number(v.replace(/,/g, '')) || 0), 0);
@@ -953,12 +510,16 @@ function OrderForm({
     if (bad) return setError(bad);
     setSaving(true);
     try {
-      const r = await saveOrder(org, id, body);
-      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      const r = await saveOrder(org, id, dupes ? { ...body, confirm_duplicate: true } : body);
+      refreshPurchase(qc);
       toast('success', id ? 'Order saved' : 'Draft order created');
       onSaved(Number(r.order?.id ?? id));
     } catch (e) {
-      setError(errorMessage(e));
+      if (refusalCode(e) === 'possible_duplicate') {
+        const data = (e as { data?: { duplicates?: Duplicate[] } }).data;
+        setDupes(Array.isArray(data?.duplicates) ? data.duplicates : []);
+        setError(refusalText(e));
+      } else setError(errorMessage(e));
     } finally {
       setSaving(false);
     }
@@ -974,8 +535,8 @@ function OrderForm({
           <button type="button" className={btn} onClick={onClose}>
             Cancel
           </button>
-          <button type="button" className={btnPrimary} disabled={saving} onClick={() => void save()}>
-            {saving ? 'Saving…' : id ? 'Save' : 'Create'}
+          <button type="button" className={btnPrimary} disabled={saving || offline} title={offline ? OFFLINE_WRITE : undefined} onClick={() => void save()}>
+            {saving ? 'Saving…' : dupes ? 'Save anyway' : id ? 'Save' : 'Create'}
           </button>
         </>
       }
@@ -987,6 +548,14 @@ function OrderForm({
           </Field>
           <Field label="Deliver to">
             <WarehousePick warehouses={warehouses} value={d.warehouse} onChange={(w) => setD({ ...d, warehouse: w })} label="Deliver to" />
+          </Field>
+        </div>
+        <div className="grid grid-cols-2 gap-2.5">
+          <Field label="Currency" hint="Blank: the company's own">
+            <input className={input + ' uppercase'} value={d.currency ?? ''} onChange={(e) => setD({ ...d, currency: e.target.value.toUpperCase().slice(0, 3) })} aria-label="Currency" placeholder="LKR" maxLength={3} />
+          </Field>
+          <Field label="Exchange rate" hint="Blank: Finance's rate for the day">
+            <input className={input + ' text-right tabular-nums'} value={d.rate ?? ''} onChange={(e) => setD({ ...d, rate: e.target.value })} aria-label="Exchange rate" inputMode="decimal" disabled={!d.currency} placeholder={d.currency ? 'Finance rate' : '—'} />
           </Field>
         </div>
         <div className="grid grid-cols-5 gap-2.5">
@@ -1055,6 +624,19 @@ function OrderForm({
             {error}
           </span>
         ) : null}
+        {dupes?.length ? (
+          <div className="flex flex-col rounded-[10px] border border-[#F3D9A4] bg-[#FFF8EA] px-3 py-2 text-[12.5px] dark:border-warning/40 dark:bg-warning-bg" aria-label="Possible duplicates">
+            <b className="text-ink">Possible duplicates</b>
+            {dupes.map((x) => (
+              <span key={x.id} className="flex gap-2 text-ink-2">
+                <b className="text-ink">{x.number}</b>
+                <span className="min-w-0 flex-1 truncate">{[x.vendor, x.date ? dateLabel(x.date) : null, Array.isArray(x.why) ? x.why.join(', ') : x.why].filter(Boolean).join(' · ')}</span>
+                <span className="tabular-nums">{whole(x.total)}</span>
+              </span>
+            ))}
+          </div>
+        ) : null}
+        {offline ? <span className="text-[12px] text-ink-3">{OFFLINE_WRITE}</span> : null}
       </div>
     </Sheet>
   );

@@ -138,6 +138,7 @@ import { EventDeskPrint } from '../services/event-desk-print';
 import { createRestaurant } from '../services/restaurant';
 import { createProjects } from '../services/projects';
 import { SalesDesk } from '../services/sales-desk';
+import { PurchaseDesk } from '../services/purchase-desk';
 import { BillingBanners } from '@shared/billing';
 import { listPrinters } from '../services/print';
 import { OfficeEditorHost } from '../services/office-editor';
@@ -1658,8 +1659,22 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     enabled: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('billing', sessionCtl.visibleApps()),
     open: (route) => navigate({ route, source: 'notification' }),
   });
-  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n) || mailAlerts.claim(n) || meetingsDesk.claim(n) || salesDesk.claim(n) || billingBanners.claim(n);
-  notifications.onRefresh = () => void supportNotices.refreshBadges();
+  // Purchasing's approvals (SRS-PUR-001 G-21): Approve and Open on the banner; the documents waiting on me on the badge.
+  const purchaseDesk = new PurchaseDesk({
+    get: (path, query) => http.get(path, { query }),
+    post: (path, body) => http.post(path, body),
+    notify: (n) => notifications.notify(n),
+    markRead: (ids) => notifications.markRead(ids),
+    enabled: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('purchase', sessionCtl.visibleApps()),
+    open: (route) => navigate({ route, source: 'notification' }),
+    toast: (kind, text) => broadcast('toast', { kind, text }),
+    changed: () => emitStatus(),
+  });
+  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n) || mailAlerts.claim(n) || meetingsDesk.claim(n) || salesDesk.claim(n) || purchaseDesk.claim(n) || billingBanners.claim(n);
+  notifications.onRefresh = () => {
+    void supportNotices.refreshBadges();
+    void purchaseDesk.refresh();
+  };
 
   // ── status ─────────────────────────────────────────────────────────────
   let statusTimer: NodeJS.Timeout | null = null;
@@ -1674,7 +1689,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
     const hasMail = canOpenApp('mail', visible);
-    const counts = { ...raw, mailBadge: hasMail ? mailAlerts.unread() : 0, mailNotices: hasMail ? raw.mailNotices : 0, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: hasMail ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0, salesApprovals: canOpenApp('sales', visible) ? raw.salesApprovals : 0, salesNotices: canOpenApp('sales', visible) ? raw.salesNotices : 0 };
+    const counts = { ...raw, mailBadge: hasMail ? mailAlerts.unread() : 0, mailNotices: hasMail ? raw.mailNotices : 0, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: hasMail ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0, salesApprovals: canOpenApp('sales', visible) ? raw.salesApprovals : 0, salesNotices: canOpenApp('sales', visible) ? raw.salesNotices : 0, purchaseApprovals: canOpenApp('purchase', visible) ? purchaseDesk.count() : 0, purchaseNotices: canOpenApp('purchase', visible) ? raw.purchaseNotices : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -1721,6 +1736,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         mailNotices: s.unread.mailNotices ?? 0,
         salesApprovals: s.unread.salesApprovals ?? 0,
         salesNotices: s.unread.salesNotices ?? 0,
+        purchaseApprovals: s.unread.purchaseApprovals ?? 0,
+        purchaseNotices: s.unread.purchaseNotices ?? 0,
         mail: trayMail(),
       });
     }, 300);
@@ -1752,6 +1769,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     mailAlerts.handleRealtime(e);
     supportNotices.handle(e);
     salesDesk.handle(e as { type?: string });
+    purchaseDesk.handle(e as { type?: string });
     // An invitation answered, moved or cancelled anywhere: the tray's Meetings lines follow (Meetings D07).
     if (touchesInvitations(e as { type: string; event?: unknown })) meetingsDesk.poke();
     supportDesk.handle(e);
@@ -2587,6 +2605,25 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/billing/invoices', 'billing'],
     ['/api/billing/payments', 'billing'],
     ['/api/billing/customers', 'billing'],
+    // Purchasing (SRS-PUR-001 G-21): the dashboard, the approvals waiting on me, the order, receipt, request, RFQ, bill,
+    // payment and return lists and every one opened, and the vendors, so Purchasing reads offline as last seen. Read
+    // only: every write in the app waits for the connection.
+    ['/api/inventory/purchase/dashboard', 'purchase'],
+    ['/api/inventory/purchase-orders', 'purchase'],
+    ['/api/inventory/receipts', 'purchase'],
+    ['/api/inventory/requests', 'purchase'],
+    ['/api/inventory/quotations', 'purchase'],
+    ['/api/inventory/bills', 'purchase'],
+    ['/api/inventory/payments', 'purchase'],
+    ['/api/inventory/payables', 'purchase'],
+    ['/api/inventory/returns', 'purchase'],
+    ['/api/inventory/vendors', 'purchase'],
+    ['/api/purchase/approvals', 'purchase'],
+    ['/api/purchase/qc', 'purchase'],
+    ['/api/purchase/agreements', 'purchase'],
+    ['/api/purchase/payment-runs', 'purchase'],
+    ['/api/purchase/payables', 'purchase'],
+    ['/api/purchase/landed-costs', 'purchase'],
     // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
     // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];
@@ -2620,6 +2657,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     meetKeys.sync();
     meetNext.poke();
     meetingsDesk.poke();
+    // Purchasing given or taken away: the documents waiting on me follow on the badge.
+    void purchaseDesk.refresh();
     if (b) {
       const closed = windows.closeWhere((route) => !canOpenRoute(route, visible));
       if (closed) log.info('windows closed: app no longer available', { closed });
@@ -2736,6 +2775,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     phone.reset();
     realtime.stop();
     notifications.stop();
+    purchaseDesk.reset();
     mailAlerts.stop();
     supportNotices.stop();
     supportDesk.stop();

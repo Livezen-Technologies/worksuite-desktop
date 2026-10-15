@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-15
+
+**Changed**
+
+- Purchasing, Vendors and Replenishment are the Purchasing app's own screens (SRS-PUR-001 G-21): Inventory's rail, dashboard and search open them there, and the old addresses (`?tab=pur`, `?tab=ven`, `?tab=rpl`) are sent to it.
+
+**Removed**
+
+- buying.ts, Purchasing.tsx, Vendors.tsx and Replenishment.tsx, now in the purchase module.
+
 ## 1.2.0 — 2026-10-03
 
 - The organisation filter is the shared compact switcher (#214): one pill, search, several at once, a default organisation, remembered per person.

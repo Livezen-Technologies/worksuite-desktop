@@ -139,8 +139,11 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   sales: ['sales'],
   billing: ['billing'],
   invoice: ['billing'],
-  inventory: ['inventory', 'purchasing'],
-  purchasing: ['purchasing'],
+  inventory: ['inventory', 'purchase'],
+  // Purchasing's own notices (`purchase.approval`, `purchase.order.sent`, `purchase.bill.due`…).
+  purchasing: ['purchase'],
+  purchase: ['purchase'],
+  payables: ['purchase'],
   tenders: ['tenders'],
   tender: ['tenders'],
   hr: ['hr'],

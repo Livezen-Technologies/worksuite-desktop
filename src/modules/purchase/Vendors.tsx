@@ -9,12 +9,14 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
-import { can, cost, short, stampWords } from './api';
+import { can, cost, short, stampWords } from '../inventory/api';
 import { archiveVendor, checkDuplicates, fetchVendor, fetchVendorRecords, fetchVendors, KB, saveVendor, VENDOR_STATUSES, VENDOR_TYPES, vendorChanges, vendorForm, vendorTone, vendorType, type VendorDetail, type VendorForm } from './buying';
-import { minWidth, Pill } from './parts';
-import { pick } from './pickers';
+import { minWidth, Pill } from '../inventory/parts';
+import { pick } from '../inventory/pickers';
 import { PoChip } from './Purchasing';
 import { Checkbox } from '../../components/Checkbox';
+import { refreshPurchase } from './api';
+import { Scorecard } from './Scorecard';
 
 /**
  * Vendors (InvVendors, InvVendorRecord, InvVendorForm): who the business
@@ -228,7 +230,7 @@ function VendorPanel({
     setBusy(true);
     try {
       await saveVendor(v.id, { is_favourite: !v.is_favourite });
-      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      refreshPurchase(qc);
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
@@ -241,7 +243,7 @@ function VendorPanel({
     try {
       await archiveVendor(v.id);
       toast('success', 'Vendor archived');
-      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      refreshPurchase(qc);
       onClose();
     } catch (e) {
       toast('error', errorMessage(e));
@@ -383,6 +385,7 @@ function Overview({ d, currency }: { d: VendorDetail; currency: string | null })
         <Stat label="Rejected on arrival" value={p.reject_pct !== null ? `${p.reject_pct}%` : '—'} sub={`${p.receipts} receipts`} />
       </div>
       {!t ? <span className="text-[12px] text-ink-3">You do not have permission to see this vendor's figures.</span> : null}
+      <Scorecard vendorId={d.vendor.id} />
       {d.compliance.items.length ? (
         <Block title="Compliance">
           {d.compliance.items.map((c) => (
@@ -511,7 +514,7 @@ function VendorFormSheet({ id, initial, canCost: fromServer, onClose, onSaved }:
     setSaving(true);
     try {
       const r = await saveVendor(id, body);
-      void qc.invalidateQueries({ queryKey: ['inventory'] });
+      refreshPurchase(qc);
       toast('success', id ? 'Vendor saved' : 'Vendor added');
       onSaved(Number(r.vendor?.id ?? id));
     } catch (e) {

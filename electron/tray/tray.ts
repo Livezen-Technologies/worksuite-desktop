@@ -99,6 +99,9 @@ export interface TrayModel {
    */
   salesApprovals?: number;
   salesNotices?: number;
+  /** Purchase documents waiting on my decision (SRS-PUR-001 G-21), and their unread bell entries (counted once). */
+  purchaseApprovals?: number;
+  purchaseNotices?: number;
   /** The status chosen (Chat's presence: available, away, busy, dnd, offline), for the status line. Optional. */
   presence?: string | null;
 }
@@ -511,7 +514,8 @@ export class TrayService {
     const hasSupport = m.apps.includes('support');
     const hasMail = m.apps.includes('mail');
     const hasSales = m.apps.includes('sales');
-    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther, hasSupport ? (m.unreadSupport ?? 0) : 0, hasSupport ? (m.unreadSupportNotices ?? 0) : 0, hasMail ? (m.mailBadge ?? 0) : 0, hasMail ? (m.mailNotices ?? 0) : 0, hasSales ? (m.salesApprovals ?? 0) : 0, hasSales ? (m.salesNotices ?? 0) : 0);
+    const hasPurchase = m.apps.includes('purchase');
+    const unread = attentionCount(hasChat ? m.unreadChat : 0, m.unreadOther, hasSupport ? (m.unreadSupport ?? 0) : 0, hasSupport ? (m.unreadSupportNotices ?? 0) : 0, hasMail ? (m.mailBadge ?? 0) : 0, hasMail ? (m.mailNotices ?? 0) : 0, (hasSales ? (m.salesApprovals ?? 0) : 0) + (hasPurchase ? (m.purchaseApprovals ?? 0) : 0), (hasSales ? (m.salesNotices ?? 0) : 0) + (hasPurchase ? (m.purchaseNotices ?? 0) : 0));
     // A website chat ringing shows as something waiting for you, whatever else is going on (RING-43) — Chat's, so only with Chat.
     const ringing = m.signedIn && hasChat ? m.webchatRinging.length + (m.webchatCalls?.length ?? 0) : 0;
     const state = ringing ? 'unread' : trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
@@ -771,6 +775,11 @@ export function trayMenu(m: TrayModel, a: TrayActions, now = new Date()): MenuIt
   if (has('sales') && (m.salesApprovals ?? 0) > 0) {
     const n = m.salesApprovals ?? 0;
     items.push({ label: `Orders to approve · ${n}`, click: () => a.openRoute('/sales?tab=appr') });
+  }
+  // Purchase documents waiting on my approval (SRS-PUR-001 G-21): the badge counts them; this opens the queue.
+  if (has('purchase') && (m.purchaseApprovals ?? 0) > 0) {
+    const n = m.purchaseApprovals ?? 0;
+    items.push({ label: `Purchases to approve · ${n}`, click: () => a.openRoute('/purchase?tab=appr') });
   }
   if (has('marketing') && m.marketing) {
     const lines = inner(trayMarketingItems(m, a));

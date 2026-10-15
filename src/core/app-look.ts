@@ -27,7 +27,7 @@ const COLOURS: Record<string, string> = {
   finance: '#115E59',
   expenses: '#A16207',
   inventory: '#4D7C0F',
-  purchasing: '#0369A1',
+  purchase: '#0369A1',
   subscriptions: '#7C3AED',
   marketing: '#BE185D',
   hr: '#9333EA',
