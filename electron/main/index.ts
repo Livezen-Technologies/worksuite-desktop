@@ -2624,6 +2624,16 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/purchase/payment-runs', 'purchase'],
     ['/api/purchase/payables', 'purchase'],
     ['/api/purchase/landed-costs', 'purchase'],
+    // Inventory (the desktop's offline stock count): the dashboard, the companies' warehouses, the products and their
+    // categories, and every count list and count sheet opened, so a count goes on from this computer's copy with
+    // WorkSuite out of reach. The counts typed there are queued (offline:submit) and sent in order when it is back;
+    // nothing is posted to stock offline.
+    ['/api/inventory/companies', 'inventory'],
+    ['/api/inventory/dashboard', 'inventory'],
+    ['/api/inventory/warehouses', 'inventory'],
+    ['/api/inventory/products', 'inventory'],
+    ['/api/inventory/categories', 'inventory'],
+    ['/api/inventory/counts', 'inventory'],
     // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
     // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];

@@ -2,14 +2,17 @@ import { useQuery, type UseQueryResult } from '@tanstack/react-query';
 import { dateLabel, dayWords } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
-import { btn, Kpi, PageHead, Panel } from '../hr/parts';
+import { btn, btnPrimary, Kpi, PageHead, Panel } from '../hr/parts';
 import { attention, fetchDetail, K, moveLabel, num, qty, short, signed, WEB_VIEW, type Dashboard as Data, stampWords } from './api';
 import { HeadLink, Line, ListPanel } from './parts';
 import { openWeb, type InvView } from './Rail';
+import { ComputerCard } from './ThisComputer';
 
 /**
- * The Inventory dashboard (InvDashboard): the catalogue and the stock in two
- * rows of tiles, what is waiting on somebody, fourteen days of movement, what
+ * The Inventory dashboard (InvDashboard; on the desktop the "Desktop inventory
+ * dashboard" design): what the stock is worth and where it is short in five
+ * tiles, what came in and went out beside this computer's scanner, printer,
+ * offline copy and changes waiting to sync, then the catalogue in tiles, what is waiting on somebody, fourteen days of movement, what
  * is coming in and going out, the health of the stock and each warehouse, the
  * latest movements, what runs out soonest, what to reorder, and how the books
  * compare with the shelves. The warehouse picker narrows it.
@@ -27,6 +30,9 @@ export default function Dashboard({
   onOpenProduct,
   onNewAdjustment,
   onSales,
+  onReceive,
+  onNewWindow,
+  onComputer,
 }: {
   data: UseQueryResult<Data>;
   org: string;
@@ -38,6 +44,12 @@ export default function Dashboard({
   onNewAdjustment: (() => void) | null;
   /** Sales orders in Sales & Orders, for those who may open it; the browser otherwise. */
   onSales: (() => void) | null;
+  /** Receive goods with the scanner, for those who may receive. */
+  onReceive?: (() => void) | null;
+  /** The dashboard in a window of its own. */
+  onNewWindow?: () => void;
+  /** This computer's details (the rail's Desktop section). */
+  onComputer?: () => void;
 }) {
   const detail = useQuery({
     queryKey: K.detail(org, warehouse),
@@ -57,13 +69,12 @@ export default function Dashboard({
 
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
-      <PageHead title="Inventory">
-        <button type="button" className={btn} onClick={() => onGo('prod')}>
-          Products
-        </button>
-        <button type="button" className={btn} onClick={() => onGo('stock')}>
-          Stock overview
-        </button>
+      <PageHead title="Inventory dashboard">
+        {onNewWindow ? (
+          <button type="button" className={btn} onClick={onNewWindow}>
+            Open in new window
+          </button>
+        ) : null}
         {onNewAdjustment ? (
           <button type="button" className={btn} onClick={onNewAdjustment}>
             New adjustment
@@ -72,16 +83,46 @@ export default function Dashboard({
         <button type="button" className={btn} onClick={() => onGo('rep')}>
           Reports
         </button>
+        {onReceive ? (
+          <button type="button" className={btnPrimary} onClick={onReceive}>
+            Receive goods
+          </button>
+        ) : null}
       </PageHead>
+      <div className="grid grid-cols-5 gap-3">
+        <Kpi label="Stock value" value={t.value === null ? '—' : short(t.value, currency)} sub={t.value === null ? 'Needs permission to see costs' : `${t.stocked_products.toLocaleString()} products holding stock`} />
+        <Kpi label="Units on hand" value={qty(t.units)} sub={`${qty(t.reserved)} reserved`} onClick={() => onGo('stock')} />
+        <Kpi label="Low stock" value={t.low_stock} sub="At or below minimum" tone={t.low_stock ? 'amber' : undefined} onClick={() => onStock('low')} />
+        <Kpi label="Out of stock" value={t.out_of_stock} sub="Nothing available" tone={t.out_of_stock ? 'red' : undefined} onClick={() => onStock('out')} />
+        <Kpi label="To approve" value={d.pending.adjustments} sub={d.pending.adjustments === 1 ? 'Adjustment waiting' : 'Adjustments waiting'} onClick={() => onGo('adj', HERE.adj)} />
+      </div>
+      <div className="grid grid-cols-3 gap-3.5">
+        <Panel title="Coming in and going out" sub="units, the last 14 days" className="col-span-2" bodyClassName="flex flex-col">
+          <div className="flex h-[200px] items-end gap-2 px-4 pt-4" role="img" aria-label="Units received and issued each day, the last fourteen days">
+            {days.map((m) => {
+              const r = num(m.received) ?? 0;
+              const i = num(m.issued) ?? 0;
+              return (
+                <div key={m.day} className="flex h-full flex-1 items-end justify-center gap-[3px]" title={`${dayWords(m.day)}: ${qty(r)} received, ${qty(i)} issued`}>
+                  <span className="w-full max-w-[14px] rounded-t-[3px] bg-primary" style={{ height: `${Math.max(r ? 2 : 0, (r / top) * 100)}%` }} />
+                  <span className="w-full max-w-[14px] rounded-t-[3px] bg-[#f59e0b]" style={{ height: `${Math.max(i ? 2 : 0, (i / top) * 100)}%` }} />
+                </div>
+              );
+            })}
+            {!days.length ? <span className="m-auto text-[12.5px] text-ink-3">Nothing has moved in the last 14 days.</span> : null}
+          </div>
+          <div className="flex items-center gap-1.5 px-4 pt-2 pb-3 text-[11.5px] text-ink-3">
+            <span className="h-2 w-2 rounded-[2px] bg-primary" /> received <span className="ml-1.5 h-2 w-2 rounded-[2px] bg-[#f59e0b]" /> issued
+            {days.length ? <span className="ml-auto">{`${dayWords(days[0]!.day)} – ${dayWords(days[days.length - 1]!.day)}`}</span> : null}
+          </div>
+        </Panel>
+        <ComputerCard copy={{ products: c.products, warehouses: c.warehouses }} onOpen={onComputer} />
+      </div>
       <div className="grid grid-cols-4 gap-2.5">
         <Kpi label="Products" value={c.products.toLocaleString()} sub={`${c.stocked.toLocaleString()} tracked for stock`} onClick={() => onGo('prod')} />
         <Kpi label="Categories" value={c.categories.toLocaleString()} sub={busiest ? `Busiest holds ${busiest.product_count}` : 'None yet'} />
         <Kpi label="Vendors" value={c.vendors.toLocaleString()} sub="Shared across companies" />
         <Kpi label="Warehouses" value={c.warehouses.toLocaleString()} sub={warehouse ? 'One chosen' : 'Holding stock'} />
-        <Kpi label="Stock value" value={t.value === null ? '—' : short(t.value, currency)} sub={t.value === null ? 'Needs permission to see costs' : `${t.stocked_products.toLocaleString()} products holding stock`} />
-        <Kpi label="Units on hand" value={qty(t.units)} sub={`${qty(t.reserved)} reserved`} />
-        <Kpi label="Low stock" value={t.low_stock} sub="At or below minimum" tone={t.low_stock ? 'amber' : undefined} onClick={() => onStock('low')} />
-        <Kpi label="Out of stock" value={t.out_of_stock} sub="Nothing available" tone={t.out_of_stock ? 'red' : undefined} onClick={() => onStock('out')} />
       </div>
       {chips.length ? (
         <section aria-label="Needs attention" className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface px-3.5 py-3">
@@ -106,37 +147,7 @@ export default function Dashboard({
         </section>
       ) : null}
       <div className="grid grid-cols-3 gap-3">
-        <Panel title="Stock movement, last 14 days" bodyClassName="flex flex-col">
-          <div className="flex h-[118px] items-end gap-1.5 px-3.5 pt-3" role="img" aria-label="Units received and issued each day, the last fourteen days">
-            {days.map((m) => {
-              const r = num(m.received) ?? 0;
-              const i = num(m.issued) ?? 0;
-              return (
-                <div key={m.day} className="flex flex-1 flex-col items-center" title={`${dayWords(m.day)}: ${qty(r)} received, ${qty(i)} issued`}>
-                  <div className="flex h-[96px] items-end gap-[2px]">
-                    <span
-                      className="w-[6px] rounded-t-[2px] bg-[#16A34A]"
-                      style={{
-                        height: `${Math.max(r ? 2 : 0, (r / top) * 96)}px`,
-                      }}
-                    />
-                    <span
-                      className="w-[6px] rounded-t-[2px] bg-primary"
-                      style={{
-                        height: `${Math.max(i ? 2 : 0, (i / top) * 96)}px`,
-                      }}
-                    />
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-          <div className="flex items-center gap-1.5 px-3.5 pt-1.5 pb-2.5 text-[11.5px] text-ink-3">
-            <span className="h-2 w-2 rounded-[2px] bg-[#16A34A]" /> received <span className="ml-1.5 h-2 w-2 rounded-[2px] bg-primary" /> issued
-            {days.length ? <span className="ml-auto">{`${dayWords(days[0]!.day)} – ${dayWords(days[days.length - 1]!.day)}`}</span> : null}
-          </div>
-        </Panel>
-        <ListPanel title="Coming in and going out" empty="">
+        <ListPanel title="Open orders and transfers" empty="">
           {[
             <Line key="po" title="Purchase orders open" right={d.pending.purchase_orders} onClick={() => onGo('pur', '&bt=orders')} />,
             <Line key="in" title="Units incoming" right={qty(t.incoming)} />,

@@ -28,7 +28,7 @@ const TABS = [
   { id: 'history', label: 'History' },
 ] as const;
 
-export default function ProductDrawer({ id, org, tab, onTab, onClose, onEdit, onOpenProduct }: { id: number; org: string; tab: string; onTab: (t: string) => void; onClose: () => void; onEdit?: () => void; onOpenProduct: (id: number) => void }) {
+export default function ProductDrawer({ id, org, tab, onTab, onClose, onEdit, onOpenProduct, on360 }: { id: number; org: string; tab: string; onTab: (t: string) => void; onClose: () => void; onEdit?: () => void; onOpenProduct: (id: number) => void; /** Product 360 (V2), full screen. */ on360?: () => void }) {
   const qc = useQueryClient();
   const q = useQuery({
     queryKey: K.product(id, org),
@@ -66,6 +66,11 @@ export default function ProductDrawer({ id, org, tab, onTab, onClose, onEdit, on
             </b>
             <span className="truncate font-mono text-[12px] text-ink-3">{p?.code ?? ''}</span>
           </span>
+          {p && on360 ? (
+            <button type="button" className={btnSmall} onClick={on360} title="Everything about it: pictures, variants, specifications, documents, channels, SEO">
+              Open 360
+            </button>
+          ) : null}
           {p && onEdit ? (
             <button type="button" className={btnSmall} disabled={busy} onClick={() => void archive(p.active === false)} title={p.active ? 'Hide it from lists and pickers; its history stays' : undefined}>
               {p.active ? 'Archive' : 'Restore'}
@@ -79,7 +84,22 @@ export default function ProductDrawer({ id, org, tab, onTab, onClose, onEdit, on
         </>
       }
     >
-      <div role="tablist" aria-label="Product" className="-mx-4 -mt-3 flex shrink-0 gap-1 border-b border-line px-4">
+      <ProductContent id={id} org={org} tab={on} onTab={onTab} onOpenProduct={onOpenProduct} />
+    </SidePanel>
+  );
+}
+
+/** A product's tabs and what each shows — the drawer's body, and the Products pane's (products in tabs). */
+export function ProductContent({ id, org, tab, onTab, onOpenProduct, flush }: { id: number; org: string; tab: string; onTab: (t: string) => void; onOpenProduct: (id: number) => void; flush?: boolean }) {
+  const q = useQuery({
+    queryKey: K.product(id, org),
+    queryFn: ({ signal }) => fetchProduct(id, org, signal),
+  });
+  const d = q.data;
+  const on = TABS.some((t) => t.id === tab) ? tab : 'overview';
+  return (
+    <>
+      <div role="tablist" aria-label="Product" className={cx('flex shrink-0 gap-1 border-b border-line', flush ? 'px-0' : '-mx-4 -mt-3 px-4')}>
         {TABS.map((t) => (
           <button
             key={t.id}
@@ -108,7 +128,7 @@ export default function ProductDrawer({ id, org, tab, onTab, onClose, onEdit, on
           <Overview d={d} onOpenProduct={onOpenProduct} />
         )
       ) : null}
-    </SidePanel>
+    </>
   );
 }
 
