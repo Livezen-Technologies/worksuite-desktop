@@ -11,6 +11,16 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.261 — 2026-10-15
+
+- **Inventory on the desktop, as designed (D1–D5).** A dashboard with **This computer** — whether a barcode scanner has been heard, the label printer, the offline copy and changes waiting to sync — beside the 14-day received/issued chart; the rail grouped Workspace / Control / Trade / Insight / Setup / Administration / Desktop, with **Receiving** under Trade.
+- **Products in tabs.** Opening a product puts it in a tab beside a compact list — up to eight, kept on the address so they come back after a restart. Right-click (or Shift+F10) a row for Open in new tab or window, Product 360, Print label (⌘/Ctrl+P), Adjust stock, **Duplicate** and Edit. The search box takes a scan: an exact code or barcode opens the product.
+- **Stock counts that keep working offline.** A count open for counting takes the whole screen: one scan box (each scan adds one, a typed number sets the line), expected, counted and variance. Each count is kept at once on this computer and sent through the offline queue; every line says whether it is on this computer, waiting to send or sent, and a line changed online in the meantime asks which to keep. Post to stock needs the connection and sends anything unsent first.
+- **Receive with a scanner.** Scan the order, then each item or serial: wrong items, too many, and a serial WorkSuite already knows are refused with the reason; per-line progress, "N more to scan", F2 damaged, F3 quality hold, ⌘/Ctrl+Enter posts, and unit labels (50 × 25 mm, QR of the serial) printed after each scan or all at once. Scanner input is taken even when the scan box has lost focus.
+- **Product 360 (V2 product master).** One product in full: completeness by section, pricing (cost only for those allowed), channels with what each is missing and a Fix link, media (drop photos from Finder or Explorer — HEIC is converted; role, alt text, public, order), the variant matrix with Generate missing, specifications by attribute set, documents, and SEO with a search-result preview. **Open in browser** opens the same product on the web.
+- Offline: Inventory's dashboard, companies, warehouses, products, categories and stock counts are now in the offline read cache.
+- Where it bites: Product 360 needs the server's V2 product master; against an older server it says so. Documents are read-only on the desktop, and variant prices are edited on the web. Inventory module 1.4.0.
+
 ## 0.2.260 — 2026-10-15
 
 - **Purchasing is its own app (SRS-PUR-001 G-21).** It has its own place in the launcher and sidebar, with the whole rail in the order the work runs: Dashboard, **Waiting on me**, Requests, RFQs, Agreements, Purchase orders, Receiving, Goods received, Quality hold, Landed costs, Replenishment, Vendor bills, Payments, Payment runs, Returns, Vendors and Reports. It is for whoever has the server's Purchasing app (`purchase`, given to everyone who had Inventory) with any purchasing permission; Inventory's Purchasing, Vendors and Replenishment entries, its dashboard links and its search now open it, and an old `/inventory?tab=pur…` link is sent there.

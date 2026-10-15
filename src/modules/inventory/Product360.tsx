@@ -167,7 +167,7 @@ export default function Product360({
             <b className="truncate text-[17px] text-ink">{p.name}</b>
             <span className="truncate text-[12.5px] text-ink-3">{[p.code, kindLabel(p.kind), variants ? `${variants} ${variants === 1 ? 'variant' : 'variants'}` : null, `completeness ${Math.round(d.completeness.total)}%`].filter(Boolean).join(' · ')}</span>
           </div>
-          <button type="button" className={btn} onClick={() => void call('app:openInBrowser', { path: `/inventory/products/${id}/360` })}>
+          <button type="button" className={btn} onClick={() => void call('app:openInBrowser', { path: `/inventory?view=product360&id=${id}` })}>
             Open in browser
           </button>
           {canCatalogue ? (
