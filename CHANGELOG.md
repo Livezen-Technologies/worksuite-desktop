@@ -18,6 +18,9 @@ person who has to live with the change — what it does, and where it bites.
   - It leaves updates to the OS package manager and the lock to the OS screen lock.
   - `--module=<mail|chat|calendar|tasks|files|crm|hr|home>` opens a module, in the running WorkSuite if there is one.
   - See [docs/WORKSUITE_OS.md](docs/WORKSUITE_OS.md).
+- **The Linux package is now called `worksuite`** (.deb and .rpm), not `worksuite-desktop`. That name belongs to WorkSuite OS's metapackage, and the two could not be installed together.
+  - On a standalone Linux computer the upgrade is automatic: the new package declares `Breaks`/`Replaces: worksuite-desktop (<< 1.0~)` (RPM: obsoletes `worksuite-desktop < 1.0`). It takes over the old 0.2.x package's files and removes it.
+  - The version bound keeps it from ever touching the OS metapackage (1.0.0~dev1 and later).
 - Where it bites: in OS mode, Settings › Updates says the system updates WorkSuite, and the app-lock settings have no effect.
 
 ## 0.2.261 — 2026-10-15

@@ -188,13 +188,24 @@ module.exports = {
   // The install scripts are electron-builder's own plus two steps (build/linux/): resources/package-type for the
   // in-app updater (worksuite-desktop#345), and the WorkSuite package source, which only a WORKSUITE_LINUX_REPO=1
   // build adds (#351); uninstall removes both, an upgrade neither.
+  //
+  // Package name `worksuite` (deb and rpm), not the npm name: `worksuite-desktop` is WorkSuite OS's metapackage
+  // (Architecture: all, version 1.0.0~dev1 and up), and apt cannot have two packages of one name. Earlier
+  // standalone .deb/.rpm installs were called worksuite-desktop 0.2.x; the version-bounded Breaks + Replaces
+  // (<< 1.0~) let `worksuite` take over their files and remove them on upgrade, and never match the OS
+  // metapackage (1.0~ sorts below 1.0.0~dev1). No Provides: that would claim to be the OS metapackage.
   deb: {
+    packageName: 'worksuite',
+    fpm: ['--replaces', 'worksuite-desktop (<< 1.0~)', '--deb-field', 'Breaks: worksuite-desktop (<< 1.0~)'],
     depends: ['libsecret-1-0', 'libnotify4', 'libxss1', 'libnss3'],
     recommends: ['xdotool', 'x11-utils'],
     afterInstall: 'build/linux/after-install-deb.tpl',
     afterRemove: 'build/linux/after-remove-deb.tpl',
   },
   rpm: {
+    packageName: 'worksuite',
+    // RPM: Obsoletes the old standalone package (WorkSuite OS is Debian-based; no metapackage clash there).
+    fpm: ['--replaces', 'worksuite-desktop < 1.0'],
     depends: ['libsecret', 'libnotify', 'libXScrnSaver', 'nss'],
     afterInstall: 'build/linux/after-install-rpm.tpl',
     afterRemove: 'build/linux/after-remove-rpm.tpl',

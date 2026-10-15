@@ -11,7 +11,7 @@ WorkSuite OS computer (support only). When OS mode is off, every flow below runs
 |---|---|---|
 | Sign-in | server step, password, two-step, passkey | the OS credentials broker; **the app never asks for a password** |
 | Device | `devices/register` + heartbeat every 5 min | the OS device agent's enrolment; the agent checks in |
-| Updates | signed self-updater, AppImage / .deb / .rpm installs | off: the OS package manager updates the `worksuite-desktop` package |
+| Updates | signed self-updater, AppImage / .deb / .rpm installs | off: the OS package manager updates the `worksuite` package |
 | Lock | app lock (timer, system lock, manual) | off: the OS screen lock covers the app |
 | worksuite:// | registered by the app | registered by WorkSuite OS (the package's `worksuite.desktop`) |
 
@@ -65,3 +65,17 @@ as `worksuite://<id>`. That means the same link grammar and permission checks. A
 link to the running instance (single instance). An unknown module just opens the app.
 
 The WorkSuite OS start menu launches `/usr/bin/worksuite --module=<id>`.
+
+## Package name
+
+The Linux packages are called `worksuite` (`build/electron-builder.config.cjs`). They install `/opt/WorkSuite`,
+`/usr/bin/worksuite` and `/usr/share/applications/worksuite.desktop`. The name is not `worksuite-desktop`, because
+that is WorkSuite OS's own metapackage (the whole desktop session, version 1.0.0~dev1 and up), and apt can have only
+one package of a name. The WorkSuite OS image ships the app as `worksuite`.
+
+Standalone installs from before the rename were called `worksuite-desktop`, at version 0.2.x. The .deb declares
+`Breaks: worksuite-desktop (<< 1.0~)` and `Replaces: worksuite-desktop (<< 1.0~)`, and the .rpm obsoletes
+`worksuite-desktop < 1.0`. An upgrade takes over the old package's files and removes it.
+
+The version bound matters: `1.0~` sorts below the metapackage's `1.0.0~dev1`, so the app never breaks or replaces
+WorkSuite OS. The package also deliberately does not `Provide` `worksuite-desktop`.
