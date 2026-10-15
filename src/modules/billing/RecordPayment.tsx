@@ -10,7 +10,7 @@ import { cx } from '../../components/ui';
 import { btn, btnPrimary, Field, input, SidePanel } from '../hr/parts';
 import { amount, fetchBankAccounts, K, METHODS, recordPayment, searchCustomers, useBillingOrgs, type Customer, type InvoiceDetail } from './api';
 import { Checkbox } from '../../components/Checkbox';
-import { converted, fetchModes, KB, oldestFirst, openInvoicesOf, uploadSlip } from './more';
+import { allocateFx, converted, fetchModes, KB, oldestFirst, openInvoicesOf, uploadSlip } from './more';
 import { OFFLINE_WRITE, useBillingOffline } from './offline';
 
 /**
@@ -84,13 +84,8 @@ export default function RecordPayment({ invoice, org, onClose }: { invoice?: Inv
     if (!ready || !clientId) return;
     setBusy(true);
     try {
-      const allocation = invoice
-        ? foreign
-          ? [{ invoice_id: invoice.id, amount: Math.min(sum, Math.round((invoice.due / fx) * 100) / 100), rate: fx }]
-          : [{ invoice_id: invoice.id, amount: Math.min(sum, invoice.due) }]
-        : oldest
-          ? ('auto' as const)
-          : null;
+      // In another currency the payment is recorded on account first, then settles the invoice at the rate (allocate-fx).
+      const allocation = invoice ? (foreign ? null : [{ invoice_id: invoice.id, amount: Math.min(sum, invoice.due) }]) : oldest ? ('auto' as const) : null;
       const r = await recordPayment({
         client_id: clientId,
         amount: sum,
@@ -98,13 +93,20 @@ export default function RecordPayment({ invoice, org, onClose }: { invoice?: Inv
         paid_on: paidOn,
         ...(invoice ? { currency: currency || invoice.currency } : {}),
         ...(whose ? { org_id: Number(whose) } : {}),
-        ...(chosenMode ? { mode_id: chosenMode.id } : {}),
         ...(bank ? { bank_account_id: Number(bank) } : {}),
         ...(reference.trim() ? { bank_reference: reference.trim() } : {}),
         ...(note.trim() ? { note: note.trim() } : {}),
         allocate: allocation,
       });
-      const n = r.allocation.count;
+      let n = r.allocation.count;
+      if (invoice && foreign) {
+        try {
+          await allocateFx(r.payment.id, { invoice_id: invoice.id, payment_amount: Math.min(sum, Math.round((invoice.due / fx) * 100) / 100), rate: fx });
+          n = 1;
+        } catch (e) {
+          toast('error', `Recorded on account, but not set against ${invoice.number ?? 'the invoice'}: ${errorMessage(e)}`);
+        }
+      }
       toast('success', n > 0 ? `Payment ${r.payment.reference} recorded and allocated across ${n} ${n === 1 ? 'invoice' : 'invoices'}.` : `Payment ${r.payment.reference} recorded on account.`);
       for (const e of r.allocation.errors) toast('error', e);
       // The slips go with it once it exists; one that fails is said, and the payment stands.

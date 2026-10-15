@@ -8,7 +8,7 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet } from '../hr/parts';
 import { Menu } from '../../components/Menu';
-import { BULK_LABEL, bulkAct, bulkSummary, exportRequest, type BulkAction, type BulkResult, type ExportFormat } from './actions';
+import { BULK_LABEL, bulkAct, bulkFile, bulkSummary, exportRequest, type BulkAction, type BulkResult, type ExportFormat } from './actions';
 import { amount, fetchInvoices, invoiceName, K, PER_PAGE, SORTS, STATUS, STATUSES, type Invoice, type ListFilters } from './api';
 import { OFFLINE_WRITE, useBillingOffline } from './offline';
 import { money, StatusChip } from './parts';
@@ -80,7 +80,8 @@ export default function Invoices({ org, narrow, salesDate, outstanding, currency
     try {
       const r = await bulkAct(bulk.action, bulk.ids, bulk.action === 'cancel' && reason.trim() ? { reason: reason.trim() } : {});
       toast(r.done ? 'success' : 'error', bulkSummary(bulk.action, r));
-      if (r.file_url) await call('transfers:download', { billingFile: r.file_url, name: `invoices-${new Date().toISOString().slice(0, 10)}.pdf`, open: true }).catch((e) => toast('error', errorMessage(e)));
+      const file = bulkFile(r);
+      if (file) await call('transfers:download', { ...file, name: `invoices-${new Date().toISOString().slice(0, 10)}.pdf`, open: true }).catch((e) => toast('error', errorMessage(e)));
       if (r.refused) setResult({ action: bulk.action, r });
       setBulk(null);
       setReason('');

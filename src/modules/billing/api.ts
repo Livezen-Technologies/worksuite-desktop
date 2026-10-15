@@ -146,9 +146,24 @@ export interface InvoiceDetail extends Invoice {
   };
   timeline: Array<{ id: number; kind: string; title: string; body: string | null; author: string | null; at: string }>;
   /** SRS-BIL-001 additions; absent on a server before it. */
-  journal?: string | null;
+  /** The issue journal, when Finance has one. */
+  journal?: { id: number; journal_no: string | null; status: string | null; reversed: boolean } | null;
   disputed?: { reason: string | null; at: string | null; by: string | null } | null;
-  approval?: { status: 'pending' | 'approved' | 'rejected'; submitted_by: string | null; submitted_at: string | null; note: string | null; can_approve: boolean; rule?: string | null } | null;
+  /**
+   * Approval before issue (G-14). `status` is null until it is submitted; `required` (and `rule`) say why the
+   * company's rules ask for it, null when they do not. `submitted_by` and `approved_by` are user ids.
+   */
+  approval?: {
+    status: 'pending' | 'approved' | 'rejected' | null;
+    note: string | null;
+    submitted_by: number | null;
+    submitted_at: string | null;
+    approved_by?: number | null;
+    approved_at?: string | null;
+    rule?: string | null;
+    required?: string | null;
+    can_approve: boolean;
+  } | null;
   /** The customer's email and phone, to start the Send dialog. */
   client_email?: string | null;
   client_phone?: string | null;
@@ -222,13 +237,8 @@ export interface PaymentBody {
   bank_account_id?: number;
   bank_reference?: string;
   note?: string;
-  /** The company's payment mode it came by (Settings › Payment modes); `method` is that mode's kind. */
-  mode_id?: number;
-  /**
-   * 'auto' settles the oldest first; a list settles exactly; null holds it on account. An entry's `rate` (G-17) is
-   * one unit of the payment's currency in the invoice's, for an invoice in another currency.
-   */
-  allocate: 'auto' | Array<{ invoice_id: number; amount: number; rate?: number }> | null;
+  /** 'auto' settles the oldest first; a list settles exactly (in its own currency); null holds it on account. */
+  allocate: 'auto' | Array<{ invoice_id: number; amount: number }> | null;
 }
 
 export interface PaymentResult {

@@ -174,8 +174,8 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
                   Save draft
                 </button>
               ) : null}
-              {mayEdit ? (
-                <button type="button" className={btn} disabled={busy || !toSend(lines).length} title="Where the company's rules ask for it, an approver says yes before it is issued" onClick={() => setAsking('submit')}>
+              {mayEdit && inv.approval?.required && inv.approval.status !== 'approved' ? (
+                <button type="button" className={btn} disabled={busy || !toSend(lines).length} title={`Needs approval before it is issued: ${inv.approval.required}`} onClick={() => setAsking('submit')}>
                   Submit for approval
                 </button>
               ) : null}
@@ -236,8 +236,7 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
         {pending ? (
           <p className="m-0 rounded-[10px] border border-[#F5D48A] bg-[#FFF8E6] px-3.5 py-2 text-[12.5px] text-[#7A3B05] dark:border-warning/40 dark:bg-warning-bg dark:text-warning">
             Waiting for approval
-            {inv.approval?.submitted_by ? ` — submitted by ${inv.approval.submitted_by}` : ''}
-            {inv.approval?.submitted_at ? ` ${dateLabel(inv.approval.submitted_at)}` : ''}.{inv.approval?.rule ? ` ${inv.approval.rule}` : ''} It is issued when approved.
+            {inv.approval?.submitted_at ? ` — submitted ${dateLabel(inv.approval.submitted_at)}` : ''}.{inv.approval?.rule ? ` ${inv.approval.rule}` : ''} It is issued when approved.
           </p>
         ) : null}
         {draft && inv.approval?.status === 'rejected' ? (
@@ -419,7 +418,7 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
 
         {tab === 'files' ? <Attachments id={inv.id} canEdit={can(perms, 'billing.invoice') && !offline} /> : null}
       </div>
-      <InvoiceAside inv={inv} canLink={can(perms, 'billing.issue')} offline={offline} />
+      <InvoiceAside inv={inv} canLink={can(perms, 'billing.invoice')} offline={offline} />
       {sending ? <SendDialog inv={inv} org={org} onClose={() => setSending(false)} /> : null}
       {paying ? <RecordPayment invoice={inv} org={org} onClose={() => setPaying(false)} /> : null}
       {asking ? (
@@ -493,7 +492,9 @@ function Loaded({ inv, editable, org, onClose, onOpen, onOpenPayment, onOpenNote
                   onClick={() =>
                     void run(async () => {
                       const r = await approveInvoice(inv.id, words);
-                      toast('success', r.message ?? 'Approved.');
+                      const issued = r.data?.issue;
+                      if (issued && !issued.ok) toast('error', `Approved, but not issued${issued.problems?.length ? `: ${issued.problems.join('; ')}` : '.'} Issue it from the draft.`);
+                      else toast('success', issued?.number ? `Approved and issued as ${issued.number}.` : (r.message ?? 'Approved.'));
                     }, null)
                   }
                 >

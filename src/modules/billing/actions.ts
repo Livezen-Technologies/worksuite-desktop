@@ -92,7 +92,9 @@ export function payLinkOf(r: unknown): PayLink | null {
 // ── approvals (G-14) ────────────────────────────────────────────────────
 
 export const submitForApproval = (id: number, note?: string) => request<{ invoice: { id: number; status: string } }>('POST', `/api/billing/invoices/${id}/submit`, { body: note?.trim() ? { note: note.trim() } : {} });
-export const approveInvoice = (id: number, note?: string) => request<{ invoice: { id: number; status: string } }>('POST', `/api/billing/invoices/${id}/approve`, { body: { note: note?.trim() ?? '' } });
+/** Approve, and (`issue: true`) issue it in the same step: numbered, frozen and posted. */
+export const approveInvoice = (id: number, note?: string) =>
+  request<{ invoice_id: number; approval: string; issue?: { ok: boolean; number: string | null; problems?: string[] | null } }>('POST', `/api/billing/invoices/${id}/approve`, { body: { note: note?.trim() ?? '', issue: true } });
 export const rejectInvoice = (id: number, note: string) => request<{ invoice: { id: number; status: string } }>('POST', `/api/billing/invoices/${id}/reject`, { body: { note: note.trim() } });
 
 export interface ApprovalRow {
@@ -156,9 +158,19 @@ export interface BulkResult {
   done: number;
   refused: number;
   file_url?: string | null;
+  /** The bulk PDF's file in the Drive (`file_url` is its `/api/files/{id}/download`). */
+  file_id?: number | null;
 }
 
-export const bulkAct = (action: BulkAction, ids: number[], extra: Record<string, unknown> = {}) => apiPost<unknown>('/api/billing/invoices/bulk', { ids, action, ...extra }).then(normaliseBulk);
+/** Issuing in bulk is confirmed in the dialog first; the server asks for `confirm: true` (else 422 `confirm_required`). */
+export const bulkAct = (action: BulkAction, ids: number[], extra: Record<string, unknown> = {}) => apiPost<unknown>('/api/billing/invoices/bulk', { ids, action, ...(action === 'issue' ? { confirm: true } : {}), ...extra }).then(normaliseBulk);
+
+/** Where a bulk PDF downloads from: its Drive file, else a Billing path. */
+export function bulkFile(r: BulkResult): { fileId: string } | { billingFile: string } | null {
+  const id = r.file_id ?? Number(/^\/api\/files\/(\d+)\/download$/.exec(r.file_url ?? '')?.[1] ?? 0);
+  if (id) return { fileId: String(id) };
+  return r.file_url && /^\/(?:api\/billing\/|d\/)/.test(r.file_url) ? { billingFile: r.file_url } : null;
+}
 
 /**
  * One shape for a bulk answer: the contract's `{results, done, refused,
@@ -174,6 +186,7 @@ export function normaliseBulk(r: unknown): BulkResult {
       done: typeof o.done === 'number' ? o.done : results.filter((x) => x.ok).length,
       refused: typeof o.refused === 'number' ? o.refused : results.filter((x) => !x.ok).length,
       file_url: (o.file_url as string | null | undefined) ?? null,
+      file_id: typeof o.file_id === 'number' ? o.file_id : null,
     };
   }
   const done = Array.isArray(o.done) ? (o.done as Array<{ id: number; number?: string | null }>) : [];
@@ -233,21 +246,24 @@ export const clearDispute = (id: number) => apiDelete(`/api/billing/invoices/${i
 
 // ── statements (G-05) ───────────────────────────────────────────────────
 
-export const sendStatement = (customer: number, body: { from: string; to: string; email?: string[]; message?: string }) => request('POST', `/api/billing/customers/${customer}/statement/send`, { body });
+/** Email a statement for `from`…`until` (the server's `to` is the recipients; without it, the customer's address). */
+export const sendStatement = (customer: number, body: { from: string; until: string; to?: string[]; message?: string }) => request('POST', `/api/billing/customers/${customer}/statement/send`, { body });
 
 // ── reminders shown on an invoice (D02) ─────────────────────────────────
 
+/** One invoice's reminders: those still to come first (`status: 'scheduled'`, `due_on`, no id), then those sent. */
 export interface ReminderEntry {
-  id: number;
-  invoice_id: number;
-  step: string | null;
+  id: number | null;
+  invoice_id: number | null;
   offset_days: number | null;
   channel: string;
   status: string;
-  at: string | null;
-  scheduled_for?: string | null;
+  sent_at: string | null;
+  due_on?: string | null;
+  error?: string | null;
 }
-export const fetchInvoiceReminders = (id: number, signal?: AbortSignal) => apiGet<{ log?: ReminderEntry[]; items?: ReminderEntry[] }>('/api/billing/reminders/log', { invoice_id: id }, signal).then((r) => r.log ?? r.items ?? []);
+export const fetchInvoiceReminders = (id: number, signal?: AbortSignal) =>
+  apiGet<{ log?: ReminderEntry[]; items?: ReminderEntry[]; upcoming?: ReminderEntry[] }>('/api/billing/reminders/log', { invoice_id: id }, signal).then((r) => r.log ?? [...(r.upcoming ?? []), ...(r.items ?? [])]);
 
 /** "+7" for seven days after the due date, "−3" before it, "on the due date". */
 export const offsetLabel = (d: number | null | undefined) => (d === null || d === undefined ? '—' : d === 0 ? 'on the due date' : d > 0 ? `+${d}` : `−${Math.abs(d)}`);

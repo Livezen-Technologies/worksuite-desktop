@@ -19,6 +19,7 @@ import {
   fetchCrm,
   fetchGateways,
   fetchMembers,
+  fetchPayOptions,
   fetchWoo,
   findAssignable,
   initialCredentials,
@@ -29,6 +30,7 @@ import {
   removeGateway,
   removeMember,
   removeWoo,
+  savePayOptions,
   ROLE_LABEL,
   secretsPatch,
   testCrm,
@@ -41,6 +43,7 @@ import {
   type GatewayAccount,
   type GatewayCapabilities,
   type GatewayKind,
+  type PayOptions,
 } from './admin';
 import { K } from './api';
 
@@ -112,62 +115,140 @@ export function Gateways({ may, org, orgs }: { may: boolean; org: string; orgs: 
       },
     );
   return (
-    <Panel title="Online payments" sub="Customers pay from the invoice’s pay link, its QR or the portal. Each paid charge records the payment, allocates it and posts it — no retyping." bodyClassName="flex flex-col">
-      {(cat.data ?? []).map((k) => {
-        const mine = all.filter((a) => a.gateway === k.key);
-        const live = mine.some((a) => a.enabled);
-        return (
-          <div key={k.key} data-gateway={k.key} className="flex flex-col gap-1.5 border-b border-line/60 px-3.5 py-3 last:border-b-0">
-            <div className="flex items-start gap-3">
-              <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-selection text-[14px] font-bold text-primary">{k.name.charAt(0)}</span>
-              <span className="flex min-w-0 flex-1 flex-col">
-                <span className="flex items-center gap-2">
-                  <b className="text-ink">{k.name}</b>
-                  <span className={cx('rounded-[10px] px-2 py-0.5 text-[11px] font-semibold', live ? 'bg-success-bg text-success' : 'bg-subtle text-ink-3')}>{live ? 'Connected' : 'Not connected'}</span>
+    <>
+      <Panel title="Online payments" sub="Customers pay from the invoice’s pay link, its QR or the portal. Each paid charge records the payment, allocates it and posts it — no retyping." bodyClassName="flex flex-col">
+        {(cat.data ?? []).map((k) => {
+          const mine = all.filter((a) => a.gateway === k.key);
+          const live = mine.some((a) => a.enabled);
+          return (
+            <div key={k.key} data-gateway={k.key} className="flex flex-col gap-1.5 border-b border-line/60 px-3.5 py-3 last:border-b-0">
+              <div className="flex items-start gap-3">
+                <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[9px] bg-selection text-[14px] font-bold text-primary">{k.name.charAt(0)}</span>
+                <span className="flex min-w-0 flex-1 flex-col">
+                  <span className="flex items-center gap-2">
+                    <b className="text-ink">{k.name}</b>
+                    <span className={cx('rounded-[10px] px-2 py-0.5 text-[11px] font-semibold', live ? 'bg-success-bg text-success' : 'bg-subtle text-ink-3')}>{live ? 'Connected' : 'Not connected'}</span>
+                  </span>
+                  <span className="text-[12px] text-ink-3">{[k.countries.join(', '), k.currencies.join(' · ')].filter(Boolean).join(' — ')}</span>
+                  <span className="mt-1 flex flex-wrap gap-1">
+                    {capsOf(k).map((c) => (
+                      <span key={c} className="rounded-[8px] bg-subtle px-1.5 text-[11px] font-semibold text-ink-2">
+                        {CAPABILITY_LABEL[c]}
+                      </span>
+                    ))}
+                  </span>
                 </span>
-                <span className="text-[12px] text-ink-3">{[k.countries.join(', '), k.currencies.join(' · ')].filter(Boolean).join(' — ')}</span>
-                <span className="mt-1 flex flex-wrap gap-1">
-                  {capsOf(k).map((c) => (
-                    <span key={c} className="rounded-[8px] bg-subtle px-1.5 text-[11px] font-semibold text-ink-2">
-                      {CAPABILITY_LABEL[c]}
-                    </span>
-                  ))}
-                </span>
-              </span>
-              {may ? (
-                <button type="button" className={btnSmall} onClick={() => setEditing({ kind: k, account: null })}>
-                  {mine.length ? 'Add an account' : 'Connect'}
-                </button>
-              ) : null}
-            </div>
-            {mine.map((a) => (
-              <div key={a.id} data-account={a.id} className="ml-12 flex flex-wrap items-center gap-2 rounded-[8px] bg-subtle px-2.5 py-1.5 text-[12.5px]">
-                <b className="text-ink">{a.name}</b>
-                <span className={cx('rounded-[8px] px-1.5 text-[11px] font-semibold', a.mode === 'live' ? 'bg-success-bg text-success' : 'bg-warning-bg text-[#9A4A06] dark:text-warning')}>{a.mode === 'live' ? 'live' : 'test'}</span>
-                {!a.enabled ? <span className="text-ink-3">off</span> : null}
-                <span className="text-ink-3">{orgs.find((o) => o.id === a.org_id)?.name ?? (a.org_id ? `Company #${a.org_id}` : 'Every company')}</span>
-                {tested[a.id] ? <span className={tested[a.id]!.ok ? 'text-success' : 'text-danger'}>{tested[a.id]!.message}</span> : a.last_test_at ? <span className="text-ink-3">tested {relative(a.last_test_at)}</span> : null}
-                <span className="flex-1" />
                 {may ? (
-                  <>
-                    <button type="button" className="font-semibold text-primary hover:underline" disabled={busy} onClick={() => test(a)}>
-                      Test
-                    </button>
-                    <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setEditing({ kind: k, account: a })}>
-                      Manage
-                    </button>
-                    <button type="button" className="font-semibold text-danger hover:underline" disabled={busy} onClick={() => void act(() => removeGateway(a.id), `${a.name} removed.`)}>
-                      Remove
-                    </button>
-                  </>
+                  <button type="button" className={btnSmall} onClick={() => setEditing({ kind: k, account: null })}>
+                    {mine.length ? 'Add an account' : 'Connect'}
+                  </button>
                 ) : null}
               </div>
-            ))}
-          </div>
-        );
-      })}
-      {!(cat.data ?? []).length ? <Empty text="The server lists no payment gateways." /> : null}
-      {editing ? <GatewayForm kind={editing.kind} account={editing.account} orgs={orgs} org={org} onClose={() => setEditing(null)} /> : null}
+              {mine.map((a) => (
+                <div key={a.id} data-account={a.id} className="ml-12 flex flex-wrap items-center gap-2 rounded-[8px] bg-subtle px-2.5 py-1.5 text-[12.5px]">
+                  <b className="text-ink">{a.name}</b>
+                  <span className={cx('rounded-[8px] px-1.5 text-[11px] font-semibold', a.mode === 'live' ? 'bg-success-bg text-success' : 'bg-warning-bg text-[#9A4A06] dark:text-warning')}>{a.mode === 'live' ? 'live' : 'test'}</span>
+                  {!a.enabled ? <span className="text-ink-3">off</span> : null}
+                  <span className="text-ink-3">{orgs.find((o) => o.id === a.org_id)?.name ?? (a.org_id ? `Company #${a.org_id}` : 'Every company')}</span>
+                  {a.missing?.length ? <span className="text-[#9A4A06] dark:text-warning">needs {a.missing.join(', ')}</span> : null}
+                  {tested[a.id] ? (
+                    <span className={tested[a.id]!.ok ? 'text-success' : 'text-danger'}>{tested[a.id]!.message}</span>
+                  ) : a.last_tested_at ? (
+                    <span className={a.last_test_ok === false ? 'text-danger' : 'text-ink-3'} title={a.last_test_message ?? undefined}>
+                      tested {relative(a.last_tested_at)}
+                      {a.last_test_ok === false ? ' — failed' : ''}
+                    </span>
+                  ) : null}
+                  <span className="flex-1" />
+                  {may ? (
+                    <>
+                      <button type="button" className="font-semibold text-primary hover:underline" disabled={busy} onClick={() => test(a)}>
+                        Test
+                      </button>
+                      <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setEditing({ kind: k, account: a })}>
+                        Manage
+                      </button>
+                      <button type="button" className="font-semibold text-danger hover:underline" disabled={busy} onClick={() => void act(() => removeGateway(a.id), `${a.name} removed.`)}>
+                        Remove
+                      </button>
+                    </>
+                  ) : null}
+                </div>
+              ))}
+            </div>
+          );
+        })}
+        {!(cat.data ?? []).length ? <Empty text="The server lists no payment gateways." /> : null}
+        {editing ? <GatewayForm kind={editing.kind} account={editing.account} orgs={orgs} org={org} onClose={() => setEditing(null)} /> : null}
+      </Panel>
+      <PayLinkOptions may={may} org={org} />
+    </>
+  );
+}
+
+const OPTION_LABEL: Array<[keyof PayOptions, string, string?]> = [
+  ['auto_link', 'Add a “Pay now” link to every issued invoice'],
+  ['print_qr', 'Print the pay-link QR on the PDF'],
+  ['allow_partial', 'Allow part payments from the link'],
+  ['save_cards', 'Save cards for recurring auto-charge', 'With the customer’s consent, through gateways that keep cards'],
+  ['post_fees', 'Post gateway fees to Bank charges'],
+];
+
+/** The company's pay-link options (W14 "Pay-link options"): `GET/PUT gateways/settings?org_id=`. */
+function PayLinkOptions({ may, org }: { may: boolean; org: string }) {
+  const q = useQuery({ queryKey: ['billing', 'gateways', 'settings', org], queryFn: ({ signal }) => fetchPayOptions(org, signal), retry: false });
+  const { busy, act } = useAct();
+  const [draft, setDraft] = useState<PayOptions | null>(null);
+  if (q.isLoading) return <Spinner />;
+  if (q.error) return <ErrorNote error={q.error} onRetry={() => void q.refetch()} />;
+  const o = draft ?? q.data!;
+  const set = (patch: Partial<PayOptions>) => setDraft({ ...o, ...patch });
+  return (
+    <Panel
+      title="Pay-link options"
+      action={
+        may ? (
+          <button
+            type="button"
+            className={btnPrimary + ' !h-[30px]'}
+            disabled={busy || !draft}
+            onClick={() =>
+              void act(
+                () => savePayOptions(org, o),
+                said('Saved.'),
+                () => (setDraft(null), void q.refetch()),
+              )
+            }
+          >
+            Save
+          </button>
+        ) : null
+      }
+      bodyClassName="flex flex-col gap-2 px-3.5 py-3"
+    >
+      {OPTION_LABEL.map(([k, label, sub]) => (
+        <label key={k} className="flex items-start gap-2 text-[12.5px] text-ink">
+          <Checkbox checked={!!o[k]} disabled={!may} onChange={(e) => set({ [k]: e.target.checked } as Partial<PayOptions>)} className="mt-0.5" />
+          <span>
+            <b>{label}</b>
+            {sub ? <span className="block text-ink-3">{sub}</span> : null}
+          </span>
+        </label>
+      ))}
+      <div className="grid grid-cols-4 gap-2.5">
+        <Field label="A link lasts (days)">
+          <input aria-label="A link lasts (days)" type="number" min={1} max={365} disabled={!may} value={o.expiry_days} onChange={(e) => set({ expiry_days: Number(e.target.value) || 1 })} className={input + ' tabular-nums'} />
+        </Field>
+        <Field label="Card fee %" hint="Passed to the customer">
+          <input aria-label="Card fee %" inputMode="decimal" disabled={!may} value={String(o.surcharge_pct)} onChange={(e) => set({ surcharge_pct: Number(e.target.value) || 0 })} className={input + ' tabular-nums'} />
+        </Field>
+        <Field label="Plus a fixed fee">
+          <input aria-label="Plus a fixed fee" inputMode="decimal" disabled={!may} value={String(o.surcharge_fixed)} onChange={(e) => set({ surcharge_fixed: Number(e.target.value) || 0 })} className={input + ' tabular-nums'} />
+        </Field>
+        <Field label="LankaQR merchant ID" hint="Prints a LankaQR in place of the link’s QR">
+          <input aria-label="LankaQR merchant ID" disabled={!may} value={o.lankaqr_merchant_id ?? ''} onChange={(e) => set({ lankaqr_merchant_id: e.target.value })} className={input + ' font-mono'} />
+        </Field>
+      </div>
     </Panel>
   );
 }
@@ -230,7 +311,7 @@ export function GatewayForm({ kind, account, orgs, org, onClose }: { kind: Gatew
         </Field>
       ) : null}
       {kind.credentials_spec.map((f) => (
-        <CredentialInput key={f.key} f={f} value={values[f.key]} hint={account?.secrets?.[f.key] ?? null} onChange={(v) => set(f.key, v)} />
+        <CredentialInput key={f.key} f={f} value={values[f.key]} hint={account?.credentials?.[f.key] ?? null} onChange={(v) => set(f.key, v)} />
       ))}
       <label className="flex items-center gap-2 font-semibold text-ink">
         <Checkbox checked={enabled} onChange={(e) => setEnabled(e.target.checked)} />

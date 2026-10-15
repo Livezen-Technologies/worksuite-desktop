@@ -62,13 +62,19 @@ export interface GatewayAccount {
   org_id: number | null;
   enabled: boolean;
   mode: 'test' | 'live';
-  /** The fields that are not secret, as saved. */
-  credentials: Record<string, string | boolean | null>;
-  /** Each secret's masked hint ("••••4242"), or null when none is stored. Never the secret. */
-  secrets: Record<string, string | null>;
+  /** Each SECRET field's masked hint ("••••4242"), or null when none is stored. Never the secret itself. */
+  credentials: Record<string, string | null>;
+  /** The fields that are not secret, as saved (null when empty). */
+  settings: Record<string, string | null>;
+  /** The labels of required credentials still missing. */
+  missing?: string[];
+  surcharge?: { percent: number; fixed: number } | null;
+  bank_account_id?: number | null;
   webhook_url?: string | null;
-  last_test_at?: string | null;
+  gateway_name?: string | null;
+  last_tested_at?: string | null;
   last_test_ok?: boolean | null;
+  last_test_message?: string | null;
   capabilities?: Partial<GatewayCapabilities>;
 }
 
@@ -79,8 +85,9 @@ function kindOf(raw: Record<string, unknown>): GatewayKind {
   return {
     key: String(raw.key ?? ''),
     name: String(raw.name ?? raw.key ?? ''),
-    countries: (raw.countries as string[]) ?? [],
-    currencies: (raw.currencies as string[]) ?? [],
+    // '*' is the server's "anywhere" / "any currency".
+    countries: ((raw.countries as string[]) ?? []).map((c) => (c === '*' ? 'Anywhere' : c)),
+    currencies: ((raw.currencies as string[]) ?? []).map((c) => (c === '*' ? 'Any currency' : c)),
     capabilities: { checkout: !!caps.checkout, webhook: !!caps.webhook, refund: !!caps.refund, tokens: !!caps.tokens, surcharge: !!caps.surcharge },
     credentials_spec: Array.isArray(spec) ? spec.map((f) => ({ ...f, type: f.type ?? 'text' })) : [],
   };
@@ -91,14 +98,34 @@ export const fetchCatalogue = (signal?: AbortSignal) =>
     (Array.isArray(r) ? r : (r.gateways ?? r.catalogue ?? [])).map(kindOf),
   );
 
-/** The accounts: secrets arrive as hints only, and are kept apart from the plain fields here too. */
+/**
+ * The accounts, from `GET gateways?org_id=` (the legacy route, which answers its verification keys as `gateways` and
+ * the accounts beside them; with no company, the installation-wide ones too). Secrets arrive as hints only.
+ */
 export const fetchGateways = (org: string, signal?: AbortSignal) =>
-  apiGet<{ accounts?: GatewayAccount[]; gateways?: GatewayAccount[] }>('/api/billing/gateways', withOrg(org), signal).then((r) => (r.accounts ?? r.gateways ?? []).filter((a) => a && typeof a === 'object' && 'id' in a));
+  apiGet<{ accounts?: GatewayAccount[] }>('/api/billing/gateways', org ? { org_id: org } : undefined, signal).then((r) =>
+    (Array.isArray(r?.accounts) ? r.accounts : []).filter((a) => a && typeof a === 'object' && 'id' in a).map((a) => ({ ...a, credentials: a.credentials ?? {}, settings: a.settings ?? {} })),
+  );
 
 export const createGateway = (body: GatewayWrite) => apiPost<{ account: GatewayAccount }>('/api/billing/gateways', body);
 export const updateGateway = (id: number, body: Partial<GatewayWrite>) => apiPut<{ account: GatewayAccount }>(`/api/billing/gateways/${id}`, body);
 export const removeGateway = (id: number) => apiDelete(`/api/billing/gateways/${id}`);
-export const testGateway = (id: number) => request<{ ok: boolean; message?: string | null }>('POST', `/api/billing/gateways/${id}/test`, { body: {} });
+export const testGateway = (id: number) => request<{ ok: boolean; message?: string | null; account?: GatewayAccount }>('POST', `/api/billing/gateways/${id}/test`, { body: {} });
+
+/** The pay-link options per company (`GET/PUT gateways/settings?org_id=`, the server's PayOptions). */
+export interface PayOptions {
+  auto_link: boolean;
+  print_qr: boolean;
+  allow_partial: boolean;
+  expiry_days: number;
+  surcharge_pct: number;
+  surcharge_fixed: number;
+  lankaqr_merchant_id: string;
+  save_cards: boolean;
+  post_fees: boolean;
+}
+export const fetchPayOptions = (org: string, signal?: AbortSignal) => apiGet<PayOptions>('/api/billing/gateways/settings', org ? { org_id: org } : undefined, signal);
+export const savePayOptions = (org: string, body: Partial<PayOptions>) => request<PayOptions>('PUT', '/api/billing/gateways/settings', { body, query: org ? { org_id: org } : undefined });
 
 export interface GatewayWrite {
   gateway: string;
@@ -140,26 +167,26 @@ export function credentialsPayload(spec: CredentialField[], values: Record<strin
  * every secret EMPTY — whatever the server sent for it. The hint is shown
  * beside the box, never in it.
  */
-export function initialCredentials(spec: CredentialField[], account: Pick<GatewayAccount, 'credentials'> | null): Record<string, string | boolean> {
+export function initialCredentials(spec: CredentialField[], account: Pick<GatewayAccount, 'settings'> | null): Record<string, string | boolean> {
   const out: Record<string, string | boolean> = {};
   for (const f of spec) {
     if (f.type === 'secret') {
       out[f.key] = '';
       continue;
     }
-    const v = account?.credentials?.[f.key];
+    const v = account?.settings?.[f.key];
     out[f.key] = f.type === 'boolean' ? !!v : typeof v === 'string' && !isMasked(v) ? v : '';
   }
   return out;
 }
 
 /** Required fields still missing: a secret counts as present when one is stored (its hint) or typed. */
-export function missingFields(spec: CredentialField[], values: Record<string, string | boolean | undefined>, account: Pick<GatewayAccount, 'secrets'> | null): string[] {
+export function missingFields(spec: CredentialField[], values: Record<string, string | boolean | undefined>, account: Pick<GatewayAccount, 'credentials'> | null): string[] {
   return spec
     .filter((f) => f.required && f.type !== 'boolean')
     .filter((f) => {
       const typed = typeof values[f.key] === 'string' && (values[f.key] as string).trim() !== '' && !isMasked(values[f.key]);
-      return !typed && !(f.type === 'secret' && account?.secrets?.[f.key]);
+      return !typed && !(f.type === 'secret' && account?.credentials?.[f.key]);
     })
     .map((f) => f.label);
 }
@@ -267,17 +294,19 @@ export interface ReminderSettings {
 export const DEFAULT_STEPS: ReminderStep[] = [-3, 0, 7, 14, 30].map((d) => ({ offset_days: d, channels: ['email'], template_id: null }));
 
 export const fetchReminders = (org: string, signal?: AbortSignal) => apiGet<{ settings?: ReminderSettings } & Partial<ReminderSettings>>('/api/billing/reminders/settings', withOrg(org), signal).then((r) => normaliseReminders(r.settings ?? r));
-export const saveReminders = (org: string, s: ReminderSettings) => request<{ settings?: ReminderSettings }>('PUT', '/api/billing/reminders/settings', { body: { ...s, steps: sortSteps(s.steps) }, query: org ? { org } : undefined });
+export const saveReminders = (org: string, s: ReminderSettings) => request<{ settings?: ReminderSettings }>('PUT', '/api/billing/reminders/settings', { body: { ...s, steps: sortSteps(s.steps) }, query: org ? { org_id: org } : undefined });
 
+/** A reminder sent (or, for one invoice, still to come: `status: 'scheduled'` with `due_on`, and no id). */
 export interface ReminderLogRow {
-  id: number;
-  invoice_id: number;
-  number: string | null;
-  client: string | null;
+  id: number | null;
+  invoice_id: number | null;
+  invoice_number: string | null;
+  customer: string | null;
   offset_days: number | null;
   channel: string;
   status: string;
-  at: string | null;
+  sent_at: string | null;
+  due_on?: string | null;
   error?: string | null;
 }
 export const fetchReminderLog = (org: string, signal?: AbortSignal) => apiGet<{ log?: ReminderLogRow[]; items?: ReminderLogRow[] }>('/api/billing/reminders/log', withOrg(org, { per_page: 50 }), signal).then((r) => r.log ?? r.items ?? []);
@@ -315,7 +344,8 @@ export interface MessageTemplate {
   name: string;
   subject: string;
   body: string;
-  channel?: Channel | null;
+  /** The WhatsApp wording, when it differs from the email's. */
+  whatsapp_body?: string | null;
   is_default?: boolean;
   org_id?: number | null;
 }
@@ -324,4 +354,4 @@ export const saveTemplate = (t: Partial<MessageTemplate>) => (t.id ? apiPut<{ te
 export const removeTemplate = (id: number) => apiDelete(`/api/billing/message-templates/${id}`);
 
 /** The placeholders a template may use, filled by the server when it sends. */
-export const PLACEHOLDERS = ['{customer}', '{number}', '{total}', '{due}', '{due_date}', '{pay_link}', '{company}'];
+export const PLACEHOLDERS = ['{customer}', '{company}', '{number}', '{currency}', '{total}', '{due}', '{due_date}', '{days_overdue}', '{pay_link}'];

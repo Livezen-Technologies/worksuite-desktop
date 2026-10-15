@@ -86,13 +86,16 @@ export const updatePayment = (id: number, body: { bank_reference?: string; note?
 export const deletePayment = (id: number) => apiDelete(`/api/billing/payments/${id}`);
 /** `via_gateway` sends the money back through the gateway that took it (G-02); without it, it records a refund already made. */
 export const refundPayment = (id: number, body: { amount: number; reason?: string; paid_on?: string; via_gateway?: boolean }) =>
-  apiPost<{ payment: PaymentDetail; gateway?: { ok: boolean; reference?: string | null; message?: string | null } }>(`/api/billing/payments/${id}/refund`, body);
-/**
- * Allocate: `amount` is in the payment's currency; `rate` (cross-currency, G-17) is what one unit of it is worth in the
- * invoice's, so the invoice is settled by amount × rate and the server posts the realised gain or loss.
- */
-export const allocatePayment = (id: number, allocate: 'auto' | Array<{ invoice_id: number; amount: number; rate?: number }>) =>
+  apiPost<{ payment: PaymentDetail; refund_ref?: string | null }>(`/api/billing/payments/${id}/refund`, body);
+/** Allocate within the payment's own currency: 'auto' settles the oldest first, a list settles exactly. */
+export const allocatePayment = (id: number, allocate: 'auto' | Array<{ invoice_id: number; amount: number }>) =>
   request<{ payment: PaymentDetail; allocation: { allocated: string; count: number; errors: string[] } }>('POST', `/api/billing/payments/${id}/allocate`, { body: { allocate } });
+/**
+ * Settle an invoice in ANOTHER currency (G-17, `POST payments/{id}/allocate-fx`): `payment_amount` is in the payment's
+ * currency and `rate` is one unit of it in the invoice's, so the invoice is settled by payment_amount × rate and the
+ * server posts the realised gain or loss. One invoice per call.
+ */
+export const allocateFx = (id: number, body: { invoice_id: number; payment_amount: number; rate: number }) => request<Record<string, unknown>>('POST', `/api/billing/payments/${id}/allocate-fx`, { body });
 /** The receipt, filed in the Drive: its file id, to download. */
 export const receiptPdf = (id: number) => apiPost<{ file_id: number; name: string }>(`/api/billing/payments/${id}/receipt`, {});
 export const fetchSlips = (id: number, signal?: AbortSignal) => apiGet<{ receipts: Slip[] }>(`/api/billing/payments/${id}/slips`, undefined, signal).then((r) => r.receipts ?? []);
@@ -140,7 +143,8 @@ export const applyNote = (id: number, invoiceId: number, amount: number) => apiP
 /** Take a credit note off an invoice (G-16): the invoice owes it again and the note's balance comes back. */
 export const unapplyNote = (id: number, invoiceId: number) => request<{ note?: NoteDetail }>('POST', `/api/billing/credit-notes/${id}/unapply`, { body: { invoice_id: invoiceId } });
 /** Pay a credit note's unused balance out to the customer (G-16), from a bank account by a payment mode. */
-export const refundCredit = (id: number, body: { amount: number; mode_id: number; bank_account_id?: number }) => request<{ note?: NoteDetail; payment?: { id: number; reference: string } }>('POST', `/api/billing/credit-notes/${id}/refund`, { body });
+export const refundCredit = (id: number, body: { amount: number; mode_id: number; method?: string; bank_account_id?: number }) =>
+  request<{ refund_id: number; reference: string; posting?: unknown }>('POST', `/api/billing/credit-notes/${id}/refund`, { body });
 export const notePdf = (id: number) => apiPost<{ file_id: number; name: string }>(`/api/billing/credit-notes/${id}/pdf`, {});
 /** A customer's issued invoices still owing, in one currency — what a note or a payment can go against. */
 export const openInvoicesOf = (clientId: number, signal?: AbortSignal) =>

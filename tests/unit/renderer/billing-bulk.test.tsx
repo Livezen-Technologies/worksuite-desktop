@@ -12,11 +12,12 @@ vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 
 window.matchMedia ??= ((query: string) => ({ matches: false, media: query, onchange: null, addEventListener: () => undefined, removeEventListener: () => undefined, addListener: () => undefined, removeListener: () => undefined, dispatchEvent: () => false })) as typeof window.matchMedia;
 
-const { apiGet, apiPost } = await import('../../../src/core/api');
+const { apiGet, apiPost, request } = await import('../../../src/core/api');
+const { allocateFx } = await import('../../../src/modules/billing/more');
 const { call } = await import('../../../src/core/bridge');
 const { toast } = await import('../../../src/core/toasts');
 const { app } = await import('../../../src/core/app-state');
-const { bulkSummary, exportRequest, normaliseBulk } = await import('../../../src/modules/billing/actions');
+const { bulkFile, bulkSummary, exportRequest, normaliseBulk } = await import('../../../src/modules/billing/actions');
 const { default: Invoices } = await import('../../../src/modules/billing/Invoices');
 const { billingExportPath } = await import('../../../shared/billing');
 
@@ -67,6 +68,23 @@ describe('billing: a bulk answer', () => {
   });
 });
 
+describe('billing: cross-currency allocation', () => {
+  it('goes to allocate-fx with the amount in the payment’s currency and the rate', async () => {
+    vi.mocked(request).mockResolvedValue({ data: {}, offline: false, cachedAt: null, message: 'Settled at the agreed rate' });
+    await allocateFx(228, { invoice_id: 361, payment_amount: 500, rate: 300 });
+    expect(request).toHaveBeenCalledWith('POST', '/api/billing/payments/228/allocate-fx', { body: { invoice_id: 361, payment_amount: 500, rate: 300 } });
+  });
+});
+
+describe('billing: a bulk PDF', () => {
+  it('downloads by its Drive file, from the id or the path', () => {
+    expect(bulkFile({ results: [], done: 1, refused: 0, file_id: 88, file_url: '/api/files/88/download' })).toEqual({ fileId: '88' });
+    expect(bulkFile({ results: [], done: 1, refused: 0, file_url: '/api/files/91/download' })).toEqual({ fileId: '91' });
+    expect(bulkFile({ results: [], done: 1, refused: 0, file_url: '/api/billing/x/1' })).toEqual({ billingFile: '/api/billing/x/1' });
+    expect(bulkFile({ results: [], done: 1, refused: 0, file_url: 'https://evil.example/x' })).toBeNull();
+  });
+});
+
 describe('billing: exports', () => {
   it('builds the server’s export address from the screen’s filters, never a path the page wrote', () => {
     const x = exportRequest('invoices', 'xlsx', { org: '2', q: 'green', status: '' });
@@ -92,7 +110,8 @@ describe('billing: the bulk bar', () => {
     const confirm = await screen.findByRole('dialog', { name: 'Issue 2 invoices?' });
     fireEvent.click(within(confirm).getByRole('button', { name: 'Issue' }));
 
-    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/billing/invoices/bulk', { ids: [1, 2], action: 'issue' }));
+    // Confirmed in the dialog, so the server's `confirm: true` goes with it (else 422 confirm_required).
+    await waitFor(() => expect(apiPost).toHaveBeenCalledWith('/api/billing/invoices/bulk', { ids: [1, 2], action: 'issue', confirm: true }));
     expect(toast).toHaveBeenCalledWith('success', '1 invoice issued; 1 refused.');
     const results = await screen.findByRole('dialog', { name: 'Issue: 1 done, 1 refused' });
     const items = within(results).getAllByRole('listitem');
@@ -106,12 +125,13 @@ describe('billing: the bulk bar', () => {
 
   it('downloads the one PDF a bulk PDF makes', async () => {
     vi.mocked(apiGet).mockResolvedValue({ invoices: [row(3, 'INV-3', 'sent'), row(4, 'INV-4', 'paid')], total: 2, page: 1, summary: {} });
-    vi.mocked(apiPost).mockResolvedValue({ results: [{ id: 3, ok: true }, { id: 4, ok: true }], done: 2, refused: 0, file_url: '/api/billing/invoices/bulk/files/ab12cd' });
+    // As the server answers it: the one PDF filed in the Drive, as its id and its download path.
+    vi.mocked(apiPost).mockResolvedValue({ results: [{ id: 3, ok: true, number: 'INV-3' }, { id: 4, ok: true, number: 'INV-4' }], done: 2, refused: 0, failed: [], action: 'pdf', file_url: '/api/files/88/download', file_id: 88 });
     wrap(<Invoices org="" narrow={null} outstanding={null} currency={null} canCreate={false} canIssue onOpen={vi.fn()} onNew={vi.fn()} />);
     fireEvent.click(await screen.findByLabelText('Choose every invoice on this page'));
     fireEvent.click(within(screen.getByRole('toolbar', { name: 'With the chosen invoices' })).getByRole('button', { name: 'PDFs' }));
     fireEvent.click(within(await screen.findByRole('dialog', { name: 'One PDF of 2 invoices?' })).getByRole('button', { name: 'PDFs' }));
-    await waitFor(() => expect(call).toHaveBeenCalledWith('transfers:download', expect.objectContaining({ billingFile: '/api/billing/invoices/bulk/files/ab12cd', open: true })));
+    await waitFor(() => expect(call).toHaveBeenCalledWith('transfers:download', expect.objectContaining({ fileId: '88', open: true })));
     expect(apiPost).toHaveBeenCalledWith('/api/billing/invoices/bulk', { ids: [3, 4], action: 'pdf' });
     // Nothing refused: no results sheet, and the selection is cleared.
     expect(screen.queryByRole('dialog')).toBeNull();

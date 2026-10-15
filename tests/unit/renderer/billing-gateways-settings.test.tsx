@@ -44,14 +44,17 @@ const STRIPE = {
     { key: 'secret_key', label: 'Secret key', type: 'secret' as const, required: true },
     { key: 'webhook_secret', label: 'Webhook signing secret', type: 'secret' as const },
     { key: 'statement', label: 'Statement descriptor', type: 'text' as const },
-    { key: 'capture', label: 'Capture at once', type: 'boolean' as const },
   ],
 };
 const ACCOUNT = {
   id: 7, gateway: 'stripe', name: 'Stripe — CreativeFX', org_id: 2, enabled: true, mode: 'live' as const,
-  credentials: { publishable_key: 'pk_live_123', statement: 'CREATIVEFX', capture: true, secret_key: '••••4242' },
-  secrets: { secret_key: '••••4242', webhook_secret: '••••beef' },
+  // As the server's Accounts::shape answers: `credentials` holds each SECRET's masked hint, `settings` the plain fields.
+  credentials: { secret_key: '••••4242', webhook_secret: '••••beef' },
+  settings: { publishable_key: 'pk_live_123', statement: 'CREATIVEFX' },
+  missing: [],
   webhook_url: 'https://ws.example.com/api/billing/gateway-hook/7',
+  last_tested_at: null,
+  last_test_ok: null,
 };
 const HINTS = ['••••4242', '••••beef'];
 
@@ -61,15 +64,16 @@ const inputValues = () => Array.from(document.querySelectorAll('input, textarea'
 describe('billing: gateway credentials are write-only', () => {
   it('starts every secret empty, whatever the server sent for it', () => {
     const v = initialCredentials(STRIPE.credentials_spec, ACCOUNT);
-    expect(v).toEqual({ publishable_key: 'pk_live_123', secret_key: '', webhook_secret: '', statement: 'CREATIVEFX', capture: true });
+    expect(v).toEqual({ publishable_key: 'pk_live_123', secret_key: '', webhook_secret: '', statement: 'CREATIVEFX' });
     // A masked hint sent among the plain fields is not taken as a value either.
-    expect(initialCredentials([{ key: 'k', label: 'K', type: 'text' }], { credentials: { k: '••••9999' } })).toEqual({ k: '' });
+    expect(initialCredentials([{ key: 'k', label: 'K', type: 'text' }], { settings: { k: '••••9999' } })).toEqual({ k: '' });
+    expect(initialCredentials([{ key: 'b', label: 'B', type: 'boolean' }], { settings: { b: '1' } })).toEqual({ b: true });
   });
 
   it('sends a secret only when something new was typed, never a hint', () => {
     const spec = STRIPE.credentials_spec;
-    expect(credentialsPayload(spec, { publishable_key: 'pk', secret_key: '', webhook_secret: '••••beef', statement: '', capture: false })).toEqual({ publishable_key: 'pk', statement: '', capture: false });
-    expect(credentialsPayload(spec, { publishable_key: 'pk', secret_key: '  sk_live_new  ', webhook_secret: '', capture: true })).toEqual({ publishable_key: 'pk', secret_key: 'sk_live_new', capture: true });
+    expect(credentialsPayload(spec, { publishable_key: 'pk', secret_key: '', webhook_secret: '••••beef', statement: '' })).toEqual({ publishable_key: 'pk', statement: '' });
+    expect(credentialsPayload(spec, { publishable_key: 'pk', secret_key: '  sk_live_new  ', webhook_secret: '' })).toEqual({ publishable_key: 'pk', secret_key: 'sk_live_new' });
     expect(isMasked('••••4242')).toBe(true);
     expect(isMasked('****4242')).toBe(true);
     expect(isMasked('sk_live')).toBe(false);
@@ -81,6 +85,7 @@ describe('billing: gateway credentials are write-only', () => {
     expect(missingFields(STRIPE.credentials_spec, { publishable_key: '', secret_key: '' }, null)).toEqual(['Publishable key', 'Secret key']);
     expect(missingFields(STRIPE.credentials_spec, { publishable_key: 'pk', secret_key: '' }, ACCOUNT)).toEqual([]);
     expect(missingFields(STRIPE.credentials_spec, { publishable_key: 'pk', secret_key: '••••4242' }, null)).toEqual(['Secret key']);
+    expect(missingFields(STRIPE.credentials_spec, { publishable_key: 'pk', secret_key: '' }, { credentials: { secret_key: null } })).toEqual(['Secret key']);
   });
 });
 
@@ -101,7 +106,7 @@ describe('billing: the gateway form', () => {
     await waitFor(() => expect(apiPut).toHaveBeenCalledTimes(1));
     const [path, body] = vi.mocked(apiPut).mock.calls[0]! as [string, { credentials: Record<string, unknown> }];
     expect(path).toBe('/api/billing/gateways/7');
-    expect(body.credentials).toEqual({ publishable_key: 'pk_live_123', statement: 'CREATIVEFX', capture: true });
+    expect(body.credentials).toEqual({ publishable_key: 'pk_live_123', statement: 'CREATIVEFX' });
     expect(JSON.stringify(body)).not.toMatch(/••••|secret_key|webhook_secret/);
   });
 
@@ -133,13 +138,17 @@ describe('billing: the gateways section', () => {
   it('lists the catalogue with each company’s accounts, tests one, and never shows a secret', async () => {
     vi.mocked(apiGet).mockImplementation(async (path: string) => {
       if (path === '/api/billing/gateways/catalogue') return { gateways: [STRIPE, { key: 'payhere', name: 'PayHere', countries: ['Sri Lanka'], currencies: ['LKR'], capabilities: { checkout: true, tokens: true }, credentialsSpec: [{ key: 'merchant_id', label: 'Merchant ID', type: 'text' }] }] };
-      if (path === '/api/billing/gateways') return { accounts: [ACCOUNT] };
+      // The legacy route: its verification keys as `gateways`, the accounts beside them.
+      if (path === '/api/billing/gateways') return { gateways: { stripe: { configured: true } }, accounts: [ACCOUNT] };
+      if (path === '/api/billing/gateways/settings') return { auto_link: true, print_qr: true, allow_partial: true, expiry_days: 30, surcharge_pct: 0, surcharge_fixed: 0, lankaqr_merchant_id: '', save_cards: true, post_fees: true };
       throw new Error(`unexpected ${path}`);
     });
-    vi.mocked(request).mockResolvedValue({ data: { ok: false, message: 'The secret key was refused.' }, offline: false, cachedAt: null, message: null });
+    vi.mocked(request).mockResolvedValue({ data: { ok: false, message: 'The secret key was refused.', account: ACCOUNT }, offline: false, cachedAt: null, message: 'The secret key was refused.' });
     wrap(<Gateways may org="2" orgs={[{ id: 2, name: 'CreativeFX' }]} />);
 
     const stripe = await screen.findByText('Stripe');
+    expect(apiGet).toHaveBeenCalledWith('/api/billing/gateways', { org_id: '2' }, expect.any(AbortSignal));
+    expect(await screen.findByText('Pay-link options')).toBeTruthy();
     const card = stripe.closest('[data-gateway]') as HTMLElement;
     expect(within(card).getByText('Connected')).toBeTruthy();
     expect(within(card).getByText('Saved cards')).toBeTruthy();

@@ -43,7 +43,8 @@ const invoice = {
   issue_date: '2026-07-27', due_date: '2026-08-10', po_number: null, file_id: null, sent_at: null, paid_at: null, days_overdue: 0,
   contact: null, contact_email: 'ap@greenleaf.lk', billing_address: null, notes: null, terms: null, payment_terms_days: 14, cancel_reason: null,
   lines: [{ id: 1, product_id: null, description: 'Discovery', quantity: 1, unit_price: 300000, discount_pct: 0, tax_rate_ids: [] }],
-  tax_breakdown: [{ name: 'VAT', rate: 18, is_compound: false, amount: 54000 }], allocations: { payments: [], credits: [] }, timeline: [], journal: 'JRN-02218',
+  tax_breakdown: [{ name: 'VAT', rate: 18, is_compound: false, amount: 54000 }], allocations: { payments: [], credits: [] }, timeline: [], journal: { id: 2218, journal_no: 'JRN-02218', status: 'posted', reversed: false },
+  approval: { status: null, note: null, submitted_by: null, submitted_at: null, approved_by: null, approved_at: null, rule: null, required: null, can_approve: false },
 };
 
 function serve() {
@@ -51,7 +52,16 @@ function serve() {
     if (path === '/api/billing/invoices/361') return { invoice, editable: false };
     if (path === '/api/billing/taxes') return { taxes: [] };
     if (path.endsWith('/pay-link')) return { url: 'https://ws.example.com/pay/i/tok', token: 'tok', expires_at: null };
-    if (path === '/api/billing/reminders/log') return { log: [] };
+    if (path === '/api/billing/reminders/log')
+      return {
+        upcoming: [{ id: null, invoice_id: 361, offset_days: 14, channel: 'email', status: 'scheduled', sent_at: null, due_on: '2026-08-24' }],
+        items: [{ id: 5, invoice_id: 361, offset_days: 7, channel: 'email', status: 'sent', sent_at: '2026-08-17 09:00:00' }],
+        log: [
+          { id: null, invoice_id: 361, offset_days: 14, channel: 'email', status: 'scheduled', sent_at: null, due_on: '2026-08-24' },
+          { id: 5, invoice_id: 361, offset_days: 7, channel: 'email', status: 'sent', sent_at: '2026-08-17 09:00:00' },
+        ],
+        meta: { total: 1 },
+      };
     return {};
   });
 }
@@ -75,9 +85,18 @@ describe('billing: why a cancel was refused', () => {
 describe('billing: cancelling an invoice', () => {
   it('says the journal is reversed, and on a locked period offers a credit note instead', async () => {
     serve();
-    vi.mocked(apiPost).mockRejectedValue(new ApiError(409, 'The July 2026 period is locked, so INV-00361 cannot be reversed.', 'period_locked', { suggest: 'credit_note' }));
+    // As the server sends it: `code` at the top and in `errors`, with `errors.suggest`.
+    vi.mocked(apiPost).mockRejectedValue(new ApiError(409, 'The July 2026 period is locked, so INV-00361 cannot be reversed.', 'period_locked', { code: 'period_locked', period: '2026-07', suggest: 'credit_note' }));
     const onCredit = vi.fn();
     wrap(<InvoiceView id={361} org="2" onClose={vi.fn()} onOpen={vi.fn()} onOpenPayment={vi.fn()} onOpenNote={vi.fn()} onCredit={onCredit} />);
+
+    // The side panel reads the server's shapes: the journal's number, the reminders sent and the next scheduled one.
+    const aside = await screen.findByRole('complementary', { name: 'Details' });
+    expect(within(aside).getByText('JRN-02218')).toBeTruthy();
+    await waitFor(() => expect(aside.textContent).toMatch(/\+7 sent/));
+    expect(aside.textContent).toMatch(/Next: \+14/);
+    // No approval rule applies, so a draft-only Submit is not offered on an issued invoice either.
+    expect(screen.queryByRole('button', { name: 'Submit for approval' })).toBeNull();
 
     fireEvent.click(await screen.findByRole('button', { name: 'More' }));
     fireEvent.click(await screen.findByRole('menuitem', { name: /Cancel invoice/ }));

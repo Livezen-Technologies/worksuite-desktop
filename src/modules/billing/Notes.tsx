@@ -419,8 +419,9 @@ function RefundCreditSheet({ n, onClose }: { n: NoteDetail; onClose: () => void 
   const send = async () => {
     setBusy(true);
     try {
-      const r = await refundCredit(n.id, { amount: sum, mode_id: Number(mode), ...(bank ? { bank_account_id: Number(bank) } : {}) });
-      toast('success', r.message ?? `${amount(sum, n.currency)} refunded to ${n.client ?? 'the customer'}${r.data.payment ? ` (${r.data.payment.reference})` : ''}.`);
+      const chosenMode = active.find((m) => String(m.id) === mode);
+      const r = await refundCredit(n.id, { amount: sum, mode_id: Number(mode), ...(chosenMode ? { method: chosenMode.kind } : {}), ...(bank ? { bank_account_id: Number(bank) } : {}) });
+      toast('success', r.message ?? `${amount(sum, n.currency)} refunded to ${n.client ?? 'the customer'}${r.data?.reference ? ` (${r.data.reference})` : ''}.`);
       void qc.invalidateQueries({ queryKey: K.all });
       onClose();
     } catch (e) {

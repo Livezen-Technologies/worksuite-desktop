@@ -10,7 +10,7 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Sheet, SidePanel } from '../hr/parts';
 import { amount, can, K, METHODS, methodLabel, unallocate } from './api';
-import { allocatePayment, converted, deletePayment, fetchPayment, fetchPayments, fetchSlips, KB, oldestFirst, openInvoicesOf, PER_PAGE, receiptPdf, refundable, refundPayment, removeSlip, uploadSlip, type PaymentDetail } from './more';
+import { allocateFx, allocatePayment, converted, deletePayment, fetchPayment, fetchPayments, fetchSlips, KB, oldestFirst, openInvoicesOf, PER_PAGE, receiptPdf, refundable, refundPayment, removeSlip, uploadSlip, type PaymentDetail } from './more';
 import { money, StatusChip } from './parts';
 import { Checkbox } from '../../components/Checkbox';
 import { exportRequest } from './actions';
@@ -362,14 +362,34 @@ function AllocateSheet({ p, onClose }: { p: PaymentDetail; onClose: () => void }
   const entered = invoices.reduce((s, i) => s + (Number(value(i.id)) || 0), 0);
   const over = entered > p.unallocated + 0.005;
   const missingRate = other.some((i) => (Number(value(i.id)) || 0) > 0 && !(rateOf(i.id) > 0));
+  /**
+   * Same-currency invoices go in one `allocate`; each invoice in another currency is its own `allocate-fx` with the
+   * amount in the payment's currency and the rate (G-17). A refusal of one is said and the others still go.
+   */
   const send = async (spec: 'auto' | Array<{ invoice_id: number; amount: number; rate?: number }>) => {
     setBusy(true);
     try {
-      const r = await allocatePayment(p.id, spec);
-      const n = r.data.allocation.count;
-      for (const e of r.data.allocation.errors) toast('error', e);
+      const plain = spec === 'auto' ? 'auto' : spec.filter((x) => x.rate === undefined).map(({ invoice_id, amount: a }) => ({ invoice_id, amount: a }));
+      const fx = spec === 'auto' ? [] : spec.filter((x) => x.rate !== undefined);
+      let n = 0;
+      let errors = 0;
+      if (plain === 'auto' || plain.length) {
+        const r = await allocatePayment(p.id, plain);
+        n += r.data.allocation.count;
+        errors += r.data.allocation.errors.length;
+        for (const e of r.data.allocation.errors) toast('error', e);
+      }
+      for (const x of fx) {
+        try {
+          await allocateFx(p.id, { invoice_id: x.invoice_id, payment_amount: x.amount, rate: x.rate! });
+          n += 1;
+        } catch (e) {
+          errors += 1;
+          toast('error', errorMessage(e));
+        }
+      }
       if (n) toast('success', `Allocated across ${n} ${n === 1 ? 'invoice' : 'invoices'}.`);
-      else if (!r.data.allocation.errors.length) toast('success', 'Nothing was open to allocate against.');
+      else if (!errors) toast('success', 'Nothing was open to allocate against.');
       void qc.invalidateQueries({ queryKey: K.all });
       onClose();
     } catch (e) {
@@ -467,8 +487,8 @@ function RefundSheet({ p, onClose }: { p: PaymentDetail; onClose: () => void }) 
     setBusy(true);
     try {
       const r = await refundPayment(p.id, { amount: sum, ...(reason.trim() ? { reason: reason.trim() } : {}), ...(viaGateway ? { via_gateway: true } : {}) });
-      if (viaGateway && r.gateway && !r.gateway.ok) toast('error', r.gateway.message ?? `${p.gateway} refused the refund.`);
-      toast('success', viaGateway ? `Refund of ${amount(sum, p.currency)} sent back through ${p.gateway}${r.gateway?.reference ? ` (${r.gateway.reference})` : ''}.` : `Refund of ${amount(sum, p.currency)} recorded.`);
+      // A gateway that refuses is an error answer (nothing recorded); a success carries the gateway's own reference.
+      toast('success', viaGateway ? `Refund of ${amount(sum, p.currency)} sent back through ${p.gateway}${r.refund_ref ? ` (${r.refund_ref})` : ''}.` : `Refund of ${amount(sum, p.currency)} recorded.`);
       void qc.invalidateQueries({ queryKey: K.all });
       onClose();
     } catch (e) {

@@ -33,10 +33,13 @@ export function InvoiceAside({ inv, canLink, offline }: { inv: InvoiceDetail; ca
             <span className="truncate text-ink">{inv.project}</span>
           </>
         ) : null}
-        {inv.journal ? (
+        {inv.journal?.journal_no ? (
           <>
             <Dt>Journal</Dt>
-            <span className="truncate font-mono text-ink">{inv.journal}</span>
+            <span className="truncate font-mono text-ink">
+              {inv.journal.journal_no}
+              {inv.journal.reversed ? <span className="ml-1 font-sans text-ink-3">(reversed)</span> : null}
+            </span>
           </>
         ) : null}
         {inv.viewed_at ? (
@@ -77,18 +80,19 @@ export function InvoiceAside({ inv, canLink, offline }: { inv: InvoiceDetail; ca
 function Reminders({ id }: { id: number }) {
   const q = useQuery({ queryKey: ['billing', 'invoice', id, 'reminders'], queryFn: ({ signal }) => fetchInvoiceReminders(id, signal), retry: false, staleTime: 60_000 });
   const rows = q.data ?? [];
-  const sent = rows.filter((r) => r.status !== 'scheduled' && r.status !== 'pending');
-  const next = rows.find((r) => r.status === 'scheduled' || r.status === 'pending');
+  // The steps still to come are first, `scheduled` with their date; the rest were sent (or failed).
+  const sent = rows.filter((r) => r.status !== 'scheduled');
+  const next = rows.find((r) => r.status === 'scheduled');
   if (q.error || (!rows.length && !q.isLoading)) return null;
   return (
     <>
       <Head>Reminders</Head>
       <div className="text-ink-2">
-        {sent.length ? sent.map((r) => `${offsetLabel(r.offset_days)} ${r.status === 'failed' ? 'failed' : 'sent'} ${r.at ? dateLabel(r.at) : ''}`.trim()).join(' · ') : 'None sent yet.'}
+        {sent.length ? sent.map((r) => `${offsetLabel(r.offset_days)} ${r.status === 'failed' ? 'failed' : 'sent'} ${r.sent_at ? dateLabel(r.sent_at) : ''}`.trim()).join(' · ') : 'None sent yet.'}
         {next ? (
           <>
             <br />
-            Next: {offsetLabel(next.offset_days)} {next.scheduled_for ? dateLabel(next.scheduled_for) : ''}
+            Next: {offsetLabel(next.offset_days)} {next.due_on ? dateLabel(next.due_on) : ''}
           </>
         ) : null}
       </div>

@@ -231,7 +231,7 @@ function Statement({ customer, org, canSend }: { customer: { id: number; name: s
   const send = async () => {
     setBusy(true);
     try {
-      const r = await sendStatement(customer.id, { from, to });
+      const r = await sendStatement(customer.id, { from, until: to });
       toast('success', r.message ?? `Statement emailed to ${customer.email ?? customer.name}.`);
     } catch (e) {
       toast('error', errorMessage(e));

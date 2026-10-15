@@ -151,16 +151,16 @@ export function Reminders({ may, org }: { may: boolean; org: string }) {
       </Panel>
       <Panel title="Sent lately" bodyClassName="flex flex-col">
         {log.isLoading ? <Spinner /> : null}
-        {(log.data ?? []).slice(0, 30).map((r) => (
-          <div key={r.id} className="flex items-center gap-2.5 border-b border-line/60 px-3.5 py-1.5 text-[12.5px] last:border-b-0">
-            <b className="w-[110px] shrink-0 truncate text-ink">{r.number ?? `#${r.invoice_id}`}</b>
-            <span className="min-w-0 flex-1 truncate text-ink-2">{r.client ?? ''}</span>
+        {(log.data ?? []).slice(0, 30).map((r, i) => (
+          <div key={r.id ?? `next-${i}`} className="flex items-center gap-2.5 border-b border-line/60 px-3.5 py-1.5 text-[12.5px] last:border-b-0">
+            <b className="w-[110px] shrink-0 truncate text-ink">{r.invoice_number ?? (r.invoice_id ? `#${r.invoice_id}` : '—')}</b>
+            <span className="min-w-0 flex-1 truncate text-ink-2">{r.customer ?? ''}</span>
             <span className="w-[50px] shrink-0 text-ink-2 tabular-nums">{offsetLabel(r.offset_days)}</span>
             <span className="w-[80px] shrink-0 text-ink-2">{r.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}</span>
             <span className={cx('w-[80px] shrink-0', r.status === 'failed' ? 'text-danger' : 'text-ink-2')} title={r.error ?? undefined}>
               {r.status}
             </span>
-            <span className="w-[90px] shrink-0 text-ink-3">{r.at ? dateLabel(r.at) : '—'}</span>
+            <span className="w-[90px] shrink-0 text-ink-3">{r.sent_at ? dateLabel(r.sent_at) : r.due_on ? dateLabel(r.due_on) : '—'}</span>
           </div>
         ))}
         {!log.isLoading && !(log.data ?? []).length ? <Empty text={log.error ? errorMessage(log.error) : 'No reminder has been sent yet.'} /> : null}
@@ -194,7 +194,7 @@ export function Templates({ may, org }: { may: boolean; org: string }) {
       sub="The words of invoices, reminders, statements and receipts sent to customers."
       action={
         may ? (
-          <button type="button" className={btnSmall} onClick={() => setEditing({ kind, name: '', subject: '', body: '', channel: 'email', ...(/^\d+$/.test(org) ? { org_id: Number(org) } : {}) })}>
+          <button type="button" className={btnSmall} onClick={() => setEditing({ kind, name: '', subject: '', body: '', ...(/^\d+$/.test(org) ? { org_id: Number(org) } : {}) })}>
             + New template
           </button>
         ) : null
@@ -214,7 +214,7 @@ export function Templates({ may, org }: { may: boolean; org: string }) {
             </b>
             <span className="truncate text-[11.5px] text-ink-3">{t.subject || t.body.slice(0, 80)}</span>
           </span>
-          <span className="w-[80px] shrink-0 text-ink-2">{t.channel === 'whatsapp' ? 'WhatsApp' : 'Email'}</span>
+          <span className="w-[80px] shrink-0 text-ink-2">{t.whatsapp_body ? 'Email, WhatsApp' : 'Email'}</span>
           {may ? (
             <span className="w-[110px] shrink-0 text-right">
               <button type="button" className="font-semibold text-primary hover:underline" onClick={() => setEditing(t)}>
@@ -260,26 +260,15 @@ export function Templates({ may, org }: { may: boolean; org: string }) {
             <Field label="Name">
               <input aria-label="Name" value={editing.name ?? ''} onChange={(e) => setEditing({ ...editing, name: e.target.value })} className={input} />
             </Field>
-            <Field label="Sent by">
-              <Select<Channel>
-                aria-label="Sent by"
-                value={(editing.channel ?? 'email') as Channel}
-                onValueChange={(v) => setEditing({ ...editing, channel: v })}
-                options={[
-                  { value: 'email', label: 'Email' },
-                  { value: 'whatsapp', label: 'WhatsApp' },
-                ]}
-                className={input}
-              />
-            </Field>
           </div>
-          {editing.channel !== 'whatsapp' ? (
-            <Field label="Subject">
-              <input aria-label="Subject" value={editing.subject ?? ''} onChange={(e) => setEditing({ ...editing, subject: e.target.value })} className={input} />
-            </Field>
-          ) : null}
+          <Field label="Subject" hint="The email’s subject">
+            <input aria-label="Subject" value={editing.subject ?? ''} onChange={(e) => setEditing({ ...editing, subject: e.target.value })} className={input} />
+          </Field>
           <Field label="Message" hint={`Filled in when sent: ${PLACEHOLDERS.join(' ')}`}>
             <textarea aria-label="Message" value={editing.body ?? ''} onChange={(e) => setEditing({ ...editing, body: e.target.value })} className={input + ' !h-[180px] resize-none py-2 leading-relaxed'} />
+          </Field>
+          <Field label="WhatsApp text" hint="Optional — without it, WhatsApp gets a short form of the message">
+            <textarea aria-label="WhatsApp text" value={editing.whatsapp_body ?? ''} onChange={(e) => setEditing({ ...editing, whatsapp_body: e.target.value })} className={input + ' !h-[80px] resize-none py-2 leading-relaxed'} />
           </Field>
           <label className="flex items-center gap-2 font-semibold text-ink">
             <Checkbox checked={!!editing.is_default} onChange={(e) => setEditing({ ...editing, is_default: e.target.checked })} />
