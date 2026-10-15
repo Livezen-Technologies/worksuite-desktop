@@ -4,6 +4,21 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-15
+
+- Billing SRS-BIL-001: D1–D3, send, pay links, native settings
+
+**Added**
+
+- D1 dashboard, D2 invoice (Send, Record payment, PDF and ⋯ up front; a Details side panel with payments, reminders and the pay link) and D3 record payment (the company's payment modes and bank account, the oldest-first split shown, the bank slip dropped on the panel, another currency at a rate).
+- The Send dialog (W12, G-05): to and cc, a message template, subject and message, the PDF, a "Pay now" link and WhatsApp, with the server's preview drawn in a sandbox.
+- Pay links (G-02/G-03): copy, show as a QR, regenerate, revoke.
+- Approval before issue (G-14): submit, approve and reject. Cancelling says the journal is reversed (G-01); a locked period's `period_locked` refusal offers a credit note instead.
+- Bulk issue, send, PDF, mark as sent, record payment and cancel, with each refusal and its reason (G-13); exports of invoices, payments, credit notes, customers and reports as CSV, XLSX or PDF, saved to disk; attachments (G-26); statements (G-05); a dispute flag.
+- Multi-line credit and debit notes (G-22), unapply and refund credit (G-16); cross-currency allocation (G-17); refunding through the gateway that took the payment.
+- Native settings (G-37): payment gateways (catalogue, accounts, a form from each gateway's credentials spec with write-only secrets, test), the CRM connector, WooCommerce stores and members — plus payment reminders and message templates.
+- Native banners for the eight `billing.*` events, opening the invoice, payment, note or profile (`shared/billing.ts`); the web's record paths open here; Billing reads offline as last seen, read only.
+
 ## 1.2.0 — 2026-10-03
 
 - The organisation filter is the shared compact switcher (#214): one pill, search, several at once, a default organisation, remembered per person.

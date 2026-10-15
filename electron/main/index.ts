@@ -138,6 +138,7 @@ import { EventDeskPrint } from '../services/event-desk-print';
 import { createRestaurant } from '../services/restaurant';
 import { createProjects } from '../services/projects';
 import { SalesDesk } from '../services/sales-desk';
+import { BillingBanners } from '@shared/billing';
 import { listPrinters } from '../services/print';
 import { OfficeEditorHost } from '../services/office-editor';
 import { OfficeExternal } from '../services/office-external';
@@ -1650,7 +1651,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     openPath: async (path) => void (await shell.openPath(path)),
     reveal: (path) => shell.showItemInFolder(path),
   });
-  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n) || mailAlerts.claim(n) || meetingsDesk.claim(n) || salesDesk.claim(n);
+  // Billing's eight events (SRS-BIL-001 G-10): a banner in Billing's words whose Open goes to the invoice, payment, note or profile.
+  const billingBanners = new BillingBanners({
+    notify: (n) => notifications.notify(n),
+    markRead: (ids) => notifications.markRead(ids),
+    enabled: () => sessionCtl.isReady() && !lock.isLocked() && canOpenApp('billing', sessionCtl.visibleApps()),
+    open: (route) => navigate({ route, source: 'notification' }),
+  });
+  notifications.claim = (n) => supportNotices.claim(n) || projects.claim(n) || mailAlerts.claim(n) || meetingsDesk.claim(n) || salesDesk.claim(n) || billingBanners.claim(n);
   notifications.onRefresh = () => void supportNotices.refreshBadges();
 
   // ── status ─────────────────────────────────────────────────────────────
@@ -2572,6 +2580,13 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     ['/api/oms/overview', 'sales'],
     ['/api/oms/organizations', 'sales'],
     ['/api/oms/orders', 'sales'],
+    // Billing (SRS-BIL-001 §16, per Desktop offline mode): the dashboard, the companies, every invoice list and invoice
+    // opened, payments and customers, so Billing reads offline as last seen. Read only: its writes wait for the connection.
+    ['/api/billing/dashboard', 'billing'],
+    ['/api/billing/organizations', 'billing'],
+    ['/api/billing/invoices', 'billing'],
+    ['/api/billing/payments', 'billing'],
+    ['/api/billing/customers', 'billing'],
     // Hotel PMS keeps the rack and the front desk's lists per property (shared/pms-cache.ts: `pmsCached`), below;
     // the Events tab its options, the events and their gates (shared/event-desk.ts: `eventsCached`).
   ];

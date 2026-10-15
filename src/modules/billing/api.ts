@@ -33,10 +33,11 @@ export const K = {
 
 // ── statuses ────────────────────────────────────────────────────────────
 
-export type InvoiceStatus = 'draft' | 'sent' | 'viewed' | 'partial' | 'paid' | 'overdue' | 'cancelled' | 'refunded';
+export type InvoiceStatus = 'draft' | 'pending_approval' | 'sent' | 'viewed' | 'partial' | 'paid' | 'overdue' | 'cancelled' | 'refunded';
 
 export const STATUS: Record<InvoiceStatus, { label: string; chip: string }> = {
   draft: { label: 'Draft', chip: 'bg-[#F1F2F6] text-[#4A5168] dark:bg-[#1B2542] dark:text-[#C9CFE6]' },
+  pending_approval: { label: 'Awaiting approval', chip: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' },
   sent: { label: 'Sent', chip: 'bg-[#DBEAFE] text-[#1E40AF] dark:bg-[#16203E] dark:text-[#93B4FF]' },
   viewed: { label: 'Viewed', chip: 'bg-[#E0E7FF] text-[#3730A3] dark:bg-[#1E1B4B] dark:text-[#A5B4FC]' },
   partial: { label: 'Part paid', chip: 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' },
@@ -144,6 +145,29 @@ export interface InvoiceDetail extends Invoice {
     credits: Array<{ id: number; credit_id: number; number: string; amount: number }>;
   };
   timeline: Array<{ id: number; kind: string; title: string; body: string | null; author: string | null; at: string }>;
+  /** SRS-BIL-001 additions; absent on a server before it. */
+  /** The issue journal, when Finance has one. */
+  journal?: { id: number; journal_no: string | null; status: string | null; reversed: boolean } | null;
+  disputed?: { reason: string | null; at: string | null; by: string | null } | null;
+  /**
+   * Approval before issue (G-14). `status` is null until it is submitted; `required` (and `rule`) say why the
+   * company's rules ask for it, null when they do not. `submitted_by` and `approved_by` are user ids.
+   */
+  approval?: {
+    status: 'pending' | 'approved' | 'rejected' | null;
+    note: string | null;
+    submitted_by: number | null;
+    submitted_at: string | null;
+    approved_by?: number | null;
+    approved_at?: string | null;
+    rule?: string | null;
+    required?: string | null;
+    can_approve: boolean;
+  } | null;
+  /** The customer's email and phone, to start the Send dialog. */
+  client_email?: string | null;
+  client_phone?: string | null;
+  viewed_at?: string | null;
 }
 
 export interface ListFilters {
@@ -198,8 +222,6 @@ export const markSent = (id: number, how: string) => apiPost<{ invoice: InvoiceD
 export const cancelInvoice = (id: number, reason: string) => apiPost<{ invoice: InvoiceDetail }>(`/api/billing/invoices/${id}/cancel`, reason.trim() ? { reason: reason.trim() } : {});
 export const duplicateInvoice = (id: number) => apiPost<{ invoice: InvoiceDetail }>(`/api/billing/invoices/${id}/duplicate`, {});
 export const deleteDraft = (id: number) => apiDelete(`/api/billing/invoices/${id}`);
-export const bulkInvoices = (action: 'sent' | 'cancel', ids: number[], reason?: string) =>
-  apiPost<{ done: Array<{ id: number; number: string | null }>; failed: Array<{ id: number; number?: string | null; why: string }> }>('/api/billing/invoices/bulk', { action, ids, ...(reason?.trim() ? { reason: reason.trim() } : {}) });
 /** The installation's PDF, filed in the Drive: `{file_id}` to download. For those without `share.download`. */
 export const filePdf = (id: number) => apiPost<{ file_id: number; name: string }>(`/api/billing/invoices/${id}/pdf`, {});
 
@@ -215,7 +237,7 @@ export interface PaymentBody {
   bank_account_id?: number;
   bank_reference?: string;
   note?: string;
-  /** 'auto' settles the oldest first; a list settles exactly; null holds it on account. */
+  /** 'auto' settles the oldest first; a list settles exactly (in its own currency); null holds it on account. */
   allocate: 'auto' | Array<{ invoice_id: number; amount: number }> | null;
 }
 

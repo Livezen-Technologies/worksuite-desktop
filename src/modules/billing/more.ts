@@ -84,9 +84,18 @@ export const fetchPayments = (org: string, f: { q: string; method: string; unall
 export const fetchPayment = (id: number, signal?: AbortSignal) => apiGet<{ payment: PaymentDetail }>(`/api/billing/payments/${id}`, undefined, signal).then((r) => r.payment);
 export const updatePayment = (id: number, body: { bank_reference?: string; note?: string; method?: string; paid_on?: string }) => apiPut<{ payment: PaymentDetail }>(`/api/billing/payments/${id}`, body);
 export const deletePayment = (id: number) => apiDelete(`/api/billing/payments/${id}`);
-export const refundPayment = (id: number, body: { amount: number; reason?: string; paid_on?: string }) => apiPost<{ payment: PaymentDetail }>(`/api/billing/payments/${id}/refund`, body);
+/** `via_gateway` sends the money back through the gateway that took it (G-02); without it, it records a refund already made. */
+export const refundPayment = (id: number, body: { amount: number; reason?: string; paid_on?: string; via_gateway?: boolean }) =>
+  apiPost<{ payment: PaymentDetail; refund_ref?: string | null }>(`/api/billing/payments/${id}/refund`, body);
+/** Allocate within the payment's own currency: 'auto' settles the oldest first, a list settles exactly. */
 export const allocatePayment = (id: number, allocate: 'auto' | Array<{ invoice_id: number; amount: number }>) =>
   request<{ payment: PaymentDetail; allocation: { allocated: string; count: number; errors: string[] } }>('POST', `/api/billing/payments/${id}/allocate`, { body: { allocate } });
+/**
+ * Settle an invoice in ANOTHER currency (G-17, `POST payments/{id}/allocate-fx`): `payment_amount` is in the payment's
+ * currency and `rate` is one unit of it in the invoice's, so the invoice is settled by payment_amount × rate and the
+ * server posts the realised gain or loss. One invoice per call.
+ */
+export const allocateFx = (id: number, body: { invoice_id: number; payment_amount: number; rate: number }) => request<Record<string, unknown>>('POST', `/api/billing/payments/${id}/allocate-fx`, { body });
 /** The receipt, filed in the Drive: its file id, to download. */
 export const receiptPdf = (id: number) => apiPost<{ file_id: number; name: string }>(`/api/billing/payments/${id}/receipt`, {});
 export const fetchSlips = (id: number, signal?: AbortSignal) => apiGet<{ receipts: Slip[] }>(`/api/billing/payments/${id}/slips`, undefined, signal).then((r) => r.receipts ?? []);
@@ -115,6 +124,7 @@ export interface Note {
   remaining: number;
   issue_date: string | null;
   reason: string | null;
+  org_id?: number | null;
 }
 export interface NoteDetail extends Note {
   lines: Array<{ id: number; description: string; quantity: number; unit_price: number; discount_pct: number; net_total: number; tax_amount: number; line_total: number }>;
@@ -124,12 +134,17 @@ export interface NoteDetail extends Note {
 export const fetchNotes = (org: string, f: { kind: 'credit' | 'debit'; q: string; page: number }, signal?: AbortSignal) =>
   apiGet<{ notes: Note[]; total: number }>('/api/billing/credit-notes', withOrg(org, { kind: f.kind, q: f.q.trim() || undefined, page: f.page, per_page: PER_PAGE }), signal);
 export const fetchNote = (id: number, signal?: AbortSignal) => apiGet<{ note: NoteDetail }>(`/api/billing/credit-notes/${id}`, undefined, signal).then((r) => r.note);
-export const createNote = (body: { kind: 'credit' | 'debit'; client_id?: number; invoice_id?: number; org_id?: number; reason?: string; lines: Array<{ description: string; quantity: number; unit_price: number }> }) =>
+export const createNote = (body: { kind: 'credit' | 'debit'; client_id?: number; invoice_id?: number; org_id?: number; reason?: string; lines: Array<{ description: string; quantity: number; unit_price: number; tax_rate_ids?: number[] }> }) =>
   apiPost<{ note: NoteDetail }>('/api/billing/credit-notes', body);
 export const deleteNote = (id: number) => apiDelete(`/api/billing/credit-notes/${id}`);
 /** Issue: numbered; a credit note raised against an invoice is applied to it at once. */
 export const issueNote = (id: number) => request<{ note: NoteDetail; applied: string | null }>('POST', `/api/billing/credit-notes/${id}/issue`, { body: {} });
 export const applyNote = (id: number, invoiceId: number, amount: number) => apiPost<{ applied: string }>(`/api/billing/credit-notes/${id}/apply`, { invoice_id: invoiceId, amount });
+/** Take a credit note off an invoice (G-16): the invoice owes it again and the note's balance comes back. */
+export const unapplyNote = (id: number, invoiceId: number) => request<{ note?: NoteDetail }>('POST', `/api/billing/credit-notes/${id}/unapply`, { body: { invoice_id: invoiceId } });
+/** Pay a credit note's unused balance out to the customer (G-16), from a bank account by a payment mode. */
+export const refundCredit = (id: number, body: { amount: number; mode_id: number; method?: string; bank_account_id?: number }) =>
+  request<{ refund_id: number; reference: string; posting?: unknown }>('POST', `/api/billing/credit-notes/${id}/refund`, { body });
 export const notePdf = (id: number) => apiPost<{ file_id: number; name: string }>(`/api/billing/credit-notes/${id}/pdf`, {});
 /** A customer's issued invoices still owing, in one currency — what a note or a payment can go against. */
 export const openInvoicesOf = (clientId: number, signal?: AbortSignal) =>
@@ -312,6 +327,12 @@ export interface BillingAccess {
 export const fetchBillingAccess = (signal?: AbortSignal) => apiGet<BillingAccess>('/api/billing/access', undefined, signal);
 
 // ── pure helpers ────────────────────────────────────────────────────────
+
+/** A multi-line note's total before tax, to the cent: the server's figures replace it once saved. */
+export const notesTotal = (lines: Array<{ quantity: number | string; unit_price: number | string }>) => Math.round(lines.reduce((s, l) => s + (Number(l.quantity) || 0) * (Number(l.unit_price) || 0), 0) * 100) / 100;
+
+/** A payment's amount in an invoice's currency at `rate` (one unit of the payment's currency in the invoice's), to the cent. */
+export const converted = (amount: number, rate: number) => Math.round(amount * rate * 100) / 100;
 
 /** How much of a payment can still be refunded: only what is not set against invoices. */
 export const refundable = (p: Pick<PaymentDetail, 'direction' | 'unallocated'>) => (p.direction === 'in' ? Math.max(0, Number(p.unallocated) || 0) : 0);

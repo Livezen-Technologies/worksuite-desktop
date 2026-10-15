@@ -16,7 +16,9 @@ import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
  * Addressed as `/billing?tab=dash|inv|pay|cn|rec|cus|rep|set`:
  * - an invoice as `?invoice=<id>` or `/billing/invoices/<id>` (what the
  *   server's notifications and shares link to), opened as a tab above the
- *   list; `&status=` narrows the list;
+ *   list; `&status=` narrows the list; the web's other record paths
+ *   (`/billing/payments/<id>`, `/credit-notes/<id>`, `/recurring/<id>`,
+ *   `/customers/<id>`) and `?recurring=` open their record the same way;
  * - a payment as `?tab=pay&payment=<id>` (`&unallocated=1` for money on
  *   account); a note as `?tab=cn&note=<id>` (`&kind=debit`); a customer as
  *   `?tab=cus&customer=<id>`; a recurring profile as `?tab=rec&profile=<id>`;
@@ -59,13 +61,22 @@ export default function BillingShell(_props: ModuleProps) {
     setSeenOrg(requestedOrg);
     if (requestedOrg !== null) setOrg(requestedOrg);
   }
-  const fromPath = path[path.length - 2] === 'invoices' ? num(path[path.length - 1]) : null;
+  // The web's own record paths, as a notification or a share may word them: /billing/{invoices|payments|credit-notes|recurring|customers}/<id>.
+  const pathKind = path[path.length - 2] ?? '';
+  const pathId = num(path[path.length - 1]);
+  const fromPath = pathKind === 'invoices' || pathKind === 'invoice' ? pathId : null;
   const invoice = num(query.get('invoice')) ?? fromPath;
+  const pathView: BillView | null = pathId ? (({ payments: 'pay', payment: 'pay', 'credit-notes': 'cn', notes: 'cn', recurring: 'rec', customers: 'cus' } as Record<string, BillView>)[pathKind] ?? null) : null;
+  const paymentId = num(query.get('payment')) ?? (pathView === 'pay' ? pathId : null);
+  const noteId = num(query.get('note')) ?? num(query.get('credit_note')) ?? (pathView === 'cn' ? pathId : null);
+  const profileId = num(query.get('profile')) ?? num(query.get('recurring')) ?? (pathView === 'rec' ? pathId : null);
+  const customerId = num(query.get('customer')) ?? (pathView === 'cus' ? pathId : null);
   const creating = query.get('new') === '1';
   const paying = query.get('pay') === '1';
   const narrow = query.get('status');
   const asked = (query.get('tab') ?? '') as BillView;
-  const view: BillView = asked && NATIVE.has(asked) && (asked !== 'set' || has('billing.settings')) ? asked : invoice || narrow ? 'inv' : 'dash';
+  const implied: BillView | null = pathView ?? (query.get('payment') ? 'pay' : query.get('note') || query.get('credit_note') ? 'cn' : query.get('recurring') || query.get('profile') ? 'rec' : query.get('customer') ? 'cus' : null);
+  const view: BillView = asked && NATIVE.has(asked) && (asked !== 'set' || has('billing.settings')) ? asked : (implied ?? (invoice || narrow ? 'inv' : 'dash'));
   const [open, setOpen] = useState<number[]>(invoice ? [invoice] : []);
   // An invoice asked for by address joins the open tabs.
   if (invoice && !open.includes(invoice)) setOpen(openTab(open, invoice));
@@ -131,7 +142,7 @@ export default function BillingShell(_props: ModuleProps) {
       </SidePanel>
       <main className="min-w-0 flex-1 overflow-y-auto bg-ground scroll-thin" aria-label={`Billing · ${TITLES[view]}`}>
         <Suspense fallback={<Spinner />}>
-          {view === 'dash' ? <Dashboard data={dash} onOpen={openInvoice} onNew={() => go('/billing?tab=inv&new=1')} onPay={() => go(`${here}&pay=1`)} onList={(s) => list(s)} canCreate={canCreate} canPay={has('billing.payment')} /> : null}
+          {view === 'dash' ? <Dashboard data={dash} onOpen={openInvoice} onPay={() => go(`${here}&pay=1`)} onList={(s) => list(s)} onOpenProfile={(id) => openProfile(id)} canPay={has('billing.payment')} /> : null}
           {view === 'inv' ? (
             <div className="flex flex-col">
               {open.length ? (
@@ -160,11 +171,11 @@ export default function BillingShell(_props: ModuleProps) {
               </div>
             </div>
           ) : null}
-          {view === 'pay' ? <Payments org={org} openId={num(query.get('payment'))} onlyUnallocated={query.get('unallocated') === '1'} onOpen={openPayment} onOpenInvoice={openInvoice} onRecord={() => go(`${here}&pay=1`)} /> : null}
+          {view === 'pay' ? <Payments org={org} openId={paymentId} onlyUnallocated={query.get('unallocated') === '1'} onOpen={openPayment} onOpenInvoice={openInvoice} onRecord={() => go(`${here}&pay=1`)} /> : null}
           {view === 'cn' ? (
             <Notes
               org={org}
-              openId={num(query.get('note'))}
+              openId={noteId}
               kind={kind}
               creating={creating}
               against={num(query.get('against'))}
@@ -175,8 +186,10 @@ export default function BillingShell(_props: ModuleProps) {
               onOpenInvoice={openInvoice}
             />
           ) : null}
-          {view === 'cus' ? <Customers org={org} openId={num(query.get('customer'))} onOpen={(id) => go(`/billing?tab=cus${id ? `&customer=${id}` : ''}`)} onOpenInvoice={openInvoice} onOpenPayment={(id) => openPayment(id)} onOpenProfile={(id) => openProfile(id)} /> : null}
-          {view === 'rec' ? <Recurring org={org} openId={num(query.get('profile'))} creating={creating} onOpen={openProfile} onNew={() => go(`${here}&new=1`)} onCloseNew={(id) => (id ? openProfile(id) : go(here))} onOpenInvoice={openInvoice} /> : null}
+          {view === 'cus' ? (
+            <Customers org={org} openId={customerId} onOpen={(id) => go(`/billing?tab=cus${id ? `&customer=${id}` : ''}`)} onOpenInvoice={openInvoice} onOpenPayment={(id) => openPayment(id)} onOpenProfile={(id) => openProfile(id)} />
+          ) : null}
+          {view === 'rec' ? <Recurring org={org} openId={profileId} creating={creating} onOpen={openProfile} onNew={() => go(`${here}&new=1`)} onCloseNew={(id) => (id ? openProfile(id) : go(here))} onOpenInvoice={openInvoice} /> : null}
           {view === 'rep' ? <BillReports org={org} onOpenPayment={(id) => openPayment(id)} /> : null}
           {view === 'set' ? <BillSettings org={org} /> : null}
           {creating && (view === 'inv' || view === 'dash') ? <NewInvoice org={org} onClose={(id) => (id ? openInvoice(id) : go(here))} /> : null}

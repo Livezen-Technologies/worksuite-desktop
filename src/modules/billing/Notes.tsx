@@ -9,16 +9,19 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Field, input, PageHead, Seg, Sheet, SidePanel } from '../hr/parts';
-import { amount, can, fetchInvoice, K, searchCustomers, useBillingOrgs, type Customer } from './api';
-import { applyNote, createNote, deleteNote, fetchNote, fetchNotes, issueNote, KB, notePdf, openInvoicesOf, PER_PAGE, type NoteDetail } from './more';
+import { amount, can, fetchBankAccounts, fetchInvoice, K, searchCustomers, useBillingOrgs, type Customer } from './api';
+import { applyNote, createNote, deleteNote, fetchModes, fetchNote, fetchNotes, issueNote, KB, notePdf, notesTotal, openInvoicesOf, PER_PAGE, refundCredit, unapplyNote, type NoteDetail } from './more';
+import { exportRequest } from './actions';
 import { Facts, Section } from './Payments';
 
 /**
- * Credit and debit notes (BillCredit). An issued invoice's figures never
+ * Credit and debit notes (BillCredit, W7). An issued invoice's figures never
  * change; a credit note reduces what is owed and a debit note adds to it.
- * A credit note raised against an invoice is applied to it the moment it is
- * issued; one raised on its own is a balance the customer can spend on any
- * later invoice, applied from here. Only drafts can be changed or deleted.
+ * A note has as many lines as it needs (G-22). A credit note raised against
+ * an invoice is applied to it the moment it is issued; one raised on its own
+ * is a balance the customer can spend on any later invoice, applied from
+ * here — and taken off an invoice again (unapply), or paid out to the
+ * customer (refund credit, G-16). Only drafts can be changed or deleted.
  * All of it needs `billing.credit`.
  */
 export default function Notes({ org, openId, kind, creating, against, onOpen, onKind, onNew, onCloseNew, onOpenInvoice }: {
@@ -46,6 +49,19 @@ export default function Notes({ org, openId, kind, creating, against, onOpen, on
   return (
     <div className="flex flex-col gap-3 px-6 py-5">
       <PageHead title={kind === 'credit' ? 'Credit notes' : 'Debit notes'} sub={kind === 'credit' ? 'What reduces what a customer owes' : 'What adds to what a customer owes'}>
+        <button
+          type="button"
+          className={btn}
+          title="Saved to disk as CSV — see Transfers"
+          onClick={() =>
+            void call('transfers:download', exportRequest('credit-notes', 'csv', { org, q: q.trim() || undefined, status: kind })).then(
+              () => toast('success', 'Exporting — see Transfers.'),
+              (e) => toast('error', errorMessage(e)),
+            )
+          }
+        >
+          <Icon name="download" size={14} /> Export
+        </button>
         {can(perms, 'billing.credit') ? (
           <button type="button" className={btnPrimary} onClick={onNew}>
             <Icon name="plus" size={15} /> New {word}
@@ -122,7 +138,7 @@ function NoteStatus({ status }: { status: string }) {
   return <span className={cx('inline-flex h-[22px] items-center rounded-[11px] px-2 text-[11.5px] font-bold', draft ? 'bg-subtle text-ink-2' : status === 'cancelled' ? 'bg-subtle text-ink-3' : 'bg-success-bg text-success')}>{draft ? 'Draft' : status === 'cancelled' ? 'Cancelled' : 'Issued'}</span>;
 }
 
-type Asking = 'issue' | 'delete' | 'apply';
+type Asking = 'issue' | 'delete' | 'apply' | 'refund';
 
 function NotePanel({ id, onClose, onOpenInvoice }: { id: number; onClose: () => void; onOpenInvoice: (id: number) => void }) {
   const qc = useQueryClient();
@@ -194,6 +210,11 @@ function NotePanel({ id, onClose, onOpenInvoice }: { id: number; onClose: () => 
                 Apply to an invoice
               </button>
             ) : null}
+            {may && n.kind === 'credit' && !draft && n.remaining > 0 ? (
+              <button type="button" className={btnSmall} title="Pay the unused balance out to the customer" onClick={() => setAsking('refund')}>
+                Refund credit
+              </button>
+            ) : null}
             <button type="button" className={btnSmall} onClick={() => void pdf()}>
               <Icon name="download" size={13} className="mr-1" /> PDF
             </button>
@@ -250,6 +271,17 @@ function NotePanel({ id, onClose, onOpenInvoice }: { id: number; onClose: () => 
                       {a.number ?? `#${a.invoice_id}`}
                     </button>
                     <b className="text-ink tabular-nums">{amount(a.amount, n.currency)}</b>
+                    {may && !draft ? (
+                      <button
+                        type="button"
+                        className="text-[12px] font-semibold text-danger hover:underline"
+                        disabled={busy}
+                        title="Take it off this invoice: the invoice owes it again"
+                        onClick={() => void run(() => unapplyNote(n.id, a.invoice_id), `Taken off ${a.number ?? 'the invoice'}; the credit is unused again.`)}
+                      >
+                        Unapply
+                      </button>
+                    ) : null}
                   </div>
                 ))
               ) : (
@@ -258,6 +290,7 @@ function NotePanel({ id, onClose, onOpenInvoice }: { id: number; onClose: () => 
             </Section>
           ) : null}
           {asking === 'apply' ? <ApplySheet n={n} onClose={() => setAsking(null)} /> : null}
+          {asking === 'refund' ? <RefundCreditSheet n={n} onClose={() => setAsking(null)} /> : null}
           {asking === 'issue' || asking === 'delete' ? (
             <Sheet
               title={asking === 'issue' ? `Issue this ${n.kind} note?` : 'Delete this draft?'}
@@ -369,6 +402,86 @@ function ApplySheet({ n, onClose }: { n: NoteDetail; onClose: () => void }) {
   );
 }
 
+/** Pay a credit note's unused balance out (G-16): how much, by which payment mode, from which bank account. */
+function RefundCreditSheet({ n, onClose }: { n: NoteDetail; onClose: () => void }) {
+  const qc = useQueryClient();
+  const perms = useStore(app, (s) => s.bootstrap?.permissions);
+  const org = n.org_id ? String(n.org_id) : '';
+  const modes = useQuery({ queryKey: KB.modes(org), queryFn: ({ signal }) => fetchModes(org, signal), staleTime: 300_000 });
+  const canBank = !!perms && (perms.includes('*') || perms.includes('finance.view'));
+  const banks = useQuery({ queryKey: ['billing', 'banks', org], queryFn: ({ signal }) => fetchBankAccounts(Number(org), signal), enabled: canBank && !!org, retry: false, staleTime: 300_000 });
+  const [value, setValue] = useState(n.remaining.toFixed(2));
+  const [mode, setMode] = useState('');
+  const [bank, setBank] = useState('');
+  const [busy, setBusy] = useState(false);
+  const sum = Number(value.replace(/,/g, '')) || 0;
+  const active = (modes.data ?? []).filter((m) => m.is_active && m.kind !== 'offset');
+  const send = async () => {
+    setBusy(true);
+    try {
+      const chosenMode = active.find((m) => String(m.id) === mode);
+      const r = await refundCredit(n.id, { amount: sum, mode_id: Number(mode), ...(chosenMode ? { method: chosenMode.kind } : {}), ...(bank ? { bank_account_id: Number(bank) } : {}) });
+      toast('success', r.message ?? `${amount(sum, n.currency)} refunded to ${n.client ?? 'the customer'}${r.data?.reference ? ` (${r.data.reference})` : ''}.`);
+      void qc.invalidateQueries({ queryKey: K.all });
+      onClose();
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Sheet
+      title={`Refund credit from ${n.number ?? 'this note'}`}
+      width={440}
+      onClose={onClose}
+      footer={
+        <>
+          <button type="button" className={btn} onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className={btnPrimary} disabled={busy || sum <= 0 || sum > n.remaining + 0.005 || !mode} onClick={() => void send()}>
+            Refund {amount(sum, n.currency)}
+          </button>
+        </>
+      }
+    >
+      <p className="m-0 text-[12.5px] text-ink-3">
+        {amount(n.remaining, n.currency)} unused · {n.client}
+      </p>
+      <Field label="Amount" hint={sum > n.remaining + 0.005 ? <span className="text-danger">More than the unused credit.</span> : undefined}>
+        <input aria-label="Amount" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} className={input + ' tabular-nums'} />
+      </Field>
+      <Field label="Paid out by">
+        <Select<string> aria-label="Paid out by" value={mode} onValueChange={setMode} placeholder={modes.isLoading ? 'Reading…' : 'Choose the payment mode'} options={active.map((m) => ({ value: String(m.id), label: m.name }))} className={input} />
+      </Field>
+      {banks.data ? (
+        <Field label="From the account">
+          <Select<string>
+            aria-label="From the account"
+            value={bank}
+            onValueChange={setBank}
+            options={[{ value: '', label: 'The company default' }, ...banks.data.accounts.map((a) => ({ value: String(a.id), label: `${a.code ? `${a.code} ` : ''}${a.name}`, hint: a.currency ?? undefined }))]}
+            className={input}
+          />
+        </Field>
+      ) : null}
+      <p className="m-0 rounded-[8px] bg-subtle px-3 py-2 text-[12px] text-ink-2">This records money paid back to the customer and posts it. Nothing here sends it.</p>
+    </Sheet>
+  );
+}
+
+type NoteLine = { description: string; quantity: string; unit_price: string };
+const blankLine = (): NoteLine => ({ description: '', quantity: '1', unit_price: '' });
+
+/** The lines a note sends: those with a description or an amount, as numbers. */
+export function noteLinesToSend(lines: NoteLine[]): Array<{ description: string; quantity: number; unit_price: number }> {
+  return lines
+    .map((l) => ({ description: l.description.trim(), quantity: Number(l.quantity.replace(/,/g, '')) || 0, unit_price: Number(l.unit_price.replace(/,/g, '')) || 0 }))
+    .filter((l) => l.quantity > 0 && l.unit_price > 0)
+    .map((l) => ({ ...l, description: l.description || 'Adjustment' }));
+}
+
 /**
  * A new note (BillRecurringSheet "New credit note"): the customer, what it is
  * against (an issued invoice still owing, or nothing), how much and why. With
@@ -385,8 +498,7 @@ function NewNote({ org, kind: startKind, against, onClose }: { org: string; kind
   const [searching, setSearching] = useState(false);
   const [invoice, setInvoice] = useState(against ? String(against) : '');
   const [company, setCompany] = useState(/^\d+$/.test(org) ? org : '');
-  const [value, setValue] = useState('');
-  const [line, setLine] = useState('');
+  const [lines, setLines] = useState<NoteLine[]>([blankLine()]);
   const [reason, setReason] = useState('');
   const [busy, setBusy] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -397,7 +509,8 @@ function NewNote({ org, kind: startKind, against, onClose }: { org: string; kind
   const client = customer ?? (fromInv?.client_id ? ({ id: fromInv.client_id, name: fromInv.client ?? '' } as Customer) : null);
   const open = useQuery({ queryKey: ['billing', 'open-invoices', client?.id], queryFn: ({ signal }) => openInvoicesOf(client!.id, signal), enabled: !!client });
   const chosen = (open.data ?? []).find((i) => String(i.id) === invoice) ?? (fromInv && String(fromInv.id) === invoice ? { id: fromInv.id, number: fromInv.number, due: fromInv.due, currency: fromInv.currency } : undefined);
-  const sum = Number(value.replace(/,/g, '')) || 0;
+  const toSend = noteLinesToSend(lines);
+  const sum = notesTotal(toSend);
   const several = (orgs.data ?? []).length > 1;
   const ready = !!client && sum > 0 && (!!invoice || !several || !!company) && !(kind === 'credit' && chosen && sum > chosen.due + 0.005);
   const search = (q: string) => {
@@ -414,13 +527,7 @@ function NewNote({ org, kind: startKind, against, onClose }: { org: string; kind
     if (!ready || !client) return;
     setBusy(true);
     try {
-      const r = await createNote({
-        kind,
-        client_id: client.id,
-        ...(invoice ? { invoice_id: Number(invoice) } : company ? { org_id: Number(company) } : {}),
-        ...(reason.trim() ? { reason: reason.trim() } : {}),
-        lines: [{ description: line.trim() || reason.trim() || 'Adjustment', quantity: 1, unit_price: sum }],
-      });
+      const r = await createNote({ kind, client_id: client.id, ...(invoice ? { invoice_id: Number(invoice) } : company ? { org_id: Number(company) } : {}), ...(reason.trim() ? { reason: reason.trim() } : {}), lines: toSend });
       toast('success', `Draft ${kind} note saved. Issue it to number it${kind === 'credit' && invoice ? ' and apply it' : ''}.`);
       void qc.invalidateQueries({ queryKey: K.all });
       onClose(r.note.id);
@@ -484,12 +591,52 @@ function NewNote({ org, kind: startKind, against, onClose }: { org: string; kind
           <Select<string> aria-label="Company" searchable value={company} onValueChange={setCompany} placeholder="Choose the company" options={(orgs.data ?? []).map((o) => ({ value: String(o.id), label: o.name }))} className={input} />
         </Field>
       ) : null}
-      <Field label={`Amount${chosen ? ` (${chosen.currency})` : ''}`} hint={kind === 'credit' && chosen && sum > chosen.due + 0.005 ? <span className="text-danger">More than the invoice still owes. Record a refund instead if money is going back.</span> : undefined}>
-        <input aria-label="Amount" inputMode="decimal" value={value} onChange={(e) => setValue(e.target.value)} className={input + ' tabular-nums'} />
-      </Field>
-      <Field label="Line description" hint="Printed on the note">
-        <input aria-label="Line description" value={line} placeholder="Adjustment" onChange={(e) => setLine(e.target.value)} className={input} />
-      </Field>
+      <div className="flex flex-col gap-1.5">
+        <span className="text-[12px] font-semibold text-ink-2">Lines{chosen ? ` (${chosen.currency})` : ''}</span>
+        {lines.map((l, i) => (
+          <div key={i} className="flex items-center gap-1.5">
+            <input
+              aria-label={`Line ${i + 1} description`}
+              value={l.description}
+              placeholder="What it is for"
+              onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, description: e.target.value } : x)))}
+              className={input + ' min-w-0 flex-1'}
+            />
+            <input
+              aria-label={`Line ${i + 1} quantity`}
+              inputMode="decimal"
+              value={l.quantity}
+              onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, quantity: e.target.value } : x)))}
+              className={input + ' !w-[52px] text-right tabular-nums'}
+            />
+            <input
+              aria-label={`Line ${i + 1} rate`}
+              inputMode="decimal"
+              value={l.unit_price}
+              placeholder="0.00"
+              onChange={(e) => setLines(lines.map((x, j) => (j === i ? { ...x, unit_price: e.target.value } : x)))}
+              className={input + ' !w-[96px] text-right tabular-nums'}
+            />
+            <button
+              type="button"
+              aria-label={`Remove line ${i + 1}`}
+              title="Remove"
+              disabled={lines.length === 1}
+              className="flex h-6 w-6 shrink-0 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-danger disabled:opacity-30"
+              onClick={() => setLines(lines.filter((_, j) => j !== i))}
+            >
+              <Icon name="x" size={13} />
+            </button>
+          </div>
+        ))}
+        <span className="flex items-center justify-between">
+          <button type="button" className="text-[12.5px] font-semibold text-primary hover:underline" onClick={() => setLines([...lines, blankLine()])}>
+            + Add a line
+          </button>
+          <b className="text-[12.5px] text-ink tabular-nums">Before tax {amount(sum, chosen?.currency)}</b>
+        </span>
+        {kind === 'credit' && chosen && sum > chosen.due + 0.005 ? <span className="text-[12px] text-danger">More than the invoice still owes. Record a refund instead if money is going back.</span> : null}
+      </div>
       <Field label="Reason">
         <input aria-label="Reason" value={reason} onChange={(e) => setReason(e.target.value)} className={input} />
       </Field>

@@ -1,5 +1,11 @@
 import { keepPreviousData, useQuery } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { useRef, useState, type ReactNode } from 'react';
+import { call, errorMessage } from '../../core/bridge';
+import { toast } from '../../core/toasts';
+import { Icon } from '../../components/Icon';
+import { Menu } from '../../components/Menu';
+import { btn } from '../hr/parts';
+import { exportRequest, type ExportFormat } from './actions';
 import { dateLabel, todayInZone } from '../../core/time';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
@@ -15,7 +21,8 @@ import { money } from './parts';
  * was billed and received, the tax charged and credited, customers, payments
  * and what sold. Figures are in the base currency except ageing, which is as
  * invoiced. The window defaults to this year; ageing is everything owed today.
- * The server has no export for these.
+ * Each one exports as the screen shows it (G-13) — CSV, XLSX where the
+ * server has a writer, or PDF — saved to disk through Transfers.
  */
 const KEY = 'billing.reports.window';
 type Window = { preset: RangePreset; from: string; to: string };
@@ -46,10 +53,32 @@ export default function BillReports({ org, onOpenPayment }: { org: string; onOpe
   const params = { org, from: win.from, to: win.to, group };
   const q = useQuery({ queryKey: KB.report(kind, params), queryFn: ({ signal }) => fetchBillReport(kind, params, signal), placeholderData: keepPreviousData });
   const d = q.data;
+  const [exporting, setExporting] = useState(false);
+  const exportRef = useRef<HTMLButtonElement | null>(null);
+  const save = (format: ExportFormat) =>
+    void call('transfers:download', exportRequest({ report: kind }, format, { org, ...(kind === 'aging' ? {} : { from: win.from, to: win.to }) })).then(
+      () => toast('success', `Exporting ${format.toUpperCase()} — see Transfers.`),
+      (e) => toast('error', errorMessage(e)),
+    );
 
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
-      <PageHead title="Reports" sub="Billing" />
+      <PageHead title="Reports" sub="Billing">
+        <button ref={exportRef} type="button" className={btn} aria-haspopup="menu" aria-expanded={exporting} onClick={() => setExporting((v) => !v)}>
+          <Icon name="download" size={14} /> Export
+        </button>
+        {exporting ? (
+          <Menu
+            label="Export this report"
+            anchor={exportRef}
+            prefer="bottom"
+            align="end"
+            width={220}
+            sections={[{ id: 'fmt', items: (['csv', 'xlsx', 'pdf'] as ExportFormat[]).map((f) => ({ id: f, label: f === 'csv' ? 'CSV' : f === 'xlsx' ? 'Excel (XLSX)' : 'PDF', onSelect: () => save(f) })) }]}
+            onClose={() => setExporting(false)}
+          />
+        ) : null}
+      </PageHead>
       <div className="flex flex-wrap items-center gap-2">
         <Seg<BillReport> label="Report" value={kind} onChange={setKind} options={BILL_REPORTS.map((r) => ({ id: r.id, label: r.label }))} />
         <span className="flex-1" />

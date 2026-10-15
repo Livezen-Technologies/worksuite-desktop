@@ -844,6 +844,30 @@ export const contract = {
         transcriptExport: z.object({ id: z.number().int().positive(), format: z.enum(['txt', 'pdf']) }).optional(),
         /** An invoice as its PDF, on its company's letterhead (the server's share of it). */
         invoicePdf: z.number().int().positive().optional(),
+        /**
+         * A Billing export (SRS-BIL-001 G-13): a list or a report as CSV, XLSX or PDF, filtered as the screen was; or a
+         * customer's statement as a PDF. The main process builds `/api/billing/{what}/export?…` (or the statement's).
+         */
+        billingExport: z
+          .object({
+            what: z.enum(['invoices', 'payments', 'credit-notes', 'customers', 'report', 'statement']),
+            report: z.enum(['aging', 'revenue', 'tax', 'customers', 'payments', 'products', 'numbering-gaps']).optional(),
+            customer: z.number().int().positive().optional(),
+            format: z.enum(['csv', 'xlsx', 'pdf']),
+            org: z.string().regex(/^(\d+(,\d+)*)?$/).optional(),
+            q: z.string().max(100).optional(),
+            status: z.string().regex(/^[a-z_,]{1,100}$/).optional(),
+            from: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+            to: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+          })
+          .refine((v) => (v.what === 'report') === !!v.report && (v.what === 'statement') === !!v.customer, 'a report names its report, a statement its customer')
+          .optional(),
+        /** The one file a Billing bulk act made (`file_url` of `invoices/bulk` with `pdf`): a path on the server's own Billing API or a /d/ grant. */
+        billingFile: z
+          .string()
+          .regex(/^\/(?:api\/billing\/|d\/)[A-Za-z0-9._~/?=&%-]{1,400}$/)
+          .refine((v) => !v.includes('..'), 'no parent paths')
+          .optional(),
         /** A bank slip attached to a payment (Billing › Payments). */
         paymentSlip: z.object({ payment: z.number().int().positive(), slip: z.number().int().positive() }).optional(),
         /** A tender's document, a checklist line's file (or an earlier version of it), or a generated letter. */
@@ -932,7 +956,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.paymentSlip, v.ordersCsv, v.omsReport, v.omsRouteSheet, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.projectsReport, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a route sheet, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, a Projects report, an eLearning lesson file, an Office export, a chat attachment, a task attachment or a chat export'),
+      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.billingExport, v.billingFile, v.paymentSlip, v.ordersCsv, v.omsReport, v.omsRouteSheet, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.projectsReport, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a Billing export or file, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a route sheet, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, a Projects report, an eLearning lesson file, an Office export, a chat attachment, a task attachment or a chat export'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   /**
