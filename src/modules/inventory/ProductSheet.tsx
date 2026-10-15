@@ -7,7 +7,7 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { btn, btnPrimary, Field, input, Sheet } from '../hr/parts';
 import ProductPictures, { sendPictures } from './ProductPictures';
-import { bodyOf, COSTING, createProduct, draftOf, fetchBrands, fetchCategories, fetchProduct, fetchUnits, K, KINDS, TRACKING, treeOf, updateProduct, type Company, type ProductDraft } from './api';
+import { bodyOf, copyDraft, COSTING, createProduct, draftOf, fetchBrands, fetchCategories, fetchProduct, fetchUnits, K, KINDS, TRACKING, treeOf, updateProduct, type Company, type ProductDraft } from './api';
 import { Checkbox } from '../../components/Checkbox';
 
 /**
@@ -28,8 +28,11 @@ export default function ProductSheet({
   onClose,
   onSaved,
   onManageCategories,
+  copyOf = null,
 }: {
   id: number | null;
+  /** Duplicate: a new product filled in from this one. */
+  copyOf?: number | null;
   org: string;
   companies: Company[];
   canCost: boolean;
@@ -42,9 +45,14 @@ export default function ProductSheet({
     queryFn: ({ signal }) => fetchProduct(id!, org, signal),
     enabled: !!id,
   });
-  if (id && existing.isLoading) {
+  const source = useQuery({
+    queryKey: K.product(copyOf ?? 0, org),
+    queryFn: ({ signal }) => fetchProduct(copyOf!, org, signal),
+    enabled: !id && !!copyOf,
+  });
+  if ((id && existing.isLoading) || (!id && copyOf && source.isLoading)) {
     return (
-      <Sheet title="Edit product" side width={600} onClose={onClose} footer={null}>
+      <Sheet title={id ? 'Edit product' : 'New product'} side width={600} onClose={onClose} footer={null}>
         <Spinner />
       </Sheet>
     );
@@ -66,7 +74,7 @@ export default function ProductSheet({
       </Sheet>
     );
   }
-  return <Form key={id ?? 'new'} id={id} org={org} companies={companies} canCost={canCost} initial={draftOf(existing.data?.product)} locked={!!existing.data?.stock_locked} onClose={onClose} onSaved={onSaved} onManageCategories={onManageCategories} />;
+  return <Form key={id ?? 'new'} id={id} org={org} companies={companies} canCost={canCost} initial={!id && source.data ? copyDraft(source.data.product) : draftOf(existing.data?.product)} locked={!!existing.data?.stock_locked} onClose={onClose} onSaved={onSaved} onManageCategories={onManageCategories} />;
 }
 
 function Form({

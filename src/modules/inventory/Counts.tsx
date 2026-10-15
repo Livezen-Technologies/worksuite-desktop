@@ -13,6 +13,7 @@ import { DocChip } from './Adjustments';
 import { countAct, countedOf, countKind, COUNT_KINDS, createCount, deleteCount, fetchCount, fetchCounts, KC, PER, saveCountLines } from './control';
 import { minWidth, Signed } from './parts';
 import { pick, WarehousePick } from './pickers';
+import CountDesk, { countsHere } from './CountDesk';
 
 /**
  * Stock counts (InvCounts): a sheet of what the books say is on the shelves,
@@ -50,6 +51,9 @@ export default function Counts({
   onOpenAdjustment: (id: number) => void;
 }) {
   const [status, setStatus] = useState(initialStatus ?? '');
+  const perms = useStore(app, (s) => s.bootstrap?.permissions);
+  // A sheet open for counting takes the whole screen: the counting desk, which keeps working offline.
+  const opened = useQuery({ queryKey: KC.count(openId ?? 0), queryFn: ({ signal }) => fetchCount(openId!, signal), enabled: !!openId });
   const f = { status, q: '' };
   const list = useInfiniteQuery({
     queryKey: KC.counts(org, { ...f, warehouse }),
@@ -63,6 +67,10 @@ export default function Counts({
   const seesCost = rows.some((r) => r.variance_value !== null);
   const W = { wh: 160, kind: 140, st: 96, counted: 80, vars: 80, val: 96 };
   const min = minWidth(120, [W.wh, W.kind, W.st, W.counted, W.vars, ...(seesCost ? [W.val] : [])]);
+
+  if (openId && opened.data && countsHere(opened.data.count.status, can(perms, 'inventory.adjust'))) {
+    return <CountDesk key={openId} id={openId} detail={opened.data} currency={currency} onBack={() => onOpen(null)} onOpenAdjustment={onOpenAdjustment} />;
+  }
 
   return (
     <div className="flex h-full min-h-0 flex-col gap-3 px-6 py-5">

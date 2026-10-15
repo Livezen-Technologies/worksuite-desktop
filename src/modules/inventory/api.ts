@@ -765,6 +765,11 @@ export function draftOf(p?: Product | null): ProductDraft {
   };
 }
 
+/** A new product started from another (Duplicate): everything but what must be its own — the code and the barcode. */
+export function copyDraft(p: Product): ProductDraft {
+  return { ...draftOf(p), name: `${p.name} (copy)`, code: '', barcode: '' };
+}
+
 /** A typed amount: "10,900" → 10900; blank → null; nonsense → NaN (refused before sending). */
 export function parseAmount(v: string): number | null {
   const t = v.replace(/,/g, '').trim();

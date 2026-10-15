@@ -6,13 +6,16 @@ import { useStore } from '../../core/store';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
-import { can, currencyOf, fetchDashboard, fetchWarehouses, K, useCompanies } from './api';
-import { IN_PURCHASING, InvRail, NATIVE, purchasingRoute, type DocHit, type InvView } from './Rail';
+import { can, currencyOf, fetchDashboard, fetchProduct, fetchWarehouses, K, useCompanies } from './api';
+import { IN_PURCHASING, InvRail, NATIVE, openWeb, purchasingRoute, type DocHit, type InvView } from './Rail';
 import type { TrackTab } from './Tracked';
 import type { MakeTab } from './Manufacturing';
 import type { SetSection } from './Setup';
 import { SidePanel } from '../../components/SidePanel';
 import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
+import { purchaseCan } from '../purchase/api';
+import { closeTab, openTab, parseOpen, productRoute, serializeOpen } from './tabs';
+import { tab360 } from './v2';
 
 /**
  * Inventory (the "Inv*" designs): the rail, and the screen it points at.
@@ -31,6 +34,11 @@ import { recallOrgChoice, rememberOrgChoice } from '../../core/org-prefs';
  * - manufacturing as `?tab=mfg&mt=jobs|boms`, a job `&job=<id>`, a recipe
  *   `&bom=<id>`; `&make=job` (`&jobbom=<id>` from a recipe) starts a job,
  *   `&make=bom` a recipe (`&bomedit=<id>` edits one).
+ * - on the desktop, Products keeps the products opened from it in tabs beside the list: `?tab=prod&open=<id>,<id>&product=<id>`
+ *   (tabs.ts); `&copy=<id>` with `&new=1` duplicates one;
+ * - Product 360 (V2) as `?tab=p360&pid=<id>&p3=overview|general|media|variants|specs|documents|channels|seo`;
+ * - receiving with the scanner as `?tab=rcv` (`&po=<id>` an order); this computer's scanner, printer and offline copy
+ *   as `?tab=dev` and `?tab=off`;
  * - reports as `?tab=rep&r=<report>`; brands, units and attributes
  *   `?tab=lk`; settings `?tab=set&ss=rules|warehouses` (`&whid=<id>` opens a
  *   warehouse); `?tab=acc` is My access.
@@ -61,6 +69,9 @@ const Reports = lazy(() => import('./Reports'));
 const Lookups = lazy(() => import('./Lookups'));
 const Setup = lazy(() => import('./Setup'));
 const MyAccess = lazy(() => import('./MyAccess'));
+const Receive = lazy(() => import('./Receive'));
+const Product360 = lazy(() => import('./Product360'));
+const ThisComputer = lazy(() => import('./ThisComputer'));
 
 const TITLES: Record<InvView, string> = {
   dash: 'Dashboard',
@@ -79,6 +90,10 @@ const TITLES: Record<InvView, string> = {
   lk: 'Brands & units',
   set: 'Settings',
   acc: 'My access',
+  rcv: 'Receiving',
+  p360: 'Product 360',
+  dev: 'Scanner & printer',
+  off: 'Offline data',
 };
 const TRACK_TABS = ['batches', 'serials', 'expiring'] as const;
 const ORG_KEY = 'inventory.org';
@@ -94,7 +109,7 @@ function savedOrg(): string {
 }
 
 export default function InventoryShell(_props: ModuleProps) {
-  const { query, path, go, navigate } = useTab();
+  const { query, path, go, navigate, openInNewTab, openInWindow } = useTab();
   // Purchasing is its own app (SRS-PUR-001 G-21): its entries here open it, for whoever may.
   const buysHere = useCanOpen('purchase');
   const onPurchasing = buysHere ? (v: string, extra = '') => navigate(purchasingRoute(v, extra)) : null;
@@ -124,13 +139,16 @@ export default function InventoryShell(_props: ModuleProps) {
   // An old purchasing address (a notification, a bookmark): it opens in Purchasing, and this tab goes to the dashboard.
   const moved = asked in IN_PURCHASING ? asked : null;
   const view: InvView = asked && NATIVE.has(asked) ? asked : product ? 'prod' : 'dash';
+  // Products in tabs: the one asked for is always among them.
+  const parsedOpen = parseOpen(query.get('open'));
+  const openIds = view === 'prod' && product ? openTab(parsedOpen, product) : parsedOpen;
+  const pid = num(query.get('pid'));
   useEffect(() => {
     if (!moved || !onPurchasing) return;
     onPurchasing(moved, `&${new URLSearchParams(query).toString()}`);
     go('/inventory?tab=dash');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [moved]);
-  useTabTitle(`Inventory · ${TITLES[view]}`);
 
   const companies = useCompanies();
   const list = companies.data ?? [];
@@ -166,6 +184,11 @@ export default function InventoryShell(_props: ModuleProps) {
   const canTransfer = d?.can.transfer ?? has('inventory.transfer');
   const canMake = d?.can.manufacture ?? has('inventory.manufacture');
   const canSettings = d?.can.settings ?? has('inventory.settings');
+  const canReceive = purchaseCan(perms).receive;
+  // The app's tab is named after the product in front, as a document's tab is (products in tabs, Product 360).
+  const named = view === 'p360' ? pid : view === 'prod' ? product : null;
+  const titled = useQuery({ queryKey: K.product(named ?? 0, scope), queryFn: ({ signal }) => fetchProduct(named!, scope, signal), enabled: !!named, staleTime: 60_000 });
+  useTabTitle(named && titled.data ? `${titled.data.product.name}${view === 'p360' ? ' · 360' : ''}` : `Inventory · ${TITLES[view]}`);
   const onSales = sellsHere ? (order?: number) => go(order ? `/sales?tab=orders&order=${order}` : '/sales?tab=orders') : null;
 
   const chooseOrg = (v: string) => {
@@ -181,7 +204,7 @@ export default function InventoryShell(_props: ModuleProps) {
   // Where this screen is, without the one-off asks, to come back to.
   const base = (() => {
     const q = new URLSearchParams(query);
-    for (const k of ['product', 'ptab', 'new', 'edit', 'cats', 'make']) q.delete(k);
+    for (const k of ['product', 'ptab', 'new', 'edit', 'cats', 'make', 'copy']) q.delete(k);
     q.set('tab', view);
     return `/inventory?${q.toString()}`;
   })();
@@ -198,6 +221,13 @@ export default function InventoryShell(_props: ModuleProps) {
     go(`/inventory?${q.toString()}`);
   };
   const start = (what: 'adj' | 'trf' | 'cnt' | 'ops' | 'job' | 'bom') => nav({ make: what });
+  // Products in tabs (tabs.ts): opening one adds its tab; closing one shows its neighbour.
+  const openInPane = (id: number) => go(`/inventory?tab=prod&open=${serializeOpen(openTab(openIds, id))}&product=${id}`);
+  const closePane = (id: number) => {
+    const r = closeTab(openIds, product, id);
+    go(`/inventory?tab=prod${r.ids.length ? `&open=${serializeOpen(r.ids)}` : ''}${r.active ? `&product=${r.active}` : ''}`);
+  };
+  const open360 = (id: number, t = 'overview') => go(`/inventory?tab=p360&pid=${id}${t !== 'overview' ? `&p3=${t}` : ''}`);
   const DOC_ROUTES: Record<string, (id: number) => string> = {
     adj: (id) => `/inventory?tab=adj&adj=${id}`,
     trf: (id) => `/inventory?tab=trf&trf=${id}`,
@@ -235,6 +265,7 @@ export default function InventoryShell(_props: ModuleProps) {
           onOpening={canAdjust ? () => start('ops') : null}
           onSales={onSales}
           onPurchasing={onPurchasing ? (v) => onPurchasing(v) : null}
+          onReceive={canReceive ? () => go('/inventory?tab=rcv') : null}
           counts={counts}
           org={scope}
           companies={list}
@@ -258,6 +289,9 @@ export default function InventoryShell(_props: ModuleProps) {
               onOpenProduct={(id) => openProduct(id)}
               onNewAdjustment={canAdjust ? () => start('adj') : null}
               onSales={onSales ? () => onSales() : null}
+              onReceive={canReceive ? () => go('/inventory?tab=rcv') : null}
+              onNewWindow={() => openInWindow('/inventory?tab=dash', 'Inventory · Dashboard')}
+              onComputer={() => go('/inventory?tab=dev')}
             />
           ) : null}
           {view === 'prod' ? (
@@ -268,10 +302,19 @@ export default function InventoryShell(_props: ModuleProps) {
               canCost={canCost}
               canCatalogue={canCatalogue}
               openId={product}
-              onOpen={(id) => openProduct(id)}
+              onOpen={openInPane}
               onNew={() => go(`${base}&new=1`)}
-              onEdit={(id) => go(`${base}&edit=${id}`)}
+              onEdit={(id) => go(`${base}${product ? `&product=${product}` : ''}&edit=${id}`)}
               onManage={() => cats(true)}
+              openIds={openIds}
+              ptab={query.get('ptab') ?? 'overview'}
+              onPtab={(t) => nav({ ptab: t === 'overview' ? null : t, open: serializeOpen(openIds) })}
+              onCloseTab={closePane}
+              onOpenInTab={(id) => openInNewTab(productRoute(id))}
+              onOpenInWindow={(id) => openInWindow(productRoute(id))}
+              on360={(id) => open360(id)}
+              onAdjust={canAdjust ? () => start('adj') : null}
+              onDuplicate={canCatalogue ? (id) => go(`${base}&new=1&copy=${id}`) : null}
             />
           ) : null}
           {view === 'stock' ? <Stock org={scope} warehouse={wh} warehouses={whs} onWarehouse={setWarehouse} currency={currency} initialFilter={query.get('filter')} onOpenProduct={(id) => openProduct(id)} /> : null}
@@ -344,9 +387,35 @@ export default function InventoryShell(_props: ModuleProps) {
             )
           ) : null}
           {view === 'acc' ? <MyAccess /> : null}
+          {view === 'rcv' ? (
+            canReceive ? (
+              <Receive
+                org={scope}
+                orderId={num(query.get('po'))}
+                onOrder={(id) => go(id ? `/inventory?tab=rcv&po=${id}` : '/inventory?tab=rcv')}
+                onReceipt={(id) => (onPurchasing ? navigate(`/purchase?tab=grn&grn=${id}`) : openWeb('purchasing', `&grn=${id}`))}
+                onOpenOrder={(id) => (onPurchasing ? navigate(`/purchase?tab=po&po=${id}`) : openWeb('purchasing', `&po=${id}`))}
+              />
+            ) : (
+              <p className="m-6 text-[13px] text-ink-2">Receiving goods is for those who may receive them. My access says what you can do here.</p>
+            )
+          ) : null}
+          {view === 'p360' && pid ? (
+            <Product360
+              key={pid}
+              id={pid}
+              tab={tab360(query.get('p3'))}
+              currency={currency}
+              canCatalogue={canCatalogue}
+              onTab={(t) => open360(pid, t)}
+              onBack={() => openInPane(pid)}
+              onEdit={canCatalogue ? () => nav({ edit: String(pid) }) : null}
+            />
+          ) : null}
+          {view === 'dev' || view === 'off' ? <ThisComputer copy={d ? { products: d.counts.products, warehouses: d.counts.warehouses } : null} /> : null}
         </Suspense>
         <Suspense fallback={null}>
-          {product && !creating && !editing ? (
+          {product && !creating && !editing && view !== 'prod' && view !== 'p360' ? (
             <ProductDrawer
               key={product}
               id={product}
@@ -356,10 +425,11 @@ export default function InventoryShell(_props: ModuleProps) {
               onClose={() => openProduct(null)}
               onEdit={canCatalogue ? () => withProduct(`&edit=${product}`) : undefined}
               onOpenProduct={(id) => openProduct(id)}
+              on360={() => open360(product)}
             />
           ) : null}
           {creating || editing ? (
-            <ProductSheet key={editing ?? 'new'} id={editing} org={scope} companies={list} canCost={canCost} onClose={() => (editing ? openProduct(editing) : go(base))} onSaved={(id) => openProduct(id)} onManageCategories={() => cats(true)} />
+            <ProductSheet key={editing ?? `new-${query.get('copy') ?? ''}`} id={editing} copyOf={num(query.get('copy'))} org={scope} companies={list} canCost={canCost} onClose={() => (view === 'p360' ? nav({ edit: null }) : editing && view === 'prod' ? openInPane(editing) : editing ? openProduct(editing) : go(base))} onSaved={(id) => (view === 'p360' ? nav({ edit: null }) : view === 'prod' ? openInPane(id) : openProduct(id))} onManageCategories={() => cats(true)} />
           ) : null}
           {managing ? <Categories org={scope} companies={list} onClose={() => cats(false)} /> : null}
           {make === 'adj' ? <AdjustmentSheet org={scope} warehouses={whs} defaultWarehouse={wh} onClose={() => nav({ make: null })} onSaved={(id) => go(`/inventory?tab=adj&adj=${id}`)} /> : null}

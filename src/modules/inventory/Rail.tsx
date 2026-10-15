@@ -19,10 +19,10 @@ import { OrgSwitcher } from '../../components/OrgSwitcher';
  * a filter, not a mode: it narrows the dashboard, stock and movements, and a
  * document that names its own warehouse ignores it.
  */
-export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk' | 'pur' | 'ven' | 'mfg' | 'rep' | 'rpl' | 'lk' | 'set' | 'acc';
+export type InvView = 'dash' | 'prod' | 'stock' | 'mov' | 'adj' | 'trf' | 'cnt' | 'trk' | 'pur' | 'ven' | 'mfg' | 'rep' | 'rpl' | 'lk' | 'set' | 'acc' | 'rcv' | 'p360' | 'dev' | 'off';
 export type WebView = keyof typeof WEB_VIEW;
 
-export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk', 'mfg', 'rep', 'lk', 'set', 'acc']);
+export const NATIVE = new Set<string>(['dash', 'prod', 'stock', 'mov', 'adj', 'trf', 'cnt', 'trk', 'mfg', 'rep', 'lk', 'set', 'acc', 'rcv', 'p360', 'dev', 'off']);
 
 /** Inventory's purchasing entries, which open the Purchasing app (SRS-PUR-001 G-21): Inventory's view → Purchasing's. */
 export const IN_PURCHASING: Readonly<Record<string, string>> = { pur: 'po', ven: 'ven', rpl: 'rpl' };
@@ -73,6 +73,7 @@ export function InvRail({
   onOpening,
   onSales,
   onPurchasing,
+  onReceive,
   counts,
   org,
   companies,
@@ -92,6 +93,8 @@ export function InvRail({
   onSales: ((order?: number) => void) | null;
   /** A purchasing entry, in the Purchasing app — for those who may open it; left out for anyone else. */
   onPurchasing: ((view: string) => void) | null;
+  /** Receiving with the scanner, for those who may receive goods; left out for anyone else. */
+  onReceive: (() => void) | null;
   counts: RailCounts;
   org: string;
   companies: Company[];
@@ -141,7 +144,7 @@ export function InvRail({
         title={web ? `${label} — opens in your browser` : inSales ? `${label} — opens in Sales & Orders` : inPurchasing ? `${label} — opens in Purchasing` : label}
         aria-current={on ? 'page' : undefined}
         onClick={() => (inSales ? onSales!() : inPurchasing ? onPurchasing!(id) : web ? openWeb(WEB_VIEW[id as WebView]) : onPick(id as InvView))}
-        className={cx('relative flex h-[30px] shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
+        className={cx('relative flex h-8 shrink-0 items-center gap-[9px] rounded-[8px] pr-2 pl-2.5 text-left', on ? 'bg-[#EAEDFB] font-bold text-[#1B2A85] dark:bg-selection dark:text-primary' : 'font-medium text-ink hover:bg-subtle')}
       >
         <span className={cx('absolute top-1.5 bottom-1.5 left-0 w-[3px] rounded-r-[3px]', on ? 'bg-primary' : 'bg-transparent')} />
         <Icon name={icon} size={16} className={cx('shrink-0', on ? 'text-primary' : 'text-ink-3')} />
@@ -150,7 +153,7 @@ export function InvRail({
           <span
             className={cx(
               'flex h-[18px] min-w-5 shrink-0 items-center justify-center rounded-[9px] px-1.5 text-[11px] font-bold tabular-nums',
-              tone === 'amber' ? 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' : 'bg-subtle text-ink-2',
+              tone === 'amber' ? 'bg-[#FFF4E0] text-[#9A4A06] dark:bg-warning-bg dark:text-warning' : 'bg-[#FCE9E4] text-[#B91C1C] dark:bg-danger-bg dark:text-danger',
             )}
           >
             {badge}
@@ -161,7 +164,7 @@ export function InvRail({
       </button>
     );
   };
-  const head = (label: string) => <div className="mt-3 mb-0.5 px-2 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>;
+  const head = (label: string) => <div key={label} className="mt-3 mb-0.5 px-2 first:mt-0 text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>;
   const results = hits.data?.results ?? [];
   const exact = hits.data?.exact ?? null;
 
@@ -225,6 +228,7 @@ export function InvRail({
         </div>
       </div>
       <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-2.5 pb-2.5 scroll-thin">
+        {head('Workspace')}
         {item('dash', 'Dashboard', 'grid')}
         {item('prod', 'Products', 'package')}
         {item('stock', 'Stock', 'box', counts.stock, 'amber')}
@@ -235,6 +239,7 @@ export function InvRail({
         {item('cnt', 'Stock counts', 'list-todo', counts.cnt)}
         {item('trk', 'Batches & serials', 'tag')}
         {head('Trade')}
+        {onReceive ? item('rcv', 'Receiving', 'scan') : null}
         {item('pur', 'Purchasing', 'cart', counts.pur)}
         {item('so', 'Sales orders', 'receipt', counts.so)}
         {item('ven', 'Vendors', 'building')}
@@ -252,6 +257,9 @@ export function InvRail({
         {head('Administration')}
         {item('set', 'Settings', 'settings')}
         {item('acc', 'My access', 'shield-check')}
+        {head('Desktop')}
+        {item('dev', 'Scanner & printer', 'printer')}
+        {item('off', 'Offline data', 'cloud-off')}
       </div>
     </nav>
   );
