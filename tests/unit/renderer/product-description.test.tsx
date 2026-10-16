@@ -9,7 +9,7 @@ import { bodyOf, draftOf } from '../../../src/modules/inventory/api';
 
 const net = vi.hoisted(() => ({ get: vi.fn(), post: vi.fn(), put: vi.fn(), call: vi.fn() }));
 vi.mock('../../../src/core/api', () => ({ apiGet: net.get, apiPost: net.post, apiPut: net.put, apiDelete: vi.fn(), request: vi.fn(), apiUrl: (s: string) => s }));
-vi.mock('../../../src/core/bridge', () => ({ call: net.call, errorMessage: (e: Error) => e.message }));
+vi.mock('../../../src/core/bridge', () => ({ isMac: false, call: net.call, errorMessage: (e: Error) => e.message }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 vi.mock('../../../src/modules/inventory/ProductPictures', () => ({ default: () => null, sendPictures: vi.fn() }));
 

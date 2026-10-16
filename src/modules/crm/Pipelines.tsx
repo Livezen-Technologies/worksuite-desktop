@@ -87,7 +87,7 @@ export function PipelinesEditor({ canEdit }: { canEdit: boolean }) {
         </div>
       ) : null}
       {p ? (
-        <div className="flex flex-col overflow-hidden rounded-[10px] border border-line">
+        <div className="flex flex-col overflow-x-auto rounded-[10px] border border-line">
           <div className="flex flex-wrap items-center gap-2 border-b border-line bg-well/60 px-3 py-2">
             <b className="min-w-0 flex-1 truncate text-ink">{p.name}</b>
             {canEdit ? (
@@ -106,6 +106,8 @@ export function PipelinesEditor({ canEdit }: { canEdit: boolean }) {
               </>
             ) : null}
           </div>
+          {/* The stage table keeps its columns on a narrow (or scaled-up) window and scrolls sideways instead of clipping its buttons. */}
+          <div className="flex min-w-[600px] flex-col">
           <div className="flex items-center gap-2 border-b border-line px-3 py-1.5 text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">
             <span className="w-4 shrink-0" />
             <span className="min-w-0 flex-1">Stage</span>
@@ -118,6 +120,7 @@ export function PipelinesEditor({ canEdit }: { canEdit: boolean }) {
             <StageRow key={s.id} s={s} canEdit={canEdit} busy={busy} first={i === 0} last={i === stages.length - 1} onSave={(patch) => saveStage(s, patch)} onUp={() => reorder(i, -1)} onDown={() => reorder(i, 1)} onDelete={() => void run(() => apiDelete(`/api/crm/stages/${s.id}`), 'Stage deleted.')} />
           ))}
           {canEdit ? <AddStage busy={busy} onAdd={(s) => run(() => apiPost(`/api/crm/pipelines/${p.id}/stages`, s), 'Stage added.')} /> : null}
+          </div>
         </div>
       ) : q.data ? (
         <p className="m-0 text-[12.5px] text-ink-3">No pipeline yet.</p>

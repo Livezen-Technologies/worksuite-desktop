@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { createRoot, type Root } from 'react-dom/client';
 import { Icon } from '../../../components/Icon';
+import { topBarPaddingRight } from '../../../core/window-chrome';
 import { fetchBytes } from './render';
 import { SlidesViewer } from './SlidesViewer';
 
@@ -57,7 +58,8 @@ export function SlidesOverlay({ src, onClose }: { src: SlidesSource; onClose: ()
   const leave = (run?: () => void) => (run ? () => (onClose(), run()) : undefined);
   return (
     <div role="dialog" aria-modal="true" aria-label={`Presentation ${src.name}`} className="no-drag fixed inset-0 z-[60] flex flex-col bg-ground text-ink">
-      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line bg-surface px-3">
+      {/* Clear of the window's own buttons, which Windows draws over the top right. */}
+      <div className="flex h-12 shrink-0 items-center gap-2.5 border-b border-line bg-surface pl-3" style={{ paddingRight: topBarPaddingRight(12) }}>
         <button type="button" aria-label="Back" title="Back (Esc)" onClick={onClose} className="flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle">
           <Icon name="chevron-left" size={18} />
         </button>

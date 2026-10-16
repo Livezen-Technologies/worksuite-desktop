@@ -123,6 +123,16 @@ export function fitToDisplays(bounds: Rectangle, displays: Array<{ id: number; w
 }
 
 /**
+ * A window's smallest size on this display: its own, unless the display's usable area is smaller. At Windows display
+ * scaling of 175% or 200% a 1920 × 1080 screen leaves about 1097 × 590 or 960 × 516 to the app, under a main window's
+ * own 1024 × 640 — the system would then keep the window larger than the screen and its bottom and right edge (the
+ * status bar, a list's paging, a dialog's buttons) out of reach.
+ */
+export function minimumFor(size: { minWidth: number; minHeight: number }, area: Rectangle): { minWidth: number; minHeight: number } {
+  return { minWidth: Math.max(1, Math.min(size.minWidth, area.width)), minHeight: Math.max(1, Math.min(size.minHeight, area.height)) };
+}
+
+/**
  * Where a window may sit on macOS (worksuite-desktop#221): never under the menu bar or the Dock. A window taller or
  * wider than its display's usable area, or above its top — what a zoom before the window was shown, a "Fill", or a
  * Dock that moved or grew leaves behind — is fitted to that area: the traffic lights come out from under the menu
@@ -867,8 +877,7 @@ export class WindowManager {
     const mac = process.platform === 'darwin';
     const win = new BrowserWindow({
       ...bounds,
-      minWidth: size.minWidth,
-      minHeight: size.minHeight,
+      ...minimumFor(size, screen.getDisplayMatching(bounds).workArea),
       show: false,
       title: opts.title ?? 'WorkSuite',
       backgroundColor: this.backgroundFor(kind),
@@ -1267,6 +1276,13 @@ export class WindowManager {
     const primary = screen.getPrimaryDisplay();
     const mac = process.platform === 'darwin';
     for (const w of this.all()) {
+      // Display scaling changed (100% → 150%, a monitor swap): the smallest size follows the display first, or the
+      // fitting below could not shrink the window to it.
+      const kind = this.kinds.get(w.id);
+      if (kind && SIZES[kind]) {
+        const min = minimumFor(SIZES[kind], screen.getDisplayMatching(w.getBounds()).workArea);
+        w.setMinimumSize(min.minWidth, min.minHeight);
+      }
       if (w.isFullScreen() || (w.isMaximized() && !mac)) continue;
       const b = w.getBounds();
       const fitted = (mac ? keepInWorkArea(b, screen.getDisplayMatching(b).workArea) : null) ?? (w.isMaximized() ? b : fitToDisplays(b, displays, primary));

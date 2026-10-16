@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useCanOpen } from '../core/access';
 import { app } from '../core/app-state';
 import { call, isMac, on } from '../core/bridge';
+import { topBarPaddingRight } from '../core/window-chrome';
 import { t } from '../core/i18n';
 import { useStore } from '../core/store';
 import { minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui, useAiDisplay } from '../core/ui';
@@ -61,7 +62,7 @@ export function TitleBar() {
   const fullScreen = useFullScreen();
 
   return (
-    <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac && !fullScreen ? 84 : 14, paddingRight: isMac ? 12 : 150 }}>
+    <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac && !fullScreen ? 84 : 14, paddingRight: topBarPaddingRight(12) }}>
       <div className="flex w-[180px] shrink-0 items-center gap-2.5">
         <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-brand text-[15px] font-extrabold">W</span>
         <span className="text-[16px] font-bold tracking-tight">WorkSuite</span>

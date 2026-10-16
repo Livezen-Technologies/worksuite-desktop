@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
 vi.mock('livekit-client', () => ({ Room: class {}, RoomEvent: {}, Track: { Source: {}, Kind: {} }, VideoPresets: { h720: {} }, createLocalTracks: vi.fn() }));
-vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(), on: vi.fn(), errorMessage: (e: unknown) => String(e) }));
+vi.mock('../../../src/core/bridge', () => ({ isMac: false, call: vi.fn(), on: vi.fn(), errorMessage: (e: unknown) => String(e) }));
 vi.mock('../../../src/core/api', () => ({ ApiError: class {}, apiGet: vi.fn(), apiPost: vi.fn(), request: vi.fn() }));
 vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 

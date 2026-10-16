@@ -2,7 +2,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
-vi.mock('../../../src/core/bridge', () => ({ on: () => () => {}, call: vi.fn(), errorMessage: (e: Error) => e.message, hasDesktop: () => true }));
+vi.mock('../../../src/core/bridge', () => ({ isMac: false, on: () => () => {}, call: vi.fn(), errorMessage: (e: Error) => e.message, hasDesktop: () => true }));
 vi.mock('../../../src/core/api', () => ({ apiGet: vi.fn(async () => ({ invoices: [], total: 0, summary: {} })), apiPost: vi.fn(), apiPut: vi.fn(), apiDelete: vi.fn(), request: vi.fn() }));
 import { apiGet } from '../../../src/core/api';
 import Invoices from '../../../src/modules/billing/Invoices';

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.1 — 2026-10-16
+
+- Page heads and side panels fit a scaled-up window: actions wrap under the title, and full-height panels keep clear of the window buttons
+
 ## 1.4.0 — 2026-10-06
 
 **Changed**
