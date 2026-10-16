@@ -97,6 +97,14 @@ describe('the in-app card (D27, MNA-APP-01…05)', () => {
     expect(screen.getByText('Checked')).toBeTruthy();
     expect(screen.getByText('1 attachment')).toBeTruthy();
     for (const name of ['Reply', 'Mark as read', 'Archive', 'Flag', 'Open', 'Dismiss']) expect(screen.getByRole('button', { name })).toBeTruthy();
+    // One row at 400 px: Reply keeps its word, the quick actions are icons named by their tooltips, nothing wraps.
+    expect(screen.getByRole('button', { name: 'Reply' }).textContent).toBe('Reply');
+    for (const name of ['Mark as read', 'Archive', 'Flag']) {
+      const b = screen.getByRole('button', { name });
+      expect(b.textContent).toBe('');
+      expect(b.getAttribute('title')).toBe(name);
+    }
+    for (const name of ['Reply', 'Open']) expect(screen.getByRole('button', { name }).className).toContain('whitespace-nowrap');
     // It never takes the keyboard.
     expect(document.activeElement).toBe(document.body);
   });
