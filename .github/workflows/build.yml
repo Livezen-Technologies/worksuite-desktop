@@ -63,6 +63,8 @@ jobs:
         run: sudo apt-get update && sudo apt-get install -y rpm libarchive-tools
       - run: npm run build
         env:
+          # electron-vite build exceeds Node's default ~2 GB heap and aborts with exit 134; macos-14 has 7 GB RAM.
+          NODE_OPTIONS: --max-old-space-size=6144
           MAIN_VITE_POLICY_PUBLIC_KEY: ${{ secrets.WS_POLICY_PUBLIC_KEY }}
       - name: Package
         shell: bash
