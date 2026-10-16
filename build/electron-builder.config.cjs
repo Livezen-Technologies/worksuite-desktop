@@ -57,8 +57,12 @@ module.exports = {
   files: ['out/**', 'package.json', '!**/*.map', '!node_modules/@napi-rs/**', '!node_modules/@node-llama-cpp/*cuda*/**', '!node_modules/pst-extractor/example/**'],
   // Text in images (worksuite-desktop#59): tesseract.js's worker thread is started from outside the asar, with the
   // packages it loads there (its WebAssembly core and their few dependencies).
+  // node-llama-cpp: only its native binaries are unpacked (its own Electron template's set); its JavaScript runs
+  // from the asar and finds them through .asar.unpacked. Unpacking all of it (~1,100 files) made the universal mac
+  // merge's minimatch pattern of every unpacked path exceed 64 KB ("pattern is too long").
   asarUnpack: [
-    'node_modules/node-llama-cpp/**',
+    'node_modules/node-llama-cpp/bins/**',
+    'node_modules/node-llama-cpp/llama/localBuilds/**',
     'node_modules/@node-llama-cpp/**',
     'node_modules/{tesseract.js,tesseract.js-core,regenerator-runtime,is-url,bmp-js,wasm-feature-detect,zlibjs}/**',
   ],
