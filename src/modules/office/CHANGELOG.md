@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.1 — 2026-10-16
+
+- A document opened while the chat drawer is docked shows beside it instead of saying it is behind the window; only a floating drawer covers it.
+
 ## 1.3.0 — 2026-10-13
 
 **Added**

@@ -4,6 +4,7 @@ import { apiUrl } from '../../core/api';
 import { call, errorMessage } from '../../core/bridge';
 import { isOfficeFile, mediaToken, openDocument } from '../../core/open-document';
 import { officeOpenKind } from '@shared/office-open';
+import { chatDrawerFloats, minimiseChatDrawer, ui } from '../../core/ui';
 import { openOfficeDoc } from '../office/open-with';
 import { bytes } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -61,6 +62,8 @@ export function readUrl(f: Pick<Attachment, 'url' | 'download_url'>): string | n
  */
 export function openChatAttachment(f: Attachment, link: (url: string) => void, gallery?: Attachment[]): void {
   const kind = previewKind(f);
+  const tabbed = (officeOpenKind(f.filename) && (f.driveFile || kind === 'office')) || kind === 'pdf' || kind === 'office' || (f.driveFile && kind === 'other');
+  if (tabbed) leaveChatForTab();
   // A Drive file (a WhatsApp attachment) with no preview here: a Word, Excel or PowerPoint file in a WorkSuite tab, a
   // PDF in PDF Studio and the rest in its app on this computer.
   const doc = officeOpenKind(f.filename) && (f.driveFile || kind === 'office') ? chatOfficeDoc(f) : null;
@@ -85,6 +88,23 @@ export function openChatAttachment(f: Attachment, link: (url: string) => void, g
   const pictures = kind === 'image' && gallery?.length ? gallery.filter((g) => previewKind(g) === 'image') : [];
   const at = pictures.findIndex((g) => (f.id !== undefined && g.id === f.id) || (g.url === f.url && g.filename === f.filename));
   openPreview(at >= 0 ? pictures : [f], Math.max(0, at), link);
+}
+
+/** When a file from a conversation last opened in a tab of its own: the drawer offers no "Attach" for that tab. */
+export const openedFromChat = { at: 0 };
+
+/**
+ * A file that opens in a tab: a floating chat drawer would lie over it, so it steps aside (to the corner); a docked
+ * one stays beside the page.
+ */
+function leaveChatForTab(): void {
+  openedFromChat.at = Date.now();
+  if (ui.get().dock === 'chat' && chatDrawerFloats()) minimiseChatDrawer();
+}
+
+/** Whether the tab that just became active is one a file from a conversation opened. */
+export function justOpenedFromChat(now = Date.now()): boolean {
+  return now - openedFromChat.at < 15_000;
 }
 
 /** The pictures of what is on screen (the conversation, the Media tab), for ‹ › in the preview. */
