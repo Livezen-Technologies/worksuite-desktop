@@ -9,6 +9,7 @@ import { BrandedSignIn } from './BrandedSignIn';
 import { ChecksScreen } from './ChecksScreen';
 import { Compatibility } from './Compatibility';
 import { EnterpriseAddress } from './EnterpriseAddress';
+import { OsSignIn } from './OsSignIn';
 import { StartupSelector } from './StartupSelector';
 import { WorkspaceChooser } from './WorkspaceChooser';
 import { BrowserWait } from './personal/BrowserWait';
@@ -37,7 +38,9 @@ export type ConnectScreen =
   | 'checks'
   | 'branded-sign-in'
   | 'compatibility'
-  | 'chooser';
+  | 'chooser'
+  /** WorkSuite OS mode: the OS signs in; no password screen. */
+  | 'os-sign-in';
 
 export interface ConnectRouteState {
   auth: AuthState;
@@ -50,6 +53,8 @@ export interface ConnectRouteState {
 /** The screen for this state. Pure, for the tests and for the packages that fill the screens in. */
 export function connectRoute(s: ConnectRouteState): ConnectScreen {
   const stage = s.auth.stage;
+  // WorkSuite OS signs in for the app: every screen that would ask for a server or a password is this one instead.
+  if (s.auth.osManaged && stage !== 'ready' && stage !== 'registering' && stage !== 'bootstrapping' && stage !== 'update-required' && stage !== 'server-too-old') return 'os-sign-in';
   // An account's own stages come first: they belong to the account being signed in, wherever it was started.
   if (stage === 'browser') return 'browser-wait';
   if (stage === 'verify-email') return 'check-email';
@@ -87,6 +92,7 @@ const SCREENS = {
   'branded-sign-in': BrandedSignIn,
   compatibility: Compatibility,
   chooser: WorkspaceChooser,
+  'os-sign-in': OsSignIn,
 } as const;
 
 export function ConnectRoot({ auth }: { auth: AuthState }) {
@@ -116,6 +122,8 @@ export function ConnectRoot({ auth }: { auth: AuthState }) {
       return <BrandedSignIn auth={auth} />;
     case 'compatibility':
       return <Compatibility auth={auth} />;
+    case 'os-sign-in':
+      return <OsSignIn auth={auth} />;
     case 'chooser':
       return accounts ? <WorkspaceChooser accounts={accounts} /> : <Onboarding auth={auth} />;
   }

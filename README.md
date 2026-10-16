@@ -83,6 +83,8 @@ tests/               unit (Vitest) and e2e (CDP smoke)
 build/               electron-builder config, entitlements, app icon
 ```
 
+On **WorkSuite OS** the app signs in, enrols, updates and locks through the OS: see [docs/WORKSUITE_OS.md](docs/WORKSUITE_OS.md).
+
 More: [architecture](docs/ARCHITECTURE.md) · [security](docs/SECURITY.md) ·
 [backend contract](docs/BACKEND.md) · [releasing](docs/RELEASING.md) ·
 [requirement traceability](docs/TRACEABILITY.md) · [changelog](CHANGELOG.md)

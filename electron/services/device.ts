@@ -7,6 +7,7 @@ import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
 import { isPassingFailure, type HttpClient } from './http';
+import type { OsDevice } from './os-mode';
 import type { SecureStore } from './secure-store';
 
 const log = logger('device');
@@ -114,6 +115,13 @@ export class DeviceService {
   onCommand: ((c: DeviceCommand) => Promise<CommandOutcome>) | null = null;
   private handled = new Set<string>();
   extras: () => HeartbeatExtras = () => ({ pendingUp: 0, pendingDown: 0, lastError: null });
+  /**
+   * WorkSuite OS mode (os-mode.ts): the OS device agent's enrolment. When it gives one, this computer is that device —
+   * its id, and its credential as `X-WS-Device` — and the app neither registers itself nor sends heartbeats (the agent
+   * checks in for the computer). A WorkSuite OS computer that is not enrolled (a personal one) registers as before.
+   */
+  osEnrolment: (() => OsDevice | null) | null = null;
+  private fromOs = false;
 
   constructor(
     private readonly db: Database,
@@ -144,6 +152,17 @@ export class DeviceService {
     return this.record?.token ?? null;
   }
 
+  /** `X-WS-Device`: the registration's id, or on WorkSuite OS the device credential the OS services send too. */
+  headerValue(): string | null {
+    if (!this.record) return null;
+    return this.fromOs ? this.record.token : this.record.id;
+  }
+
+  /** Whether this computer's device is WorkSuite OS's enrolment (not one this app registered). */
+  isOsEnrolled(): boolean {
+    return this.fromOs;
+  }
+
   getTrust(): DeviceTrust {
     return this.trust;
   }
@@ -158,6 +177,9 @@ export class DeviceService {
    * stored credential the server no longer accepts.
    */
   async reenrol(userId: string, api: ServerApi): Promise<DeviceRecord> {
+    if (this.osEnrolment?.()) {
+      throw new DesktopError('DEVICE_NOT_REGISTERED', "Your organization's server does not recognise this computer's WorkSuite OS enrolment. Ask your administrator to check it.");
+    }
     this.secrets.delete(this.key(userId));
     this.record = null;
     return this.register(userId, api);
@@ -165,6 +187,15 @@ export class DeviceService {
 
   load(userId: string): DeviceRecord | null {
     this.userId = userId;
+    const os = this.osEnrolment?.() ?? null;
+    this.fromOs = !!os;
+    if (os) {
+      this.record = { id: os.id, token: os.credential, registeredAt: this.record?.id === os.id ? this.record.registeredAt : new Date().toISOString() };
+      // Enrolled by the organization through WorkSuite OS: a managed computer.
+      this.trust = 'TRUSTED';
+      this.classification = 'MANAGED';
+      return this.record;
+    }
     const raw = this.secrets.get(this.key(userId));
     this.record = null;
     if (raw) {
@@ -190,6 +221,7 @@ export class DeviceService {
   async ensureRegistered(userId: string, api: ServerApi): Promise<DeviceRecord> {
     this.api = api;
     this.load(userId);
+    if (this.fromOs && this.record) return this.record;
     if (this.record) {
       try {
         await this.heartbeat();
@@ -255,6 +287,8 @@ export class DeviceService {
 
   /** One health report; applies whatever directive comes back. */
   async heartbeat(): Promise<Directive> {
+    // WorkSuite OS: the device agent checks in for this computer and carries out its organization's commands.
+    if (this.fromOs && this.record) return { kind: 'none', allowOffline: true };
     if (!this.record) throw new DesktopError('DEVICE_NOT_REGISTERED', 'This computer is not registered.');
     let diskUsed: number | null = null;
     let diskFree: number | null = null;
@@ -335,6 +369,7 @@ export class DeviceService {
 
   start(): void {
     this.stop();
+    if (this.fromOs) return;
     const tick = () => {
       this.heartbeat().catch((e) => log.debug('heartbeat failed', { code: isDesktopError(e) ? e.code : String(e) }));
     };
@@ -364,6 +399,7 @@ export class DeviceService {
     this.trust = 'STANDARD';
     this.classification = 'UNKNOWN';
     this.lastHeartbeatAt = null;
+    this.fromOs = false;
     this.handled.clear();
   }
 

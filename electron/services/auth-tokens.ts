@@ -27,7 +27,8 @@ export interface Tokens {
 export type RefreshOutcome = { status: 'ok'; tokens: Tokens } | { status: 'refused' | 'revoked' | 'offline'; message?: string };
 
 export interface TokenEndpoint {
-  kind: 'worksuite' | 'oidc';
+  /** `broker`: WorkSuite OS's credentials broker hands out the access tokens (electron/services/os-mode.ts). */
+  kind: 'worksuite' | 'oidc' | 'broker';
   refresh(refreshToken: string): Promise<RefreshOutcome>;
   /** Best effort; never throws. `accessToken` lets WorkSuite's logout end the session it belongs to. */
   revoke(refreshToken: string, accessToken?: string): Promise<void>;

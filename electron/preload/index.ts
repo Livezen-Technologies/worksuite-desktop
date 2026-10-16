@@ -105,6 +105,7 @@ const api = {
     requestUnblock: call('auth:requestUnblock'),
     clearGate: call('auth:clearGate'),
     passkeyStart: call('auth:passkeyStart'),
+    osSignIn: call('auth:osSignIn'),
     passkeyCancel: call('auth:passkeyCancel'),
     openPage: call('auth:openPage'),
     signOut: call('auth:signOut'),

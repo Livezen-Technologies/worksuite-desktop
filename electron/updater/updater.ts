@@ -196,6 +196,8 @@ export class UpdaterService {
   private graceTimer: NodeJS.Timeout | null = null;
   private freeTimer: NodeJS.Timeout | null = null;
   private linuxRepo: LinuxRepo | null = null;
+  /** Why this copy never updates itself (WorkSuite OS: the OS package manager does), or null. */
+  private disabledReason: string | null = null;
 
   constructor(private readonly deps: UpdaterDeps) {
     this.status = {
@@ -226,6 +228,21 @@ export class UpdaterService {
       restartWhenFree: false,
       immediate: null,
     };
+  }
+
+  /**
+   * This copy is updated by something else (WorkSuite OS's package manager, os-mode.ts): no checks, downloads,
+   * AppImage or package installs, nothing at quit or launch. Settings › Updates says why.
+   */
+  disable(reason: string): void {
+    this.disabledReason = reason;
+    this.stop();
+    this.offer = null;
+    this.status = { ...this.status, state: 'IDLE', installSupported: false, installBlockedReason: reason, availableVersion: null, required: false, error: null };
+  }
+
+  isDisabled(): boolean {
+    return this.disabledReason !== null;
   }
 
   get(): UpdateStatus {
@@ -383,6 +400,7 @@ export class UpdaterService {
   }
 
   start(): void {
+    if (this.disabledReason) return;
     this.afterLaunch();
     // At launch (a little after), every 4 hours, and after the computer wakes (wake()).
     this.scheduler = new UpdateScheduler({
@@ -423,6 +441,7 @@ export class UpdaterService {
   }
 
   check(): Promise<UpdateStatus> {
+    if (this.disabledReason) return Promise.resolve(this.get());
     if (this.checking) return this.checking;
     this.checking = this.doCheck().finally(() => {
       this.checking = null;
@@ -624,6 +643,7 @@ export class UpdaterService {
 
   /** Downloads the update on offer (Settings › Updates › Download, when automatic downloads are off), or resumes a paused one. */
   download(): Promise<void> {
+    if (this.disabledReason) return Promise.resolve();
     if (this.downloading) return this.downloading;
     const offer = this.offer;
     const resuming = this.status.state === 'DOWNLOADING' && !!this.status.download?.paused;
@@ -1095,6 +1115,7 @@ export class UpdaterService {
    * open tabs are saved first; the same tabs and windows come back after the restart.
    */
   async install(force = false, opts: { relaunch?: boolean } = {}): Promise<{ started: boolean; busy: BusyReport | null; message: string | null }> {
+    if (this.disabledReason) return { started: false, busy: null, message: this.disabledReason };
     const relaunch = opts.relaunch ?? true;
     if (this.status.state !== 'STAGED' || !this.stagedPath) {
       return { started: false, busy: null, message: this.status.installBlockedReason ?? 'No update is ready to install.' };
@@ -1132,7 +1153,7 @@ export class UpdaterService {
    * It does not reopen WorkSuite; the next launch checks the new version's health.
    */
   installOnQuitSync(): boolean {
-    if (this.quitInstallTried) return false;
+    if (this.quitInstallTried || this.disabledReason) return false;
     this.quitInstallTried = true;
     if (this.status.state !== 'STAGED' || !this.stagedPath || !(this.deps.installOnQuit?.() ?? false)) return false;
     // A .deb or .rpm needs its password prompt answered, which cannot happen after WorkSuite has gone.
