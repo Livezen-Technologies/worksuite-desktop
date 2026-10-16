@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.33.1 — 2026-10-16
+
+- New-email card: the action row fits on one line — Reply and Open keep their words, Mark as read, Archive and Flag are icon buttons named by their tooltips — with even 32 px buttons and a visible keyboard focus ring.
+
 ## 1.33.0 — 2026-10-11
 
 **Added**

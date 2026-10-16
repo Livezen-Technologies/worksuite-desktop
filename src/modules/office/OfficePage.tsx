@@ -7,7 +7,7 @@ import { useStore } from '../../core/store';
 import { useTabTitle } from '../../core/tab-context';
 import { activate, closeTab, detachTab, navigate, recordKey, setCloseGuard, setRoute, tabsStore, takeCloseReason } from '../../core/tabs';
 import { toast } from '../../core/toasts';
-import { ui } from '../../core/ui';
+import { ui, useChatDrawerMode } from '../../core/ui';
 import { Icon } from '../../components/Icon';
 import { Avatar, Button, Empty, ErrorNote, FileBadge, IconButton, Modal, Spinner, TextField, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
@@ -189,7 +189,10 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
   );
   const s = useStore(session.store, (x) => x);
   const network = useStore(app, (x) => x.status?.network ?? 'ONLINE');
-  const covered = useStore(ui, (x) => x.dock === 'chat');
+  // Only a floating chat drawer lies over the document; docked, it sits beside the page and the editor follows the
+  // page's narrower width.
+  const { floating: chatFloats } = useChatDrawerMode();
+  const covered = useStore(ui, (x) => x.dock === 'chat') && chatFloats;
   const me = useStore(app, (x) => x.bootstrap?.user.id ?? null);
   const boot = s.boot;
   const name = boot?.file.name ?? routeName ?? 'Document';

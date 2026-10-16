@@ -5,12 +5,14 @@ import { Select } from '../../../components/Select';
 import { Avatar, Button, Modal, cx } from '../../../components/ui';
 import { qk } from '../api';
 import { ROLE, errorText, fmtDay, hm, num, pk, preads, pwrites, usedFill, type FullDetail, type Member, type MemberRole, type WorkloadGrid } from '../portfolio';
+import { ExternalMembers } from './Guests';
 import { Chip, ErrorLine, Failed, Field, Loading, Mono, Nothing, Panel, TD, TH, inputClass, needsConnection, useAsk } from './kit';
 
 /**
  * W05 · A project's team, roles and capacity (PRJ-MEM): who is on it, at what role, capacity and rate, how loaded each
  * person is, a week-by-week load grid, adding someone, editing and removing members, and re-adding former members
- * (their logged time stays at their rate). Load is arithmetic — open estimate ÷ weekly capacity — and every cell prints
+ * (their logged time stays at their rate), and the project's external members — clients and people at other companies
+ * who follow it through a status link (Guests.tsx). Load is arithmetic — open estimate ÷ weekly capacity — and every cell prints
  * its percentage, so colour is never the only signal. Every change needs WorkSuite (disabled offline).
  */
 
@@ -126,6 +128,7 @@ export function ProjectTeam({ detail, offline }: { detail: FullDetail; offline: 
           </div>
           {detail.members.length === 0 ? <Nothing text="Nobody is on this project yet." /> : null}
         </Panel>
+        <ExternalMembers projectId={projectId} offline={offline} />
         <Panel title="Load by week" sub="estimated hours of tasks due that week ÷ capacity">
           <div className="p-3">{work.isLoading ? <Loading /> : !work.data ? <Failed error={work.error} onRetry={() => void work.refetch()} /> : <Heat grid={work.data.data} />}</div>
         </Panel>

@@ -10,7 +10,8 @@ vi.mock('../../../src/core/toasts', () => ({ toast: vi.fn() }));
 const { call } = await import('../../../src/core/bridge');
 const { navigate } = await import('../../../src/core/tabs');
 const { app } = await import('../../../src/core/app-state');
-const { CSV_ROWS, TEXT_LIMIT, closePreview, openChatAttachment, parseCsv, previewKind } = await import('../../../src/modules/chat/AttachmentViewer');
+const { CSV_ROWS, TEXT_LIMIT, closePreview, justOpenedFromChat, openChatAttachment, openedFromChat, parseCsv, previewKind } = await import('../../../src/modules/chat/AttachmentViewer');
+const { ui } = await import('../../../src/core/ui');
 
 const file = (filename: string, mime: string, over: Partial<Attachment> = {}): Attachment => {
   const token = `tok${filename.replace(/[^A-Za-z0-9]/g, '')}xxxxxxxx`;
@@ -53,6 +54,33 @@ describe('what an attachment opens in (#38)', () => {
     openChatAttachment(file('Plan.docx', ''), link);
     expect(navigate).toHaveBeenCalledTimes(1);
     expect(dialog()).toBeNull();
+  });
+});
+
+describe('a document opened from the chat drawer', () => {
+  it('steps a floating drawer aside so the document shows, and marks the tab as opened from chat', () => {
+    openedFromChat.at = 0;
+    vi.stubGlobal('innerWidth', 900);
+    ui.set({ dock: 'chat', chatRoom: '7', chatMinimised: [] } as never);
+    openChatAttachment(file('01_Cover_Letter.docx', ''), link);
+    expect(ui.get().dock).toBeNull();
+    expect(ui.get().chatMinimised).toContain('7');
+    expect(justOpenedFromChat()).toBe(true);
+    expect(justOpenedFromChat(Date.now() + 60_000)).toBe(false);
+  });
+
+  it('leaves a docked drawer beside the page, and a picture preview leaves the drawer alone', () => {
+    openedFromChat.at = 0;
+    vi.stubGlobal('innerWidth', 1600);
+    ui.set({ dock: 'chat', chatRoom: '7', chatMinimised: [] } as never);
+    openChatAttachment(file('Quote.pdf', 'application/pdf'), link);
+    expect(ui.get().dock).toBe('chat');
+    expect(justOpenedFromChat()).toBe(true);
+    openedFromChat.at = 0;
+    vi.stubGlobal('innerWidth', 900);
+    act(() => openChatAttachment(file('one.png', 'image/png'), link));
+    expect(ui.get().dock).toBe('chat');
+    expect(justOpenedFromChat()).toBe(false);
   });
 });
 

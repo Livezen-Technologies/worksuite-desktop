@@ -332,3 +332,23 @@ export function projectsReportPath(r: ProjectsReportFile): string {
   q.set('format', r.format);
   return `${PROJECTS_API}/reports?${q.toString()}`;
 }
+
+/** The formats a whole-project report is saved in (`GET /api/projects/{id}/report?format=`). */
+export const PROJECT_DOSSIER_FORMATS = ['pdf', 'xlsx'] as const;
+export type ProjectDossierFormat = (typeof PROJECT_DOSSIER_FORMATS)[number];
+
+/**
+ * One project's whole report — overview, tasks, milestones, timeline, team, risks, client updates, activity — as PDF
+ * or Excel, as the download manager takes it (`transfers:download` with `projectReport`): the project's id and the
+ * format, never a path. The main process builds the address (`projectReportPath`).
+ */
+export const projectReportSchema = z.strictObject({
+  project: z.number().int().positive(),
+  format: z.enum(PROJECT_DOSSIER_FORMATS),
+});
+export type ProjectReportFile = z.infer<typeof projectReportSchema>;
+
+/** The server's address for one project's report: `/api/projects/{id}/report?format=pdf|xlsx`. */
+export function projectReportPath(r: ProjectReportFile): string {
+  return `${PROJECTS_API}/${r.project}/report?format=${r.format}`;
+}

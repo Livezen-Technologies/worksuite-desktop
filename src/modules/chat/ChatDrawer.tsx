@@ -28,6 +28,7 @@ import { canCall, roomPerson, type Room } from './types';
 import { usePresence } from './presence';
 import { roomMenu } from './menus';
 import { refOf, shareLink, webPathOfRoute } from './cards/recordLinks';
+import { justOpenedFromChat } from './AttachmentViewer';
 import { useRoomActions } from './RoomActions';
 
 /**
@@ -342,6 +343,13 @@ function Conversation({ roomId }: { roomId: string }) {
   const tab = useStore(tabsStore, (s) => s.tabs.find((t) => t.id === s.activeId) ?? null);
   const link = tab ? webPathOfRoute(tab.route) : null;
   const page = link ? refOf(link)?.kind === 'page' : false;
+  // A file opened from a conversation is not offered back to it as a record to attach.
+  const tabId = tab?.id ?? null;
+  const [seenTab, setSeenTab] = useState<string | null>(null);
+  if (tabId !== seenTab) {
+    setSeenTab(tabId);
+    if (tabId && justOpenedFromChat()) setHiddenFor(tabId);
+  }
   const attach = async () => {
     if (!tab || !link) return;
     // The tab's title, then a full link that names its organisation, what it is and which (worksuite-desktop#266):

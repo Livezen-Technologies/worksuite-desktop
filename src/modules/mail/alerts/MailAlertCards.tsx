@@ -265,27 +265,30 @@ function AlertCard({ shown, onAct, onUndo, onExpire }: { shown: Shown; onAct: (a
           </div>
         </div>
       ) : (
-        <footer className="flex items-center gap-1 bg-subtle/60 px-3.5 py-2.5">
+        <footer className="flex items-center gap-1.5 border-t border-line bg-subtle/60 px-3.5 py-2.5">
           {single && row ? (
             <>
-              <CardButton icon="reply" label={text('Reply')} onClick={() => (card.replyable ? setReplying(true) : onAct('reply', row))} />
+              {/* Reply keeps its word; the quick actions are icons with their names as tooltips, so the row never
+                  wraps at the card's 400 px (a two-line "Mark as read" button). */}
+              <CardButton icon="reply" label={text('Reply')} showLabel onClick={() => (card.replyable ? setReplying(true) : onAct('reply', row))} />
               <CardButton icon="mail-open" label={text('Mark as read')} onClick={() => onAct('read', row)} />
               <CardButton icon="archive" label={text('Archive')} onClick={() => onAct('archive', row)} />
               <CardButton icon="flag" label={text('Flag')} onClick={() => onAct('flag', row)} />
               <span className="flex-1" />
-              <button type="button" className="h-[30px] rounded-[7px] bg-primary px-3.5 text-[12px] font-bold text-white" onClick={() => onAct('open', row)}>
+              <button type="button" className={PRIMARY} onClick={() => onAct('open', row)}>
                 {text('Open')}
               </button>
             </>
           ) : (
             <>
               {card.rows.length ? (
-                <button type="button" className="h-[30px] rounded-[7px] border border-line bg-surface px-3 text-[12px] font-semibold text-ink hover:bg-subtle" onClick={() => onAct('read-all')}>
+                <button type="button" className={SECONDARY} onClick={() => onAct('read-all')}>
+                  <Icon name="mail-open" size={14} aria-hidden className="shrink-0 text-ink-2" />
                   {text('Mark all as read')}
                 </button>
               ) : null}
               <span className="flex-1" />
-              <button type="button" className="h-[30px] rounded-[7px] bg-primary px-3.5 text-[12px] font-bold text-white" onClick={() => onAct('open-inbox')}>
+              <button type="button" className={PRIMARY} onClick={() => onAct('open-inbox')}>
                 {card.inbox.label === 'Open Inbox' ? text('Open Inbox') : card.inbox.label}
               </button>
             </>
@@ -296,11 +299,16 @@ function AlertCard({ shown, onAct, onUndo, onExpire }: { shown: Shown; onAct: (a
   );
 }
 
-function CardButton({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
+const FOCUS = 'outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-1';
+const SECONDARY = cx('inline-flex h-8 shrink-0 items-center gap-1.5 whitespace-nowrap rounded-[8px] border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink transition-colors hover:border-ink-3/40 hover:bg-subtle active:bg-line/60', FOCUS);
+const PRIMARY = cx('inline-flex h-8 shrink-0 items-center whitespace-nowrap rounded-[8px] bg-primary px-4 text-[12.5px] font-bold text-white shadow-sm transition hover:brightness-110 active:brightness-95', FOCUS);
+const ICON_ONLY = cx('inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-[8px] border border-line bg-surface text-ink-2 transition-colors hover:border-ink-3/40 hover:bg-subtle hover:text-ink active:bg-line/60', FOCUS);
+
+function CardButton({ icon, label, onClick, showLabel = false }: { icon: string; label: string; onClick: () => void; showLabel?: boolean }) {
   return (
-    <button type="button" aria-label={label} title={label} onClick={onClick} className="inline-flex h-[30px] items-center gap-1 rounded-[7px] border border-line bg-surface px-2 text-[12px] font-semibold text-ink hover:bg-subtle">
-      <Icon name={icon} size={14} aria-hidden />
-      {label}
+    <button type="button" aria-label={label} title={label} onClick={onClick} className={showLabel ? SECONDARY : ICON_ONLY}>
+      <Icon name={icon} size={15} aria-hidden className={showLabel ? 'shrink-0 text-ink-2' : 'shrink-0'} />
+      {showLabel ? label : null}
     </button>
   );
 }

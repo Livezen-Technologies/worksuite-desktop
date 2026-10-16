@@ -48,6 +48,9 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build
+        env:
+          # electron-vite build exceeds Node's default ~2 GB heap and aborts with exit 134 on macos-14 (as in build.yml).
+          NODE_OPTIONS: --max-old-space-size=6144
       - name: A display
         if: runner.os == 'Linux'
         run: |

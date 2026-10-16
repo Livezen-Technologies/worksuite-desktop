@@ -67,7 +67,7 @@ import { OFFICE_APP_SRC, type OfficeAppStatus } from '../office-open';
 import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
 import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
-import { projectsContract, projectsReportSchema, type ProjectsOutputs } from '../projects';
+import { projectReportSchema, projectsContract, projectsReportSchema, type ProjectsOutputs } from '../projects';
 import { purchaseExportSchema } from '../purchase';
 import { salesContract, type SalesOutputs } from '../sales';
 import { phoneContract, type PhoneOutputs } from '../phone';
@@ -942,6 +942,8 @@ export const contract = {
         garageDoc: garageDocSchema.optional(),
         /** A Projects report as CSV, Excel or PDF, as the Reports screen filtered it (`shared/projects.ts`). */
         projectsReport: projectsReportSchema.optional(),
+        /** One project's whole report as PDF or Excel (`GET /api/projects/{id}/report`, `shared/projects.ts`). */
+        projectReport: projectReportSchema.optional(),
         /**
          * An eLearning lesson's file where the lesson allows downloading: the signed token of the
          * address the server gave with the lesson (`file.urls.download`). The main process builds
@@ -961,7 +963,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.billingExport, v.billingFile, v.paymentSlip, v.ordersCsv, v.omsReport, v.omsRouteSheet, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.projectsReport, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport, v.purchaseExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a Billing export or file, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a route sheet, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, a Projects report, an eLearning lesson file, an Office export, a chat attachment, a task attachment, a chat export or a Purchasing export'),
+      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.billingExport, v.billingFile, v.paymentSlip, v.ordersCsv, v.omsReport, v.omsRouteSheet, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.projectsReport, v.projectReport, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport, v.purchaseExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a Billing export or file, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a route sheet, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, a Projects report, a whole project report, an eLearning lesson file, an Office export, a chat attachment, a task attachment, a chat export or a Purchasing export'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   /**

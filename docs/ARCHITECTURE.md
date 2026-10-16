@@ -309,7 +309,8 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   never by a path: `transfers:download` takes a typed variant (Garage's
   `garageDoc` — a check-in sheet, an estimate, a work order sheet, a delivery
   note or a report's CSV, `shared/garage-docs.ts`; Projects' `projectsReport`
-  — a report as CSV, Excel or PDF, `shared/projects.ts`), and the main process
+  — a report as CSV, Excel or PDF — and `projectReport` — one project's whole
+  report as PDF or Excel, `shared/projects.ts`), and the main process
   builds the address it fetches. Hotel PMS has a channel of its own,
   `pms:download` (`shared/pms-files.ts`), with the same shape and the
   `desktop.downloads` check repeated in its handler.
@@ -527,7 +528,14 @@ Vault-sealed, so the database file alone gives nothing to guess against.
     Change requests — list, Raise, Withdraw and the decision with what approval does (`/projects/changes[/<id>]`,
     `/projects/<id>/changes[/<id>]`) — and Reports (`/projects/reports[/<kind>]`) with the scheduled emails; a
     report's CSV, Excel or PDF leaves through the download manager (`transfers:download` with `projectsReport`,
-    `shared/projects.ts`).
+    `shared/projects.ts`);
+  - client access (`screens/client-api.ts`, server Project 2.6.0, since projects 1.6.0): a project's external members
+    (`project_guests` — clients and people at other companies, never given staff access across the company
+    boundary; `Guests.tsx`, on the Team tab; a WorkSuite person at another company is found through
+    `GET <id>/guest-candidates?q=` and added by `user_id`), its password-protected status links and client updates
+    (`ShareDialog.tsx`, "Share with client" in the project's header; a link's address is shown once, the password is
+    never emailed), all read from `GET <id>/client-access`; and "Export report" in the header — the whole project as
+    PDF or Excel through `transfers:download` with `projectReport` (`GET <id>/report?format=`), opened when it lands.
   A project's own screens (board, timeline, milestones, sprints, budget, risks, changes) sit under its tab strip
   (`ProjectPage.tsx: ProjectTabs`), as on the web. `company.tsx` is the shared company selector (G-01):
   `useProjectCompany()`, `withOrg()` and the "Company: ▾" control `CompanySelect` mirror the web's, the choice is the
