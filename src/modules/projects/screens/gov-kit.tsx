@@ -114,7 +114,7 @@ export function Kpi({ label, value, sub, tone }: { label: string; value: ReactNo
 export function PageHead({ crumb, title, sub, children }: { crumb?: ReactNode; title: ReactNode; sub?: ReactNode; children?: ReactNode }) {
   return (
     <header className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-5 py-3">
-      <div className="flex min-w-0 flex-1 flex-col">
+      <div className="flex min-w-0 flex-1 basis-[240px] flex-col">
         {crumb ? <span className="truncate font-mono text-[11.5px] text-ink-3">{crumb}</span> : null}
         <h1 className="truncate text-[18px] font-bold text-ink">{title}</h1>
         {sub ? <span className="text-[12px] text-ink-3">{sub}</span> : null}

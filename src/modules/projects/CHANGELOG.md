@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.1 — 2026-10-16
+
+- Page heads wrap their actions under the title on a narrow or scaled-up window
+
 ## 1.6.0 — 2026-10-16
 
 **Added**

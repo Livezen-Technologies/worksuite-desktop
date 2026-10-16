@@ -5,7 +5,7 @@ import type { Transfer } from '../../../shared/types';
 import { CONNECTION_LOST, TOO_LARGE } from '../../../shared/uploads';
 
 const bridge = vi.hoisted(() => ({ call: vi.fn() }));
-vi.mock('../../../src/core/bridge', () => ({ call: bridge.call, on: vi.fn(() => () => undefined), errorMessage: (e: unknown) => String(e), registerDropped: vi.fn(async () => []) }));
+vi.mock('../../../src/core/bridge', () => ({ isMac: false, call: bridge.call, on: vi.fn(() => () => undefined), errorMessage: (e: unknown) => String(e), registerDropped: vi.fn(async () => []) }));
 const toasts = vi.hoisted(() => ({ toast: vi.fn() }));
 vi.mock('../../../src/core/toasts', () => ({ toast: toasts.toast }));
 vi.mock('../../../src/core/tabs', () => ({ navigate: vi.fn() }));

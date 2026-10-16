@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
+import { topBarPaddingRight } from '../../core/window-chrome';
 
 /**
  * The HR designs' shared pieces: the status chip (one colour per meaning,
@@ -87,7 +88,8 @@ export function Seg<T extends string | number>({ options, value, onChange, label
 export function PageHead({ title, sub, children }: { title: ReactNode; sub?: ReactNode; children?: ReactNode }) {
   return (
     <div className="flex flex-wrap items-center gap-2">
-      <div className="flex min-w-0 flex-1 flex-col">
+      {/* A basis, so the actions wrap below the title on a narrow (or scaled-up) window instead of squeezing it. */}
+      <div className="flex min-w-0 flex-1 basis-[240px] flex-col">
         <h1 className="m-0 text-[20px] font-bold text-ink">{title}</h1>
         {sub ? <span className="text-[12.5px] text-ink-3">{sub}</span> : null}
       </div>
@@ -157,7 +159,7 @@ export function Initials({ name, size = 30 }: { name: string | null | undefined;
 export function Sheet({ title, children, footer, onClose, width = 460, side }: { title: ReactNode; children: ReactNode; footer: ReactNode; onClose: () => void; width?: number; side?: boolean }) {
   return (
     <div className={cx('no-drag fixed inset-0 z-50 flex items-center bg-[rgba(15,27,61,.32)]', side ? 'justify-end pr-10' : 'justify-center')} onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <div role="dialog" aria-label={typeof title === 'string' ? title : undefined} className="animate-in flex max-h-[calc(100vh-60px)] flex-col rounded-[14px] border border-line bg-surface shadow-[0_24px_60px_rgb(var(--ws-shadow-rgb)/.28)]" style={{ width }}>
+      <div role="dialog" aria-label={typeof title === 'string' ? title : undefined} className="animate-in flex max-h-[calc(100vh-60px)] flex-col rounded-[14px] border border-line bg-surface shadow-[0_24px_60px_rgb(var(--ws-shadow-rgb)/.28)]" style={{ width, maxWidth: 'calc(100vw - 32px)' }}>
         <div className="flex items-center px-5 pt-4 pb-1.5">
           <h2 className="m-0 flex-1 text-[17px] font-bold text-ink">{title}</h2>
           <button type="button" aria-label="Close" onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
@@ -207,8 +209,9 @@ export function Grid({ rows }: { rows: Array<[string, ReactNode]> }) {
 export function SidePanel({ label, width = 440, onClose, head, children }: { label: string; width?: number; onClose: () => void; head: ReactNode; children: ReactNode }) {
   return (
     <div className="no-drag fixed inset-0 z-40 bg-[rgba(15,27,61,.32)]" onMouseDown={(e) => e.target === e.currentTarget && onClose()} onKeyDown={(e) => e.key === 'Escape' && onClose()}>
-      <aside aria-label={label} className="absolute top-0 right-0 bottom-0 flex flex-col overflow-hidden bg-surface shadow-[-10px_0_30px_rgb(var(--ws-shadow-rgb)/.18)]" style={{ width }}>
-        <div className="flex shrink-0 items-center gap-2.5 border-b border-line px-4 py-3.5">
+      <aside aria-label={label} className="absolute top-0 right-0 bottom-0 flex flex-col overflow-hidden bg-surface shadow-[-10px_0_30px_rgb(var(--ws-shadow-rgb)/.18)]" style={{ width, maxWidth: 'calc(100vw - 24px)' }}>
+        {/* Full height, so the head clears the Windows caption buttons on the top right. */}
+        <div className="flex shrink-0 items-center gap-2.5 border-b border-line py-3.5 pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
           <div className="flex min-w-0 flex-1 items-center gap-2.5">{head}</div>
           <button type="button" aria-label="Close" onClick={onClose} className="flex h-7 w-7 items-center justify-center rounded-full text-ink-3 hover:bg-subtle hover:text-ink">
             <Icon name="x" size={15} />

@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.1 — 2026-10-16
+
+- Settings: the stage table scrolls sideways on a narrow or scaled-up window instead of cutting off its buttons
+
 ## 1.2.0 — 2026-10-14
 
 Proposals and estimates (CRM SRS v1.3 §17).

@@ -13,6 +13,19 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **The app fits a Full HD screen at 150% scaling, and at 100–200%.** Checked in the real app on every module's home
+  screen and the busiest dialogs at 100, 125, 150, 175 and 200% (`tests/e2e/scaling.mjs`, which reports anything cut
+  off, covered or squeezed):
+  - The window's minimum size now fits the screen's work area. At 175% and 200% the old 1024×640 minimum was larger
+    than the screen, so the window ran off it.
+  - Full-height side panels (HR, CRM and others built on the HR kit) are never wider than the window, and their close
+    buttons keep clear of the Windows caption buttons.
+  - The sidebar's Drive card hides on short windows, so the app list keeps room to scroll.
+  - Page heads (HR, Projects) wrap their buttons under the title instead of squeezing the title to one word per line.
+  - The Meetings dashboard stacks into one column on a narrow window, and its list filters wrap instead of running off
+    the page.
+  - CRM settings: the stage table scrolls sideways instead of cutting off its colour, move and delete buttons.
+  - Modules: CRM 1.2.1, HR 1.4.1, Meetings 1.6.1, Projects 1.6.1.
 - **Windows: the picture and slide viewers no longer sit under the window's buttons.** A chat attachment's preview
   and the slide viewer cover the whole window, and their toolbars ran to the right edge, where Windows draws its own
   minimise, maximise and close buttons, so those covered *Open in app* and *Close*. Both now keep the same room clear

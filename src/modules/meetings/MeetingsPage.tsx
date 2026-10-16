@@ -97,7 +97,8 @@ export default function MeetingsPage(_props: ModuleProps) {
               ))}
             </div>
             <DayStrip day={day} onDay={setDay} />
-            <div className="grid items-start gap-4 [grid-template-columns:1.6fr_1fr]">
+            {/* Side by side on a wide window; one column on a narrow (or scaled-up) one, never wider than the page. */}
+            <div className="grid grid-cols-1 items-start gap-4 min-[1200px]:[grid-template-columns:minmax(0,1.6fr)_minmax(0,1fr)]">
               <MeetingList scope="upcoming" q={q} day={day} title={day ? `Meetings on ${dayWordsOf(day)}` : 'Upcoming meetings'} typeFilter onOpen={(id) => go(`/meetings?meeting=${id}`)} />
               <div className="flex flex-col gap-4">
                 <Invitations onOpen={(id) => go(`/meetings?meeting=${id}`)} compact />
@@ -219,8 +220,8 @@ function MeetingList({ scope, q, day, title, typeFilter, onOpen }: { scope: stri
   const pick = (fn: () => void) => (fn(), setPage(1));
   return (
     <section className="flex flex-col rounded-[12px] border border-line bg-surface">
-      <div className="flex items-center gap-1.5 border-b border-line px-4 py-3">
-        <h2 className="flex-1 text-[15px] font-bold text-ink">{title}</h2>
+      <div className="flex flex-wrap items-center gap-1.5 border-b border-line px-4 py-3">
+        <h2 className="flex-1 basis-[160px] text-[15px] font-bold text-ink">{title}</h2>
         <Select aria-label="Related to" value={source} onChange={(e) => pick(() => setSource(e.target.value))} className="h-8 rounded-[7px] border border-line bg-surface px-1.5 text-[12px] text-ink">
           {SOURCE_FILTERS.map(([k, v]) => <option key={k} value={k}>{k ? `Related to: ${v}` : 'Related to: any'}</option>)}
         </Select>

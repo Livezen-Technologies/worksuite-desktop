@@ -11,7 +11,7 @@ import type * as CoreApi from '../../../src/core/api';
  */
 const toast = vi.fn();
 vi.mock('../../../src/core/toasts', () => ({ toast: (...a: unknown[]) => toast(...a) }));
-vi.mock('../../../src/core/bridge', () => ({ errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
+vi.mock('../../../src/core/bridge', () => ({ isMac: false, errorMessage: (e: unknown) => (e instanceof Error ? e.message : String(e)) }));
 const apiGet = vi.fn();
 const apiPost = vi.fn();
 const apiPut = vi.fn();

@@ -49,6 +49,19 @@ diagnostics, the lock screen, sign-out — checks the security boundaries
 locked, no token in the diagnostic bundle) and saves a screenshot of each
 screen to `test-results/e2e/`.
 
+### Display scaling
+
+```bash
+WS_E2E_SERVER=http://localhost:8920 WS_E2E_EMAIL=… WS_E2E_PASSWORD=… \
+  WS_SCALING_SCALES=100,125,150,175,200 WS_SCALING_ONLY=crm,hr \
+  ELECTRON_RUN_AS_NODE=1 npx electron tests/e2e/scaling.mjs
+```
+
+Opens every app (or the ones named in `WS_SCALING_ONLY`) and the busiest dialogs as a Full HD screen at each Windows
+scale, and reports controls that are cut off, covered by something else, or whose label is squeezed onto extra lines.
+It writes `scaling.json` and a screenshot of each screen with a finding to `WS_E2E_OUT` (default
+`test-results/e2e-scaling/`). Run it after changing a layout.
+
 ### Passkey sign-in end to end
 
 ```bash

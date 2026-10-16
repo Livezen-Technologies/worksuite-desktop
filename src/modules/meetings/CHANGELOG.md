@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.1 — 2026-10-16
+
+- The dashboard stacks into one column on a narrow or scaled-up window, and list filters wrap instead of running off the page
+
 ## 1.6.0 — 2026-10-13
 
 **Added**

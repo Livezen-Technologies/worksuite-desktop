@@ -459,7 +459,9 @@ function FilesCard() {
   const quota = q.data?.stats?.storage_quota ?? 0;
   const offline = network === 'OFFLINE';
   return (
-    <button type="button" onClick={() => navigate('/files')} className="mx-2.5 mt-2 rounded-[10px] bg-white/6 px-3 py-2.5 text-start hover:bg-white/10">
+    // Off in a short window (Windows display scaling of 150% and over on Full HD): the apps above need the room more,
+    // and Files is one of them.
+    <button type="button" onClick={() => navigate('/files')} className="mx-2.5 mt-2 rounded-[10px] bg-white/6 px-3 py-2.5 text-start hover:bg-white/10 [@media(max-height:760px)]:hidden">
       <div className="flex items-center gap-2 text-[13px] font-semibold text-white">
         <Icon name={offline ? 'cloud-off' : 'cloud'} size={15} className={offline ? 'text-[#8A90A2]' : 'text-[#43B581]'} />
         {offline ? 'Files offline' : 'WorkSuite Drive'}
