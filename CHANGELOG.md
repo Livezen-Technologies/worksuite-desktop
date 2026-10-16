@@ -11,7 +11,10 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## Unreleased
+## 0.2.262 — 2026-10-16
+
+Needs WorkSuite Auth 2.6.0 (unlock without a login code) and Project 2.6.0 (client access) on the server for those two
+changes; everything else works with the server 0.2.261 needs.
 
 - **The app fits a Full HD screen at 150% scaling, and at 100–200%.** Checked in the real app on every module's home
   screen and the busiest dialogs at 100, 125, 150, 175 and 200% (`tests/e2e/scaling.mjs`, which reports anything cut
