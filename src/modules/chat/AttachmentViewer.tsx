@@ -8,6 +8,7 @@ import { chatDrawerFloats, minimiseChatDrawer, ui } from '../../core/ui';
 import { openOfficeDoc } from '../office/open-with';
 import { bytes } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { topBarPaddingRight } from '../../core/window-chrome';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
 import { chatOfficeDoc, mediaUrl, openAttachment, type ChatFile } from './types';
@@ -222,7 +223,8 @@ export function AttachmentViewer({ items, start, link, onClose }: { items: Attac
       aria-label={`Preview ${f.filename}`}
       className="no-drag fixed inset-0 z-[60] flex flex-col bg-[#0D1424] text-[#E6ECFA] outline-none"
     >
-      <div className="flex min-h-[52px] shrink-0 flex-wrap items-center gap-2 border-b border-[#1E2C57] bg-[#0F1B3D] px-3 py-2">
+      {/* Clear of the window's own buttons, which Windows draws over the top right (not in full screen, where it hides them). */}
+      <div className="flex min-h-[52px] shrink-0 flex-wrap items-center gap-2 border-b border-[#1E2C57] bg-[#0F1B3D] py-2 pl-3" style={{ paddingRight: topBarPaddingRight(12, full) }}>
         <button type="button" aria-label="Back to the conversation" title="Back to the conversation" onClick={onClose} className={tool}>
           <Icon name="chevron-left" size={18} />
         </button>

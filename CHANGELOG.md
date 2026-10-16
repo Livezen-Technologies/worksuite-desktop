@@ -13,6 +13,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **Windows: the picture and slide viewers no longer sit under the window's buttons.** A chat attachment's preview
+  and the slide viewer cover the whole window, and their toolbars ran to the right edge, where Windows draws its own
+  minimise, maximise and close buttons, so those covered *Open in app* and *Close*. Both now keep the same room clear
+  as the title bar (`WINDOW_CONTROLS_INSET`, src/core/window-chrome.ts). macOS is unchanged.
 - **Unlocking no longer emails a login code.** Unlocking the app with your password used to sign in to WorkSuite again
   behind the scenes, so every unlock went through the new-device check and could email a login code (and a new
   sign-in alert). Now the app checks the password against the session it already holds

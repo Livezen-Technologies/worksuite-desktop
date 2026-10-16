@@ -113,6 +113,12 @@ describe('the picture preview (#38)', () => {
     opener.remove();
   });
 
+  it('keeps its toolbar clear of the window buttons Windows draws at the top right', () => {
+    act(() => openChatAttachment(file('one.png', 'image/png'), link));
+    const bar = screen.getByRole('button', { name: 'Close' }).parentElement as HTMLElement;
+    expect(bar.style.paddingRight).toBe('150px');
+  });
+
   it('asks for full screen', () => {
     act(() => openChatAttachment(file('one.png', 'image/png'), link));
     const ask = vi.fn(async () => undefined);

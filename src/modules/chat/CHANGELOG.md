@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.78.2 — 2026-10-16
+
+- Attachment preview on Windows: the toolbar keeps clear of the window's minimise, maximise and close buttons (they covered Open in app and Close).
+
 ## 1.78.1 — 2026-10-16
 
 - Open on a document in the chat drawer: a floating drawer steps aside so the document shows, and the drawer no longer offers that document back as a record to attach.
