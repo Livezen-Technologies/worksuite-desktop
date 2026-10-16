@@ -4,6 +4,15 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.0 — 2026-10-16
+
+**Added**
+
+- a project's external members on its Team tab — clients and people at other companies, with company and role (client, collaborator, observer); Add someone outside (name, email, company, role, note) or someone at another company found by search (guest-candidates?q=), Edit and Remove for can_manage, online only
+- Share with client in the project's header — its password-protected status links (who for, sections, expiry, views, Active / Expired / Withdrawn) with Withdraw and Change password, and New link: label, for, password and confirm (8+, Generate a strong one, Copy), sections (progress, milestones, timeline, updates on by default; tasks), optional expiry, Email the link to them for an external member; the address shown once with Copy and the reminder to send the password separately
+- client updates in the same dialog — listed for everyone, posted, edited and deleted by the project's manager, a lead or project.manage
+- Export report in the project's header — the whole project as PDF or Excel through the download manager (transfers:download with projectReport → GET /api/projects/{id}/report?format=pdf|xlsx), opened when it lands
+
 ## 1.5.0 — 2026-10-14
 
 **Added**

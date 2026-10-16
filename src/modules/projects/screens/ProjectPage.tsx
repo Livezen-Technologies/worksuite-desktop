@@ -18,6 +18,8 @@ import {
 import { ActivityList } from './Activity';
 import { Chip, ErrorLine, Failed, Field, HealthChip, Kpi, Loading, MenuButton, Mono, Nothing, PageHead, Panel, ProjectStatusChip, areaClass, inputClass, needsConnection, useAsk, withConfirm } from './kit';
 import { ProjectTeam } from './Team';
+import { exportProjectReport } from './client-api';
+import { ShareDialog } from './ShareDialog';
 import { SaveAsTemplate } from './SaveAsTemplate';
 
 /**
@@ -121,6 +123,7 @@ function Header({ d, offline, onGo }: { d: FullDetail; offline: boolean; onGo: (
   const { confirm, dialog } = useAsk();
   const [rebaselining, setRebaselining] = useState(false);
   const [saving, setSaving] = useState(false);
+  const [sharing, setSharing] = useState(false);
   const p = d.project;
   const can = d.can ?? {};
   const refresh = () => void qc.invalidateQueries({ queryKey: qk.all });
@@ -156,6 +159,15 @@ function Header({ d, offline, onGo }: { d: FullDetail; offline: boolean; onGo: (
       refresh();
     } catch (e) {
       toast('error', errorText(e, 'That could not be changed.'));
+    }
+  };
+
+  const exportAs = async (format: 'pdf' | 'xlsx') => {
+    try {
+      await exportProjectReport({ project: p.id, code: p.code, format });
+      toast('success', `Saving the ${p.code} report as ${format === 'pdf' ? 'PDF' : 'Excel'} — it opens when it is ready (see Transfers).`);
+    } catch (e) {
+      toast('error', errorText(e, 'The report could not be saved.'));
     }
   };
 
@@ -222,11 +234,26 @@ function Header({ d, offline, onGo }: { d: FullDetail; offline: boolean; onGo: (
           {can.manage && d.next_statuses?.length ? (
             <MenuButton label="Move to ▾" ariaLabel="Move to another status" disabled={offline} title={offlineTitle('Moving a project')} items={d.next_statuses.map((s) => ({ label: MOVE_LABEL[s] ?? PROJECT_STATUS[s]?.label ?? s, onSelect: () => void moveTo(s) }))} />
           ) : null}
+          <Button size="sm" icon="link" onClick={() => setSharing(true)}>
+            Share with client
+          </Button>
+          <MenuButton
+            label="Export report ▾"
+            icon="download"
+            ariaLabel="Export the project report"
+            disabled={offline}
+            title={offlineTitle('Exporting a report')}
+            items={[
+              { label: 'PDF', onSelect: () => void exportAs('pdf') },
+              { label: 'Excel (.xlsx)', onSelect: () => void exportAs('xlsx') },
+            ]}
+          />
           {more.length ? <MenuButton icon="more" ariaLabel="More actions" disabled={offline} title={offlineTitle('This')} items={more} /> : null}
           <Button size="sm" variant="ghost" icon="external" onClick={() => openWeb(projectPath(p.id))}>
             Open on the web
           </Button>
           {rebaselining ? <Rebaseline d={d} offline={offline} onClose={() => setRebaselining(false)} onDone={refresh} /> : null}
+          {sharing ? <ShareDialog projectId={p.id} projectName={p.name} offline={offline} onClose={() => setSharing(false)} /> : null}
           {saving ? <SaveAsTemplate d={d} onClose={() => setSaving(false)} onDone={() => (setSaving(false), refresh())} /> : null}
           {dialog}
         </>

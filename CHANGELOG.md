@@ -22,6 +22,11 @@ person who has to live with the change — what it does, and where it bites.
   - On a standalone Linux computer the upgrade is automatic: the new package declares `Breaks`/`Replaces: worksuite-desktop (<< 1.0~)` (RPM: obsoletes `worksuite-desktop < 1.0`). It takes over the old 0.2.x package's files and removes it.
   - The version bound keeps it from ever touching the OS metapackage (1.0.0~dev1 and later).
 - Where it bites: in OS mode, Settings › Updates says the system updates WorkSuite, and the app-lock settings have no effect.
+- **Share a project with its client.** A project's Team tab lists its **external members** — a client's contact, an engineer at a partner company, a consultant — with their company and role (client, collaborator, observer); whoever manages projects adds them (someone outside WorkSuite by name and email, or a WorkSuite person at another company found by search), edits and removes them. They never get staff access to the project.
+  - **Share with client** in the project's header lists its status links (who each is for, what it shows, expiry, views, Active / Expired / Withdrawn) with **Withdraw** and **Change password**, and makes new ones: a label, who it is for, a password (Generate makes a strong one, Copy copies it), what it shows (progress, milestones, timeline, updates, tasks), an optional expiry, and **Email the link to them** for an external member. The address is shown once, to copy; the password is never emailed — send it separately.
+  - **Client updates** in the same dialog: the project's manager, a lead or whoever manages projects posts, edits and deletes the updates the status links show.
+  - **Export report** in the header saves the whole project — overview, tasks, milestones, timeline, team, risks, client updates, activity — as PDF or Excel through Transfers, and opens it (`GET /api/projects/{id}/report`; money only for those who may see budgets).
+  - Where it bites: needs the server's Project module 2.6.0 (client access); every change, and the export, needs a connection. Projects module 1.6.0.
 
 ## 0.2.261 — 2026-10-15
 
