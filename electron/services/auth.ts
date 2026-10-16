@@ -714,8 +714,18 @@ export class AuthService {
    * "Session ended. Please sign in again." and the app went back to the
    * sign-in screen — QA-002 and QA-003. Nothing about this session needs
    * replacing: it was only locked, not ended.
+   *
+   * AND IT IS NOT A SIGN-IN AT ALL WHEN THE SERVER CAN SAY SO. A sign-in is the
+   * whole pipeline — the device check, the emailed code for a device it does
+   * not recognise, the new-sign-in email — so every unlock emailed a login
+   * code. With the session still open, the password is checked against it
+   * (`POST /api/auth/verify-password`, WorkSuite Auth): no session, no code, no
+   * email. Signing in again is only the fallback, for a server without that
+   * route or a session that can no longer be renewed — where a code is right.
    */
   async verifyPassword(email: string, password: string): Promise<boolean> {
+    const checked = await this.recheckPassword(password);
+    if (checked !== null) return checked;
     const { res, json } = await this.post('/api/auth/login', ...this.withDevice(email, { email, password }));
     if (res.status === 401) return false;
     if (!res.ok) throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
@@ -726,6 +736,26 @@ export class AuthService {
       void this.post('/api/auth/logout', { refresh_token: tokens.refresh_token }, tokens.access_token).catch(() => undefined);
     }
     return true;
+  }
+
+  /**
+   * The password checked against the open session: true or false, or null when
+   * this session cannot ask (no session to renew, a server before the route,
+   * the session ended meanwhile) and the caller signs in again instead.
+   */
+  private async recheckPassword(password: string): Promise<boolean | null> {
+    let token = this.accessToken();
+    if (!token && this.hasRefreshToken() && !this.held) {
+      if ((await this.refresh()) === 'ok') token = this.accessToken();
+    }
+    if (!token) return null;
+    const { res, json } = await this.post('/api/auth/verify-password', { password }, token);
+    if (res.ok) return true;
+    const code = ((json?.errors ?? null) as { code?: unknown } | null)?.code;
+    if (res.status === 403 && code === 'invalid_password') return false;
+    // An older server (no such route), or a session that ended: sign in again, as before.
+    if (res.status === 404 || res.status === 405 || res.status === 401) return null;
+    throw errorFromResponse(res.status, json as never, res.headers.get('retry-after'));
   }
 
   /**

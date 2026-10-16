@@ -129,8 +129,47 @@ describe('the hold across a password change', () => {
   });
 });
 
-describe('unlocking with the password (QA-002, QA-003)', () => {
-  it('keeps this session, and closes the one the check opened with its own tokens', async () => {
+const refused = (status: number, code: string) => new Response(JSON.stringify({ status: 'error', message: 'Refused', errors: { code } }), { status, headers: { 'Content-Type': 'application/json' } });
+
+describe('unlocking with the password: no sign-in, no emailed code', () => {
+  it('checks the password against the open session, and signs nothing in', async () => {
+    const bearers: Array<string | null> = [];
+    const { auth, calls } = setup(() => json(tokens(645)));
+    await auth.signIn('a@x.lk', 'pw');
+    const fetch = (auth as unknown as { fetch: ReturnType<typeof vi.fn> }).fetch;
+    fetch.mockImplementation(async (url: string, init?: RequestInit) => {
+      calls.push({ url, body: JSON.parse(String(init?.body ?? '{}')) as Record<string, string> });
+      bearers.push(new Headers(init?.headers).get('Authorization'));
+      return json({ verified: true });
+    });
+    const before = calls.length;
+    expect(await auth.verifyPassword('a@x.lk', 'pw')).toBe(true);
+    // One call, the re-check, with this session's token: no /api/auth/login, so no device code and no sign-in email.
+    expect(calls.slice(before)).toEqual([{ url: 'https://ws.example/api/auth/verify-password', body: { password: 'pw' } }]);
+    expect(bearers).toEqual([`Bearer ${jwt({ sub: 7, type: 'access', sid: 645 })}`]);
+    expect(auth.sessionId()).toBe(645);
+  });
+
+  it('says no to a wrong password without signing in, and does not treat it as a session end', async () => {
+    const { auth, calls, secrets } = setup((url) => (url.endsWith('/verify-password') ? refused(403, 'invalid_password') : json(tokens(645))));
+    await auth.signIn('a@x.lk', 'pw');
+    const before = calls.length;
+    expect(await auth.verifyPassword('a@x.lk', 'nope')).toBe(false);
+    expect(calls.slice(before).map((c) => c.url)).toEqual(['https://ws.example/api/auth/verify-password']);
+    expect(secrets.get('auth:refresh')).toBe('rt645');
+  });
+
+  it('passes on the server’s other refusals (too many tries) rather than signing in', async () => {
+    const { auth, calls } = setup((url) => (url.endsWith('/verify-password') ? refused(429, 'rate_limited') : json(tokens(645))));
+    await auth.signIn('a@x.lk', 'pw');
+    const before = calls.length;
+    await expect(auth.verifyPassword('a@x.lk', 'pw')).rejects.toMatchObject({ code: 'RATE_LIMITED' });
+    expect(calls.slice(before).map((c) => c.url)).toEqual(['https://ws.example/api/auth/verify-password']);
+  });
+});
+
+describe('unlocking on a server without the re-check (QA-002, QA-003)', () => {
+  it('signs in to check, keeps this session, and closes the one the check opened with its own tokens', async () => {
     let n = 644;
     const bearers: Array<string | null> = [];
     const { auth, calls, secrets } = setup(() => json(tokens(++n)));
@@ -141,6 +180,8 @@ describe('unlocking with the password (QA-002, QA-003)', () => {
       const body = JSON.parse(String(init?.body ?? '{}')) as Record<string, string>;
       calls.push({ url, body });
       bearers.push(new Headers(init?.headers).get('Authorization'));
+      // An older server has no /api/auth/verify-password.
+      if (url.endsWith('/verify-password')) return json(null, 404);
       return json(tokens(++n));
     });
     expect(await auth.verifyPassword('a@x.lk', 'pw')).toBe(true);
@@ -152,7 +193,7 @@ describe('unlocking with the password (QA-002, QA-003)', () => {
     expect(secrets.get('auth:refresh')).toBe('rt645');
   });
 
-  it('says no to a wrong password, and opens nothing', async () => {
+  it('with no session to ask, signs in to check and says no to a wrong password', async () => {
     const { auth, calls } = setup((url) => (url.endsWith('/api/auth/login') ? json(null, 401) : json(tokens(1))));
     expect(await auth.verifyPassword('a@x.lk', 'nope')).toBe(false);
     expect(calls.map((c) => c.url)).toEqual(['https://ws.example/api/auth/login']);
