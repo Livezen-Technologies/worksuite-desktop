@@ -15,8 +15,13 @@ import { createPublicKey, type KeyObject } from 'node:crypto';
  * 32-byte public key in base64url (Update Center style).
  */
 
-/** Livezen's pinned discovery keys, `kid` → raw base64url Ed25519 key. Empty until the Cloud team issues them (plan §8.1 item 5). */
-export const LIVEZEN_DISCOVERY_KEYS: Readonly<Record<string, string>> = Object.freeze({});
+/**
+ * Livezen's pinned discovery keys, `kid` → raw base64url Ed25519 key. The first was issued 2026-10-18 and signs
+ * https://worksuitecloud.com/.well-known/worksuite.jws (private key on the Cloud server only).
+ */
+export const LIVEZEN_DISCOVERY_KEYS: Readonly<Record<string, string>> = Object.freeze({
+  '131A:C0B6:88AC:1A91:9DBB:341A:6C7C:1C48': 'N7Cg68I6FnegXrR1JQVb7lV5-rdISnQTsh8mOYb1YLM',
+});
 
 /**
  * The test key of tests/fixtures/discovery (keys.json), trusted for Cloud discovery in unpackaged builds only, so the

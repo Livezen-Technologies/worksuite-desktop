@@ -11,6 +11,14 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.264 — 2026-10-18
+
+- **WorkSuite Cloud is trusted.** The Livezen discovery key (kid `131A:C0B6:88AC:1A91:9DBB:341A:6C7C:1C48`) is pinned,
+  so a packaged build accepts https://worksuitecloud.com's signed discovery document and Personal sign-in through
+  account.worksuitecloud.com works end to end. Before this the pin list was empty and installed builds refused the
+  Cloud as unsigned. Checked against the live document: it verifies, and a one-byte change fails with `signature`.
+- Opt-in test of Personal sign-in against a local WorkSuite Cloud account service.
+
 ## 0.2.263 — 2026-10-18
 
 - **Sign-out's "unsynced changes" and the status bar agree, and Sync Now clears what it can.** Copies of Drive files
