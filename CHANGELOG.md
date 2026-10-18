@@ -11,6 +11,16 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+
+- **Personal sign-in checked against the real WorkSuite Cloud account service.** No app change: the client written
+  against the mock already speaks what worksuite-cloud's new OneAuth (`/oauth/*`, part 8) answers.
+  `tests/unit/electron/cloud/oneauth-live.test.ts` (opt-in: `WS_ONEAUTH_LIVE_ORIGIN`, `WS_ONEAUTH_LIVE_MYSQL`) runs the
+  app's own discovery, browser sign-up and sign-in, loopback callback, code exchange, refresh, rotation reuse and
+  sign-out against a locally running service. Where it bites: a packaged build still stops at SIGNATURE_MISSING until a
+  Livezen discovery key is made and pinned in `LIVEZEN_DISCOVERY_KEYS`, and the workspace stays on "setting up" until a
+  Core serves Personal organizations.
+
 ## 0.2.262 — 2026-10-16
 
 Needs WorkSuite Auth 2.6.0 (unlock without a login code) and Project 2.6.0 (client access) on the server for those two
