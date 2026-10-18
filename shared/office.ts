@@ -396,6 +396,17 @@ export interface ExternalApp {
 /** `quota`: the edits could not go up because the account's storage is full; they wait on this computer (screen 13). */
 export type LocalCopyState = 'downloading' | 'open' | 'changed' | 'uploading' | 'uploaded' | 'conflict' | 'failed' | 'missing' | 'quota';
 
+/**
+ * Whether a copy holds edits not on the server yet — the one rule the sign-out list, the status bar's "pending
+ * changes" and Sync Now share. A download that failed (`failed`, never changed here) has nothing to send; a copy
+ * Drive sync owns goes back through sync; one gone from this computer (`missing`) has nothing left to send.
+ */
+export function copyHasUnsentEdits(c: Pick<OfficeLocalCopy, 'state' | 'syncOwned' | 'changedAt'>): boolean {
+  if (c.syncOwned) return false;
+  if (c.state === 'changed' || c.state === 'uploading' || c.state === 'conflict' || c.state === 'quota') return true;
+  return c.state === 'failed' && !!c.changedAt;
+}
+
 /** A copy of a Drive file opened in another app on this computer, watched for edits to bring back. */
 export interface OfficeLocalCopy {
   id: string;

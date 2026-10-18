@@ -36,6 +36,8 @@ export interface AccountsHost {
   syncNow: () => Promise<void>;
   /** Asks where to save, and writes the zip. */
   exportUnsynced: (account: AccountRecord) => Promise<{ path: string | null }>;
+  /** Discard this change: one item of the open account's list, by its id ("office:…", "queue:…", "upload:…"). */
+  discardUnsynced?: (itemId: string) => Promise<void>;
   /** Another account's sign-out: its refresh token revoked at its server and deleted from its secrets. */
   signOutOther: (account: AccountRecord) => Promise<void>;
   remove: (account: AccountRecord, keepOfflineFiles: boolean) => Promise<void>;
@@ -229,6 +231,14 @@ export class AccountsService {
     return this.h.exportUnsynced(this.need(id));
   }
 
+  /** Discard this change (the person confirmed): only the open account's, whose services hold the item. */
+  async discardUnsynced(id: string, itemId: string): Promise<UnsyncedSummary> {
+    const a = this.need(id);
+    if (a.id !== this.h.registry.activeId() || !this.h.discardUnsynced) throw new DesktopError('UNSUPPORTED', 'Switch to this account to discard its changes.');
+    await this.h.discardUnsynced(itemId);
+    return this.h.unsynced(a);
+  }
+
   async signOut(input: { accountId: string; removeCachedData: boolean; keepOfflineFiles: boolean; discardUnsynced: boolean }): Promise<AccountsState> {
     const a = this.need(input.accountId);
     if (a.id === this.h.registry.activeId()) {
@@ -392,6 +402,7 @@ export function registerAccountsHandlers(router: IpcRouter, s: AccountsService):
   router.handle('accounts:unsynced', (input) => s.unsynced(input.accountId));
   router.handle('accounts:syncNow', (input) => s.syncNow(input.accountId));
   router.handle('accounts:exportUnsynced', (input) => s.exportUnsynced(input.accountId));
+  router.handle('accounts:discardUnsynced', (input) => s.discardUnsynced(input.accountId, input.itemId));
   router.handle('accounts:signOut', (input) => s.signOut(input));
   router.handle('accounts:remove', (input) => s.remove(input));
   router.handle('accounts:health', (input) => s.health(input?.accountId));

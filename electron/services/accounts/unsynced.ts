@@ -1,5 +1,5 @@
 import type { UnsyncedItem, UnsyncedSummary } from '@shared/accounts';
-import type { OfficeLocalCopy } from '@shared/office';
+import { copyHasUnsentEdits, type OfficeLocalCopy } from '@shared/office';
 import type { Database } from '../db';
 import type { Vault } from '../vault';
 import { createZip, type ZipEntry } from '../zip';
@@ -11,7 +11,6 @@ import { createZip, type ZipEntry } from '../zip';
  */
 
 const QUEUE_STATES = ['PENDING', 'SYNCING', 'FAILED', 'CONFLICT'];
-const OFFICE_STATES = new Set(['changed', 'uploading', 'conflict', 'failed', 'quota']);
 const UPLOAD_STATES = ['queued', 'running', 'paused', 'failed'];
 
 function tableExists(db: Database, name: string): boolean {
@@ -29,34 +28,52 @@ export interface UnsyncedDeps {
   accountId: string;
   /** Whose: the account's user (rows of others on a shared computer are theirs, not this account's). */
   userId: string | null;
+  /** The open account's copies, from memory (OfficeExternal.list()); otherwise they are read from its database. */
+  officeCopies?: () => OfficeLocalCopy[];
+  /** The list only (the status bar's count): the offline-files and cache sizes are not summed. */
+  itemsOnly?: boolean;
+}
+
+/**
+ * One row per Drive file: two copies of the same file (an older one left behind when it was opened again) are one
+ * change, the latest. Copies without edits waiting are not listed at all.
+ */
+export function pendingCopies(copies: OfficeLocalCopy[]): OfficeLocalCopy[] {
+  const byFile = new Map<number, OfficeLocalCopy>();
+  for (const c of copies) {
+    if (!copyHasUnsentEdits(c)) continue;
+    const had = byFile.get(c.fileId);
+    if (!had || (c.updatedAt ?? '') > (had.updatedAt ?? '')) byFile.set(c.fileId, c);
+  }
+  return [...byFile.values()];
 }
 
 export function unsyncedSummary(d: UnsyncedDeps): UnsyncedSummary {
   const { db, vault, userId } = d;
   const items: UnsyncedItem[] = [];
   if (userId && !db.isClosed) {
-    for (const r of db.all<{ id: string; module: string; label: string; created_at: string; state: string }>(
-      `SELECT id, module, label, created_at, state FROM offline_mutations WHERE user_id = ? AND state IN (${placeholders(QUEUE_STATES.length)}) ORDER BY seq ASC`,
+    for (const r of db.all<{ id: string; module: string; label: string; created_at: string; state: string; error: string | null }>(
+      `SELECT id, module, label, created_at, state, error FROM offline_mutations WHERE user_id = ? AND state IN (${placeholders(QUEUE_STATES.length)}) ORDER BY seq ASC`,
       userId,
       ...QUEUE_STATES,
     )) {
-      items.push({ id: `queue:${r.id}`, source: 'queue', module: r.module, label: r.label, at: r.created_at });
+      items.push({ id: `queue:${r.id}`, source: 'queue', module: r.module, label: r.label, at: r.created_at, error: r.error ?? null, discardable: true });
     }
 
-    const copies = (() => {
+    const copies = d.officeCopies ? d.officeCopies() : (() => {
       const stored = db.getConfig<string>(`office_local_copies:${userId}`);
       return stored && vault ? (vault.decrypt<OfficeLocalCopy[]>(stored) ?? []) : [];
     })();
-    for (const c of copies) {
-      if (OFFICE_STATES.has(c.state as string)) items.push({ id: `office:${c.id}`, source: 'office', module: 'files', label: c.name, at: c.changedAt ?? c.updatedAt });
+    for (const c of pendingCopies(copies)) {
+      items.push({ id: `office:${c.id}`, source: 'office', module: 'files', label: c.name, at: c.changedAt ?? c.updatedAt, error: c.state === 'conflict' ? (c.conflict?.message ?? 'The cloud file changed while you were editing.') : (c.error ?? null), discardable: true });
     }
 
-    for (const r of db.all<{ id: string; name: string; created_at: string }>(
-      `SELECT id, name, created_at FROM transfers WHERE user_id = ? AND direction = 'upload' AND state IN (${placeholders(UPLOAD_STATES.length)}) ORDER BY created_at ASC`,
+    for (const r of db.all<{ id: string; name: string; created_at: string; error: string | null }>(
+      `SELECT id, name, created_at, error FROM transfers WHERE user_id = ? AND direction = 'upload' AND state IN (${placeholders(UPLOAD_STATES.length)}) ORDER BY created_at ASC`,
       userId,
       ...UPLOAD_STATES,
     )) {
-      items.push({ id: `upload:${r.id}`, source: 'upload', module: 'files', label: r.name, at: r.created_at });
+      items.push({ id: `upload:${r.id}`, source: 'upload', module: 'files', label: r.name, at: r.created_at, error: r.error ?? null, discardable: true });
     }
 
     if (tableExists(db, 'projects_outbox')) {
@@ -83,6 +100,7 @@ export function unsyncedSummary(d: UnsyncedDeps): UnsyncedSummary {
     if (row && row.n > 0) items.push({ id: 'desk:pos', source: 'desk', module: 'pos', label: 'pos sales', at: row.at ?? new Date(0).toISOString(), count: row.n });
   }
 
+  if (d.itemsOnly) return { accountId: d.accountId, items, offlineFiles: { count: 0, bytes: 0 }, cachedBytes: 0 };
   const offline = userId && !db.isClosed
     ? db.get<{ n: number; bytes: number | null }>(
         "SELECT COUNT(*) AS n, SUM(e.size) AS bytes FROM sync_entries e JOIN sync_folders f ON f.id = e.folder WHERE f.user_id = ? AND e.kind = 'file'",
@@ -98,7 +116,7 @@ export function unsyncedSummary(d: UnsyncedDeps): UnsyncedSummary {
   };
 }
 
-/** How many changes are waiting, for "N pending changes kept". */
+/** How many changes are waiting: "N pending changes kept", the status bar's "N pending changes", and the sign-out list. */
 export function pendingCount(summary: UnsyncedSummary): number {
   return summary.items.reduce((n, i) => n + (i.count ?? 1), 0);
 }

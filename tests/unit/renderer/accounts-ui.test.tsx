@@ -111,6 +111,31 @@ describe('SignOutDialog', () => {
     expect(screen.queryByRole('heading', { name: /unsynced/ })).toBeNull();
   });
 
+  it('Sync Now that leaves items shows why under each; Discard this change asks first', async () => {
+    const stuck = { id: 'office:c1', source: 'office' as const, module: 'files', label: 'diulaptiya_tender.pdf', at: '2026-10-05T07:39:00Z', error: 'The file no longer exists on this computer.', discardable: true };
+    bridge.call.mockImplementation(async (channel: string) => {
+      if (channel === 'accounts:unsynced' || channel === 'accounts:syncNow') return unsynced({ items: [stuck] });
+      if (channel === 'accounts:discardUnsynced') return unsynced({ items: [] });
+      return undefined;
+    });
+    render(<SignOutDialog account={account()} onClose={vi.fn()} />);
+    await waitFor(() => screen.getByRole('heading', { name: /1 unsynced change/ }));
+    expect(screen.getByText('The file no longer exists on this computer.')).toBeTruthy();
+    await act(async () => {
+      fireEvent.click(screen.getByRole('button', { name: 'Sync Now' }));
+    });
+    expect(screen.getByRole('alert').textContent).toMatch(/1 change could not sync/);
+    fireEvent.click(screen.getByRole('button', { name: 'Discard this change: diulaptiya_tender.pdf' }));
+    expect(bridge.call).not.toHaveBeenCalledWith('accounts:discardUnsynced', expect.anything());
+    const confirm = screen.getByRole('alertdialog', { name: 'Discard this change?' });
+    expect(confirm.textContent).toMatch(/file stays on this computer/);
+    await act(async () => {
+      fireEvent.click(within(confirm).getByRole('button', { name: 'Discard this change' }));
+    });
+    expect(bridge.call).toHaveBeenCalledWith('accounts:discardUnsynced', { accountId: LIVEZEN_ID, itemId: 'office:c1' });
+    expect(screen.queryByRole('heading', { name: /unsynced/ })).toBeNull();
+  });
+
   it('signs out with the chosen options, keeping what has not synced', async () => {
     const onClose = vi.fn();
     render(<SignOutDialog account={account()} onClose={onClose} />);

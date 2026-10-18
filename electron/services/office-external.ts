@@ -3,7 +3,7 @@ import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream, existsSync, openAsBlob } from 'node:fs';
 import { stat } from 'node:fs/promises';
 import { basename, join } from 'node:path';
-import { EXTERNAL_APP_LABELS, keepBothName, microsoftAppFor, type ExternalApp, type ExternalAppId, type OfficeLocalCopy, type OfficeUploadHow } from '@shared/office';
+import { copyHasUnsentEdits, EXTERNAL_APP_LABELS, keepBothName, microsoftAppFor, type ExternalApp, type ExternalAppId, type OfficeLocalCopy, type OfficeUploadHow } from '@shared/office';
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { Database } from './db';
@@ -81,6 +81,9 @@ interface Stored extends OfficeLocalCopy {
 }
 
 const WATCHED = new Set(['open', 'uploaded']);
+
+/** Why a copy with edits waiting cannot go back. */
+export const GONE_MESSAGE = 'The file no longer exists on this computer.';
 
 /** Screen 13's promise, on a copy whose new version the account's full storage refused. */
 export const QUOTA_COPY_MESSAGE = 'Your storage is full. Your edits are safe on this computer and upload as a new version as soon as there is room.';
@@ -203,9 +206,55 @@ export class OfficeExternal {
       const stored = this.deps.db.getConfig<string>(this.key(uid));
       this.copies = (stored ? this.deps.vault().decrypt<Stored[]>(stored) : undefined) ?? [];
       this.loadedFor = uid;
+      if (this.tidy()) this.save();
       this.schedule();
     }
     return this.copies;
+  }
+
+  /**
+   * The list as it is read (each start, each account): rows that stood for nothing are let go, and two rows for one
+   * Drive file become one. Only the list changes — no file on this computer is touched, so edits not sent are never
+   * lost: a copy with edits waiting is always the row kept.
+   *  - a download that failed and was never edited here (`failed`, no changedAt): nothing to send;
+   *  - an older row for a file that has a newer one (the same file opened again before the fix that replaced it).
+   * A copy with edits waiting whose file is gone keeps its row, with why it cannot be sent, so the person can see it
+   * and discard it.
+   */
+  private tidy(): boolean {
+    const before = this.copies.length;
+    const kept: Stored[] = [];
+    const seen = new Map<string, Stored>();
+    let dropped = 0;
+    let duplicates = 0;
+    let gone = 0;
+    for (const c of this.copies) {
+      if (c.state === 'failed' && !c.changedAt) {
+        dropped++;
+        continue;
+      }
+      // An upload interrupted by quitting is not running any more: back to "changed", to be sent again.
+      if (c.state === 'uploading') c.state = 'changed';
+      if (copyHasUnsentEdits(c) && c.path && !this.exists(c.path) && c.error !== GONE_MESSAGE) {
+        c.error = GONE_MESSAGE;
+        gone++;
+      }
+      const key = c.syncOwned ? `s:${c.fileId}` : `f:${c.fileId}`;
+      const had = seen.get(key);
+      if (had) {
+        duplicates++;
+        // Keep the one with edits waiting; between equals, the newer.
+        const better = copyHasUnsentEdits(c) && !copyHasUnsentEdits(had) ? c : copyHasUnsentEdits(had) && !copyHasUnsentEdits(c) ? had : (c.updatedAt ?? '') > (had.updatedAt ?? '') ? c : had;
+        if (better === c) kept[kept.indexOf(had)] = c;
+        seen.set(key, better);
+        continue;
+      }
+      seen.set(key, c);
+      kept.push(c);
+    }
+    this.copies = kept;
+    if (dropped || duplicates || gone) log.info('local copies tidied', { before, after: kept.length, failedDownloads: dropped, duplicates, missingFiles: gone });
+    return dropped > 0 || duplicates > 0 || gone > 0 || kept.length !== before;
   }
 
   private save(): void {
@@ -355,7 +404,10 @@ export class OfficeExternal {
   async upload(id: string, how: OfficeUploadHow): Promise<{ state: 'uploaded'; version: number | null } | { state: 'conflict'; conflict: NonNullable<OfficeLocalCopy['conflict']> } | { state: 'queued' }> {
     const c = this.find(id);
     if (c.syncOwned) throw new DesktopError('POLICY_DENIED', 'Drive sync takes this file’s changes back; nothing to upload.');
-    if (!c.path || !this.exists(c.path)) throw new DesktopError('NOT_FOUND', 'The copy on this computer was moved or deleted.');
+    if (!c.path || !this.exists(c.path)) {
+      if (c.error !== GONE_MESSAGE) this.touch(c, { error: GONE_MESSAGE });
+      throw new DesktopError('NOT_FOUND', GONE_MESSAGE);
+    }
     if (how === 'keep_both') {
       await this.deps.uploadNew(c.path, keepBothName(c.name), c.folderId);
       this.touch(c, { state: 'uploaded', conflict: null, error: null });
@@ -423,6 +475,34 @@ export class OfficeExternal {
       }
     }
     return sent;
+  }
+
+  /**
+   * Sync Now: every copy with edits waiting goes up as a new version, against the version it was made from. A
+   * conflict is left for the person to decide (Files shows Keep Both / Upload as New Version); each one that could not
+   * go is returned with why, and keeps that reason on its row for the sign-out list.
+   */
+  async syncPending(): Promise<{ sent: number; errors: Array<{ id: string; name: string; error: string }> }> {
+    let sent = 0;
+    const errors: Array<{ id: string; name: string; error: string }> = [];
+    for (const c of [...this.load()]) {
+      if (!copyHasUnsentEdits(c) || c.state === 'uploading') continue;
+      if (c.state === 'conflict') {
+        errors.push({ id: c.id, name: c.name, error: c.conflict?.message ?? 'The cloud file changed while you were editing.' });
+        continue;
+      }
+      try {
+        const r = await this.upload(c.id, 'version');
+        if (r.state === 'conflict') errors.push({ id: c.id, name: c.name, error: r.conflict.message });
+        else sent++;
+      } catch (e) {
+        const error = isDesktopError(e) ? e.message : String((e as Error)?.message ?? e);
+        errors.push({ id: c.id, name: c.name, error });
+        if (isDesktopError(e) && e.code === 'QUOTA_EXCEEDED') break;
+      }
+    }
+    if (sent || errors.length) log.info('local copies synced', { sent, failed: errors.length });
+    return { sent, errors };
   }
 
   /** Stop watching a copy; the file stays in the downloads folder (it is the person's). */
