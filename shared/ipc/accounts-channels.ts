@@ -12,6 +12,7 @@ export const ACCOUNTS_INVOKE_CHANNELS = [
   'accounts:unsynced',
   'accounts:syncNow',
   'accounts:exportUnsynced',
+  'accounts:discardUnsynced',
   'accounts:signOut',
   'accounts:remove',
   'accounts:health',

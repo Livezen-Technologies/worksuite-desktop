@@ -47,7 +47,9 @@ export function SignOutDialog({ account, onClose }: SignOutDialogProps) {
   const [loading, setLoading] = useState(true);
   const [removeCached, setRemoveCached] = useState(true);
   const [keepOffline, setKeepOffline] = useState(false);
-  const [busy, setBusy] = useState<'sync' | 'export' | 'signout' | null>(null);
+  const [busy, setBusy] = useState<'sync' | 'export' | 'signout' | 'discard' | null>(null);
+  // Discard this change: the item waiting for "Discard" to be confirmed.
+  const [confirming, setConfirming] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const name = accountName(account);
   const close = useRef(onClose);
@@ -97,6 +99,10 @@ export function SignOutDialog({ account, onClose }: SignOutDialogProps) {
       const next = await call('accounts:syncNow', { accountId: account.id });
       setSummary(next);
       if (next.items.length === 0) toast('success', 'Everything is on the server now.');
+      else {
+        const left = unsyncedCount(next.items);
+        setError(`${left} ${left === 1 ? 'change' : 'changes'} could not sync. The reason is under each one; you can export or discard it.`);
+      }
     } catch (e) {
       setError(errorMessage(e));
     } finally {
@@ -127,6 +133,19 @@ export function SignOutDialog({ account, onClose }: SignOutDialogProps) {
       setBusy(null);
     }
   };
+  const discard = async (itemId: string) => {
+    setBusy('discard');
+    setError(null);
+    try {
+      const next = await call('accounts:discardUnsynced', { accountId: account.id, itemId });
+      setSummary(next);
+      setConfirming(null);
+    } catch (e) {
+      setError(errorMessage(e));
+    } finally {
+      setBusy(null);
+    }
+  };
   const goRemove = () => {
     onClose();
     navigate('/settings/accounts');
@@ -145,10 +164,31 @@ export function SignOutDialog({ account, onClose }: SignOutDialogProps) {
             </p>
             <ul className="m-0 max-h-[230px] list-none overflow-y-auto p-0 scroll-thin" aria-label="Unsynced changes">
               {items.map((i) => (
-                <li key={i.id} className="flex items-center gap-3 border-b border-line py-2.5 text-[13.5px] text-ink last:border-b-0">
-                  <span className="shrink-0 rounded-[6px] bg-selection px-2 py-0.5 text-[11.5px] font-bold text-primary">{tagOf(i)}</span>
-                  <span className="min-w-0 flex-1 truncate">{i.label}</span>
-                  <span className="shrink-0 text-ink-3">{timeOf(i.at)}</span>
+                <li key={i.id} className="flex flex-col gap-1 border-b border-line py-2.5 text-[13.5px] text-ink last:border-b-0">
+                  <div className="flex items-center gap-3">
+                    <span className="shrink-0 rounded-[6px] bg-selection px-2 py-0.5 text-[11.5px] font-bold text-primary">{tagOf(i)}</span>
+                    <span className="min-w-0 flex-1 truncate">{i.label}</span>
+                    <span className="shrink-0 text-ink-3">{timeOf(i.at)}</span>
+                    {i.discardable && confirming !== i.id ? (
+                      <button type="button" className="shrink-0 text-[12.5px] font-semibold text-danger hover:underline disabled:opacity-50" disabled={busy !== null} onClick={() => setConfirming(i.id)} aria-label={`Discard this change: ${i.label}`}>
+                        Discard
+                      </button>
+                    ) : null}
+                  </div>
+                  {i.error ? <p className="m-0 pl-1 text-[12.5px] text-danger">{i.error}</p> : null}
+                  {confirming === i.id ? (
+                    <div role="alertdialog" aria-label="Discard this change?" className="flex flex-wrap items-center gap-2 rounded-[8px] bg-subtle p-2 text-[12.5px] text-ink-2">
+                      <span className="min-w-0 flex-1">
+                        Discard this change? It will not be sent to the server.{i.source === 'office' || i.source === 'upload' ? ' The file stays on this computer.' : ''}
+                      </span>
+                      <Button size="sm" variant="danger" loading={busy === 'discard'} onClick={() => void discard(i.id)}>
+                        Discard this change
+                      </Button>
+                      <Button size="sm" variant="ghost" disabled={busy === 'discard'} onClick={() => setConfirming(null)}>
+                        Keep
+                      </Button>
+                    </div>
+                  ) : null}
                 </li>
               ))}
             </ul>

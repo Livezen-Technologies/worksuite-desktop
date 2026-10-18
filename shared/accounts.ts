@@ -92,6 +92,10 @@ export interface UnsyncedItem {
   label: string;
   at: string;
   count?: number;
+  /** Why the last try to send it failed ("The copy on this computer was moved or deleted."), when it did. */
+  error?: string | null;
+  /** It can be discarded from the sign-out list (Discard this change); a desk outbox is reviewed in its own app. */
+  discardable?: boolean;
 }
 
 export interface UnsyncedSummary {
@@ -156,6 +160,7 @@ export const accountsContract = {
   'accounts:unsynced': { input: z.strictObject({ accountId }) },
   'accounts:syncNow': { input: z.strictObject({ accountId }) },
   'accounts:exportUnsynced': { input: z.strictObject({ accountId }), sensitive: true },
+  'accounts:discardUnsynced': { input: z.strictObject({ accountId, itemId: z.string().min(1).max(200) }), sensitive: true },
   'accounts:signOut': {
     input: z.strictObject({ accountId, removeCachedData: z.boolean(), keepOfflineFiles: z.boolean(), discardUnsynced: z.boolean() }),
     sensitive: true,
@@ -202,6 +207,8 @@ export interface AccountsOutputs {
   'accounts:syncNow': UnsyncedSummary;
   /** The zip's path, or null when the save dialog was cancelled. */
   'accounts:exportUnsynced': { path: string | null };
+  /** The list again, without the change discarded. */
+  'accounts:discardUnsynced': UnsyncedSummary;
   'accounts:signOut': AccountsState;
   'accounts:remove': AccountsState;
   'accounts:health': ConnectionHealth;

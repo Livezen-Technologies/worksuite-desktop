@@ -694,6 +694,7 @@ const api = {
     unsynced: call('accounts:unsynced'),
     syncNow: call('accounts:syncNow'),
     exportUnsynced: call('accounts:exportUnsynced'),
+    discardUnsynced: call('accounts:discardUnsynced'),
     signOut: call('accounts:signOut'),
     remove: call('accounts:remove'),
     health: call('accounts:health'),

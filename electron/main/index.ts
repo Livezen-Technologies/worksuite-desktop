@@ -1716,7 +1716,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       // The service banner (screen 16) and the switcher's dot for the accounts not open now.
       service: health.state(),
       otherAccountsUnread: background.totalUnread(),
-      pendingChanges: uid ? queue.pendingCount(uid) + salonSync.pending() + eventDesk.pending() + pos.pending() + restaurant.sync.pending() + projects.pending() : 0,
+      // The same list the sign-out dialog shows (accounts/unsynced.ts): one count, so the two never disagree.
+      pendingChanges: uid ? pendingCount(unsyncedSummary({ db, vault, accountId: registry.activeId() ?? '', userId: uid, officeCopies: () => officeLocal.list(), itemsOnly: true })) : 0,
       unread: counts,
       notificationsPausedUntil: notifications.pausedUntilIso(),
       mailAlertsPaused: hasMail ? (mailAlerts.state().pauseLabel ?? null) : null,
@@ -3668,7 +3669,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   }
 
   /** The open account's unsynced summary, live from the bound database. */
-  const activeUnsynced = (account: AccountRecord) => unsyncedSummary({ db, vault, accountId: account.id, userId: sessionCtl.userId() ?? account.user?.id ?? null });
+  const activeUnsynced = (account: AccountRecord) => unsyncedSummary({ db, vault, accountId: account.id, userId: sessionCtl.userId() ?? account.user?.id ?? null, officeCopies: sessionCtl.isReady() ? () => officeLocal.list() : undefined });
   /** Another account's, from its own database (opened for the read, closed after). */
   const otherUnsynced = (account: AccountRecord) => {
     const paths = profilePaths(p.userData, account.profileDir);
@@ -3703,6 +3704,30 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       void projects.reconnected();
       sync.kick('sync-now');
       transfers.setOnline(true);
+      // Uploads that stopped (failed or paused) go again; each keeps its error if it fails again.
+      for (const t of transfers.list()) {
+        if (t.direction !== 'upload' || (t.state !== 'failed' && t.state !== 'paused')) continue;
+        try {
+          transfers.retry(t.id);
+        } catch (e) {
+          log.warn('upload not retried', { error: String((e as Error)?.message ?? e) });
+        }
+      }
+      // Copies edited in other apps go back as new versions; each that cannot keeps why on its row.
+      await officeLocal.syncPending();
+    },
+    discardUnsynced: async (itemId) => {
+      const uid = sessionCtl.userId();
+      if (!uid) throw new DesktopError('NOT_SIGNED_IN', 'Sign in again to change this list.');
+      const [kind, ...rest] = itemId.split(':');
+      const id = rest.join(':');
+      if (kind === 'queue') queue.discard(uid, id);
+      // The copy stays in the downloads folder: only WorkSuite stops waiting to send it.
+      else if (kind === 'office') officeLocal.forget(id);
+      else if (kind === 'upload') await transfers.cancel(id);
+      else throw new DesktopError('UNSUPPORTED', 'Open that app to review its changes.');
+      audit.record(uid, 'accounts.unsynced.discarded', { kind });
+      log.info('unsynced change discarded', { kind });
     },
     exportUnsynced: async (account) => {
       const parent = windows.getMain();

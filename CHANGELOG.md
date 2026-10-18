@@ -11,6 +11,21 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+
+- **Sign-out's "unsynced changes" and the status bar agree, and Sync Now clears what it can.** Copies of Drive files
+  edited in other apps (Open in Word, the default app) were listed when signing out but counted nowhere else — the
+  status bar said "0 pending changes" while the dialog said 4 — and Sync Now never sent them, so they stayed for good.
+  - One list (`accounts/unsynced.ts`) is now the count everywhere: the status bar, the sign-out dialog and
+    "N pending changes kept".
+  - Sync Now sends each edited copy as a new version and retries failed or paused uploads. What still cannot go says
+    why under its row ("The file no longer exists on this computer.", the server's refusal, a conflict to decide).
+  - **Discard this change** on each row, with a confirmation. Discarding a file change only stops WorkSuite waiting
+    to send it: the file stays on this computer.
+  - On start the list is tidied, and logged (`local copies tidied`): downloads that failed and were never edited are
+    let go (they held nothing to send), and two rows for one Drive file become one, always keeping the edited one.
+    No file on disk is touched.
+
 ## 0.2.262 — 2026-10-16
 
 Needs WorkSuite Auth 2.6.0 (unlock without a login code) and Project 2.6.0 (client access) on the server for those two
