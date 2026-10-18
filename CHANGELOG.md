@@ -11,7 +11,7 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## Unreleased
+## 0.2.263 — 2026-10-18
 
 - **Sign-out's "unsynced changes" and the status bar agree, and Sync Now clears what it can.** Copies of Drive files
   edited in other apps (Open in Word, the default app) were listed when signing out but counted nowhere else — the
@@ -3078,7 +3078,7 @@ Saved Home layouts carry over: hidden cards stay hidden and your order is kept. 
   - This needs WorkSuite Communication 1.3.0 and Meeting 1.4.0 on the server. Run its migrations (two new ones).
   - Against an older server, Raise hand is greyed out, and Q&A and Polls have nothing to show.
   - An anonymous poll keeps no name with a vote, so not even the host can see who chose what.
-## Unreleased
+## 0.2.263 — 2026-10-18
 
 - **Drag to create calendar events** (#63). Select empty time slots in Day or Week in quarter hours; the highlight shows the start, end, duration and displayed timezone. Release to fill in New Event, then add the title, attendees, location, description and reminder before saving. Month dates and the All Day row select inclusive multi-day events. The calendar scrolls near its edges; Escape cancels without creating anything. Creation respects calendar access and offline status, and the New event button and keyboard shortcut remain available.
 
