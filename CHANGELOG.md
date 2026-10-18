@@ -25,6 +25,15 @@ person who has to live with the change — what it does, and where it bites.
   - On start the list is tidied, and logged (`local copies tidied`): downloads that failed and were never edited are
     let go (they held nothing to send), and two rows for one Drive file become one, always keeping the edited one.
     No file on disk is touched.
+## Unreleased
+
+- **Personal sign-in checked against the real WorkSuite Cloud account service.** No app change: the client written
+  against the mock already speaks what worksuite-cloud's new OneAuth (`/oauth/*`, part 8) answers.
+  `tests/unit/electron/cloud/oneauth-live.test.ts` (opt-in: `WS_ONEAUTH_LIVE_ORIGIN`, `WS_ONEAUTH_LIVE_MYSQL`) runs the
+  app's own discovery, browser sign-up and sign-in, loopback callback, code exchange, refresh, rotation reuse and
+  sign-out against a locally running service. Where it bites: a packaged build still stops at SIGNATURE_MISSING until a
+  Livezen discovery key is made and pinned in `LIVEZEN_DISCOVERY_KEYS`, and the workspace stays on "setting up" until a
+  Core serves Personal organizations.
 
 ## 0.2.262 — 2026-10-16
 
