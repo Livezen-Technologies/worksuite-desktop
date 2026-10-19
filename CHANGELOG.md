@@ -11,6 +11,10 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.268 — 2026-10-19
+
+- Settings › License shows the server’s current edition, masked key, actual status, expiry, server activation limit and grace details. Refresh updates the open panel. Older servers retain explicit missing-value labels; a sign-in alone no longer implies an active license. Full details require the additive Core 1.20.0 server update.
+
 ## 0.2.267 — 2026-10-19
 
 - **Notifications follow the selected theme (#382).** The bell drawer, notification rows, app and snooze menus, notification centre and settings now use the app's live appearance colors for backgrounds, text, borders, icons and actions. Light/dark changes and color-profile changes apply to an open panel immediately. Notifications 2.3.1; no server update or migration is required.

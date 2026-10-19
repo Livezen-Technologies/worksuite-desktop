@@ -1,4 +1,4 @@
-import type { Bootstrap, DesktopPolicy, MonitoringPolicySummary, Organization, ServerApi } from '@shared/types';
+import type { Bootstrap, LicenseDetails, DesktopPolicy, MonitoringPolicySummary, Organization, ServerApi } from '@shared/types';
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import type { PublicUser } from './auth';
@@ -60,10 +60,22 @@ export function mediaServersOf(media: unknown): string[] {
   }
 }
 
+/** Normalize only the public display fields, never an activation key or admin payload. */
+export function licenseDetailsOf(value: unknown): LicenseDetails | null {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const d = value as Record<string, unknown>;
+  const text = (key: string) => typeof d[key] === 'string' && d[key].trim() ? d[key].slice(0, 256) : null;
+  const count = (key: string) => typeof d[key] === 'number' && Number.isSafeInteger(d[key]) && d[key] >= 0 ? d[key] : null;
+  return { status: text('status'), edition: text('edition'), keyMasked: text('license_key_masked'),
+    expiresAt: text('license_expires_at'), lastValidatedAt: text('last_validated_at'),
+    graceEndsAt: text('grace_ends_at'), graceDays: count('grace_days'), maxActivations: count('max_activations') };
+}
+
 /** What a licence says, per app: entitled or not, and the slugs it locks (hidden everywhere). */
 export interface LicenceSnapshot {
   entitlements: Record<string, boolean>;
   locked: string[];
+  license?: LicenseDetails | null;
 }
 
 /**
@@ -103,7 +115,7 @@ export class BootstrapService {
   async fetch(api: ServerApi, organizationId: string | null = null): Promise<Bootstrap> {
     const base = api === 'desktop-v1' ? await this.fetchV1(organizationId) : await this.compose();
     const lic = await this.licence();
-    const b: Bootstrap = lic ? { ...base, entitlements: { ...base.entitlements, ...lic.entitlements }, lockedApps: lic.locked } : base;
+    const b: Bootstrap = lic ? { ...base, entitlements: { ...base.entitlements, ...lic.entitlements }, lockedApps: lic.locked, license: lic.license ?? null } : base;
     this.current = b;
     this.save(b);
     return b;
@@ -123,7 +135,7 @@ export class BootstrapService {
       }
     }
     try {
-      const d = await this.http.get<{ apps?: unknown }>('/api/system/entitlements');
+      const d = await this.http.get<{ apps?: unknown; license?: unknown }>('/api/system/entitlements');
       if (!d || !Array.isArray(d.apps)) return null;
       const entitlements: Record<string, boolean> = {};
       const locked: string[] = [];
@@ -132,7 +144,7 @@ export class BootstrapService {
         entitlements[a.app] = a.entitled !== false;
         if (a.locked === true) locked.push(a.app);
       }
-      return { entitlements, locked };
+      return { entitlements, locked, license: licenseDetailsOf(d.license) };
     } catch (e) {
       log.debug('licence entitlements unavailable; every app as the server grants it', { code: isDesktopError(e) ? e.code : String(e) });
       return null;

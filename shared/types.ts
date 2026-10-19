@@ -183,7 +183,20 @@ export interface MonitoringPolicySummary {
   version: number;
 }
 
+/** Public, masked server licence details; absent on older servers and Cloud-only entitlements. */
+export interface LicenseDetails {
+  status: string | null;
+  edition: string | null;
+  keyMasked: string | null;
+  expiresAt: string | null;
+  lastValidatedAt: string | null;
+  graceEndsAt: string | null;
+  graceDays: number | null;
+  maxActivations: number | null;
+}
+
 export interface Bootstrap {
+  license?: LicenseDetails | null;
   source: ServerApi;
   user: UserSummary;
   organizations: Organization[];

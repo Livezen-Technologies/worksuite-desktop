@@ -355,16 +355,36 @@ describe('Settings › License', () => {
     handlers.set('security:deviceInfo', () => device);
     handlers.set('session:refresh', () => boot);
     wrap(<LicensePage />);
-    expect(screen.getByText('ACTIVE · CACHED')).toBeTruthy();
-    expect(screen.getByText(/Active — last verified 27 days ago/)).toBeTruthy();
+    expect(screen.getByText('UNKNOWN · CACHED')).toBeTruthy();
+    expect(screen.getByText(/Unknown — last verified unknown/)).toBeTruthy();
     expect(screen.getByText('Acme Ltd')).toBeTruthy();
     expect(await screen.findByText('dev_01J…4QX')).toBeTruthy();
     expect(screen.getByText('macOS Keychain')).toBeTruthy();
-    expect(screen.getAllByText('Needs server')).toHaveLength(4);
+    expect(screen.getAllByText('Needs server')).toHaveLength(5);
     expect(screen.getByText(/Your data is safe\./)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Refresh License' }));
     await waitFor(() => expect(mocked).toHaveBeenCalledWith('session:refresh'));
     await act(async () => undefined);
+  });
+
+  it('shows current server details and updates an open panel after a refreshed bootstrap', async () => {
+    handlers.set('security:deviceInfo', () => device);
+    app.set({ bootstrap: { ...boot, license: { status: 'ACTIVE', edition: 'Enterprise', keyMasked: 'WS-****-1234', expiresAt: '2027-10-19T00:00:00Z', lastValidatedAt: '2026-10-19T00:00:00Z', graceDays: 7, graceEndsAt: null, maxActivations: 2 } } });
+    wrap(<LicensePage />);
+    expect(screen.getByText('Enterprise')).toBeTruthy();
+    expect(screen.getByText('WS-****-1234')).toBeTruthy();
+    expect(screen.getByText('2 server installations')).toBeTruthy();
+    expect(screen.getByText('7 days (server license)')).toBeTruthy();
+    expect(screen.queryByText('Needs server')).toBeNull();
+    handlers.set('session:refresh', () => {
+      const next = { ...app.get().bootstrap!, license: { ...app.get().bootstrap!.license!, status: 'RESTRICTED', edition: 'Business' } };
+      app.set({ bootstrap: next });
+      return next;
+    });
+    fireEvent.click(screen.getByRole('button', { name: 'Refresh License' }));
+    expect(await screen.findByText('RESTRICTED · CACHED')).toBeTruthy();
+    expect(screen.getByText('Business')).toBeTruthy();
+    expect(screen.queryByText('Enterprise')).toBeNull();
   });
 
   it('lists entitlements from the sign-in, and says where the token is kept', () => {
