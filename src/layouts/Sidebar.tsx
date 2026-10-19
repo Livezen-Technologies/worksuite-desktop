@@ -176,7 +176,7 @@ export function Sidebar() {
       className={cx('flex shrink-0 flex-col bg-navy pb-3 text-navy-ink transition-[width] duration-150', collapsed ? 'w-[64px]' : 'w-[220px]')}
     >
       <OrgCard collapsed={collapsed} />
-      <div className="flex-1 overflow-y-auto overflow-x-hidden px-2.5 pt-2 scroll-thin">
+      <div className={cx('flex-1 overflow-y-auto overflow-x-hidden pt-2', collapsed ? 'scroll-none px-2' : 'scroll-thin px-2.5')}>
         {layout.pinned.length ? (
           <>
             {!collapsed ? (
@@ -185,7 +185,7 @@ export function Sidebar() {
                 {t('nav.pinned')}
               </div>
             ) : null}
-            <ul className="flex flex-col gap-0.5" aria-label={t('nav.pinned')} data-list="pinned">
+            <ul className={cx('flex flex-col gap-0.5', collapsed && 'rounded-[11px] bg-white/5 py-1')} aria-label={t('nav.pinned')} title={collapsed ? t('nav.pinned') : undefined} data-list="pinned">
               {layout.pinned.map((a) => item(a, 'pinned'))}
             </ul>
             <div className="mx-2 my-3 border-t border-white/10" data-pinned-divider />
@@ -432,13 +432,14 @@ function Item({ a, active, collapsed, badge, onClick, locked, custom }: { a: App
         {!collapsed && <span className="flex-1 truncate text-start">{label}</span>}
         {!collapsed && a.surface === 'browser' && !locked ? <Icon name="external" size={13} className="opacity-60" /> : null}
         {locked ? <Icon name="lock" size={13} className={cx('opacity-70', collapsed && 'absolute end-1.5 bottom-1')} /> : null}
-        {/* Collapsed, Pinned has no heading: each of its icons carries a small pin. */}
-        {collapsed && custom?.pinned ? (
-          <span data-pin-marker className="absolute end-1.5 bottom-1 flex opacity-80">
-            <Icon name="pin" size={10} />
-          </span>
+        {badge > 0 ? (
+          <CountBadge
+            n={badge}
+            tone={a.id === 'mail' || a.id === 'tasks' ? 'indigo' : 'badge'}
+            // Collapsed, the count sits on the icon's top-right corner, small and ringed in the sidebar colour, so the icon stays readable.
+            className={collapsed ? 'absolute top-0.5 start-[calc(50%+3px)] !h-4 !min-w-4 !px-1 !text-[9.5px] ring-2 ring-navy' : ''}
+          />
         ) : null}
-        {badge > 0 ? <CountBadge n={badge} tone={a.id === 'mail' || a.id === 'tasks' ? 'indigo' : 'badge'} className={collapsed ? 'absolute top-0.5 end-1' : ''} /> : null}
       </button>
     </li>
   );

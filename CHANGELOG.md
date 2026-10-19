@@ -11,6 +11,13 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased — 2026-10-19
+
+- **Collapsed sidebar, tidied.** Pinned apps no longer carry a second pin icon under each app; the pinned group sits on a
+  faint backdrop instead. Unread counts are small and ringed on the icon's top-right corner rather than covering it,
+  and the narrow sidebar scrolls without showing a scrollbar.
+- **Title-bar logo sized to the header.** The WorkSuite logo is 21px tall (was 30), in line with the header's buttons.
+
 ## 0.2.265 — 2026-10-19
 
 - **The WorkSuite logo is the owner's original artwork.** The four-square mark and the "worksuite" wordmark replace

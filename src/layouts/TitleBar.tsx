@@ -64,8 +64,8 @@ export function TitleBar() {
 
   return (
     <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac && !fullScreen ? 84 : 14, paddingRight: topBarPaddingRight(12) }}>
-      <div className="flex w-[180px] shrink-0 items-center gap-2.5">
-        <BrandLogo height={30} tone="dark" />
+      <div className="flex w-[150px] shrink-0 items-center gap-2.5">
+        <BrandLogo height={21} tone="dark" />
       </div>
 
       {/* The App Launcher: every app this person has, as tiles. */}

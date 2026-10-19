@@ -323,6 +323,14 @@ html[data-contrast='more'] :focus-visible {
   scrollbar-color: var(--ws-line) transparent;
 }
 
+/* Scrolls without showing a bar: the collapsed sidebar is too narrow for one. */
+.scroll-none {
+  scrollbar-width: none;
+}
+.scroll-none::-webkit-scrollbar {
+  display: none;
+}
+
 .tabular {
   font-variant-numeric: tabular-nums;
 }
