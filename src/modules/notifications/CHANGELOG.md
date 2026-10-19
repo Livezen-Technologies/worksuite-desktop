@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.3.1 — 2026-10-19
+
+**Fixed**
+
+- The notification drawer, rows, menus, centre and settings inherit live appearance tokens instead of fixed navy colors, including light/dark and color-profile changes (#382).
+
 ## 2.3.0 — 2026-10-15
 
 **Added**

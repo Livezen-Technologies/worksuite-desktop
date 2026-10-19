@@ -54,7 +54,7 @@ export function NotifRow({ n, labels, selected, onSelect, checked, onCheck, onOp
       data-category={n.category ?? ''}
       className={cx(
         'group relative flex gap-3 rounded-[12px] py-3 pr-4 pl-[22px] text-left',
-        selected ? 'bg-selection dark:bg-[#1A2549]' : n.read ? 'hover:bg-subtle dark:hover:bg-[#141D38]' : 'bg-[#F4F6FD] hover:bg-subtle dark:bg-[#131C36] dark:hover:bg-[#162042]',
+        selected ? 'bg-selection' : n.read ? 'hover:bg-subtle' : 'bg-selection/50 hover:bg-subtle',
       )}
     >
       {onCheck ? (
@@ -65,17 +65,17 @@ export function NotifRow({ n, labels, selected, onSelect, checked, onCheck, onOp
           className={cx('absolute top-[13px] left-[6px] z-10', checked ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus:opacity-100')}
         />
       ) : null}
-      {!n.read && !checked ? <span className={cx('absolute top-[25px] left-2 h-[7px] w-[7px] rounded-full bg-primary dark:bg-[#6C8CFF]', onCheck && 'group-hover:opacity-0')} aria-label="Unread" /> : null}
+      {!n.read && !checked ? <span className={cx('absolute top-[25px] left-2 h-[7px] w-[7px] rounded-full bg-primary', onCheck && 'group-hover:opacity-0')} aria-label="Unread" /> : null}
       <span className="flex h-9 w-9 shrink-0 items-center justify-center rounded-[11px] [background:var(--tl)] dark:[background:var(--td)]" style={{ color: a.acc, ['--tl' as string]: a.tintLight, ['--td' as string]: a.tint }}>
         <Icon name={a.icon} size={17} />
       </span>
       <button type="button" onClick={onSelect ?? open} className="absolute inset-0 rounded-[12px]" aria-label={`${onSelect ? 'Show' : 'Open'} “${n.title}”`} />
       <div className="pointer-events-none relative min-w-0 flex-1">
         <div className="flex items-baseline gap-2">
-          <div className={cx('min-w-0 flex-1 text-[13.5px] leading-[1.35] text-ink dark:text-[#F2F4FB]', n.read ? 'font-medium' : 'font-bold')}>{n.title}</div>
-          <span className="shrink-0 text-[11.5px] whitespace-nowrap text-ink-3 dark:text-[#8D96B8]">{relative(n.created_at)}</span>
+          <div className={cx('min-w-0 flex-1 text-[13.5px] leading-[1.35] text-ink', n.read ? 'font-medium' : 'font-bold')}>{n.title}</div>
+          <span className="shrink-0 text-[11.5px] whitespace-nowrap text-ink-3">{relative(n.created_at)}</span>
         </div>
-        {n.body ? <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-[1.45] text-ink-2 dark:text-[#AAB2CF]">{n.body}</div> : null}
+        {n.body ? <div className="mt-0.5 line-clamp-2 text-[12.5px] leading-[1.45] text-ink-2">{n.body}</div> : null}
         <div className="mt-2 flex flex-wrap items-center gap-1.5">
           {quickActions(n).map((q) => (
             <button
@@ -84,7 +84,7 @@ export function NotifRow({ n, labels, selected, onSelect, checked, onCheck, onOp
               onClick={open}
               className={cx(
                 'pointer-events-auto inline-flex h-7 items-center rounded-[7px] px-2.5 text-[12px] font-bold whitespace-nowrap',
-                q.primary ? 'bg-[#5B6CF0] text-white hover:bg-[#4E5FE0]' : 'border border-line text-ink hover:bg-subtle dark:border-[#2D3A66] dark:text-[#E8EBF7] dark:hover:bg-[#1A2442]',
+                q.primary ? 'bg-primary text-white hover:bg-primary-hover' : 'border border-line text-ink hover:bg-subtle',
               )}
             >
               {q.label}
@@ -92,13 +92,13 @@ export function NotifRow({ n, labels, selected, onSelect, checked, onCheck, onOp
           ))}
           <TaskReminderActions notice={n} />
           <MeetingInviteActions notice={n} />
-          {n.count > 1 ? <span className="rounded-full bg-subtle px-2 py-0.5 text-[11px] font-bold text-ink-2 dark:bg-[#1B2542] dark:text-[#C9CFE6]">{n.count} alike</span> : null}
+          {n.count > 1 ? <span className="rounded-full bg-subtle px-2 py-0.5 text-[11px] font-bold text-ink-2">{n.count} alike</span> : null}
           {n.snoozed_until && !n.archived ? <span className="text-[11.5px] font-semibold text-warning">Snoozed</span> : null}
           <span className="flex-1" />
-          <span className="text-[11.5px] text-ink-3 dark:text-[#6B7496]">{a.short}</span>
+          <span className="text-[11.5px] text-ink-3">{a.short}</span>
         </div>
       </div>
-      <div className={cx('absolute top-2 right-2.5 z-10 flex gap-0.5 rounded-[8px] bg-surface p-0.5 shadow-[0_0_0_1px_var(--ws-edge)] dark:bg-[#1A2442] dark:shadow-none', snoozing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
+      <div className={cx('absolute top-2 right-2.5 z-10 flex gap-0.5 rounded-[8px] bg-surface p-0.5 shadow-[0_0_0_1px_var(--ws-edge)]', snoozing ? 'opacity-100' : 'opacity-0 group-hover:opacity-100 focus-within:opacity-100')}>
         <Hover icon={n.read ? 'mail' : 'check'} label={n.read ? 'Mark as unread' : 'Mark as read'} onClick={() => void run(() => act(n.id, n.read ? 'unread' : 'read'))} />
         {!n.archived ? (
           <span className="relative">
@@ -132,7 +132,7 @@ function Hover({ icon, label, onClick, pressed }: { icon: string; label: string;
       title={label}
       aria-pressed={pressed}
       onClick={(e) => (e.stopPropagation(), onClick())}
-      className={cx('flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-ink-2 hover:bg-subtle hover:text-ink dark:text-[#C9CFE6] dark:hover:bg-[#26315A]', pressed && 'bg-subtle dark:bg-[#26315A]')}
+      className={cx('flex h-[26px] w-[26px] items-center justify-center rounded-[6px] text-ink-2 hover:bg-subtle hover:text-ink', pressed && 'bg-subtle')}
     >
       <Icon name={icon} size={14} />
     </button>
@@ -154,10 +154,10 @@ export function SnoozeMenu({ onPick, onClose, align = 'right', up }: { onPick: (
     };
   }, [onClose]);
   return (
-    <div ref={ref} role="menu" aria-label="Snooze until" className={cx('absolute z-30 w-[170px]', up ? 'bottom-9' : 'top-8', 'rounded-[10px] border border-line bg-surface p-1 shadow-[0_12px_30px_rgb(var(--ws-shadow-rgb)/.22)] dark:border-[#2D3A66] dark:bg-[#16203E]', align === 'right' ? 'right-0' : 'left-0')}>
-      <div className="px-2 pt-1 pb-1 text-[10.5px] font-extrabold tracking-[.7px] text-ink-3 dark:text-[#8D96B8]">SNOOZE UNTIL</div>
+    <div ref={ref} role="menu" aria-label="Snooze until" className={cx('absolute z-30 w-[170px]', up ? 'bottom-9' : 'top-8', 'rounded-[10px] border border-line bg-surface p-1 shadow-[0_12px_30px_rgb(var(--ws-shadow-rgb)/.22)]', align === 'right' ? 'right-0' : 'left-0')}>
+      <div className="px-2 pt-1 pb-1 text-[10.5px] font-extrabold tracking-[.7px] text-ink-3">SNOOZE UNTIL</div>
       {snoozeChoices().map((c) => (
-        <button key={c.label} type="button" role="menuitem" onClick={(e) => (e.stopPropagation(), onPick(c.minutes))} className="flex h-8 w-full items-center rounded-[7px] px-2 text-left text-[12.5px] font-semibold text-ink outline-none hover:bg-subtle focus:bg-subtle dark:text-[#E8EBF7] dark:hover:bg-[#1A2442] dark:focus:bg-[#1A2442]">
+        <button key={c.label} type="button" role="menuitem" onClick={(e) => (e.stopPropagation(), onPick(c.minutes))} className="flex h-8 w-full items-center rounded-[7px] px-2 text-left text-[12.5px] font-semibold text-ink outline-none hover:bg-subtle focus:bg-subtle">
           {c.label}
         </button>
       ))}

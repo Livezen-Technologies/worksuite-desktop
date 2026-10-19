@@ -124,14 +124,14 @@ function Centre() {
   const total = list.data?.pages[0]?.total ?? 0;
 
   return (
-    <div className="flex h-full min-h-0 bg-ground dark:bg-[#0A0F1E]">
+    <div className="flex h-full min-h-0 bg-ground">
       <SidePanel id="notifications" label="the notification views">
-        <nav aria-label="Notification views" className="flex w-[232px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-surface px-3 py-4 scroll-thin dark:border-[#1E2848] dark:bg-[#0F1629]">
-          <h1 className="m-0 px-2 pb-3 text-[18px] font-extrabold text-ink dark:text-[#E8EBF7]">Notifications</h1>
+        <nav aria-label="Notification views" className="flex w-[232px] shrink-0 flex-col gap-0.5 overflow-y-auto border-r border-line bg-surface px-3 py-4 scroll-thin">
+          <h1 className="m-0 px-2 pb-3 text-[18px] font-extrabold text-ink">Notifications</h1>
           {VIEWS.map((v) => (
             <RailItem key={v.id} icon={v.icon} label={v.label} count={counts[v.id]} on={view === v.id && !category} onClick={() => pick(v.id)} />
           ))}
-          {byCat.length ? <div className="px-2 pt-4 pb-1 text-[10.5px] font-extrabold tracking-[.8px] text-ink-3 dark:text-[#6B7496]">APPS</div> : null}
+          {byCat.length ? <div className="px-2 pt-4 pb-1 text-[10.5px] font-extrabold tracking-[.8px] text-ink-3">APPS</div> : null}
           {byCat.map(([c, n]) => {
             const a = appOf(c, labels);
             return <RailItem key={c} icon={a.icon} tone={a.acc} label={a.short} count={n.unread || undefined} on={category === c} onClick={() => pick('inbox', c)} />;
@@ -142,11 +142,11 @@ function Centre() {
       </SidePanel>
 
       <section className="flex min-w-0 flex-1 flex-col">
-        <div className="flex items-center gap-2 border-b border-line bg-surface px-5 py-3 dark:border-[#1E2848] dark:bg-[#0F1629]">
-          <h2 className="m-0 min-w-0 shrink-0 truncate text-[16px] font-extrabold text-ink dark:text-[#E8EBF7]">{title}</h2>
-          <label className="ml-3 flex h-[34px] min-w-0 flex-1 items-center gap-2 rounded-[9px] border border-line bg-surface px-2.5 focus-within:border-primary dark:border-[#26315A] dark:bg-[#111A31]">
+        <div className="flex items-center gap-2 border-b border-line bg-surface px-5 py-3">
+          <h2 className="m-0 min-w-0 shrink-0 truncate text-[16px] font-extrabold text-ink">{title}</h2>
+          <label className="ml-3 flex h-[34px] min-w-0 flex-1 items-center gap-2 rounded-[9px] border border-line bg-surface px-2.5 focus-within:border-primary">
             <Icon name="search" size={15} className="text-ink-3" />
-            <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search notifications" placeholder="Search notifications" className="bare-focus min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none dark:text-[#E8EBF7]" />
+            <input value={q} onChange={(e) => setQ(e.target.value)} aria-label="Search notifications" placeholder="Search notifications" className="bare-focus min-w-0 flex-1 bg-transparent text-[13px] text-ink outline-none" />
           </label>
           <Button size="sm" icon="check-check" disabled={!counts.inbox} onClick={() => void markAllRead().then(refresh, (e) => toast('error', errorMessage(e)))}>
             Mark all read
@@ -156,7 +156,7 @@ function Centre() {
           </Button>
         </div>
 
-        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-surface px-5 text-[12.5px] dark:border-[#1E2848] dark:bg-[#0F1629]" aria-label="Selection">
+        <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line bg-surface px-5 text-[12.5px]" aria-label="Selection">
           <Checkbox
             aria-label="Select all shown"
             checked={items.length > 0 && picked.length === items.length}
@@ -165,7 +165,7 @@ function Centre() {
           />
           {picked.length ? (
             <>
-              <b className="text-ink dark:text-[#E8EBF7]">{picked.length} selected</b>
+              <b className="text-ink">{picked.length} selected</b>
               <Bar icon="check" label="Mark read" onClick={() => void run(() => bulk(ids, 'read'), 'Marked read')} />
               <Bar icon="mail" label="Mark unread" onClick={() => void run(() => bulk(ids, 'unread'), 'Marked unread')} />
               {view !== 'archived' ? (
@@ -191,7 +191,7 @@ function Centre() {
               {sameApp ? <Bar icon={muted ? 'bell' : 'bell-off'} label={muted ? `Desktop alerts from ${appOf(sameApp, labels).short}` : `Mute ${appOf(sameApp, labels).short} on this computer`} onClick={() => mute(sameApp, !muted)} /> : null}
             </>
           ) : (
-            <span className="text-ink-3 dark:text-[#8D96B8]">{list.data ? (DERIVED.includes(view) ? `${items.length} among the latest hundred` : `${total} ${total === 1 ? 'notification' : 'notifications'}`) : ''}</span>
+            <span className="text-ink-3">{list.data ? (DERIVED.includes(view) ? `${items.length} among the latest hundred` : `${total} ${total === 1 ? 'notification' : 'notifications'}`) : ''}</span>
           )}
         </div>
 
@@ -203,9 +203,9 @@ function Centre() {
               <div key={g.section ?? i}>
                 {g.section ? (
                   <div className="flex items-center gap-2 px-3 pt-3.5 pb-1.5">
-                    <span className={cx('text-[11px] font-extrabold tracking-[.8px] uppercase', g.section === 'needs' ? 'text-[#C2410C] dark:text-[#FFB38A]' : 'text-ink-3 dark:text-[#8D96B8]')}>{SECTION_LABEL[g.section]}</span>
-                    <span className="text-[11px] font-bold text-ink-3 dark:text-[#6B7496]">{g.items.length}</span>
-                    <span className="h-px flex-1 bg-line dark:bg-[#1E2848]" />
+                    <span className={cx('text-[11px] font-extrabold tracking-[.8px] uppercase', g.section === 'needs' ? 'text-warning-ink' : 'text-ink-3')}>{SECTION_LABEL[g.section]}</span>
+                    <span className="text-[11px] font-bold text-ink-3">{g.items.length}</span>
+                    <span className="h-px flex-1 bg-line" />
                   </div>
                 ) : null}
                 {g.items.map((n) => (
@@ -231,10 +231,10 @@ function Centre() {
             ))}
             {!list.isLoading && !list.error && !items.length ? (
               <div className="flex flex-col items-center gap-2 px-8 py-20 text-center">
-                <span className="flex h-14 w-14 items-center justify-center rounded-[16px] bg-[#E3F6EE] text-[#1F9D6B] dark:bg-[#12291F] dark:text-[#6FE0B0]">
+                <span className="flex h-14 w-14 items-center justify-center rounded-[16px] bg-success-bg text-success">
                   <Icon name="check-check" size={26} />
                 </span>
-                <b className="text-[15px] text-ink dark:text-[#F2F4FB]">{view === 'snoozed' ? 'Nothing is snoozed' : view === 'archived' ? 'Nothing is done yet' : 'You’re all caught up'}</b>
+                <b className="text-[15px] text-ink">{view === 'snoozed' ? 'Nothing is snoozed' : view === 'archived' ? 'Nothing is done yet' : 'You’re all caught up'}</b>
                 <span className="text-[12.5px] text-ink-3">{needle ? 'Nothing matches the search.' : 'Nothing here.'}</span>
               </div>
             ) : null}
@@ -259,20 +259,20 @@ function RailItem({ icon, label, count, on, tone, onClick }: { icon: string; lab
       type="button"
       aria-current={on ? 'page' : undefined}
       onClick={onClick}
-      className={cx('flex h-9 w-full shrink-0 items-center gap-2.5 rounded-[9px] px-2 text-left text-[13px] font-semibold', on ? 'bg-selection text-primary dark:bg-[#1A2549] dark:text-[#E8EBF7]' : 'text-ink-2 hover:bg-subtle dark:text-[#C9CFE6] dark:hover:bg-[#141D38]')}
+      className={cx('flex h-9 w-full shrink-0 items-center gap-2.5 rounded-[9px] px-2 text-left text-[13px] font-semibold', on ? 'bg-selection text-primary' : 'text-ink-2 hover:bg-subtle')}
     >
       <span className="flex" style={tone ? { color: tone } : undefined}>
         <Icon name={icon} size={16} />
       </span>
       <span className="min-w-0 flex-1 truncate">{label}</span>
-      {count ? <span className={cx('rounded-full px-1.5 text-[11px] font-bold', on ? 'bg-primary text-white' : 'bg-subtle text-ink-2 dark:bg-[#1B2542] dark:text-[#C9CFE6]')}>{count}</span> : null}
+      {count ? <span className={cx('rounded-full px-1.5 text-[11px] font-bold', on ? 'bg-primary text-white' : 'bg-subtle text-ink-2')}>{count}</span> : null}
     </button>
   );
 }
 
 function Bar({ icon, label, onClick }: { icon: string; label: string; onClick: () => void }) {
   return (
-    <button type="button" onClick={onClick} className="inline-flex h-7 items-center gap-1.5 rounded-[7px] px-2 font-semibold whitespace-nowrap text-ink hover:bg-subtle dark:text-[#E8EBF7] dark:hover:bg-[#1A2442]">
+    <button type="button" onClick={onClick} className="inline-flex h-7 items-center gap-1.5 rounded-[7px] px-2 font-semibold whitespace-nowrap text-ink hover:bg-subtle">
       <Icon name={icon} size={14} />
       {label}
     </button>
@@ -300,7 +300,7 @@ function Preview({ n, labels, onChanged }: { n: Notice | null; labels?: Record<s
   });
   if (!n) {
     return (
-      <aside className="hidden w-[380px] shrink-0 flex-col items-center justify-center gap-2 border-l border-line bg-surface px-8 text-center text-[13px] text-ink-3 xl:flex dark:border-[#1E2848] dark:bg-[#0F1629]">
+      <aside className="hidden w-[380px] shrink-0 flex-col items-center justify-center gap-2 border-l border-line bg-surface px-8 text-center text-[13px] text-ink-3 xl:flex">
         <Icon name="bell" size={28} />
         Choose a notification to see all of it here.
       </aside>
@@ -316,9 +316,9 @@ function Preview({ n, labels, onChanged }: { n: Notice | null; labels?: Record<s
       (e) => toast('error', errorMessage(e)),
     );
   return (
-    <aside aria-label="Notification" className="hidden w-[380px] shrink-0 flex-col border-l border-line bg-surface xl:flex dark:border-[#1E2848] dark:bg-[#0F1629]" data-notif-preview>
+    <aside aria-label="Notification" className="hidden w-[380px] shrink-0 flex-col border-l border-line bg-surface xl:flex" data-notif-preview>
       <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-5 py-5 scroll-thin">
-        <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-3 dark:text-[#8D96B8]">
+        <div className="flex items-center gap-1.5 text-[11.5px] font-semibold text-ink-3">
           <span>{n.archived ? 'Done' : SECTION_LABEL[sectionOf(n)]}</span>
           <Icon name="chevron-right" size={12} />
           <span style={{ color: a.acc }}>{a.short}</span>
@@ -327,19 +327,19 @@ function Preview({ n, labels, onChanged }: { n: Notice | null; labels?: Record<s
           <span className="flex h-10 w-10 shrink-0 items-center justify-center rounded-[12px] [background:var(--tl)] dark:[background:var(--td)]" style={{ color: a.acc, ['--tl' as string]: a.tintLight, ['--td' as string]: a.tint }}>
             <Icon name={a.icon} size={19} />
           </span>
-          <h3 className="m-0 text-[16px] leading-snug font-extrabold text-ink dark:text-[#F2F4FB]">{n.title}</h3>
+          <h3 className="m-0 text-[16px] leading-snug font-extrabold text-ink">{n.title}</h3>
         </div>
-        {n.body ? <p className="m-0 text-[13px] leading-[1.55] whitespace-pre-wrap text-ink-2 dark:text-[#C9CFE6]">{n.body}</p> : null}
-        {n.image_url ? <img src={n.image_url} alt="" className="max-h-[220px] rounded-[10px] border border-line object-cover dark:border-[#26315A]" /> : null}
+        {n.body ? <p className="m-0 text-[13px] leading-[1.55] whitespace-pre-wrap text-ink-2">{n.body}</p> : null}
+        {n.image_url ? <img src={n.image_url} alt="" className="max-h-[220px] rounded-[10px] border border-line object-cover" /> : null}
         {n.count > 1 ? <p className="m-0 text-[12.5px] text-ink-3">{n.count} alike, folded into this one.</p> : null}
         {ref ? (
           <div className="flex flex-col gap-1.5">
-            <span className="text-[10.5px] font-extrabold tracking-[.7px] text-ink-3 dark:text-[#8D96B8]">WHAT IT IS ABOUT</span>
+            <span className="text-[10.5px] font-extrabold tracking-[.7px] text-ink-3">WHAT IT IS ABOUT</span>
             <RecordCard r={ref} />
           </div>
         ) : null}
       </div>
-      <div className="flex flex-col gap-2 border-t border-line px-5 py-3 dark:border-[#1E2848]">
+      <div className="flex flex-col gap-2 border-t border-line px-5 py-3">
         <div className="flex flex-wrap gap-1.5">
           {q ? (
             <Button variant="primary" size="sm" onClick={() => openNotice(n)}>
@@ -379,7 +379,7 @@ function Preview({ n, labels, onChanged }: { n: Notice | null; labels?: Record<s
             </Button>
           )}
         </div>
-        <span className="text-[11.5px] text-ink-3 dark:text-[#8D96B8]">
+        <span className="text-[11.5px] text-ink-3">
           Received {relative(n.created_at)} · {dateLabel(n.created_at)} {timeLabel(n.created_at)}
           {sent.length ? ` · also sent ${sent.join(' and ')}` : ''}
         </span>
