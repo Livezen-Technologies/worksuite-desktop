@@ -96,7 +96,7 @@ export default function NotificationSettings() {
     col === DESKTOP ? local({ moduleNotifications: { ...prefs.moduleNotifications, [`cat:${cat}`]: v } }) : commit({ categories: { ...cats, [cat]: { ...(cats[cat] ?? {}), [col]: v } } });
 
   return (
-    <div className="h-full overflow-y-auto bg-ground scroll-thin dark:bg-[#0A0F1E]">
+    <div className="h-full overflow-y-auto bg-ground scroll-thin">
       <div className="mx-auto flex max-w-[1180px] flex-col gap-4 px-8 py-6">
         <div className="flex items-center gap-3">
           <button type="button" onClick={() => navigate('/notifications')} className="flex h-8 w-8 items-center justify-center rounded-[8px] text-ink-2 hover:bg-subtle" aria-label="Back to notifications" title="Back to notifications">

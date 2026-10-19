@@ -11,6 +11,10 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.267 — 2026-10-19
+
+- **Notifications follow the selected theme (#382).** The bell drawer, notification rows, app and snooze menus, notification centre and settings now use the app's live appearance colors for backgrounds, text, borders, icons and actions. Light/dark changes and color-profile changes apply to an open panel immediately. Notifications 2.3.1; no server update or migration is required.
+
 ## 0.2.266 — 2026-10-19
 
 - **Product pictures in visitor chat link previews (#381).** Product cards use a bounded, validated image fetched by WorkSuite instead of a third-party URL blocked by the desktop's content security policy. The policy stays intact. Missing images leave the title and description readable without a broken thumbnail.
