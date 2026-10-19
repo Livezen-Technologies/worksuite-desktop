@@ -2,6 +2,7 @@ import { useState } from 'react';
 import type { UpdateStatus } from '@shared/types';
 import { app } from '../../core/app-state';
 import { call, errorMessage } from '../../core/bridge';
+import { checkForUpdates } from '../../core/update-check';
 import { useStore } from '../../core/store';
 import { navigate } from '../../core/tabs';
 import { relative } from '../../core/time';
@@ -100,7 +101,7 @@ export function UpdateActions({ size = 'md', onDone }: { size?: 'sm' | 'md'; onD
     );
   }
   return (
-    <Button size={size} loading={working || u?.state === 'CHECKING'} onClick={() => void run(() => call('updates:check').then((s) => s && app.set({ update: s })))}>
+    <Button size={size} loading={working || u?.state === 'CHECKING'} onClick={() => void run(checkForUpdates)}>
       {u?.state === 'FAILED' ? 'Try again' : 'Check for updates'}
     </Button>
   );

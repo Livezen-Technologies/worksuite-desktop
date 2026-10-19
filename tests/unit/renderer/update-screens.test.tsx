@@ -78,6 +78,7 @@ beforeEach(() => {
   nav.navigate.mockReset();
   app.set({
     update: null,
+    manualUpdateCheck: null,
     prefs: { autoUpdate: false, updateNotifications: true, updateInstallOnQuit: true, updateShowWhatsNew: true, updateChannel: 'stable' } as unknown as Preferences,
     locks: [],
     info: { platform: 'windows', arch: 'x64' } as never,
@@ -135,6 +136,105 @@ describe('WorkSuite Update Available', () => {
     app.set({ update: offer(), prefs: { autoUpdate: true } as Preferences });
     wrap(<UpdateDialogs />);
     expect(screen.queryByRole('dialog')).toBeNull();
+  });
+});
+
+describe('manual update check choices', () => {
+  const ready = () => offer({ state: 'STAGED', progress: 100 });
+  const open = async (result = ready()) => {
+    app.set({ update: status(), prefs: { ...app.get().prefs!, autoUpdate: true } });
+    handlers.set('updates:check', () => result);
+    wrap(<><UpdatesPage /><UpdateDialogs /></>);
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    return screen.findByRole('dialog', { name: 'WorkSuite Update Available' });
+  };
+
+  it('offers all three actions after a manual check despite automatic downloads', async () => {
+    const d = await open();
+    for (const name of ['Update now', 'Update later', 'Schedule']) expect(within(d).getByRole('button', { name })).toBeTruthy();
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(within(d).queryByRole('checkbox')).toBeNull();
+    expect(mocked).not.toHaveBeenCalledWith('updates:installNow', expect.anything());
+  });
+
+  it('Update now downloads if needed, then uses the guarded restart', async () => {
+    const d = await open(offer());
+    handlers.set('updates:download', ready);
+    handlers.set('updates:installNow', () => ({ started: true }));
+    fireEvent.click(within(d).getByRole('button', { name: 'Update now' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:download'));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:installNow', { force: false }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('Update later saves a reminder and a repeated manual check opens the choice again', async () => {
+    const d = await open();
+    handlers.set('updates:later', () => ready());
+    fireEvent.click(within(d).getByRole('button', { name: 'Update later' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:later', { choice: 'hour' }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    expect(await screen.findByRole('button', { name: 'Schedule' })).toBeTruthy();
+    expect(mocked).not.toHaveBeenCalledWith('updates:installNow', expect.anything());
+  });
+
+  it('Schedule can install when work finishes', async () => {
+    const d = await open();
+    handlers.set('updates:installWhenFree', () => ready());
+    fireEvent.click(within(d).getByRole('button', { name: 'Schedule' }));
+    fireEvent.click(within(d).getByRole('button', { name: 'When work finishes' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:installWhenFree'));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+  });
+
+  it('Schedule can enable installation on quit without restarting now', async () => {
+    const d = await open();
+    handlers.set('settings:set', () => ({ preferences: { ...app.get().prefs!, updateInstallOnQuit: true, language: 'en' }, locks: [] }));
+    fireEvent.click(within(d).getByRole('button', { name: 'Schedule' }));
+    fireEvent.click(within(d).getByRole('button', { name: 'When I quit WorkSuite' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('settings:set', { updateInstallOnQuit: true }));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    expect(mocked).not.toHaveBeenCalledWith('updates:installNow', expect.anything());
+  });
+
+  it.each([status(), offer({ required: true }), offer({ critical: true }), offer({ installBlockedReason: 'Unsupported build' }), offer({ state: 'FAILED' })])('does not offer optional actions for an unavailable or policy-controlled update', async (result) => {
+    app.set({ update: status(), prefs: { ...app.get().prefs!, autoUpdate: true } });
+    handlers.set('updates:check', () => result);
+    wrap(<><UpdatesPage /><UpdateDialogs /></>);
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    await waitFor(() => expect(app.get().manualUpdateCheck).toBeNull());
+    expect(screen.queryByRole('dialog', { name: 'WorkSuite Update Available' })).toBeNull();
+  });
+
+  it('waits for a pending manual check instead of opening a duplicate automatic offer', async () => {
+    let finish!: (value: UpdateStatus) => void;
+    handlers.set('updates:check', () => new Promise<UpdateStatus>((resolve) => { finish = resolve; }));
+    app.set({ update: status() });
+    wrap(<><UpdatesPage /><UpdateDialogs /></>);
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    act(() => app.set({ update: offer() }));
+    expect(screen.queryByRole('dialog')).toBeNull();
+    await act(async () => finish(ready()));
+    expect(screen.getAllByRole('dialog')).toHaveLength(1);
+    expect(screen.getByRole('button', { name: 'Schedule' })).toBeTruthy();
+  });
+
+  it('clears the pending prompt when the check throws', async () => {
+    app.set({ update: status() });
+    handlers.set('updates:check', () => { throw new Error('Offline'); });
+    wrap(<><UpdatesPage /><UpdateDialogs /></>);
+    fireEvent.click(screen.getByRole('button', { name: 'Check for updates' }));
+    await waitFor(() => expect(app.get().manualUpdateCheck).toBeNull());
+    expect(screen.queryByRole('dialog')).toBeNull();
+  });
+
+  it('keeps the choice open after a failed download', async () => {
+    const d = await open(offer());
+    handlers.set('updates:download', () => offer({ state: 'FAILED', error: 'Network unavailable' }));
+    fireEvent.click(within(d).getByRole('button', { name: 'Update now' }));
+    await waitFor(() => expect(mocked).toHaveBeenCalledWith('updates:download'));
+    expect(screen.getByRole('dialog', { name: 'WorkSuite Update Available' })).toBeTruthy();
+    expect(mocked).not.toHaveBeenCalledWith('updates:installNow', expect.anything());
   });
 });
 

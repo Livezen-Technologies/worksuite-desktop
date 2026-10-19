@@ -7,6 +7,7 @@ import { call, errorMessage } from '../../core/bridge';
 import { useStore } from '../../core/store';
 import { bytes, stampDayLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
+import { checkForUpdates } from '../../core/update-check';
 import { useNow } from '../../core/use-now';
 import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
@@ -292,8 +293,7 @@ export function UpdatesPage({ onDiagnostics }: { onDiagnostics?: () => void }) {
   const m = mandatoryView(u, now);
   const check = () => {
     setChecking(true);
-    void call('updates:check')
-      .then((s) => s && app.set({ update: s }))
+    void checkForUpdates()
       .catch((e) => toast('error', errorMessage(e)))
       .finally(() => setChecking(false));
   };
