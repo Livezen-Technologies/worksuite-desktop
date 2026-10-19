@@ -11,6 +11,11 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.266 — 2026-10-19
+
+- **Product pictures in visitor chat link previews (#381).** Product cards use a bounded, validated image fetched by WorkSuite instead of a third-party URL blocked by the desktop's content security policy. The policy stays intact. Missing images leave the title and description readable without a broken thumbnail.
+- Chat 2.0.0 needs the companion server Communication 1.74.0 update for image previews; older servers retain text-only fallback. No database migration is required.
+
 ## Unreleased — 2026-10-19
 
 - **Collapsed sidebar, tidied.** Pinned apps no longer carry a second pin icon under each app; the pinned group sits on a
