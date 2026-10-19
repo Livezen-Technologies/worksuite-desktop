@@ -11,7 +11,7 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## Unreleased — 2026-10-19
+## 0.2.265 — 2026-10-19
 
 - **The WorkSuite logo is the owner's original artwork.** The four-square mark and the "worksuite" wordmark replace
   the stroked "W" everywhere the app draws its own brand.
