@@ -12,7 +12,7 @@ vi.mock('electron', () => ({
 }));
 
 const { errorFromResponse } = await import('../../../electron/services/http');
-const { BootstrapService } = await import('../../../electron/services/bootstrap');
+const { BootstrapService, licenseDetailsOf } = await import('../../../electron/services/bootstrap');
 const { Database } = await import('../../../electron/services/db');
 const { Vault } = await import('../../../electron/services/vault');
 const { parseEd25519Key, livezenKeyring } = await import('../../../electron/services/discovery/keys');
@@ -43,19 +43,22 @@ describe('BootstrapService licence source', () => {
   const user = { id: 7, name: 'Nuwan', email: 'n@ws.example' };
   const routes: Record<string, unknown> = {
     '/api/auth/me': { user, permissions: ['*'], apps: '*' },
-    '/api/system/entitlements': { apps: [{ app: 'payroll', entitled: false, locked: true }] },
+    '/api/system/entitlements': { license: { status: 'GRACE', edition: 'Enterprise', license_key_masked: 'WS-****-1234', grace_days: 7 }, apps: [{ app: 'payroll', entitled: false, locked: true }] },
   };
   const http = { get: async (path: string) => { if (path in routes) return routes[path]; throw new Error(`no ${path}`); } } as unknown as HttpClient;
   const service = () => new BootstrapService(new Database(':memory:'), () => new Vault(Vault.generateKey()), http, null);
 
   it('uses the server licence when no source is set (as before)', async () => {
-    expect((await service().fetch('core')).lockedApps).toEqual(['payroll']);
+    const b = await service().fetch('core');
+    expect(b.lockedApps).toEqual(['payroll']);
+    expect(b.license).toMatchObject({ status: 'GRACE', edition: 'Enterprise', keyMasked: 'WS-****-1234', graceDays: 7, expiresAt: null });
   });
 
   it('takes the source first: Cloud entitlements replace the server licence', async () => {
     const s = service();
     s.setLicenceSource(async () => ({ entitlements: { crm: false, mail: true }, locked: ['crm'] }));
     const b = await s.fetch('core');
+    expect(b.license).toBeNull();
     expect(b.lockedApps).toEqual(['crm']);
     expect(b.entitlements).toMatchObject({ crm: false, mail: true });
   });
@@ -69,6 +72,14 @@ describe('BootstrapService licence source', () => {
     s.setLicenceSource(async () => ({ entitlements: {}, locked: ['crm'] }));
     s.setLicenceSource(null);
     expect((await s.fetch('core')).lockedApps).toEqual(['payroll']);
+  });
+
+  it('ignores malformed display values and never forwards raw activation credentials', () => {
+    expect(licenseDetailsOf(null)).toBeNull();
+    expect(licenseDetailsOf([])).toBeNull();
+    const details = licenseDetailsOf({ status: 42, edition: {}, grace_days: -1, max_activations: 0, license_key: 'secret' });
+    expect(details).toMatchObject({ status: null, edition: null, graceDays: null, maxActivations: 0 });
+    expect(details).not.toHaveProperty('license_key');
   });
 
   it('turns verified claims into a licence', () => {

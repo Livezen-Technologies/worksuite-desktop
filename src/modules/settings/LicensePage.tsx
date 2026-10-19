@@ -10,13 +10,6 @@ import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Chip, cx } from '../../components/ui';
 
-/**
- * Settings › License (Updates & License design), from what this computer knows: the organization, the modules it
- * may open, this device, where its sign-in is kept and when the server last confirmed it. WorkSuite's server has no
- * license API yet, so edition, license key, validity, activations and the offline grace period are marked as
- * waiting for one rather than made up.
- */
-
 const STORAGE: Record<string, string> = {
   keychain: 'macOS Keychain',
   dpapi: 'Windows DPAPI',
@@ -102,8 +95,11 @@ export function LicensePage() {
     );
   }
   const org = b.organizations.find((o) => o.id === (orgId ?? b.defaultOrganizationId)) ?? b.organizations[0] ?? null;
-  const days = daysAgo(b.cachedAt);
-  const verified = b.cachedAt ? stampDayLabel(b.cachedAt, 'year') : null;
+  const license = b.license;
+  const status = license?.status ?? 'Unknown';
+  const checked = license?.lastValidatedAt;
+  const days = daysAgo(checked);
+  const verified = checked ? stampDayLabel(checked, 'year') : null;
   const list = entitlements(b);
   const on = list.filter((e) => e.enabled);
   const off = list.filter((e) => !e.enabled);
@@ -113,27 +109,27 @@ export function LicensePage() {
       <section aria-label="License" className="rounded-[12px] border border-line bg-surface p-5">
         <div className="flex items-center gap-3">
           <h2 className="text-[20px] font-bold text-ink">License</h2>
-          <Chip tone="success">{b.offline ? 'ACTIVE · CACHED' : 'ACTIVE'}</Chip>
+          <Chip tone={status === 'ACTIVE' ? 'success' : 'warning'}>{status.toUpperCase()}{b.offline ? ' · CACHED' : ''}</Chip>
           <div className="flex-1" />
           <Button variant="primary" loading={refreshing} onClick={refresh}>
             Refresh License
           </Button>
         </div>
         <div className="mt-3">
-          <Row label="Edition" pending>
-            {NOT_YET}
+          <Row label="Edition" pending={!license?.edition}>
+            {license?.edition ?? NOT_YET}
           </Row>
           <Row label="Status">
-            Active — last verified {days === null ? 'unknown' : days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`}
+            {status} — last verified {days === null ? 'unknown' : days === 0 ? 'today' : `${days} day${days === 1 ? '' : 's'} ago`}
             {verified ? ` (${verified})` : ''}
             {b.offline ? ' · using the saved copy' : ''}
           </Row>
-          <Row label="License" pending>
-            {NOT_YET}
+          <Row label="License" pending={!license?.keyMasked}>
+            {license?.keyMasked ?? NOT_YET}
           </Row>
           <Row label="Organization">{org?.name ?? auth?.user?.organizationName ?? '—'}</Row>
-          <Row label="Valid until" pending>
-            {NOT_YET}
+          <Row label="Valid until" pending={!license?.expiresAt}>
+            {license?.expiresAt ? stampDayLabel(license.expiresAt, 'year') : NOT_YET}
           </Row>
           <Row label="This device">
             {d ? (
@@ -143,14 +139,16 @@ export function LicensePage() {
             ) : (
               '—'
             )}
-            <span className="text-ink-3"> · activations: {NOT_YET.toLowerCase()}</span>
           </Row>
           <Row label="Token storage">
             {storageLabel(d)}
             {b.policy.signed ? ' · policy signature valid' : ''}
           </Row>
-          <Row label="Offline grace" pending>
-            {NOT_YET}
+          <Row label="Activation limit" pending={license?.maxActivations == null}>
+            {license?.maxActivations == null ? NOT_YET : `${license.maxActivations} server installation${license.maxActivations === 1 ? '' : 's'}`}
+          </Row>
+          <Row label="Offline grace" pending={license?.graceDays == null && !license?.graceEndsAt}>
+            {license?.graceEndsAt ? `Until ${stampDayLabel(license.graceEndsAt, 'year')}` : license?.graceDays != null ? `${license.graceDays} days (server license)` : NOT_YET}
           </Row>
         </div>
       </section>
@@ -179,7 +177,7 @@ export function LicensePage() {
           </p>
         </section>
         <p className="flex items-center gap-1.5 text-[12px] text-ink-3">
-          <Icon name="info" size={13} /> Edition, license key, validity, activations and the offline grace period appear here once the server provides a license.
+          <Icon name="info" size={13} /> License details come from your server’s latest verification. Refresh retrieves its current saved license status.
         </p>
       </div>
     </div>

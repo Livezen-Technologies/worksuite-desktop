@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.40.0 — 2026-10-19
+
+**Added**
+
+- Show current server license edition, masked key, status, expiry, activation limit and grace details after refresh.
+
 ## 1.39.0 — 2026-10-13
 
 **Added**
