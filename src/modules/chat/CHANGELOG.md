@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.0.0 — 2026-10-19
+
+**Fixed**
+
+- Product link previews use server-validated raster thumbnails inside the existing content security policy; failed pictures leave a readable text card. Requires the companion Communication image-preview update (#381).
+
 ## 1.78.2 — 2026-10-16
 
 - Attachment preview on Windows: the toolbar keeps clear of the window's minimise, maximise and close buttons (they covered Open in app and Close).

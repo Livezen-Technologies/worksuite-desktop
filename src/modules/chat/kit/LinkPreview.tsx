@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '../../../core/api';
 import { openAnyLink } from '../../../components/LinkedText';
@@ -35,6 +36,12 @@ export interface LinkPreviewData {
   site?: string | null;
 }
 
+/** Keep the card usable when a site's thumbnail is missing or an older server returns a blocked URL. */
+function PreviewImage({ src }: { src: string }) {
+  const [failed, setFailed] = useState(false);
+  return failed ? null : <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="h-[72px] w-[72px] shrink-0 object-cover" />;
+}
+
 /**
  * A link's card under a message. The desktop never fetches a page itself: it draws what it is given, and nothing
  * without it — the preview data comes from the server with the message.
@@ -59,7 +66,7 @@ export function LinkPreview({ preview, own = false, className }: { preview?: Lin
       }}
       className={cx('flex max-w-[320px] overflow-hidden rounded-[10px] border text-left no-underline', own ? 'border-white/30 bg-white/10' : 'border-line bg-surface hover:bg-subtle', className)}
     >
-      {preview.image ? <img src={preview.image} alt="" loading="lazy" className="h-[72px] w-[72px] shrink-0 object-cover" /> : null}
+      {preview.image ? <PreviewImage key={preview.image} src={preview.image} /> : null}
       <span className="flex min-w-0 flex-col gap-0.5 px-2.5 py-2">
         {site ? <span className={cx('truncate text-[11px]', own ? 'text-white/80' : 'text-ink-3')}>{site}</span> : null}
         {preview.title ? <b className={cx('line-clamp-2 text-[12.5px]', own ? 'text-white' : 'text-ink')}>{preview.title}</b> : null}
@@ -82,10 +89,10 @@ export function firstUrl(body: string | null | undefined): string | null {
 export function MessageLinkPreview({ body, path, own }: { body: string | null | undefined; path?: string; own?: boolean }) {
   const url = path ? firstUrl(body) : null;
   const q = useQuery({
-    queryKey: ['link-preview', url],
+    queryKey: ['link-preview', path, url, 'image-v1'],
     queryFn: async ({ signal }) => {
-      const r = await apiGet<{ url: string; title?: string | null; description?: string | null; image?: string | null; site_name?: string | null }>(path!, { url: url! }, signal);
-      return { url: r.url, title: r.title, description: r.description, image: r.image, site: r.site_name } satisfies LinkPreviewData;
+      const r = await apiGet<{ url: string; title?: string | null; description?: string | null; image?: string | null; image_data?: string | null; site_name?: string | null }>(path!, { url: url!, image: 1 }, signal);
+      return { url: r.url, title: r.title, description: r.description, image: r.image_data !== undefined ? r.image_data : r.image, site: r.site_name } satisfies LinkPreviewData;
     },
     enabled: !!url,
     staleTime: 24 * 60 * 60_000,
