@@ -28,6 +28,8 @@ export interface AppState {
   locks: PreferenceLock[];
   lock: LockState | null;
   update: UpdateStatus | null;
+  /** A manual check suppresses the automatic offer until its result is ready. */
+  manualUpdateCheck: 'checking' | 'offer' | null;
   organizationId: string | null;
   transfers: Transfer[];
   /** Drive sync on this computer. */
@@ -65,6 +67,7 @@ export const app = createStore<AppState>({
   locks: [],
   lock: null,
   update: null,
+  manualUpdateCheck: null,
   organizationId: null,
   transfers: [],
   sync: null,

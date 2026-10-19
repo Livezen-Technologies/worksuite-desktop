@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import type { Platform, UpdateStatus } from '@shared/types';
 import { minutesSeconds } from '@shared/updates';
 import { app, updatePrefs } from '../../core/app-state';
@@ -30,7 +30,7 @@ function channelWord(u: UpdateStatus): string {
 }
 
 /** WorkSuite Update Available: what's new, the package, and Download & Install or Later. */
-export function UpdateAvailableDialog({ u, onClose, onInstalled }: { u: UpdateStatus; onClose: () => void; onInstalled: (installOnRestart: boolean) => void }) {
+export function UpdateAvailableDialog({ u, onClose, onInstalled, actions }: { u: UpdateStatus; onClose: () => void; onInstalled: (installOnRestart: boolean) => void; actions?: ReactNode }) {
   const info = useStore(app, (s) => s.info);
   const [background, setBackground] = useState(true);
   const notes = u.notes;
@@ -40,7 +40,7 @@ export function UpdateAvailableDialog({ u, onClose, onInstalled }: { u: UpdateSt
       labelledBy="update-available-title"
       onClose={onClose}
       width={540}
-      footer={
+      footer={actions ?? (
         <>
           <LaterMenu onDone={onClose} />
           <span className="whitespace-nowrap text-[12px] text-ink-3">Remind: 1 hour · 4 hours · Tomorrow</span>
@@ -49,7 +49,7 @@ export function UpdateAvailableDialog({ u, onClose, onInstalled }: { u: UpdateSt
             Download &amp; Install
           </Button>
         </>
-      }
+      )}
     >
       <div className="flex items-start gap-3">
         <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-[10px] bg-selection text-primary">
@@ -92,12 +92,73 @@ export function UpdateAvailableDialog({ u, onClose, onInstalled }: { u: UpdateSt
           </button>
         ) : null}
       </div>
-      <label className="mt-3 flex items-center gap-2 text-[13px] text-ink">
+      {!actions ? <label className="mt-3 flex items-center gap-2 text-[13px] text-ink">
         <Checkbox checked={background} onChange={(e) => setBackground(e.target.checked)} />
         Download in the background and install when I restart
-      </label>
+      </label> : null}
     </Modal>
   );
+}
+
+/** Manual check result: explicit install, a reminder, or one of the supported installation schedules. */
+export function ManualUpdateDialog({ u, onClose }: { u: UpdateStatus; onClose: () => void }) {
+  const [scheduling, setScheduling] = useState(false);
+  const [working, setWorking] = useState(false);
+  const restart = useRestartToUpdate(onClose);
+  const run = async (action: 'now' | 'later' | 'free' | 'quit') => {
+    setWorking(true);
+    try {
+      if (action === 'later') {
+        app.set({ update: await call('updates:later', { choice: 'hour' }) });
+        toast('info', 'We’ll remind you in one hour. Your existing automatic installation preferences still apply.');
+        onClose();
+        return;
+      }
+      const ready = u.state === 'STAGED' ? u : await call('updates:download');
+      if (ready) app.set({ update: ready });
+      if (ready?.state !== 'STAGED') {
+        toast('warning', ready?.error ?? 'The update is not ready yet. Check its download status in Settings.');
+        return;
+      }
+      if (action === 'now') {
+        await restart.start();
+      } else if (action === 'free') {
+        app.set({ update: await call('updates:installWhenFree') });
+        toast('info', 'WorkSuite will restart to update when your work finishes.');
+        onClose();
+      } else {
+        await updatePrefs({ updateInstallOnQuit: true });
+        if (!app.get().prefs?.updateInstallOnQuit) throw new Error('Your organization does not allow installation on quit.');
+        toast('info', 'WorkSuite will install this and future downloaded updates when you quit.');
+        onClose();
+      }
+    } catch (error) {
+      toast('error', errorMessage(error));
+    } finally {
+      setWorking(false);
+    }
+  };
+  // While the busy-work confirmation is open, show only that dialog (one focus trap).
+  if (restart.dialog) return restart.dialog;
+  return <UpdateAvailableDialog u={u} onClose={() => { if (!working) onClose(); }} onInstalled={() => undefined} actions={
+    <div className="w-full space-y-3">
+      {scheduling ? <>
+        <p className="text-[13px] text-ink-2">Your work is saved before restarting. “When work finishes” restarts immediately if nothing is active. Installation on quit also applies to future updates.</p>
+        <div className="flex flex-wrap gap-2">
+          <Button disabled={working} onClick={() => setScheduling(false)}>Back</Button>
+          <Button disabled={working} onClick={() => void run('quit')}>When I quit WorkSuite</Button>
+          <Button variant="primary" loading={working} onClick={() => void run('free')}>When work finishes</Button>
+        </div>
+      </> : <>
+        <p className="text-[12px] text-ink-3">Update now installs and restarts WorkSuite. Update later reminds you in one hour.</p>
+        <div className="flex flex-wrap justify-end gap-2">
+          <Button disabled={working} onClick={() => void run('later')}>Update later</Button>
+          <Button disabled={working} onClick={() => setScheduling(true)}>Schedule</Button>
+          <Button variant="primary" loading={working || restart.busy} onClick={() => void run('now')}>Update now</Button>
+        </div>
+      </>}
+    </div>
+  } />;
 }
 
 /** The update dialog opens by itself once per version and run, when downloads wait for the person. */
@@ -206,11 +267,12 @@ export function whatsNewShown(u: UpdateStatus | null, showPref: boolean | undefi
 export function UpdateDialogs() {
   const u = useStore(app, (s) => s.update);
   const prefs = useStore(app, (s) => s.prefs);
+  const manual = useStore(app, (s) => s.manualUpdateCheck);
   const auto = prefs?.autoUpdate !== false;
   const [closed, setClosed] = useState<string | null>(null);
   const [installing, setInstalling] = useState(false);
   const restart = useRestartToUpdate();
-  const offer = shouldOfferUpdate(u, auto) && closed !== u?.availableVersion;
+  const offer = !manual && shouldOfferUpdate(u, auto) && closed !== u?.availableVersion;
 
   const dismissNotice = () => void call('updates:dismissNotice').then((s) => app.set({ update: s }), () => undefined);
   // Turned off: the notice is still dismissed, so it is not waiting for the next time it is turned on.
@@ -232,6 +294,10 @@ export function UpdateDialogs() {
 
   if (u?.immediate && (u.state === 'STAGED' || u.state === 'INSTALLING')) return <CriticalUpdateModal u={u} installing={installing || u.state === 'INSTALLING'} onInstall={() => void installNow()} />;
   if (u && whatsNewShown(u, prefs?.updateShowWhatsNew)) return <WhatsNewCard u={u} onClose={dismissNotice} />;
+  if (manual === 'offer' && u && !u.required && !u.critical && !u.immediate) return <ManualUpdateDialog u={u} onClose={() => {
+    setClosed(u.availableVersion);
+    app.set({ manualUpdateCheck: null });
+  }} />;
   return (
     <>
       {offer && u ? (

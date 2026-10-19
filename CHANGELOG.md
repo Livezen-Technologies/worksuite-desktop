@@ -11,6 +11,10 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.269 — 2026-10-19
+
+- After a manual update check finds a newer version, a modal offers **Update now**, **Update later** (a one-hour reminder), or **Schedule** (install when work finishes or on quit). Works with automatic downloads and previously dismissed offers; required and critical updates keep their existing policy behavior. Choosing installation on quit enables that preference for future updates too.
+
 ## 0.2.268 — 2026-10-19
 
 - Settings › License shows the server’s current edition, masked key, actual status, expiry, server activation limit and grace details. Refresh updates the open panel. Older servers retain explicit missing-value labels; a sign-in alone no longer implies an active license. Full details require the additive Core 1.20.0 server update.
