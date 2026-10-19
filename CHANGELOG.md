@@ -27,6 +27,13 @@ person who has to live with the change — what it does, and where it bites.
     Linux get the mark in colour; badges cut a clear ring out of the mark. `build/icon.png`, `resources/icons/*` and
     all 24 `resources/tray/*` images are regenerated. The Dock, taskbar, About panel, notifications and installers
     take the icon from these files, so they change in the next build.
+## 0.2.264 — 2026-10-18
+
+- **WorkSuite Cloud is trusted.** The Livezen discovery key (kid `131A:C0B6:88AC:1A91:9DBB:341A:6C7C:1C48`) is pinned,
+  so a packaged build accepts https://worksuitecloud.com's signed discovery document and Personal sign-in through
+  account.worksuitecloud.com works end to end. Before this the pin list was empty and installed builds refused the
+  Cloud as unsigned. Checked against the live document: it verifies, and a one-byte change fails with `signature`.
+- Opt-in test of Personal sign-in against a local WorkSuite Cloud account service.
 
 ## 0.2.263 — 2026-10-18
 
@@ -42,6 +49,15 @@ person who has to live with the change — what it does, and where it bites.
   - On start the list is tidied, and logged (`local copies tidied`): downloads that failed and were never edited are
     let go (they held nothing to send), and two rows for one Drive file become one, always keeping the edited one.
     No file on disk is touched.
+## Unreleased
+
+- **Personal sign-in checked against the real WorkSuite Cloud account service.** No app change: the client written
+  against the mock already speaks what worksuite-cloud's new OneAuth (`/oauth/*`, part 8) answers.
+  `tests/unit/electron/cloud/oneauth-live.test.ts` (opt-in: `WS_ONEAUTH_LIVE_ORIGIN`, `WS_ONEAUTH_LIVE_MYSQL`) runs the
+  app's own discovery, browser sign-up and sign-in, loopback callback, code exchange, refresh, rotation reuse and
+  sign-out against a locally running service. Where it bites: a packaged build still stops at SIGNATURE_MISSING until a
+  Livezen discovery key is made and pinned in `LIVEZEN_DISCOVERY_KEYS`, and the workspace stays on "setting up" until a
+  Core serves Personal organizations.
 
 ## 0.2.262 — 2026-10-16
 
