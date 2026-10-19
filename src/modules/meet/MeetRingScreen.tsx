@@ -6,6 +6,7 @@ import { Icon } from '../../components/Icon';
 import { CallAvatar } from '../calls/parts';
 import { playTone, ringVolume } from '../calls/tones';
 import { openMeeting } from './api';
+import { BrandMark } from '../../components/BrandMark';
 
 /**
  * Somebody rings you into a meeting that is on (worksuite-desktop#79): the
@@ -98,7 +99,7 @@ export function MeetRingScreen() {
   return (
     <div role="alertdialog" aria-label={`${name} invites you to ${title}`} className="drag flex h-full flex-col bg-[#0F1B3D] text-white">
       <div className="flex items-center gap-2 pt-3 pr-3 pl-4 text-[11.5px] font-semibold text-[#AFC0E8]">
-        <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-[#3B5BDB] text-[10px] font-extrabold text-white">W</span>
+        <BrandMark size={18} />
         <span className="flex-1">WorkSuite · Invitation to a meeting</span>
         <button type="button" aria-label="Not now" title="Stop ringing — they see you didn't answer" disabled={busy} onClick={() => void answer('dismiss')} className="no-drag flex h-[26px] w-[26px] items-center justify-center rounded-full bg-white/8 text-[#C3CEEA] hover:text-white">
           <Icon name="x" size={14} />

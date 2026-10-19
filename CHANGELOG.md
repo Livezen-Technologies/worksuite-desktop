@@ -11,6 +11,23 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased — 2026-10-19
+
+- **The WorkSuite logo is the owner's original artwork.** The four-square mark and the "worksuite" wordmark replace
+  the stroked "W" everywhere the app draws its own brand.
+  - The vectors live in `shared/brand.ts` (the mark's three shapes and the wordmark's letter outlines from the
+    official SVGs; the wordmark's fill, a raster gradient there, is the same gradient as stops), drawn by
+    `BrandMark` / `BrandLogo` in `src/components/BrandMark.tsx`. `BrandLogo` takes `light` (dark-to-grey wordmark),
+    `dark` (mint-to-blue) or `auto` (follows the theme).
+  - The title bar and the lock screen show the full logo for a dark background; the onboarding card the one for the
+    current theme; Quick Ask, the onboarding steps, the call and meeting ring screens, the website-chat ring card,
+    tray panel and wall-mode dashboard show the mark where the "W" tile was.
+  - `scripts/render-icons.mjs` draws the new app icon (the mark on a white rounded tile on Apple's 824-in-1024 grid)
+    and the tray icons: macOS template images are the mark's silhouette with its centre at half strength; Windows and
+    Linux get the mark in colour; badges cut a clear ring out of the mark. `build/icon.png`, `resources/icons/*` and
+    all 24 `resources/tray/*` images are regenerated. The Dock, taskbar, About panel, notifications and installers
+    take the icon from these files, so they change in the next build.
+
 ## 0.2.263 — 2026-10-18
 
 - **Sign-out's "unsynced changes" and the status bar agree, and Sync Now clears what it can.** Copies of Drive files

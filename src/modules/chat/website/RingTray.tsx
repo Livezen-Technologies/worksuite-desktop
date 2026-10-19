@@ -18,6 +18,7 @@ import { DASHBOARD_KEYS, homeOf, MAP_KEYS } from './live/LiveDashboard';
 import { DeskHeading, DeskTiles, NeedsYou, needsRows, useLiveDesk, Yours, yoursRows } from './live/LiveDesk';
 import { placesNow, presetsFor } from './live/liveMap';
 import { LiveMap } from './live/LazyMap';
+import { BrandMark } from '../../../components/BrandMark';
 
 /**
  * The tray's ringing menu (R-06, RING-UI-07, X-UI-11; RING-43, UX-ALR-02): opened from the menu-bar or tray icon
@@ -202,7 +203,7 @@ function TrayDashboard({ s, desk }: { s: WebchatRingState; desk: ReturnType<type
     >
       <section aria-label="WorkSuite tray — live dashboard" className="flex flex-col border border-line bg-surface text-[13px] text-ink">
         <div className="flex items-center gap-2 px-3 pt-[11px] pb-2">
-          <span aria-hidden className="flex h-[22px] w-[22px] items-center justify-center rounded-[6px] bg-[#4a63e8] text-[11px] font-bold text-white">W</span>
+          <BrandMark size={22} />
           <span className="flex-1 text-[13.5px] font-bold">{text('Website chats')}</span>
           <span className="flex items-center gap-[5px] text-[11px] font-bold text-[#1f6b40] dark:text-success">
             <span className="h-[7px] w-[7px] rounded-full bg-[#2f9e67]" aria-hidden />

@@ -14,6 +14,7 @@ import { Button, TextField, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
 import { useNow } from '../../core/use-now';
 import { BlockedPanel, CaptchaBox, DeviceCodeStep, gateFor, WaitPanel } from './SignInProtection';
+import { BrandLogo, BrandMark } from '../../components/BrandMark';
 
 /**
  * Welcome, sign-in and two-step verification (UI-01, UI-02, WF-01 steps 1–5). Everything that can fail says what to
@@ -37,8 +38,7 @@ export function Onboarding({ auth }: { auth: AuthState }) {
     <div className="drag flex h-full items-center justify-center bg-navy p-6">
       <div className="no-drag w-[440px] rounded-[16px] bg-surface p-8 shadow-2xl">
         <div className="mb-6 flex items-center gap-2.5">
-          <span className="flex h-9 w-9 items-center justify-center rounded-[9px] bg-brand text-[16px] font-extrabold text-white">W</span>
-          <span className="text-[18px] font-bold text-ink">WorkSuite</span>
+          <BrandLogo height={36} />
         </div>
         <Select label="Language" aria-label="Choose your language" className="mb-4 w-full" value={language} options={LANGUAGES.map((l) => ({ value: l.id, label: l.label }))} onValueChange={(value) => void updatePrefs({ language: value }).catch((e) => toast('error', errorMessage(e)))} />
         {language !== 'en' ? <p className="mb-4 text-xs text-ink-3">Some screens still use English.</p> : null}
@@ -354,7 +354,7 @@ export function SetupWizard() {
       <div className="no-drag flex h-[600px] w-[900px] overflow-hidden rounded-[16px] border border-line bg-surface shadow-xl">
         <aside className="w-[270px] shrink-0 bg-navy p-7 text-white">
           <div className="mb-8 flex items-center gap-2.5">
-            <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-brand text-[15px] font-extrabold">W</span>
+            <BrandMark size={30} />
             <span className="text-[16px] font-bold">Set up WorkSuite</span>
           </div>
           <ol className="flex flex-col gap-4">

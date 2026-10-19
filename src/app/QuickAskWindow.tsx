@@ -7,6 +7,7 @@ import { Assist } from '../modules/ai/Assist';
 import { AskPanel } from '../modules/ai/AskPanel';
 import { shortcutLabel } from '../modules/ai/writer';
 import { cx } from '../components/ui';
+import { BrandMark } from '../components/BrandMark';
 
 type Ctx = QuickAskContext & { shortcut: string | null };
 
@@ -56,7 +57,7 @@ export function QuickAskWindow() {
   return (
       <div className="flex h-full flex-col overflow-hidden border border-line bg-surface">
         <div className="drag flex h-11 shrink-0 items-center gap-2 border-b border-line px-4 text-[13px]">
-          <span className="flex h-6 w-6 items-center justify-center rounded-[7px] bg-navy text-[12px] font-extrabold text-white">W</span>
+          <BrandMark size={22} />
           <b className="text-ink">Quick Ask</b>
           {org ? <span className="truncate text-ink-3">· {org}</span> : null}
           <span className="flex-1" />

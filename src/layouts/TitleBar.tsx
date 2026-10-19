@@ -19,6 +19,7 @@ import { unreadLabel, useAssistantActivity } from '../app/overlays/AiDock';
 import { phaseLabel } from '../modules/ai/session';
 import { useGuest } from '../core/session';
 import { TimerPill } from '../modules/projects/Timer';
+import { BrandLogo } from '../components/BrandMark';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
@@ -64,8 +65,7 @@ export function TitleBar() {
   return (
     <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac && !fullScreen ? 84 : 14, paddingRight: topBarPaddingRight(12) }}>
       <div className="flex w-[180px] shrink-0 items-center gap-2.5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-brand text-[15px] font-extrabold">W</span>
-        <span className="text-[16px] font-bold tracking-tight">WorkSuite</span>
+        <BrandLogo height={30} tone="dark" />
       </div>
 
       {/* The App Launcher: every app this person has, as tiles. */}

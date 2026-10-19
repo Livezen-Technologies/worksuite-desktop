@@ -10,6 +10,7 @@ import { Icon } from '../../components/Icon';
 import { CallAvatar } from './parts';
 import { answerCall } from './start';
 import { playTone, ringVolume, saveRingVolume } from './tones';
+import { BrandMark } from '../../components/BrandMark';
 
 const QUICK_REPLIES = ["Can't talk now — I'll call you back.", "I'm in a meeting. I'll message you shortly.", 'Call you in 5 minutes.'];
 
@@ -102,7 +103,7 @@ export function RingScreen() {
   return (
     <div role="alertdialog" aria-label="Incoming WorkSuite call" className="drag flex h-full flex-col bg-[#0F1B3D] text-white" onKeyDown={(e) => e.key === 'Escape' && replying && setReplying(false)}>
       <div className="flex items-center gap-2 pt-3 pr-3 pl-4 text-[11.5px] font-semibold text-[#AFC0E8]">
-        <span className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-[#3B5BDB] text-[10px] font-extrabold text-white">W</span>
+        <BrandMark size={18} />
         <span className="flex-1">WorkSuite · Incoming {video ? 'video' : 'voice'} call</span>
         <span className="rounded-[9px] bg-white/10 px-2 py-0.5 text-[10.5px]">Always on top</span>
         <button type="button" aria-label="Dismiss" title="Stop ringing here" onClick={close} className="no-drag flex h-[26px] w-[26px] items-center justify-center rounded-full bg-white/8 text-[#C3CEEA] hover:text-white">

@@ -5,6 +5,7 @@ import { t } from '../../core/i18n';
 import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
 import { Avatar } from '../../components/ui';
+import { BrandLogo } from '../../components/BrandMark';
 
 /**
  * App lock (UI-20, FR-SEC-04/05, WF-30). Replaces every window's content —
@@ -57,8 +58,7 @@ export function LockScreen() {
   return (
     <div className="drag fixed inset-0 z-[80] flex flex-col items-center justify-center bg-navy text-white">
       <div className="mb-6 flex items-center gap-2.5">
-        <span className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-brand text-[15px] font-extrabold">W</span>
-        <span className="text-[17px] font-bold text-navy-ink">WorkSuite</span>
+        <BrandLogo height={34} tone="dark" />
       </div>
       <form
         className="no-drag flex w-[380px] flex-col items-center rounded-[16px] border border-white/10 bg-navy-2 px-8 py-8"

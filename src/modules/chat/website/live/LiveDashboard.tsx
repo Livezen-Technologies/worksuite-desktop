@@ -23,6 +23,7 @@ import { LiveMap, loadMap, MapPlaceholder } from './LazyMap';
 import { agoWords, type LiveData } from './liveData';
 import { MapLegend } from './MapLegend';
 import { OnSiteNow } from './OnSiteNow';
+import { BrandMark } from '../../../../components/BrandMark';
 
 /*
  * The Live dashboard (worksuite-desktop C-00; the web's LiveDashboard, WS-WCHAT MAP-UI-01…03): who is on the sites right
@@ -897,7 +898,7 @@ function WallMode({ d, online, visitors, here, sites, now, skew, updated, onClos
     // Dark whichever theme the app is in, its map and legend too: inside it the theme's variables are the dark ones (#284).
     <div role="dialog" aria-modal="true" aria-label={text('Website chats — live, wall mode')} data-theme="dark" className="fixed inset-0 z-[120] flex flex-col gap-4 overflow-auto bg-[#0b1430] px-7 py-[22px] text-[#f1f4fb]">
       <div className="flex flex-wrap items-center gap-3">
-        <span className="flex h-[34px] w-[34px] items-center justify-center rounded-[9px] bg-[#4a63e8] font-bold" aria-hidden>W</span>
+        <BrandMark size={34} />
         <span className="text-[20px] font-bold">{text('Website chats — live')}</span>
         <span className={cx('flex h-[26px] items-center gap-[7px] rounded-full px-[11px] text-[13px] font-bold', stale ? 'bg-[#3a2a10] text-[#f3c77e]' : 'bg-[#123a2a] text-[#8fe0b5]')}>
           <span className={cx('h-2 w-2 rounded-full', stale ? 'bg-[#d9922e]' : 'bg-[#2f9e67] shadow-[0_0_0_4px_rgba(47,158,103,0.3)]')} aria-hidden />

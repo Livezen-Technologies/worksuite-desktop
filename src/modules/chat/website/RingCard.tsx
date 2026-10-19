@@ -9,6 +9,7 @@ import { useCanned } from './api';
 import { text } from '../../../core/i18n';
 import { markdownText } from '../../../core/markdown';
 import { clock, firstName, handoverIn, returningLine, ringsFor, silencedFor, stageLabel, stepLabel, visitLabel, waited, youJoinedLine } from './Ringing';
+import { BrandMark } from '../../../components/BrandMark';
 
 /**
  * The website chat ringing card (worksuite-desktop#225), in the call window over other apps:
@@ -47,7 +48,7 @@ const minimise = () => void call('ring:minimise').catch(() => undefined);
 export function WindowStrip({ title, badge, canMinimise }: { title: string; badge?: string; canMinimise?: boolean }) {
   return (
     <div className="drag flex h-8 shrink-0 items-center gap-2 bg-[#0B1430] px-3.5 text-[12px] text-[#C9CFE3]">
-      <span aria-hidden className="flex h-[18px] w-[18px] items-center justify-center rounded-[5px] bg-[#4A63E8] text-[10px] font-bold text-white">W</span>
+      <BrandMark size={18} />
       {title}
       <span className="flex-1" />
       {badge ? <span className="rounded-[4px] bg-[#1F2A5B] px-1.5 py-0.5 text-[11px] text-[#B3C0FF]">{badge}</span> : null}
