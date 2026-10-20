@@ -56,7 +56,9 @@ interface Live {
 
 const MAX_EVENT_BYTES = 64 * 1024;
 const MAX_EVENTS_PER_SECOND = 60;
-const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write', 'fullscreen']);
+// Not 'fullscreen' (#388): the editor's own full screen took the whole window to full screen, which on Windows
+// hides the title bar and its buttons, and left the shell's top area blank. Presenting is WorkSuite's slideshow (#321).
+const ALLOWED_PERMISSIONS = new Set(['clipboard-sanitized-write']);
 
 /**
  * DesktopOfficeDocumentService's native half (SRS §7.1): the editor views.
@@ -245,6 +247,13 @@ export class OfficeEditorHost {
         return;
       }
       wc.setIgnoreMenuShortcuts(!menuKeepsShortcut(input, this.deps.platform));
+    });
+    // Should the editor reach full screen anyway, the window comes straight back with its title bar (#388).
+    const wasFull = win.isFullScreen();
+    wc.on('enter-html-full-screen', () => {
+      log.warn('office editor asked for full screen; refused');
+      void wc.executeJavaScript('document.exitFullscreen && document.fullscreenElement && document.exitFullscreen()', true).catch(() => undefined);
+      if (!win.isDestroyed() && win.isFullScreen() && !wasFull) win.setFullScreen(false);
     });
     wc.on('render-process-gone', (_e, details) => {
       log.error('office editor gone', { reason: details.reason });

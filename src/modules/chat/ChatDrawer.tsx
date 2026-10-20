@@ -143,7 +143,7 @@ export function DrawerModeButton({ className }: { className?: string }) {
       onClick={() => void updatePrefs({ chatDrawer: chosen === 'floating' ? 'docked' : 'floating' }).catch((e) => toast('error', errorMessage(e)))}
       className={cx(className, 'disabled:opacity-40 disabled:hover:bg-transparent')}
     >
-      <Icon name={floating ? 'layout-side' : 'pip'} size={15} />
+      <Icon name={floating ? 'layout-side' : 'pip'} size={18} />
     </button>
   );
 }
@@ -153,7 +153,7 @@ function useRooms() {
 }
 
 const hbtn = 'flex h-8 min-w-8 items-center justify-center rounded-full px-1 text-[13px] text-ink-2 hover:bg-subtle hover:text-ink';
-const round = 'flex h-[34px] w-[34px] items-center justify-center rounded-full text-ink-2 hover:bg-subtle hover:text-ink';
+const round = 'flex h-9 w-9 items-center justify-center rounded-full text-ink-2 hover:bg-subtle hover:text-ink active:bg-line/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
 const pill = (on: boolean) => cx('flex h-[30px] shrink-0 items-center rounded-full border px-3 text-[12.5px] font-semibold', on ? 'border-primary bg-primary text-white' : 'border-line bg-surface text-ink-2 hover:text-ink');
 
 type Tab = 'Chats' | 'Calls' | 'Archived';
@@ -195,18 +195,18 @@ function Lists() {
     <>
       <div className="flex shrink-0 items-center gap-0.5 pt-3 pr-2 pb-1.5 pl-4">
         <b className="flex-1 text-[20px] tracking-[-0.2px] text-ink">Chat</b>
-        <button type="button" aria-label="New conversation" title="New conversation" onClick={() => setStarting(true)} className="flex h-[34px] w-[34px] items-center justify-center rounded-full bg-selection text-primary hover:brightness-95">
-          <Icon name="compose" size={16} />
+        <button type="button" aria-label="New conversation" title="New conversation" onClick={() => setStarting(true)} className="flex h-9 w-9 items-center justify-center rounded-full bg-selection text-primary hover:brightness-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+          <Icon name="compose" size={18} />
         </button>
         <button type="button" aria-label="Open full chat" title="Open full chat" onClick={() => (minimiseChatDrawer(), navigate('/chat'))} className={round}>
-          <Icon name="maximize" size={15} />
+          <Icon name="maximize" size={18} />
         </button>
         <DrawerModeButton className={round} />
         <button type="button" aria-label="Minimise" title="Minimise" onClick={minimiseChatDrawer} className={round}>
-          <Icon name="minus" size={16} />
+          <Icon name="minus" size={18} />
         </button>
         <button type="button" aria-label="Close" title="Close" onClick={minimiseChatDrawer} className={round}>
-          <Icon name="x" size={16} />
+          <Icon name="x" size={18} />
         </button>
       </div>
       <div className="shrink-0 px-3.5 pt-1 pb-2">

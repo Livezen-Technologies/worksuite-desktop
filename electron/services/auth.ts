@@ -300,16 +300,32 @@ export class AuthService {
 
   // ── remembered computers (worksuite-desktop#301) ─────────────────────
 
-  private deviceKey(email: string): string | null {
-    if (!this.server || !email.trim()) return null;
-    return DEVICE_PREFIX + createHash('sha256').update(`${this.server.origin}\n${email.trim().toLowerCase()}`).digest('hex').slice(0, 40);
+  /**
+   * Where this computer's token for an account is kept. The server address is normalised first (case, a trailing
+   * slash, a default port), so the same server written slightly differently — after a redirect or a probe — still
+   * finds it; otherwise every sign-in there counted as a new computer and emailed a code (#390).
+   */
+  private deviceKey(email: string, origin = this.server ? canonicalOrigin(this.server.origin) : null): string | null {
+    if (!origin || !email.trim()) return null;
+    return DEVICE_PREFIX + createHash('sha256').update(`${origin}\n${email.trim().toLowerCase()}`).digest('hex').slice(0, 40);
   }
 
   /** This computer's token for that account on this server, once it has been verified there. */
   private deviceTokenFor(email: string): string | null {
     const key = this.deviceKey(email);
     const token = key ? this.secrets.get(key) : null;
-    return isDeviceToken(token) ? token : null;
+    if (isDeviceToken(token)) return token;
+    // Kept by an earlier version under the address exactly as it was written: moved to the normalised key.
+    const legacy = this.server ? this.deviceKey(email, this.server.origin) : null;
+    const old = legacy && legacy !== key ? this.secrets.get(legacy) : null;
+    if (!key || !isDeviceToken(old)) return null;
+    try {
+      this.secrets.set(key, old);
+      this.secrets.delete(legacy!);
+    } catch {
+      /* still usable this time */
+    }
+    return old;
   }
 
   private keepDeviceToken(email: string, token: unknown, remember: boolean): void {
@@ -870,5 +886,15 @@ export class AuthService {
     this.captcha = null;
     if (this.refreshTimer) clearTimeout(this.refreshTimer);
     this.refreshTimer = null;
+  }
+}
+
+/** A server address as one string per server: lower-case scheme and host, no default port, no trailing slash. */
+export function canonicalOrigin(origin: string): string {
+  try {
+    const u = new URL(origin);
+    return `${u.protocol}//${u.host}${u.pathname.replace(/\/+$/, '')}`.toLowerCase();
+  } catch {
+    return origin.trim().replace(/\/+$/, '').toLowerCase();
   }
 }

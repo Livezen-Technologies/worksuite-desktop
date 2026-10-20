@@ -44,7 +44,8 @@ export async function loadBytes(source: EditorSource): Promise<Uint8Array> {
   if (source.kind === 'local') return new Uint8Array(await call('office:readFile', { handle: source.handle }));
   if (source.kind === 'offline') return new Uint8Array(await call('office:readOffline', { fileId: source.fileId }));
   const path = source.kind === 'drive' ? `/api/files/${source.fileId}/download` : source.path;
-  const res = await fetch(apiUrl(path));
+  // Never the browser's cached copy: a document replaced since must open as it is now (#393).
+  const res = await fetch(apiUrl(path), { cache: 'no-store' });
   if (!res.ok) throw new Error(res.status === 403 ? 'You may not download this file, so it cannot be opened here.' : `The file could not be read (${res.status}).`);
   return new Uint8Array(await res.arrayBuffer());
 }

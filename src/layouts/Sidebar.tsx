@@ -173,7 +173,7 @@ export function Sidebar() {
       aria-label="Apps"
       onMouseEnter={() => setHover(true)}
       onMouseLeave={() => setHover(false)}
-      className={cx('flex shrink-0 flex-col bg-navy pb-3 text-navy-ink transition-[width] duration-150', collapsed ? 'w-[64px]' : 'w-[220px]')}
+      className={cx('flex shrink-0 flex-col bg-navy pb-3 text-navy-ink transition-[width] duration-150', collapsed ? 'w-[68px]' : 'w-[220px]')}
     >
       <OrgCard collapsed={collapsed} />
       <div className={cx('flex-1 overflow-y-auto overflow-x-hidden pt-2', collapsed ? 'scroll-none px-2' : 'scroll-thin px-2.5')}>
@@ -208,8 +208,8 @@ export function Sidebar() {
         <ul className="flex flex-col gap-0.5" data-list="business">
           {layout.business.map((a) => item(a, 'business'))}
           <li>
-            <button type="button" onClick={() => openOverlay('launcher')} className={cx('flex h-10 w-full items-center gap-3 rounded-[9px] px-3 text-[14px] font-medium hover:bg-white/8 hover:text-white', collapsed && 'justify-center px-0')} title={collapsed ? t('nav.moreApps') : undefined}>
-              <Icon name="grid" size={19} />
+            <button type="button" onClick={() => openOverlay('launcher')} className={cx('flex h-10 w-full items-center gap-3 rounded-[9px] px-3 text-[14px] font-medium hover:bg-white/8 hover:text-white', collapsed && 'h-11 justify-center px-0')} title={collapsed ? t('nav.moreApps') : undefined}>
+              <Icon name="grid" size={collapsed ? 22 : 19} />
               {!collapsed && <span>{t('nav.moreApps')}</span>}
             </button>
           </li>
@@ -223,30 +223,30 @@ export function Sidebar() {
         <button
           type="button"
           onClick={() => navigate('/settings')}
-          className={cx('flex h-10 w-full items-center gap-3 rounded-[9px] px-3 text-[14px] font-medium hover:bg-white/8 hover:text-white', activeApp === 'settings' && 'bg-primary text-white', collapsed && 'justify-center px-0')}
+          className={cx('flex h-10 w-full items-center gap-3 rounded-[9px] px-3 text-[14px] font-medium hover:bg-white/8 hover:text-white', activeApp === 'settings' && 'bg-primary text-white', collapsed && 'h-11 justify-center px-0')}
           title={collapsed ? t('nav.settings') : undefined}
         >
-          <Icon name="settings" size={19} />
+          <Icon name="settings" size={collapsed ? 22 : 19} />
           {!collapsed && <span>{t('nav.settings')}</span>}
         </button>
         <button
           type="button"
-          className={cx('mt-1 flex h-8 w-full items-center gap-3 rounded-[9px] px-3 text-[12px] text-navy-ink/70 hover:bg-white/8', collapsed && 'justify-center px-0')}
+          className={cx('mt-1 flex h-8 w-full items-center gap-3 rounded-[9px] px-3 text-[12px] text-navy-ink/70 hover:bg-white/8', collapsed && 'h-10 justify-center px-0 text-navy-ink/85')}
           onClick={() => navigate(SIDEBAR_SETTINGS_ROUTE)}
           aria-label={collapsed ? t('nav.customizeSidebar') : undefined}
           title={collapsed ? t('nav.customizeSidebar') : undefined}
         >
-          <Icon name="sliders" size={16} />
+          <Icon name="sliders" size={collapsed ? 19 : 16} />
           {!collapsed && <span>{t('nav.customizeSidebar')}</span>}
         </button>
         <button
           type="button"
-          className={cx('mt-1 flex h-8 w-full items-center gap-3 rounded-[9px] px-3 text-[12px] text-navy-ink/70 hover:bg-white/8', collapsed && 'justify-center px-0')}
+          className={cx('mt-1 flex h-8 w-full items-center gap-3 rounded-[9px] px-3 text-[12px] text-navy-ink/70 hover:bg-white/8', collapsed && 'h-10 justify-center px-0 text-navy-ink/85')}
           onClick={() => void updatePrefs({ sidebarMode: mode === 'expanded' ? 'collapsed' : mode === 'collapsed' ? 'auto-hide' : 'expanded' })}
           aria-label={`Sidebar: ${mode}. Change`}
           title={`Sidebar: ${mode}`}
         >
-          <Icon name={collapsed ? 'panel-open' : 'panel-close'} size={16} />
+          <Icon name={collapsed ? 'panel-open' : 'panel-close'} size={collapsed ? 19 : 16} />
           {!collapsed && <span className="capitalize">{mode.replace('-', ' ')}</span>}
         </button>
       </div>
@@ -424,11 +424,12 @@ function Item({ a, active, collapsed, badge, onClick, locked, custom }: { a: App
         className={cx(
           'relative flex h-10 w-full items-center gap-3 rounded-[9px] px-3 text-[14px] font-medium transition-colors',
           active ? 'bg-primary text-white' : 'hover:bg-white/8 hover:text-white',
-          collapsed && 'justify-center px-0',
+          // Collapsed (#387): a full-size square target and a larger icon, not the expanded row's icon left alone.
+          collapsed && 'h-11 justify-center px-0',
           custom?.dragging && 'opacity-50',
         )}
       >
-        <Icon name={a.icon} size={19} />
+        <Icon name={a.icon} size={collapsed ? 22 : 19} />
         {!collapsed && <span className="flex-1 truncate text-start">{label}</span>}
         {!collapsed && a.surface === 'browser' && !locked ? <Icon name="external" size={13} className="opacity-60" /> : null}
         {locked ? <Icon name="lock" size={13} className={cx('opacity-70', collapsed && 'absolute end-1.5 bottom-1')} /> : null}

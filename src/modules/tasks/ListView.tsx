@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { cx } from '../../components/ui';
 import { dueOf, priorityOf, progressOf, STATUSES, type DueGroup, type Status, type Task, type TaskList } from './api';
 import { Select } from '../../components/Select';
@@ -11,14 +11,17 @@ const GROUPS: Array<{ id: DueGroup | 'done'; label: string; tone: string }> = [
   { id: 'later', label: 'LATER', tone: 'text-ink-2' },
   { id: 'none', label: 'NO DUE DATE', tone: 'text-ink-3' },
 ];
-const COLS = '34px minmax(0,2.6fr) minmax(0,1.2fr) minmax(0,1.3fr) minmax(0,0.8fr) minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,1fr)';
+const COLS = '22px minmax(0,2.6fr) minmax(0,1.2fr) minmax(0,1.3fr) minmax(0,0.8fr) minmax(0,0.9fr) minmax(0,0.9fr) minmax(0,1fr)';
 
 /**
  * The list (TasksList): open tasks grouped by when they are due, with the
- * status changed in place and a tick to complete. Completed tasks come newest
- * first, in one group.
+ * status changed in place and a round tick before the title to complete.
+ * Completed tasks come newest first, in one group.
+ *
+ * The box at the start of a row picks it (#392): a bar over the list then
+ * completes, reopens or moves every picked task at once.
  */
-export function ListView({ tasks, lists, me, today, now, completed, selected, canChangeStatus, quickAdd, onOpen, onToggle, onStatus, onQuickAdd }: {
+export function ListView({ tasks, lists, me, today, now, completed, selected, canChangeStatus, quickAdd, onOpen, onToggle, onStatus, onBulkStatus, onQuickAdd }: {
   tasks: Task[];
   lists: Map<number, TaskList>;
   me: number;
@@ -31,9 +34,25 @@ export function ListView({ tasks, lists, me, today, now, completed, selected, ca
   onOpen: (t: Task) => void;
   onToggle: (t: Task) => void;
   onStatus: (t: Task, s: Status) => void;
+  onBulkStatus: (ts: Task[], s: Status) => Promise<void>;
   onQuickAdd: (title: string) => Promise<void>;
 }) {
   const [title, setTitle] = useState('');
+  const [picked, setPicked] = useState<Set<number>>(() => new Set());
+  // Only what is still on screen counts: a task that left the view (completed, filtered) is no longer picked.
+  const chosen = useMemo(() => tasks.filter((t) => picked.has(t.id)), [tasks, picked]);
+  const pick = (id: number, on: boolean) => setPicked((cur) => { const next = new Set(cur); if (on) next.add(id); else next.delete(id); return next; });
+  const allPicked = tasks.length > 0 && chosen.length === tasks.length;
+  const [busy, setBusy] = useState(false);
+  const bulk = async (s: Status) => {
+    setBusy(true);
+    try {
+      await onBulkStatus(chosen, s);
+      setPicked(new Set());
+    } finally {
+      setBusy(false);
+    }
+  };
   const sorted = completed
     ? [...tasks].sort((a, b) => (b.completed_at ?? '').localeCompare(a.completed_at ?? ''))
     : [...tasks].sort((a, b) => {
@@ -62,9 +81,26 @@ export function ListView({ tasks, lists, me, today, now, completed, selected, ca
           />
         </div>
       ) : null}
+      {chosen.length ? (
+        <div role="toolbar" aria-label="Picked tasks" className="mx-5 mb-2 flex shrink-0 flex-wrap items-center gap-2 rounded-[9px] border border-primary/30 bg-selection px-3 py-1.5 text-[13px]">
+          <b className="text-ink">{chosen.length} picked</b>
+          {canChangeStatus ? (
+            <>
+              <button type="button" disabled={busy} onClick={() => void bulk('done')} className="h-7 rounded-[7px] bg-primary px-2.5 text-[12.5px] font-semibold text-white hover:bg-primary-hover disabled:opacity-50">Mark complete</button>
+              <button type="button" disabled={busy} onClick={() => void bulk('todo')} className="h-7 rounded-[7px] border border-line bg-surface px-2.5 text-[12.5px] font-semibold text-ink hover:bg-subtle disabled:opacity-50">Reopen</button>
+              <Select value="" disabled={busy} onChange={(e) => e.target.value && void bulk(e.target.value as Status)} aria-label="Set the status of the picked tasks" className="h-7 rounded-[7px] border border-line bg-surface px-1 text-[12px] text-ink">
+                <option value="">Set status…</option>
+                {STATUSES.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+              </Select>
+            </>
+          ) : <span className="text-ink-3">Shared tasks can only be changed by their owners.</span>}
+          <span className="flex-1" />
+          <button type="button" onClick={() => setPicked(new Set())} className="h-7 rounded-[7px] px-2 text-[12.5px] font-semibold text-ink-2 hover:bg-subtle">Clear</button>
+        </div>
+      ) : null}
       <div role="table" aria-label="Tasks" className="min-h-0 flex-1 overflow-y-auto scroll-thin">
         <div role="row" className="sticky top-0 z-10 grid gap-2 border-y border-line bg-ground px-5 py-[7px] text-[10.5px] font-bold tracking-[0.4px] text-ink-3" style={{ gridTemplateColumns: COLS }}>
-          <span />
+          <Checkbox checked={allPicked} indeterminate={chosen.length > 0 && !allPicked} disabled={!tasks.length} onChange={(e) => setPicked(e.target.checked ? new Set(tasks.map((t) => t.id)) : new Set())} aria-label="Pick all tasks" />
           <span role="columnheader">TASK</span>
           <span role="columnheader">LIST</span>
           <span role="columnheader">STATUS</span>
@@ -85,10 +121,22 @@ export function ListView({ tasks, lists, me, today, now, completed, selected, ca
               const list = t.list_id ? lists.get(t.list_id) : undefined;
               return (
                 <div key={t.id} role="row" aria-selected={selected === t.id} className={cx('grid items-center gap-2 border-b border-line/60 px-5 py-[7px] text-[13px]', selected === t.id ? 'bg-selection' : 'hover:bg-subtle/60')} style={{ gridTemplateColumns: COLS }}>
-                  <Checkbox checked={done} disabled={!canChangeStatus} onChange={() => onToggle(t)} aria-label={`${done ? 'Reopen' : 'Complete'} ${t.title}`} />
-                  <button type="button" onClick={() => onOpen(t)} className={cx('min-w-0 truncate text-left font-semibold hover:underline', done ? 'text-ink-3 line-through' : 'text-ink')} title={t.title}>
-                    {t.title}
-                  </button>
+                  <Checkbox checked={picked.has(t.id)} onChange={(e) => pick(t.id, e.target.checked)} aria-label={`Pick ${t.title}`} />
+                  <span className="flex min-w-0 items-center gap-2">
+                    <button
+                      type="button"
+                      disabled={!canChangeStatus}
+                      onClick={() => onToggle(t)}
+                      aria-label={`${done ? 'Reopen' : 'Complete'} ${t.title}`}
+                      title={canChangeStatus ? (done ? 'Reopen' : 'Complete') : 'Shared tasks can only be completed by their owners'}
+                      className={cx('flex h-[18px] w-[18px] shrink-0 items-center justify-center rounded-full border-[1.5px] text-[11px] leading-none', done ? 'border-success bg-success text-white' : 'border-ink-3 text-transparent hover:border-success hover:text-success', 'disabled:cursor-not-allowed disabled:opacity-50')}
+                    >
+                      ✓
+                    </button>
+                    <button type="button" onClick={() => onOpen(t)} className={cx('min-w-0 truncate text-left font-semibold hover:underline', done ? 'text-ink-3 line-through' : 'text-ink')} title={t.title}>
+                      {t.title}
+                    </button>
+                  </span>
                   <span className="flex min-w-0 items-center gap-1.5 text-ink-2">
                     {list ? <span className="h-2 w-2 shrink-0 rounded-[3px]" style={{ background: list.color }} /> : null}
                     <span className="truncate">{list?.name ?? '—'}</span>

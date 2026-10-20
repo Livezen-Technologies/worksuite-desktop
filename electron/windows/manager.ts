@@ -941,6 +941,27 @@ export class WindowManager {
       }
     });
     win.webContents.on('unresponsive', () => log.warn('window unresponsive', { kind }));
+    // Dragged to another monitor (#389): its smallest size follows that monitor's usable area and scaling, so a window
+    // moved from a 100% desktop screen to a 200% laptop fits it rather than hanging off the edge.
+    if (SIZES[kind]) {
+      let onDisplay = screen.getDisplayMatching(win.getBounds()).id;
+      let settle: NodeJS.Timeout | null = null;
+      win.on('moved', () => {
+        if (settle) clearTimeout(settle);
+        settle = setTimeout(() => {
+          if (win.isDestroyed()) return;
+          const d = screen.getDisplayMatching(win.getBounds());
+          if (d.id === onDisplay) return;
+          onDisplay = d.id;
+          const min = minimumFor(SIZES[kind], d.workArea);
+          win.setMinimumSize(min.minWidth, min.minHeight);
+          if (win.isFullScreen() || win.isMaximized()) return;
+          const b = win.getBounds();
+          const fitted = fitToDisplays(b, screen.getAllDisplays(), screen.getPrimaryDisplay());
+          if (fitted.x !== b.x || fitted.y !== b.y || fitted.width !== b.width || fitted.height !== b.height) win.setBounds(fitted);
+        }, 250);
+      });
+    }
     // What the window's page reports as an error — a screen that failed to draw among them (app/Boundaries.tsx) —
     // goes to the log, so a crash can be read afterwards. Capped: a failing loop must not fill the disk.
     let logged = 0;

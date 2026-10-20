@@ -114,6 +114,8 @@ export default function TasksPage(_props: ModuleProps) {
     }
   };
   const change = async (t: Task, s: Status) => {
+    // Ticked at once (#392); the server has the last word.
+    qc.setQueryData<{ data: { tasks: Task[] } }>(['tasks', 'all'], (old) => (old ? { ...old, data: { tasks: old.data.tasks.map((x) => (x.id === t.id ? { ...x, status: s } : x)) } } : old));
     try {
       await patchTask(t, 'status', s, `${STATUSES.find((x) => x.id === s)?.label}: “${t.title}”`);
       // Completing sets progress to 100 and reopening leaves it there; a reopened task is not finished.
@@ -123,6 +125,22 @@ export default function TasksPage(_props: ModuleProps) {
     } finally {
       refresh();
     }
+  };
+  // The list's picked tasks, one after another so each change is its own entry in the task's history.
+  const bulk = async (ts: Task[], s: Status) => {
+    const ids = new Set(ts.map((t) => t.id));
+    qc.setQueryData<{ data: { tasks: Task[] } }>(['tasks', 'all'], (old) => (old ? { ...old, data: { tasks: old.data.tasks.map((x) => (ids.has(x.id) ? { ...x, status: s } : x)) } } : old));
+    let failed = 0;
+    for (const t of ts) {
+      try {
+        if (t.status !== s) await patchTask(t, 'status', s, `${STATUSES.find((x) => x.id === s)?.label}: “${t.title}”`);
+      } catch {
+        failed += 1;
+      }
+    }
+    refresh();
+    if (failed) toast('error', `${failed} of ${ts.length} tasks could not be changed.`);
+    else toast('success', `${ts.length} ${ts.length === 1 ? 'task' : 'tasks'}: ${STATUSES.find((x) => x.id === s)?.label}.`);
   };
   const move = async (t: Task, s: Status) => {
     // Shown in its new column straight away; the server has the last word.
@@ -214,6 +232,7 @@ export default function TasksPage(_props: ModuleProps) {
               onOpen={(t) => open(t.id)}
               onToggle={(t) => void change(t, t.status === 'done' ? 'todo' : 'done')}
               onStatus={(t, s) => void change(t, s)}
+              onBulkStatus={bulk}
               onQuickAdd={(text) => quickAdd(text)}
             />
           )

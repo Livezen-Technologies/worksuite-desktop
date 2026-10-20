@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.3 — 2026-10-20
+
+- A tender document opened from the Tenders module saves back to the tender as its next version, so its Download gives what was edited; the editor can no longer take the window full screen and hide the title bar (#393, #388)
+
 ## 1.3.2 — 2026-10-16
 
 - Slide viewer on Windows: the header keeps clear of the window's own buttons, which covered Close.

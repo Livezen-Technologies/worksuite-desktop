@@ -434,17 +434,20 @@ function Rail({ rooms, loading, error, offline, retry, check, checkedAt, selecte
     <aside aria-label="Conversations" className="relative flex shrink-0 flex-col border-r border-line bg-surface" style={{ width: list.width }}>
       <ResizeDivider state={list} label="Resize the conversation list" />
       <div className="flex flex-col gap-2 px-3 pt-3 pb-2">
-        <div className="flex items-center gap-2">
+        {/* #391: the status on its own, then the actions as one group — 36px targets, 18px icons, clear states. */}
+        <div className="flex min-w-0 items-center gap-2">
           <MyStatus />
-          <button type="button" aria-label="Starred messages" title="Starred messages" onClick={onStarred} className="flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle">
-            <Icon name="star" size={15} />
-          </button>
-          <button type="button" aria-label="Select conversations" title="Select conversations" aria-pressed={selecting} onClick={() => (selecting ? endSelect() : sel.setSelecting(true))} className={cx('flex h-8 w-8 items-center justify-center rounded-[8px] border border-line text-ink-2 hover:bg-subtle', selecting && '!border-primary !bg-selection !text-primary')}>
-            <Icon name="check-circle" size={15} />
-          </button>
-          <button type="button" data-guide="chat.new" aria-label="New conversation" title="New conversation" onClick={onNew} className="flex h-8 w-8 items-center justify-center rounded-[8px] bg-primary text-white hover:bg-primary-hover">
-            <Icon name="plus" size={17} />
-          </button>
+          <div className="flex shrink-0 items-center gap-1">
+            <button type="button" aria-label="Starred messages" title="Starred messages" onClick={onStarred} className={headAction}>
+              <Icon name="star" size={18} />
+            </button>
+            <button type="button" aria-label="Select conversations" title={selecting ? 'Stop selecting' : 'Select conversations'} aria-pressed={selecting} onClick={() => (selecting ? endSelect() : sel.setSelecting(true))} className={cx(headAction, selecting && '!bg-selection !text-primary ring-1 ring-primary/40')}>
+              <Icon name="check-circle" size={18} />
+            </button>
+            <button type="button" data-guide="chat.new" aria-label="New conversation" title="New conversation" onClick={onNew} className="flex h-9 w-9 items-center justify-center rounded-[10px] bg-primary text-white shadow-sm hover:bg-primary-hover active:scale-95 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+              <Icon name="compose" size={18} />
+            </button>
+          </div>
         </div>
         <label className="flex h-[34px] items-center gap-2 rounded-[8px] bg-ground px-2.5 text-ink-3">
           <Icon name="search" size={14} />
@@ -655,3 +658,5 @@ function VisitorRow({ c, active, onOpen, onMenu }: { c: WebsiteRow; active: bool
   );
 }
 
+/** A header action of the conversation list (#391): a 36px target, a visible hover, press and keyboard focus. */
+const headAction = 'flex h-9 w-9 items-center justify-center rounded-[10px] text-ink-2 hover:bg-subtle hover:text-ink active:scale-95 active:bg-line/60 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary';
