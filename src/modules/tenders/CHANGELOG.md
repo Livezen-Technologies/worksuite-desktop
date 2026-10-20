@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.7.1 — 2026-10-20
+
+- Document review keeps its toolbar clear of the Windows window buttons (#395)
+
 ## 1.7.0 — 2026-10-10
 
 **Added**

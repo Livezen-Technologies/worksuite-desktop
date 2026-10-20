@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.11.1 — 2026-10-20
+
+- Preview, media player and code editor keep their toolbar clear of the Windows window buttons (#395)
+
 ## 1.11.0 — 2026-10-10
 
 **Added**

@@ -9,6 +9,7 @@ import { Spinner, cx } from '../../components/ui';
 import { changedLines, diffLines, hunks } from './diff';
 import type { DriveFile } from './api';
 import { Select } from '../../components/Select';
+import { topBarPaddingRight } from '../../core/window-chrome';
 
 interface Opened {
   id: number;
@@ -201,7 +202,7 @@ export function CodeEditor({ file, onClose }: { file: DriveFile; onClose: () => 
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Edit ${file.name}`} className="no-drag fixed inset-0 z-50 flex flex-col bg-[#0D1424] text-[13px] text-[#E6ECFA]">
-      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2C57] bg-[#0F1B3D] px-4">
+      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2C57] bg-[#0F1B3D] pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
         <button type="button" aria-label="Back" onClick={close} className="flex h-[34px] w-[34px] items-center justify-center rounded-[8px] hover:bg-white/10"><Icon name="chevron-left" size={18} /></button>
         <b className="truncate text-[14px]">{file.name}</b>
         <span className="truncate text-[12px] text-[#AFC0E8]">{where} · {LANG[ext] ?? (o?.language || 'Text')}</span>

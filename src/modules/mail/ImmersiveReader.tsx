@@ -3,6 +3,7 @@ import { text } from '../../core/i18n';
 import { Icon } from '../../components/Icon';
 import { Button, cx } from '../../components/ui';
 import type { MailPrefs } from './types';
+import { topBarPaddingRight } from '../../core/window-chrome';
 
 /**
  * Immersive reader (ENH-MAIL-03 DMO-RD-04): the message's words alone, full
@@ -70,7 +71,7 @@ export function ImmersiveReader({ subject, from, plain, prefs, onPrefs, onClose 
 
   return (
     <div role="dialog" aria-modal="true" aria-label={text('Immersive reader')} className="fixed inset-0 z-50 flex flex-col bg-ground">
-      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface px-4 py-2" role="toolbar" aria-label={text('Reader options')}>
+      <div className="flex flex-wrap items-center gap-2 border-b border-line bg-surface py-2 pl-4" style={{ paddingRight: topBarPaddingRight(16) }} role="toolbar" aria-label={text('Reader options')}>
         <span className="min-w-0 flex-1 truncate text-[13px] font-semibold text-ink-2">{text('Immersive reader')}</span>
         <Button size="sm" icon="zoom-out" disabled={size === SIZES[0]} onClick={() => set({ size: SIZES[Math.max(0, SIZES.indexOf(size) - 1)] })}>
           {text('Smaller')}
