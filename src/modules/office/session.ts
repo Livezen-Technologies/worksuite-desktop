@@ -353,6 +353,11 @@ export class OfficeSession {
     void this.renew('reload');
   }
 
+  /** Sinhala Tools' plugin, driven from the tab's menu (blueprint WF-SI-01): the selection, or the whole document. */
+  sinhala(action: 'convertSelection' | 'convertDocument'): void {
+    this.port?.command({ type: `sinhala.${action}` });
+  }
+
   // ── modes ──────────────────────────────────────────────────────────────
 
   async setMode(mode: OfficeMode): Promise<boolean> {

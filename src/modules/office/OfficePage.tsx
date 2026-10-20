@@ -15,6 +15,7 @@ import type { DriveFile } from '../files/api';
 import type { Item } from '../files/ctx';
 import { LinkDialog, SecureLinkDialog, SendToChatDialog } from '../files/Dialogs';
 import { PopMenu, below, type MenuItem } from '../files/Menu';
+import { useSinhalaAvailable } from '../../core/sinhala';
 import { ShareDialog } from '../files/Share';
 import { clock, convertLegacy, exportDocument, names, restoreVersion, versions, type OfficeRefusal } from './api';
 import { EditorSurface } from './EditorSurface';
@@ -189,6 +190,8 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
       }),
   );
   const s = useStore(session.store, (x) => x);
+  // Sinhala Tools' plugin, driven from this menu, while the organisation has the tools (blueprint WF-SI-01).
+  const sinhalaOn = useSinhalaAvailable();
   const network = useStore(app, (x) => x.status?.network ?? 'ONLINE');
   // Only a floating chat drawer lies over the document; docked, it sits beside the page and the editor follows the
   // page's narrower width.
@@ -376,6 +379,9 @@ function OfficeDocument({ tabId, fileId, requested, routeName, active }: { tabId
     if (boot.format.legacy && p.convert) menuItems.push({ sep: true }, { label: `Convert & Edit as ${(boot.format.upgrade_to ?? 'a modern file').toUpperCase()}…`, icon: 'repeat', run: () => session.store.set({ convertAsk: { status: 422, code: 'OFFICE_LEGACY_CONVERSION_REQUIRED', message: `This legacy file will be converted to ${(boot.format.upgrade_to ?? 'a modern format').toUpperCase()} for editing.`, actions: ['convert_and_edit', 'view_only', 'cancel'], offline: false, details: {} } }) });
     if (s.mode === 'EDIT' && !s.lock) menuItems.push({ sep: true }, { label: 'Keep to myself while I edit', icon: 'lock', run: () => void session.keepToMyself() });
     if (s.lock?.mine) menuItems.push({ sep: true }, { label: 'Let others edit again', icon: 'unlock', run: () => void session.releaseLock() });
+    if (s.mode === 'EDIT' && sinhalaOn && officeKind(name) === 'doc') {
+      menuItems.push({ sep: true }, { label: 'Convert selection to Unicode Sinhala', icon: 'languages', run: () => session.sinhala('convertSelection') }, { label: 'Convert document to Unicode Sinhala', icon: 'languages', run: () => session.sinhala('convertDocument') });
+    }
     menuItems.push({ sep: true }, { label: 'Reload the editor', icon: 'refresh', run: () => session.reloadEditor() });
   }
 

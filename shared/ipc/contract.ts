@@ -70,6 +70,7 @@ import { posContract, type PosOutputs } from '../pos';
 import { projectReportSchema, projectsContract, projectsReportSchema, type ProjectsOutputs } from '../projects';
 import { purchaseExportSchema } from '../purchase';
 import { salesContract, type SalesOutputs } from '../sales';
+import { sinhalaContract, type SinhalaOutputs } from '../sinhala';
 import { phoneContract, type PhoneOutputs } from '../phone';
 import { accountsContract, type AccountsOutputs, type ServiceHealthState } from '../accounts';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
@@ -1572,6 +1573,8 @@ export const contract = {
   ...projectsContract,
   // WorkSuite Sales: approvals from a banner, printing on this computer, reports as PDF (shared/sales.ts, electron/services/sales-desk.ts).
   ...salesContract,
+  // Sinhala Tools: the engine, profile cache, fonts and clipboard on this computer (shared/sinhala.ts, electron/services/sinhala.ts).
+  ...sinhalaContract,
   // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (shared/accounts.ts, electron/main/accounts-wiring.ts).
   ...accountsContract,
 } satisfies Record<InvokeChannel, ChannelSpec>;
@@ -1645,7 +1648,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, SalesOutputs, AccountsOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, SalesOutputs, SinhalaOutputs, AccountsOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;

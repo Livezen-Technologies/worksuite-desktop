@@ -1,7 +1,7 @@
 {
   "name": "worksuite-desktop",
   "productName": "WorkSuite",
-  "version": "0.2.269",
+  "version": "0.2.270",
   "description": "WorkSuite Desktop \u2014 the native desktop client for the WorkSuite platform (Windows, macOS, Linux).",
   "author": "Livezen Technologies",
   "license": "UNLICENSED",
@@ -29,7 +29,9 @@
     "release:keygen": "node scripts/release-keygen.mjs",
     "release:manifest": "node scripts/release-manifest.mjs",
     "e2e": "npm run build && node scripts/run-e2e.mjs",
-    "icons": "electron scripts/render-icons.mjs"
+    "icons": "electron scripts/render-icons.mjs",
+    "sinhala:sync": "node scripts/sync-sinhala-core.mjs",
+    "sinhala:check": "node scripts/sync-sinhala-core.mjs --check"
   },
   "dependencies": {
     "@betteroffice/docx": "^0.3.0",
@@ -71,6 +73,7 @@
     "@types/react": "^19.2.0",
     "@types/react-dom": "^19.2.0",
     "@vitejs/plugin-react": "^5.2.0",
+    "@worksuite/sinhala-core": "file:vendor/sinhala-core",
     "electron": "^44.4.5",
     "electron-builder": "^26.15.3",
     "electron-vite": "^5.0.0",

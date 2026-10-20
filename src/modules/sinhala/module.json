@@ -1,0 +1,11 @@
+{
+    "module": "sinhala",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/sinhala-docx.ts",
+        "electron/services/sinhala.ts",
+        "electron/workers/sinhala-worker.ts",
+        "shared/ipc/sinhala-channels.ts",
+        "shared/sinhala.ts"
+    ]
+}

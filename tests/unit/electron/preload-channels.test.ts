@@ -19,8 +19,8 @@ describe('the main window bridge', () => {
 
   it('exposes every channel the contract lists', () => {
     const names = new Set(exposed.map((m) => `${m[2]}:${m[3]}`));
-    // Exposed by hand: the two turn File objects into paths first; activity is the preload's own, on input.
-    const byHand = new Set(['files:registerDropped', 'pdf:registerDropped', 'security:activity']);
+    // Exposed by hand: the three turn File objects into paths first; activity is the preload's own, on input.
+    const byHand = new Set(['files:registerDropped', 'pdf:registerDropped', 'sinhala:registerDropped', 'security:activity']);
     const missing = INVOKE_CHANNELS.filter((c) => !names.has(c) && !byHand.has(c));
     expect(missing).toEqual([]);
   });

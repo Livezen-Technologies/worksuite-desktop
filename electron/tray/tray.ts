@@ -51,6 +51,11 @@ export interface TrayModel {
   webchatOnCall?: { conversationId: number; label: string; held: boolean } | null;
   /** Quick Ask's shortcut while it is registered, or null (AI Assistant). */
   quickAsk: string | null;
+  /**
+   * Sinhala Tools' "Convert clipboard to Unicode" (blueprint WF-SI-04), with its key while it is held; null (or absent)
+   * while the organisation does not have the tools. Optional for older callers.
+   */
+  sinhala?: { shortcut: string | null } | null;
   /** Changes the assistant proposed that wait for a decision (DSK-5): opened in the main window, never confirmed here. */
   aiChanges: number;
   /** The catalogue ids of the apps the person may open (shared/access.ts): the menu offers nothing else. */
@@ -174,6 +179,8 @@ export interface TrayActions {
   answerWebchatCall?: (callId: number) => void;
   quickAsk: () => void;
   aiChanges: () => void;
+  /** Sinhala Tools: the clipboard converted to Unicode. Optional for older callers. */
+  sinhalaClipboard?: () => void;
   /** Meet's tray lines (WS-MEET-ENH-01 D04). Optional for older callers. */
   meetJoinNext?: () => void;
   meetStart?: () => void;
@@ -735,6 +742,9 @@ export function trayMenu(m: TrayModel, a: TrayActions, now = new Date()): MenuIt
 
   items.push({ label: 'Open WorkSuite', click: a.open });
   if (has('ai') && m.quickAsk) items.push({ label: 'Quick Ask…', accelerator: m.quickAsk, registerAccelerator: false, click: a.quickAsk });
+  if (m.signedIn && m.sinhala && a.sinhalaClipboard) {
+    items.push({ label: 'Convert clipboard to Unicode', ...(m.sinhala.shortcut ? { accelerator: m.sinhala.shortcut, registerAccelerator: false } : {}), click: a.sinhalaClipboard });
+  }
   if (has('ai') && m.aiChanges > 0) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant waits' : `${m.aiChanges} changes from the assistant wait`, click: a.aiChanges });
   if (m.signedIn) {
     const create: MenuItemConstructorOptions[] = [

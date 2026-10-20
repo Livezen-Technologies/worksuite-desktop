@@ -115,6 +115,17 @@ export const OFFICE_HOST_JS = `(function () {
     document.head.appendChild(s);
   }
 
+  function sinhala(action) {
+    var frame = document.querySelector('#box iframe');
+    var origin = null;
+    try { origin = new URL(apiUrl).origin; } catch (e) { origin = null; }
+    if (!frame || !frame.contentWindow || !origin) return;
+    frame.contentWindow.postMessage(JSON.stringify({
+      type: 'onExternalPluginMessage',
+      data: { type: 'worksuite.sinhala', guid: 'asc.{B50BAEE2-4EAC-4298-9DD2-73CC3223FFFA}', action: action }
+    }), origin);
+  }
+
   // The view follows its placeholder (setBounds), which resizes this window: the editor is told, where it can be (#326).
   window.addEventListener('resize', function () {
     if (editor && typeof editor.resize === 'function') { try { editor.resize(); } catch (e) { /* not ready yet */ } }
@@ -132,6 +143,10 @@ export const OFFICE_HOST_JS = `(function () {
       case 'setUsers': if (editor && typeof editor.setUsers === 'function') editor.setUsers({ c: cmd.c, users: cmd.users }); break;
       case 'denyEditingRights': if (editor && typeof editor.denyEditingRights === 'function') editor.denyEditingRights(cmd.message); break;
       case 'showMessage': if (editor && typeof editor.showMessage === 'function') editor.showMessage(cmd.message); break;
+      // Sinhala Tools: the action goes to the editor's frame, and only to the Document Server's origin; the plugin
+      // (asc.{B50BAEE2-…}) takes it as an external plugin message. Nothing runs in this page.
+      case 'sinhala.convertSelection':
+      case 'sinhala.convertDocument': sinhala(cmd.type.slice(8)); break;
       // The app's light or dark mode, for the page behind the editor (#326); the editor's own theme is in its signed config.
       case 'theme': document.documentElement.className = cmd.dark ? 'dark' : ''; break;
       case 'destroy': if (editor) { try { editor.destroyEditor(); } catch (e) { /* already gone */ } editor = null; } break;

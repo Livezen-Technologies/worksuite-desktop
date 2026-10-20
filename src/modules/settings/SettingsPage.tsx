@@ -44,6 +44,7 @@ import { AccountsSettings } from '../contacts/sync/AccountsSettings';
 import { LocalDataSection, LocalProfileSection } from '../guest/LocalSettings';
 import { useGuest } from '../../core/session';
 import { LinksSettings } from './LinksSettings';
+import { SinhalaSettings } from './SinhalaSettings';
 import { CustomTimeoutRow, MAX_LOCK_MINUTES } from './CustomTimeout';
 import { LauncherSettings, ShortcutRecorder } from './LauncherSettings';
 import { SidebarSettings } from './SidebarSettings';
@@ -66,6 +67,7 @@ const WIDE: ReadonlySet<string> = new Set(['updates', 'update-diagnostics', 'lic
 const SECTIONS = [
   { id: 'general', label: 'General', icon: 'globe', group: 'Account' },
   { id: 'preferences', label: 'Preferences', icon: 'settings', group: 'Account' },
+  { id: 'language', label: 'Language & Sinhala', icon: 'languages', group: 'Account' },
   { id: 'notifications', label: 'Notifications & calls', icon: 'bell', group: 'Account' },
   // The app launcher's look, apps, groups, order and shortcut (worksuite-desktop#201).
   { id: 'launcher', label: 'App launcher', icon: 'grid', group: 'Account' },
@@ -99,7 +101,7 @@ const SECTIONS = [
 ] as ReadonlyArray<{ id: string; label: string; icon: string; group: string }>;
 
 /** What a guest's Settings show: what applies to this computer and the Local Profile, nothing that needs an account. */
-const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'launcher', 'sidebar', 'updates', 'update-diagnostics', 'local-profile', 'local-data', 'about']);
+const GUEST_SECTIONS: ReadonlySet<string> = new Set(['general', 'preferences', 'language', 'launcher', 'sidebar', 'updates', 'update-diagnostics', 'local-profile', 'local-data', 'about']);
 const LOCAL_SECTIONS: ReadonlySet<string> = new Set(['local-profile', 'local-data']);
 
 /**
@@ -167,6 +169,7 @@ function SettingsSections(_props: ModuleProps) {
         <div className={WIDE.has(section) ? 'max-w-[1040px]' : 'max-w-[760px]'}>
           {section === 'general' ? <General /> : null}
           {section === 'preferences' ? <PreferencesSection prefs={prefs} /> : null}
+          {section === 'language' ? <SinhalaSettings /> : null}
           {section === 'notifications' ? <NotificationsSection prefs={prefs} /> : null}
           {section === 'launcher' ? <LauncherSettings /> : null}
           {section === 'sidebar' ? <SidebarSettings /> : null}

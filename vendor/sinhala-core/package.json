@@ -1,0 +1,11 @@
+{
+  "name": "@worksuite/sinhala-core",
+  "version": "1.0.0",
+  "description": "Sinhala legacy-font conversion, detection and validation (no DOM or Node APIs) — pinned build, do not edit (scripts/sync-sinhala-core.mjs)",
+  "private": true,
+  "license": "AGPL-3.0-only",
+  "type": "module",
+  "main": "dist/src/index.js",
+  "types": "dist/src/index.d.ts",
+  "sideEffects": false
+}

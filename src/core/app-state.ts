@@ -159,10 +159,34 @@ function applyTheme(prefs: Preferences | null): void {
  * of what the person may open (core/access), and the Shell closes the tabs of
  * any app that left it.
  */
+/**
+ * Sinhala Tools are the person's (sinhala.use) only while the server also says the organisation has them on — a server
+ * without the Sinhala API (404) or an organisation with them off shows nothing (blueprint §6.1, AC-SI-10).
+ */
+let sinhalaOffered = false;
+const SINHALA_APP = 'sinhala-tools';
+
+function refreshSinhala(): void {
+  const b = app.get().bootstrap;
+  if (!b || !visibleApps(grantOf(b)).some((a) => a.id === SINHALA_APP)) {
+    sinhalaOffered = false;
+    return;
+  }
+  call('sinhala:status').then(
+    (st) => {
+      const offered = st.availability === 'ok';
+      if (offered === sinhalaOffered) return;
+      sinhalaOffered = offered;
+      applyBootstrap(app.get().bootstrap);
+    },
+    () => undefined,
+  );
+}
+
 function applyBootstrap(b: Bootstrap | null): void {
   // Guest mode's apps stand until an account signs in.
   if (!b && isGuest()) return;
-  const apps = b ? visibleApps(grantOf(b)) : [];
+  const apps = b ? visibleApps(grantOf(b)).filter((a) => a.id !== SINHALA_APP || sinhalaOffered) : [];
   if (b) setRegional({ timezone: b.user.timezone, locale: b.user.locale, timeFormat: b.user.timeFormat });
   const current = app.get().organizationId;
   const orgId = b && current && b.organizations.some((o) => o.id === current) ? current : null;
@@ -185,8 +209,10 @@ export async function initAppState(): Promise<void> {
   app.set({ info, auth, prefs: settings.preferences, locks: settings.locks, status, update, lock });
   applyTheme(settings.preferences);
   setLanguage(settings.preferences.language);
+  on('sinhala:changed', refreshSinhala);
   if (auth.stage === 'ready') {
     applyBootstrap(await call('session:bootstrap'));
+    refreshSinhala();
     call('transfers:list').then((t) => app.set({ transfers: t }), () => undefined);
     call('sync:status').then((s) => app.set({ sync: s }), () => undefined);
   }
@@ -205,7 +231,10 @@ export async function initAppState(): Promise<void> {
       applyBootstrap(null);
     }
   });
-  on<Bootstrap | null>('session:changed', (b) => applyBootstrap(b));
+  on<Bootstrap | null>('session:changed', (b) => {
+    applyBootstrap(b);
+    refreshSinhala();
+  });
   // Accounts side by side (Connection & Startup). A desktop without them answers UNSUPPORTED: the store stays null.
   void (async () => {
     try {

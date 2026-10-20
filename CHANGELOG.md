@@ -11,8 +11,35 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## Unreleased
+## 0.2.270 — 2026-10-20
 
+- **Sinhala Tools (Sinhala Tools blueprint §6, P2).** Text typed in the old Sinhala fonts — FM Abhaya, DL Manel,
+  Kaputa — becomes Unicode in a new **Sinhala Tools** app: paste or drop it and the Unicode appears as you type, with
+  the characters a font profile has no mapping for listed and left as they were, never dropped. Drop or pick Word
+  documents and each is converted on this computer into `name (Unicode).docx` beside the original, which is not
+  touched. A Drive file (DOCX or PPTX) is converted by the server while online: its preview — before and after, paragraphs changed, characters left unmapped — comes first, and nothing is saved until **Save as new version** (if the file changed meanwhile the server refuses and says so; **Discard** changes nothing); offline, its copy here is
+  converted and goes up as the file's new version when WorkSuite is back (if the file changed meanwhile, both are kept).
+  Sinhala Tools 1.0.0.
+- **Convert clipboard to Unicode, from any app.** Ctrl+Shift+U (⌘⇧U on a Mac) or the tray's line converts copied
+  legacy Sinhala and puts the Unicode back on the clipboard, saying which profile it used; English and Unicode around
+  it stay as they are. The key is changeable or can be turned off in **Settings › Language & Sinhala**, and is let go
+  while WorkSuite is locked. Only the clipboard is read, and only when you ask: no keystroke is ever read.
+- **Settings › Language & Sinhala.** The interface language, the default font profile, what a paste of legacy text
+  does, the clipboard key, the organisation's Sinhala fonts (installed for you only: Windows, macOS and Linux, each
+  file checked against its sha256, only fonts the organisation marked distributable) and the profiles in use. Whatever
+  the organisation fixed is shown locked. Settings 1.42.0.
+- **Office tabs.** A document's ⋯ menu has **Convert selection / Convert document to Unicode Sinhala**, which hand the
+  work to the Sinhala Tools plugin the Document Server serves — the editor's content-security policy is unchanged. In
+  the built-in editor, **Sinhala to Unicode** converts the open .docx here, offline too, unsaved until you Save.
+  Office 1.4.0.
+- **Where it bites.** The tools show only when the server's `GET api/sinhala/status` says so (WorkSuite's Sinhala
+  module: the person has `sinhala.use` and the organisation has them on); an older server without it shows nothing.
+  While only the server's engine is down, converting on this computer still works. Font profiles are used only
+  after their sha256 checks out (and their Ed25519 signature, once the server signs them); the last good set is kept
+  for offline use and a tampered one is refused. The engine is `@worksuite/sinhala-core` 1.0.0, pinned from
+  worksuite-office (`npm run sinhala:sync` / `sinhala:check`). The Office tab's commands reach the plugin as an external
+  plugin message, which the Document Server passes on only under a licence with `advancedApi`, and the plugin must
+  handle (its next release).
 - **A saved document shows as saved on the computer that saved it (#396).** The app reaches WorkSuite through its own
   `app://bundle/__api/…` addresses, and those passed the server's caching on: a file's bytes could be kept for up to six
   hours under an address that does not change when a new version is saved. The computer that had opened the document

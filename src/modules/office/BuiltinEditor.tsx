@@ -9,6 +9,7 @@ import { useTabTitle } from '../../core/tab-context';
 import { detachTab, navigate, setCloseGuard } from '../../core/tabs';
 import { toast } from '../../core/toasts';
 import { uploadBlob } from '../../core/upload';
+import { useSinhalaAvailable } from '../../core/sinhala';
 import { Button, ErrorNote, FileBadge, Spinner, cx } from '../../components/ui';
 import type { BetterEditorApi, PreparedFile } from './better/BetterEditor';
 import { betterFormat } from './better/format';
@@ -156,6 +157,32 @@ export function BuiltinEditor({ tabKey, source, routeName, active, notice }: { t
     return () => setCloseGuard(tabKey, null);
   }, [tabKey, dirty, canEdit, save]);
 
+  // Sinhala Tools here too (blueprint §6.1 Built-in editor): the document's legacy runs converted on this computer —
+  // offline as well — and shown in place, unsaved, so Save (or closing without it) decides.
+  const sinhalaOn = useSinhalaAvailable();
+  const [revision, setRevision] = useState(0);
+  const [converting, setConverting] = useState(false);
+  const convertSinhala = async () => {
+    if (!api.current) return;
+    setConverting(true);
+    try {
+      const r = await call('sinhala:convertDocx', { bytes: new Uint8Array(await api.current.serialize()) });
+      if (!r.runsConverted) {
+        toast('info', 'No text in a legacy Sinhala font was found in this document.');
+        return;
+      }
+      const { prepareFile } = await import('./better/BetterEditor');
+      qc.setQueryData(['office', 'builtin-file', sourceKey], await prepareFile(new Uint8Array(r.bytes), 'docx'));
+      setRevision((n) => n + 1);
+      setState('unsaved');
+      toast('success', r.unmappedCount ? `Converted ${r.runsConverted} runs to Unicode (${r.profile} ${r.profileVersion}); ${r.unmappedCount} characters were left as they were.` : `Converted ${r.runsConverted} runs to Unicode (${r.profile} ${r.profileVersion}). Save to keep it.`);
+    } catch (e) {
+      toast('error', errorMessage(e));
+    } finally {
+      setConverting(false);
+    }
+  };
+
   const onReady = useCallback((a: BetterEditorApi | null) => {
     api.current = a;
   }, []);
@@ -190,6 +217,11 @@ export function BuiltinEditor({ tabKey, source, routeName, active, notice }: { t
             Save to Drive
           </Button>
         ) : null}
+        {sinhalaOn && canEdit && format === 'docx' ? (
+          <Button size="sm" icon="languages" loading={converting} onClick={() => void convertSinhala()} title="Convert text in legacy Sinhala fonts (FM Abhaya, DL Manel, Kaputa) to Unicode">
+            Sinhala to Unicode
+          </Button>
+        ) : null}
         <Button size="sm" onClick={() => void saveCopy()} title="Save a copy on this computer">
           Save a copy
         </Button>
@@ -206,6 +238,7 @@ export function BuiltinEditor({ tabKey, source, routeName, active, notice }: { t
       <div className="relative min-h-0 flex-1 overflow-hidden bg-white text-[#111]">
         <Suspense fallback={<Spinner label="Starting the editor…" />}>
           <BetterEditor
+            key={revision}
             file={prepared.data}
             name={name}
             readOnly={!canEdit}
