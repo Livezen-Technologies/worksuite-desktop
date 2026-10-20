@@ -13,6 +13,8 @@ import { AttachMenu, saveTenderFile, tenderOfficeDoc, Uploading, useDropZone, us
 import { OpenWithButton } from '../office/open-with';
 import { addDocuments, DOC_KINDS, docKindLabel, removeDocument, replaceDocument, updateDocument } from './work';
 import { Checkbox } from '../../components/Checkbox';
+import { DocumentVersions, openDocumentOnline } from './DocumentVersions';
+import { officeOpenKind } from '@shared/office-open';
 
 /**
  * The tender's documents: the buyer's notice and specification, our bid,
@@ -27,6 +29,7 @@ export default function Documents({ id, docs, can }: { id: number; docs: TenderD
   const [kind, setKind] = useState('tender_notice');
   const [editing, setEditing] = useState<TenderDoc | null>(null);
   const [busy, setBusy] = useState<number | null>(null);
+  const [versions, setVersions] = useState<TenderDoc | null>(null);
   const refresh = () => void qc.invalidateQueries({ queryKey: K.tender(id) });
   const uploads = useTenderUploads(id, refresh);
   // Files dropped on the list are added as documents of the kind chosen above.
@@ -111,6 +114,16 @@ export default function Documents({ id, docs, can }: { id: number; docs: TenderD
                       </button>
                     </>
                   ) : null}
+                  {f?.state === 'ready' && officeOpenKind(f.download_name) ? (
+                    <button type="button" className={btnSmall + ' !h-7'} title={can.edit ? 'Edit it in WorkSuite Office — each save is a new version' : 'Open it read-only in WorkSuite Office'} onClick={() => void openDocumentOnline(d)}>
+                      {can.edit ? 'Edit online' : 'Open online'}
+                    </button>
+                  ) : null}
+                  {f && f.state !== 'deleted' ? (
+                    <button type="button" aria-label={`Versions of ${d.title}`} title="Versions" className={btnSmall + ' !h-7 !w-7 justify-center !px-0'} onClick={() => setVersions(d)}>
+                      <Icon name="history" size={13} />
+                    </button>
+                  ) : null}
                   {can.edit && can.upload ? (
                     <AttachMenu
                       small
@@ -138,6 +151,7 @@ export default function Documents({ id, docs, can }: { id: number; docs: TenderD
         )}
       </div>
       {!can.download && docs.length ? <p className="m-0 text-[12px] text-ink-3">You can see what is filed here, but taking copies of tender documents needs its own permission.</p> : null}
+      {versions ? <DocumentVersions doc={versions} onClose={() => setVersions(null)} onChanged={refresh} /> : null}
       {editing ? <EditDoc doc={editing} onClose={() => setEditing(null)} onSaved={refresh} /> : null}
     </div>
   );
@@ -146,8 +160,8 @@ export default function Documents({ id, docs, can }: { id: number; docs: TenderD
 async function replaceFromDrive(docId: number, f: { id: number | string } | undefined, refresh: () => void) {
   if (!f) return;
   try {
-    await replaceDocument(docId, Number(f.id));
-    toast('success', 'Replaced.');
+    const r = await replaceDocument(docId, Number(f.id));
+    toast('success', r?.in_place ? 'Saved as a new version — the earlier ones are under Versions.' : 'Replaced.');
   } catch (e) {
     toast('error', errorMessage(e));
   } finally {

@@ -750,7 +750,9 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       : input.transcriptExport
       ? `/api/meetings/transcripts/${input.transcriptExport.id}/export?format=${input.transcriptExport.format}`
       : input.tenderDocument
-      ? `/api/tenders/documents/${input.tenderDocument}/file`
+      ? input.tenderDocumentVersion
+        ? `/api/tenders/documents/${input.tenderDocument}/versions/${input.tenderDocumentVersion}/file`
+        : `/api/tenders/documents/${input.tenderDocument}/file`
       : tl
       ? `/api/tenders/checklist/${tl.line}/download${tl.version ? `?v=${tl.version}` : ''}`
       : input.tenderLetter

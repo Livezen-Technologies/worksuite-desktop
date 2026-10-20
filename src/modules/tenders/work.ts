@@ -246,7 +246,8 @@ export const docKindLabel = (k: string) => DOC_KINDS.find(([v]) => v === k)?.[1]
 
 export const updateDocument = (docId: number, patch: { title?: string; kind?: string; note?: string; is_final?: boolean }) => apiPut(`/api/tenders/documents/${docId}`, patch);
 /** A Drive file as a document's new version. */
-export const replaceDocument = (docId: number, fileId: number) => apiPut(`/api/tenders/documents/${docId}`, { file_id: fileId });
+/** `in_place`: the new file was added as a version of the document's own file (its history kept). */
+export const replaceDocument = (docId: number, fileId: number) => apiPut<{ in_place?: boolean } | null>(`/api/tenders/documents/${docId}`, { file_id: fileId });
 /** Drive files as new documents of one kind, titled by their names. */
 export const addDocuments = async (id: number, files: Array<{ id: number | string; name: string }>, kind: string) => {
   for (const f of files) await apiPost(`/api/tenders/${id}/documents`, { file_id: Number(f.id), kind, title: f.name });

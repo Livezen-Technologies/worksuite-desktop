@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.8.0 — 2026-10-20
+
+- Documents: Edit online / Open online in the WorkSuite Office tab (the server's mode), and Versions — view, save, compare two side by side, restore
+
 ## 1.7.1 — 2026-10-20
 
 - Document review keeps its toolbar clear of the Windows window buttons (#395)
