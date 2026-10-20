@@ -15,6 +15,7 @@ import type { NotificationItem, NotificationPermission, NotificationPrivacy, Pre
 import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import { isPurchaseApprovalEvent } from '@shared/purchase';
+import { recruitmentNoticeLink } from '@shared/recruitment';
 import type { Database } from './db';
 import type { HttpClient } from './http';
 import { notificationPermission, presentLocked, testNoticeFor } from './locked-notifications';
@@ -300,7 +301,8 @@ export function mapServerNotification(n: ServerNotification): NotificationItem {
     module: moduleOf(n),
     title: n.title ?? 'Notification',
     body: n.body ?? '',
-    link: n.link ?? null,
+    // Recruitment's keys open the desktop's own screen for them (interviews today, the scorecard, approvals).
+    link: recruitmentNoticeLink(n.event_key ?? n.type, n.data) ?? n.link ?? null,
     read: !!n.read_at,
     createdAt: utcStamp(n.created_at),
     actor: null,
@@ -336,6 +338,7 @@ const MODULE_LABELS: Record<string, string> = {
   ai: 'AI Assistant',
   marketing: 'Marketing',
   purchase: 'Purchasing',
+  recruitment: 'Recruitment',
   system: 'WorkSuite',
 };
 
@@ -767,7 +770,8 @@ export class NotificationService {
         const id = String(e.id ?? (e.event_id ? `event:${e.event_id}` : ''));
         if (!id) return;
         if (e.transient !== true) this.unread.notifications += 1;
-        const link = typeof e.link === 'string' ? e.link : null;
+        // A recruitment key opens the desktop's own screen for it (shared/recruitment.ts).
+        const link = recruitmentNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? (typeof e.link === 'string' ? e.link : null);
         const category = typeof e.category === 'string' ? e.category : null;
         if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
         if (moduleOf({ category, link }) === 'mail' || e.event === 'mail.received') this.mailUnread.add(id);

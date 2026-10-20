@@ -11,6 +11,15 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+
+- **Recruitment on the desktop.** A new **Recruitment** app (People) for those with `recruitment.access`: the
+  pipeline board (drag a candidate to another stage; moving back or out asks for a reason), the review queue with
+  the CV beside it and J / K / A / S / R keys, my interviews today with Join Meet, the scorecard docked beside the
+  call or in its own window (1–5 per criterion, a comment on a 1 or a 5), and the approvals waiting on me —
+  requisitions, selections and offers. Recruitment's notifications open the right screen. Requisitions, jobs,
+  offers and settings still open on the web. Recruitment 1.0.0, Notifications 2.4.0.
+
 ## 0.2.270 — 2026-10-20
 
 - **Sinhala Tools (Sinhala Tools blueprint §6, P2).** Text typed in the old Sinhala fonts — FM Abhaya, DL Manel,

@@ -117,6 +117,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // HR carries no app slug: there is no `hr` row in `applications`, and its
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
   { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in', guest: 'locked', guestLabel: 'HR & People' },
+  // Recruitment (WS-REC): the server's app `recruitment`, opened with `recruitment.access`; its notices link
+  // `/recruitment?tab=…` (shared/recruitment.ts). Requisitions, jobs, offers and settings stay on the web.
+  { id: 'recruitment', label: 'Recruitment', group: 'people', icon: 'user-plus', app: 'recruitment', perm: 'recruitment.access', webPath: '/recruitment', surface: 'native', sidebar: 'business', order: 141, keywords: 'recruitment hiring jobs vacancies candidates applicants pipeline interviews scorecards offers requisitions ats talent' },
 
   // Phone (WS-VOIP-SRS-001): the web's `/phone`, open to everyone signed in like the web's catalogue — the server has
   // no `voip` row in `applications` yet (G-13); the screens ask the server what the person may do.
