@@ -12,6 +12,7 @@ import { notifiedNote, reviewMessage, reviewRecipients, tellInChat, usePeople } 
 import { reviewLine, type Line } from './work';
 import { SidePanel } from '../../components/SidePanel';
 import { Checkbox } from '../../components/Checkbox';
+import { topBarPaddingRight } from '../../core/window-chrome';
 
 /** A line with something on it to look at. */
 export const viewable = (l: Line) => l.files.length > 0;
@@ -123,7 +124,7 @@ export function ReviewScreen({
   const btn = 'h-9 rounded-[8px] px-3 text-[13px] font-semibold disabled:opacity-50';
   return (
     <div role="dialog" aria-modal="true" aria-label={`Review ${line.label}`} className="fixed inset-0 z-50 flex flex-col bg-ground">
-      <div className="drag flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface px-4">
+      <div className="drag flex h-12 shrink-0 items-center gap-2 border-b border-line bg-surface pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
         <IconButton icon="chevron-left" label="Previous file" className="no-drag" disabled={at <= 0} onClick={() => open(files[at - 1]!)} />
         <IconButton icon="chevron-right" label="Next file" className="no-drag" disabled={at >= files.length - 1} onClick={() => open(files[at + 1]!)} />
         <span className="text-[12px] text-ink-3 tabular-nums">

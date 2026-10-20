@@ -13,6 +13,16 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **A saved document shows as saved on the computer that saved it (#396).** The app reaches WorkSuite through its own
+  `app://bundle/__api/…` addresses, and those passed the server's caching on: a file's bytes could be kept for up to six
+  hours under an address that does not change when a new version is saved. The computer that had opened the document
+  before editing it went on showing that copy, while every other computer fetched the new one. Every API answer is now
+  checked with the server again before it is used (`Cache-Control: no-cache`), so editors, previews, PDFs and
+  downloads always get the latest saved version.
+- **Document viewers keep clear of the window buttons (#395).** The Files preview, media player and code editor, the
+  tender document review, and Mail's image viewer and immersive reader cover the whole window; their toolbars ran
+  under Windows' minimise, maximise and close buttons. They keep the same room clear as the title bar now (as the chat
+  attachment viewer and slide viewer already did). Files, Mail and Tenders patch releases.
 - **Tasks: the boxes in List view pick tasks (#392).** The box at the start of a row was a "complete" tick that only
   changed after the server answered, and did nothing in Shared. It now picks the task; a bar over the list completes,
   reopens or sets the status of every picked task. Completing one task is the round tick before its title, and it

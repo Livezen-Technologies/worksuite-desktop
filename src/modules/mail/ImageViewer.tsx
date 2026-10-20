@@ -3,6 +3,7 @@ import { text } from '../../core/i18n';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import type { FramedPicture } from './readable';
+import { topBarPaddingRight } from '../../core/window-chrome';
 
 /**
  * A picture from an email's body, over the page (worksuite-desktop#287). The frame cannot run anything, so a click on
@@ -45,7 +46,7 @@ export function MailImageViewer({ pictures, start, onClose }: { pictures: Framed
   const name = pic.alt || text('Picture {n} of {m}', { n: i + 1, m: pictures.length });
   return (
     <div ref={box} tabIndex={-1} role="dialog" aria-modal="true" aria-label={name} data-mail-image-viewer className="no-drag fixed inset-0 z-[60] flex flex-col bg-[#080c18]/95 outline-none">
-      <div className="flex h-[52px] shrink-0 items-center gap-1 border-b border-white/10 px-3">
+      <div className="flex h-[52px] shrink-0 items-center gap-1 border-b border-white/10 pl-3" style={{ paddingRight: topBarPaddingRight(12) }}>
         <span className="min-w-0 flex-1 truncate text-[14px] font-semibold text-white" title={name}>
           {name}
         </span>

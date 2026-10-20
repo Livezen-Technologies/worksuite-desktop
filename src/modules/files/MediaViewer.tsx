@@ -13,6 +13,7 @@ import { useDrive } from './ctx';
 import { FileIcon } from './Thumb';
 import { VideoStream } from './VideoStream';
 import { Select } from '../../components/Select';
+import { topBarPaddingRight } from '../../core/window-chrome';
 
 interface Probe {
   kind: 'video' | 'audio' | 'image' | 'other';
@@ -247,7 +248,7 @@ export function MediaViewer({ files, start, onClose }: { files: DriveFile[]; sta
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Play ${f.name}`} className="no-drag fixed inset-0 z-50 flex flex-col bg-[#0D1424] text-[13px] text-[#E6ECFA]">
-      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2C57] bg-[#0F1B3D] px-4">
+      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2C57] bg-[#0F1B3D] pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
         <button type="button" aria-label="Back to folder" onClick={onClose} className="flex h-[34px] w-[34px] items-center justify-center rounded-[8px] hover:bg-white/10"><Icon name="chevron-left" size={18} /></button>
         <span className="rounded-[6px] bg-white/10 px-2 py-0.5 text-[10.5px] font-bold">{tagOf(f.name, f.extension)}</span>
         <div className="flex min-w-0 flex-col">
