@@ -113,11 +113,13 @@ export function createAppHandler(root: string, apiProxy: ApiProxyHandler, cspSou
       if (request.method === 'OPTIONS') return new Response(null, { status: 204, headers: corsHeaders(request) });
       const apiPath = url.pathname.slice('/__api'.length) + url.search;
       const res = await apiProxy(request, apiPath);
-      const extra = corsHeaders(request);
-      if (Object.keys(extra).length === 0) return res;
       const headers = new Headers(res.headers);
-      for (const [k, v] of Object.entries(extra)) headers.set(k, v);
-      return new Response(res.body, { status: res.status, headers });
+      for (const [k, v] of Object.entries(corsHeaders(request))) headers.set(k, v);
+      // Never kept as is (#396): the server lets a file's bytes be cached for hours, and this address does not change
+      // when a new version is saved, so the computer that had opened it went on showing the old one. Every use asks
+      // the server again (a 304 where it can say "unchanged").
+      headers.set('Cache-Control', 'no-cache');
+      return new Response(res.body, { status: res.status, statusText: res.statusText, headers });
     }
 
     if (url.pathname.startsWith('/__local/')) {

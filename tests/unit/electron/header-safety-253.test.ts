@@ -231,6 +231,15 @@ describe('the viewer path end to end: server → net fetch → HTTP client → A
 describe('the app:// protocol handler never throws', () => {
   const root = mkdtempSync(join(tmpdir(), 'ws-bundle-'));
 
+  it('makes the app ask the server again for every API answer, so a saved file is never shown as it was (#396)', async () => {
+    const handler = createAppHandler(root, async () => new Response('v2', { status: 200, headers: { 'Content-Type': 'application/pdf', 'Cache-Control': 'private, max-age=21600' } }));
+    const res = await handler(new Request('app://bundle/__api/api/files/7/download'));
+    expect(res.headers.get('cache-control')).toBe('no-cache');
+    expect(await res.text()).toBe('v2');
+    const empty = createAppHandler(root, async () => new Response(null, { status: 304 }));
+    expect((await empty(new Request('app://bundle/__api/api/files/7/download'))).status).toBe(304);
+  });
+
   it('answers 500, with safe headers, when the API proxy throws', async () => {
     const handler = createAppHandler(root, async () => {
       throw new TypeError(`Cannot convert argument to a ByteString because the character at index 13 has a value of 8212`);

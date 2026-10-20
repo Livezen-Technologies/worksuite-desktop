@@ -10,6 +10,7 @@ import { FileIcon } from './Thumb';
 import { isSlidesFile } from '../office/slides/overlay';
 import { fetchBytes } from '../office/slides/render';
 import { SlidesViewer } from '../office/slides/SlidesViewer';
+import { topBarPaddingRight } from '../../core/window-chrome';
 
 /**
  * The viewer (DriveMedia): the file as big as it goes — a picture, a video,
@@ -71,7 +72,7 @@ export function Preview({ files, start, onClose }: { files: DriveFile[]; start: 
 
   return (
     <div role="dialog" aria-modal="true" aria-label={`Preview ${f.name}`} className="no-drag fixed inset-0 z-50 flex flex-col bg-[#0D1424] text-[#E6ECFA]">
-      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2C57] bg-[#0F1B3D] px-4">
+      <div className="flex h-[52px] shrink-0 items-center gap-2.5 border-b border-[#1E2C57] bg-[#0F1B3D] pl-4" style={{ paddingRight: topBarPaddingRight(16) }}>
         <button type="button" aria-label="Back to the folder" onClick={onClose} className="flex h-[34px] w-[34px] items-center justify-center rounded-[8px] hover:bg-white/10"><Icon name="chevron-left" size={18} /></button>
         <span className="rounded-[6px] bg-white/10 px-2 py-0.5 text-[10.5px] font-bold">{tagOf(f.name, f.extension)}</span>
         <div className="flex min-w-0 flex-col">
