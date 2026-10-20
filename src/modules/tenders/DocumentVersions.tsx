@@ -1,6 +1,9 @@
 import { useQuery } from '@tanstack/react-query';
 import { useMemo, useState } from 'react';
-import { errorMessage } from '../../core/bridge';
+import { officeRoute } from '@shared/office';
+import { app } from '../../core/app-state';
+import { call, errorMessage } from '../../core/bridge';
+import { navigate } from '../../core/tabs';
 import { bytes, dateLabel } from '../../core/time';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
@@ -8,7 +11,6 @@ import { Checkbox } from '../../components/Checkbox';
 import { cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
-import { openOfficeTab } from '../files/office';
 import type { TenderDoc } from './api';
 import { saveTenderFile } from './files';
 import { diffLines, diffStats, sideBySide } from './lineDiff';
@@ -23,7 +25,9 @@ export async function openDocumentOnline(d: Pick<TenderDoc, 'id' | 'title'>): Pr
   try {
     const o = await documentOnline(d.id);
     if (!o.online || !o.file_id || !o.mode) return void toast('error', o.reason ?? `${d.title} cannot be opened online.`);
-    await openOfficeTab({ id: o.file_id, name: o.name || d.title }, o.mode);
+    // The tab Drive opens (files/office.ts openOfficeTab): the one already open, in any window, or a new one.
+    const elsewhere = await call('office:focusFile', { fileId: o.file_id }).catch(() => false);
+    if (!elsewhere) navigate(officeRoute(o.file_id, { mode: o.mode, name: o.name || d.title }), app.get().organizationId);
   } catch (e) {
     toast('error', errorMessage(e));
   }
