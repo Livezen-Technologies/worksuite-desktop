@@ -149,6 +149,7 @@ import {
   Shuffle,
   GripHorizontal,
   SplitSquareHorizontal,
+  Languages,
 } from 'lucide-react';
 
 /**
@@ -167,7 +168,7 @@ const ICONS: Record<string, LucideIcon> = {
   send: Send, star: Star, flag: Flag, inbox: Inbox, trash: Trash2, refresh: RefreshCw, pin: Pin, 'pin-off': PinOff, copy: Copy,
   grid: LayoutGrid, stethoscope: Stethoscope, 'shield-check': ShieldCheck, 'shield-alert': ShieldAlert, wifi: Wifi, 'wifi-off': WifiOff,
   warning: TriangleAlert, info: Info, alert: CircleAlert, clock: Clock, 'bell-off': BellOff, snooze: AlarmClock, scan: ScanLine, truck: Truck, 'mail-open': MailOpen, logout: LogOut, moon: Moon, sun: Sun, monitor: Monitor,
-  keyboard: Keyboard, globe: Globe, disk: HardDrive, pause: Pause, play: Play, undo: RotateCcw, file: File, 'file-image': FileImage,
+  keyboard: Keyboard, globe: Globe, languages: Languages, disk: HardDrive, pause: Pause, play: Play, undo: RotateCcw, file: File, 'file-image': FileImage,
   'file-sheet': FileSpreadsheet, filter: Filter, more: Ellipsis, smile: Smile, timer: Timer, coffee: Coffee, eye: Eye, 'eye-off': EyeOff, grip: GripVertical, laptop: Laptop,
   server: Server, link: Link, history: History, zap: Zap, hash: Hash, compose: SquarePen, user: UserRound, building: Building2,
   briefcase: Briefcase, 'list-todo': ListTodo, spinner: LoaderCircle, back: ArrowLeft, 'panel-close': PanelLeftClose, 'panel-open': PanelLeftOpen, 'panel-right-close': PanelRightClose, 'panel-right-open': PanelRightOpen,

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.42.0 — 2026-10-20
+
+**Added**
+
+- Settings › Language & Sinhala — the interface language, the default Sinhala font profile, legacy text on paste, the clipboard key, the organisation's Sinhala fonts and the profiles in use (what the organisation locks is shown locked)
+
 ## 1.41.0 — 2026-10-19
 
 **Added**

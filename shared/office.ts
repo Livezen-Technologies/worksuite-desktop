@@ -354,6 +354,13 @@ export const officeCommandSchema = z.discriminatedUnion('type', [
   z.object({ type: z.literal('setUsers'), c: z.enum(['mention', 'protect', 'info']), users: z.array(officeUserSchema).max(100) }),
   z.object({ type: z.literal('denyEditingRights'), message: short(500) }),
   z.object({ type: z.literal('showMessage'), message: short(500) }),
+  /**
+   * Sinhala Tools (blueprint §6.1 Office tab, WF-SI-01): Desktop's menus and keys drive the plugin the Document Server
+   * serves (SINHALA_PLUGIN_GUID). Nothing is injected: the editor's page passes the action to the editor frame, on the
+   * Document Server's own origin, and the plugin does the work there.
+   */
+  z.object({ type: z.literal('sinhala.convertSelection') }),
+  z.object({ type: z.literal('sinhala.convertDocument') }),
 ]);
 export type OfficeCommand = z.infer<typeof officeCommandSchema>;
 

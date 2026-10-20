@@ -1,6 +1,6 @@
 {
     "module": "office",
-    "version": "1.3.3",
+    "version": "1.4.0",
     "paths": [
         "electron/services/office-editor.ts",
         "electron/services/office-external.ts",

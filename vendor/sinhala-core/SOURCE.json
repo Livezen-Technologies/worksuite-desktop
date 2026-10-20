@@ -1,0 +1,43 @@
+{
+  "package": "@worksuite/sinhala-core",
+  "version": "1.0.0",
+  "repository": "Livezen-Technologies/worksuite-office",
+  "path": "sinhala/core",
+  "ref": "office-v10",
+  "commit": "984d4408611e5812cd9ce7da030507437b8eff9b",
+  "synced": "2026-10-20",
+  "sources": {
+    "package.json": "2624c37fe6fa875b4be9174a3dd46ba0296eb8dac2a01c4caa4c3e5e1d3fbf14",
+    "profiles/dl-manel.json": "4aa4daf13ac0ecb7d0fe3cbd3fb0eeb9db15eb0238d92aaf150e150334bf6ce3",
+    "profiles/fm-abhaya.json": "0c9a4b7bc43875e65b02ec240881abdd22887bb1a5a1a1d2ee5a2911025644eb",
+    "profiles/kaputa.json": "668b1ba3b411f686114ecfd58671a9fd7b42b38179ef51f1fb9c5eb5d5ec5cf4",
+    "src/convert.ts": "88d6327f0e3334194904525da286133b821da3c51c3d6d0c50eaa810739eeb67",
+    "src/detect.ts": "55eeb3a1f1511f773518a8f4743c564612349f5af17dbfc592b99257e9af977a",
+    "src/index.ts": "2bb1b5c73abc5378be89c5068daf18edb3e06cd6ed4c42274096407d90b71386",
+    "src/normalize.ts": "80e1e133cb64e35b1565d75504e74bbe91eb4c90e399299e285ac506fc37af9f",
+    "src/profiles.ts": "75ab05b3b063b9cd1172f6232c9e56e52c1fd02def717048e51f625f4a9da14d",
+    "src/script.ts": "58dc05be64f324da64ab207278ef718ff54fa54e1262606a44a7cf1f36782c8f",
+    "src/sha256.ts": "698fd0af5a64116762feb2addd8df32144f5b1e38e0f348c0706dad5714596ab",
+    "tsconfig.json": "5e468b233e2a0ee9bd00cb6ecf9d93534b541155b336df4f57f95deb3ca3ff6b"
+  },
+  "files": {
+    "dist/profiles/dl-manel.json": "cfe38731bc4a6fdacd30bd324b7bdb93b16f80364b25fdc38574c6c02d4f7583",
+    "dist/profiles/fm-abhaya.json": "b502e4dc6bb3633efe9d7636188e2a55645c1b858a59616273e8dcb0f89da067",
+    "dist/profiles/kaputa.json": "d8f9dc22f8c7d3385fc860453b078c363e27cd7d3991a0ca91428a5c5c94d591",
+    "dist/src/convert.d.ts": "03182077a104b4690a0acddd741838c35b8e134c21c7abf623b3ff061ccf66e6",
+    "dist/src/convert.js": "66457ffd1ebd964fa80e3af41f337e4ee271b9e55d553b43397e6046ac575688",
+    "dist/src/detect.d.ts": "3e93a6454c910350d1df22c1a364859b19ab4547759b366afeb06694a2c64366",
+    "dist/src/detect.js": "817a5741f3ab37d56098a662d8b6c1287ca028c148e4f18e6653e0ae59d0f4b2",
+    "dist/src/index.d.ts": "f665f4ffefc86c5e7366961069f83af7ab69861f4558fd7a5d3d9d9cb95c55d8",
+    "dist/src/index.js": "2bdca92af7b8b86ba257b1b9b76b5b839f04130b5370ce8b9ecfbdfc7b31a5e2",
+    "dist/src/normalize.d.ts": "000b2d4a9830dcc1bf06fb37d53d080e033b8209f6f241e782b98637d93e6d9b",
+    "dist/src/normalize.js": "88a5836ea37431cd7920cefee53f942f0a419960a807f6a30e6501849825c35a",
+    "dist/src/profiles.d.ts": "201dc5b1e0924a87f161c4d3f58d0c667b222f8ef46e2e4f61afe41fa0cd83bf",
+    "dist/src/profiles.js": "f1959cc8be6380063893846cf02597adf4a1c46da25dac668b85dafba77c09b6",
+    "dist/src/script.d.ts": "0ece715eab7f0e3ddc53f148bdc08d109e5498ce096223ff1bd7ca5e1faa8ff6",
+    "dist/src/script.js": "bdd8344c5302b78802b5033b2c8546384313688db73e2b303f8e93eafbf7aca3",
+    "dist/src/sha256.d.ts": "3bfd23c578a4b407d850455eb7dd7bf8b5b8563e625a35e8ed504072cec04511",
+    "dist/src/sha256.js": "f7857853db5e4b9ee5f02ab4bb2523950afa531778905642ce1a0ea968fa4440",
+    "package.json": "565251544a2cfbb75c5ef9be09cffad2a7984aa183a77cd88d0184f2f816ec93"
+  }
+}

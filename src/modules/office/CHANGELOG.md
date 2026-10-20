@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-20
+
+**Added**
+
+- Sinhala Tools in Office tabs — Convert selection / Convert document to Unicode Sinhala in the tab's menu, sent to the Document Server's plugin as the sinhala.convertSelection / sinhala.convertDocument OfficeCommands (no new origin; the editor's CSP is unchanged); the built-in editor's Sinhala to Unicode converts a .docx on this computer, offline too
+
 ## 1.3.3 — 2026-10-20
 
 - A tender document opened from the Tenders module saves back to the tender as its next version, so its Download gives what was edited; the editor can no longer take the window full screen and hide the title bar (#393, #388)

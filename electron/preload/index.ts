@@ -485,6 +485,33 @@ const api = {
     outboxResolve: call('salon:outboxResolve'),
   },
   // POS (pos-channels.ts): each channel under its own name, so the bridge test sees it.
+  // Sinhala Tools (sinhala-channels.ts, blueprint §6.2): the engine, profiles, fonts and the clipboard on this computer.
+  // Text in, text out; files only as handles the main process issued (its dialog, or a real drop below).
+  sinhala: {
+    status: call('sinhala:status'),
+    detect: call('sinhala:detect'),
+    convert: call('sinhala:convert'),
+    convertFile: call('sinhala:convertFile'),
+    job: call('sinhala:job'),
+    profiles: call('sinhala:profiles'),
+    fontsStatus: call('sinhala:fontsStatus'),
+    fontsInstall: call('sinhala:fontsInstall'),
+    clipboard: call('sinhala:clipboard'),
+    settings: call('sinhala:settings'),
+    settingsSet: call('sinhala:settingsSet'),
+    convertDocx: call('sinhala:convertDocx'),
+    pickFile: call('sinhala:pickFile'),
+    reveal: call('sinhala:reveal'),
+    /** .docx files from a real drop: turned into paths here, into handles in main — as files.registerDropped. */
+    registerDropped: (files: File[]): Promise<unknown> => {
+      const paths = Array.from(files)
+        .map((f) => webUtils.getPathForFile(f))
+        .filter((p) => typeof p === 'string' && p.length > 0)
+        .slice(0, 20);
+      if (paths.length === 0) return Promise.resolve({ files: [], rejected: [] });
+      return invoke('sinhala:registerDropped', { paths });
+    },
+  },
   // Hotel PMS files saved through the download manager; the main process checks the download policy.
   pms: {
     download: call('pms:download'),

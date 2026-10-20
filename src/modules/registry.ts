@@ -211,6 +211,19 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./pdf/PdfStudio'),
   },
   {
+    // Sinhala Tools (WorkSuite Desktop Sinhala Tools blueprint §6.1): legacy Sinhala fonts to Unicode — text as it is
+    // pasted, Word documents on this computer (offline too), the clipboard from any app. Shown only while the server
+    // says the organisation has the tools on (core/app-state).
+    input: defineDesktopManifest({
+      id: 'sinhala-tools', name: 'Sinhala Tools', icon: 'languages', contractVersion: 1, desktop: { enabled: true },
+      offline: { mode: 'NONE' },
+      native: ['file-drop'],
+      quickActions: [{ id: 'sinhala-convert', label: 'Convert Sinhala text', route: '/sinhala-tools' }],
+      deepLinks: ['sinhala-tools'],
+    }),
+    load: () => import('./sinhala/SinhalaToolsPage'),
+  },
+  {
     input: defineDesktopManifest({
       id: 'crm', name: 'CRM', icon: 'users', contractVersion: 1, desktop: { enabled: true },
       offline: { mode: 'READ_CACHE', entities: ['lead'], cache: ['/api/crm/leads'] },

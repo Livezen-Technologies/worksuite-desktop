@@ -103,6 +103,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'office', label: 'Office', group: 'work', icon: 'file-text', app: 'drive', webPath: '/office', surface: 'native', order: 71, keywords: 'word excel powerpoint document spreadsheet presentation docx xlsx pptx template new write' },
   // PDF Studio: native here for everyone signed in (a PDF from this computer needs no app); a Drive file is still the
   // server's to allow. The web's `/pdf?file=<id>` links open the file here.
+  // Sinhala Tools (Sinhala Tools blueprint §6.1 Converter app): legacy Sinhala fonts to Unicode, here and offline. Shown
+  // only to whoever has sinhala.use, and only while the server says the organisation has the tools on (core/app-state).
+  { id: 'sinhala-tools', label: 'Sinhala Tools', group: 'work', icon: 'languages', perm: 'sinhala.use', webPath: '/sinhala', surface: 'native', order: 73, keywords: 'sinhala unicode legacy font fm abhaya dl manel kaputa convert clipboard සිංහල' },
   { id: 'pdf', label: 'PDF Studio', group: 'work', icon: 'file-text', webPath: '/pdf', surface: 'native', order: 72, keywords: 'pdf viewer reader acrobat document open print search bookmarks' },
   { id: 'crm', label: 'CRM', group: 'business', icon: 'users', app: 'crm', perm: 'crm.view', webPath: '/crm', surface: 'native', sidebar: 'business', order: 110, keywords: 'leads customers pipeline', guest: 'locked', guestLabel: 'CRM & Sales' },
   // The server's OMS: `/oms?order=` (what notifications and shares link to) opens here as `/sales?order=`.

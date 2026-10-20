@@ -140,6 +140,9 @@ import { EventDeskPrint } from '../services/event-desk-print';
 import { createRestaurant } from '../services/restaurant';
 import { createProjects } from '../services/projects';
 import { SalesDesk } from '../services/sales-desk';
+import { SinhalaService, type SinhalaDocxRequest } from '../services/sinhala';
+import type { DocxConvertStats } from '../services/sinhala-docx';
+import { execFile as execFileCb } from 'node:child_process';
 import { PurchaseDesk } from '../services/purchase-desk';
 import { BillingBanners } from '@shared/billing';
 import { listPrinters } from '../services/print';
@@ -162,7 +165,7 @@ import { Vault } from '../services/vault';
 import { indicatorHostRunning, NO_TRAY_HINT, TrayService } from '../tray/tray';
 import { POLICY_PUBLIC_KEY } from '../updater/keys';
 import { linuxInstallKind } from '../updater/linux';
-import { UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, setDiscoveryKeysSink, setEntitlementKeysSink, ucInstallType, updateCheckUrl, reportProblemUrl } from '../updater/update-center';
+import { UPDATE_CENTER_RELEASE_KEYS, UPDATE_CENTER_RESPONSE_KEYS, UPDATE_CENTER_URL, ed25519Key, setDiscoveryKeysSink, setEntitlementKeysSink, ucInstallType, updateCheckUrl, reportProblemUrl } from '../updater/update-center';
 import { announce, noticeText } from '../updater/notice';
 import { runUpdateDiagnostics } from '../updater/diagnostics';
 import type { TrayUpdate } from '../tray/tray';
@@ -1016,6 +1019,87 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     openPath: (path) => shell.openPath(path),
     audit: (action, details) => audit.record(sessionCtl.userId(), action, details),
     onChanged: (copies) => broadcast('office:localChanged', copies),
+  });
+
+  // Sinhala Tools (Sinhala Tools blueprint §6): the engine here and in a worker, the profile cache, the clipboard key, fonts.
+  const sinhalaWaiters = new Map<string, { resolve: (v: { stats: DocxConvertStats; bytes?: Uint8Array }) => void; reject: (e: Error) => void }>();
+  supervisor.start({
+    name: 'sinhala-worker',
+    entry: join(__dirname, 'sinhala-worker.js'),
+    onMessage: (msg) => {
+      const m = msg as { type?: string; id?: string; ok?: boolean; stats?: DocxConvertStats; bytes?: Uint8Array; error?: string };
+      if (m.type !== 'docx' || !m.id) return;
+      const w = sinhalaWaiters.get(m.id);
+      if (!w) return;
+      sinhalaWaiters.delete(m.id);
+      if (m.ok && m.stats) w.resolve({ stats: m.stats, bytes: m.bytes });
+      else w.reject(new DesktopError('INTERNAL', m.error ?? 'The document could not be converted.'));
+    },
+  });
+  const sinhala: SinhalaService = new SinhalaService({
+    http: {
+      get: (path, opts) => http.get(path, opts),
+      post: (path, body) => http.post(path, body),
+      download: async (path) => {
+        const res = await http.raw('GET', http.url(path));
+        if (!res.ok) throw new DesktopError('SERVER_ERROR', `The font could not be downloaded (${res.status}).`, res.status);
+        return Buffer.from(await res.arrayBuffer());
+      },
+    },
+    config: db,
+    scope: () => (sessionCtl.isReady() && sessionCtl.userId() ? `${registry.activeId() ?? auth.getServer()?.origin ?? ''}:${sessionCtl.userId()}` : null),
+    online: () => apiReachable,
+    locked: () => lock.isLocked(),
+    clipboard: { readText: () => clipboard.readText(), writeText: (t) => clipboard.writeText(t) },
+    shortcuts: { register: (acc, fn) => globalShortcut.register(acc, fn), unregister: (acc) => globalShortcut.unregister(acc) },
+    toast: (kind, text) => {
+      broadcast('toast', { kind, text });
+      // From another app (the key), the person is not looking at WorkSuite: a system notification says it too.
+      if (!BrowserWindow.getFocusedWindow() && Notification.isSupported()) new Notification({ title: 'Sinhala Tools', body: text, silent: true }).show();
+    },
+    changed: () => {
+      broadcast('sinhala:changed');
+      tray.update({ sinhala: sinhala.available() ? { shortcut: sinhala.status().shortcutHeld } : null });
+    },
+    docx: (req: SinhalaDocxRequest) =>
+      new Promise((resolveDocx, reject) => {
+        const id = randomUUID();
+        sinhalaWaiters.set(id, { resolve: resolveDocx, reject });
+        if (!supervisor.post('sinhala-worker', { type: 'docx', id, ...req })) {
+          sinhalaWaiters.delete(id);
+          reject(new DesktopError('INTERNAL', 'The Sinhala conversion helper is not running. Try again in a moment.'));
+        }
+      }),
+    offlinePath: (fileId) => officeLocal.localPath(fileId),
+    uploadVersion: async (fileId, path, name) => {
+      const form = new FormData();
+      form.set('file', await fsp.readFile(path).then((b) => new Blob([b as BlobPart])), name);
+      const res = await http.raw('POST', http.url(`/api/files/${fileId}/versions`), { body: form, timeoutMs: 15 * 60_000 });
+      if (res.status === 409) return 'conflict';
+      const body = (await res.json().catch(() => null)) as { message?: string; data?: { current?: { version?: number } } } | null;
+      if (!res.ok) throw new DesktopError(res.status === 404 ? 'NOT_FOUND' : res.status >= 500 ? 'SERVER_ERROR' : 'INTERNAL', body?.message ?? `The server answered ${res.status}.`, res.status);
+      return { version: Number(body?.data?.current?.version ?? 0) || null };
+    },
+    uploadNew: async (path, name) => {
+      const [picked] = await transfers.register([path]);
+      if (!picked) throw new DesktopError('NOT_FOUND', 'The converted copy was moved or deleted.');
+      await transfers.upload([picked.handle], { kind: 'files', folderId: null, name });
+    },
+    pickFiles: async (sender) => {
+      const win = BrowserWindow.fromWebContents(sender);
+      const opts: Electron.OpenDialogOptions = { title: 'Convert a document', filters: [{ name: 'Word documents', extensions: ['docx'] }], properties: ['openFile', 'multiSelections'] };
+      const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts);
+      return res.canceled ? [] : res.filePaths;
+    },
+    reveal: (path) => shell.showItemInFolder(path),
+    fetch: (url) => fetchImpl(url, { method: 'GET' }),
+    fonts: { platform: process.platform, home: app.getPath('home'), localAppData: process.env.LOCALAPPDATA ?? null },
+    run: (file, args) =>
+      new Promise<void>((resolveRun, reject) => {
+        execFileCb(file, args, { timeout: 60_000, windowsHide: true }, (err) => (err ? reject(err) : resolveRun()));
+      }),
+    keys: UPDATE_CENTER_RELEASE_KEYS,
+    ed25519Key,
   });
 
   let activeCall = false;
@@ -2008,6 +2092,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     joinWebchat: (id) => void webchat.join(id),
     answerWebchatCall: (id) => void webchat.answerCall(id, true),
     quickAsk: () => void quickAsk.open(),
+    // Sinhala Tools (WF-SI-04): what is on the clipboard, converted to Unicode and put back.
+    sinhalaClipboard: () => sinhala.pressed(),
     aiChanges: () => openAiChanges(),
     ringingSettings: () => navigate({ route: '/settings/notifications', source: 'tray' }),
     showRingMenu: (anchor) => ringTray.show(anchor),
@@ -2686,6 +2772,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     meetingsDesk.poke();
     // Purchasing given or taken away: the documents waiting on me follow on the badge.
     void purchaseDesk.refresh();
+    // Sinhala Tools turned on or off for the organisation, or this person: asked again (WF-SI-05).
+    if (b) void sinhala.sync();
     if (b) {
       const closed = windows.closeWhere((route) => !canOpenRoute(route, visible));
       if (closed) log.info('windows closed: app no longer available', { closed });
@@ -2718,6 +2806,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     webchat.start();
     livePulse.start();
     syncQuickAsk();
+    // Sinhala Tools: profiles on sign-in and daily; the tools show once the server says they are on (blueprint §6.1).
+    sinhala.start();
+    void sinhala.sync();
     // Quick Ask waits on the company's rules; once they are known, it is offered (or not).
     void ai.refresh().then(() => {
       syncQuickAsk();
@@ -2768,6 +2859,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     emitStatus();
   };
   const stopServices = (): void => {
+    sinhala.stop();
+    sinhala.signedOut();
     mailBodies.stop();
     projects.stop();
     void remoteControl.shutdown('logout');
@@ -2889,6 +2982,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         pmsLocks.wipe();
         // The iCloud and CardDAV passwords contact sync kept for this computer.
         contactSync.wipe();
+        // Sinhala Tools' profile cache, settings and queued uploads for this person.
+        sinhala.forget();
       }
       log.info('local data removed', { scope });
     },
@@ -2979,6 +3074,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     nextContactKey.sync();
     meetKeys.sync();
     meetNext.publish();
+    // The Sinhala clipboard key is let go while locked.
+    sinhala.syncKey();
     if (s.locked) {
       windows.hideQuickAsk();
       if (!settings.effective().lockedShowCallerDetails) for (const win of BrowserWindow.getAllWindows()) {
@@ -3007,6 +3104,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (sessionCtl.current()?.offline === false) void accessWatch.refresh('reconnect');
     void queue.replay(uid);
     pdfOnline();
+    // Converted offline copies go up as new versions (Sinhala Tools WF-SI-03).
+    void sinhala.sync();
     void notifications.refreshCounts();
     void audit.flush();
     void calls.check();
@@ -3322,6 +3421,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   restaurant.register(router);
   projects.register(router);
   salesDesk.register(router);
+  sinhala.register(router);
   localAI.register(router);
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
   router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));

@@ -60,6 +60,8 @@ export default defineConfig({
           'local-ai-worker': resolve(__dirname, 'electron/workers/local-ai-worker.ts'),
           // Mail data files (ENH-MAIL-03 §3.1): .pst, .mbox, .eml and .msg read away from the UI, one file per process.
           'datafile-worker': resolve(__dirname, 'electron/workers/datafile-worker.ts'),
+          // Sinhala Tools (blueprint §6.1): whole documents converted away from the UI.
+          'sinhala-worker': resolve(__dirname, 'electron/workers/sinhala-worker.ts'),
         },
       },
     },
