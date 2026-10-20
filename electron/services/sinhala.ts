@@ -7,6 +7,7 @@ import {
   fontManifestSchema,
   orgSettingsFrom,
   profilesResponseSchema,
+  statusResponseSchema,
   serverJobSchema,
   serverProfileSchema,
   SINHALA_ORG_DEFAULTS,
@@ -33,7 +34,7 @@ import {
 import type { IpcRouter } from '../ipc/router';
 import { DesktopError, isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
-import type { DocxConvertStats } from './sinhala-docx';
+import { readZip, type DocxConvertStats } from './sinhala-docx';
 
 const log = logger('sinhala');
 
@@ -143,6 +144,10 @@ interface Cached {
   profiles: unknown[];
   settings: SinhalaOrgSettings;
   syncedAt: string | null;
+  /** The server's engine answered at the last status (its document jobs can run). */
+  serverEngine?: boolean;
+  formats?: string[];
+  fonts?: SinhalaFontManifest | null;
 }
 
 interface Loaded {
@@ -181,17 +186,24 @@ function summary(l: Loaded): SinhalaProfileSummary {
  */
 export function checkServerProfile(raw: unknown, keys: Readonly<Record<string, string>>, keyOf: (raw: string) => KeyObject): { profile: Profile; signed: boolean } {
   const parsed = serverProfileSchema.safeParse(raw);
-  if (!parsed.success) throw new Error('not a Sinhala profile');
-  const data = parsed.data as Record<string, unknown>;
+  if (!parsed.success) throw new Error('not a Sinhala profile listing');
+  const item = parsed.data;
+  if (!item.profile || typeof item.profile !== 'object') throw new Error(`profile ${item.id} ${item.version}: no profile data (ask with include=map)`);
+  const data = item.profile as Record<string, unknown>;
   const engine: Record<string, unknown> = {};
   for (const k of PROFILE_FIELDS) engine[k] = data[k];
   const profile = verifyProfile(engine);
-  const signature = typeof data.signature === 'string' && data.signature ? data.signature : null;
+  // The listing must describe the data it carries: the same profile, version and sha256.
+  if (profile.id !== item.id || profile.version !== item.version || profile.sha256 !== item.sha256) {
+    throw new Error(`profile ${item.id} ${item.version}: the listing does not match its data (sha256)`);
+  }
+  const signature = item.signature || null;
   if (!signature) return { profile, signed: false };
-  const keyId = typeof data.key_id === 'string' ? data.key_id : Object.keys(keys)[0];
+  const keyId = item.key_id || Object.keys(keys)[0];
   const key = keyId ? keys[keyId] : undefined;
   if (!key) throw new Error(`profile ${profile.id} ${profile.version}: signed with an unknown key${keyId ? ` (${keyId})` : ''}`);
-  const signed: Record<string, unknown> = { ...engine, ...(typeof data.key_id === 'string' ? { key_id: data.key_id } : {}) };
+  // Signed: the engine's profile JSON (sha256 inside), canonical, with `key_id` when one is named.
+  const signed: Record<string, unknown> = { ...engine, ...(item.key_id ? { key_id: item.key_id } : {}) };
   let ok = false;
   try {
     ok = verify(null, Buffer.from(canonicalJson(signed), 'utf8'), keyOf(key), Buffer.from(signature, 'base64'));
@@ -200,6 +212,14 @@ export function checkServerProfile(raw: unknown, keys: Readonly<Record<string, s
   }
   if (!ok) throw new Error(`profile ${profile.id} ${profile.version}: the signature does not match`);
   return { profile, signed: true };
+}
+
+/** A font file's name in the archive → the name it is installed under; only the font files themselves. */
+export function fontFilesOf(files: Record<string, string> | null | undefined): Array<{ path: string; name: string; sha256: string }> {
+  return Object.entries(files ?? {})
+    .filter(([path]) => /\.(ttf|otf)$/i.test(path))
+    .map(([path, sha256]) => ({ path, name: basename(path.split('\\').join('/')), sha256 }))
+    .filter((f) => /^[A-Za-z0-9 ._()-]{1,120}\.(ttf|otf)$/i.test(f.name));
 }
 
 /** Where fonts go for this person (blueprint §6.1 Fonts), or null where it is not supported. */
@@ -254,7 +274,7 @@ export class SinhalaService {
       const key = this.key('cache');
       const raw = key ? this.d.config.getConfig<Cached>(key) : undefined;
       if (raw && typeof raw === 'object' && Array.isArray(raw.profiles)) {
-        this.cache = { availability: raw.availability, profiles: raw.profiles, settings: { ...SINHALA_ORG_DEFAULTS, ...(raw.settings ?? {}) }, syncedAt: raw.syncedAt ?? null };
+        this.cache = { ...raw, settings: { ...SINHALA_ORG_DEFAULTS, ...(raw.settings ?? {}) }, syncedAt: raw.syncedAt ?? null };
         this.loaded = this.check(raw.profiles, 'cache');
       }
     }
@@ -336,6 +356,8 @@ export class SinhalaService {
       user: this.user(),
       shortcutHeld: this.heldKey,
       pendingUploads: this.pending().length,
+      serverEngine: !this.offline && (this.state()?.serverEngine ?? false),
+      serverFormats: this.state()?.formats ?? [],
       engineVersion: ENGINE_VERSION,
     };
   }
@@ -370,32 +392,59 @@ export class SinhalaService {
       return;
     }
     this.state();
+    const save = (c: Cached): void => {
+      this.cache = c;
+      this.d.config.setConfig(key, c);
+    };
     try {
-      const raw = await this.d.http.get<unknown>('/api/sinhala/profiles');
+      // Whether this person may see the tools, and why not (any signed-in user may ask).
+      const st = statusResponseSchema.parse(await this.d.http.get<unknown>('/api/sinhala/status'));
       if (this.d.scope() !== scope) return;
-      const body = profilesResponseSchema.parse(raw);
-      const settings = orgSettingsFrom(body.settings ?? null, body.enabled);
-      const loaded = this.check(body.profiles, 'server');
-      // Only what checked out is kept: the cache is never a way around the check.
-      const good = body.profiles.filter((p) => loaded.some((l) => l.profile.id === (p as { id?: unknown }).id && l.profile.sha256 === (p as { sha256?: unknown }).sha256));
-      const keep = loaded.length || !this.cache ? good : this.cache.profiles;
-      this.cache = { availability: settings.enabled ? 'ok' : 'disabled', profiles: keep, settings, syncedAt: new Date(this.now()).toISOString() };
-      this.loaded = loaded.length ? loaded : this.loaded;
       this.offline = false;
-      this.d.config.setConfig(key, this.cache);
+      const reason = st.available ? null : (st.reason ?? 'DISABLED_FOR_ORGANIZATION');
+      if (reason && reason !== 'SINHALA_UNAVAILABLE') {
+        // No sinhala.use, or the company has the tools off: hidden, and nothing of theirs is kept.
+        save({ availability: reason === 'NO_PERMISSION' ? 'forbidden' : 'disabled', profiles: [], settings: orgSettingsFrom(st), syncedAt: null, serverEngine: false, formats: [], fonts: null });
+        this.loaded = [];
+        this.manifest = null;
+      } else {
+        // Available (SINHALA_UNAVAILABLE only stops the server's own engine: this computer converts with its own).
+        let fonts: SinhalaFontManifest | null = this.cache?.fonts ?? null;
+        try {
+          fonts = fontManifestSchema.parse(await this.d.http.get<unknown>('/api/sinhala/fonts'));
+        } catch (e) {
+          log.info('font list not read', { error: e instanceof Error ? e.message : String(e) });
+        }
+        this.manifest = fonts;
+        const settings = orgSettingsFrom(st, fonts?.desktop_install_fonts);
+        let profiles = this.cache?.profiles ?? [];
+        let syncedAt = this.cache?.syncedAt ?? null;
+        try {
+          const body = profilesResponseSchema.parse(await this.d.http.get<unknown>('/api/sinhala/profiles', { query: { include: 'map' } }));
+          const loaded = this.check(body.profiles, 'server');
+          // Only what checked out is kept: the cache is never a way around the check.
+          const good = body.profiles.filter((p) => loaded.some((l) => l.profile.id === (p as { id?: unknown }).id && l.profile.sha256 === (p as { sha256?: unknown }).sha256));
+          if (loaded.length || !profiles.length) {
+            profiles = good;
+            this.loaded = loaded;
+          }
+          syncedAt = body.synced_at ?? new Date(this.now()).toISOString();
+        } catch (e) {
+          log.info('profiles not refreshed', { error: e instanceof Error ? e.message : String(e) });
+        }
+        save({ availability: 'ok', profiles, settings, syncedAt, serverEngine: st.worker?.ok ?? st.available, formats: st.formats ?? [], fonts });
+      }
     } catch (e) {
       if (this.d.scope() !== scope) return;
-      const code = isDesktopError(e) ? e.code : null;
-      if (code === 'NOT_FOUND' || code === 'PERMISSION_DENIED' || code === 'APP_ACCESS_DENIED') {
-        // The server answered: no Sinhala API here, or not for this person. What was kept goes.
-        this.cache = { availability: code === 'NOT_FOUND' ? 'no_api' : 'forbidden', profiles: [], settings: SINHALA_ORG_DEFAULTS, syncedAt: null };
+      if (isDesktopError(e) && e.code === 'NOT_FOUND') {
+        // A server without the Sinhala API: nothing is shown, and what was kept goes.
+        save({ availability: 'no_api', profiles: [], settings: SINHALA_ORG_DEFAULTS, syncedAt: null, serverEngine: false, formats: [], fonts: null });
         this.loaded = [];
         this.offline = false;
-        this.d.config.setConfig(key, this.cache);
       } else {
         // No answer: the last one stands, and converting goes on with the last good profiles.
         this.offline = true;
-        log.info('profiles not refreshed', { error: e instanceof Error ? e.message : String(e) });
+        log.info('Sinhala status not refreshed', { error: e instanceof Error ? e.message : String(e) });
       }
     }
     this.syncKey();
@@ -585,12 +634,15 @@ export class SinhalaService {
     const src = input.source;
     if (src.kind === 'drive' && this.d.online()) {
       try {
+        // 202 with the job: the server converts a copy and shows its preview; nothing is saved before Accept.
         const raw = await this.d.http.post<unknown>(`/api/sinhala/files/${src.fileId}/convert`, { profile: input.profile && input.profile !== 'auto' ? input.profile : undefined });
         const j = this.fromServer(raw, src.name ?? `File ${src.fileId}`);
         return { jobId: this.job(j).id };
       } catch (e) {
-        // Only an unreachable server falls back to the offline copy; a refusal is the server's answer.
-        if (isDesktopError(e) && e.code !== 'NETWORK_UNREACHABLE') throw e;
+        // An unreachable server, or its engine down (503 SINHALA_UNAVAILABLE), falls back to the copy on this
+        // computer, if there is one; any other refusal is the server's answer.
+        const fallBack = isDesktopError(e) && (e.code === 'NETWORK_UNREACHABLE' || (e.status === 503 && !!this.d.offlinePath(src.fileId)));
+        if (!fallBack) throw e;
       }
     }
     let path: string;
@@ -611,7 +663,7 @@ export class SinhalaService {
     if (extname(path).toLowerCase() !== '.docx') throw new DesktopError('UNSUPPORTED', 'Only Word documents (.docx) can be converted on this computer.');
     const outPath = join(dirname(path), unicodeCopyName(basename(path)));
     const id = `l-${randomUUID()}`;
-    this.job({ id, where: 'local', state: 'running', name, profile: input.profile ?? 'auto', profileVersion: null, runsTotal: 0, runsConverted: 0, unmappedCount: 0, preview: [], outputName: basename(outPath), resultVersionId: null, error: null, outPath });
+    this.job({ id, where: 'local', state: 'running', name, profile: input.profile ?? 'auto', profileVersion: null, runsTotal: 0, runsConverted: 0, unmappedCount: 0, preview: [], paragraphsChanged: null, canAccept: false, unmapped: [], outputName: basename(outPath), resultVersionId: null, error: null, outPath });
     void this.runLocal(id, path, outPath, input.profile, upload, name);
     return { jobId: id };
   }
@@ -652,35 +704,62 @@ export class SinhalaService {
 
   private fromServer(raw: unknown, name: string): SinhalaJob & { outPath?: string } {
     const s = serverJobSchema.parse(raw);
-    const st = s.status.toLowerCase();
-    const state: SinhalaJob['state'] = st === 'done' || st === 'completed' || st === 'succeeded' ? 'done' : st === 'failed' || st === 'error' ? 'failed' : st === 'running' || st === 'processing' ? 'running' : 'queued';
+    const known: SinhalaJob['state'][] = ['queued', 'running', 'preview', 'done', 'rejected', 'no_change', 'failed', 'conflict'];
+    const state = known.find((k) => k === s.status) ?? 'failed';
     return {
       id: `s-${s.id}`,
       where: 'server',
       state,
-      name,
+      name: s.file_name ?? name,
       profile: s.profile ?? 'auto',
       profileVersion: s.profile_version ?? null,
       runsTotal: s.runs_total ?? 0,
       runsConverted: s.runs_converted ?? 0,
       unmappedCount: s.unmapped_count ?? 0,
-      preview: (s.preview ?? []).slice(0, 10).map((x) => ({ before: x.before, after: x.after })),
+      preview: (s.preview?.samples ?? []).slice(0, 10).map((x) => ({ part: x.part, before: x.before, after: x.after })),
+      paragraphsChanged: s.preview?.paragraphs_changed ?? null,
+      canAccept: s.can_accept ?? state === 'preview',
+      unmapped: (s.unmapped ?? []).slice(0, 50).map((u) => ({ sequence: u.sequence, codePoint: u.code_point, count: u.count, firstOffset: u.first_offset })),
       outputName: null,
-      resultVersionId: s.result_version_id ?? null,
-      error: s.error ?? null,
+      resultVersionId: s.result_version ?? null,
+      error: state === 'failed' && !known.includes(s.status as SinhalaJob['state']) ? `The server reported "${s.status}".` : (s.error ?? null),
     };
+  }
+
+  private view(j: SinhalaJob & { outPath?: string }): SinhalaJob {
+    const { outPath: _out, ...view } = j;
+    return view;
   }
 
   async jobStatus(id: string): Promise<SinhalaJob> {
     const j = this.jobs.get(id);
     if (!j) throw new DesktopError('NOT_FOUND', 'That conversion is not known here.');
     if (j.where === 'server' && (j.state === 'queued' || j.state === 'running')) {
-      const raw = await this.d.http.get<unknown>(`/api/sinhala/jobs/${encodeURIComponent(id.slice(2))}`);
-      const fresh = this.fromServer(raw, j.name);
-      Object.assign(j, fresh);
+      Object.assign(j, this.fromServer(await this.d.http.get<unknown>(`/api/sinhala/jobs/${encodeURIComponent(id.slice(2))}`), j.name));
     }
-    const { outPath: _out, ...view } = j;
-    return view;
+    return this.view(j);
+  }
+
+  /**
+   * The person's decision on a server job's preview (WF-SI-02 step 4): Accept saves it as the file's new version —
+   * the server answers 409 when the file changed after it was converted, and nothing is saved — or Reject drops it.
+   */
+  async decide(id: string, accept: boolean): Promise<SinhalaJob> {
+    this.require();
+    const j = this.jobs.get(id);
+    if (!j || j.where !== 'server') throw new DesktopError('NOT_FOUND', 'That conversion is not known here.');
+    const path = `/api/sinhala/jobs/${encodeURIComponent(id.slice(2))}/${accept ? 'accept' : 'reject'}`;
+    try {
+      Object.assign(j, this.fromServer(await this.d.http.post<unknown>(path), j.name));
+    } catch (e) {
+      // The job as it is now (a conflict ends it `preview` or `conflict`), then the server's reason.
+      const now = await this.d.http.get<unknown>(`/api/sinhala/jobs/${encodeURIComponent(id.slice(2))}`).catch(() => null);
+      if (now) Object.assign(j, this.fromServer(now, j.name));
+      this.d.changed();
+      throw e;
+    }
+    this.d.changed();
+    return this.view(j);
   }
 
   reveal(id: string): boolean {
@@ -742,13 +821,14 @@ export class SinhalaService {
   // ── fonts (blueprint §6.1 Fonts, §7; P4) ─────────────────────────────────
 
   private async loadManifest(): Promise<SinhalaFontManifest | null> {
-    if (this.manifest) return this.manifest;
-    if (!this.d.online()) return null;
-    try {
-      this.manifest = fontManifestSchema.parse(await this.d.http.get<unknown>('/api/sinhala/fonts'));
-    } catch (e) {
-      log.info('font manifest not read', { error: e instanceof Error ? e.message : String(e) });
-      return null;
+    // Asked again while online (an admin may just have uploaded a font); the last list kept otherwise.
+    this.manifest = this.manifest ?? this.state()?.fonts ?? null;
+    if (this.d.online()) {
+      try {
+        this.manifest = fontManifestSchema.parse(await this.d.http.get<unknown>('/api/sinhala/fonts'));
+      } catch (e) {
+        log.info('font list not read', { error: e instanceof Error ? e.message : String(e) });
+      }
     }
     return this.manifest;
   }
@@ -758,21 +838,20 @@ export class SinhalaService {
     const dir = fontsDirFor(this.d.fonts);
     const m = await this.loadManifest();
     const families = [];
-    for (const f of m?.fonts ?? []) {
-      let installed = f.files.length > 0;
-      for (const file of f.files) {
-        if (!dir) installed = false;
-        else installed = installed && (await stat(join(dir, file.name)).catch(() => null))?.isFile() === true;
-      }
-      families.push({ family: f.family, kind: f.kind, installed, distributable: f.distributable, licence: f.licence ?? null });
+    for (const f of [...(m?.unicode ?? []), ...(m?.legacy ?? [])]) {
+      const files = fontFilesOf(f.files);
+      let installed = files.length > 0 && dir !== null;
+      for (const file of files) installed = installed && (await stat(join(dir!, file.name)).catch(() => null))?.isFile() === true;
+      families.push({ family: f.family, kind: f.kind, installed, distributable: f.distributable && !!f.download_url && files.length > 0, licence: f.licence ?? null });
     }
     return { supported: dir !== null, dir, families, policy: this.org().installFonts };
   }
 
   /**
-   * Installs the organisation's fonts for this person only (no administrator rights): each file downloaded, checked
-   * against the manifest's sha256 and only then put in place. Only fonts marked distributable — legacy fonts only when
-   * the organisation uploaded them and marked them so (blueprint §7).
+   * Installs the organisation's fonts for this person only (no administrator rights). A distributable font comes as
+   * its release archive (`download_url`): the archive is checked against its sha256, then each font file in it against
+   * its own (`files`), and only then put in place. Only distributable fonts — legacy fonts only when the organisation
+   * uploaded them and marked them so (blueprint §7).
    */
   async installFonts(families?: string[], quiet = false): Promise<SinhalaFontsStatus> {
     this.require();
@@ -783,23 +862,31 @@ export class SinhalaService {
     const m = await this.loadManifest();
     if (!m) throw new DesktopError('NETWORK_UNREACHABLE', 'The font list could not be read. Check you are online, then try again.');
     await mkdir(dir, { recursive: true });
+    const sha = (b: Buffer): string => createHash('sha256').update(b).digest('hex');
     let installed = 0;
-    for (const f of m.fonts) {
-      if (!f.distributable || (families && !families.includes(f.family))) continue;
-      for (const file of f.files) {
+    for (const f of [...m.unicode, ...m.legacy]) {
+      const files = fontFilesOf(f.files);
+      if (!f.distributable || !f.download_url || !files.length || (families && !families.includes(f.family))) continue;
+      const missing = [];
+      for (const file of files) {
+        const have = await readFile(join(dir, file.name)).catch(() => null);
+        if (!have || sha(have) !== file.sha256) missing.push(file);
+      }
+      if (!missing.length) continue;
+      let archive: Buffer;
+      if (f.download_url.startsWith('/')) archive = await this.d.http.download(f.download_url);
+      else {
+        if (!/^https:\/\//i.test(f.download_url)) throw new DesktopError('POLICY_DENIED', `${f.family}: fonts are downloaded over HTTPS only.`);
+        const res = await this.d.fetch(f.download_url);
+        if (!res.ok) throw new DesktopError('SERVER_ERROR', `${f.family} could not be downloaded (${res.status}).`);
+        archive = Buffer.from(await res.arrayBuffer());
+      }
+      if (!f.sha256 || sha(archive) !== f.sha256) throw new DesktopError('INTERNAL', `${f.family}: the download does not match its checksum, so nothing was installed.`);
+      const entries = /\.zip$/i.test(f.download_url.split('?')[0] ?? '') || archive.readUInt32LE(0) === 0x04034b50 ? readZip(archive) : null;
+      for (const file of missing) {
+        const bytes = entries ? entries.find((e) => e.name === file.path)?.data : files.length === 1 ? archive : undefined;
+        if (!bytes || sha(bytes) !== file.sha256) throw new DesktopError('INTERNAL', `${f.family}: ${file.name} does not match its checksum, so it was not installed.`);
         const dest = join(dir, file.name);
-        const have = await readFile(dest).catch(() => null);
-        if (have && createHash('sha256').update(have).digest('hex') === file.sha256) continue;
-        let bytes: Buffer;
-        if (file.url.startsWith('/')) bytes = await this.d.http.download(file.url);
-        else {
-          if (!/^https:\/\//i.test(file.url)) throw new DesktopError('POLICY_DENIED', `${f.family}: fonts are downloaded over HTTPS only.`);
-          const res = await this.d.fetch(file.url);
-          if (!res.ok) throw new DesktopError('SERVER_ERROR', `${f.family} could not be downloaded (${res.status}).`);
-          bytes = Buffer.from(await res.arrayBuffer());
-        }
-        const got = createHash('sha256').update(bytes).digest('hex');
-        if (got !== file.sha256) throw new DesktopError('INTERNAL', `${f.family}: the downloaded file does not match its checksum, so it was not installed.`);
         const tmp = `${dest}.part`;
         await writeFile(tmp, bytes);
         await rename(tmp, dest);
@@ -822,6 +909,8 @@ export class SinhalaService {
     router.handle('sinhala:convert', (input) => this.convert(input.text, input.profile, input.direction));
     router.handle('sinhala:convertFile', (input) => this.convertFile(input));
     router.handle('sinhala:job', (input) => this.jobStatus(input.jobId));
+    router.handle('sinhala:jobAccept', (input) => this.decide(input.jobId, true));
+    router.handle('sinhala:jobReject', (input) => this.decide(input.jobId, false));
     router.handle('sinhala:profiles', async (input) => {
       if (input?.refresh) await this.sync();
       return this.profilesView();

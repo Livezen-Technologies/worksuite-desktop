@@ -493,6 +493,8 @@ const api = {
     convert: call('sinhala:convert'),
     convertFile: call('sinhala:convertFile'),
     job: call('sinhala:job'),
+    jobAccept: call('sinhala:jobAccept'),
+    jobReject: call('sinhala:jobReject'),
     profiles: call('sinhala:profiles'),
     fontsStatus: call('sinhala:fontsStatus'),
     fontsInstall: call('sinhala:fontsInstall'),

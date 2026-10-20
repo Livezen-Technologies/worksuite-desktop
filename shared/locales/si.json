@@ -2333,5 +2333,8 @@
   "Sinhala to Unicode": "සිංහල යුනිකෝඩ් වෙත",
   "Convert selection to Unicode Sinhala": "තේරීම යුනිකෝඩ් සිංහලට පරිවර්තනය කරන්න",
   "Convert document to Unicode Sinhala": "ලේඛනය යුනිකෝඩ් සිංහලට පරිවර්තනය කරන්න",
-  "Convert Sinhala text": "සිංහල පෙළ පරිවර්තනය කරන්න"
+  "Convert Sinhala text": "සිංහල පෙළ පරිවර්තනය කරන්න",
+  "Saved as a new version. The previous version can still be restored.": "නව අනුවාදයක් ලෙස සුරකින ලදී. පෙර අනුවාදය තවමත් ප්‍රතිසාධනය කළ හැක.",
+  "paragraphs change.": "ඡේද වෙනස් වේ.",
+  "Save as new version": "නව අනුවාදයක් ලෙස සුරකින්න"
 }

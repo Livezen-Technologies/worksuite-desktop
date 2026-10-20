@@ -9,6 +9,8 @@ export const SINHALA_INVOKE_CHANNELS = [
   'sinhala:convert',
   'sinhala:convertFile',
   'sinhala:job',
+  'sinhala:jobAccept',
+  'sinhala:jobReject',
   'sinhala:profiles',
   'sinhala:fontsStatus',
   'sinhala:fontsInstall',

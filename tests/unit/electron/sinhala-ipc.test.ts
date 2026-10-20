@@ -33,6 +33,8 @@ describe('the Sinhala IPC contract', () => {
       'sinhala:fontsStatus': 1,
       'sinhala:fontsInstall': 1,
       'sinhala:clipboard': 5,
+      'sinhala:jobAccept': 2,
+      'sinhala:jobReject': 2,
     };
     for (const c of SINHALA_INVOKE_CHANNELS) {
       const spec = contract[c] as { session?: boolean; rate?: number };
@@ -63,6 +65,9 @@ describe('the Sinhala IPC contract', () => {
   it('marks converting a whole file as audited', () => {
     expect((contract['sinhala:convertFile'] as { sensitive?: boolean }).sensitive).toBe(true);
     expect((contract['sinhala:fontsInstall'] as { sensitive?: boolean }).sensitive).toBe(true);
+    expect((contract['sinhala:jobAccept'] as { sensitive?: boolean }).sensitive).toBe(true);
+    expect(contract['sinhala:jobAccept'].input.safeParse({ jobId: 'l-abc' }).success).toBe(false);
+    expect(contract['sinhala:jobAccept'].input.safeParse({ jobId: 's-7' }).success).toBe(true);
   });
 });
 

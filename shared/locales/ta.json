@@ -2333,5 +2333,8 @@
   "Sinhala to Unicode": "சிங்களம் யூனிகோடுக்கு",
   "Convert selection to Unicode Sinhala": "தேர்வை யூனிகோடு சிங்களத்துக்கு மாற்று",
   "Convert document to Unicode Sinhala": "ஆவணத்தை யூனிகோடு சிங்களத்துக்கு மாற்று",
-  "Convert Sinhala text": "சிங்கள உரையை மாற்று"
+  "Convert Sinhala text": "சிங்கள உரையை மாற்று",
+  "Saved as a new version. The previous version can still be restored.": "புதிய பதிப்பாகச் சேமிக்கப்பட்டது. முந்தைய பதிப்பை இன்னும் மீட்டெடுக்கலாம்.",
+  "paragraphs change.": "பத்திகள் மாறுகின்றன.",
+  "Save as new version": "புதிய பதிப்பாகச் சேமி"
 }

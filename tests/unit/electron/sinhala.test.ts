@@ -1,4 +1,4 @@
-import { generateKeyPairSync, sign } from 'node:crypto';
+import { createHash, generateKeyPairSync, sign } from 'node:crypto';
 import { mkdtempSync, readFileSync, rmSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -23,6 +23,14 @@ const UNICODE = 'ශ්‍රී ලංකා රජයේ පුවත්පත
 
 const fm = builtinProfiles.find((p) => p.id === 'fm-abhaya')!;
 const serverProfiles = () => builtinProfiles.map((p) => JSON.parse(JSON.stringify(p)) as Profile);
+/** `GET api/sinhala/profiles?include=map` (SinhalaProfiles::current): the listing, the engine's data under `profile`. */
+const listing = (p: Profile, extra: Record<string, unknown> = {}) => ({ id: p.id, name: p.name, version: p.version, status: p.status, direction: 'both', font_names: p.fontNames, sha256: p.sha256, signature: null, source_commit: 'abc', profile: p, ...extra });
+const profilesBody = (list: Profile[] = serverProfiles()) => ({ profiles: list.map((p) => listing(p)), default_profile: 'fm-abhaya', synced_at: '2026-10-20T08:00:00+00:00' });
+/** `GET api/sinhala/status` (CoreSinhalaService::status). */
+const statusBody = (o: Record<string, unknown> = {}) => ({
+  available: true, reason: null, enabled: true, can_use: true, can_admin: false, worker: { ok: true, core: '1.0.0', commit: 'abc' }, plugin_guid: 'asc.{B50BAEE2-4EAC-4298-9DD2-73CC3223FFFA}',
+  default_profile: 'fm-abhaya', enabled_profiles: ['fm-abhaya', 'dl-manel', 'kaputa'], target_font: 'Noto Sans Sinhala', allow_reverse: true, auto_detect_on_paste: 'prompt', max_file_mb: 50, formats: ['docx', 'pptx'], ...o,
+});
 
 function memoryConfig() {
   const m = new Map<string, unknown>();
@@ -50,7 +58,9 @@ interface Harness {
   svc: SinhalaService;
   deps: SinhalaDeps;
   config: ReturnType<typeof memoryConfig>;
-  answer: { profiles: () => unknown };
+  answer: { status: () => unknown; profiles: () => unknown; fonts: () => unknown };
+  posts: Array<{ path: string; body: unknown }>;
+  postAnswer: { fn: (path: string) => unknown };
   clip: { text: string };
   keys: Map<string, () => void>;
   toasts: Array<[string, string]>;
@@ -70,9 +80,15 @@ afterEach(() => {
   rmSync(dir, { recursive: true, force: true });
 });
 
-function harness(o: { profiles?: () => unknown; keys?: Record<string, string> } = {}): Harness {
+function harness(o: { profiles?: () => unknown; status?: () => unknown; keys?: Record<string, string> } = {}): Harness {
   const config = memoryConfig();
-  const answer = { profiles: o.profiles ?? (() => ({ profiles: serverProfiles(), settings: { enabled: true } })) };
+  const answer = { status: o.status ?? (() => statusBody()), profiles: o.profiles ?? (() => profilesBody()), fonts: (): unknown => ({ unicode: [], legacy: [], target_font: 'Noto Sans Sinhala', desktop_install_fonts: 'ask' }) };
+  const posts: Harness['posts'] = [];
+  const postAnswer: Harness['postAnswer'] = {
+    fn: () => {
+      throw new DesktopError('NETWORK_UNREACHABLE', 'offline');
+    },
+  };
   const clip = { text: '' };
   const keys = new Map<string, () => void>();
   const toasts: Array<[string, string]> = [];
@@ -83,13 +99,21 @@ function harness(o: { profiles?: () => unknown; keys?: Record<string, string> } 
   const conflict = { v: false };
   const deps: SinhalaDeps = {
     http: {
-      get: async <T,>(path: string) => {
+      get: async <T,>(path: string, opts?: { query?: Record<string, unknown> }) => {
         if (!online.v) throw new DesktopError('NETWORK_UNREACHABLE', 'offline');
-        if (path === '/api/sinhala/profiles') return answer.profiles() as T;
+        if (path === '/api/sinhala/status') return answer.status() as T;
+        if (path === '/api/sinhala/profiles') {
+          expect(opts?.query?.include).toBe('map');
+          return answer.profiles() as T;
+        }
+        if (path === '/api/sinhala/fonts') return answer.fonts() as T;
+        if (path.startsWith('/api/sinhala/jobs/')) return postAnswer.fn(path) as T;
         throw new DesktopError('NOT_FOUND', 'no such path', 404);
       },
-      post: async () => {
-        throw new DesktopError('NETWORK_UNREACHABLE', 'offline');
+      post: async <T,>(path: string, body?: unknown) => {
+        if (!online.v) throw new DesktopError('NETWORK_UNREACHABLE', 'offline');
+        posts.push({ path, body });
+        return postAnswer.fn(path) as T;
       },
       download: async () => Buffer.alloc(0),
     },
@@ -133,7 +157,7 @@ function harness(o: { profiles?: () => unknown; keys?: Record<string, string> } 
     keys: o.keys ?? {},
     ed25519Key,
   };
-  return { svc: new SinhalaService(deps), deps, config, answer, clip, keys, toasts, online, locked, uploads, newFiles, conflict, dir };
+  return { svc: new SinhalaService(deps), deps, config, answer, posts, postAnswer, clip, keys, toasts, online, locked, uploads, newFiles, conflict, dir };
 }
 
 describe('SinhalaService: whether the tools are offered', () => {
@@ -142,19 +166,18 @@ describe('SinhalaService: whether the tools are offered', () => {
     expect(h.svc.availability()).toBe('no_api');
     await h.svc.sync();
     expect(h.svc.availability()).toBe('ok');
-    h.answer.profiles = () => ({ profiles: serverProfiles(), settings: { enabled: false } });
+    h.answer.status = () => statusBody({ available: false, reason: 'DISABLED_FOR_ORGANIZATION', enabled: false });
     await h.svc.sync();
     expect(h.svc.availability()).toBe('disabled');
+    expect(h.svc.profilesView().profiles.every((p) => p.source === 'builtin')).toBe(true);
     expect(() => h.svc.convert(LEGACY)).toThrow(/not available/);
   });
 
-  it('hides the tools on a server without the API (404) or for someone without sinhala.use (403)', async () => {
-    const h = harness({ profiles: () => { throw new DesktopError('NOT_FOUND', 'Not found', 404); } });
+  it('hides the tools on a server without the API (404) or for someone without sinhala.use (NO_PERMISSION)', async () => {
+    const h = harness({ status: () => { throw new DesktopError('NOT_FOUND', 'Not found', 404); } });
     await h.svc.sync();
     expect(h.svc.availability()).toBe('no_api');
-    h.answer.profiles = () => {
-      throw new DesktopError('PERMISSION_DENIED', 'Forbidden', 403);
-    };
+    h.answer.status = () => statusBody({ available: false, reason: 'NO_PERMISSION', can_use: false });
     await h.svc.sync();
     expect(h.svc.availability()).toBe('forbidden');
     expect(h.svc.status().shortcutHeld).toBeNull();
@@ -174,23 +197,29 @@ describe('SinhalaService: whether the tools are offered', () => {
     expect(again.profilesView().profiles.every((p) => p.source === 'cache')).toBe(true);
   });
 
-  it('reads org settings sent with the profiles; a bare list works too', async () => {
-    const h = harness({ profiles: () => serverProfiles() });
+  it('keeps the tools here while only the server’s engine is down (SINHALA_UNAVAILABLE)', async () => {
+    const h = harness({ status: () => statusBody({ available: false, reason: 'SINHALA_UNAVAILABLE', worker: { ok: false } }) });
     await h.svc.sync();
     expect(h.svc.availability()).toBe('ok');
-    h.answer.profiles = () => ({ profiles: serverProfiles(), settings: { enabled: true, default_profile: 'dl-manel', target_font: 'Noto Serif Sinhala', allow_reverse: false, locked: ['defaultProfile'] } });
+    expect(h.svc.status().serverEngine).toBe(false);
+    expect(h.svc.convert(LEGACY, 'fm-abhaya').text).toBe(UNICODE);
+  });
+
+  it('takes the org settings from status and the font policy from fonts', async () => {
+    const h = harness({ status: () => statusBody({ default_profile: 'dl-manel', target_font: 'Noto Serif Sinhala', allow_reverse: false, auto_detect_on_paste: 'off' }) });
+    h.answer.fonts = () => ({ unicode: [], legacy: [], target_font: 'Noto Serif Sinhala', desktop_install_fonts: 'never' });
     await h.svc.sync();
-    expect(h.svc.org().targetFont).toBe('Noto Serif Sinhala');
-    expect(h.svc.user().defaultProfile).toBe('dl-manel');
-    expect(() => h.svc.setUser({ defaultProfile: 'kaputa' })).toThrow(/organization/);
+    expect(h.svc.org()).toMatchObject({ defaultProfile: 'dl-manel', targetFont: 'Noto Serif Sinhala', allowReverse: false, autoDetectOnPaste: 'off', installFonts: 'never', locked: [] });
+    expect(h.svc.status().serverFormats).toEqual(['docx', 'pptx']);
     expect(() => h.svc.convert(UNICODE, 'fm-abhaya', 'toLegacy')).toThrow(/does not allow/);
+    await expect(h.svc.installFonts()).rejects.toThrow(/does not install fonts/);
   });
 });
 
 describe('profiles: sha256 and signatures (AC-SI-05)', () => {
   it('refuses a tampered profile from the server and falls back to the built-in set', async () => {
     const tampered = serverProfiles().map((p) => (p.id === 'fm-abhaya' ? { ...p, map: p.map.map(([l, u]) => (l === 'l' ? ['l', 'ඛ'] : [l, u])) as Profile['map'] } : p));
-    const h = harness({ profiles: () => ({ profiles: tampered, settings: { enabled: true } }) });
+    const h = harness({ profiles: () => profilesBody(tampered) });
     await h.svc.sync();
     const view = h.svc.profilesView();
     expect(view.rejected.map((r) => r.id)).toEqual(['fm-abhaya']);
@@ -205,8 +234,8 @@ describe('profiles: sha256 and signatures (AC-SI-05)', () => {
     const h = harness();
     await h.svc.sync();
     const key = 'sinhala.cache:acct:7';
-    const cached = h.config.getConfig<{ profiles: Profile[] }>(key)!;
-    cached.profiles[0]!.map[0] = [cached.profiles[0]!.map[0]![0], 'X'];
+    const cached = h.config.getConfig<{ profiles: Array<{ id: string; profile: Profile }> }>(key)!;
+    cached.profiles[0]!.profile.map[0] = [cached.profiles[0]!.profile.map[0]![0], 'X'];
     h.config.setConfig(key, cached);
     h.online.v = false;
     const fresh = new SinhalaService(h.deps);
@@ -215,12 +244,19 @@ describe('profiles: sha256 and signatures (AC-SI-05)', () => {
     expect(view.profiles.map((p) => p.id)).not.toContain(cached.profiles[0]!.id);
   });
 
+  it('refuses a listing whose sha256 is not its data’s, and one without the data', () => {
+    const p = serverProfiles()[0]!;
+    expect(() => checkServerProfile(listing(p, { sha256: 'f'.repeat(64) }), {}, ed25519Key)).toThrow(/does not match its data/);
+    expect(() => checkServerProfile(listing(p, { profile: undefined }), {}, ed25519Key)).toThrow(/include=map/);
+  });
+
   it('checks an Ed25519 signature when the profile carries one', () => {
     const { publicKey, privateKey } = generateKeyPairSync('ed25519');
     const raw = (publicKey.export({ format: 'der', type: 'spki' }) as Buffer).subarray(12).toString('base64url');
     const keys = { 'ws-test-1': raw };
-    const p = { ...serverProfiles()[0]!, key_id: 'ws-test-1' } as Record<string, unknown>;
-    p.signature = sign(null, Buffer.from(canonicalJson(p), 'utf8'), privateKey).toString('base64url');
+    const data = serverProfiles()[0]!;
+    const signature = sign(null, Buffer.from(canonicalJson({ ...data, key_id: 'ws-test-1' }), 'utf8'), privateKey).toString('base64url');
+    const p = listing(data, { key_id: 'ws-test-1', signature }) as Record<string, unknown>;
     expect(checkServerProfile(p, keys, ed25519Key).signed).toBe(true);
     // Same sha256, signature over something else: refused.
     const forged = { ...p, signature: sign(null, Buffer.from('other'), privateKey).toString('base64url') };
@@ -228,18 +264,17 @@ describe('profiles: sha256 and signatures (AC-SI-05)', () => {
     // A key this build does not pin: refused.
     expect(() => checkServerProfile({ ...p, key_id: 'ws-other' }, keys, ed25519Key)).toThrow(/unknown key/);
     // No signature: used on its sha256 alone, marked unsigned.
-    const { signature: _s, key_id: _k, ...plain } = p;
-    expect(checkServerProfile(plain, keys, ed25519Key).signed).toBe(false);
+    expect(checkServerProfile(listing(data), keys, ed25519Key).signed).toBe(false);
   });
 
   it('a profile re-hashed after an edit passes its sha256 but not a signature made before', () => {
     const { publicKey, privateKey } = generateKeyPairSync('ed25519');
     const raw = (publicKey.export({ format: 'der', type: 'spki' }) as Buffer).subarray(12).toString('base64url');
-    const p = serverProfiles()[0]! as unknown as Record<string, unknown>;
+    const p = serverProfiles()[0]!;
     const signature = sign(null, Buffer.from(canonicalJson(p), 'utf8'), privateKey).toString('base64url');
-    const edited = { ...p, notes: 'edited' } as Record<string, unknown>;
-    edited.sha256 = profileHash(edited as unknown as Profile);
-    expect(() => checkServerProfile({ ...edited, signature }, { k: raw }, ed25519Key)).toThrow(/signature/);
+    const edited = { ...p, notes: 'edited' };
+    edited.sha256 = profileHash(edited);
+    expect(() => checkServerProfile(listing(edited, { signature }), { k: raw }, ed25519Key)).toThrow(/signature/);
   });
 });
 
@@ -394,32 +429,41 @@ describe('fonts and names', () => {
     expect(windowsFontValue('Noto Sans Sinhala', 'NotoSansSinhala-Bold.ttf')).toBe('Noto Sans Sinhala Bold (TrueType)');
   });
 
-  it('installs only distributable fonts whose sha256 matches', async () => {
+  const fontZip = (files: Record<string, Buffer>) => createZip(Object.entries(files).map(([name, data]) => ({ name, data })));
+  const sha = (b: Buffer) => createHash('sha256').update(b).digest('hex');
+
+  it('installs distributable fonts from their release archive, each file checked (GET fonts)', async () => {
     const h = harness();
     await h.svc.sync();
-    const good = Buffer.from('font-bytes');
-    const sha = (await import('node:crypto')).createHash('sha256').update(good).digest('hex');
-    h.deps.http.get = async <T,>(path: string) =>
-      (path === '/api/sinhala/fonts'
-        ? { fonts: [
-            { family: 'Noto Sans Sinhala', kind: 'unicode', distributable: true, licence: 'OFL-1.1', files: [{ name: 'NotoSansSinhala-Regular.ttf', url: '/api/sinhala/fonts/1/download', sha256: sha }] },
-            { family: 'FM Abhaya', kind: 'legacy', distributable: false, files: [{ name: 'FMAbhaya.ttf', url: '/api/sinhala/fonts/2/download', sha256: sha }] },
-          ] }
-        : { profiles: serverProfiles(), settings: { enabled: true } }) as T;
-    h.deps.http.download = async () => good;
+    const regular = Buffer.from('regular-font');
+    const ofl = Buffer.from('licence');
+    const zip = fontZip({ 'NotoSansSinhala/full/ttf/NotoSansSinhala-Regular.ttf': regular, 'OFL.txt': ofl });
+    h.answer.fonts = () => ({
+      unicode: [{ id: 1, family: 'Noto Sans Sinhala', kind: 'unicode', profile: null, version: '3.000', licence: 'OFL-1.1', distributable: true, download_url: '/api/files/fonts/noto.zip', sha256: sha(zip), files: { 'NotoSansSinhala/full/ttf/NotoSansSinhala-Regular.ttf': sha(regular), 'OFL.txt': sha(ofl) }, organization: false }],
+      legacy: [{ id: 2, family: 'FM Abhaya', kind: 'legacy', profile: 'fm-abhaya', version: null, licence: 'commercial', distributable: false, download_url: null, sha256: null, files: null, organization: false }],
+      target_font: 'Noto Sans Sinhala',
+      desktop_install_fonts: 'ask',
+    });
+    h.deps.http.download = async () => zip;
     const st = await h.svc.installFonts();
-    expect(st.families.find((f) => f.family === 'Noto Sans Sinhala')!.installed).toBe(true);
-    expect(st.families.find((f) => f.family === 'FM Abhaya')!.installed).toBe(false);
-    expect(existsSync(join(dir, '.local', 'share', 'fonts', 'worksuite', 'FMAbhaya.ttf'))).toBe(false);
+    expect(st.families.find((f) => f.family === 'Noto Sans Sinhala')).toMatchObject({ installed: true, distributable: true });
+    expect(st.families.find((f) => f.family === 'FM Abhaya')).toMatchObject({ installed: false, distributable: false });
+    const fontDir = join(dir, '.local', 'share', 'fonts', 'worksuite');
+    expect(readFileSync(join(fontDir, 'NotoSansSinhala-Regular.ttf'))).toEqual(regular);
+    expect(existsSync(join(fontDir, 'OFL.txt'))).toBe(false);
   });
 
-  it('refuses a font that does not match its checksum', async () => {
+  it('refuses an archive, or a font in it, that does not match its checksum', async () => {
     const h = harness();
     await h.svc.sync();
-    h.deps.http.get = async <T,>(path: string) =>
-      (path === '/api/sinhala/fonts' ? { fonts: [{ family: 'Noto Sans Sinhala', kind: 'unicode', distributable: true, files: [{ name: 'N.ttf', url: '/f', sha256: '0'.repeat(64) }] }] } : { profiles: serverProfiles() }) as T;
-    h.deps.http.download = async () => Buffer.from('evil');
+    const good = Buffer.from('font');
+    const zip = fontZip({ 'N.ttf': Buffer.from('evil') });
+    const font = { family: 'Noto Sans Sinhala', kind: 'unicode', distributable: true, download_url: '/f.zip', files: { 'N.ttf': sha(good) } };
+    h.answer.fonts = () => ({ unicode: [{ ...font, sha256: '0'.repeat(64) }], legacy: [] });
+    h.deps.http.download = async () => zip;
     await expect(h.svc.installFonts()).rejects.toThrow(/checksum/);
+    h.answer.fonts = () => ({ unicode: [{ ...font, sha256: sha(zip) }], legacy: [] });
+    await expect(h.svc.installFonts()).rejects.toThrow(/N\.ttf does not match/);
     expect(existsSync(join(dir, '.local', 'share', 'fonts', 'worksuite', 'N.ttf'))).toBe(false);
   });
 
@@ -427,5 +471,70 @@ describe('fonts and names', () => {
     expect(unicodeCopyName('Report.docx')).toBe('Report (Unicode).docx');
     expect(unicodeCopyName('a.b.docx')).toBe('a.b (Unicode).docx');
     expect(unicodeCopyName('Report (Unicode).docx')).toBe('Report (Unicode).docx');
+  });
+});
+
+describe('Drive documents on the server: preview, then Accept or Reject (WF-SI-02)', () => {
+  /** SinhalaJobs::present. */
+  const job = (o: Record<string, unknown> = {}) => ({
+    id: 7, status: 'preview', file_id: 42, file_name: 'Report.docx', source_version: 3, result_version: null, profile: null, profile_version: 'fm-abhaya@1.0.0',
+    runs_total: 4, runs_converted: 4, unmapped_count: 1,
+    unmapped: [{ profile: 'fm-abhaya', sequence: '¥', code_point: 'U+00A5', count: 1, first_offset: 12 }],
+    preview: { paragraphs_changed: 2, samples: [{ part: 'word/document.xml', before: LEGACY, after: UNICODE }], locations: [], profiles: { 'fm-abhaya': '1.0.0' }, target_font: 'Noto Sans Sinhala' },
+    error: null, mine: true, can_accept: true, created_at: '2026-10-20 08:00:00', finished_at: null, ...o,
+  });
+
+  it('starts a server job (202), shows its preview, and saves only on Accept', async () => {
+    const h = harness();
+    await h.svc.sync();
+    h.postAnswer.fn = (path) => (path === '/api/sinhala/files/42/convert' ? job({ status: 'queued', can_accept: false, preview: null }) : path.endsWith('/accept') ? job({ status: 'done', result_version: 4, can_accept: false }) : job());
+    const { jobId } = await h.svc.convertFile({ source: { kind: 'drive', fileId: 42, name: 'Report.docx' }, profile: 'fm-abhaya' });
+    expect(jobId).toBe('s-7');
+    expect(h.posts[0]).toEqual({ path: '/api/sinhala/files/42/convert', body: { profile: 'fm-abhaya' } });
+    const p = await h.svc.jobStatus(jobId);
+    expect(p).toMatchObject({ state: 'preview', canAccept: true, paragraphsChanged: 2, runsConverted: 4, unmappedCount: 1, profileVersion: 'fm-abhaya@1.0.0' });
+    expect(p.preview).toEqual([{ part: 'word/document.xml', before: LEGACY, after: UNICODE }]);
+    expect(p.unmapped).toEqual([{ sequence: '¥', codePoint: 'U+00A5', count: 1, firstOffset: 12 }]);
+    expect(h.posts.some((x) => x.path.endsWith('/accept'))).toBe(false);
+    const done = await h.svc.decide(jobId, true);
+    expect(h.posts.at(-1)!.path).toBe('/api/sinhala/jobs/7/accept');
+    expect(done).toMatchObject({ state: 'done', resultVersionId: 4, canAccept: false });
+  });
+
+  it('Reject changes nothing; a 409 on Accept says why and keeps the job as the server has it', async () => {
+    const h = harness();
+    await h.svc.sync();
+    h.postAnswer.fn = (path) => (path.endsWith('/reject') ? job({ status: 'rejected', can_accept: false }) : job());
+    const { jobId } = await h.svc.convertFile({ source: { kind: 'drive', fileId: 42 } });
+    expect((await h.svc.decide(jobId, false)).state).toBe('rejected');
+
+    const h2 = harness();
+    await h2.svc.sync();
+    h2.postAnswer.fn = (path) => {
+      if (path.endsWith('/accept')) throw new DesktopError('CONFLICT', 'The document was changed after it was converted, so nothing was saved. Convert it again.', 409);
+      return path.startsWith('/api/sinhala/jobs/') ? job({ status: 'conflict', can_accept: false }) : job();
+    };
+    const second = await h2.svc.convertFile({ source: { kind: 'drive', fileId: 42 } });
+    await expect(h2.svc.decide(second.jobId, true)).rejects.toThrow(/changed after it was converted/);
+    expect((await h2.svc.jobStatus(second.jobId)).state).toBe('conflict');
+  });
+
+  it('falls back to the offline copy when the server’s engine is down (503)', async () => {
+    const h = harness();
+    await h.svc.sync();
+    writeFileSync(join(dir, 'Report.docx'), docxWith([{ font: 'FMAbhaya', text: LEGACY }]));
+    h.postAnswer.fn = () => {
+      throw new DesktopError('SERVER_ERROR', 'Sinhala Tools are unavailable right now', 503);
+    };
+    const { jobId } = await h.svc.convertFile({ source: { kind: 'drive', fileId: 42 } });
+    expect(jobId.startsWith('l-')).toBe(true);
+  });
+
+  it('keeps an unknown server status from looking finished', async () => {
+    const h = harness();
+    await h.svc.sync();
+    h.postAnswer.fn = () => job({ status: 'exploded' });
+    const { jobId } = await h.svc.convertFile({ source: { kind: 'drive', fileId: 42 } });
+    expect((await h.svc.jobStatus(jobId)).state).toBe('failed');
   });
 });

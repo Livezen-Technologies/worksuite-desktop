@@ -234,7 +234,7 @@ export default function SinhalaToolsPage(_props: ModuleProps) {
             <h2 className="mb-2 text-[14px] font-bold text-ink">Documents</h2>
             <div className="flex flex-col gap-2">
               {jobs.map((j) => (
-                <JobRow key={j.id} job={j} />
+                <JobRow key={j.id} job={j} onChange={(next) => setJobs((list) => list.map((x) => (x.id === next.id ? next : x)))} />
               ))}
             </div>
           </section>
@@ -247,15 +247,32 @@ export default function SinhalaToolsPage(_props: ModuleProps) {
 const STATE_LABEL: Record<SinhalaJob['state'], string> = {
   queued: 'Waiting',
   running: 'Converting…',
+  preview: 'Check the preview, then save it as a new version',
   done: 'Converted',
+  rejected: 'Not saved — the document is unchanged',
+  no_change: 'No legacy Sinhala text was found',
   failed: 'Failed',
   waiting_upload: 'Converted — uploads as a new version when you are online',
   uploaded: 'Converted and uploaded as a new version',
   conflict: 'The file changed meanwhile — the converted copy was uploaded beside it',
 };
 
-function JobRow({ job }: { job: SinhalaJob }) {
-  const tone = job.state === 'failed' ? 'danger' : job.state === 'conflict' ? 'warning' : job.state === 'queued' || job.state === 'running' ? 'muted' : 'success';
+function JobRow({ job, onChange }: { job: SinhalaJob; onChange: (j: SinhalaJob) => void }) {
+  const [busy, setBusy] = useState(false);
+  const tone = job.state === 'failed' ? 'danger' : job.state === 'conflict' || job.state === 'preview' ? 'warning' : job.state === 'queued' || job.state === 'running' || job.state === 'rejected' || job.state === 'no_change' ? 'muted' : 'success';
+  // Nothing is saved until Accept (WF-SI-02 step 4); the server refuses with 409 when the file changed meanwhile.
+  const decide = async (accept: boolean) => {
+    setBusy(true);
+    try {
+      onChange(await call(accept ? 'sinhala:jobAccept' : 'sinhala:jobReject', { jobId: job.id }));
+      if (accept) toast('success', 'Saved as a new version. The previous version can still be restored.');
+    } catch (e) {
+      toast('error', errorMessage(e));
+      onChange(await call('sinhala:job', { jobId: job.id }).catch(() => job));
+    } finally {
+      setBusy(false);
+    }
+  };
   return (
     <div className="rounded-[8px] border border-line bg-surface p-3">
       <div className="flex flex-wrap items-center gap-2">
@@ -282,8 +299,29 @@ function JobRow({ job }: { job: SinhalaJob }) {
         ) : null}
       </div>
       {job.error ? <div className="mt-1 text-[12.5px] text-danger">{job.error}</div> : null}
+      {job.canAccept && job.state === 'preview' ? (
+        <div className="mt-2 flex flex-wrap items-center gap-2">
+          {job.paragraphsChanged !== null ? <span className="text-[12.5px] text-ink-2">{job.paragraphsChanged} paragraphs change.</span> : null}
+          <div className="flex-1" />
+          <Button size="sm" disabled={busy} onClick={() => void decide(false)}>
+            Discard
+          </Button>
+          <Button size="sm" variant="primary" loading={busy} onClick={() => void decide(true)}>
+            Save as new version
+          </Button>
+        </div>
+      ) : null}
+      {job.unmapped.length ? (
+        <div className="mt-1 text-[12px] text-ink-3">
+          {job.unmapped.slice(0, 12).map((u) => (
+            <code key={`${u.sequence}-${u.codePoint}`} className="mr-1.5 rounded bg-subtle px-1 py-0.5">
+              {u.sequence} {u.codePoint} ×{u.count}
+            </code>
+          ))}
+        </div>
+      ) : null}
       {job.preview.length ? (
-        <details className="mt-2 text-[12.5px]">
+        <details className="mt-2 text-[12.5px]" open={job.state === 'preview'}>
           <summary className="cursor-pointer text-ink-2">Preview of the changes</summary>
           <table className="mt-1 w-full">
             <tbody>

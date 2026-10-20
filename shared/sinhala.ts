@@ -33,8 +33,14 @@ export type SinhalaAvailability =
   | 'no_api'
   /** The organisation has Sinhala Tools off. */
   | 'disabled'
-  /** The person lacks `sinhala.use` (403). */
+  /** The person lacks `sinhala.use` (status `NO_PERMISSION`). */
   | 'forbidden';
+
+/**
+ * `GET api/sinhala/status`'s `reason`, as the server sends it. SINHALA_UNAVAILABLE (the server's engine is down) does
+ * not hide the desktop's tools — this computer has its own engine — only the server's document jobs.
+ */
+export type SinhalaServerReason = 'NO_PERMISSION' | 'DISABLED_FOR_ORGANIZATION' | 'SINHALA_UNAVAILABLE';
 
 /** The organisation's settings as the desktop uses them (blueprint §7 Org settings). */
 export interface SinhalaOrgSettings {
@@ -105,6 +111,10 @@ export interface SinhalaStatus {
   shortcutHeld: string | null;
   /** Uploads of converted copies waiting for the network. */
   pendingUploads: number;
+  /** The server's engine answers (`status.worker.ok`): its document jobs can run. False also while offline. */
+  serverEngine: boolean;
+  /** What the server converts as documents (`status.formats`: docx, pptx). */
+  serverFormats: string[];
   engineVersion: string;
 }
 
@@ -139,7 +149,12 @@ export interface SinhalaClipboardResult {
   ms: number;
 }
 
-export type SinhalaJobState = 'queued' | 'running' | 'done' | 'failed' | 'waiting_upload' | 'uploaded' | 'conflict';
+/**
+ * A job's state. The server's own (SinhalaJobs: queued → running → preview → done | rejected; no_change; failed;
+ * conflict) as it sends them, and two of this computer's: `waiting_upload` (converted offline, waiting for the
+ * network) and `uploaded`.
+ */
+export type SinhalaJobState = 'queued' | 'running' | 'preview' | 'done' | 'rejected' | 'no_change' | 'failed' | 'conflict' | 'waiting_upload' | 'uploaded';
 
 /** A document conversion: a server job (online Drive file) or one done here (offline, or a file on this computer). */
 export interface SinhalaJob {
@@ -153,8 +168,14 @@ export interface SinhalaJob {
   runsTotal: number;
   runsConverted: number;
   unmappedCount: number;
-  /** Before → after of the first changed runs (blueprint WF-SI-02 step 3). */
-  preview: Array<{ before: string; after: string }>;
+  /** Before → after of the first changed runs (blueprint WF-SI-02 step 3; the server's `preview.samples`). */
+  preview: Array<{ part?: string; before: string; after: string }>;
+  /** Paragraphs the conversion changes (server jobs). */
+  paragraphsChanged: number | null;
+  /** A server job waiting for Accept or Reject from this person (`can_accept`): nothing is saved until Accept. */
+  canAccept: boolean;
+  /** Unmapped sequences, most frequent first (server jobs). */
+  unmapped: Array<{ sequence: string; codePoint: string; count: number; firstOffset: number }>;
   /** The converted copy on this computer (local jobs). */
   outputName: string | null;
   /** The new Drive version (server jobs, or an upload that went through). */
@@ -186,97 +207,134 @@ export interface SinhalaDocxResult {
   unmappedCount: number;
   profile: string;
   profileVersion: string;
-  preview: Array<{ before: string; after: string }>;
+  preview: Array<{ part?: string; before: string; after: string }>;
 }
 
-// ── the server's answers (`api/sinhala/*`, blueprint §5) ──────────────────
+// ── the server's answers (`api/sinhala/*`, WorkSuite app/Modules/Sinhala) ───
 
-/** A profile as `GET api/sinhala/profiles` sends it: the engine's shape plus an optional Ed25519 signature. */
+const settingValue = <T extends string>(values: readonly T[], fallback: T) => z.string().transform((v): T => ((values as readonly string[]).includes(v) ? (v as T) : fallback));
+
+/** `GET api/sinhala/status` (any signed-in user): whether this person may see the tools, why not, the org's settings. */
+export const statusResponseSchema = z
+  .object({
+    available: z.boolean(),
+    reason: z.string().max(64).nullable().optional(),
+    enabled: z.boolean().optional(),
+    worker: z.object({ ok: z.boolean() }).passthrough().nullable().optional(),
+    plugin_guid: z.string().max(80).optional(),
+    default_profile: z.string().max(64).nullable().optional(),
+    enabled_profiles: z.array(z.string().max(64)).max(64).optional(),
+    target_font: z.string().max(120).optional(),
+    allow_reverse: z.boolean().optional(),
+    auto_detect_on_paste: settingValue(['prompt', 'auto', 'off'] as const, 'prompt').optional(),
+    max_file_mb: z.number().optional(),
+    formats: z.array(z.string().max(16)).max(16).optional(),
+  })
+  .passthrough();
+export type SinhalaServerStatus = z.infer<typeof statusResponseSchema>;
+
+/** The org settings the desktop uses, from `status` (and `fonts`' `desktop_install_fonts`). The server locks nothing. */
+export function orgSettingsFrom(st: SinhalaServerStatus | null, installFonts?: string | null): SinhalaOrgSettings {
+  const fonts = (['ask', 'always', 'never'] as const).find((v) => v === installFonts);
+  return {
+    enabled: st?.enabled ?? SINHALA_ORG_DEFAULTS.enabled,
+    defaultProfile: st?.default_profile || SINHALA_ORG_DEFAULTS.defaultProfile,
+    targetFont: st?.target_font || SINHALA_ORG_DEFAULTS.targetFont,
+    autoDetectOnPaste: st?.auto_detect_on_paste ?? SINHALA_ORG_DEFAULTS.autoDetectOnPaste,
+    allowReverse: st?.allow_reverse ?? SINHALA_ORG_DEFAULTS.allowReverse,
+    installFonts: fonts ?? SINHALA_ORG_DEFAULTS.installFonts,
+    locked: [],
+  };
+}
+
+/**
+ * One entry of `GET api/sinhala/profiles?include=map` (SinhalaProfiles::current): the listing's fields, and `profile`
+ * — the engine's own profile JSON, `sha256` inside — which is what is checked and cached. `signature` is null until
+ * the server signs profiles.
+ */
 export const serverProfileSchema = z
   .object({
     id: z.string().regex(/^[a-z0-9][a-z0-9-]{0,63}$/),
     name: z.string().max(120),
     version: z.string().max(32),
-    status: z.enum(['verified', 'provisional']).catch('provisional'),
-    fontNames: z.array(z.string().max(120)).max(64),
-    notes: z.string().max(4000).default(''),
-    passthrough: z.string().max(512),
-    map: z.array(z.tuple([z.string().min(1).max(16), z.string().min(1).max(16)])).max(4096),
-    prebase: z.array(z.string().max(4)).max(16),
-    compose: z.array(z.tuple([z.string().max(8), z.string().max(4)])).max(64),
+    status: z.string().max(32).optional(),
+    direction: z.string().max(16).optional(),
+    font_names: z.array(z.string().max(120)).max(64).optional(),
     sha256: z.string().regex(/^[0-9a-f]{64}$/),
     signature: z.string().max(200).nullable().optional(),
+    key_id: z.string().max(64).nullable().optional(),
+    source_commit: z.string().max(64).nullable().optional(),
+    profile: z.unknown().optional(),
   })
   .passthrough();
 export type ServerProfile = z.infer<typeof serverProfileSchema>;
 
-const orgSettingsSchema = z
-  .object({
-    enabled: z.boolean().optional(),
-    default_profile: z.string().max(64).optional(),
-    target_font: z.string().max(120).optional(),
-    auto_detect_on_paste: z.enum(['prompt', 'auto', 'off']).optional(),
-    allow_reverse: z.boolean().optional(),
-    install_fonts: z.enum(['ask', 'always', 'never']).optional(),
-    locked: z.array(z.string().max(40)).max(10).optional(),
-  })
+/** `GET api/sinhala/profiles`. */
+export const profilesResponseSchema = z
+  .object({ profiles: z.array(z.unknown()).max(64), default_profile: z.string().max(64).nullable().optional(), synced_at: z.string().max(40).nullable().optional() })
   .passthrough();
 
-/** `GET api/sinhala/profiles`: `{profiles}`, or a bare list; `settings` when the server sends the org's settings along. */
-export const profilesResponseSchema = z.union([
-  z.object({ profiles: z.array(z.unknown()).max(64), settings: orgSettingsSchema.nullable().optional(), enabled: z.boolean().optional() }).passthrough(),
-  z.array(z.unknown()).max(64).transform((profiles) => ({ profiles, settings: null, enabled: undefined })),
-]);
+const sha = z.string().regex(/^[0-9a-f]{64}$/);
+const serverFont = z
+  .object({
+    id: z.number().int().optional(),
+    family: z.string().min(1).max(120),
+    kind: z.enum(['unicode', 'legacy']),
+    profile: z.string().max(64).nullable().optional(),
+    version: z.string().max(32).nullable().optional(),
+    licence: z.string().max(400).nullable().optional(),
+    distributable: z.boolean().default(false),
+    /** The release archive (a .zip) for a distributable font, and its sha256. */
+    download_url: z.string().max(2048).nullable().optional(),
+    sha256: sha.nullable().optional(),
+    /** Path inside the archive → that file's sha256 (fonts and licence texts). */
+    files: z.record(z.string().max(300), sha).nullable().optional(),
+    organization: z.boolean().optional(),
+  })
+  .passthrough();
+export type SinhalaServerFont = z.infer<typeof serverFont>;
 
-export function orgSettingsFrom(raw: unknown, enabled?: boolean): SinhalaOrgSettings {
-  const p = orgSettingsSchema.safeParse(raw ?? {});
-  const s = p.success ? p.data : {};
-  const lockable: Array<keyof SinhalaUserSettings> = ['defaultProfile', 'shortcut', 'autoDetectOnPaste'];
-  return {
-    enabled: s.enabled ?? enabled ?? SINHALA_ORG_DEFAULTS.enabled,
-    defaultProfile: s.default_profile ?? SINHALA_ORG_DEFAULTS.defaultProfile,
-    targetFont: s.target_font ?? SINHALA_ORG_DEFAULTS.targetFont,
-    autoDetectOnPaste: s.auto_detect_on_paste ?? SINHALA_ORG_DEFAULTS.autoDetectOnPaste,
-    allowReverse: s.allow_reverse ?? SINHALA_ORG_DEFAULTS.allowReverse,
-    installFonts: s.install_fonts ?? SINHALA_ORG_DEFAULTS.installFonts,
-    locked: (s.locked ?? []).filter((k): k is keyof SinhalaUserSettings => (lockable as string[]).includes(k)),
-  };
-}
-
-/** `GET api/sinhala/fonts`: the org's font manifest (blueprint §5). */
-export const fontManifestSchema = z.object({
-  fonts: z
-    .array(
-      z
-        .object({
-          family: z.string().min(1).max(120),
-          kind: z.enum(['unicode', 'legacy']),
-          licence: z.string().max(400).nullable().optional(),
-          distributable: z.boolean().default(false),
-          files: z
-            .array(z.object({ name: z.string().regex(/^[A-Za-z0-9 ._()-]{1,120}\.(ttf|otf)$/i), url: z.string().max(2048), sha256: z.string().regex(/^[0-9a-f]{64}$/), bytes: z.number().int().positive().max(50 * 1024 * 1024).optional() }))
-            .max(16)
-            .default([]),
-        })
-        .passthrough(),
-    )
-    .max(64),
-});
+/** `GET api/sinhala/fonts` (SinhalaFonts::forOrg plus `desktop_install_fonts`). */
+export const fontManifestSchema = z
+  .object({
+    unicode: z.array(serverFont).max(64).default([]),
+    legacy: z.array(serverFont).max(64).default([]),
+    target_font: z.string().max(120).optional(),
+    desktop_install_fonts: z.string().max(16).optional(),
+  })
+  .passthrough();
 export type SinhalaFontManifest = z.infer<typeof fontManifestSchema>;
 
-/** `POST api/sinhala/files/{id}/convert` and `GET api/sinhala/jobs/{id}`. */
+/** A job as `POST files/{id}/convert` (202), `GET jobs/{id}` and `POST jobs/{id}/accept|reject` send it (SinhalaJobs::present). */
 export const serverJobSchema = z
   .object({
-    id: z.union([z.number(), z.string()]).transform(String),
+    id: z.number().int(),
     status: z.string().max(32),
+    file_id: z.number().int().optional(),
+    file_name: z.string().max(255).nullable().optional(),
+    source_version: z.number().int().nullable().optional(),
+    result_version: z.number().int().nullable().optional(),
     profile: z.string().max(64).nullable().optional(),
-    profile_version: z.string().max(32).nullable().optional(),
+    profile_version: z.string().max(80).nullable().optional(),
     runs_total: z.number().int().nonnegative().nullable().optional(),
     runs_converted: z.number().int().nonnegative().nullable().optional(),
     unmapped_count: z.number().int().nonnegative().nullable().optional(),
-    result_version_id: z.number().int().nullable().optional(),
+    unmapped: z
+      .array(z.object({ profile: z.string().nullable().optional(), sequence: z.string().max(64), code_point: z.string().max(64), count: z.number().int(), first_offset: z.number().int() }).passthrough())
+      .max(500)
+      .nullable()
+      .optional(),
+    preview: z
+      .object({
+        paragraphs_changed: z.number().int().nullable().optional(),
+        samples: z.array(z.object({ part: z.string().max(80).optional(), before: z.string().max(2000), after: z.string().max(2000) }).passthrough()).max(50).nullable().optional(),
+        target_font: z.string().max(120).nullable().optional(),
+      })
+      .passthrough()
+      .nullable()
+      .optional(),
     error: z.string().max(2000).nullable().optional(),
-    preview: z.array(z.object({ before: z.string().max(2000), after: z.string().max(2000) }).passthrough()).max(50).nullable().optional(),
+    can_accept: z.boolean().optional(),
   })
   .passthrough();
 
@@ -316,6 +374,10 @@ export const sinhalaContract = {
   'sinhala:convert': { input: z.strictObject({ text, profile: profileId.optional(), direction: z.enum(['toUnicode', 'toLegacy']).default('toUnicode') }), session: true, rate: 30 },
   'sinhala:convertFile': { input: sinhalaConvertFileInput, session: true, rate: 2, sensitive: true },
   'sinhala:job': { input: z.strictObject({ jobId: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/) }), session: true, rate: 5 },
+  /** A server job's preview, saved as the file's new version (`POST jobs/{id}/accept`); 409 when the file moved on. */
+  'sinhala:jobAccept': { input: z.strictObject({ jobId: z.string().regex(/^s-\d{1,12}$/) }), session: true, rate: 2, sensitive: true },
+  /** A server job's preview, dropped (`POST jobs/{id}/reject`): nothing changes. */
+  'sinhala:jobReject': { input: z.strictObject({ jobId: z.string().regex(/^s-\d{1,12}$/) }), session: true, rate: 2 },
   'sinhala:profiles': { input: z.strictObject({ refresh: z.boolean().optional() }).optional().or(z.null()), session: true, rate: 2 },
   /** Blueprint `sinhala:fonts:status` / `sinhala:fonts:install` (channel names have one colon). */
   'sinhala:fontsStatus': { input: none, session: true, rate: 1 },
@@ -344,6 +406,8 @@ export interface SinhalaOutputs {
   'sinhala:convert': SinhalaConvertResult;
   'sinhala:convertFile': { jobId: string };
   'sinhala:job': SinhalaJob;
+  'sinhala:jobAccept': SinhalaJob;
+  'sinhala:jobReject': SinhalaJob;
   'sinhala:profiles': SinhalaProfilesView;
   'sinhala:fontsStatus': SinhalaFontsStatus;
   'sinhala:fontsInstall': SinhalaFontsStatus;

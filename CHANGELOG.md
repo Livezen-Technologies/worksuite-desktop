@@ -17,7 +17,7 @@ person who has to live with the change — what it does, and where it bites.
   Kaputa — becomes Unicode in a new **Sinhala Tools** app: paste or drop it and the Unicode appears as you type, with
   the characters a font profile has no mapping for listed and left as they were, never dropped. Drop or pick Word
   documents and each is converted on this computer into `name (Unicode).docx` beside the original, which is not
-  touched. A Drive file is converted by the server while online (it writes a new version); offline, its copy here is
+  touched. A Drive file (DOCX or PPTX) is converted by the server while online: its preview — before and after, paragraphs changed, characters left unmapped — comes first, and nothing is saved until **Save as new version** (if the file changed meanwhile the server refuses and says so; **Discard** changes nothing); offline, its copy here is
   converted and goes up as the file's new version when WorkSuite is back (if the file changed meanwhile, both are kept).
   Sinhala Tools 1.0.0.
 - **Convert clipboard to Unicode, from any app.** Ctrl+Shift+U (⌘⇧U on a Mac) or the tray's line converts copied
@@ -32,12 +32,14 @@ person who has to live with the change — what it does, and where it bites.
   work to the Sinhala Tools plugin the Document Server serves — the editor's content-security policy is unchanged. In
   the built-in editor, **Sinhala to Unicode** converts the open .docx here, offline too, unsaved until you Save.
   Office 1.4.0.
-- **Where it bites.** The tools show only when the server offers `api/sinhala` (WorkSuite's Sinhala module), the
-  organisation has them on and the person has `sinhala.use`; an older server shows nothing. Font profiles are used only
+- **Where it bites.** The tools show only when the server's `GET api/sinhala/status` says so (WorkSuite's Sinhala
+  module: the person has `sinhala.use` and the organisation has them on); an older server without it shows nothing.
+  While only the server's engine is down, converting on this computer still works. Font profiles are used only
   after their sha256 checks out (and their Ed25519 signature, once the server signs them); the last good set is kept
   for offline use and a tampered one is refused. The engine is `@worksuite/sinhala-core` 1.0.0, pinned from
-  worksuite-office (`npm run sinhala:sync` / `sinhala:check`). The Office tab's commands need the plugin to listen for
-  them (its next release).
+  worksuite-office (`npm run sinhala:sync` / `sinhala:check`). The Office tab's commands reach the plugin as an external
+  plugin message, which the Document Server passes on only under a licence with `advancedApi`, and the plugin must
+  handle (its next release).
 - **Tasks: the boxes in List view pick tasks (#392).** The box at the start of a row was a "complete" tick that only
   changed after the server answered, and did nothing in Shared. It now picks the task; a bar over the list completes,
   reopens or sets the status of every picked task. Completing one task is the round tick before its title, and it
