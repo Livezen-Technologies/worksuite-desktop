@@ -277,6 +277,19 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./tenders/TendersShell'),
   },
   {
+    // Recruitment (WS-REC SRS §9, gap doc §9.3 D01–D05): the pipeline board, the review queue with the CV, my
+    // interviews today, the scorecard beside the Meet call (its own window too) and approvals waiting on me, over the
+    // staff API `/api/recruitment`. Nothing is kept for offline: every screen is a decision the server must see.
+    input: defineDesktopManifest({
+      id: 'recruitment', name: 'Recruitment', icon: 'user-plus', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['notifications'],
+      windows: [{ id: 'scorecard', route: '/recruitment?tab=cards&solo=1' }],
+      quickActions: [{ id: 'interviews-today', label: 'Interviews today', route: '/recruitment?tab=today' }],
+      deepLinks: ['recruitment'],
+    }),
+    load: () => import('./recruitment/RecruitmentShell'),
+  },
+  {
     // Figures are not cached for offline reading: a stale trial balance looks exactly like a current one.
     input: defineDesktopManifest({
       id: 'finance', name: 'Finance', icon: 'landmark', contractVersion: 1, desktop: { enabled: true },

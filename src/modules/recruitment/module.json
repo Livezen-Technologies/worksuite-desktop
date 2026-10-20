@@ -1,0 +1,7 @@
+{
+    "module": "recruitment",
+    "version": "1.0.0",
+    "paths": [
+        "shared/recruitment.ts"
+    ]
+}

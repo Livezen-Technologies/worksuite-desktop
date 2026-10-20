@@ -105,6 +105,8 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'marketing/queue', module: 'marketing', route: () => '/marketing?view=queue' },
   { pattern: 'marketing/contacts/:id', module: 'marketing', route: (p) => `/marketing?view=contacts&contact=${p.id}` },
   { pattern: 'marketing/campaigns/:id', module: 'marketing', route: (p) => `/marketing?view=campaigns&campaign=${p.id}` },
+  { pattern: 'recruitment', module: 'recruitment', route: () => '/recruitment' },
+  { pattern: 'recruitment/interviews/:id', module: 'recruitment', route: (p) => `/recruitment?tab=cards&interview=${p.id}` },
   { pattern: 'hr', module: 'hr', route: () => '/hr' },
   { pattern: 'hr/leave/:id', module: 'hr', route: (p) => `/hr/leave/${p.id}` },
   { pattern: 'notifications', module: 'notifications', route: () => '/notifications' },
