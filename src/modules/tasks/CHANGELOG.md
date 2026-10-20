@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-20
+
+- List view: pick tasks with the box at the start of a row and complete, reopen or move them together; the round tick completes a task at once (#392)
+
 ## 1.3.0 — 2026-10-14
 
 **Added**

@@ -65,7 +65,7 @@ export function MyStatus({ variant = 'chat', open = 0 }: { variant?: 'chat' | 'w
     </span>
   );
   const list = (
-    <div role="menu" aria-label={text('Your status')} className={cx('absolute z-30 w-52 rounded-[10px] border border-line bg-surface py-1 shadow-xl', variant === 'website' ? 'bottom-full left-0 mb-1' : 'top-9 left-0')}>
+    <div role="menu" aria-label={text('Your status')} className={cx('absolute z-30 w-52 rounded-[10px] border border-line bg-surface py-1 shadow-xl', variant === 'website' ? 'bottom-full left-0 mb-1' : 'top-11 left-0')}>
       {STATUS_CHOICES.map((c) => (
         <button key={c.id} type="button" role="menuitemradio" aria-checked={c.id === choice.id} onClick={() => void pick(c.id)} className="flex w-full items-center gap-2.5 px-3 py-1.5 text-left text-[13px] text-ink hover:bg-subtle">
           <span className={cx('h-2.5 w-2.5 rounded-full', c.dot)} /> {text(c.label)}
@@ -91,10 +91,15 @@ export function MyStatus({ variant = 'chat', open = 0 }: { variant?: 'chat' | 'w
     );
   }
   return (
-    <div ref={ref} className="relative flex flex-1 items-center gap-2">
-      {avatar(32)}
-      <button type="button" aria-haspopup="menu" aria-expanded={menu} onClick={() => setMenu(!menu)} className="h-[30px] flex-1 truncate rounded-[7px] border border-line px-2 text-left text-[12px] text-ink-2 hover:bg-subtle">
-        Set your status · {choice.label}
+    <div ref={ref} className="relative flex min-w-0 flex-1 items-center">
+      {/* #391: one control — who you are and how you show — easy to read and to hit. */}
+      <button type="button" aria-haspopup="menu" aria-expanded={menu} aria-label={text('Your status: {status}. Change it', { status: text(shown.label) })} title={text('Set your status')} onClick={() => setMenu(!menu)} className="flex h-10 min-w-0 flex-1 items-center gap-2 rounded-[10px] px-1.5 text-left hover:bg-subtle focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-primary">
+        {avatar(32)}
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className={cx('h-2 w-2 shrink-0 rounded-full', shown.dot)} />
+          <span className="truncate text-[13px] font-semibold text-ink">{text(shown.label)}</span>
+        </span>
+        <Icon name="chevron-down" size={14} className="shrink-0 text-ink-3" />
       </button>
       {menu ? list : null}
     </div>

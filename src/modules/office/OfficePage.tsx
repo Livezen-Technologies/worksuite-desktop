@@ -21,7 +21,7 @@ import { EditorSurface } from './EditorSurface';
 import { OfficeHome } from './OfficeHome';
 import { ClassicEditor } from './ClassicEditor';
 import { BuiltinEditor } from './BuiltinEditor';
-import { driveCopy, linkedLocal, writeBack, writeBackLater } from './copies';
+import { driveCopy, linkedSource, writeBack, writeBackLater } from './copies';
 import { useOfficeRouting } from '../files/office';
 import { ConflictDialog, LocalCopyRow, externalApps, openInApp, useLocalCopies } from './local';
 import { OfficeSession, type OfficeState } from './session';
@@ -59,19 +59,20 @@ function OfficeTab({ tabId, fileId, requested, routeName, active }: { tabId: str
   const routing = useOfficeRouting();
   // Decided when the tab opens: a connection lost later leaves the editor that is open alone.
   const [offline] = useState(() => app.get().status?.network === 'OFFLINE');
-  const [link] = useState(() => linkedLocal(fileId));
+  const [link] = useState(() => linkedSource(fileId));
   useEffect(() => (link ? () => writeBackLater(fileId) : undefined), [fileId, link]);
   if (offline) return <OfflineDocument tabId={tabId} fileId={fileId} routeName={routeName} active={active} />;
   if (routing.pending) return <Spinner label="Opening the document…" />;
   const editor = routing.legacy ? <ClassicEditor tabKey={tabId} fileId={fileId} routeName={routeName} active={active} /> : <OfficeDocument tabId={tabId} fileId={fileId} requested={requested} routeName={routeName} active={active} />;
   if (!link) return editor;
-  // A Drive copy of a file on this computer: its saves go back to that file too.
+  // A Drive copy of a file on this computer or of a tender document: its saves go back there too.
+  const where = link.kind === 'tender' ? `the tender's “${link.name}” (as its next version)` : `“${link.name}” on this computer`;
   return (
     <div className="flex h-full min-h-0 flex-col">
       <div role="status" className="flex shrink-0 items-center gap-2 border-b border-line bg-selection px-3.5 py-1.5 text-[12px] text-ink-2">
-        <span className="min-w-0 flex-1 truncate">This is a copy in WorkSuite copies. Its changes are written back to “{link.name}” on this computer when you close it.</span>
-        <Button size="sm" onClick={() => void writeBack(fileId).then(() => toast('success', `“${link.name}” updated on this computer.`), (e) => toast('error', errorMessage(e)))}>
-          Update the file now
+        <span className="min-w-0 flex-1 truncate" title={`This is a copy in WorkSuite copies. Its changes are written back to ${where} when you close it.`}>This is a copy in WorkSuite copies. Its changes are written back to {where} when you close it.</span>
+        <Button size="sm" onClick={() => void writeBack(fileId).then(() => toast('success', link.kind === 'tender' ? `“${link.name}” saved to the tender. Downloads now give this version.` : `“${link.name}” updated on this computer.`), (e) => toast('error', `Not saved: ${errorMessage(e)}`))}>
+          {link.kind === 'tender' ? 'Save to the tender now' : 'Update the file now'}
         </Button>
       </div>
       <div className="flex min-h-0 flex-1 flex-col">{editor}</div>

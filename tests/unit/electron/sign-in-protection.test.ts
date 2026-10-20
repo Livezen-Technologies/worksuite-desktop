@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { tmpdir } from 'node:os';
 import { describe, expect, it, vi } from 'vitest';
 
@@ -19,7 +20,7 @@ vi.mock('electron', () => ({
 import type { SignInGate } from '@shared/types';
 import { SessionController, type SessionHooks } from '../../../electron/main/session';
 import { contentSecurityPolicy } from '../../../electron/security/hardening';
-import { AuthService } from '../../../electron/services/auth';
+import { AuthService, canonicalOrigin } from '../../../electron/services/auth';
 import { BootstrapService } from '../../../electron/services/bootstrap';
 import { captchaNavigationAllowed, captchaPageUrl, captchaTokenFrom } from '../../../electron/services/captcha-window';
 import { Database } from '../../../electron/services/db';
@@ -218,6 +219,26 @@ describe('AuthService', () => {
 
     known = true;
     expect((await auth.signIn('ann@x.lk', 'pw')).kind).toBe('signed-in');
+  });
+
+  it('the remembered token survives the server address being written differently (#390)', async () => {
+    const { auth } = setup((r) => (r.path === '/api/auth/device' ? ok({ user: USER, tokens: TOKENS, device_token: DEVICE_TOKEN }) : r.path === '/api/auth/login' ? deviceStep() : undefined));
+    await auth.signIn('ann@x.lk', 'pw');
+    await auth.verifyDevice('123456', true);
+    // The same server after a probe or a redirect: a trailing slash, capitals.
+    auth.setServer({ origin: 'HTTPS://WS.example/', name: 'WS', api: 'core', minimumVersion: null, locked: false, passkey: null });
+    expect(auth.deviceHeader()).toEqual({ 'X-Device-Token': DEVICE_TOKEN });
+  });
+
+  it('a token kept under the address as first written is still found, and moved', () => {
+    const { auth, kept, db } = setup(() => undefined);
+    auth.setServer({ origin: 'https://ws.example/', name: 'WS', api: 'core', minimumVersion: null, locked: false, passkey: null });
+    const legacy = 'auth:device:' + createHash('sha256').update('https://ws.example/\nann@x.lk').digest('hex').slice(0, 40);
+    kept.set(legacy, DEVICE_TOKEN);
+    db.setConfig('device_email', 'ann@x.lk');
+    expect(auth.deviceHeader()).toEqual({ 'X-Device-Token': DEVICE_TOKEN });
+    expect(kept.has(legacy)).toBe(false);
+    expect(canonicalOrigin('HTTPS://WS.example:443/')).toBe('https://ws.example');
   });
 
   it('not remembering a computer keeps no token, and the next sign-in is verified again', async () => {

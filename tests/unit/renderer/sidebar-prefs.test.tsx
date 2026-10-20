@@ -222,7 +222,7 @@ describe('the Pinned section', () => {
     app.set({ prefs: { ...app.get().prefs!, sidebarMode: 'collapsed' } });
     await start();
     render(wrap(<Sidebar />));
-    expect(screen.getByRole('navigation', { name: 'Apps' }).className).toContain('w-[64px]');
+    expect(screen.getByRole('navigation', { name: 'Apps' }).className).toContain('w-[68px]');
     expect(screen.queryByText('Pinned')).toBeNull();
     expect(document.querySelector('[data-pinned-divider]')).toBeTruthy();
     expect(itemButton('mail').querySelector('[data-pin-marker]')).toBeTruthy();
@@ -238,11 +238,11 @@ describe('the Pinned section', () => {
     await start();
     render(wrap(<Sidebar />));
     const nav = screen.getByRole('navigation', { name: 'Apps' });
-    expect(nav.className).toContain('w-[64px]');
+    expect(nav.className).toContain('w-[68px]');
     rightClick('mail');
     expect(nav.className).toContain('w-[220px]');
     fireEvent.keyDown(window, { key: 'Escape' });
-    expect(nav.className).toContain('w-[64px]');
+    expect(nav.className).toContain('w-[68px]');
   });
 });
 

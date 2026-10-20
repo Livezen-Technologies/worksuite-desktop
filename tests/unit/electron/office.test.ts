@@ -127,7 +127,7 @@ const fake = vi.hoisted(() => {
       this.background = c;
     }
   }
-  const windows = new Map<unknown, { children: unknown[]; closed: Handler[]; focused: number; inUse: boolean; isFocused: () => boolean; contentView: { addChildView: (v: unknown) => void; removeChildView: (v: unknown) => void }; isDestroyed: () => boolean; isMinimized: () => boolean; restore: () => void; show: () => void; focus: () => void; once: (e: string, fn: Handler) => void }>();
+  const windows = new Map<unknown, { children: unknown[]; closed: Handler[]; focused: number; inUse: boolean; isFocused: () => boolean; contentView: { addChildView: (v: unknown) => void; removeChildView: (v: unknown) => void }; isDestroyed: () => boolean; isMinimized: () => boolean; isFullScreen: () => boolean; setFullScreen: (on: boolean) => void; restore: () => void; show: () => void; focus: () => void; once: (e: string, fn: Handler) => void }>();
   function windowFor(owner: unknown) {
     let w = windows.get(owner);
     if (!w) {
@@ -144,6 +144,8 @@ const fake = vi.hoisted(() => {
         contentView: { addChildView: (v) => children.push(v), removeChildView: (v) => children.splice(children.indexOf(v), 1) },
         isDestroyed: () => false,
         isMinimized: () => false,
+        isFullScreen: () => false,
+        setFullScreen: () => undefined,
         restore: () => undefined,
         show: () => undefined,
         focus() {

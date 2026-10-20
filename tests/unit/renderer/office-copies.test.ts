@@ -1,14 +1,14 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
-vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGetMeta: vi.fn(), apiPost: vi.fn() }));
+vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGetMeta: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn(async () => ({})) }));
 vi.mock('../../../src/core/upload', () => ({ uploadBlob: vi.fn(async () => ({ uploadId: 'u', fileId: 900 })) }));
 vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(async (ch: string) => (ch === 'office:readFile' ? new Uint8Array([0x50, 0x4b, 1]) : { size: 3 })), on: () => () => undefined, errorMessage: (e: unknown) => String(e), isMac: false, platform: 'linux', registerDropped: vi.fn() }));
 
-const { apiGetMeta, apiPost } = await import('../../../src/core/api');
+const { apiGetMeta, apiPost, apiPut } = await import('../../../src/core/api');
 const { uploadBlob } = await import('../../../src/core/upload');
 const { call } = await import('../../../src/core/bridge');
-const { driveCopy, linkedLocal, writeBack, COPIES_FOLDER } = await import('../../../src/modules/office/copies');
+const { driveCopy, linkedSource, writeBack, COPIES_FOLDER } = await import('../../../src/modules/office/copies');
 
 describe('online, a document that is not a Drive file opens as a Drive copy in the Document Server', () => {
   beforeEach(() => {
@@ -25,7 +25,7 @@ describe('online, a document that is not a Drive file opens as a Drive copy in t
     // The same attachment again: the same copy, nothing uploaded twice.
     await driveCopy(src);
     expect(uploadBlob).toHaveBeenCalledTimes(1);
-    expect(linkedLocal(900)).toBeNull();
+    expect(linkedSource(900)).toBeNull();
   });
 
   it('links a copy of a file on this computer, and writes the Drive version back to it', async () => {
@@ -33,9 +33,18 @@ describe('online, a document that is not a Drive file opens as a Drive copy in t
     const src = { kind: 'local' as const, handle: '0e9c3a2e-5b1f-4c7e-9a41-2f1d7c9b8e10', name: 'Budget.xlsx' };
     await driveCopy(src);
     expect(call).toHaveBeenCalledWith('office:readFile', { handle: src.handle });
-    expect(linkedLocal(901)).toEqual({ handle: src.handle, name: 'Budget.xlsx' });
+    expect(linkedSource(901)).toEqual({ kind: 'local', handle: src.handle, name: 'Budget.xlsx' });
     expect(await writeBack(901)).toBe(true);
     expect(call).toHaveBeenCalledWith('office:writeFile', { handle: src.handle, bytes: new Uint8Array([0x50, 0x4b, 9]) });
     expect(await writeBack(12345)).toBe(false);
+  });
+
+  it('links a copy of a tender document, and saves it back as the tender\'s next version (#393)', async () => {
+    vi.mocked(uploadBlob).mockResolvedValueOnce({ uploadId: 'u3', fileId: 902 });
+    const src = { kind: 'api' as const, path: '/api/tenders/documents/77/file', name: 'Bid.docx' };
+    await driveCopy(src);
+    expect(linkedSource(902)).toEqual({ kind: 'tender', docId: 77, path: src.path, name: 'Bid.docx' });
+    expect(await writeBack(902)).toBe(true);
+    expect(apiPut).toHaveBeenCalledWith('/api/tenders/documents/77', { file_id: 902 });
   });
 });

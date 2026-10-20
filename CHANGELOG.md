@@ -11,6 +11,31 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+
+- **Tasks: the boxes in List view pick tasks (#392).** The box at the start of a row was a "complete" tick that only
+  changed after the server answered, and did nothing in Shared. It now picks the task; a bar over the list completes,
+  reopens or sets the status of every picked task. Completing one task is the round tick before its title, and it
+  shows at once. Tasks 1.4.0.
+- **Tenders: an edited document is the one you download (#393).** Opening a tender's Word file edits a copy in
+  WorkSuite copies, and nothing wrote it back, so the tender's Download still gave the file as it was. The copy now goes
+  back to the tender as its next version when you close it, or straight away with **Save to the tender now**; that
+  only says "saved" once the server has stored it. Files are no longer read from the browser cache, so a document
+  replaced since opens as it is now. Formatting is the Document Server's own .docx, nothing converted. Office 1.3.3.
+- **Fewer sign-in codes (#390).** The remembered-computer token is found again when the server address is written
+  slightly differently (a trailing slash, capitals) and moved to one key. The server side, WorkSuite Auth 2.8.1,
+  stops a stale browser cookie from hiding the app's token; both are needed for the full fix.
+- **The title bar no longer disappears while editing documents (#388).** The document editor could take the whole
+  window full screen, which on Windows hides the title bar and its buttons and left a blank strip. It may not any
+  more, and the window comes back at once if it ever does. Several End Tasks in a row start the next launch in Safe
+  Mode (no hardware acceleration, so slower); that is the "slow to reopen" — use Restart normally on its banner.
+- **Collapsed sidebar (#387):** larger icons (22px) on full-size targets, and a slightly wider rail.
+- **Chat header (#391):** your status is one clear control (avatar, coloured dot, status, chevron); Starred, Select
+  and New are 36px buttons with hover, press and keyboard-focus states and tooltips. The chat drawer's header icons
+  are larger too. Chat 2.0.1.
+- **Moving between monitors (#389):** a window dragged to a monitor with other scaling takes that monitor's smallest
+  size and is fitted to it, so it never hangs off a 200% laptop screen.
+
 ## 0.2.269 — 2026-10-19
 
 - After a manual update check finds a newer version, a modal offers **Update now**, **Update later** (a one-hour reminder), or **Schedule** (install when work finishes or on quit). Works with automatic downloads and previously dismissed offers; required and critical updates keep their existing policy behavior. Choosing installation on quit enables that preference for future updates too.
