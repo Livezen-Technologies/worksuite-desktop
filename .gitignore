@@ -15,3 +15,6 @@ playwright-report/
 
 # Reproducible translator exports (npm run localization:report)
 docs/localization/missing-*.json
+
+# The pinned Sinhala engine ships its built files (scripts/sync-sinhala-core.mjs)
+!vendor/sinhala-core/dist/
