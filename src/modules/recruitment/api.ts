@@ -217,7 +217,12 @@ export const fetchKit = (id: number, signal?: AbortSignal) => apiGet<Kit>(`${B}/
 export type Recommendation = 'PROCEED' | 'HOLD' | 'ADDITIONAL_INTERVIEW' | 'REJECT' | 'FINAL_SELECTION';
 export interface Rating { criterion_id: number | string; rating: number | null; comment: string }
 export interface ScorecardDraft { ratings: Rating[]; notes: string; recommendation: Recommendation | null }
-export interface Evaluation extends Partial<ScorecardDraft> { id: number; interview_id: number; status: 'DRAFT' | 'SUBMITTED' }
+/** A saved scorecard. The server sends its per-criterion list as `scores`; its `ratings` is a criterion → rating map. */
+export interface Evaluation extends Omit<Partial<ScorecardDraft>, 'ratings'> {
+  id: number; interview_id: number; status: 'DRAFT' | 'SUBMITTED';
+  ratings?: Rating[] | Record<string, number>;
+  scores?: Array<{ criterion_id: number | string; rating: number | null; comment?: string | null }>;
+}
 
 export const fetchMyEvaluation = (interview: number, signal?: AbortSignal) =>
   apiGet<unknown>(`${B}/evaluations`, { interview_id: interview, mine: 1 }, signal).then((v) => rows<Evaluation>(v)[0] ?? null);

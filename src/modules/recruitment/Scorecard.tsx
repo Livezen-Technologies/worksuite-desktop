@@ -100,7 +100,8 @@ export function draftFrom(ev: Evaluation | null, criteria: Criterion[]): Scoreca
   if (!ev) return d;
   return {
     ratings: d.ratings.map((r) => {
-      const had = ev.ratings?.find((x) => String(x.criterion_id) === String(r.criterion_id));
+      // The server's per-criterion list is `scores`; its `ratings` is a criterion → rating map.
+      const had = (ev.scores ?? (Array.isArray(ev.ratings) ? ev.ratings : []))?.find((x) => String(x.criterion_id) === String(r.criterion_id));
       return had ? { ...r, rating: had.rating ?? null, comment: had.comment ?? '' } : r;
     }),
     notes: ev.notes ?? '',
