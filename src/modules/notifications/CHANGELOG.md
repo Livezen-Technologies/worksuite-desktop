@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.6.0 — 2026-10-21
+
+**Added**
+
+- AMC's new-request banner (amc.request.logged) carries Open and Give to, and AMC notices link to the desktop's AMC screen
+
 ## 2.5.0 — 2026-10-21
 
 **Added**
