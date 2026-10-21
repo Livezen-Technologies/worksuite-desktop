@@ -13,6 +13,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **Tender competitors.** Once a tender is submitted (the server's `GET /api/tenders/{id}/competitors` says
+  `available`), its workspace gains a **Competitors** tab: the other bidders, lowest bid price first and marked
+  Lowest, prices in their currency. People the server lets edit (`can.edit`) add, edit and delete them (delete asks
+  first); a refused field is shown under that field. Before submission the tab is not shown. Tenders module 1.9.0.
 - **WorkSuite Board on the desktop.** A new **Board** app (Work) for directors and secretaries with `board.access`:
   a director's home with board and committee tabs, the next meetings flagged NEW or AMENDED, what's new for you,
   pending decisions and a Director brief; the calendar; each meeting's agenda with meeting information,

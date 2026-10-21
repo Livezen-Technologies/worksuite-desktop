@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.9.0 — 2026-10-21
+
+- Competitors tab on a submitted tender: other bidders sorted by bid price with the lowest marked; add, edit and delete (with a confirm) where the server allows, field errors shown under each field
+
 ## 1.8.0 — 2026-10-20
 
 - Documents: Edit online / Open online in the WorkSuite Office tab (the server's mode), and Versions — view, save, compare two side by side, restore

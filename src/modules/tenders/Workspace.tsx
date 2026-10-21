@@ -10,7 +10,7 @@ import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, btnSmall, Empty, Facts, Field, input, Panel, Sheet } from '../hr/parts';
 import { Pill } from '../inventory/parts';
-import { addNote, fetchBlockers, fetchTender, K, money, moveStage, recordLoss, recordWin, refusalOf, rescore, setFollowing, type Band, type LoseDraft, type WinDraft, type Workspace as Data } from './api';
+import { addNote, fetchBlockers, fetchCompetitors, fetchTender, K, KC, money, moveStage, recordLoss, recordWin, refusalOf, rescore, setFollowing, type Band, type LoseDraft, type WinDraft, type Workspace as Data } from './api';
 import Approvals from './Approvals';
 import Bonds from './Bonds';
 import Budget from './Budget';
@@ -18,6 +18,7 @@ import Expenses from './Expenses';
 import { amount, expensesTabLabel, varianceLine } from './bidcost';
 import Checklist from './Checklist';
 import ContactPersons from './ContactPersons';
+import Competitors from './Competitors';
 import { fetchContactPersons, K3, tabLabel } from './persons';
 import Decision from './Decision';
 import Documents from './Documents';
@@ -40,8 +41,8 @@ import { Left, openWeb, OutcomePill, PriorityPill, Score, StagePill, subline } f
  * The working tabs — checklist, documents, bonds, meetings, budget, costs and
  * approvals — open in the browser for now.
  */
-type Tab = 'overview' | 'checklist' | 'documents' | 'contacts' | 'bonds' | 'meetings' | 'budget' | 'expenses' | 'mail' | 'approvals' | 'notice' | 'decision' | 'history' | 'activity';
-const TABS: Tab[] = ['overview', 'checklist', 'documents', 'contacts', 'bonds', 'meetings', 'budget', 'expenses', 'mail', 'approvals', 'notice', 'decision', 'history', 'activity'];
+type Tab = 'overview' | 'checklist' | 'documents' | 'contacts' | 'bonds' | 'meetings' | 'budget' | 'expenses' | 'mail' | 'approvals' | 'notice' | 'decision' | 'competitors' | 'history' | 'activity';
+const TABS: Tab[] = ['overview', 'checklist', 'documents', 'contacts', 'bonds', 'meetings', 'budget', 'expenses', 'mail', 'approvals', 'notice', 'decision', 'competitors', 'history', 'activity'];
 
 type Ask = { kind: 'move'; to: string; label: string; blockers: string[] } | { kind: 'cancel' } | { kind: 'win' } | { kind: 'lose' };
 
@@ -71,6 +72,8 @@ export default function Workspace({
   const q = useQuery({ queryKey: K.tender(id), queryFn: ({ signal }) => fetchTender(id, signal), refetchOnMount: 'always' });
   // For the tab's count; the tab itself reads the same query.
   const persons = useQuery({ queryKey: K3.persons(id), queryFn: ({ signal }) => fetchContactPersons(id, signal), refetchOnMount: 'always' });
+  // The Competitors tab is there once the server says the tender is submitted.
+  const rivals = useQuery({ queryKey: KC.competitors(id), queryFn: ({ signal }) => fetchCompetitors(id, signal), refetchOnMount: 'always' });
   const [ask, setAsk] = useState<Ask | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
   const perms = useStore(app, (s) => s.bootstrap?.permissions);
@@ -96,7 +99,8 @@ export default function Workspace({
    * says whether this tender's expenses are theirs to see (`bid_cost.visible`).
    */
   const showExpenses = can(perms, 'expense.view') && d.bid_cost?.visible !== false;
-  const t: Tab = (TABS as string[]).includes(tab) && (tab !== 'expenses' || showExpenses) ? (tab as Tab) : 'overview';
+  const showCompetitors = rivals.data?.available === true;
+  const t: Tab = (TABS as string[]).includes(tab) && (tab !== 'expenses' || showExpenses) && (tab !== 'competitors' || showCompetitors) ? (tab as Tab) : 'overview';
 
   const act = async (key: string, fn: () => Promise<unknown>, done: string) => {
     setBusy(key);
@@ -243,6 +247,7 @@ export default function Workspace({
             ['approvals', d.approvals.some((a) => a.status === 'pending') ? `Approvals · ${d.approvals.filter((a) => a.status === 'pending').length} pending` : 'Approvals'],
             ['notice', 'Notice'],
             ['decision', 'Submission'],
+            ...(showCompetitors ? ([['competitors', rivals.data?.competitors.length ? `Competitors · ${rivals.data.competitors.length}` : 'Competitors']] as Array<[Tab, string]>) : []),
             ['history', `History · ${d.history.length}`],
             ['activity', 'Notes'],
           ] as Array<[Tab, string]>
@@ -272,6 +277,7 @@ export default function Workspace({
       {t === 'mail' ? <RecordMail kind="tender" id={id} /> : null}
       {t === 'expenses' ? <Expenses id={id} tender={{ title: r.title, reference: r.reference, currency: r.currency }} /> : null}
       {t === 'approvals' ? <Approvals id={id} org={org} rows={d.approvals} canManage={canManage} canApprove={canApprove} /> : null}
+      {t === 'competitors' ? <Competitors id={id} /> : null}
       {t === 'notice' ? <Notice id={id} canManage={canManage} /> : null}
       {t === 'decision' ? <Decision d={d} canManage={canManage} /> : null}
       {t === 'history' ? <History d={d} /> : null}
