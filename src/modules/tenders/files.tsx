@@ -192,11 +192,11 @@ export function AttachMenu({ label = 'Attach', disabled, onComputer, onDrive, sm
   );
 }
 
-type Source = { tenderDocument: number } | { tenderLine: { line: number; version?: number } } | { tenderLetter: { tender: number; letter: number } } | { tenderLibrary: number };
+type Source = { tenderDocument: number; tenderDocumentVersion?: number } | { tenderLine: { line: number; version?: number } } | { tenderLetter: { tender: number; letter: number } } | { tenderLibrary: number };
 
 /** Where this server serves a tender's file (the same paths the download manager fetches). */
 export function tenderFilePath(source: Source): string {
-  if ('tenderDocument' in source) return `/api/tenders/documents/${source.tenderDocument}/file`;
+  if ('tenderDocument' in source) return source.tenderDocumentVersion ? `/api/tenders/documents/${source.tenderDocument}/versions/${source.tenderDocumentVersion}/file` : `/api/tenders/documents/${source.tenderDocument}/file`;
   if ('tenderLine' in source) return `/api/tenders/checklist/${source.tenderLine.line}/download${source.tenderLine.version ? `?v=${source.tenderLine.version}` : ''}`;
   if ('tenderLetter' in source) return `/api/tenders/${source.tenderLetter.tender}/letters/${source.tenderLetter.letter}/download`;
   return `/api/tender/library/${source.tenderLibrary}/file`;

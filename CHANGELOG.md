@@ -13,6 +13,13 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **Tender documents: online editing and versions.** Each Word, Excel or PowerPoint document on a tender has
+  **Edit online** (or **Open online** for those who may only read): it opens the document's Drive file in the
+  WorkSuite Office tab, in the mode the server gives (`/api/tenders/documents/{id}/online`). The new **Versions**
+  button lists every save, Replace and restore — view or save any version to your downloads, compare two side by
+  side (a line diff of their words), or restore one as the newest version after a confirm. Buttons follow the
+  server's `can`. A Replace the server keeps as a new version of the same file says so. tenders 1.8.0.
+
 - **Recruitment on the desktop.** A new **Recruitment** app (People) for those with `recruitment.access`: the
   pipeline board (drag a candidate to another stage; moving back or out asks for a reason), the review queue with
   the CV beside it and J / K / A / S / R keys, my interviews today with Join Meet, the scorecard docked beside the

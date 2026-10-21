@@ -45,5 +45,7 @@ describe("a tender's files are downloaded by what they are, never by a path", ()
     expect(input.safeParse({ tenderLibrary: 103, name: 'Tax clearance.pdf' }).success).toBe(true);
     expect(input.safeParse({ tenderDocument: 4, tenderLetter: { tender: 7, letter: 2 }, name: 'x.pdf' }).success).toBe(false);
     expect(input.safeParse({ tenderLine: { line: -1 }, name: 'x.pdf' }).success).toBe(false);
+    expect(input.safeParse({ tenderDocument: 4, tenderDocumentVersion: 2, name: 'Spec (v2).pdf' }).success).toBe(true);
+    expect(input.safeParse({ tenderDocumentVersion: 2, name: 'x.pdf' }).success).toBe(false);
   });
 });
