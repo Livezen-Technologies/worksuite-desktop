@@ -1,0 +1,9 @@
+{
+    "module": "board",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/board-vault.ts",
+        "shared/board.ts",
+        "shared/ipc/board-channels.ts"
+    ]
+}

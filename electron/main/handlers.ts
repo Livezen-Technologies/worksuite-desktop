@@ -883,6 +883,17 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('elearning:offlineDownload', (input) => ctx.elearning.download(input.courseId, input.title));
   router.handle('elearning:offlineRemove', (input) => ctx.elearning.remove(input.courseId));
   router.handle('elearning:offlineValidate', () => ctx.elearning.validate());
+  // WorkSuite Board's offline pack vault (electron/services/board-vault.ts).
+  router.handle('board:vaultStatus', () => ctx.board.status());
+  router.handle('board:packDownload', (input) => ctx.board.download(input.meetingId));
+  router.handle('board:packOpen', (input) => ctx.board.open(input.meetingId));
+  router.handle('board:packRemove', (input) => ctx.board.remove(input.meetingId));
+  router.handle('board:queueAdd', (input) => ctx.board.enqueue(input));
+  router.handle('board:queueList', () => ctx.board.queue());
+  router.handle('board:respondOffline', (input) => ctx.board.respondOffline(input));
+  router.handle('board:sync', () => ctx.board.sync());
+  router.handle('board:search', (input) => ctx.board.search(input.q));
+  router.handle('board:verify', (input) => ctx.lock.verifyPresence(input.reason));
   router.handle('transfers:prepareMedia', (input) => ctx.transfers.prepareMedia(input));
   router.handle('transfers:upload', (input, c) => {
     // A file for a remote-control session goes only from the meeting window that controls it; the shared

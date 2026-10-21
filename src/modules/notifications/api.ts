@@ -135,6 +135,7 @@ export const APPS: Record<string, { short: string; icon: string; acc: string; ti
   billing: { short: 'Invoices', icon: 'receipt', acc: '#9B7CF6', tint: '#1F1836', tintLight: '#F1ECFE' },
   calendar: { short: 'Calendar & Meet', icon: 'calendar', acc: '#E0629B', tint: '#2A1624', tintLight: '#FCE7F1' },
   files: { short: 'Drive', icon: 'folder', acc: '#F0A43A', tint: '#2A2213', tintLight: '#FDF1DF' },
+  board: { short: 'Board', icon: 'landmark', acc: '#7B93F6', tint: '#18203A', tintLight: '#EEF1FD' },
   recruitment: { short: 'Recruitment', icon: 'user-plus', acc: '#9B7CF6', tint: '#1F1836', tintLight: '#F1ECFE' },
   hr: { short: 'HR', icon: 'id-card', acc: '#3FB7C8', tint: '#10262B', tintLight: '#E1F4F6' },
   payroll: { short: 'Payroll', icon: 'wallet', acc: '#3FB7C8', tint: '#10262B', tintLight: '#E1F4F6' },

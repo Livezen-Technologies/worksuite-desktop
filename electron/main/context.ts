@@ -36,6 +36,7 @@ import type { SalonDesk } from '../services/salon-desk';
 import type { SalonPrint } from '../services/salon-print';
 import type { SalonSync } from '../services/salon-sync';
 import type { ElearningOffline } from '../services/elearning-offline';
+import type { BoardVault } from '../services/board-vault';
 import type { EventDesk } from '../services/event-desk';
 import type { EventDeskPrint } from '../services/event-desk-print';
 import type { OfficeEditorHost } from '../services/office-editor';
@@ -75,6 +76,8 @@ export interface AppContext {
   salonSync: SalonSync;
   /** eLearning's courses kept offline: encrypted copies, played inside the app (elearning-offline.ts). */
   elearning: ElearningOffline;
+  /** WorkSuite Board's encrypted offline pack vault (board-vault.ts). */
+  board: BoardVault;
   /** WorkSuite Events' desk: this computer as a check-in device, its key, offline copy and queue (event-desk.ts), and its badge printer. */
   eventDesk: EventDesk;
   eventDeskPrint: EventDeskPrint;

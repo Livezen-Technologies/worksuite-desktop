@@ -134,6 +134,7 @@ import { MeetRecorder } from '../services/meet-recorder';
 import { SpeechService } from '../services/speech';
 import { TransferManager, queueConfig, type DownloadSink } from '../services/transfers';
 import { ElearningOffline } from '../services/elearning-offline';
+import { BoardVault } from '../services/board-vault';
 import { createBrokerCall, osDeviceServer, readOsDevice, startOsSession, type BrokerTokenEndpoint } from '../services/os-mode';
 import { EventDesk } from '../services/event-desk';
 import { EventDeskPrint } from '../services/event-desk-print';
@@ -824,6 +825,24 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         ? { ok: true, reason: null }
         : { ok: false, reason: 'Your organization does not allow WorkSuite data to be kept offline on this computer.' },
     changed: () => broadcast('elearning:offlineChanged'),
+  });
+  // WorkSuite Board: meeting packs kept offline in an encrypted vault, its queue and offline circular responses.
+  const board = new BoardVault({
+    http,
+    download: async (path) => {
+      const res = await http.raw('GET', http.url(path));
+      if (!res.ok) return null;
+      return new Uint8Array(await res.arrayBuffer());
+    },
+    secrets,
+    root: () => join(accountPaths().dir, 'board'),
+    userId: () => (sessionCtl.isReady() ? String(sessionCtl.userId()) : null),
+    deviceId: () => device.current()?.id ?? null,
+    allowed: () =>
+      sessionCtl.capabilities().offlineCache
+        ? { ok: true, reason: null }
+        : { ok: false, reason: 'Your organization does not allow WorkSuite data to be kept offline on this computer.' },
+    changed: () => broadcast('board:vaultChanged'),
   });
   // WorkSuite Events' desk: this computer as a check-in device at an event, its key, offline copy and queue.
   const eventDesk = new EventDesk({
@@ -1879,6 +1898,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     calls.handle(e);
     aiPending.handle(e as { type?: string });
     remoteControl.onRealtime(e as { type?: string; meeting?: string });
+    board.handleRealtime(e as { type?: string; device_id?: unknown });
     if (!lock.isLocked()) broadcast('realtime:event', e);
     else for (const win of BrowserWindow.getAllWindows()) {
       const scope = scopeFor(win.webContents);
@@ -2784,6 +2804,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       }
       // Courses kept offline go with the app.
       if (!canOpenApp('elearning', visible)) void elearning.wipeUser(b.user.id).catch((e) => log.warn('offline courses not removed', { error: String(e) }));
+      // Board packs kept offline go with the Board app.
+      if (!canOpenApp('board', visible)) board.wipe('policy');
       // So do an event desk's copies of the gates' tickets (scans still unsent wait, should the app come back).
       if (!canOpenApp('events', visible)) eventDesk.signedOut(b.user.id);
       if (!canOpenApp('restaurant', visible)) restaurant.signedOut(b.user.id);
@@ -2835,6 +2857,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     projects.start();
     // Courses kept offline: the ones whose learning ended, or whose licence ran out, go.
     void elearning.validate().catch((e) => log.warn('offline courses not checked', { error: String(e) }));
+    // Board: what waited offline goes up, revocations and expiries are applied.
+    void board.sync().catch(() => undefined);
     void audit.flush();
     void refreshAttendance();
     attendanceTimer = setInterval(() => void refreshAttendance(), 5 * 60_000);
@@ -2964,6 +2988,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (scope === 'cache+offline_files') void sync.wipe(uid, false);
       // So are the courses kept for offline learning.
       if (scope === 'cache+offline_files') void elearning.wipeUser(uid).catch(() => undefined);
+      // And Board's offline vault (FR-DEV-02): its own folder and keys, never the person's files.
+      if (scope === 'cache+offline_files') board.wipeAll();
       // A remote wipe, or signing out with "remove WorkSuite's data", forgets
       // the salon desk this computer was, and its printers; a plain sign-out keeps them.
       if (includeDrafts) {
@@ -3117,6 +3143,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     void restaurant.sync.sync();
     void projects.reconnected();
     void elearning.validate().catch(() => undefined);
+    void board.sync().catch(() => undefined);
     broadcast('realtime:resync');
   }
 
@@ -3326,6 +3353,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     salonPrint,
     salonSync,
     elearning,
+    board,
     eventDesk,
     eventDeskPrint,
     settings,

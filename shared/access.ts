@@ -148,6 +148,7 @@ export const NOTIFICATION_CATEGORY_APPS: Readonly<Record<string, readonly string
   tender: ['tenders'],
   hr: ['hr'],
   recruitment: ['recruitment'],
+  board: ['board'],
   hrm: ['hr'],
   leave: ['hr'],
   attendance: ['hr'],

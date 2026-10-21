@@ -69,6 +69,11 @@ const DENY: RegExp[] = [
   // there under the device policy. No page — Quick Ask's included — does either for itself.
   /^\/api\/ai\/pending\/\d+\/confirm\/?$/,
   /^\/api\/ai\/context\/uploads\/?$/,
+  // Board's offline vault (board-vault.ts): grants, manifests, signed offline responses and wipe reports are the main
+  // process's, made with this device's keys; a page never keeps or signs its own copy.
+  /^\/api\/board\/offline\/(grants|manifest\/\d+)\/?$/,
+  /^\/api\/board\/circulars\/\d+\/offline-responses\/?$/,
+  /^\/api\/board\/devices\/[A-Za-z0-9-]{1,64}\/wipe-report\/?$/,
 ];
 
 /** The shared computer's grant (`?end=sharer`): its key never reaches a page. */

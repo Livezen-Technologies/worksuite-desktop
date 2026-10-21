@@ -146,6 +146,20 @@ export class LockService {
     }
   }
 
+  /**
+   * Step-up before a signature (Board FR-SIG): the OS's own check where Electron can ask for it (Touch ID). Elsewhere
+   * 'none' — the server then asks for its own step-up (password or MFA) with the signature.
+   */
+  async verifyPresence(reason: string): Promise<{ verified: boolean; method: 'touch-id' | 'none' }> {
+    if (this.biometric() !== 'touch-id') return { verified: false, method: 'none' };
+    try {
+      await systemPreferences.promptTouchID(reason);
+      return { verified: true, method: 'touch-id' };
+    } catch {
+      return { verified: false, method: 'touch-id' };
+    }
+  }
+
   /** Signed out or wiped: nothing left to protect. */
   reset(): void {
     if (this.locked) {

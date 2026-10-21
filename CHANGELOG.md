@@ -13,6 +13,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **WorkSuite Board on the desktop.** A new **Board** app (Work) for directors and secretaries with `board.access`:
+  a director's home with board and committee tabs, the next meetings flagged NEW or AMENDED, what's new for you and a
+  Director brief; the calendar; each meeting's agenda with meeting information, participants, item comments and AI
+  summaries; the pack reader with your own notes; annotations; search; approvals and signing (version and SHA-256
+  shown, verified before signing); your actions; the archive; notices; the live meeting room (present items,
+  quorum, votes that cannot open without quorum, live tally) and the secretary's live minutes with polls.
+  **Packs can be kept offline** in an encrypted vault whose key is in this computer's secure store; they expire on
+  the board's policy and are erased if an administrator revokes or blocks this computer — only Board's own data,
+  never your files. Notes, acknowledgements and, where the board allows, circular responses made offline are sent
+  when you reconnect; the server accepts or rejects each with a reason. Board 1.0.0, Notifications 2.5.0.
+
 - **Tender documents: online editing and versions.** Each Word, Excel or PowerPoint document on a tender has
   **Edit online** (or **Open online** for those who may only read): it opens the document's Drive file in the
   WorkSuite Office tab, in the mode the server gives (`/api/tenders/documents/{id}/online`). The new **Versions**

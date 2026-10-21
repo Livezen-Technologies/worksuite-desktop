@@ -119,6 +119,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in', guest: 'locked', guestLabel: 'HR & People' },
   // Recruitment (WS-REC): the server's app `recruitment`, opened with `recruitment.access`; its notices link
   // `/recruitment?tab=…` (shared/recruitment.ts). Requisitions, jobs, offers and settings stay on the web.
+  // WorkSuite Board (SRS-BOARD-001): the server's app `board`, opened with `board.access`; its notices link
+  // `/board?view=…` (shared/board.ts). Setup, pack building and registers stay on the web.
+  { id: 'board', label: 'Board', group: 'work', icon: 'landmark', app: 'board', perm: 'board.access', webPath: '/board', surface: 'native', sidebar: 'business', order: 142, keywords: 'board directors governance meetings packs papers agenda resolutions votes circulars minutes signing committee' },
   { id: 'recruitment', label: 'Recruitment', group: 'people', icon: 'user-plus', app: 'recruitment', perm: 'recruitment.access', webPath: '/recruitment', surface: 'native', sidebar: 'business', order: 141, keywords: 'recruitment hiring jobs vacancies candidates applicants pipeline interviews scorecards offers requisitions ats talent' },
 
   // Phone (WS-VOIP-SRS-001): the web's `/phone`, open to everyone signed in like the web's catalogue — the server has
