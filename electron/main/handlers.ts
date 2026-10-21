@@ -442,7 +442,7 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   // notification (which can only open the main window), and never through the page's API proxy.
   router.handle('ai:confirm', (input, c) => {
     if (winOf(c.sender) !== ctx.windows.getMain()) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'A change the assistant proposed is confirmed in the main window.');
-    return ctx.ai.confirm(input.id, input.nonce);
+    return ctx.ai.confirm(input.id, input.nonce, { phrase: input.phrase, stepUpCode: input.stepUpCode });
   });
   // A file from this computer, picked here: never a path the page names.
   // An answer ready while the window is behind others (#126): a banner, as the notification settings allow; none in front.
@@ -655,6 +655,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
   router.handle('stt:status', () => ctx.speech.status());
   router.handle('stt:chooseModel', (_i, c) => ctx.speech.chooseModel(winOf(c.sender) ?? null));
   router.handle('stt:removeModel', () => ctx.speech.removeModel());
+  router.handle('stt:catalog', () => ctx.speech.catalog());
+  router.handle('stt:install', (input) => ctx.speech.install(input.id));
   router.handle('stt:transcribe', async (input) => ({ segments: await ctx.speech.transcribe(input.wav, input.language) }));
   router.handle('speech:ready', (input, c) => ctx.speech.onReady(c.sender.id, input));
   router.handle('speech:result', (input, c) => ctx.speech.onResult(c.sender.id, input));

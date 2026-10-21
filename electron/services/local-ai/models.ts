@@ -47,6 +47,8 @@ export class LocalAIModelManager {
   private catalog: LocalAICatalog | null = null;
   private catalogAt: string | null = null;
   private catalogError: string | null = null;
+  /** Where the server's list came from (G-02): `{server: n, cdn?: n}`; null for the app's own CDN fallback. */
+  private catalogSources: Record<string, number> | null = null;
   private downloads = new Map<string, Download>();
   private failures = new Map<string, string>();
   private paused = new Set<string>();
@@ -127,13 +129,25 @@ export class LocalAIModelManager {
     try {
       got = await this.deps.serverCatalog();
     } catch (e) {
-      if ((e as { status?: unknown })?.status === 404) return false;
+      if ((e as { status?: unknown })?.status === 404) {
+        // The server's registry is the one catalogue (G-02, Q-02): when the workspace switched downloads off, the
+        // app's own CDN list is not a way round it. Only a server without the route at all falls back to the CDN.
+        const msg = e instanceof Error ? e.message : '';
+        if (/switched off/i.test(msg)) {
+          this.catalog = null;
+          this.catalogSources = null;
+          this.catalogError = msg;
+          return true;
+        }
+        return false;
+      }
       this.catalogError = e instanceof Error ? e.message : String(e);
       return true;
     }
-    const body = got as { catalog?: unknown; problems?: Record<string, string> };
+    const body = got as { catalog?: unknown; problems?: Record<string, string>; sources?: Record<string, unknown> };
     try {
       this.acceptServer(body?.catalog, true);
+      this.catalogSources = sourcesOf(body?.sources, this.catalog?.models.length ?? 0);
       await writeFile(join(this.deps.root, 'catalog.json'), JSON.stringify({ source: 'server', catalog: body.catalog }), { mode: 0o600 });
       const problems = Object.entries(body.problems ?? {});
       if (!this.catalog?.models.length && problems.length) {
@@ -169,8 +183,8 @@ export class LocalAIModelManager {
     this.changed();
   }
 
-  catalogState(): { at: string | null; error: string | null } {
-    return { at: this.catalogAt, error: this.catalogError };
+  catalogState(): { at: string | null; error: string | null; sources: Record<string, number> | null } {
+    return { at: this.catalogAt, error: this.catalogError, sources: this.catalogSources };
   }
 
   private find(id: string): LocalModel {
@@ -390,4 +404,11 @@ function sha256(path: string): Promise<string> {
       .on('error', reject)
       .on('end', () => resolve(h.digest('hex')));
   });
+}
+
+/** The server's `sources` (G-02): counts per origin (`server`, `cdn`), numbers only. */
+function sourcesOf(raw: Record<string, unknown> | undefined, fallback: number): Record<string, number> {
+  const out: Record<string, number> = {};
+  for (const [k, v] of Object.entries(raw ?? {})) if (/^[a-z_]{1,20}$/.test(k) && typeof v === 'number' && Number.isFinite(v) && v >= 0) out[k] = Math.floor(v);
+  return Object.keys(out).length ? out : { server: fallback };
 }

@@ -38,7 +38,15 @@ export interface OrgAccess {
   modules: OrgModule[];
   /** An administrator: the organization's column is theirs to change. */
   can_manage: boolean;
+  /**
+   * Whether Local AI may prepare changes at all (G-01, Q-03): false in this release unless the installation's
+   * `ai_local_writes` setting is on. Absent from an older server, which decides per function instead.
+   */
+  local_writes?: boolean;
 }
+
+/** Why Local AI's "Create or update" column is off everywhere while the server keeps Local AI to reads (Q-03). */
+export const LOCAL_READS_ONLY = 'Local AI only reads your WorkSuite data in this release. Changes are prepared by WorkSuite AI.';
 
 /** One module function, as the model is told about it. */
 export interface AiTool {
@@ -108,11 +116,12 @@ export function personal(prefs: AiModuleAccessPrefs | undefined, engine: AiEngin
 }
 
 /** The organization's ceiling, the module's own functions and the person's choice, together. */
-export function effective(m: OrgModule, engine: AiEngine, prefs: AiModuleAccessPrefs | undefined): Effective {
+export function effective(m: OrgModule, engine: AiEngine, prefs: AiModuleAccessPrefs | undefined, localWrites?: boolean): Effective {
   const mine = personal(prefs, engine, m.key);
   const org = m[engine];
   const why = (kind: 'read' | 'write'): string | null => {
     if (m.denied) return m.denied;
+    if (engine === 'local' && kind === 'write' && localWrites === false && m.supports.write) return LOCAL_READS_ONLY;
     if (!m.supports[kind]) return kind === 'read' ? `${m.label} has no data the assistant can read yet.` : `${m.label} has no changes the assistant can make yet.`;
     if (!org[kind] || (kind === 'write' && !org.read)) return `Your organization has turned ${kind === 'read' || !org.read ? 'reading' : 'changes'} in ${m.label} off for ${ENGINE_NAME[engine]}.`;
     if (kind === 'write' && !(mine.read && org.read)) return `Changes need ${m.label}'s data to be on too.`;
@@ -139,9 +148,10 @@ export function personalOff(prefs: AiModuleAccessPrefs | undefined, engine: AiEn
 export function toolAllowed(tool: AiTool, org: OrgAccess | null | undefined, prefs: AiModuleAccessPrefs | undefined): string | null {
   const m = org?.modules.find((x) => x.key === tool.module);
   if (m) {
-    const e = effective(m, 'local', prefs);
+    const e = effective(m, 'local', prefs, org?.local_writes);
     return tool.kind === 'read' ? e.readWhy : e.writeWhy;
   }
+  if (tool.kind === 'write' && org?.local_writes === false) return LOCAL_READS_ONLY;
   const mine = personal(prefs, 'local', tool.module);
   const label = tool.module.charAt(0).toUpperCase() + tool.module.slice(1);
   if (!mine.read) return `You turned ${label} off for Local AI in Settings › AI Assistant › Module Access.`;
@@ -149,17 +159,22 @@ export function toolAllowed(tool: AiTool, org: OrgAccess | null | undefined, pre
   return null;
 }
 
+/** The functions Local AI may use now: reads, and changes only when the server says `local_writes` (Q-03). */
+export async function fetchLocalTools(signal?: AbortSignal): Promise<AiTool[]> {
+  try {
+    const r = await apiGet<{ tools: AiTool[]; local_writes?: boolean }>('/api/ai/tools', { engine: 'local' }, signal);
+    // The model is never told of a change it cannot make.
+    return (r.tools ?? []).filter((t) => t.kind === 'read' || r.local_writes === true);
+  } catch (e) {
+    if (e instanceof ApiError && (e.status === 404 || e.forbidden)) return [];
+    throw e;
+  }
+}
+
 export function useLocalTools(enabled: boolean) {
   return useQuery({
     queryKey: ['ai', 'tools', 'local'],
-    queryFn: async ({ signal }) => {
-      try {
-        return (await apiGet<{ tools: AiTool[] }>('/api/ai/tools', { engine: 'local' }, signal)).tools ?? [];
-      } catch (e) {
-        if (e instanceof ApiError && (e.status === 404 || e.forbidden)) return [];
-        throw e;
-      }
-    },
+    queryFn: ({ signal }) => fetchLocalTools(signal),
     enabled,
     staleTime: 60_000,
     retry: false,

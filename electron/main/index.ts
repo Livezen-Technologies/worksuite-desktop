@@ -811,7 +811,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
   meetRecorder.onChanged = (list) => broadcast('meetrec:changed', list);
   // Speech to text on this computer (worksuite-desktop#81): whisper.cpp in a hidden page, with the person's model.
-  const speech = new SpeechService({ dir: join(p.profile, 'LocalAI', 'speech'), preload: join(__dirname, '../preload/index.js') });
+  const speech = new SpeechService({ dir: join(p.profile, 'LocalAI', 'speech'), preload: join(__dirname, '../preload/index.js'), get: (path) => http.get(path) });
   // eLearning: a course's lessons kept for offline learning, as the server's manifest lists them.
   const elearning: ElearningOffline = new ElearningOffline({
     db,

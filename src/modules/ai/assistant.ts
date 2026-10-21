@@ -34,6 +34,13 @@ export interface PendingAction {
   links?: { label: string; url: string }[];
   undo_until?: string | null;
   error?: string | null;
+  /** The action's level (0–5) and its words; levels 4–5 ask for more before they run (Q-01). */
+  level?: number;
+  level_label?: string;
+  category?: string;
+  reversible?: boolean;
+  /** What confirming must carry: an authenticator code (step-up) and/or the phrase to type. */
+  confirm?: { step_up: boolean; phrase: string | null };
 }
 
 export interface AskTurn {
@@ -108,8 +115,18 @@ export function usePending(which: 'open' | 'recent') {
 }
 
 /** Confirming goes through the main process, which refuses anything but the main window. */
-export function confirmAction(a: PendingAction): Promise<PendingAction> {
-  return call('ai:confirm', { id: a.id, nonce: String(a.nonce ?? '') }) as Promise<PendingAction>;
+export function confirmAction(a: PendingAction, extra: { phrase?: string; stepUpCode?: string } = {}): Promise<PendingAction> {
+  return call('ai:confirm', {
+    id: a.id,
+    nonce: String(a.nonce ?? ''),
+    ...(extra.phrase ? { phrase: extra.phrase.slice(0, 40) } : {}),
+    ...(extra.stepUpCode ? { stepUpCode: extra.stepUpCode } : {}),
+  }) as Promise<PendingAction>;
+}
+
+/** Whether a card's typed phrase matches what the server asks for (case and outer spaces do not matter). */
+export function phraseMatches(asked: string | null | undefined, typed: string): boolean {
+  return !asked || typed.trim().toLowerCase() === asked.trim().toLowerCase();
 }
 
 export const cancelAction = (id: number) => apiPost<PendingAction>(`/api/ai/pending/${id}/cancel`);

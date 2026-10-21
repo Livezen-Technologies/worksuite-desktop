@@ -72,6 +72,21 @@ describe('the confirmation card', () => {
     expect(screen.getAllByText('Done').length).toBeGreaterThan(0);
   });
 
+  it('asks for the typed phrase and an authenticator code before a level 5 change (Q-01)', async () => {
+    vi.mocked(call).mockResolvedValue(card({ status: 'succeeded', nonce: null }) as never);
+    wrap(<ActionCard action={card({ level: 5, level_label: 'Delete', reversible: false, confirm: { step_up: true, phrase: 'DELETE' } })} />);
+
+    const go = screen.getByRole('button', { name: 'Confirm' }) as HTMLButtonElement;
+    expect(go.disabled).toBe(true);
+    expect(screen.getByText('L5 · Delete')).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Confirmation phrase'), { target: { value: 'delete ' } });
+    expect(go.disabled).toBe(true);
+    fireEvent.change(screen.getByLabelText('Verification code'), { target: { value: '12 34 56' } });
+    expect(go.disabled).toBe(false);
+    await act(async () => fireEvent.click(go));
+    expect(call).toHaveBeenCalledWith('ai:confirm', { id: 7, nonce: 'abcdef0123456789', phrase: 'delete ', stepUpCode: '123456' });
+  });
+
   it('in Quick Ask, sends the person to the main window instead of confirming', () => {
     const elsewhere = vi.fn();
     wrap(<ActionCard action={card({ risk: 'R2', external_recipients: ['buyer@abc.lk'] })} elsewhere={elsewhere} />);

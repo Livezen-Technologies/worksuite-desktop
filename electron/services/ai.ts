@@ -76,9 +76,32 @@ export class AiService {
     };
   }
 
-  /** Confirm one proposal with the nonce its card was shown. The caller has checked the sender. */
-  confirm(id: number, nonce: string): Promise<unknown> {
-    return this.deps.post(`/api/ai/pending/${id}/confirm`, { nonce });
+  /**
+   * Confirm one proposal with the nonce its card was shown (and, for levels 4–5, the typed phrase and an
+   * authenticator code when the server asks for step-up). The caller has checked the sender.
+   */
+  async confirm(id: number, nonce: string, extra: { phrase?: string; stepUpCode?: string } = {}): Promise<unknown> {
+    const token = await this.confirmToken(id);
+    return this.deps.post(`/api/ai/pending/${id}/confirm`, {
+      nonce,
+      ...(token ? { confirm_token: token } : {}),
+      ...(extra.phrase ? { phrase: extra.phrase } : {}),
+      ...(extra.stepUpCode ? { step_up: { code: extra.stepUpCode } } : {}),
+    });
+  }
+
+  /**
+   * A fresh confirmation token (G-14): single-use, 120 seconds, asked for on the click and kept in memory only for
+   * the one confirm it goes with. A server without the route (404) has none, and the nonce alone is sent.
+   */
+  private async confirmToken(id: number): Promise<string | null> {
+    try {
+      const r = await this.deps.post<{ token?: unknown }>(`/api/ai/pending/${id}/confirm-token`, { client: 'desktop' });
+      return typeof r?.token === 'string' && /^ct_[A-Za-z0-9_-]{8,76}$/.test(r.token) ? r.token : null;
+    } catch (e) {
+      if (e instanceof DesktopError && (e.status === 404 || e.status === 405)) return null;
+      throw e;
+    }
   }
 
   /**

@@ -1494,7 +1494,7 @@ export function LocalAISection() {
           </Button>
         </div>
       </Row>
-      <Row label="Models to download" hint={st?.catalogError ?? (st?.catalogAt ? `AI Studio's models, from your WorkSuite server — checked ${relative(st.catalogAt)}.` : 'Not checked yet.')}>
+      <Row label="Models to download" hint={st?.catalogError ?? (st?.catalogAt ? `AI Studio's models, from your WorkSuite server${st.catalogSources?.cdn ? ` (${st.catalogSources.cdn} from WorkSuite's signed catalogue)` : ''} — checked ${relative(st.catalogAt)}.` : 'Not checked yet.')}>
         <Button size="sm" icon="refresh" loading={busy === 'catalog'} onClick={() => run('catalog', call('ai:localRefresh'))}>
           Check for models
         </Button>

@@ -160,6 +160,8 @@ export const INVOKE_CHANNELS = [
   'meetrec:downloads',
   'stt:status',
   'stt:chooseModel',
+  'stt:catalog',
+  'stt:install',
   'stt:removeModel',
   'stt:transcribe',
   'speech:ready',

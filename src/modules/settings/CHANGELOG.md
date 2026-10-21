@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.42.1 — 2026-10-21
+
+**Changed**
+
+- Local AI's 'Models to download' says when some came from WorkSuite's signed catalogue (G-02)
+
 ## 1.42.0 — 2026-10-20
 
 **Added**

@@ -258,6 +258,8 @@ const api = {
   stt: {
     status: call('stt:status'),
     chooseModel: call('stt:chooseModel'),
+    catalog: call('stt:catalog'),
+    install: call('stt:install'),
     removeModel: call('stt:removeModel'),
     transcribe: call('stt:transcribe'),
   },

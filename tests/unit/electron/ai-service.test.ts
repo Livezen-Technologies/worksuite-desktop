@@ -111,6 +111,33 @@ describe('confirming', () => {
     expect(deps.post).toHaveBeenCalledWith('/api/ai/pending/12/confirm', { nonce: 'abcdef0123456789' });
   });
 
+  it('asks for a fresh confirmation token on the click and sends it with the nonce (G-14)', async () => {
+    const token = 'ct_' + 'a1'.repeat(24);
+    const post = vi.fn(async (path: string) => (path.endsWith('/confirm-token') ? { token, expires_in: 120, required: false } : { id: 12 }));
+    const { ai } = service({ post: post as AiServiceDeps['post'] });
+    await ai.confirm(12, 'abcdef0123456789');
+    expect(post.mock.calls.map((c) => c[0])).toEqual(['/api/ai/pending/12/confirm-token', '/api/ai/pending/12/confirm']);
+    expect(post).toHaveBeenCalledWith('/api/ai/pending/12/confirm-token', { client: 'desktop' });
+    expect(post).toHaveBeenLastCalledWith('/api/ai/pending/12/confirm', { nonce: 'abcdef0123456789', confirm_token: token });
+    expect(isProxyPathAllowed('/api/ai/pending/12/confirm-token', 'POST')).toBe(false);
+  });
+
+  it('confirms with the nonce alone on a server without confirmation tokens (404)', async () => {
+    const post = vi.fn(async (path: string) => {
+      if (path.endsWith('/confirm-token')) throw new DesktopError('SERVER_ERROR', 'Not found', 404);
+      return { id: 12 };
+    });
+    const { ai } = service({ post: post as AiServiceDeps['post'] });
+    await ai.confirm(12, 'abcdef0123456789');
+    expect(post).toHaveBeenLastCalledWith('/api/ai/pending/12/confirm', { nonce: 'abcdef0123456789' });
+  });
+
+  it('carries the typed phrase and an authenticator code for levels 4–5 (Q-01)', async () => {
+    const { ai, deps } = service();
+    await ai.confirm(12, 'abcdef0123456789', { phrase: 'DELETE', stepUpCode: '123456' });
+    expect(deps.post).toHaveBeenCalledWith('/api/ai/pending/12/confirm', { nonce: 'abcdef0123456789', phrase: 'DELETE', step_up: { code: '123456' } });
+  });
+
   it('is never done through a page, nor is a file sent from one', () => {
     expect(isProxyPathAllowed('/api/ai/pending/12/confirm', 'POST')).toBe(false);
     expect(isProxyPathAllowed('/api/ai/context/uploads', 'POST')).toBe(false);

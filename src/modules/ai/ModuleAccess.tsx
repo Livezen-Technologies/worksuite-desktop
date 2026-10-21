@@ -5,7 +5,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
-import { effective, ORG_ACCESS_KEY, personal, saveOrgAccess, useOrgAccess, type OrgAccess, type OrgModule } from './tools';
+import { effective, LOCAL_READS_ONLY, ORG_ACCESS_KEY, personal, saveOrgAccess, useOrgAccess, type OrgAccess, type OrgModule } from './tools';
 
 /**
  * Settings › AI Assistant › Module Access (worksuite-desktop#51): which modules WorkSuite AI and Local AI may use,
@@ -85,6 +85,7 @@ export function ModuleAccess({ prefs, onChange }: { prefs: AiModuleAccessPrefs; 
           ))}
         </div>
       ) : null}
+      {data?.local_writes === false ? <p className="mt-2 text-[12.5px] text-ink-3">{LOCAL_READS_ONLY}</p> : null}
       {asOrg ? <p className="mt-2 text-[12.5px] text-ink-3">The most anyone in your organization may use. People can turn modules off for themselves, never on beyond this.</p> : null}
 
       {org.isLoading ? (
@@ -123,7 +124,7 @@ export function ModuleAccess({ prefs, onChange }: { prefs: AiModuleAccessPrefs; 
                           </td>
                         );
                       }
-                      const e = effective(m, c.engine, prefs);
+                      const e = effective(m, c.engine, prefs, data?.local_writes);
                       const on = c.kind === 'read' ? e.read : e.write;
                       const why = c.kind === 'read' ? e.readWhy : e.writeWhy;
                       // Off for a reason the person cannot change here: shown off and disabled, with the reason.

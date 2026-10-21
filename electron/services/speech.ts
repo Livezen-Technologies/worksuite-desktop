@@ -1,12 +1,13 @@
-import { randomUUID } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import { createReadStream } from 'node:fs';
-import { copyFile, mkdir, open, readFile, rm, stat, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, open, readFile, rename, rm, stat, writeFile } from 'node:fs/promises';
 import { basename, join } from 'node:path';
 import { Readable } from 'node:stream';
 import { BrowserWindow, app, dialog } from 'electron';
 import { logger } from '../main/log';
 import { DesktopError } from '../main/errors';
 import { APP_ORIGIN, devOrigin } from '../security/hardening';
+import type { SpeechCatalog } from '@shared/types';
 
 const log = logger('speech');
 
@@ -17,6 +18,19 @@ export interface SpeechSegment {
   text: string;
   uncertain: boolean;
 }
+
+/** One speech model as the server lists it (G-11): pinned by size and SHA-256. */
+interface ServerSpeechModel {
+  id: string;
+  name: string;
+  url: string;
+  sha256: string;
+  bytes: number;
+  recommendedFor?: string[];
+  languages?: string[];
+}
+
+const MAX_SPEECH_BYTES = 4 * 1024 * 1024 * 1024;
 
 export interface SpeechStatus {
   local: { ready: boolean; model: { name: string; size: number } | null; why: string | null };
@@ -47,7 +61,111 @@ export class SpeechService {
   private jobs = new Map<string, { resolve: (s: SpeechSegment[]) => void; reject: (e: Error) => void; timer: NodeJS.Timeout }>();
   private queue: Promise<unknown> = Promise.resolve();
 
-  constructor(private readonly deps: { dir: string; preload: string }) {}
+  private listed: ServerSpeechModel[] = [];
+  private installing: Promise<SpeechStatus> | null = null;
+
+  constructor(
+    private readonly deps: {
+      dir: string;
+      preload: string;
+      /** The signed-in WorkSuite server (G-11): `ai/speech/status` and its speech catalogue. */
+      get?: <T>(path: string) => Promise<T>;
+      fetch?: (url: string, init?: { signal?: AbortSignal }) => Promise<Response>;
+    },
+  ) {}
+
+  /**
+   * The speech models the WorkSuite server offers (G-11, Q-05) and whether the company wants transcripts made on
+   * this computer. Local speech stays off until the person downloads a model; nothing is fetched on its own.
+   */
+  async catalog(): Promise<SpeechCatalog> {
+    const off: SpeechCatalog = { preferred: false, required: false, models: [], error: null };
+    if (!this.deps.get) return { ...off, error: 'Sign in to WorkSuite to see its speech models.' };
+    let path = '/api/ai/local/speech-catalog';
+    try {
+      const st = await this.deps.get<{ local?: { preferred?: unknown; required?: unknown; catalog?: unknown } }>('/api/ai/speech/status');
+      off.preferred = st?.local?.preferred === true;
+      off.required = st?.local?.required === true;
+      if (typeof st?.local?.catalog === 'string' && /^\/api\/ai\/[a-z/-]+$/.test(st.local.catalog)) path = st.local.catalog;
+    } catch {
+      /* an older server: no company setting, the catalogue may still answer */
+    }
+    let body: { models?: unknown };
+    try {
+      body = await this.deps.get<{ models?: unknown }>(path);
+    } catch (e) {
+      const status = (e as { status?: unknown })?.status;
+      return { ...off, error: status === 404 ? (e instanceof Error && /switched off/i.test(e.message) ? e.message : 'Your WorkSuite server does not offer speech models yet. You can still add a whisper.cpp model file.') : e instanceof Error ? e.message : String(e) };
+    }
+    this.listed = (Array.isArray(body?.models) ? body.models : []).filter(validSpeechModel);
+    const installedId = await this.installedId();
+    return {
+      ...off,
+      models: this.listed.map((m) => ({ id: m.id, name: m.name, bytes: m.bytes, recommendedFor: m.recommendedFor ?? [], languages: m.languages ?? [], installed: m.id === installedId })),
+    };
+  }
+
+  private async installedId(): Promise<string | null> {
+    try {
+      const meta = JSON.parse(await readFile(this.metaFile, 'utf8')) as { id?: unknown };
+      return typeof meta.id === 'string' ? meta.id : null;
+    } catch {
+      return null;
+    }
+  }
+
+  /** Download one of the server's speech models, check its size and SHA-256, and only then keep it. */
+  install(id: string): Promise<SpeechStatus> {
+    this.installing ??= this.download(id).finally(() => {
+      this.installing = null;
+    });
+    return this.installing;
+  }
+
+  private async download(id: string): Promise<SpeechStatus> {
+    const m = this.listed.find((x) => x.id === id);
+    if (!m) throw new DesktopError('IPC_VALIDATION_FAILED', 'That speech model is not in your WorkSuite server’s list. Check for models again.');
+    const fetchImpl = this.deps.fetch ?? fetch;
+    await mkdir(this.deps.dir, { recursive: true });
+    const part = join(this.deps.dir, 'download.part');
+    const res = await fetchImpl(m.url);
+    if (!res.ok || !res.body) throw new DesktopError('SERVER_ERROR', `The speech model could not be downloaded (${res.status}).`);
+    const hash = createHash('sha256');
+    const fh = await open(part, 'w', 0o600);
+    let received = 0;
+    try {
+      const reader = res.body.getReader();
+      for (;;) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        received += value.byteLength;
+        if (received > m.bytes) throw new DesktopError('SERVER_ERROR', 'The speech model is larger than WorkSuite said. It was not kept.');
+        hash.update(value);
+        await fh.write(value);
+      }
+    } catch (e) {
+      await fh.close().catch(() => undefined);
+      await rm(part, { force: true });
+      throw e;
+    }
+    await fh.close();
+    const head = Buffer.alloc(4);
+    const check = await open(part, 'r');
+    try {
+      await check.read(head, 0, 4, 0);
+    } finally {
+      await check.close();
+    }
+    if (received !== m.bytes || hash.digest('hex') !== m.sha256.toLowerCase() || !isGgml(head)) {
+      await rm(part, { force: true });
+      throw new DesktopError('SERVER_ERROR', 'The downloaded speech model did not match its SHA-256. It was not kept — try again.');
+    }
+    this.stop();
+    await rename(part, this.modelFile);
+    await writeFile(this.metaFile, JSON.stringify({ name: m.name, id: m.id, sha256: m.sha256, addedAt: new Date().toISOString() }));
+    log.info('speech model downloaded', { id: m.id });
+    return this.status();
+  }
 
   private get modelFile(): string {
     return join(this.deps.dir, 'model.bin');
@@ -182,4 +300,16 @@ export class SpeechService {
     this.loaded = null;
     if (win && !win.isDestroyed()) win.destroy();
   }
+}
+
+function validSpeechModel(x: unknown): x is ServerSpeechModel {
+  const m = x as Partial<ServerSpeechModel> | null;
+  return (
+    !!m &&
+    typeof m.id === 'string' && /^[a-z0-9][a-z0-9._-]{0,63}$/i.test(m.id) &&
+    typeof m.name === 'string' &&
+    typeof m.url === 'string' && /^https:\/\//.test(m.url) &&
+    typeof m.sha256 === 'string' && /^[0-9a-f]{64}$/i.test(m.sha256) &&
+    typeof m.bytes === 'number' && m.bytes > 0 && m.bytes <= MAX_SPEECH_BYTES
+  );
 }

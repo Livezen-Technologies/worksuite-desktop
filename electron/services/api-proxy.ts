@@ -68,6 +68,8 @@ const DENY: RegExp[] = [
   // request came from the main window and audits it; a file from this computer is `ai:upload`, picked
   // there under the device policy. No page — Quick Ask's included — does either for itself.
   /^\/api\/ai\/pending\/\d+\/confirm\/?$/,
+  // Its fresh single-use token (G-14) is asked for by the main process, on the click, and never leaves it.
+  /^\/api\/ai\/pending\/\d+\/confirm-token\/?$/,
   /^\/api\/ai\/context\/uploads\/?$/,
   // Board's offline vault (board-vault.ts): grants, manifests, signed offline responses, this device's check-in and its
   // wipe report are the main process's, made with this device's keys; a page never keeps or signs its own copy.

@@ -13,6 +13,17 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **AI Assistant follows the server's AI contract (WS-AI-SRS-001 G-01, G-02, G-11, Q-01…Q-05).** Local AI is told
+  only of reading functions unless the server's `ai_local_writes` allows changes, and Module Access shows "Local AI
+  only reads" instead of a switch that would do nothing. A proposed change at level 4–5 shows its level and asks for
+  the phrase the server names and, when step-up is needed, a code from the authenticator app before **Confirm**
+  works — confirmed in the main window only, with the card's nonce and a fresh single-use confirmation token the
+  main process asks the server for on the click (G-14; an older server gets the nonce alone). The Local AI catalogue is the
+  server's registry; the app's own signed CDN list is used only with a server that has no catalogue route, never
+  when the workspace has switched downloads off. Settings › Speech lists the server's whisper models to download
+  (checked by size and SHA-256); speech on the computer stays off until one is downloaded. The server has no
+  streaming route for online answers yet: Local AI answers stream as before. AI 1.12.0, Meet 1.26.0, Settings 1.42.1.
+
 ## 0.2.271 — 2026-10-21
 
 - **AMC & Service on the desktop.** AMC is now a native app (Operations) instead of a web page: a dashboard, the

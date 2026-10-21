@@ -54,8 +54,8 @@ export class LocalAIRuntime {
     this.deps.onChange?.();
   }
 
-  status(catalog: { at: string | null; error: string | null }, hardware: LocalAIHardware | null): LocalAIStatus {
-    return { runtime: this.state, error: this.error, loaded: this.loadedId, hardware, catalogError: catalog.error, catalogAt: catalog.at };
+  status(catalog: { at: string | null; error: string | null; sources?: Record<string, number> | null }, hardware: LocalAIHardware | null): LocalAIStatus {
+    return { runtime: this.state, error: this.error, loaded: this.loadedId, hardware, catalogError: catalog.error, catalogAt: catalog.at, catalogSources: catalog.sources ?? null };
   }
 
   /** This computer, for the tier and the model advice (LAI-HW-001…003). */
