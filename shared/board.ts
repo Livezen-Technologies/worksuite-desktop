@@ -7,21 +7,32 @@ import { z } from 'zod';
  * checked here only saves a round trip and is checked by the server again.
  */
 
-// ── notifications (§9.2 event bus) ─────────────────────────────────────────
+// ── notifications (the server's Notification Centre keys, category `board`) ──
 
-/** Which Board screen each `board.*` event opens. Events the director need not act on open nothing of ours. */
+/**
+ * Which Board screen each notification key opens (docs/board/API.md "Notifications"). `data` carries the ids:
+ * `board_meeting_id`, `paper_id`, `circular_id`, `action_id`.
+ */
 export const BOARD_SCREENS: Readonly<Record<string, string>> = {
   'board.meeting.published': 'agenda',
-  'board.meeting.created': 'home',
-  'board.meeting.started': 'room',
-  'board.agenda.updated': 'agenda',
-  'board.pack.published': 'packs',
-  'board.pack.revised': 'packs',
+  'board.meeting.updated': 'agenda',
+  'board.meeting.cancelled': 'home',
+  'board.pack.published': 'agenda',
+  'board.pack.revised': 'agenda',
+  'board.paper.requested': 'home',
+  'board.paper.updated': 'agenda',
+  'board.paper.overdue': 'home',
   'board.vote.opened': 'room',
+  'board.vote.closing': 'room',
   'board.circular.created': 'approvals',
-  'board.minutes.submitted': 'approvals',
-  'board.action.created': 'actions',
-  'board.poll.closed': 'minutes',
+  'board.circular.reminder': 'approvals',
+  'board.approval.requested': 'approvals',
+  'board.minutes.review': 'approvals',
+  'board.action.assigned': 'actions',
+  'board.action.overdue': 'actions',
+  'board.member.term_ending': 'home',
+  'board.conflict.recorded': 'agenda',
+  'board.notice': 'home',
 };
 
 const id = (v: unknown): number | null => (typeof v === 'number' && Number.isInteger(v) && v > 0 ? v : typeof v === 'string' && /^\d{1,12}$/.test(v) ? Number(v) : null);
@@ -31,19 +42,27 @@ export function boardNoticeLink(event: string | null | undefined, data?: unknown
   const view = event ? BOARD_SCREENS[event] : undefined;
   if (!view) return null;
   const d = (data && typeof data === 'object' ? data : {}) as Record<string, unknown>;
-  const meeting = id(d.meeting_id);
-  if ((view === 'agenda' || view === 'room' || view === 'minutes') && meeting) return `/board?view=${view}&meeting=${meeting}`;
-  if (view === 'room' || view === 'agenda' || view === 'minutes') return '/board?view=home';
+  const meeting = id(d.board_meeting_id) ?? id(d.meeting_id);
+  if (view === 'agenda' || view === 'room') return meeting ? `/board?view=${view}&meeting=${meeting}` : '/board?view=home';
   const circular = id(d.circular_id);
   if (view === 'approvals' && circular) return `/board?view=approvals&circular=${circular}`;
   return `/board?view=${view}`;
 }
 
-/** Board events that end this computer's offline vault (FR-DEV-02, FR-DEV-03). */
-export const BOARD_WIPE_EVENTS: ReadonlySet<string> = new Set(['board.device.revoked', 'board.device.blocked']);
+/**
+ * The server's refusal of a blocked or revoked device (`X-Board-Device`, FR-DEV-03):
+ * `403 {errors: {code: "device_blocked"|"device_revoked", command: "WIPE"}}`.
+ */
+export const BOARD_WIPE_CODES: ReadonlySet<string> = new Set(['device_blocked', 'device_revoked']);
 
-/** Server error codes that mean the same as those events, met on any Board request. */
-export const BOARD_WIPE_CODES: ReadonlySet<string> = new Set(['DEVICE_REVOKED', 'DEVICE_BLOCKED']);
+/** What a Board error tells this device to do: wipe (and why), or nothing. */
+export function boardDeviceRefusal(status: number | null | undefined, errors: unknown): 'blocked' | 'revoked' | null {
+  if (status !== 403 || !errors || typeof errors !== 'object') return null;
+  const e = errors as { code?: unknown; command?: unknown };
+  const code = typeof e.code === 'string' ? e.code : '';
+  if (BOARD_WIPE_CODES.has(code)) return code === 'device_blocked' ? 'blocked' : 'revoked';
+  return e.command === 'WIPE' ? 'revoked' : null;
+}
 
 // ── the offline vault (FR-OFF-01..03) ──────────────────────────────────────
 
@@ -52,21 +71,23 @@ const intId = z.number().int().positive().max(2_147_483_647);
 export const boardMeetingRef = z.strictObject({ meetingId: intId });
 export const boardCircularRef = z.strictObject({ circularId: intId });
 
-/** Something done offline that waits for the server (FR-OFF-02): an annotation, an acknowledgement or a draft note. */
+/**
+ * Something done offline that waits for the server (FR-OFF-02): an annotation (sent through `POST /annotations/sync`,
+ * last writer wins by `client_uuid` + `updated_at`) or a pack acknowledgement (`POST /packs/versions/{id}/acknowledge`).
+ */
 export const boardQueueInput = z.strictObject({
-  kind: z.enum(['annotation', 'ack', 'note']),
+  kind: z.enum(['annotation', 'ack']),
   meetingId: intId,
-  /** The annotation's or note's own id, client-made, so a later edit replaces the earlier one (last writer wins). */
+  /** The annotation's `client_uuid`, client-made, so a later edit replaces the earlier one (last writer wins). */
   ref: z.string().regex(/^[A-Za-z0-9_-]{1,64}$/),
   body: z.record(z.string(), z.unknown()).refine((b) => JSON.stringify(b).length <= 20_000, 'Too large.'),
 });
 
-/** A circular response recorded offline (FR-VOT-08): signed with this device's key when it is recorded. */
+/** A circular response recorded offline (FR-VOT-08): signed with this device's Ed25519 key when it is recorded. */
 export const boardOfflineResponseInput = z.strictObject({
   circularId: intId,
   choice: z.enum(['approve', 'reject', 'abstain']),
   comment: z.string().max(2000).optional(),
-  /** The circular as the vault kept it, which the rules are checked against again in the main process. */
 });
 
 export const boardSearchInput = z.strictObject({ q: z.string().min(2).max(200) });
@@ -76,14 +97,14 @@ export type BoardPackState = 'ready' | 'downloading' | 'failed' | 'expired';
 export interface BoardPackSummary {
   meetingId: number;
   title: string;
-  /** The pack version the copy was made from. */
+  /** The pack version the copy was made from (the grant manifest's `pack_version`). */
   version: number;
   pages: number | null;
   /** My notes kept with it. */
   notes: number;
   bytes: number;
   downloadedAt: string;
-  /** min(grant expiry, now + max offline days, the meeting's archive date) — FR-OFF-03. */
+  /** The grant's `expires_at`: max offline days or the meeting's archiving, whichever is sooner (FR-OFF-03). */
   expiresAt: string;
   /** The server has published a newer version since. */
   latestVersion: number | null;
@@ -94,8 +115,8 @@ export interface BoardVaultStatus {
   /** The OS keystore holds the key (Keychain, DPAPI, Secret Service); false keeps packs for this session only. */
   keystore: boolean;
   backend: string;
-  /** This device's trust as Board last heard it. */
-  trust: 'trusted' | 'revoked' | 'blocked' | 'unknown';
+  /** This device's trust as Board last heard it (`POST /devices`, `/devices/check-in`). */
+  trust: 'trusted' | 'pending' | 'revoked' | 'blocked' | 'unknown';
   lastSyncAt: string | null;
   packs: BoardPackSummary[];
   queued: number;
@@ -103,23 +124,34 @@ export interface BoardVaultStatus {
   wiped: { at: string; reason: string } | null;
 }
 
-/** An offline pack opened from the vault: the server's manifest as it was given, and the pack file. */
+/** An offline pack opened from the vault: what was kept for the meeting, and the member's pack rendition. */
 export interface BoardOfflinePack {
   summary: BoardPackSummary;
-  manifest: Record<string, unknown>;
+  manifest: BoardKeptManifest;
   file: Uint8Array | null;
+}
+
+/** What the vault keeps for a meeting: the server's signed grant manifest and the screens' copies taken with it. */
+export interface BoardKeptManifest {
+  /** The grant's manifest exactly as the server signed it (`Grant.manifest`). */
+  grant: Record<string, unknown>;
+  meeting: { id: number; title: string; meeting_number: string | null; body: string | null; starts_at: string | null };
+  /** The agenda items this member may read, flattened. */
+  agenda: Array<{ id: number; number: string; title: string; depth: number; papers: Array<{ id: number; title: string }> }>;
+  /** My annotations (FR-ANN), as `GET /annotations?mine=1` gave them. */
+  notes: Array<Record<string, unknown>>;
 }
 
 export interface BoardQueued {
   id: string;
-  kind: 'annotation' | 'ack' | 'note' | 'circular';
+  kind: 'annotation' | 'ack' | 'circular';
   meetingId: number | null;
   circularId: number | null;
   ref: string;
   at: string;
   /** Rejected by the server (or by the rules here) with a reason the person sees. */
   error: string | null;
-  /** For a circular response: what the server said when it was uploaded. */
+  /** For a circular response: the server's verdict (ACCEPTED / REJECTED). */
   outcome: 'pending' | 'accepted' | 'rejected';
 }
 
@@ -133,17 +165,16 @@ export interface BoardSearchHit {
 
 // ── offline circular responses (FR-VOT-08, FR-CIR-05) ──────────────────────
 
+/** The parts of the server's Circular the offline rules read. */
 export interface CircularForOffline {
   id: number;
+  /** `ISSUED` is open for responses (§6.4). */
   status: string;
-  deadline: string | null;
-  /** The board's policy allows recording a response offline. */
-  offline_responses_allowed?: boolean;
-  /** The server says this person may respond. */
-  can_respond?: boolean;
+  deadline_at: string | null;
+  /** The circular allows offline responses (the board's `devices.offline_circular_responses` is checked by the server). */
+  allow_offline?: boolean;
   secret?: boolean;
-  /** A vote in a live meeting: never offline. */
-  live_meeting?: boolean;
+  me?: { eligible?: boolean; response?: string | null } | null;
 }
 
 const stamp = (s: string) => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${s.replace(' ', 'T')}Z`);
@@ -151,12 +182,12 @@ const stamp = (s: string) => Date.parse(/[zZ]|[+-]\d\d:?\d\d$/.test(s) ? s : `${
 /** Why a response may not be recorded offline, or null when it may (FR-VOT-08; the server checks again on upload). */
 export function offlineResponseRefusal(c: CircularForOffline | null | undefined, now = Date.now()): string | null {
   if (!c) return 'This circular is not in the offline vault.';
-  if (c.live_meeting) return 'Votes in a live meeting are online only.';
-  if (!c.offline_responses_allowed) return "The board's policy does not allow responding offline.";
-  if (c.can_respond === false) return 'You are not eligible to respond to this circular.';
-  if (String(c.status).toLowerCase() !== 'open') return 'This circular is closed.';
-  if (c.deadline) {
-    const t = stamp(c.deadline);
+  if (!c.allow_offline) return "The board's policy does not allow responding offline.";
+  if (c.me && c.me.eligible === false) return 'You are not eligible to respond to this circular.';
+  if (c.me?.response) return 'You have already responded to this circular.';
+  if (String(c.status).toUpperCase() !== 'ISSUED') return 'This circular is closed.';
+  if (c.deadline_at) {
+    const t = stamp(c.deadline_at);
     if (Number.isFinite(t) && t <= now) return 'The deadline has passed.';
   }
   return null;
@@ -167,21 +198,35 @@ export function showOthersResponses(c: { show_responses?: boolean; secret?: bool
   return !!c && !!c.show_responses && !c.secret && responded;
 }
 
-/** What the device signs for an offline response: fixed field order, so the server rebuilds the same bytes. */
-export function offlineResponsePayload(r: { circularId: number; choice: string; comment?: string | null; recordedAt: string; deviceId: string }): string {
-  return ['ws-board-offline-response-v1', r.circularId, r.choice, r.comment ?? '', r.recordedAt, r.deviceId].join('\n');
+/** PHP's trim(): the server normalises the comment with it before rebuilding the signed bytes. */
+const PHP_TRIM = new Set([' ', '\t', '\n', '\r', '\0', '\v']);
+const phpTrim = (s: string) => {
+  let a = 0;
+  let b = s.length;
+  while (a < b && PHP_TRIM.has(s[a]!)) a++;
+  while (b > a && PHP_TRIM.has(s[b - 1]!)) b--;
+  return s.slice(a, b);
+};
+
+/** The comment as the server keeps it (`Board::text($comment, 2000)`): trimmed, null when empty, 2,000 characters. */
+export function offlineComment(comment: string | null | undefined): string | null {
+  const t = phpTrim(comment ?? '');
+  return t ? [...t].slice(0, 2000).join('') : null;
 }
 
-/** The offline expiry (FR-OFF-03): the soonest of the grant's own end, the policy's max offline days, the archive date. */
-export function packExpiry(o: { grantExpiresAt?: string | null; maxOfflineDays?: number | null; archiveAt?: string | null }, now = Date.now()): string {
-  const candidates: number[] = [];
-  if (o.grantExpiresAt) candidates.push(stamp(o.grantExpiresAt));
-  if (o.maxOfflineDays && o.maxOfflineDays > 0) candidates.push(now + o.maxOfflineDays * 86_400_000);
-  if (o.archiveAt) candidates.push(stamp(o.archiveAt));
-  const finite = candidates.filter(Number.isFinite);
-  // Nothing said: a day, not forever.
-  return new Date(finite.length ? Math.min(...finite) : now + 86_400_000).toISOString();
+/**
+ * What the device signs for an offline response — the server's `Circulars::offlinePayload()`: canonical JSON, keys
+ * sorted, no spaces, slashes and Unicode unescaped (PHP `json_encode` still escapes U+2028/U+2029):
+ * `{"circular_id":12,"comment":null,"device_signed_at":"2026-11-02T07:00:00Z","response":"APPROVE","user_id":4}`.
+ * `device_signed_at` is signed exactly as it is sent.
+ */
+export function offlineResponsePayload(r: { circularId: number; userId: number; response: string; comment: string | null; signedAt: string }): string {
+  const json = JSON.stringify({ circular_id: r.circularId, comment: offlineComment(r.comment), device_signed_at: r.signedAt, response: r.response.toUpperCase(), user_id: r.userId });
+  return json.replace(/\u2028/g, '\\u2028').replace(/\u2029/g, '\\u2029');
 }
+
+/** The time sent as `device_signed_at`: ISO 8601 UTC to the second, as the server writes times. */
+export const signedAtStamp = (ms: number): string => new Date(Math.floor(ms / 1000) * 1000).toISOString().replace('.000Z', 'Z');
 
 export const packExpired = (expiresAt: string, now = Date.now()): boolean => {
   const t = stamp(expiresAt);

@@ -4,22 +4,23 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Icon } from '../../components/Icon';
 import { Button, Modal, Spinner } from '../../components/ui';
-import { brief, dayKey, fmtDate, type Dashboard } from './api';
+import { bodiesOf, bodyKeyOf, brief, dayKey, flagOf, fmtDate, titleCase, type Dashboard } from './api';
 import { BodyTabs, FlagChip, MonthCal, Panel } from './parts';
 import type { BoardView } from './Rail';
 
-/** D-01 Home (director): body tabs, the meeting strip, the month, shared documents and notices, what's new (FR-DX-01..06). */
+/** D-01 Home (director): body tabs, the meeting strip, the month, pending decisions and my actions, what's new (FR-DX-01..06). */
 export default function Home({ data, onMeeting, onGo }: { data: Dashboard; onMeeting: (id: number) => void; onGo: (v: BoardView) => void }) {
-  const [body, setBody] = useState<number | null>(null);
-  const [panel, setPanel] = useState<'docs' | 'notices'>('docs');
+  const [body, setBody] = useState<string | null>(null);
+  const [panel, setPanel] = useState<'decisions' | 'actions'>('decisions');
   const [briefOpen, setBriefOpen] = useState(false);
   const [opened] = useState(() => Date.now());
-  const meetings = useMemo(() => [...data.meetings].filter((m) => !body || m.body?.id === body).sort((a, b) => a.starts_at.localeCompare(b.starts_at)), [data.meetings, body]);
+  const bodies = bodiesOf(data);
+  const meetings = useMemo(() => [...(data.upcoming ?? [])].filter((m) => !body || bodyKeyOf(m) === body).sort((a, b) => a.starts_at.localeCompare(b.starts_at)), [data.upcoming, body]);
   const next = meetings.find((m) => Date.parse(m.starts_at) >= opened - 4 * 3_600_000) ?? null;
   const now = new Date();
-  const marked = new Set(meetings.map((m) => dayKey(m.starts_at)));
+  const marked = new Set([...meetings.map((m) => dayKey(m.starts_at)), ...(data.calendar ?? []).map((c) => dayKey(c.date))]);
   const hour = now.getHours();
-  const c = data.counters ?? {};
+  const c = data.whats_new ?? {};
   const brf = useMutation({ mutationFn: () => brief(next!.id), onError: (e) => toast('error', errorMessage(e)) });
 
   const counter = (n: number | undefined, label: string, go: BoardView) => (
@@ -34,28 +35,28 @@ export default function Home({ data, onMeeting, onGo }: { data: Dashboard; onMee
     <div className="flex h-full flex-col gap-3 overflow-y-auto p-5 scroll-thin">
       <div className="flex items-start justify-between gap-3">
         <div>
-          <h1 className="text-[18px] font-bold text-ink">Good {hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'}{data.user?.name ? `, ${data.user.name.split(' ')[0]}` : ''}</h1>
-          <p className="text-[12px] text-ink-3">{[data.user?.role, `${data.bodies.length} boards and committees`].filter(Boolean).join(' · ')}</p>
+          <h1 className="text-[18px] font-bold text-ink">Good {hour < 12 ? 'morning' : hour < 17 ? 'afternoon' : 'evening'}</h1>
+          <p className="text-[12px] text-ink-3">{bodies.length} boards and committees</p>
         </div>
         <div className="flex gap-2">
           <Button disabled={!next} onClick={() => { setBriefOpen(true); brf.mutate(); }}>Director brief</Button>
           <Button variant="primary" disabled={!next} onClick={() => next && onMeeting(next.id)}>Open next pack</Button>
         </div>
       </div>
-      <BodyTabs bodies={data.bodies} value={body} onChange={setBody} />
+      <BodyTabs bodies={bodies} value={body} onChange={setBody} />
       <ul aria-label="Meetings" className="flex gap-3 overflow-x-auto pb-1 scroll-thin">
         {meetings.length === 0 ? <li className="text-[13px] text-ink-3">No meetings.</li> : null}
         {meetings.map((m) => (
           <li key={m.id} className="w-[260px] shrink-0">
             <button type="button" onClick={() => onMeeting(m.id)} aria-label={m.title} className="flex h-full w-full flex-col rounded-[10px] border border-line bg-surface p-3 text-left hover:border-primary">
               <div className="flex items-center justify-between text-[10.5px] font-bold tracking-[.5px] text-ink-3 uppercase">
-                <span>Meeting · {m.body?.name ?? ''}</span>
-                <FlagChip flag={m.flag} />
+                <span>Meeting · {m.body ?? ''}</span>
+                <FlagChip flag={flagOf(m.flags)} />
               </div>
               <div className="mt-1 text-[14px] font-bold text-ink">{m.title}</div>
-              <div className="text-[12px] text-ink-3">{m.room ?? ''}</div>
+              <div className="text-[12px] text-ink-3">{m.location ?? ''}</div>
               <div className="mt-auto flex justify-between border-t border-line pt-2 text-[12px]">
-                <span className="text-ink-2">{m === next ? 'Next' : m.status === 'draft' ? 'Draft agenda' : 'Scheduled'}</span>
+                <span className="text-ink-2">{m === next ? 'Next' : titleCase(m.gov_status)}</span>
                 <span className="font-bold">{fmtDate(m.starts_at)}</span>
               </div>
             </button>
@@ -67,42 +68,44 @@ export default function Home({ data, onMeeting, onGo }: { data: Dashboard; onMee
           <MonthCal year={now.getFullYear()} month={now.getMonth()} marked={marked} today={dayKey(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString())} />
         </Panel>
         <Panel
-          title={panel === 'docs' ? 'Shared documents' : 'Notices'}
-          action={<button type="button" className="text-[12px] text-primary underline" onClick={() => setPanel(panel === 'docs' ? 'notices' : 'docs')}>{panel === 'docs' ? 'Notices' : 'Documents'}</button>}
+          title={panel === 'decisions' ? 'Pending decisions' : 'My actions'}
+          action={<button type="button" className="text-[12px] text-primary underline" onClick={() => setPanel(panel === 'decisions' ? 'actions' : 'decisions')}>{panel === 'decisions' ? 'Actions' : 'Decisions'}</button>}
         >
-          {panel === 'docs' ? (
+          {panel === 'decisions' ? (
             <ul className="space-y-2">
-              {(data.documents ?? []).map((d) => (
-                <li key={d.id} className="flex gap-2 text-[12.5px]">
-                  <Icon name="star" size={14} className={d.starred ? 'text-warning' : 'text-ink-3'} aria-label={d.starred ? 'Favourite' : undefined} />
-                  <div><div className="text-ink">{d.title}</div><div className="text-[11.5px] text-ink-3">{[d.source, d.date ? fmtDate(d.date) : null].filter(Boolean).join(' · ')}</div></div>
+              {(data.pending_decisions ?? []).map((d) => (
+                <li key={`${d.kind}-${d.id}`} className="text-[12.5px]">
+                  <div className="text-ink">{[d.number, d.title].filter(Boolean).join(' ')}</div>
+                  <div className="text-[11.5px] text-ink-3">{[d.kind === 'circular' ? 'Circular' : 'Resolution', d.label ?? titleCase(d.state)].filter(Boolean).join(' · ')}</div>
                 </li>
               ))}
+              {!data.pending_decisions?.length ? <li className="text-[12.5px] text-ink-3">Nothing pending.</li> : null}
             </ul>
           ) : (
             <ul className="space-y-2">
-              {(data.notices ?? []).map((n) => <li key={n.id} className="text-[12.5px]"><div className="font-semibold">{n.title}</div><div className="text-ink-3">{n.body}</div></li>)}
+              {(data.actions ?? []).map((a) => <li key={a.id} className="text-[12.5px]"><div className="font-semibold">{a.title}</div><div className="text-ink-3">{[a.meeting_number, a.due_on ? fmtDate(a.due_on) : null, titleCase(a.status)].filter(Boolean).join(' · ')}</div></li>)}
+              {!data.actions?.length ? <li className="text-[12.5px] text-ink-3">No open actions.</li> : null}
             </ul>
           )}
         </Panel>
         <Panel title="What's new for you">
-          {counter(c.new_meetings, 'New meetings & circulars', 'calendar')}
-          {counter(c.new_items, 'New agenda items & papers', 'packs')}
+          {counter((c.new_meetings ?? 0) + (c.new_circulars ?? 0), 'New meetings & circulars', 'calendar')}
+          {counter(c.new_items_and_papers, 'New agenda items & papers', 'packs')}
           {counter(c.amended, 'Amended since you last read', 'packs')}
-          {counter(c.approvals, 'Approvals & signatures', 'approvals')}
+          {counter((c.pending_approvals ?? 0) + (c.pending_signatures ?? 0), 'Approvals & signatures', 'approvals')}
         </Panel>
       </div>
       {briefOpen && next ? (
         <Modal title={`Director brief · ${next.title}`} onClose={() => setBriefOpen(false)} width={620}>
           {brf.isPending ? <Spinner label="Preparing your brief…" /> : brf.data ? (
             <div className="space-y-3 text-[13px]">
-              {brf.data.sections.map((s) => (
-                <section key={s.title}>
-                  <h3 className="font-bold">{s.title}</h3>
-                  <ul className="list-disc pl-5">{s.items.map((i, k) => <li key={k}>{i.text} {i.cite ? <span className="rounded bg-subtle px-1 text-[11px]">{i.cite}</span> : null}</li>)}</ul>
+              {([['Decisions to take', brf.data.decision_items], ['High-risk items', brf.data.high_risk_items], ['Pending actions', brf.data.pending_actions], ['Questions to ask', brf.data.suggested_questions]] as const).map(([t, list]) => list.length ? (
+                <section key={t}>
+                  <h3 className="font-bold">{t}</h3>
+                  <ul className="list-disc pl-5">{list.map((i, k) => <li key={k}>{i}</li>)}</ul>
                 </section>
-              ))}
-              <p className="text-[11.5px] text-ink-3">AI draft from the papers you can open. Check the paper before relying on it.</p>
+              ) : null)}
+              <p className="text-[11.5px] text-ink-3">{brf.data.label ?? 'From the papers you can open. Check the paper before relying on it.'}</p>
             </div>
           ) : <p className="text-[13px] text-ink-3">No brief.</p>}
         </Modal>

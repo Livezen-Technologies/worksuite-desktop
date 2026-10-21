@@ -4,13 +4,13 @@ import { call, errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Button } from '../../components/ui';
 import type { BoardVaultStatus } from '@shared/board';
-import { fmtDate, K, type MeetingCard } from './api';
+import { fmtDate, K, type MeetingRow } from './api';
 import { Muted, Panel, Status } from './parts';
 
 const mb = (b: number) => `${Math.max(1, Math.round(b / 1_048_576))} MB`;
 
 /** D-05 Board packs — offline: the encrypted vault on this computer (FR-OFF-01..03, FR-DEV-02). */
-export default function Packs({ status, meetings, onOpen }: { status: BoardVaultStatus | null; meetings: MeetingCard[]; onOpen: (meetingId: number) => void }) {
+export default function Packs({ status, meetings, onOpen }: { status: BoardVaultStatus | null; meetings: MeetingRow[]; onOpen: (meetingId: number) => void }) {
   const qc = useQueryClient();
   const [busy, setBusy] = useState<number | null>(null);
   const [opened] = useState(() => Date.now());
@@ -43,7 +43,7 @@ export default function Packs({ status, meetings, onOpen }: { status: BoardVault
         </div>
         <div className="flex gap-2">
           <Button size="sm" loading={sync.isPending} onClick={() => sync.mutate()}>Sync now</Button>
-          <Button size="sm" disabled={blocked || !upcoming.length || busy !== null} onClick={async () => { for (const m of upcoming) await download(m.id); }}>Download all upcoming</Button>
+          <Button size="sm" disabled={blocked || !upcoming.some((m) => m.pack?.current_version) || busy !== null} onClick={async () => { for (const m of upcoming.filter((x) => x.pack?.current_version)) await download(m.id); }}>Download all upcoming</Button>
         </div>
       </div>
       {status?.wiped ? <div role="alert" className="mb-3 rounded-[8px] bg-danger/10 p-3 text-[13px] text-danger">Board packs on this computer were erased: {status.wiped.reason} Your own files were not touched.</div> : null}
@@ -67,9 +67,9 @@ export default function Packs({ status, meetings, onOpen }: { status: BoardVault
                 <span className="flex h-[38px] w-[38px] items-center justify-center rounded-[6px] bg-subtle text-[9px] font-bold text-ink-3">PACK</span>
                 <div className="min-w-0 flex-1">
                   <div className="text-[13px] font-bold">{m.title}</div>
-                  <div className="text-[11.5px] text-ink-3">{fmtDate(m.starts_at)}{m.status === 'draft' ? ' · not yet published' : ''}</div>
+                  <div className="text-[11.5px] text-ink-3">{fmtDate(m.starts_at)}{!m.pack?.current_version ? ' · pack not yet published' : ''}</div>
                 </div>
-                {busy === m.id ? <Status tone="indigo">Downloading</Status> : m.status === 'draft' ? <Status>Auto on publish</Status> : <Button size="sm" disabled={blocked || busy !== null} onClick={() => void download(m.id)}>Download</Button>}
+                {busy === m.id ? <Status tone="indigo">Downloading</Status> : !m.pack?.current_version ? <Status>Not published</Status> : <Button size="sm" disabled={blocked || busy !== null} onClick={() => void download(m.id)}>Download</Button>}
               </li>
             ))}
             {!kept.length && !upcoming.length ? <li className="py-3"><Muted>No packs yet. Use “Download for offline” on a meeting's agenda.</Muted></li> : null}
@@ -86,7 +86,7 @@ export default function Packs({ status, meetings, onOpen }: { status: BoardVault
             <Muted>Votes and signatures need a connection.</Muted>
           </Panel>
           <Panel title="This device">
-            <div className="text-[12.5px]">{blocked ? <Status tone="danger">{status?.trust === 'blocked' ? 'Blocked' : 'Revoked'}</Status> : status?.trust === 'trusted' ? <Status tone="success">Trusted</Status> : <Status>Not checked yet</Status>}</div>
+            <div className="text-[12.5px]">{blocked ? <Status tone="danger">{status?.trust === 'blocked' ? 'Blocked' : 'Revoked'}</Status> : status?.trust === 'trusted' ? <Status tone="success">Trusted</Status> : status?.trust === 'pending' ? <Status tone="warning">Waiting for an administrator's approval</Status> : <Status>Not registered yet</Status>}</div>
             <Muted>{status?.lastSyncAt ? `Synced ${fmtDate(status.lastSyncAt)} ${new Date(status.lastSyncAt).toLocaleTimeString()}` : 'Not synced yet'} · {status?.backend ?? ''}</Muted>
           </Panel>
         </div>

@@ -22,28 +22,69 @@ function secrets() {
   return { m, get: (k: string) => m.get(k) ?? null, set: (k: string, v: string) => void m.set(k, v), delete: (k: string) => void m.delete(k), getStatus: () => ({ persistent: true, backend: 'test' }) };
 }
 
-const MANIFEST = {
-  meeting: { id: 4, title: 'Audit Committee — AC/2026/004', archive_at: '2026-12-01T00:00:00Z' },
-  pack: { version_id: 77, version: 2, pages: 75 },
-  policy: { offline_allowed: true, max_offline_days: 14, offline_circular_responses: true },
-  agenda: [{ id: 1, number: '2.1', title: 'Q3 management accounts', paper: { id: 11, name: 'q3.pdf' } }, { id: 2, number: '3.2', title: 'External auditor appointment' }],
-  papers: [{ id: 11, title: 'Tender evaluation v2', pages: ['Intro', 'recommends the appointment of the highest-scoring firm as external auditor'] }],
-  notes: [{ id: 'n1', text: 'Check rotation rule for the engagement partner', page: 9, paper_title: 'Tender evaluation v2' }],
-  circulars: [
-    { id: 9, status: 'open', deadline: '2026-10-25T17:00:00Z' },
-    { id: 10, status: 'open', deadline: '2026-10-20T17:00:00Z' },
-    { id: 11, status: 'open', deadline: '2026-10-25T17:00:00Z', offline_responses_allowed: false },
-    { id: 12, status: 'open', deadline: '2026-10-25T17:00:00Z', live_meeting: true },
+/** The server's answers (worksuite docs/board/API.md "Devices and offline"), by path. */
+const GRANT = {
+  id: 31,
+  board_meeting_id: 4,
+  device_id: 7,
+  manifest: { board_meeting_id: 4, user_id: 42, agenda_version: 3, papers: [{ paper_id: 11, paper_version_id: 111, sha256: 'ab', agenda_item_id: 1, title: 'Tender evaluation v2' }], pack_version: 2, annotations: [5], issued_at: '2026-10-21T10:00:00Z', encryption: 'AES-256-GCM' },
+  manifest_sha256: 'cd',
+  signature: 'sig',
+  issued_at: '2026-10-21T10:00:00Z',
+  expires_at: '2026-11-04T10:00:00Z',
+  revoked_at: null,
+  wiped_at: null,
+  valid: true,
+};
+const MEETING = { id: 4, title: 'Audit Committee — AC/2026/004', meeting_number: 'AC/2026/004', body: 'Audit Committee', starts_at: '2026-10-25T09:00:00Z', pack: { pack_id: 3, status: 'PUBLISHED', current_version: 2 } };
+const AGENDA = { items: [{ id: 1, number: '2', title: 'Q3 management accounts', depth: 0, papers: [{ id: 11, title: 'Tender evaluation v2' }], children: [{ id: 2, number: '2.1', title: 'External auditor appointment', depth: 1, papers: [], children: [] }] }] };
+const NOTES = { items: [{ id: 5, kind: 'note', page: 9, body: 'Check rotation rule for the engagement partner', paper_version_id: 111, visibility: 'PRIVATE', mine: true }] };
+const PACK = { pack: { id: 3, status: 'PUBLISHED', current_version: 2, versions: [{ id: 77, pack_id: 3, version: 2, pages: 75 }] } };
+const CIRCULARS = {
+  items: [
+    { id: 9, status: 'ISSUED', deadline_at: '2026-10-25T17:00:00Z', allow_offline: true, me: { eligible: true, response: null } },
+    { id: 10, status: 'ISSUED', deadline_at: '2026-10-20T17:00:00Z', allow_offline: true, me: { eligible: true, response: null } },
+    { id: 11, status: 'ISSUED', deadline_at: '2026-10-25T17:00:00Z', allow_offline: false, me: { eligible: true, response: null } },
+    { id: 12, status: 'ISSUED', deadline_at: '2026-10-25T17:00:00Z', allow_offline: true, me: { eligible: true, response: 'APPROVE' } },
   ],
 };
 
-function make(over: Partial<BoardVaultDeps> = {}) {
+function router(over: Record<string, unknown> = {}) {
+  const gets: Record<string, unknown> = {
+    '/api/board/meetings/4': MEETING,
+    '/api/board/meetings/4/agenda': AGENDA,
+    '/api/board/annotations?board_meeting_id=4&mine=1': NOTES,
+    '/api/board/meetings/4/pack': PACK,
+    '/api/board/offline/manifest/31': GRANT,
+    '/api/board/circulars?tab=open': CIRCULARS,
+    ...over,
+  };
+  return {
+    get: vi.fn(async (p: string, _o?: unknown): Promise<unknown> => {
+      if (p in gets) return gets[p];
+      throw new DesktopError('NOT_FOUND', `no ${p}`, 404);
+    }),
+    post: vi.fn(async (p: string, b?: unknown, _o?: unknown): Promise<unknown> => {
+      if (p === '/api/board/devices') return { device: { id: 7, device_uid: (b as { device_uid: string }).device_uid, status: 'ACTIVE', trust_level: 'TRUSTED', has_key: true } };
+      if (p === '/api/board/devices/check-in') return { allowed: true, command: null, revoked_grants: [], status: 'ACTIVE' };
+      if (p === '/api/board/offline/grants') return { grant: GRANT };
+      if (p.endsWith('/offline-responses')) {
+        const r = (b as { responses: Array<{ client_uuid: string }> }).responses[0]!;
+        return { results: [{ client_uuid: r.client_uuid, verdict: 'ACCEPTED', reason: null }] };
+      }
+      if (p === '/api/board/annotations/sync') return { items: [{ client_uuid: 'a1', status: 200, body: {} }] };
+      return {};
+    }),
+  };
+}
+
+function make(over: Partial<BoardVaultDeps> = {}, http = router()) {
   const s = secrets();
-  const http = { get: vi.fn(async (_p: string): Promise<unknown> => MANIFEST), post: vi.fn(async (p: string, _b?: unknown): Promise<unknown> => (p.endsWith('/grants') ? { expires_at: '2026-11-30T00:00:00Z' } : { results: [{ status: 'accepted' }] })) };
   const changed = vi.fn();
+  const download = vi.fn(async (_p: string, _h: Record<string, string>) => new Uint8Array(Buffer.from('%PDF-1.7 secret board paper text')));
   const v = new BoardVault({
     http: http as unknown as BoardVaultDeps['http'],
-    download: vi.fn(async () => new Uint8Array(Buffer.from('%PDF-1.7 secret board paper text'))),
+    download,
     secrets: s,
     root: () => join(dir, 'board'),
     userId: () => '42',
@@ -53,8 +94,10 @@ function make(over: Partial<BoardVaultDeps> = {}) {
     now: () => now,
     ...over,
   });
-  return { v, s, http, changed };
+  return { v, s, http, changed, download };
 }
+
+const refused = (code: 'device_blocked' | 'device_revoked') => new DesktopError('PERMISSION_DENIED', `This device is ${code.slice(7)} for WorkSuite Board.`, 403, { code, command: 'WIPE' });
 
 function allFiles(d: string): string[] {
   if (!existsSync(d)) return [];
@@ -77,15 +120,37 @@ describe('sealing', () => {
   });
 });
 
+describe('the device (FR-DEV-01)', () => {
+  it('registers with its raw Ed25519 public key and names itself on every Board call', async () => {
+    const { v, http, download } = make();
+    await v.download(4);
+    const reg = http.post.mock.calls.find((c) => c[0] === '/api/board/devices')!;
+    const body = reg[1] as { device_uid: string; public_key: string; platform: string };
+    expect(body.device_uid).toBe('dev-1');
+    expect(Buffer.from(body.public_key, 'base64').length).toBe(32);
+    expect(reg[2]).toEqual({ headers: { 'X-Board-Device': 'dev-1' } });
+    expect(http.post).toHaveBeenCalledWith('/api/board/offline/grants', { board_meeting_id: 4, device_uid: 'dev-1' }, { headers: { 'X-Board-Device': 'dev-1' } });
+    expect(download).toHaveBeenCalledWith('/api/board/packs/versions/77/file?member=me', { 'X-Board-Device': 'dev-1' });
+    expect(v.headers('/api/board/dashboard')).toEqual({ 'X-Board-Device': 'dev-1' });
+    expect(v.headers('/api/mail/messages')).toEqual({});
+  });
+
+  it('waits for an administrator when the device is pending', async () => {
+    const http = router();
+    const post = http.post.getMockImplementation()!;
+    http.post.mockImplementation(async (p: string, b?: unknown, o?: unknown) => (p === '/api/board/devices' ? { device: { id: 7, status: 'ACTIVE', trust_level: 'PENDING', has_key: true } } : post(p, b, o)));
+    const { v } = make({}, http);
+    await expect(v.download(4)).rejects.toThrow(/not approved/);
+    expect(v.status().trust).toBe('pending');
+    expect(http.post.mock.calls.some((c) => c[0] === '/api/board/offline/grants')).toBe(false);
+  });
+});
+
 describe('offline packs (FR-OFF-01, FR-OFF-03)', () => {
-  it('keeps a pack encrypted with a keychain key, nothing plain on disk', async () => {
-    const { v, s, http } = make();
+  it('keeps the grant and the rendition encrypted with a keychain key, nothing plain on disk', async () => {
+    const { v, s } = make();
     const p = await v.download(4);
-    expect(http.post).toHaveBeenCalledWith('/api/board/offline/grants', { meeting_id: 4, device_id: 'dev-1' });
-    expect(http.get).toHaveBeenCalledWith('/api/board/offline/manifest/4');
-    expect(p).toMatchObject({ meetingId: 4, version: 2, pages: 75, notes: 1, state: 'ready' });
-    // min(grant 30 Nov, now + 14 days = 4 Nov, archive 1 Dec)
-    expect(p.expiresAt).toBe('2026-11-04T10:00:00.000Z');
+    expect(p).toMatchObject({ meetingId: 4, version: 2, pages: 75, notes: 1, state: 'ready', expiresAt: '2026-11-04T10:00:00Z' });
     expect(s.m.has('board.vault.42')).toBe(true);
     const files = allFiles(join(dir, 'board'));
     expect(files.length).toBe(2);
@@ -96,7 +161,8 @@ describe('offline packs (FR-OFF-01, FR-OFF-03)', () => {
     }
     const opened = v.open(4);
     expect(Buffer.from(opened.file!).toString()).toContain('secret board paper');
-    expect(opened.manifest.pack).toEqual(MANIFEST.pack);
+    expect(opened.manifest.grant).toEqual(GRANT.manifest);
+    expect(opened.manifest.agenda.map((a) => [a.number, a.depth])).toEqual([['2', 0], ['2.1', 1]]);
   });
 
   it('refuses when the organization keeps nothing offline', async () => {
@@ -104,7 +170,7 @@ describe('offline packs (FR-OFF-01, FR-OFF-03)', () => {
     await expect(v.download(4)).rejects.toThrow('No offline data here.');
   });
 
-  it('erases an expired pack on the next look, online or not', async () => {
+  it("erases a pack at its grant's expiry on the next look, online or not", async () => {
     const { v } = make();
     await v.download(4);
     now = Date.parse('2026-11-05T00:00:00Z');
@@ -120,110 +186,162 @@ describe('offline packs (FR-OFF-01, FR-OFF-03)', () => {
     expect(v.status().packs).toEqual([]);
   });
 
-  it('searches the kept packs offline with pages', async () => {
+  it('searches the kept agenda, papers and my notes offline', async () => {
     const { v } = make();
     await v.download(4);
-    const hits = v.search('auditor');
-    expect(hits.map((h) => h.type)).toEqual(['agenda', 'paper']);
-    expect(hits[1]).toMatchObject({ page: 2, title: 'Tender evaluation v2' });
+    expect(v.search('auditor').map((h) => h.type)).toEqual(['agenda']);
+    expect(v.search('tender')[0]).toMatchObject({ type: 'paper', title: 'Tender evaluation v2' });
     expect(v.search('rotation rule')[0]).toMatchObject({ type: 'note', page: 9 });
   });
 
-  it('flags a newer version and drops an archived meeting at sync', async () => {
-    const { v, http } = make();
+  it('flags a newer version, and drops a revoked or missing grant at sync', async () => {
+    const http = router();
+    const { v } = make({}, http);
     await v.download(4);
-    http.get.mockResolvedValueOnce({ ...MANIFEST, pack: { ...MANIFEST.pack, version: 3 } });
+    const get = http.get.getMockImplementation()!;
+    http.get.mockImplementation(async (p: string) => (p === '/api/board/meetings/4' ? { ...MEETING, pack: { ...MEETING.pack, current_version: 3 } } : get(p)));
     let st = await v.sync();
     expect(st.packs[0]!.latestVersion).toBe(3);
     expect(st.trust).toBe('trusted');
-    http.get.mockRejectedValueOnce(new DesktopError('NOT_FOUND', 'Archived', 404));
+    http.get.mockImplementation(async (p: string) => (p === '/api/board/offline/manifest/31' ? { ...GRANT, valid: false, revoked_at: '2026-10-21T11:00:00Z' } : get(p)));
     st = await v.sync();
     expect(st.packs).toEqual([]);
+  });
+
+  it('PURGE_GRANTS at check-in erases just those meetings', async () => {
+    const http = router();
+    const { v } = make({}, http);
+    await v.download(4);
+    const post = http.post.getMockImplementation()!;
+    http.post.mockImplementation(async (p: string, b?: unknown, o?: unknown) => (p === '/api/board/devices/check-in' ? { allowed: true, command: 'PURGE_GRANTS', revoked_grants: [31], status: 'ACTIVE' } : post(p, b, o)));
+    const st = await v.sync();
+    expect(st.packs).toEqual([]);
+    expect(st.trust).toBe('trusted');
   });
 });
 
 describe('revocation and wipe (FR-DEV-02, FR-DEV-03)', () => {
-  it('a revoked device erases only its vault and reports it at the next contact', async () => {
-    const { v, s, http } = make();
+  it('a WIPE at check-in erases only the vault and reports it with POST /devices/{id}/wiped', async () => {
+    const http = router();
+    const { v, s } = make({}, http);
     await v.download(4);
     const personal = join(dir, 'my-own-file.txt');
     writeFileSync(personal, 'mine');
     mkdirSync(join(dir, 'board-other'));
-    v.handleRealtime({ type: 'board.device.revoked', device_id: 'dev-1' });
+    const post = http.post.getMockImplementation()!;
+    http.post.mockImplementation(async (p: string, b?: unknown, o?: unknown) => (p === '/api/board/devices/check-in' ? { allowed: false, command: 'WIPE', revoked_grants: [31], status: 'REVOKED' } : post(p, b, o)));
+    let st = await v.sync();
     expect(existsSync(personal)).toBe(true);
     expect(existsSync(join(dir, 'board-other'))).toBe(true);
     expect(s.m.has('board.sign.42')).toBe(false);
-    const st = v.status();
     expect(st.packs).toEqual([]);
     expect(st.trust).toBe('revoked');
     expect(st.wiped?.reason).toMatch(/revoked/);
     await expect(v.download(4)).rejects.toMatchObject({ code: 'DEVICE_REVOKED' });
-    await v.sync();
-    expect(http.post).toHaveBeenCalledWith('/api/board/devices/dev-1/wipe-report', expect.objectContaining({ packs: 1 }));
+    st = await v.sync();
+    const report = http.post.mock.calls.find((c) => c[0] === '/api/board/devices/7/wiped')!;
+    expect(report[1]).toEqual({ result: expect.stringMatching(/Board vault destroyed/), grants: [31] });
+    // The report is the device's own, by id: no X-Board-Device, which a blocked device would be refused with.
+    expect(report[2]).toBeUndefined();
   });
 
-  it("ignores another device's revocation", async () => {
-    const { v } = make();
+  it('403 device_blocked on any Board call wipes the vault', async () => {
+    const http = router();
+    const { v } = make({}, http);
     await v.download(4);
-    v.handleRealtime({ type: 'board.device.blocked', device_id: 'dev-2' });
-    expect(v.status().packs.length).toBe(1);
-  });
-
-  it('DEVICE_BLOCKED on a Board call wipes the vault', async () => {
-    const { v, http } = make();
-    await v.download(4);
-    http.get.mockRejectedValueOnce(new DesktopError('DEVICE_BLOCKED', 'Blocked', 403));
+    http.get.mockRejectedValue(refused('device_blocked'));
     const st = await v.sync();
     expect(st.trust).toBe('blocked');
     expect(st.packs).toEqual([]);
     expect(() => v.open(4)).toThrow(/may not open/);
   });
+
+  it('a refused download wipes too', async () => {
+    const http = router();
+    const { v } = make({}, http);
+    http.post.mockRejectedValue(refused('device_revoked'));
+    await expect(v.download(4)).rejects.toThrow(/revoked; its Board packs were erased/);
+    expect(v.status().trust).toBe('revoked');
+  });
+
+  it('a plain 403 (no permission) is not a wipe', () => {
+    const { v } = make();
+    expect(v.wipeIfRevoked(new DesktopError('PERMISSION_DENIED', 'You do not have permission to do that', 403, null))).toBeNull();
+  });
 });
 
 describe('offline queue and circular responses (FR-OFF-02, FR-VOT-08, FR-CIR-05)', () => {
-  it('keeps only the latest edit of the same annotation, then sends it', async () => {
+  it('keeps only the latest edit of the same annotation, then sends it through /annotations/sync', async () => {
     const { v, http } = make();
     await v.download(4);
-    v.enqueue({ kind: 'annotation', meetingId: 4, ref: 'a1', body: { note: 'first' } });
-    v.enqueue({ kind: 'annotation', meetingId: 4, ref: 'a1', body: { note: 'second' } });
+    v.enqueue({ kind: 'annotation', meetingId: 4, ref: 'a1', body: { paper_version_id: 111, kind: 'note', body: 'first', visibility: 'PRIVATE' } });
+    v.enqueue({ kind: 'annotation', meetingId: 4, ref: 'a1', body: { paper_version_id: 111, kind: 'note', body: 'second', visibility: 'PRIVATE' } });
     expect(v.queue().length).toBe(1);
     await v.sync();
-    expect(http.post).toHaveBeenCalledWith('/api/board/meetings/4/annotations', expect.objectContaining({ note: 'second', client_ref: 'a1' }));
+    expect(http.post).toHaveBeenCalledWith('/api/board/annotations/sync', { items: [expect.objectContaining({ body: 'second', client_uuid: 'a1', board_meeting_id: 4, updated_at: expect.any(String) })] }, expect.anything());
     expect(v.queue()[0]!.outcome).toBe('accepted');
   });
 
-  it('signs an allowed response with the device key, and the signature verifies', async () => {
+  it('acknowledges the kept pack version', async () => {
+    const { v, http } = make();
+    await v.download(4);
+    v.enqueue({ kind: 'ack', meetingId: 4, ref: 'ack-4', body: {} });
+    await v.sync();
+    expect(http.post).toHaveBeenCalledWith('/api/board/packs/versions/77/acknowledge', {}, expect.anything());
+  });
+
+  it("signs an allowed response over the server's canonical JSON, and it verifies with the registered key", async () => {
     const { v, s, http } = make();
     await v.download(4);
-    const q = v.respondOffline({ circularId: 9, choice: 'approve', comment: 'Fine' });
+    await v.sync();
+    const q = v.respondOffline({ circularId: 9, choice: 'approve', comment: '  Fine / “ok”  ' });
     expect(q.outcome).toBe('pending');
     await v.sync();
     const call = http.post.mock.calls.find((c) => c[0] === '/api/board/circulars/9/offline-responses')!;
-    const r = (call[1] as { responses: Array<Record<string, string>> }).responses[0]!;
-    const payload = offlineResponsePayload({ circularId: 9, choice: 'approve', comment: 'Fine', recordedAt: r.recorded_at!, deviceId: 'dev-1' });
-    expect(verify(null, Buffer.from(payload), createPublicKey(r.public_key!), Buffer.from(r.signature!, 'base64'))).toBe(true);
+    const r = (call[1] as { responses: Array<Record<string, string | null>> }).responses[0]!;
+    expect(Object.keys(r).sort()).toEqual(['client_uuid', 'comment', 'device_signed_at', 'device_uid', 'response', 'signature']);
+    expect(r).toMatchObject({ device_uid: 'dev-1', response: 'APPROVE', comment: 'Fine / “ok”', device_signed_at: '2026-10-21T10:00:00Z' });
+    const payload = '{"circular_id":9,"comment":"Fine / “ok”","device_signed_at":"2026-10-21T10:00:00Z","response":"APPROVE","user_id":42}';
+    expect(offlineResponsePayload({ circularId: 9, userId: 42, response: 'approve', comment: '  Fine / “ok”  ', signedAt: '2026-10-21T10:00:00Z' })).toBe(payload);
+    const raw = (http.post.mock.calls.find((c) => c[0] === '/api/board/devices')![1] as { public_key: string }).public_key;
+    const pub = createPublicKey({ key: Buffer.concat([Buffer.from('302a300506032b6570032100', 'hex'), Buffer.from(raw, 'base64')]), format: 'der', type: 'spki' });
+    expect(verify(null, Buffer.from(payload), pub, Buffer.from(r.signature!, 'base64'))).toBe(true);
     expect(s.m.get('board.sign.42')).toContain('PRIVATE KEY');
     expect(v.queue().find((x) => x.kind === 'circular')!.outcome).toBe('accepted');
   });
 
-  it('refuses past the deadline, without the policy, and for live votes', async () => {
+  it('signs null for an empty comment, as the server rebuilds it', () => {
+    expect(offlineResponsePayload({ circularId: 12, userId: 4, response: 'APPROVE', comment: ' \n ', signedAt: '2026-11-02T07:00:00Z' })).toBe('{"circular_id":12,"comment":null,"device_signed_at":"2026-11-02T07:00:00Z","response":"APPROVE","user_id":4}');
+    expect(offlineResponsePayload({ circularId: 1, userId: 1, response: 'REJECT', comment: 'a b', signedAt: 'x' })).toContain('"a\\u2028b"');
+  });
+
+  it('refuses past the deadline, without the policy, once answered, and when not kept', async () => {
     const { v } = make();
     await v.download(4);
+    await v.sync();
     expect(() => v.respondOffline({ circularId: 10, choice: 'approve' })).toThrow('The deadline has passed.');
-    expect(() => v.respondOffline({ circularId: 11, choice: 'approve' })).toThrow(/policy/);
-    expect(() => v.respondOffline({ circularId: 12, choice: 'approve' })).toThrow(/online only/);
+    expect(() => v.respondOffline({ circularId: 11, choice: 'approve' })).toThrow(/not in the offline vault/);
+    expect(() => v.respondOffline({ circularId: 12, choice: 'approve' })).toThrow(/already responded/);
     expect(() => v.respondOffline({ circularId: 99, choice: 'approve' })).toThrow(/not in the offline vault/);
   });
 
+  it('refuses before this computer is registered with a key', () => {
+    const { v } = make();
+    expect(() => v.respondOffline({ circularId: 9, choice: 'approve' })).toThrow(/not set up for Board offline use/);
+  });
+
   it('shows the server rejection reason', async () => {
-    const { v, http } = make();
+    const http = router();
+    const { v } = make({}, http);
     await v.download(4);
+    await v.sync();
     v.respondOffline({ circularId: 9, choice: 'reject' });
     v.respondOffline({ circularId: 9, choice: 'approve' });
     expect(v.queue().filter((x) => x.kind === 'circular').length).toBe(1);
-    http.post.mockResolvedValueOnce({ results: [{ status: 'rejected', reason: 'Recorded after the deadline.' }] });
+    const post = http.post.getMockImplementation()!;
+    http.post.mockImplementation(async (p: string, b?: unknown, o?: unknown) => (p.endsWith('/offline-responses') ? { results: [{ client_uuid: 'x', verdict: 'REJECTED', reason: 'Signed after the deadline (2026-10-25T17:00:00Z).' }] } : post(p, b, o)));
     await v.sync();
-    expect(v.queue().find((x) => x.kind === 'circular')).toMatchObject({ outcome: 'rejected', error: 'Recorded after the deadline.' });
+    expect(v.queue().find((x) => x.kind === 'circular')).toMatchObject({ outcome: 'rejected', error: 'Signed after the deadline (2026-10-25T17:00:00Z).' });
   });
 });
 
@@ -237,11 +355,17 @@ describe('IPC and the page boundary', () => {
     expect(contract['board:packDownload'].input.safeParse({ meetingId: -1 }).success).toBe(false);
     expect(contract['board:respondOffline'].input.safeParse({ circularId: 9, choice: 'maybe' }).success).toBe(false);
     expect(contract['board:queueAdd'].input.safeParse({ kind: 'annotation', meetingId: 4, ref: '../x', body: {} }).success).toBe(false);
+    expect(contract['board:queueAdd'].input.safeParse({ kind: 'note', meetingId: 4, ref: 'x', body: {} }).success).toBe(false);
   });
-  it('keeps grants, manifests and signed responses away from pages', () => {
+  it('keeps grants, manifests, signed responses, check-in, wipe reports and device registration away from pages', () => {
     expect(isProxyPathAllowed('/api/board/offline/grants', 'POST')).toBe(false);
     expect(isProxyPathAllowed('/api/board/offline/manifest/4')).toBe(false);
+    expect(isProxyPathAllowed('/api/mobile/v1/board/offline/grants', 'POST')).toBe(false);
     expect(isProxyPathAllowed('/api/board/circulars/9/offline-responses', 'POST')).toBe(false);
+    expect(isProxyPathAllowed('/api/board/devices/check-in', 'POST')).toBe(false);
+    expect(isProxyPathAllowed('/api/board/devices/7/wiped', 'POST')).toBe(false);
+    expect(isProxyPathAllowed('/api/board/devices', 'POST')).toBe(false);
+    expect(isProxyPathAllowed('/api/board/devices?mine=1')).toBe(true);
     expect(isProxyPathAllowed('/api/board/circulars/9/respond', 'POST')).toBe(true);
     expect(isProxyPathAllowed('/api/board/dashboard')).toBe(true);
   });

@@ -1,28 +1,28 @@
 import { useMutation, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import { call, errorMessage } from '../../core/bridge';
+import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Button, Spinner, cx } from '../../components/ui';
-import { checkIntegrity, fetchMeeting, fetchMeetings, fmtDate, K, type Body, type MeetingCard } from './api';
+import { bodyKeyOf, checkIntegrity, fetchArchive, fmtDate, K, titleCase, type Body, type MeetingRow } from './api';
 import { BodyTabs, Muted, Panel, Status } from './parts';
 
 /** D-10 Archive: past meetings by year, read-only, with integrity verification (FR-ARC-01). */
 export default function Archive({ bodies, onOpen }: { bodies: Body[]; onOpen: (meetingId: number) => void }) {
-  const [body, setBody] = useState<number | null>(null);
+  const [body, setBody] = useState<string | null>(null);
   const [selId, setSelId] = useState<number | null>(null);
-  const list = useQuery({ queryKey: K.archive, queryFn: ({ signal }) => fetchMeetings({ archived: true }, signal) });
-  const rows = (list.data ?? []).filter((m) => !body || m.body?.id === body).sort((a, b) => b.starts_at.localeCompare(a.starts_at));
-  const years = new Map<string, MeetingCard[]>();
+  const list = useQuery({ queryKey: K.archive, queryFn: ({ signal }) => fetchArchive(signal) });
+  const rows = (list.data ?? []).filter((m) => !body || bodyKeyOf(m) === body).sort((a, b) => b.starts_at.localeCompare(a.starts_at));
+  const years = new Map<string, MeetingRow[]>();
   for (const m of rows) years.set(m.starts_at.slice(0, 4), [...(years.get(m.starts_at.slice(0, 4)) ?? []), m]);
   const selId2 = selId ?? rows[0]?.id ?? null;
-  const rec = useQuery({ queryKey: K.meeting(selId2 ?? 0), queryFn: ({ signal }) => fetchMeeting(selId2!, signal), enabled: !!selId2 });
+  const r = rows.find((m) => m.id === selId2) ?? null;
+  // The archive's integrity check covers the company's audit chain and every pack and paper version (FR-ARC-01).
   const verify = useMutation({
-    mutationFn: () => checkIntegrity(selId2!),
-    onSuccess: (r) => toast(r.ok ? 'success' : 'error', r.ok ? 'Integrity verified: nothing here has changed since it was archived.' : (r.message ?? 'The integrity check failed.')),
+    mutationFn: () => checkIntegrity(),
+    onSuccess: (x) => toast(x.ok ? 'success' : 'error', x.ok ? 'Integrity verified: nothing has changed since it was sealed.' : `The integrity check found ${x.failures?.length ?? 0} problems.`),
     onError: (e) => toast('error', errorMessage(e)),
   });
-  const r = rec.data as (typeof rec.data & { record?: { packs?: string[]; minutes?: string; resolutions?: string[]; actions?: number; notes?: number; archived_at?: string } }) | undefined;
-  const web = (p: string) => void call('app:openInBrowser', { path: p });
+  const a = r?.archive ?? null;
   return (
     <div className="flex h-full flex-col gap-3 p-5">
       <div><h1 className="text-[18px] font-bold">Archive</h1><Muted>Read-only · meetings you attended or may view</Muted></div>
@@ -39,7 +39,7 @@ export default function Archive({ bodies, onOpen }: { bodies: Body[]; onOpen: (m
                     <button type="button" onClick={() => setSelId(m.id)} className={cx('flex w-full items-center gap-3 rounded-[8px] border bg-surface p-2.5 text-left', selId2 === m.id ? 'border-primary' : 'border-line')}>
                       <span className="w-[34px] text-center text-[10px] font-bold text-ink-3 uppercase">{new Date(m.starts_at).toLocaleDateString(undefined, { month: 'short' })}<span className="block text-[16px] text-ink">{new Date(m.starts_at).getDate()}</span></span>
                       <span className="min-w-0 flex-1"><span className="block text-[13px] font-bold">{m.title}</span></span>
-                      <Status tone={m.status === 'complete' || m.status === 'completed' ? 'success' : 'indigo'}>{m.status}</Status>
+                      <Status tone={m.gov_status === 'ARCHIVED' ? 'success' : 'indigo'}>{titleCase(m.gov_status)}</Status>
                     </button>
                   </li>
                 ))}
@@ -47,17 +47,14 @@ export default function Archive({ bodies, onOpen }: { bodies: Body[]; onOpen: (m
             </section>
           ))}
         </div>
-        <Panel title={r ? r.number ?? r.title : 'Meeting record'}>
+        <Panel title={r ? r.meeting_number ?? r.title : 'Meeting record'}>
           {r ? (
             <div className="space-y-2 text-[12.5px]">
-              <Muted>{r.body?.name} · {fmtDate(r.starts_at)}</Muted>
-              {r.pack ? <div className="flex justify-between">Board pack v{r.pack.version} (final)<button type="button" className="text-primary underline" onClick={() => onOpen(r.id)}>Open</button></div> : null}
-              {r.record?.minutes ? <div className="flex justify-between">Signed minutes<button type="button" className="text-primary underline" onClick={() => web(`/board/minutes/${r.minutes_id}`)}>Open</button></div> : null}
-              {r.record?.resolutions?.length ? <div>{r.record.resolutions.join(', ')}</div> : null}
-              {r.record?.actions !== undefined ? <div>Actions · {r.record.actions}</div> : null}
-              {r.record?.notes !== undefined ? <div>My private notes · {r.record.notes}</div> : null}
+              <Muted>{r.body} · {fmtDate(r.starts_at)}</Muted>
+              {r.pack ? <div className="flex justify-between">Board pack v{r.pack.current_version} (final)<button type="button" className="text-primary underline" onClick={() => onOpen(r.id)}>Open</button></div> : null}
+              {a ? <div>{[a.pack_versions !== undefined ? `Pack versions · ${a.pack_versions}` : null, a.minutes ? 'Minutes' : null, a.resolutions !== undefined ? `Resolutions · ${a.resolutions}` : null, a.votes !== undefined ? `Votes · ${a.votes}` : null, a.actions !== undefined ? `Actions · ${a.actions}` : null].filter(Boolean).join(' · ')}</div> : null}
               <Button size="sm" loading={verify.isPending} onClick={() => verify.mutate()}>Verify integrity</Button>
-              <Muted>Archived {fmtDate(r.archived_at ?? r.record?.archived_at)} · nothing here can be edited</Muted>
+              <Muted>{a?.read_only === false ? 'Not yet sealed' : 'Read-only · nothing here can be edited'}</Muted>
             </div>
           ) : <Muted>Choose a meeting.</Muted>}
         </Panel>

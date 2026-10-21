@@ -4,7 +4,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { CheckboxMark } from '../../components/Checkbox';
 import { Button, Spinner, cx } from '../../components/ui';
-import { fetchActions, fmtDate, groupActions, K, updateAction, type BoardAction } from './api';
+import { fetchActions, fmtDate, groupActions, K, titleCase, updateAction, type Action } from './api';
 import { Muted, Panel, Status } from './parts';
 
 const GROUPS: Array<['overdue' | 'week' | 'later' | 'verify', string]> = [['overdue', 'Overdue'], ['week', 'This week'], ['later', 'Later'], ['verify', 'Done — awaiting verification']];
@@ -14,16 +14,12 @@ export default function Actions({ onWeb }: { onWeb: (path: string) => void }) {
   const qc = useQueryClient();
   const list = useQuery({ queryKey: K.actions, queryFn: ({ signal }) => fetchActions(signal) });
   const [selId, setSelId] = useState<number | null>(null);
-  const [note, setNote] = useState('');
   const g = groupActions(list.data ?? []);
   const all = [...g.overdue, ...g.week, ...g.later, ...g.verify];
-  const sel: BoardAction | null = all.find((a) => a.id === selId) ?? all[0] ?? null;
+  const sel: Action | null = all.find((a) => a.id === selId) ?? all[0] ?? null;
   const step = useMutation({
-    mutationFn: (s: 'in_progress' | 'blocked' | 'done') => {
-      if (s === 'blocked' && !note.trim()) throw new Error('Say what is blocking it in the progress note.');
-      return updateAction(sel!.id, s, note);
-    },
-    onSuccess: () => { setNote(''); void qc.invalidateQueries({ queryKey: K.actions }); },
+    mutationFn: (s: 'IN_PROGRESS' | 'BLOCKED' | 'COMPLETED') => updateAction(sel!.id, s),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: K.actions }),
     onError: (e) => toast('error', errorMessage(e)),
   });
   return (
@@ -42,9 +38,9 @@ export default function Actions({ onWeb }: { onWeb: (path: string) => void }) {
                 {g[k].map((a) => (
                   <li key={a.id}>
                     <button type="button" onClick={() => setSelId(a.id)} className={cx('flex w-full items-center gap-2.5 rounded-[8px] border border-line p-2.5 text-left mb-1.5', sel?.id === a.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'bg-surface')}>
-                      <CheckboxMark checked={a.status === 'done'} />
-                      <div className="min-w-0 flex-1"><div className="text-[13px] font-bold">{a.title}</div><div className="text-[11.5px] text-ink-3">{[a.source, a.task_ref].filter(Boolean).join(' · ')}</div></div>
-                      {k === 'verify' ? <Status tone="indigo">Secretary to verify</Status> : <Status tone={k === 'overdue' ? 'danger' : k === 'week' ? 'warning' : 'muted'}>{fmtDate(a.due)}</Status>}
+                      <CheckboxMark checked={a.status === 'COMPLETED'} />
+                      <div className="min-w-0 flex-1"><div className="text-[13px] font-bold">{a.title}</div><div className="text-[11.5px] text-ink-3">{[a.meeting_number, a.decision_extract?.resolution_number, titleCase(a.status)].filter(Boolean).join(' · ')}</div></div>
+                      {k === 'verify' ? <Status tone="indigo">Secretary to verify</Status> : <Status tone={k === 'overdue' ? 'danger' : k === 'week' ? 'warning' : 'muted'}>{a.due_on ? fmtDate(a.due_on) : 'No date'}</Status>}
                     </button>
                   </li>
                 ))}
@@ -57,17 +53,16 @@ export default function Actions({ onWeb }: { onWeb: (path: string) => void }) {
           {sel ? (
             <div className="space-y-2 text-[12.5px]">
               {g.overdue.includes(sel) ? <Status tone="danger">Overdue</Status> : null}
-              <div><div className="text-[11px] text-ink-3">From decision</div>{sel.source ?? '—'}</div>
-              <div><div className="text-[11px] text-ink-3">Due</div>{fmtDate(sel.due)}{sel.assigned_by ? ` · assigned by ${sel.assigned_by}` : ''}</div>
-              {sel.status !== 'done' ? (
-                <>
-                  <textarea aria-label="Progress note" value={note} onChange={(e) => setNote(e.target.value)} placeholder="Add a progress note" className="h-[70px] w-full rounded-[8px] border border-line bg-surface p-2" />
-                  <div className="flex gap-1.5">
-                    <Button size="sm" onClick={() => step.mutate('in_progress')}>In progress</Button>
-                    <Button size="sm" onClick={() => step.mutate('blocked')}>Blocked…</Button>
-                    <Button size="sm" variant="primary" onClick={() => step.mutate('done')}>Mark complete</Button>
-                  </div>
-                </>
+              <div><div className="text-[11px] text-ink-3">From decision</div>{sel.decision_extract ? [sel.decision_extract.resolution_number, sel.decision_extract.title].filter(Boolean).join(' ') : (sel.meeting_number ?? '—')}</div>
+              {sel.decision_extract?.text ? <p className="rounded-[8px] bg-subtle p-2 font-serif">{sel.decision_extract.text}</p> : null}
+              {sel.description ? <p>{sel.description}</p> : null}
+              <div><div className="text-[11px] text-ink-3">Due</div>{sel.due_on ? fmtDate(sel.due_on) : '—'} · {titleCase(sel.status)}</div>
+              {sel.status !== 'COMPLETED' ? (
+                <div className="flex gap-1.5">
+                  <Button size="sm" disabled={sel.status === 'IN_PROGRESS'} onClick={() => step.mutate('IN_PROGRESS')}>In progress</Button>
+                  <Button size="sm" disabled={sel.status === 'BLOCKED'} onClick={() => step.mutate('BLOCKED')}>Blocked</Button>
+                  <Button size="sm" variant="primary" onClick={() => step.mutate('COMPLETED')}>Mark complete</Button>
+                </div>
               ) : null}
               <Muted>The secretary verifies completed actions before they close.</Muted>
             </div>

@@ -3,12 +3,12 @@ import { cx } from '../../components/ui';
 
 /**
  * The Board rail (220px, "Desk board rail"): Home, Meetings and Calendar; the current meeting's agenda, packs,
- * comments and annotations; my approvals, actions and notices; archive, search and Ask AI (FR-DX-12, FR-RPT-02).
+ * comments and annotations; my approvals and actions; archive, search and Ask AI (FR-DX-12, FR-RPT-02).
  */
-export type BoardView = 'home' | 'calendar' | 'agenda' | 'packs' | 'comments' | 'annotations' | 'approvals' | 'actions' | 'notices' | 'archive' | 'search' | 'room' | 'minutes' | 'reader';
-export const NATIVE = new Set<string>(['home', 'calendar', 'agenda', 'packs', 'comments', 'annotations', 'approvals', 'actions', 'notices', 'archive', 'search', 'room', 'minutes', 'reader']);
+export type BoardView = 'home' | 'calendar' | 'agenda' | 'packs' | 'comments' | 'annotations' | 'approvals' | 'actions' | 'archive' | 'search' | 'room' | 'minutes' | 'reader';
+export const NATIVE = new Set<string>(['home', 'calendar', 'agenda', 'packs', 'comments', 'annotations', 'approvals', 'actions', 'archive', 'search', 'room', 'minutes', 'reader']);
 
-export function BoardRail({ view, onPick, onWeb, counts, meeting, packsReady, canNotice }: {
+export function BoardRail({ view, onPick, onWeb, counts, meeting, packsReady }: {
   view: BoardView;
   onPick: (v: BoardView) => void;
   onWeb: (path: string) => void;
@@ -16,7 +16,6 @@ export function BoardRail({ view, onPick, onWeb, counts, meeting, packsReady, ca
   /** The current meeting's title, when one is open. */
   meeting: string | null;
   packsReady: number;
-  canNotice: boolean;
 }) {
   const item = (id: BoardView, label: string, icon: string, disabled = false) => {
     const on = view === id || (id === 'agenda' && (view === 'room' || view === 'minutes' || view === 'reader'));
@@ -48,7 +47,6 @@ export function BoardRail({ view, onPick, onWeb, counts, meeting, packsReady, ca
         {head('To do')}
         {item('approvals', 'Approvals', 'signature')}
         {item('actions', 'My actions', 'list-checks')}
-        {canNotice ? item('notices', 'Notices', 'megaphone', noMeeting) : null}
         {head('Find')}
         {item('archive', 'Archive', 'archive')}
         {item('search', 'Search', 'search')}

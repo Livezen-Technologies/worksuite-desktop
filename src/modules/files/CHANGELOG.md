@@ -8,7 +8,7 @@ the root CHANGELOG.md.
 
 **Security**
 
-- the API proxy keeps WorkSuite Board's offline grants, manifests, signed offline circular responses and wipe reports to the main process (board-vault.ts); pages cannot reach them.
+- the API proxy keeps WorkSuite Board's offline grants and manifests, signed offline circular responses, the device's check-in, its wipe report and its registration (`POST /devices`, with its public key) to the main process (board-vault.ts), under `/api/board` and `/api/mobile/v1/board` alike; pages cannot reach them. Board requests from pages carry `X-Board-Device`, so a blocked or revoked computer is refused by the server.
 
 ## 1.11.1 — 2026-10-20
 

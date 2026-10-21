@@ -2,20 +2,20 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { call } from '../../core/bridge';
 import { Button, IconButton, Spinner } from '../../components/ui';
-import { dayKey, fetchMeetings, fmtDate, fmtTime, K, type Body } from './api';
+import { bodyKeyOf, dayKey, fetchMeetings, flagOf, fmtDate, fmtTime, K, titleCase, type Body } from './api';
 import { BodyTabs, FlagChip, MonthCal, Panel } from './parts';
 
 /** D-03 Calendar: two months, filtered by board or committee, and the month's meetings (FR-DX-05). */
 export default function Calendar({ bodies, onMeeting }: { bodies: Body[]; onMeeting: (id: number) => void }) {
   const now = new Date();
   const [start, setStart] = useState({ y: now.getFullYear(), m: now.getMonth() });
-  const [body, setBody] = useState<number | null>(null);
+  const [body, setBody] = useState<string | null>(null);
   const [day, setDay] = useState<string | null>(null);
   const second = start.m === 11 ? { y: start.y + 1, m: 0 } : { y: start.y, m: start.m + 1 };
   const from = new Date(Date.UTC(start.y, start.m, 1)).toISOString().slice(0, 10);
   const to = new Date(Date.UTC(second.y, second.m + 1, 0)).toISOString().slice(0, 10);
   const q = useQuery({ queryKey: K.meetings(`${from}:${to}`), queryFn: ({ signal }) => fetchMeetings({ from, to }, signal) });
-  const list = (q.data ?? []).filter((m) => !body || m.body?.id === body);
+  const list = (q.data ?? []).filter((m) => !body || bodyKeyOf(m) === body);
   const marked = new Set(list.map((m) => dayKey(m.starts_at)));
   const today = dayKey(new Date(Date.UTC(now.getFullYear(), now.getMonth(), now.getDate())).toISOString());
   const monthList = list.filter((m) => (day ? dayKey(m.starts_at) === day : new Date(m.starts_at).getMonth() === start.m)).sort((a, b) => a.starts_at.localeCompare(b.starts_at));
@@ -43,9 +43,9 @@ export default function Calendar({ bodies, onMeeting }: { bodies: Body[]; onMeet
               {monthList.map((m) => (
                 <li key={m.id}>
                   <button type="button" onClick={() => onMeeting(m.id)} className="w-full rounded-[8px] border border-line p-2.5 text-left hover:border-primary">
-                    <div className="flex justify-between text-[10.5px] font-bold text-ink-3 uppercase"><span>{m.body?.name}</span><FlagChip flag={m.flag} /></div>
+                    <div className="flex justify-between text-[10.5px] font-bold text-ink-3 uppercase"><span>{m.body}</span><FlagChip flag={flagOf(m.flags)} /></div>
                     <div className="text-[13px] font-bold">{m.title}</div>
-                    <div className="mt-1 flex justify-between text-[12px] text-ink-2"><span>{m.status}</span><span>{fmtTime(m.starts_at)} · {fmtDate(m.starts_at)}</span></div>
+                    <div className="mt-1 flex justify-between text-[12px] text-ink-2"><span>{titleCase(m.gov_status)}</span><span>{fmtTime(m.starts_at)} · {fmtDate(m.starts_at)}</span></div>
                   </button>
                 </li>
               ))}

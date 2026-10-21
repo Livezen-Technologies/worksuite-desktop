@@ -3,17 +3,19 @@ import { useState } from 'react';
 import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Button, Spinner, cx } from '../../components/ui';
-import { COMMENT_MAX, commentProblem, fetchAgenda, fetchComments, fmtDate, fmtTime, K, postComment, summarize, type Comment, type Participant } from './api';
-import { FlagChip, Muted, Panel } from './parts';
+import { app } from '../../core/app-state';
+import { COMMENT_MAX, commentProblem, fetchAgenda, fetchComments, flagOf, fmtDate, fmtTime, K, postComment, summarize, type Attendance, type Audience } from './api';
+import { SummaryPanel } from './Agenda';
+import { FlagChip } from './parts';
 
-const SHARE: Record<Comment['share'], string> = { all: 'All members', specific: 'Specific…', private: 'Private' };
+const SHARE: Record<Audience, string> = { ALL: 'All members', SPECIFIC: 'Specific…', PRIVATE: 'Private' };
 
 /** D-04 Item comments & AI summary (FR-DX-10, FR-DX-11, FR-AI-03). */
-export default function Comments({ meetingId, item, participants, canComment, onItem }: { meetingId: number; item: number | null; participants: Participant[]; canComment: boolean; onItem: (id: number) => void }) {
+export default function Comments({ meetingId, item, participants, canComment, onItem }: { meetingId: number; item: number | null; participants: Attendance[]; canComment: boolean; onItem: (id: number) => void }) {
   const qc = useQueryClient();
   const [scope, setScope] = useState<'item' | 'all'>(item ? 'item' : 'all');
   const [body, setBody] = useState('');
-  const [share, setShare] = useState<Comment['share']>('all');
+  const [share, setShare] = useState<Audience>('ALL');
   const [people, setPeople] = useState<number[]>([]);
   const agenda = useQuery({ queryKey: K.agenda(meetingId), queryFn: ({ signal }) => fetchAgenda(meetingId, signal) });
   const forItem = scope === 'item' ? item : null;
@@ -21,9 +23,13 @@ export default function Comments({ meetingId, item, participants, canComment, on
   const items = agenda.data ?? [];
   const idx = items.findIndex((i) => i.id === item);
   const cur = idx >= 0 ? items[idx]! : null;
-  const sum = useQuery({ queryKey: K.summary(item ?? 0), queryFn: () => summarize(item!), enabled: !!cur?.paper });
+  const paper = cur?.papers?.[0] ?? null;
+  const sum = useQuery({ queryKey: K.summary(paper?.id ?? 0), queryFn: () => summarize(paper!.id), enabled: !!paper });
+  const me = Number(app.get().auth?.user?.id ?? 0);
+  const names = new Map(participants.map((p) => [p.user_id, p.name]));
+  const itemNo = new Map(items.map((i) => [i.id, `${i.number} ${i.title}`]));
   const send = useMutation({
-    mutationFn: () => postComment(meetingId, item, body, share, people),
+    mutationFn: () => postComment(meetingId, item!, body, share, people),
     onSuccess: () => { setBody(''); void qc.invalidateQueries({ queryKey: ['board', 'comments', meetingId] }); },
     onError: (e) => toast('error', errorMessage(e)),
   });
@@ -33,7 +39,7 @@ export default function Comments({ meetingId, item, participants, canComment, on
     <div className="flex h-full flex-col p-5">
       <div className="mb-3 flex items-start justify-between">
         <div>
-          <h1 className="flex items-center gap-2 text-[18px] font-bold">{cur ? `${cur.number} ${cur.title}` : 'All comments'} <FlagChip flag={cur?.flag} /></h1>
+          <h1 className="flex items-center gap-2 text-[18px] font-bold">{cur ? `${cur.number} ${cur.title}` : 'All comments'} <FlagChip flag={flagOf(cur?.flags)} /></h1>
           <p className="text-[12px] text-ink-3">{list.data?.length ?? 0} comments</p>
         </div>
         <div className="flex gap-1.5">
@@ -52,14 +58,17 @@ export default function Comments({ meetingId, item, participants, canComment, on
           </div>
           <ul className="min-h-0 flex-1 space-y-3 overflow-y-auto p-3.5 scroll-thin" aria-label="Comments">
             {list.isPending ? <Spinner /> : null}
-            {(list.data ?? []).map((c) => (
-              <li key={c.id} className={cx('max-w-[75%] rounded-[10px] border border-line p-2.5 text-[12.5px]', c.mine ? 'ml-auto bg-[#EEF1FD] dark:bg-selection' : 'bg-subtle')}>
-                <div className="flex justify-between gap-3 font-semibold"><span>{c.mine ? 'You' : c.author}</span><span className="font-normal text-ink-3">{fmtDate(c.at)} {fmtTime(c.at)}</span></div>
-                {scope === 'all' && c.item ? <div className="text-[11px] text-ink-3">{c.item}</div> : null}
-                <p className="whitespace-pre-wrap">{c.body}</p>
-                <span className="text-[11px] text-primary">{c.share === 'specific' ? (c.with ?? []).join(', ') : SHARE[c.share]}</span>
-              </li>
-            ))}
+            {(list.data ?? []).map((c) => {
+              const mine = c.user_id === me;
+              return (
+                <li key={c.id} className={cx('max-w-[75%] rounded-[10px] border border-line p-2.5 text-[12.5px]', mine ? 'ml-auto bg-[#EEF1FD] dark:bg-selection' : 'bg-subtle')}>
+                  <div className="flex justify-between gap-3 font-semibold"><span>{mine ? 'You' : c.author}</span><span className="font-normal text-ink-3">{fmtDate(c.created_at)} {fmtTime(c.created_at)}</span></div>
+                  {scope === 'all' && itemNo.get(c.agenda_item_id) ? <div className="text-[11px] text-ink-3">{itemNo.get(c.agenda_item_id)}</div> : null}
+                  <p className="whitespace-pre-wrap">{c.body}</p>
+                  <span className="text-[11px] text-primary">{c.audience === 'SPECIFIC' ? (c.shared_with ?? []).map((u) => names.get(u) ?? `#${u}`).join(', ') : SHARE[c.audience]}</span>
+                </li>
+              );
+            })}
           </ul>
           {item && canComment ? (
             <div className="flex gap-3 border-t border-line p-3.5">
@@ -70,10 +79,10 @@ export default function Comments({ meetingId, item, participants, canComment, on
               </label>
               <div className="flex w-[130px] flex-col gap-1.5 text-[12px]" role="radiogroup" aria-label="Share with">
                 Share with
-                {(Object.keys(SHARE) as Comment['share'][]).map((s) => <Button key={s} size="sm" role="radio" aria-checked={share === s} variant={share === s ? 'primary' : 'secondary'} onClick={() => setShare(s)}>{SHARE[s]}</Button>)}
-                {share === 'specific' ? (
+                {(Object.keys(SHARE) as Audience[]).map((s) => <Button key={s} size="sm" role="radio" aria-checked={share === s} variant={share === s ? 'primary' : 'secondary'} onClick={() => setShare(s)}>{SHARE[s]}</Button>)}
+                {share === 'SPECIFIC' ? (
                   <select multiple aria-label="People" className="h-[64px] rounded border border-line" value={people.map(String)} onChange={(e) => setPeople([...e.target.selectedOptions].map((o) => Number(o.value)))}>
-                    {participants.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
+                    {participants.filter((p) => p.user_id !== me).map((p) => <option key={p.user_id} value={p.user_id}>{p.name}</option>)}
                   </select>
                 ) : null}
                 <Button variant="primary" size="sm" disabled={!!problem || !body.trim() || send.isPending} title={problem ?? undefined} onClick={() => send.mutate()}>Send</Button>
@@ -81,15 +90,7 @@ export default function Comments({ meetingId, item, participants, canComment, on
             </div>
           ) : item ? <p className="border-t border-line p-3 text-[12px] text-ink-3">Your role cannot comment during the live meeting.</p> : null}
         </section>
-        <Panel title={`AI summary${cur ? ` · ${cur.number}` : ''}`}>
-          {!cur?.paper ? <Muted>No paper on this item.</Muted> : sum.isPending ? <Spinner /> : (
-            <ul className="space-y-2 text-[12.5px]">
-              {(sum.data?.points ?? []).map((p, i) => <li key={i}><b>{p.label}.</b> {p.text} {p.page ? <span className="rounded bg-subtle px-1 text-[11px]">p{p.page}</span> : null}</li>)}
-              {sum.data && !sum.data.points.length ? <li className="text-ink-3">Not found in the documents you can access.</li> : null}
-            </ul>
-          )}
-          <Muted>Check the paper before relying on a summary.</Muted>
-        </Panel>
+        <SummaryPanel title={`AI summary${cur ? ` · ${cur.number}` : ''}`} paper={paper} q={sum} />
       </div>
     </div>
   );

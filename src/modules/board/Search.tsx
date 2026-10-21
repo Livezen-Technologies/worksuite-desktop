@@ -3,10 +3,15 @@ import { useEffect, useState, type ReactNode } from 'react';
 import { call } from '../../core/bridge';
 import { Spinner, cx } from '../../components/ui';
 import { fetchSearch, K, type SearchResult } from './api';
-import { FlagChip, Muted } from './parts';
+import { Muted } from './parts';
 
-const TYPES: Array<[SearchResult['type'], string]> = [['agenda', 'Agenda items'], ['paper', 'Papers'], ['minutes', 'Minutes'], ['resolution', 'Resolutions'], ['comment', 'Comments'], ['note', 'My notes'], ['circular', 'Circulars']];
-const LABEL: Record<string, string> = { agenda: 'Agenda item', paper: 'Paper', minutes: 'Minutes', resolution: 'Resolution', comment: 'Comment', note: 'My note', circular: 'Circular' };
+const TYPES: Array<[SearchResult['type'], string]> = [['meeting', 'Meetings'], ['agenda_item', 'Agenda items'], ['paper', 'Papers'], ['minutes', 'Minutes'], ['resolution', 'Resolutions'], ['action', 'Actions'], ['annotation', 'My notes']];
+const LABEL: Record<string, string> = { meeting: 'Meeting', agenda_item: 'Agenda item', paper: 'Paper', minutes: 'Minutes', resolution: 'Resolution', action: 'Action', annotation: 'My note', note: 'My note' };
+
+/** The server marks its matches `[[term]]` in titles and previews. */
+export function marked(text: string): ReactNode[] {
+  return text.split(/\[\[(.+?)\]\]/g).map((part, i) => (i % 2 ? <mark key={i} className="bg-[#FDE68A] text-ink">{part}</mark> : part));
+}
 
 /** Marks each word of the query in the text. */
 export function highlight(text: string, q: string): ReactNode[] {
@@ -18,7 +23,8 @@ export function highlight(text: string, q: string): ReactNode[] {
 
 /** Server search, or the offline vault's when the server cannot be reached (FR-OFF-01). */
 async function runSearch(q: string, offline: boolean, signal?: AbortSignal): Promise<{ hits: SearchResult[]; offline: boolean }> {
-  const local = async () => ({ hits: (await call('board:search', { q })).map((h) => ({ type: h.type, title: h.title, snippet: h.snippet, page: h.page, meeting_id: h.meetingId })), offline: true });
+  // The offline vault's hits use the same names: agenda → agenda_item, note → annotation.
+  const local = async () => ({ hits: (await call('board:search', { q })).map((h): SearchResult => ({ type: h.type === 'agenda' ? 'agenda_item' : h.type === 'note' ? 'annotation' : 'paper', title: h.title, preview: h.snippet, page: h.page, board_meeting_id: h.meetingId })), offline: true });
   if (offline) return local();
   try {
     return { hits: await fetchSearch(q, signal), offline: false };
@@ -57,15 +63,14 @@ export default function Search({ offline, onOpen }: { offline: boolean; onOpen: 
       <ul aria-label="Results" className="divide-y divide-line rounded-[10px] border border-line bg-surface">
         {shown.map((h, i) => (
           <li key={i}>
-            <button type="button" disabled={!h.meeting_id} onClick={() => h.meeting_id && onOpen(h.meeting_id)} className="w-full p-3 text-left hover:bg-subtle">
+            <button type="button" disabled={!h.board_meeting_id} onClick={() => h.board_meeting_id && onOpen(h.board_meeting_id)} className="w-full p-3 text-left hover:bg-subtle">
               <div className="flex items-center gap-2 text-[13px]">
-                <span className="rounded bg-subtle px-1.5 text-[11px]">{LABEL[h.type]}</span>
-                <b>{highlight(h.title, q)}</b>
+                <span className="rounded bg-subtle px-1.5 text-[11px]">{LABEL[h.type] ?? h.type}</span>
+                <b>{res.data?.offline ? highlight(h.title, q) : marked(h.title)}</b>
                 {h.page ? <span className="text-[11.5px] text-ink-3">· p {h.page}</span> : null}
-                {h.meta ? <span className="text-[11.5px] text-ink-3">· {h.meta}</span> : null}
-                <FlagChip flag={h.flag} />
+                {h.meeting_number ? <span className="text-[11.5px] text-ink-3">· {h.meeting_number}</span> : null}
               </div>
-              {h.snippet ? <p className="mt-0.5 text-[12.5px] text-ink-2">{highlight(h.snippet, q)}</p> : null}
+              {h.preview ? <p className="mt-0.5 text-[12.5px] text-ink-2">{res.data?.offline ? highlight(h.preview, q) : marked(h.preview)}</p> : null}
             </button>
           </li>
         ))}

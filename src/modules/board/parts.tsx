@@ -10,8 +10,8 @@ export function FlagChip({ flag }: { flag?: Flag }) {
 }
 
 /** Board / committee filter tabs (FR-DX-01): only bodies the person belongs to. */
-export function BodyTabs({ bodies, value, onChange }: { bodies: Body[]; value: number | null; onChange: (id: number | null) => void }) {
-  const tab = (id: number | null, label: string) => (
+export function BodyTabs({ bodies, value, onChange }: { bodies: Body[]; value: string | null; onChange: (key: string | null) => void }) {
+  const tab = (id: string | null, label: string) => (
     <button key={id ?? 'all'} type="button" role="tab" aria-selected={value === id} onClick={() => onChange(id)}
       className={cx('h-[28px] rounded-full px-3 text-[12.5px] font-semibold', value === id ? 'bg-primary text-white' : 'border border-line bg-surface text-ink-2 hover:bg-subtle')}>
       {label}
@@ -20,7 +20,7 @@ export function BodyTabs({ bodies, value, onChange }: { bodies: Body[]; value: n
   return (
     <div role="tablist" aria-label="Boards and committees" className="flex flex-wrap gap-1.5">
       {tab(null, 'All')}
-      {bodies.map((b) => tab(b.id, b.name))}
+      {bodies.map((b) => tab(b.key, b.name))}
     </div>
   );
 }

@@ -829,8 +829,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // WorkSuite Board: meeting packs kept offline in an encrypted vault, its queue and offline circular responses.
   const board = new BoardVault({
     http,
-    download: async (path) => {
-      const res = await http.raw('GET', http.url(path));
+    download: async (path, headers) => {
+      const res = await http.raw('GET', http.url(path), { headers });
       if (!res.ok) return null;
       return new Uint8Array(await res.arrayBuffer());
     },
@@ -838,6 +838,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     root: () => join(accountPaths().dir, 'board'),
     userId: () => (sessionCtl.isReady() ? String(sessionCtl.userId()) : null),
     deviceId: () => device.current()?.id ?? null,
+    deviceName: () => `WorkSuite Desktop (${platformName()})`,
+    platform: () => platformName(),
     allowed: () =>
       sessionCtl.capabilities().offlineCache
         ? { ok: true, reason: null }
@@ -1898,7 +1900,6 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     calls.handle(e);
     aiPending.handle(e as { type?: string });
     remoteControl.onRealtime(e as { type?: string; meeting?: string });
-    board.handleRealtime(e as { type?: string; device_id?: unknown });
     if (!lock.isLocked()) broadcast('realtime:event', e);
     else for (const win of BrowserWindow.getAllWindows()) {
       const scope = scopeFor(win.webContents);
@@ -3274,7 +3275,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       extraHeaders: (path) => {
         const key = salonDesk.keyFor(path);
         // A restaurant terminal's calls carry its key too (restaurant/terminal.ts).
-        return key ? { 'X-Salon-Desk-Key': key } : restaurant.headers(path);
+        if (key) return { 'X-Salon-Desk-Key': key };
+        // Board's calls name this computer (X-Board-Device), so a blocked or revoked device is refused (FR-DEV-03).
+        const boardHeaders = board.headers(path.split('?')[0]!);
+        return Object.keys(boardHeaders).length ? boardHeaders : restaurant.headers(path);
       },
     });
   // Read on each page load: the server chosen, and the media servers it announced.

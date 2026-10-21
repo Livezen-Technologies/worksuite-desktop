@@ -5,12 +5,12 @@ import { useTab, useTabTitle } from '../../core/tab-context';
 import { SidePanel } from '../../components/SidePanel';
 import { Spinner } from '../../components/ui';
 import type { ModuleProps } from '../registry';
-import { allowed, fetchApprovals, fetchActions, fetchMeeting, K, useDashboard } from './api';
+import { allowed, bodiesOf, fetchApprovals, fetchActions, fetchMeeting, isLive, K, roleOf, useDashboard, useMeta } from './api';
 import { BoardRail, NATIVE, type BoardView } from './Rail';
 
 /**
  * WorkSuite Board on the desktop (SRS-BOARD-001 §13.2 D-01..D-13, FR-DX), addressed as `/board?view=…`:
- *  - `&meeting=<id>` the current meeting (agenda, comments, annotations, notices, room, minutes, reader);
+ *  - `&meeting=<id>` the current meeting (agenda, comments, annotations, room, minutes, reader);
  *  - `&item=<id>` an agenda item (comments, reader); `&circular=<id>` an approval to open.
  * The `board.*` notifications land here (shared/board.ts). Setup, pack building and registers open on the web.
  */
@@ -24,14 +24,13 @@ const Search = lazy(() => import('./Search'));
 const Approvals = lazy(() => import('./Approvals'));
 const Actions = lazy(() => import('./Actions'));
 const Archive = lazy(() => import('./Archive'));
-const Notice = lazy(() => import('./Notice'));
 const Room = lazy(() => import('./Room'));
 const Minutes = lazy(() => import('./Minutes'));
 const Reader = lazy(() => import('./Reader'));
 
 const TITLES: Record<BoardView, string> = {
   home: 'Home', calendar: 'Calendar', agenda: 'Agenda', packs: 'Board packs', comments: 'Comments', annotations: 'Annotations', approvals: 'Approvals',
-  actions: 'My actions', notices: 'Send notice', archive: 'Archive', search: 'Search', room: 'Meeting room', minutes: 'Live minutes', reader: 'Reader',
+  actions: 'My actions', archive: 'Archive', search: 'Search', room: 'Meeting room', minutes: 'Live minutes', reader: 'Reader',
 };
 const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : null);
 
@@ -46,6 +45,7 @@ export default function BoardShell(_props: ModuleProps) {
   useTabTitle(`Board · ${TITLES[view]}`);
 
   const dash = useDashboard();
+  const meta = useMeta();
   const meeting = useQuery({ queryKey: K.meeting(meetingId ?? 0), queryFn: ({ signal }) => fetchMeeting(meetingId!, signal), enabled: !!meetingId });
   const approvals = useQuery({ queryKey: K.approvals, queryFn: ({ signal }) => fetchApprovals(signal), enabled: !!dash.data, refetchInterval: 120_000 });
   const actions = useQuery({ queryKey: K.actions, queryFn: ({ signal }) => fetchActions(signal), enabled: !!dash.data });
@@ -64,10 +64,11 @@ export default function BoardShell(_props: ModuleProps) {
   if (dash.isPending) return <Spinner />;
   // Offline with nothing from the server: the packs kept on this computer still open (FR-OFF-01).
   const offlineOnly = !dash.data;
-  if (dash.data && !allowed(dash.data, 'access') && dash.data.can) return <p className="m-6 text-[13px] text-ink-2">Board is not open to you. Ask your company secretary for access.</p>;
+  if (meta.data?.can && !allowed(meta.data, 'access')) return <p className="m-6 text-[13px] text-ink-2">Board is not open to you. Ask your company secretary for access.</p>;
   const m = meeting.data ?? null;
-  const live = !!m && (m.status === 'live' || m.status === 'in_progress');
-  const role = m?.my_role;
+  const live = isLive(m);
+  const role = roleOf(m);
+  const bodies = bodiesOf(dash.data);
 
   const shown: BoardView = offlineOnly && !['packs', 'reader', 'search', 'approvals'].includes(view) ? 'packs' : view;
 
@@ -78,10 +79,9 @@ export default function BoardShell(_props: ModuleProps) {
           view={shown}
           onPick={(v) => to(v)}
           onWeb={web}
-          counts={{ approvals: approvals.data?.length, actions: actions.data?.filter((a) => a.status !== 'verified' && a.status !== 'done').length }}
-          meeting={m ? (m.number ?? m.title) : null}
+          counts={{ approvals: approvals.data?.length, actions: actions.data?.filter((a) => a.status !== 'VERIFIED' && a.status !== 'COMPLETED').length }}
+          meeting={m ? (m.meeting_number ?? m.title) : null}
           packsReady={vault.data?.packs.filter((p) => p.state === 'ready').length ?? 0}
-          canNotice={allowed(dash.data, 'notice.send')}
         />
       </SidePanel>
       <main className="min-w-0 flex-1 overflow-hidden bg-ground" aria-label={`Board · ${TITLES[shown]}`}>
@@ -89,9 +89,9 @@ export default function BoardShell(_props: ModuleProps) {
           {shown === 'home' ? (
             <Home data={dash.data!} onMeeting={(id) => to('agenda', { meeting: id })} onGo={(v) => to(v)} />
           ) : shown === 'calendar' ? (
-            <Calendar bodies={dash.data?.bodies ?? []} onMeeting={(id) => to('agenda', { meeting: id })} />
+            <Calendar bodies={bodies} onMeeting={(id) => to('agenda', { meeting: id })} />
           ) : shown === 'packs' ? (
-            <Packs status={vault.data ?? null} meetings={dash.data?.meetings ?? []} onOpen={(id) => to('reader', { meeting: id })} />
+            <Packs status={vault.data ?? null} meetings={dash.data?.upcoming ?? []} onOpen={(id) => to('reader', { meeting: id })} />
           ) : shown === 'search' ? (
             <Search offline={offlineOnly} onOpen={(id) => to('agenda', { meeting: id })} />
           ) : shown === 'approvals' ? (
@@ -99,17 +99,15 @@ export default function BoardShell(_props: ModuleProps) {
           ) : shown === 'actions' ? (
             <Actions onWeb={web} />
           ) : shown === 'archive' ? (
-            <Archive bodies={dash.data?.bodies ?? []} onOpen={(id) => to('reader', { meeting: id })} />
+            <Archive bodies={bodies} onOpen={(id) => to('reader', { meeting: id })} />
           ) : !meetingId ? (
             <p className="m-6 text-[13px] text-ink-2">Choose a meeting on Home or in the calendar first.</p>
           ) : shown === 'agenda' ? (
             <Agenda meeting={m} meetingId={meetingId} onItem={(id) => to('reader', { item: id })} onComments={(id) => to('comments', { item: id })} onRoom={() => to(role === 'secretary' ? 'minutes' : 'room')} />
           ) : shown === 'comments' ? (
-            <Comments meetingId={meetingId} item={item} participants={m?.participants ?? []} canComment={role !== 'invitee' || !live} onItem={(id) => to('comments', { item: id })} />
+            <Comments meetingId={meetingId} item={item} participants={m?.participants ?? []} canComment={!live || !['invitee', 'observer'].includes(role)} onItem={(id) => to('comments', { item: id })} />
           ) : shown === 'annotations' ? (
-            <Annotations meetingId={meetingId} packVersion={m?.pack?.version ?? 1} />
-          ) : shown === 'notices' ? (
-            <Notice meeting={m} meetingId={meetingId} />
+            <Annotations meetingId={meetingId} packVersion={m?.pack?.current_version ?? null} />
           ) : shown === 'room' ? (
             <Room meetingId={meetingId} onMinutes={() => to('minutes')} />
           ) : shown === 'minutes' ? (
