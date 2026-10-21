@@ -13,6 +13,12 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **AMC & Service on the desktop.** AMC is now a native app (Operations) instead of a web page: a dashboard, the
+  dispatch timeline (drag a job or request onto a technician's hour, the dispatch assistant's suggestions, give out
+  ticked overdue PMs at once), a request window that can pop out on its own, and the contracts, renewals, estimates,
+  units and warranties lists with their details. A new request raises a desktop banner with **Open** and **Give to**.
+  Offline, the last data stays readable and changes are off. Schedule, sites, claims, technicians, reports and
+  settings still open on the web. AMC module 1.0.0.
 - **Tender competitors.** Once a tender is submitted (the server's `GET /api/tenders/{id}/competitors` says
   `available`), its workspace gains a **Competitors** tab: the other bidders, lowest bid price first and marked
   Lowest, prices in their currency. People the server lets edit (`can.edit`) add, edit and delete them (delete asks

@@ -290,6 +290,19 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./recruitment/RecruitmentShell'),
   },
   {
+    // AMC & Service (WS-AMC-SRS-001 T-15): D-01 dashboard, D-02 dispatch timeline (drag to give out, suggestions, bulk
+    // give-out of overdue PMs), D-03 the request window (a pop-out too) and the lists with their details, over
+    // `/api/amc`. Read offline from the last answers kept (READ_CACHE); every write waits for the server.
+    input: defineDesktopManifest({
+      id: 'amc', name: 'AMC & Service', icon: 'wrench', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', cache: ['/api/amc'] },
+      native: ['notifications'],
+      windows: [{ id: 'request', route: '/amc?view=requests&solo=1' }],
+      quickActions: [{ id: 'amc-dispatch', label: 'Dispatch timeline', route: '/amc?view=dispatch' }, { id: 'amc-requests', label: 'Service requests', route: '/amc?view=requests' }],
+      deepLinks: ['amc', 'amc/dispatch', 'amc/requests/:id', 'amc/contracts/:id', 'amc/estimates/:id', 'amc/units/:id', 'amc/warranties/:id'],
+    }),
+    load: () => import('./amc/AmcShell'),
+  },
+  {
     // WorkSuite Board (SRS-BOARD-001 §13.2 D-01..D-13, FR-DX): the director's home, calendar, agenda with meeting
     // information, item comments, offline packs, annotations, search, approvals and signing, my actions, archive,
     // notices, the live room with votes and the secretary's live minutes with polls, over `/api/board`. Packs kept
