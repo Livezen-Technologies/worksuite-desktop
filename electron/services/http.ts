@@ -77,6 +77,7 @@ interface Envelope {
 
 const KNOWN_CODES = new Set<DesktopErrorCode>([
   'DEVICE_REVOKED',
+  'DEVICE_BLOCKED',
   'DEVICE_NOT_REGISTERED',
   'DESKTOP_ACCESS_DISABLED',
   'VERSION_UNSUPPORTED',

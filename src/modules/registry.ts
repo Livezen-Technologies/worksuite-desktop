@@ -290,6 +290,19 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./recruitment/RecruitmentShell'),
   },
   {
+    // WorkSuite Board (SRS-BOARD-001 §13.2 D-01..D-13, FR-DX): the director's home, calendar, agenda with meeting
+    // information, item comments, offline packs, annotations, search, approvals and signing, my actions, archive,
+    // notices, the live room with votes and the secretary's live minutes with polls, over `/api/board`. Packs kept
+    // offline live in the main process's encrypted vault (board-vault.ts), not the read cache.
+    input: defineDesktopManifest({
+      id: 'board', name: 'Board', icon: 'landmark', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['notifications'],
+      quickActions: [{ id: 'board-packs', label: 'Board packs', route: '/board?view=packs' }, { id: 'board-approvals', label: 'Board approvals', route: '/board?view=approvals' }],
+      deepLinks: ['board', 'board/meetings/:id', 'board/meetings/:id/room', 'board/circulars/:id'],
+    }),
+    load: () => import('./board/BoardShell'),
+  },
+  {
     // Figures are not cached for offline reading: a stale trial balance looks exactly like a current one.
     input: defineDesktopManifest({
       id: 'finance', name: 'Finance', icon: 'landmark', contractVersion: 1, desktop: { enabled: true },

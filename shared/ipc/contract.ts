@@ -67,6 +67,7 @@ import { OFFICE_APP_SRC, type OfficeAppStatus } from '../office-open';
 import { contactSyncContract, type ContactSyncOutputs } from '../contact-sync';
 import { pmsLocksContract, type PmsLocksOutputs } from '../pms-locks';
 import { posContract, type PosOutputs } from '../pos';
+import { boardContract, type BoardOutputs } from '../board';
 import { projectReportSchema, projectsContract, projectsReportSchema, type ProjectsOutputs } from '../projects';
 import { purchaseExportSchema } from '../purchase';
 import { salesContract, type SalesOutputs } from '../sales';
@@ -1573,6 +1574,8 @@ export const contract = {
   ...contactSyncContract,
   // WorkSuite Projects: the tray timer and the offline outbox (shared/projects.ts, electron/services/projects).
   ...projectsContract,
+  // WorkSuite Board: the encrypted offline pack vault (shared/board.ts, electron/services/board-vault.ts).
+  ...boardContract,
   // WorkSuite Sales: approvals from a banner, printing on this computer, reports as PDF (shared/sales.ts, electron/services/sales-desk.ts).
   ...salesContract,
   // Sinhala Tools: the engine, profile cache, fonts and clipboard on this computer (shared/sinhala.ts, electron/services/sinhala.ts).
@@ -1650,7 +1653,7 @@ export interface WindowState {
   fullScreen?: boolean;
 }
 
-export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, SalesOutputs, SinhalaOutputs, AccountsOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, BoardOutputs, SalesOutputs, SinhalaOutputs, AccountsOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;
@@ -2103,6 +2106,8 @@ export type DesktopErrorCode =
   | 'PASSKEY_FAILED'
   | 'SESSION_EXPIRED'
   | 'DEVICE_REVOKED'
+  /** Board (FR-DEV-03): an administrator blocked this device; its Board offline vault is wiped. */
+  | 'DEVICE_BLOCKED'
   | 'DEVICE_NOT_REGISTERED'
   | 'DEVICE_LIMIT'
   | 'DESKTOP_ACCESS_DISABLED'

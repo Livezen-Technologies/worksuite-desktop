@@ -13,6 +13,22 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **WorkSuite Board on the desktop.** A new **Board** app (Work) for directors and secretaries with `board.access`:
+  a director's home with board and committee tabs, the next meetings flagged NEW or AMENDED, what's new for you,
+  pending decisions and a Director brief; the calendar; each meeting's agenda with meeting information,
+  participants, item comments and AI summaries; the reader with your own notes; annotations; search; approvals and
+  signing (the minutes' SHA-256 shown, verified before signing, with WorkSuite's password step-up when the server
+  asks); your actions; the archive; the live meeting room (present items, quorum, votes that cannot open without
+  quorum, live tally, the chair's casting vote on a tie) and the secretary's live minutes with polls. It follows the
+  WorkSuite Board server's own contract (Board module 1.0.0), including its realtime frames and their replay.
+  **Packs can be kept offline** in an encrypted vault whose key is in this computer's secure store: the computer
+  registers as a Board device, may need an administrator's approval first, and its packs expire when the server's
+  offline grant does. They are erased if an administrator revokes or blocks this computer — only Board's own data,
+  never your files — and the wipe is reported back. Notes, acknowledgements and, where the board allows, circular
+  responses made offline (signed on this computer) are sent when you reconnect; the server accepts or rejects each
+  with a reason. Sending meeting notices stays with the server, which tells participants when a meeting is
+  published. Board 1.0.0, Files 1.11.2, Notifications 2.5.0.
+
 - **Tender documents: online editing and versions.** Each Word, Excel or PowerPoint document on a tender has
   **Edit online** (or **Open online** for those who may only read): it opens the document's Drive file in the
   WorkSuite Office tab, in the mode the server gives (`/api/tenders/documents/{id}/online`). The new **Versions**

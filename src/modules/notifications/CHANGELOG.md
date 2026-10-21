@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.5.0 — 2026-10-21
+
+**Added**
+
+- WorkSuite Board's notifications (board.*) open the Board screen for them — the agenda, the live room, packs, approvals or actions (shared/board.ts); Board has its own tone in the list.
+
 ## 2.4.0 — 2026-10-20
 
 - Recruitment's look in the notification list (icon, name, colours) for the new Recruitment app.

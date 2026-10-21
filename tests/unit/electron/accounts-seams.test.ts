@@ -105,7 +105,10 @@ describe('discovery keys', () => {
   });
 
   it('never lets a rotated key replace a pinned one', () => {
-    expect(livezenKeyring('discovery', { k1: 'abc' })).toEqual({ k1: 'abc' });
+    const pinned = livezenKeyring('discovery');
+    const [kid] = Object.keys(pinned);
+    expect(livezenKeyring('discovery', { k1: 'abc' })).toEqual({ k1: 'abc', ...pinned });
+    if (kid) expect(livezenKeyring('discovery', { [kid]: 'rotated' })[kid]).toBe(pinned[kid]);
   });
 });
 

@@ -21,6 +21,7 @@ const COLOURS: Record<string, string> = {
   projects: '#3730A3',
   tenders: '#B45309',
   recruitment: '#7C3AED',
+  board: '#1E3A8A',
   notes: '#CA8A04',
   crm: '#DC2626',
   sales: '#C2410C',

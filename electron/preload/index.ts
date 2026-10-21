@@ -544,6 +544,19 @@ const api = {
     discard: call('projects:discard'),
     replay: call('projects:replay'),
   },
+  // WorkSuite Board (board-channels.ts): the encrypted offline pack vault, its queue and offline circular responses.
+  board: {
+    vaultStatus: call('board:vaultStatus'),
+    packDownload: call('board:packDownload'),
+    packOpen: call('board:packOpen'),
+    packRemove: call('board:packRemove'),
+    queueAdd: call('board:queueAdd'),
+    queueList: call('board:queueList'),
+    respondOffline: call('board:respondOffline'),
+    sync: call('board:sync'),
+    search: call('board:search'),
+    verify: call('board:verify'),
+  },
   // WorkSuite Sales (sales-channels.ts): labels and delivery notes on this computer's printers, reports saved as PDF.
   sales: {
     printSettings: call('sales:printSettings'),

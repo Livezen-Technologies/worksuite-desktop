@@ -9,6 +9,7 @@ import { PMS_LOCKS_INVOKE_CHANNELS } from './pms-locks-channels';
 import { PHONE_EVENT_CHANNELS, PHONE_INVOKE_CHANNELS } from './phone-channels';
 import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
 import { PROJECTS_EVENT_CHANNELS, PROJECTS_INVOKE_CHANNELS } from './projects-channels';
+import { BOARD_EVENT_CHANNELS, BOARD_INVOKE_CHANNELS } from './board-channels';
 import { SALES_INVOKE_CHANNELS } from './sales-channels';
 import { SINHALA_EVENT_CHANNELS, SINHALA_INVOKE_CHANNELS } from './sinhala-channels';
 
@@ -476,6 +477,8 @@ export const INVOKE_CHANNELS = [
   ...CONTACT_SYNC_INVOKE_CHANNELS,
   // WorkSuite Projects: the tray timer, the mini timer window and the offline outbox (projects-channels.ts).
   ...PROJECTS_INVOKE_CHANNELS,
+  // WorkSuite Board: the offline pack vault and offline circular responses (board-channels.ts).
+  ...BOARD_INVOKE_CHANNELS,
   // WorkSuite Sales: approvals from a banner, labels and delivery notes on this computer's printers (sales-channels.ts).
   ...SALES_INVOKE_CHANNELS,
   // Sinhala Tools: conversion, profiles, fonts and the clipboard on this computer (sinhala-channels.ts).
@@ -550,6 +553,7 @@ export const EVENT_CHANNELS = [
   ...POS_EVENT_CHANNELS,
   ...PHONE_EVENT_CHANNELS,
   ...PROJECTS_EVENT_CHANNELS,
+  ...BOARD_EVENT_CHANNELS,
   ...SINHALA_EVENT_CHANNELS,
   ...ACCOUNTS_EVENT_CHANNELS,
 ] as const;

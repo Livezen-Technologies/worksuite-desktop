@@ -69,6 +69,13 @@ const DENY: RegExp[] = [
   // there under the device policy. No page — Quick Ask's included — does either for itself.
   /^\/api\/ai\/pending\/\d+\/confirm\/?$/,
   /^\/api\/ai\/context\/uploads\/?$/,
+  // Board's offline vault (board-vault.ts): grants, manifests, signed offline responses, this device's check-in and its
+  // wipe report are the main process's, made with this device's keys; a page never keeps or signs its own copy.
+  // Registering the device (POST /devices, with its public key) is refused below, by method.
+  /^\/api\/(mobile\/v1\/)?board\/offline\/(grants|manifest\/\d+)\/?$/,
+  /^\/api\/(mobile\/v1\/)?board\/circulars\/\d+\/offline-responses\/?$/,
+  /^\/api\/(mobile\/v1\/)?board\/devices\/check-in\/?$/,
+  /^\/api\/(mobile\/v1\/)?board\/devices\/\d+\/wiped\/?$/,
 ];
 
 /** The shared computer's grant (`?end=sharer`): its key never reaches a page. */
@@ -119,6 +126,8 @@ export function isProxyPathAllowed(apiPath: string, method = 'GET'): boolean {
   // A Restaurant terminal's pairing answers with its key; its outbox playback, heartbeat and print agent run in the
   // main process with that key (electron/services/restaurant). Reading the print queue stays open to the screens.
   if (restaurantMainOnly(pathOnly, m)) return false;
+  // A Board device registers with its Ed25519 public key from the main process (board-vault.ts); the list stays readable.
+  if (m !== 'GET' && m !== 'HEAD' && /^\/api\/(mobile\/v1\/)?board\/devices\/?$/.test(pathOnly)) return false;
   return !DENY.some((re) => re.test(pathOnly));
 }
 
