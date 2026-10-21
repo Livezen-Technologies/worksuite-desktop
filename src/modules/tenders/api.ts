@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
+import { ApiError, apiDelete, apiGet, apiPost, apiPut } from '../../core/api';
 import { currentZone, parseTs, wallToUtc } from '../../core/time';
 import { toBidCost, toExpenseHistory, type BidCostSummary, type ExpenseHistoryLine } from './bidcost';
 
@@ -686,3 +686,71 @@ export interface ModuleAccess {
 }
 
 export const fetchModuleAccess = (signal?: AbortSignal) => apiGet<ModuleAccess>('/api/access/module/Tender', undefined, signal);
+
+// ── competitors (`/api/tenders/{id}/competitors`) ───────────────────────
+/*
+ * Who else bid, and at what price. The server opens this once the tender is
+ * submitted (`available`, with a `reason` before then), sorts by bid price and
+ * says whether this person may change it (`can.edit`). Nothing is worked out
+ * here beyond showing the lowest of what it sent.
+ */
+
+export interface Competitor {
+  id: number;
+  company_name: string;
+  /** A decimal string, as the server keeps it. */
+  bid_price: string;
+  currency: string;
+  remarks: string | null;
+  created_by: { id: number; name: string } | null;
+  updated_by: { id: number; name: string } | null;
+  created_at: string | null;
+  updated_at: string | null;
+}
+
+export interface Competitors {
+  available: boolean;
+  reason: string | null;
+  currency: string;
+  can: { edit: boolean };
+  competitors: Competitor[];
+}
+
+export interface CompetitorDraft {
+  company_name: string;
+  bid_price: string;
+  currency: string;
+  remarks: string;
+}
+
+export const KC = { competitors: (id: number) => ['tenders', 'competitors', id] as const };
+
+export const fetchCompetitors = (id: number, signal?: AbortSignal) => apiGet<Competitors>(`/api/tenders/${id}/competitors`, undefined, signal);
+
+/** The body as the contract has it: trimmed, the price without grouping, empty remarks sent as null. */
+export function competitorBody(d: CompetitorDraft): { company_name: string; bid_price: string; currency?: string; remarks: string | null } {
+  const currency = d.currency.trim().toUpperCase();
+  return { company_name: d.company_name.trim(), bid_price: plain(d.bid_price), ...(currency ? { currency } : {}), remarks: d.remarks.trim() || null };
+}
+
+export const createCompetitor = (id: number, d: CompetitorDraft) => apiPost<{ competitor: Competitor }>(`/api/tenders/${id}/competitors`, competitorBody(d));
+export const updateCompetitor = (id: number, cid: number, d: CompetitorDraft) => apiPut<{ competitor: Competitor }>(`/api/tenders/${id}/competitors/${cid}`, competitorBody(d));
+export const deleteCompetitor = (id: number, cid: number) => apiDelete<{ id: number }>(`/api/tenders/${id}/competitors/${cid}`);
+
+/** The lowest bid's id (ties: the first, as the server sorted them). */
+export function lowestBid(list: Competitor[]): number | null {
+  let best: Competitor | null = null;
+  for (const c of list) if (!best || Number(c.bid_price) < Number(best.bid_price)) best = c;
+  return best?.id ?? null;
+}
+
+/** A 422's errors, one sentence per field. */
+export function fieldErrors(e: unknown): Record<string, string> | null {
+  if (!(e instanceof ApiError) || e.status !== 422 || !e.data || typeof e.data !== 'object') return null;
+  const out: Record<string, string> = {};
+  for (const [k, v] of Object.entries(e.data as Record<string, unknown>)) {
+    const first = Array.isArray(v) ? v[0] : v;
+    if (typeof first === 'string') out[k] = first;
+  }
+  return Object.keys(out).length ? out : null;
+}
