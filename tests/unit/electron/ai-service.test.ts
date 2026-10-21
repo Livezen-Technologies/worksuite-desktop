@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { AiService, MAX_UPLOAD_BYTES, type AiServiceDeps } from '../../../electron/services/ai';
+import { AiService, MAX_UPLOAD_BYTES, readTurn, type AiServiceDeps } from '../../../electron/services/ai';
 import { DesktopError } from '../../../electron/main/errors';
 import { DEFAULT_POLICY, normalizePolicy } from '../../../electron/services/policy';
 import { isProxyPathAllowed } from '../../../electron/services/api-proxy';
@@ -146,5 +146,69 @@ describe('confirming', () => {
     expect(isProxyPathAllowed('/api/ai/pending/12/undo', 'POST')).toBe(true);
     expect(isProxyPathAllowed('/api/ai/pending?which=open', 'GET')).toBe(true);
     expect(isProxyPathAllowed('/api/ai/context/uploads/3', 'GET')).toBe(true);
+  });
+});
+
+describe('G-14 refusals', () => {
+  it('fetches a fresh token and retries once on 409 confirm_token_* or 428 confirm_token_required', async () => {
+    let confirms = 0;
+    const post = vi.fn(async (path: string) => {
+      if (path.endsWith('/confirm-token')) return { token: 'ct_' + String(confirms).repeat(48) };
+      confirms++;
+      if (confirms === 1) throw new DesktopError('CONFLICT', 'Token used', 409, { confirm_token: 'confirm_token_used' });
+      return { id: 12, status: 'succeeded' };
+    });
+    const { ai } = service({ post: post as AiServiceDeps['post'] });
+    await expect(ai.confirm(12, 'abcdef0123456789')).resolves.toMatchObject({ status: 'succeeded' });
+    expect(post.mock.calls.filter((c) => String(c[0]).endsWith('/confirm-token'))).toHaveLength(2);
+  });
+
+  it('does not retry other refusals, nor more than once', async () => {
+    const post = vi.fn(async (path: string) => {
+      if (path.endsWith('/confirm-token')) return { token: 'ct_' + 'b'.repeat(48) };
+      throw new DesktopError('INTERNAL', 'Token required', 428, { confirm_token: 'confirm_token_required' });
+    });
+    const { ai } = service({ post: post as AiServiceDeps['post'] });
+    await expect(ai.confirm(12, 'abcdef0123456789')).rejects.toThrow('Token required');
+    expect(post.mock.calls.filter((c) => String(c[0]).endsWith('/confirm'))).toHaveLength(2);
+    const phrase = vi.fn(async (path: string) => {
+      if (path.endsWith('/confirm-token')) return { token: 'ct_' + 'c'.repeat(48) };
+      throw new DesktopError('INTERNAL', 'Type DELETE', 428, { phrase: 'DELETE' });
+    });
+    await expect(service({ post: phrase as AiServiceDeps['post'] }).ai.confirm(12, 'abcdef0123456789')).rejects.toThrow('Type DELETE');
+    expect(phrase.mock.calls.filter((c) => String(c[0]).endsWith('/confirm'))).toHaveLength(1);
+  });
+});
+
+const sse = (...chunks: string[]) =>
+  new Response(new ReadableStream({ start(c) { for (const x of chunks) c.enqueue(new TextEncoder().encode(x)); c.close(); } }), { headers: { 'Content-Type': 'text/event-stream' } });
+
+describe('streaming online answers (G-22)', () => {
+  it('hands on the answer so far, then returns done', async () => {
+    const seen: string[] = [];
+    const turn = await readTurn(sse('event: delta\ndata: {"text":"Due "}\n\n', 'event: delta\r\ndata: {"text":"Fri', 'day"}\r\n\r\nevent: done\ndata: {"ok":true,"reply":"Due Friday.","pending_actions":[]}\n\n'), (t) => seen.push(t));
+    expect(seen).toEqual(['Due ', 'Due Friday']);
+    expect(turn).toEqual({ ok: true, reply: 'Due Friday.', pending_actions: [] });
+  });
+
+  it('handles a stream with no deltas, and an error event', async () => {
+    expect(await readTurn(sse('event: done\ndata: {"reply":"Hi"}\n\n'), () => undefined)).toEqual({ reply: 'Hi' });
+    await expect(readTurn(sse('event: error\ndata: {"message":"Model down","status":502}\n\n'), () => undefined)).rejects.toThrow('Model down');
+    await expect(readTurn(sse('event: delta\ndata: {"text":"x"}\n\n'), () => undefined)).rejects.toThrow(/stopped/);
+  });
+
+  it('uses the stream route, and assist/chat when the server has none (404/405)', async () => {
+    const postStream = vi.fn(async () => sse('event: done\ndata: {"reply":"S"}\n\n'));
+    const { ai } = service({ postStream });
+    expect(await ai.ask({ text: 'q' }, () => undefined)).toEqual({ reply: 'S' });
+    expect(postStream).toHaveBeenCalledWith('/api/ai/assist/chat/stream', { text: 'q' });
+
+    const post = vi.fn(async () => ({ reply: 'W' }));
+    const old = service({ post: post as AiServiceDeps['post'], postStream: async () => { throw new DesktopError('NOT_FOUND', 'Not found', 404); } });
+    expect(await old.ai.ask({ text: 'q' }, () => undefined)).toEqual({ reply: 'W' });
+    expect(post).toHaveBeenCalledWith('/api/ai/assist/chat', { text: 'q' });
+
+    const refused = service({ postStream: async () => { throw new DesktopError('PERMISSION_DENIED', 'No AI', 403); } });
+    await expect(refused.ai.ask({ text: 'q' }, () => undefined)).rejects.toThrow('No AI');
   });
 });

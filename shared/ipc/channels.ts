@@ -69,6 +69,7 @@ export const INVOKE_CHANNELS = [
   'quickask:handoff',
   'ai:rules',
   'ai:confirm',
+  'ai:ask',
   'ai:upload',
   'ai:answerReady',
   // Local AI (WS-SRS-LAI): models on this computer, llama.cpp in the ws-local-ai process.
@@ -546,6 +547,7 @@ export const EVENT_CHANNELS = [
   'office:event',
   'ai:localEvent',
   'ai:localChanged',
+  'ai:askDelta',
   'ai:ocrProgress',
   'office:localChanged',
   'image:localChanged',

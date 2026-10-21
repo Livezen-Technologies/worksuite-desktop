@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.1 — 2026-10-21
+
+**Added**
+
+- online answers in the dock and Quick Ask stream through the main process (assist/chat/stream, G-22), falling back to assist/chat on 404/405
+
+**Fixed**
+
+- a confirm refused for its confirmation token (409 confirm_token_*, 428 confirm_token_required) gets a fresh token and is retried once (G-14 §9)
+
 ## 1.12.0 — 2026-10-21
 
 **Added**

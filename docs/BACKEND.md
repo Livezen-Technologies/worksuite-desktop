@@ -1217,9 +1217,14 @@ Access keeps the person's choices for later.
 - **Confirming at levels 4–5 (Q-01).** A pending action carries `level`, `level_label`, `category`, `reversible` and
   `confirm: {step_up, phrase}`. `ai:confirm` sends `POST /api/ai/pending/{id}/confirm {nonce, phrase?, step_up?: {code}}`;
   the card asks for the phrase and, when `step_up` (or a 428 naming the authenticator), a 6–8 digit code.
+- **Streaming online answers (G-22).** The main process sends `ai:ask` as `POST /api/ai/assist/chat/stream` (same
+  body as `assist/chat`) and reads the SSE: each `delta {text}` goes to the asking window as `ai:askDelta {id, text}`
+  (the answer so far); `done` (assist/chat's `data`) is the result and its `reply` replaces the deltas; `error
+  {message, status}` throws. 404/405 falls back to `POST assist/chat`; other refusals are JSON errors as before.
 - **Fresh confirmation token (G-14).** On each confirm the main process first asks
   `POST /api/ai/pending/{id}/confirm-token {client: 'desktop'}` → `{token: 'ct_…', expires_in: 120}` and sends it as
-  `confirm_token`; it is held in memory for that one request. A 404/405 (older server) confirms with the nonce alone.
+  `confirm_token`; it is held in memory for that one request. A 404/405 (older server) confirms with the nonce alone. A 409 `confirm_token_*` or 428
+  `confirm_token_required` refusal gets a fresh token and one retry.
   Neither route is reachable through a page's API proxy.
 - **Local AI catalogue (G-02, Q-02).** `GET /api/ai/local/catalog` is the one catalogue (`sources: {server, cdn?}`).
   The app's own signed CDN list is used only when the route is missing; a 404 saying downloads are switched off is

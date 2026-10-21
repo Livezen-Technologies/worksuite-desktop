@@ -420,11 +420,24 @@ export function createAskSession(): AskSession {
       store.set({ engine: 'online' });
       // What was said on this computer goes along, the first time online AI answers after it.
       const context = carriedOver(before);
-      const answer = await until(ask(context + full, { surface: opts.surface, refs: opts.refs, conversationId: store.get().conversationId, moduleAccess: opts.moduleAccess }));
+      // The answer streams in as it is written (G-22); `done.reply` then replaces what arrived.
+      const answer = await until(
+        ask(context + full, {
+          surface: opts.surface,
+          refs: opts.refs,
+          conversationId: store.get().conversationId,
+          moduleAccess: opts.moduleAccess,
+          onDelta: (text) => {
+            if (live) move('progress', { streaming: text });
+          },
+        }),
+      );
+      store.set({ streaming: null });
       if (answer === STOPPED) return;
       store.set({ conversationId: answer.conversation_id });
       finish(answer.ok ? { role: 'assistant', text: answer.reply ?? '', turn: answer, fallback: opts.local || needsServer ? why : undefined } : { role: 'assistant', text: answer.error ?? 'The assistant could not answer just now.', error: true, retry });
     } catch (err) {
+      store.set({ streaming: null });
       finish({ role: 'assistant', text: assistantProblem(err), error: true, retry });
     } finally {
       // Whatever ended it, nothing is left thinking.

@@ -1,7 +1,11 @@
 import { describe, expect, it, vi } from 'vitest';
 import type * as CoreApi from '../../../src/core/api';
 
-vi.mock('../../../src/core/bridge', () => ({ call: vi.fn(), on: () => () => undefined, errorMessage: (e: unknown) => String(e), hasDesktop: () => true }));
+// An online question goes to the main process (`ai:ask`, streamed there); here it is answered by the mocked assist/chat.
+const online = vi.hoisted(() => ({ post: null as null | ((path: string, body: unknown) => Promise<unknown>) }));
+vi.mock('../../../src/core/bridge', () => {
+  return { call: vi.fn((ch: string, i: { body: unknown }) => (ch === 'ai:ask' ? online.post!('/api/ai/assist/chat', i.body) : undefined)), on: () => () => undefined, errorMessage: (e: unknown) => String(e), hasDesktop: () => true };
+});
 vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<typeof CoreApi>()), apiGet: vi.fn(), apiPost: vi.fn(), apiPut: vi.fn() }));
 const answers = vi.hoisted(() => [] as string[]);
 vi.mock('../../../src/core/local-ai', () => ({
@@ -9,6 +13,7 @@ vi.mock('../../../src/core/local-ai', () => ({
 }));
 
 import { apiGet, apiPost } from '../../../src/core/api';
+online.post = (path, body) => apiPost(path, body);
 import { createAskSession } from '../../../src/modules/ai/session';
 import { effective, fetchLocalTools, LOCAL_READS_ONLY, toolAllowed, type AiTool, type OrgAccess } from '../../../src/modules/ai/tools';
 

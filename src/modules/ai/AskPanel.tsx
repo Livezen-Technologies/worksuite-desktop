@@ -318,7 +318,7 @@ export function AskPanel({
         {/* A growing answer is not read out word by word: the whole one is, once it lands. */}
         {streaming ? (
           <div aria-live="off">
-            <Bubble e={{ role: 'assistant', text: streaming, local: true }} />
+            <Bubble e={{ role: 'assistant', text: streaming, local: engine !== 'online' }} />
           </div>
         ) : null}
         {/* From the moment the question goes until the answer starts to show; read out once, as it appears. */}

@@ -535,6 +535,8 @@ export const contract = {
   ),
   'ai:upload': ch(none, { session: true, rate: 3 }),
   /** An answer arrived while the assistant was minimised and the window is not in front (#126): a banner, as notifications allow. */
+  // An online question, streamed in the main process (G-22): deltas come as `ai:askDelta` {id, text}.
+  'ai:ask': ch(z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{6,64}$/), body: z.record(z.string(), z.unknown()) }), { session: true, rate: 30 }),
   'ai:answerReady': ch(z.strictObject({ kind: z.enum(['ready', 'input', 'failed']), preview: z.string().max(300) }), { session: true, rate: 20 }),
   // Website chats ringing like calls (WS-WCHAT ENH-01, RING-49): the call window, the main window's bar.
   'ring:state': ch(none, { session: true, whileLocked: true }),
@@ -1809,6 +1811,7 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'ai:confirm': unknown;
   'ai:upload': AiUpload | null;
   'ai:answerReady': boolean;
+  'ai:ask': unknown;
   'ring:state': WebchatRingState;
   'ring:join': boolean;
   'ring:silence': void;

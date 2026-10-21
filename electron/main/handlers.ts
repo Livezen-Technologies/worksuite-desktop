@@ -444,6 +444,12 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (winOf(c.sender) !== ctx.windows.getMain()) throw new DesktopError('IPC_FORBIDDEN_SENDER', 'A change the assistant proposed is confirmed in the main window.');
     return ctx.ai.confirm(input.id, input.nonce, { phrase: input.phrase, stepUpCode: input.stepUpCode });
   });
+  // An online answer, streamed here and handed to the asking window piece by piece (G-22).
+  router.handle('ai:ask', (input, c) =>
+    ctx.ai.ask(input.body, (text) => {
+      if (!c.sender.isDestroyed()) c.sender.send('ai:askDelta', { id: input.id, text });
+    }),
+  );
   // A file from this computer, picked here: never a path the page names.
   // An answer ready while the window is behind others (#126): a banner, as the notification settings allow; none in front.
   router.handle('ai:answerReady', (input) => {

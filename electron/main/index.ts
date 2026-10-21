@@ -2465,6 +2465,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const ai = new AiService({
     get: (path, query) => http.get(path, { query }),
     post: (path, body) => http.post(path, body, { timeoutMs: 120_000 }),
+    postStream: (path, body) => http.postStream(path, body, { timeoutMs: 180_000 }),
     policy: () => (sessionCtl.isReady() ? (sessionCtl.current()?.policy ?? null) : null),
     driveIdAt: (p) => sync.fileIdAt(p),
     realpath: (p) => fsp.realpath(p),

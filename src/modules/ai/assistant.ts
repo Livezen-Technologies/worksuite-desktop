@@ -2,7 +2,7 @@ import { currentLanguage } from '../../core/i18n';
 import { useQuery } from '@tanstack/react-query';
 import type { AiRules } from '@shared/types';
 import { ApiError, apiGet, apiPost, apiPut } from '../../core/api';
-import { call } from '../../core/bridge';
+import { call, hasDesktop, on } from '../../core/bridge';
 import type { UploadImage } from './images';
 import type { VisionInfo } from './vision';
 
@@ -58,8 +58,8 @@ export interface AskTurn {
  * One question to the assistant. `refs` are records it may read, as the person asking; `images` go only to a model
  * the server has verified as reading images (worksuite-desktop#59).
  */
-export function ask(text: string, opts: { surface: Surface; refs?: string[]; conversationId?: number | null; moduleAccess?: { read: string[]; write: string[] }; images?: UploadImage[] }): Promise<AskTurn> {
-  return apiPost<AskTurn>('/api/ai/assist/chat', {
+export function ask(text: string, opts: { surface: Surface; refs?: string[]; conversationId?: number | null; moduleAccess?: { read: string[]; write: string[] }; images?: UploadImage[]; onDelta?: (soFar: string) => void }): Promise<AskTurn> {
+  const body = {
     text,
     reply_language: currentLanguage(),
     surface: opts.surface,
@@ -69,7 +69,15 @@ export function ask(text: string, opts: { surface: Surface; refs?: string[]; con
     // Modules this person switched off for WorkSuite AI (worksuite-desktop#51): it uses none of their functions.
     ...(opts.moduleAccess ? { module_access: { off_read: opts.moduleAccess.read, off_write: opts.moduleAccess.write } } : {}),
     ...(opts.images?.length ? { images: opts.images } : {}),
-  });
+  };
+  // Streamed in the main process (G-22, `assist/chat/stream`), the answer so far arriving as `ai:askDelta`.
+  if (opts.onDelta && hasDesktop()) {
+    const id = `a${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`;
+    const onDelta = opts.onDelta;
+    const off = on<{ id: string; text: string }>('ai:askDelta', (d) => d?.id === id && onDelta(d.text));
+    return (call('ai:ask', { id, body }) as Promise<AskTurn>).finally(off);
+  }
+  return apiPost<AskTurn>('/api/ai/assist/chat', body);
 }
 
 /**
