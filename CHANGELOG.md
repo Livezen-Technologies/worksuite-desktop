@@ -13,6 +13,8 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+## 0.2.271 — 2026-10-21
+
 - **AMC & Service on the desktop.** AMC is now a native app (Operations) instead of a web page: a dashboard, the
   dispatch timeline (drag a job or request onto a technician's hour, the dispatch assistant's suggestions, give out
   ticked overdue PMs at once), a request window that can pop out on its own, and the contracts, renewals, estimates,
