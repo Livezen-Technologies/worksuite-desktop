@@ -22,7 +22,7 @@ person who has to live with the change — what it does, and where it bites.
   server's registry; the app's own signed CDN list is used only with a server that has no catalogue route, never
   when the workspace has switched downloads off. Settings › Speech lists the server's whisper models to download
   (checked by size and SHA-256); speech on the computer stays off until one is downloaded. The server has no
-  streaming route for online answers yet: Local AI answers stream as before. AI 1.12.0, Meet 1.26.0, Settings 1.42.1.
+  streaming route for online answers yet: Local AI answers stream as before. AI 1.12.0, Meet 1.26.0, Settings 1.42.1, Files 1.11.3.
 
 ## 0.2.271 — 2026-10-21
 
