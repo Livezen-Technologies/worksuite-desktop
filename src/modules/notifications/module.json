@@ -1,6 +1,6 @@
 {
     "module": "notifications",
-    "version": "2.5.0",
+    "version": "2.6.0",
     "paths": [
         "electron/services/notifications.ts",
         "shared/task-reminders.ts",

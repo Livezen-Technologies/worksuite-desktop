@@ -96,6 +96,8 @@ export function wireQueryInvalidation(): void {
     // an account's connection changed (`social.post`, `social.inbox`, `social.account`… or a notification of one) —
     // its screens ask again. Only ids travel; each screen re-reads what the person may see.
     if (touchesSocialMedia(e)) void queryClient.invalidateQueries({ queryKey: ['social-media'] });
+    // AMC (docs/amc/API.md §10): a request logged (its own frame, or the notification of it) — the desk's lists ask again.
+    if (e.type === 'amc.request.logged' || (e.type === 'notification' && typeof e.event === 'string' && e.event.startsWith('amc.'))) void queryClient.invalidateQueries({ queryKey: ['amc'] });
   });
   on('notifications:changed', () => void queryClient.invalidateQueries({ queryKey: ['notifications'] }));
   // New mail in the folder in front (ENH-MAIL-05 MNA-APP-02): the list asks now, and the row comes in marked "New".
