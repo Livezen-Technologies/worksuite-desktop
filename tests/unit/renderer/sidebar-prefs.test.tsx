@@ -217,7 +217,7 @@ describe('the Pinned section', () => {
     expect(keysIn('pinned')).toEqual(['tasks']);
   });
 
-  it('works collapsed: no heading, a thin divider, and a small pin on each icon', async () => {
+  it('works collapsed: no heading, a thin divider, and no pin on each icon', async () => {
     state = { items: [row('mail', { pinned: true, pinned_position: 0 })], updated_at: 'then' };
     app.set({ prefs: { ...app.get().prefs!, sidebarMode: 'collapsed' } });
     await start();
@@ -225,8 +225,9 @@ describe('the Pinned section', () => {
     expect(screen.getByRole('navigation', { name: 'Apps' }).className).toContain('w-[68px]');
     expect(screen.queryByText('Pinned')).toBeNull();
     expect(document.querySelector('[data-pinned-divider]')).toBeTruthy();
-    expect(itemButton('mail').querySelector('[data-pin-marker]')).toBeTruthy();
-    expect(itemButton('chat').querySelector('[data-pin-marker]')).toBeNull();
+    // Collapsed, the Pinned group is a tinted block titled Pinned; the icons carry no pin of their own.
+    expect(screen.getByRole('list', { name: 'Pinned' }).title).toBe('Pinned');
+    expect(itemButton('mail').querySelector('[data-pin-marker]')).toBeNull();
     expect(itemButton('mail').title).toBe('Mail');
     // The menu works collapsed too.
     rightClick('mail');
