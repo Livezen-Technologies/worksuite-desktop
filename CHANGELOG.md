@@ -12,15 +12,12 @@ person who has to live with the change — what it does, and where it bites.
 > come after what had already shipped.
 
 ## Unreleased
-
-## 0.2.274 — 2026-10-22
 ### Changed
 - Home (#104): recent activity groups a run of the same update by the same person into one line with a count, even
   from a server that sends a line per update, and leaves out transfer-part lines; recent files leave out a transfer's
   temporary pieces (`.part3`, `.001`, `.chunk`, `upload-<id>` and the like) as well as editor and system leftovers.
 
 ### Fixed
-- Chat: the message hover toolbar now sits above the bubble instead of covering its first line of text.
 - Chat: text and links in messages can be selected and copied again — a link's preview card is no longer one big link (only its title opens the page), links no longer drag instead of selecting, and link cards have a "Copy link" button.
 - Linux (#409): minimise, maximise and close are now drawn by WorkSuite's own title bar instead of over it by the system, so on GNOME desktops such as Zorin OS (X11 or Wayland, any scaling) they line up with the bar, never cover or clip its buttons, follow the desktop's button layout (side and order, from `org.gnome.desktop.wm.preferences button-layout`) and show Restore when the window is maximised. Windows and macOS are unchanged.
 - Web Chat: a notification about a website visitor's chat (assigned, routed, a follow-up, not reaching anybody) opens
@@ -29,6 +26,9 @@ person who has to live with the change — what it does, and where it bites.
 - Sign-in (worksuite#164): the sign-in, account and meeting-join screens have no theme switch; they open in the last
   signed-in person's theme on this computer, else follow the system's appearance live. Now covered by a test.
 
+## 0.2.274 — 2026-10-22
+### Fixed
+- Chat: the message hover toolbar now sits above the bubble instead of covering its first line of text.
 
 - **User guides (help 1.0.0).** A "User guide" button in the title bar opens the guide of the module in front — and
   in a docked tab's own bar — from the server's new GET /api/help/guides and /api/help/guides/{key}. The guide viewer
