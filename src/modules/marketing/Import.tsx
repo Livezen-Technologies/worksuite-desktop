@@ -11,7 +11,7 @@ import { refreshMarketing, send, withOrg } from './api';
 import { SAVE_REFUSED, saveServerFile, useMaySave } from './audience-files';
 import { firstCompany, Refused, TABLE, TD, TH, useLists } from './audience-parts';
 import { btn, btnPrimary, btnSmall, Card, Field, input, Kpi, n, PageHeader, Pill, type PillTone } from './parts';
-import { companiesWhere, MATCH_WORD, peopleOf, refusal, type ImportCounts, type ImportPreview, type ImportRecord, type ImportRow, type Options } from './types';
+import { companiesWhere, LAWFUL_BASIS, MATCH_WORD, peopleOf, refusal, type ImportCounts, type ImportPreview, type ImportProgress, type ImportRecord, type ImportRow, type LawfulBasis, type Options } from './types';
 
 const STEPS = ['Upload', 'Map columns', 'Preview', 'Consent & lists', 'Import'] as const;
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -51,6 +51,10 @@ export default function Import({ org, options }: { org: string; options: Options
   const [owner, setOwner] = useState('');
   const [tags, setTags] = useState('');
   const [basis, setBasis] = useState<'none' | 'granted'>('none');
+  /* CON-01: the lawful basis the grants are recorded under. */
+  const [lawful, setLawful] = useState<LawfulBasis>('consent');
+  /* IMP-06: a large file runs in the background; its progress is followed here. */
+  const [jobId, setJobId] = useState<number | null>(null);
   const [channels, setChannels] = useState<string[]>(['email']);
   const [done, setDone] = useState<{ message: string; counts: Partial<ImportCounts> } | null>(null);
   const [busy, setBusy] = useState(false);
@@ -99,6 +103,7 @@ export default function Import({ org, options }: { org: string; options: Options
     setMapping(null);
     setPreview(null);
     setDone(null);
+    if (f) setJobId(null);
     setProblem(null);
     setChecking(false);
     setStep(1);
@@ -138,14 +143,15 @@ export default function Import({ org, options }: { org: string; options: Options
     const opts = {
       existing, list_id: listId === '' ? null : Number(listId), owner_id: owner === '' ? null : Number(owner),
       tags: tags.split(',').map((t) => t.trim()).filter(Boolean),
-      consent: basis, consent_channels: channels,
+      consent: basis, consent_channels: channels, lawful_basis: lawful,
     };
     try {
-      const r = await send<{ counts?: ImportCounts } | null>('POST', '/api/marketing/imports', form(file, orgId, shown, { options: JSON.stringify(opts) }));
+      const r = await send<{ counts?: ImportCounts; background?: boolean; id?: number } | null>('POST', '/api/marketing/imports', form(file, orgId, shown, { options: JSON.stringify(opts) }));
       toast('success', r.message ?? 'Imported.');
       await refreshMarketing();
       reset();
-      setDone({ message: r.message ?? 'Imported.', counts: r.data?.counts ?? {} });
+      if (r.data?.background && r.data.id) setJobId(r.data.id);
+      else setDone({ message: r.message ?? 'Imported.', counts: r.data?.counts ?? {} });
     } catch (e) {
       toast('error', refusal(e));
     } finally {
@@ -198,6 +204,7 @@ export default function Import({ org, options }: { org: string; options: Options
           {(done.counts.duplicates ?? 0) + (done.counts.refused ?? 0) > 0 ? ` ${n((done.counts.duplicates ?? 0) + (done.counts.refused ?? 0))} rows were left out.` : ''}
         </p>
       ) : null}
+      {jobId !== null ? <Background id={jobId} onEnd={() => void refreshMarketing()} /> : null}
       {problem ? <Refused error={null} fallback={problem} /> : null}
 
       {step === 1 ? (
@@ -318,6 +325,9 @@ export default function Import({ org, options }: { org: string; options: Options
               </div>
             ) : null}
           </fieldset>
+          <Field label="Lawful basis for the consent in the file" className="mt-3 max-w-[320px]">
+            <Select<string> aria-label="Lawful basis" value={lawful} onValueChange={(v) => setLawful(v as LawfulBasis)} options={(Object.keys(LAWFUL_BASIS) as LawfulBasis[]).map((k) => ({ value: k, label: LAWFUL_BASIS[k] }))} className={input} />
+          </Field>
         </Card>
       ) : null}
 
@@ -379,9 +389,13 @@ export default function Import({ org, options }: { org: string; options: Options
                         <span className="ml-1.5">
                           <Pill tone="red">stopped part way</Pill>
                         </span>
-                      ) : h.status === 'running' ? (
+                      ) : h.status === 'running' || h.status === 'queued' ? (
                         <span className="ml-1.5">
-                          <Pill tone="blue">running</Pill>
+                          <Pill tone="blue">{h.status === 'queued' ? 'waiting' : `running ${h.rows ? Math.floor(((h.rows_done ?? 0) * 100) / h.rows) : 0}%`}</Pill>
+                        </span>
+                      ) : h.status === 'cancelled' ? (
+                        <span className="ml-1.5">
+                          <Pill tone="amber">cancelled</Pill>
                         </span>
                       ) : null}
                     </td>
@@ -511,6 +525,55 @@ function NoConsent() {
           This file has <b>no consent column</b>. Contacts will be imported as <b>email: unknown</b> and <b>phone: unknown</b>, and are excluded from sends and call queues until consent is recorded. Choose a lawful basis on the next step.
         </span>
       </p>
+    </Card>
+  );
+}
+
+/**
+ * A background import (MKT-IMP-06): its progress, read every two seconds
+ * until it ends, and a Cancel that stops it between chunks — what is already
+ * in stays in. Whoever started it is also told by notification.
+ */
+export function Background({ id, onEnd }: { id: number; onEnd: () => void }) {
+  const [ended, setEnded] = useState(false);
+  const q = useQuery({
+    queryKey: ['marketing', 'import', id],
+    queryFn: ({ signal }) => apiGet<ImportProgress>(`/api/marketing/imports/${id}`, undefined, signal),
+    refetchInterval: ended ? false : 2000,
+    retry: false,
+  });
+  const p = q.data;
+  const live = p ? p.status === 'queued' || p.status === 'running' : true;
+  if (p && !live && !ended) {
+    setEnded(true);
+    onEnd();
+  }
+  const stop = async () => {
+    try {
+      const r = await send('POST', `/api/marketing/imports/${id}/cancel`);
+      toast('success', r.message ?? 'Stopping.');
+      await q.refetch();
+    } catch (e) {
+      toast('error', refusal(e));
+    }
+  };
+  return (
+    <Card title="Importing in the background" action={live ? <button type="button" className={btnSmall} disabled={p?.cancel_requested} onClick={() => void stop()}>Cancel</button> : undefined}>
+      {!p ? <Spinner /> : (
+        <>
+          <div className="h-2 overflow-hidden rounded-full bg-subtle" role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={p.percent} aria-label="Import progress">
+            <div className="h-full rounded-full bg-primary transition-all" style={{ width: `${p.percent}%` }} />
+          </div>
+          <p role="status" className="m-0 mt-2 text-[13px] text-ink">
+            {p.status === 'queued' ? 'Waiting to start…'
+              : p.status === 'running' ? `${n(p.rows_done)} of ${n(p.rows)} rows${p.cancel_requested ? ' · stopping…' : ''}`
+                : p.status === 'done' ? `Done: ${n(p.created)} added, ${n(p.updated)} updated.`
+                  : p.status === 'cancelled' ? `Cancelled: ${n(p.created)} added, ${n(p.updated)} updated before it stopped.`
+                    : `Stopped: ${p.error ?? 'the import failed'}.`}
+          </p>
+          <p className="m-0 mt-1 text-[11.5px] text-ink-3">You can leave this screen: you will be told when it is done.</p>
+        </>
+      )}
     </Card>
   );
 }

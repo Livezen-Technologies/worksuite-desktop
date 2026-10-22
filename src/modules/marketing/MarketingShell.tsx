@@ -35,6 +35,7 @@ const Segments = lazy(() => import('./Segments'));
 const SegmentBuilder = lazy(() => import('./SegmentBuilder'));
 const Import = lazy(() => import('./Import'));
 const Consent = lazy(() => import('./Consent'));
+const DataQuality = lazy(() => import('./DataQuality'));
 const Campaigns = lazy(() => import('./Campaigns'));
 const CampaignView = lazy(() => import('./CampaignView'));
 const Templates = lazy(() => import('./Templates'));
@@ -48,6 +49,7 @@ const Automation = lazy(() => import('./Automation'));
 const Settings = lazy(() => import('./Settings'));
 
 const TITLES: Record<MarketingView, string> = {
+  quality: 'Data quality',
   dashboard: 'Dashboard', contacts: 'Contacts', companies: 'Organisations', lists: 'Lists', segments: 'Segments', import: 'Import',
   consent: 'Consent & suppression', campaigns: 'Campaigns', templates: 'Templates', topics: 'Topics & preferences',
   calls: 'Call campaigns', queue: 'My call queue', scripts: 'Scripts', reports: 'Reports', automation: 'Automation', settings: 'Settings',
@@ -58,7 +60,9 @@ const ALIASES: Record<string, [MarketingView, string | null]> = { suppression: [
 
 const CONSENT_TABS: ConsentTab[] = ['suppression', 'ledger', 'dnc', 'topics'];
 const QUEUE_TABS: QueueTab[] = ['queue', 'callbacks', 'work'];
-const CONTACT_HOSTS: MarketingView[] = ['contacts', 'consent', 'queue', 'dashboard'];
+const CONTACT_HOSTS: MarketingView[] = ['contacts', 'consent', 'queue', 'dashboard', 'quality'];
+const QUALITY_TABS = ['duplicates', 'merges', 'fields'] as const;
+type QualityTab = (typeof QUALITY_TABS)[number];
 
 const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
 
@@ -144,7 +148,11 @@ export default function MarketingShell(_props: ModuleProps) {
     switch (view) {
       case 'dashboard': return <Dashboard org={org} options={o} onGo={onGo} />;
       case 'contacts': return <Contacts org={org} options={o} filter={filter} onFilter={setFilter} onOpen={(id) => setKey('contact', id)} />;
-      case 'companies': return <Companies org={org} options={o} onContacts={(id) => go(to('contacts', { company: id }))} />;
+      case 'companies': return <Companies org={org} options={o} onContacts={(id) => go(to('contacts', { company: id }))} onOpenContact={(id) => go(to('contacts', { contact: id }))} />;
+      case 'quality': {
+        const qt: QualityTab = (QUALITY_TABS as readonly string[]).includes(tab ?? '') ? (tab as QualityTab) : 'duplicates';
+        return <DataQuality org={org} options={o} tab={qt} onTab={(t) => setKey('tab', t)} onContact={(id) => go(to('quality', { tab: qt, contact: id }))} />;
+      }
       case 'lists': return <Lists org={org} options={o} onContacts={(id) => go(to('contacts', { list: id }))} />;
       case 'segments':
         return segment

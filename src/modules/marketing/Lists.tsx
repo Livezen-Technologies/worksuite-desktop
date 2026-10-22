@@ -95,6 +95,17 @@ export default function Lists({ org, options, onContacts }: { org: string; optio
                 changed {dateLabel(l.updated_at) || '—'}
               </span>
             </div>
+            {/* LST-02: total and who each channel may reach. */}
+            {l.reachable ? (
+              <dl aria-label={`${l.name}: reachable by channel`} className="m-0 mt-2.5 grid grid-cols-4 gap-1.5 text-center text-[11px]">
+                {([['Total', l.members], ['Email', l.reachable.email], ['Calls', l.reachable.call], ['WhatsApp', l.reachable.whatsapp]] as const).map(([k, v]) => (
+                  <div key={k} className="rounded-[8px] bg-subtle px-1 py-1">
+                    <dt className="text-ink-3">{k}</dt>
+                    <dd className="m-0 font-bold text-ink tabular-nums">{n(v)}</dd>
+                  </div>
+                ))}
+              </dl>
+            ) : null}
           </li>
         ))}
       </ul>

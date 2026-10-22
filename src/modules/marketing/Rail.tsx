@@ -13,11 +13,11 @@ import type { Sending } from './types';
  * so where bulk mail leaves is never a mystery.
  */
 export type MarketingView =
-  | 'dashboard' | 'contacts' | 'companies' | 'lists' | 'segments' | 'import' | 'consent'
+  | 'dashboard' | 'contacts' | 'companies' | 'lists' | 'segments' | 'import' | 'consent' | 'quality'
   | 'campaigns' | 'templates' | 'topics' | 'calls' | 'queue' | 'scripts' | 'reports' | 'automation' | 'settings';
 
 export const VIEWS = new Set<MarketingView>([
-  'dashboard', 'contacts', 'companies', 'lists', 'segments', 'import', 'consent',
+  'dashboard', 'contacts', 'companies', 'lists', 'segments', 'import', 'consent', 'quality',
   'campaigns', 'templates', 'topics', 'calls', 'queue', 'scripts', 'reports', 'automation', 'settings',
 ]);
 
@@ -69,6 +69,7 @@ export function MarketingRail({ view, onPick, onNewCampaign, counts, may, compan
         { id: 'segments', label: 'Segments', icon: 'filter' },
         ...(may.import ? [{ id: 'import' as const, label: 'Import', icon: 'upload' }] : []),
         { id: 'consent', label: 'Consent & suppression', icon: 'shield-check' },
+        { id: 'quality', label: 'Data quality', icon: 'grid' },
       ],
     },
     {

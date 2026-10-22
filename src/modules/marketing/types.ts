@@ -97,7 +97,20 @@ export interface Contact {
   next_follow_up_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  /* SRS v2.0 (AUD-01, CON-09, SCO): absent from a server a part behind. */
+  time_zone?: string | null;
+  /** The zone in force: their own, else their country's single zone. */
+  local_zone?: string | null;
+  /** HH:MM where they are, now. */
+  local_time?: string | null;
+  doi_status?: 'pending' | 'confirmed' | null;
+  score_behaviour?: number;
+  score_fit?: number;
 }
+
+/** CON-01: the lawful basis a consent row records. */
+export type LawfulBasis = 'consent' | 'legitimate_interest' | 'contract';
+export const LAWFUL_BASIS: Record<LawfulBasis, string> = { consent: 'Consent', legitimate_interest: 'Legitimate interest', contract: 'Contract' };
 
 export interface ConsentEntry {
   id: number;
@@ -109,6 +122,11 @@ export interface ConsentEntry {
   note: string | null;
   by: string | null;
   at: string | null;
+  lawful_basis?: LawfulBasis | null;
+  wording?: string | null;
+  evidence?: string | null;
+  actor?: 'user' | 'contact' | 'system' | null;
+  topic_id?: number | null;
 }
 
 export interface TimelineEntry {
@@ -155,6 +173,36 @@ export interface MarketingCompany {
   created_at: string | null;
 }
 
+/** Who each channel may reach (LST-02). */
+export interface Reachable { email: number; call: number; whatsapp: number }
+
+/** One organisation whole (AUD-03): its contacts, their reach and one merged timeline. */
+export interface CompanyDetail extends Omit<MarketingCompany, 'contacts'> {
+  contacts_count: number;
+  contacts: Contact[];
+  reachable: Reachable;
+  timeline: Array<TimelineEntry & { contact: { id: number; name: string } }>;
+}
+
+/** AUD-11: contacts that look like one person. */
+export interface DuplicateGroup { org_id: number; match: 'email' | 'phone' | 'name'; key: string; contacts: Contact[] }
+
+/** AUD-08: a merge, undoable for 30 days. */
+export interface MergeRecord {
+  id: number; org_id: number; survivor_id: number; survivor: string; merged: Array<{ id: number; name: string }>;
+  by: string | null; merged_at: string | null; undo_until: string | null; undone_at: string | null; can_undo: boolean;
+}
+
+/** AUD-10: a company's own contact field. */
+export type CustomFieldType = 'text' | 'number' | 'date' | 'picklist' | 'boolean';
+export interface CustomField { id: number; org_id: number; key: string; label: string; type: CustomFieldType; options: string[]; position: number }
+
+/** IMP-06: a background import's progress. */
+export interface ImportProgress {
+  id: number; org_id: number; file_name: string; status: ImportRecord['status']; rows: number; rows_done: number; percent: number;
+  created: number; updated: number; cancel_requested: boolean; error: string | null;
+}
+
 export interface MarketingList {
   id: number;
   org_id: number;
@@ -164,6 +212,8 @@ export interface MarketingList {
   members: number;
   /* Who on it may be emailed now, and when a campaign last used it (MKT-LST-02). Absent from a server a part behind. */
   subscribed?: number;
+  /* LST-02: who each channel may reach. */
+  reachable?: Reachable;
   last_used_at?: string | null;
   archived: boolean;
   created_at: string | null;
@@ -237,7 +287,10 @@ export interface ImportRecord {
   updated: number;
   skipped: number;
   stats: ImportCounts | null;
-  status: 'running' | 'done' | 'failed';
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  rows_done?: number;
+  cancel_requested?: boolean;
+  error?: string | null;
   list: Named | null;
   by: string | null;
   created_at: string | null;

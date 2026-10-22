@@ -1,3 +1,4 @@
+import { useQuery } from '@tanstack/react-query';
 import { useState, type ReactNode } from 'react';
 import { ApiError, apiGet } from '../../core/api';
 import { toast } from '../../core/toasts';
@@ -6,7 +7,7 @@ import { Select } from '../../components/Select';
 import { refreshMarketing, send } from './api';
 import { CountrySelect, firstCompany, useMeId } from './audience-parts';
 import { btn, btnPrimary, Field, input, Sheet } from './parts';
-import { companiesWhere, fieldErrors, peopleOf, refusal, type Channel, type Contact, type ContactRow, type Options } from './types';
+import { companiesWhere, fieldErrors, peopleOf, refusal, type Channel, type Contact, type ContactRow, type CustomField, type Options } from './types';
 
 /**
  * Adding a contact, or changing one (MKT-AUD-01), in a sheet over the list or
@@ -36,6 +37,10 @@ export interface Draft {
   status: string;
   source_channel: string;
   tags: string;
+  /** AUD-01: an IANA zone; empty means "from the country". */
+  time_zone: string;
+  /** AUD-10: the company's own fields, by key. */
+  custom: Record<string, string>;
   /** For a new contact only: what they agreed to. A change of mind on an existing one is recorded as consent, with a note. */
   consent: Record<Channel, boolean>;
 }
@@ -44,7 +49,7 @@ export function blankDraft(orgId: string, owner: number | null): Draft {
   return {
     org_id: orgId, first_name: '', last_name: '', email: '', phone: '', whatsapp: '', job_title: '', company: '', country: '', city: '',
     industry: '', language: '', owner_id: owner === null ? '' : String(owner), status: 'new', source_channel: 'manual', tags: '',
-    consent: { email: false, phone: false, whatsapp: false },
+    time_zone: '', custom: {}, consent: { email: false, phone: false, whatsapp: false },
   };
 }
 
@@ -53,7 +58,9 @@ export function draftOf(c: Contact): Draft {
     org_id: String(c.org_id), first_name: c.first_name ?? '', last_name: c.last_name ?? '', email: c.email ?? '', phone: c.phone ?? '',
     whatsapp: c.whatsapp ?? '', job_title: c.job_title ?? '', company: c.company?.name ?? '', country: c.country ?? '', city: c.city ?? '',
     industry: c.industry ?? '', language: c.language ?? '', owner_id: c.owner ? String(c.owner.id) : '', status: c.status,
-    source_channel: c.source, tags: c.tags.join(', '), consent: { email: false, phone: false, whatsapp: false },
+    source_channel: c.source, tags: c.tags.join(', '), time_zone: c.time_zone ?? '',
+    custom: Object.fromEntries(Object.entries((c as Contact & { custom?: Record<string, unknown> }).custom ?? {}).map(([k, v]) => [k, v == null ? '' : String(v)])),
+    consent: { email: false, phone: false, whatsapp: false },
   };
 }
 
@@ -63,7 +70,11 @@ export function bodyOf(d: Draft, isNew: boolean): Record<string, unknown> {
     first_name: d.first_name, last_name: d.last_name, email: d.email, phone: d.phone, whatsapp: d.whatsapp, job_title: d.job_title,
     company: d.company, country: d.country, city: d.city, industry: d.industry, language: d.language,
     owner_id: d.owner_id === '' ? null : Number(d.owner_id), status: d.status, tags: d.tags.split(',').map((t) => t.trim()).filter(Boolean),
+    time_zone: d.time_zone,
   };
+  /* Sent whole: the server keeps exactly what is sent. Blanks are dropped. */
+  const custom = Object.fromEntries(Object.entries(d.custom ?? {}).filter(([, v]) => v !== ''));
+  if (Object.keys(custom).length > 0 || !isNew) body.custom = custom;
   if (isNew) {
     body.org_id = d.org_id === '' ? null : Number(d.org_id);
     body.source_channel = d.source_channel;
@@ -176,6 +187,15 @@ export function ContactForm({ draft, onChange, options, errors, isNew }: { draft
   const set = <K extends keyof Draft>(k: K, v: Draft[K]) => onChange({ ...draft, [k]: v });
   const makers = companiesWhere(options, 'create');
   const orgId = draft.org_id === '' ? null : Number(draft.org_id);
+  /* AUD-10: the company's own fields, typed. */
+  const fields = useQuery({
+    queryKey: ['marketing', 'custom-fields'],
+    queryFn: ({ signal }) => apiGet<{ items: CustomField[] }>('/api/marketing/custom-fields', undefined, signal),
+    retry: false,
+    staleTime: 60_000,
+  });
+  const defs = (fields.data?.items ?? []).filter((f) => orgId === null || f.org_id === orgId);
+  const setCustom = (k: string, v: string) => onChange({ ...draft, custom: { ...draft.custom, [k]: v } });
   const hint = (k: string, plain?: ReactNode) => (errors[k] ? <span className="text-danger">{errors[k]}</span> : plain);
   const text = (k: keyof Draft, label: string, extra: { type?: string; placeholder?: string; plain?: ReactNode; autoFocus?: boolean; maxLength?: number } = {}) => (
     <Field label={label} hint={hint(k, extra.plain)}>
@@ -236,6 +256,23 @@ export function ContactForm({ draft, onChange, options, errors, isNew }: { draft
           {text('city', 'City')}
           {text('industry', 'Industry')}
           {text('language', 'Language', { plain: 'As its code: en, si, ta, ar.', maxLength: 12 })}
+          {text('time_zone', 'Time zone', { placeholder: 'Asia/Colombo', plain: 'Empty: from the country. Calls and local-time sends use it.' })}
+          {defs.map((f) =>
+            f.type === 'picklist' ? (
+              <Field key={f.id} label={f.label} hint={hint(`custom.${f.key}`)}>
+                <Select<string> aria-label={f.label} value={draft.custom[f.key] ?? ''} onValueChange={(v) => setCustom(f.key, v)} options={[{ value: '', label: '—' }, ...f.options.map((o) => ({ value: o, label: o }))]} className={input} />
+              </Field>
+            ) : f.type === 'boolean' ? (
+              <label key={f.id} className="mt-5 flex items-center gap-2 text-[13px] text-ink">
+                <Checkbox checked={draft.custom[f.key] === '1'} onChange={(e) => setCustom(f.key, e.target.checked ? '1' : '0')} />
+                {f.label}
+              </label>
+            ) : (
+              <Field key={f.id} label={f.label} hint={hint(`custom.${f.key}`)}>
+                <input className={input} type={f.type === 'number' ? 'number' : f.type === 'date' ? 'date' : 'text'} value={draft.custom[f.key] ?? ''} onChange={(e) => setCustom(f.key, e.target.value)} />
+              </Field>
+            ),
+          )}
           <Field label="Owner" hint={hint('owner_id')}>
             <Select<string> aria-label="Owner" value={draft.owner_id} onValueChange={(v) => set('owner_id', v)} options={[{ value: '', label: 'Nobody' }, ...peopleOf(options, orgId)]} className={input} />
           </Field>

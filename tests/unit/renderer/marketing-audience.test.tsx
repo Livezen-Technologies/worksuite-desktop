@@ -160,7 +160,7 @@ describe('A contact (DK03)', () => {
     expect(record.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/How they agreed/), { target: { value: 'Verbal on call #C-2291' } });
     fireEvent.click(record);
-    await waitFor(() => expect(net.request).toHaveBeenCalledWith('POST', '/api/marketing/contacts/5/consent', { body: { channel: 'phone', status: 'granted', note: 'Verbal on call #C-2291' } }));
+    await waitFor(() => expect(net.request).toHaveBeenCalledWith('POST', '/api/marketing/contacts/5/consent', { body: { channel: 'phone', status: 'granted', note: 'Verbal on call #C-2291', lawful_basis: 'consent', consent_wording: 'Verbal on call #C-2291' } }));
   });
 });
 

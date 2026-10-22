@@ -13,6 +13,7 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 ### Added
+- Marketing (WS-MKT-SRS-002 stream A): a **Data quality** screen — the duplicate report, merging with field picking and a 30-day undo, and the company's custom contact fields; an organisation's own page with its people, reach per channel and one timeline; a list's email/call/WhatsApp reach; a contact's time zone and the time there, double opt-in state, lawful basis on the consent ledger, export of their data (JSON/CSV), erasure on request and "ask again for permission"; typed custom fields and time zone on the contact form; background imports with progress and cancel, and a lawful basis for an import's consent.
 - Marketing › Email › Templates: the gallery of 100 system templates from the server (50 newsletters, 50 promotional) with a kind switch, a subcategory filter, a search and a sandboxed preview; each opens in the block editor as editable blocks. Starting a campaign from a template shows each one's subcategory.
 
 ## 0.2.274 — 2026-10-22

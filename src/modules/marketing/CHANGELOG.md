@@ -6,6 +6,7 @@ the root CHANGELOG.md.
 
 ## Unreleased
 
+- WS-A (SRS v2.0): `DataQuality.tsx` (duplicates, merge + undo, custom fields), `CompanyPage.tsx`, reach per channel on Lists, time zone / DOI / lawful basis / export / erase / re-permission on the contact page, typed custom fields and time zone in `audience-contact.tsx`, background import progress and cancel in `Import.tsx`; view `quality` in the rail.
 - Templates: a gallery of the server's 100 system templates with kind, subcategory, search and preview (`email-gallery.tsx`).
 
 ## 1.0.0 — 2026-10-06
