@@ -4,11 +4,9 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
-## Unreleased
+## 1.8.1 — 2026-10-22
 
-**Changed**
-
-- recent activity groups repeated updates on the client too, and recent files leave out transfer pieces (#104)
+- Activity grouped on the client; transfer pieces left out of activity and recent files (#104)
 
 ## 1.8.0 — 2026-10-13
 

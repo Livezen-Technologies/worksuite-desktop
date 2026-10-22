@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.6.1 — 2026-10-22
+
+- Website-chat notifications open in Chat and count as Chat for mute and access (#407)
+
 ## 2.6.0 — 2026-10-21
 
 **Added**
