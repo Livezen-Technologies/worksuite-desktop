@@ -14,6 +14,8 @@ person who has to live with the change — what it does, and where it bites.
 ## Unreleased
 ### Fixed
 - Chat: the message hover toolbar now sits above the bubble instead of covering its first line of text.
+- Sign-in (worksuite#164): the sign-in, account and meeting-join screens have no theme switch; they open in the last
+  signed-in person's theme on this computer, else follow the system's appearance live. Now covered by a test.
 
 
 - **User guides (help 1.0.0).** A "User guide" button in the title bar opens the guide of the module in front — and

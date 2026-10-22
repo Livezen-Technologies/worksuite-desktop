@@ -172,6 +172,18 @@ describe('the settings service’s colour profiles (#234)', () => {
     expect(s.effective().appearance?.darkProfile).toBe('teal');
   });
 
+  it('opens the sign-in screens in the last signed-in person’s theme, after signing out and after a restart (worksuite#164)', () => {
+    const db = database();
+    const s = new SettingsService(db as never);
+    s.setUserLanguageScope('https://ws.example', 'ann');
+    s.update({ theme: 'dark' });
+    s.setUserLanguageScope(null, null);
+    expect(s.effective().appearance?.mode).toBe('dark');
+    expect(new SettingsService(db as never).effective().appearance?.mode).toBe('dark');
+    // Nobody has chosen yet: the sign-in screens follow the computer (System).
+    expect(new SettingsService(database() as never).effective().appearance?.mode).toBe('system');
+  });
+
   it('takes another device’s copy only when it is newer', () => {
     const s = new SettingsService(database() as never);
     s.update({ appearance: { darkProfile: 'red', chosen: true } } as Partial<Preferences>);
