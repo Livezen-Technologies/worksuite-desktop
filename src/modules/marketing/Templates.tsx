@@ -7,11 +7,13 @@ import { ErrorNote, Spinner } from '../../components/ui';
 import { refreshMarketing, send } from './api';
 import { BlockEditor } from './email-BlockEditor';
 import { Confirm, useTemplates } from './email-kit';
+import { TemplateGallery } from './email-gallery';
 import { Card, Field, PageHeader, Pill, btn, btnPrimary, btnSmall, input } from './parts';
 import { companiesWhere, fieldErrors, refusal, type Options, type Starter, type Template } from './types';
 
 /**
- * Email templates: the starters that come with Marketing, and whatever each
+ * Email templates: the starters and the 100-template gallery that come with
+ * Marketing, and whatever each
  * company saves — written in the same block editor as a campaign.
  *
  * A template is only a starting point. A campaign made from one keeps its own
@@ -104,22 +106,7 @@ export default function Templates({ org, options }: { org: string; options: Opti
             )}
           </section>
 
-          <section aria-labelledby="tpl-starters">
-            <h2 id="tpl-starters" className="m-0 mb-2 text-[11px] font-bold tracking-[.5px] text-ink-3 uppercase">Starters</h2>
-            <ul className="m-0 grid list-none gap-3 p-0 sm:grid-cols-3">
-              {(q.data?.starters ?? []).map((s) => (
-                <li key={s.key} className="flex min-w-0 flex-col gap-2 rounded-[12px] border border-dashed border-line bg-surface p-4">
-                  <p className="m-0 text-[14px] font-bold text-ink">{s.name}</p>
-                  <p className="m-0 truncate text-[12px] text-ink-3">{s.subject}</p>
-                  {writers.length > 0 ? (
-                    <button type="button" className={btnSmall} onClick={() => setEditing({ template: null, from: s })}>
-                      Make a template from it
-                    </button>
-                  ) : null}
-                </li>
-              ))}
-            </ul>
-          </section>
+          <TemplateGallery starters={q.data?.starters ?? []} onUse={writers.length > 0 ? (s) => setEditing({ template: null, from: s }) : undefined} />
         </div>
       )}
 

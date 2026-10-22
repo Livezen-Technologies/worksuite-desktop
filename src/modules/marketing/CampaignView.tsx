@@ -255,7 +255,7 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
 function TemplatePicker({ orgId, onPick }: { orgId: number; onPick: (t: { subject: string; preheader: string; body_html: string }) => void }) {
   const templates = useTemplates();
   const choices = [
-    ...(templates.data?.starters ?? []).map((s) => ({ value: `s:${s.key}`, label: s.name, hint: 'Starter' })),
+    ...(templates.data?.starters ?? []).map((s) => ({ value: `s:${s.key}`, label: s.name, hint: s.subcategory_label ?? 'Starter' })),
     ...(templates.data?.items ?? []).filter((t) => t.org_id === orgId).map((t) => ({ value: `t:${t.id}`, label: t.name, hint: t.category_label })),
   ];
   const pick = (v: string) => {

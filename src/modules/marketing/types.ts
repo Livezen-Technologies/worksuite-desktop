@@ -417,7 +417,13 @@ export interface Template {
   updated_at: string | null;
 }
 
-export interface Starter { key: string; name: string; category: string; subject: string; preheader: string; body_html: string }
+export interface Starter {
+  key: string; name: string; category: string; subject: string; preheader: string; body_html: string;
+  /** The gallery's own grouping (`black_friday`, `monthly_digest`…); null for the three basic starters. */
+  subcategory?: string | null; subcategory_label?: string | null;
+  /** `starter`: one of the three basics; `library`: one of the 100 system templates. */
+  source?: 'starter' | 'library'; layout?: string; accent?: string;
+}
 
 export interface EmailImage { id: number; org_id: number; name: string; url: string; width: number | null; height: number | null; bytes: number; created_at: string | null }
 

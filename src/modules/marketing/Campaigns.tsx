@@ -182,7 +182,7 @@ function NewCampaign({ options, org, onClose, onMade }: { options: Options; org:
   const [busy, setBusy] = useState(false);
   const templates = useTemplates();
   const choices = [
-    ...(templates.data?.starters ?? []).map((s) => ({ key: `s:${s.key}`, label: s.name, hint: 'Starter', subject: s.subject, preheader: s.preheader, body_html: s.body_html, template: null as number | null })),
+    ...(templates.data?.starters ?? []).map((s) => ({ key: `s:${s.key}`, label: s.name, hint: s.subcategory_label ?? 'Starter', subject: s.subject, preheader: s.preheader, body_html: s.body_html, template: null as number | null })),
     ...(templates.data?.items ?? []).filter((t) => String(t.org_id) === orgId).map((t) => ({ key: `t:${t.id}`, label: t.name, hint: t.category_label, subject: t.subject ?? '', preheader: t.preheader ?? '', body_html: t.body_html, template: t.id })),
   ];
 

@@ -12,6 +12,8 @@ person who has to live with the change — what it does, and where it bites.
 > come after what had already shipped.
 
 ## Unreleased
+### Added
+- Marketing › Email › Templates: the gallery of 100 system templates from the server (50 newsletters, 50 promotional) with a kind switch, a subcategory filter, a search and a sandboxed preview; each opens in the block editor as editable blocks. Starting a campaign from a template shows each one's subcategory.
 
 ## 0.2.274 — 2026-10-22
 ### Fixed

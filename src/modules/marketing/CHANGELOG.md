@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## Unreleased
+
+- Templates: a gallery of the server's 100 system templates with kind, subcategory, search and preview (`email-gallery.tsx`).
+
 ## 1.0.0 — 2026-10-06
 
 **Added**
