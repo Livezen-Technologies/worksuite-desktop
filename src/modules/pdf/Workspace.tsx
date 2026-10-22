@@ -19,6 +19,7 @@ import { Organize } from './Organize';
 import { recordOpened } from './recent';
 import { AllToolsPanel, ToolPanel } from './ToolPanels';
 import { toolById, type ToolId } from './tools';
+import ProPanel from './ProPanel';
 
 /**
  * One PDF in a WorkSuite tab (§4): the title bar with its save state, the
@@ -516,6 +517,7 @@ export function Workspace({ source }: { source: PdfSource }) {
                   <>
                     <RibbonButton icon="history" label="Versions" active={right === 'versions'} onClick={() => setRight('versions')} />
                     <RibbonButton icon="activity" label="Activity" active={right === 'activity'} onClick={() => setRight('activity')} />
+                    <RibbonButton icon="sparkles" label="Pro" active={right === 'pro'} onClick={() => setRight('pro')} />
                   </>
                 ) : null}
               </>
@@ -659,6 +661,13 @@ export function Workspace({ source }: { source: PdfSource }) {
                 />
               ) : right === 'versions' || right === 'activity' ? (
                 <DriveDetails view={ready} tab={right} />
+              ) : right === 'pro' && ready.source.kind === 'drive' && ready.source.fileId ? (
+                <ProPanel
+                  fileId={ready.source.fileId}
+                  version={ready.source.version ?? 1}
+                  page={page}
+                  onChanged={(v) => toast('success', v ? `Saved as version ${v} in Drive. Reopen the PDF to see it.` : 'Done.')}
+                />
               ) : null}
             </div>
           </aside>

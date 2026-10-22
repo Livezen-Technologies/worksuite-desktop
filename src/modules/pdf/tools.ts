@@ -82,8 +82,9 @@ export const TOOLS: PdfTool[] = [
   },
   {
     id: 'edit', t: 'T05', group: 'create', label: 'Edit text & images', blurb: 'Text, images, links, headers', icon: 'pen',
-    pro: true, permission: 'files.pdf.edit', lock: 'edit', output: 'in-place', runs: 'desktop', screens: ['DK03'], phase: 'PRO-2', status: 'ui',
-    missing: ['Engine: text-block segmentation and content-stream rewrite', 'Font matching/subsetting (HarfBuzz, FreeType) incl. Sinhala and Tamil shaping', 'Image add/replace/crop ops', 'Link ops', 'Page design ops: crop boxes, header & footer, watermark, background, page labels', 'Edit ops in the journal (pdfEditOpSchema) with summary kinds text_edited/images_changed'],
+    pro: true, permission: 'files.pdf.edit', lock: 'edit', output: 'in-place', runs: 'desktop', screens: ['DK03'], phase: 'PRO-2', status: 'partial',
+    works: "For Drive PDFs (Pro panel, on the server): find and replace in the document's own font, with preview; images, links, bookmarks, labels and boxes through the server editing API.",
+    missing: ['On-canvas text-block editing in the engine (PDFium) with reflow', 'Sinhala and Tamil shaping for new text (HarfBuzz)', 'Image and link handles on the canvas'],
   },
   {
     id: 'export', t: 'T06', group: 'create', label: 'Export a PDF', blurb: 'Word, Excel, PowerPoint, images', icon: 'external',
@@ -115,8 +116,8 @@ export const TOOLS: PdfTool[] = [
   {
     id: 'comment', t: 'T08', group: 'review', label: 'Add comments', blurb: 'Notes, markup, shared review', icon: 'chat',
     pro: false, proNote: 'Summarize, import/export, audio and shared review need Pro', permission: 'files.pdf.annotate', lock: 'none', output: 'in-place', runs: 'both', screens: ['DK05', 'W03'], phase: 'PRO-2', status: 'partial',
-    works: 'Highlight, underline, strike out, squiggle, note, text box, draw, rectangle, ellipse, line and stamps saved inside the PDF; Comments panel to go to, edit and delete.',
-    missing: ['Replies, @mentions, resolve/status, filter and sort', 'Replace/insert text, callout, cloud, polygon, arrow, eraser, attach file, record audio', 'Opacity and fill controls; per-tool defaults', 'Make task (Tasks API)', 'Summarize comments, FDF/XFDF import/export', 'Shared review: api/files/{id}/pdf/reviews', 'Server annotation index (GET …/pdf/annotations)'],
+    works: 'Highlight, underline, strike out, squiggle, note, text box, draw, rectangle, ellipse, line and stamps saved inside the PDF; for Drive PDFs (Pro panel) shared review — replies, statuses, @mentions — written into the file.',
+    missing: ['Callout, cloud, polygon, arrow, eraser, attach file, record audio', 'Make task (Tasks API)', 'FDF/XFDF import/export on the desktop'],
   },
   {
     id: 'fill-sign', t: 'T11', group: 'review', label: 'Fill & Sign', blurb: 'Complete and sign forms', icon: 'signature',
@@ -125,18 +126,21 @@ export const TOOLS: PdfTool[] = [
   },
   {
     id: 'esign', t: 'T12', group: 'review', label: 'Request e-signatures', blurb: 'Send, track, remind', icon: 'send',
-    pro: true, permission: 'files.pdf.sign_request', lock: 'signing', output: 'new-file', runs: 'server', screens: ['DK08'], phase: 'PRO-4', status: 'ui',
-    missing: ['Server: PDFAgreementService, api/pdf/agreements, public sign/{token} page with OTP', 'SIGNING lock type', 'Field placement per recipient, text tags', 'Agreements tracker', 'Envelope metering'],
+    pro: true, permission: 'files.pdf.sign_request', lock: 'signing', output: 'new-file', runs: 'server', screens: ['DK08'], phase: 'PRO-4', status: 'partial',
+    works: 'For Drive PDFs (Pro panel): send to signers by email with a signature line each; the server locks the PDF, sends one-time codes, reminds, and seals the result.',
+    missing: ['Placing fields freely on the desktop canvas (the web builder has it)', 'Agreements tracker on the desktop'],
   },
   {
     id: 'prepare-form', t: 'T13', group: 'review', label: 'Prepare a form', blurb: 'Detect and design fields', icon: 'list-checks',
-    pro: true, permission: 'files.pdf.forms_design', lock: 'edit', output: 'in-place', runs: 'desktop', screens: ['DK09'], phase: 'PRO-3', status: 'ui',
-    missing: ['Engine: field create/edit/delete ops', 'Auto-detect fields on flat PDFs', 'Safe formula engine (no document JavaScript)', 'Record mappings and responses (api/pdf/forms/*)'],
+    pro: true, permission: 'files.pdf.forms_design', lock: 'edit', output: 'in-place', runs: 'desktop', screens: ['DK09'], phase: 'PRO-3', status: 'partial',
+    works: 'For Drive PDFs (Pro panel): detect fields on flat forms and add them; calculations, formats, tab order and data import/export through the server.',
+    missing: ['Designing fields on the desktop canvas'],
   },
   {
     id: 'compare', t: 'T17', group: 'review', label: 'Compare files', blurb: 'Text and visual differences', icon: 'layout-side',
-    pro: true, proNote: 'Versions of one file, text only, is standard', permission: 'files.pdf.compare', lock: 'none', output: 'report', runs: 'both', screens: ['DK11', 'W07'], phase: 'PRO-2', status: 'ui',
-    missing: ['Open two documents in one view with synced scroll', 'Text diff from the engine text layer; visual overlay', 'Report PDF and pdf_comparisons (POST api/files/{id}/pdf/compare)'],
+    pro: true, proNote: 'Versions of one file, text only, is standard', permission: 'files.pdf.compare', lock: 'none', output: 'report', runs: 'both', screens: ['DK11', 'W07'], phase: 'PRO-2', status: 'partial',
+    works: 'For Drive PDFs (Pro panel): compare two versions on the server — inserted, deleted, changed, moved and formatting differences — and save a report PDF.',
+    missing: ['Two documents side by side with synced scroll on the desktop canvas (the web has it)', 'Comparing a local file'],
   },
   {
     id: 'protect', t: 'T14', group: 'protect', label: 'Protect a PDF', blurb: 'Passwords, certificates', icon: 'lock',
@@ -146,18 +150,20 @@ export const TOOLS: PdfTool[] = [
   {
     id: 'redact', t: 'T15', group: 'protect', label: 'Redact a PDF', blurb: 'Remove sensitive content', icon: 'eye-off',
     pro: true, permission: 'files.pdf.redact', lock: 'edit', output: 'copy', runs: 'both', screens: ['DK10', 'W10'], phase: 'PRO-3', status: 'partial',
-    works: 'Pattern finding (Sri Lankan NIC, phones, emails, cards, bank numbers) through the document search, listing every hit to review.',
-    missing: ['Redaction marks as annotations', 'Engine: apply — remove text, vectors and image pixels under marks', 'Sanitize: metadata/XMP, attachments, comments, hidden layers, scripts', 'Verification and report; audit pdf.redaction.applied'],
+    works: 'Pattern finding through the document search; for Drive PDFs (Pro panel) true redaction on the server with verification, reason codes, and Sanitise a copy.',
+    missing: ['Drawing redaction marks on the desktop canvas', 'Redacting local files on the device'],
   },
   {
     id: 'certificates', t: 'T16', group: 'protect', label: 'Use a certificate', blurb: 'Sign, certify, validate', icon: 'badge-check',
-    pro: true, proNote: 'Validate is standard', permission: 'files.pdf.sign_digital', lock: 'none', output: 'in-place', runs: 'both', screens: ['DK10'], phase: 'PRO-4', status: 'ui',
-    missing: ['Signature validation (pkijs is bundled; the engine counts signatures already)', 'OS keystore / PKCS#12 / PKCS#11 bridge', 'PAdES signing with incremental save', 'TSA timestamps, LTV, trust list'],
+    pro: true, proNote: 'Validate is standard', permission: 'files.pdf.sign_digital', lock: 'none', output: 'in-place', runs: 'both', screens: ['DK10'], phase: 'PRO-4', status: 'partial',
+    works: 'For Drive PDFs (Pro panel): every signature validated by the server; sign with a PKCS#12 file on this computer (the key stays here) or a certificate WorkSuite holds, PAdES B-B to B-LTA.',
+    missing: ['PKCS#11 smart cards and USB tokens (native module)', 'OS keystore (Windows certificate store, macOS keychain)', 'Signing local files'],
   },
   {
     id: 'accessibility', t: 'T18', group: 'advanced', label: 'Prepare for accessibility', blurb: 'Check, tag, reading order', icon: 'user',
-    pro: true, proNote: 'Check is standard', permission: 'files.pdf.accessibility', lock: 'edit', output: 'in-place', runs: 'both', screens: ['DK12'], phase: 'PRO-5', status: 'ui',
-    missing: ['Engine: structure tree read/write', 'PDF/UA + WCAG checker', 'Autotag, reading order tool, alt text', 'Read out loud (OS speech)'],
+    pro: true, proNote: 'Check is standard', permission: 'files.pdf.accessibility', lock: 'edit', output: 'in-place', runs: 'both', screens: ['DK12'], phase: 'PRO-5', status: 'partial',
+    works: 'For Drive PDFs (Pro panel): PDF/UA and WCAG check, auto-tag, and fixes for language, title and tab order on the server.',
+    missing: ['Tag tree and reading-order editor on the desktop (the server API has it)', 'Read out loud (OS speech)'],
   },
   {
     id: 'standards', t: 'T19', group: 'advanced', label: 'Standards', blurb: 'PDF/A, PDF/X, PDF/UA', icon: 'shield-check',
@@ -181,13 +187,15 @@ export const TOOLS: PdfTool[] = [
   },
   {
     id: 'actions', t: 'T22', group: 'advanced', label: 'Action wizard', blurb: 'Guided batch actions', icon: 'zap',
-    pro: true, permission: 'files.pdf.actions', lock: 'none', output: 'new-file', runs: 'both', screens: ['DK14'], phase: 'PRO-4', status: 'ui',
-    missing: ['Server: api/pdf/actions + runs (PDFActionService)', 'Local runner over the tool steps', 'Built-in action library'],
+    pro: true, permission: 'files.pdf.actions', lock: 'none', output: 'new-file', runs: 'both', screens: ['DK14'], phase: 'PRO-4', status: 'partial',
+    works: 'For Drive PDFs (Pro panel): run a saved Action on this PDF; Actions, runs and watched folders are built on the web (PDF Studio Pro › Batch).',
+    missing: ['Action builder on the desktop', 'Local runner for files on this computer'],
   },
   {
     id: 'ai', t: 'T24', group: 'advanced', label: 'AI Assistant', blurb: 'Summaries, ask the document', icon: 'sparkles',
-    pro: true, proNote: 'Summary is standard when AI is on', permission: 'files.pdf.ai', lock: 'none', output: 'report', runs: 'server', screens: ['DK15'], phase: 'PRO-3', status: 'ui',
-    missing: ['Server: POST api/files/{id}/pdf/ai/{summary|ask|extract|compare} via CoreAIService', 'Text extraction with page anchors from the engine', 'Citation highlight on the canvas', 'Save to record note / task'],
+    pro: true, proNote: 'Summary is standard when AI is on', permission: 'files.pdf.ai', lock: 'none', output: 'report', runs: 'server', screens: ['DK15'], phase: 'PRO-3', status: 'partial',
+    works: 'For Drive PDFs (Pro panel): summarise (whole or this page), ask with page citations, extract data, suggest redactions — through WorkSuite AI on the server.',
+    missing: ['Citation highlight on the canvas', 'Save to record note / task'],
   },
 ];
 

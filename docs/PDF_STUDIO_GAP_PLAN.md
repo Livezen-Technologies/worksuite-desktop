@@ -7,6 +7,16 @@ canvas *WorkSuite PDF Studio — UI* (W01–W10, DK01–DK17, A01–A02, M01). S
 Status words: **Built** works end to end · **UI** screen built, its action is off with the reason · **Partial** some
 of it works · **Missing** nothing yet.
 
+## 0. PDF Studio Pro on the server (WS-SRS-PDFPRO-001, 2026-10-22)
+
+The server's `app/Modules/PdfPro` (1.0.0) now does what many **UI** rows below waited for, for **Drive PDFs**, and
+the desktop reaches it through the **Pro** panel (`ProPanel.tsx`, `pro.ts`): true redaction + sanitise, signature
+validation, PAdES signing (server certificates, or a **PKCS#12 file signed on this computer** through
+`prepare`/`complete` — `openPkcs12`/`signLocally` with pkijs and WebCrypto), e-sign envelopes with the SIGNING
+lock, text find-and-replace, compare with report, shared review, form detection, accessibility, AI and Actions.
+`tools.ts` marks those tools **partial** with what works. Still to build on the desktop: canvas-level editing with
+the engine, PKCS#11 tokens and the OS keystores, field placement on the canvas, local-file Pro operations.
+
 ## 1. What this change adds (UI first)
 
 Every desktop screen in the design now exists in `src/modules/pdf`, driven by one tool registry

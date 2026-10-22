@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.2.0 — 2026-10-22
+
+**Added**
+
+- the Pro panel for Drive PDFs (Properties panel › Pro, Review ribbon › Pro) — true redaction and Sanitise a copy, signature validation, signing with a PKCS#12 file on this computer (the key never leaves it; prepare/complete with the server) or a certificate WorkSuite holds, send for signature, find and replace in the document's font, compare versions with a report, shared review replies and statuses, form field detection, accessibility check and fixes, the AI assistant, and running a saved Action — on PDF Studio Pro (server PdfPro 1.0.0)
+
+**Changed**
+
+- the tool registry says honestly which tools now work for Drive PDFs through the server (edit, compare, redact, certificates, e-signatures, prepare a form, accessibility, AI, actions, comments)
+
 ## 1.1.1 — 2026-10-13
 
 **Changed**
