@@ -1,3 +1,4 @@
+import { Checkbox } from '../../components/Checkbox';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiGet } from '../../core/api';
@@ -513,7 +514,7 @@ export function RecurrenceCard({ campaign, value, onChange, edit, dirty, onChang
   return (
     <Card title="Repeat" action={repeating ? <Pill tone="violet">Repeating</Pill> : undefined}>
       <label className="flex items-center gap-2 text-[12.5px] text-ink">
-        <input type="checkbox" checked={!!r} disabled={!edit || repeating} onChange={(e) => onChange(e.target.checked ? NO_REPEAT : null)} />
+        <Checkbox checked={!!r} disabled={!edit || repeating} onChange={(e) => onChange(e.target.checked ? NO_REPEAT : null)} />
         Send it again on a schedule — a newsletter every week, or what is new in a feed
       </label>
       {r ? (
@@ -537,7 +538,7 @@ export function RecurrenceCard({ campaign, value, onChange, edit, dirty, onChang
           {r.feed_url ? (
             <>
               <Field label="Items per email"><input className={input} type="number" min={1} max={10} value={r.feed_items} readOnly={!edit} onChange={(e) => set({ feed_items: Number(e.target.value) || 5 })} /></Field>
-              <label className="flex items-center gap-2 text-[12.5px] text-ink sm:col-span-2"><input type="checkbox" checked={r.only_new} disabled={!edit} onChange={(e) => set({ only_new: e.target.checked })} />Only when there is something new</label>
+              <label className="flex items-center gap-2 text-[12.5px] text-ink sm:col-span-2"><Checkbox checked={r.only_new} disabled={!edit} onChange={(e) => set({ only_new: e.target.checked })} />Only when there is something new</label>
             </>
           ) : null}
           {feed ? (
@@ -634,7 +635,7 @@ function SaveBlock({ orgId, body, kinds, onClose, onSaved }: { orgId: number; bo
       <b className="text-[12.5px] text-ink">Which of the email’s blocks</b>
       {blocks.length === 0 ? <p className="m-0 text-[12.5px] text-ink-3">The email has no blocks yet.</p> : blocks.map((b) => (
         <label key={b.id} className="flex items-center gap-2 text-[12.5px] text-ink">
-          <input type="checkbox" checked={pick.includes(b.id)} onChange={() => setPick((p) => (p.includes(b.id) ? p.filter((x) => x !== b.id) : [...p, b.id]))} />
+          <Checkbox checked={pick.includes(b.id)} onChange={() => setPick((p) => (p.includes(b.id) ? p.filter((x) => x !== b.id) : [...p, b.id]))} />
           <span className="truncate">{blockLabel(b)}</span>
         </label>
       ))}

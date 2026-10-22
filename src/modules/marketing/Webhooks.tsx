@@ -1,3 +1,4 @@
+import { Checkbox } from '../../components/Checkbox';
 import { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '../../core/api';
@@ -104,7 +105,7 @@ function WebhookSheet({ options, events, onClose, onSaved }: { options: Options;
         <legend className="mb-1 text-[12.5px] font-semibold text-ink">Events</legend>
         {events.map((e) => (
           <label key={e.value} className="flex items-center gap-2 py-0.5 text-[12.5px] text-ink">
-            <input type="checkbox" checked={chosen.includes(e.value)} onChange={(x) => setChosen(x.target.checked ? [...chosen, e.value] : chosen.filter((c) => c !== e.value))} /> {e.label}
+            <Checkbox checked={chosen.includes(e.value)} onChange={(x) => setChosen(x.target.checked ? [...chosen, e.value] : chosen.filter((c) => c !== e.value))} /> {e.label}
           </label>
         ))}
         {errors.events ? <span className="text-[11.5px] text-danger">{errors.events}</span> : null}

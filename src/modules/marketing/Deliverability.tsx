@@ -1,3 +1,4 @@
+import { Checkbox } from '../../components/Checkbox';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiGet } from '../../core/api';
@@ -138,7 +139,7 @@ function WarmupSheet({ orgId, domain, defaults, onClose }: { orgId: number; doma
         <Field label="Until a day of"><input className={input} type="number" value={max} onChange={(e) => setMax(e.target.value)} /></Field>
       </div>
       <Field label="Status"><Select aria-label="Status" value={status} onValueChange={setStatus} options={[{ value: 'active', label: 'Active' }, { value: 'paused', label: 'Paused: no cap' }, { value: 'done', label: 'Done' }]} /></Field>
-      {p ? <label className="flex items-center gap-2 text-[12.5px] text-ink"><input type="checkbox" checked={restart} onChange={(e) => setRestart(e.target.checked)} />Start again from the first day</label> : null}
+      {p ? <label className="flex items-center gap-2 text-[12.5px] text-ink"><Checkbox checked={restart} onChange={(e) => setRestart(e.target.checked)} />Start again from the first day</label> : null}
     </Sheet>
   );
 }

@@ -1,3 +1,4 @@
+import { Checkbox } from '../../components/Checkbox';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiGet } from '../../core/api';
@@ -168,7 +169,7 @@ function FormBody({ form, options, onBack }: { form: FormDetail; options: Option
                   <Select<string> aria-label={`Field ${i + 1}: fills in`} value={x.key} disabled={!may} className="w-[160px]" onValueChange={(v) => setField(i, { key: v, label: targets.find((t) => t.value === v)?.label ?? v })} options={targets} />
                   <input aria-label={`Field ${i + 1}: label`} className={cx(input, '!w-40')} disabled={!may} value={x.label} onChange={(e) => setField(i, { label: e.target.value })} />
                   <input aria-label={`Field ${i + 1}: options`} className={cx(input, '!w-48')} disabled={!may} value={(x.options ?? []).join(', ')} placeholder="Options, with commas" onChange={(e) => setField(i, { options: e.target.value.trim() ? e.target.value.split(',').map((o) => o.trim()).filter(Boolean) : null })} />
-                  <label className="flex items-center gap-1 text-[12px] text-ink-2"><input type="checkbox" disabled={!may} checked={x.required} onChange={(e) => setField(i, { required: e.target.checked })} /> Required</label>
+                  <label className="flex items-center gap-1 text-[12px] text-ink-2"><Checkbox disabled={!may} checked={x.required} onChange={(e) => setField(i, { required: e.target.checked })} /> Required</label>
                   {may ? <button type="button" aria-label={`Remove field ${i + 1}`} className="ml-auto text-ink-3 hover:text-danger" onClick={() => setF({ ...f, fields: f.fields.filter((_, j) => j !== i) })}><Icon name="x" size={14} /></button> : null}
                 </li>
               ))}
