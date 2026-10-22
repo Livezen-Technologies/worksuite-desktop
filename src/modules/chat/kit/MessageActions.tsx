@@ -129,7 +129,7 @@ export function MessageToolbar({ m, own, caps, handlers: h, items, onMoreReactio
       aria-label="Message actions"
       className={cx(
         'z-20 flex items-center gap-0.5 rounded-[10px] bg-surface p-[3px] shadow-[0_4px_14px_rgb(var(--ws-shadow-rgb)/.16),0_0_0_1px_var(--ws-edge)]',
-        look === 'page' ? 'pointer-events-auto shrink-0' : cx('absolute -top-[15px]', own ? 'right-1.5' : 'left-1.5'),
+        look === 'page' ? 'pointer-events-auto shrink-0' : cx('absolute bottom-full -mb-1', own ? 'right-1.5' : 'left-1.5'),
         pop ? 'visible' : 'invisible group-hover:visible group-focus-within:visible',
       )}
     >
@@ -166,7 +166,7 @@ export function MessageToolbar({ m, own, caps, handlers: h, items, onMoreReactio
     <div ref={box} className="contents">
       {look === 'page' ? (
         // The top-right corner; a bar wider than a short message from the other side runs right, never off the left edge.
-        <div data-message-toolbar className={cx('pointer-events-none absolute inset-x-1.5 -top-[15px] z-20 flex', own ? 'justify-end' : 'justify-end-safe')}>
+        <div data-message-toolbar className={cx('pointer-events-none absolute inset-x-1.5 bottom-full -mb-1 z-20 flex', own ? 'justify-end' : 'justify-end-safe')}>
           {bar}
         </div>
       ) : (
