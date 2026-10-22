@@ -4,6 +4,15 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-22
+
+**Added**
+
+- signing with a smart card or USB token (PKCS#11 through OpenSC): tokens and their certificates are found, the PIN goes to the token library in its environment and is never kept, the key never leaves the token (PRO-SIG-002)
+- Convert and OCR — PDF to DOCX/XLSX/PPTX/HTML/EPUB/TXT/images; searchable or editable OCR with language detection (Sinhala, Tamil, English), straightening and cleaning (PRO-CNV-001..005)
+- Print production — PDF/X preflight with fixes, separation and overprint previews with the output intent, n-up and booklet imposition with crop and bleed marks (PRO-PRT-001..003)
+- share a PDF form by link and see the answers as a table (PRO-FRM-006); who else has the PDF open and on which page (PRO-REV-006)
+
 ## 1.2.0 — 2026-10-22
 
 **Added**

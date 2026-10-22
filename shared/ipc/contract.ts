@@ -1176,6 +1176,13 @@ export const contract = {
   'pdf:resolve': ch(z.strictObject({ session: pdfSession, answer: z.enum(['keep_both', 'upload_as_new_version', 'use_cloud']) }), { session: true, rate: 3, sensitive: true }),
   'pdf:discard': ch(z.strictObject({ session: pdfSession }), { session: true, rate: 3 }),
   'pdf:extract': ch(z.strictObject({ session: pdfSession, pages: z.array(pdfPage).min(1).max(10_000) }), { session: true, rate: 3 }),
+  // PDF Studio Pro (PRO-SIG-002): the person's own token signs the server's signed attributes; the PIN goes to the
+  // token library in the tool's environment, never on a command line, never kept.
+  'pdf:tokens': ch(z.strictObject({ module: z.string().min(1).max(400).nullable().optional() }), { session: true, rate: 2 }),
+  'pdf:tokenSign': ch(z.strictObject({
+    module: z.string().min(1).max(400), token: z.string().min(1).max(64), id: z.string().regex(/^[0-9a-fA-F]{1,64}$/), pin: z.string().min(1).max(64),
+    data: z.instanceof(Uint8Array).refine((b) => b.byteLength > 0 && b.byteLength <= 65536, 'Nothing to sign.'), ec: z.boolean(),
+  }), { session: true, sensitive: true, rate: 2 }),
 
   // SalonMate's front desk: the key it is paired with stays in the main process.
   'salon:deskPairing': ch(none, { session: true }),
@@ -1948,6 +1955,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'pdf:resolve': PdfSessionView;
   'pdf:discard': PdfSessionView;
   'pdf:extract': { saved: boolean; name: string | null };
+  'pdf:tokens': { available: boolean; reason: string | null; tokens: Array<{ module: string; token: string; manufacturer: string; certs: Array<{ module: string; token: string; id: string; label: string; der: string }> }> };
+  'pdf:tokenSign': Uint8Array;
   'salon:deskPairing': SalonDeskPairing | null;
   'salon:deskPair': { desk: SalonDeskInfo; message: string | null };
   'salon:deskForget': void;

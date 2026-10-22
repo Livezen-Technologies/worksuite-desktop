@@ -8,6 +8,7 @@ import { logger } from '../../main/log';
 import type { IpcRouter } from '../../ipc/router';
 import { openExternalSafely } from '../../security/hardening';
 import { listPrinters } from '../print';
+import { TokenSigner } from './pkcs11';
 import { runPdfDiagnostics } from './diagnostics';
 import { PdfLocalFiles } from './local-files';
 import { printPdfPages } from './print';
@@ -98,6 +99,7 @@ export function createPdfStudio(deps: PdfStudioDeps): PdfStudio {
   const profile = (): string => (typeof deps.profile === 'function' ? deps.profile() : deps.profile);
   const cacheKey = (): Buffer | null => (typeof deps.cacheKey === 'function' ? deps.cacheKey() : deps.cacheKey);
   const storage = new PdfStorage(() => join(profile(), 'PDF'), cacheKey);
+  const tokens = new TokenSigner();
   void storage.prepare().catch((e) => log.warn('pdf storage not prepared', { error: String(e) }));
   const local = new PdfLocalFiles({ maxBytes: () => deps.policy().maxBytes, forbidden: () => [deps.userData] });
   // Unsaved work kept on this computer (PDF-SAVE-020), sealed under a key from the credential store; none without one.
@@ -228,6 +230,9 @@ export function createPdfStudio(deps: PdfStudioDeps): PdfStudio {
     router.handle('pdf:resolve', (input, c) => service.resolve(c.sender.id, input.session, input.answer));
     router.handle('pdf:discard', (input, c) => service.discard(c.sender.id, input.session));
     router.handle('pdf:extract', (input, c) => service.extract(c.sender.id, input.session, input.pages));
+    // PDF Studio Pro: a smart card or USB token signs (PKCS#11 through OpenSC); its key never leaves it.
+    router.handle('pdf:tokens', (input) => tokens.list(input.module ?? null));
+    router.handle('pdf:tokenSign', (input) => tokens.sign(input));
     router.handle('pdf:diagnostics', async (_input, c) => {
       const win = BrowserWindow.fromWebContents(c.sender);
       const checks = await runPdfDiagnostics({
