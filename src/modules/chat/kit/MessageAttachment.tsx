@@ -102,7 +102,7 @@ export function FileCard({ file, at, look, accent = 'text-primary', onOpen }: { 
   return (
     <div data-file-card className={look === 'drawer' ? 'flex w-[250px] max-w-full items-center gap-2.5 rounded-[8px] bg-surface/70 px-2 py-2 dark:bg-white/5' : 'flex w-[280px] max-w-full items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5'}>
       <FileBadge name={/\.[A-Za-z0-9]{1,8}$/.test(name) ? name : file.filename} size={look === 'drawer' ? 32 : 34} />
-      <span className="min-w-0 flex-1">
+      <span className="min-w-0 flex-1 selectable">
         <b className="block truncate text-[12px] text-ink" title={file.filename !== name ? file.filename : undefined}>{name}</b>
         <span className={cx('block text-ink-3', look === 'drawer' ? 'text-[11.5px]' : 'text-[12px]')}>
           {bytes(file.size)}

@@ -3,6 +3,9 @@ import { useQuery } from '@tanstack/react-query';
 import { apiGet } from '../../../core/api';
 import { openAnyLink } from '../../../components/LinkedText';
 import { cx } from '../../../components/ui';
+import { Icon } from '../../../components/Icon';
+import { text } from '../../../core/i18n';
+import { toast } from '../../../core/toasts';
 
 /**
  * Links in messages (C-02; worksuite-desktop#229). A long address is drawn as its site and path, cut with an
@@ -42,37 +45,61 @@ function PreviewImage({ src }: { src: string }) {
   return failed ? null : <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(true)} className="h-[72px] w-[72px] shrink-0 object-cover" />;
 }
 
+/** Copies an address and says so; shared by the link card and a file's card (worksuite-desktop#412). */
+export function copyLink(url: string): void {
+  void navigator.clipboard
+    ?.writeText(url)
+    .then(() => toast('success', text('Link copied.')))
+    .catch(() => toast('error', text('Could not copy the link.')));
+}
+
 /**
  * A link's card under a message. The desktop never fetches a page itself: it draws what it is given, and nothing
  * without it — the preview data comes from the server with the message.
+ *
+ * The card is not one big link (worksuite-desktop#412): its words can be selected and copied like the message's, only
+ * its title opens the page, and "Copy link" copies the address. It sits in the message's flow, under its words, so it
+ * never covers what is being read.
  */
 export function LinkPreview({ preview, own = false, className }: { preview?: LinkPreviewData | null; own?: boolean; className?: string }) {
   if (!preview?.url || (!preview.title && !preview.description)) return null;
+  const url = preview.url;
   let site = preview.site ?? '';
   if (!site) {
     try {
-      site = new URL(preview.url).host.replace(/^www\./, '');
+      site = new URL(url).host.replace(/^www\./, '');
     } catch {
       site = '';
     }
   }
+  const open = (e: { preventDefault: () => void }) => {
+    e.preventDefault();
+    openAnyLink(url);
+  };
   return (
-    <a
-      href={preview.url}
-      title={preview.url}
-      onClick={(e) => {
-        e.preventDefault();
-        openAnyLink(preview.url);
-      }}
-      className={cx('flex max-w-[320px] overflow-hidden rounded-[10px] border text-left no-underline', own ? 'border-white/30 bg-white/10' : 'border-line bg-surface hover:bg-subtle', className)}
-    >
+    <div data-link-preview className={cx('flex max-w-[320px] overflow-hidden rounded-[10px] border text-left', own ? 'border-white/30 bg-white/10' : 'border-line bg-surface', className)}>
       {preview.image ? <PreviewImage key={preview.image} src={preview.image} /> : null}
-      <span className="flex min-w-0 flex-col gap-0.5 px-2.5 py-2">
-        {site ? <span className={cx('truncate text-[11px]', own ? 'text-white/80' : 'text-ink-3')}>{site}</span> : null}
-        {preview.title ? <b className={cx('line-clamp-2 text-[12.5px]', own ? 'text-white' : 'text-ink')}>{preview.title}</b> : null}
+      <span className="flex min-w-0 flex-1 flex-col gap-0.5 px-2.5 py-2 selectable">
+        <span className="flex items-center gap-1.5">
+          {site ? <span className={cx('min-w-0 flex-1 truncate text-[11px]', own ? 'text-white/80' : 'text-ink-3')}>{site}</span> : <span className="flex-1" />}
+          <button
+            type="button"
+            aria-label={text('Copy link')}
+            title={text('Copy link')}
+            onClick={() => copyLink(url)}
+            className={cx('inline-flex h-5 w-5 shrink-0 items-center justify-center rounded-[5px]', own ? 'text-white/80 hover:bg-white/15' : 'text-ink-3 hover:bg-subtle')}
+          >
+            <Icon name="link" size={13} />
+          </button>
+        </span>
+        {preview.title ? (
+          <a href={url} draggable={false} onClick={open} className={cx('line-clamp-2 text-[12.5px] font-bold no-underline hover:underline', own ? 'text-white' : 'text-ink')}>
+            {preview.title}
+          </a>
+        ) : null}
         {preview.description ? <span className={cx('line-clamp-2 text-[12px]', own ? 'text-white/85' : 'text-ink-2')}>{preview.description}</span> : null}
       </span>
-    </a>
+    </div>
   );
 }
 
