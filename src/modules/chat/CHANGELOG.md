@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.0.2 — 2026-10-22
+
+- Message hover toolbar sits above the bubble instead of covering its text.
+
 ## 2.0.1 — 2026-10-20
 
 - Clearer conversation-list header: one status control, larger actions with hover, press and focus states, and larger drawer header icons (#391)
