@@ -6,6 +6,7 @@ the root CHANGELOG.md.
 
 ## Unreleased
 
+- WS-C (SRS v2.0): `Automation.tsx` (journey list and visual builder: trigger/step/settings panels, insert on any arrow, per-step figures, people, dry-run test), `Forms.tsx` (forms and landing pages), `Scoring.tsx` (rules, threshold, decay), `automation-parts.tsx` (journey graph helpers, snapshot panel, AI segment draft, contact score card, AI copy sheet); `audience-rules.tsx` gains `RuleTree` (nested groups ≤ 3), `rulesOf`, `leaves`, form/journey values; views `forms` and `scoring` in the rail; options `can.journeys|forms|scores`.
 - WS-B (SRS v2.0): `email-governance.tsx` (deliverability panel + fixes + AI rewrite + seed tests, version history, approval bar and waiting list, languages, repeat/feed, saved blocks, who sees each block, re-permission card, script versions), `Deliverability.tsx` (domain health, warm-up) and view `deliverability` in the rail; block rules (`data-show-segment` / `data-hide-segment`) kept by `email-blocks.ts`; campaign status `recurring`; draft fields `variants`, `recurrence`, `text_body`, `daily_cap`.
 - WS-A (SRS v2.0): `DataQuality.tsx` (duplicates, merge + undo, custom fields), `CompanyPage.tsx`, reach per channel on Lists, time zone / DOI / lawful basis / export / erase / re-permission on the contact page, typed custom fields and time zone in `audience-contact.tsx`, background import progress and cancel in `Import.tsx`; view `quality` in the rail.
 - Templates: a gallery of the server's 100 system templates with kind, subcategory, search and preview (`email-gallery.tsx`).
