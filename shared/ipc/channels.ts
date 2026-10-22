@@ -286,6 +286,9 @@ export const INVOKE_CHANNELS = [
   'pdf:resolve',
   'pdf:discard',
   'pdf:extract',
+  // PDF Studio Pro: signing with a smart card or USB token (PKCS#11).
+  'pdf:tokens',
+  'pdf:tokenSign',
 
   'salon:deskPairing',
   'salon:deskPair',

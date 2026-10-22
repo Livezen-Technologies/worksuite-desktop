@@ -1,6 +1,7 @@
 import * as asn1js from 'asn1js';
 import * as pkijs from 'pkijs';
 import { ApiError, apiDelete, apiGet, apiPost } from '../../core/api';
+import { call } from '../../core/bridge';
 import { text } from '../../core/i18n';
 
 /**
@@ -59,7 +60,73 @@ export const pro = {
   run: (id: number) => apiGet<{ id: number; status: string; done: number; failed: number; total: number; items: Array<{ name: string | null; status: string; error: string | null }> }>(`/api/pdfpro/runs/${id}`),
   stamp: (id: number, body: Record<string, unknown>) => apiPost<{ version: number }>(`${f(id)}/stamp`, body),
   forget: (id: number) => apiDelete(`/api/pdfpro/envelopes/${id}`),
+
+  // Conversion and OCR (PRO-CNV-001..006).
+  formats: () => apiGet<ConvertFormats>('/api/pdfpro/convert/formats'),
+  convert: (id: number, format: string) => apiPost<{ file_id: number; name: string; engine: string }>(`${f(id)}/convert`, { format }),
+  convertToPdf: (body: Record<string, unknown>) => apiPost<{ file_id: number; name: string; pages: number }>('/api/pdfpro/convert', body),
+  ocr: (id: number, body: Record<string, unknown>) => apiPost<OcrResult>(`${f(id)}/ocr`, body),
+  ocrDetect: (id: number, pages = '1-3') => apiPost<{ pages: Array<{ page: number; rotate: number; language: string | null }> }>(`${f(id)}/ocr/detect`, { pages }),
+  ocrTemplates: () => apiGet<{ templates: Array<{ id: number; name: string; zones: unknown[] }> }>('/api/pdfpro/ocr-templates'),
+  ocrZonal: (id: number, templateId: number) => apiPost<{ values: Array<{ name: string; value: string; valid: boolean; confidence: number }> }>(`${f(id)}/ocr/zonal`, { template_id: templateId }),
+  // Print production (PRO-PRT-001..005).
+  preflight: (id: number, body: Record<string, unknown>) => apiPost<{ passed: boolean; fixed?: string[]; version?: number; results: Array<{ rule: string; status: string; page: number | null; message: string }> }>(`${f(id)}/preflight`, body),
+  separations: (id: number, page: number, preview?: string) => apiGet<{ pages: Array<{ page: number; channels: string[]; overprint: boolean }>; output_intent: { condition: string | null }; preview?: { png_b64: string } }>(
+    `${f(id)}/separations?page=${page}${preview ? `&preview=${encodeURIComponent(preview)}` : ''}`),
+  impose: (id: number, body: Record<string, unknown>) => apiPost<{ file_id: number; sheets: number }>(`${f(id)}/impose`, body),
+  layers: (id: number) => apiGet<{ layers: Array<{ name: string; on: boolean }> }>(`${f(id)}/layers`),
+  layersSet: (id: number, body: Record<string, unknown>) => apiPost<{ version: number }>(`${f(id)}/layers`, body),
+  measure: (id: number, body: Record<string, unknown>) => apiPost<{ value: number; unit: string; version?: number }>(`${f(id)}/measure`, body),
+  // Forms by link (PRO-FRM-006).
+  formLinks: (id: number) => apiGet<{ links: FormLink[] }>(`${f(id)}/forms/links`),
+  formLinkCreate: (id: number, body: Record<string, unknown>) => apiPost<FormLink & { token: string; path: string }>(`${f(id)}/forms/links`, body),
+  formLinkUpdate: (id: number, lid: number, body: Record<string, unknown>) => apiPost<FormLink>(`${f(id)}/forms/links/${lid}`, body),
+  formResponses: (id: number, lid: number) => apiGet<{ columns: string[]; rows: Array<{ id: number; cells: string[] }> }>(`${f(id)}/forms/links/${lid}/responses`),
+  // Live presence (PRO-REV-006).
+  presence: (id: number, page: number) => apiPost<{ topic: string; others: PresenceRow[]; interval: number }>(`${f(id)}/presence`, { page, client: 'desktop' }),
+  presenceLeave: (id: number) => apiDelete(`${f(id)}/presence`),
 };
+
+export interface ConvertFormats { from_pdf: Array<{ format: string; engine: string }>; to_pdf: string[]; url: boolean; ocr: { available: boolean; languages: string[]; detail: string } }
+export interface OcrResult {
+  mode: 'version' | 'copy' | 'none'; file_id: number; version: number; recognised: number; message?: string;
+  pages: Array<{ page: number; language: string; rotated: number; words: number; confidence: number; skipped?: string }>;
+}
+export interface FormLink { id: number; title: string; status: string; responses: number; max_responses: number; fields: string[] }
+export interface PresenceRow { user_id: number; name: string; page: number; client: string }
+
+/* ─────────────────────────── signing with a smart card or USB token ─────────────────────────── */
+
+export interface TokenCert { module: string; token: string; id: string; label: string; der: string }
+
+/** The tokens plugged in and their certificates (main process, through the token's PKCS#11 library). */
+export function listTokens(module?: string | null): Promise<{ available: boolean; reason: string | null; tokens: Array<{ module: string; token: string; manufacturer: string; certs: TokenCert[] }> }> {
+  return call('pdf:tokens', { module: module ?? null });
+}
+
+/** Whether a certificate's key is an elliptic-curve one (it signs ECDSA). */
+export function isEcCert(derB64: string): boolean {
+  const der = Uint8Array.from(atob(derB64), (c) => c.charCodeAt(0));
+  const cert = pkijs.Certificate.fromBER(der);
+
+  return cert.subjectPublicKeyInfo.algorithm.algorithmId === '1.2.840.10045.2.1';
+}
+
+/**
+ * Prepare on the server with the token's certificate, sign on the token with
+ * the PIN (handed to the token library, never kept), complete on the server.
+ */
+export async function signWithToken(fileId: number, cert: TokenCert, pin: string, opts: { level: string; reason?: string; page?: number; rect?: Rect | null }): Promise<{ version: number; level: string }> {
+  const der = Uint8Array.from(atob(cert.der), (c) => c.charCodeAt(0));
+  const p = await pro.sign(fileId, { step: 'prepare', certificate_chain_pem: pem(der.buffer as ArrayBuffer, 'CERTIFICATE'), level: opts.level, reason: opts.reason,
+    ...(opts.rect ? { page: opts.page ?? 1, rect: opts.rect } : {}) });
+  const data = Uint8Array.from(atob(p.to_sign_b64 ?? ''), (c) => c.charCodeAt(0));
+  const sig = await call('pdf:tokenSign', { module: cert.module, token: cert.token, id: cert.id, pin, data, ec: isEcCert(cert.der) });
+  let s = '';
+  new Uint8Array(sig).forEach((x) => { s += String.fromCharCode(x); });
+
+  return pro.sign(fileId, { step: 'complete', token: p.token, signature_b64: btoa(s) });
+}
 
 /* ─────────────────────────── signing with a PKCS#12 file ─────────────────────────── */
 

@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon';
 import { Button, Chip, cx } from '../../components/ui';
 import { CheckRow, Field, Input, inputCls } from './parts';
 import { openPkcs12, pro, proError, signWithLocalId, type LocalId, type ProMe, type SignatureCheck, type Thread } from './pro';
+import { ConvertOcr, FormLinks, PresenceLine, PrintProduction, TokenSign } from './ProStudio';
 
 /**
  * PDF Studio Pro for a Drive PDF on the desktop (PRO-NFR-041: in PDF Studio's
@@ -35,6 +36,7 @@ export default function ProPanel({ fileId, version, page, onChanged }: { fileId:
 
   return (
     <div className="flex h-full min-h-0 flex-col overflow-y-auto scroll-thin p-2 text-[12.5px] text-ink">
+      {can('presence') ? <PresenceLine fileId={fileId} page={page} /> : null}
       {can('redact') ? <Block title={text('Redact and sanitise')}><Redact fileId={fileId} version={version} me={me} onChanged={onChanged} /></Block> : null}
       <Block title={text('Signatures')}><Signatures fileId={fileId} version={version} me={me} canSign={can('sign')} onChanged={onChanged} /></Block>
       {can('envelopes') ? <Block title={text('Send for signature')}><Envelope fileId={fileId} /></Block> : null}
@@ -42,6 +44,9 @@ export default function ProPanel({ fileId, version, page, onChanged }: { fileId:
       {can('compare') && version > 1 ? <Block title={text('Compare versions')}><Compare fileId={fileId} version={version} /></Block> : null}
       {can('review') ? <Block title={text('Shared review')}><Review fileId={fileId} onChanged={onChanged} /></Block> : null}
       {can('forms') ? <Block title={text('Form fields')}><Forms fileId={fileId} onChanged={onChanged} /></Block> : null}
+      {can('form_links') ? <Block title={text('Share the form by link')}><FormLinks fileId={fileId} /></Block> : null}
+      {can('convert') || can('ocr') ? <Block title={text('Convert and OCR')}><ConvertOcr fileId={fileId} version={version} canConvert={can('convert')} canOcr={can('ocr')} onChanged={onChanged} /></Block> : null}
+      {can('print') ? <Block title={text('Print production')}><PrintProduction fileId={fileId} version={version} page={page} onChanged={onChanged} /></Block> : null}
       <Block title={text('Accessibility')}><Access fileId={fileId} canFix={can('accessibility')} onChanged={onChanged} /></Block>
       {can('ai') && me.settings.ai_enabled ? <Block title={text('AI Assistant')}><Ai fileId={fileId} page={page} /></Block> : null}
       {can('batch') ? <Block title={text('Run an Action')}><Batch fileId={fileId} /></Block> : null}
@@ -158,6 +163,7 @@ function Signatures({ fileId, version, me, canSign, onChanged }: { fileId: numbe
               {text('Sign as {name}', { name: local.subject || text('me') })}
             </Button>
           ) : null}
+          <TokenSign fileId={fileId} level={level} reason={reason} rect={rect} onChanged={onChanged} />
           {me.certificates.length ? (
             <div className="flex flex-col gap-1.5 border-t border-line pt-2">
               <Field label={text('Or a certificate WorkSuite holds')}>

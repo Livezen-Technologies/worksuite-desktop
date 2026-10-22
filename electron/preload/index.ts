@@ -393,6 +393,8 @@ const api = {
     resolve: call('pdf:resolve'),
     discard: call('pdf:discard'),
     extract: call('pdf:extract'),
+    tokens: call('pdf:tokens'),
+    tokenSign: call('pdf:tokenSign'),
     /** PDFs from a real drop: turned into paths here, into handles in main — as files.registerDropped. */
     registerDropped: (files: File[]): Promise<unknown> => {
       const paths = Array.from(files)
