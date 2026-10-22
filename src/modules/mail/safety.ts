@@ -35,6 +35,8 @@ export function accountIssue(b: Partial<Mailbox> & RawAccount): AccountErrorCode
   if (b.auth_type === 'oauth' && !b.oauth_provider) return 'missing_token';
   if (b.auth_state === 'problem' && /\b(no|missing|null|empty)\b.{0,20}\btoken\b|\btoken\b.{0,20}\b(missing|null|empty)\b/i.test(str(b.last_error))) return 'missing_token';
   if (b.auth_state === 'problem') return 'auth_failed';
+  // A mailbox read through its provider's API (Graph, Gmail, Zoho, EWS) needs no IMAP or SMTP host.
+  if (b.transport && typeof b.transport === 'object' && b.transport.driver) return null;
   // The server says which hosts it has; an older one says none, and nothing is concluded from that.
   if ('imap_host' in b || 'smtp_host' in b || 'pop3_host' in b) {
     if (!str(b.imap_host).trim() && !str(b.smtp_host).trim() && !str(b.pop3_host).trim()) return 'missing_host';

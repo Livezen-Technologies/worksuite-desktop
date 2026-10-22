@@ -12,6 +12,8 @@ person who has to live with the change — what it does, and where it bites.
 > come after what had already shipped.
 
 ## Unreleased
+### Added
+- Mail: accounts the server reads through a provider API (Admin Center › Mail Services on the web — Microsoft Graph, Gmail API, Zoho Mail API, Exchange Web Services, POP3) say so in Settings › Mail › Accounts, and an Exchange (EWS) or Zoho account with no IMAP/SMTP host is no longer marked "no mail server". Needs server Mail 1.32.0; an older server sends no `transport` and nothing changes. (desktop module mail 1.34.0)
 
 ## 0.2.276 — 2026-10-22
 ### Added

@@ -146,6 +146,9 @@ describe('one account’s bad data (#338)', () => {
     expect(accountIssue({ email: 'a@b.test', auth_type: 'oauth', oauth_provider: null })).toBe('missing_token');
     expect(accountIssue({ email: 'a@b.test', imap_host: '', smtp_host: null, pop3_host: null })).toBe('missing_host');
     expect(accountIssue({ email: 'a@b.test', imap_host: '', smtp_host: 'smtp.b.test' })).toBeNull();
+    // Read through its provider's API (Admin Center › Mail Services): no IMAP or SMTP host is needed.
+    expect(accountIssue({ email: 'a@b.test', imap_host: '', smtp_host: '', pop3_host: null, transport: { driver: 'ews', label: 'Exchange Web Services (EWS)', native: true, incoming_only: false } })).toBeNull();
+    expect(accountIssue({ email: 'a@b.test', imap_host: '', smtp_host: '', transport: { driver: null, label: 'IMAP / SMTP', native: false, incoming_only: false } })).toBe('missing_host');
     // An older server says nothing of hosts: nothing is concluded from that.
     expect(accountIssue({ email: 'a@b.test' })).toBeNull();
     const [, , m365, noEmail] = safeMailboxes({ mailboxes: boxes }).mailboxes;

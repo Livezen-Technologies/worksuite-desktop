@@ -35,6 +35,19 @@ export interface Mailbox {
   notify?: boolean;
   /** Set on this computer as the list is read (safety.ts, #338): whether the account can work, and why not. */
   health?: AccountHealth;
+  /**
+   * How the server reads and sends this mailbox (Admin Center › Mail Services): a provider API — Microsoft Graph,
+   * the Gmail API, Zoho Mail, Exchange Web Services, POP3 (incoming only) — or IMAP/SMTP when `driver` is null.
+   * Absent from an older server.
+   */
+  transport?: MailboxTransport;
+}
+
+export interface MailboxTransport {
+  driver: 'graph' | 'gmail' | 'zoho' | 'ews' | 'pop3' | null;
+  label: string;
+  native: boolean;
+  incoming_only: boolean;
 }
 
 /** Why an account cannot work (#338): no address, a sign-in that never finished, no server, or a refused sign-in. */

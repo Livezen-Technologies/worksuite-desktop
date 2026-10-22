@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.34.0 — 2026-10-22
+
+**Added**
+
+- accounts read through a provider API on the server (Admin Center › Mail Services: Microsoft Graph, Gmail API, Zoho Mail API, Exchange Web Services, POP3) show how they travel in Settings › Mail › Accounts ("via Microsoft Graph", "POP3, incoming only"), from the server's new `transport` field.
+
+**Fixed**
+
+- such an account has no IMAP or SMTP host, and is no longer marked "The account has no mail server" (#338's check now reads `transport`).
+
 ## 1.33.2 — 2026-10-20
 
 - The image viewer and immersive reader keep their toolbar clear of the Windows window buttons (#395)
