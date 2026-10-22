@@ -14,6 +14,11 @@ person who has to live with the change — what it does, and where it bites.
 ## Unreleased
 
 ## 0.2.274 — 2026-10-22
+### Changed
+- Home (#104): recent activity groups a run of the same update by the same person into one line with a count, even
+  from a server that sends a line per update, and leaves out transfer-part lines; recent files leave out a transfer's
+  temporary pieces (`.part3`, `.001`, `.chunk`, `upload-<id>` and the like) as well as editor and system leftovers.
+
 ### Fixed
 - Chat: the message hover toolbar now sits above the bubble instead of covering its first line of text.
 - Chat: text and links in messages can be selected and copied again — a link's preview card is no longer one big link (only its title opens the page), links no longer drag instead of selecting, and link cards have a "Copy link" button.
