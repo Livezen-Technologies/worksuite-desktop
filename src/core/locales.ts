@@ -114,6 +114,10 @@ const en = {
   'common.retry': 'Retry',
   'common.save': 'Save',
   'common.close': 'Close',
+  // The window's own buttons on Linux (#409).
+  'window.minimize': 'Minimize',
+  'window.maximize': 'Maximize',
+  'window.restore': 'Restore',
   'common.openInBrowser': 'Open in browser',
   'common.loading': 'Loading…',
   'common.offlineResults': 'Offline results — saved {when}',

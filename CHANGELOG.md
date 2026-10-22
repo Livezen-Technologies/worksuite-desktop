@@ -14,6 +14,7 @@ person who has to live with the change — what it does, and where it bites.
 ## Unreleased
 ### Fixed
 - Chat: the message hover toolbar now sits above the bubble instead of covering its first line of text.
+- Linux (#409): minimise, maximise and close are now drawn by WorkSuite's own title bar instead of over it by the system, so on GNOME desktops such as Zorin OS (X11 or Wayland, any scaling) they line up with the bar, never cover or clip its buttons, follow the desktop's button layout (side and order, from `org.gnome.desktop.wm.preferences button-layout`) and show Restore when the window is maximised. Windows and macOS are unchanged.
 
 
 - **User guides (help 1.0.0).** A "User guide" button in the title bar opens the guide of the module in front — and

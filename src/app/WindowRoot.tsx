@@ -9,6 +9,7 @@ import { moduleRecovery, useOptionalQueryClient } from '../components/moduleReco
 import { useWindowBarHidden } from './windowChrome';
 import { WINDOW_DRAG } from '../core/dock-drag';
 import { Icon } from '../components/Icon';
+import { useWindowButtons, WindowControls } from '../components/WindowControls';
 import { guardWindowClose } from '../core/closeGuard';
 import { flushDrafts } from '../core/drafts';
 
@@ -43,6 +44,8 @@ export function WindowRoot({ hash }: { hash: string }) {
   // The same decision as the main window's (shared/access); the main process closes such a window when access goes.
   const allowed = mod && canOpenApp(mod.id, visible);
   const barHidden = useWindowBarHidden();
+  // Linux: the bar's own minimise, maximise and close (#409).
+  const { layout: buttons, maximized } = useWindowButtons();
 
   useEffect(() => {
     void call('windows:state').then(
@@ -66,7 +69,8 @@ export function WindowRoot({ hash }: { hash: string }) {
   }, [dockable, route, title]);
   return (
     <div className="flex h-full flex-col">
-      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'support-ring' || kind === 'call' || barHidden) && 'hidden')} style={{ paddingLeft: isMac ? 78 : 12, paddingRight: isMac ? 8 : 140 }}>
+      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'support-ring' || kind === 'call' || barHidden) && 'hidden')} style={{ paddingLeft: isMac ? 78 : buttons?.side === 'left' ? 6 : 12, paddingRight: isMac ? 8 : buttons ? (buttons.side === 'right' ? 6 : 12) : 140 }}>
+        {buttons?.side === 'left' ? <WindowControls layout={buttons} maximized={maximized} height={28} /> : null}
         {dockable && windowId ? (
           <span
             draggable
@@ -111,6 +115,7 @@ export function WindowRoot({ hash }: { hash: string }) {
             size={15}
           />
         ) : null}
+        {buttons?.side === 'right' ? <WindowControls layout={buttons} maximized={maximized} height={28} /> : null}
       </div>
       <div className="relative min-h-0 flex-1 bg-ground">
         {!mod || !allowed ? (

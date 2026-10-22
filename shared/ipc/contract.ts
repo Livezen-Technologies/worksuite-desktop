@@ -7,6 +7,7 @@ import type { SmimeVerdict } from '../smime';
 import type { ConnectionDetails, SpeedTestResult } from '../connection';
 import type { MeetPermissionRow } from '../meet-permissions';
 import type { ShareBarState } from '../share-bar';
+import type { ButtonLayout } from '../window-controls';
 import type { MailAlertCard, MailAlertState } from '../mail-alerts';
 /**
  * The typed IPC contract (§3.4, §8.4, WF-05).
@@ -1666,6 +1667,11 @@ export interface WindowState {
   /** Shrunk to a floating bar or card (call and meeting windows). */
   compact?: boolean;
   fullScreen?: boolean;
+  /**
+   * Linux: the title bar draws the window's buttons itself (#409), in the desktop's order and on its side. Absent
+   * where the system draws them (macOS traffic lights, the Windows overlay) or the window has none.
+   */
+  buttonLayout?: ButtonLayout;
 }
 
 export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, BoardOutputs, SalesOutputs, SinhalaOutputs, AccountsOutputs {
