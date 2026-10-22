@@ -25,6 +25,10 @@ export interface Can {
   templates?: boolean; analytics?: boolean;
   /* Calls (phase 3): see campaigns, run them, make calls. Optional for the same reason. */
   calls?: boolean; call_manage?: boolean; call_make?: boolean;
+  /* WS-C: journeys, forms and pages, lead scoring. Optional for the same reason. */
+  journeys?: boolean; forms?: boolean; scores?: boolean;
+  /* WS-D: WhatsApp/SMS campaigns, budgets and calendar events, webhooks. Optional for the same reason. */
+  channels?: boolean; budgets?: boolean; webhooks?: boolean;
 }
 
 export interface Company { id: number; name: string; can: Can; people: Person[] }
@@ -34,7 +38,7 @@ export interface FieldOp { key: string; label: string; bare: boolean }
 export interface SegmentField {
   key: string;
   label: string;
-  type: 'choice' | 'country' | 'text' | 'user' | 'tag' | 'list' | 'days' | 'number' | 'none';
+  type: 'choice' | 'country' | 'text' | 'user' | 'tag' | 'list' | 'days' | 'number' | 'none' | 'form' | 'journey';
   ops: FieldOp[];
   choices: Pair[] | null;
 }
@@ -97,7 +101,20 @@ export interface Contact {
   next_follow_up_at: string | null;
   created_at: string | null;
   updated_at: string | null;
+  /* SRS v2.0 (AUD-01, CON-09, SCO): absent from a server a part behind. */
+  time_zone?: string | null;
+  /** The zone in force: their own, else their country's single zone. */
+  local_zone?: string | null;
+  /** HH:MM where they are, now. */
+  local_time?: string | null;
+  doi_status?: 'pending' | 'confirmed' | null;
+  score_behaviour?: number;
+  score_fit?: number;
 }
+
+/** CON-01: the lawful basis a consent row records. */
+export type LawfulBasis = 'consent' | 'legitimate_interest' | 'contract';
+export const LAWFUL_BASIS: Record<LawfulBasis, string> = { consent: 'Consent', legitimate_interest: 'Legitimate interest', contract: 'Contract' };
 
 export interface ConsentEntry {
   id: number;
@@ -109,6 +126,11 @@ export interface ConsentEntry {
   note: string | null;
   by: string | null;
   at: string | null;
+  lawful_basis?: LawfulBasis | null;
+  wording?: string | null;
+  evidence?: string | null;
+  actor?: 'user' | 'contact' | 'system' | null;
+  topic_id?: number | null;
 }
 
 export interface TimelineEntry {
@@ -155,6 +177,36 @@ export interface MarketingCompany {
   created_at: string | null;
 }
 
+/** Who each channel may reach (LST-02). */
+export interface Reachable { email: number; call: number; whatsapp: number }
+
+/** One organisation whole (AUD-03): its contacts, their reach and one merged timeline. */
+export interface CompanyDetail extends Omit<MarketingCompany, 'contacts'> {
+  contacts_count: number;
+  contacts: Contact[];
+  reachable: Reachable;
+  timeline: Array<TimelineEntry & { contact: { id: number; name: string } }>;
+}
+
+/** AUD-11: contacts that look like one person. */
+export interface DuplicateGroup { org_id: number; match: 'email' | 'phone' | 'name'; key: string; contacts: Contact[] }
+
+/** AUD-08: a merge, undoable for 30 days. */
+export interface MergeRecord {
+  id: number; org_id: number; survivor_id: number; survivor: string; merged: Array<{ id: number; name: string }>;
+  by: string | null; merged_at: string | null; undo_until: string | null; undone_at: string | null; can_undo: boolean;
+}
+
+/** AUD-10: a company's own contact field. */
+export type CustomFieldType = 'text' | 'number' | 'date' | 'picklist' | 'boolean';
+export interface CustomField { id: number; org_id: number; key: string; label: string; type: CustomFieldType; options: string[]; position: number }
+
+/** IMP-06: a background import's progress. */
+export interface ImportProgress {
+  id: number; org_id: number; file_name: string; status: ImportRecord['status']; rows: number; rows_done: number; percent: number;
+  created: number; updated: number; cancel_requested: boolean; error: string | null;
+}
+
 export interface MarketingList {
   id: number;
   org_id: number;
@@ -164,13 +216,16 @@ export interface MarketingList {
   members: number;
   /* Who on it may be emailed now, and when a campaign last used it (MKT-LST-02). Absent from a server a part behind. */
   subscribed?: number;
+  /* LST-02: who each channel may reach. */
+  reachable?: Reachable;
   last_used_at?: string | null;
   archived: boolean;
   created_at: string | null;
   updated_at: string | null;
 }
 
-export interface Rule { field: string; op: string; value: unknown }
+/** A rule, or (SEG-07) a group of rules matched all or any, nested at most three deep. */
+export interface Rule { field: string; op: string; value: unknown; group?: 'all' | 'any'; rules?: Rule[] }
 
 export interface Segment {
   id: number;
@@ -237,7 +292,10 @@ export interface ImportRecord {
   updated: number;
   skipped: number;
   stats: ImportCounts | null;
-  status: 'running' | 'done' | 'failed';
+  status: 'queued' | 'running' | 'done' | 'failed' | 'cancelled';
+  rows_done?: number;
+  cancel_requested?: boolean;
+  error?: string | null;
   list: Named | null;
   by: string | null;
   created_at: string | null;
@@ -273,7 +331,8 @@ export function peopleOf(options: Options | undefined, orgId: number | null): Pa
  * Email campaigns
  * ------------------------------------------------------------------ */
 
-export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'paused' | 'sent' | 'cancelled';
+/* `recurring`: a repeating or feed campaign (MKT-SND-13) — it never sends itself; each run is a campaign of its own. */
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'paused' | 'sent' | 'cancelled' | 'recurring';
 
 /** What a company's emails are about, as its preferences page offers them. */
 export interface Topic {
@@ -324,6 +383,8 @@ export interface Campaign {
   local_time?: boolean;
   ab?: AbSettings | null;
   b?: { subject: string | null; preheader: string | null; from_name: string | null };
+  /** When a repeating campaign next runs (MKT-SND-13). */
+  next_run_at?: string | null;
   status: CampaignStatus;
   status_label: string;
   status_note: string | null;
@@ -350,7 +411,22 @@ export interface CampaignDetail extends Campaign {
   body_html: string;
   /** Version B's own content; null is "the same as A". */
   b_body_html?: string | null;
-  can: { edit: boolean; launch: boolean; pause: boolean; create: boolean; results: boolean; templates: boolean };
+  can: { edit: boolean; launch: boolean; pause: boolean; create: boolean; results: boolean; templates: boolean; approve?: boolean };
+  /* WS-B (SRS v2.0) — optional: a server a part behind sends none of them. See `email-governance.tsx`. */
+  approval?: { status: 'pending' | 'approved' | 'rejected' | null; label: string | null; note: string | null; required: boolean };
+  version_no?: number;
+  parent_id?: number | null;
+  recurrence?: Recurrence | null;
+  daily_cap?: number | null;
+  languages?: string[];
+  variants?: Record<string, { subject: string | null; preheader: string | null; body_html: string }>;
+  text_body?: string | null;
+}
+
+/** How a recurring campaign repeats (MKT-SND-13). */
+export interface Recurrence {
+  every: 'daily' | 'weekly' | 'monthly'; at: string; weekday: number; day: number; until: string | null;
+  feed_url: string | null; feed_items: number; only_new: boolean;
 }
 
 export interface CampaignCheck {
@@ -417,7 +493,13 @@ export interface Template {
   updated_at: string | null;
 }
 
-export interface Starter { key: string; name: string; category: string; subject: string; preheader: string; body_html: string }
+export interface Starter {
+  key: string; name: string; category: string; subject: string; preheader: string; body_html: string;
+  /** The gallery's own grouping (`black_friday`, `monthly_digest`…); null for the three basic starters. */
+  subcategory?: string | null; subcategory_label?: string | null;
+  /** `starter`: one of the three basics; `library`: one of the 100 system templates. */
+  source?: 'starter' | 'library'; layout?: string; accent?: string;
+}
 
 export interface EmailImage { id: number; org_id: number; name: string; url: string; width: number | null; height: number | null; bytes: number; created_at: string | null }
 

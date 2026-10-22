@@ -8,12 +8,14 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { send } from './api';
 import { BlockEditor } from './email-BlockEditor';
+import { AiCopySheet } from './automation-parts';
 import { bodyOf, draftOf, type Draft, type SetDraft } from './email-draft';
 import { Confirm, Tabs, stamp, useTemplates, useTopics, wallWords } from './email-kit';
 import { ReportView } from './email-Report';
 import { ReviewStep, SendTest } from './email-Review';
 import { SetupStep } from './email-Setup';
-import { Field, Seg, Sheet, btn, btnPrimary, btnSmall, input } from './parts';
+import { ApprovalBar, DeliverabilityPanel, LanguagesCard, RecurrenceCard, SavedBlocksMenu, VersionHistory } from './email-governance';
+import { Card, Field, Seg, Sheet, btn, btnPrimary, btnSmall, input } from './parts';
 import { fieldErrors, refusal, type CampaignCheck, type CampaignDetail, type Options } from './types';
 
 /**
@@ -54,7 +56,7 @@ export default function CampaignView({ id, options, step, onStep, onBack, onOpen
   }
 
   const c = q.data;
-  const writing = (c.status === 'draft' || c.status === 'scheduled') && step !== 'report';
+  const writing = (c.status === 'draft' || c.status === 'scheduled' || c.status === 'recurring') && step !== 'report';
   /* Keyed by the campaign alone: a save refreshes what the editor is given without throwing away what is on screen. */
   return writing ? (
     <Editor key={c.id} campaign={c} options={options} step={step === 'setup' || step === 'review' ? step : 'content'} onStep={onStep} onBack={onBack} />
@@ -75,10 +77,12 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState(false);
   const [version, setVersion] = useState<'a' | 'b'>('a');
+  const [drafting, setDrafting] = useState(false);
   /** Bumped when the content is replaced from outside the editor (a template), so the editor reads it again. */
   const [seed, setSeed] = useState(0);
   const [replacing, setReplacing] = useState<{ subject: string; preheader: string; body_html: string } | null>(null);
   const [savingTemplate, setSavingTemplate] = useState(false);
+  const [history, setHistory] = useState(false);
   const edit = campaign.can.edit;
   const auto = campaign.status === 'draft' && edit;
   const dirty = rev > savedRev;
@@ -122,6 +126,27 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
     }
   };
 
+  /**
+   * The server changed the campaign — a version restored, a deliverability
+   * fix, an approval — so the editor reads it again. Offered only with
+   * nothing unsaved, so nothing typed is lost.
+   */
+  const reload = async () => {
+    const fresh = await qc.fetchQuery({
+      queryKey: ['marketing', 'campaign', campaign.id],
+      queryFn: ({ signal }) => apiGet<CampaignDetail>(`/api/marketing/campaigns/${campaign.id}`, undefined, signal),
+      staleTime: 0,
+    });
+    setD(draftOf(fresh, options));
+    setRev((r) => {
+      setSavedRev(r + 1);
+      return r + 1;
+    });
+    setSeed((s) => s + 1);
+    void qc.invalidateQueries({ queryKey: ['marketing', 'campaigns'] });
+    void qc.invalidateQueries({ queryKey: ['marketing', 'campaign-check', campaign.id] });
+  };
+
   /* A draft saves itself two seconds after the last change; a refusal waits for the next change. */
   useEffect(() => {
     if (!auto || !dirty || saving || problem) return;
@@ -162,6 +187,9 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
               {saving ? 'Saving…' : 'Save'}
             </button>
           ) : null}
+          <button type="button" className={btn} disabled={dirty} title={dirty ? 'Save first' : undefined} onClick={() => setHistory(true)}>
+            History
+          </button>
           {edit ? (
             <button type="button" className={btn} onClick={openTest}>
               <Icon name="send" size={15} /> Send test
@@ -184,6 +212,7 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
           {campaign.status_note}
         </p>
       ) : null}
+      <ApprovalBar campaign={campaign} dirty={dirty} onChanged={reload} />
       {!edit ? <p className="m-0 rounded-[10px] bg-subtle px-3.5 py-2.5 text-[12.5px] text-ink-2">You can read this campaign; changing it needs permission to edit campaigns.</p> : null}
       {problem ? (
         <p role="alert" className="m-0 flex flex-wrap items-center gap-2 rounded-[10px] bg-danger-bg px-3.5 py-2.5 text-[12.5px] text-danger">
@@ -195,9 +224,33 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
       ) : null}
 
       {step === 'setup' ? (
-        <SetupStep orgId={campaign.org_id} d={d} set={set} errors={errors} options={options} edit={edit} check={check.data} checking={check.isFetching} dirty={dirty || saving} />
+        <div className="flex flex-col gap-4">
+          <SetupStep orgId={campaign.org_id} d={d} set={set} errors={errors} options={options} edit={edit} check={check.data} checking={check.isFetching} dirty={dirty || saving} />
+          <div className="grid items-start gap-4 lg:grid-cols-2">
+            <div className="flex min-w-0 flex-col gap-4">
+              <LanguagesCard value={d.variants} onChange={(v) => set('variants', v)} edit={edit} orgId={campaign.org_id} mergeTags={options.merge_tags ?? []}
+                company={options.companies.find((x) => x.id === campaign.org_id)?.name} main={{ subject: d.subject, preheader: d.preheader, body_html: d.body_html }} />
+              {errors.variants ? <p role="alert" className="m-0 text-[12px] text-danger">{errors.variants}</p> : null}
+            </div>
+            <div className="flex min-w-0 flex-col gap-4">
+              <RecurrenceCard campaign={campaign} value={d.recurrence} onChange={(v) => set('recurrence', v)} edit={edit} dirty={dirty || saving} onChanged={reload} />
+              {errors.recurrence ? <p role="alert" className="m-0 text-[12px] text-danger">{errors.recurrence}</p> : null}
+              <Card title="Daily cap & plain text">
+                <Field label="Emails a day from this campaign, at most" hint="Empty: no cap of its own. Spreads a big send over days, as a warming-up domain needs.">
+                  <input className={input} type="number" min={10} value={d.daily_cap} readOnly={!edit} onChange={(e) => set('daily_cap', e.target.value)} />
+                </Field>
+                {errors.daily_cap ? <p role="alert" className="m-0 text-[12px] text-danger">{errors.daily_cap}</p> : null}
+                <Field label="Plain-text part" hint="Empty: made from the HTML for every copy. The unsubscribe link is added at its end either way." className="mt-2.5">
+                  <textarea className={`${input} h-28 py-2`} value={d.text_body} readOnly={!edit} onChange={(e) => set('text_body', e.target.value)} />
+                </Field>
+                {errors.text_body ? <p role="alert" className="m-0 text-[12px] text-danger">{errors.text_body}</p> : null}
+              </Card>
+            </div>
+          </div>
+        </div>
       ) : step === 'review' ? (
-        <ReviewStep campaign={campaign} d={d} set={set} errors={errors} options={options} check={check} dirty={dirty} saving={saving} autosave={auto} edit={edit} onStep={go} onTest={openTest} />
+        <ReviewStep campaign={campaign} d={d} set={set} errors={errors} options={options} check={check} dirty={dirty} saving={saving} autosave={auto} edit={edit} onStep={go} onTest={openTest}
+          extra={<DeliverabilityPanel campaign={campaign} dirty={dirty || saving} onChanged={reload} />} />
       ) : (
         <div className="flex flex-col gap-3">
           <div className="flex flex-wrap items-center gap-2">
@@ -206,11 +259,16 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
             {edit && !onB ? (
               <span className="ml-auto flex flex-wrap items-center gap-2">
                 <TemplatePicker orgId={campaign.org_id} onPick={setReplacing} />
+                <SavedBlocksMenu orgId={campaign.org_id} body={d.body_html} edit={edit}
+                  onInsert={(html) => { set('body_html', d.body_html + html); setSeed((s) => s + 1); }}
+                  onBody={(html) => { set('body_html', html); setSeed((s) => s + 1); }} />
                 {campaign.can.templates ? (
                   <button type="button" className={btnSmall} onClick={() => setSavingTemplate(true)}>
                     Save as a template
                   </button>
                 ) : null}
+                {/* WS-C (MKT-AI-01): a draft from a brief, used only when "Use this" is pressed. */}
+                <button type="button" className={btnSmall} onClick={() => setDrafting(true)}>Draft with AI</button>
               </span>
             ) : null}
           </div>
@@ -246,6 +304,17 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
           What is written now is replaced by the template, with its subject and preview text.{auto ? ' It saves itself as usual.' : ' It is not saved until you save.'}
         </Confirm>
       ) : null}
+      {history ? <VersionHistory campaign={campaign} onClose={() => setHistory(false)} onRestored={reload} /> : null}
+      {drafting ? (
+        <AiCopySheet orgId={campaign.org_id} onClose={() => setDrafting(false)}
+          onUse={(t) => {
+            setD((x) => ({ ...x, subject: t.subject || x.subject, preheader: t.preheader || x.preheader, body_html: t.body_html }));
+            setRev((r) => r + 1);
+            setSeed((s) => s + 1);
+            setVersion('a');
+            setDrafting(false);
+          }} />
+      ) : null}
       {savingTemplate ? <SaveAsTemplate campaign={campaign} d={d} options={options} onClose={() => setSavingTemplate(false)} /> : null}
     </div>
   );
@@ -255,7 +324,7 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
 function TemplatePicker({ orgId, onPick }: { orgId: number; onPick: (t: { subject: string; preheader: string; body_html: string }) => void }) {
   const templates = useTemplates();
   const choices = [
-    ...(templates.data?.starters ?? []).map((s) => ({ value: `s:${s.key}`, label: s.name, hint: 'Starter' })),
+    ...(templates.data?.starters ?? []).map((s) => ({ value: `s:${s.key}`, label: s.name, hint: s.subcategory_label ?? 'Starter' })),
     ...(templates.data?.items ?? []).filter((t) => t.org_id === orgId).map((t) => ({ value: `t:${t.id}`, label: t.name, hint: t.category_label })),
   ];
   const pick = (v: string) => {

@@ -40,7 +40,7 @@ const Schedules = lazy(() => import('./Schedules'));
 const Settings = lazy(() => import('./Settings'));
 const Announcements = lazy(() => import('./Announcements'));
 const Departments = lazy(() => import('./Departments'));
-const Devices = lazy(() => import('./Devices'));
+const DeviceCenter = lazy(() => import('./DeviceCenter'));
 
 const TITLES: Partial<Record<HrView, string>> = {
   departments: 'Departments',
@@ -137,7 +137,7 @@ export default function HrShell(_props: ModuleProps) {
           {view === 'settings' ? <Settings section={query.get('section')} /> : null}
           {view === 'departments' ? <Departments /> : null}
           {view === 'announcements' ? <Announcements /> : null}
-          {view === 'devices' ? <Devices /> : null}
+          {view === 'devices' ? <DeviceCenter /> : null}
         </Suspense>
       </main>
     </div>

@@ -35,6 +35,7 @@ const Segments = lazy(() => import('./Segments'));
 const SegmentBuilder = lazy(() => import('./SegmentBuilder'));
 const Import = lazy(() => import('./Import'));
 const Consent = lazy(() => import('./Consent'));
+const DataQuality = lazy(() => import('./DataQuality'));
 const Campaigns = lazy(() => import('./Campaigns'));
 const CampaignView = lazy(() => import('./CampaignView'));
 const Templates = lazy(() => import('./Templates'));
@@ -45,12 +46,24 @@ const MyQueue = lazy(() => import('./MyQueue'));
 const Scripts = lazy(() => import('./Scripts'));
 const Reports = lazy(() => import('./Reports'));
 const Automation = lazy(() => import('./Automation'));
+const Forms = lazy(() => import('./Forms'));
+const Scoring = lazy(() => import('./Scoring'));
 const Settings = lazy(() => import('./Settings'));
+const Deliverability = lazy(() => import('./Deliverability'));
+/* WS-D */
+const Channels = lazy(() => import('./Channels'));
+const Analytics = lazy(() => import('./Analytics'));
+const MarketingCalendar = lazy(() => import('./Planning').then((m) => ({ default: m.MarketingCalendar })));
+const Budgets = lazy(() => import('./Planning').then((m) => ({ default: m.Budgets })));
+const Webhooks = lazy(() => import('./Webhooks'));
 
 const TITLES: Record<MarketingView, string> = {
+  quality: 'Data quality',
   dashboard: 'Dashboard', contacts: 'Contacts', companies: 'Organisations', lists: 'Lists', segments: 'Segments', import: 'Import',
   consent: 'Consent & suppression', campaigns: 'Campaigns', templates: 'Templates', topics: 'Topics & preferences',
-  calls: 'Call campaigns', queue: 'My call queue', scripts: 'Scripts', reports: 'Reports', automation: 'Automation', settings: 'Settings',
+  calls: 'Call campaigns', queue: 'My call queue', scripts: 'Scripts', reports: 'Reports', automation: 'Journeys', settings: 'Settings', forms: 'Forms & pages', scoring: 'Lead scoring',
+  deliverability: 'Deliverability',
+  channels: 'WhatsApp & SMS', analytics: 'Analytics', calendar: 'Calendar', budgets: 'Budgets & ROI', webhooks: 'Webhooks',
 };
 
 /** Older addresses, still followed: a link in a notification or a bookmark outlives the screen it named. */
@@ -58,7 +71,9 @@ const ALIASES: Record<string, [MarketingView, string | null]> = { suppression: [
 
 const CONSENT_TABS: ConsentTab[] = ['suppression', 'ledger', 'dnc', 'topics'];
 const QUEUE_TABS: QueueTab[] = ['queue', 'callbacks', 'work'];
-const CONTACT_HOSTS: MarketingView[] = ['contacts', 'consent', 'queue', 'dashboard'];
+const CONTACT_HOSTS: MarketingView[] = ['contacts', 'consent', 'queue', 'dashboard', 'quality'];
+const QUALITY_TABS = ['duplicates', 'merges', 'fields'] as const;
+type QualityTab = (typeof QUALITY_TABS)[number];
 
 const num = (v: string | null | undefined) => (v && /^\d+$/.test(v) ? Number(v) : null);
 
@@ -84,6 +99,10 @@ export default function MarketingShell(_props: ModuleProps) {
     scripts: mayAny(o, 'call_manage') || mayAny(o, 'call_make'),
     reports: mayAny(o, 'analytics') || mayAny(o, 'calls'),
     settings: mayAny(o, 'settings'),
+    channels: mayAny(o, 'channels'),
+    analytics: mayAny(o, 'analytics'),
+    budgets: mayAny(o, 'budgets'),
+    webhooks: mayAny(o, 'webhooks'),
   };
   const fallback: MarketingView = may.dashboard || options.isLoading ? 'dashboard' : 'contacts';
   const view: MarketingView = aliasView ?? (VIEWS.has(asked as MarketingView) ? (asked as MarketingView) : fallback);
@@ -144,20 +163,26 @@ export default function MarketingShell(_props: ModuleProps) {
     switch (view) {
       case 'dashboard': return <Dashboard org={org} options={o} onGo={onGo} />;
       case 'contacts': return <Contacts org={org} options={o} filter={filter} onFilter={setFilter} onOpen={(id) => setKey('contact', id)} />;
-      case 'companies': return <Companies org={org} options={o} onContacts={(id) => go(to('contacts', { company: id }))} />;
+      case 'companies': return <Companies org={org} options={o} onContacts={(id) => go(to('contacts', { company: id }))} onOpenContact={(id) => go(to('contacts', { contact: id }))} />;
+      case 'quality': {
+        const qt: QualityTab = (QUALITY_TABS as readonly string[]).includes(tab ?? '') ? (tab as QualityTab) : 'duplicates';
+        return <DataQuality org={org} options={o} tab={qt} onTab={(t) => setKey('tab', t)} onContact={(id) => go(to('quality', { tab: qt, contact: id }))} />;
+      }
       case 'lists': return <Lists org={org} options={o} onContacts={(id) => go(to('contacts', { list: id }))} />;
       case 'segments':
         return segment
           ? <SegmentBuilder key={segment} id={num(segment)} org={org} options={o} onBack={() => setKey('segment', null)} onSaved={(id) => setKey('segment', id)} onList={(id) => go(to('contacts', { list: id }))} />
           : <Segments org={org} options={o} onContacts={(id) => go(to('contacts', { segment: id }))} onEdit={(id) => setKey('segment', id)} />;
       case 'import': return <Import org={org} options={o} />;
-      case 'consent': return <Consent org={org} options={o} tab={consentTab} onTab={(t) => setKey('tab', t)} onContact={(id) => go(to('consent', { tab: consentTab, contact: id }))} />;
+      case 'consent': return <Consent org={org} options={o} tab={consentTab} onTab={(t) => setKey('tab', t)} onContact={(id) => go(to('consent', { tab: consentTab, contact: id }))}
+        onCampaign={(id) => go(to('campaigns', { campaign: id, step: 'setup' }))} />;
       case 'campaigns':
         return campaign
           ? <CampaignView key={campaign} id={campaign} options={o} step={query.get('step')} onStep={(s) => setKey('step', s)} onBack={() => go(to('campaigns'))} onOpen={(id) => go(to('campaigns', { campaign: id }))} />
           : <Campaigns org={org} options={o} onOpen={(id) => go(to('campaigns', { campaign: id }))} creating={query.get('new') === '1'} onCreating={(v) => setKey('new', v ? '1' : null)} />;
       case 'templates': return <Templates org={org} options={o} />;
       case 'topics': return <Topics org={org} options={o} />;
+      case 'deliverability': return <Deliverability org={org} options={o} />;
       case 'calls':
         return call
           ? <CallCampaignView key={call} id={call} options={o} onBack={() => go(to('calls'))} onQueue={(id) => go(to('queue', { call: id }))} />
@@ -169,8 +194,15 @@ export default function MarketingShell(_props: ModuleProps) {
             onCampaign={(id) => go(to('queue', { call: id, tab: queueTab }))} />
         );
       case 'scripts': return <Scripts options={o} />;
-      case 'reports': return <Reports org={org} options={o} onCampaign={(id) => go(to('campaigns', { campaign: id, step: 'report' }))} onCall={(id) => go(to('calls', { call: id }))} />;
-      case 'automation': return <Automation />;
+      case 'reports': return <Reports org={org} options={o} onCampaign={(id) => go(to('campaigns', { campaign: id, step: 'report' }))} onCall={(id) => go(to('calls', { call: id }))} onAnalytics={() => go(to('analytics'))} />;
+      case 'automation': return <Automation org={org} options={o} journeyId={num(query.get('journey'))} onOpen={(id) => go(to('automation', { journey: id }))} onBack={() => go(to('automation'))} />;
+      case 'forms': return <Forms org={org} options={o} />;
+      case 'scoring': return <Scoring org={org} options={o} />;
+      case 'channels': return <Channels org={org} options={o} />;
+      case 'analytics': return <Analytics org={org} options={o} />;
+      case 'calendar': return <MarketingCalendar org={org} options={o} />;
+      case 'budgets': return <Budgets org={org} options={o} />;
+      case 'webhooks': return <Webhooks org={org} options={o} />;
       case 'settings': return <Settings org={org} options={o} section={tab} onSection={(s) => setKey('tab', s)} />;
     }
   };

@@ -13,12 +13,15 @@ import type { Sending } from './types';
  * so where bulk mail leaves is never a mystery.
  */
 export type MarketingView =
-  | 'dashboard' | 'contacts' | 'companies' | 'lists' | 'segments' | 'import' | 'consent'
-  | 'campaigns' | 'templates' | 'topics' | 'calls' | 'queue' | 'scripts' | 'reports' | 'automation' | 'settings';
+  | 'dashboard' | 'contacts' | 'companies' | 'lists' | 'segments' | 'import' | 'consent' | 'quality'
+  | 'campaigns' | 'templates' | 'topics' | 'calls' | 'queue' | 'scripts' | 'reports' | 'automation' | 'settings' | 'deliverability' | 'forms' | 'scoring'
+  /* WS-D */
+  | 'channels' | 'analytics' | 'calendar' | 'budgets' | 'webhooks';
 
 export const VIEWS = new Set<MarketingView>([
-  'dashboard', 'contacts', 'companies', 'lists', 'segments', 'import', 'consent',
-  'campaigns', 'templates', 'topics', 'calls', 'queue', 'scripts', 'reports', 'automation', 'settings',
+  'dashboard', 'contacts', 'companies', 'lists', 'segments', 'import', 'consent', 'quality',
+  'campaigns', 'templates', 'topics', 'calls', 'queue', 'scripts', 'reports', 'automation', 'settings', 'deliverability', 'forms', 'scoring',
+  'channels', 'analytics', 'calendar', 'budgets', 'webhooks',
 ]);
 
 interface Item {
@@ -45,6 +48,11 @@ export interface RailMay {
   scripts: boolean;
   reports: boolean;
   settings: boolean;
+  /* WS-D. Optional: absent is "may not". */
+  channels?: boolean;
+  analytics?: boolean;
+  budgets?: boolean;
+  webhooks?: boolean;
 }
 
 export function MarketingRail({ view, onPick, onNewCampaign, counts, may, companies, org, onOrg, sending }: {
@@ -69,6 +77,7 @@ export function MarketingRail({ view, onPick, onNewCampaign, counts, may, compan
         { id: 'segments', label: 'Segments', icon: 'filter' },
         ...(may.import ? [{ id: 'import' as const, label: 'Import', icon: 'upload' }] : []),
         { id: 'consent', label: 'Consent & suppression', icon: 'shield-check' },
+        { id: 'quality', label: 'Data quality', icon: 'grid' },
       ],
     },
     {
@@ -78,8 +87,13 @@ export function MarketingRail({ view, onPick, onNewCampaign, counts, may, compan
           { id: 'campaigns', label: 'Campaigns', icon: 'mail', badge: counts.sending },
           { id: 'templates', label: 'Templates', icon: 'file-text' },
           { id: 'topics', label: 'Topics & preferences', icon: 'tag' },
+          { id: 'deliverability', label: 'Deliverability', icon: 'check-circle' },
         ]
         : [],
+    },
+    {
+      label: may.channels || may.analytics ? 'WhatsApp & SMS' : null,
+      items: may.channels || may.analytics ? [{ id: 'channels' as const, label: 'Campaigns', icon: 'message-circle' }] : [],
     },
     {
       label: may.calls || may.callMake ? 'Calls' : null,
@@ -93,7 +107,14 @@ export function MarketingRail({ view, onPick, onNewCampaign, counts, may, compan
       label: 'Insights',
       items: [
         ...(may.reports ? [{ id: 'reports' as const, label: 'Reports', icon: 'trending-up' }] : []),
-        { id: 'automation', label: 'Automation', icon: 'zap', planned: true },
+        ...(may.analytics ? [{ id: 'analytics' as const, label: 'Analytics', icon: 'chart' }] : []),
+        { id: 'calendar', label: 'Calendar', icon: 'calendar' },
+        ...(may.budgets || may.analytics ? [{ id: 'budgets' as const, label: 'Budgets & ROI', icon: 'banknote' }] : []),
+        /* WS-C: automation is real — journeys, forms and pages, lead scoring. */
+        { id: 'automation', label: 'Journeys', icon: 'zap' },
+        { id: 'forms', label: 'Forms & pages', icon: 'file-text' },
+        { id: 'scoring', label: 'Lead scoring', icon: 'star' },
+        ...(may.webhooks ? [{ id: 'webhooks' as const, label: 'Webhooks', icon: 'zap' }] : []),
         ...(may.settings ? [{ id: 'settings' as const, label: 'Settings', icon: 'settings' }] : []),
       ],
     },

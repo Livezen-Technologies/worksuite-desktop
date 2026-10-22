@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-22
+
+**Added**
+
+- HR › Devices is the attendance device framework (server HR 1.5.0) — dashboard with the punches that need mapping, all devices of every make and connection (ZK TCP pull, ADMS push, gateway), Add device with Test Connection, device detail (overview, logs, employees with Link / Ignore / Auto match, commands with typed confirmation for the dangerous ones, diagnostics), Sync Center with retry, Unmapped, Live, Gateways with pairing codes, and Settings › Biometric devices; the original screen is Push terminals
+
 ## 1.4.1 — 2026-10-16
 
 - Page heads and side panels fit a scaled-up window: actions wrap under the title, and full-height panels keep clear of the window buttons

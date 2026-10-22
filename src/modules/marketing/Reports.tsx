@@ -4,14 +4,14 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { mayAny, withOrg } from './api';
 import type { CallCampaign, CallStatus } from './calls';
 import { bounceGuarded, delivered, rateWords, stamp, useHumanOpens } from './email-kit';
-import { CAMPAIGN_PILL, Card, Cell, Empty, PageHeader, Pill, Planned, THead, n, row, type PillTone } from './parts';
+import { CAMPAIGN_PILL, Card, Cell, Empty, PageHeader, Pill, THead, n, row, type PillTone } from './parts';
 import { refusal, type Campaign, type Options } from './types';
 
 /**
  * Reports: every email campaign that has gone out or is going, with its
  * rates, and every call campaign with its reach — each row opening that
- * campaign's own report. Analytics across campaigns (trends, cohorts, list
- * health over time) is planned, and says so.
+ * campaign's own report. Analytics across campaigns is its own screen,
+ * Insights › Analytics (WS-D).
  *
  * Rates are worked out from the server's counts the same way the campaign's
  * report works them out: out of the copies that reached a mailbox. Opens are
@@ -21,7 +21,7 @@ const SENT_STATUSES = ['sending', 'paused', 'sent'] as const;
 
 const CALL_PILL: Record<CallStatus, PillTone> = { draft: 'slate', active: 'blue', paused: 'amber', completed: 'green', cancelled: 'red' };
 
-export default function Reports({ org, options, onCampaign, onCall }: { org: string; options: Options; onCampaign: (id: number) => void; onCall: (id: number) => void }) {
+export default function Reports({ org, options, onCampaign, onCall, onAnalytics }: { org: string; options: Options; onCampaign: (id: number) => void; onCall: (id: number) => void; onAnalytics?: () => void }) {
   const mayEmail = mayAny(options, 'analytics') || mayAny(options, 'campaigns');
   const mayCalls = mayAny(options, 'calls');
 
@@ -123,9 +123,9 @@ export default function Reports({ org, options, onCampaign, onCall }: { org: str
         </Card>
       ) : null}
 
-      <Card title="Cross-campaign analytics" action={<Planned phase="phase 4" />} tone="info">
+      <Card title="Cross-campaign analytics" tone="info" action={onAnalytics ? <button type="button" className="text-[12.5px] font-semibold text-primary hover:underline" onClick={onAnalytics}>Open Analytics</button> : null}>
         <p className="m-0 text-[12.5px] text-ink-2">
-          Trends across campaigns — engagement over time, list health, how one audience compares with another — are planned, not in the current code. Until then each campaign’s own report is the place to look.
+          Results by period, channel and topic across email, WhatsApp, SMS and calls, the funnel, revenue attribution, UTM links, site tracking and scheduled reports are under Insights › Analytics.
         </p>
       </Card>
     </div>

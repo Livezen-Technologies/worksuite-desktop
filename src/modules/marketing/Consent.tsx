@@ -10,6 +10,7 @@ import { refreshMarketing, send, withOrg } from './api';
 import { SAVE_REFUSED, saveServerFile, useMaySave } from './audience-files';
 import { act, companyName, firstCompany, may, Pager, ReasonSheet, Refused, SearchField, TABLE, TD, TH, Tabs, useDebounced } from './audience-parts';
 import { btn, btnPrimary, btnSmall, Card, Field, input, n, PageHeader, Pill, Planned, Sheet, type PillTone } from './parts';
+import { RepermissionCard } from './email-governance';
 import type { ConsentTab } from './routes';
 import Topics from './Topics';
 import { CHANNEL_WORD, companiesWhere, refusal, type LedgerEntry, type Options, type Suppressed } from './types';
@@ -38,7 +39,7 @@ const REASON_TONE: Record<string, PillTone> = { unsubscribed: 'blue', hard_bounc
  * the record. The ledger is never edited: a correction is a new entry, made
  * on the contact.
  */
-export default function Consent({ org, options, tab, onTab, onContact }: { org: string; options: Options; tab: ConsentTab; onTab: (t: ConsentTab) => void; onContact: (id: number) => void }) {
+export default function Consent({ org, options, tab, onTab, onContact, onCampaign }: { org: string; options: Options; tab: ConsentTab; onTab: (t: ConsentTab) => void; onContact: (id: number) => void; onCampaign?: (id: number) => void }) {
   const maySave = useMaySave();
   const [adding, setAdding] = useState(false);
   const [ledger, setLedger] = useState<LedgerFilter>({ channel: '', status: '', q: '', from: '', to: '' });
@@ -114,6 +115,8 @@ export default function Consent({ org, options, tab, onTab, onContact }: { org: 
               <Planned />
             </div>
           </Card>
+          <RepermissionCard orgId={org ? Number(org.split(',')[0]) : (companiesWhere(options, 'campaign_create')[0]?.id ?? null)}
+            canCreate={companiesWhere(options, 'campaign_create').length > 0} onOpen={onCampaign} />
         </div>
       ) : null}
 

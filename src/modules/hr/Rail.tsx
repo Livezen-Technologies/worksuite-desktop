@@ -115,7 +115,7 @@ export function hrSections(perms: readonly string[] | undefined, counts: { reque
       label: 'Administration',
       items: [
         { id: 'settings', label: 'Settings', icon: 'settings', show: manage || c('hr.schedule.manage') },
-        { id: 'devices', label: 'Devices', icon: 'fingerprint', show: c('hr.device.manage') },
+        { id: 'devices', label: 'Devices', icon: 'fingerprint', show: c('hr.device.manage') || c('hr.attendance.device.view') },
         { id: 'departments', label: 'Departments', icon: 'building', show: staff && c('directory.view') },
       ],
     },

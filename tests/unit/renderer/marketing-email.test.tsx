@@ -11,8 +11,7 @@ import type { Block } from '../../../src/modules/marketing/email-blocks';
  * counts per status, the block editor's HTML format (round trip, and an email
  * written before blocks kept as it was), the missing-alt-text warning, a
  * review that will not schedule while the check names a blocker, a report
- * from a server that sends no open quality or deliverability, and the planned
- * Automation screen, whose buttons do nothing.
+ * from a server that sends no open quality or deliverability.
  */
 const net = vi.hoisted(() => ({ apiGet: vi.fn(), request: vi.fn(), call: vi.fn(), go: vi.fn(), navigate: vi.fn(), toast: vi.fn() }));
 
@@ -30,7 +29,6 @@ vi.mock('../../../src/core/toasts', () => ({ toast: net.toast }));
 
 const { default: Campaigns } = await import('../../../src/modules/marketing/Campaigns');
 const { default: CampaignView } = await import('../../../src/modules/marketing/CampaignView');
-const { default: Automation } = await import('../../../src/modules/marketing/Automation');
 const { BlockEditor } = await import('../../../src/modules/marketing/email-BlockEditor');
 const blocks = await import('../../../src/modules/marketing/email-blocks');
 
@@ -350,17 +348,4 @@ describe('The campaign report (DK09)', () => {
   });
 });
 
-describe('Automation (R01)', () => {
-  it('is planned: the journey is drawn and listed in order, and nothing on it can be switched on', () => {
-    shown(<Automation />);
-    expect(screen.getByText('Planned · phase 4')).toBeTruthy();
-    expect((screen.getByRole('button', { name: /Test with a contact/ }) as HTMLButtonElement).disabled).toBe(true);
-    expect((screen.getByRole('button', { name: /Activate/ }) as HTMLButtonElement).disabled).toBe(true);
-    const steps = screen.getAllByRole('listitem').map((li) => li.textContent ?? '');
-    const order = ['Trigger · joins list', 'Send email', 'Wait', 'Branch · opened welcome?', 'Add score +10 · tag engaged', 'Hand over to CRM', 'Send WhatsApp', 'Create call task'];
-    const at = order.map((o) => steps.findIndex((s) => s.startsWith(o)));
-    expect(at.every((i) => i >= 0)).toBe(true);
-    expect([...at].sort((a, b) => a - b)).toEqual(at);
-    expect(screen.getByText(/re-checks consent, topic and suppression/)).toBeTruthy();
-  });
-});
+/* Automation (R01) is built now (WS-C): its screens are tested in marketing-automation.test.tsx. */

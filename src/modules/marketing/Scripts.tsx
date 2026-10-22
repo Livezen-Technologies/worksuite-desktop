@@ -9,6 +9,7 @@ import { Caption, ConfirmSheet, useCallScripts } from './calls-parts';
 import { LANGUAGES, ScriptSheet } from './calls-scripts';
 import { btnPrimary, btnSmall, Card, Empty, PageHeader, Pill, Seg } from './parts';
 import { companiesWhere, refusal, type Options } from './types';
+import { ScriptVersions } from './email-governance';
 
 /**
  * Call scripts (MKT-CAL-07): what an agent reads beside every contact — the introduction, the questions that qualify,
@@ -23,6 +24,7 @@ export default function Scripts({ options }: { options: Options }) {
   const [archived, setArchived] = useState<'current' | 'archived'>('current');
   const q = useCallScripts(archived === 'archived');
   const [editing, setEditing] = useState<CallScript | 'new' | null>(null);
+  const [versions, setVersions] = useState<CallScript | null>(null);
   const [archiving, setArchiving] = useState<CallScript | null>(null);
   const [open, setOpen] = useState<number | null>(null);
   const [busy, setBusy] = useState(false);
@@ -101,6 +103,9 @@ export default function Scripts({ options }: { options: Options }) {
                       </span>
                     </span>
                   </button>
+                  <button type="button" className={btnSmall} onClick={() => setVersions(s)}>
+                    Versions{s.version ? ` · v${s.version}` : ''}
+                  </button>
                   {mine && !s.archived ? (
                     <div className="flex gap-1.5">
                       <button type="button" className={btnSmall} onClick={() => setEditing(s)}>
@@ -128,6 +133,10 @@ export default function Scripts({ options }: { options: Options }) {
         </ul>
       )}
       {editing ? <ScriptSheet script={editing === 'new' ? null : editing} companies={where} onClose={() => setEditing(null)} /> : null}
+      {versions ? (
+        <ScriptVersions scriptId={versions.id} name={versions.name} canManage={where.some((c) => c.id === versions.org_id)} words={Object.fromEntries(SECTIONS)}
+          onClose={() => setVersions(null)} onRestored={() => void refreshMarketing()} />
+      ) : null}
       {archiving ? (
         <ConfirmSheet
           title={`Archive “${archiving.name}”?`}

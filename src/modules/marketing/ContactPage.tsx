@@ -7,14 +7,17 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { cx, Spinner, Switch } from '../../components/ui';
 import { send } from './api';
+import { SAVE_REFUSED, saveServerFile, useMaySave } from './audience-files';
 import { ContactSheet } from './audience-contact';
 import { act, CHANNELS, ConfirmSheet, countryName, emailWord, MoreMenu, phoneWord, ReasonSheet, Refused, TABLE, TD, TH, Tabs, useLists } from './audience-parts';
 import { btn, btnBad, btnPrimary, btnSmall, Card, humanise, Initials, input, Line, PageHeader, Pill } from './parts';
 import type { PastCall } from './calls';
-import { CHANNEL_WORD, refusal, type Channel, type ContactCampaign, type ContactDetail, type Options, type TimelineEntry } from './types';
+import { CallRecord } from './calls-record';
+import { CHANNEL_WORD, LAWFUL_BASIS, refusal, type Channel, type LawfulBasis, type ContactCampaign, type ContactDetail, type Options, type TimelineEntry } from './types';
+import { ContactScoreCard } from './automation-parts';
 
 type Tab = 'timeline' | 'ledger' | 'campaigns' | 'calls';
-type Doing = { kind: 'edit' } | { kind: 'convert' } | { kind: 'delete' } | { kind: 'consent'; channel: Channel; status: 'granted' | 'withdrawn' } | { kind: 'suppress'; channel: 'email' | 'phone' } | null;
+type Doing = { kind: 'edit' } | { kind: 'convert' } | { kind: 'delete' } | { kind: 'consent'; channel: Channel; status: 'granted' | 'withdrawn' } | { kind: 'suppress'; channel: 'email' | 'phone' } | { kind: 'erase' } | { kind: 'repermission' } | null;
 
 /** A number as a phone dials it: digits and a leading plus. A masked one ("077 *** 4521") cannot be dialled. */
 const dial = (phone: string | null | undefined) => (phone && !phone.includes('*') ? phone.replace(/[^\d+]/g, '') : '');
@@ -35,6 +38,9 @@ export default function ContactPage({ id, options, onBack, onOpen, onCampaign }:
   const [tab, setTab] = useState<Tab>('timeline');
   const [doing, setDoing] = useState<Doing>(null);
   const [busy, setBusy] = useState(false);
+  /* CON-01: the basis a grant recorded here is kept under. */
+  const [basis, setBasis] = useState<LawfulBasis>('consent');
+  const maySave = useMaySave();
   const q = useQuery({
     queryKey: ['marketing', 'contact', id],
     queryFn: ({ signal }) => apiGet<ContactDetail>(`/api/marketing/contacts/${id}`, undefined, signal),
@@ -92,6 +98,36 @@ export default function ContactPage({ id, options, onBack, onOpen, onCampaign }:
 
   const handedOver = Boolean(c.crm_lead) && c.status === 'converted';
 
+  /* CON-11: everything held on them, saved where the person picks. */
+  const exportData = async (format: 'json' | 'csv') => {
+    if (!maySave) {
+      toast('error', SAVE_REFUSED);
+      return;
+    }
+    try {
+      const name = await saveServerFile({ method: 'GET', path: `/api/marketing/contacts/${c.id}/export`, query: { format } }, `contact-${c.id}-data.${format}`);
+      if (name) toast('success', `Saved ${name}`);
+    } catch (e) {
+      toast('error', refusal(e));
+    }
+  };
+  const more = [
+    { id: 'export-json', label: 'Export their data (JSON)', icon: 'download', onSelect: () => void exportData('json') },
+    { id: 'export-csv', label: 'Export their data (CSV)', icon: 'download', onSelect: () => void exportData('csv') },
+    ...(c.can.edit && c.email && c.doi_status === 'pending'
+      ? [{ id: 'doi', label: 'Resend the confirmation email', icon: 'mail', onSelect: () => void run(() => send('POST', `/api/marketing/contacts/${c.id}/double-opt-in`), 'Confirmation email sent.') }]
+      : []),
+    ...(c.can.edit && c.email && c.consent.email !== 'withdrawn' && !blocked('email')
+      ? [{ id: 'repermission', label: 'Ask again for permission', icon: 'refresh', onSelect: () => setDoing({ kind: 'repermission' }) }]
+      : []),
+    ...(c.can.delete
+      ? [
+          { id: 'delete', label: 'Delete contact', icon: 'trash', danger: true, onSelect: () => setDoing({ kind: 'delete' }) },
+          { id: 'erase', label: 'Erase on request…', icon: 'alert', danger: true, onSelect: () => setDoing({ kind: 'erase' }) },
+        ]
+      : []),
+  ];
+
   return (
     <div className="flex flex-col gap-4">
       <PageHeader
@@ -116,7 +152,7 @@ export default function ContactPage({ id, options, onBack, onOpen, onCampaign }:
                 Edit
               </button>
             ) : null}
-            {c.can.delete ? <MoreMenu label={`More for ${c.name}`} items={[{ id: 'delete', label: 'Delete contact', icon: 'trash', danger: true, onSelect: () => setDoing({ kind: 'delete' }) }]} /> : null}
+            <MoreMenu label={`More for ${c.name}`} items={more} />
           </>
         }
       />
@@ -152,6 +188,8 @@ export default function ContactPage({ id, options, onBack, onOpen, onCampaign }:
             ) : null}
           </Card>
 
+          {/* WS-C: the score explained, the CRM deal outcome and the best send hour (SCO, CRM-04, AI-03). */}
+          <ContactScoreCard contactId={c.id} />
           <ListsCard c={c} busy={busy} onRun={run} />
 
           {(c.topics ?? []).length > 0 ? (
@@ -212,9 +250,17 @@ export default function ContactPage({ id, options, onBack, onOpen, onCampaign }:
         <ReasonSheet
           title={`${CHANNEL_WORD[doing.channel]}: ${doing.status === 'granted' ? 'they agreed' : 'they asked to stop'}`}
           intro={
-            doing.status === 'granted'
-              ? 'Record it only when they said yes themselves. Say how, so anybody asked later can answer: on a call, in an email, at the counter.'
-              : 'Their address or number is suppressed for this, so nothing is sent to it again until they agree once more.'
+            doing.status === 'granted' ? (
+              <>
+                Record it only when they said yes themselves. Say how, so anybody asked later can answer: on a call, in an email, at the counter.
+                <label className="mt-2.5 flex flex-col gap-1 text-[12.5px] font-semibold text-ink">
+                  Lawful basis
+                  <Select<string> aria-label="Lawful basis" value={basis} onValueChange={(v) => setBasis(v as LawfulBasis)} options={(Object.keys(LAWFUL_BASIS) as LawfulBasis[]).map((k) => ({ value: k, label: LAWFUL_BASIS[k] }))} className={input} />
+                </label>
+              </>
+            ) : (
+              'Their address or number is suppressed for this, so nothing is sent to it again until they agree once more.'
+            )
           }
           label={doing.status === 'granted' ? 'How they agreed' : 'How they asked (optional)'}
           placeholder={doing.status === 'granted' ? 'Verbal, on a call on 3 Oct' : 'Replied to the newsletter asking to stop'}
@@ -223,7 +269,37 @@ export default function ContactPage({ id, options, onBack, onOpen, onCampaign }:
           danger={doing.status === 'withdrawn'}
           busy={busy}
           onClose={() => setDoing(null)}
-          onSubmit={(note) => void run(() => send('POST', `/api/marketing/contacts/${c.id}/consent`, { channel: doing.channel, status: doing.status, note }), 'Recorded.')}
+          onSubmit={(note) =>
+            void run(
+              () => send('POST', `/api/marketing/contacts/${c.id}/consent`, { channel: doing.channel, status: doing.status, note, ...(doing.status === 'granted' ? { lawful_basis: basis, consent_wording: note } : {}) }),
+              'Recorded.',
+            )
+          }
+        />
+      ) : null}
+      {doing?.kind === 'repermission' ? (
+        <ConfirmSheet title="Ask again for permission?" action="Send" busy={busy} onClose={() => setDoing(null)} onYes={() => void run(() => send('POST', '/api/marketing/contacts/repermission', { ids: [c.id] }), 'Re-permission email sent.')}>
+          They get an email asking whether they still want to hear from you, with a button that records their consent. Nothing changes if they do not answer.
+        </ConfirmSheet>
+      ) : null}
+      {doing?.kind === 'erase' ? (
+        <ReasonSheet
+          title={`Erase ${c.name}?`}
+          intro="Their personal data is deleted for good — name, address, numbers, notes, lists, timeline. Only a hashed key is kept so they are never added or imported again. This cannot be undone."
+          label="Type ERASE to confirm"
+          placeholder="ERASE"
+          min={5}
+          action="Erase for good"
+          danger
+          busy={busy}
+          onClose={() => setDoing(null)}
+          onSubmit={(typed) => {
+            if (typed !== 'ERASE') {
+              toast('error', 'Nothing was erased: type ERASE to confirm.');
+              return;
+            }
+            void run(() => send('POST', `/api/marketing/contacts/${c.id}/erase`, { confirm: 'ERASE' }), 'Erased.').then((ok) => ok && onBack());
+          }}
         />
       ) : null}
       {doing?.kind === 'suppress' ? (
@@ -277,6 +353,19 @@ function Profile({ c, options }: { c: ContactDetail; options: Options }) {
         <Line label="Status">{c.status_label}</Line>
         <Line label="Owner">{c.owner?.name ?? 'Nobody'}</Line>
         <Line label="Where">{where || '—'}</Line>
+        {/* AUD-01: their own zone, else their country's; it decides calling hours and local-time sends. */}
+        {c.time_zone ?? c.local_zone ? (
+          <Line label="Time zone">
+            {c.time_zone ?? c.local_zone}
+            {c.local_time ? <span className="text-ink-3"> · {c.local_time} there now</span> : null}
+            {!c.time_zone ? <span className="text-ink-3"> (from country)</span> : null}
+          </Line>
+        ) : null}
+        {c.doi_status ? (
+          <Line label="Double opt-in">
+            <Pill tone={c.doi_status === 'confirmed' ? 'green' : 'amber'}>{c.doi_status === 'confirmed' ? 'Confirmed' : 'Waiting for confirmation'}</Pill>
+          </Line>
+        ) : null}
         <Line label="Came from">{c.source_label}</Line>
         {c.language ? <Line label="Language">{c.language}</Line> : null}
         {Object.entries(c.source_detail).map(([k, v]) => (
@@ -461,11 +550,15 @@ function Ledger({ c, onRecord }: { c: ContactDetail; onRecord: (channel: Channel
                     <Pill tone={h.status === 'granted' ? 'green' : 'amber'}>{h.status}</Pill>
                   </td>
                   <td className={cx(TD, 'text-ink-2')}>
+                    {h.lawful_basis ? <b className="mr-1 font-semibold">{LAWFUL_BASIS[h.lawful_basis] ?? h.lawful_basis} ·</b> : null}
                     {h.source_label}
+                    {h.topic_id ? <span className="ml-1 text-[11.5px] text-ink-3">(topic)</span> : null}
                     {h.source_ref ? ` · ${h.source_ref}` : ''}
                     {h.note ? <span className="block text-[12px] text-ink-3">“{h.note}”</span> : null}
+                    {h.wording && h.wording !== h.note ? <span className="block text-[12px] text-ink-3">Wording: “{h.wording}”</span> : null}
+                    {h.evidence ? <span className="block text-[11px] text-ink-3">{h.evidence}</span> : null}
                   </td>
-                  <td className={cx(TD, 'text-ink-2')}>{h.by ?? 'The system'}</td>
+                  <td className={cx(TD, 'text-ink-2')}>{h.actor === 'contact' ? 'The contact' : (h.by ?? 'The system')}</td>
                 </tr>
               ))}
             </tbody>
@@ -561,6 +654,8 @@ function Calls({ id }: { id: number }) {
               {r.by ?? 'Somebody'} · {dateLabel(r.at)} {timeLabel(r.at)}
               {r.follow_up_at ? ` · call back ${dateLabel(r.follow_up_at)} ${timeLabel(r.follow_up_at)}` : ''}
             </p>
+            {/* WS-D (CAL-11/14): the telephone system's record of it, on request. */}
+            <CallRecord callId={r.id} />
           </div>
         </li>
       ))}

@@ -9,6 +9,7 @@ import { refreshMarketing, send, withOrg } from './api';
 import { act, ConfirmSheet, CountrySelect, firstCompany, may, Pager, Refused, SearchField, TABLE, TD, TH, useDebounced } from './audience-parts';
 import { btn, btnPrimary, btnSmall, Field, input, n, PageHeader, Sheet } from './parts';
 import { companiesWhere, fieldErrors, peopleOf, refusal, type MarketingCompany, type Options } from './types';
+import CompanyPage from './CompanyPage';
 
 const PER = 50;
 
@@ -19,7 +20,9 @@ const PER = 50;
  * spaced — and editable here. Each one's count leads to its contacts.
  * Deleting one keeps its contacts, at no organisation.
  */
-export default function Companies({ org, options, onContacts }: { org: string; options: Options; onContacts: (companyId: number) => void }) {
+export default function Companies({ org, options, onContacts, onOpenContact }: { org: string; options: Options; onContacts: (companyId: number) => void; onOpenContact?: (contactId: number) => void }) {
+  /* AUD-03: one organisation's page, over the list. */
+  const [open, setOpen] = useState<MarketingCompany | null>(null);
   const [typed, setTyped] = useState('');
   const q = useDebounced(typed.trim(), 300);
   const key = `${org}|${q}`;
@@ -41,6 +44,13 @@ export default function Companies({ org, options, onContacts }: { org: string; o
     if (await act(() => send('DELETE', `/api/marketing/companies/${c.id}`), 'Deleted.')) setRemoving(null);
     setBusy(false);
   };
+
+  if (open && !editing) {
+    return (
+      <CompanyPage id={open.id} onBack={() => setOpen(null)} onContacts={onContacts} onOpenContact={onOpenContact ?? (() => onContacts(open.id))}
+        onEdit={may(options, 'edit', open.org_id) ? () => setEditing(open) : undefined} />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-3">
@@ -94,7 +104,7 @@ export default function Companies({ org, options, onContacts }: { org: string; o
                 {rows.map((c) => (
                   <tr key={c.id}>
                     <td className={TD}>
-                      <span className="block font-semibold text-ink">{c.name}</span>
+                      <button type="button" className="block text-left font-semibold text-ink hover:text-primary hover:underline" onClick={() => setOpen(c)}>{c.name}</button>
                       <span className="block truncate text-[11.5px] text-ink-3">{c.domain ?? c.website ?? '—'}</span>
                     </td>
                     <td className={cx(TD, 'text-ink-2')}>{c.industry ?? '—'}</td>

@@ -160,7 +160,7 @@ describe('A contact (DK03)', () => {
     expect(record.disabled).toBe(true);
     fireEvent.change(screen.getByLabelText(/How they agreed/), { target: { value: 'Verbal on call #C-2291' } });
     fireEvent.click(record);
-    await waitFor(() => expect(net.request).toHaveBeenCalledWith('POST', '/api/marketing/contacts/5/consent', { body: { channel: 'phone', status: 'granted', note: 'Verbal on call #C-2291' } }));
+    await waitFor(() => expect(net.request).toHaveBeenCalledWith('POST', '/api/marketing/contacts/5/consent', { body: { channel: 'phone', status: 'granted', note: 'Verbal on call #C-2291', lawful_basis: 'consent', consent_wording: 'Verbal on call #C-2291' } }));
   });
 });
 
@@ -182,7 +182,8 @@ describe('Segment builder (DK04)', () => {
     expect(screen.getByText('Never')).toBeTruthy();
     expect(screen.getByText('612')).toBeTruthy();
     expect(screen.getByText('1 of 20 rules · 2 fields available')).toBeTruthy();
-    expect(screen.getByText('Planned · scheduled segment → list')).toBeTruthy();
+    /* SEG-08 is built (WS-C): an unsaved segment is asked to be saved before it is scheduled. */
+    expect(screen.getByText('Save the segment first.')).toBeTruthy();
   });
 });
 

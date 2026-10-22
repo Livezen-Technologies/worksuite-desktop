@@ -8,7 +8,7 @@ import { VirtualList } from '../../components/VirtualList';
 import { ticket } from './client';
 
 export type LeftPanel = 'pages' | 'bookmarks' | 'search' | 'attachments';
-export type RightPanel = 'properties' | 'comments' | 'versions' | 'activity';
+export type RightPanel = 'properties' | 'comments' | 'versions' | 'activity' | 'pro';
 
 function Tabs<T extends string>({ label, value, items, onChange }: { label: string; value: T; items: Array<{ id: T; label: string; icon: string }>; onChange: (v: T) => void }) {
   return (
@@ -418,7 +418,7 @@ export function RightTabs({ value, drive, onChange }: { value: RightPanel; drive
       label="Details"
       value={value}
       onChange={onChange}
-      items={[{ id: 'properties' as const, label: 'Properties', icon: 'info' }, { id: 'comments' as const, label: 'Comments', icon: 'chat' }, ...(drive ? [{ id: 'versions' as const, label: 'Versions', icon: 'history' }, { id: 'activity' as const, label: 'Activity', icon: 'activity' }] : [])]}
+      items={[{ id: 'properties' as const, label: 'Properties', icon: 'info' }, { id: 'comments' as const, label: 'Comments', icon: 'chat' }, ...(drive ? [{ id: 'versions' as const, label: 'Versions', icon: 'history' }, { id: 'activity' as const, label: 'Activity', icon: 'activity' }, { id: 'pro' as const, label: 'Pro', icon: 'sparkles' }] : [])]}
     />
   );
 }
