@@ -13,6 +13,8 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+## 0.2.273 — 2026-10-22
+
 - Tests: the live-chat wall's map tests (L-06) read the map's own SVG again. Since the brand logo became an SVG they read the logo's viewBox, so the cycling test failed and the "stays on the world" test passed without checking the map.
 
 ## 0.2.272 — 2026-10-22
