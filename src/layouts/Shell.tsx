@@ -45,6 +45,7 @@ import { StatusBar } from './StatusBar';
 import { TabStrip } from './TabStrip';
 import { TitleBar } from './TitleBar';
 import { Workspace } from './Workspace';
+import { openUserGuide } from '../modules/help/api';
 
 /** The main window: title bar, sidebar, tabs, workspace, dock and status bar (UI-04, §4.1). */
 export function Shell() {
@@ -165,6 +166,8 @@ export function Shell() {
       registerCommand({ id: 'ai-alt', label: 'Open AI Assistant', group: 'Shell', hidden: true, run: () => toggleAssistant(), when: () => canOpen('ai') }),
       registerCommand({ id: 'switch-org', label: 'Switch organization', group: 'Shell', run: () => openOverlay('org'), when: () => !isGuest() }),
       registerCommand({ id: 'lock', label: 'Lock WorkSuite', group: 'Shell', run: () => void call('security:lock'), when: () => !isGuest() }),
+      registerCommand({ id: 'user-guide', label: 'User guide for this app', group: 'Navigate', keywords: 'help guide manual how to documentation', run: () => openUserGuide(activeTab()?.app ?? null) }),
+      registerCommand({ id: 'user-guides', label: 'User guides', group: 'Navigate', keywords: 'help guide manual how to documentation', run: () => openUserGuide(null) }),
       registerCommand({ id: 'help', label: 'Help & Diagnostics', group: 'Navigate', run: () => navigate('/diagnostics') }),
       registerCommand({ id: 'launcher', label: 'App launcher', group: 'Navigate', keywords: 'all apps grid', run: () => openOverlay('launcher') }),
       registerCommand({ id: 'notifications', label: 'Notifications', group: 'Navigate', run: () => navigate('/notifications'), when: () => !isGuest() }),

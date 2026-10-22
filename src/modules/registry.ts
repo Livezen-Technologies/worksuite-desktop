@@ -525,6 +525,11 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./account/AccountPage'),
   },
   {
+    // User guides (the server's /api/help/guides): the list, a guide, a workflow's steps — the last ones read, offline.
+    input: defineDesktopManifest({ id: 'help', name: 'User guides', icon: 'book-open', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'READ_CACHE', cache: ['/api/help/guides'] }, deepLinks: ['help'] }),
+    load: () => import('./help/HelpPage'),
+  },
+  {
     input: defineDesktopManifest({ id: 'diagnostics', name: 'Diagnostics', icon: 'stethoscope', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' } }),
     load: () => import('./diagnostics/DiagnosticsPage'),
   },

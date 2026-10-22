@@ -20,6 +20,8 @@ import { phaseLabel } from '../modules/ai/session';
 import { useGuest } from '../core/session';
 import { TimerPill } from '../modules/projects/Timer';
 import { BrandLogo } from '../components/BrandMark';
+import { tabsStore } from '../core/tabs';
+import { UserGuideButton } from '../modules/help/UserGuideButton';
 
 /**
  * Title / top bar, 52 px (§4.12 shared shell components): WorkSuite mark,
@@ -61,6 +63,8 @@ export function TitleBar() {
   const unread = status?.unread.notifications ?? 0;
   // In macOS full screen the traffic lights hide with the menu bar, so their room is given back (#221).
   const fullScreen = useFullScreen();
+  // The tab in front: its module's user guide (the guide viewer's own tab shows none).
+  const activeApp = useStore(tabsStore, (s) => s.tabs.find((x) => x.id === s.activeId)?.app ?? null);
 
   return (
     <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac && !fullScreen ? 84 : 14, paddingRight: topBarPaddingRight(12) }}>
@@ -82,6 +86,8 @@ export function TitleBar() {
       </button>
 
       <div className="flex-1" />
+
+      {activeApp && activeApp !== 'help' && !guest ? <UserGuideButton app={activeApp} /> : null}
 
       {/* A website chat ringing, or silenced and still waiting (R-01, RING-25): the title bar's alert, on every module. */}
       {hasChat ? <RingAlertPill /> : null}

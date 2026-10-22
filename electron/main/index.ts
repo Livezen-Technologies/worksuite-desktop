@@ -2645,6 +2645,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // ── what the person may open (shared/access.ts) ───────────────────────
   // READ_CACHE: which module's answers a GET path is.
   const CACHE_PREFIXES: Array<[string, string]> = [
+    // User guides: the list and each guide read, for reading offline.
+    ['/api/help/guides', 'help'],
     ['/api/mail/folders', 'mail'],
     ['/api/mail/mailboxes', 'mail'],
     ['/api/mail/messages', 'mail'],

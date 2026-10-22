@@ -7,6 +7,7 @@ import { TabProvider } from '../core/tab-context';
 import { moduleFor } from '../modules/registry';
 import { ModuleBoundary, Spinner, IconButton, cx } from '../components/ui';
 import { moduleRecovery, useOptionalQueryClient } from '../components/moduleRecovery';
+import { UserGuideButton } from '../modules/help/UserGuideButton';
 import { TAB_DRAG, WINDOW_DRAG, dragHas, droppedWindow } from '../core/dock-drag';
 
 /**
@@ -97,7 +98,7 @@ export function Workspace() {
             style={style}
           >
             <div className="flex h-full flex-col">
-              {side ? <SideBar id={tab.id} title={tab.title} /> : null}
+              {side ? <SideBar id={tab.id} title={tab.title} app={tab.app} /> : null}
               <div className="relative min-h-0 flex-1">
                 <ModuleBoundary name={mod.manifest.name} {...moduleRecovery(mod, qc, navigate)} resetKey={tab.route}>
                   <Suspense fallback={<Spinner />}>
@@ -157,12 +158,13 @@ export function Workspace() {
 }
 
 /** The docked tab's own bar: its name, and what can be done with it. */
-function SideBar({ id, title }: { id: string; title: string }) {
+function SideBar({ id, title, app }: { id: string; title: string; app: string }) {
   return (
     <div className="flex h-8 shrink-0 items-center gap-1 border-b border-line bg-surface pr-1 pl-3 text-[12.5px] font-semibold text-ink">
       <span className="min-w-0 flex-1 truncate" title={title}>
         {title}
       </span>
+      {app !== 'help' ? <UserGuideButton app={app} tone="plain" /> : null}
       <IconButton icon="repeat" label="Swap sides" size={14} onClick={swapSides} />
       <IconButton icon="app-window" label="Move to new window" size={14} onClick={() => void detachTab(id)} />
       <IconButton icon="x" label="Undock" size={14} onClick={undockSide} />
