@@ -13,6 +13,8 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+## 0.2.272 — 2026-10-22
+
 - **AI Assistant follows the server's AI contract (WS-AI-SRS-001 G-01, G-02, G-11, Q-01…Q-05).** Local AI is told
   only of reading functions unless the server's `ai_local_writes` allows changes, and Module Access shows "Local AI
   only reads" instead of a switch that would do nothing. A proposed change at level 4–5 shows its level and asks for
