@@ -33,6 +33,24 @@ function ownPath(path: string) {
   return OWN.find((o) => clean === o.prefix || clean.startsWith(`${o.prefix}/`));
 }
 
+/**
+ * The web's website-chat pages (`/website-chats?conversation=12`, `/website-chats/12`, `?tab=visitors`) as Chat › Web
+ * Chat here (worksuite-desktop#407). The server's notifications about a visitor's chat — assigned, routed, a follow-up,
+ * not reaching anybody — link there, and no desktop app sits under that path, so a click went to the browser and the
+ * conversation was never opened in Web Chat.
+ */
+function websiteChatRoute(path: string): string | null {
+  const m = /^\/website-chats(?:\/(\d{1,12}))?\/?(?:\?([^#]*))?(?:#.*)?$/.exec(path);
+  if (!m) return null;
+  const q = new URLSearchParams(m[2] ?? '');
+  const id = m[1] ?? q.get('conversation') ?? q.get('id');
+  if (id && /^\d{1,12}$/.test(id) && Number(id) > 0) return `/chat?view=website&section=inbox&website=${id}`;
+  const tab = q.get('tab');
+  if (tab === 'visitors') return '/chat?view=website&section=visitors';
+  if (tab === 'widgets') return '/chat?view=website&section=widgets';
+  return '/chat?view=website';
+}
+
 /** The catalogue app a WorkSuite web path belongs to (the longest `webPath` it sits under); none for Home's `/` and for paths of no app. */
 export function appForWebPath(path: string, catalogue: AppDefinition[] = APP_CATALOGUE): AppDefinition | undefined {
   const own = ownPath(path);
@@ -71,6 +89,8 @@ export function resolveWebLink(link: string | null | undefined, catalogue: AppDe
   if (mailMessage) return { kind: 'tab', route: `/mail?box=${mailMessage[1]}&folder=inbox&msg=${mailMessage[2]}&mbx=${mailMessage[1]}`, app: 'mail' };
   const mailBox = /^\/mail\?(?:.*&)?mailbox=(\d{1,12})(?:&|$)/.exec(path);
   if (mailBox) return { kind: 'tab', route: `/mail?box=${mailBox[1]}&folder=inbox`, app: 'mail' };
+  const website = websiteChatRoute(path);
+  if (website) return { kind: 'tab', route: website, app: 'chat' };
   const own = ownPath(path);
   if (own) return { kind: 'tab', route: own.route, app: own.app };
   const app = appForWebPath(path, catalogue);
