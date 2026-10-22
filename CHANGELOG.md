@@ -14,6 +14,9 @@ person who has to live with the change — what it does, and where it bites.
 ## Unreleased
 ### Fixed
 - Chat: the message hover toolbar now sits above the bubble instead of covering its first line of text.
+- Web Chat: a notification about a website visitor's chat (assigned, routed, a follow-up, not reaching anybody) opens
+  that conversation in Chat › Web Chat instead of the browser, and the Web Chat lists read again as it arrives, so the
+  chat it names is listed (#407).
 
 
 - **User guides (help 1.0.0).** A "User guide" button in the title bar opens the guide of the module in front — and

@@ -293,7 +293,7 @@ function moduleOf(n: { category?: string | null; type?: string | null; entity_ty
   if (fromLink === 'social-media') return 'social-media';
   const raw = (n.category || n.entity_type || fromLink || n.type || 'system').toLowerCase();
   // `projects` is the server's category for tasks: without it, task alerts could not be muted by the Tasks switch.
-  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', projects: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat', social_media: 'social-media', 'social-media': 'social-media', purchasing: 'purchase', payables: 'purchase' };
+  const map: Record<string, string> = { hrm: 'hr', leave: 'hr', attendance: 'hr', task: 'tasks', projects: 'tasks', calendar: 'calendar', event: 'calendar', lead: 'crm', drive: 'files', file: 'files', message: 'chat', 'website-chats': 'chat', social_media: 'social-media', 'social-media': 'social-media', purchasing: 'purchase', payables: 'purchase' };
   return map[raw] ?? raw.split(/[._:]/)[0] ?? 'system';
 }
 
