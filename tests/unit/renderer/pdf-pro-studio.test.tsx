@@ -25,7 +25,11 @@ vi.mock('../../../src/core/bridge', () => ({
   call: vi.fn(async (channel: string, input: unknown) => {
     bridge.calls.push({ channel, input });
     if (channel === 'pdf:tokens') {
-      const der = new X509Certificate(readFileSync(join(__dirname, '../../fixtures/pdf/pro-signer.pem'))).raw.toString('base64');
+      // The test signer's certificate, as a token would hold it (from the PKCS#12 fixture: no key file in the repository).
+      const { openPkcs12 } = await import('../../../src/modules/pdf/pro');
+      const p12 = readFileSync(join(__dirname, '../../fixtures/pdf/pro-signer.p12'));
+      const id = await openPkcs12(p12.buffer.slice(p12.byteOffset, p12.byteOffset + p12.byteLength) as ArrayBuffer, 'secret');
+      const der = new X509Certificate(Buffer.from(id.certsDer[0]!)).raw.toString('base64');
       return { available: true, reason: null, tokens: [{ module: '/usr/lib/opensc-pkcs11.so', token: 'Asha eToken', manufacturer: 'SafeNet', certs: [{ module: '/usr/lib/opensc-pkcs11.so', token: 'Asha eToken', id: '01', label: 'Asha Perera', der }] }] };
     }
     if (channel === 'pdf:tokenSign') return new Uint8Array([7, 7, 7]);
