@@ -182,7 +182,8 @@ describe('Segment builder (DK04)', () => {
     expect(screen.getByText('Never')).toBeTruthy();
     expect(screen.getByText('612')).toBeTruthy();
     expect(screen.getByText('1 of 20 rules · 2 fields available')).toBeTruthy();
-    expect(screen.getByText('Planned · scheduled segment → list')).toBeTruthy();
+    /* SEG-08 is built (WS-C): an unsaved segment is asked to be saved before it is scheduled. */
+    expect(screen.getByText('Save the segment first.')).toBeTruthy();
   });
 });
 

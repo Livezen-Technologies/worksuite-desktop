@@ -25,6 +25,10 @@ export interface Can {
   templates?: boolean; analytics?: boolean;
   /* Calls (phase 3): see campaigns, run them, make calls. Optional for the same reason. */
   calls?: boolean; call_manage?: boolean; call_make?: boolean;
+  /* WS-C: journeys, forms and pages, lead scoring. Optional for the same reason. */
+  journeys?: boolean; forms?: boolean; scores?: boolean;
+  /* WS-D: WhatsApp/SMS campaigns, budgets and calendar events, webhooks. Optional for the same reason. */
+  channels?: boolean; budgets?: boolean; webhooks?: boolean;
 }
 
 export interface Company { id: number; name: string; can: Can; people: Person[] }
@@ -34,7 +38,7 @@ export interface FieldOp { key: string; label: string; bare: boolean }
 export interface SegmentField {
   key: string;
   label: string;
-  type: 'choice' | 'country' | 'text' | 'user' | 'tag' | 'list' | 'days' | 'number' | 'none';
+  type: 'choice' | 'country' | 'text' | 'user' | 'tag' | 'list' | 'days' | 'number' | 'none' | 'form' | 'journey';
   ops: FieldOp[];
   choices: Pair[] | null;
 }
@@ -220,7 +224,8 @@ export interface MarketingList {
   updated_at: string | null;
 }
 
-export interface Rule { field: string; op: string; value: unknown }
+/** A rule, or (SEG-07) a group of rules matched all or any, nested at most three deep. */
+export interface Rule { field: string; op: string; value: unknown; group?: 'all' | 'any'; rules?: Rule[] }
 
 export interface Segment {
   id: number;

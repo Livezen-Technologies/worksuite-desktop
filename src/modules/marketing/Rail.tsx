@@ -14,11 +14,14 @@ import type { Sending } from './types';
  */
 export type MarketingView =
   | 'dashboard' | 'contacts' | 'companies' | 'lists' | 'segments' | 'import' | 'consent' | 'quality'
-  | 'campaigns' | 'templates' | 'topics' | 'calls' | 'queue' | 'scripts' | 'reports' | 'automation' | 'settings' | 'deliverability';
+  | 'campaigns' | 'templates' | 'topics' | 'calls' | 'queue' | 'scripts' | 'reports' | 'automation' | 'settings' | 'deliverability' | 'forms' | 'scoring'
+  /* WS-D */
+  | 'channels' | 'analytics' | 'calendar' | 'budgets' | 'webhooks';
 
 export const VIEWS = new Set<MarketingView>([
   'dashboard', 'contacts', 'companies', 'lists', 'segments', 'import', 'consent', 'quality',
-  'campaigns', 'templates', 'topics', 'calls', 'queue', 'scripts', 'reports', 'automation', 'settings', 'deliverability',
+  'campaigns', 'templates', 'topics', 'calls', 'queue', 'scripts', 'reports', 'automation', 'settings', 'deliverability', 'forms', 'scoring',
+  'channels', 'analytics', 'calendar', 'budgets', 'webhooks',
 ]);
 
 interface Item {
@@ -45,6 +48,11 @@ export interface RailMay {
   scripts: boolean;
   reports: boolean;
   settings: boolean;
+  /* WS-D. Optional: absent is "may not". */
+  channels?: boolean;
+  analytics?: boolean;
+  budgets?: boolean;
+  webhooks?: boolean;
 }
 
 export function MarketingRail({ view, onPick, onNewCampaign, counts, may, companies, org, onOrg, sending }: {
@@ -84,6 +92,10 @@ export function MarketingRail({ view, onPick, onNewCampaign, counts, may, compan
         : [],
     },
     {
+      label: may.channels || may.analytics ? 'WhatsApp & SMS' : null,
+      items: may.channels || may.analytics ? [{ id: 'channels' as const, label: 'Campaigns', icon: 'message-circle' }] : [],
+    },
+    {
       label: may.calls || may.callMake ? 'Calls' : null,
       items: [
         ...(may.calls ? [{ id: 'calls' as const, label: 'Call campaigns', icon: 'phone' }] : []),
@@ -95,7 +107,14 @@ export function MarketingRail({ view, onPick, onNewCampaign, counts, may, compan
       label: 'Insights',
       items: [
         ...(may.reports ? [{ id: 'reports' as const, label: 'Reports', icon: 'trending-up' }] : []),
-        { id: 'automation', label: 'Automation', icon: 'zap', planned: true },
+        ...(may.analytics ? [{ id: 'analytics' as const, label: 'Analytics', icon: 'chart' }] : []),
+        { id: 'calendar', label: 'Calendar', icon: 'calendar' },
+        ...(may.budgets || may.analytics ? [{ id: 'budgets' as const, label: 'Budgets & ROI', icon: 'banknote' }] : []),
+        /* WS-C: automation is real — journeys, forms and pages, lead scoring. */
+        { id: 'automation', label: 'Journeys', icon: 'zap' },
+        { id: 'forms', label: 'Forms & pages', icon: 'file-text' },
+        { id: 'scoring', label: 'Lead scoring', icon: 'star' },
+        ...(may.webhooks ? [{ id: 'webhooks' as const, label: 'Webhooks', icon: 'zap' }] : []),
         ...(may.settings ? [{ id: 'settings' as const, label: 'Settings', icon: 'settings' }] : []),
       ],
     },

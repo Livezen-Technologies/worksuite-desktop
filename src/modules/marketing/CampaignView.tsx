@@ -8,6 +8,7 @@ import { Select } from '../../components/Select';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { send } from './api';
 import { BlockEditor } from './email-BlockEditor';
+import { AiCopySheet } from './automation-parts';
 import { bodyOf, draftOf, type Draft, type SetDraft } from './email-draft';
 import { Confirm, Tabs, stamp, useTemplates, useTopics, wallWords } from './email-kit';
 import { ReportView } from './email-Report';
@@ -76,6 +77,7 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [testing, setTesting] = useState(false);
   const [version, setVersion] = useState<'a' | 'b'>('a');
+  const [drafting, setDrafting] = useState(false);
   /** Bumped when the content is replaced from outside the editor (a template), so the editor reads it again. */
   const [seed, setSeed] = useState(0);
   const [replacing, setReplacing] = useState<{ subject: string; preheader: string; body_html: string } | null>(null);
@@ -265,6 +267,8 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
                     Save as a template
                   </button>
                 ) : null}
+                {/* WS-C (MKT-AI-01): a draft from a brief, used only when "Use this" is pressed. */}
+                <button type="button" className={btnSmall} onClick={() => setDrafting(true)}>Draft with AI</button>
               </span>
             ) : null}
           </div>
@@ -301,6 +305,16 @@ function Editor({ campaign, options, step, onStep, onBack }: { campaign: Campaig
         </Confirm>
       ) : null}
       {history ? <VersionHistory campaign={campaign} onClose={() => setHistory(false)} onRestored={reload} /> : null}
+      {drafting ? (
+        <AiCopySheet orgId={campaign.org_id} onClose={() => setDrafting(false)}
+          onUse={(t) => {
+            setD((x) => ({ ...x, subject: t.subject || x.subject, preheader: t.preheader || x.preheader, body_html: t.body_html }));
+            setRev((r) => r + 1);
+            setSeed((s) => s + 1);
+            setVersion('a');
+            setDrafting(false);
+          }} />
+      ) : null}
       {savingTemplate ? <SaveAsTemplate campaign={campaign} d={d} options={options} onClose={() => setSavingTemplate(false)} /> : null}
     </div>
   );

@@ -46,15 +46,24 @@ const MyQueue = lazy(() => import('./MyQueue'));
 const Scripts = lazy(() => import('./Scripts'));
 const Reports = lazy(() => import('./Reports'));
 const Automation = lazy(() => import('./Automation'));
+const Forms = lazy(() => import('./Forms'));
+const Scoring = lazy(() => import('./Scoring'));
 const Settings = lazy(() => import('./Settings'));
 const Deliverability = lazy(() => import('./Deliverability'));
+/* WS-D */
+const Channels = lazy(() => import('./Channels'));
+const Analytics = lazy(() => import('./Analytics'));
+const MarketingCalendar = lazy(() => import('./Planning').then((m) => ({ default: m.MarketingCalendar })));
+const Budgets = lazy(() => import('./Planning').then((m) => ({ default: m.Budgets })));
+const Webhooks = lazy(() => import('./Webhooks'));
 
 const TITLES: Record<MarketingView, string> = {
   quality: 'Data quality',
   dashboard: 'Dashboard', contacts: 'Contacts', companies: 'Organisations', lists: 'Lists', segments: 'Segments', import: 'Import',
   consent: 'Consent & suppression', campaigns: 'Campaigns', templates: 'Templates', topics: 'Topics & preferences',
-  calls: 'Call campaigns', queue: 'My call queue', scripts: 'Scripts', reports: 'Reports', automation: 'Automation', settings: 'Settings',
+  calls: 'Call campaigns', queue: 'My call queue', scripts: 'Scripts', reports: 'Reports', automation: 'Journeys', settings: 'Settings', forms: 'Forms & pages', scoring: 'Lead scoring',
   deliverability: 'Deliverability',
+  channels: 'WhatsApp & SMS', analytics: 'Analytics', calendar: 'Calendar', budgets: 'Budgets & ROI', webhooks: 'Webhooks',
 };
 
 /** Older addresses, still followed: a link in a notification or a bookmark outlives the screen it named. */
@@ -90,6 +99,10 @@ export default function MarketingShell(_props: ModuleProps) {
     scripts: mayAny(o, 'call_manage') || mayAny(o, 'call_make'),
     reports: mayAny(o, 'analytics') || mayAny(o, 'calls'),
     settings: mayAny(o, 'settings'),
+    channels: mayAny(o, 'channels'),
+    analytics: mayAny(o, 'analytics'),
+    budgets: mayAny(o, 'budgets'),
+    webhooks: mayAny(o, 'webhooks'),
   };
   const fallback: MarketingView = may.dashboard || options.isLoading ? 'dashboard' : 'contacts';
   const view: MarketingView = aliasView ?? (VIEWS.has(asked as MarketingView) ? (asked as MarketingView) : fallback);
@@ -181,8 +194,15 @@ export default function MarketingShell(_props: ModuleProps) {
             onCampaign={(id) => go(to('queue', { call: id, tab: queueTab }))} />
         );
       case 'scripts': return <Scripts options={o} />;
-      case 'reports': return <Reports org={org} options={o} onCampaign={(id) => go(to('campaigns', { campaign: id, step: 'report' }))} onCall={(id) => go(to('calls', { call: id }))} />;
-      case 'automation': return <Automation />;
+      case 'reports': return <Reports org={org} options={o} onCampaign={(id) => go(to('campaigns', { campaign: id, step: 'report' }))} onCall={(id) => go(to('calls', { call: id }))} onAnalytics={() => go(to('analytics'))} />;
+      case 'automation': return <Automation org={org} options={o} journeyId={num(query.get('journey'))} onOpen={(id) => go(to('automation', { journey: id }))} onBack={() => go(to('automation'))} />;
+      case 'forms': return <Forms org={org} options={o} />;
+      case 'scoring': return <Scoring org={org} options={o} />;
+      case 'channels': return <Channels org={org} options={o} />;
+      case 'analytics': return <Analytics org={org} options={o} />;
+      case 'calendar': return <MarketingCalendar org={org} options={o} />;
+      case 'budgets': return <Budgets org={org} options={o} />;
+      case 'webhooks': return <Webhooks org={org} options={o} />;
       case 'settings': return <Settings org={org} options={o} section={tab} onSection={(s) => setKey('tab', s)} />;
     }
   };

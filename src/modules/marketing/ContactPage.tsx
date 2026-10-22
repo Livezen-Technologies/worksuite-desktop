@@ -12,7 +12,9 @@ import { ContactSheet } from './audience-contact';
 import { act, CHANNELS, ConfirmSheet, countryName, emailWord, MoreMenu, phoneWord, ReasonSheet, Refused, TABLE, TD, TH, Tabs, useLists } from './audience-parts';
 import { btn, btnBad, btnPrimary, btnSmall, Card, humanise, Initials, input, Line, PageHeader, Pill } from './parts';
 import type { PastCall } from './calls';
+import { CallRecord } from './calls-record';
 import { CHANNEL_WORD, LAWFUL_BASIS, refusal, type Channel, type LawfulBasis, type ContactCampaign, type ContactDetail, type Options, type TimelineEntry } from './types';
+import { ContactScoreCard } from './automation-parts';
 
 type Tab = 'timeline' | 'ledger' | 'campaigns' | 'calls';
 type Doing = { kind: 'edit' } | { kind: 'convert' } | { kind: 'delete' } | { kind: 'consent'; channel: Channel; status: 'granted' | 'withdrawn' } | { kind: 'suppress'; channel: 'email' | 'phone' } | { kind: 'erase' } | { kind: 'repermission' } | null;
@@ -186,6 +188,8 @@ export default function ContactPage({ id, options, onBack, onOpen, onCampaign }:
             ) : null}
           </Card>
 
+          {/* WS-C: the score explained, the CRM deal outcome and the best send hour (SCO, CRM-04, AI-03). */}
+          <ContactScoreCard contactId={c.id} />
           <ListsCard c={c} busy={busy} onRun={run} />
 
           {(c.topics ?? []).length > 0 ? (
@@ -650,6 +654,8 @@ function Calls({ id }: { id: number }) {
               {r.by ?? 'Somebody'} · {dateLabel(r.at)} {timeLabel(r.at)}
               {r.follow_up_at ? ` · call back ${dateLabel(r.follow_up_at)} ${timeLabel(r.follow_up_at)}` : ''}
             </p>
+            {/* WS-D (CAL-11/14): the telephone system's record of it, on request. */}
+            <CallRecord callId={r.id} />
           </div>
         </li>
       ))}

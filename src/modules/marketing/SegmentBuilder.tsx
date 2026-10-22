@@ -8,11 +8,11 @@ import { Select } from '../../components/Select';
 import { cx, Spinner } from '../../components/ui';
 import { refreshMarketing, send, usePulse } from './api';
 import { firstCompany, may, Refused, TABLE, TD, TH, useDebounced, useLists } from './audience-parts';
-import { draftOfRule, ruleOf, ValueInput, type RuleDraft } from './audience-rules';
-import { btn, btnPrimary, Card, Field, input, Meter, n, PageHeader, Planned, Sheet } from './parts';
+import { draftOfRule, leaves, MAX_RULES, RuleTree, rulesOf, type RuleDraft } from './audience-rules';
+import { AiSegmentDraft, SnapshotPanel, useNames } from './automation-parts';
+import { btn, btnPrimary, Card, Field, input, Meter, n, PageHeader, Sheet } from './parts';
 import { companiesWhere, peopleOf, refusal, type Options, type Segment, type SegmentSample } from './types';
 
-const MAX_RULES = 20;
 
 /**
  * The segment builder (DK04, the web's W04; MKT-SEG-01, MKT-SEG-03,
@@ -65,7 +65,9 @@ function Builder({ segment, org, options, onBack, onSaved, onList }: { segment: 
   const pulse = usePulse(orgId, orgId !== '');
   const editable = segment ? may(options, 'segments', segment.org_id) : makers.length > 0;
 
-  const rules = useMemo(() => drafts.map((d) => ruleOf(d, fields.find((f) => f.key === d.field))), [drafts, fields]);
+  const rules = useMemo(() => rulesOf(drafts, fields), [drafts, fields]);
+  const forms = useNames('forms', orgId);
+  const journeys = useNames('journeys', orgId);
   const asked = useDebounced(JSON.stringify({ org_id: Number(orgId), match, rules }), 450);
   /* The count as the rules are written, once typing pauses (MKT-SEG-03, NFR-03). */
   const preview = useQuery({
@@ -87,11 +89,6 @@ function Builder({ segment, org, options, onBack, onSaved, onList }: { segment: 
   const [opened] = useState(now);
   const dirty = opened !== now;
 
-  const setDraft = (i: number, d: RuleDraft) => setDrafts(drafts.map((x, j) => (j === i ? d : x)));
-  const addRule = () => {
-    const f = fields[0];
-    if (f) setDrafts([...drafts, { field: f.key, op: f.ops[0]?.key ?? 'is', value: '' }]);
-  };
 
   const save = async () => {
     setBusy(true);
@@ -163,52 +160,12 @@ function Builder({ segment, org, options, onBack, onSaved, onList }: { segment: 
             }
             action={
               <span className="text-[12px] text-ink-3">
-                {drafts.length} of {MAX_RULES} rules · {fields.length} fields available
+                {leaves(drafts)} of {MAX_RULES} rules · {fields.length} fields available
               </span>
             }
           >
-            <ol className="m-0 flex list-none flex-col gap-2 p-0" aria-label="Rules">
-              {drafts.map((d, i) => {
-                const f = fields.find((x) => x.key === d.field);
-                const op = f?.ops.find((o) => o.key === d.op);
-                const said = wrong[String(i)];
-                return (
-                  <li key={i} className={cx('rounded-[10px] border p-2', said ? 'border-danger/50' : 'border-line')}>
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Select<string>
-                        aria-label={`Rule ${i + 1}: about`}
-                        value={d.field}
-                        disabled={!editable}
-                        onValueChange={(v) => {
-                          const nf = fields.find((x) => x.key === v);
-                          setDraft(i, { field: v, op: nf?.ops[0]?.key ?? '', value: '' });
-                        }}
-                        options={fields.map((x) => ({ value: x.key, label: x.label }))}
-                        className="w-[200px]"
-                      />
-                      <Select<string> aria-label={`Rule ${i + 1}: how`} value={d.op} disabled={!editable} onValueChange={(v) => setDraft(i, { ...d, op: v })} options={(f?.ops ?? []).map((o) => ({ value: o.key, label: o.label }))} className="w-auto" />
-                      {f && op && !op.bare ? <ValueInput field={f} draft={d} label={`Rule ${i + 1}: value`} onChange={(value) => setDraft(i, { ...d, value })} people={people} lists={companyLists} /> : null}
-                      {editable ? (
-                        <button type="button" aria-label={`Remove rule ${i + 1}`} onClick={() => setDrafts(drafts.filter((_, j) => j !== i))} className="ml-auto flex h-[30px] w-[30px] items-center justify-center rounded-[7px] border border-line text-ink-3 hover:bg-subtle hover:text-danger">
-                          <Icon name="x" size={14} />
-                        </button>
-                      ) : null}
-                    </div>
-                    {said ? (
-                      <p role="alert" className="m-0 mt-1 text-[12px] text-danger">
-                        {said}
-                      </p>
-                    ) : null}
-                  </li>
-                );
-              })}
-            </ol>
+            <RuleTree drafts={drafts} onChange={setDrafts} fields={fields} people={people} lists={companyLists} forms={forms} journeys={journeys} wrong={wrong} editable={editable} />
             {drafts.length === 0 ? <p className="m-0 text-[12.5px] text-ink-3">No rules yet: add one to describe who you mean.</p> : null}
-            {editable ? (
-              <button type="button" className={cx(btn, 'mt-2.5')} onClick={addRule} disabled={drafts.length >= MAX_RULES || fields.length === 0}>
-                <Icon name="plus" size={14} /> Add rule
-              </button>
-            ) : null}
           </Card>
 
           <Card title={members === null ? 'Preview' : `Preview · first ${Math.min(4, sample?.length ?? 0)} of ${n(members)}`} padded={false}>
@@ -277,12 +234,8 @@ function Builder({ segment, org, options, onBack, onSaved, onList }: { segment: 
               ))}
             </ul>
           </Card>
-          <Card title="Snapshot">
-            <p className="m-0 text-[12.5px] text-ink-2">Turn this segment into a list on a schedule so a campaign can target a frozen audience.</p>
-            <div className="mt-2">
-              <Planned phase="scheduled segment → list" />
-            </div>
-          </Card>
+          {editable && orgId !== '' ? <AiSegmentDraft orgId={Number(orgId)} onRules={(m, r) => { setMatch(m); setDrafts(r.map(draftOfRule)); }} /> : null}
+          <SnapshotPanel segmentId={segment?.id ?? null} mayEdit={Boolean(segment && may(options, 'lists', segment.org_id) && editable)} dirty={dirty} onList={onList} />
         </div>
       </div>
 
