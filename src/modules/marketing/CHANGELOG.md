@@ -6,6 +6,7 @@ the root CHANGELOG.md.
 
 ## Unreleased
 
+- WS-B (SRS v2.0): `email-governance.tsx` (deliverability panel + fixes + AI rewrite + seed tests, version history, approval bar and waiting list, languages, repeat/feed, saved blocks, who sees each block, re-permission card, script versions), `Deliverability.tsx` (domain health, warm-up) and view `deliverability` in the rail; block rules (`data-show-segment` / `data-hide-segment`) kept by `email-blocks.ts`; campaign status `recurring`; draft fields `variants`, `recurrence`, `text_body`, `daily_cap`.
 - WS-A (SRS v2.0): `DataQuality.tsx` (duplicates, merge + undo, custom fields), `CompanyPage.tsx`, reach per channel on Lists, time zone / DOI / lawful basis / export / erase / re-permission on the contact page, typed custom fields and time zone in `audience-contact.tsx`, background import progress and cancel in `Import.tsx`; view `quality` in the rail.
 - Templates: a gallery of the server's 100 system templates with kind, subcategory, search and preview (`email-gallery.tsx`).
 
