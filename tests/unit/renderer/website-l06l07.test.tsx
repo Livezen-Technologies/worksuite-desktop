@@ -180,12 +180,15 @@ describe('L-06 · the Wall mode sheet (MAP-UI-06, MAP-24)', () => {
   });
 });
 
+/** The map's own viewBox: the wall also draws the brand logo as an SVG, so find the one holding the countries. */
+const mapView = (wall: HTMLElement) => wall.querySelector('[data-country]')?.closest('svg')?.getAttribute('viewBox');
+
 describe('L-06 · the wall on its display (MAP-16, MAP-24)', () => {
   it('cycles the map World → Asia → Sri Lanka every 60 s when the sheet says so', async () => {
     vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'] });
     show(<WallWindow />);
     const wall = await screen.findByRole('dialog', { name: 'Website chats — live, wall mode' });
-    const view = () => wall.querySelector('svg[viewBox]')?.getAttribute('viewBox');
+    const view = () => mapView(wall);
     await waitFor(() => expect(call).toHaveBeenCalledWith('live:info'));
     // The map's code loads on demand (#248).
     await waitFor(() => expect(view()).toBeTruthy());
@@ -206,10 +209,11 @@ describe('L-06 · the wall on its display (MAP-16, MAP-24)', () => {
     show(<WallWindow />);
     const wall = await screen.findByRole('dialog', { name: 'Website chats — live, wall mode' });
     await waitFor(() => expect(call).toHaveBeenCalledWith('live:info'));
-    await waitFor(() => expect(wall.querySelector('svg[viewBox]')).toBeTruthy());
-    const world = wall.querySelector('svg[viewBox]')?.getAttribute('viewBox');
+    await waitFor(() => expect(mapView(wall)).toBeTruthy());
+    const world = mapView(wall);
+    expect(world).toMatch(/^0 /);
     await act(async () => void vi.advanceTimersByTime(WALL_CYCLE_MS));
-    expect(wall.querySelector('svg[viewBox]')?.getAttribute('viewBox')).toBe(world);
+    expect(mapView(wall)).toBe(world);
   });
 });
 
