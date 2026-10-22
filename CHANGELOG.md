@@ -18,6 +18,9 @@ person who has to live with the change — what it does, and where it bites.
 - Chat: the message hover toolbar now sits above the bubble instead of covering its first line of text.
 - Chat: text and links in messages can be selected and copied again — a link's preview card is no longer one big link (only its title opens the page), links no longer drag instead of selecting, and link cards have a "Copy link" button.
 - Linux (#409): minimise, maximise and close are now drawn by WorkSuite's own title bar instead of over it by the system, so on GNOME desktops such as Zorin OS (X11 or Wayland, any scaling) they line up with the bar, never cover or clip its buttons, follow the desktop's button layout (side and order, from `org.gnome.desktop.wm.preferences button-layout`) and show Restore when the window is maximised. Windows and macOS are unchanged.
+- Web Chat: a notification about a website visitor's chat (assigned, routed, a follow-up, not reaching anybody) opens
+  that conversation in Chat › Web Chat instead of the browser, and the Web Chat lists read again as it arrives, so the
+  chat it names is listed (#407).
 
 
 - **User guides (help 1.0.0).** A "User guide" button in the title bar opens the guide of the module in front — and
