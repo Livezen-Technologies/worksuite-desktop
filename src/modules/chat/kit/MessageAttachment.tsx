@@ -9,9 +9,6 @@ import { OpenWithButton } from '../../office/open-with';
 import type { KitFile } from './model';
 import { isVoiceFile } from './voice';
 import { VoiceMessage, type VoiceOf } from './VoiceMessage';
-import { copyLink } from './LinkPreview';
-import { Icon } from '../../../components/Icon';
-
 
 /**
  * A message's attachments (C-02, RDC-13; worksuite-desktop#229): a picture as a thumbnail, several in a grid, a video
@@ -102,8 +99,6 @@ export function FileCard({ file, at, look, accent = 'text-primary', onOpen }: { 
   const name = readableName(file, at);
   // Open with ▸ for a Word, Excel or PowerPoint file (#322).
   const office = officeOpenKind(file.filename) ? chatOfficeDoc(file) : null;
-  // "Copy link" for the file's own address (worksuite-desktop#412).
-  const link = mediaUrl(file.download_url ?? file.url);
   return (
     <div data-file-card className={look === 'drawer' ? 'flex w-[250px] max-w-full items-center gap-2.5 rounded-[8px] bg-surface/70 px-2 py-2 dark:bg-white/5' : 'flex w-[280px] max-w-full items-center gap-2.5 rounded-[10px] border border-line bg-surface px-3 py-2.5'}>
       <FileBadge name={/\.[A-Za-z0-9]{1,8}$/.test(name) ? name : file.filename} size={look === 'drawer' ? 32 : 34} />
@@ -114,11 +109,6 @@ export function FileCard({ file, at, look, accent = 'text-primary', onOpen }: { 
           {file.status && file.status !== 'ready' ? ` · ${file.status}` : ''}
         </span>
       </span>
-      {link ? (
-        <button type="button" aria-label={text('Copy link')} title={text('Copy link')} onClick={() => copyLink(link)} className="inline-flex h-6 w-6 shrink-0 items-center justify-center rounded-[6px] text-ink-3 hover:bg-subtle">
-          <Icon name="link" size={14} />
-        </button>
-      ) : null}
       <button type="button" onClick={onOpen} className={cx('text-[12px] font-semibold hover:underline', accent)}>
         Open
       </button>
