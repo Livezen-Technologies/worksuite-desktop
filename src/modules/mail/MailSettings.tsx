@@ -150,7 +150,8 @@ export function storeParts(s: MailStoreStats): Array<{ key: 'messages' | 'lists'
 function kindOf(b: Mailbox): string {
   if (b.account_type === 'local_mailbox') return text('WorkSuite Local · managed by your administrator');
   if (b.shared) return text('Shared mailbox');
-  return `${b.provider_label ?? b.provider ?? 'IMAP'}${b.auth_type === 'oauth' ? ' · OAuth' : ''}`;
+  const via = b.transport?.driver ? ` · ${b.transport.incoming_only ? text('POP3, incoming only') : text('via {api}', { api: b.transport.label })}` : '';
+  return `${b.provider_label ?? b.provider ?? 'IMAP'}${b.auth_type === 'oauth' ? ' · OAuth' : ''}${via}`;
 }
 
 function Accounts() {
