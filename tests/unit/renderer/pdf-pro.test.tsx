@@ -69,6 +69,6 @@ describe('signing with a PKCS#12 file on this computer', () => {
     const [prep, done] = api.post.mock.calls.map((c) => c[1] as Record<string, string>);
     expect(prep!.certificate_chain_pem).toContain('BEGIN CERTIFICATE');
     expect(JSON.stringify(api.post.mock.calls)).not.toContain('PRIVATE KEY');
-    expect(done!.signature_b64.length).toBeGreaterThan(100);
+    expect((done?.signature_b64 ?? "").length).toBeGreaterThan(100);
   });
 });
