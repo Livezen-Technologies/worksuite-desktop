@@ -12,6 +12,18 @@ person who has to live with the change — what it does, and where it bites.
 > come after what had already shipped.
 
 ## Unreleased
+### Fixed
+- Chat: the message hover toolbar now sits above the bubble instead of covering its first line of text.
+
+
+- **User guides (help 1.0.0).** A "User guide" button in the title bar opens the guide of the module in front — and
+  in a docked tab's own bar — from the server's new GET /api/help/guides and /api/help/guides/{key}. The guide viewer
+  (`/help`, Help › User Guide / All User Guides, the profile menu, the command palette) lists the guides with search,
+  shows a guide's overview, workflows, settings and FAQ, and a workflow's steps (`/help?guide=crm&workflow=add-a-lead`).
+  The server's HTML is cleaned again before it is shown and its links open in the system browser. The button is hidden
+  when the Admin Center turns guides or the link off, or the module's guide is off; a company page set as the
+  module's guide (external_url) opens in the system browser, and apps that open in the browser get the web guide
+  (`/help/guides/<key>`). Guides already read open offline (READ_CACHE); one never read says it's offline.
 
 ## 0.2.273 — 2026-10-22
 

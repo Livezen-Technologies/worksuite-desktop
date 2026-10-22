@@ -135,6 +135,7 @@ export function ProfileMenu() {
         {orgs > 1 ? <MenuRow icon="building" label="Switch organisation" onClick={() => openOverlay('org')} extra={<span className="max-w-[110px] truncate text-[12px] text-ink-3">{organizationName(orgId)}</span>} /> : null}
         {accounts ? <MenuRow icon="server" label="Account Settings" onClick={() => go('/settings/accounts')} /> : null}
         <MenuRow icon="settings" label="Settings for this computer" onClick={() => go('/settings')} />
+        <MenuRow icon="book-open" label="User guides" onClick={() => go('/help')} />
         <MenuRow icon="help" label="Help & diagnostics" onClick={() => go('/diagnostics')} />
         <MenuRow icon="lock" label="Lock WorkSuite" onClick={() => (closeOverlay(), void call('security:lock'))} />
       </div>

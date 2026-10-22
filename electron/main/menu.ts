@@ -112,6 +112,9 @@ export function menuTemplate(send: (command: string, arg?: number) => void, acti
   template.push({
     role: 'help',
     submenu: [
+      { label: 'User Guide', click: cmd('user-guide'), ...r },
+      { label: 'All User Guides', click: cmd('user-guides'), ...r },
+      { type: 'separator' },
       { label: 'Diagnostics', accelerator: 'F1', click: actions.diagnostics, ...r },
       { label: 'Report a Problem…', click: actions.reportProblem },
       ...(mac ? [] : [{ label: 'Check for Updates…', click: actions.checkUpdates }, { label: 'Lock WorkSuite', accelerator: 'Ctrl+L', click: cmd('lock'), ...r }]),

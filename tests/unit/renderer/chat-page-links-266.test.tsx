@@ -128,10 +128,10 @@ describe('a message’s actions in a conversation tab', () => {
   it('sit in the top-right corner of the message, on hover — react, reply, star and more — with no round ⌄ beside it', () => {
     const onReact = vi.fn();
     const view = list(chat({ id: 1, can: { reply: true, react: true } }), onReact);
-    // Inside the message's own column (not beside it), at its top edge.
+    // Inside the message's own column (not beside it), sitting just above its top edge so it never covers the text.
     const corner = view.container.querySelector('[data-bubble] [data-message-toolbar]') as HTMLElement;
     expect(corner.className).toMatch(/\babsolute\b/);
-    expect(corner.className).toMatch(/-top-\[15px\]/);
+    expect(corner.className).toMatch(/\bbottom-full\b/);
     // Someone else's short message: the bar keeps to its corner but never runs off the left edge.
     expect(corner.className).toMatch(/\bjustify-end-safe\b/);
     const bar = within(corner).getByRole('toolbar', { name: 'Message actions' });
