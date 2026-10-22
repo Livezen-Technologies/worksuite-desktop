@@ -204,6 +204,24 @@ describe('Local AI models from the WorkSuite server (AI Studio)', () => {
     t.done();
   });
 
+  it('does not go round a workspace that switched downloads off (G-02): no CDN, and says why', async () => {
+    const t = fromServer(() => Promise.reject(Object.assign(new Error('Downloading models to the computer is switched off for this workspace.'), { status: 404 })));
+    await t.m.init();
+    await t.m.refresh();
+    expect(await t.m.list(hw)).toEqual([]);
+    expect(t.m.catalogState().error).toMatch(/switched off/);
+    expect(t.net.calls.some((c) => c.url.endsWith('catalog.json'))).toBe(false);
+    t.done();
+  });
+
+  it('reports where the one server catalogue came from (G-02)', async () => {
+    const t = fromServer(async () => ({ ...serverCatalog([aiStudioModel()]), sources: { server: 1, cdn: 2, junk: 'x' } }));
+    await t.m.init();
+    await t.m.refresh();
+    expect(t.m.catalogState().sources).toEqual({ server: 1, cdn: 2 });
+    t.done();
+  });
+
   it('says why when AI Studio has models but none could be found to download', async () => {
     const t = fromServer(async () => serverCatalog([], { 'private-model:7b': 'The registry has no model by this name.' }));
     await t.m.init();

@@ -376,4 +376,19 @@ export class HttpClient {
   post<T = unknown>(path: string, body?: unknown, opts?: RequestOptions): Promise<T> {
     return this.request<T>('POST', path, { ...opts, body });
   }
+
+  /**
+   * A JSON POST whose answer is read as a stream (Server-Sent Events, e.g. `ai/assist/chat/stream`). A refusal is an
+   * ordinary JSON error and throws as `request` does; an accepted answer is handed back unread.
+   */
+  async postStream(path: string, body: unknown, opts: { timeoutMs?: number; signal?: AbortSignal } = {}): Promise<Response> {
+    const res = await this.raw('POST', this.url(path), {
+      headers: { 'Content-Type': 'application/json', Accept: 'text/event-stream' },
+      body: JSON.stringify(body),
+      timeoutMs: opts.timeoutMs,
+      signal: opts.signal,
+    });
+    if (!res.ok) throw errorFromResponse(res.status, await readEnvelope(res), res.headers.get('retry-after'));
+    return res;
+  }
 }

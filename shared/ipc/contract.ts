@@ -81,6 +81,7 @@ import type {
   LocalRecording,
   ScreenRecordingAccess,
   SpeechSegment,
+  SpeechCatalog,
   SpeechStatus,
   AiRules,
   AiUpload,
@@ -522,9 +523,20 @@ export const contract = {
   'ai:ocr': ch(ocrRequestSchema, { session: true, rate: 10 }),
   'ai:ocrCancel': ch(z.strictObject({ id: z.string().regex(/^[A-Za-z0-9-]{8,64}$/) }), { session: true, rate: 30 }),
   'ai:ocrStatus': ch(none, { session: true }),
-  'ai:confirm': ch(z.object({ id: z.number().int().positive(), nonce: z.string().regex(/^[a-f0-9]{16,64}$/) }), { session: true, sensitive: true, rate: 5 }),
+  // Levels 4–5 (Q-01): the typed phrase the card names and, when asked, an authenticator code (step-up).
+  'ai:confirm': ch(
+    z.object({
+      id: z.number().int().positive(),
+      nonce: z.string().regex(/^[a-f0-9]{16,64}$/),
+      phrase: z.string().max(40).optional(),
+      stepUpCode: z.string().regex(/^\d{6,8}$/).optional(),
+    }),
+    { session: true, sensitive: true, rate: 5 },
+  ),
   'ai:upload': ch(none, { session: true, rate: 3 }),
   /** An answer arrived while the assistant was minimised and the window is not in front (#126): a banner, as notifications allow. */
+  // An online question, streamed in the main process (G-22): deltas come as `ai:askDelta` {id, text}.
+  'ai:ask': ch(z.object({ id: z.string().regex(/^[A-Za-z0-9_-]{6,64}$/), body: z.record(z.string(), z.unknown()) }), { session: true, rate: 30 }),
   'ai:answerReady': ch(z.strictObject({ kind: z.enum(['ready', 'input', 'failed']), preview: z.string().max(300) }), { session: true, rate: 20 }),
   // Website chats ringing like calls (WS-WCHAT ENH-01, RING-49): the call window, the main window's bar.
   'ring:state': ch(none, { session: true, whileLocked: true }),
@@ -689,6 +701,9 @@ export const contract = {
    */
   'stt:status': ch(none, { session: true }),
   'stt:chooseModel': ch(none, { session: true, rate: 3 }),
+  /** The server's speech models (G-11) and the company's local-speech setting; one is downloaded and SHA-256 checked. */
+  'stt:catalog': ch(none, { session: true, rate: 10 }),
+  'stt:install': ch(z.object({ id: z.string().regex(/^[a-z0-9][a-z0-9._-]{0,63}$/i) }), { session: true, rate: 3 }),
   'stt:removeModel': ch(none, { session: true, rate: 3 }),
   'stt:transcribe': ch(
     z.object({ wav: z.instanceof(Uint8Array).refine((b) => b.byteLength > 44 && b.byteLength <= 12 * 1024 * 1024, 'A piece is at most 12 MB.'), language: z.enum(['en', 'si', 'ta', 'auto']) }),
@@ -1726,6 +1741,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'meetrec:downloads': Record<string, string>;
   'stt:status': SpeechStatus;
   'stt:chooseModel': SpeechStatus;
+  'stt:catalog': SpeechCatalog;
+  'stt:install': SpeechStatus;
   'stt:removeModel': SpeechStatus;
   'stt:transcribe': { segments: SpeechSegment[] };
   'speech:ready': void;
@@ -1794,6 +1811,7 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'ai:confirm': unknown;
   'ai:upload': AiUpload | null;
   'ai:answerReady': boolean;
+  'ai:ask': unknown;
   'ring:state': WebchatRingState;
   'ring:join': boolean;
   'ring:silence': void;

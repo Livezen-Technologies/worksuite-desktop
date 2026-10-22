@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { navigate } from '../../core/tabs';
-import { assistantProblem, cancelAction, confirmAction, undoAction, type PendingAction } from './assistant';
+import { assistantProblem, cancelAction, confirmAction, phraseMatches, undoAction, type PendingAction } from './assistant';
 
 /**
  * A change the assistant proposed (WS-AI-SRS-001 §4.6, FR-CNF-02, DSK-5): the
@@ -27,6 +27,10 @@ export function ActionCard({ action, onChange, elsewhere }: {
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [now, setNow] = useState(() => Date.now());
+  // Levels 4–5 (Q-01): the phrase the server names, typed; and an authenticator code when it asks for step-up.
+  const [phrase, setPhrase] = useState('');
+  const [code, setCode] = useState('');
+  const [askCode, setAskCode] = useState(false);
 
   useEffect(() => {
     const t = setInterval(() => setNow(Date.now()), 1000);
@@ -38,6 +42,9 @@ export function ActionCard({ action, onChange, elsewhere }: {
   const open = a.status === 'awaiting_confirmation' && left > 0;
   const outside = a.risk === 'R2';
   const done = a.status === 'succeeded' || a.status === 'submitted_for_approval';
+  const askedPhrase = a.confirm?.phrase ?? null;
+  const needCode = !!a.confirm?.step_up || askCode;
+  const ready = phraseMatches(askedPhrase, phrase) && (!needCode || /^\d{6,8}$/.test(code));
 
   const act = async (name: string, fn: () => Promise<PendingAction>) => {
     setBusy(name);
@@ -48,6 +55,8 @@ export function ActionCard({ action, onChange, elsewhere }: {
       onChange?.(next);
       void qc.invalidateQueries({ queryKey: ['ai', 'pending'] });
     } catch (e) {
+      // The server asks for step-up (428): the code field appears, and nothing ran.
+      if (/authenticator/i.test(assistantProblem(e))) setAskCode(true);
       setError(assistantProblem(e));
     } finally {
       setBusy(null);
@@ -61,6 +70,11 @@ export function ActionCard({ action, onChange, elsewhere }: {
         <span className={cx('rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]', outside ? 'bg-danger-bg text-danger' : 'bg-subtle text-primary')}>
           {outside ? 'Reaches outside' : 'Internal change'}
         </span>
+        {a.level !== undefined && a.level >= 3 ? (
+          <span className={cx('rounded px-1.5 py-0.5 text-[10px] font-bold uppercase tracking-[0.06em]', a.level >= 4 ? 'bg-danger-bg text-danger' : 'bg-subtle text-ink-2')}>
+            {`L${a.level}${a.level_label ? ` · ${a.level_label}` : ''}`}
+          </span>
+        ) : null}
         <span className="text-[12px] text-ink-3">{a.name}</span>
         <span className="ml-auto text-[11.5px] text-ink-3">{open ? `Expires in ${Math.floor(left / 60)}:${String(left % 60).padStart(2, '0')}` : statusWord(a.status, left)}</span>
       </header>
@@ -97,6 +111,24 @@ export function ActionCard({ action, onChange, elsewhere }: {
         </ul>
       ) : null}
 
+      {open && !elsewhere && (askedPhrase || needCode) ? (
+        <div className="mt-2 flex flex-col gap-1.5 rounded-[8px] border border-line p-2 text-[12.5px]">
+          {a.reversible === false ? <p className="text-danger">This cannot be undone.</p> : null}
+          {askedPhrase ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-ink-2">Type <b className="selectable">{askedPhrase}</b> to confirm</span>
+              <input aria-label="Confirmation phrase" value={phrase} onChange={(e) => setPhrase(e.target.value)} maxLength={40} autoComplete="off" className="h-8 rounded-[7px] border border-line bg-surface px-2 text-ink" />
+            </label>
+          ) : null}
+          {needCode ? (
+            <label className="flex flex-col gap-1">
+              <span className="text-ink-2">Code from your authenticator app</span>
+              <input aria-label="Verification code" value={code} inputMode="numeric" onChange={(e) => setCode(e.target.value.replace(/\D/g, '').slice(0, 8))} autoComplete="one-time-code" className="h-8 w-32 rounded-[7px] border border-line bg-surface px-2 tracking-[0.2em] text-ink" />
+            </label>
+          ) : null}
+        </div>
+      ) : null}
+
       {error ? <p role="alert" className="mt-2 rounded-[8px] bg-danger-bg px-2 py-1.5 text-[12px] text-danger">{error}</p> : null}
 
       <footer className="mt-3 flex flex-wrap items-center gap-2">
@@ -107,7 +139,7 @@ export function ActionCard({ action, onChange, elsewhere }: {
         ) : null}
         {open && !elsewhere ? (
           <>
-            <button type="button" disabled={!!busy} onClick={() => void act('confirm', () => confirmAction(a))}
+            <button type="button" disabled={!!busy || !ready} onClick={() => void act('confirm', () => confirmAction(a, { phrase: askedPhrase ? phrase : undefined, stepUpCode: needCode ? code : undefined }))}
               className={cx(btn, 'text-white', outside ? 'bg-danger hover:opacity-90' : 'bg-primary hover:bg-primary-hover')}>
               {busy === 'confirm' ? 'Doing it…' : outside ? 'Confirm and send' : 'Confirm'}
             </button>

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.26.0 — 2026-10-21
+
+**Added**
+
+- Settings › Speech lists the WorkSuite server's whisper speech models to download, SHA-256 checked, and the company's local-speech setting (G-11)
+
 ## 1.25.0 — 2026-10-11
 
 - Host controls only for the people who may use them (worksuite-desktop#348): one permission table, the server's, builds the People tab, each person's menu, the waiting room and More — a guest or a staff participant sees no Mute all, Remove, Admit or Lock, not even greyed out, and a person's menu offers them Pin for me; only the host sees End for everyone and Make co-host

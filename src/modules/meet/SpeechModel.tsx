@@ -12,6 +12,8 @@ import { Button, Spinner } from '../../components/ui';
 export function SpeechModelSettings() {
   const qc = useQueryClient();
   const q = useQuery({ queryKey: ['stt', 'status'], queryFn: () => call('stt:status') });
+  // The server's whisper.cpp models (G-11): local speech stays off until one is downloaded here (Q-05).
+  const cat = useQuery({ queryKey: ['stt', 'catalog'], queryFn: () => call('stt:catalog'), staleTime: 5 * 60_000 });
   const act = async (fn: () => Promise<unknown>, done: string) => {
     try {
       await fn();
@@ -46,6 +48,27 @@ export function SpeechModelSettings() {
           </Button>
         </div>
       )}
+      {cat.data?.required && !m ? <p className="text-[12px] text-danger">Your company has switched online transcription off: transcripts need a speech model on this computer.</p> : null}
+      {cat.data?.preferred && !cat.data.required && !m ? <p className="text-[12px] text-ink-2">Your company prefers transcripts made on this computer. Download a speech model below.</p> : null}
+      {cat.data?.models.length ? (
+        <ul aria-label="Speech models from WorkSuite" className="flex flex-col gap-1">
+          {cat.data.models.map((x) => (
+            <li key={x.id} className="flex items-center gap-2 rounded-[8px] bg-subtle px-3 py-1.5">
+              <span className="flex min-w-0 flex-1 flex-col">
+                <b className="truncate text-ink">{x.name}</b>
+                <span className="text-[12px] text-ink-3">{bytes(x.bytes)}{x.languages.length ? ` · ${x.languages.join(', ')}` : ''} · checked by SHA-256 before it is kept</span>
+              </span>
+              {x.installed ? (
+                <span className="text-[12px] font-semibold text-success">In use</span>
+              ) : (
+                <Button size="sm" onClick={() => void act(() => call('stt:install', { id: x.id }), 'Speech model downloaded. Transcripts are made on this computer.')}>
+                  Download
+                </Button>
+              )}
+            </li>
+          ))}
+        </ul>
+      ) : cat.data?.error ? <p className="text-[12px] text-ink-3">{cat.data.error}</p> : null}
       <p className="text-[12px] text-ink-3">A whisper.cpp model file (ggml). A multilingual one — such as ggml-base or ggml-small — is needed for Sinhala and Tamil; larger ones are more accurate and slower.</p>
     </div>
   );

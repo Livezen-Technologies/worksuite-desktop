@@ -1883,6 +1883,27 @@ export interface SpeechSegment {
   uncertain: boolean;
 }
 
+/** A whisper.cpp model the server lists for this computer (G-11, `GET /api/ai/local/speech-catalog`). */
+export interface SpeechCatalogModel {
+  id: string;
+  name: string;
+  bytes: number;
+  recommendedFor: string[];
+  languages: string[];
+  installed: boolean;
+}
+
+/**
+ * Local speech as the company sets it (G-11, Q-05): off by default; `preferred` when the company wants transcripts
+ * made on the computer first, `required` when online transcription is switched off.
+ */
+export interface SpeechCatalog {
+  preferred: boolean;
+  required: boolean;
+  models: SpeechCatalogModel[];
+  error: string | null;
+}
+
 /** Whether this computer can transcribe on its own, and if not why. */
 export interface SpeechStatus {
   local: { ready: boolean; model: { name: string; size: number } | null; why: string | null };

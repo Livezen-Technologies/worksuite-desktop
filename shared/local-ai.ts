@@ -119,6 +119,8 @@ export interface LocalAIStatus {
   /** The catalog could not be fetched or verified: the reason, in words. */
   catalogError: string | null;
   catalogAt: string | null;
+  /** Where the server's catalogue came from (G-02): `{server, cdn?}` model counts; null when from the app's CDN. */
+  catalogSources?: Record<string, number> | null;
 }
 
 // ── requests (LAI-CORE, LAI-CHAT, LAI-WRT) ─────────────────────────────────

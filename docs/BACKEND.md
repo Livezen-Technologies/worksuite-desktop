@@ -1186,19 +1186,22 @@ What the desktop cannot do because the server does not (yet):
 
 Local AI (the model on the computer) can read WorkSuite data and prepare changes. The model only decides which
 function to call; **the server runs it**, as the signed-in person, with their company, role and record permissions.
-Enabling a module for an assistant never grants access the person does not already have. None of this exists on the
-server yet. The desktop treats a 404 as "not offered yet": Local AI then answers without WorkSuite data, and Module
+Enabling a module for an assistant never grants access the person does not already have. The server implements this
+(WS-AI-SRS-001 G-01; worksuite `docs/ai/API.md` §1). The desktop treats a 404 from an older server as "not offered yet": Local AI then answers without WorkSuite data, and Module
 Access keeps the person's choices for later.
 
 - **`GET /api/ai/module-access`** →
-  `{ can_manage, modules: [{ key, label, supports: {read, write}, worksuite: {read, write}, local: {read, write}, denied? }] }`.
+  `{ can_manage, org_id, local_writes, modules: [{ key, label, supports: {read, write}, worksuite: {read, write}, local: {read, write}, denied? }] }`.
   - `worksuite` and `local` are the organization's ceiling for each assistant.
   - `supports` says whether the module has read or write functions at all.
   - `denied` is a sentence for a person who cannot open the module.
   - `can_manage` is true for administrators.
+  - `local_writes` (Q-03) is false unless the installation's `ai_local_writes` setting is on: Local AI then only reads,
+    and Module Access shows its "Create or update" column off with that reason.
 - **`PUT /api/ai/module-access {modules: [{key, worksuite, local}]}`** (administrators only; 403 otherwise) saves the
   ceiling and answers the new state. It applies to the next question.
-- **`GET /api/ai/tools?engine=local`** → `{ tools: [{ name, module, kind: 'read'|'write', label, description, parameters }] }`.
+- **`GET /api/ai/tools?engine=local`** → `{ tools: [{ name, module, kind: 'read'|'write', label, description, parameters }], engine, local_writes }`.
+  The desktop drops `write` functions unless `local_writes` is true, so the model is never told of a change it cannot make.
   - It lists only the functions this person may use with Local AI now (their permissions and the organization's
     ceiling).
   - `parameters` is a JSON Schema object; `name` matches `^[a-z][a-z0-9_.]{0,63}$`.
@@ -1211,6 +1214,24 @@ Access keeps the person's choices for later.
   - **A refusal** answers `ok: false` with a sentence in `error`: module off, permission missing, unsupported.
   - `links` are the records the result is about.
   - The server records every run and every confirmed change in the activity history, marked as made with Local AI.
+- **Confirming at levels 4–5 (Q-01).** A pending action carries `level`, `level_label`, `category`, `reversible` and
+  `confirm: {step_up, phrase}`. `ai:confirm` sends `POST /api/ai/pending/{id}/confirm {nonce, phrase?, step_up?: {code}}`;
+  the card asks for the phrase and, when `step_up` (or a 428 naming the authenticator), a 6–8 digit code.
+- **Streaming online answers (G-22).** The main process sends `ai:ask` as `POST /api/ai/assist/chat/stream` (same
+  body as `assist/chat`) and reads the SSE: each `delta {text}` goes to the asking window as `ai:askDelta {id, text}`
+  (the answer so far); `done` (assist/chat's `data`) is the result and its `reply` replaces the deltas; `error
+  {message, status}` throws. 404/405 falls back to `POST assist/chat`; other refusals are JSON errors as before.
+- **Fresh confirmation token (G-14).** On each confirm the main process first asks
+  `POST /api/ai/pending/{id}/confirm-token {client: 'desktop'}` → `{token: 'ct_…', expires_in: 120}` and sends it as
+  `confirm_token`; it is held in memory for that one request. A 404/405 (older server) confirms with the nonce alone. A 409 `confirm_token_*` or 428
+  `confirm_token_required` refusal gets a fresh token and one retry.
+  Neither route is reachable through a page's API proxy.
+- **Local AI catalogue (G-02, Q-02).** `GET /api/ai/local/catalog` is the one catalogue (`sources: {server, cdn?}`).
+  The app's own signed CDN list is used only when the route is missing; a 404 saying downloads are switched off is
+  honoured.
+- **Local speech (G-11, Q-05).** `GET /api/ai/speech/status` → `local: {preferred, required, catalog}`;
+  `GET /api/ai/local/speech-catalog` → `{models: [{id, name, url, sha256, bytes, languages, recommendedFor}]}`. A model
+  is downloaded only when the person asks (https only), kept only if size and SHA-256 match and it is a ggml file.
 - **WorkSuite AI** gets the person's own choices with each question: `/api/ai/assist/chat` takes
   `module_access: {off_read: [module], off_write: [module]}`. The server's assistant must not use those modules'
   functions, on top of the organization's ceiling.

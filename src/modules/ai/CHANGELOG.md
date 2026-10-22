@@ -4,6 +4,29 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.1 — 2026-10-21
+
+**Added**
+
+- online answers in the dock and Quick Ask stream through the main process (assist/chat/stream, G-22), falling back to assist/chat on 404/405
+
+**Fixed**
+
+- a confirm refused for its confirmation token (409 confirm_token_*, 428 confirm_token_required) gets a fresh token and is retried once (G-14 §9)
+
+## 1.12.0 — 2026-10-21
+
+**Added**
+
+- Local AI follows the server's local_writes (G-01, Q-03) — reads only unless the installation allows changes; Module Access shows why
+- levels 4–5 confirmations on the card — the level, the typed phrase and an authenticator code when the server asks for step-up (Q-01)
+- whisper speech models from the server's speech catalogue, downloaded and SHA-256 checked; local speech stays off until one is downloaded (G-11, Q-05)
+- the fresh confirmation token (G-14): the main process asks `pending/{id}/confirm-token` on the click and sends it with the nonce; a server without the route gets the nonce alone
+
+**Changed**
+
+- the server registry is the one Local AI catalogue (G-02, Q-02); the app's CDN list is used only by a server without the route, never when the workspace switched downloads off; the catalogue's sources are shown
+
 ## 1.11.0 — 2026-10-12
 
 **Added**

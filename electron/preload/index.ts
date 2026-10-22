@@ -146,6 +146,7 @@ const api = {
   ai: {
     rules: call('ai:rules'),
     confirm: call('ai:confirm'),
+    ask: call('ai:ask'),
     upload: call('ai:upload'),
     answerReady: call('ai:answerReady'),
     // Local AI (WS-SRS-LAI): the models on this computer, the runtime, and asking the default model.
@@ -258,6 +259,8 @@ const api = {
   stt: {
     status: call('stt:status'),
     chooseModel: call('stt:chooseModel'),
+    catalog: call('stt:catalog'),
+    install: call('stt:install'),
     removeModel: call('stt:removeModel'),
     transcribe: call('stt:transcribe'),
   },
