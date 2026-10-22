@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-22
+
+- SRS v2.0 on the desktop: data quality, consent, deliverability, journeys, forms, scoring, WhatsApp/SMS, analytics, template gallery
+
 ## Unreleased
 
 - WS-D (SRS v2.0): `Channels.tsx` (WhatsApp & SMS campaigns: new campaign with live SMS part count, the server's estimate, send, cancel, results per message), `Analytics.tsx` (results by period/channel/topic, funnel, attribution, UTM builder, site tracking snippet, scheduled reports, CSV/PDF export through `saveServerFile`), `Planning.tsx` (`MarketingCalendar`, `Budgets` with ROI), `Webhooks.tsx` (add, test, on/off, new secret, deliveries and retry), `calls-record.tsx` (a call's CDR and recording on the contact page), `wsd.ts` (shapes); views `channels`, `analytics`, `calendar`, `budgets`, `webhooks` in the rail; options `can.channels|budgets|webhooks`; Reports links to Analytics instead of a planned card.
