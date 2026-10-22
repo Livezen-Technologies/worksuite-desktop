@@ -12,6 +12,8 @@ person who has to live with the change — what it does, and where it bites.
 > come after what had already shipped.
 
 ## Unreleased
+
+## 0.2.276 — 2026-10-22
 ### Added
 - PDF Studio › **Pro**, second release (server PdfPro 1.1.0; desktop module pdf 1.3.0): sign with a **smart card or USB token** — Signatures › Smart card or USB token finds the tokens plugged in and their certificates through the token's PKCS#11 library (OpenSC's `pkcs11-tool`); the PIN goes to the token library in its environment, never on a command line, and is cleared from the window; the key never leaves the token. **Convert and OCR**: PDF to Word, Excel, PowerPoint, HTML, EPUB, text or images as a new Drive file; searchable or editable OCR with the language detected page by page (Sinhala, Tamil, English), straightening and cleaning where a page needs it. **Print production**: PDF/X-1a / X-4 preflight and its fixes, separation and overprint previews with the output intent, n-up and booklet imposition with crop and bleed marks. **Share the form by link** with the answers as a table, and the people who have the same PDF open, with their page.
 
