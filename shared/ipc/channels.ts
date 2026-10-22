@@ -522,6 +522,8 @@ export const EVENT_CHANNELS = [
   'organization:changed',
   'windows:changed',
   'window:fullscreen',
+  // Maximised or restored (Linux, #409): the title bar's maximise button shows which.
+  'window:maximized',
   'calls:changed',
   'meetrec:changed',
   // A global Meet key was pressed (WS-MEET-ENH-01 D06): the id, to the window
