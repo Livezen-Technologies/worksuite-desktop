@@ -12,6 +12,8 @@ person who has to live with the change — what it does, and where it bites.
 > come after what had already shipped.
 
 ## Unreleased
+
+## 0.2.274 — 2026-10-22
 ### Fixed
 - Chat: the message hover toolbar now sits above the bubble instead of covering its first line of text.
 
