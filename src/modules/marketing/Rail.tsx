@@ -14,11 +14,11 @@ import type { Sending } from './types';
  */
 export type MarketingView =
   | 'dashboard' | 'contacts' | 'companies' | 'lists' | 'segments' | 'import' | 'consent' | 'quality'
-  | 'campaigns' | 'templates' | 'topics' | 'calls' | 'queue' | 'scripts' | 'reports' | 'automation' | 'settings';
+  | 'campaigns' | 'templates' | 'topics' | 'calls' | 'queue' | 'scripts' | 'reports' | 'automation' | 'settings' | 'deliverability';
 
 export const VIEWS = new Set<MarketingView>([
   'dashboard', 'contacts', 'companies', 'lists', 'segments', 'import', 'consent', 'quality',
-  'campaigns', 'templates', 'topics', 'calls', 'queue', 'scripts', 'reports', 'automation', 'settings',
+  'campaigns', 'templates', 'topics', 'calls', 'queue', 'scripts', 'reports', 'automation', 'settings', 'deliverability',
 ]);
 
 interface Item {
@@ -79,6 +79,7 @@ export function MarketingRail({ view, onPick, onNewCampaign, counts, may, compan
           { id: 'campaigns', label: 'Campaigns', icon: 'mail', badge: counts.sending },
           { id: 'templates', label: 'Templates', icon: 'file-text' },
           { id: 'topics', label: 'Topics & preferences', icon: 'tag' },
+          { id: 'deliverability', label: 'Deliverability', icon: 'check-circle' },
         ]
         : [],
     },

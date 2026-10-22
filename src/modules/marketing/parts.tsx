@@ -88,7 +88,7 @@ export function Planned({ phase }: { phase?: string }) {
   return <Pill tone="violet">{phase ? `Planned · ${phase}` : 'Planned'}</Pill>;
 }
 
-export const CAMPAIGN_PILL: Record<CampaignStatus, PillTone> = { draft: 'slate', scheduled: 'violet', sending: 'blue', paused: 'amber', sent: 'green', cancelled: 'red' };
+export const CAMPAIGN_PILL: Record<CampaignStatus, PillTone> = { draft: 'slate', scheduled: 'violet', sending: 'blue', paused: 'amber', sent: 'green', cancelled: 'red', recurring: 'violet' };
 
 /** A share as a bar: delivered of sent, consent recorded of contacts. */
 export function Meter({ value, max, tone = 'blue', label }: { value: number; max: number; tone?: 'blue' | 'violet' | 'amber' | 'red' | 'green'; label?: string }) {

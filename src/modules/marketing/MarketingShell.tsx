@@ -47,12 +47,14 @@ const Scripts = lazy(() => import('./Scripts'));
 const Reports = lazy(() => import('./Reports'));
 const Automation = lazy(() => import('./Automation'));
 const Settings = lazy(() => import('./Settings'));
+const Deliverability = lazy(() => import('./Deliverability'));
 
 const TITLES: Record<MarketingView, string> = {
   quality: 'Data quality',
   dashboard: 'Dashboard', contacts: 'Contacts', companies: 'Organisations', lists: 'Lists', segments: 'Segments', import: 'Import',
   consent: 'Consent & suppression', campaigns: 'Campaigns', templates: 'Templates', topics: 'Topics & preferences',
   calls: 'Call campaigns', queue: 'My call queue', scripts: 'Scripts', reports: 'Reports', automation: 'Automation', settings: 'Settings',
+  deliverability: 'Deliverability',
 };
 
 /** Older addresses, still followed: a link in a notification or a bookmark outlives the screen it named. */
@@ -159,13 +161,15 @@ export default function MarketingShell(_props: ModuleProps) {
           ? <SegmentBuilder key={segment} id={num(segment)} org={org} options={o} onBack={() => setKey('segment', null)} onSaved={(id) => setKey('segment', id)} onList={(id) => go(to('contacts', { list: id }))} />
           : <Segments org={org} options={o} onContacts={(id) => go(to('contacts', { segment: id }))} onEdit={(id) => setKey('segment', id)} />;
       case 'import': return <Import org={org} options={o} />;
-      case 'consent': return <Consent org={org} options={o} tab={consentTab} onTab={(t) => setKey('tab', t)} onContact={(id) => go(to('consent', { tab: consentTab, contact: id }))} />;
+      case 'consent': return <Consent org={org} options={o} tab={consentTab} onTab={(t) => setKey('tab', t)} onContact={(id) => go(to('consent', { tab: consentTab, contact: id }))}
+        onCampaign={(id) => go(to('campaigns', { campaign: id, step: 'setup' }))} />;
       case 'campaigns':
         return campaign
           ? <CampaignView key={campaign} id={campaign} options={o} step={query.get('step')} onStep={(s) => setKey('step', s)} onBack={() => go(to('campaigns'))} onOpen={(id) => go(to('campaigns', { campaign: id }))} />
           : <Campaigns org={org} options={o} onOpen={(id) => go(to('campaigns', { campaign: id }))} creating={query.get('new') === '1'} onCreating={(v) => setKey('new', v ? '1' : null)} />;
       case 'templates': return <Templates org={org} options={o} />;
       case 'topics': return <Topics org={org} options={o} />;
+      case 'deliverability': return <Deliverability org={org} options={o} />;
       case 'calls':
         return call
           ? <CallCampaignView key={call} id={call} options={o} onBack={() => go(to('calls'))} onQueue={(id) => go(to('queue', { call: id }))} />

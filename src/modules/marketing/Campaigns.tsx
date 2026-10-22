@@ -10,6 +10,7 @@ import { refreshMarketing, send, withOrg } from './api';
 import { audienceWords, bounceGuarded, delivered, rateWords, stamp, Tabs, useHumanOpens, useLists, useSegmentNames, useTemplates, wallWords } from './email-kit';
 import { CAMPAIGN_PILL, Cell, Empty, Field, PageHeader, Pill, Sheet, THead, btn, btnPrimary, input, n, row } from './parts';
 import { companiesWhere, refusal, type Campaign, type CampaignStatus, type Options, type StatusCounts } from './types';
+import { ApprovalsWaiting } from './email-governance';
 
 /**
  * Email campaigns (DK06 — W06 in the desktop window): what has gone out, what
@@ -32,7 +33,7 @@ interface CampaignList {
 }
 
 const TABS: Array<[Tab, string]> = [
-  ['all', 'All'], ['draft', 'Drafts'], ['scheduled', 'Scheduled'], ['sending', 'Sending'], ['paused', 'Paused'], ['sent', 'Sent'], ['cancelled', 'Cancelled'],
+  ['all', 'All'], ['draft', 'Drafts'], ['scheduled', 'Scheduled'], ['sending', 'Sending'], ['paused', 'Paused'], ['sent', 'Sent'], ['cancelled', 'Cancelled'], ['recurring', 'Repeating'],
 ];
 
 export default function Campaigns({ org, options, onOpen, creating, onCreating }: { org: string; options: Options; onOpen: (id: number) => void; creating: boolean; onCreating: (open: boolean) => void }) {
@@ -79,6 +80,8 @@ export default function Campaigns({ org, options, onOpen, creating, onCreating }
           </>
         }
       />
+
+      <ApprovalsWaiting onOpen={onOpen} />
 
       <div className="mb-3 flex flex-wrap items-end justify-between gap-x-4 gap-y-2 border-b border-line">
         <Tabs

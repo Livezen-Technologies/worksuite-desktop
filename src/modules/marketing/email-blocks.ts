@@ -68,7 +68,14 @@ export interface DividerBlock { id: string; type: 'divider'; spacing: number }
 /** Markup kept exactly as written: a campaign from before blocks, or anything the blocks cannot say. */
 export interface HtmlBlock { id: string; type: 'html'; html: string }
 
-export type Block = TextBlock | ImageBlock | ButtonBlock | ColumnsBlock | DividerBlock | HtmlBlock;
+/**
+ * Dynamic content (MKT-EDT-08): a block shown only to a segment's members, or
+ * to everybody but them — `data-show-segment` / `data-hide-segment` on its
+ * mark, decided per copy by the server (`Content::personalise`).
+ */
+export interface BlockRule { mode: 'show' | 'hide'; segment: number }
+
+export type Block = (TextBlock | ImageBlock | ButtonBlock | ColumnsBlock | DividerBlock | HtmlBlock) & { rule?: BlockRule };
 
 /** The email's column, inside the 32px padding the server's layout gives it (600 − 2 × 32). */
 export const CONTENT_WIDTH = 536;
@@ -236,8 +243,23 @@ function columnHtml(col: Column, side: 0 | 1): string {
   return `<td data-col="${col.kind}" width="50%" valign="top" style="${pad}">${inner}</td>`;
 }
 
-/** One block as the HTML it is saved as. */
+/** One block as the HTML it is saved as, with its show/hide rule on its mark. */
 export function blockHtml(b: Block): string {
+  const html = bareHtml(b);
+  if (!b.rule || b.type === 'html' || !(b.rule.segment > 0)) return html;
+  return html.replace(`data-block="${b.type}"`, `data-block="${b.type}" data-${b.rule.mode}-segment="${Math.round(b.rule.segment)}"`);
+}
+
+/** The rule a marked element carries, if any. */
+export function ruleOf(el: Element): BlockRule | undefined {
+  const show = Number(el.getAttribute('data-show-segment'));
+  const hide = Number(el.getAttribute('data-hide-segment'));
+  if (show > 0) return { mode: 'show', segment: show };
+  if (hide > 0) return { mode: 'hide', segment: hide };
+  return undefined;
+}
+
+function bareHtml(b: Block): string {
   switch (b.type) {
     case 'text':
       return `<div data-block="text">${sanitizeText(b.html)}</div>`;
@@ -354,6 +376,9 @@ export function parseBlocks(html: string): Block[] {
 
   for (const node of nodes) {
     const b = marked(node) ? fromMarked(node) : null;
+    const rule = b && marked(node) ? ruleOf(node) : undefined;
+
+    if (b && rule) b.rule = rule;
 
     if (b) {
       flush();

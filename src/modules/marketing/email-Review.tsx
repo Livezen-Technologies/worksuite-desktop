@@ -1,5 +1,5 @@
 import { useQuery, type UseQueryResult } from '@tanstack/react-query';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { apiGet } from '../../core/api';
 import { currentZone, wallToUtc } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -22,7 +22,7 @@ import { refusal, type CampaignCheck, type CampaignDetail, type ContactRow, type
  * scheduled while the check names a blocker. The server checks again when it
  * is asked to send, whatever this screen shows.
  */
-export function ReviewStep({ campaign, d, set, errors, options, check, dirty, saving, autosave, edit, onStep, onTest }: {
+export function ReviewStep({ campaign, d, set, errors, options, check, dirty, saving, autosave, edit, onStep, onTest, extra }: {
   campaign: CampaignDetail;
   d: Draft;
   set: SetDraft;
@@ -36,6 +36,8 @@ export function ReviewStep({ campaign, d, set, errors, options, check, dirty, sa
   edit: boolean;
   onStep: (step: 'setup' | 'content' | 'review') => void;
   onTest: () => void;
+  /** More cards under the pre-send check: the deliverability panel (WS-B). */
+  extra?: ReactNode;
 }) {
   const org = String(campaign.org_id);
   const lists = useLists(org);
@@ -121,6 +123,7 @@ export function ReviewStep({ campaign, d, set, errors, options, check, dirty, sa
               </ul>
             )}
           </Card>
+          {extra}
           <Card title="Sender & subject">
             <SenderFields orgId={campaign.org_id} d={d} set={set} errors={errors} edit={edit} compact />
           </Card>

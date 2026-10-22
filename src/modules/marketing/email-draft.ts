@@ -1,4 +1,4 @@
-import type { Audience, CampaignDetail, Options } from './types';
+import type { Audience, CampaignDetail, Options, Recurrence } from './types';
 
 /**
  * A campaign being written, as the editor's three steps hold it between
@@ -36,6 +36,11 @@ export interface Draft {
   b_from_name: string;
   b_own: boolean;
   b_body_html: string;
+  /* WS-B: other languages (EDT-09), the repeat rule (SND-13), an own plain-text part and a daily cap (deliverability). */
+  variants: Record<string, { subject: string; preheader: string; body_html: string }>;
+  recurrence: Recurrence | null;
+  text_body: string;
+  daily_cap: string;
 }
 
 export type SetDraft = <K extends keyof Draft>(k: K, v: Draft[K]) => void;
@@ -71,6 +76,10 @@ export function draftOf(c: CampaignDetail, options: Options | undefined): Draft 
     b_from_name: c.b?.from_name ?? '',
     b_own: !!c.b_body_html,
     b_body_html: c.b_body_html ?? '',
+    variants: Object.fromEntries(Object.entries(c.variants ?? {}).map(([k, v]) => [k, { subject: v.subject ?? '', preheader: v.preheader ?? '', body_html: v.body_html ?? '' }])),
+    recurrence: c.recurrence ?? null,
+    text_body: c.text_body ?? '',
+    daily_cap: c.daily_cap ? String(c.daily_cap) : '',
   };
 }
 
@@ -99,5 +108,9 @@ export function bodyOf(d: Draft): Record<string, unknown> {
     b_preheader: d.b_preheader,
     b_from_name: d.b_from_name,
     b_body_html: d.b_own ? d.b_body_html : '',
+    variants: d.variants,
+    recurrence: d.recurrence,
+    text_body: d.text_body,
+    daily_cap: d.daily_cap === '' ? 0 : Number(d.daily_cap),
   };
 }

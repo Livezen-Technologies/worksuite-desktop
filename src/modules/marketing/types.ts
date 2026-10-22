@@ -326,7 +326,8 @@ export function peopleOf(options: Options | undefined, orgId: number | null): Pa
  * Email campaigns
  * ------------------------------------------------------------------ */
 
-export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'paused' | 'sent' | 'cancelled';
+/* `recurring`: a repeating or feed campaign (MKT-SND-13) — it never sends itself; each run is a campaign of its own. */
+export type CampaignStatus = 'draft' | 'scheduled' | 'sending' | 'paused' | 'sent' | 'cancelled' | 'recurring';
 
 /** What a company's emails are about, as its preferences page offers them. */
 export interface Topic {
@@ -377,6 +378,8 @@ export interface Campaign {
   local_time?: boolean;
   ab?: AbSettings | null;
   b?: { subject: string | null; preheader: string | null; from_name: string | null };
+  /** When a repeating campaign next runs (MKT-SND-13). */
+  next_run_at?: string | null;
   status: CampaignStatus;
   status_label: string;
   status_note: string | null;
@@ -403,7 +406,22 @@ export interface CampaignDetail extends Campaign {
   body_html: string;
   /** Version B's own content; null is "the same as A". */
   b_body_html?: string | null;
-  can: { edit: boolean; launch: boolean; pause: boolean; create: boolean; results: boolean; templates: boolean };
+  can: { edit: boolean; launch: boolean; pause: boolean; create: boolean; results: boolean; templates: boolean; approve?: boolean };
+  /* WS-B (SRS v2.0) — optional: a server a part behind sends none of them. See `email-governance.tsx`. */
+  approval?: { status: 'pending' | 'approved' | 'rejected' | null; label: string | null; note: string | null; required: boolean };
+  version_no?: number;
+  parent_id?: number | null;
+  recurrence?: Recurrence | null;
+  daily_cap?: number | null;
+  languages?: string[];
+  variants?: Record<string, { subject: string | null; preheader: string | null; body_html: string }>;
+  text_body?: string | null;
+}
+
+/** How a recurring campaign repeats (MKT-SND-13). */
+export interface Recurrence {
+  every: 'daily' | 'weekly' | 'monthly'; at: string; weekday: number; day: number; until: string | null;
+  feed_url: string | null; feed_items: number; only_new: boolean;
 }
 
 export interface CampaignCheck {

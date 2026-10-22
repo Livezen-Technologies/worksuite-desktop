@@ -57,7 +57,7 @@ export const SECTIONS: [Section, string][] = [
   ['objections', 'Objection handling'], ['closing', 'Closing'], ['next_action', 'Next action'],
 ];
 
-export interface CallScript { id: number; org_id: number; name: string; language: string; sections: Record<Section, string>; archived: boolean; updated_at: string | null }
+export interface CallScript { id: number; org_id: number; name: string; language: string; sections: Record<Section, string>; archived: boolean; updated_at: string | null; /** Its version number (MKT-CAL-07); absent from a server a part behind. */ version?: number }
 
 export type Outcome = 'interested' | 'qualified' | 'call_back' | 'no_answer' | 'busy' | 'voicemail'
   | 'not_interested' | 'wrong_number' | 'not_decision_maker' | 'bad_number' | 'do_not_call' | 'converted_to_lead';
