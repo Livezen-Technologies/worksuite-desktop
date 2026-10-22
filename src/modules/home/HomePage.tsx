@@ -22,7 +22,7 @@ import { useWaitingInvitations } from '../calendar/conflicts';
 import { WaitingInvitations } from './WaitingInvitations';
 import { ALL_TASKS } from '../tasks/queries';
 import { FileIcon } from '../files/Thumb';
-import { isJunkFile } from '../files/api';
+import { groupActivity, recentFiles } from './feed';
 import type { Room } from '../chat/types';
 import { assistantSession } from '../ai/session';
 import { aiDock } from '../../app/overlays/AiDock';
@@ -87,9 +87,6 @@ interface Summary {
   total: number;
   digest: { text: string | null; reason: string | null; points?: Array<{ text: string; link: string | null }>; sources?: Array<{ label: string; link: string }> };
 }
-
-/** Transfer parts and the like are not activity (#104): a line per chunk of an upload says nothing. */
-const NOISE = /\b(chunk|part \d+ of \d+|upload(ed)? part|transfer part)\b/i;
 
 /** A leave's review, opened over Home from Waiting for me (#263): HR's own panel, loaded when first asked for. */
 const ReviewLeave = lazy(() => import('../hr/Leave').then((m) => ({ default: m.ReviewLeave })));
@@ -209,8 +206,8 @@ export default function HomePage(_props: ModuleProps) {
   const unreadMail = has('mail') ? (status?.unread.mail ?? 0) : 0;
   const mentions = (rooms.data?.data.rooms ?? []).reduce((n, r) => n + (r.mentions ?? 0), 0);
   const offlineAt = dash.data?.offline ? dash.data.cachedAt : null;
-  const activity = (dash.data?.data.activity ?? []).filter((a) => !NOISE.test(a.description ?? ''));
-  const files = (dash.data?.data.recent_files ?? []).filter((f) => !isJunkFile(f.name));
+  const activity = groupActivity(dash.data?.data.activity ?? []);
+  const files = recentFiles(dash.data?.data.recent_files ?? []);
   const open = (to: Destination) => (to.route ? navigate(to.route) : to.web ? void call('app:openInBrowser', { path: to.web }).catch((e) => toast('error', errorMessage(e))) : undefined);
 
   const available: Record<CardId, boolean> = {
@@ -331,7 +328,7 @@ export default function HomePage(_props: ModuleProps) {
                   <span className="truncate text-[13px] text-ink-2">
                     {a.user ? <b className="font-semibold text-ink">{a.user} </b> : null}
                     {a.description}
-                    {a.count && a.count > 1 ? <span className="ml-1 rounded-full bg-subtle px-1.5 text-[11px] font-bold text-ink-2" title={`${a.count} updates`}>×{compactCount(a.count)}</span> : null}
+                    {a.count && a.count > 1 ? <span className="ml-1 rounded-full bg-subtle px-1.5 text-[11px] font-bold text-ink-2" title={`${a.count.toLocaleString()} updates`}>×{compactCount(a.count)}</span> : null}
                   </span>
                   {a.module ? <span className="truncate text-[12px] text-ink-3 capitalize">{a.module}</span> : null}
                 </span>

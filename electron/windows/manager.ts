@@ -65,6 +65,14 @@ const SIZES: Record<WindowKind, { width: number; height: number; minWidth: numbe
 };
 /** Cards that ring: no window controls, no place remembered, on top of everything. */
 const RINGS = new Set<WindowKind>(['ring', 'support-ring']);
+
+/**
+ * Whether a window draws minimise, maximise and close in its own title bar (#409): on Linux, every window with a bar
+ * of ours. Rings have no controls; a call window has no bar, so the system draws its controls as before.
+ */
+export function ownControlsFor(kind: WindowKind, platform: NodeJS.Platform | string): boolean {
+  return platform === 'linux' && !RINGS.has(kind) && kind !== 'call';
+}
 /**
  * Kinds of which one window is open at a time, a newer one replacing the older: a ring, and a quick reply (D-04) —
  * whose draft is kept per ticket, so nothing typed in the older one is lost.
@@ -204,6 +212,13 @@ export class WindowManager {
   private look = { ground: '#0F1B3D', surface: '#FFFFFF', chrome: '#0F1B3D' };
   /** Windows whose title bar the system draws the controls over. */
   private overlays = new Set<number>();
+  /** Linux windows whose title bar draws minimise, maximise and close itself (#409). */
+  private ownControls = new Set<number>();
+
+  /** Whether this window's page draws its own minimise, maximise and close (Linux, #409). */
+  drawsOwnControls(id: number): boolean {
+    return this.ownControls.has(id);
+  }
 
   private backgroundFor(kind: WindowKind): string {
     if (kind === 'main' || kind === 'record' || kind === 'live-map' || kind === 'wall-sheet') return this.look.ground;
@@ -875,6 +890,10 @@ export class WindowManager {
     };
     const bounds = fitToDisplays(initial, screen.getAllDisplays(), primary);
     const mac = process.platform === 'darwin';
+    // Linux (#409): Electron's drawn-over controls sit out of line with our bar on GNOME (Zorin OS), differ between
+    // X11 and Wayland and with scaling, and ignore the desktop's button layout; the bar draws its own. A call window
+    // has no bar of ours, so it keeps the system's.
+    const own = ownControlsFor(kind, process.platform);
     const win = new BrowserWindow({
       ...bounds,
       ...minimumFor(size, screen.getDisplayMatching(bounds).workArea),
@@ -885,7 +904,7 @@ export class WindowManager {
       // with the OS window controls drawn over it (snap layouts keep working).
       titleBarStyle: 'hidden',
       // A ring has no window controls at all: it is answered or declined.
-      ...(mac ? { trafficLightPosition: { x: 18, y: 18 } } : { titleBarOverlay: ring ? false : { color: this.look.chrome, symbolColor: '#FFFFFF', height: kind === 'main' ? 52 : 40 } }),
+      ...(mac ? { trafficLightPosition: { x: 18, y: 18 } } : own ? { frame: false } : { titleBarOverlay: ring ? false : { color: this.look.chrome, symbolColor: '#FFFFFF', height: kind === 'main' ? 52 : 40 } }),
       alwaysOnTop: !!opts.alwaysOnTop && ALWAYS_ON_TOP_ALLOWED.has(kind),
       ...(ring ? { resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true } : {}),
       icon: mac ? undefined : join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '256x256.png'),
@@ -894,7 +913,11 @@ export class WindowManager {
     if (ring && mac) win.setWindowButtonVisibility(false);
     this.kinds.set(win.id, kind);
     const id = win.id;
-    if (!mac && !ring) this.overlays.add(id);
+    if (own) {
+      this.ownControls.add(id);
+      win.on('maximize', () => !win.isDestroyed() && win.webContents.send('window:maximized', true));
+      win.on('unmaximize', () => !win.isDestroyed() && win.webContents.send('window:maximized', false));
+    } else if (!mac && !ring) this.overlays.add(id);
     // A chat window holds its close while a draft is saved or a picture finishes
     // going up (#103); quitting, signing out and losing access close it anyway.
     win.webContents.on('will-prevent-unload', (e) => {
@@ -903,6 +926,7 @@ export class WindowManager {
     win.on('closed', () => {
       this.kinds.delete(id);
       this.overlays.delete(id);
+      this.ownControls.delete(id);
       this.forced.delete(id);
       this.compactFrom.delete(id);
       const t = this.saveTimers.get(id);

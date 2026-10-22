@@ -8,6 +8,7 @@ import { useStore } from '../core/store';
 import { minimiseChatDrawer, openChatDrawer, openOverlay, toggleDock, ui, useAiDisplay } from '../core/ui';
 import { prettyAccelerator } from '../core/commands';
 import { Icon } from '../components/Icon';
+import { useWindowButtons, WindowControls } from '../components/WindowControls';
 import { ClockControl } from '../app/overlays/ClockPopover';
 import { ActiveCalls } from '../app/ActiveCalls';
 import { RingAlertPill } from '../modules/chat/website/Ringing';
@@ -28,7 +29,7 @@ import { UserGuideButton } from '../modules/help/UserGuideButton';
  * organization selector, global search, clock in / out, network pill, a new
  * version (the update icon), transfers, notifications, AI, profile — and the
  * window controls (native traffic lights on macOS, the OS overlay controls
- * elsewhere).
+ * on Windows, our own on Linux in the desktop's button layout, #409).
  */
 export function TitleBar() {
   const status = useStore(app, (s) => s.status);
@@ -65,9 +66,12 @@ export function TitleBar() {
   const fullScreen = useFullScreen();
   // The tab in front: its module's user guide (the guide viewer's own tab shows none).
   const activeApp = useStore(tabsStore, (s) => s.tabs.find((x) => x.id === s.activeId)?.app ?? null);
+  // Linux: minimise, maximise and close are ours, on the side GNOME puts them (#409).
+  const { layout: buttons, maximized } = useWindowButtons();
 
   return (
-    <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac && !fullScreen ? 84 : 14, paddingRight: topBarPaddingRight(12) }}>
+    <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac && !fullScreen ? 84 : buttons?.side === 'left' ? 10 : 14, paddingRight: buttons?.side === 'right' ? 10 : topBarPaddingRight(12) }}>
+      {buttons?.side === 'left' ? <WindowControls layout={buttons} maximized={maximized} className="me-1" /> : null}
       <div className="flex w-[150px] shrink-0 items-center gap-2.5">
         <BrandLogo height={21} tone="dark" />
       </div>
@@ -130,6 +134,7 @@ export function TitleBar() {
       >
         <UserPicture name={who.name} src={who.avatar} size={28} className="!bg-[#E8ECFA] text-[11px] !text-[#1E2F8A]" />
       </button>
+      {buttons?.side === 'right' ? <WindowControls layout={buttons} maximized={maximized} className="ms-1" /> : null}
     </header>
   );
 }

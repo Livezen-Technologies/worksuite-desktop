@@ -90,6 +90,8 @@ export function LinkedText({ text, className, display }: { text: string; classNa
           <a
             key={i}
             href={p.href}
+            // Not dragged as a link, so a selection can start or end on it and be copied (worksuite-desktop#412).
+            draggable={false}
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();

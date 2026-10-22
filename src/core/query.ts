@@ -37,6 +37,17 @@ export function touchesAnnouncements(e: { type: string; event?: string }): boole
   return e.type === 'hr.announcement.changed' || (e.type === 'notification' && e.event === 'hr.announcement_published');
 }
 
+/** A server notification that links to a website chat (`/website-chats…`, worksuite-desktop#407). */
+export function touchesWebsiteChat(e: { type: string; link?: unknown }): boolean {
+  return e.type === 'notification' && typeof e.link === 'string' && /^\/website-chats(?:[/?#]|$)/.test(e.link);
+}
+
+/** The conversation a website-chat notification names, as the thread's query key has it; null for none. */
+export function websiteChatOf(e: { link?: unknown }): string | null {
+  const m = typeof e.link === 'string' ? /^\/website-chats(?:\/(\d+)|\?(?:.*&)?conversation=(\d+))/.exec(e.link) : null;
+  return m ? (m[1] ?? m[2] ?? null) : null;
+}
+
 /** A realtime event about an expense claim: the module's own nudge, or a notification that one was decided or paid. */
 export function touchesExpenses(e: { type: string; event?: string }): boolean {
   return e.type === 'expense.claim.changed' || (e.type === 'notification' && typeof e.event === 'string' && e.event.startsWith('expense.'));
@@ -50,7 +61,7 @@ export function touchesSocialMedia(e: { type: string; event?: string }): boolean
 export function wireQueryInvalidation(): void {
   on('realtime:resync', () => void queryClient.invalidateQueries());
   on('organization:changed', () => void queryClient.invalidateQueries());
-  on<{ type: string; room_id?: number; conversation_id?: number; event?: string; seq?: number }>('realtime:event', (e) => {
+  on<{ type: string; room_id?: number; conversation_id?: number; event?: string; seq?: number; link?: unknown }>('realtime:event', (e) => {
     if (WEBSITE_EVENTS.has(e.type)) {
       void queryClient.invalidateQueries({ queryKey: ['website', 'inbox'] });
       // A message in a thread open on screen is fetched by its seq there (plan 1.9), not by reading the whole thread again.
@@ -72,6 +83,13 @@ export function wireQueryInvalidation(): void {
     // the toolbar badges, the lists and an open thread ask again.
     if (e.type === 'meta.message' || e.type === 'meta.account') void queryClient.invalidateQueries({ queryKey: ['meta'] });
     if (e.type === 'notification') void queryClient.invalidateQueries({ queryKey: ['notifications'] });
+    // A notification about a website chat (assigned, routed, a follow-up: worksuite-desktop#407): Web Chat's lists and
+    // that conversation ask again, so the chat it names is there when it is clicked.
+    if (touchesWebsiteChat(e)) {
+      void queryClient.invalidateQueries({ queryKey: ['website', 'inbox'] });
+      const id = websiteChatOf(e);
+      if (id) void queryClient.invalidateQueries({ queryKey: ['website', 'conversation', id] });
+    }
     // Something shared with this person, or their access changed: Shared with me and Drive's lists show it now (worksuite-desktop#16).
     if (e.type === 'notification' && typeof e.event === 'string' && /^files\.(shared|access_changed|access_revoked)$/.test(e.event)) {
       for (const k of ['shared', 'list', 'home', 'access']) void queryClient.invalidateQueries({ queryKey: ['files', k] });

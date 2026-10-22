@@ -28,3 +28,23 @@ describe('thumbnail failures', () => {
     expect(container.querySelector('img')?.getAttribute('src')).toBe('data:image/png;base64,bmV3');
   });
 });
+
+describe('selecting and copying (worksuite-desktop#412)', () => {
+  const preview = { url: 'https://shop.example/office', title: 'Office 2021', description: 'Professional Plus' };
+  it('is not one big link: its words stay selectable and only the title opens the page', () => {
+    const { container, getByText } = render(<LinkPreview preview={preview} />);
+    const card = container.querySelector('[data-link-preview]')!;
+    expect(card.tagName).toBe('DIV');
+    expect(card.querySelector('.selectable')).toBeTruthy();
+    expect(getByText('Professional Plus').closest('a')).toBeNull();
+    const title = getByText('Office 2021').closest('a')!;
+    expect(title.getAttribute('draggable')).toBe('false');
+  });
+  it('copies the address with "Copy link"', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true });
+    const { getByRole } = render(<LinkPreview preview={preview} />);
+    fireEvent.click(getByRole('button', { name: 'Copy link' }));
+    expect(writeText).toHaveBeenCalledWith('https://shop.example/office');
+  });
+});

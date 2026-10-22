@@ -45,6 +45,7 @@ import { broadcast } from './events';
 import { logger, recentLog } from './log';
 import { captureName, helpLogText } from '../services/ai-help';
 import { screenTimings } from '../services/screen-timings';
+import { buttonLayout } from '../windows/button-layout';
 
 /** The web app's pages `auth:openPage` may open, signed out. */
 const AUTH_PAGES = { 'forgot-password': '/forgot-password', account: '/account/settings' } as const;
@@ -575,9 +576,11 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     return n;
   });
 
-  router.handle('windows:state', (_i, c) => {
+  router.handle('windows:state', async (_i, c) => {
     const w = winOf(c.sender);
+    const ownControls = !!w && ctx.windows.drawsOwnControls(w.id);
     return {
+      ...(ownControls ? { buttonLayout: await buttonLayout() } : {}),
       id: w?.id ?? 0,
       kind: w ? (ctx.windows.kindOf(w.id) ?? 'main') : 'main',
       maximized: !!w?.isMaximized(),
