@@ -13,6 +13,28 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+- **The AI assistant, against the desktop design boards.** Built from the published boards D01–D10; nine of the ten
+  were already in the app, so this is the gaps rather than new screens. **Edit** now sits beside Confirm and Cancel
+  on a proposed change: the proposal's own fields open for typing over, and saving asks the server to check them as
+  a new version to confirm — that endpoint had been there all along and only the client never called it, and a card
+  that put the superseded proposal back on screen afterwards is fixed. **Local AI ready**, with the model's name,
+  now shows in the sidebar's footer and the tray menu, so whether the assistant answers without a connection no
+  longer has to be looked up in Settings — and it says nothing at all when nothing is set up. **Settings › Local AI
+  › Language packs** lists the reading packs for English, Sinhala and Tamil with their sizes and lets one be
+  downloaded before it is needed, instead of discovering offline that reading Sinhala wanted a connection. The
+  background notice **names the question** its answer belongs to. **Quick Ask** says "Replace selection in Word"
+  when the selection really was read and "Insert into Word" when it opened with what was copied last, and promises
+  that nothing is written back until it is clicked. **Module Access** says on the row when a module needs a server
+  update, instead of keeping it in a tooltip no keyboard or screen reader reaches. ai 1.12.0.
+
+  **Followed only as far as it was true.** The boards' three-way *Which AI answers* (Auto / Local only / Online
+  only) is not built: that switch was removed deliberately in ai 1.3.0, and "Online only" does not exist in the
+  app, so restoring it is a product decision. Nor are the L1–L3 risk ladder and the To / Subject / Attach preview
+  (both server contract changes), Help & Guide and the image reader as workspace tabs (both deliberately inside the
+  assistant panel), *Files from this computer* as a person's switch (it is a company and device rule, and turning a
+  policy gate into a user setting weakens it), or D10's ONNX Runtime panel and Performance choice — there is no
+  ONNX runtime in the app, so the panel would be false and the setting a control that quietly does nothing.
+
 - **Tender documents: online editing and versions.** Each Word, Excel or PowerPoint document on a tender has
   **Edit online** (or **Open online** for those who may only read): it opens the document's Drive file in the
   WorkSuite Office tab, in the mode the server gives (`/api/tenders/documents/{id}/online`). The new **Versions**

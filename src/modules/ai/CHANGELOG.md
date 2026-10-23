@@ -4,6 +4,69 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.12.0 — 2026-10-23
+
+Built against the published desktop design boards D01–D10. Nine of the ten were already here; these are the gaps
+that were real, and the places the designs were followed only as far as they were true.
+
+**Added**
+
+- **Edit a proposed change before confirming it** (boards D01, D06, D08). The card offered Confirm and Cancel and
+  nothing in between, so a proposal that was nearly right could only be thrown away and asked for again. The server
+  had been ready throughout — `PUT /api/ai/pending/{id}` validates changed arguments, supersedes the proposal and
+  returns a new version to confirm — and only the client never called it. Edit opens the proposal's own arguments:
+  the strings and numbers, since the desktop knows no tool's schema, with objects and lists sent back as the
+  assistant built them and named under the form as left alone, together with the fact that an edit never changes
+  which record the change is about. A field that arrived as a number goes back as a number.
+- **"Local AI ready · <model> · works offline"** in the sidebar's footer and **"Local AI: Ready · <model>"** in the
+  tray (boards D01, D02, D04–D06). Whether a model answers on this computer decides whether the assistant works on
+  a plane, and it could only be learnt by opening Settings. Both use the same test the panel uses, so neither
+  promises an offline answer from a computer that would go online instead; both say nothing when nothing is set up,
+  and the strip is left out at icon width.
+- **Language packs** in Settings › Local AI (board D10), with **Download** (`ai:ocrInstall`). The reading packs for
+  English, Sinhala and Tamil were already real and pinned by size and SHA-256, but invisible and fetched from a CDN
+  on the first picture that needed them — so reading Sinhala for the first time needed a connection, and whoever
+  found that out was at a site with no signal. The list shows sizes and what is installed, and a pack can be
+  fetched in advance by the same checked path as the automatic download.
+- **The question named in the background notice** (board D02). "Your answer is ready" could not be matched to a
+  question by somebody who had put the assistant down, changed tab and asked something else while it worked. It is
+  withheld along with the answer while WorkSuite is locked.
+
+**Changed**
+
+- **Quick Ask says whether the text is replaced or inserted** (board D03): "Replace selection in Word" when the
+  selection really was read, "Insert into Word" when Quick Ask opened with what was copied last and nothing is
+  highlighted. The footer carries the guarantee that nothing is written back until it is clicked, which was stated
+  only in Settings before.
+- **Module Access says on the row when a module needs a server update** (board D05). The reason was on the cell's
+  `title`, which a keyboard user never sees, a touch user cannot reach and a screen reader does not announce, so
+  boxes that simply would not tick read as broken rather than as not there yet. The organisation columns carry it
+  as `aria-description` too; the personal columns already did.
+
+**Fixed**
+
+- A card put the superseded proposal back on screen after an edit. It kept its own copy of what it had last done
+  and compared it to the proposal it was given by id, so because an edit returns a *new* id the edited version was
+  discarded — a saved edit looked as though it had done nothing while the server had already replaced it.
+
+**Not built, on purpose**
+
+- **The three-way "Which AI answers" selector** (Auto / Local only / Online only) on boards D01, D06 and D09. The
+  WorkSuite AI / On this computer switch was removed deliberately in 1.3.0 for one "Allow online fallback" setting,
+  and "Online only" does not exist in the app at all: local wins whenever a model can answer. Putting the selector
+  back is a product decision, and its third state is a change to `AiPrefs`, not a relocation.
+- **The L1–L3 risk ladder and the structured To / Subject / Attach preview** (boards D01, D06, D08). The card has
+  two tiers — "Internal change" and "Reaches outside" — from the server's `risk`, and renders the server's own
+  preview lines. Both are server contract changes.
+- **Help & Guide and the image reader as workspace tabs** (boards D07, D08). Both live inside the assistant panel
+  by an existing decision; moving them is a surface change, not a gap.
+- **"Files from this computer" as a person's own switch** (board D09). It is a company and device rule today
+  (`AiRules.localFiles`). Turning a policy gate into a user setting weakens it, and that is not a decision to take
+  while matching a mock-up.
+- **The ONNX Runtime panel and the Performance choice** (board D10). There is no ONNX runtime in the app and no
+  catalogue that could offer those packs, so the panel would be false, the latencies would measure nothing, and a
+  Performance setting no engine consulted would be a control that quietly does nothing.
+
 ## 1.11.0 — 2026-10-12
 
 **Added**
