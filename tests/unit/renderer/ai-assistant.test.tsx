@@ -11,7 +11,7 @@ vi.mock('../../../src/core/tabs', async () => {
   return { navigate: vi.fn(), tabsStore: createStore({ tabs: [], activeId: null }) };
 });
 
-import { apiGet, apiPost } from '../../../src/core/api';
+import { apiGet, apiPost, apiPut } from '../../../src/core/api';
 import { call } from '../../../src/core/bridge';
 import { ActionCard } from '../../../src/modules/ai/ActionCard';
 import { AskPanel } from '../../../src/modules/ai/AskPanel';
@@ -70,6 +70,44 @@ describe('the confirmation card', () => {
     expect(call).toHaveBeenCalledWith('ai:confirm', { id: 7, nonce: 'abcdef0123456789' });
     expect(apiPost).not.toHaveBeenCalledWith('/api/ai/pending/7/confirm', expect.anything());
     expect(screen.getAllByText('Done').length).toBeGreaterThan(0);
+  });
+
+  /**
+   * An edit replaces the proposal: the server validates the changed arguments
+   * as a new version, supersedes the old one and hands back a card with its
+   * own id and nonce. These two pin that the replacement is what the person
+   * then confirms — the card used to compare the returned id with the one it
+   * was given, drop the mismatch and redisplay the superseded proposal, so a
+   * saved edit looked as though it had done nothing.
+   */
+  it('saves the typed-over arguments as a new version, and confirms that one', async () => {
+    const edited = card({ id: 9, version: 2, nonce: 'feedfacefeedface', preview: { title: 'Email Nimal: revised quote', lines: [], warnings: [] } });
+    vi.mocked(apiPut).mockReset().mockResolvedValue(edited as never);
+    vi.mocked(call).mockResolvedValue(card({ id: 9, status: 'succeeded' }) as never);
+    wrap(<ActionCard action={card({ slug: 'mail_send', name: 'Send an email', arguments: { subject: 'Quote', body: 'Here it is.' } })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    fireEvent.change(screen.getByLabelText('Subject'), { target: { value: 'Revised quote' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save changes' })));
+
+    expect(apiPut).toHaveBeenCalledWith('/api/ai/pending/7', { arguments: { subject: 'Revised quote', body: 'Here it is.' } });
+    expect(await screen.findByText('Email Nimal: revised quote')).toBeTruthy();
+
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Confirm' })));
+    expect(call).toHaveBeenLastCalledWith('ai:confirm', { id: 9, nonce: 'feedfacefeedface' });
+  });
+
+  it('sends a number back as a number, and leaves a shape it cannot type over alone', async () => {
+    vi.mocked(apiPut).mockReset().mockResolvedValue(card({ id: 11 }) as never);
+    wrap(<ActionCard action={card({ arguments: { hours: 3, note: 'Site visit', rows: [{ item: 'cable' }] } })} />);
+
+    fireEvent.click(screen.getByRole('button', { name: 'Edit' }));
+    expect(screen.queryByLabelText('Rows')).toBeNull();
+    expect(screen.getByText(/Left as it is: Rows/)).toBeTruthy();
+    fireEvent.change(screen.getByLabelText('Hours'), { target: { value: '5' } });
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: 'Save changes' })));
+
+    expect(apiPut).toHaveBeenCalledWith('/api/ai/pending/7', { arguments: { hours: 5, note: 'Site visit', rows: [{ item: 'cable' }] } });
   });
 
   it('in Quick Ask, sends the person to the main window instead of confirming', () => {

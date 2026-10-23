@@ -3,7 +3,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { navigate } from '../../core/tabs';
-import { assistantProblem, cancelAction, confirmAction, undoAction, type PendingAction } from './assistant';
+import { assistantProblem, cancelAction, confirmAction, editAction, undoAction, type PendingAction } from './assistant';
 
 /**
  * A change the assistant proposed (WS-AI-SRS-001 §4.6, FR-CNF-02, DSK-5): the
@@ -13,6 +13,16 @@ import { assistantProblem, cancelAction, confirmAction, undoAction, type Pending
  * main window only — so neither Quick Ask nor a notification can confirm
  * anything, and a change reaching outside the company is always confirmed
  * here, looking at this card. Cancel and Undo go straight to the server.
+ *
+ * EDITING DOES NOT ALTER THIS PROPOSAL — IT REPLACES IT. The server's edit
+ * (`PUT /api/ai/pending/{id}`) validates the changed arguments as a *new*
+ * version and supersedes this one, so what comes back has its own id, its own
+ * nonce and `version + 1`, and still has to be confirmed. That is why the
+ * card's own override is keyed on the id of the action it was *given*
+ * (`mine.for`) rather than the id of the action it is *showing*: the earlier
+ * `local.id === action.id` test quietly discarded the edited version and put
+ * the superseded one back on screen, which read as "the edit did nothing"
+ * while the server had already replaced the proposal.
  */
 export function ActionCard({ action, onChange, elsewhere }: {
   action: PendingAction;
@@ -22,10 +32,12 @@ export function ActionCard({ action, onChange, elsewhere }: {
 }) {
   const qc = useQueryClient();
   // What this card itself last did wins over the list it came from, which catches up on refetch.
-  const [local, setA] = useState<PendingAction | null>(null);
-  const a = local && local.id === action.id ? local : action;
+  const [mine, setMine] = useState<{ for: number; action: PendingAction } | null>(null);
+  const a = mine && mine.for === action.id ? mine.action : action;
+  const setA = (next: PendingAction) => setMine({ for: action.id, action: next });
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [editing, setEditing] = useState<Record<string, string> | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -97,6 +109,40 @@ export function ActionCard({ action, onChange, elsewhere }: {
         </ul>
       ) : null}
 
+      {editing ? (
+        <div className="mt-2.5 rounded-[10px] border border-line bg-ground p-2.5">
+          <p className="mb-2 text-[12px] text-ink-2">
+            Change what the assistant proposed. Saving does not do it — WorkSuite checks the change and asks you to confirm the new version.
+          </p>
+          <div className="space-y-2">
+            {fields(a.arguments).map(([key, value]) => {
+              const id = `edit-${a.id}-${key}`;
+              const long = value.length > 60 || value.includes('\n');
+              return (
+                <div key={key}>
+                  <label htmlFor={id} className="mb-0.5 block text-[11.5px] font-semibold text-ink-2">{humanise(key)}</label>
+                  {long ? (
+                    <textarea id={id} rows={4} value={editing[key] ?? ''} onChange={(e) => setEditing({ ...editing, [key]: e.target.value })}
+                      className="w-full resize-y rounded-[8px] border border-line bg-surface px-2 py-1.5 text-[12.5px] text-ink" />
+                  ) : (
+                    <input id={id} type="text" value={editing[key] ?? ''} onChange={(e) => setEditing({ ...editing, [key]: e.target.value })}
+                      className="h-8 w-full rounded-[8px] border border-line bg-surface px-2 text-[12.5px] text-ink" />
+                  )}
+                </div>
+              );
+            })}
+          </div>
+          {fields(a.arguments).length === 0 ? (
+            <p className="text-[12px] text-ink-3">This proposal has nothing on it you can type over. Cancel it and ask for what you want instead.</p>
+          ) : null}
+          {kept(a.arguments).length ? (
+            <p className="mt-2 text-[11.5px] text-ink-3">
+              Left as it is: {kept(a.arguments).map(humanise).join(', ')}. The record this is about never changes with an edit.
+            </p>
+          ) : null}
+        </div>
+      ) : null}
+
       {error ? <p role="alert" className="mt-2 rounded-[8px] bg-danger-bg px-2 py-1.5 text-[12px] text-danger">{error}</p> : null}
 
       <footer className="mt-3 flex flex-wrap items-center gap-2">
@@ -105,11 +151,30 @@ export function ActionCard({ action, onChange, elsewhere }: {
             Review in WorkSuite
           </button>
         ) : null}
-        {open && !elsewhere ? (
+        {open && !elsewhere && editing ? (
+          <>
+            <button type="button" disabled={!!busy || fields(a.arguments).length === 0}
+              onClick={() => void act('edit', async () => {
+                const next = await editAction(a.id, merge(a.arguments, editing));
+                setEditing(null);
+                return next;
+              })}
+              className={cx(btn, 'bg-primary text-white hover:bg-primary-hover')}>
+              {busy === 'edit' ? 'Checking…' : 'Save changes'}
+            </button>
+            <button type="button" disabled={!!busy} onClick={() => { setEditing(null); setError(null); }} className={cx(btn, 'text-ink-2 hover:bg-subtle')}>
+              Keep it as it was
+            </button>
+          </>
+        ) : null}
+        {open && !elsewhere && !editing ? (
           <>
             <button type="button" disabled={!!busy} onClick={() => void act('confirm', () => confirmAction(a))}
               className={cx(btn, 'text-white', outside ? 'bg-danger hover:opacity-90' : 'bg-primary hover:bg-primary-hover')}>
               {busy === 'confirm' ? 'Doing it…' : outside ? 'Confirm and send' : 'Confirm'}
+            </button>
+            <button type="button" disabled={!!busy} onClick={() => { setError(null); setEditing(asText(a.arguments)); }} className={cx(btn, 'border border-line text-ink hover:bg-subtle')}>
+              Edit
             </button>
             <button type="button" disabled={!!busy} onClick={() => void act('cancel', () => cancelAction(a.id))} className={cx(btn, 'text-ink-2 hover:bg-subtle')}>
               Cancel
@@ -133,6 +198,55 @@ export function ActionCard({ action, onChange, elsewhere }: {
       </footer>
     </section>
   );
+}
+
+/**
+ * WHAT AN EDIT MAY TOUCH. The desktop does not know any tool's argument
+ * schema — the server owns that and validates the result — so the form offers
+ * the arguments a person can sensibly type over: the strings and numbers. An
+ * object or a list (a row set, a structured attachment) is left exactly as the
+ * assistant built it and sent back unchanged, because retyping one as text
+ * would be a guess at a shape only the server knows.
+ *
+ * The server additionally pins any argument named in the tool's endpoint path
+ * back to its original value, so an edit "changes what is done, never what it
+ * is done to". Those are listed as left alone rather than hidden, so nobody
+ * types into a box whose value is quietly going to be ignored.
+ */
+function fields(args: Record<string, unknown>): Array<[string, string]> {
+  return Object.entries(args)
+    .filter(([, v]) => typeof v === 'string' || typeof v === 'number')
+    .map(([k, v]) => [k, String(v)] as [string, string]);
+}
+
+function kept(args: Record<string, unknown>): string[] {
+  return Object.entries(args).filter(([, v]) => !(typeof v === 'string' || typeof v === 'number')).map(([k]) => k);
+}
+
+function asText(args: Record<string, unknown>): Record<string, string> {
+  return Object.fromEntries(fields(args));
+}
+
+/**
+ * The typed-over values back onto the arguments the assistant built. A box
+ * always holds text, so an argument that arrived as a number goes back as a
+ * number — sending `"3"` where the tool declared an integer is a validation
+ * failure the person cannot see the cause of. Text that is no longer a number
+ * is sent as it was typed and refused by name on the server, which is the
+ * clearer error of the two.
+ */
+function merge(args: Record<string, unknown>, typed: Record<string, string>): Record<string, unknown> {
+  const out: Record<string, unknown> = { ...args };
+  for (const [k, v] of Object.entries(typed)) {
+    out[k] = typeof args[k] === 'number' && v.trim() !== '' && Number.isFinite(Number(v)) ? Number(v) : v;
+  }
+  return out;
+}
+
+/** `recipient_email` → `Recipient email`, so a field reads as a label and not as a column name. */
+function humanise(key: string): string {
+  const words = key.replace(/[_-]+/g, ' ').replace(/([a-z0-9])([A-Z])/g, '$1 $2').trim().toLowerCase();
+  return words.charAt(0).toUpperCase() + words.slice(1);
 }
 
 function statusWord(s: PendingAction['status'], left: number): string {
