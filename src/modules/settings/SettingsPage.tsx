@@ -390,6 +390,10 @@ const SHORTCUT_LABELS: Record<string, string> = {
   'meet-pop-out': 'Float the call over other apps',
   'meet-action-item': 'Add action item',
   'meet-decision': 'Add decision',
+  // Held, not pressed: the only key here that does something for as long as it
+  // is down. The label says so, because "Push to talk" alone reads like a
+  // switch and people press it once and wonder why nothing stayed on.
+  'meet-push-to-talk': 'Push to talk (hold)',
 };
 
 /** Rows shown but not changed here: the emergency stop is the remote-control service's. */

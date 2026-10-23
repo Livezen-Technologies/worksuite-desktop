@@ -111,6 +111,10 @@ export const acceleratorKeyName = (key: string): string => EVENT_KEY_NAMES[key] 
  * ⌘⇧N off a Mac is Ctrl+Shift+N, and Ctrl+Alt+N there is Marketing's, so the
  * new-meeting key needs the extra Shift on Windows and Linux. Marketing's own
  * entry splits by platform for the same reason in the other direction.
+ *
+ * Ten of the eleven are keys you press. The eleventh, push to talk, is one you
+ * hold: it is listed here, so it is shown and changeable like the rest, but it
+ * is answered by the call rather than by a command.
  */
 export function meetShortcutDefaults(mac: boolean): Record<string, string> {
   return {
@@ -123,6 +127,11 @@ export function meetShortcutDefaults(mac: boolean): Record<string, string> {
     'meet-pop-out': 'Mod+Alt+P',
     'meet-action-item': 'Mod+Alt+A',
     'meet-decision': 'Mod+Alt+D',
+    // Held, not pressed. It is listed here so the shortcuts page shows it and
+    // can change it, but nothing registers a command behind it:
+    // `src/modules/meet/pushToTalk.ts` says why a bare Space under a registry
+    // command would swallow every space bar press in the app.
+    'meet-push-to-talk': 'Space',
   };
 }
 

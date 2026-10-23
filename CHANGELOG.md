@@ -12,6 +12,8 @@ person who has to live with the change — what it does, and where it bites.
 > come after what had already shipped.
 
 ## Unreleased
+### Added
+- Meet: **push to talk** — hold the space bar in a meeting to be heard, let go to go back to muted. It is in Settings › Keyboard shortcuts with the rest of Meet's keys and can be changed there. It only ever unmutes: pressed while your microphone is already live it does nothing, so letting go can never cut you off mid-sentence; it does nothing where a space would be typed instead, nothing when the host has turned participants' microphones off, and it closes the microphone again if you switch away from WorkSuite or close the meeting window while still holding the key. (desktop modules meet 1.27.0, settings 1.42.3)
 
 ## 0.2.277 — 2026-10-22
 ### Added

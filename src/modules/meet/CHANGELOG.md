@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.27.0 — 2026-10-23
+
+**Added**
+
+- Push to talk (D06): hold the space bar to be heard and let go to go back to muted — the eleventh key on that artboard, and the only one you hold rather than press. It is listed in Settings › Keyboard shortcuts and can be changed there like the rest, but nothing registers a command behind it: the shell calls `preventDefault()` for any accelerator with a command attached, so a bare Space in the registry would have swallowed every space bar press in every WorkSuite window. The call answers the key itself.
+- The key only ever unmutes. Pressed while the microphone is already live it does nothing at all, so letting go can never mute somebody in the middle of a sentence they had chosen to say out loud. It asks the meeting's own `mayMic` — the same answer the mute button reads — so it cannot open a microphone the host has closed, and it leaves the key alone wherever a space would be typed instead.
+- Losing the key counts as letting go: the window losing focus, the document being hidden, or the meeting window closing mid-hold all close the microphone. A key held while you switch apps never delivers its `keyup`, and the failure mode of missing one is a live microphone in a meeting its owner has walked away from.
+
 ## 1.26.0 — 2026-10-21
 
 **Added**

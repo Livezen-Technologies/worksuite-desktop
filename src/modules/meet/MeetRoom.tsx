@@ -23,6 +23,7 @@ import { RemoteControlLayer } from './remote/ControllerSurface';
 import { PointerLayer } from './remote/PointerLayer';
 import { pointers } from './remote/pointers';
 import { useCallShortcuts, useShareBarState } from './shortcuts';
+import { usePushToTalk } from './pushToTalk';
 import { isGuest, meet, roleOf, userIdOf } from './session';
 import { PeoplePanel } from './PeoplePanel';
 import { HostLeaveDialog, RoomSettingsPanel } from './RoomRoles';
@@ -275,6 +276,18 @@ export function MeetRoom() {
     popOut: () => callUi.float(!ui.floating),
     pauseShare: () => void meet.pauseShare(!paused),
     stopShare: () => void meet.share(null),
+  });
+  /*
+   * Push to talk (D06's eleventh key), which is held rather than pressed and so
+   * cannot be one of the buttons above. It keeps the same rule all the same:
+   * `mayMic` is the meeting's own answer, the one the mute button reads, so a
+   * held key cannot open a microphone the host has closed.
+   */
+  usePushToTalk({
+    accelerator: keys['meet-push-to-talk'],
+    micOn: !!lp.isMicrophoneEnabled,
+    mayMic: meet.mayMic,
+    setMic: (on) => void meet.setMic(on),
   });
   // What the sharing bar shows (D03). Reported from here because this window
   // is where the truth is; the bar keeps none of its own.

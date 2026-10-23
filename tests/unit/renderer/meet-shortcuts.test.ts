@@ -12,10 +12,13 @@ import { meetShortcutDefaults } from '@shared/shortcuts';
  */
 
 describe('Meet in the shell registry', () => {
-  it('registers all nine of the design\u2019s keys', () => {
+  it('registers all ten of the design\u2019s keys that are Meet\u2019s own', () => {
     for (const id of Object.keys(meetShortcutDefaults(true))) {
       expect(DEFAULT_SHORTCUTS[id], id).toBeTruthy();
     }
+    // Ten here; the artboard's eleventh row is the remote-control emergency
+    // stop, which that service owns and this page only lists.
+    expect(Object.keys(meetShortcutDefaults(true))).toHaveLength(10);
   });
 
   it('files each key under the area the design names, with the right scope', () => {
@@ -45,6 +48,14 @@ describe('Meet in the shell registry', () => {
     expect(DEFAULT_SHORTCUTS['meet-pop-out']).toBe('Mod+Alt+P');
     expect(DEFAULT_SHORTCUTS['meet-action-item']).toBe('Mod+Alt+A');
     expect(DEFAULT_SHORTCUTS['meet-decision']).toBe('Mod+Alt+D');
+  });
+
+  it('keeps push to talk a bare key, and the registry quiet about it', () => {
+    // It is listed and changeable, but `Shell.tsx` only calls preventDefault
+    // for an accelerator with a *registered command* behind it \u2014 so a bare
+    // Space here is safe exactly as long as nothing registers one.
+    expect(DEFAULT_SHORTCUTS['meet-push-to-talk']).toBe('Space');
+    expect(shortcutMeta('meet-push-to-talk').scope).toBe('app');
   });
 
   it('keeps the design\u2019s key where it was free', () => {

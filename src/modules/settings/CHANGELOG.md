@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.42.3 — 2026-10-23
+
+**Added**
+
+- Keyboard shortcuts lists Meet's push-to-talk key, with "(hold)" in its name — on a page where every other row is a key you press once, a row called only "Push to talk" is one people press and then wonder why nothing stayed on (meet 1.27.0)
+
 ## 1.42.2 — 2026-10-22
 
 **Changed**

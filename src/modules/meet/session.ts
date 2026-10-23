@@ -725,11 +725,26 @@ export class MeetSession {
     this.changed();
   }
 
-  async toggleMic(): Promise<void> {
+  /**
+   * The microphone on or off, said rather than flipped.
+   *
+   * Push to talk (D06) needs this: it turns the microphone on when the key goes
+   * down and off when it comes up, and a toggle would drift the moment either
+   * event arrived twice — a key repeat, or a release that followed a mute
+   * click. Turning it on asks the host's permission exactly as the mute button
+   * does; turning it off never needs one.
+   */
+  async setMic(on: boolean): Promise<void> {
     const lp = this.room?.localParticipant;
-    if (lp && !lp.isMicrophoneEnabled && !this.mayMic) return this.note(mt('hc.off.microphone'));
-    if (lp) await lp.setMicrophoneEnabled(!lp.isMicrophoneEnabled).catch((e) => this.note(errorMessage(e)));
+    if (!lp) return this.changed();
+    if (lp.isMicrophoneEnabled === on) return;
+    if (on && !this.mayMic) return this.note(mt('hc.off.microphone'));
+    await lp.setMicrophoneEnabled(on).catch((e) => this.note(errorMessage(e)));
     this.changed();
+  }
+
+  async toggleMic(): Promise<void> {
+    return this.setMic(!this.room?.localParticipant?.isMicrophoneEnabled);
   }
 
   async toggleCamera(): Promise<void> {
