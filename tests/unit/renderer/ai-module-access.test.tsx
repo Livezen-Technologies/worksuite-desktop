@@ -185,6 +185,23 @@ describe('Settings › AI Assistant › Module Access', () => {
     expect((screen.getByRole('checkbox', { name: 'CRM: Create or update with WorkSuite AI' }) as HTMLInputElement).disabled).toBe(true);
   });
 
+  /**
+   * Board D05 gives every module a status of its own. What a module does not
+   * support was only ever a `title` on the cell, which a keyboard or touch
+   * user never sees and a screen reader does not announce, so boxes that
+   * simply would not tick read as broken rather than as not there yet.
+   */
+  it('says on the row when a module needs a server update, and stays quiet when it does not', async () => {
+    vi.mocked(apiGet).mockResolvedValue(org as never);
+    mount(none);
+
+    const crmRow = await screen.findByRole('rowheader', { name: /CRM/ });
+    expect(crmRow.textContent).toMatch(/Server update needed before the assistants can create or update here/);
+    expect(screen.getByRole('rowheader', { name: /Sales/ }).textContent).not.toMatch(/Server update needed/);
+    // The reason reaches a screen reader on the box itself, not only as a tooltip.
+    expect(screen.getByRole('checkbox', { name: 'CRM: Read data with Local AI' }).getAttribute('aria-description')).toMatch(/turned reading in CRM off/);
+  });
+
   it('only administrators see "For everyone", and their change is saved for the organization', async () => {
     vi.mocked(apiGet).mockResolvedValue({ ...org, can_manage: true } as never);
     vi.mocked(apiPut).mockImplementation(async (_p: string, body?: unknown) => ({ ...org, can_manage: true, modules: (body as { modules: OrgModule[] }).modules.map((x) => ({ ...org.modules.find((m) => m.key === x.key)!, ...x })) }) as never);

@@ -33,6 +33,28 @@ const COLUMNS: Array<{ engine: AiEngine; kind: keyof AiModuleToggle; label: stri
 ];
 const ENGINE_LABEL: Record<AiEngine, string> = { worksuite: 'WorkSuite AI', local: 'Local AI' };
 
+/**
+ * Why a module's boxes cannot be ticked, as a sentence on the row (board D05,
+ * which gives every module an "Available" or "Server update needed" of its
+ * own).
+ *
+ * THIS USED TO BE A TOOLTIP ONLY. The reason was on the cell's `title`, which
+ * a keyboard or touch user never sees and a screen reader does not announce,
+ * so a module whose boxes simply would not tick looked broken rather than
+ * unsupported. It is plain text beside the module's name now, and the cells
+ * carry it as `aria-description` as well.
+ *
+ * Nothing is said for a module that works, deliberately: the table is dense
+ * and four columns wide, and an "Available" on every row would be the same
+ * word repeated down the page instead of the exception standing out.
+ */
+function supportNote(m: OrgModule): string | null {
+  if (!m.supports.read && !m.supports.write) return 'Server update needed — this module offers the assistants nothing yet.';
+  if (!m.supports.write) return 'Server update needed before the assistants can create or update here.';
+  if (!m.supports.read) return 'Server update needed before the assistants can read here.';
+  return null;
+}
+
 export function ModuleAccess({ prefs, onChange }: { prefs: AiModuleAccessPrefs; onChange: (next: AiModuleAccessPrefs) => void }) {
   const qc = useQueryClient();
   const org = useOrgAccess();
@@ -109,9 +131,10 @@ export function ModuleAccess({ prefs, onChange }: { prefs: AiModuleAccessPrefs; 
               <tbody>
                 {modules.map((m) => (
                   <tr key={m.key} className="border-b border-line/70">
-                    <th scope="row" className="py-2 text-left font-semibold text-ink">
+                    <th scope="row" className="py-2 pr-3 text-left font-semibold text-ink">
                       {m.label}
                       {m.denied ? <span className="block text-[11.5px] font-normal text-ink-3">{m.denied}</span> : null}
+                      {supportNote(m) ? <span className="block text-[11.5px] font-normal text-ink-3">{supportNote(m)}</span> : null}
                     </th>
                     {COLUMNS.map((c) => {
                       const label = `${m.label}: ${c.label} with ${ENGINE_LABEL[c.engine]}`;
@@ -119,7 +142,7 @@ export function ModuleAccess({ prefs, onChange }: { prefs: AiModuleAccessPrefs; 
                         const why = m.supports[c.kind] ? null : 'Not supported by this module yet.';
                         return (
                           <td key={`${c.engine}-${c.kind}`} className="px-2 py-2 text-center" title={why ?? undefined}>
-                            <Checkbox aria-label={label} checked={m.supports[c.kind] && m[c.engine][c.kind]} disabled={!m.supports[c.kind] || saving} onChange={(e) => void setOrg(m, c.engine, c.kind, e.target.checked)} />
+                            <Checkbox aria-label={label} aria-description={why ?? undefined} checked={m.supports[c.kind] && m[c.engine][c.kind]} disabled={!m.supports[c.kind] || saving} onChange={(e) => void setOrg(m, c.engine, c.kind, e.target.checked)} />
                           </td>
                         );
                       }
