@@ -47,7 +47,22 @@ export function QuickAskWindow() {
 
   const key = ctx?.shortcut ? shortcutLabel(ctx.shortcut, isMac) : null;
   const handoff = (to: 'dock' | 'task' | 'search' | 'changes', t: string, result: string | null = null) => void call('quickask:handoff', { to, text: t.slice(0, 8000), result });
-  const insert = ctx?.canInsert ? { label: `Insert into ${ctx.app ?? 'the app'}`, run: (r: string) => void call('quickask:insert', { text: r }) } : undefined;
+  /**
+   * REPLACE OR INSERT, WHICHEVER IS TRUE. Board D03 labels this "Replace
+   * selection", and when the selection really was read that is what pasting
+   * does — the words under the highlight are gone. But Quick Ask also opens
+   * with what was copied last, on a computer whose selection cannot be read
+   * (no helper, or macOS Accessibility not granted), and there is nothing
+   * highlighted to replace: the text lands wherever the caret is. Promising to
+   * replace a selection there would be a promise about the wrong text, so the
+   * label follows the source instead of the mock-up. The app is named in both,
+   * because this window floats over somebody else's window and "the app" is
+   * not obvious from the inside.
+   */
+  const where = ctx?.app ?? 'the app';
+  const insert = ctx?.canInsert
+    ? { label: ctx.source === 'selection' ? `Replace selection in ${where}` : `Insert into ${where}`, run: (r: string) => void call('quickask:insert', { text: r }) }
+    : undefined;
   const tab = (m: 'ask' | 'write', label: string) => (
     <button type="button" role="tab" aria-selected={mode === m} onClick={() => setMode(m)}
       className={cx('rounded-[7px] px-2.5 py-1 text-[12px] font-semibold', mode === m ? 'bg-surface text-ink shadow-sm' : 'text-ink-3 hover:text-ink')}>
@@ -98,8 +113,10 @@ export function QuickAskWindow() {
             />
           ) : null}
         </div>
+        {/* Where the text came from, and — beside a button that writes into somebody else's window — that it waits to be clicked. */}
         <p className="shrink-0 border-t border-line px-4 py-2 text-[11.5px] text-ink-3">
           {ctx?.note ?? (ctx?.source === 'selection' ? `The selection was read when you pressed ${key ?? 'the shortcut'}. Nothing else on your screen is read.` : 'Only what you type or paste here is sent.')}
+          {insert ? ' Nothing is written back until you click.' : null}
         </p>
       </div>
   );
