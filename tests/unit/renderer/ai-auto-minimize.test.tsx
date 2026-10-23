@@ -20,7 +20,7 @@ const { app } = await import('../../../src/core/app-state');
 const { useStore } = await import('../../../src/core/store');
 const { tabsStore } = await import('../../../src/core/tabs');
 const { aiWidget, ui } = await import('../../../src/core/ui');
-const { answerPreview, assistantSession } = await import('../../../src/modules/ai/session');
+const { answerPreview, assistantSession, lastQuestion } = await import('../../../src/modules/ai/session');
 const { AiDock, aiNotice, useAssistantAlerts } = await import('../../../src/app/overlays/AiDock');
 const { AiWidget } = await import('../../../src/app/overlays/AiWidget');
 const { aiMinimized, mayAutoMinimize, useAutoMinimize } = await import('../../../src/app/overlays/aiMinimize');
@@ -329,6 +329,9 @@ describe('privacy and notifications (#126)', () => {
     const entries = [{ role: 'user' as const, text: 'Salary of Asha?' }, { role: 'assistant' as const, text: 'Asha earns 200,000.' }];
     expect(answerPreview(entries, false)).toBe('Asha earns 200,000.');
     expect(answerPreview(entries, true)).toBe('');
+    // The question is the person's words too, so a locked screen shows neither it nor the answer (board D02).
+    expect(lastQuestion(entries, false)).toBe('Salary of Asha?');
+    expect(lastQuestion(entries, true)).toBe('');
     const later = answerLater();
     wrap(<Harness />);
     fireEvent.click(bubble());
@@ -338,7 +341,28 @@ describe('privacy and notifications (#126)', () => {
     await later.answer(turn('Asha earns 200,000.'));
     expect(screen.getByTestId('ai-notice')).toBeTruthy();
     expect(screen.queryByTestId('ai-notice-preview')).toBeNull();
+    expect(screen.queryByTestId('ai-notice-asked')).toBeNull();
     expect(screen.queryByText(/200,000/)).toBeNull();
+    expect(screen.queryByText(/Salary of Asha/)).toBeNull();
+  });
+
+  /**
+   * Board D02 names the question in the notice. "Your answer is ready" on its
+   * own cannot be matched to a question by somebody who put the assistant
+   * down, changed tab and asked something else while it worked.
+   */
+  it('names the question the waiting answer belongs to', async () => {
+    setAi({ display: 'drawer' });
+    const later = answerLater();
+    ui.set({ dock: 'ai' });
+    wrap(<Harness />);
+    await askIt('Compare the quote versions');
+    await press(work());
+    await later.answer(turn('The second raised the roofing by 12%.'));
+
+    expect(screen.getByTestId('ai-notice-asked').textContent).toBe('Compare the quote versions');
+    expect(screen.getByTestId('ai-notice-preview').textContent).toBe('The second raised the roofing by 12%.');
+    expect(lastQuestion([{ role: 'user', text: 'x'.repeat(200) }], false)).toHaveLength(70);
   });
 
   it('asks for a desktop banner only while the window is not in front, and only as the notification settings allow', async () => {

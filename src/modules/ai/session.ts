@@ -143,6 +143,24 @@ export function answerPreview(entries: AskEntry[], locked: boolean, max = 180): 
   return lines.length > max ? `${lines.slice(0, max - 1).trimEnd()}…` : lines;
 }
 
+/**
+ * The question the latest answer belongs to, for the notices shown while the
+ * assistant is put away (board D02, which names it: `"Compare quote versions"
+ * finished while minimised`).
+ *
+ * An answer's first lines say what it says but never what it was asked, and
+ * somebody who put the assistant down, changed tab and asked something else
+ * meanwhile has no way to tell which question a bare "Your answer is ready"
+ * belongs to. Locked, this says nothing at all: the question is the person's
+ * own words every bit as much as the answer is.
+ */
+export function lastQuestion(entries: AskEntry[], locked: boolean, max = 70): string {
+  if (locked) return '';
+  const asked = [...entries].reverse().find((e) => e.role === 'user');
+  const said = (asked?.question ?? asked?.text ?? '').replace(/\s+/g, ' ').trim();
+  return said.length > max ? `${said.slice(0, max - 1).trimEnd()}…` : said;
+}
+
 export interface AskFile {
   ref: string;
   name: string;

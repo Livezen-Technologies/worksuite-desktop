@@ -5,7 +5,7 @@ import { useStore } from '../../core/store';
 import { Icon } from '../../components/Icon';
 import { CountBadge, cx } from '../../components/ui';
 import { aiWidget, openAssistant, ui, useAiDisplay } from '../../core/ui';
-import { answerPreview, assistantSession, phaseLabel } from '../../modules/ai/session';
+import { answerPreview, assistantSession, lastQuestion, phaseLabel } from '../../modules/ai/session';
 import { aiNotice, AssistantBody, unreadLabel, useAssistantActivity } from './AiDock';
 import { AI_ASSISTANT_ATTR, AI_WORKSPACE_ATTR, aiMinimized, restoreAssistant } from './aiMinimize';
 
@@ -261,6 +261,8 @@ export function AiNotice() {
   const shown = !!kind && !(display === 'widget' ? floating : docked);
   const title = kind === 'input' ? t('ai.needsInput') : kind === 'failed' ? t('ai.failed') : t('ai.complete');
   const preview = shown ? answerPreview(entries, locked) : '';
+  // Which question this is about (board D02): a bare "Your answer is ready" says nothing when more than one was asked.
+  const asked = shown ? lastQuestion(entries, locked) : '';
   const canRetry = kind === 'failed' && !!entries.at(-1)?.retry;
   // Above the floating button; with the drawer and no button, in the corner on its own.
   const alone = display !== 'widget' && !minimized;
@@ -275,6 +277,11 @@ export function AiNotice() {
             <Icon name={kind === 'ready' ? 'sparkles' : 'alert'} size={15} className={cx('shrink-0', kind === 'failed' ? 'text-danger' : kind === 'input' ? 'text-warning' : 'text-teal')} />
             <span className="min-w-0 flex-1 font-semibold">{title}</span>
           </div>
+          {asked ? (
+            <p data-testid="ai-notice-asked" className="truncate text-[12px] text-ink-3" title={asked}>
+              {asked}
+            </p>
+          ) : null}
           {preview ? (
             <p data-testid="ai-notice-preview" className="line-clamp-3 text-[12px] leading-[1.45] text-ink-2">
               {preview}
