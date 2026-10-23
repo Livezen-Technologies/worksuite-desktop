@@ -58,6 +58,13 @@ export interface TrayModel {
   sinhala?: { shortcut: string | null } | null;
   /** Changes the assistant proposed that wait for a decision (DSK-5): opened in the main window, never confirmed here. */
   aiChanges: number;
+  /**
+   * Local AI while a model on this computer can answer, with its name (board D06). A line that reads, never a
+   * control: there is nothing to decide here, and choosing a model belongs on the Settings page that can explain the
+   * sizes and the licences. Null (or absent) whenever nothing is set up, so the menu never advertises an absence.
+   * Optional for older callers.
+   */
+  localAi?: { model: string } | null;
   /** The catalogue ids of the apps the person may open (shared/access.ts): the menu offers nothing else. */
   apps: string[];
   /**
@@ -746,6 +753,7 @@ export function trayMenu(m: TrayModel, a: TrayActions, now = new Date()): MenuIt
     items.push({ label: 'Convert clipboard to Unicode', ...(m.sinhala.shortcut ? { accelerator: m.sinhala.shortcut, registerAccelerator: false } : {}), click: a.sinhalaClipboard });
   }
   if (has('ai') && m.aiChanges > 0) items.push({ label: m.aiChanges === 1 ? 'A change from the assistant waits' : `${m.aiChanges} changes from the assistant wait`, click: a.aiChanges });
+  if (has('ai') && m.localAi) items.push({ label: `Local AI: Ready · ${m.localAi.model}`, enabled: false });
   if (m.signedIn) {
     const create: MenuItemConstructorOptions[] = [
       ...(has('mail') ? [{ label: 'Email', click: () => a.openRoute('/mail?compose=1') }] : []),

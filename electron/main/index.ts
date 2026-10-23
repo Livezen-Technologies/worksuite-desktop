@@ -3145,9 +3145,25 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     userData: p.userData,
     signedIn: () => sessionCtl.isReady(),
     serverCatalog: () => http.get('/api/ai/local/catalog'),
-    changed: () => broadcast('ai:localChanged'),
+    changed: () => {
+      broadcast('ai:localChanged');
+      syncLocalAiTray();
+    },
   });
   app.on('will-quit', () => void localAI.stop());
+  /**
+   * The tray's "Local AI: Ready" line (board D06). Local AI already tells every window when models, downloads or the
+   * runtime change, which is exactly when this line can go stale, so it is refreshed from the same signal rather
+   * than on a timer of its own — and once at start-up, because a model installed in an earlier run changes nothing
+   * and would otherwise leave the menu silent until the first download.
+   */
+  function syncLocalAiTray(): void {
+    void localAI
+      .defaultReady()
+      .then((r) => tray.update({ localAi: r.ready && r.model ? { model: r.model } : null }))
+      .catch(() => undefined);
+  }
+  syncLocalAiTray();
   // Text read from images on this computer (worksuite-desktop#59): Tesseract, its language data fetched once when first needed.
   const ocr = new OcrService({
     dir: join(p.userData, 'LocalAI', 'ocr'),

@@ -36,6 +36,15 @@ export interface LocalAIHostDeps {
 export interface LocalAIHost {
   register(router: IpcRouter): void;
   senderGone(id: number): void;
+  /**
+   * Whether Local AI can answer right now, and with which model — for the
+   * things outside a window that have to say so, such as the tray. This is the
+   * same test the windows make (`localReady` in core/local-ai): chosen,
+   * installed, and neither failing nor still in its readiness check, so
+   * nothing claims an answer without a connection on a computer that would go
+   * online the moment somebody asked.
+   */
+  defaultReady(): Promise<{ ready: boolean; model: string | null }>;
   /** Sign-out: the model stops; the model files stay (they are not the person's data). */
   signedOut(): Promise<void>;
   stop(): Promise<void>;
@@ -169,6 +178,13 @@ export function createLocalAI(deps: LocalAIHostDeps): LocalAIHost {
       router.handle('ai:localRestart', () => runtime.reset());
     },
     senderGone: (id) => runtime.senderGone(id),
+    async defaultReady() {
+      await ready;
+      // Hardware is not needed to say whether a model answers, only to say whether it suits the computer, and asking
+      // for it would start the worker just to draw a tray line.
+      const chosen = (await models.list(null)).find((v) => v.isDefault && v.state === 'installed' && v.readiness !== 'failed' && v.readiness !== 'testing');
+      return { ready: !!chosen, model: chosen?.model.name ?? null };
+    },
     async signedOut() {
       await runtime.stop();
     },

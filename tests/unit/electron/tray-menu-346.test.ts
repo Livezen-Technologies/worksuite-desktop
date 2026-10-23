@@ -106,6 +106,25 @@ describe('the summary lines', () => {
     expect(trayMenu({ ...model, offline: true }, actions()).some((i) => /^(Connected|Offline)$/.test(String(i.label)))).toBe(false);
   });
 
+  /**
+   * "Local AI: Ready" (board D06) is a line that reads, not a control: there
+   * is nothing to decide in a menu, and nothing may be confirmed from one. It
+   * is absent rather than negative while no model can answer — a menu this
+   * long does not spend a line advertising something nobody has set up.
+   */
+  it('says Local AI is ready, with the model, and offers nothing to click', () => {
+    const items = trayMenu({ ...model, localAi: { model: 'Gemma 3 4B' } }, actions());
+    const line = items.find((i) => String(i.label).startsWith('Local AI'));
+    expect(line?.label).toBe('Local AI: Ready · Gemma 3 4B');
+    expect(line?.enabled).toBe(false);
+    expect(line?.click).toBeUndefined();
+
+    expect(trayMenu({ ...model, localAi: null }, actions()).some((i) => /Local AI/.test(String(i.label)))).toBe(false);
+    expect(trayMenu(model, actions()).some((i) => /Local AI/.test(String(i.label)))).toBe(false);
+    // Somebody without the AI app never sees it, as with Quick Ask and the waiting changes.
+    expect(trayMenu({ ...model, localAi: { model: 'Gemma 3 4B' }, apps: ['mail'] }, actions()).some((i) => /Local AI/.test(String(i.label)))).toBe(false);
+  });
+
   it('keeps labels to about forty characters', () => {
     expect(fit('x'.repeat(60))).toHaveLength(40);
     expect(headerLabel('A very long person name indeed', 'An even longer organisation name')).toMatch(/…$/);

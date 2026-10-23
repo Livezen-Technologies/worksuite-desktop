@@ -20,6 +20,7 @@ import { Icon } from '../components/Icon';
 import { CountBadge, cx } from '../components/ui';
 import { bytes } from '../core/time';
 import { StorageMeter } from '../modules/account/Storage';
+import { LocalAiPill } from '../modules/ai/LocalAiPill';
 
 /** Where Settings › Sidebar is: the sidebar's footer and each item's menu open it. */
 export const SIDEBAR_SETTINGS_ROUTE = '/settings/sidebar';
@@ -220,6 +221,7 @@ export function Sidebar() {
       {!collapsed ? personal ? <StorageMeter /> : <FilesCard /> : null}
 
       <div className="px-2.5 pt-2">
+        <LocalAiPill collapsed={collapsed} />
         <button
           type="button"
           onClick={() => navigate('/settings')}
