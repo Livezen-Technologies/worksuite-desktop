@@ -117,6 +117,38 @@ describe('reading text in images on this computer (#59)', () => {
     expect(s.created[0]!.languages).toEqual(['eng', 'tam']);
   });
 
+  /**
+   * Board D10's Language packs: a pack fetched on purpose, before anything
+   * needs it, so a computer that will be offline can be prepared. It has to
+   * take the same checked path as the automatic download — a Download button
+   * is no reason to trust a file the reader would otherwise have verified.
+   */
+  it('installs one pack on purpose, checked, and reads with it later without fetching again', async () => {
+    const s = service();
+
+    await s.ocr.install('sin');
+    expect(s.fetched).toEqual(['https://cdn.test/sin.traineddata.gz']);
+    expect(readFileSync(join(s.dir, 'sin.traineddata.gz'))).toEqual(data('sin'));
+    expect((await s.ocr.status()).languages.find((l) => l.id === 'sin')?.installed).toBe(true);
+
+    // Already there: a success that downloads nothing.
+    await s.ocr.install('sin');
+    expect(s.fetched).toHaveLength(1);
+
+    // And reading uses what was installed rather than fetching it again.
+    await s.ocr.recognize(1, { id: 'job-00001', png: PNG, languages: ['sin'] });
+    expect(s.fetched).toHaveLength(1);
+  });
+
+  it('refuses a pack installed on purpose that does not match, and leaves nothing behind', async () => {
+    const s = service({ body: () => Buffer.from('not the pack at all') });
+
+    await expect(s.ocr.install('eng')).rejects.toThrow(/did not match what WorkSuite expects/);
+    expect(existsSync(join(s.dir, 'eng.traineddata.gz'))).toBe(false);
+    expect(existsSync(join(s.dir, 'eng.traineddata.gz.part'))).toBe(false);
+    expect((await s.ocr.status()).languages.find((l) => l.id === 'eng')?.installed).toBe(false);
+  });
+
   it('pins every language file this build downloads by size and SHA-256', () => {
     for (const f of Object.values(OCR_LANGUAGE_FILES)) {
       expect(f.url).toMatch(/^https:\/\/cdn\.jsdelivr\.net\/npm\/@tesseract\.js-data\/(eng|sin|tam)@1\.0\.0\/4\.0\.0_best_int\/\w+\.traineddata\.gz$/);

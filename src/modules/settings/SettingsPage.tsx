@@ -22,6 +22,7 @@ import { useStore } from '../../core/store';
 import { useScrollFades } from '../../core/use-scroll-fades';
 import { RecordingSettings } from '../meet/RecordingSettings';
 import { SpeechModelSettings } from '../meet/SpeechModel';
+import { LanguagePacks } from '../ai/LanguagePacks';
 import { useTab, useTabTitle } from '../../core/tab-context';
 import { bytes, currentZone, relative } from '../../core/time';
 import { toast } from '../../core/toasts';
@@ -1601,6 +1602,7 @@ export function LocalAISection() {
           </div>
         );
       })}
+      <LanguagePacks />
     </>
   );
 }

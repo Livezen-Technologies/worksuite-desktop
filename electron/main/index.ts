@@ -3442,6 +3442,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
   router.handle('ai:ocrCancel', (input) => ocr.cancel(input.id));
   router.handle('ai:ocrStatus', () => ocr.status());
+  router.handle('ai:ocrInstall', (input) => ocr.install(input.language));
   const openGuest = async (input: string, server?: string, localName?: string) => {
     const prepared = await guests.prepare(input, server);
     const info = localName ? { ...prepared, localName } : prepared;

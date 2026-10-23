@@ -45,7 +45,7 @@ import {
   type DeskStatus,
 } from '../event-desk';
 import { localRequestSchema, type LocalAIStatus, type LocalModelView } from '../local-ai';
-import { ocrRequestSchema, type OcrResult, type OcrStatus } from '../ocr';
+import { OCR_LANGUAGES, ocrRequestSchema, type OcrResult, type OcrStatus } from '../ocr';
 import {
   restaurantOutboxAction,
   restaurantOutboxAdd,
@@ -521,6 +521,7 @@ export const contract = {
   'ai:ocr': ch(ocrRequestSchema, { session: true, rate: 10 }),
   'ai:ocrCancel': ch(z.strictObject({ id: z.string().regex(/^[A-Za-z0-9-]{8,64}$/) }), { session: true, rate: 30 }),
   'ai:ocrStatus': ch(none, { session: true }),
+  'ai:ocrInstall': ch(z.strictObject({ language: z.enum(OCR_LANGUAGES) }), { session: true, rate: 10 }),
   'ai:confirm': ch(z.object({ id: z.number().int().positive(), nonce: z.string().regex(/^[a-f0-9]{16,64}$/) }), { session: true, sensitive: true, rate: 5 }),
   'ai:upload': ch(none, { session: true, rate: 3 }),
   /** An answer arrived while the assistant was minimised and the window is not in front (#126): a banner, as notifications allow. */
@@ -1788,6 +1789,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'ai:ocr': OcrResult;
   'ai:ocrCancel': void;
   'ai:ocrStatus': OcrStatus;
+  /** Downloads one reading pack on purpose, so it is there without a connection (board D10). */
+  'ai:ocrInstall': void;
   'ai:confirm': unknown;
   'ai:upload': AiUpload | null;
   'ai:answerReady': boolean;

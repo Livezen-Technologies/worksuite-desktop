@@ -164,6 +164,7 @@ const api = {
     ocr: call('ai:ocr'),
     ocrCancel: call('ai:ocrCancel'),
     ocrStatus: call('ai:ocrStatus'),
+    ocrInstall: call('ai:ocrInstall'),
   },
   ring: {
     state: call('ring:state'),

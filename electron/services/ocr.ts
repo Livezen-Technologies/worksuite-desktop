@@ -136,6 +136,24 @@ export class OcrService {
     await rename(part, this.file(lang));
   }
 
+  /**
+   * Downloads one reading pack on purpose (board D10, Settings › Local AI ›
+   * Language packs), instead of waiting for the first picture that needs it.
+   *
+   * WHY THIS IS MORE THAN A CONVENIENCE: the data comes from a CDN, so reading
+   * Sinhala for the first time needs a connection. Somebody who knows they
+   * will be offline — on a flight, at a site with no signal — had no way to
+   * prepare, and no way even to see which languages were already there. It
+   * takes exactly the same checked path as the automatic download: pinned size
+   * and SHA-256, written to a `.part` and renamed only once it matches, so
+   * nothing unverified is left where the reader would load it. A pack already
+   * installed is a success that downloads nothing.
+   */
+  async install(lang: OcrLanguage): Promise<void> {
+    if (await this.installed(lang)) return;
+    await this.download(lang, new AbortController().signal, () => undefined);
+  }
+
   /** Reads the text in a picture (a PNG the window drew). One job at a time. */
   recognize(sender: number, req: OcrRequest): Promise<OcrResult> {
     const run = this.queue.then(() => this.run(sender, req));

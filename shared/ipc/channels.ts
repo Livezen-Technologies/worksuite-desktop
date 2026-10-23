@@ -87,6 +87,7 @@ export const INVOKE_CHANNELS = [
   'ai:ocr',
   'ai:ocrCancel',
   'ai:ocrStatus',
+  'ai:ocrInstall',
   'ring:state',
   'ring:join',
   'ring:silence',
