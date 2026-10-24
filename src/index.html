@@ -45,19 +45,24 @@
       }
       @keyframes ws-boot-dim {
         0%,
-        13.89% {
+        16.67% {
           opacity: 1;
+          transform: scale(1);
         }
         30.56% {
           opacity: 0.28;
+          transform: scale(0.84);
         }
         50%,
         100% {
           opacity: 1;
+          transform: scale(1);
         }
       }
       #ws-boot rect {
-        animation: ws-boot-dim 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+        transform-box: fill-box;
+        transform-origin: center;
+        animation: ws-boot-dim 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
       }
       #ws-boot .b {
         animation-delay: -0.2s;
@@ -75,6 +80,7 @@
         #ws-boot rect {
           animation: none;
           opacity: 1;
+          transform: none;
         }
       }
     </style>

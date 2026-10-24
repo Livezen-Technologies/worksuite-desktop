@@ -67,6 +67,9 @@ const html = readFileSync(resolve(__dirname, '../../../src/index.html'), 'utf8')
 
 /** The `ws-load-dim` keyframes block, and the rule bodies that use it. */
 const keyframes = /@keyframes ws-load-dim\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
+/* The one rule that drives all four squares: easing, and the transform box
+   the squash needs. */
+const driver = /\.ws-load-navy\s*\{([\s\S]*?)\n\}/.exec(css)?.[1] ?? '';
 
 /**
  * The bodies of every at-rule with this prelude, brace-matched.
@@ -169,11 +172,35 @@ describe('the WorkSuite loading mark, against worksuite-loader.json', () => {
     expect(stops).toContain(pct(base.dimFrame)); // 22/72 -> 30.56%
     expect(stops).toContain(pct(base.recoverFrame)); // 36/72 -> 50%
 
-    /* It holds at full until just before its turn, then ramps: the hold must
-       land inside the JSON's own hold, never after the dim has begun. */
+    /* It holds at full until its turn, then ramps. This must be the frame the
+       hold ENDS on, not the length of the descent that follows it: the ten
+       frames from f12 to f22 once got written here as 13.89%, which started
+       every square dimming early and steepened the ramp. An inequality let
+       that through for a while, so this is an equality now. */
     const hold = stops.filter((s) => s > 0 && s < pct(base.dimFrame));
     expect(hold).toHaveLength(1);
-    expect(hold[0]).toBeLessThanOrEqual(pct(base.holdFrame));
+    expect(base.holdFrame).toBe(12);
+    expect(hold[0]).toBe(pct(base.holdFrame)); // 12/72 -> 16.67%
+    expect(hold[0]).not.toBe(pct(base.dimFrame - base.holdFrame)); // not 13.89%
+
+    /* The JSON squashes each square as it dims — `ks.s` 100 -> 84 -> 100, in
+       lockstep with the opacity — and an SVG rect scales about the user-space
+       origin, so it needs its own box as the origin or it slides instead. */
+    for (const l of lottie.layers) {
+      const scale = (l.ks.s.k as Array<{ s: number[] }>).map((k) => k.s[0]);
+      expect(Math.min(...scale)).toBe(84);
+    }
+    expect(keyframes).toMatch(/transform:\s*scale\(0\.84\)/);
+    expect(keyframes).toMatch(/transform:\s*scale\(1\)/);
+    expect(driver).toMatch(/transform-box:\s*fill-box/);
+    expect(driver).toMatch(/transform-origin:\s*center/);
+
+    /* The easing is the JSON's own tangents, not a curve borrowed from
+       somewhere else: `o.x .45 / o.y 0 / i.x .55 / i.y 1`. */
+    const k0 = (lottie.layers.find((l) => l.nm === 'cyan left')!.ks.o.k as Array<Record<string, any>>)[0];
+    expect(driver).toContain(
+      `cubic-bezier(${k0.o.x[0]}, ${k0.o.y[0]}, ${k0.i.x[0]}, ${k0.i.y[0]})`,
+    );
   });
 
   it('staggers the four squares by the Lottie’s 12 frames, in the Lottie’s order', () => {

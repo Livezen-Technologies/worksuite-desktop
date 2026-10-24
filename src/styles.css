@@ -474,7 +474,12 @@ html[data-contrast='more'] :focus-visible {
  *
  * Four squares, each dimming to 28% and back, 0.2s apart over a 1.2s loop.
  * Every percentage below is a frame from `assets/brand/worksuite-loader.json`
- * divided by its 72: f10 -> 13.89%, f22 -> 30.56%, f36 -> 50%. Keeping the
+ * divided by its 72: f12 -> 16.67%, f22 -> 30.56%, f36 -> 50%. f12 is where
+ * the hold ENDS; the ten frames from f12 to f22 are the descent, and using
+ * that length as the percentage (13.89%) is the mistake this once had.
+ * The squares squash as they dim, because the JSON animates `ks.s` 100 -> 84
+ * -> 100 in lockstep with the opacity, and the easing is the JSON's own
+ * tangents (`o.x .45 / i.x .55`), not a borrowed curve. Keeping the
  * arithmetic visible is what lets somebody check this against the JSON the
  * designers edit — and `brand-loader.test.tsx` checks it against that JSON on
  * every run, so a new colour or a moved square fails the build instead of
@@ -482,15 +487,18 @@ html[data-contrast='more'] :focus-visible {
  */
 @keyframes ws-load-dim {
   0%,
-  13.89% {
+  16.67% {
     opacity: 1;
+    transform: scale(1);
   }
   30.56% {
     opacity: 0.28;
+    transform: scale(0.84);
   }
   50%,
   100% {
     opacity: 1;
+    transform: scale(1);
   }
 }
 
@@ -498,7 +506,10 @@ html[data-contrast='more'] :focus-visible {
 .ws-load-cyan-left,
 .ws-load-cyan-bottom,
 .ws-load-navy {
-  animation: ws-load-dim 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+  /* Each square shrinks about its own centre, not the SVG's origin. */
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: ws-load-dim 1.2s cubic-bezier(0.45, 0, 0.55, 1) infinite;
 }
 
 /* The stagger: each square starts its dim 0.2s after the one before it. A
@@ -527,6 +538,7 @@ html[data-contrast='more'] :focus-visible {
   .ws-load-navy {
     animation: none;
     opacity: 1;
+    transform: none;
   }
 }
 
