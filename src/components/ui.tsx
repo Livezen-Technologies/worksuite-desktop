@@ -1,5 +1,6 @@
 import { Component, Fragment, useEffect, useRef, useState, type ButtonHTMLAttributes, type ErrorInfo, type InputHTMLAttributes, type ReactNode } from 'react';
 import { Icon } from './Icon';
+import { WorkSuiteLoader } from './WorkSuiteLoader';
 import { recordScreenError } from '../core/screen-errors';
 
 export function cx(...parts: Array<string | false | null | undefined>): string {
@@ -156,10 +157,18 @@ export function Avatar({ name, size = 32, className, presence, src }: { name: st
   );
 }
 
+/**
+ * The app's block "this is loading" state: the WorkSuite mark, and a word for
+ * what is being waited on.
+ *
+ * The mark itself carries no accessible name here. The `role="status"` wrapper
+ * already announces the label beside it, and a screen reader saying "Loading"
+ * twice over is worse than saying it once.
+ */
 export function Spinner({ label = 'Loading…', className }: { label?: string; className?: string }) {
   return (
     <div className={cx('flex items-center justify-center gap-2 p-6 text-ink-3', className)} role="status">
-      <Icon name="spinner" size={18} className="animate-spin-slow" />
+      <WorkSuiteLoader size={18} label={null} />
       <span className="text-[12.5px]">{label}</span>
     </div>
   );

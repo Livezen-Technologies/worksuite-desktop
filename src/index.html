@@ -5,9 +5,93 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="color-scheme" content="light dark" />
     <title>WorkSuite</title>
+    <!--
+      The boot mark: what a window shows between its first paint and React
+      mounting. Every window is created with `show: false` and revealed on
+      `ready-to-show`, so without this the first thing anybody sees on a cold
+      start is a window of flat background colour.
+
+      It is written here, inline, because it has to be on screen before any
+      bundle has been parsed — that is the whole point of it. The styles are
+      inline for the same reason, which the shell's CSP allows
+      (`style-src 'self' 'unsafe-inline'`); no inline script is needed or used.
+      `createRoot` empties `#root` on its first render, so React takes the mark
+      away by itself and nothing has to clear it.
+
+      It fades in only after 400ms. A warm start mounts well inside that, and so
+      do the small secondary windows (the ring tray, a call tag, a slideshow),
+      which would otherwise flash a brand mark on their way up. The mark is for
+      a boot slow enough to be worth telling somebody about.
+
+      The geometry and timings are the same four squares as
+      `assets/brand/worksuite-loader.json`, kept in step with
+      `components/WorkSuiteLoader.tsx`. The background stays transparent so each
+      window's own `backgroundColor` shows through.
+    -->
+    <style>
+      #ws-boot {
+        position: fixed;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        opacity: 0;
+        animation: ws-boot-in 240ms ease-out 400ms forwards;
+      }
+      @keyframes ws-boot-in {
+        to {
+          opacity: 1;
+        }
+      }
+      @keyframes ws-boot-dim {
+        0%,
+        13.89% {
+          opacity: 1;
+        }
+        30.56% {
+          opacity: 0.28;
+        }
+        50%,
+        100% {
+          opacity: 1;
+        }
+      }
+      #ws-boot rect {
+        animation: ws-boot-dim 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+      }
+      #ws-boot .b {
+        animation-delay: -0.2s;
+      }
+      #ws-boot .cl {
+        animation-delay: 0s;
+      }
+      #ws-boot .n {
+        animation-delay: 0.2s;
+      }
+      #ws-boot .cb {
+        animation-delay: 0.4s;
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #ws-boot rect {
+          animation: none;
+          opacity: 1;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Back to front: the navy core is drawn last so it sits over the blue square. -->
+      <div id="ws-boot">
+        <svg viewBox="0 0 200 200" width="56" height="56" role="img" aria-label="Starting WorkSuite" focusable="false">
+          <title>Starting WorkSuite</title>
+          <rect class="b" x="75" y="25" width="100" height="100" fill="#0A6CFF" />
+          <rect class="cl" x="25" y="75" width="50" height="50" fill="#00DAF2" />
+          <rect class="cb" x="75" y="125" width="50" height="50" fill="#00DAF2" />
+          <rect class="n" x="75" y="75" width="50" height="50" fill="#001842" />
+        </svg>
+      </div>
+    </div>
     <script type="module" src="./main.tsx"></script>
   </body>
 </html>
