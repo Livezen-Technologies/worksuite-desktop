@@ -4,6 +4,23 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.43.0 — 2026-10-24
+
+**Added**
+
+- The WorkSuite loading mark: the four brand squares dimming in turn, wherever the app used to show a turning
+  circle. It is `components/WorkSuiteLoader.tsx`, and it arrives through the shared `Spinner`, the `spinner` icon
+  that some fifty buttons and panels ask for, the wait for a browser sign-in, and the window itself before React
+  has mounted. The shared kit (`components/ui.tsx`) and the stylesheet (`src/styles.css`) are this module's,
+  which is why the version is here.
+- The mark is four `<rect>`s and a CSS keyframe, not a Lottie player: the animation is opacity against time and
+  nothing else, so a player would have added ~250 KB of JavaScript and a runtime canvas to every surface that
+  shows a spinner. The timings are read off `src/assets/brand/worksuite-loader.json`, which stays the source of
+  truth; a test compares the two on every run, so a change to that file fails the build rather than shipping a
+  mark that is no longer the brand's.
+- Reduced motion stops the squares and leaves the mark at full opacity. A turning `refresh` or sync icon still
+  turns — that is the button you pressed, not the app saying it is busy.
+
 ## 1.42.3 — 2026-10-23
 
 **Added**

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { BrowserSignIn } from '@shared/cloud';
 import { call, errorMessage } from '../../../core/bridge';
 import { ConnectCard, ConnectFrame } from '../ConnectFrame';
+import { WorkSuiteLoader } from '../../../components/WorkSuiteLoader';
 
 export interface BrowserWaitProps {
   /** The attempt in progress (`signin:changed`); null once it ended. */
@@ -62,10 +63,14 @@ export function BrowserWait({ attempt, variant, accountName }: BrowserWaitProps)
   return (
     <ConnectFrame title={title}>
       <ConnectCard className="items-center gap-[18px] text-center" width={520}>
-        <div
-          aria-hidden="true"
-          className={expired ? 'h-[72px] w-[72px] rounded-full border-[6px] border-line' : 'h-[72px] w-[72px] animate-spin-slow rounded-full border-[6px] border-selection border-t-primary motion-reduce:animate-none'}
-        />
+        {/* Waiting on the browser is a wait, so it is the WorkSuite mark. An
+            expired attempt is not: nothing is happening any more, and the
+            inert ring says that better than a brand mark standing still. */}
+        {expired ? (
+          <div aria-hidden="true" className="h-[72px] w-[72px] rounded-full border-[6px] border-line" />
+        ) : (
+          <WorkSuiteLoader size={72} label={null} />
+        )}
         <h1 className="m-0 text-[24px] font-extrabold text-ink">{expired ? 'The sign-in window closed' : signUp ? 'Finish creating your account in your browser' : 'Finish signing in in your browser'}</h1>
         {attempt ? (
           <p className="m-0 text-[15px] leading-[1.6] text-ink-3">

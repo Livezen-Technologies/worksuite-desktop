@@ -151,6 +151,7 @@ import {
   SplitSquareHorizontal,
   Languages,
 } from 'lucide-react';
+import { WorkSuiteLoader } from './WorkSuiteLoader';
 
 /**
  * Icons (§4.12): 24 px stroke icons at a 1.8 px stroke in currentColor. No
@@ -193,7 +194,26 @@ const ICONS: Record<string, LucideIcon> = {
   wand: Wand2, shapes: Shapes, sticker: Sticker, droplet: Droplet, blend: Blend, layers: Layers, 'flip-v': FlipVertical2, 'square-dashed': SquareDashed, 'message-square-plus': MessageSquarePlus, shuffle: Shuffle, 'grip-horizontal': GripHorizontal, 'split-square': SplitSquareHorizontal,
 };
 
+/* The rotation utilities a spinning icon gets asked for. The WorkSuite mark
+   does not rotate — it dims its four squares in turn — so these come off when
+   `spinner` is drawn as the brand's mark instead of as a lucide glyph. */
+const SPIN_CLASSES = /(?:^|\s)(?:motion-safe:|motion-reduce:)?animate-spin(?:-slow)?(?=\s|$)/g;
+
 export function Icon({ name, size = 18, className, strokeWidth = 1.8, label }: { name: string; size?: number; className?: string; strokeWidth?: number; label?: string }) {
+  /*
+   * `spinner` is the app's one "something is loading" glyph, and it is now the
+   * WorkSuite loading mark rather than a turning circle. Branding it here
+   * instead of at each of its ~50 call sites is deliberate: the mark reaches
+   * everywhere a spinner was already shown, from one place, without editing
+   * (and so re-versioning) the thirty modules that ask for it.
+   *
+   * A `refresh` or `sync` icon asked to rotate still rotates. That is an
+   * affordance turning — the button you just pressed — not the app saying it
+   * is busy, and the brand mark is the wrong thing to put in its place.
+   */
+  if (name === 'spinner') {
+    return <WorkSuiteLoader size={size} label={label ?? null} className={className?.replace(SPIN_CLASSES, ' ').trim() || undefined} />;
+  }
   const C = ICONS[name] ?? Box;
   return <C size={size} strokeWidth={strokeWidth} className={className} aria-hidden={label ? undefined : true} aria-label={label} role={label ? 'img' : undefined} />;
 }

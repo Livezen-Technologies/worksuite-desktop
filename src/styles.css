@@ -469,6 +469,67 @@ html[data-contrast='more'] :focus-visible {
   animation: ws-spin 1.4s linear infinite;
 }
 
+/*
+ * The WorkSuite loading mark (`components/WorkSuiteLoader.tsx`).
+ *
+ * Four squares, each dimming to 28% and back, 0.2s apart over a 1.2s loop.
+ * Every percentage below is a frame from `assets/brand/worksuite-loader.json`
+ * divided by its 72: f10 -> 13.89%, f22 -> 30.56%, f36 -> 50%. Keeping the
+ * arithmetic visible is what lets somebody check this against the JSON the
+ * designers edit — and `brand-loader.test.tsx` checks it against that JSON on
+ * every run, so a new colour or a moved square fails the build instead of
+ * shipping a mark that is no longer the brand's.
+ */
+@keyframes ws-load-dim {
+  0%,
+  13.89% {
+    opacity: 1;
+  }
+  30.56% {
+    opacity: 0.28;
+  }
+  50%,
+  100% {
+    opacity: 1;
+  }
+}
+
+.ws-load-blue,
+.ws-load-cyan-left,
+.ws-load-cyan-bottom,
+.ws-load-navy {
+  animation: ws-load-dim 1.2s cubic-bezier(0.4, 0, 0.2, 1) infinite;
+}
+
+/* The stagger: each square starts its dim 0.2s after the one before it. A
+   negative delay starts the animation already part-way through, so the four
+   are in step from the first frame rather than easing in one by one. */
+.ws-load-blue {
+  animation-delay: -0.2s;
+}
+.ws-load-cyan-left {
+  animation-delay: 0s;
+}
+.ws-load-navy {
+  animation-delay: 0.2s;
+}
+.ws-load-cyan-bottom {
+  animation-delay: 0.4s;
+}
+
+/* The squares stop and sit at full opacity. The mark still reads as the logo,
+   and whatever is waiting still says so in words — an animation is not how
+   anybody should learn that the app is busy. */
+@media (prefers-reduced-motion: reduce) {
+  .ws-load-blue,
+  .ws-load-cyan-left,
+  .ws-load-cyan-bottom,
+  .ws-load-navy {
+    animation: none;
+    opacity: 1;
+  }
+}
+
 /* A call's voice bars, moving while someone speaks. */
 @keyframes ws-wave {
   0%,

@@ -14,6 +14,8 @@ person who has to live with the change — what it does, and where it bites.
 ## Unreleased
 ### Added
 - Meet: **push to talk** — hold the space bar in a meeting to be heard, let go to go back to muted. It is in Settings › Keyboard shortcuts with the rest of Meet's keys and can be changed there. It only ever unmutes: pressed while your microphone is already live it does nothing, so letting go can never cut you off mid-sentence; it does nothing where a space would be typed instead, nothing when the host has turned participants' microphones off, and it closes the microphone again if you switch away from WorkSuite or close the meeting window while still holding the key. (desktop modules meet 1.27.0, settings 1.42.3)
+### Changed
+- **Waiting now looks like WorkSuite.** The turning circle is gone: wherever the app is busy it shows the brand's loading mark — the four squares dimming one after another, the same animation as everywhere else in the suite. It is the block "Loading…" state, the small mark inside a button that is working, the wait while a browser sign-in finishes, and the window itself on a cold start, which until now sat as a rectangle of flat colour until the app had mounted. That last one only appears if starting actually takes a moment, so a warm start still goes straight to the app rather than flashing a logo at you. If you have asked your system for reduced motion the squares do not animate at all; the mark is simply there, and the words beside it still say what is being waited on. A refresh or sync button whose icon spins while it works is unchanged — that is the button turning, not the app saying it is busy. (desktop module settings 1.43.0)
 
 ## 0.2.277 — 2026-10-22
 ### Added
