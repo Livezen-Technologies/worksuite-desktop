@@ -626,7 +626,10 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   Receipts, deposit slips, day sheets and statements are HTML laid out by the shared `print:print` / `print:toPdf`
   service (`print.ts`); payments are recorded in Billing (`POST /api/billing/payments`, allocated to the invoice or
   linked as a deposit). This desk's location and printers are per-computer conveniences in window storage. The
-  waitlist reads `GET|POST /api/appointments/waitlist` and says so on a server without it.
+  week view reads `GET /calendar/week` (server Appointments 1.1) and falls back to the list over the same seven days
+  on a 404. The waitlist reads `GET|POST /waitlist` (1.1 and the web field names, normalised by `waitlistFrom`),
+  books a matched entry with `POST /waitlist/{id}/book` and offers it with `POST /waitlist/{id}/offer`; on a server
+  without it (404) the screen says so.
 
 - Label Studio (`modules/label`, main process `electron/services/label/`, shapes in `shared/label.ts`;
   WS-LABEL-SRS-001 §4.27 FR-DSK-01…06, §4.20 FR-GWY, the desktop boards D01–D07): the shell (`LabelShell.tsx`,

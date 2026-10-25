@@ -135,7 +135,7 @@ export interface SetupProvider { id: number; org_id: number; name: string; title
 export interface Block { id: number; starts_at: string; ends_at: string; reason: string | null }
 
 /** T-07 (target): the server's waitlist, where the connected server has one. */
-export interface WaitlistEntry { id: number; customer: Party; service: { id: number; name: string } | null; provider: { id: number; name: string } | null; date_from: string | null; date_to: string | null; part_of_day?: string | null; note?: string | null; status?: string; created_at?: string | null }
+export interface WaitlistEntry { id: number; customer: Party; service: { id: number; name: string } | null; provider: { id: number; name: string } | null; date_from: string | null; date_to: string | null; part_of_day?: string | null; note?: string | null; status?: string; created_at?: string | null; match?: { starts_at: string; provider_id: number | null; label?: string } | null }
 export interface WaitlistOffer { starts_at: string; provider: { id: number; name: string } | null; matches: number[]; why?: string | null }
 
 /* ───────────────────────── reads ───────────────────────── */
@@ -182,13 +182,70 @@ export const fetchProviders = (signal?: AbortSignal) => apiGet<{ items: SetupPro
 export const fetchBlocks = (provider: number, signal?: AbortSignal) => apiGet<{ items: Block[] }>(`${BASE}/setup/providers/${provider}/blocks`, undefined, signal);
 export const fetchDeposits = (id: number, signal?: AbortSignal) => apiGet<{ items: Array<{ id: number; reference: string | null; method: string; amount: number; free: number; currency: string; paid_on: string; note: string | null }>; currency: string | null }>(`${BASE}/${id}/deposits`, undefined, signal);
 
-/** The waitlist is a target endpoint (SRS §10.3); `null` means the connected server does not have it yet. */
+const missing = (e: unknown) => e instanceof ApiError && (e.status === 404 || e.status === 405);
+
+/**
+ * D04 week (server 1.1 `GET /calendar/week`: `date` any day of the week, weeks start Monday, `location` or `provider`).
+ * On a server without it (404 / 405) the week is read from the list over the same seven days, as before.
+ */
+export async function fetchWeek(q: { date: string; location: number | null; provider: number | null }, signal?: AbortSignal): Promise<{ items: Appointment[]; from: string; to: string }> {
+  const from = weekStart(q.date);
+  const to = addDays(from, 6);
+  try {
+    const r = await apiGet<WeekWire>(`${BASE}/calendar/week`, { date: q.date, ...(q.location ? { location: q.location } : {}), ...(q.provider ? { provider: q.provider } : {}) } as Query, signal);
+    return weekItems(r, from, to);
+  } catch (e) {
+    if (!missing(e)) throw e;
+    const r = await fetchList({ from, to, location: q.location, provider: q.provider }, signal);
+    return { items: r.items, from, to };
+  }
+}
+
+interface WeekWire { from?: string; to?: string; days?: Array<{ date: string; appointments?: Appointment[] }> }
+
+/** The week endpoint's days flattened to the rows the calendar draws. */
+export function weekItems(r: WeekWire, from: string, to: string): { items: Appointment[]; from: string; to: string } {
+  return { items: (r.days ?? []).flatMap((d) => d.appointments ?? []), from: r.from ?? from, to: r.to ?? to };
+}
+
+interface WaitlistWire {
+  items?: Array<Record<string, unknown>>;
+  offers?: WaitlistOffer[];
+  freed?: Array<{ label?: string; detail?: string | null; entries?: number[]; starts_at?: string; provider?: { id: number; name: string } | null }>;
+}
+
+const party = (v: unknown): { id: number; name: string } | null =>
+  v && typeof v === 'object' ? (v as { id: number; name: string }) : typeof v === 'string' ? { id: 0, name: v } : null;
+
+/** The server's waitlist (1.1 and the web names: `state`, `match`, `wants`, `freed`) in the desk's shape. */
+export function waitlistFrom(r: WaitlistWire): { items: WaitlistEntry[]; offers: WaitlistOffer[] } {
+  const items: WaitlistEntry[] = (r.items ?? []).map((e) => {
+    const c = party(e.customer) ?? { id: 0, name: '' };
+    const match = (e.match ?? null) as WaitlistEntry['match'];
+    return {
+      id: Number(e.id),
+      customer: { id: c.id, name: c.name, phone: null, email: null } as Party,
+      service: party(e.service),
+      provider: party(e.provider),
+      date_from: (e.date_from ?? e.from ?? null) as string | null,
+      date_to: (e.date_to ?? e.to ?? null) as string | null,
+      part_of_day: (e.part_of_day ?? null) as string | null,
+      note: (e.note ?? e.notes ?? e.wants ?? null) as string | null,
+      status: (e.state ?? e.status ?? undefined) as string | undefined,
+      created_at: (e.created_at ?? e.added_at ?? null) as string | null,
+      match,
+    };
+  });
+  const offers: WaitlistOffer[] = r.offers ?? (r.freed ?? []).filter((f) => f.starts_at).map((f) => ({ starts_at: f.starts_at!, provider: f.provider ?? null, matches: f.entries ?? [], why: f.detail ?? f.label ?? null }));
+  return { items, offers };
+}
+
+/** The waitlist (server 1.1 `GET /waitlist`); `null` means the connected server does not have it yet (404 / 405). */
 export async function fetchWaitlist(signal?: AbortSignal): Promise<{ items: WaitlistEntry[]; offers: WaitlistOffer[] } | null> {
   try {
-    const r = await apiGet<{ items?: WaitlistEntry[]; offers?: WaitlistOffer[] }>(`${BASE}/waitlist`, undefined, signal);
-    return { items: r.items ?? [], offers: r.offers ?? [] };
+    return waitlistFrom(await apiGet<WaitlistWire>(`${BASE}/waitlist`, undefined, signal));
   } catch (e) {
-    if (e instanceof ApiError && (e.status === 404 || e.status === 405)) return null;
+    if (missing(e)) return null;
     throw e;
   }
 }
@@ -222,8 +279,13 @@ export const retryNotice = (id: number) => send<{ notices: Notice[] }>('POST', `
 export const markCommission = (ids: number[], to: 'paid' | 'void' | 'accrued', note?: string) => send<{ changed: number }>('POST', `${BASE}/commissions/mark`, { ids, to, note });
 export const addBlock = (provider: number, body: { starts_at: string; ends_at: string; reason?: string }) => send<unknown>('POST', `${BASE}/setup/providers/${provider}/blocks`, body);
 export const removeBlock = (id: number) => send<unknown>('DELETE', `${BASE}/setup/blocks/${id}`);
-export const addToWaitlist = (body: { customer_id: number; service_id: number; provider_id?: number | null; date_from: string; date_to: string; part_of_day?: string; note?: string }) =>
-  send<{ entry: WaitlistEntry }>('POST', `${BASE}/waitlist`, body);
+/** `POST /waitlist` — both the 1.1 names (`date_from`, `notes`) and the web ones (`from`, `note`) are sent; the server reads either. */
+export const addToWaitlist = (body: { customer_id: number; location_id: number | null; service_id: number; provider_id?: number | null; date_from: string; date_to: string; part_of_day?: string; note?: string }) =>
+  send<{ id?: number; entry?: WaitlistEntry }>('POST', `${BASE}/waitlist`, { ...body, from: body.date_from, to: body.date_to, notes: body.note });
+/** One-click book the entry's matched time (a normal booking; a refusal comes back as a booking's would). */
+export const bookFromWaitlist = (id: number, body: { starts_at: string; provider_id: number | null }) => send<{ appointment: Appointment }>('POST', `${BASE}/waitlist/${id}/book`, body);
+/** Hold the matched freed time for the client (`hold_min`, default 15) and let the server email them. */
+export const offerFromWaitlist = (id: number, holdMin = 15) => send<unknown>('POST', `${BASE}/waitlist/${id}/offer`, { hold_min: holdMin });
 
 /**
  * A payment recorded in Billing (it owns money), for this client. The desk records it there first, then says what it is

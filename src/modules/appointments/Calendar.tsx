@@ -3,7 +3,7 @@ import { useEffect, useState, type DragEvent } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx, Modal } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
-import { addDays, dayLabel, fetchDay, fetchList, hhmm, K, minutesIn, movable, reschedule, snap, today, weekStart, zonedInstant, type Appointment } from './api';
+import { addDays, dayLabel, fetchDay, fetchWeek, hhmm, K, minutesIn, movable, reschedule, snap, today, weekStart, zonedInstant, type Appointment } from './api';
 import { EDGE, input, Kbd, label, Refused, useDesk } from './parts';
 
 /**
@@ -40,7 +40,7 @@ export default function Calendar({ date, mode, provider, active, onNav, onPrint 
   const day = useQuery({ queryKey: K.day(loc?.id ?? 0, date), queryFn: ({ signal }) => fetchDay(loc!.id, date, signal), enabled: mode === 'day' && !!loc });
   const week = useQuery({
     queryKey: K.range({ from: week0, loc: loc?.id, provider: weekProvider }),
-    queryFn: ({ signal }) => fetchList({ from: week0, to: addDays(week0, 6), location: loc?.id ?? null, provider: weekProvider }, signal),
+    queryFn: ({ signal }) => fetchWeek({ date: week0, location: loc?.id ?? null, provider: weekProvider }, signal),
     enabled: mode === 'week' && !!loc,
   });
 

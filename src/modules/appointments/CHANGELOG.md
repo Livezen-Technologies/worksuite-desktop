@@ -13,7 +13,7 @@ the root CHANGELOG.md.
   Waitlist, Outbox, Reports, Commission, Set up, with the connection, location and desk at the foot
 - D01 Today board (arriving — late and the next two hours —, waiting, in service, to check out) with each card's next
   move and a running-late banner; D02 calendar day by stylist with working hours, a mini-month and a stylist filter;
-  D04 week for one stylist; Pending and Confirmed cards drag to a new time or stylist — the drop asks why, the server
+  D04 week for one stylist (from `/calendar/week`, or the list on an older server); Pending and Confirmed cards drag to a new time or stylist — the drop asks why, the server
   checks it like a new booking, and a refusal leaves the card where it was with the reason
 - D05 list with queues, filters, ↑ ↓ Enter Space C and Export CSV; D06 new appointment from the server's free times
   (a new client added in place, a deposit said up front); D07 walk-in — who is free now, book and check in
@@ -24,7 +24,8 @@ the root CHANGELOG.md.
   applied, and D13 the payment recorded in Billing against the invoice with the 80/58 mm receipt printed through the
   desktop's print service
 - D14 clients with a preview card; D15 client history with staff-only notes (add, pin, edit, withdraw); D16 waitlist
-  with freed-time offers (on a server that has `/api/appointments/waitlist`); D17 reports with Print and Export CSV;
+  with freed-time offers, Book match and Offer (server Appointments 1.1 `/waitlist`, `/waitlist/{id}/book|offer`;
+  a server without it says so); D17 reports with Print and Export CSV;
   D18 commission — mark paid, void with a reason, statements, CSV; D19 set-up of stylists' blocks; D20 this desk
   (location, receipt and A4 printers, roll width, print with each payment, running-late alerts); D22 notifications
   about appointments; D23 day sheets per stylist, printed or saved as PDF; D24 command palette (⌘J) and desk keys

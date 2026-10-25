@@ -2,20 +2,31 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx, Modal } from '../../components/ui';
-import { addDays, addToWaitlist, dateIn, fetchWaitlist, K, minutesIn, hhmm, today, type ClientRow } from './api';
+import { addDays, addToWaitlist, bookFromWaitlist, offerFromWaitlist, dateIn, fetchWaitlist, K, minutesIn, hhmm, refusal, today, type ClientRow } from './api';
 import { ClientPick } from './ClientPick';
 import { errText, Head, input, label, Pill, Refused, Section, useDesk } from './parts';
 
 /**
  * D16 · Waitlist (SRS T-07): clients who want a time that is full. When a booking is cancelled the server matches the
  * freed time against the list and offers it here; Book opens New appointment on that time for the first match.
- * The waitlist is new on the server (`GET|POST /api/appointments/waitlist`); on a server without it the board says so.
+ * An entry the server has matched (`match`) is booked in one click (`POST /waitlist/{id}/book`) or offered to the client
+ * with the time held (`POST /waitlist/{id}/offer`). On a server without `/waitlist` (404) the board says so.
  */
 export default function Waitlist() {
   const desk = useDesk();
   const qc = useQueryClient();
   const q = useQuery({ queryKey: K.waitlist, queryFn: ({ signal }) => fetchWaitlist(signal), refetchInterval: 60_000 });
   const [adding, setAdding] = useState(false);
+  const act = async (run: () => Promise<{ message: string }>, done: string) => {
+    try {
+      const r = await run();
+      toast('success', r.message || done);
+    } catch (err) {
+      toast('error', refusal(err).message);
+    } finally {
+      void qc.invalidateQueries({ queryKey: K.all });
+    }
+  };
   const tz = desk.options?.locations.find((l) => l.id === desk.location)?.timezone ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
 
   if (q.data === null) {
@@ -56,7 +67,10 @@ export default function Waitlist() {
                 <div className="text-[13px] font-bold text-ink">{e.customer.name}</div>
                 <div className="text-[12px] text-ink-3">{[e.service?.name ?? 'Any service', e.provider?.name ?? 'anyone', [e.date_from, e.date_to].filter(Boolean).join(' – '), e.part_of_day, e.note].filter(Boolean).join(' · ')}</div>
               </div>
+              {e.match ? <span className="text-[12px] text-ink-2">{e.match.label ?? `${dateIn(e.match.starts_at, tz)} ${hhmm(minutesIn(e.match.starts_at, tz))}`}</span> : null}
               {e.status ? <Pill tone={e.status === 'offered' ? 'ok' : 'muted'}>{e.status}</Pill> : null}
+              {e.match ? <Button size="sm" variant="secondary" disabled={!desk.online} onClick={() => void act(() => offerFromWaitlist(e.id), 'Offered.')}>Offer</Button> : null}
+              {e.match ? <Button size="sm" variant="primary" disabled={!desk.online} onClick={() => void act(() => bookFromWaitlist(e.id, { starts_at: e.match!.starts_at, provider_id: e.match!.provider_id }), 'Booked.')}>Book match</Button> : null}
               <Button size="sm" variant="secondary" disabled={!desk.online} onClick={() => desk.book({ customer: { id: e.customer.id, name: e.customer.name }, service: e.service?.id, provider: e.provider?.id, date: e.date_from ?? undefined })}>Book</Button>
             </li>
           ))}
@@ -84,7 +98,7 @@ function AddDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => v
     setBusy(true);
     setErr(null);
     try {
-      const r = await addToWaitlist({ customer_id: client.id, service_id: service, provider_id: provider, date_from: from, date_to: to, part_of_day: part, note: note.trim() || undefined });
+      const r = await addToWaitlist({ customer_id: client.id, location_id: desk.location, service_id: service, provider_id: provider, date_from: from, date_to: to, part_of_day: part, note: note.trim() || undefined });
       toast('success', r.message || 'Added to the waitlist.');
       onSaved();
     } catch (e) {

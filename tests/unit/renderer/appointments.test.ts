@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { addDays, arriving, laneOf, minutesIn, movable, primaryMove, toCsv, weekStart, zonedInstant, type Appointment } from '../../../src/modules/appointments/api';
+import { addDays, arriving, laneOf, minutesIn, movable, primaryMove, toCsv, waitlistFrom, weekItems, weekStart, zonedInstant, type Appointment } from '../../../src/modules/appointments/api';
 import { daySheetHtml, receiptHtml } from '../../../src/modules/appointments/print';
 import { parseDeepLink } from '../../../shared/deeplink';
 
@@ -55,5 +55,22 @@ describe('printing and export', () => {
   it('opens appointment links natively', () => {
     const r = parseDeepLink('worksuite://appointments/12');
     expect(r.ok && r.link.route).toBe('/appointments?tab=today&apt=12');
+  });
+});
+
+describe('server 1.1 calendar week and waitlist', () => {
+  it('flattens the week endpoint\'s days', () => {
+    const r = weekItems({ from: '2026-10-19', days: [{ date: '2026-10-19', appointments: [appt({ id: 1 })] }, { date: '2026-10-20', appointments: [appt({ id: 2 })] }, { date: '2026-10-21' }] }, 'x', '2026-10-25');
+    expect(r.items.map((a) => a.id)).toEqual([1, 2]);
+    expect(r.from).toBe('2026-10-19');
+    expect(r.to).toBe('2026-10-25');
+  });
+  it('reads the web waitlist names (state, match, freed)', () => {
+    const w = waitlistFrom({
+      items: [{ id: 4, customer: { id: 9, name: 'Nadeesha' }, service: 'Cut', provider: null, wants: 'Sat morning', added_at: '2026-10-20', state: 'match', match: { starts_at: '2026-10-25T04:30:00Z', provider_id: 3, label: 'Sun 10:00' } }],
+      freed: [{ label: 'Kasun 10:00', starts_at: '2026-10-25T04:30:00Z', entries: [4] }],
+    });
+    expect(w.items[0]).toMatchObject({ id: 4, status: 'match', note: 'Sat morning', service: { name: 'Cut' }, match: { provider_id: 3 } });
+    expect(w.offers).toEqual([{ starts_at: '2026-10-25T04:30:00Z', provider: null, matches: [4], why: 'Kasun 10:00' }]);
   });
 });

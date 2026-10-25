@@ -1,6 +1,6 @@
 import { PayrollReminders } from '../services/payroll-reminders';
 import { AssetAlerts } from '../services/assets-alerts';
-import { assetsCached } from '@shared/assets';
+import { assetsCached, type TrayAssets } from '@shared/assets';
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
@@ -619,7 +619,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const payrollReminders = new PayrollReminders(http, notifications);
   // Assets' alerts and tray line (D03): handovers to confirm, loans overdue, approvals waiting — with the tab closed.
   // The tray is made later in start(); its line follows the count once it exists.
-  let assetsTray: ((t: import('@shared/assets').TrayAssets | null) => void) | null = null;
+  let assetsTray: ((t: TrayAssets | null) => void) | null = null;
   const assetAlerts = new AssetAlerts(http, notifications, (t) => assetsTray?.(t));
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
   // New-mail alerts (ENH-MAIL-05): one per message on this computer — the row's "New" in Mail, the in-app card while
