@@ -11,6 +11,10 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+### Added
+- WorkSuite Office **Local AI policy from your organisation**: once signed in, the app writes your company's Office Local AI policy (set in the Admin Center › AI › On-device AI; needs server Ai 1.19.0) where WorkSuite Office's local AI service reads it — macOS user defaults `lk.worksuite.office` (`AI*` keys), Windows `HKCU\Software\Policies\WorkSuite\Office\AI`, Linux `~/.config/worksuite/office/policy.json`. Office then hides or locks what the company switched off. A policy your IT deployed through MDM or Group Policy is never overwritten; signing out removes what the app wrote. An older server without the policy changes nothing. (desktop module office 1.5.0)
+
 ## 0.2.278 — 2026-10-24
 ### Added
 - Meet: **push to talk** — hold the space bar in a meeting to be heard, let go to go back to muted. It is in Settings › Keyboard shortcuts with the rest of Meet's keys and can be changed there. It only ever unmutes: pressed while your microphone is already live it does nothing, so letting go can never cut you off mid-sentence; it does nothing where a space would be typed instead, nothing when the host has turned participants' microphones off, and it closes the microphone again if you switch away from WorkSuite or close the meeting window while still holding the key. (desktop modules meet 1.27.0, settings 1.42.3)
