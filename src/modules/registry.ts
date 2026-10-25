@@ -316,6 +316,20 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./board/BoardShell'),
   },
   {
+    // Payroll (WS-PAYROLL-SRS-001 §D1, the desktop boards D01–D25) over `/api/payroll` (docs/payroll-api.md): home,
+    // runs and the run workspace, approval with Touch ID and the journal, employees, inputs, loans, settlements,
+    // payslips, disbursements with bank files, statutory, reports, setup and settings. My Payslips is HR › My pay.
+    input: defineDesktopManifest({
+      id: 'payroll', name: 'Payroll', icon: 'banknote', contractVersion: 1, desktop: { enabled: true },
+      // D25: the runs and the screens around them, read-only from the encrypted cache while offline; nothing is written.
+      offline: { mode: 'READ_CACHE', cache: ['/api/payroll/access', '/api/payroll/dashboard', '/api/payroll/runs', '/api/payroll/groups', '/api/payroll/payslips', '/api/payroll/me'] },
+      native: ['notifications'],
+      quickActions: [{ id: 'payroll-runs', label: 'Payroll runs', route: '/payroll?tab=runs' }],
+      deepLinks: ['payroll', 'payroll/runs/:id'],
+    }),
+    load: () => import('./payroll/PayrollShell'),
+  },
+  {
     // Figures are not cached for offline reading: a stale trial balance looks exactly like a current one.
     input: defineDesktopManifest({
       id: 'finance', name: 'Finance', icon: 'landmark', contractVersion: 1, desktop: { enabled: true },

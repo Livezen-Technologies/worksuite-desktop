@@ -1,3 +1,4 @@
+import { PayrollReminders } from '../services/payroll-reminders';
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
@@ -610,6 +611,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   connection.start();
 
   const notifications = new NotificationService(db, getVault, http, () => settings.effective());
+  // Payroll's tray reminders (D24): cut-off, approvals waiting and pay dates, even with the Payroll tab closed.
+  const payrollReminders = new PayrollReminders(http, notifications);
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
   // New-mail alerts (ENH-MAIL-05): one per message on this computer — the row's "New" in Mail, the in-app card while
   // WorkSuite is in front, the system's notification while it is not — and the tray's mail lines, pause and badge.
@@ -2825,6 +2828,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     setExternalAllowList([new URL(auth.getServer()!.origin).hostname]);
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
+    payrollReminders.start();
     mailAlerts.start();
     supportNotices.start();
     supportDesk.start();
@@ -2923,6 +2927,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     phone.reset();
     realtime.stop();
     notifications.stop();
+    payrollReminders.stop();
     purchaseDesk.reset();
     mailAlerts.stop();
     supportNotices.stop();

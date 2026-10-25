@@ -130,6 +130,8 @@ export const INVOKE_CHANNELS = [
   'files:registerDropped',
   'files:chooseDownloadFolder',
   'files:saveText',
+  'payroll:verify',
+  'payroll:saveFile',
 
   'hr:clock',
   'hr:break',

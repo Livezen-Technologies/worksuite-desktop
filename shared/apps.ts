@@ -172,7 +172,8 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'subscriptions', label: 'Subscriptions', group: 'business', icon: 'repeat', app: 'subscriptions', webPath: '/subscriptions', surface: 'browser', order: 165 },
   // Native since 0.2.193 (WS-MKT-SRS-001 v1.1, MKT-DSK-01): the web's fourteen screens, the call queue and its Next contact shortcut.
   { id: 'marketing', label: 'Marketing', group: 'business', icon: 'megaphone', app: 'marketing', webPath: '/marketing', surface: 'native', sidebar: 'business', order: 166, keywords: 'marketing campaigns email newsletter audience contacts segments lists consent suppression unsubscribe call queue call campaigns telemarketing' },
-  { id: 'payroll', label: 'Payroll', group: 'people', icon: 'banknote', app: 'payroll', perm: 'payroll.view', webPath: '/payroll', surface: 'browser', order: 150 },
+  // Payroll (WS-PAYROLL-SRS-001 §D1): native runs and run approval; setup, inputs and payouts open on the web from its rail.
+  { id: 'payroll', label: 'Payroll', group: 'people', icon: 'banknote', app: 'payroll', perm: 'payroll.view', webPath: '/payroll', surface: 'native', sidebar: 'business', order: 150, keywords: 'payroll salary payslips runs approval pay' },
   { id: 'appointments', label: 'Appointments', group: 'people', icon: 'calendar-clock', app: 'appointments', webPath: '/appointments', surface: 'browser', order: 155 },
   // A salon's front desk: native here (the counter PC); the owners' screens open on the web from its rail.
   { id: 'salon', label: 'SalonMate', group: 'business', icon: 'scissors', app: 'salon', perm: 'salon.view', webPath: '/salon', surface: 'native', sidebar: 'business', order: 131, keywords: 'salon hair beauty front desk walk-in check-in stylists clients bookings' },

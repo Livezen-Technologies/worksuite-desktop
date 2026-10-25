@@ -19,6 +19,7 @@ import { assertRoute, assertWebPath } from './access';
 import { windowRoute } from '../windows/manager';
 import { attachmentRisk } from '@shared/attachments';
 import { DesktopError, isDesktopError } from './errors';
+import { createHash } from 'node:crypto';
 import { saveLauncherDefaults } from '../services/launcher-defaults';
 import { saveAppearanceDefaults } from '../services/appearance-defaults';
 import type { AppContext } from './context';
@@ -686,6 +687,18 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     await writeFile(res.filePath, input.text, { encoding: 'utf8', mode: 0o600 });
     return res.filePath;
   });
+  router.handle('payroll:verify', (input) => ctx.lock.verifyPresence(input.reason));
+  router.handle('payroll:saveFile', async (input, c) => {
+    const bytes = Buffer.from(input.base64, 'base64');
+    // The file is the server's; a copy that does not match its hash is not the file the server logged.
+    if (createHash('sha256').update(bytes).digest('hex') !== input.sha256.toLowerCase()) throw new DesktopError('IPC_VALIDATION_FAILED', 'The file did not arrive intact. Try again.');
+    const w = winOf(c.sender);
+    const opts: Electron.SaveDialogOptions = { title: 'Save file', defaultPath: join(ctx.settings.effective().downloadFolder, safeFileName(input.name)) };
+    const res = w ? await dialog.showSaveDialog(w, opts) : await dialog.showSaveDialog(opts);
+    if (res.canceled || !res.filePath) return null;
+    await writeFile(res.filePath, bytes, { mode: 0o600 });
+    return res.filePath;
+  });
   router.handle('files:registerDropped', (input) => ctx.transfers.register(input.paths));
   router.handle('transfers:list', () => ctx.transfers.list());
   router.handle('transfers:download', async (input, c) => {
@@ -798,6 +811,10 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/hr/reports/attendance?${new URLSearchParams({ type: r.type, from: r.from, to: r.to, format: 'csv', ...(r.department_id ? { department_id: String(r.department_id) } : {}), ...(r.employee_id ? { employee_id: String(r.employee_id) } : {}) })}`
       : input.payslip
       ? `/api/payroll/me/payslips/${encodeURIComponent(input.payslip)}/pdf`
+      : input.payrollDoc
+      ? input.payrollDoc.kind === 'tax-certificate'
+        ? `/api/payroll/me/tax-certificates/${encodeURIComponent(input.payrollDoc.id)}/pdf`
+        : `/api/payroll/payslips/${encodeURIComponent(input.payrollDoc.id)}/pdf`
       : input.mailSource
       ? `/api/mail/messages/${input.mailSource.uid}/source?${new URLSearchParams({ folder: input.mailSource.folder, download: '1', ...(input.mailSource.mailbox ? { mailbox: input.mailSource.mailbox } : {}) })}`
       : input.fileId

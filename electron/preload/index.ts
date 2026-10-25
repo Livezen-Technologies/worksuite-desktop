@@ -549,6 +549,11 @@ const api = {
     discard: call('projects:discard'),
     replay: call('projects:replay'),
   },
+  // Payroll: Touch ID before approving a run, and bank files saved where the person chooses.
+  payroll: {
+    verify: call('payroll:verify'),
+    saveFile: call('payroll:saveFile'),
+  },
   // WorkSuite Board (board-channels.ts): the encrypted offline pack vault, its queue and offline circular responses.
   board: {
     vaultStatus: call('board:vaultStatus'),

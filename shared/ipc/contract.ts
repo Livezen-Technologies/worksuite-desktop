@@ -624,6 +624,16 @@ export const contract = {
     ]),
     { session: true, rate: 2 },
   ),
+  /** Payroll (docs/payroll-api.md): the OS's own check (Touch ID) before approving a run, where there is one (D07). */
+  'payroll:verify': ch(z.strictObject({ reason: z.string().min(1).max(120) }), { session: true, rate: 2, sensitive: true }),
+  /**
+   * Payroll: a bank or return file the server produced (`POST payouts/{id}/file`), saved where the person chooses.
+   * The main process checks the bytes against the server's SHA-256 before writing, and writes the file 0600 (D10).
+   */
+  'payroll:saveFile': ch(
+    z.strictObject({ name: z.string().regex(/^[A-Za-z0-9 ._()-]{1,120}$/), base64: z.string().max(40_000_000), sha256: z.string().regex(/^[a-f0-9]{64}$/i) }),
+    { session: true, permission: 'desktop.downloads', sensitive: true, rate: 5 },
+  ),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
   /** A folder, with everything in it: each file carries its path inside the folder. */
   'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
@@ -840,6 +850,8 @@ export const contract = {
         version: z.object({ fileId: z.number().int().positive(), versionId: z.number().int().positive() }).optional(),
         /** My payslip as a PDF, by its reference. */
         payslip: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/).optional(),
+        /** A payroll document: my annual tax certificate by its reference, or one payslip of a run by id (payroll staff; the server checks). */
+        payrollDoc: z.object({ kind: z.enum(['tax-certificate', 'run-payslip']), id: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/) }).optional(),
         /** An HR document (the main process asks for its one-time link) — mine, or with `hrEmployee` that employee's. */
         hrDocument: z.number().int().positive().optional(),
         hrEmployee: z.number().int().positive().optional(),
@@ -983,7 +995,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.billingExport, v.billingFile, v.paymentSlip, v.ordersCsv, v.omsReport, v.omsRouteSheet, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.projectsReport, v.projectReport, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport, v.purchaseExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined) && (v.tenderDocumentVersion === undefined || v.tenderDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a Billing export or file, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a route sheet, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, a Projects report, a whole project report, an eLearning lesson file, an Office export, a chat attachment, a task attachment, a chat export or a Purchasing export'),
+      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.payrollDoc, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.billingExport, v.billingFile, v.paymentSlip, v.ordersCsv, v.omsReport, v.omsRouteSheet, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.projectsReport, v.projectReport, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport, v.purchaseExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined) && (v.tenderDocumentVersion === undefined || v.tenderDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, a payroll document, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a Billing export or file, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a route sheet, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, a Projects report, a whole project report, an eLearning lesson file, an Office export, a chat attachment, a task attachment, a chat export or a Purchasing export'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   /**
@@ -1864,6 +1876,9 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'files:pickFolder': PickedFile[];
   'files:chooseDownloadFolder': string | null;
   'files:saveText': string | null;
+  'payroll:verify': { verified: boolean; method: 'touch-id' | 'none' };
+  /** The path written, or null when the person cancelled. */
+  'payroll:saveFile': string | null;
   'transfers:list': Transfer[];
   'transfers:download': Transfer;
   'pms:download': Transfer;

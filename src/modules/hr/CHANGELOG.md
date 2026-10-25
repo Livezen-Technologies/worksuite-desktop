@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.6.0 — 2026-10-25
+
+**Added**
+
+- My payslips to the UI-23 / D23 design — the latest payslip with its net pay and PDF, every payslip across the companies you are paid by, year to date, annual tax certificates where the server issues them, the breakdown with what your employer paid, and Ask a question about this payslip as an HR payroll query
+
 ## 1.5.0 — 2026-10-22
 
 **Added**

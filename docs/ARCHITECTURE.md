@@ -559,6 +559,23 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   the configured idle time; the tab set is saved and restored only for apps
   the user can still open.
 
+- Payroll (`modules/payroll`, main process `electron/services/payroll-reminders.ts`, rules in `shared/payroll.ts`;
+  WS-PAYROLL-SRS-001 §D1, the desktop boards D01–D25): native since payroll 1.0.0 (it was a browser surface), over
+  the server's `/api/payroll` exactly as `docs/payroll-api.md` (server Payroll 1.2.0) describes it. The shell
+  (`PayrollShell.tsx`, `/payroll?tab=<view>&run=&employee=&settlement=`) has the DeskRail sections (`Rail.tsx`) and
+  ⌘N for a new run; the run workspace (`RunWorkspace.tsx`) has the header with the next act (⌘R recalculates) and
+  the tabs Summary · Employees · Variance · Validation · Journal · Payslips · Payment · History; `RunApproval.tsx`
+  is D07 — the checks, the chain, the journal preview, Touch ID through `payroll:verify` (the lock service's
+  `verifyPresence`) before `POST runs/{id}/approve`. Maker-checker is the server's (`can.approve` is false for the
+  preparer, approve answers 403); `approvalBlock()` only stops offering what it would refuse. Nothing is summed on
+  the client: totals, variance, journal lines, settlement amounts and arrears are the server's, and a 404 from an
+  endpoint new in 1.2.0 is shown as "needs a newer server" (`orNull`). A bank file is produced and logged by the
+  server; `payroll:saveFile` checks its SHA-256 in the main process, asks where to save it and writes it 0600.
+  Offline (D25) the manifest's READ_CACHE serves the last answers and `ReadOnly` turns every act off. The tray
+  reminders (D24) poll `GET /dashboard` hourly while signed in and raise local notices once per day each;
+  `payroll.*` notices and `/payroll/runs/<id>` links open the run here. My Payslips stays HR's (`hr/MyPay.tsx`,
+  `hr/pay.ts`).
+
 ## Time
 
 WorkSuite sends two kinds of stamp that look the same. True-UTC stamps (chat,

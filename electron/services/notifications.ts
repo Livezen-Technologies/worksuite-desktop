@@ -16,6 +16,7 @@ import { isDesktopError } from '../main/errors';
 import { logger } from '../main/log';
 import { isPurchaseApprovalEvent } from '@shared/purchase';
 import { recruitmentNoticeLink } from '@shared/recruitment';
+import { payrollNoticeLink } from '@shared/payroll';
 import { boardNoticeLink } from '@shared/board';
 import { amcNoticeActions, amcNoticeLink } from '@shared/amc';
 import type { Database } from './db';
@@ -304,7 +305,7 @@ export function mapServerNotification(n: ServerNotification): NotificationItem {
     title: n.title ?? 'Notification',
     body: n.body ?? '',
     // Recruitment's keys open the desktop's own screen for them (interviews today, the scorecard, approvals).
-    link: recruitmentNoticeLink(n.event_key ?? n.type, n.data) ?? boardNoticeLink(n.event_key ?? n.type, n.data) ?? amcNoticeLink(n.event_key ?? n.type, n.data, n.link) ?? n.link ?? null,
+    link: recruitmentNoticeLink(n.event_key ?? n.type, n.data) ?? payrollNoticeLink(n.event_key ?? n.type, n.data) ?? boardNoticeLink(n.event_key ?? n.type, n.data) ?? amcNoticeLink(n.event_key ?? n.type, n.data, n.link) ?? n.link ?? null,
     read: !!n.read_at,
     createdAt: utcStamp(n.created_at),
     actor: null,
@@ -775,7 +776,7 @@ export class NotificationService {
         if (!id) return;
         if (e.transient !== true) this.unread.notifications += 1;
         // A recruitment key opens the desktop's own screen for it (shared/recruitment.ts).
-        const link = recruitmentNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? boardNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? amcNoticeLink(typeof e.event === 'string' ? e.event : null, e.data, typeof e.link === 'string' ? e.link : null) ?? (typeof e.link === 'string' ? e.link : null);
+        const link = recruitmentNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? payrollNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? boardNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? amcNoticeLink(typeof e.event === 'string' ? e.event : null, e.data, typeof e.link === 'string' ? e.link : null) ?? (typeof e.link === 'string' ? e.link : null);
         const category = typeof e.category === 'string' ? e.category : null;
         if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
         if (moduleOf({ category, link }) === 'mail' || e.event === 'mail.received') this.mailUnread.add(id);
