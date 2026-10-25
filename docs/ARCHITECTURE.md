@@ -575,6 +575,28 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   reminders (D24) poll `GET /dashboard` hourly while signed in and raise local notices once per day each;
   `payroll.*` notices and `/payroll/runs/<id>` links open the run here. My Payslips stays HR's (`hr/MyPay.tsx`,
   `hr/pay.ts`).
+- Cheque Manager (`modules/cheque`, main process `electron/services/cheque-print.ts` and the shared
+  `electron/services/core-print.ts`, data and schemas in `shared/cheque.ts`; Cheque SRS v1.0, the desktop boards
+  D01–D06): the certified print station over `/api/cheque` as the server's `docs/cheque-api.md` describes it. The
+  shell (`ChequeShell.tsx`, `/cheque?tab=home|queue|calibration|batches|batch&batch=&version=&profile=`) has Home
+  (D01, `GET /dashboard`), the print queue (D02, approved cheques; the profiles bound to this device decide which
+  can be picked), Print and confirm (D03, `PrintDialog.tsx`: `pre-print-checks`, then `cheque:print`, then
+  `print-jobs/{id}/confirm` printed / failed_unused / spoiled, and `reprint-request`), Calibration (D04: the A4
+  sheet and a test leaf through `cheque:printCalibration`, marker measurements to `template-versions/{id}/calibrations`
+  and `calibrations/{id}/apply`, or offsets typed and `PATCH printers/{id}`) and batches (D05/D06, `BatchRun.tsx`:
+  `start`/`resume`/`pause`/`interrupt`; `cheque:printQueued` for the next leaf, then the person's answer through
+  `print-jobs/{id}/confirm`, after which the server queues the next; `reconcile` with every leaf in `unsettled`).
+  The main process registers the station (`POST /stations`, heartbeat on each home load), makes the job
+  (`cheques/{id}/print-job` with `station_id`), claims it (`stations/{id}/claim`), verifies the Ed25519 signature
+  over the canonical JSON envelope, the device id, the expiry and `sha256(canonical(layout))`, refuses a model with
+  `problems`, and prints the server's render model (points, the profile's offsets and scale already applied)
+  through CorePrintService, reporting `progress` printing, then spooled and sent (AWAITING_CONFIRMATION), or failed.
+  The layout hash is checked against PHP's canonical JSON (whole floats as `11.0`, `JSON_PRESERVE_ZERO_FRACTION`)
+  as well as plain canonical JSON. In a batch it prints only a job for the next leaf in the stack; others are left
+  to their lease. CorePrintService lays out boxes in mm on a page of that
+  exact size in a hidden window with no script and no network and prints silently with margins none, scale 100
+  and the page size in microns; an extra offset (the calibration offsets being tried) and 180° rotation are applied
+  at render. No leaf changes state on this computer: only a confirmation or a reconciliation does, on the server.
 - Appointments (`modules/appointments`; Appointments SRS v1.0 §9, the desktop boards D01–D24): native since
   appointments 1.0.0 (it was a browser surface), over the server's `/api/appointments`. The shell
   (`AppointmentsShell.tsx`, `/appointments?tab=<view>&apt=&client=&date=&mode=week`; a web link `/appointments/<id>`

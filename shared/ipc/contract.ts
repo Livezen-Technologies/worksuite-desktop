@@ -72,6 +72,7 @@ import { boardContract, type BoardOutputs } from '../board';
 import { projectReportSchema, projectsContract, projectsReportSchema, type ProjectsOutputs } from '../projects';
 import { purchaseExportSchema } from '../purchase';
 import { salesContract, type SalesOutputs } from '../sales';
+import { chequeContract, type ChequeOutputs } from '../cheque';
 import { sinhalaContract, type SinhalaOutputs } from '../sinhala';
 import { phoneContract, type PhoneOutputs } from '../phone';
 import { accountsContract, type AccountsOutputs, type ServiceHealthState } from '../accounts';
@@ -1613,6 +1614,7 @@ export const contract = {
   ...boardContract,
   // WorkSuite Sales: approvals from a banner, printing on this computer, reports as PDF (shared/sales.ts, electron/services/sales-desk.ts).
   ...salesContract,
+  ...chequeContract,
   // Sinhala Tools: the engine, profile cache, fonts and clipboard on this computer (shared/sinhala.ts, electron/services/sinhala.ts).
   ...sinhalaContract,
   // Accounts side by side, connect, browser sign-in and WorkSuite Cloud (shared/accounts.ts, electron/main/accounts-wiring.ts).
@@ -1693,7 +1695,7 @@ export interface WindowState {
   buttonLayout?: ButtonLayout;
 }
 
-export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, BoardOutputs, SalesOutputs, SinhalaOutputs, AccountsOutputs {
+export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, ContactSyncOutputs, ProjectsOutputs, BoardOutputs, SalesOutputs, SinhalaOutputs, AccountsOutputs, ChequeOutputs {
   'app:info': AppInfo;
   'app:quit': void;
   'app:relaunch': void;

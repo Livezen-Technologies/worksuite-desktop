@@ -567,6 +567,13 @@ const api = {
     search: call('board:search'),
     verify: call('board:verify'),
   },
+  // Cheque Manager (cheque-channels.ts): this computer as a print station; what prints is fetched by the main process.
+  cheque: {
+    station: call('cheque:station'),
+    print: call('cheque:print'),
+    printQueued: call('cheque:printQueued'),
+    printCalibration: call('cheque:printCalibration'),
+  },
   // WorkSuite Sales (sales-channels.ts): labels and delivery notes on this computer's printers, reports saved as PDF.
   sales: {
     printSettings: call('sales:printSettings'),

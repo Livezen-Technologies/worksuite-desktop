@@ -1,0 +1,10 @@
+{
+    "module": "cheque",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/cheque-print.ts",
+        "electron/services/core-print.ts",
+        "shared/cheque.ts",
+        "shared/ipc/cheque-channels.ts"
+    ]
+}

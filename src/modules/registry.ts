@@ -330,6 +330,17 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./payroll/PayrollShell'),
   },
   {
+    // Cheque Manager (Cheque SRS v1.0, the desktop boards D01–D06) over `/api/cheque` (server docs/cheque-api.md): this
+    // computer as the certified print station — home, print queue, direct print and confirm, calibration and
+    // offsets, batch runs and reconciling an interrupted batch. Printing happens only in the main process.
+    input: defineDesktopManifest({
+      id: 'cheque', name: 'Cheque Manager', icon: 'printer', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      quickActions: [{ id: 'cheque-queue', label: 'Cheque print queue', route: '/cheque?tab=queue' }],
+      deepLinks: ['cheque', 'cheque/queue', 'cheque/batches/:id'],
+    }),
+    load: () => import('./cheque/ChequeShell'),
+  },
+  {
     // Appointments (Appointments SRS v1.0 §9, the desktop boards D01–D24) over `/api/appointments`: the today board,
     // calendar day and week with drag-to-move, list, new appointment, walk-in, the appointment panel with check-in,
     // move, cancel/no-show and deposit, checkout with the receipt, clients, waitlist, reports, commission, set-up, this

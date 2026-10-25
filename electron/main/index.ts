@@ -142,6 +142,7 @@ import { EventDeskPrint } from '../services/event-desk-print';
 import { createRestaurant } from '../services/restaurant';
 import { createProjects } from '../services/projects';
 import { SalesDesk } from '../services/sales-desk';
+import { ChequeStation } from '../services/cheque-print';
 import { SinhalaService, type SinhalaDocxRequest } from '../services/sinhala';
 import type { DocxConvertStats } from '../services/sinhala-docx';
 import { execFile as execFileCb } from 'node:child_process';
@@ -1752,6 +1753,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     joinMeet: (uuid, title) => void windows.open('meet', `/meet/${uuid}`, title || 'WorkSuite Meet', false),
     openExternal: (url) => void openExternalSafely(url),
     onChange: (meetings) => tray.update({ meetings }),
+  });
+  // Cheque Manager's print station (D02–D06): the leaf's layout is fetched here from the server, printed at exact size.
+  const chequeStation = new ChequeStation({
+    http,
+    deviceId: () => device.current()?.id ?? null,
+    host: () => device.deviceName(),
+    version: () => app.getVersion(),
+    printers: (sender) => listPrinters(sender ? BrowserWindow.fromWebContents(sender) : null),
   });
   // Sales' approvals (WS-OMS-SRS-001 D-05, FR-APR-10): Approve and Open on the banner; printing on this computer.
   const salesDesk = new SalesDesk({
@@ -3461,6 +3470,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   restaurant.register(router);
   projects.register(router);
   salesDesk.register(router);
+  chequeStation.register(router);
   sinhala.register(router);
   localAI.register(router);
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));

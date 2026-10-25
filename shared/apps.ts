@@ -160,6 +160,7 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'contacts', label: 'Contacts', group: 'work', icon: 'contact', app: 'contacts', webPath: '/contacts', surface: 'native', order: 80, guest: 'local' },
 
   // `/finance?tab=<view>&company=<id>`, the web's view names; screens not built here yet open in the browser from its rail.
+  { id: 'cheque', label: 'Cheque Manager', group: 'business', icon: 'printer', app: 'cheque', perm: 'cheque.access', webPath: '/cheque', surface: 'native', sidebar: 'business', order: 131, keywords: 'cheque cheques check print station leaves books calibration batch' },
   { id: 'finance', label: 'Finance', group: 'business', icon: 'landmark', app: 'finance', perm: 'finance.view', webPath: '/finance', surface: 'native', sidebar: 'business', order: 130, keywords: 'accounts ledger journals general ledger trial balance chart of accounts periods books accounting', guest: 'locked', guestLabel: 'Company records' },
   // `/expenses?tab=<view>&org=<ids|all>`; `/expenses?claim=12` (notifications) opens that claim.
   { id: 'expenses', label: 'Expenses', group: 'business', icon: 'wallet', app: 'expenses', webPath: '/expenses', surface: 'native', sidebar: 'business', order: 135, keywords: 'expense claims receipts reimbursement advances petty cash corporate cards mileage per diem budgets policies subscriptions' },
