@@ -153,7 +153,7 @@ describe('web links', () => {
   it('opens native apps in a tab and others in the browser', () => {
     expect(resolveWebLink('/tasks?task=12')).toEqual({ kind: 'tab', route: '/tasks?task=12', app: 'tasks' });
     expect(resolveWebLink('/crm/leads/5')).toEqual({ kind: 'tab', route: '/crm/leads/5', app: 'crm' });
-    expect(resolveWebLink('/payroll/runs/3')).toEqual({ kind: 'browser', path: '/payroll/runs/3', app: 'payroll' });
+    expect(resolveWebLink('/payroll/runs/3')).toEqual({ kind: 'tab', route: '/payroll?tab=run&run=3', app: 'payroll' });
     // An Expenses notification's link opens the claim here.
     expect(resolveWebLink('/expenses?claim=12')).toEqual({ kind: 'tab', route: '/expenses?claim=12', app: 'expenses' });
     expect(resolveWebLink('/finance?tab=journals')).toEqual({ kind: 'tab', route: '/finance?tab=journals', app: 'finance' });

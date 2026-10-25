@@ -114,6 +114,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'billing', label: 'Invoices', group: 'business', icon: 'receipt', app: 'billing', perm: 'billing.view', webPath: '/billing', surface: 'native', sidebar: 'business', order: 125, keywords: 'billing invoice invoices payments receipts owed overdue' },
   // `/inventory?product=` and `/inventory/products/<id>` open the product here.
   { id: 'inventory', label: 'Inventory', group: 'business', icon: 'package', app: 'inventory', perm: 'inventory.view', webPath: '/inventory', surface: 'native', sidebar: 'business', order: 128, keywords: 'inventory stock products warehouse movements catalogue sku barcode' },
+  // Label Studio (WS-LABEL-SRS-001 FR-DSK-01, D01–D07): home, designer, print station, this computer's printers, the
+  // interrupted batch and the Print Gateway. The rest of Label Studio (W02–W32) opens on the web from its rail.
+  { id: 'label', label: 'Label Studio', group: 'business', icon: 'printer', app: 'label', perm: 'label.access', webPath: '/label', surface: 'native', sidebar: 'business', order: 129, keywords: 'label labels barcode qr sticker zebra zpl print station printer gateway templates serials' },
   // HR carries no app slug: there is no `hr` row in `applications`, and its
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
   { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in', guest: 'locked', guestLabel: 'HR & People' },
@@ -160,6 +163,7 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'contacts', label: 'Contacts', group: 'work', icon: 'contact', app: 'contacts', webPath: '/contacts', surface: 'native', order: 80, guest: 'local' },
 
   // `/finance?tab=<view>&company=<id>`, the web's view names; screens not built here yet open in the browser from its rail.
+  { id: 'cheque', label: 'Cheque Manager', group: 'business', icon: 'printer', app: 'cheque', perm: 'cheque.access', webPath: '/cheque', surface: 'native', sidebar: 'business', order: 131, keywords: 'cheque cheques check print station leaves books calibration batch' },
   { id: 'finance', label: 'Finance', group: 'business', icon: 'landmark', app: 'finance', perm: 'finance.view', webPath: '/finance', surface: 'native', sidebar: 'business', order: 130, keywords: 'accounts ledger journals general ledger trial balance chart of accounts periods books accounting', guest: 'locked', guestLabel: 'Company records' },
   // `/expenses?tab=<view>&org=<ids|all>`; `/expenses?claim=12` (notifications) opens that claim.
   { id: 'expenses', label: 'Expenses', group: 'business', icon: 'wallet', app: 'expenses', webPath: '/expenses', surface: 'native', sidebar: 'business', order: 135, keywords: 'expense claims receipts reimbursement advances petty cash corporate cards mileage per diem budgets policies subscriptions' },
@@ -172,8 +176,10 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'subscriptions', label: 'Subscriptions', group: 'business', icon: 'repeat', app: 'subscriptions', webPath: '/subscriptions', surface: 'browser', order: 165 },
   // Native since 0.2.193 (WS-MKT-SRS-001 v1.1, MKT-DSK-01): the web's fourteen screens, the call queue and its Next contact shortcut.
   { id: 'marketing', label: 'Marketing', group: 'business', icon: 'megaphone', app: 'marketing', webPath: '/marketing', surface: 'native', sidebar: 'business', order: 166, keywords: 'marketing campaigns email newsletter audience contacts segments lists consent suppression unsubscribe call queue call campaigns telemarketing' },
-  { id: 'payroll', label: 'Payroll', group: 'people', icon: 'banknote', app: 'payroll', perm: 'payroll.view', webPath: '/payroll', surface: 'browser', order: 150 },
-  { id: 'appointments', label: 'Appointments', group: 'people', icon: 'calendar-clock', app: 'appointments', webPath: '/appointments', surface: 'browser', order: 155 },
+  // Payroll (WS-PAYROLL-SRS-001 §D1): native runs and run approval; setup, inputs and payouts open on the web from its rail.
+  { id: 'payroll', label: 'Payroll', group: 'people', icon: 'banknote', app: 'payroll', perm: 'payroll.view', webPath: '/payroll', surface: 'native', sidebar: 'business', order: 150, keywords: 'payroll salary payslips runs approval pay' },
+  // Appointments (SRS v1.0 §9, D01–D24): the front desk native here; the web keeps locations, services and the booking page.
+  { id: 'appointments', label: 'Appointments', group: 'people', icon: 'calendar-clock', app: 'appointments', perm: 'appointment.view', webPath: '/appointments', surface: 'native', sidebar: 'business', order: 155, keywords: 'appointments booking calendar schedule walk-in check-in clients waitlist deposit checkout receipt commission' },
   // A salon's front desk: native here (the counter PC); the owners' screens open on the web from its rail.
   { id: 'salon', label: 'SalonMate', group: 'business', icon: 'scissors', app: 'salon', perm: 'salon.view', webPath: '/salon', surface: 'native', sidebar: 'business', order: 131, keywords: 'salon hair beauty front desk walk-in check-in stylists clients bookings' },
   // A workshop's counter, board, technician terminal and parts counter: native here; check-in, estimates, QC and delivery open on the web.
@@ -199,7 +205,8 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // its gate is the desk's own `support.view` — or an as-built `ticket.*` slug on a server from before it. The web's
   // `/tickets?ticket=<id>` (notifications, search) opens that ticket's tab here.
   { id: 'support', label: 'Support', group: 'operations', icon: 'life-buoy', perm: SUPPORT_PERMISSIONS, webPath: '/tickets', surface: 'native', sidebar: 'business', order: 200, badge: 'support', keywords: 'support tickets ticket helpdesk help desk service desk customers requester sla reply inbox' },
-  { id: 'assets', label: 'Assets', group: 'operations', icon: 'box', app: 'assets', webPath: '/assets', surface: 'browser', order: 210 },
+  // Assets (WS-ASSET-SRS-001 T-17, the desktop boards D01–D26): native since assets 1.0.0 — the register, the scan station, tray alerts and labels.
+  { id: 'assets', label: 'Assets', group: 'operations', icon: 'box', app: 'assets', webPath: '/assets', surface: 'native', sidebar: 'business', order: 210, keywords: 'assets equipment register scan barcode labels custody handover depreciation licences audit disposal' },
   // AMC & Service (WS-AMC-SRS-001 T-15): the server's app `amc`; native here — the dashboard, the dispatch timeline, the
   // request window and the lists. Its links `/amc?view=…` (shared/amc.ts) open here; the rest of AMC on the web.
   { id: 'amc', label: 'AMC & Service', group: 'operations', icon: 'wrench', app: 'amc', webPath: '/amc', surface: 'native', sidebar: 'business', order: 215, keywords: 'amc service contracts maintenance requests dispatch technicians visits renewals estimates units equipment warranties sla' },

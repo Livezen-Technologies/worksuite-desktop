@@ -1,0 +1,8 @@
+{
+    "module": "assets",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/assets-alerts.ts",
+        "shared/assets.ts"
+    ]
+}

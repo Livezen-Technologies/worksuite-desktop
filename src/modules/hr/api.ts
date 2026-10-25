@@ -556,6 +556,30 @@ export interface Payslip {
   state: 'current' | 'under_revision' | 'cancelled';
   revision_note: string | null;
   payment: { state: 'paid' | 'instructed' | 'scheduled' | 'returned' | 'failed' | 'held' | 'not_scheduled'; on: string | null; detail: string | null };
+  /** The run's kind (regular, bonus, off-cycle, correction), where the server sends it. */
+  kind?: string | null;
+  /** The company that paid it, frozen on the payslip — a person employed by two companies has two lists in one. */
+  employer?: { name: string | null; address?: string | null; reg_no?: string | null } | null;
+  org_id?: number | null;
+  /** Where the net pay went, masked by the server (v1.1). */
+  bank?: { name?: string | null; last4?: string | null } | null;
+}
+
+/** An annual tax / earnings certificate (PAY-SLP-06), by reference. */
+export interface TaxCertificate {
+  reference: string;
+  /** "2025/26". */
+  year: string;
+  title?: string | null;
+  employer?: string | null;
+}
+
+/** A loan or advance still being recovered, with what is left after the payslip (v1.1). */
+export interface PayLoan {
+  label: string;
+  balance: string;
+  instalment?: string | null;
+  of?: string | null;
 }
 
 export interface PayLine {

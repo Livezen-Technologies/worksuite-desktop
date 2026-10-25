@@ -93,6 +93,9 @@ export function resolveWebLink(link: string | null | undefined, catalogue: AppDe
   if (website) return { kind: 'tab', route: website, app: 'chat' };
   const own = ownPath(path);
   if (own) return { kind: 'tab', route: own.route, app: own.app };
+  // A payroll run's web page (`/payroll/runs/12`, its notices' link) is the run's workspace on the desktop.
+  const payrollRun = /^\/payroll\/runs\/(\d{1,12})\/?(?:[?#].*)?$/.exec(path);
+  if (payrollRun && appForWebPath(path, catalogue)?.surface === 'native') return { kind: 'tab', route: `/payroll?tab=run&run=${payrollRun[1]}`, app: 'payroll' };
   const app = appForWebPath(path, catalogue);
   if (!app) return { kind: 'browser', path, app: null };
   if (BROWSER_PAGES.some((re) => re.test(path))) return { kind: 'browser', path, app: app.id };

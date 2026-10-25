@@ -30,7 +30,7 @@ import { UserGuideButton } from '../../../src/modules/help/UserGuideButton';
 const KEYS = new Set('word excel powerpoint pdf diagram notes announcements mail chat social meet phone whatsapp website-chats tickets calendar meetings tasks projects contacts forms crm marketing recruitment board tender hosting docs billing expenses appointments salon garage pos restaurant pms events rental amc subscriptions inventory purchase oms hr elearning ai payroll finance assets devices analytics drive admin'.split(' '));
 
 const CRM = { key: 'crm', title: 'CRM', summary: 'Leads and deals.', workflows: [{ slug: 'add-a-lead', title: 'Add a lead' }], url: '/help/guides/crm', external_url: null };
-const INDEX = (over: Record<string, unknown> = {}) => ({ guides: [CRM, { key: 'tickets', title: 'Support', summary: 'Tickets.', workflows: [], url: '/help/guides/tickets', external_url: 'https://wiki.example.com/support' }, { key: 'payroll', title: 'Payroll', summary: 'Pay.', workflows: [], url: '/help/guides/payroll', external_url: null }], ...over });
+const INDEX = (over: Record<string, unknown> = {}) => ({ guides: [CRM, { key: 'tickets', title: 'Support', summary: 'Tickets.', workflows: [], url: '/help/guides/tickets', external_url: 'https://wiki.example.com/support' }, { key: 'social', title: 'Social', summary: 'Posts.', workflows: [], url: '/help/guides/social', external_url: null }], ...over });
 
 beforeEach(() => {
   resetGuideIndex();
@@ -75,9 +75,9 @@ describe('User guide button', () => {
 
   it('opens the web guide for a browser-surface app', async () => {
     answers.map.set('/api/help/guides', INDEX());
-    render(<UserGuideButton app="payroll" />);
+    render(<UserGuideButton app="social" />);
     fireEvent.click(await screen.findByRole('button', { name: 'User guide' }));
-    expect(bridge.call).toHaveBeenCalledWith('app:openInBrowser', { path: '/help/guides/payroll' });
+    expect(bridge.call).toHaveBeenCalledWith('app:openInBrowser', { path: '/help/guides/social' });
   });
 
   it('is hidden when the module guide is disabled (not listed), when links are off, or guides are off', async () => {

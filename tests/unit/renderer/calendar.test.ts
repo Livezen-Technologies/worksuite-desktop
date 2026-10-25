@@ -79,9 +79,9 @@ describe('where an entry opens', () => {
     expect(destinationOf(ev({ editable: false, ...over } as Partial<CalendarEvent>))).toEqual(want);
   });
 
-  it('opens a project in the Projects app and an asset on the web, at that record, from the parent id the server sends', () => {
+  it('opens a project in the Projects app and an asset in the Assets app, at that record, from the parent id the server sends', () => {
     expect(destinationOf(ev({ source: 'project_milestone', id: 3, project_id: 21, link: '/projects?project=21' }))).toEqual({ route: '/projects?project=21', label: 'Open Project' });
-    expect(destinationOf(ev({ source: 'asset_maintenance', id: 8, asset_id: 55, link: '/assets?asset=55' }))).toEqual({ web: '/assets?asset=55', label: 'Open Asset ↗' });
+    expect(destinationOf(ev({ source: 'asset_maintenance', id: 8, asset_id: 55, link: '/assets?asset=55' }))).toEqual({ route: '/assets?asset=55', label: 'Open Asset' });
   });
 
   it('from an older server, a milestone opens its module rather than a project numbered like the milestone', () => {

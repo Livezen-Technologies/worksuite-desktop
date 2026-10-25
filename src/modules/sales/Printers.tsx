@@ -1,6 +1,8 @@
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import type { SalesPrintPatch } from '@shared/sales';
+import { useCanOpen } from '../../core/access';
 import { errorMessage } from '../../core/bridge';
+import { useTab } from '../../core/tab-context';
 import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Select } from '../../components/Select';
@@ -12,9 +14,15 @@ import { printers, printSettings, setPrintSettings } from './print';
  * Printers on this computer for Sales (FR-DSK-06, FR-LBL-06): one for delivery notes and manifests (A4), one for
  * shipping labels (4×6 in), and how labels reach it — raw ZPL straight to a thermal printer, or the server's PDF.
  * Remembered on this computer, for the server it is signed in to; nothing here goes to WorkSuite.
+ *
+ * Superseded by Label Studio's printers where the organisation has Label Studio (WS-LABEL-SRS-001 §2.1): label
+ * printers are then this computer's registered Label Studio printers (D04), and this screen says so and links there.
+ * It is kept as it is for installs without Label Studio.
  */
 export default function Printers() {
   const qc = useQueryClient();
+  const studio = useCanOpen('label');
+  const { go } = useTab();
   const s = useQuery({ queryKey: ['sales', 'print-settings'], queryFn: printSettings });
   const list = useQuery({ queryKey: ['sales', 'printers'], queryFn: printers });
   const set = (patch: SalesPrintPatch) =>
@@ -28,6 +36,14 @@ export default function Printers() {
   const options = (none: string) => [{ value: '', label: none }, ...(list.data ?? []).map((p) => ({ value: p.name, label: p.displayName, hint: p.isDefault ? 'default' : undefined }))];
   return (
     <Panel title="Printers on this computer" sub="Kept on this computer for this server. Labels and delivery notes print here without the browser." bodyClassName="flex flex-col gap-3 px-3.5 py-3">
+      {studio ? (
+        <p className="m-0 rounded-[8px] bg-[#EAEDFB] px-3 py-2 text-[12.5px] text-[#23349E] dark:bg-primary/15 dark:text-primary">
+          Label printers are set up in Label Studio on this computer now.{' '}
+          <button type="button" className="font-bold underline" onClick={() => go('/label?tab=printers')}>
+            Open Label Studio printers
+          </button>
+        </p>
+      ) : null}
       {list.error ? <ErrorNote error={list.error} /> : null}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Delivery notes and manifests (A4)">

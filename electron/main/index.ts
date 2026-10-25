@@ -1,3 +1,6 @@
+import { PayrollReminders } from '../services/payroll-reminders';
+import { AssetAlerts } from '../services/assets-alerts';
+import { assetsCached, type TrayAssets } from '@shared/assets';
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
@@ -29,7 +32,7 @@ import { redactUrl } from '@shared/redact';
 import { SUPPORT_QUICK_SHORTCUT, quickRoute, ringRoute, supportNoticePrefs } from '@shared/support';
 import { FOLLOW_UP_DEFAULTS, type ActiveCall, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
-import { applyAutostart, startedHidden } from './autostart';
+import { applyAutostart, gatewayAutostart, gatewayPairingArgs, setGatewayAutostart, startedAsGateway, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
 import type { AppContext, ClockExtra } from './context';
 import { broadcast, guestWindowIds, sendTo } from './events';
@@ -139,8 +142,10 @@ import { createBrokerCall, osDeviceServer, readOsDevice, startOsSession, type Br
 import { EventDesk } from '../services/event-desk';
 import { EventDeskPrint } from '../services/event-desk-print';
 import { createRestaurant } from '../services/restaurant';
+import { createLabel } from '../services/label';
 import { createProjects } from '../services/projects';
 import { SalesDesk } from '../services/sales-desk';
+import { ChequeStation } from '../services/cheque-print';
 import { SinhalaService, type SinhalaDocxRequest } from '../services/sinhala';
 import type { DocxConvertStats } from '../services/sinhala-docx';
 import { execFile as execFileCb } from 'node:child_process';
@@ -610,6 +615,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   connection.start();
 
   const notifications = new NotificationService(db, getVault, http, () => settings.effective());
+  // Payroll's tray reminders (D24): cut-off, approvals waiting and pay dates, even with the Payroll tab closed.
+  const payrollReminders = new PayrollReminders(http, notifications);
+  // Assets' alerts and tray line (D03): handovers to confirm, loans overdue, approvals waiting — with the tab closed.
+  // The tray is made later in start(); its line follows the count once it exists.
+  let assetsTray: ((t: TrayAssets | null) => void) | null = null;
+  const assetAlerts = new AssetAlerts(http, notifications, (t) => assetsTray?.(t));
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
   // New-mail alerts (ENH-MAIL-05): one per message on this computer — the row's "New" in Mail, the in-app card while
   // WorkSuite is in front, the system's notification while it is not — and the tray's mail lines, pause and badge.
@@ -945,6 +956,22 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('restaurant:changed');
       emitStatus();
     },
+  });
+
+  // Label Studio: this computer as a print host for the signed-in person, and the Print Gateway (tray mode, SRS Q-03).
+  const label = createLabel({
+    config: db,
+    http,
+    secrets,
+    origin: () => auth.getServer()?.origin ?? null,
+    active: () => sessionCtl.isReady() && canOpenApp('label', sessionCtl.visibleApps()),
+    installId: () => device.installId(),
+    userData: app.getPath('userData'),
+    version: app.getVersion(),
+    headless: startedAsGateway(),
+    setHeadless: (on) => setGatewayAutostart(on, settings.effective()),
+    autostart: gatewayAutostart,
+    changed: (which) => broadcast(which === 'host' ? 'label:changed' : 'labelGateway:changed'),
   });
 
   // Drive sync (Phase 2): chosen Drive folders kept in step with folders here.
@@ -1750,6 +1777,14 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     openExternal: (url) => void openExternalSafely(url),
     onChange: (meetings) => tray.update({ meetings }),
   });
+  // Cheque Manager's print station (D02–D06): the leaf's layout is fetched here from the server, printed at exact size.
+  const chequeStation = new ChequeStation({
+    http,
+    deviceId: () => device.current()?.id ?? null,
+    host: () => device.deviceName(),
+    version: () => app.getVersion(),
+    printers: (sender) => listPrinters(sender ? BrowserWindow.fromWebContents(sender) : null),
+  });
   // Sales' approvals (WS-OMS-SRS-001 D-05, FR-APR-10): Approve and Open on the banner; printing on this computer.
   const salesDesk = new SalesDesk({
     http,
@@ -2149,6 +2184,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       windows.open('timer', '/projects/timer', 'Timer', true);
     },
   });
+  assetsTray = (t) => tray.update({ assets: t });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
   const JOIN_SHORTCUT = 'CommandOrControl+Shift+J';
@@ -2825,6 +2861,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     setExternalAllowList([new URL(auth.getServer()!.origin).hostname]);
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
+    payrollReminders.start();
+    assetAlerts.start();
     mailAlerts.start();
     supportNotices.start();
     supportDesk.start();
@@ -2859,6 +2897,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     eventDesk.start();
     restaurant.start();
     projects.start();
+    label.host.start();
     // Courses kept offline: the ones whose learning ended, or whose licence ran out, go.
     void elearning.validate().catch((e) => log.warn('offline courses not checked', { error: String(e) }));
     // Board: what waited offline goes up, revocations and expiries are applied.
@@ -2923,6 +2962,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     phone.reset();
     realtime.stop();
     notifications.stop();
+    payrollReminders.stop();
+    assetAlerts.stop();
     purchaseDesk.reset();
     mailAlerts.stop();
     supportNotices.stop();
@@ -2936,6 +2977,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     eventDesk.stop();
     restaurant.stop();
     if (attendanceTimer) clearInterval(attendanceTimer);
+    label.host.stop();
     attendanceTimer = null;
     stopPresence();
     accessWatch.stop();
@@ -3008,6 +3050,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         pos.forgetAll();
         // The restaurant terminal this computer was: its key, copy, outbox and printer mapping.
         restaurant.forgetAll();
+        // Label Studio's printers, registration and print journal on this computer (the gateway's identity is the computer's).
+        label.forgetAll();
         // The door-lock servers this computer's front desk talked to, and their secrets.
         pmsLocks.wipe();
         // The iCloud and CardDAV passwords contact sync kept for this computer.
@@ -3262,7 +3306,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       userId: () => sessionCtl.userId(),
       cacheModuleFor: (path) => {
         const clean = path.split('?')[0]!;
-        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : null);
+        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : assetsCached(clean) ? 'assets' : null);
         // Neither saved nor served for an app the person may not open.
         return module && canOpenApp(module, sessionCtl.visibleApps()) ? module : null;
       },
@@ -3454,8 +3498,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   pmsLocks.register(router);
   contactSync.register(router);
   restaurant.register(router);
+  label.register(router);
   projects.register(router);
   salesDesk.register(router);
+  chequeStation.register(router);
   sinhala.register(router);
   localAI.register(router);
   router.handle('ai:ocr', (input, c) => ocr.recognize(c.sender.id, input));
@@ -4196,6 +4242,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     pos.stop();
     restaurant.stop();
     supervisor.stopAll();
+    label.stop();
     realtime.stop();
     updater.stop();
     lock.stop();
@@ -4259,6 +4306,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   lock.start();
   // The till sends its sales with its own credential, whoever is signed in (or nobody).
   pos.start();
+  // The Print Gateway runs with its own device identity, whoever is signed in (or nobody); a headless box pairs from its command line.
+  label.gateway.start();
+  const pairArgs = startedAsGateway() ? gatewayPairingArgs() : null;
+  if (pairArgs && !label.gateway.status().paired) void label.gateway.pair({ ...pairArgs, name: pairArgs.name ?? os.hostname() }).catch((e) => log.warn('print gateway pairing failed', { error: String(e) }));
   updater.start();
   applyAutostartOnce(settings);
 

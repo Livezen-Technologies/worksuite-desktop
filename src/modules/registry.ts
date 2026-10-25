@@ -316,6 +316,82 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./board/BoardShell'),
   },
   {
+    // Assets (WS-ASSET-SRS-001 T-17, the desktop boards D01–D26) over `/api/assets`: the register and one asset's
+    // overview, custody and depreciation; the scan station for a keyboard-wedge scanner; requests, transfers,
+    // bookings, upkeep, licences, consumables, audits, disposal, reports, import/export, labels and settings.
+    // Alerts and the tray line come from electron/services/assets-alerts.ts.
+    input: defineDesktopManifest({
+      id: 'assets', name: 'Assets', icon: 'box', contractVersion: 1, desktop: { enabled: true },
+      // Read-only offline from the encrypted cache: what was last opened; every change waits for the connection.
+      offline: { mode: 'READ_CACHE', entities: ['asset'], cache: ['/api/assets', '/api/assets/access', '/api/assets/dashboard', '/api/assets/mine', '/api/assets/requests', '/api/assets/lookups/categories'] },
+      native: ['notifications', 'printing', 'barcode', 'file-drop'],
+      quickActions: [
+        { id: 'assets-scan', label: 'Asset scan station', route: '/assets?tab=scan' },
+        { id: 'assets-mine', label: 'My equipment', route: '/assets?tab=mine' },
+      ],
+      deepLinks: ['assets', 'assets/:id'],
+    }),
+    load: () => import('./assets/AssetsShell'),
+  },
+  {
+    // Payroll (WS-PAYROLL-SRS-001 §D1, the desktop boards D01–D25) over `/api/payroll` (docs/payroll-api.md): home,
+    // runs and the run workspace, approval with Touch ID and the journal, employees, inputs, loans, settlements,
+    // payslips, disbursements with bank files, statutory, reports, setup and settings. My Payslips is HR › My pay.
+    input: defineDesktopManifest({
+      id: 'payroll', name: 'Payroll', icon: 'banknote', contractVersion: 1, desktop: { enabled: true },
+      // D25: the runs and the screens around them, read-only from the encrypted cache while offline; nothing is written.
+      offline: { mode: 'READ_CACHE', cache: ['/api/payroll/access', '/api/payroll/dashboard', '/api/payroll/runs', '/api/payroll/groups', '/api/payroll/payslips', '/api/payroll/me'] },
+      native: ['notifications'],
+      quickActions: [{ id: 'payroll-runs', label: 'Payroll runs', route: '/payroll?tab=runs' }],
+      deepLinks: ['payroll', 'payroll/runs/:id'],
+    }),
+    load: () => import('./payroll/PayrollShell'),
+  },
+  {
+    // Cheque Manager (Cheque SRS v1.0, the desktop boards D01–D06) over `/api/cheque` (server docs/cheque-api.md): this
+    // computer as the certified print station — home, print queue, direct print and confirm, calibration and
+    // offsets, batch runs and reconciling an interrupted batch. Printing happens only in the main process.
+    input: defineDesktopManifest({
+      id: 'cheque', name: 'Cheque Manager', icon: 'printer', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      quickActions: [{ id: 'cheque-queue', label: 'Cheque print queue', route: '/cheque?tab=queue' }],
+      deepLinks: ['cheque', 'cheque/queue', 'cheque/batches/:id'],
+    }),
+    load: () => import('./cheque/ChequeShell'),
+  },
+  {
+    // Appointments (Appointments SRS v1.0 §9, the desktop boards D01–D24) over `/api/appointments`: the today board,
+    // calendar day and week with drag-to-move, list, new appointment, walk-in, the appointment panel with check-in,
+    // move, cancel/no-show and deposit, checkout with the receipt, clients, waitlist, reports, commission, set-up, this
+    // desk, notifications, day sheets and the palette. Offline, status moves and client notes wait in the queue.
+    input: defineDesktopManifest({
+      id: 'appointments', name: 'Appointments', icon: 'calendar-clock', contractVersion: 1, desktop: { enabled: true },
+      offline: {
+        mode: 'PARTIAL_WRITE',
+        entities: ['appointment', 'customer_note'],
+        cache: ['/api/appointments/options', '/api/appointments/dashboard', '/api/appointments/calendar', '/api/appointments/customers'],
+      },
+      native: ['notifications', 'printing'],
+      quickActions: [
+        { id: 'appointments-new', label: 'New appointment', route: '/appointments?tab=today&new=1' },
+        { id: 'appointments-walk-in', label: 'Appointment walk-in', route: '/appointments?tab=walkin' },
+      ],
+      deepLinks: ['appointments', 'appointments/:id'],
+    }),
+    load: () => import('./appointments/AppointmentsShell'),
+  },
+  {
+    // Label Studio (WS-LABEL-SRS-001 §4.27, the desktop boards D01–D07) over `/api/labels` (server docs/label-api.md):
+    // home, designer with a test print, the print station, printers on this computer, the interrupted batch and the
+    // Print Gateway. Printing happens only in the main process (electron/services/label/, FR-DSK-03).
+    input: defineDesktopManifest({
+      id: 'label', name: 'Label Studio', icon: 'printer', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['printing', 'barcode'],
+      quickActions: [{ id: 'label-station', label: 'Label print station', route: '/label?tab=station' }],
+      deepLinks: ['label', 'label/jobs/:id', 'label/templates/:id'],
+    }),
+    load: () => import('./label/LabelShell'),
+  },
+  {
     // Figures are not cached for offline reading: a stale trial balance looks exactly like a current one.
     input: defineDesktopManifest({
       id: 'finance', name: 'Finance', icon: 'landmark', contractVersion: 1, desktop: { enabled: true },

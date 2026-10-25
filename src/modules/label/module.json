@@ -1,0 +1,9 @@
+{
+    "module": "label",
+    "version": "1.0.0",
+    "paths": [
+        "electron/services/label/",
+        "shared/label.ts",
+        "shared/ipc/label-channels.ts"
+    ]
+}
