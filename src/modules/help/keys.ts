@@ -62,6 +62,8 @@ export const GUIDE_KEYS: Readonly<Record<string, string | null>> = {
   social: 'social',
   subscriptions: 'subscriptions',
   payroll: 'payroll',
+  // Cheque Manager: no guide of its own yet.
+  cheque: null,
   appointments: 'appointments',
   assets: 'assets',
   admin: 'admin',
