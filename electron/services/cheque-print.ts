@@ -16,7 +16,8 @@ import {
 } from '@shared/cheque';
 import type { IpcRouter } from '../ipc/router';
 import type { HttpClient } from './http';
-import { CorePrintService, canonicalPhp, ed25519Key, sha256Canonical, sha256Text, verifyCanonical, type ExactPrintJob, type ExactPrintResult } from './core-print';
+import { canonicalJson } from '@shared/canonical-json';
+import { CorePrintService, ed25519Key, sha256Canonical, sha256Text, verifyCanonical, type ExactPrintJob, type ExactPrintResult } from './core-print';
 
 /**
  * Cheque Manager's print station (Cheque SRS §3.9 CHQ-PRT-03..07/10/11, §3.4 CHQ-CAL-01..02, CHQ-PRN-01..02; boards
@@ -124,7 +125,7 @@ export class ChequeStation {
     if (String(e.device_id) !== this.d.deviceId()) return { ok: false, reason: 'The print job is for another computer.' };
     const exp = typeof e.expires === 'number' ? e.expires * (e.expires < 1e12 ? 1000 : 1) : Date.parse(e.expires);
     if (!Number.isFinite(exp) || exp <= (this.d.now ?? Date.now)()) return { ok: false, reason: 'The print job’s signature has expired.' };
-    if (!layoutHashMatches(job.layout, e.layout_sha256, e.kind)) return { ok: false, reason: 'The layout is not what was signed.' };
+    if (!layoutHashMatches(job.layout, e.layout_sha256, job.layout_canonical)) return { ok: false, reason: 'The layout is not what was signed.' };
     if (e.kind === 'test') {
       const sheet = sheetLayout(job.layout);
       return sheet ? { ok: true, layout: sheet, rotation: 0 } : { ok: false, reason: 'The test sheet could not be read.' };
@@ -326,25 +327,17 @@ export function testLeafLayout(v: { width_mm: number; height_mm: number; fields:
 }
 
 /**
- * Does the layout hash to what the envelope signed? The server hashes PHP's canonical JSON, which writes a whole
- * float as `11.0`; the wire copy has lost that, so the PHP form is rebuilt from what the server's models hold:
- * in a cheque's render model every number is a float but `rotation`; in the A4 sheet the page size, the corner
- * markers' zero coordinates, the crosshair size and the ruler's start and tick are integers. Plain canonical JSON
- * is tried too, for a server that hashes without the zero fraction.
+ * Does the layout hash to what the envelope signed? The server hashes canonical JSON (sorted keys, no spaces, whole
+ * numbers written `12`, not `12.0`) and sends that exact string as `layout_canonical`. When it is there it is hashed
+ * as sent and must also parse to the same canonical form as the `layout` that will be printed; otherwise the layout
+ * itself is canonicalised.
  */
-export function layoutHashMatches(layout: unknown, sha: string, kind: 'cheque' | 'test'): boolean {
+export function layoutHashMatches(layout: unknown, sha: string, canonical?: string): boolean {
   const want = sha.toLowerCase();
-  if (sha256Canonical(layout) === want) return true;
-  const ints = kind === 'test'
-    ? (p: readonly string[], v: number) => {
-        const k = p[p.length - 1] ?? '';
-        if (p[0] === 'page' && (k === 'w_mm' || k === 'h_mm')) return true;
-        if (k === 'crosshair_mm' || k === 'tick_mm' || k === 'from_mm') return true;
-        return p[0] === 'markers' && (k === 'x_mm' || k === 'y_mm') && v === 0;
-      }
-    : (p: readonly string[]) => p[p.length - 1] === 'rotation';
   try {
-    return sha256Text(canonicalPhp(layout, ints)) === want;
+    if (canonical === undefined) return sha256Canonical(layout) === want;
+    if (sha256Text(canonical) !== want) return false;
+    return canonicalJson(JSON.parse(canonical)) === canonicalJson(layout);
   } catch {
     return false;
   }

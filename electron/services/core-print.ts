@@ -187,23 +187,4 @@ export function verifyCanonical(signed: unknown, signature: string, key: KeyObje
 
 export const sha256Canonical = (v: unknown): string => createHash('sha256').update(canonicalJson(v), 'utf8').digest('hex');
 
-/**
- * Canonical JSON as PHP writes it with `JSON_PRESERVE_ZERO_FRACTION` (keys sorted, no spaces, `11.0` for a float
- * that is whole). JSON over the wire loses whether a whole number was a float, so the caller says which numbers
- * were integers (`isInt`, given the key path); every other whole number is written with `.0`. Strings are written
- * as JSON.stringify writes them, which matches PHP's `JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES`.
- */
-export function canonicalPhp(value: unknown, isInt: (path: readonly string[], v: number) => boolean, path: readonly string[] = []): string {
-  if (typeof value === 'number') {
-    if (!Number.isFinite(value)) throw new Error('non-finite number');
-    return Number.isInteger(value) && !isInt(path, value) ? `${value}.0` : JSON.stringify(value);
-  }
-  if (value === null || typeof value !== 'object') return JSON.stringify(value);
-  if (Array.isArray(value)) return `[${value.map((v, i) => canonicalPhp(v === undefined ? null : v, isInt, [...path, String(i)])).join(',')}]`;
-  const entries = Object.entries(value as Record<string, unknown>)
-    .filter(([, v]) => v !== undefined)
-    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0));
-  return `{${entries.map(([k, v]) => `${JSON.stringify(k)}:${canonicalPhp(v, isInt, [...path, k])}`).join(',')}}`;
-}
-
 export const sha256Text = (s: string): string => createHash('sha256').update(s, 'utf8').digest('hex');

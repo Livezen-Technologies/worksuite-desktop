@@ -132,6 +132,8 @@ export const claimedJob = z.object({
   envelope: jobEnvelope,
   signature: z.string().min(16).max(400),
   layout: z.unknown(),
+  /** The exact canonical string the server hashed into `layout_sha256` (newer servers). */
+  layout_canonical: z.string().max(2_000_000).optional(),
 });
 export type ClaimedJob = z.infer<typeof claimedJob>;
 

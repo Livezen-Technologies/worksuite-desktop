@@ -4,7 +4,7 @@ import { describe, expect, it, vi } from 'vitest';
 vi.mock('electron', () => ({ app: { getPath: () => '/tmp', getVersion: () => '0.2.57' }, safeStorage: {}, BrowserWindow: class {} }));
 
 import { ChequeStation, layoutHashMatches, sheetLayout } from '../../../electron/services/cheque-print';
-import { canonicalPhp, pageSizeMicrons, renderExactHtml, sha256Text, type ExactPrintJob, type ExactPrintResult } from '../../../electron/services/core-print';
+import { pageSizeMicrons, renderExactHtml, sha256Text, type ExactPrintJob, type ExactPrintResult } from '../../../electron/services/core-print';
 import { canonicalJson } from '../../../shared/canonical-json';
 import { clampOffset, modelToLayout, parseOffset, renderModel, signedMm } from '../../../shared/cheque';
 
@@ -28,11 +28,12 @@ const MODEL = {
 
 function signedJob(over: { model?: unknown; device?: string; expires?: number; cheque?: number; tamper?: boolean } = {}) {
   const layout = over.model ?? MODEL;
-  // As the server hashes it: PHP's canonical JSON with whole floats written 11.0 (everything but rotation is a float).
-  const sha = sha256Text(canonicalPhp(layout, (p) => p[p.length - 1] === 'rotation'));
+  // As the server hashes it: canonical JSON, whole numbers without a zero fraction, also sent as layout_canonical.
+  const layout_canonical = canonicalJson(layout);
+  const sha = sha256Text(layout_canonical);
   const envelope = { job_id: 88214, attempt_id: '9f2c4e', cheque_id: over.cheque ?? 1217, leaf_id: 51, cheque_number: '001217', device_id: over.device ?? '42', org_id: 1, kind: 'cheque', printer: 'HP_M404', tray: null, expires: over.expires ?? 4_102_444_800, layout_sha256: sha };
   const signature = sign(null, Buffer.from(canonicalJson(envelope)), privateKey).toString('base64');
-  return { job_id: 88214, attempt_id: '9f2c4e', lease_until: null, envelope: over.tamper ? { ...envelope, leaf_id: 52 } : envelope, signature, layout };
+  return { job_id: 88214, attempt_id: '9f2c4e', lease_until: null, envelope: over.tamper ? { ...envelope, leaf_id: 52 } : envelope, signature, layout, layout_canonical };
 }
 
 const PROFILE = { id: 5, device_id: '42', printer_name: 'HP_M404', tray: 'Manual feed', offset_x_mm: 1.2, offset_y_mm: -0.8, rotation: 0, version_ids: [9] };
@@ -118,11 +119,24 @@ describe('CorePrintService layout', () => {
     expect(l.boxes.filter((b) => b.kind === 'ruler').map((b) => [b.width_mm, b.height_mm])).toEqual([[178, 0], [0, 82]]);
   });
 
-  it('matches the server’s layout hash whether or not it kept whole floats as 11.0', () => {
-    expect(layoutHashMatches(MODEL, sha256Text(canonicalPhp(MODEL, (p) => p[p.length - 1] === 'rotation')), 'cheque')).toBe(true);
-    expect(layoutHashMatches(MODEL, sha256Text(canonicalJson(MODEL)), 'cheque')).toBe(true);
-    expect(layoutHashMatches(MODEL, sha256Text(canonicalJson({ ...MODEL, rotation: 180 })), 'cheque')).toBe(false);
-    expect(canonicalPhp({ b: 11, a: [1.5, 0], rotation: 0 }, (p) => p[p.length - 1] === 'rotation')).toBe('{"a":[1.5,0.0],"b":11.0,"rotation":0}');
+  it('verifies the layout hash over layout_canonical when sent, and requires it to parse to the printed layout', () => {
+    const c = canonicalJson(MODEL);
+    expect(c).not.toContain('11.0');
+    expect(layoutHashMatches(MODEL, sha256Text(c), c)).toBe(true);
+    expect(layoutHashMatches(MODEL, sha256Text(c).toUpperCase(), c)).toBe(true);
+    // Whole floats written 11.0 are not the server's form any more.
+    const zf = c.replace('"size_pt":11,', '"size_pt":11.0,');
+    expect(zf).not.toBe(c);
+    expect(layoutHashMatches(MODEL, sha256Text(c), zf)).toBe(false);
+    // A canonical string that hashes right but describes another layout is refused.
+    const other = canonicalJson({ ...MODEL, rotation: 180 });
+    expect(layoutHashMatches(MODEL, sha256Text(other), other)).toBe(false);
+    expect(layoutHashMatches(MODEL, sha256Text('{not json'), '{not json')).toBe(false);
+  });
+
+  it('falls back to canonicalising the layout when layout_canonical is absent', () => {
+    expect(layoutHashMatches(MODEL, sha256Text(canonicalJson(MODEL)))).toBe(true);
+    expect(layoutHashMatches(MODEL, sha256Text(canonicalJson({ ...MODEL, rotation: 180 })))).toBe(false);
   });
 });
 

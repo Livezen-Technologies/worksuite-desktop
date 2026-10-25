@@ -1,6 +1,6 @@
 {
     "module": "cheque",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "paths": [
         "electron/services/cheque-print.ts",
         "electron/services/core-print.ts",
