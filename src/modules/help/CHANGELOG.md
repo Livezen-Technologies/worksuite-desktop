@@ -4,6 +4,10 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.0.1 — 2026-10-25
+
+- Cheque Manager has a place in the guide index (no guide yet).
+
 ## 1.0.0 — 2026-10-22
 
 - User guides in the app: the list of guides with search, a guide's overview, workflows, settings and FAQ, and a workflow's steps (`/help?guide=<key>&workflow=<slug>`), over the server's GET /api/help/guides; the last copies read here open offline
