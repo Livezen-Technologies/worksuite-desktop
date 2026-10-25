@@ -202,7 +202,8 @@ export const APP_CATALOGUE: AppDefinition[] = [
   // its gate is the desk's own `support.view` — or an as-built `ticket.*` slug on a server from before it. The web's
   // `/tickets?ticket=<id>` (notifications, search) opens that ticket's tab here.
   { id: 'support', label: 'Support', group: 'operations', icon: 'life-buoy', perm: SUPPORT_PERMISSIONS, webPath: '/tickets', surface: 'native', sidebar: 'business', order: 200, badge: 'support', keywords: 'support tickets ticket helpdesk help desk service desk customers requester sla reply inbox' },
-  { id: 'assets', label: 'Assets', group: 'operations', icon: 'box', app: 'assets', webPath: '/assets', surface: 'browser', order: 210 },
+  // Assets (WS-ASSET-SRS-001 T-17, the desktop boards D01–D26): native since assets 1.0.0 — the register, the scan station, tray alerts and labels.
+  { id: 'assets', label: 'Assets', group: 'operations', icon: 'box', app: 'assets', webPath: '/assets', surface: 'native', sidebar: 'business', order: 210, keywords: 'assets equipment register scan barcode labels custody handover depreciation licences audit disposal' },
   // AMC & Service (WS-AMC-SRS-001 T-15): the server's app `amc`; native here — the dashboard, the dispatch timeline, the
   // request window and the lists. Its links `/amc?view=…` (shared/amc.ts) open here; the rest of AMC on the web.
   { id: 'amc', label: 'AMC & Service', group: 'operations', icon: 'wrench', app: 'amc', webPath: '/amc', surface: 'native', sidebar: 'business', order: 215, keywords: 'amc service contracts maintenance requests dispatch technicians visits renewals estimates units equipment warranties sla' },

@@ -17,6 +17,7 @@ import { logger } from '../main/log';
 import { isPurchaseApprovalEvent } from '@shared/purchase';
 import { recruitmentNoticeLink } from '@shared/recruitment';
 import { payrollNoticeLink } from '@shared/payroll';
+import { assetNoticeActions, assetNoticeLink } from '@shared/assets';
 import { boardNoticeLink } from '@shared/board';
 import { amcNoticeActions, amcNoticeLink } from '@shared/amc';
 import type { Database } from './db';
@@ -305,7 +306,7 @@ export function mapServerNotification(n: ServerNotification): NotificationItem {
     title: n.title ?? 'Notification',
     body: n.body ?? '',
     // Recruitment's keys open the desktop's own screen for them (interviews today, the scorecard, approvals).
-    link: recruitmentNoticeLink(n.event_key ?? n.type, n.data) ?? payrollNoticeLink(n.event_key ?? n.type, n.data) ?? boardNoticeLink(n.event_key ?? n.type, n.data) ?? amcNoticeLink(n.event_key ?? n.type, n.data, n.link) ?? n.link ?? null,
+    link: recruitmentNoticeLink(n.event_key ?? n.type, n.data) ?? payrollNoticeLink(n.event_key ?? n.type, n.data) ?? boardNoticeLink(n.event_key ?? n.type, n.data) ?? amcNoticeLink(n.event_key ?? n.type, n.data, n.link) ?? n.link ?? assetNoticeLink(n.event_key ?? n.type, n.data) ?? null,
     read: !!n.read_at,
     createdAt: utcStamp(n.created_at),
     actor: null,
@@ -663,7 +664,7 @@ export class NotificationService {
           if (i.read || this.shown.includes(i.id) || Date.parse(i.createdAt) < since) return;
           if (n.desktop_allowed === false) return;
           if (this.claim({ id: i.id, event: n.event_key ?? n.type ?? null, title: i.title, body: i.body, link: i.link, category: n.category ?? null, priority: n.priority ?? null, actions: n.actions, data: n.data, module: i.module })) return;
-          this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), social: socialNoticeActions(n.event_key ?? n.type, n.link, n.actions) ?? amcNoticeActions(n.event_key ?? n.type, i.link, n.data), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
+          this.notify({ flag: (n.event_key ?? n.type) === 'mail.flag_reminder' ? flagFromLink(n.link) : null, reminder: (n.event_key ?? n.type) === 'task.reminder' ? reminderAction(n.link, n.actions) : null, meeting: meetingNoticeActions(n.event_key ?? n.type, n.actions), social: socialNoticeActions(n.event_key ?? n.type, n.link, n.actions) ?? amcNoticeActions(n.event_key ?? n.type, i.link, n.data) ?? assetNoticeActions(n.event_key ?? n.type, n.data), id: i.id, module: i.module, category: n.category ?? null, title: i.title, body: i.body, sender: null, link: i.link, critical: n.priority === 'critical' || n.priority === 'emergency' || n.level === 'critical' || n.level === 'emergency' });
         });
       }
       this.listed = true;
@@ -776,7 +777,7 @@ export class NotificationService {
         if (!id) return;
         if (e.transient !== true) this.unread.notifications += 1;
         // A recruitment key opens the desktop's own screen for it (shared/recruitment.ts).
-        const link = recruitmentNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? payrollNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? boardNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? amcNoticeLink(typeof e.event === 'string' ? e.event : null, e.data, typeof e.link === 'string' ? e.link : null) ?? (typeof e.link === 'string' ? e.link : null);
+        const link = recruitmentNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? payrollNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? boardNoticeLink(typeof e.event === 'string' ? e.event : null, e.data) ?? amcNoticeLink(typeof e.event === 'string' ? e.event : null, e.data, typeof e.link === 'string' ? e.link : null) ?? (typeof e.link === 'string' ? e.link : null) ?? assetNoticeLink(typeof e.event === 'string' ? e.event : null, e.data);
         const category = typeof e.category === 'string' ? e.category : null;
         if (moduleOf({ category, link }) === 'support') this.supportUnread.add(id);
         if (moduleOf({ category, link }) === 'mail' || e.event === 'mail.received') this.mailUnread.add(id);
@@ -795,7 +796,7 @@ export class NotificationService {
           flag: e.event === 'mail.flag_reminder' ? flagFromLink(link) : null,
           meeting: meetingNoticeActions(typeof e.event === 'string' ? e.event : null, e.actions),
           // AMC's new request (NOT-02): Open / Give to, which only open screens, as Social Media's buttons do.
-          social: socialNoticeActions(typeof e.event === 'string' ? e.event : null, link, e.actions) ?? amcNoticeActions(typeof e.event === 'string' ? e.event : null, link, e.data),
+          social: socialNoticeActions(typeof e.event === 'string' ? e.event : null, link, e.actions) ?? amcNoticeActions(typeof e.event === 'string' ? e.event : null, link, e.data) ?? assetNoticeActions(typeof e.event === 'string' ? e.event : null, e.data),
           module: moduleOf({ category: e.category as string, link }),
           category: typeof e.category === 'string' ? e.category : null,
           title: String(e.title ?? 'Notification'),

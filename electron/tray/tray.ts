@@ -6,6 +6,7 @@ import { logger } from '../main/log';
 import { liveTitle } from '../services/live-desk';
 import type { SupportPulseFigures } from '../services/support-desk';
 import type { TrayMarketing } from '../services/marketing-pulse';
+import type { TrayAssets } from '@shared/assets';
 import type { TrayMeet } from '../services/meet-next';
 import type { TrayMeetings } from '../services/meetings-desk';
 import { NEXT_CONTACT_LABEL } from '../services/marketing-shortcut';
@@ -79,6 +80,8 @@ export interface TrayModel {
    * sending now. Null for anybody with nothing to show, or before the server answers. Optional for older callers.
    */
   marketing?: TrayMarketing | null;
+  /** Assets (D03): what waits for me — handovers to confirm, loans overdue, approvals. Null: no Assets lines. */
+  assets?: TrayAssets | null;
   /** Meet's lines (WS-MEET-ENH-01 D04): the next meeting to join, and whether this computer is in one. Null: no Meet lines. */
   meet?: TrayMeet | null;
   /** Meetings' lines (Meetings D07): today's meetings and the invitations waiting. Null: no Meetings lines. */
@@ -308,6 +311,17 @@ export function trayProjectItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'proje
  * the next contact — its key shown, not registered here (main holds it while WorkSuite is not in front). The queue's
  * lines only for somebody with a call queue, all of it only for somebody who has Marketing.
  */
+/** Assets' tray lines (D03): what waits, the scan station, my equipment and reporting a problem with it. */
+export function trayAssetsItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'assets'>, a: Pick<TrayActions, 'openRoute'>): MenuItemConstructorOptions[] {
+  if (!m.signedIn || !m.apps.includes('assets') || !m.assets) return [];
+  return [
+    ...(m.assets.waiting > 0 ? [{ label: `${m.assets.waiting} waiting for you`, click: () => a.openRoute('/assets?tab=dashboard') }] : []),
+    { label: 'Open scan station', click: () => a.openRoute('/assets?tab=scan') },
+    { label: 'My equipment', click: () => a.openRoute('/assets?tab=mine') },
+    { label: 'Report a problem with my equipment', click: () => a.openRoute('/assets?tab=mine&problem=1') },
+  ];
+}
+
 export function trayMarketingItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'marketing'>, a: Pick<TrayActions, 'openRoute' | 'marketingNextContact'>): MenuItemConstructorOptions[] {
   const mk = m.marketing;
   if (!m.signedIn || !m.apps.includes('marketing') || !mk) return [];
@@ -794,6 +808,10 @@ export function trayMenu(m: TrayModel, a: TrayActions, now = new Date()): MenuIt
   if (has('marketing') && m.marketing) {
     const lines = inner(trayMarketingItems(m, a));
     if (lines.length) items.push({ label: callsSummary(m.marketing), submenu: lines });
+  }
+  if (has('assets') && m.assets) {
+    const lines = trayAssetsItems(m, a);
+    if (lines.length) items.push({ label: m.assets.waiting > 0 ? `Assets · ${m.assets.waiting} waiting for you` : 'Assets', submenu: lines });
   }
   if (has('meet') && m.meet) {
     const lines = inner(trayMeetItems(m, a, m.shortcutLabels ?? {}));

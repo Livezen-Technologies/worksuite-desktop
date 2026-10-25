@@ -554,6 +554,10 @@ const api = {
     verify: call('payroll:verify'),
     saveFile: call('payroll:saveFile'),
   },
+  // Assets: a register file read from the open dialog for the import check (D21).
+  assets: {
+    openFile: call('assets:openFile'),
+  },
   // WorkSuite Board (board-channels.ts): the encrypted offline pack vault, its queue and offline circular responses.
   board: {
     vaultStatus: call('board:vaultStatus'),

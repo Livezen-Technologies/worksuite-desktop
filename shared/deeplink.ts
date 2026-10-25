@@ -118,6 +118,8 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'board/meetings/:id/room', module: 'board', route: (p) => `/board?view=room&meeting=${p.id}` },
   { pattern: 'board/circulars/:id', module: 'board', route: (p) => `/board?view=approvals&circular=${p.id}` },
   { pattern: 'recruitment/interviews/:id', module: 'recruitment', route: (p) => `/recruitment?tab=cards&interview=${p.id}` },
+  { pattern: 'assets', module: 'assets', route: () => '/assets' },
+  { pattern: 'assets/:id', module: 'assets', route: (p) => `/assets?asset=${p.id}` },
   { pattern: 'payroll', module: 'payroll', route: () => '/payroll' },
   { pattern: 'cheque', module: 'cheque', route: () => '/cheque' },
   { pattern: 'cheque/queue', module: 'cheque', route: () => '/cheque?tab=queue' },

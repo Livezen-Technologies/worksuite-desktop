@@ -3,7 +3,7 @@ import { BrowserWindow, app, clipboard, dialog, nativeImage, powerMonitor, scree
 import { wallDisplays } from '../services/live-desk';
 import { planShow } from '../services/slideshow';
 import { readFile } from 'node:fs/promises';
-import { basename, join } from 'node:path';
+import { basename, dirname, join } from 'node:path';
 import { writeAtomically } from '../services/pdf/host';
 import os from 'node:os';
 import { writeFile } from 'node:fs/promises';
@@ -686,6 +686,16 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     if (res.canceled || !res.filePath) return null;
     await writeFile(res.filePath, input.text, { encoding: 'utf8', mode: 0o600 });
     return res.filePath;
+  });
+  router.handle('assets:openFile', async (input, c) => {
+    const w = winOf(c.sender);
+    const opts: Electron.OpenDialogOptions = { title: input.title ?? 'Choose a register file', properties: ['openFile'], filters: [{ name: 'CSV or tab-separated', extensions: ['csv', 'tsv', 'txt'] }] };
+    const res = w ? await dialog.showOpenDialog(w, opts) : await dialog.showOpenDialog(opts);
+    const path = res.filePaths[0];
+    if (res.canceled || !path) return null;
+    const bytes = await readFile(path);
+    if (bytes.byteLength > 5_000_000) throw new DesktopError('IPC_VALIDATION_FAILED', 'That file is larger than 5 MB. Split it and import each part.');
+    return { name: basename(path), folder: dirname(path), text: bytes.toString('utf8').replace(/^\uFEFF/, '') };
   });
   router.handle('payroll:verify', (input) => ctx.lock.verifyPresence(input.reason));
   router.handle('payroll:saveFile', async (input, c) => {

@@ -1,4 +1,6 @@
 import { PayrollReminders } from '../services/payroll-reminders';
+import { AssetAlerts } from '../services/assets-alerts';
+import { assetsCached } from '@shared/assets';
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
@@ -614,6 +616,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const notifications = new NotificationService(db, getVault, http, () => settings.effective());
   // Payroll's tray reminders (D24): cut-off, approvals waiting and pay dates, even with the Payroll tab closed.
   const payrollReminders = new PayrollReminders(http, notifications);
+  // Assets' alerts and tray line (D03): handovers to confirm, loans overdue, approvals waiting — with the tab closed.
+  // The tray is made later in start(); its line follows the count once it exists.
+  let assetsTray: ((t: import('@shared/assets').TrayAssets | null) => void) | null = null;
+  const assetAlerts = new AssetAlerts(http, notifications, (t) => assetsTray?.(t));
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
   // New-mail alerts (ENH-MAIL-05): one per message on this computer — the row's "New" in Mail, the in-app card while
   // WorkSuite is in front, the system's notification while it is not — and the tray's mail lines, pause and badge.
@@ -2161,6 +2167,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       windows.open('timer', '/projects/timer', 'Timer', true);
     },
   });
+  assetsTray = (t) => tray.update({ assets: t });
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
   const JOIN_SHORTCUT = 'CommandOrControl+Shift+J';
@@ -2838,6 +2845,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     if (settings.effective().backgroundServices.realtime) realtime.start();
     notifications.start(uid);
     payrollReminders.start();
+    assetAlerts.start();
     mailAlerts.start();
     supportNotices.start();
     supportDesk.start();
@@ -2937,6 +2945,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     realtime.stop();
     notifications.stop();
     payrollReminders.stop();
+    assetAlerts.stop();
     purchaseDesk.reset();
     mailAlerts.stop();
     supportNotices.stop();
@@ -3276,7 +3285,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       userId: () => sessionCtl.userId(),
       cacheModuleFor: (path) => {
         const clean = path.split('?')[0]!;
-        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : null);
+        const module = CACHE_PREFIXES.find(([prefix]) => clean === prefix || clean.startsWith(`${prefix}/`))?.[1] ?? (pmsCached(clean) ? 'pms' : eventsCached(clean) ? 'events' : assetsCached(clean) ? 'assets' : null);
         // Neither saved nor served for an app the person may not open.
         return module && canOpenApp(module, sessionCtl.visibleApps()) ? module : null;
       },

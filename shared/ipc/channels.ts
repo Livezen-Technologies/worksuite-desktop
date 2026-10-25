@@ -133,6 +133,7 @@ export const INVOKE_CHANNELS = [
   'files:saveText',
   'payroll:verify',
   'payroll:saveFile',
+  'assets:openFile',
 
   'hr:clock',
   'hr:break',

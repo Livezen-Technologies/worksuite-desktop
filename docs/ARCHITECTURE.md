@@ -575,6 +575,24 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   reminders (D24) poll `GET /dashboard` hourly while signed in and raise local notices once per day each;
   `payroll.*` notices and `/payroll/runs/<id>` links open the run here. My Payslips stays HR's (`hr/MyPay.tsx`,
   `hr/pay.ts`).
+
+- Assets (`modules/assets`, main process `electron/services/assets-alerts.ts`, rules in `shared/assets.ts`;
+  WS-ASSET-SRS-001 T-17, the desktop boards D01–D26): native since assets 1.0.0 (it was a browser surface), over
+  the server's `/api/assets` (server Assets 1.1). The shell (`AssetsShell.tsx`, `/assets?tab=<view>`, one asset as
+  `/assets?asset=<id>&view=overview|custody|depreciation|upkeep|documents|history`, which is also what the server's
+  links say) has the rail of D04 and ⌘N / F5. Scanning is the shared keyboard-wedge detector (`core/scanner.ts`): the
+  register's filter box, the scan station (`Scan.tsx`, D02 — `nextAct()` decides what Enter does) and audit runs take
+  scans; a code is resolved by `GET resolve?code=` where the server has it, else by the register's search taking an
+  exact code / barcode / serial match only (`resolveCode`). Labels (`labels.ts`, D22) are QR and Code 128 drawn here
+  and printed through `print:print` / `print:toPdf` to the printer chosen for this computer. Import (D21) reads the
+  file through `assets:openFile` (the main process's open dialog; CSV or TSV, 5 MB) and sends the rows to the
+  server's dry run, then the import. Nothing is worked out here: book values, schedules, gain or loss, seats and
+  stock are the server's; an endpoint new in 1.1 that answers 404 is shown as "needs a newer server" (`orNull`).
+  Offline the READ_CACHE keeps the GETs `assetsCached()` allows — never a licence key, document or label — and
+  `ReadOnly` turns every act off. The alerts (D03) poll `GET mine` (and the dashboard for approvers) every 15 minutes
+  while signed in, raise handovers to confirm, overdue loans and approvals waiting once each, and feed the tray's
+  "Assets · N waiting for you" line; `asset.*` notices open the right screen (`assetNoticeLink`) and carry buttons
+  that only open it (`assetNoticeActions`).
 - Cheque Manager (`modules/cheque`, main process `electron/services/cheque-print.ts` and the shared
   `electron/services/core-print.ts`, data and schemas in `shared/cheque.ts`; Cheque SRS v1.0, the desktop boards
   D01–D06): the certified print station over `/api/cheque` as the server's `docs/cheque-api.md` describes it. The

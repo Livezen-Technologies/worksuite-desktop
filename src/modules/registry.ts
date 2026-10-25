@@ -316,6 +316,24 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./board/BoardShell'),
   },
   {
+    // Assets (WS-ASSET-SRS-001 T-17, the desktop boards D01–D26) over `/api/assets`: the register and one asset's
+    // overview, custody and depreciation; the scan station for a keyboard-wedge scanner; requests, transfers,
+    // bookings, upkeep, licences, consumables, audits, disposal, reports, import/export, labels and settings.
+    // Alerts and the tray line come from electron/services/assets-alerts.ts.
+    input: defineDesktopManifest({
+      id: 'assets', name: 'Assets', icon: 'box', contractVersion: 1, desktop: { enabled: true },
+      // Read-only offline from the encrypted cache: what was last opened; every change waits for the connection.
+      offline: { mode: 'READ_CACHE', entities: ['asset'], cache: ['/api/assets', '/api/assets/access', '/api/assets/dashboard', '/api/assets/mine', '/api/assets/requests', '/api/assets/lookups/categories'] },
+      native: ['notifications', 'printing', 'barcode', 'file-drop'],
+      quickActions: [
+        { id: 'assets-scan', label: 'Asset scan station', route: '/assets?tab=scan' },
+        { id: 'assets-mine', label: 'My equipment', route: '/assets?tab=mine' },
+      ],
+      deepLinks: ['assets', 'assets/:id'],
+    }),
+    load: () => import('./assets/AssetsShell'),
+  },
+  {
     // Payroll (WS-PAYROLL-SRS-001 §D1, the desktop boards D01–D25) over `/api/payroll` (docs/payroll-api.md): home,
     // runs and the run workspace, approval with Touch ID and the journal, employees, inputs, loans, settlements,
     // payslips, disbursements with bank files, statutory, reports, setup and settings. My Payslips is HR › My pay.

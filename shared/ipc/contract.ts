@@ -635,6 +635,11 @@ export const contract = {
     z.strictObject({ name: z.string().regex(/^[A-Za-z0-9 ._()-]{1,120}$/), base64: z.string().max(40_000_000), sha256: z.string().regex(/^[a-f0-9]{64}$/i) }),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 5 },
   ),
+  /**
+   * Assets (D21): a register file chosen in the system's open dialog and read here, so nothing leaves the computer
+   * until the person imports. CSV or tab-separated text only, at most 5 MB; null when the person cancelled.
+   */
+  'assets:openFile': ch(z.strictObject({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
   'files:registerDropped': ch(z.object({ paths: z.array(z.string().min(1).max(4096)).min(1).max(200) }), { session: true, rate: 5 }),
   /** A folder, with everything in it: each file carries its path inside the folder. */
   'files:pickFolder': ch(z.object({ title: z.string().max(100).optional() }), { session: true, rate: 2 }),
@@ -1881,6 +1886,8 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'payroll:verify': { verified: boolean; method: 'touch-id' | 'none' };
   /** The path written, or null when the person cancelled. */
   'payroll:saveFile': string | null;
+  /** The chosen file's name, folder and text, or null when cancelled. */
+  'assets:openFile': { name: string; folder: string; text: string } | null;
   'transfers:list': Transfer[];
   'transfers:download': Transfer;
   'pms:download': Transfer;
