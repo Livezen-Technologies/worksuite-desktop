@@ -65,7 +65,11 @@ export interface Detail {
   deposit: { can_apply?: boolean; [k: string]: unknown } | null;
   commission: Array<{ id: number; description: string; amount: number; currency: string; status: string }> | null;
   notices: Notice[];
+  /** Appointments 1.1: the cancellation / no-show fees the company's policy raised. */
+  fees?: Fee[];
 }
+
+export interface Fee { id: number; kind: 'late_cancel' | 'no_show' | string; amount: number | string; currency: string | null; status: 'deducted' | 'invoiced' | 'waived' | 'due' | string; invoice_id?: number | null; reason?: string | null }
 
 export interface Location { id: number; org_id: number; name: string; timezone: string }
 export interface Service { id: number; org_id: number; name: string; duration_min: number; color: string | null; locations: number[]; deposit: { due?: number; currency?: string | null; [k: string]: unknown } | null }
@@ -104,6 +108,8 @@ export interface CheckoutPreview {
   warehouse: { id: number; name: string } | null;
   planned: Array<{ product_id: number; name: string; unit: string | null; planned: number; stocked: boolean; available: number | null }>;
   deposit_held: number | { held?: number; [k: string]: unknown };
+  /** Appointments 1.2: what the customer paid online on the deposit invoice, netted off this checkout as one line. */
+  deposit_paid_online?: number | string | { amount?: number | string; currency?: string | null; invoice?: string | null } | null;
   may: { discount: boolean; issue: boolean; payment: boolean };
 }
 export interface Quote { currency: string; lines: Array<{ kind: string; description: string; quantity: number; unit_price: number; taxes: string[] }>; subtotal: string | number; discount: string | number; tax: string | number; total: string | number }
@@ -446,3 +452,43 @@ export function toCsv(head: string[], rows: Array<Array<unknown>>): string {
 
 /** Save a CSV through the desktop's save dialog; the path chosen, or null when cancelled. */
 export const saveCsv = (name: string, text: string) => call('files:saveText', { name, text: text.slice(0, 8_000_000) });
+
+/* ───────────── Appointments 1.2: fees, intake, consent, freed time, a word to the provider ───────────── */
+
+const or404 = async <T>(p: Promise<T>): Promise<T | null> => {
+  try {
+    return await p;
+  } catch (e) {
+    if (missing(e)) return null;
+    throw e;
+  }
+};
+
+export interface CancelFee { late: boolean; fee: number | string | null; currency: string | null; from: 'deducted' | 'invoiced' | null; window_hours: number | null; free_until: string | null }
+/** What cancelling now would cost under the company's policy; nothing is written. Null on an older server. */
+export const fetchCancelFee = (id: number, signal?: AbortSignal) => or404(apiGet<CancelFee>(`${BASE}/${id}/cancel-fee`, undefined, signal));
+export const waiveFee = (id: number, reason: string) => send<unknown>('POST', `${BASE}/fees/${id}/waive`, { reason });
+
+export interface Intake {
+  required: boolean;
+  form: { id: number; title: string; status: string; submitted_at: string | null; submission_id: number | null; answers: Array<{ key: string; label: string; value: unknown }>; link: string | null } | null;
+  consent: { text: string; given: boolean; at: string | null; name: string | null; how: 'desk' | 'online' | null } | null;
+  fields: Array<{ key: string; label: string; type: string; required?: boolean; options?: string[] }>;
+  values: Record<string, unknown>;
+}
+export const fetchIntake = (id: number, signal?: AbortSignal) => or404(apiGet<Intake>(`${BASE}/${id}/intake`, undefined, signal));
+export const sendIntake = (id: number) => send<Intake>('POST', `${BASE}/${id}/intake/send`);
+/** The customer signed the service's consent wording at the desk. */
+export const recordConsent = (id: number, name: string) => send<Intake>('POST', `${BASE}/${id}/consent`, { name });
+export const saveFields = (id: number, values: Record<string, unknown>) => send<{ values: Record<string, unknown> }>('PUT', `${BASE}/${id}/fields`, { values });
+/** Offer a cancelled or no-show time still to come to the waiting list again. */
+export const offerFreed = (id: number) => send<{ made: number; offers: unknown[] }>('POST', `${BASE}/${id}/offer-freed`);
+/** A message to the provider's own login, kept in the history (≤ 500). */
+export const tellProvider = (id: number, message: string) => send<unknown>('POST', `${BASE}/${id}/tell-provider`, { message });
+
+/** The deposit paid online as an amount, whichever shape the server sent. */
+export function paidOnline(v: CheckoutPreview['deposit_paid_online']): number {
+  if (v === null || v === undefined) return 0;
+  const n = typeof v === 'object' ? Number(v.amount ?? 0) : Number(v);
+  return Number.isFinite(n) ? n : 0;
+}

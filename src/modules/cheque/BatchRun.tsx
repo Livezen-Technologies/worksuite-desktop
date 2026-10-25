@@ -216,13 +216,14 @@ function Reconcile({ batch, canPrint, onSaved }: { batch: Batch; canPrint: boole
   // A job never sent starts as blank; anything that went to the printer must be looked at.
   const [found, setFound] = useState<Record<number, LeafFound>>(() => Object.fromEntries(rows.filter((r) => r.job_status === 'QUEUED').map((r) => [r.leaf_id, 'blank' as LeafFound])));
   const [saving, setSaving] = useState(false);
+  const [note, setNote] = useState('');
   const complete = rows.every((r) => found[r.leaf_id]);
   const firstBlank = rows.find((r) => found[r.leaf_id] === 'blank');
   const more = batch.items.some((i) => open(i.state));
   const save = async (resume: boolean) => {
     setSaving(true);
     try {
-      await reconcileBatch(batch.id, rows.map((r) => ({ leaf_id: r.leaf_id, outcome: found[r.leaf_id]! })));
+      await reconcileBatch(batch.id, rows.map((r) => ({ leaf_id: r.leaf_id, outcome: found[r.leaf_id]! })), note.trim() || undefined);
       toast('success', resume ? 'Saved. Printing carries on from the next blank leaf.' : 'Saved.');
       await onSaved(resume);
     } catch (e) {
@@ -297,6 +298,10 @@ function Reconcile({ batch, canPrint, onSaved }: { batch: Batch; canPrint: boole
             : null}
         </Panel>
         <Panel title="Confirm">
+          <label className="mb-2 block text-[12px] text-ink-2">
+            What happened (kept with the batch's audit)
+            <textarea aria-label="Reconciliation note" rows={2} maxLength={500} value={note} onChange={(e) => setNote(e.target.value)} className="mt-1 w-full resize-none rounded-[7px] border border-line bg-surface px-2 py-1.5 text-[12.5px] text-ink outline-none focus:border-primary" placeholder="Paper jam after 001207; leaf 001208 torn" />
+          </label>
           <div className="flex flex-wrap gap-2">
             <button type="button" className={btn} disabled={!canPrint || !complete || saving} onClick={() => void save(false)}>Save and stay paused</button>
             {more || firstBlank ? (

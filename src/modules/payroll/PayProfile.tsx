@@ -10,13 +10,14 @@ import { refusal, shortDate } from '../finance/api';
 import { Field, Sheet, btn, btnPrimary, humanise, input } from '../hr/parts';
 import { approveSalary, fetchLoans, fetchSalary, proposeSalary } from './api';
 import { Badge, Card, Table, amt, td, tdr, useReadOnly } from './parts';
+import { StatutoryIdsCard } from './PayrollExtras';
 
 /**
  * An employee's pay profile (D13): the pay assignment, salary history with its approvals, and loans — with Change
  * salary (D14), which proposes a revision for a second person to approve. Arrears for months already closed are the
  * server's to work out and go into the next run; the sheet says so rather than adding them up here.
  */
-type Tab = 'pay' | 'history' | 'loans';
+type Tab = 'pay' | 'ids' | 'history' | 'loans';
 
 export default function PayProfile({ employee, figures, onBack }: { employee: number; figures: boolean; onBack: () => void }) {
   const ro = useReadOnly();
@@ -49,9 +50,9 @@ export default function PayProfile({ employee, figures, onBack }: { employee: nu
         <button type="button" className={btnPrimary} disabled={ro} onClick={() => setChanging(true)}>Change salary</button>
       </div>
       <div role="tablist" className="flex gap-1 border-b border-line">
-        {(['pay', 'history', 'loans'] as Tab[]).map((t) => (
+        {(['pay', 'ids', 'history', 'loans'] as Tab[]).map((t) => (
           <button key={t} role="tab" type="button" aria-selected={t === tab} onClick={() => setTab(t)} className={cx('h-9 border-b-2 px-2.5 text-[12.5px] font-semibold', t === tab ? 'border-primary text-primary' : 'border-transparent text-ink-2')}>
-            {t === 'pay' ? 'Pay & assignment' : t === 'history' ? 'History' : 'Loans'}
+            {t === 'pay' ? 'Pay & assignment' : t === 'ids' ? 'Statutory IDs' : t === 'history' ? 'History' : 'Loans'}
           </button>
         ))}
       </div>
@@ -72,6 +73,8 @@ export default function PayProfile({ employee, figures, onBack }: { employee: nu
             </div>
           </Card>
         </div>
+      ) : tab === 'ids' ? (
+        <StatutoryIdsCard employee={employee} ro={ro} />
       ) : tab === 'history' ? (
         <Card>
           <Table head={['From', 'Kind', ['Gross', 'r'], 'Reason', 'Status', '']}>

@@ -1,4 +1,5 @@
-import { BrowserWindow, net } from 'electron';
+import { app, BrowserWindow, net } from 'electron';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { hostname } from 'node:os';
 import { join } from 'node:path';
 import type { IpcRouter } from '../../ipc/router';
@@ -78,6 +79,14 @@ export function createLabel(d: LabelDeps): Label {
     headless: d.headless,
     autostart: d.autostart,
     changed: () => d.changed('gateway'),
+    // A gateway build whose SHA-256 matched the signed manifest, kept in Downloads for the person to install.
+    saveUpdate: async (name, bytes) => {
+      const dir = join(app.getPath('downloads'), 'WorkSuite Print Gateway');
+      await mkdir(dir, { recursive: true });
+      const file = join(dir, name);
+      await writeFile(file, bytes);
+      return file;
+    },
   });
   return {
     host,
@@ -106,6 +115,8 @@ export function createLabel(d: LabelDeps): Label {
       router.handle('labelGateway:status', () => gateway.status());
       router.handle('labelGateway:pair', (input) => gateway.pair(input));
       router.handle('labelGateway:unpair', () => gateway.unpair());
+      router.handle('labelGateway:checkUpdate', () => gateway.checkUpdates());
+      router.handle('labelGateway:downloadUpdate', () => gateway.downloadUpdate());
       router.handle('labelGateway:headless', (input) => {
         d.setHeadless(input.enabled);
         return gateway.status();

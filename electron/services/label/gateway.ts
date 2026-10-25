@@ -1,11 +1,11 @@
-import { createPrivateKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
+import { createHash, createPrivateKey, generateKeyPairSync, randomBytes, sign } from 'node:crypto';
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, unlinkSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { gatewayOrigin, LABEL_GATEWAY_API, normalisePairingCode, printerKeyOf, type GatewayStatus, type LocalPrinter, type PrinterState, type ServerConnection } from '@shared/label';
 import { DesktopError } from '../../main/errors';
 import { CorePrintService, serverStatus, type ClaimedJob, type CorePrintDeps, type HostTransport } from './core-print';
-import type { EnvelopeCheck } from './envelope';
-import { discoveredOf, targetFor } from './host';
+import { checkUpdate, type EnvelopeCheck, type GatewayUpdate, type PrinterCommand } from './envelope';
+import { discoveredOf, localTarget, targetFor } from './host';
 
 /**
  * WorkSuite Print Gateway (WS-LABEL-SRS-001 §4.20 FR-GWY-01…07, D06, D07, §16) — built, per SRS Q-03, as a
@@ -46,6 +46,16 @@ const SECRET_KEY = 'label-gateway:device-key';
 const SECRET_TOKEN = 'label-gateway:token';
 const POLL_MS = 5_000;
 const REFRESH_EARLY_MS = 60_000;
+/** How often the gateway asks for a newer signed build (Label 1.1 update channel). */
+export const UPDATE_CHECK_MS = 6 * 60 * 60_000;
+
+/** This build's platform in the server's words (`gateway-releases`), or null for one it has no builds for. */
+export function releasePlatform(platform: string = process.platform, arch: string = process.arch): string | null {
+  if (platform === 'win32') return arch === 'x64' ? 'windows-x64' : null;
+  if (platform === 'darwin') return 'macos';
+  if (platform === 'linux') return arch === 'x64' ? 'linux-x64' : arch === 'arm64' ? 'linux-arm64' : null;
+  return null;
+}
 
 interface GatewayState {
   server: string;
@@ -58,6 +68,10 @@ interface GatewayState {
   /** Its printers on the server, by this computer's key. */
   printers: Record<string, { id: number; name: string; approved: boolean }>;
   revoked?: boolean;
+  /** Whose gateway this is, as pairing answered (Label 1.1). */
+  company?: { id: number; name: string | null } | null;
+  branchId?: number | null;
+  channel?: 'stable' | 'beta';
 }
 
 export interface DeviceSecrets {
@@ -111,6 +125,8 @@ export interface PrintGatewayDeps {
   changed: () => void;
   now?: () => number;
   core?: Partial<Pick<CorePrintDeps, 'send' | 'status'>>;
+  /** Keeps a downloaded update whose SHA-256 matched; answers where it is. */
+  saveUpdate?: (name: string, bytes: Buffer) => Promise<string>;
 }
 
 class GatewayRefused extends DesktopError {}
@@ -134,6 +150,9 @@ export class PrintGateway {
   private local: LocalPrinter[] = [];
   private states = new Map<number, PrinterState>();
   private refreshing: Promise<string> | null = null;
+  private updatesAt = 0;
+  private available: GatewayUpdate | null = null;
+  private updateProblem: string | null = null;
 
   constructor(private readonly d: PrintGatewayDeps) {
     const transport: HostTransport = {
@@ -262,12 +281,24 @@ export class PrintGateway {
       redirect: 'error',
     });
     const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-    const data = (json?.data ?? json) as { gateway_id?: number; token?: string; expires_at?: string; server_key?: { key_id?: string; public_key?: string }; heartbeat_sec?: number; organization_id?: number | null } | null;
+    const data = (json?.data ?? json) as { gateway_id?: number; token?: string; expires_at?: string; server_key?: { key_id?: string; public_key?: string }; heartbeat_sec?: number; organization_id?: number | null; company?: { id?: number; name?: string | null } | null; branch_id?: number | null; name?: string } | null;
     if (!res.ok || !data?.gateway_id || !data.token) throw new GatewayRefused('SERVER_ERROR', String(json?.message ?? 'The code was not accepted. Codes work once, for 15 minutes.'), res.status);
     this.d.secrets.set(SECRET_KEY, privateKey.export({ format: 'pem', type: 'pkcs8' }).toString());
     this.d.secrets.set(SECRET_TOKEN, JSON.stringify({ token: data.token, expires: utc(data.expires_at) ?? new Date(this.nowMs() + 15 * 60_000).toISOString() }));
     const keys = data.server_key?.key_id && data.server_key.public_key ? { [data.server_key.key_id]: data.server_key.public_key } : {};
-    this.save({ server, gatewayId: Number(data.gateway_id), name: input.name, org: typeof data.organization_id === 'number' ? data.organization_id : null, pairedAt: this.stamp(), keys, heartbeatSec: data.heartbeat_sec ?? 30, printers: {} });
+    const company = data.company && typeof data.company.id === 'number' ? { id: data.company.id, name: typeof data.company.name === 'string' ? data.company.name : null } : null;
+    this.save({
+      server,
+      gatewayId: Number(data.gateway_id),
+      name: typeof data.name === 'string' && data.name.trim() ? data.name.trim() : input.name,
+      org: company?.id ?? (typeof data.organization_id === 'number' ? data.organization_id : null),
+      company,
+      branchId: typeof data.branch_id === 'number' ? data.branch_id : null,
+      pairedAt: this.stamp(),
+      keys,
+      heartbeatSec: data.heartbeat_sec ?? 30,
+      printers: {},
+    });
     this.connection = 'connecting';
     await this.reportPrinters().catch((e) => (this.problem = e instanceof Error ? e.message : String(e)));
     if (this.state() && !this.state()!.revoked) this.start();
@@ -324,7 +355,7 @@ export class PrintGateway {
   async beat(): Promise<void> {
     if (!this.running) return;
     try {
-      const r = await this.api<{ commands?: Array<{ type?: string; printer_id?: number }> }>('POST', '/heartbeat', {
+      const r = await this.api<{ commands?: PrinterCommand[] }>('POST', '/heartbeat', {
         version: this.d.version,
         printers: [...this.states.entries()].map(([printer_id, s]) => ({ printer_id, status: serverStatus(s) })),
       });
@@ -337,7 +368,14 @@ export class PrintGateway {
           const j = this.core.jobs().find((x) => x.printerId === String(c.printer_id) && (x.state === 'printing' || x.state === 'waiting_printer'));
           if (j) await this.core.cancel(j.id).catch(() => undefined);
         }
+        // Label 1.1: printer bytes only under a verified command envelope (envelope.ts checkCommand).
+        if ((c.type === 'status' || c.type === 'calibrate' || c.type === 'cancel') && c.printer_id && (c.bytes_base64 || c.envelope)) {
+          const key = Object.entries(this.state()?.printers ?? {}).find(([, p]) => p.id === c.printer_id)?.[0];
+          const out = await this.core.command(c, key ? localTarget(this.local, key) : null).catch((e: unknown) => ({ ok: false as const, reason: e instanceof Error ? e.message : String(e) }));
+          if (!out.ok) this.problem = out.reason;
+        }
       }
+      if (this.nowMs() - this.updatesAt > UPDATE_CHECK_MS) await this.checkUpdates().catch(() => undefined);
     } catch (e) {
       if (this.connection !== 'revoked') this.connection = 'offline';
       this.problem = e instanceof Error ? e.message : String(e);
@@ -351,6 +389,51 @@ export class PrintGateway {
     const n = await this.core.tick();
     if (this.connection !== 'revoked') this.problem = this.core.health().problem ?? this.problem;
     return n;
+  }
+
+  /**
+   * Label 1.1 update channel: asks for the newest signed build above this one. It is offered only when the manifest
+   * verifies with the server key this gateway was paired with and is for this gateway (envelope.ts `checkUpdate`).
+   */
+  async checkUpdates(): Promise<GatewayStatus> {
+    const s = this.state();
+    const platform = releasePlatform();
+    this.updatesAt = this.nowMs();
+    if (!s || s.revoked || !platform) return this.status();
+    try {
+      const r = await this.api<{ update?: unknown } | null>('GET', `/updates?${new URLSearchParams({ platform, channel: s.channel ?? 'stable', current: this.d.version })}`);
+      if (!r?.update) {
+        this.available = null;
+        this.updateProblem = null;
+      } else {
+        const c = checkUpdate(r.update, s.keys, s.gatewayId);
+        this.available = c.ok ? c.update : null;
+        this.updateProblem = c.ok ? null : c.reason;
+      }
+    } catch (e) {
+      // An older server has no update channel (404): nothing to offer, nothing wrong.
+      if ((e as { status?: number }).status !== 404) this.updateProblem = e instanceof Error ? e.message : String(e);
+    }
+    this.d.changed();
+    return this.status();
+  }
+
+  /** Downloads the offered build and keeps it only if its SHA-256 is the signed one. */
+  async downloadUpdate(): Promise<{ path: string; version: string }> {
+    const u = this.available;
+    if (!u) throw new DesktopError('NOT_FOUND', 'There is no update to download.');
+    if (!this.d.saveUpdate) throw new DesktopError('UNSUPPORTED', 'This build cannot keep downloads.');
+    const res = await this.d.fetch(u.url, { method: 'GET', redirect: 'follow' });
+    if (!res.ok) throw new DesktopError('SERVER_ERROR', `The download answered ${res.status}.`);
+    const bytes = Buffer.from(await res.arrayBuffer());
+    const got = createHash('sha256').update(bytes).digest('hex');
+    if (got !== u.sha256) {
+      this.updateProblem = 'The downloaded build is not the one WorkSuite signed (SHA-256 differs). It was not kept.';
+      this.d.changed();
+      throw new DesktopError('POLICY_DENIED', this.updateProblem);
+    }
+    const name = (u.url.split('/').pop() ?? '').split('?')[0]!.replace(/[^A-Za-z0-9._-]/g, '-') || `print-gateway-${u.version}`;
+    return { path: await this.d.saveUpdate(name, bytes), version: u.version };
   }
 
   /** Discovery to the server (FR-GWY-05): what this computer has, offered unapproved; and their statuses. */
@@ -389,7 +472,10 @@ export class PrintGateway {
       headless: this.d.headless,
       autostart: this.d.autostart?.() ?? false,
       version: this.d.version,
-      updateChannel: null,
+      updateChannel: s ? (s.channel ?? 'stable') : null,
+      company: s?.company ?? null,
+      update: this.available ? { version: this.available.version, channel: this.available.channel, notes: this.available.notes, sha256: this.available.sha256 } : null,
+      updateProblem: this.updateProblem,
       printers: Object.entries(s?.printers ?? {}).map(([key, p]) => ({ id: String(p.id), key, name: p.name, approved: p.approved, state: this.states.get(p.id) ?? 'unknown' })),
       current: cur ? { id: cur.id, ref: cur.ref, printer: cur.printerId, confirmed: cur.confirmed, total: cur.total } : null,
       lastCheck: this.lastCheck,

@@ -858,7 +858,7 @@ export const contract = {
         /** My payslip as a PDF, by its reference. */
         payslip: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/).optional(),
         /** A payroll document: my annual tax certificate by its reference, or one payslip of a run by id (payroll staff; the server checks). */
-        payrollDoc: z.object({ kind: z.enum(['tax-certificate', 'run-payslip']), id: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/) }).optional(),
+        payrollDoc: z.object({ kind: z.enum(['tax-certificate', 'run-payslip', 'input-attachment']), id: z.string().regex(/^[A-Za-z0-9._-]{1,64}$/) }).optional(),
         /** An HR document (the main process asks for its one-time link) — mine, or with `hrEmployee` that employee's. */
         hrDocument: z.number().int().positive().optional(),
         hrEmployee: z.number().int().positive().optional(),
@@ -979,6 +979,8 @@ export const contract = {
          * the address.
          */
         garageDoc: garageDocSchema.optional(),
+        /** Cheque Manager's PDFs (Cheque 1.2): a cheque's preview or voucher, a deposit slip, a return letter, a version's calibration sheet. */
+        chequeDoc: z.object({ kind: z.enum(['preview', 'voucher', 'deposit-slip', 'return-letter', 'calibration-sheet']), id: z.string().regex(/^\d{1,12}$/) }).optional(),
         /** A Projects report as CSV, Excel or PDF, as the Reports screen filtered it (`shared/projects.ts`). */
         projectsReport: projectsReportSchema.optional(),
         /** One project's whole report as PDF or Excel (`GET /api/projects/{id}/report`, `shared/projects.ts`). */
@@ -1002,7 +1004,7 @@ export const contract = {
         name: z.string().min(1).max(255),
         open: z.boolean().optional(),
       })
-      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.payrollDoc, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.billingExport, v.billingFile, v.paymentSlip, v.ordersCsv, v.omsReport, v.omsRouteSheet, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.projectsReport, v.projectReport, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport, v.purchaseExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined) && (v.tenderDocumentVersion === undefined || v.tenderDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, a payroll document, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a Billing export or file, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a route sheet, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, a Projects report, a whole project report, an eLearning lesson file, an Office export, a chat attachment, a task attachment, a chat export or a Purchasing export'),
+      .refine((v) => [v.fileId, v.mail, v.mailSource, v.recording, v.export, v.importErrors, v.version, v.payslip, v.payrollDoc, v.hrDocument, v.hrReport, v.hrLetter, v.picture, v.orderPdf, v.minutesExport, v.transcriptExport, v.invoicePdf, v.billingExport, v.billingFile, v.paymentSlip, v.ordersCsv, v.omsReport, v.omsRouteSheet, v.tenderDocument, v.tenderLine, v.tenderLetter, v.tenderLibrary, v.financeCsv, v.expenseFile, v.garageDoc, v.chequeDoc, v.projectsReport, v.projectReport, v.elearningMedia, v.officeExport, v.chatMedia, v.taskAttachment, v.chatExport, v.purchaseExport].filter((x) => x !== undefined).length === 1 && (v.hrEmployee === undefined || v.hrDocument !== undefined) && (v.tenderDocumentVersion === undefined || v.tenderDocument !== undefined), 'give a file id, a file version, a mail attachment or original, a recording, an export, an import job, a payslip, a payroll document, an HR document, an HR report, a resignation letter, a profile picture, an order or invoice PDF, a Billing export or file, the minutes or a transcript of a meeting, a payment slip, an order list, an Orders report, a route sheet, a tender document, checklist file, letter or library document, a Finance report, an Expenses file, a Garage document, a Cheque Manager PDF, a Projects report, a whole project report, an eLearning lesson file, an Office export, a chat attachment, a task attachment, a chat export or a Purchasing export'),
     { session: true, permission: 'desktop.downloads', sensitive: true, rate: 10 },
   ),
   /**

@@ -3,7 +3,9 @@ import { useRef, useState } from 'react';
 import { signedMm } from '@shared/cheque';
 import { Checkbox } from '../../components/Checkbox';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { fetchProfiles, fetchQueue, has, K, profileFor, type Access, type QueueItem } from './api';
+import { errorMessage } from '../../core/bridge';
+import { toast } from '../../core/toasts';
+import { fetchProfiles, fetchQueue, has, K, openPdf, profileFor, type Access, type QueueItem } from './api';
 import { Note, PageHead, Panel, amt, btn, btnPrimary, num, td, th, useStation } from './parts';
 import { PrintDialog } from './PrintDialog';
 
@@ -66,7 +68,10 @@ export default function Queue({ access }: { access: Access | undefined }) {
                   return (
                     <tr key={i.cheque_id} className={ok ? (picked.includes(i.cheque_id) ? 'bg-[#EEF1FD] dark:bg-selection' : '') : 'opacity-50'}>
                       <td className={td}><Checkbox aria-label={`Select ${i.cheque_number}`} checked={picked.includes(i.cheque_id)} disabled={!ok || !canPrint} onChange={() => toggle(i)} /></td>
-                      <td className={`${td} ${num}`}>{i.cheque_number}</td>
+                      <td className={`${td} ${num}`}>
+                        {i.cheque_number}
+                        <button type="button" className="ms-2 font-sans text-[11px] font-semibold text-primary hover:underline" onClick={() => void openPdf('preview', i.cheque_id, `Cheque ${i.cheque_number} preview`).catch((e) => toast('error', errorMessage(e)))}>Preview</button>
+                      </td>
                       <td className={td}>{i.payee_name}{!ok ? <div className="text-[11px] text-ink-3">No printer profile on this computer for this template or account</div> : null}</td>
                       <td className={td}>{i.bank_account}</td>
                       <td className={`${td} ${num} text-right`}>{amt(i.amount, i.currency)}</td>

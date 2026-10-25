@@ -20,6 +20,9 @@ import { z } from 'zod';
 
 export const CHEQUE_API = '/api/cheque';
 
+/** The largest signature image a layout may carry, as base64 (≈ 512 KB of PNG). */
+export const SIGNATURE_PNG_MAX_B64 = 700_000;
+
 /** C3: 1 mm = 2.8346 pt (the server's constant, so a round trip lands where it left). */
 export const PT_PER_MM = 2.8346;
 /** The furthest a calibration offset may move anything (mm). More than this is a wrong profile, not a printer. */
@@ -33,7 +36,7 @@ const pt = z.number().finite().min(-50).max(1200);
 /** One box on a page, in millimetres from the page's top-left corner — what CorePrintService draws. */
 export const layoutBox = z.object({
   key: z.string().regex(/^[a-z0-9_.: -]{1,48}$/i),
-  kind: z.enum(['text', 'box', 'zone', 'crosshair', 'ruler', 'rules']).default('text'),
+  kind: z.enum(['text', 'box', 'zone', 'crosshair', 'ruler', 'rules', 'image']).default('text'),
   x_mm: mm(-5, 420),
   y_mm: mm(-5, 420),
   width_mm: mm(0, 420),
@@ -45,6 +48,8 @@ export const layoutBox = z.object({
   size_pt: z.number().min(4).max(48).default(10),
   align: z.enum(['left', 'center', 'right']).default('left'),
   letter_spacing_mm: mm(0, 20).default(0),
+  /** An `image` box: a PNG as base64 (no data: prefix), drawn to fill the box — a printed signature (CHQ-SIG). */
+  png_base64: z.string().regex(/^[A-Za-z0-9+/]+={0,2}$/).max(SIGNATURE_PNG_MAX_B64).optional(),
 });
 export type LayoutBox = z.infer<typeof layoutBox>;
 
@@ -73,10 +78,14 @@ export const renderModel = z.object({
         w_pt: pt,
         h_pt: pt,
         font: z.string().max(40).optional(),
-        size_pt: z.number().min(4).max(48),
+        size_pt: z.number().min(4).max(48).default(10),
         align: z.enum(['left', 'center', 'right']).default('left'),
         letter_spacing_pt: z.number().min(0).max(60).default(0),
         lines_draw: z.boolean().optional(),
+        /** Cheque 1.2: a signature specimen printed into the signature zone, only inside a claimed job's layout. */
+        image_png: z.string().max(SIGNATURE_PNG_MAX_B64 + 64).optional(),
+        image_sha256: z.string().max(80).optional(),
+        signature_ref: z.string().max(80).optional(),
       }),
     )
     .max(60),
@@ -84,6 +93,17 @@ export const renderModel = z.object({
   problems: z.array(z.string()).default([]),
 });
 export type RenderModel = z.infer<typeof renderModel>;
+
+/**
+ * The PNG inside a `data:image/png;base64,…` URL (or bare base64), or null when it is not one: the bytes must start
+ * with the PNG signature. Nothing else is ever drawn as an image.
+ */
+export function pngBase64(v: string | undefined): string | null {
+  if (!v) return null;
+  const b64 = v.startsWith('data:') ? (/^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(v)?.[1] ?? null) : /^[A-Za-z0-9+/]+={0,2}$/.test(v) ? v : null;
+  if (!b64 || b64.length > SIGNATURE_PNG_MAX_B64 || !b64.startsWith('iVBORw0KGgo')) return null;
+  return b64;
+}
 
 const toMm = (v: number) => Math.round((v / PT_PER_MM) * 1000) / 1000;
 const plainFont = (f: string | undefined) => (f && /^[A-Za-z0-9 -]{1,40}$/.test(f) ? f : undefined);
@@ -96,6 +116,12 @@ export function modelToLayout(m: RenderModel): ExactLayout {
   const boxes: LayoutBox[] = [];
   for (const it of m.items) {
     const base = { key: it.key, x_mm: toMm(it.x_pt), y_mm: toMm(it.y_pt), width_mm: toMm(it.w_pt), height_mm: toMm(it.h_pt) };
+    if (it.image_png !== undefined) {
+      // A signature: drawn only when it is a real PNG; otherwise the leaf prints without it, never with something else.
+      const png = pngBase64(it.image_png);
+      if (png) boxes.push({ ...base, kind: 'image', lines: [], size_pt: 10, align: 'left', letter_spacing_mm: 0, png_base64: png });
+      continue;
+    }
     if (it.lines_draw) boxes.push({ ...base, kind: 'rules', lines: [], size_pt: it.size_pt, align: 'left', letter_spacing_mm: 0 });
     boxes.push({ ...base, kind: 'text', lines: it.lines ?? [it.text ?? ''], font: plainFont(it.font === 'Helvetica' ? undefined : it.font), size_pt: it.size_pt, align: it.align, letter_spacing_mm: toMm(it.letter_spacing_pt) });
   }
@@ -201,6 +227,23 @@ export function parseOffset(raw: string, max = MAX_OFFSET_MM): number | null {
   if (!/^[+-]?\d{0,3}(\.\d{0,3})?$/.test(t) || !/\d/.test(t)) return null;
   const n = Number(t);
   return Number.isFinite(n) && Math.abs(n) <= max ? n : null;
+}
+
+/** Where each of Cheque Manager's server PDFs is (server docs/cheque-api.md §PDFs, §Sources and letters). */
+export function chequeDocPath(d: { kind: 'preview' | 'voucher' | 'deposit-slip' | 'return-letter' | 'calibration-sheet'; id: string }): string {
+  const id = encodeURIComponent(d.id);
+  switch (d.kind) {
+    case 'preview':
+      return `${CHEQUE_API}/cheques/${id}/preview.pdf`;
+    case 'voucher':
+      return `${CHEQUE_API}/cheques/${id}/voucher.pdf`;
+    case 'deposit-slip':
+      return `${CHEQUE_API}/deposit-slips/${id}.pdf`;
+    case 'return-letter':
+      return `${CHEQUE_API}/returns/${id}/letter.pdf`;
+    case 'calibration-sheet':
+      return `${CHEQUE_API}/template-versions/${id}/calibration-sheet.pdf`;
+  }
 }
 
 // ── the IPC contract ─────────────────────────────────────────────────────

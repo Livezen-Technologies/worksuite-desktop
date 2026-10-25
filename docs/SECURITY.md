@@ -405,7 +405,20 @@ A computer paired as a POS till holds a credential of its own (`Pos\Libraries\De
   this computer's private /24 networks on 9100 and sends nothing but `~HI`.
 - The gateway opens no listening port, holds no user password and keeps its device key and token in the OS key
   store (a 0600 file on a headless build without one). A revocation (`GATEWAY_REVOKED`) deletes both at once and
-  stops it. Heartbeat commands that carry printer bytes (`calibrate`) are not signed, so they are never sent.
+  stops it. Heartbeat commands that carry printer bytes (`status`, `calibrate`, `cancel`) are sent only when their
+  signed `printer_command` envelope verifies: a key the server gave this host, that command for that printer, the
+  bytes' SHA-256, issued within ten minutes and a nonce not seen before. A command without one sends nothing.
+- A gateway update is offered only from a `gateway_update` manifest signed with the key the gateway was paired with,
+  for this gateway, from an https address; the download is kept only when its SHA-256 is the signed one, and it is
+  never run by the gateway — a person installs it.
+
+## Cheque signatures and step-up (Cheque 1.2)
+
+- A signature image reaches this computer only inside a claimed job's layout, which is covered by `layout_sha256`
+  and the Ed25519 envelope. Only a PNG (`data:image/png;base64,` with the PNG signature) is drawn; anything else is
+  left off the leaf. The print window allows images from `data:` URLs only and still blocks every network request.
+- Step-up asks for the password or authenticator code in a dialog of its own and sends it to WorkSuite only; the
+  single-use token goes with the one retried request in `X-Step-Up` and is not kept.
 
 ## Updates (FR-UPD-01, WF-25)
 

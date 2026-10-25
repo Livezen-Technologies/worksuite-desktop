@@ -195,10 +195,15 @@ export interface License {
   id: number; name: string; vendor: string | null; version: string | null; status: string;
   seats_total: number; seats_used: number; seats_available: number; over_allocated: boolean;
   purchase_date: string | null; expiry_date: string | null; days_left: number | null; cost: string; currency: string; has_key: boolean; notes: string | null;
+  /** Assets 1.3 (LIC-07): the Expense subscription paying for it. */
+  subscription_id?: number | null;
+  subscription?: { name: string; billing_cycle?: string | null; amount?: string | null; currency?: string | null; next_renewal?: string | null; status?: string | null; auto_renew?: boolean | null } | null;
 }
 
 export interface StockItem {
   id: number; name: string; sku: string | null; kind: string; unit: string; category: string | null; reorder_level: number; stock: number; low: boolean;
+  /** Assets 1.3 (STK-05): kept in Inventory — moves go through Inventory's ledger at one of its warehouses. */
+  inventory_product_id?: number | null;
 }
 
 export interface Audit {
@@ -231,7 +236,8 @@ export interface Person {
 
 export interface Booking {
   id: number; asset_id: number; asset?: string; asset_code?: string; starts_at: string; ends_at: string;
-  status: 'booked' | 'checked_out' | 'returned' | 'cancelled' | 'no_show' | string; booked_for?: string | null; purpose?: string | null; overdue?: boolean;
+  status: 'pending' | 'booked' | 'checked_out' | 'returned' | 'cancelled' | 'no_show' | 'rejected' | string; booked_for?: string | null; purpose?: string | null; overdue?: boolean;
+  booked_by?: number | null; mine?: boolean;
 }
 
 export interface Plan {
@@ -320,7 +326,34 @@ export const saveJob = (id: number | null, b: Record<string, unknown>) => apiPos
 export const revealKey = (id: number) => apiGet<{ license_key: string }>(`${BASE}/licenses/${id}/key`);
 export const assignSeat = (id: number, b: { employee_id?: number; label?: string }) => apiPost(`${BASE}/licenses/${id}/seats`, b);
 export const releaseSeat = (seat: number) => apiDelete(`${BASE}/license-seats/${seat}`);
-export const moveStock = (id: number, b: { kind: 'in' | 'out'; qty: number; unit_cost?: string; issued_to?: string; note?: string }) => apiPost(`${BASE}/consumables/${id}/move`, b);
+export const moveStock = (id: number, b: { kind: 'in' | 'out'; qty: number; unit_cost?: string; issued_to?: string; note?: string; warehouse_id?: number }) => apiPost(`${BASE}/consumables/${id}/move`, b);
+/** Inventory's warehouses, for an item kept there (Assets 1.3). Empty when Inventory is not reachable. */
+export async function fetchWarehouses(signal?: AbortSignal): Promise<Array<{ id: number; name: string }>> {
+  try {
+    const r = await apiGet<unknown>('/api/inventory/warehouses', undefined, signal);
+    const rows = Array.isArray(r) ? r : ((r as { items?: unknown[]; warehouses?: unknown[] } | null)?.items ?? (r as { warehouses?: unknown[] } | null)?.warehouses ?? []);
+    return (rows as Array<{ id?: unknown; name?: unknown }>).filter((w) => Number(w.id) > 0).map((w) => ({ id: Number(w.id), name: String(w.name ?? `Warehouse ${String(w.id)}`) }));
+  } catch {
+    return [];
+  }
+}
+/** Expense's subscriptions, for the one paying a licence (Assets 1.3). Empty when Expense is not reachable. */
+export async function fetchSubscriptions(signal?: AbortSignal): Promise<Array<{ id: number; name: string; billing_cycle?: string }>> {
+  try {
+    const r = await apiGet<unknown>('/api/expense/subscriptions', undefined, signal);
+    const rows = Array.isArray(r) ? r : ((r as { items?: unknown[] } | null)?.items ?? []);
+    return (rows as Array<{ id?: unknown; name?: unknown; billing_cycle?: string }>).filter((x) => Number(x.id) > 0).map((x) => ({ id: Number(x.id), name: String(x.name ?? `Subscription ${String(x.id)}`), billing_cycle: x.billing_cycle }));
+  } catch {
+    return [];
+  }
+}
+export const linkSubscription = (licence: number, subscription_id: number | null) => apiPost(`${BASE}/licenses/${licence}/subscription`, { subscription_id });
+/** Approve or decline a booking that waits for approval (Assets 1.3); a note is needed to decline; never your own. */
+export const decideBooking = (id: number, decision: 'approve' | 'reject', note: string) => apiPost(`${BASE}/bookings/${id}/decide`, { decision, note });
+/** Print an asset's label through Label Studio (`CoreLabelService`), stamped as printed (Assets 1.3). */
+export const printAssetLabel = (id: number, b: { template_id?: number; printer_id?: number; copies?: number } = {}) => apiPost<{ job?: { id?: number; code?: string } | null }>(`${BASE}/${id}/label/print`, b);
+/** Stamp labels printed here (sheet, PDF or label printer) so the register knows (Assets 1.3). */
+export const markLabelsPrinted = (ids: number[], method: 'sheet' | 'label_printer' | 'desktop', job_ref?: string) => orNull(apiPost(`${BASE}/labels/printed`, { ids, method, ...(job_ref ? { job_ref } : {}) }));
 export const checkAudit = (id: number, b: { line_id?: number; asset_code?: string; found: boolean; outcome?: 'found' | 'missing' | 'elsewhere'; condition?: string; note?: string }) => apiPost<{ line?: AuditLine; message?: string }>(`${BASE}/audits/${id}/check`, b);
 export const completeAudit = (id: number, force: boolean) => apiPost(`${BASE}/audits/${id}/complete`, { force });
 export const raiseDisposal = (b: { asset_id: number; method: string; proceeds: string; disposal_date: string; reason: string }) => apiPost(`${BASE}/disposals`, b);

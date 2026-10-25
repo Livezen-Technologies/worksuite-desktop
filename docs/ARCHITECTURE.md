@@ -574,7 +574,14 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   Offline (D25) the manifest's READ_CACHE serves the last answers and `ReadOnly` turns every act off. The tray
   reminders (D24) poll `GET /dashboard` hourly while signed in and raise local notices once per day each;
   `payroll.*` notices and `/payroll/runs/<id>` links open the run here. My Payslips stays HR's (`hr/MyPay.tsx`,
-  `hr/pay.ts`).
+  `hr/pay.ts`). Payroll 1.3–1.6 (payroll 1.1.0 here): the run's Holds tab (`RunHolds.tsx`: `runs/{id}/holds`,
+  `holds/{id}/release`, `runs/{id}/recalculate {employee_ids}`), Reverse run (`runs/{id}/reverse`, locked or later
+  only), the journal's `last_attempt`, input attachments (multipart `inputs/{id}/attachment`; opened through
+  `transfers:download` `payrollDoc.kind = input-attachment`), expense claims sent to payroll (`expenses/claimable`,
+  `expenses/send`), assignments as CSV (`enrolments/export` saved with `files:saveText`, `enrolments/import` dry run
+  first — a 422 shows its rows), the pay profile's statutory identifiers (`employees/{id}/statutory-ids`, reveal is
+  audited by the server and shown for a minute) and Statutory › Gratuity (`gratuity/provision`, `gratuity/accrue`)
+  in `PayrollExtras.tsx`. Each answers "needs a newer server" on a 404.
 
 - Assets (`modules/assets`, main process `electron/services/assets-alerts.ts`, rules in `shared/assets.ts`;
   WS-ASSET-SRS-001 T-17, the desktop boards D01–D26): native since assets 1.0.0 (it was a browser surface), over
@@ -592,7 +599,11 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   `ReadOnly` turns every act off. The alerts (D03) poll `GET mine` (and the dashboard for approvers) every 15 minutes
   while signed in, raise handovers to confirm, overdue loans and approvals waiting once each, and feed the tray's
   "Assets · N waiting for you" line; `asset.*` notices open the right screen (`assetNoticeLink`) and carry buttons
-  that only open it (`assetNoticeActions`).
+  that only open it (`assetNoticeActions`). Assets 1.3 (assets 1.1.0 here): bookings waiting for approval are approved
+  or declined with a note (`bookings/{id}/decide`); labels print through Label Studio (`{id}/label/print`) and labels
+  printed here are stamped (`labels/printed`); a licence names the Expense subscription paying for it
+  (`licenses/{id}/subscription`, list from `/api/expense/subscriptions`); a consumable kept in Inventory moves at a
+  warehouse (`warehouse_id`, list from `/api/inventory/warehouses`).
 - Cheque Manager (`modules/cheque`, main process `electron/services/cheque-print.ts` and the shared
   `electron/services/core-print.ts`, data and schemas in `shared/cheque.ts`; Cheque SRS v1.0, the desktop boards
   D01–D06): the certified print station over `/api/cheque` as the server's `docs/cheque-api.md` describes it. The
@@ -615,6 +626,15 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   exact size in a hidden window with no script and no network and prints silently with margins none, scale 100
   and the page size in microns; an extra offset (the calibration offsets being tried) and 180° rotation are applied
   at render. No leaf changes state on this computer: only a confirmation or a reconciliation does, on the server.
+  Cheque 1.2 (cheque 1.1.0 here): a claimed layout may carry signature items (`items[].image_png`, covered by
+  `layout_sha256` and the envelope); `modelToLayout` turns only a real PNG into an `image` box and CorePrintService
+  draws it from a `data:` URL (the print window allows `img-src data:` and nothing else). A 428
+  `STEP_UP_REQUIRED` (reprint request) opens the step-up dialog (`StepUp.tsx`, `POST /step-up`, password or
+  authenticator code) and sends the action once more with `X-Step-Up`. Batches take a reconcile `note` and are
+  built from a Purchasing payment run (`batches/from-payment-run`); `tab=sources` starts cheques from Expense
+  reimbursements and Billing refunds (`cheques/sources`, `cheques/from-source`) and `tab=returns` lists returned
+  cheques with their letter (`returns/{id}/letter.pdf`, `POST returns/{id}/letter`). The server's PDFs (preview,
+  voucher, deposit slip, calibration sheet, return letter) open through `transfers:download` `chequeDoc`.
 - Appointments (`modules/appointments`; Appointments SRS v1.0 §9, the desktop boards D01–D24): native since
   appointments 1.0.0 (it was a browser surface), over the server's `/api/appointments`. The shell
   (`AppointmentsShell.tsx`, `/appointments?tab=<view>&apt=&client=&date=&mode=week`; a web link `/appointments/<id>`
@@ -629,7 +649,11 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   week view reads `GET /calendar/week` (server Appointments 1.1) and falls back to the list over the same seven days
   on a 404. The waitlist reads `GET|POST /waitlist` (1.1 and the web field names, normalised by `waitlistFrom`),
   books a matched entry with `POST /waitlist/{id}/book` and offers it with `POST /waitlist/{id}/offer`; on a server
-  without it (404) the screen says so.
+  without it (404) the screen says so. Appointments 1.2 (appointments 1.1.0 here, `Extras.tsx`): the panel shows the
+  policy's fees (`fees/{id}/waive` with a reason), the intake form, custom fields and consent (`{id}/intake`,
+  `intake/send`, `consent` at the desk), offers a freed time to the waiting list again (`{id}/offer-freed`) and sends
+  the provider a word (`{id}/tell-provider`); the cancel dialog says what cancelling now costs (`{id}/cancel-fee`);
+  checkout notes the deposit paid online, which the server already nets off as a line.
 
 - Label Studio (`modules/label`, main process `electron/services/label/`, shapes in `shared/label.ts`;
   WS-LABEL-SRS-001 §4.27 FR-DSK-01…06, §4.20 FR-GWY, the desktop boards D01–D07): the shell (`LabelShell.tsx`,
@@ -653,7 +677,14 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   running whoever is signed in; it pairs from D06 or `--pair-url= --pair-code=`, keeps its Ed25519 device key and
   15-minute token (`token`: the device key signs "label-gateway-token\n{id}\n{ts}\n{nonce}") in SecureStore (or a
   0600 file without an OS key store), and is outbound HTTPS only: heartbeat every 30 s, claim polled every 5 s
-  (the server's 1.0.0 has no socket); heartbeat `calibrate` commands carry unsigned bytes and are not sent.
+  (the server's 1.0.0 has no socket). Label 1.1 (label 1.1.0 here): heartbeat `status`, `calibrate` and `cancel`
+  commands carry printer bytes under a signed `envelope` (`printer_command`, `bytes_sha256`, `issued_at`, `nonce`);
+  `checkCommand` verifies it (key, command, printer, bytes, ten minutes, no replayed nonce) before
+  `CorePrintService.command` sends them in turn with the jobs. The gateway asks `GET {id}/updates` every six hours,
+  offers a build only when the `gateway_update` manifest verifies with its paired key (`checkUpdate`), and keeps a
+  download in Downloads only if its SHA-256 matches (`labelGateway:checkUpdate`, `labelGateway:downloadUpdate`).
+  Pairing keeps `company {id, name}` and `branch_id`, shown on D07. Printers on this computer can be paused and
+  resumed in WorkSuite (`printers/{id}/pause|resume`); a paused printer is skipped by the server's claim.
   Sales › Printers (`sales/Printers.tsx`) links to Label Studio's printers where the app is on.
 
 ## Time

@@ -10,6 +10,7 @@ import { writeFile } from 'node:fs/promises';
 import { canOpenApp, notificationAllowed } from '@shared/access';
 import { tabRecordSchema, type TabRecord } from '@shared/ipc/contract';
 import { garageDocPath } from '@shared/garage-docs';
+import { chequeDocPath } from '@shared/cheque';
 import { billingExportPath } from '@shared/billing';
 import { purchaseExportPath } from '@shared/purchase';
 import { projectReportPath, projectsReportPath } from '@shared/projects';
@@ -759,6 +760,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       ? `/api/chat/rooms/${input.chatExport.room}/export?${new URLSearchParams({ format: input.chatExport.format, media: input.chatExport.media ? '1' : '0' })}`
       : input.garageDoc
       ? garageDocPath(input.garageDoc)
+      : input.chequeDoc
+      ? chequeDocPath(input.chequeDoc)
       : input.projectsReport
       ? projectsReportPath(input.projectsReport)
       : input.projectReport
@@ -824,6 +827,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
       : input.payrollDoc
       ? input.payrollDoc.kind === 'tax-certificate'
         ? `/api/payroll/me/tax-certificates/${encodeURIComponent(input.payrollDoc.id)}/pdf`
+        : input.payrollDoc.kind === 'input-attachment'
+        ? `/api/payroll/inputs/${encodeURIComponent(input.payrollDoc.id)}/attachment`
         : `/api/payroll/payslips/${encodeURIComponent(input.payrollDoc.id)}/pdf`
       : input.mailSource
       ? `/api/mail/messages/${input.mailSource.uid}/source?${new URLSearchParams({ folder: input.mailSource.folder, download: '1', ...(input.mailSource.mailbox ? { mailbox: input.mailSource.mailbox } : {}) })}`

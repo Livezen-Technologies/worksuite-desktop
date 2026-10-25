@@ -160,6 +160,12 @@ export interface GatewayStatus {
   autostart: boolean;
   version: string;
   updateChannel: string | null;
+  /** Whose gateway this is, as pairing answered (Label 1.1); null before or on an older server. */
+  company: { id: number; name: string | null } | null;
+  /** A newer signed build on the update channel, when its manifest verified (Label 1.1). */
+  update: { version: string; channel: string; notes: string | null; sha256: string } | null;
+  /** Why an update was not offered or not kept (bad signature, SHA-256 mismatch). */
+  updateProblem: string | null;
   /** The printers registered to this gateway — the only ones it prints to (FR-GWY-04). */
   printers: Array<{ id: string; name: string; key: string; approved: boolean; state: PrinterState }>;
   /** The job printing now, with per-label progress (D07). */
@@ -204,6 +210,8 @@ export const labelContract = {
   'labelGateway:pair': { input: z.strictObject({ url: z.string().min(3).max(300), code: z.string().min(8).max(20), name: z.string().trim().min(1).max(80) }), session: true, rate: 2, sensitive: true },
   'labelGateway:unpair': { input: none, session: true, rate: 2, sensitive: true },
   'labelGateway:headless': { input: z.strictObject({ enabled: z.boolean() }), session: true, rate: 2, sensitive: true },
+  'labelGateway:checkUpdate': { input: none, rate: 4 },
+  'labelGateway:downloadUpdate': { input: none, session: true, rate: 2, sensitive: true },
 };
 
 export interface LabelOutputs {
@@ -220,4 +228,6 @@ export interface LabelOutputs {
   'labelGateway:pair': GatewayStatus;
   'labelGateway:unpair': GatewayStatus;
   'labelGateway:headless': GatewayStatus;
+  'labelGateway:checkUpdate': GatewayStatus;
+  'labelGateway:downloadUpdate': { path: string; version: string };
 }

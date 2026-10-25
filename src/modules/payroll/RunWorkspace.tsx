@@ -11,18 +11,19 @@ import { humanise } from '../hr/parts';
 import { groupLines, unsigned } from '../hr/pay';
 import type { PayLine } from '../hr/api';
 import {
-  acceptException, calculateRun, fetchAudit, fetchPayouts, fetchPosting, fetchRun, fetchVariance, K, KIND_LABEL, percent, rejectBlock, rejectRun, runTitle, STATUS_LABEL, submitRun, validateRun,
+  acceptException, calculateRun, fetchAudit, fetchPayouts, fetchPosting, fetchRun, fetchVariance, K, KIND_LABEL, percent, rejectBlock, rejectRun, reverseRun, reversible, runTitle, STATUS_LABEL, submitRun, validateRun,
   type RunDetail,
 } from './api';
 import { Badge, Card, Kbd, NotYet, Table, amt, td, tdr, useReadOnly } from './parts';
+import RunHolds from './RunHolds';
 
 /**
  * A run's workspace (DRunHead + D04–D07): the header with the run's figures and its next act — Recalculate (⌘R),
  * Submit, Reject, Approve — and the tabs Summary · Employees · Variance · Validation · Journal · Payslips · Payment ·
  * History. Everything shown is the server's; offline (D25) it is the last copy and every act is off.
  */
-export type RunTab = 'summary' | 'employees' | 'variance' | 'validation' | 'journal' | 'payslips' | 'payment' | 'history';
-const TABS: RunTab[] = ['summary', 'employees', 'variance', 'validation', 'journal', 'payslips', 'payment', 'history'];
+export type RunTab = 'summary' | 'employees' | 'holds' | 'variance' | 'validation' | 'journal' | 'payslips' | 'payment' | 'history';
+const TABS: RunTab[] = ['summary', 'employees', 'holds', 'variance', 'validation', 'journal', 'payslips', 'payment', 'history'];
 
 export default function RunWorkspace({ id, figures, tab, active, onTab, onBack, onApprove, onEmployee }: {
   id: number; figures: boolean; tab: string; active: boolean; onTab: (t: RunTab) => void; onBack: () => void; onApprove: () => void; onEmployee: (employeeId: number) => void;
@@ -32,6 +33,7 @@ export default function RunWorkspace({ id, figures, tab, active, onTab, onBack, 
   const q = useQuery({ queryKey: K.run(id), queryFn: ({ signal }) => fetchRun(id, signal) });
   const t: RunTab = (TABS as string[]).includes(tab) ? (tab as RunTab) : 'summary';
   const [rejecting, setRejecting] = useState(false);
+  const [reversing, setReversing] = useState(false);
   const refresh = () => void qc.invalidateQueries({ queryKey: ['payroll'] });
   const act = useMutation({
     mutationFn: (what: 'calc' | 'submit') => (what === 'calc' ? calculateRun(id) : submitRun(id)),
@@ -63,7 +65,7 @@ export default function RunWorkspace({ id, figures, tab, active, onTab, onBack, 
   const held = payslips.filter((p) => p.status === 'held').length;
   const noReject = ro ? 'Offline' : rejectBlock(d, 0);
   const label: Record<RunTab, string> = {
-    summary: 'Summary', employees: `Employees ${payslips.length}`, variance: 'Variance', validation: `Validation ${counts.blocking || ''}`.trim(), journal: 'Journal', payslips: 'Payslips', payment: 'Payment', history: 'History',
+    summary: 'Summary', employees: `Employees ${payslips.length}`, holds: 'Holds', variance: 'Variance', validation: `Validation ${counts.blocking || ''}`.trim(), journal: 'Journal', payslips: 'Payslips', payment: 'Payment', history: 'History',
   };
 
   return (
@@ -104,6 +106,11 @@ export default function RunWorkspace({ id, figures, tab, active, onTab, onBack, 
               </button>
             </>
           ) : null}
+          {reversible(run) && d.can.approve ? (
+            <button type="button" disabled={ro} onClick={() => setReversing(true)} className="inline-flex h-8 items-center rounded-[7px] border border-[#F1B8A8] bg-surface px-3 text-[12.5px] font-semibold text-danger disabled:opacity-50 dark:border-danger/40">
+              Reverse run…
+            </button>
+          ) : null}
         </div>
         <div className="mt-3 grid grid-cols-5 gap-2">
           <Fig label="Employees" value={String(run.employee_count ?? payslips.length)} sub={held ? `${held} held` : `${payslips.length} on the run`} />
@@ -124,6 +131,7 @@ export default function RunWorkspace({ id, figures, tab, active, onTab, onBack, 
 
       {t === 'summary' ? <Summary d={d} onTab={onTab} onApprove={onApprove} /> : null}
       {t === 'employees' ? <Employees d={d} show={show} onEmployee={onEmployee} /> : null}
+      {t === 'holds' ? <RunHolds d={d} ro={ro} /> : null}
       {t === 'variance' ? <VarianceTab id={id} show={show} /> : null}
       {t === 'validation' ? <Validation d={d} ro={ro} onChanged={refresh} /> : null}
       {t === 'journal' ? <Journal id={id} ro={ro} cur={cur} /> : null}
@@ -131,6 +139,22 @@ export default function RunWorkspace({ id, figures, tab, active, onTab, onBack, 
       {t === 'payment' ? <Payment id={id} cur={cur} /> : null}
       {t === 'history' ? <History id={id} /> : null}
 
+      {reversing ? (
+        <ReasonSheet
+          title="Reverse this run"
+          body="WorkSuite makes a reversal run that replaces this one: the period opens again and the journal is reversed in Finance. Payslips already sent stay on record."
+          label="Reason"
+          action="Reverse run"
+          danger
+          onOk={(r) =>
+            void reverseRun(id, r).then(
+              (x) => (toast('success', `Reversed. The reversal is run ${x.run_id}.`), setReversing(false), refresh()),
+              (e) => toast('error', [404, 405].includes((e as { status?: number }).status ?? 0) ? 'Reversing a run needs a newer WorkSuite server (Payroll 1.6).' : refusal(e)),
+            )
+          }
+          onClose={() => setReversing(false)}
+        />
+      ) : null}
       {rejecting ? (
         <ReasonSheet
           title="Reject this run"
@@ -396,6 +420,9 @@ function Journal({ id, ro, cur }: { id: number; ro: boolean; cur: string }) {
   return (
     <Card title="Journal" action={!p.posted && p.can.post ? <button type="button" disabled={ro || !p.ok || post.isPending} onClick={() => post.mutate()} className="h-7 rounded-[7px] bg-primary px-2.5 text-[12px] font-bold text-white disabled:opacity-50">Post to Finance</button> : p.posted ? <Badge status="done">In the books</Badge> : null}>
       {p.problems.length ? <p className="m-0 px-3.5 pb-2 text-[12.5px] text-danger">{p.problems.join(' ')}</p> : null}
+      {!p.posted && p.last_attempt?.problems?.length ? (
+        <p className="m-0 px-3.5 pb-2 text-[12px] text-danger">{`Finance refused the last posting${p.last_attempt.at ? ` (${p.last_attempt.at})` : ''}: ${p.last_attempt.problems.join(' ')}`}</p>
+      ) : null}
       {p.lines?.length ? (
         <Table head={['Account', 'Role', ['Debit', 'r'], ['Credit', 'r']]}>
           {p.lines.map((l, i) => (

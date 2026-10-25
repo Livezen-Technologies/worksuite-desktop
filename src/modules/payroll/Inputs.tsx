@@ -1,12 +1,14 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState, type DragEvent } from 'react';
+import { call, errorMessage } from '../../core/bridge';
+import { Checkbox } from '../../components/Checkbox';
 import { toast } from '../../core/toasts';
 import { Select } from '../../components/Select';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal } from '../finance/api';
 import { ReasonSheet } from '../finance/parts';
 import { humanise } from '../hr/parts';
-import { cancelInput, csvRows, fetchGroups, fetchInputs, fetchPeriods, importInputs, type ImportResult } from './api';
+import { ATTACHMENT_MAX, attachmentName, ATTACHMENT_TYPES, cancelInput, csvRows, fetchClaimable, fetchGroups, fetchInputs, fetchPeriods, importInputs, sendExpenses, uploadInputAttachment, type ImportResult } from './api';
 import { Badge, Card, NotYet, Table, amt, td, tdr, useReadOnly } from './parts';
 
 /**
@@ -20,6 +22,7 @@ export default function Inputs({ periodId }: { periodId: number | null }) {
   const groups = useQuery({ queryKey: ['payroll', 'groups'], queryFn: ({ signal }) => fetchGroups(signal), staleTime: 300_000 });
   const [group, setGroup] = useState(0);
   const g = group || groups.data?.groups[0]?.id || 0;
+  const org = groups.data?.groups.find((x) => x.id === g)?.org_id ?? 0;
   const periods = useQuery({ queryKey: ['payroll', 'periods', g], queryFn: ({ signal }) => fetchPeriods(g, signal), enabled: g > 0 });
   const [picked, setPicked] = useState(0);
   const list = periods.data?.periods ?? [];
@@ -81,11 +84,13 @@ export default function Inputs({ periodId }: { periodId: number | null }) {
         </Card>
       ) : null}
 
+      {org ? <ExpensesToPayroll org={org} ro={ro || locked} onSent={() => void qc.invalidateQueries({ queryKey: ['payroll', 'inputs', p] })} /> : null}
+
       <Card>
         {q.isLoading ? <Spinner /> : q.error ? <div className="p-3"><ErrorNote error={q.error} onRetry={() => void q.refetch()} /></div> : null}
         {q.data === null ? <NotYet what="Period inputs" /> : null}
         {q.data ? (
-          <Table head={['Employee', 'Component', ['Qty', 'r'], ['Amount', 'r'], 'Source', 'Status', '']}>
+          <Table head={['Employee', 'Component', ['Qty', 'r'], ['Amount', 'r'], 'Source', 'Status', 'File', '']}>
             {q.data.inputs.map((i) => (
               <tr key={i.id} className={cx(i.source_module && 'bg-ground')}>
                 <td className={td}>{i.employee_name ?? `#${i.employee_id}`}</td>
@@ -94,6 +99,7 @@ export default function Inputs({ periodId }: { periodId: number | null }) {
                 <td className={tdr}>{amt(i.amount)}</td>
                 <td className={cx(td, 'text-ink-2')}>{[i.source_module ? humanise(i.source_module) : humanise(i.source ?? 'manual'), i.source_ref ?? i.note].filter(Boolean).join(' · ')}</td>
                 <td className={td}><Badge status={i.status === 'paid' ? 'done' : i.status}>{humanise(i.status)}</Badge></td>
+                <td className={td}><Attachment id={i.id} has={!!i.file_id} canAdd={!ro && !locked && i.status === 'open'} onDone={() => void qc.invalidateQueries({ queryKey: ['payroll', 'inputs', p] })} /></td>
                 <td className={tdr}>{i.status === 'open' && !ro && !locked ? <button type="button" className="font-semibold text-danger hover:underline" onClick={() => setCancelling(i.id)}>Cancel</button> : null}</td>
               </tr>
             ))}
@@ -112,5 +118,79 @@ export default function Inputs({ periodId }: { periodId: number | null }) {
         <ReasonSheet title="Cancel this input" body="It will not be paid. The reason is kept." label="Reason" action="Cancel input" danger onOk={(r) => void cancelInput(cancelling, r).then(() => (setCancelling(null), void qc.invalidateQueries({ queryKey: ['payroll', 'inputs', p] })), (e) => toast('error', refusal(e)))} onClose={() => setCancelling(null)} />
       ) : null}
     </div>
+  );
+}
+
+/** PAY-INP-04: the supporting file on an input — open it, or add one (≤ 10 MB; PDF, image, CSV or text). */
+function Attachment({ id, has, canAdd, onDone }: { id: number; has: boolean; canAdd: boolean; onDone: () => void }) {
+  const [busy, setBusy] = useState(false);
+  const open = () =>
+    void attachmentName(id)
+      .then((name) => call('transfers:download', { payrollDoc: { kind: 'input-attachment', id: String(id) }, name, open: true }))
+      .catch((e) => toast('error', errorMessage(e)));
+  const pick = async (f: File | undefined) => {
+    if (!f) return;
+    if (f.size > ATTACHMENT_MAX) return void toast('error', 'The file is over 10 MB.');
+    if (!ATTACHMENT_TYPES.test(f.name)) return void toast('error', 'Attach a PDF, PNG, JPEG, WebP, CSV or text file.');
+    setBusy(true);
+    try {
+      await uploadInputAttachment(id, f);
+      toast('success', 'Attached.');
+      onDone();
+    } catch (e) {
+      toast('error', [404, 405].includes((e as { status?: number }).status ?? 0) ? 'Attachments need a newer WorkSuite server (Payroll 1.6).' : refusal(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <span className="inline-flex items-center gap-2">
+      {has ? <button type="button" className="font-semibold text-primary hover:underline" onClick={open}>Open</button> : null}
+      {canAdd ? (
+        <label className={cx('cursor-pointer font-semibold text-primary hover:underline', busy && 'opacity-50')}>
+          {busy ? 'Attaching…' : has ? 'Replace' : 'Attach'}
+          <input type="file" className="hidden" aria-label={`Attach a file to input ${id}`} accept=".pdf,.png,.jpg,.jpeg,.webp,.csv,.txt" disabled={busy} onChange={(e) => void pick(e.target.files?.[0])} />
+        </label>
+      ) : null}
+    </span>
+  );
+}
+
+/** PAY-INP-06: approved, unpaid expense claims sent to payroll as non-taxable reimbursement inputs, each once. */
+function ExpensesToPayroll({ org, ro, onSent }: { org: number; ro: boolean; onSent: () => void }) {
+  const qc = useQueryClient();
+  const q = useQuery({ queryKey: ['payroll', 'claimable', org], queryFn: ({ signal }) => fetchClaimable(org, signal), retry: false });
+  const [ticked, setTicked] = useState<Set<number>>(new Set());
+  const send = useMutation({
+    mutationFn: () => sendExpenses(org, ticked.size ? [...ticked] : undefined),
+    onSuccess: (r) => {
+      toast(r.failed.length ? 'error' : 'success', `${r.sent} sent to payroll.${r.failed.length ? ` ${r.failed.length} not: ${r.failed.map((f) => f.error).join(' ')}` : ''}`);
+      setTicked(new Set());
+      void qc.invalidateQueries({ queryKey: ['payroll', 'claimable', org] });
+      onSent();
+    },
+    onError: (e) => toast('error', refusal(e)),
+  });
+  if (!q.data || !q.data.claims.length) return null; // a server without it, no permission, or nothing waiting
+  const claims = q.data.claims;
+  return (
+    <Card
+      title={`Expense claims to pay through payroll · ${claims.length}`}
+      action={q.data.enabled ? <button type="button" disabled={ro || send.isPending} onClick={() => send.mutate()} className="h-7 rounded-[7px] bg-primary px-2.5 text-[12px] font-bold text-white disabled:opacity-50">{send.isPending ? 'Sending…' : ticked.size ? `Send ${ticked.size}` : 'Send all'}</button> : null}
+    >
+      {!q.data.enabled ? <p className="m-0 px-3.5 pb-2 text-[12px] text-ink-2">Paying expenses through payroll is off in Payroll settings.</p> : null}
+      <Table head={['', 'Claim', 'Claimant', 'Spent', ['Amount', 'r'], 'For']}>
+        {claims.map((c) => (
+          <tr key={c.id}>
+            <td className={td}><Checkbox aria-label={`Send claim ${c.claim_no ?? c.id}`} disabled={!q.data!.enabled || ro} checked={ticked.has(c.id)} onChange={() => setTicked((s) => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n; })} /></td>
+            <td className={cx(td, 'font-mono text-[11px]')}>{c.claim_no ?? `#${c.id}`}</td>
+            <td className={td}>{c.claimant ?? '—'}{c.employee_id ? '' : <span className="text-danger"> · not on payroll</span>}</td>
+            <td className={td}>{c.spent_on ?? ''}</td>
+            <td className={tdr}>{amt(c.base_amount)}</td>
+            <td className={cx(td, 'whitespace-normal text-ink-2')}>{c.description ?? ''}</td>
+          </tr>
+        ))}
+      </Table>
+    </Card>
   );
 }

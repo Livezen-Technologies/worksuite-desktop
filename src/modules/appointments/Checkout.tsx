@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx } from '../../components/ui';
 import { Checkbox } from '../../components/Checkbox';
-import { applyDeposit, checkout, fetchCheckout, fetchDetail, fetchSaleProducts, K, money, quote, recordPayment, type CheckoutInput, type CheckoutResult, type Quote } from './api';
+import { applyDeposit, checkout, fetchCheckout, fetchDetail, fetchSaleProducts, K, money, paidOnline, quote, recordPayment, type CheckoutInput, type CheckoutResult, type Quote } from './api';
 import { errText, Head, input, Kbd, label, Refused, Section, td, tdr, th, useDesk } from './parts';
 import { printPage, readDesk, receiptHtml, type Receipt } from './print';
 
@@ -146,6 +146,7 @@ export default function Checkout({ id, onDone }: { id: number; onDone: () => voi
             <Sum k="Tax (Billing rates)" v={money(q?.tax)} />
             <Sum k="Total" v={money(q?.total, cur)} strong />
             {a.deposit && a.deposit.held > 0 ? <Sum k="Deposit held" v={`− ${money(a.deposit.held)}`} /> : null}
+            {paidOnline(pre.data.deposit_paid_online) > 0 ? <p className="m-0 py-1 text-[12px] text-ink-3">{`${money(paidOnline(pre.data.deposit_paid_online), cur)} paid online on the deposit invoice is already a line above (less deposit paid online).`}</p> : null}
             {qErr ? <div className="mt-2"><Refused>{qErr}</Refused></div> : null}
             {!pre.data.may.issue ? <p className="mt-2 mb-0 text-[12px] text-ink-3">The invoice stays a draft for Billing to issue: issuing needs Billing’s permission.</p> : null}
             <div className="mt-2"><Refused>{err}</Refused></div>

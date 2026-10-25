@@ -3,7 +3,8 @@ import { useState } from 'react';
 import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Spinner, cx } from '../../components/ui';
-import { fetchAsset, fetchAssets, type Asset } from './api';
+import { refusal } from '../finance/api';
+import { fetchAsset, fetchAssets, markLabelsPrinted, printAssetLabel, type Asset } from './api';
 import { code128Svg, labelPrefs, printLabels, qrSvg, saveLabelPrefs, saveLabelsPdf, type LabelCode, type LabelPrefs, type LabelStock } from './labelSheets';
 import { Btn, Card, Field, PageHead, Pills, input } from './parts';
 
@@ -18,14 +19,37 @@ export default function Labels({ ids }: { ids: number[] }) {
   const named = useQueries({ queries: ids.slice(0, 200).map((id) => ({ queryKey: ['assets', 'one', id], queryFn: ({ signal }: { signal: AbortSignal }) => fetchAsset(id, signal), staleTime: 60_000 })) });
   const printers = useQuery({ queryKey: ['assets', 'printers'], queryFn: () => call('print:printers'), staleTime: 60_000 });
   const search = useQuery({ queryKey: ['assets', 'list', 'labels', q], queryFn: ({ signal }) => fetchAssets({ q, per_page: 10 }, signal), enabled: q.trim().length > 1 });
-  const items = [...named.flatMap((r) => (r.data ? [{ code: r.data.asset.asset_code, name: r.data.asset.name, company: r.data.asset.company }] : [])), ...extra.map((a) => ({ code: a.asset_code, name: a.name, company: a.company }))];
+  const items = [...named.flatMap((r) => (r.data ? [{ id: r.data.asset.id, code: r.data.asset.asset_code, name: r.data.asset.name, company: r.data.asset.company }] : [])), ...extra.map((a) => ({ id: a.id, code: a.asset_code, name: a.name, company: a.company }))];
+  const [studio, setStudio] = useState(false);
   const set = (p: Partial<LabelPrefs>) => {
     const n = { ...prefs, ...p };
     setPrefs(n);
     saveLabelPrefs(n);
   };
   const print = async () => {
-    if (await printLabels(items, prefs)) toast('success', `${items.length} ${items.length === 1 ? 'label' : 'labels'} sent to the printer.`);
+    if (await printLabels(items, prefs)) {
+      toast('success', `${items.length} ${items.length === 1 ? 'label' : 'labels'} sent to the printer.`);
+      // Assets 1.3: the register records that these were labelled (an older server simply has no record of it).
+      void markLabelsPrinted(items.map((i) => i.id), prefs.stock === 'a4' ? 'sheet' : 'desktop').catch(() => undefined);
+    }
+  };
+  /** Assets 1.3: through Label Studio — its template, printer and print host — one job per asset, stamped by the server. */
+  const viaStudio = async () => {
+    setStudio(true);
+    let ok = 0;
+    let last = '';
+    for (const i of items) {
+      try {
+        await printAssetLabel(i.id);
+        ok += 1;
+      } catch (e) {
+        last = [404, 405].includes((e as { status?: number }).status ?? 0) ? 'Printing through Label Studio needs a newer WorkSuite server (Assets 1.3).' : refusal(e);
+        if (last.includes('newer')) break;
+      }
+    }
+    setStudio(false);
+    if (ok) toast('success', `${ok} ${ok === 1 ? 'label' : 'labels'} sent to Label Studio.`);
+    if (last) toast('error', last);
   };
 
   return (
@@ -33,6 +57,7 @@ export default function Labels({ ids }: { ids: number[] }) {
       <div className="flex min-w-0 flex-[2_1_520px] flex-col gap-3">
         <PageHead title="Print labels" sub={`${items.length} ${items.length === 1 ? 'label' : 'labels'}`}>
           <Btn disabled={!items.length} onClick={() => void saveLabelsPdf(items, prefs)}>Save PDF</Btn>
+          <Btn disabled={!items.length || studio} onClick={() => void viaStudio()}>{studio ? 'Sending…' : 'Print with Label Studio'}</Btn>
           <Btn primary disabled={!items.length} onClick={() => void print()}>{`Print ${items.length}`}</Btn>
         </PageHead>
         <Field label="Add an asset">
