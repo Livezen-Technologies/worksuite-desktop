@@ -4,7 +4,7 @@ import { apiGet, apiPost } from '../../core/api';
 import { toast } from '../../core/toasts';
 import { Spinner, cx } from '../../components/ui';
 import { refusal } from '../finance/api';
-import { BASE, fetchAssets, orNull, type Booking, type Can } from './api';
+import { BASE, decideBooking, fetchAssets, orNull, type Booking, type Can } from './api';
 import { Btn, Card, Field, NotYet, PageHead, input, useReadOnly } from './parts';
 
 /**
@@ -20,7 +20,7 @@ export function weekOf(anchor: Date): string[] {
   return Array.from({ length: 7 }, (_, i) => iso(new Date(monday + i * DAY)));
 }
 
-export default function Bookings({ org }: { org: number; can: Can; active: boolean }) {
+export default function Bookings({ org, can }: { org: number; can: Can; active: boolean }) {
   const ro = useReadOnly();
   const qc = useQueryClient();
   const [anchor, setAnchor] = useState(() => new Date());
@@ -32,6 +32,8 @@ export default function Bookings({ org }: { org: number; can: Can; active: boole
   const [until, setUntil] = useState(() => `${iso(new Date(Date.now() + DAY))}T18:00`);
   const [purpose, setPurpose] = useState('');
   const [busy, setBusy] = useState(false);
+  const [declining, setDeclining] = useState<Booking | null>(null);
+  const [note, setNote] = useState('');
 
   if (q.isPending) return <Spinner />;
   if (q.data === null) return (<div className="flex flex-col gap-3"><PageHead title="Bookings" /><Card><NotYet what="Booking equipment" /></Card></div>);
@@ -39,13 +41,30 @@ export default function Bookings({ org }: { org: number; can: Can; active: boole
   const byAsset = new Map<number, Booking[]>();
   for (const b of list) byAsset.set(b.asset_id, [...(byAsset.get(b.asset_id) ?? []), b]);
   const rows = [...byAsset.entries()];
+  const pending = list.filter((b) => b.status === 'pending');
+
+  // Assets 1.3: a booking that waits for approval holds its slot; an assigner approves or declines it (never their own).
+  const decide = async (b: Booking, decision: 'approve' | 'reject', why: string) => {
+    setBusy(true);
+    try {
+      await decideBooking(b.id, decision, why);
+      toast('success', decision === 'approve' ? 'Approved. The booking is confirmed.' : 'Declined. The booker is told why.');
+      setDeclining(null);
+      setNote('');
+      void qc.invalidateQueries({ queryKey: ['assets', 'bookings'] });
+    } catch (e) {
+      toast('error', [404, 405].includes((e as { status?: number }).status ?? 0) ? 'Approving bookings needs a newer WorkSuite server (Assets 1.3).' : refusal(e));
+    } finally {
+      setBusy(false);
+    }
+  };
 
   const book = async () => {
     if (!asset) return;
     setBusy(true);
     try {
       await apiPost(`${BASE}/bookings`, { asset_id: asset, starts_at: from, ends_at: until, purpose: purpose.trim() || undefined });
-      toast('success', 'Booked.');
+      toast('success', 'Booked. If this asset needs approval, the booking holds the slot until an approver answers.');
       setPurpose('');
       void qc.invalidateQueries({ queryKey: ['assets', 'bookings'] });
     } catch (e) {
@@ -76,7 +95,7 @@ export default function Bookings({ org }: { org: number; can: Can; active: boole
                   const b = bs.find((x) => x.starts_at.slice(0, 10) <= d && x.ends_at.slice(0, 10) >= d);
                   return (
                     <div key={d} className="border-b border-l border-line/70 p-1">
-                      {b ? <div className={cx('truncate rounded-[5px] px-1.5 py-1 text-[11px] font-semibold', b.overdue ? 'bg-[#FDECEA] text-[#B42318]' : b.status === 'checked_out' ? 'bg-[#EAEDFB] text-[#23349E]' : 'bg-[#EEF0F6] text-[#4A5068]')} title={b.purpose ?? undefined}>{b.booked_for ?? b.purpose ?? b.status}</div> : null}
+                      {b ? <div className={cx('truncate rounded-[5px] px-1.5 py-1 text-[11px] font-semibold', b.overdue ? 'bg-[#FDECEA] text-[#B42318]' : b.status === 'pending' ? 'bg-[#FFF4DB] text-[#8A5200]' : b.status === 'checked_out' ? 'bg-[#EAEDFB] text-[#23349E]' : 'bg-[#EEF0F6] text-[#4A5068]')} title={b.purpose ?? undefined}>{b.booked_for ?? b.purpose ?? b.status}</div> : null}
                     </div>
                   );
                 })}
@@ -85,6 +104,31 @@ export default function Bookings({ org }: { org: number; can: Can; active: boole
           </div>
           {!rows.length ? <p className="m-0 px-3.5 py-4 text-[12.5px] text-ink-3">Nothing booked this week.</p> : null}
         </Card>
+        {pending.length ? (
+          <Card title={`Waiting for approval · ${pending.length}`}>
+            <div className="flex flex-col">
+              {pending.map((b) => (
+                <div key={b.id} className="flex flex-wrap items-center gap-2 border-t border-line/70 px-3.5 py-2 text-[12.5px]">
+                  <span className="min-w-0 flex-1"><b>{b.asset ?? `#${b.asset_id}`}</b>{` · ${b.starts_at.replace('T', ' ').slice(0, 16)} – ${b.ends_at.replace('T', ' ').slice(0, 16)}`}{b.booked_for ? ` · ${b.booked_for}` : ''}{b.purpose ? ` · ${b.purpose}` : ''}</span>
+                  {can.assign && !b.mine && !ro ? (
+                    declining?.id === b.id ? (
+                      <>
+                        <input aria-label="Why it is declined" placeholder="Why (the booker sees this)" value={note} onChange={(e) => setNote(e.target.value)} className={cx(input, 'h-8 w-[220px]')} />
+                        <Btn danger disabled={busy || !note.trim()} onClick={() => void decide(b, 'reject', note.trim())}>Decline</Btn>
+                        <Btn onClick={() => setDeclining(null)}>Cancel</Btn>
+                      </>
+                    ) : (
+                      <>
+                        <Btn primary disabled={busy} onClick={() => void decide(b, 'approve', '')}>Approve</Btn>
+                        <Btn disabled={busy} onClick={() => (setDeclining(b), setNote(''))}>Decline…</Btn>
+                      </>
+                    )
+                  ) : <span className="text-ink-3">Waiting for an approver</span>}
+                </div>
+              ))}
+            </div>
+          </Card>
+        ) : null}
       </div>
       <aside aria-label="New booking" className="flex min-w-0 flex-[1_1_260px] flex-col gap-2.5 self-start rounded-[10px] border border-line bg-surface p-3.5">
         <h2 className="m-0 text-[13.5px] font-bold">New booking</h2>

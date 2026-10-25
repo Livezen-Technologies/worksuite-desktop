@@ -5,7 +5,8 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { ErrorNote, Spinner } from '../../components/ui';
-import { discover, hostSettings, hostStatus, K, registerHost, setHostSettings } from './api';
+import { refusal } from '../finance/api';
+import { discover, fetchServerPrinters, hostSettings, hostStatus, K, pausePrinter, registerHost, resumePrinter, setHostSettings } from './api';
 import type { ViewProps } from './LabelShell';
 import { btn, btnPrimary, field, Section, StatePill, td, th } from './parts';
 
@@ -33,6 +34,13 @@ export default function Printers(_: ViewProps) {
     mutationFn: registerHost,
     onSuccess: (s) => (qc.setQueryData(K.host, s), toast('success', 'This computer’s printers are registered with WorkSuite. New ones wait for an administrator’s approval.')),
     onError: (e) => toast('error', errorMessage(e)),
+  });
+  const server = useQuery({ queryKey: ['label', 'server-printers'], queryFn: ({ signal }) => fetchServerPrinters(signal), retry: false, refetchInterval: 30_000 });
+  const paused = new Map((server.data ?? []).map((p) => [String(p.id), p]));
+  const toggle = useMutation({
+    mutationFn: ({ id, pause }: { id: number; pause: boolean }) => (pause ? pausePrinter(id, 'Paused at the print station.') : resumePrinter(id)),
+    onSuccess: (_r, v) => (toast('success', v.pause ? 'Paused. Its jobs wait in WorkSuite until it is resumed.' : 'Resumed.'), void qc.invalidateQueries({ queryKey: ['label', 'server-printers'] })),
+    onError: (e) => toast('error', refusal(e)),
   });
   const scan = useMutation({ mutationFn: discover, onSuccess: setFound, onError: (e) => toast('error', errorMessage(e)) });
 
@@ -70,8 +78,20 @@ export default function Printers(_: ViewProps) {
                 <td className={td}>{p.connection === 'tcp' ? `Raw TCP ${p.address}:${p.port}` : 'OS queue (raw)'}</td>
                 <td className={td}>{p.language === 'unknown' ? '—' : p.language.toUpperCase()}</td>
                 <td className={td}>{p.serverId ? (p.approved ? <StatePill state="ready">Approved</StatePill> : <StatePill state="paused">Awaiting approval</StatePill>) : <StatePill state="unknown">Not registered</StatePill>}</td>
-                <td className={td}><StatePill state={p.state} />{p.message ? <span className="ml-1 text-[11px] text-ink-3">{p.message}</span> : null}</td>
-                <td className={td}>{p.connection === 'tcp' ? <button type="button" className={btn} onClick={() => void set({ removeLan: p.key })}>Remove</button> : null}</td>
+                <td className={td}>
+                  {p.serverId && paused.get(p.serverId)?.paused ? <StatePill state="paused">Paused in WorkSuite</StatePill> : <StatePill state={p.state} />}
+                  {p.message ? <span className="ml-1 text-[11px] text-ink-3">{p.message}</span> : null}
+                </td>
+                <td className={td}>
+                  <span className="inline-flex gap-1.5">
+                    {p.serverId && p.approved && server.data ? (
+                      <button type="button" className={btn} disabled={toggle.isPending} onClick={() => toggle.mutate({ id: Number(p.serverId), pause: !paused.get(p.serverId!)?.paused })}>
+                        {paused.get(p.serverId)?.paused ? 'Resume' : 'Pause'}
+                      </button>
+                    ) : null}
+                    {p.connection === 'tcp' ? <button type="button" className={btn} onClick={() => void set({ removeLan: p.key })}>Remove</button> : null}
+                  </span>
+                </td>
               </tr>
             ))}
           </tbody>

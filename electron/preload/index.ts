@@ -605,6 +605,8 @@ const api = {
     pair: call('labelGateway:pair'),
     unpair: call('labelGateway:unpair'),
     headless: call('labelGateway:headless'),
+    checkUpdate: call('labelGateway:checkUpdate'),
+    downloadUpdate: call('labelGateway:downloadUpdate'),
   },
   // Contact sync (contact-sync-channels.ts): iCloud, CardDAV and Mac Contacts on this computer; passwords never come back.
   contactSync: {

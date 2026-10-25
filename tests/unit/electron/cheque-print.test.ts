@@ -93,6 +93,20 @@ describe('CorePrintService layout', () => {
     expect(pageSizeMicrons(layout)).toEqual({ width: 178_000, height: 82_000 });
   });
 
+  it('draws a signature PNG from the signed layout, and nothing that is not a PNG', () => {
+    const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkYPhfDwAChwGA60e6kgAAAABJRU5ErkJggg==';
+    const model = { page: { w_pt: 504.6, h_pt: 232.4 }, items: [
+      { key: 'signature_1', x_pt: 300, y_pt: 150, w_pt: 120, h_pt: 40, image_png: `data:image/png;base64,${png}`, image_sha256: 'x', signature_ref: 'u-1' },
+      { key: 'signature_2', x_pt: 420, y_pt: 150, w_pt: 60, h_pt: 40, image_png: 'data:image/svg+xml;base64,PHN2Zz4=' },
+    ] };
+    const layout = modelToLayout(renderModel.parse(model));
+    expect(layout.boxes.filter((b) => b.kind === 'image')).toHaveLength(1);
+    const html = renderExactHtml({ layout, offset: { x_mm: 0, y_mm: 0 }, title: 't' });
+    expect(html).toContain(`src="data:image/png;base64,${png}"`);
+    expect(html).toContain("img-src data:");
+    expect(html).not.toContain('svg');
+  });
+
   it('moves an offset the other way on a page turned 180°', () => {
     const layout = { width_mm: 178, height_mm: 82, boxes: [{ key: 'a', kind: 'text' as const, x_mm: 10, y_mm: 10, width_mm: 5, height_mm: 5, lines: ['x'], size_pt: 10, align: 'left' as const, letter_spacing_mm: 0 }] };
     const html = renderExactHtml({ layout, offset: { x_mm: 1, y_mm: 1 }, rotation: 180, title: 't' });

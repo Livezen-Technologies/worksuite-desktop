@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-25
+
+**Added**
+
+- run holds and exclusions with release notes, recalculate selected employees, Reverse run, the journal's last refused posting
+- input attachments, expense claims sent to payroll, assignment CSV export and import, statutory identifiers with audited reveal, gratuity provision and accrual
+
 ## 1.0.0 — 2026-10-25
 
 **Added**

@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from 'react';
 import type { ChequePrintOutcome } from '@shared/cheque';
 import { Modal } from '../../components/ui';
 import { refusal } from '../finance/api';
-import { confirmPrint, fetchChecks, printCheque, requestReprint, type Checks, type Profile, type QueueItem } from './api';
+import { errorMessage } from '../../core/bridge';
+import { confirmPrint, fetchChecks, openPdf, printCheque, requestReprint, type Checks, type Profile, type QueueItem } from './api';
+import { withStepUp } from './StepUp';
 import { Check, Note, btn, btnPrimary, num } from './parts';
 
 /**
@@ -72,7 +74,7 @@ export function PrintDialog({ item, profile, onClose, onDone }: { item: QueueIte
   const askReprint = async () => {
     if (!reprint || reprint.trim().length < 5) return;
     try {
-      await requestReprint(item.cheque_id, reprint.trim());
+      await withStepUp('Asking for a reprint', (token) => requestReprint(item.cheque_id, reprint.trim(), token));
       setMessage('Reprint requested. A different approver has to agree; the original leaf is voided then.');
       setReprint(null);
     } catch (e) {
@@ -102,7 +104,10 @@ export function PrintDialog({ item, profile, onClose, onDone }: { item: QueueIte
         <button type="button" className={btnPrimary} onClick={() => void send()}>Try again</button>
       </>
     ) : step === 'done' ? (
-      <button type="button" className={btnPrimary} onClick={onClose}>Done</button>
+      <>
+        <button type="button" className={`${btn} mr-auto`} onClick={() => void openPdf('voucher', item.cheque_id, `Voucher ${item.cheque_number}`).catch((e) => setMessage(errorMessage(e)))}>Voucher PDF</button>
+        <button type="button" className={btnPrimary} onClick={onClose}>Done</button>
+      </>
     ) : null;
 
   return (

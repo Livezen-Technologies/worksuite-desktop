@@ -4,7 +4,8 @@ import { RESIDUAL_TARGET_MM, clampOffset, parseOffset, signedMm } from '@shared/
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { refusal } from '../finance/api';
-import { applyCalibration, fetchGeometry, fetchMarkers, fetchProfiles, fetchVersions, has, K, printCalibration, recordCalibration, saveOffsets, type Access, type CalibrationRun } from './api';
+import { errorMessage } from '../../core/bridge';
+import { applyCalibration, fetchGeometry, fetchMarkers, fetchProfiles, fetchVersions, has, K, openPdf, printCalibration, recordCalibration, saveOffsets, type Access, type CalibrationRun } from './api';
 import { Check, Note, PageHead, Panel, Tile, btn, btnPrimary, num, td, th, useStation } from './parts';
 
 /**
@@ -105,6 +106,7 @@ export default function Calibration({ access, versionId, profileId, onPick }: { 
   return (
     <div className="flex flex-col gap-3">
       <PageHead title={`Calibrate ${nameOf(versionId)}`} sub={`${profile.printer_name} on this computer`}>
+        <button type="button" className={btn} onClick={() => void openPdf('calibration-sheet', versionId, `Calibration sheet ${nameOf(versionId)}`).catch((e) => toast('error', errorMessage(e)))}>Sheet PDF</button>
         <button type="button" className={btn} disabled={!mayCalibrate || !!busy} onClick={() => void print('a4')}>Print A4 sheet</button>
         <button type="button" className={btnPrimary} disabled={!mayCalibrate || !!busy} onClick={() => void print('leaf')}>Print test on voided leaf</button>
       </PageHead>

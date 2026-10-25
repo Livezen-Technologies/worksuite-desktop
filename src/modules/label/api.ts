@@ -173,6 +173,23 @@ export const cancelJob = (jobId: string) => call('label:cancel', { job_id: jobId
 export const resolveJob = (jobId: string, decision: ReconcileDecision, reason: string, lastPrinted?: number) =>
   call('label:resolve', { job_id: jobId, decision, reason, ...(lastPrinted !== undefined ? { last_printed: lastPrinted } : {}) });
 export const gatewayStatus = () => call('labelGateway:status');
+export const checkGatewayUpdate = () => call('labelGateway:checkUpdate');
+export const downloadGatewayUpdate = () => call('labelGateway:downloadUpdate');
+
+/** The server's printers with their pause state (Label 1.1, FR-QUE-04); null on a server without it. */
+export async function fetchServerPrinters(signal?: AbortSignal): Promise<Array<{ id: number; paused: boolean; paused_reason: string | null }> | null> {
+  try {
+    const r = await apiGet<unknown>(`${LABEL}/printers`, { per_page: 200 }, signal);
+    const rows = Array.isArray(r) ? r : ((r as { items?: unknown[] } | null)?.items ?? []);
+    return (rows as Array<{ id?: unknown; paused?: unknown; paused_at?: unknown; paused_reason?: unknown }>).map((p) => ({ id: Number(p.id), paused: !!p.paused || !!p.paused_at, paused_reason: typeof p.paused_reason === 'string' ? p.paused_reason : null }));
+  } catch (e) {
+    if ([403, 404, 405].includes((e as { status?: number }).status ?? 0)) return null;
+    throw e;
+  }
+}
+/** A paused printer takes no new job; its queue waits until it is resumed (Label 1.1). */
+export const pausePrinter = (id: number, reason?: string) => apiPost(`${LABEL}/printers/${id}/pause`, reason ? { reason } : {});
+export const resumePrinter = (id: number) => apiPost(`${LABEL}/printers/${id}/resume`, {});
 export const pairGateway = (url: string, code: string, name: string) => call('labelGateway:pair', { url, code, name });
 export const unpairGateway = () => call('labelGateway:unpair');
 export const setGatewayHeadless = (enabled: boolean) => call('labelGateway:headless', { enabled });

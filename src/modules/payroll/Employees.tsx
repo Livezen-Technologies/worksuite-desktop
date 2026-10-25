@@ -4,7 +4,8 @@ import { call } from '../../core/bridge';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { humanise } from '../hr/parts';
 import { fetchEnrolments, type Enrolment } from './api';
-import { Badge, Card, Pills, Table, amt, td, tdr } from './parts';
+import { Badge, Card, Pills, Table, amt, td, tdr, useReadOnly } from './parts';
+import { AssignmentCsv } from './PayrollExtras';
 
 /**
  * Employees on payroll (D12): who is enrolled, in which pay group, and whether they are ready to be paid. The person's
@@ -22,6 +23,7 @@ export function readiness(e: Enrolment): Filter {
 
 export default function Employees({ figures, onOpen }: { figures: boolean; onOpen: (employeeId: number, newTab: boolean) => void }) {
   const q = useQuery({ queryKey: ['payroll', 'enrolments'], queryFn: ({ signal }) => fetchEnrolments(signal) });
+  const ro = useReadOnly();
   const [only, setOnly] = useState<Filter>('all');
   const [find, setFind] = useState('');
   const all = q.data?.enrolments ?? [];
@@ -71,6 +73,7 @@ export default function Employees({ figures, onOpen }: { figures: boolean; onOpe
         </Table>
         {q.data && !rows.length ? <p className="m-0 px-3.5 py-4 text-[12.5px] text-ink-3">Nobody matches.</p> : null}
       </Card>
+      <AssignmentCsv figures={figures} ro={ro} />
     </div>
   );
 }

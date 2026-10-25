@@ -1,4 +1,4 @@
-import { apiGet, apiPost, apiPut } from '../../core/api';
+import { apiGet, apiPost, apiPut, apiUrl, request } from '../../core/api';
 
 /**
  * Payroll on the desktop (WS-PAYROLL-SRS-001 §D1, UI-07 and the run screens), over the server's `/api/payroll`.
@@ -152,6 +152,8 @@ export interface Posting {
   totals?: { debit: string; credit: string; balanced: boolean } | null;
   source?: string | null;
   posts_on?: string | null;
+  /** The last refused posting of this run, by hand or by the nightly queue (Payroll 1.5). */
+  last_attempt?: { at: string | null; problems: string[] } | null;
 }
 
 export interface PayrollAccess {
@@ -185,7 +187,7 @@ export const STATUS_LABEL: Record<string, string> = {
   rejected: 'Rejected',
 };
 
-export const KIND_LABEL: Record<string, string> = { regular: 'Regular', off_cycle: 'Off-cycle', correction: 'Correction', bonus: 'Bonus' };
+export const KIND_LABEL: Record<string, string> = { regular: 'Regular', off_cycle: 'Off-cycle', correction: 'Correction', bonus: 'Bonus', reversal: 'Reversal' };
 
 export const fetchAccess = (signal?: AbortSignal) => apiGet<PayrollAccess>('/api/payroll/access', undefined, signal);
 export const fetchRuns = (status: string, page: number, signal?: AbortSignal) => apiGet<RunList>('/api/payroll/runs', { status: status || undefined, page, per_page: 25 }, signal);
@@ -370,6 +372,8 @@ export interface InputRow {
   source_module: string | null;
   source_ref: string | null;
   status: 'open' | 'paid' | 'cancelled' | string;
+  /** Payroll 1.6: the supporting file filed in Core Files, when there is one. */
+  file_id?: number | string | null;
 }
 
 export interface ImportResult {
@@ -603,3 +607,108 @@ export function csvRows(text: string): string[][] {
 
 /** The run statuses the runs list counts (D02 pills), in the order the design shows them. */
 export const PILLS = ['draft', 'submitted', 'locked', 'paying', 'paid', 'cancelled'];
+
+// ── Payroll 1.3–1.6 (docs/payroll-api.md): holds, partial recalculation, reversal, attachments, expenses,
+// assignment CSV, statutory identifiers, gratuity provision. Each answers null on a server without it (404/405). ──
+
+export interface Hold {
+  id: number;
+  employee_id: number;
+  action: 'hold' | 'exclude' | string;
+  reason: string | null;
+  created_by?: number | null;
+  created_at?: string | null;
+  released_at?: string | null;
+  released_by?: number | null;
+  release_note?: string | null;
+}
+
+export const fetchHolds = (run: number, signal?: AbortSignal) => orNull(apiGet<{ holds: Hold[] }>(`${P}/runs/${run}/holds`, undefined, signal));
+export const addHold = (run: number, body: { employee_id: number; action: 'hold' | 'exclude'; reason: string }) => apiPost<{ id: number }>(`${P}/runs/${run}/holds`, body);
+export const releaseHold = (id: number, note: string) => apiPost(`${P}/holds/${id}/release`, { note });
+export const recalculateSelected = (run: number, employeeIds: number[]) =>
+  apiPost<{ employees: number; net: string | null; exceptions: { blocking: number; warning: number } }>(`${P}/runs/${run}/recalculate`, { employee_ids: employeeIds });
+/** PAY-RUN-01: the reversal run (kind `reversal`, locked, empty) supersedes this one; the server reverses the journal. */
+export const reverseRun = (run: number, reason: string) => apiPost<{ run_id: number }>(`${P}/runs/${run}/reverse`, { reason });
+/** Statuses a run can be reversed from: it is effective (locked or further) and not already replaced. */
+export const reversible = (r: Run) => ['locked', 'paying', 'paid'].includes(r.status) && !r.replaced && r.kind !== 'reversal';
+
+/** PAY-INP-04: a supporting file on an input, filed in Core Files. */
+export function uploadInputAttachment(input: number, file: File): Promise<{ file_id: number | string }> {
+  const form = new FormData();
+  form.append('file', file, file.name);
+  return request<{ file_id: number | string }>('POST', `${P}/inputs/${input}/attachment`, { body: form }).then((r) => r.data);
+}
+export const ATTACHMENT_MAX = 10 * 1024 * 1024;
+export const ATTACHMENT_TYPES = /\.(pdf|png|jpe?g|webp|csv|txt)$/i;
+
+export interface ClaimableExpense { id: number; claim_no: string | null; user_id?: number; claimant: string | null; employee_id: number | null; employee_no?: string | null; base_amount: string; spent_on: string | null; description: string | null }
+export const fetchClaimable = (org: number, signal?: AbortSignal) => orNull(apiGet<{ enabled: boolean; claims: ClaimableExpense[] }>(`${P}/expenses/claimable`, { org_id: org }, signal));
+export const sendExpenses = (org: number, claimIds?: number[]) => apiPost<{ sent: number; failed: Array<{ claim: number; error: string }> }>(`${P}/expenses/send`, { org_id: org, ...(claimIds ? { claim_ids: claimIds } : {}) });
+
+/** PAY-ASG-06: the pay assignments as the server writes them (CSV text), or null on a server without it. */
+export async function exportEnrolments(org: number, gross: boolean): Promise<string | null> {
+  const res = await fetch(apiUrl(`${P}/enrolments/export`, { org_id: org, gross: gross ? 1 : undefined }), { headers: { Accept: 'text/csv' } });
+  if (res.status === 404 || res.status === 405) return null;
+  if (!res.ok) {
+    const j = (await res.json().catch(() => null)) as { message?: string } | null;
+    throw Object.assign(new Error(j?.message ?? `The server answered ${res.status}.`), { status: res.status });
+  }
+  return res.text();
+}
+export interface EnrolmentImport { dry_run: boolean; valid: number; errors: Array<{ row: number; error: string }>; preview: Array<{ row: number; employee_no: string; group_code: string; action: string }>; enrolled?: number; updated?: number; proposed?: number }
+/** A 422 carries the same body (nothing written): it is shown, not thrown. */
+export async function importEnrolments(org: number, csv: string, dryRun: boolean): Promise<EnrolmentImport> {
+  try {
+    return await apiPost<EnrolmentImport>(`${P}/enrolments/import`, { org_id: org, csv, dry_run: dryRun });
+  } catch (e) {
+    const x = e as { status?: number; data?: unknown };
+    const d = x.data as Partial<EnrolmentImport> | null | undefined;
+    if (x.status === 422 && d && typeof d === 'object' && Array.isArray(d.errors)) return { dry_run: true, valid: d.valid ?? 0, preview: d.preview ?? [], ...d, errors: d.errors };
+    throw e;
+  }
+}
+
+export type StatutoryKind = 'nic' | 'tin' | 'epf_no' | 'etf_no' | 'gpssa_no' | 'emirates_id' | 'labour_card';
+export interface StatutoryId { kind: StatutoryKind | string; label: string; set: boolean; last4: string | null; updated_at: string | null }
+export interface StatutoryIds { ids: StatutoryId[]; can: { edit?: boolean; reveal?: boolean }; duplicates?: string[] }
+export const fetchStatutoryIds = (employee: number, signal?: AbortSignal) => orNull(apiGet<StatutoryIds>(`${P}/employees/${employee}/statutory-ids`, undefined, signal));
+export const saveStatutoryIds = (employee: number, values: Record<string, string>) => apiPut<StatutoryIds>(`${P}/employees/${employee}/statutory-ids`, values);
+/** The server writes the audit row before it answers; the value is shown, never kept. */
+export const revealStatutoryId = (employee: number, kind: string) => apiPost<{ kind: string; value: string }>(`${P}/employees/${employee}/statutory-ids/${encodeURIComponent(kind)}/reveal`, {});
+/** What the server takes: letters, digits, `-` and `/`, at most 40; empty clears. */
+export const statutoryIdOk = (v: string) => v === '' || /^[A-Za-z0-9/-]{1,40}$/.test(v);
+
+export interface GratuityAccrual { id: number; as_of: string; pack: string | null; employees: number; liability: string; delta: string; status: string; journal_no: string | null; problems: string[] | null }
+export interface GratuityProvision {
+  pack: string | null;
+  as_of: string;
+  liability: string;
+  employees: Array<{ employee_id: number; employee_no: string | null; name: string | null; amount: string; basis: string | null }>;
+  accruals: GratuityAccrual[];
+  can: { accrue?: boolean };
+}
+export const fetchGratuity = (org: number, asOf: string | null, signal?: AbortSignal) => orNull(apiGet<GratuityProvision>(`${P}/gratuity/provision`, { org_id: org, as_of: asOf ?? undefined }, signal));
+export const accrueGratuity = (org: number, asOf: string) => apiPost<{ accrual: GratuityAccrual }>(`${P}/gratuity/accrue`, { org_id: org, as_of: asOf });
+
+/** The companies the person's pay groups are in, for the endpoints that take `org_id`. */
+export const groupCompanies = (groups: Group[] | undefined): number[] => [...new Set((groups ?? []).map((g) => g.org_id).filter((x) => Number.isFinite(x) && x > 0))];
+
+const EXT: Record<string, string> = { 'application/pdf': 'pdf', 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp', 'text/csv': 'csv', 'text/plain': 'txt' };
+
+/** The attachment's file name as the server sends it (headers only; the body is left unread), for saving it. */
+export async function attachmentName(input: number): Promise<string> {
+  const fallback = `Input ${input} attachment`;
+  const ctl = new AbortController();
+  try {
+    const res = await fetch(apiUrl(`${P}/inputs/${input}/attachment`), { signal: ctl.signal });
+    const cd = res.headers.get('content-disposition') ?? '';
+    const named = /filename\*?=(?:UTF-8'')?"?([^";]+)"?/i.exec(cd)?.[1];
+    const ext = EXT[(res.headers.get('content-type') ?? '').split(';')[0]!.trim().toLowerCase()];
+    ctl.abort();
+    const name = named ? decodeURIComponent(named).replace(/[/\\]/g, '-').trim() : '';
+    return name || (ext ? `${fallback}.${ext}` : fallback);
+  } catch {
+    return fallback;
+  }
+}

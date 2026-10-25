@@ -2,6 +2,7 @@ import { LABEL_API, printerKeyOf, type DiscoveredPrinter, type HostSettings, typ
 import { DesktopError } from '../../main/errors';
 import type { HttpClient } from '../http';
 import { CorePrintService, serverStatus, type ClaimedJob, type CorePrintDeps, type HostTransport, type PrintTarget } from './core-print';
+import type { PrinterCommand } from './envelope';
 import { discoverLan } from './raw-out';
 
 /**
@@ -18,8 +19,9 @@ import { discoverLan } from './raw-out';
  * and this host only prints to a printer it has itself (the allow-list in `target`). Which printers are on this
  * computer is a fact about this computer: the settings and the journal are kept here, filed under the server.
  *
- * Heartbeat commands: `discover` reports the printers again, `status` asks them, `cancel` stops the printer's job
- * here. `calibrate` comes with printer bytes that are not signed, so it is not sent: a calibration label is a job.
+ * Heartbeat commands: `discover` reports the printers again, `cancel` stops the printer's job here; `status`,
+ * `calibrate` and `cancel` carry printer bytes, which are sent only when the command's signed envelope verifies
+ * (Label 1.1, envelope.ts `checkCommand`). A command without one, or that does not verify, sends nothing.
  */
 const KEY = 'label-host';
 const TICK_MS = 5_000;
@@ -71,6 +73,12 @@ export function targetFor(local: LocalPrinter[], c: ServerConnection | null | un
   if (!p) return null;
   const lang = (language && ['zpl', 'tspl', 'epl', 'dpl', 'sbpl', 'escp', 'pdf'].includes(language) ? language : p.language) as LabelLanguage;
   return { key: p.key, connection: p.connection, address: p.address, port: p.port, language: lang };
+}
+
+/** One of this computer's printers by its key, as a send target. */
+export function localTarget(local: LocalPrinter[], key: string): PrintTarget | null {
+  const p = local.find((x) => x.key === key);
+  return p ? { key: p.key, connection: p.connection, address: p.address, port: p.port, language: p.language } : null;
 }
 
 const httpStatus = (e: unknown) => (e instanceof DesktopError ? e.status : null);
@@ -289,12 +297,17 @@ export class LabelHost {
     const printers = Object.entries(reg)
       .filter(([k]) => this.states.has(k))
       .map(([k, p]) => ({ printer_id: p.id, status: serverStatus(this.states.get(k)!.state) }));
-    const r = await this.d.http.request<{ commands?: Array<{ type?: string; printer_id?: number }> }>('POST', `${LABEL_API}/hosts/desktop/${this.hostId()}/heartbeat`, { body: { printers } });
+    const r = await this.d.http.request<{ commands?: PrinterCommand[] }>('POST', `${LABEL_API}/hosts/desktop/${this.hostId()}/heartbeat`, { body: { printers } });
     for (const c of r?.commands ?? []) {
       if (c.type === 'discover') await this.register().catch(() => undefined);
       if (c.type === 'cancel' && c.printer_id) {
         const j = this.core.jobs().find((x) => x.printerId === String(c.printer_id) && (x.state === 'printing' || x.state === 'waiting_printer'));
         if (j) await this.core.cancel(j.id).catch(() => undefined);
+      }
+      if ((c.type === 'status' || c.type === 'calibrate' || c.type === 'cancel') && c.printer_id && (c.bytes_base64 || c.envelope)) {
+        const key = Object.entries(reg).find(([, p]) => p.id === c.printer_id)?.[0];
+        const out = await this.core.command(c, key ? localTarget(this.local, key) : null).catch((e: unknown) => ({ ok: false as const, reason: e instanceof Error ? e.message : String(e) }));
+        if (!out.ok) this.problem = out.reason;
       }
     }
   }

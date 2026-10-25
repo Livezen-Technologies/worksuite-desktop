@@ -6,6 +6,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { addDays, dayLabel, fetchAvailability, fetchDeposits, K, linkDeposit, money, recordPayment, refusal, reschedule, today, weekStart, type Appointment } from './api';
 import { Chips, errText, input, Kbd, label, Refused, useDesk, useMove, useNow } from './parts';
 import { depositHtml, printPage, type DeskSettings } from './print';
+import { CancelFeeNote } from './Extras';
 
 /**
  * The panel's dialogs: D09 check-in, D10 move, D11 cancel or no-show, D12 deposit. Each asks the server and shows its
@@ -157,6 +158,7 @@ export function CancelDialog({ a, kind, noShows, onClose }: { a: Appointment; ki
       <p className="m-0 text-[13px] text-ink-2">{`${a.customer.name} · ${a.service.name} · ${a.local.date} ${a.local.start} with ${a.provider.name}. The time becomes free at once.`}</p>
       <div className="mt-3"><Chips label="Reason" value={reason} onChange={setReason} options={REASONS.map((r) => ({ id: r, label: r }))} /></div>
       {reason === 'Other' ? <input autoFocus className={cx(input, 'mt-2')} aria-label="Reason" value={other} maxLength={200} onChange={(e) => setOther(e.target.value)} /> : null}
+      <CancelFeeNote a={a} />
       <p className="mt-3 mb-0 text-[12px] text-ink-3">The client is told as WorkSuite is set up to. Offline, the cancellation waits in the outbox.</p>
     </Modal>
   ) : (

@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-25
+
+**Added**
+
+- approve or decline bookings waiting for approval, labels through Label Studio and labels printed recorded, licence subscription, Inventory warehouse on consumable moves
+
 ## 1.0.0 — 2026-10-25
 
 **Added**

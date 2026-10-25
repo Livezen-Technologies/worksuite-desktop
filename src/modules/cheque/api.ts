@@ -1,4 +1,4 @@
-import { apiGet, apiPatch, apiPost } from '../../core/api';
+import { apiGet, apiPatch, apiPost, request } from '../../core/api';
 import { call } from '../../core/bridge';
 import { CHEQUE_API } from '@shared/cheque';
 
@@ -237,7 +237,7 @@ export const fetchChecks = async (chequeId: number, profileId: number, signal?: 
 /** D03: what the person found when they took the leaf out. Only this makes a leaf PRINTED or VOID. */
 export const confirmPrint = (jobId: number, result: PrintResult, notes?: string) => apiPost<Row | null>(`${A}/print-jobs/${jobId}/confirm`, { result, ...(notes ? { notes } : {}) });
 /** WF-12: reprint is blocked by default; this asks a different approver (BR-12). */
-export const requestReprint = (chequeId: number, reason: string) => apiPost(`${A}/cheques/${chequeId}/reprint-request`, { reason });
+export const requestReprint = (chequeId: number, reason: string, stepUp?: string) => stepped(`${A}/cheques/${chequeId}/reprint-request`, { reason }, stepUp);
 
 // ── batches ──────────────────────────────────────────────────────────────
 
@@ -317,7 +317,9 @@ export const pauseBatch = (id: number) => apiPost(`${A}/batches/${id}/pause`, {}
 /** CHQ-BAT-04: a failed or stopped print puts the batch in RECONCILE_REQUIRED. */
 export const interruptBatch = (id: number, message: string) => apiPost(`${A}/batches/${id}/interrupt`, { message });
 /** BR-19: every unconfirmed leaf of the run, as found. PAUSED (resumable) or COMPLETED. */
-export const reconcileBatch = (id: number, leaves: Array<{ leaf_id: number; outcome: LeafFound }>) => apiPost(`${A}/batches/${id}/reconcile`, { leaves });
+export const reconcileBatch = (id: number, leaves: Array<{ leaf_id: number; outcome: LeafFound }>, note?: string) => apiPost(`${A}/batches/${id}/reconcile`, { leaves, ...(note ? { note } : {}) });
+/** Cheque 1.2: one batch from a Purchasing payment run paid by cheque (each vendor payment its cheque); once per run (409). */
+export const batchFromPaymentRun = (body: { org_id?: number; run_id: number; book_id?: number; profile_id?: number; cheque_date?: string }) => apiPost<Row>(`${A}/batches/from-payment-run`, body);
 
 export const K = {
   access: ['cheque', 'access'] as const,
@@ -330,6 +332,8 @@ export const K = {
   checks: (c: number, p: number) => ['cheque', 'checks', c, p] as const,
   batches: ['cheque', 'batches'] as const,
   batch: (id: number) => ['cheque', 'batch', id] as const,
+  sources: ['cheque', 'sources'] as const,
+  returns: ['cheque', 'returns'] as const,
 };
 
 // ── this computer (main process) ─────────────────────────────────────────
@@ -338,3 +342,47 @@ export const station = () => call('cheque:station');
 export const printCheque = (input: { cheque_id: number; profile_id: number }) => call('cheque:print', input);
 export const printQueued = (input: { cheque_ids: number[]; profile_id: number }) => call('cheque:printQueued', input);
 export const printCalibration = (input: { template_id: number; version_id: number; profile_id: number; sheet: 'a4' | 'leaf'; offsets?: { x_mm: number; y_mm: number } }) => call('cheque:printCalibration', input);
+
+// ── Cheque 1.2: step-up, sources, returns, PDFs ─────────────────────────
+
+/** A high-risk action the company has put behind a fresh check of who is at the keyboard (428 STEP_UP_REQUIRED). */
+export function isStepUpRequired(e: unknown): boolean {
+  const x = e as { status?: number; code?: string | null; data?: { code?: string } | null };
+  return x?.status === 428 && (x.code === 'STEP_UP_REQUIRED' || x.data?.code === 'STEP_UP_REQUIRED' || !x.code);
+}
+/** `POST /step-up`: a single-use token for five minutes, over Core's own check (password or authenticator code). */
+export const stepUp = (body: { current_password?: string; totp_code?: string }) => apiPost<{ token: string; expires_at?: string; method?: string }>(`${A}/step-up`, body);
+/** A POST that carries a step-up token in `X-Step-Up` when there is one. */
+async function stepped<T = unknown>(path: string, body: unknown, token?: string): Promise<T> {
+  return (await request<T>('POST', path, { body, headers: token ? { 'X-Step-Up': token } : undefined })).data;
+}
+
+export interface Source { kind: 'expense_reimbursement' | 'billing_refund'; id: number; reference: string | null; total: string; currency: string; status: string; org_id?: number | null }
+export async function fetchSources(signal?: AbortSignal): Promise<Source[] | null> {
+  try {
+    return list(await apiGet(`${A}/cheques/sources`, undefined, signal)) as unknown as Source[];
+  } catch (e) {
+    if ([404, 405].includes((e as { status?: number }).status ?? 0)) return null;
+    throw e;
+  }
+}
+export const startFromSource = (body: { org_id?: number; kind: Source['kind']; id: number; bank_account_id: number; book_id?: number; cheque_date?: string }) => apiPost<unknown>(`${A}/cheques/from-source`, body);
+
+export interface BankAccount { id: number; label: string; currency?: string | null }
+export const fetchBankAccounts = async (signal?: AbortSignal): Promise<BankAccount[]> =>
+  list(await apiGet(`${A}/bank-accounts`, undefined, signal)).map((r) => ({ id: int(r.id) ?? 0, label: str(r.label) || str(r.name) || `Account ${str(r.id)}`, currency: str(r.currency) || null })).filter((a) => a.id > 0);
+
+export interface ReturnRow { id: number; number: string | null; party: string | null; direction: 'in' | 'out'; return_date: string; reason: string | null; letter_sent_at: string | null; letter_to: string | null }
+export async function fetchReturns(signal?: AbortSignal): Promise<ReturnRow[] | null> {
+  try {
+    return list(await apiGet(`${A}/returns`, undefined, signal)) as unknown as ReturnRow[];
+  } catch (e) {
+    if ([404, 405].includes((e as { status?: number }).status ?? 0)) return null;
+    throw e;
+  }
+}
+export const sendReturnLetter = (id: number, to?: string) => apiPost<unknown>(`${A}/returns/${id}/letter`, to ? { to } : {});
+
+export type ChequeDocKind = 'preview' | 'voucher' | 'deposit-slip' | 'return-letter' | 'calibration-sheet';
+/** Opens one of the server's PDFs (Cheque 1.2) with this computer's PDF viewer. */
+export const openPdf = (kind: ChequeDocKind, id: number, name: string) => call('transfers:download', { chequeDoc: { kind, id: String(id) }, name: `${name.replace(/[/\\:*?"<>|]/g, '-')}.pdf`, open: true });

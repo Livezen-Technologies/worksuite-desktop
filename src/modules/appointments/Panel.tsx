@@ -5,6 +5,7 @@ import { toast } from '../../core/toasts';
 import { Button, IconButton } from '../../components/ui';
 import { fetchClient, fetchDetail, K, money, retryNotice, type Appointment } from './api';
 import { CancelDialog, CheckInDialog, DepositDialog, MoveDialog } from './Actions';
+import { FeesBlock, FreedActions, IntakeBlock } from './Extras';
 import { errText, Kbd, Pill, StatusPill, useDesk, useMove, useNow } from './parts';
 import type { DeskSettings } from './print';
 
@@ -86,12 +87,15 @@ export default function Panel({ id, settings, onClose }: { id: number; settings:
             {a.notes ? <p className="mt-2 mb-0 text-[12.5px] text-ink-2">{`Client note: ${a.notes}`}</p> : null}
             {a.internal_notes ? <p className="mt-1 mb-0 text-[12.5px] text-ink-2">{`Internal: ${a.internal_notes}`}</p> : null}
             {a.cancel_reason ? <p className="mt-1 mb-0 text-[12.5px] text-ink-2">{`Reason: ${a.cancel_reason}`}</p> : null}
+            <FreedActions a={a} />
 
             <Block title="Money">
               <Row k="Invoice" v={a.invoice ? `${a.invoice.number ?? 'Draft'} · ${money(a.invoice.total, a.invoice.currency)} · ${a.invoice.outstanding > 0 ? `${money(a.invoice.outstanding)} owed` : 'paid'}` : a.checked_out ? 'Checked out' : 'Not checked out yet'} />
               {a.deposit ? <Row k="Deposit" v={`${money(a.deposit.due, a.deposit.currency)} asked · ${money(a.deposit.held)} held${a.deposit.outstanding > 0 ? ` · ${money(a.deposit.outstanding)} due` : ''}`} /> : null}
               {q.data?.commission?.map((c) => <Row key={c.id} k="Commission" v={`${money(c.amount, c.currency)} · ${c.status}`} />)}
+              <FeesBlock fees={q.data?.fees ?? []} />
             </Block>
+            <IntakeBlock a={a} />
             {q.data?.stock?.consumptions?.length ? (
               <Block title="Will use">
                 {q.data.stock.consumptions.map((c, i) => <Row key={i} k={c.name} v={`${c.actual || c.planned}${c.unit ? ` ${c.unit}` : ''}`} />)}

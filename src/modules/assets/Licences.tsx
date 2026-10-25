@@ -4,7 +4,7 @@ import { apiGet } from '../../core/api';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { BASE, assignSeat, fetchPeople, releaseSeat, revealKey, type Can, type License } from './api';
+import { BASE, assignSeat, fetchPeople, fetchSubscriptions, linkSubscription, releaseSeat, revealKey, type Can, type License } from './api';
 import { Badge, Btn, Card, Field, PageHead, Table, amt, input, td, tdr, useReadOnly } from './parts';
 
 /**
@@ -31,6 +31,7 @@ export default function Licences({ org, can }: { org: number; can: Can; active: 
   const people = useQuery({ queryKey: ['assets', 'people', org], queryFn: ({ signal }) => fetchPeople(org || null, signal), staleTime: 300_000, enabled: !!cur && !ro });
   const [key, setKey] = useState<{ id: number; key: string } | null>(null);
   const [who, setWho] = useState(0);
+  const subs = useQuery({ queryKey: ['assets', 'expense-subscriptions'], queryFn: ({ signal }) => fetchSubscriptions(signal), staleTime: 300_000, enabled: !!cur && !ro });
   const [busy, setBusy] = useState(false);
   const done = () => void qc.invalidateQueries({ queryKey: ['assets'] });
 
@@ -83,6 +84,18 @@ export default function Licences({ org, can }: { org: number; can: Can; active: 
                   </button>
                 )
               ) : '—'}
+            </dd>
+            <dt className="text-ink-3">Paid by</dt>
+            <dd className="m-0">
+              {cur.subscription ? (
+                <span>{cur.subscription.name}{cur.subscription.next_renewal ? <span className="text-ink-3">{` · renews ${shortDate(cur.subscription.next_renewal)}`}</span> : null}{cur.subscription.amount ? <span className="text-ink-3">{` · ${amt(cur.subscription.amount, cur.subscription.currency ?? '')}${cur.subscription.billing_cycle ? ` ${cur.subscription.billing_cycle}` : ''}`}</span> : null}</span>
+              ) : !subs.data?.length ? '—' : null}
+              {!ro && subs.data?.length ? (
+                <select aria-label="Expense subscription paying for it" className={cx(input, 'mt-1 h-8')} value={cur.subscription_id ?? 0} disabled={busy} onChange={(e) => void act(() => linkSubscription(cur.id, Number(e.target.value) || null), Number(e.target.value) ? 'Linked to the subscription.' : 'Unlinked.')}>
+                  <option value={0}>No subscription</option>
+                  {subs.data.map((s) => <option key={s.id} value={s.id}>{`${s.name}${s.billing_cycle ? ` · ${s.billing_cycle}` : ''}`}</option>)}
+                </select>
+              ) : null}
             </dd>
           </dl>
           <h3 className="m-0 text-[13px] font-bold">{`Seats ${cur.seats_used} of ${cur.seats_total}`}</h3>

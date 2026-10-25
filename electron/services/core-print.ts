@@ -60,6 +60,10 @@ function boxHtml(b: LayoutBox, dx: number, dy: number): string {
     }
     return `<div class="r">${ticks.join('')}</div>`;
   }
+  if (b.kind === 'image') {
+    // A signature specimen from the signed layout: a PNG only (checked in shared/cheque.ts), filling its box.
+    return b.png_base64 && /^[A-Za-z0-9+/]+={0,2}$/.test(b.png_base64) ? `<img class="i" alt="" style="${pos}" src="data:image/png;base64,${b.png_base64}">` : '';
+  }
   if (b.kind === 'rules') return `<div class="l" style="${pos}"></div>`;
   if (b.kind === 'box' || b.kind === 'zone') {
     return `<div class="${b.kind === 'zone' ? 'z' : 'b'}" style="${pos}"><span>${esc(b.lines[0] ?? b.key)}</span></div>`;
@@ -91,7 +95,8 @@ export function renderExactHtml(job: Pick<ExactPrintJob, 'layout' | 'offset' | '
     `@page{size:${w}mm ${h}mm;margin:0}`,
     `html,body{margin:0;padding:0;width:${w}mm;height:${h}mm;overflow:hidden;background:#fff}`,
     `.p{position:relative;width:${w}mm;height:${h}mm;overflow:hidden;${turn}font-family:Arial,Helvetica,sans-serif;color:#000}`,
-    '.p>div,.r>i,.r>b{position:absolute;box-sizing:border-box}',
+    '.p>div,.p>img,.r>i,.r>b{position:absolute;box-sizing:border-box}',
+    '.i{object-fit:contain;object-position:left center}',
     '.t{overflow:hidden;white-space:pre}',
     '.l{border-top:0.25mm solid #000;border-bottom:0.25mm solid #000}',
     '.b{border:0.2mm solid #000}.b span,.z span{position:absolute;left:0.6mm;top:0.4mm;font-size:6pt}',
@@ -99,7 +104,7 @@ export function renderExactHtml(job: Pick<ExactPrintJob, 'layout' | 'offset' | '
     '.x{background:linear-gradient(#000,#000) center/0.2mm 100% no-repeat,linear-gradient(#000,#000) center/100% 0.2mm no-repeat}',
     '.r{position:absolute;left:0;top:0}.r>i{border-left:0.15mm solid #000;border-top:0.15mm solid #000}.r>b{font-size:5pt;font-weight:400}',
   ].join('');
-  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'"><title>${esc(job.title)}</title><style>${css}</style></head><body><div class="p">${boxes}</div></body></html>`;
+  return `<!doctype html><html><head><meta charset="utf-8"><meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; img-src data:"><title>${esc(job.title)}</title><style>${css}</style></head><body><div class="p">${boxes}</div></body></html>`;
 }
 
 /** The page size Chromium is asked for, in microns. */
@@ -113,7 +118,7 @@ export async function printExactInWindow(job: ExactPrintJob): Promise<ExactPrint
     show: false,
     width: 1000,
     height: 1400,
-    webPreferences: { partition: 'ws-core-print', sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false, webSecurity: true, images: false },
+    webPreferences: { partition: 'ws-core-print', sandbox: true, contextIsolation: true, nodeIntegration: false, javascript: false, webSecurity: true, images: true },
   });
   win.webContents.session.webRequest.onBeforeRequest({ urls: ['http://*/*', 'https://*/*', 'ws://*/*', 'wss://*/*', 'file://*/*'] }, (_d, cb) => cb({ cancel: true }));
   try {

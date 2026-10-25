@@ -5,7 +5,7 @@ import { errorMessage } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Checkbox } from '../../components/Checkbox';
 import { Spinner } from '../../components/ui';
-import { gatewayStatus, K, pairGateway, setGatewayHeadless, unpairGateway } from './api';
+import { checkGatewayUpdate, downloadGatewayUpdate, gatewayStatus, K, pairGateway, setGatewayHeadless, unpairGateway } from './api';
 import type { ViewProps } from './LabelShell';
 import { btn, btnPrimary, field, Progress, Section, StatePill } from './parts';
 
@@ -27,6 +27,12 @@ export default function Gateway(_: ViewProps) {
     mutationFn: () => pairGateway(url, code, name || 'Print Gateway'),
     onSuccess: (v) => (qc.setQueryData(K.gateway, v), toast('success', 'Paired. Approve its printers on the web (Print gateways).')),
     onError: (e) => toast('error', errorMessage(e)),
+  });
+  const check = useMutation({ mutationFn: checkGatewayUpdate, onSuccess: (v) => qc.setQueryData(K.gateway, v), onError: (e) => toast('error', errorMessage(e)) });
+  const download = useMutation({
+    mutationFn: downloadGatewayUpdate,
+    onSuccess: (r) => toast('success', `Version ${r.version} downloaded and its SHA-256 checked: ${r.path}. Install it when no job is printing.`),
+    onError: (e) => (toast('error', errorMessage(e)), void qc.invalidateQueries({ queryKey: K.gateway })),
   });
   const unpair = useMutation({ mutationFn: unpairGateway, onSuccess: (v) => qc.setQueryData(K.gateway, v), onError: (e) => toast('error', errorMessage(e)) });
   const headless = useMutation({ mutationFn: setGatewayHeadless, onSuccess: (v) => (qc.setQueryData(K.gateway, v), toast('success', 'Saved. It applies the next time this computer starts.')), onError: (e) => toast('error', errorMessage(e)) });
@@ -64,6 +70,7 @@ export default function Gateway(_: ViewProps) {
         <Section title="Connection">
           <dl className="m-0 grid grid-cols-[150px_1fr] gap-x-3 gap-y-1.5 p-3.5 text-[12.5px]">
             <dt className="text-ink-3">Server</dt><dd className="m-0 truncate">{g.server}</dd>
+            {g.company ? <><dt className="text-ink-3">Company</dt><dd className="m-0 truncate font-semibold">{g.company.name ?? `Company ${g.company.id}`}</dd></> : null}
             <dt className="text-ink-3">Gateway id</dt><dd className="m-0 font-mono">{g.gatewayId}</dd>
             <dt className="text-ink-3">Paired</dt><dd className="m-0">{g.pairedAt ? new Date(g.pairedAt).toLocaleString() : '—'}</dd>
             <dt className="text-ink-3">Last heartbeat</dt><dd className="m-0">{g.lastHeartbeatAt ? new Date(g.lastHeartbeatAt).toLocaleTimeString() : '—'}</dd>
@@ -72,6 +79,19 @@ export default function Gateway(_: ViewProps) {
             <dt className="text-ink-3">Version</dt><dd className="m-0">{`${g.version}${g.updateChannel ? ` · ${g.updateChannel} channel` : ''}`}</dd>
           </dl>
           {g.problem ? <p className="m-0 border-t border-line px-3.5 py-2 text-[12px] text-[#B42318] dark:text-danger">{g.problem}</p> : null}
+          <div className="flex flex-wrap items-center gap-2 border-t border-line px-3.5 py-2 text-[12px]">
+            {g.update ? (
+              <>
+                <span className="min-w-0 flex-1">{`Version ${g.update.version} is available (${g.update.channel}), signed by WorkSuite.`}{g.update.notes ? <span className="text-ink-3">{` ${g.update.notes}`}</span> : null}</span>
+                <button type="button" className={btnPrimary} disabled={download.isPending} onClick={() => download.mutate()}>{download.isPending ? 'Downloading…' : 'Download'}</button>
+              </>
+            ) : (
+              <>
+                <span className="min-w-0 flex-1 text-ink-3">{g.updateProblem ?? 'This gateway is up to date.'}</span>
+                <button type="button" className={btn} disabled={check.isPending} onClick={() => check.mutate()}>{check.isPending ? 'Checking…' : 'Check for updates'}</button>
+              </>
+            )}
+          </div>
         </Section>
         <Section title="Now printing">
           <div className="flex flex-col gap-2 p-3.5 text-[12.5px]">

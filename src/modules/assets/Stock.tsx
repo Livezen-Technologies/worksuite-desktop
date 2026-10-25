@@ -4,7 +4,7 @@ import { apiGet } from '../../core/api';
 import { toast } from '../../core/toasts';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
-import { BASE, moveStock, type Can, type StockItem } from './api';
+import { BASE, fetchWarehouses, moveStock, type Can, type StockItem } from './api';
 import { Badge, Btn, Card, Field, PageHead, Pills, Table, amt, input, td, tdr, useReadOnly } from './parts';
 
 /**
@@ -32,9 +32,12 @@ export default function Stock({ can, active }: { org: number; can: Can; active: 
   const [cost, setCost] = useState('');
   const [to, setTo] = useState('');
   const [busy, setBusy] = useState(false);
+  const [warehouse, setWarehouse] = useState(0);
   const q = useQuery({ queryKey: ['assets', 'stock', kind], queryFn: ({ signal }) => apiGet<{ items: StockItem[] }>(`${BASE}/consumables`, { kind }, signal) });
   const items = q.data?.items ?? [];
   const cur = items.find((i) => i.id === sel) ?? items[0] ?? null;
+  const inInventory = !!cur?.inventory_product_id;
+  const warehouses = useQuery({ queryKey: ['assets', 'inventory-warehouses'], queryFn: ({ signal }) => fetchWarehouses(signal), staleTime: 300_000, enabled: inInventory });
   const moves = useQuery({ queryKey: ['assets', 'stock-moves', cur?.id], queryFn: ({ signal }) => apiGet<{ movements: Movement[]; stock: number }>(`${BASE}/consumables/${cur!.id}/movements`, undefined, signal), enabled: !!cur });
 
   useEffect(() => {
@@ -57,9 +60,10 @@ export default function Stock({ can, active }: { org: number; can: Can; active: 
   const move = async () => {
     const n = Number(qty);
     if (!cur || !Number.isInteger(n) || n <= 0) return toast('error', 'Give a whole number.');
+    if (inInventory && !warehouse) return toast('error', 'Choose the Inventory warehouse it moves at.');
     setBusy(true);
     try {
-      await moveStock(cur.id, { kind: mode, qty: n, unit_cost: mode === 'in' && cost.trim() ? cost.trim() : undefined, issued_to: mode === 'out' && to.trim() ? to.trim() : undefined });
+      await moveStock(cur.id, { kind: mode, qty: n, unit_cost: mode === 'in' && cost.trim() ? cost.trim() : undefined, issued_to: mode === 'out' && to.trim() ? to.trim() : undefined, warehouse_id: inInventory ? warehouse : undefined });
       toast('success', mode === 'in' ? 'Received.' : 'Issued.');
       setQty('1');
       setTo('');
@@ -97,6 +101,17 @@ export default function Stock({ can, active }: { org: number; can: Can; active: 
           <Pills label="Movement" value={mode} onChange={setMode} options={[{ id: 'out', label: 'Issue · ⌘I' }, { id: 'in', label: 'Receive · ⌘R' }]} />
           <Field label="Quantity"><input className={input} inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} /></Field>
           {mode === 'in' ? <Field label="Unit cost"><input className={input} inputMode="decimal" value={cost} onChange={(e) => setCost(e.target.value)} /></Field> : <Field label="Issued to"><input className={input} value={to} onChange={(e) => setTo(e.target.value)} /></Field>}
+          {inInventory ? (
+            <Field label="Inventory warehouse">
+              {warehouses.data?.length ? (
+                <select className={input} aria-label="Inventory warehouse" value={warehouse} onChange={(e) => setWarehouse(Number(e.target.value))}>
+                  <option value={0}>Choose…</option>
+                  {warehouses.data.map((w) => <option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              ) : <input className={input} aria-label="Warehouse id" inputMode="numeric" placeholder="Warehouse id" value={warehouse || ''} onChange={(e) => setWarehouse(Number(e.target.value.replace(/\D/g, '')) || 0)} />}
+            </Field>
+          ) : null}
+          {inInventory ? <p className="m-0 text-[11px] text-ink-3">Kept in Inventory: the stock moves in Inventory's ledger.</p> : null}
           <Btn primary disabled={ro || busy} onClick={() => void move()}>{mode === 'in' ? 'Receive' : 'Issue'}</Btn>
           <h3 className="m-0 mt-2 text-[12.5px] font-bold">Movements</h3>
           {(moves.data?.movements ?? []).slice(0, 20).map((m) => (

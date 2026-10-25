@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-25
+
+**Added**
+
+- printed signatures drawn from the signed layout (PNG only), step-up on 428 STEP_UP_REQUIRED, reconcile note, batch from payment run
+- start cheques from Expense reimbursements and Billing refunds, returned-cheque letters, the server's PDFs (preview, voucher, calibration sheet, return letter)
+
 ## 1.0.1 — 2026-10-25
 
 - Verify the layout hash over layout_canonical; drop JSON_PRESERVE_ZERO_FRACTION reconstruction

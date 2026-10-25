@@ -1,5 +1,5 @@
 import type { HostJob, HostJobState, LabelConnection, LabelLanguage, PrinterState } from '@shared/label';
-import { checkEnvelope, type EnvelopeCheck } from './envelope';
+import { checkCommand, checkEnvelope, type CommandCheck, type EnvelopeCheck, type PrinterCommand } from './envelope';
 import { sendSpooler, sendTcp, zebraStatus, type SendOutcome } from './raw-out';
 
 /**
@@ -187,6 +187,21 @@ export class CorePrintService {
     const p = this.chain.then(fn, fn);
     this.chain = p.catch(() => undefined);
     return p;
+  }
+
+  private readonly nonces = new Set<string>();
+
+  /**
+   * A heartbeat command's printer bytes (status, calibrate, cancel; Label 1.1): sent to the printer only once its
+   * envelope verified (envelope.ts `checkCommand`), and in turn with the jobs, never in the middle of a chunk.
+   */
+  async command(cmd: PrinterCommand, target: PrintTarget | null): Promise<CommandCheck & { sent?: boolean }> {
+    const r = checkCommand(cmd, await this.d.transport.keys(), this.nonces, this.nowMs());
+    this.d.onCheck?.(`command ${String(cmd.type)} · printer ${String(cmd.printer_id)}`, r.ok ? { ok: true } : r);
+    if (!r.ok || !r.bytes || !target) return r;
+    const bytes = r.bytes;
+    const out = await this.serialise(() => (this.d.send ?? defaultSend)(target, bytes));
+    return { ...r, sent: out.ok };
   }
 
   /* ── What the screens read ──────────────────────────────────────── */

@@ -7,6 +7,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import type { ModuleProps } from '../registry';
 import { fetchAccess, fetchHome, K } from './api';
 import { useOnline, useStation } from './parts';
+import { StepUpHost } from './StepUp';
 
 /**
  * Cheque Manager on the desktop (Cheque SRS v1.0; the "Desktop — certified print station" boards D01–D06), addressed
@@ -18,10 +19,12 @@ const Queue = lazy(() => import('./Queue'));
 const Calibration = lazy(() => import('./Calibration'));
 const Batches = lazy(() => import('./Batches'));
 const BatchRun = lazy(() => import('./BatchRun'));
+const Sources = lazy(() => import('./Sources').then((m) => ({ default: m.Sources })));
+const Returns = lazy(() => import('./Sources').then((m) => ({ default: m.Returns })));
 
-export type ChequeView = 'home' | 'queue' | 'calibration' | 'batches' | 'batch';
-const VIEWS = new Set<string>(['home', 'queue', 'calibration', 'batches', 'batch']);
-const TITLES: Record<ChequeView, string> = { home: 'Home', queue: 'Print queue', calibration: 'Calibration', batches: 'Batches', batch: 'Batch' };
+export type ChequeView = 'home' | 'queue' | 'calibration' | 'batches' | 'batch' | 'sources' | 'returns';
+const VIEWS = new Set<string>(['home', 'queue', 'calibration', 'batches', 'batch', 'sources', 'returns']);
+const TITLES: Record<ChequeView, string> = { home: 'Home', queue: 'Print queue', calibration: 'Calibration', batches: 'Batches', batch: 'Batch', sources: 'Start from payments', returns: 'Returned cheques' };
 const num = (v: string | null) => (v && /^\d+$/.test(v) ? Number(v) : null);
 
 export default function ChequeShell(_props: ModuleProps) {
@@ -69,6 +72,7 @@ export default function ChequeShell(_props: ModuleProps) {
 
   return (
     <div className="flex h-full min-h-0">
+      <StepUpHost />
       <SidePanel id="cheque" label="the Cheque Manager menu">
         <nav aria-label="Cheque Manager" className="flex w-[232px] shrink-0 flex-col overflow-hidden border-r border-line bg-[#FBFBFD] text-[13px] text-ink dark:bg-surface">
           <div className="px-4 pt-3.5 pb-1">
@@ -80,6 +84,8 @@ export default function ChequeShell(_props: ModuleProps) {
             {item('queue', 'Print queue', 'printer')}
             {item('batches', 'Batches', 'list')}
             {item('calibration', 'Calibration', 'sliders')}
+            {item('sources', 'Start from payments', 'plus')}
+            {item('returns', 'Returned cheques', 'mail')}
           </div>
         </nav>
       </SidePanel>
@@ -94,6 +100,10 @@ export default function ChequeShell(_props: ModuleProps) {
               <Calibration access={access.data} versionId={num(query.get('version'))} profileId={num(query.get('profile'))} onPick={(v, p) => go(`/cheque?tab=calibration&version=${v}&profile=${p}`)} />
             ) : view === 'batches' ? (
               <Batches onOpen={(id) => to('batch', `&batch=${id}`)} />
+            ) : view === 'sources' ? (
+              <Sources access={access.data} />
+            ) : view === 'returns' ? (
+              <Returns access={access.data} />
             ) : batchId ? (
               <BatchRun id={batchId} access={access.data} onBack={() => to('batches')} />
             ) : null}

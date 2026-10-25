@@ -18,6 +18,8 @@ export const LABEL_INVOKE_CHANNELS = [
   'labelGateway:pair',
   'labelGateway:unpair',
   'labelGateway:headless',
+  'labelGateway:checkUpdate',
+  'labelGateway:downloadUpdate',
 ] as const;
 
 export const LABEL_EVENT_CHANNELS = ['label:changed', 'labelGateway:changed'] as const;

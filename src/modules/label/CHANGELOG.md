@@ -4,6 +4,16 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-25
+
+**Added**
+
+- the gateway's company from pairing, the signed update channel with SHA-256 checked downloads, pause and resume printers
+
+**Security**
+
+- heartbeat printer commands send their bytes only under a verified signed envelope
+
 ## 1.0.0 — 2026-10-25
 
 **Added**
