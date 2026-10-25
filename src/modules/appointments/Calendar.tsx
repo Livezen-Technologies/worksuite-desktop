@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type DragEvent } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx, Modal } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 import { addDays, dayLabel, fetchDay, fetchList, hhmm, K, minutesIn, movable, reschedule, snap, today, weekStart, zonedInstant, type Appointment } from './api';
 import { EDGE, input, Kbd, label, Refused, useDesk } from './parts';
 
@@ -198,7 +199,7 @@ export default function Calendar({ date, mode, provider, active, onNav, onPrint 
             <div className={label}>{desk.options?.terms.provider ? `${desk.options.terms.provider}s` : 'Stylists'}</div>
             {providers.map((p) => (
               <label key={p.id} className="flex items-center gap-2 py-1 text-[12.5px] text-ink">
-                <input type="checkbox" checked={!hidden.has(p.id)} onChange={() => setHidden((h) => { const n = new Set(h); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} />
+                <Checkbox checked={!hidden.has(p.id)} onChange={() => setHidden((h) => { const n = new Set(h); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} />
                 <span className="h-2.5 w-2.5 rounded-full" style={{ background: p.color ?? '#3B5BDB' }} />
                 {p.name}
               </label>

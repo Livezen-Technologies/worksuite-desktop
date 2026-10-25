@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 import { addNote, editNote, fetchClient, K, money, withdrawNote } from './api';
 import { Chips, errText, Head, input, Section, StatusPill, td, th, useDesk } from './parts';
 
@@ -129,7 +130,7 @@ export default function ClientHistory({ id, onBack }: { id: number; onBack: () =
               <div className="mt-2">
                 <textarea className={cx(input, 'h-20 py-2')} placeholder="A note for the team" aria-label="New note" value={body} maxLength={2000} onChange={(e) => setBody(e.target.value)} />
                 <div className="mt-1 flex items-center gap-2">
-                  <label className="flex flex-1 items-center gap-2 text-[12.5px] text-ink"><input type="checkbox" checked={pin} onChange={(e) => setPin(e.target.checked)} />Pin to the booking card</label>
+                  <label className="flex flex-1 items-center gap-2 text-[12.5px] text-ink"><Checkbox checked={pin} onChange={(e) => setPin(e.target.checked)} />Pin to the booking card</label>
                   <Button size="sm" variant="primary" disabled={!body.trim()} onClick={() => void save()}>Save note</Button>
                 </div>
               </div>

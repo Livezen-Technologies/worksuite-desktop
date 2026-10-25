@@ -2,6 +2,7 @@ import { useQueries, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx, Modal } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 import { addDays, dayLabel, fetchAvailability, fetchDeposits, K, linkDeposit, money, recordPayment, refusal, reschedule, today, weekStart, type Appointment } from './api';
 import { Chips, errText, input, Kbd, label, Refused, useDesk, useMove, useNow } from './parts';
 import { depositHtml, printPage, type DeskSettings } from './print';
@@ -227,7 +228,7 @@ export function DepositDialog({ a, settings, onClose }: { a: Appointment; settin
         <label><span className={label}>Amount</span><input className={input} inputMode="decimal" value={amount} onChange={(e) => setAmount(e.target.value)} /></label>
         <label><span className={label}>Reference</span><input className={input} value={ref} maxLength={100} onChange={(e) => setRef(e.target.value)} /></label>
       </div>
-      <label className="mt-2 flex items-center gap-2 text-[12.5px] text-ink"><input type="checkbox" checked={print} onChange={(e) => setPrint(e.target.checked)} />Print a deposit receipt</label>
+      <label className="mt-2 flex items-center gap-2 text-[12.5px] text-ink"><Checkbox checked={print} onChange={(e) => setPrint(e.target.checked)} />Print a deposit receipt</label>
       {cands.data?.items.length ? (
         <div className="mt-4">
           <div className={label}>Or link money already received</div>

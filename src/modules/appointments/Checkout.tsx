@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 import { applyDeposit, checkout, fetchCheckout, fetchDetail, fetchSaleProducts, K, money, quote, recordPayment, type CheckoutInput, type CheckoutResult, type Quote } from './api';
 import { errText, Head, input, Kbd, label, Refused, Section, td, tdr, th, useDesk } from './parts';
 import { printPage, readDesk, receiptHtml, type Receipt } from './print';
@@ -253,7 +254,7 @@ function Payment({ a, result, quote: qt, canPay, onDone }: { a: CheckoutResult['
                 )}
               </div>
               <p className="mt-2 mb-0 text-[12px] text-ink-3">{method === 'card' ? 'The card is charged on the bank’s terminal; this records the payment in Billing against the invoice.' : change ? `Change ${money(change, cur)}.` : 'Cash is recorded in Billing against the invoice.'}</p>
-              <label className="mt-2 flex items-center gap-2 text-[12.5px] text-ink"><input type="checkbox" checked={print} onChange={(e) => setPrint(e.target.checked)} />Print the receipt</label>
+              <label className="mt-2 flex items-center gap-2 text-[12.5px] text-ink"><Checkbox checked={print} onChange={(e) => setPrint(e.target.checked)} />Print the receipt</label>
               <div className="mt-2"><Refused>{err}</Refused></div>
               <div className="mt-3 flex gap-2">
                 <Button variant="secondary" onClick={() => desk.book({ customer: { id: a.customer.id, name: a.customer.name }, service: a.service.id, provider: a.provider.id })}>Book next visit</Button>

@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 import { addDays, fetchList, K, money, saveCsv, today, toCsv, type Appointment } from './api';
 import { Chips, Head, input, StatusPill, td, th, useDesk, useMove, useNow } from './parts';
 
@@ -122,7 +123,7 @@ export default function List({ active }: { active: boolean }) {
             {shown.map((a, i) => (
               <tr key={a.id} aria-selected={i === cursor} onClick={() => (setCursor(i), desk.open(a.id))} className={cx('cursor-pointer', i === cursor ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
                 <td className={td}>
-                  <input type="checkbox" aria-label={`Select ${a.number}`} checked={picked.has(a.id)} onClick={(e) => e.stopPropagation()} onChange={() => setPicked((p) => { const n = new Set(p); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })} />
+                  <Checkbox aria-label={`Select ${a.number}`} checked={picked.has(a.id)} onClick={(e) => e.stopPropagation()} onChange={() => setPicked((p) => { const n = new Set(p); if (n.has(a.id)) n.delete(a.id); else n.add(a.id); return n; })} />
                 </td>
                 <td className={cx(td, 'tabular-nums')}>{`${a.local.date === t ? 'Today' : a.local.date} ${a.local.start}`}</td>
                 <td className={cx(td, 'font-mono text-[11.5px]')}>{a.number}</td>

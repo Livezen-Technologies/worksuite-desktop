@@ -2,6 +2,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx, Modal } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 import { fetchCommission, K, markCommission, money, saveCsv, today, toCsv } from './api';
 import { Chips, errText, Head, input, label, Pill, Section, td, tdr, th, useDesk } from './parts';
 import { esc, printPage, readDesk } from './print';
@@ -84,14 +85,14 @@ export default function Commission() {
         <table className="w-full border-collapse text-[12.5px] text-ink">
           <thead>
             <tr>
-              <th className={th}><input type="checkbox" aria-label="Select all" checked={!!rows.length && sel.size === rows.filter((r) => !provider || r.provider_id === provider).length} onChange={(e) => setSel(e.target.checked ? new Set(rows.filter((r) => !provider || r.provider_id === provider).map((r) => r.id)) : new Set())} /></th>
+              <th className={th}><Checkbox aria-label="Select all" checked={!!rows.length && sel.size === rows.filter((r) => !provider || r.provider_id === provider).length} onChange={(e) => setSel(e.target.checked ? new Set(rows.filter((r) => !provider || r.provider_id === provider).map((r) => r.id)) : new Set())} /></th>
               {['Earned', 'Appointment', 'Stylist', 'Line', 'Base', 'Rate', 'Commission', 'Status'].map((h) => <th key={h} className={cx(th, ['Base', 'Commission'].includes(h) && 'text-right')}>{h}</th>)}
             </tr>
           </thead>
           <tbody>
             {rows.filter((r) => !provider || r.provider_id === provider).map((r) => (
               <tr key={r.id}>
-                <td className={td}><input type="checkbox" aria-label={`Select ${r.number}`} checked={sel.has(r.id)} onChange={() => setSel((s) => { const n = new Set(s); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })} /></td>
+                <td className={td}><Checkbox aria-label={`Select ${r.number}`} checked={sel.has(r.id)} onChange={() => setSel((s) => { const n = new Set(s); if (n.has(r.id)) n.delete(r.id); else n.add(r.id); return n; })} /></td>
                 <td className={td}>{r.date}</td>
                 <td className={cx(td, 'cursor-pointer font-mono text-[11.5px] hover:underline')} onClick={() => desk.open(r.appointment_id)}>{r.number}</td>
                 <td className={td}>{r.provider}</td>

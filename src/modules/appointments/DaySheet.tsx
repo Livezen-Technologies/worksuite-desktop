@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { toast } from '../../core/toasts';
 import { Button, cx } from '../../components/ui';
+import { Checkbox } from '../../components/Checkbox';
 import { dayLabel, fetchDay, K } from './api';
 import { errText, Head, input, label, Section, useDesk } from './parts';
 import { daySheetHtml, printPage, savePdf, type DeskSettings } from './print';
@@ -38,7 +39,7 @@ export default function DaySheet({ date: initial, settings, onBack }: { date: st
     }
   };
   const tick = (v: boolean, set: (v: boolean) => void, text: string) => (
-    <label className="flex items-center gap-2 py-1 text-[12.5px] text-ink"><input type="checkbox" checked={v} onChange={(e) => set(e.target.checked)} />{text}</label>
+    <label className="flex items-center gap-2 py-1 text-[12.5px] text-ink"><Checkbox checked={v} onChange={(e) => set(e.target.checked)} />{text}</label>
   );
   return (
     <div>
@@ -54,7 +55,7 @@ export default function DaySheet({ date: initial, settings, onBack }: { date: st
             <div className={cx(label, 'mt-3')}>Stylists</div>
             {(q.data?.providers ?? []).map((p) => (
               <label key={p.id} className="flex items-center gap-2 py-1 text-[12.5px] text-ink">
-                <input type="checkbox" checked={!off.has(p.id)} onChange={() => setOff((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} />
+                <Checkbox checked={!off.has(p.id)} onChange={() => setOff((s) => { const n = new Set(s); if (n.has(p.id)) n.delete(p.id); else n.add(p.id); return n; })} />
                 <span className="flex-1">{p.name}</span>
                 <span className="text-ink-3">{(q.data?.appointments ?? []).filter((a) => a.provider.id === p.id && a.status !== 'cancelled').length}</span>
               </label>
