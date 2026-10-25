@@ -11,6 +11,7 @@ import { POS_EVENT_CHANNELS, POS_INVOKE_CHANNELS } from './pos-channels';
 import { PROJECTS_EVENT_CHANNELS, PROJECTS_INVOKE_CHANNELS } from './projects-channels';
 import { BOARD_EVENT_CHANNELS, BOARD_INVOKE_CHANNELS } from './board-channels';
 import { SALES_INVOKE_CHANNELS } from './sales-channels';
+import { LABEL_EVENT_CHANNELS, LABEL_INVOKE_CHANNELS } from './label-channels';
 import { CHEQUE_INVOKE_CHANNELS } from './cheque-channels';
 import { SINHALA_EVENT_CHANNELS, SINHALA_INVOKE_CHANNELS } from './sinhala-channels';
 
@@ -491,6 +492,8 @@ export const INVOKE_CHANNELS = [
   ...BOARD_INVOKE_CHANNELS,
   // WorkSuite Sales: approvals from a banner, labels and delivery notes on this computer's printers (sales-channels.ts).
   ...SALES_INVOKE_CHANNELS,
+  // Label Studio: the print host and the Print Gateway (label-channels.ts).
+  ...LABEL_INVOKE_CHANNELS,
   // Cheque Manager: the certified print station (cheque-channels.ts).
   ...CHEQUE_INVOKE_CHANNELS,
   // Sinhala Tools: conversion, profiles, fonts and the clipboard on this computer (sinhala-channels.ts).
@@ -555,6 +558,7 @@ export const EVENT_CHANNELS = [
   'elearning:offlineChanged',
   'eventdesk:changed',
   'restaurant:changed',
+  ...LABEL_EVENT_CHANNELS,
   'office:event',
   'ai:localEvent',
   'ai:localChanged',

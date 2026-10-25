@@ -628,6 +628,31 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   linked as a deposit). This desk's location and printers are per-computer conveniences in window storage. The
   waitlist reads `GET|POST /api/appointments/waitlist` and says so on a server without it.
 
+- Label Studio (`modules/label`, main process `electron/services/label/`, shapes in `shared/label.ts`;
+  WS-LABEL-SRS-001 §4.27 FR-DSK-01…06, §4.20 FR-GWY, the desktop boards D01–D07): the shell (`LabelShell.tsx`,
+  `/label?tab=home|designer|station|printers|batch|gateway`, `&template=`, `&job=`) over the server's `/api/labels`
+  (server docs/label-api.md). The renderer creates jobs (`POST print` with an Idempotency-Key) and hands the main
+  process a job id; it never sees printer bytes (FR-DSK-03: `label:listPrinters`, `label:send`, `label:status`,
+  `label:cancel`, plus D04's `label:discover` / `label:settings*` / `label:register` and D05's `label:resolve`).
+  `core-print.ts` (CorePrintService) is the one print host behind both the desktop host (`host.ts`, the signed-in
+  person's session: `POST hosts/desktop` registers this computer by install id and `…/printers` offers its printers,
+  `…/heartbeat` every 30 s, `…/claim` with a 60 s lease, `…/jobs/{job}/chunks/{n}`, `…/jobs/{job}/progress`; `jobs/{id}/resume`
+  and `cancel`) and the Print Gateway (`gateway.ts`, `/api/label-gateways/{id}/…` with its device token). Each
+  chunk's envelope is verified (`envelope.ts`: Ed25519 over the canonical JSON without `sig`, payload SHA-256,
+  job/chunk, printer, company, expiry) before `raw-out.ts` sends it — the OS queue through salon-print's `sendRaw`,
+  a LAN printer by TCP; a Zebra on TCP is asked `~HS` before each chunk (paper out, head open, ribbon out, paused).
+  The journal (config `label-host` per server, `label-gateway-journal`) writes a chunk's range as `inflight` before it
+  goes and moves `confirmed` after (the larger of it and the server's count is reported): a job found inflight is
+  `interrupted` with those labels `uncertain` until a person decides here (D05) — a gateway reports `stopped` and the
+  server makes a sequence job PARTIAL (C-08), reconciled on D05's sheet (`jobs/{id}/reconciliation`, `reconcile`);
+  a printer not ready holds the job two minutes, then `paused` with nothing sent, resumed when it is ready.
+  The rest. The gateway is WorkSuite Desktop started with `--print-gateway` (tray only; `startedHidden`),
+  running whoever is signed in; it pairs from D06 or `--pair-url= --pair-code=`, keeps its Ed25519 device key and
+  15-minute token (`token`: the device key signs "label-gateway-token\n{id}\n{ts}\n{nonce}") in SecureStore (or a
+  0600 file without an OS key store), and is outbound HTTPS only: heartbeat every 30 s, claim polled every 5 s
+  (the server's 1.0.0 has no socket); heartbeat `calibrate` commands carry unsigned bytes and are not sent.
+  Sales › Printers (`sales/Printers.tsx`) links to Label Studio's printers where the app is on.
+
 ## Time
 
 WorkSuite sends two kinds of stamp that look the same. True-UTC stamps (chat,

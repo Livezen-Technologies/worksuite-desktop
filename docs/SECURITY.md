@@ -394,6 +394,19 @@ A computer paired as a POS till holds a credential of its own (`Pos\Libraries\De
   window with no preload, no script and no network. A page can ask for a test slip, the drawer, or a document the
   server returned (`restaurant:printText`, printable text only), never a path or a printer the settings do not name.
 
+## Label Studio printing and the Print Gateway (WS-LABEL-SRS-001 FR-DSK-03, FR-GWY-04, §16)
+
+- The renderer never handles printer bytes, sockets, files or a shell: it passes a job id to the main process,
+  which fetches the chunk itself. There is no channel that accepts printer language from a page (C-07).
+- Every chunk is checked before it is sent: an Ed25519 signature by a key id the server published to this host,
+  the payload's SHA-256, the job and chunk, the printer it was claimed for, the company and the expiry.
+- Bytes go only to this host's registered, approved printers: an OS queue through `sendRaw` (no shell, the queue's
+  name never on a command line) or the TCP address that printer was registered with. LAN discovery probes only
+  this computer's private /24 networks on 9100 and sends nothing but `~HI`.
+- The gateway opens no listening port, holds no user password and keeps its device key and token in the OS key
+  store (a 0600 file on a headless build without one). A revocation (`GATEWAY_REVOKED`) deletes both at once and
+  stops it. Heartbeat commands that carry printer bytes (`calibrate`) are not signed, so they are never sent.
+
 ## Updates (FR-UPD-01, WF-25)
 
 1. Manifest signature: Ed25519 over canonical JSON, public key pinned in

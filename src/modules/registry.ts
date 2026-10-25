@@ -380,6 +380,18 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./appointments/AppointmentsShell'),
   },
   {
+    // Label Studio (WS-LABEL-SRS-001 §4.27, the desktop boards D01–D07) over `/api/labels` (server docs/label-api.md):
+    // home, designer with a test print, the print station, printers on this computer, the interrupted batch and the
+    // Print Gateway. Printing happens only in the main process (electron/services/label/, FR-DSK-03).
+    input: defineDesktopManifest({
+      id: 'label', name: 'Label Studio', icon: 'printer', contractVersion: 1, desktop: { enabled: true }, offline: { mode: 'NONE' },
+      native: ['printing', 'barcode'],
+      quickActions: [{ id: 'label-station', label: 'Label print station', route: '/label?tab=station' }],
+      deepLinks: ['label', 'label/jobs/:id', 'label/templates/:id'],
+    }),
+    load: () => import('./label/LabelShell'),
+  },
+  {
     // Figures are not cached for offline reading: a stale trial balance looks exactly like a current one.
     input: defineDesktopManifest({
       id: 'finance', name: 'Finance', icon: 'landmark', contractVersion: 1, desktop: { enabled: true },

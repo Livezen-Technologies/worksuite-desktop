@@ -18,6 +18,8 @@ export const GUIDE_KEYS: Readonly<Record<string, string | null>> = {
   'sinhala-tools': null,
   // Social Media Manager is not the internal Social stream; it has no guide of its own yet.
   'social-media': null,
+  // Label Studio has no user guide of its own yet: its button opens the list of guides.
+  label: null,
   // Native modules.
   mail: 'mail',
   chat: 'chat',

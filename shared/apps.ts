@@ -114,6 +114,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'billing', label: 'Invoices', group: 'business', icon: 'receipt', app: 'billing', perm: 'billing.view', webPath: '/billing', surface: 'native', sidebar: 'business', order: 125, keywords: 'billing invoice invoices payments receipts owed overdue' },
   // `/inventory?product=` and `/inventory/products/<id>` open the product here.
   { id: 'inventory', label: 'Inventory', group: 'business', icon: 'package', app: 'inventory', perm: 'inventory.view', webPath: '/inventory', surface: 'native', sidebar: 'business', order: 128, keywords: 'inventory stock products warehouse movements catalogue sku barcode' },
+  // Label Studio (WS-LABEL-SRS-001 FR-DSK-01, D01–D07): home, designer, print station, this computer's printers, the
+  // interrupted batch and the Print Gateway. The rest of Label Studio (W02–W32) opens on the web from its rail.
+  { id: 'label', label: 'Label Studio', group: 'business', icon: 'printer', app: 'label', perm: 'label.access', webPath: '/label', surface: 'native', sidebar: 'business', order: 129, keywords: 'label labels barcode qr sticker zebra zpl print station printer gateway templates serials' },
   // HR carries no app slug: there is no `hr` row in `applications`, and its
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
   { id: 'hr', label: 'HR', group: 'people', icon: 'id-card', webPath: '/hr', surface: 'native', sidebar: 'business', order: 140, keywords: 'people leave attendance clock in', guest: 'locked', guestLabel: 'HR & People' },

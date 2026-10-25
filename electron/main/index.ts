@@ -32,7 +32,7 @@ import { redactUrl } from '@shared/redact';
 import { SUPPORT_QUICK_SHORTCUT, quickRoute, ringRoute, supportNoticePrefs } from '@shared/support';
 import { FOLLOW_UP_DEFAULTS, type ActiveCall, type Bootstrap, type BusyReport, type UpdateActivity, type UpdateDiagnostics, type NavigateRequest, type RealtimeState, type ServiceHealth, type StatusSnapshot, type UpdateStatus, type WebchatOnCall, type WebchatRingState } from '@shared/types';
 import { AccessWatch, NO_ACCESS } from './access';
-import { applyAutostart, startedHidden } from './autostart';
+import { applyAutostart, gatewayAutostart, gatewayPairingArgs, setGatewayAutostart, startedAsGateway, startedHidden } from './autostart';
 import { evaluateBoot, markCleanExit, markRunning, clearCrashes, writeBootConfig } from './boot';
 import type { AppContext, ClockExtra } from './context';
 import { broadcast, guestWindowIds, sendTo } from './events';
@@ -142,6 +142,7 @@ import { createBrokerCall, osDeviceServer, readOsDevice, startOsSession, type Br
 import { EventDesk } from '../services/event-desk';
 import { EventDeskPrint } from '../services/event-desk-print';
 import { createRestaurant } from '../services/restaurant';
+import { createLabel } from '../services/label';
 import { createProjects } from '../services/projects';
 import { SalesDesk } from '../services/sales-desk';
 import { ChequeStation } from '../services/cheque-print';
@@ -955,6 +956,22 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       broadcast('restaurant:changed');
       emitStatus();
     },
+  });
+
+  // Label Studio: this computer as a print host for the signed-in person, and the Print Gateway (tray mode, SRS Q-03).
+  const label = createLabel({
+    config: db,
+    http,
+    secrets,
+    origin: () => auth.getServer()?.origin ?? null,
+    active: () => sessionCtl.isReady() && canOpenApp('label', sessionCtl.visibleApps()),
+    installId: () => device.installId(),
+    userData: app.getPath('userData'),
+    version: app.getVersion(),
+    headless: startedAsGateway(),
+    setHeadless: (on) => setGatewayAutostart(on, settings.effective()),
+    autostart: gatewayAutostart,
+    changed: (which) => broadcast(which === 'host' ? 'label:changed' : 'labelGateway:changed'),
   });
 
   // Drive sync (Phase 2): chosen Drive folders kept in step with folders here.
@@ -2880,6 +2897,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     eventDesk.start();
     restaurant.start();
     projects.start();
+    label.host.start();
     // Courses kept offline: the ones whose learning ended, or whose licence ran out, go.
     void elearning.validate().catch((e) => log.warn('offline courses not checked', { error: String(e) }));
     // Board: what waited offline goes up, revocations and expiries are applied.
@@ -2959,6 +2977,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     eventDesk.stop();
     restaurant.stop();
     if (attendanceTimer) clearInterval(attendanceTimer);
+    label.host.stop();
     attendanceTimer = null;
     stopPresence();
     accessWatch.stop();
@@ -3031,6 +3050,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         pos.forgetAll();
         // The restaurant terminal this computer was: its key, copy, outbox and printer mapping.
         restaurant.forgetAll();
+        // Label Studio's printers, registration and print journal on this computer (the gateway's identity is the computer's).
+        label.forgetAll();
         // The door-lock servers this computer's front desk talked to, and their secrets.
         pmsLocks.wipe();
         // The iCloud and CardDAV passwords contact sync kept for this computer.
@@ -3477,6 +3498,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   pmsLocks.register(router);
   contactSync.register(router);
   restaurant.register(router);
+  label.register(router);
   projects.register(router);
   salesDesk.register(router);
   chequeStation.register(router);
@@ -4220,6 +4242,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     pos.stop();
     restaurant.stop();
     supervisor.stopAll();
+    label.stop();
     realtime.stop();
     updater.stop();
     lock.stop();
@@ -4283,6 +4306,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   lock.start();
   // The till sends its sales with its own credential, whoever is signed in (or nobody).
   pos.start();
+  // The Print Gateway runs with its own device identity, whoever is signed in (or nobody); a headless box pairs from its command line.
+  label.gateway.start();
+  const pairArgs = startedAsGateway() ? gatewayPairingArgs() : null;
+  if (pairArgs && !label.gateway.status().paired) void label.gateway.pair({ ...pairArgs, name: pairArgs.name ?? os.hostname() }).catch((e) => log.warn('print gateway pairing failed', { error: String(e) }));
   updater.start();
   applyAutostartOnce(settings);
 

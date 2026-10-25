@@ -587,6 +587,25 @@ const api = {
     saveReport: call('sales:saveReport'),
     reveal: call('sales:reveal'),
   },
+  // Label Studio (label-channels.ts): the four printing calls of §16 and D04/D05; printer bytes never come here.
+  label: {
+    listPrinters: call('label:listPrinters'),
+    send: call('label:send'),
+    status: call('label:status'),
+    cancel: call('label:cancel'),
+    discover: call('label:discover'),
+    settings: call('label:settings'),
+    settingsSet: call('label:settingsSet'),
+    register: call('label:register'),
+    resolve: call('label:resolve'),
+  },
+  // The Print Gateway (D06, D07): pair with a URL and a one-time code; the device key stays in the main process.
+  labelGateway: {
+    status: call('labelGateway:status'),
+    pair: call('labelGateway:pair'),
+    unpair: call('labelGateway:unpair'),
+    headless: call('labelGateway:headless'),
+  },
   // Contact sync (contact-sync-channels.ts): iCloud, CardDAV and Mac Contacts on this computer; passwords never come back.
   contactSync: {
     status: call('contactSync:status'),
