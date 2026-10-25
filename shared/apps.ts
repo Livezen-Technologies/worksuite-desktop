@@ -174,7 +174,8 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'marketing', label: 'Marketing', group: 'business', icon: 'megaphone', app: 'marketing', webPath: '/marketing', surface: 'native', sidebar: 'business', order: 166, keywords: 'marketing campaigns email newsletter audience contacts segments lists consent suppression unsubscribe call queue call campaigns telemarketing' },
   // Payroll (WS-PAYROLL-SRS-001 §D1): native runs and run approval; setup, inputs and payouts open on the web from its rail.
   { id: 'payroll', label: 'Payroll', group: 'people', icon: 'banknote', app: 'payroll', perm: 'payroll.view', webPath: '/payroll', surface: 'native', sidebar: 'business', order: 150, keywords: 'payroll salary payslips runs approval pay' },
-  { id: 'appointments', label: 'Appointments', group: 'people', icon: 'calendar-clock', app: 'appointments', webPath: '/appointments', surface: 'browser', order: 155 },
+  // Appointments (SRS v1.0 §9, D01–D24): the front desk native here; the web keeps locations, services and the booking page.
+  { id: 'appointments', label: 'Appointments', group: 'people', icon: 'calendar-clock', app: 'appointments', perm: 'appointment.view', webPath: '/appointments', surface: 'native', sidebar: 'business', order: 155, keywords: 'appointments booking calendar schedule walk-in check-in clients waitlist deposit checkout receipt commission' },
   // A salon's front desk: native here (the counter PC); the owners' screens open on the web from its rail.
   { id: 'salon', label: 'SalonMate', group: 'business', icon: 'scissors', app: 'salon', perm: 'salon.view', webPath: '/salon', surface: 'native', sidebar: 'business', order: 131, keywords: 'salon hair beauty front desk walk-in check-in stylists clients bookings' },
   // A workshop's counter, board, technician terminal and parts counter: native here; check-in, estimates, QC and delivery open on the web.

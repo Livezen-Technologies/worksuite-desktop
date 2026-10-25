@@ -119,6 +119,8 @@ export const DEEP_LINK_RULES: RouteRule[] = [
   { pattern: 'board/circulars/:id', module: 'board', route: (p) => `/board?view=approvals&circular=${p.id}` },
   { pattern: 'recruitment/interviews/:id', module: 'recruitment', route: (p) => `/recruitment?tab=cards&interview=${p.id}` },
   { pattern: 'payroll', module: 'payroll', route: () => '/payroll' },
+  { pattern: 'appointments', module: 'appointments', route: () => '/appointments' },
+  { pattern: 'appointments/:id', module: 'appointments', route: (p) => `/appointments?tab=today&apt=${p.id}` },
   { pattern: 'payroll/runs/:id', module: 'payroll', route: (p) => `/payroll?tab=run&run=${p.id}` },
   { pattern: 'hr', module: 'hr', route: () => '/hr' },
   { pattern: 'hr/leave/:id', module: 'hr', route: (p) => `/hr/leave/${p.id}` },

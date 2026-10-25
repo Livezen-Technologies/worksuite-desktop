@@ -575,6 +575,18 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   reminders (D24) poll `GET /dashboard` hourly while signed in and raise local notices once per day each;
   `payroll.*` notices and `/payroll/runs/<id>` links open the run here. My Payslips stays HR's (`hr/MyPay.tsx`,
   `hr/pay.ts`).
+- Appointments (`modules/appointments`; Appointments SRS v1.0 §9, the desktop boards D01–D24): native since
+  appointments 1.0.0 (it was a browser surface), over the server's `/api/appointments`. The shell
+  (`AppointmentsShell.tsx`, `/appointments?tab=<view>&apt=&client=&date=&mode=week`; a web link `/appointments/<id>`
+  opens that appointment's panel) has the 88px rail (`Rail.tsx`), the side panel (`Panel.tsx`, dialogs in
+  `Actions.tsx`), New appointment and the ⌘J palette. Slots, prices, tax, deposits and commission are the server's;
+  a calendar drop (`Calendar.tsx`) only asks `POST /{id}/reschedule` and changes nothing until it answers. Status
+  moves and client notes go through the generic offline queue (`offline:submit`, module `appointments`) and the
+  Outbox screen lists, retries and dismisses them; booking, moving, checkout, deposits and set-up are online only.
+  Receipts, deposit slips, day sheets and statements are HTML laid out by the shared `print:print` / `print:toPdf`
+  service (`print.ts`); payments are recorded in Billing (`POST /api/billing/payments`, allocated to the invoice or
+  linked as a deposit). This desk's location and printers are per-computer conveniences in window storage. The
+  waitlist reads `GET|POST /api/appointments/waitlist` and says so on a server without it.
 
 ## Time
 

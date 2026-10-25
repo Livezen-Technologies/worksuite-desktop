@@ -330,6 +330,27 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./payroll/PayrollShell'),
   },
   {
+    // Appointments (Appointments SRS v1.0 §9, the desktop boards D01–D24) over `/api/appointments`: the today board,
+    // calendar day and week with drag-to-move, list, new appointment, walk-in, the appointment panel with check-in,
+    // move, cancel/no-show and deposit, checkout with the receipt, clients, waitlist, reports, commission, set-up, this
+    // desk, notifications, day sheets and the palette. Offline, status moves and client notes wait in the queue.
+    input: defineDesktopManifest({
+      id: 'appointments', name: 'Appointments', icon: 'calendar-clock', contractVersion: 1, desktop: { enabled: true },
+      offline: {
+        mode: 'PARTIAL_WRITE',
+        entities: ['appointment', 'customer_note'],
+        cache: ['/api/appointments/options', '/api/appointments/dashboard', '/api/appointments/calendar', '/api/appointments/customers'],
+      },
+      native: ['notifications', 'printing'],
+      quickActions: [
+        { id: 'appointments-new', label: 'New appointment', route: '/appointments?tab=today&new=1' },
+        { id: 'appointments-walk-in', label: 'Appointment walk-in', route: '/appointments?tab=walkin' },
+      ],
+      deepLinks: ['appointments', 'appointments/:id'],
+    }),
+    load: () => import('./appointments/AppointmentsShell'),
+  },
+  {
     // Figures are not cached for offline reading: a stale trial balance looks exactly like a current one.
     input: defineDesktopManifest({
       id: 'finance', name: 'Finance', icon: 'landmark', contractVersion: 1, desktop: { enabled: true },
