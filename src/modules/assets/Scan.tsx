@@ -5,7 +5,7 @@ import { useScannerSeen, useWedge } from '../../core/scanner';
 import { cx } from '../../components/ui';
 import { refusal } from '../finance/api';
 import { checkin, checkout, fetchPeople, issueAsset, resolveCode, returnAsset, type Asset, type Can, type Person } from './api';
-import { labelPrefs, printLabels } from './labels';
+import { labelPrefs, printLabels } from './labelSheets';
 import { Badge, Btn, Card, Field, Kbd, Note, PageHead, input, useReadOnly } from './parts';
 
 /**

@@ -7,7 +7,7 @@ import { useScannerSeen, useWedge } from '../../core/scanner';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { refusal } from '../finance/api';
 import { BASE, saveSettings, type Can, type Company } from './api';
-import { labelPrefs, saveLabelPrefs } from './labels';
+import { labelPrefs, saveLabelPrefs } from './labelSheets';
 import { Btn, Card, Field, Note, PageHead, input, useReadOnly } from './parts';
 
 /**

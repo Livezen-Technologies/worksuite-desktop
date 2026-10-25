@@ -7,7 +7,7 @@ import { typingTarget } from '../../core/scanner';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
 import { BASE, fetchAsset, returnAsset, statusLabel, type AssetFull, type Can } from './api';
-import { printLabels } from './labels';
+import { printLabels } from './labelSheets';
 import { Badge, Btn, Card, Field, Kpi, Table, amt, input, td, tdr, useReadOnly } from './parts';
 import type { AssetView } from './Rail';
 

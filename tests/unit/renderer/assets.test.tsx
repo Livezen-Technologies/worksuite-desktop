@@ -7,7 +7,7 @@ vi.mock('../../../src/core/api', async (orig) => ({ ...(await orig<object>()), a
 
 import { apiGet } from '../../../src/core/api';
 import { orNull, parseCsv, resolveCode, toCsv, type Asset } from '../../../src/modules/assets/api';
-import { code128, labelsHtml } from '../../../src/modules/assets/labels';
+import { code128, labelsHtml } from '../../../src/modules/assets/labelSheets';
 import { nextAct } from '../../../src/modules/assets/Scan';
 import { stageOf } from '../../../src/modules/assets/Requests';
 import { columnsOf, toTsv } from '../../../src/modules/assets/Reports';

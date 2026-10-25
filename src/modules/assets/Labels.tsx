@@ -4,7 +4,7 @@ import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { Spinner, cx } from '../../components/ui';
 import { fetchAsset, fetchAssets, type Asset } from './api';
-import { code128Svg, labelPrefs, printLabels, qrSvg, saveLabelPrefs, saveLabelsPdf, type LabelCode, type LabelPrefs, type LabelStock } from './labels';
+import { code128Svg, labelPrefs, printLabels, qrSvg, saveLabelPrefs, saveLabelsPdf, type LabelCode, type LabelPrefs, type LabelStock } from './labelSheets';
 import { Btn, Card, Field, PageHead, Pills, input } from './parts';
 
 /**

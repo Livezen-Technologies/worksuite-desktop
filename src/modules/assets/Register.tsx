@@ -6,7 +6,7 @@ import { useWedge } from '../../core/scanner';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { shortDate } from '../finance/api';
 import { fetchAsset, fetchAssets, resolveCode, toCsv, type Asset, type Can } from './api';
-import { printLabels } from './labels';
+import { printLabels } from './labelSheets';
 import { Badge, Btn, Card, Kbd, PageHead, Pills, Table, amt, td, useReadOnly } from './parts';
 import type { AssetView } from './Rail';
 
