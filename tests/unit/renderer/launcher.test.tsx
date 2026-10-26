@@ -393,13 +393,13 @@ describe('opening and closing', () => {
 
 describe('long names', () => {
   it('are cut short on the tile, with the whole name in a tooltip', () => {
-    app.set({ ...app.get(), apps: visibleApps({ apps: ['mail', 'oms', 'appointments'], permissions: ['oms.view'] }) });
+    app.set({ ...app.get(), apps: visibleApps({ apps: ['mail', 'oms', 'appointments'], permissions: ['oms.view', 'appointment.view'] }) });
     render(<Launcher />);
     const sales = within(grid()).getByRole('option', { name: 'Sales & Orders' });
     expect(sales.getAttribute('title')).toBe('Sales & Orders');
     expect(sales.querySelector('[data-name]')!.className).toContain('truncate');
     const appointments = within(grid()).getByRole('option', { name: 'Appointments' });
-    expect(appointments.getAttribute('title')).toBe('Appointments · Opens in your browser');
+    expect(appointments.getAttribute('title')).toBe('Appointments');
     // The category chips and the pinned row say theirs too.
     expect(screen.getByRole('tab', { name: /Business/ }).getAttribute('title')).toBe('Business');
   });

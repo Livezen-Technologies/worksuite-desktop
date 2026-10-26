@@ -549,6 +549,15 @@ const api = {
     discard: call('projects:discard'),
     replay: call('projects:replay'),
   },
+  // Payroll: Touch ID before approving a run, and bank files saved where the person chooses.
+  payroll: {
+    verify: call('payroll:verify'),
+    saveFile: call('payroll:saveFile'),
+  },
+  // Assets: a register file read from the open dialog for the import check (D21).
+  assets: {
+    openFile: call('assets:openFile'),
+  },
   // WorkSuite Board (board-channels.ts): the encrypted offline pack vault, its queue and offline circular responses.
   board: {
     vaultStatus: call('board:vaultStatus'),
@@ -562,6 +571,13 @@ const api = {
     search: call('board:search'),
     verify: call('board:verify'),
   },
+  // Cheque Manager (cheque-channels.ts): this computer as a print station; what prints is fetched by the main process.
+  cheque: {
+    station: call('cheque:station'),
+    print: call('cheque:print'),
+    printQueued: call('cheque:printQueued'),
+    printCalibration: call('cheque:printCalibration'),
+  },
   // WorkSuite Sales (sales-channels.ts): labels and delivery notes on this computer's printers, reports saved as PDF.
   sales: {
     printSettings: call('sales:printSettings'),
@@ -570,6 +586,27 @@ const api = {
     printLabel: call('sales:printLabel'),
     saveReport: call('sales:saveReport'),
     reveal: call('sales:reveal'),
+  },
+  // Label Studio (label-channels.ts): the four printing calls of §16 and D04/D05; printer bytes never come here.
+  label: {
+    listPrinters: call('label:listPrinters'),
+    send: call('label:send'),
+    status: call('label:status'),
+    cancel: call('label:cancel'),
+    discover: call('label:discover'),
+    settings: call('label:settings'),
+    settingsSet: call('label:settingsSet'),
+    register: call('label:register'),
+    resolve: call('label:resolve'),
+  },
+  // The Print Gateway (D06, D07): pair with a URL and a one-time code; the device key stays in the main process.
+  labelGateway: {
+    status: call('labelGateway:status'),
+    pair: call('labelGateway:pair'),
+    unpair: call('labelGateway:unpair'),
+    headless: call('labelGateway:headless'),
+    checkUpdate: call('labelGateway:checkUpdate'),
+    downloadUpdate: call('labelGateway:downloadUpdate'),
   },
   // Contact sync (contact-sync-channels.ts): iCloud, CardDAV and Mac Contacts on this computer; passwords never come back.
   contactSync: {

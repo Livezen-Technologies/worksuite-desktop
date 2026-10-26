@@ -283,6 +283,7 @@ export function MeetRoom() {
    * `mayMic` is the meeting's own answer, the one the mute button reads, so a
    * held key cannot open a microphone the host has closed.
    */
+  const keys = effectiveShortcuts(useStore(app, (st) => st.prefs?.shortcuts));
   usePushToTalk({
     accelerator: keys['meet-push-to-talk'],
     micOn: !!lp.isMicrophoneEnabled,

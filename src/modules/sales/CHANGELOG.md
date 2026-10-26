@@ -4,6 +4,11 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.0 — 2026-10-25
+
+- Printers on this computer says that label printers are Label Studio's where the organisation has Label Studio, and
+  opens Label Studio › Printers (WS-LABEL-SRS-001 §2.1: superseded when the module is on, kept for installs without it).
+
 ## 1.2.0 — 2026-10-15
 
 - Sales (OMS) SRS v1.1: D-01…D-14, shipping desk, dispatch

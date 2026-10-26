@@ -32,11 +32,11 @@ const { fr, op: frames, layers } = lottie;
 
 /** The square each Lottie layer describes, in the terms SVG wants. */
 function squareOf(l: Layer) {
-  const items = l.shapes[0].it;
+  const items = l.shapes[0]!.it;
   const rc = items.find((i) => i.ty === 'rc') as unknown as { s: { k: [number, number] } };
   const fl = items.find((i) => i.ty === 'fl') as unknown as { c: { k: number[] } };
   const [w, h] = rc.s.k;
-  const [cx, cy] = l.ks.p.k;
+  const [cx = 0, cy = 0] = l.ks.p.k;
   const hex = `#${fl.c.k
     .slice(0, 3)
     .map((v) => Math.round(v * 255).toString(16).padStart(2, '0'))
@@ -45,7 +45,7 @@ function squareOf(l: Layer) {
   /* Its turn in the loop: holds at full, ramps down to the dim keyframe, then
      back up to the next keyframe at full again. */
   const kf = l.ks.o.k;
-  const dropsAt = kf.find((k) => k.s[0] < 100)!;
+  const dropsAt = kf.find((k) => k.s[0]! < 100)!;
   const holdsTo = [...kf].reverse().find((k) => k.t < dropsAt.t && k.s[0] === 100)!;
   const recoversAt = kf.find((k) => k.t > dropsAt.t && k.s[0] === 100)!;
   return {
@@ -54,7 +54,7 @@ function squareOf(l: Layer) {
     h,
     x: cx - w / 2,
     y: cy - h / 2,
-    dim: dropsAt.s[0] / 100,
+    dim: dropsAt.s[0]! / 100,
     holdFrame: holdsTo.t,
     dimFrame: dropsAt.t,
     recoverFrame: recoversAt.t,
@@ -141,9 +141,9 @@ describe('the WorkSuite loading mark, against worksuite-loader.json', () => {
 
     /* Lottie draws its FIRST layer on top; SVG draws its LAST on top. The navy
        core overlaps the big blue square, so getting this backwards hides it. */
-    expect(fills[0]).toBe(squares[squares.length - 1].hex);
-    expect(fills[fills.length - 1]).toBe(squares[0].hex);
-    expect(layers[0].nm).toContain('navy');
+    expect(fills[0]).toBe(squares[squares.length - 1]!.hex);
+    expect(fills[fills.length - 1]).toBe(squares[0]!.hex);
+    expect(layers[0]!.nm).toContain('navy');
   });
 
   it('loops for exactly as long as the Lottie does', () => {
@@ -187,7 +187,7 @@ describe('the WorkSuite loading mark, against worksuite-loader.json', () => {
        lockstep with the opacity — and an SVG rect scales about the user-space
        origin, so it needs its own box as the origin or it slides instead. */
     for (const l of lottie.layers) {
-      const scale = (l.ks.s.k as Array<{ s: number[] }>).map((k) => k.s[0]);
+      const scale = (l.ks as unknown as { s: { k: Array<{ s: number[] }> } }).s.k.map((k) => k.s[0] ?? 0);
       expect(Math.min(...scale)).toBe(84);
     }
     expect(keyframes).toMatch(/transform:\s*scale\(0\.84\)/);
@@ -197,7 +197,7 @@ describe('the WorkSuite loading mark, against worksuite-loader.json', () => {
 
     /* The easing is the JSON's own tangents, not a curve borrowed from
        somewhere else: `o.x .45 / o.y 0 / i.x .55 / i.y 1`. */
-    const k0 = (lottie.layers.find((l) => l.nm === 'cyan left')!.ks.o.k as Array<Record<string, any>>)[0];
+    const k0 = (lottie.layers.find((l) => l.nm === 'cyan left')!.ks.o.k as unknown as Array<{ o: { x: number[]; y: number[] }; i: { x: number[]; y: number[] } }>)[0]!;
     expect(driver).toContain(
       `cubic-bezier(${k0.o.x[0]}, ${k0.o.y[0]}, ${k0.i.x[0]}, ${k0.i.y[0]})`,
     );
@@ -314,7 +314,7 @@ describe('where the mark is shown', () => {
     expect(html).toMatch(/opacity:\s*0\.28/);
     expect(html).toMatch(/prefers-reduced-motion: reduce[\s\S]*animation:\s*none/);
     /* Navy drawn last, over the blue square, exactly as in the component. */
-    const order = [...boot.matchAll(/fill="(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1].toUpperCase());
+    const order = [...boot.matchAll(/fill="(#[0-9A-Fa-f]{6})"/g)].map((m) => m[1]!.toUpperCase());
     expect(order[order.length - 1]).toBe('#001842');
     expect(order[0]).toBe('#0A6CFF');
   });
