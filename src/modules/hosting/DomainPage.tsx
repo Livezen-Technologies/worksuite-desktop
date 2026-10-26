@@ -11,6 +11,7 @@ import type { Nav } from './HostingShell';
 import { EditLinks } from './Links';
 import { Btn, Card, Chip, Days, NeedsUpdate, Note, Row, Status, Table, td, tdr, useReadOnly, when } from './parts';
 import { withStepUp } from './StepUp';
+import { clickOnKey } from '../../components/press';
 
 /**
  * One domain in its own tab or window (D-03, HDM-DSK-03) from `GET domains/{id}`: Overview, DNS, Certificates,
@@ -254,7 +255,7 @@ function DomainCerts({ d, nav }: { d: DomainDetail; nav: Nav }) {
     <div className="rounded-[10px] border border-line bg-surface">
       <Table head={['Host', 'Status', 'Expires', 'Issuer']} label="Certificates">
         {items.map((c) => (
-          <tr key={c.id} className="cursor-pointer hover:bg-subtle" onClick={(e) => nav.to('certificates', `&certificate=${c.id}`, e.metaKey || e.ctrlKey)}>
+          <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className="cursor-pointer hover:bg-subtle" onClick={(e) => nav.to('certificates', `&certificate=${c.id}`, e.metaKey || e.ctrlKey)}>
             <td className={cx(td, 'font-semibold')}>{c.label ?? (c.port && c.port !== 443 ? `${c.host}:${c.port}` : c.host)}</td>
             <td className={td}>
               <Status value={c.status} label={c.status_words} />
@@ -277,7 +278,7 @@ function DomainMonitors({ d, nav }: { d: DomainDetail; nav: Nav }) {
     <div className="rounded-[10px] border border-line bg-surface">
       <Table head={['Monitor', 'Kind', 'State', 'Response', 'Uptime 30 d']} label="Monitors">
         {items.map((m) => (
-          <tr key={m.id} className="cursor-pointer hover:bg-subtle" onClick={() => nav.to('monitors')}>
+          <tr tabIndex={0} onKeyDown={clickOnKey} key={m.id} className="cursor-pointer hover:bg-subtle" onClick={() => nav.to('monitors')}>
             <td className={cx(td, 'font-semibold')}>{m.name || m.target}</td>
             <td className={td}>{m.kind.toUpperCase()}</td>
             <td className={td}>

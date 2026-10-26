@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.0.2 — 2026-10-26
+
+**Fixed**
+
+- a receiving line is focused with Enter or Space as well as a click (D-G21)
+
 ## 1.0.1 — 2026-10-26
 
 **Changed**

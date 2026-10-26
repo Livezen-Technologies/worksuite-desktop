@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button, Empty, ErrorNote, Spinner, cx } from '../../components/ui';
 import { at, eGet, money, type Paged, type Registration } from './api';
 import { Header, useEvent } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * The event's registrations, read at the desk (§5.4–5.9, §15.1's lists):
@@ -72,7 +73,7 @@ export default function Registrations({ list }: { list: string | null }) {
             </thead>
             <tbody>
               {r.data.items.map((x) => (
-                <tr key={x.id} onClick={() => open({ kind: 'registration', event: event.id, id: x.id })} className="cursor-pointer border-t border-line hover:bg-subtle">
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={x.id} onClick={() => open({ kind: 'registration', event: event.id, id: x.id })} className="cursor-pointer border-t border-line hover:bg-subtle">
                   <td className="px-3 py-1.5">
                     <b>{x.attendee?.name ?? '—'}</b>
                     {x.attendee?.company ? <span className="text-ink-3"> · {x.attendee.company}</span> : null}

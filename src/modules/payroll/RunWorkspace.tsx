@@ -16,6 +16,7 @@ import {
 } from './api';
 import { Badge, Card, Kbd, NotYet, Table, amt, td, tdr, useReadOnly } from './parts';
 import RunHolds from './RunHolds';
+import { clickOnKey } from '../../components/press';
 
 /**
  * A run's workspace (DRunHead + D04–D07): the header with the run's figures and its next act — Recalculate (⌘R),
@@ -252,7 +253,7 @@ function Employees({ d, show, onEmployee }: { d: RunDetail; show: boolean; onEmp
         </div>
         <Table head={['Employee', ['Days', 'r'], ['Gross', 'r'], ['Net', 'r'], 'Flag']}>
           {rows.map((p) => (
-            <tr key={p.id} onClick={() => setSel(p.id)} aria-selected={p.id === sel} className={cx('cursor-default', p.id === sel ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : 'hover:bg-subtle', p.status === 'held' && 'text-ink-2')}>
+            <tr tabIndex={0} onKeyDown={clickOnKey} key={p.id} onClick={() => setSel(p.id)} aria-selected={p.id === sel} className={cx('cursor-default', p.id === sel ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : 'hover:bg-subtle', p.status === 'held' && 'text-ink-2')}>
               <td className={td}><b>{p.employee_name ?? '—'}</b> <span className="text-ink-2">{p.department ? `· ${p.department}` : ''}</span></td>
               <td className={tdr}>{p.paid_days ?? '—'}</td>
               <td className={tdr}>{show ? amt(p.gross) : '—'}</td>

@@ -600,7 +600,7 @@ function Postings({ orgId, orgs }: ScreenProps & { orgId: number }) {
               <span className="shrink-0" style={{ width: POST_COLS.status }}>
                 <StatusPill status={p.status} />
               </span>
-              <span className="flex shrink-0 items-center justify-end gap-2" style={{ width: POST_COLS.act }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
+              <span role="presentation" className="flex shrink-0 items-center justify-end gap-2" style={{ width: POST_COLS.act }} onClick={(e) => e.stopPropagation()} onKeyDown={(e) => e.stopPropagation()}>
                 {may && p.balanced && p.status !== 'void' ? (
                   <button
                     type="button"

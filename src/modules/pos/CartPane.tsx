@@ -10,6 +10,7 @@ import { BADGE } from './look';
 import { who } from './OpenSales';
 import { PosButton, useTillContext } from './parts';
 import { deductionOf, formatMoney } from './pricing';
+import { clickOnKey } from '../../components/press';
 
 /**
  * The counter's right side: the open sales on this till as tabs (a new one, all of them), the customer on the sale
@@ -153,6 +154,10 @@ export default function CartPane({
           return (
             <div
               key={l.product_id}
+              role="button"
+              tabIndex={0}
+              aria-pressed={on}
+              onKeyDown={clickOnKey}
               onClick={() => setSelected(on ? null : l.product_id)}
               className={cx('flex items-center gap-3 rounded-[10px] border-b border-pos-line/60 px-2 py-[9px]', on && 'bg-pos-on')}
             >
@@ -160,7 +165,7 @@ export default function CartPane({
                 <div className="truncate text-[14px] font-semibold">{name}</div>
                 <div className="truncate text-[12px] text-ink-3">{t('pos.each', { price: formatMoney(priced?.unit_price ?? p?.price) })}</div>
               </div>
-              <div className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
+              <div role="presentation" className="flex items-center gap-1" onClick={(e) => e.stopPropagation()}>
                 <button type="button" aria-label={`One fewer ${name}`} onClick={() => cartActions.qty(l.product_id, l.quantity - 1)} className="flex h-9 w-9 items-center justify-center rounded-[8px] bg-pos-key text-[18px] text-ink">
                   −
                 </button>

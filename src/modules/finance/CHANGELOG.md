@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.2 — 2026-10-26
+
+**Changed**
+
+- the Overview's result for the year, the ledger's cash without a statement and what is owed to us and by us, and Reconcile's difference, are stat cards (D-G22)
+
 ## 1.1.1 — 2026-10-26
 
 **Changed**

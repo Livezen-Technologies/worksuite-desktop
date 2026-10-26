@@ -50,7 +50,7 @@ beforeEach(() => {
   app.set({
     auth: { stage: 'ready', user: { id: '7' } } as never,
     session: { mode: 'account', signingIn: false, moveOffer: false },
-    apps: visibleApps({ apps: ['mail', 'chat', 'tasks', 'calendar', 'billing', 'projects', 'drive', 'notes'], permissions: ['billing.view'] }),
+    apps: visibleApps({ apps: ['mail', 'chat', 'tasks', 'calendar', 'billing', 'projects', 'drive', 'notes', 'telephony'], permissions: ['billing.view'] }),
     prefs: { pinnedApps: [] } as never,
     status: { unread: { mail: 5, chat: 0, tasks: 0, notifications: 0 } } as never,
     bootstrap: null,
@@ -500,7 +500,7 @@ describe('the keyboard', () => {
 
 describe('tiles', () => {
   // Projects became a desktop app (WS-PROJECT-SRS-001 G-13): Social stands for the apps that still open on the web.
-  const withSocial = () => app.set({ apps: visibleApps({ apps: ['mail', 'chat', 'tasks', 'calendar', 'billing', 'projects', 'social', 'drive', 'notes'], permissions: ['billing.view'] }) });
+  const withSocial = () => app.set({ apps: visibleApps({ apps: ['mail', 'chat', 'tasks', 'calendar', 'billing', 'projects', 'social', 'drive', 'notes', 'telephony'], permissions: ['billing.view'] }) });
 
   it('shows unread badges and the browser mark, each of which can be switched off', () => {
     withSocial();

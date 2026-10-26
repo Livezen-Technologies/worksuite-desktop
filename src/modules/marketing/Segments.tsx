@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { apiGet } from '../../core/api';
 import { Icon } from '../../components/Icon';
+import { StatCard } from '../../components/StatCard';
 import { Spinner } from '../../components/ui';
 import { send, withOrg } from './api';
 import { act, ConfirmSheet, may, Refused } from './audience-parts';
@@ -63,10 +64,17 @@ export default function Segments({ org, options, onContacts, onEdit }: { org: st
                 <p className="m-0 truncate text-[14px] font-bold text-ink">{s.name}</p>
                 {s.description ? <p className="m-0 line-clamp-2 text-[12px] text-ink-3">{s.description}</p> : null}
               </div>
-              <button type="button" onClick={() => onContacts(s.id)} className="shrink-0 text-right" aria-label={`${s.name}: see the ${s.members ?? 'matching'} contacts`}>
-                <span className="block text-[22px] leading-tight font-bold text-ink tabular-nums">{n(s.members)}</span>
-                <span className="text-[12px] font-bold text-primary hover:underline">see them</span>
-              </button>
+              <StatCard
+                size="sm"
+                className="w-[150px] shrink-0"
+                label="Contacts"
+                value={n(s.members)}
+                sub="see them"
+                icon="filter"
+                tone="cyan"
+                ariaLabel={`${s.name}: see the ${s.members ?? 'matching'} contacts`}
+                onClick={() => onContacts(s.id)}
+              />
             </div>
             <p className="m-0 text-[12.5px] text-ink-2">
               <b>{s.match === 'any' ? 'Any of: ' : 'All of: '}</b>

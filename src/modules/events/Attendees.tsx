@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button, Empty, ErrorNote, Spinner } from '../../components/ui';
 import { eGet, type Attendee, type Paged } from './api';
 import { Header, useEvent } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * The attendees of the events this person reaches in the event's company
@@ -49,7 +50,7 @@ export default function Attendees() {
             </thead>
             <tbody>
               {r.data.items.map((a) => (
-                <tr key={a.id} onClick={() => open({ kind: 'attendee', id: a.id, event: event.id })} className="cursor-pointer border-t border-line hover:bg-subtle">
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={a.id} onClick={() => open({ kind: 'attendee', id: a.id, event: event.id })} className="cursor-pointer border-t border-line hover:bg-subtle">
                   <td className="px-3 py-1.5 font-semibold">{a.anonymized ? 'Erased' : a.name}</td>
                   <td className="px-3 py-1.5">{a.company ?? '—'}</td>
                   <td className="px-3 py-1.5">{a.email ?? '—'}</td>

@@ -6,6 +6,7 @@ import { input } from '../garage/parts';
 import { PageHead } from '../hr/parts';
 import { day, K, pGet, type ReservationSummary } from './api';
 import { Money, occupants, ReservationPill, usePms, VipPill } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Reservations: the property's list by status, and the search every desk
@@ -84,7 +85,7 @@ export default function Reservations({ seed }: { seed: string | null }) {
             </thead>
             <tbody>
               {items.map((r) => (
-                <tr key={r.id} className="cursor-pointer border-t border-line hover:bg-subtle" onClick={() => pms.open({ kind: 'reservation', id: r.id })}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={r.id} className="cursor-pointer border-t border-line hover:bg-subtle" onClick={() => pms.open({ kind: 'reservation', id: r.id })}>
                   <td className="px-3 py-2">
                     <button type="button" className="font-mono text-[12px] font-semibold text-primary" onClick={() => pms.open({ kind: 'reservation', id: r.id })}>
                       {r.confirmation_no}

@@ -37,7 +37,8 @@ function openLink(ev: React.MouseEvent): boolean {
 
 /** A read-only note (a viewer's, or a version in the history). */
 export function NoteView({ html, noteId, className }: { html: string; noteId: number; className?: string }) {
-  return <div className={cx(BOX, className)} onClick={(e) => void openLink(e)} dangerouslySetInnerHTML={{ __html: showBody(html, noteId) }} />;
+  // Links are <a> elements: Tab reaches them and Enter's click bubbles here.
+  return <div className={cx(BOX, className)} role="presentation" onClick={(e) => void openLink(e)} dangerouslySetInnerHTML={{ __html: showBody(html, noteId) }} />;
 }
 
 /**

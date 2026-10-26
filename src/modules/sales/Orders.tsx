@@ -443,7 +443,7 @@ function Row({ o, checked, open, focused, onCheck, onOpen }: { o: Order; checked
       onClick={onOpen}
       className={cx('relative flex cursor-default items-center gap-2.5 border-b border-line/70 px-3.5 py-2 text-[12.5px] last:border-b-0', open ? 'bg-selection' : checked ? 'bg-[#F4F6FE] dark:bg-[#141D38]' : 'hover:bg-subtle', focused && 'ring-2 ring-primary/40 ring-inset')}
     >
-      <span onClick={(e) => e.stopPropagation()} className="relative z-10 flex">
+      <span role="presentation" onClick={(e) => e.stopPropagation()} className="relative z-10 flex">
         <Checkbox aria-label={`Select ${o.number}`} checked={checked} onChange={(e) => onCheck(e.target.checked)} />
       </span>
       <span className="flex w-[180px] min-w-0 flex-col">

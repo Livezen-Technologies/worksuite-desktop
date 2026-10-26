@@ -16,6 +16,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { isMissing, pageOf, type PageMeta } from './logic';
 import { exportCrmCsv } from './exportCsv';
 import { CompanyField, orgIdFor, useCrmScope } from './scope';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Quotes (CrmQuotes, desk-quote): the list for the company the CRM is
@@ -125,7 +126,7 @@ export default function Quotes({ openId, creating, forAccount, onOpen, onNew, on
         <div className="min-h-0 overflow-y-auto scroll-thin">
           {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
           {rows.map((r) => (
-            <div key={r.id} data-quote={r.id} className="flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle" onClick={() => onOpen(r.id)}>
+            <div key={r.id} data-quote={r.id} className="flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle" role="button" tabIndex={0} onKeyDown={clickOnKey} onClick={() => onOpen(r.id)}>
               <b className="w-[130px] shrink-0 truncate font-mono text-ink">{r.quote_no}</b>
               <span className="min-w-0 flex-1 truncate text-ink">{r.account ?? '—'}</span>
               <span className="w-[110px] shrink-0">

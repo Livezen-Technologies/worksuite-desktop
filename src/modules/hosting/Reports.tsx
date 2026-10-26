@@ -8,6 +8,7 @@ import { printRenewals } from './files';
 import type { Nav } from './HostingShell';
 import { renewalNote } from './Overview';
 import { Btn, Card, Days, ExportButton, NeedsUpdate, PageHead, Pills, Status, Table, td, tdr, useReadOnly } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Reports (HDM-RPT-02, HDM-IMP-03) from `GET reports/{name}`: the renewal calendar for the next 30 to 365 days — with
@@ -66,7 +67,7 @@ function RenewalsReport({ items, nav }: { items: Renewal[]; nav: Nav }) {
     <Card>
       <Table head={['Name', 'Kind', 'Expires', 'Days left', 'Note']} label="Renewals">
         {items.map((r) => (
-          <tr key={`${r.kind}-${r.id}`} className="cursor-pointer hover:bg-subtle" onClick={() => (r.kind === 'domain' ? nav.openDomain(r.id, 'tab', r.name) : r.kind === 'server' ? nav.openServer(r.id, 'tab', r.name) : nav.to('certificates', `&certificate=${r.id}`, true))}>
+          <tr tabIndex={0} onKeyDown={clickOnKey} key={`${r.kind}-${r.id}`} className="cursor-pointer hover:bg-subtle" onClick={() => (r.kind === 'domain' ? nav.openDomain(r.id, 'tab', r.name) : r.kind === 'server' ? nav.openServer(r.id, 'tab', r.name) : nav.to('certificates', `&certificate=${r.id}`, true))}>
             <td className={cx(td, 'font-semibold')}>{r.name}</td>
             <td className={td}>{r.kind === 'domain' ? text('Domain') : r.kind === 'server' ? text('Server') : text('Certificate')}</td>
             <td className={cx(td, 'tabular-nums')}>{r.expires_on ?? '—'}</td>

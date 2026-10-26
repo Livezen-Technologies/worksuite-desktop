@@ -6,6 +6,7 @@ import { Select } from '../../components/Select';
 import { shortDate } from '../finance/api';
 import { fetchGroups, KIND_LABEL, PILLS, STATUS_LABEL, type RunList } from './api';
 import { Badge, Card, Kbd, Pills, Table, amt, td, tdr, useReadOnly } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Payroll runs (D02): status pills, a pay-group filter, and the list. ↑↓ move, ↵ opens, ⌘↵ opens in a new window,
@@ -78,7 +79,7 @@ export default function Runs({ figures, active, onOpen, onNew }: { figures: bool
         <div ref={body} tabIndex={0} role="grid" aria-label="Payroll runs" aria-activedescendant={items[at] ? `run-${items[at]!.id}` : undefined} onKeyDown={onKey} className="outline-none">
           <Table head={['Run', 'Pay group', 'Period', 'Type', ['Staff', 'r'], ['Net', 'r'], 'Status', 'Updated']}>
             {items.map((r, i) => (
-              <tr
+              <tr tabIndex={0} onKeyDown={clickOnKey}
                 key={r.id}
                 id={`run-${r.id}`}
                 aria-selected={i === at}

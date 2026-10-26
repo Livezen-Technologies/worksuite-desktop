@@ -849,7 +849,7 @@ export default function Editor(props: EditorProps) {
               <div role="list" aria-label="Pictures in this folder" className="flex min-w-0 max-w-[45%] items-center gap-1.5 overflow-x-auto scroll-thin">
                 {strip.map((s) => (
                   <button key={s.id} type="button" role="listitem" aria-current={s.id === fileId ? 'true' : undefined} title={s.name} onClick={() => s.id !== fileId && guard(() => (discardDraft(), props.onSwitch({ id: s.id, name: s.name })))} className={cx('relative h-[44px] w-[56px] shrink-0 overflow-hidden rounded-[6px] bg-[#1A2440]', s.id === fileId ? 'outline-2 outline-offset-1 outline-[#7FA2FF]' : 'opacity-70 hover:opacity-100')}>
-                    {s.url ? <img src={s.url} alt="" loading="lazy" className="h-full w-full object-cover" /> : <Icon name="image" size={16} className="m-auto text-[#5E6B8C]" />}
+                    {s.url ? <img src={s.url} alt={s.name} loading="lazy" className="h-full w-full object-cover" /> : <Icon name="image" size={16} className="m-auto text-[#5E6B8C]" />}
                     {s.edited ? <span className="absolute right-0.5 bottom-0.5 rounded-[3px] bg-black/70 px-1 text-[8.5px] font-bold text-white">{`v${s.edited}`}</span> : null}
                   </button>
                 ))}

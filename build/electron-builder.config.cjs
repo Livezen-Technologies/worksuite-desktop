@@ -2,8 +2,9 @@
  * Packaging (FR-SHL-01/02, §16). One codebase, every platform:
  *
  *   Windows  NSIS .exe (per-user) + .msi (machine-wide, Intune/GPO/RMM)
- *   macOS    .dmg (what the updater installs; one per architecture for releases,
- *            see docs/RELEASING.md) + .pkg (Jamf/MDM) + .zip
+ *   macOS    .dmg (what the updater installs; one universal DMG, published to the
+ *            Update Center as both macos:arm64 and macos:x64, see docs/RELEASING.md)
+ *            + .pkg (Jamf/MDM) + .zip
  *   Linux    .AppImage (self-updating) + .deb + .rpm
  *
  * Signing is driven entirely by environment/CI secrets and never lives in
@@ -13,7 +14,9 @@
  *            or APPLE_ID + APPLE_APP_SPECIFIC_PASSWORD + APPLE_TEAM_ID
  *   Windows  WIN_CSC_LINK / WIN_CSC_KEY_PASSWORD, or Azure Trusted Signing
  *            (AZURE_TRUSTED_SIGNING_* — the Q8 default in the SRS)
- *   Linux    GPG signing of packages happens in the repository pipeline. The WorkSuite APT/DNF repositories
+ *   Linux    LINUX_GPG_PRIVATE_KEY (+ LINUX_GPG_PASSPHRASE): CI signs the .rpm (rpmsign) and writes a detached
+ *            .asc for the .deb and AppImage after packaging, when the secret exists (docs/RELEASING.md). The
+ *            APT/DNF repositories' own metadata is signed in the repository pipeline. The WorkSuite APT/DNF repositories
  *            (worksuite-desktop#351) are OFF unless WORKSUITE_LINUX_REPO=1 with WORKSUITE_REPO_GPG_PUBLIC_KEY
  *            (build/linux-repo.cjs, docs/RELEASING.md)
  *
@@ -181,8 +184,8 @@ module.exports = {
     ],
     executableName: 'worksuite',
     category: 'Office',
-    // Set to the real support mailbox before the first Linux release.
-    maintainer: 'Livezen Technologies <noreply@worksuite.lk>',
+    // The package's Maintainer (deb) / Packager (rpm): the support mailbox people can write to.
+    maintainer: 'Livezen Technologies <support@worksuitecloud.com>',
     vendor: 'Livezen Technologies',
     synopsis: 'The WorkSuite desktop client',
     description: 'WorkSuite Desktop — mail, chat, tasks, files and every WorkSuite app on your desktop.',

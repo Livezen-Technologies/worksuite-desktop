@@ -1,6 +1,7 @@
 import js from '@eslint/js';
 import tseslint from 'typescript-eslint';
 import reactHooks from 'eslint-plugin-react-hooks';
+import a11y from './build-tools/eslint-a11y.mjs';
 
 export default tseslint.config(
   { ignores: ['vendor/**', 'out/**', 'dist/**', 'release/**', 'node_modules/**', 'build/**', 'scripts/**'] },
@@ -8,9 +9,12 @@ export default tseslint.config(
   ...tseslint.configs.recommended,
   {
     files: ['src/**/*.{ts,tsx}'],
-    plugins: { 'react-hooks': reactHooks },
+    plugins: { 'react-hooks': reactHooks, a11y },
     rules: {
       ...reactHooks.configs.recommended.rules,
+      // Clicks the keyboard can make too, and pictures that say what they show (audit D-G21; build-tools/eslint-a11y.mjs).
+      'a11y/click-has-keys': 'error',
+      'a11y/img-alt': 'error',
       // The renderer is sandboxed: it must never reach for Node or Electron.
       'no-restricted-imports': [
         'error',

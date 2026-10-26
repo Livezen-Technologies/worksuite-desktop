@@ -501,7 +501,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const salonDesk = new SalonDesk(secrets, http, () => auth.getServer()?.origin ?? null);
   const salonPrint = new SalonPrint({ config: db, http, origin: () => auth.getServer()?.origin ?? null, desk: () => salonDesk.pairing()?.desk_id ?? null });
   // The policy is verified with the account's own key when IT configured one (its trusted `discovery_key`).
-  const bootstrap = new BootstrapService(db, getVault, http, () => policyKeyFor(scopes.current()?.account ?? null, POLICY_PUBLIC_KEY));
+  // A release build applies no unsigned policy, so none at all when it has no key (audit D-G05); a dev build does.
+  const bootstrap = new BootstrapService(db, getVault, http, () => policyKeyFor(scopes.current()?.account ?? null, POLICY_PUBLIC_KEY), app.isPackaged);
   const cache = new OfflineCache(db, getVault);
   const mailLimits = () => {
     const caps = sessionCtl.capabilities();

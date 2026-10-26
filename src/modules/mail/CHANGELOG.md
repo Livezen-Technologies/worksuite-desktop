@@ -4,6 +4,14 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.34.4 — 2026-10-26
+
+**Fixed**
+
+- the @mention list's close timer is cleared with the editor, so closing the composer just after it lost focus no longer sets state on a closed editor (the CI flake 'window is not defined', D-G15)
+- a link from a message is opened without a question only when the app handed that address to the window when it was clicked; any other address is asked about by the app first (D-G16)
+- Immersive Reader's paragraphs are no longer announced as controls; the arrows move the focus line (D-G21)
+
 ## 1.34.3 — 2026-10-26
 
 **Changed**

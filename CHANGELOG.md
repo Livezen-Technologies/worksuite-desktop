@@ -11,6 +11,48 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+
+The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G19, D-G21, D-G22, D-G24, D-G25).
+
+### Security
+
+- **A link from a message opens only as clicked.** The window's "confirmed" is believed only for an address the app
+  itself handed that window when the link was clicked (within 15 minutes); for any other address WorkSuite asks first,
+  from the app rather than the page, showing the real address. A link from a message still opens without a question
+  when its checks find nothing wrong. (D-G16)
+- **Release builds refuse unsigned desktop policies.** A packaged build with no policy key built in, and no
+  `discovery_key` on the account, no longer applies an organisation's desktop policy it cannot check: it keeps the
+  last one it accepted (or the defaults) and logs `POLICY_UNSIGNED_REFUSED`. Development builds apply it as before,
+  marked unsigned. A CI build without `WS_POLICY_PUBLIC_KEY` now says so in a warning. (D-G05)
+
+### Changed
+
+- **Phone follows the server's Telephony app.** Phone (and its ringing, notifications and tray) shows for whoever has
+  the server's `telephony` application, as on the web — everybody by default. Needs **Voip 1.2.0 / Core 1.17.0** on
+  the server; an older one does not send `telephony`, so Phone is hidden there for everyone but a super-admin. (D-G24)
+- **More headline figures are stat cards.** Finance's Overview (the year's result, the ledger's cash without a
+  statement, what is owed to us and by us) and Reconcile's difference, and the member counts of Marketing's lists and
+  segments, use the shared stat card. (D-G22)
+- **The keyboard reaches what the mouse clicks.** About sixty table rows and list cards that opened a record on a click
+  — Assets, Payroll, PMS, Hosting, eLearning, Events, Garage, Appointments, Projects, Social Media, Marketing, Phone,
+  Tenders, CRM, Expenses, Files, PDF pages and more — are now reached with Tab and opened with Enter or Space; a
+  Commission number is a button; the file preview's zoom and the photo strips' thumbnails have a name. A lint rule
+  (`build-tools/eslint-a11y.mjs`) keeps new clicks keyboard-usable and every picture with an `alt`. (D-G21)
+- **Linux packages name a real maintainer** — `Livezen Technologies <support@worksuitecloud.com>` — and CI GPG-signs
+  the `.rpm` and writes a detached `.asc` for the `.deb` and AppImage when the `LINUX_GPG_PRIVATE_KEY` secret is set
+  (docs/RELEASING.md "Signing Linux packages"). (D-G18)
+- **CI on Node 24 actions.** `actions/checkout@v5`, `setup-node@v5`, `upload-artifact@v6`, `download-artifact@v7`;
+  the check job, the Linux packages and the Linux OS checks run on `ubuntu-24.04` rather than `ubuntu-latest`. (D-G25)
+- **RELEASING.md on the Mac DMG:** one universal DMG is built and is published to the Update Center twice, as
+  `macos:arm64` and `macos:x64`; the "pattern is too long" merge failure it described is gone. (D-G19)
+
+### Fixed
+
+- **A flaky test run ("window is not defined").** Mail's @mention list closed itself 150 ms after the editor lost
+  focus with a timer nothing cancelled, so closing the composer in that moment set state on an unmounted editor — in
+  CI, after the test's page was gone. The timer is now cleared with the editor. (D-G15)
+
 ## 0.2.282 — 2026-10-26
 
 Needs the server with **Hosting 1.1.0** (Hosting & Domains) and **Desktop 1.13.0** (desktop settings) for those screens; on an older server they stay hidden or show "needs a server update".

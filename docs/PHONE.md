@@ -45,7 +45,7 @@ this computer).
 | No renderer notifications | `phone:notify` — strict schema, `module: 'phone'`, `category: 'voip'`, link `/phone` or `/phone/calls`; `delivery: 'silent'` (Busy: no sound) or `'bell'` (turned away by Do not disturb or Away: the bell only, no banner) |
 | A compact always-on-top window | `WindowKind 'phone'` (360×640, pinnable) |
 | CSV export (downloads are blocked) | `files:saveText` also takes `.csv` (8 MB) |
-| Catalogue | `phone` app (no server slug, like the web's — G-13), sidebar *work*, deep links `worksuite://phone`, `phone/calls/:id`; `voip` notifications visible with Phone or Chat |
+| Catalogue | `phone` app, gated on the server's `telephony` application (Voip 1.2.0 `RegisterTelephonyApp`, in Core 1.17.0's `AppGate::DEFAULTS`; the web's `'/phone': 'telephony'`), sidebar *work*, deep links `worksuite://phone`, `phone/calls/:id`; `voip` notifications visible with Phone or Chat. Without the app the phone does not connect, ring or notify |
 
 ## 3. Server gaps that remain (Livezen-Technologies/worksuite)
 
@@ -69,7 +69,7 @@ The desktop calls these; until they land the screens say so. Contract: [BACKEND.
 | G-10 | Medium | voip.voicemail / pbx_offline / queue_overflow never raised | Desktop raises its own missed/incoming notifications |
 | G-11 | Low | registrations never written | W07 shows this computer, plus the list when served |
 | G-12 | Medium | FreePBX driver untested | Shown on A04 cards |
-| G-13 | Low | no `voip` application row | Phone shown to all, like the web |
+| G-13 | Low | ~~no `voip` application row~~ — closed: the server's application is `telephony` (G-03, Voip 1.2.0) | Phone gated on `telephony` (audit D-G24). A server older than Voip 1.2.0 sends no `telephony`, so Phone is hidden there for everyone but a super-admin |
 | G-14 | Medium | no org_id scoping | Reports pass `org_id` when the person has several companies |
 | G-17 | High | recordings read from local spool | A11 explains; ARI fetch is server work |
 | G-18 | Medium | no gateway adapters | A06 "Read status" calls `POST gateways/{id}/poll` |

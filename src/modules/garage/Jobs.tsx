@@ -4,6 +4,7 @@ import { Button, ErrorNote, Spinner, cx } from '../../components/ui';
 import { PageHead } from '../hr/parts';
 import { gGet, K, lateBy, when, type JobList } from './api';
 import { input, PriorityPill, StatusPill, useGarage } from './parts';
+import { clickOnKey } from '../../components/press';
 
 export const LISTS: { key: string; label: string }[] = [
   { key: 'open', label: 'All open' },
@@ -82,7 +83,7 @@ export default function Jobs({ list }: { list: string }) {
             </thead>
             <tbody>
               {d.jobs.map((j) => (
-                <tr key={j.id} className="cursor-pointer border-t border-line hover:bg-subtle" onClick={() => g.openJob(j.id)}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={j.id} className="cursor-pointer border-t border-line hover:bg-subtle" onClick={() => g.openJob(j.id)}>
                   <td className="px-3 py-2">
                     <button type="button" className="font-mono text-[12px] font-semibold text-primary" onClick={() => g.openJob(j.id)}>
                       {j.number}

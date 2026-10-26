@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.0.2 — 2026-10-26
+
+**Fixed**
+
+- the calendar's tap-to-book columns are marked as a pointer shortcut; New booking does it from the keyboard (D-G21)
+
 ## 2.0.1 — 2026-10-26
 
 **Changed**

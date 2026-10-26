@@ -11,6 +11,7 @@ import { toCsv } from '../lib/csv';
 import { clock, daysAgo, dispositionLabel, dispositionTone, isoDay, money, otherParty, prettyNumber, stamp } from '../lib/format';
 import { DirectionGlyph, Mono, PageBody, PageHeader, Panel, Refused, TD, TR, Table } from '../parts';
 import { usePhoneState } from '../softphone/client';
+import { clickOnKey } from '../../../components/press';
 
 /**
  * W04 · Call history (VOIP-HIS-01/02/05/08, VOIP-POP-05). Your calls, or the whole team's for supervisors (the server
@@ -120,7 +121,7 @@ export default function History() {
                 const other = otherParty(c);
                 const known = c.contact?.name ?? c.linked?.label ?? null;
                 return (
-                  <tr key={c.id} className={cx(TR, 'cursor-pointer')} onClick={() => go(`/phone/calls/${c.id}`)}>
+                  <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className={cx(TR, 'cursor-pointer')} onClick={() => go(`/phone/calls/${c.id}`)}>
                     <td className={TD}>
                       <DirectionGlyph direction={c.direction} disposition={c.disposition} />
                     </td>
@@ -128,7 +129,7 @@ export default function History() {
                       <div className="font-semibold text-ink">{c.contact?.name ?? (prettyNumber(other) || 'Unknown caller')}</div>
                       <Mono className="text-[11px] text-ink-3">{prettyNumber(other)}</Mono>
                     </td>
-                    <td className={TD} onClick={(e) => e.stopPropagation()}>
+                    <td role="presentation" className={TD} onClick={(e) => e.stopPropagation()}>
                       {c.linked ? (
                         <button type="button" className="text-primary underline" onClick={() => openInNewTab(linkRoute(c.linked!.kind, c.linked!.id), c.linked!.label)}>
                           {c.linked.label}
@@ -162,7 +163,7 @@ export default function History() {
                     </td>
                     <td className={TD}>{c.recording_id ? <Icon name="play" size={14} className="text-primary" label="Has a recording" /> : <span className="text-ink-3">—</span>}</td>
                     <td className={cx(TD, 'whitespace-nowrap text-ink-2')}>{stamp(c.started_at)}</td>
-                    <td className={TD} onClick={(e) => e.stopPropagation()}>
+                    <td role="presentation" className={TD} onClick={(e) => e.stopPropagation()}>
                       {other ? <IconButton icon="phone" label={`Call ${prettyNumber(other)}`} onClick={() => void placeCall(other, { name: c.contact?.name ?? null, contactId: c.contact?.id ?? null })} className="text-success" /> : null}
                     </td>
                   </tr>

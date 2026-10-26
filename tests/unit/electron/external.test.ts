@@ -19,7 +19,7 @@ vi.mock('electron', () => ({
   BrowserWindow: { getAllWindows: () => [] },
 }));
 
-import { openExternalSafely, rustDeskId } from '../../../electron/security/hardening';
+import { forgetHandedMailLinks, MAIL_LINK_TTL_MS, noteHandedMailLink, openExternalSafely, openMailLink, rustDeskId, wasHandedMailLink } from '../../../electron/security/hardening';
 
 describe('opening a link outside the app', () => {
   beforeEach(() => {
@@ -64,6 +64,34 @@ describe('opening a link outside the app', () => {
     for (const bad of ['http://example.com', 'file:///etc/passwd', 'sms:+94771234567', 'javascript:alert(1)']) {
       expect(await openExternalSafely(bad)).toBe(false);
     }
+    expect(opened).toEqual([]);
+  });
+});
+
+describe('a link from a message, confirmed by the window (audit D-G16)', () => {
+  beforeEach(() => {
+    opened.length = 0;
+  });
+
+  it('opens without asking only a link this process handed that window, and asks for any other', async () => {
+    noteHandedMailLink(7, 'https://user:pw@login.bad.example/x', 1_000);
+    // The address the window was handed, confirmed past its warning: opened, with the hidden name taken off.
+    expect(await openMailLink('https://user:pw@login.bad.example/x', true, 7, null, 2_000)).toBe(true);
+    expect(opened).toEqual(['https://login.bad.example/x']);
+    // Another window, another address, or the same one long after: the main process asks, and Cancel opens nothing.
+    expect(await openMailLink('https://user:pw@login.bad.example/x', true, 8, null, 2_000)).toBe(false);
+    expect(await openMailLink('https://evil.test/', true, 7, null, 2_000)).toBe(false);
+    expect(await openMailLink('https://user:pw@login.bad.example/x', true, 7, null, 1_000 + MAIL_LINK_TTL_MS + 1)).toBe(false);
+    expect(opened).toHaveLength(1);
+    expect(wasHandedMailLink(7, 'https://evil.test/', 2_000)).toBe(false);
+  });
+
+  it('never opens anything but http or https as confirmed, and forgets a closed window', async () => {
+    noteHandedMailLink(9, 'file:///etc/passwd', 1_000);
+    expect(await openMailLink('file:///etc/passwd', true, 9, null, 1_000)).toBe(false);
+    noteHandedMailLink(9, 'http://intranet.livezen.lk/', 1_000);
+    forgetHandedMailLinks(9);
+    expect(wasHandedMailLink(9, 'http://intranet.livezen.lk/', 1_000)).toBe(false);
     expect(opened).toEqual([]);
   });
 });

@@ -1,6 +1,6 @@
 {
     "module": "social-media",
-    "version": "1.0.2",
+    "version": "1.0.3",
     "paths": [
         "shared/social-notices.ts"
     ]
