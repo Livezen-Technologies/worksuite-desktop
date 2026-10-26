@@ -1,7 +1,8 @@
 {
     "module": "office",
-    "version": "1.4.0",
+    "version": "1.5.0",
     "paths": [
+        "electron/services/office-ai-policy.ts",
         "electron/services/office-editor.ts",
         "electron/services/office-external.ts",
         "electron/services/office-host-page.ts",

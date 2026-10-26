@@ -302,6 +302,10 @@ Vault-sealed, so the database file alone gives nothing to guess against.
   tabs, commands and shortcuts, drafts, i18n, time rules.
 - `layouts/` — title bar (52 px), sidebar (220 px), tab strip (40 px),
   workspace, status bar (26 px) — §4.12.
+  On macOS the traffic lights are placed and the bars leave them room from
+  one definition, `shared/window-chrome.ts` (#424): centred in the main
+  window's 52 px bar and in every other window's 40 px bar, the room given
+  back in full screen.
 - `modules/` — one folder per desktop module with a validated manifest
   (`modules/registry.ts`, §15). Modules are lazy chunks; each renders inside
   its own error boundary.

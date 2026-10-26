@@ -111,7 +111,9 @@ export function ResizeDivider({ state, label, side = 'right', className }: { sta
       aria-valuemin={state.min}
       aria-valuemax={state.max}
       tabIndex={0}
-      title="Drag to resize · double-click to reset"
+      // No hover tooltip (#415): the system's tooltip opens under the pointer, over the text beside a 7 px divider, and
+      // follows it during a drag. The resize cursor says what it does; the hint is read out by screen readers.
+      aria-description="Drag to resize · double-click to reset"
       data-dragging={dragging || undefined}
       className={cx(
         'group/divider absolute inset-y-0 z-10 flex w-[7px] cursor-col-resize touch-none justify-center outline-none',

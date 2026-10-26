@@ -14,7 +14,7 @@ import { GuestMeetService } from '../services/guest-meet';
 import { app, net as electronNet, Notification, clipboard, crashReporter, desktopCapturer, dialog, globalShortcut, ipcMain, nativeTheme, powerMonitor, screen, session, shell, systemPreferences, BrowserWindow, type WebContents, webContents } from 'electron';
 import os from 'node:os';
 import { hkdfSync } from 'node:crypto';
-import { join, resolve } from 'node:path';
+import { dirname, join, resolve } from 'node:path';
 import { canOpenApp, canOpenLink, canOpenRoute, notificationAllowed, visibleAppIds } from '@shared/access';
 import { findDeepLinkInArgv, parseDeepLink } from '@shared/deeplink';
 import { isOsMode, moduleLinkInArgv } from '@shared/os-mode';
@@ -73,6 +73,7 @@ import { AuditService } from '../services/audit';
 import { AuthService, normalizeServerUrl, probeServer, type PublicUser, type SignInPayload } from '../services/auth';
 import { DesktopAccountsFile, OfficeSignIn } from '../services/office-signin';
 import { OfficeApp } from '../services/office-app';
+import { OfficeAiPolicySync } from '../services/office-ai-policy';
 import { BootstrapService } from '../services/bootstrap';
 import { CallService } from '../services/calls';
 import { ScreenShare } from '../services/screen-share';
@@ -1493,6 +1494,27 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       if (origin) void openExternalSafely(`${origin}${target.path}`);
     } else windows.showMain();
   };
+  /* WorkSuite Office's Local AI policy (W10): the company's policy from the server, written where Office's local
+     AI service reads managed configuration. Refreshed with every bootstrap, removed on sign-out. */
+  const officeAiPolicy = new OfficeAiPolicySync({
+    platform: process.platform,
+    env: process.env,
+    home: app.getPath('home'),
+    fetchPolicy: () => http.get<unknown>('/api/ai/office-policy'),
+    run: (file, args) =>
+      new Promise<string>((resolveRun, reject) => {
+        execFileCb(file, args, { timeout: 30_000, windowsHide: true }, (err, stdout) => (err ? reject(err) : resolveRun(String(stdout))));
+      }),
+    readFile: (path) => fsp.readFile(path, 'utf8').catch(() => null),
+    writeFile: async (path, data, mode) => {
+      await fsp.mkdir(dirname(path), { recursive: true, mode: 0o700 });
+      const tmp = `${path}.${process.pid}.tmp`;
+      await fsp.writeFile(tmp, data, { mode });
+      await fsp.rename(tmp, path);
+    },
+    removeFile: (path) => fsp.rm(path, { force: true }),
+    log: logger('office-ai-policy'),
+  });
   // WorkSuite Office, the desktop editor: "Open with ▸ WorkSuite Office" hands it a link this process builds (#322).
   const officeApp = new OfficeApp({
     protocolApp: (url) => app.getApplicationNameForProtocol(url),
@@ -3083,6 +3105,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       desktopAccounts.update(desktopAccountOf(sessionCtl.isReady()));
       if (b) settings.setPolicy(b.policy);
       if (b) void appearanceSync.pull();
+      // Office's Local AI policy follows the session: refreshed with the bootstrap, cleared when nobody is signed in.
+      void (b ? officeAiPolicy.sync() : officeAiPolicy.clear()).catch(() => undefined);
       // Policy or trust may have turned sync on or off.
       sync.kick('policy');
       applyAccess(b);

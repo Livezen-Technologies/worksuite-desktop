@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.5.0 — 2026-10-25
+
+**Added**
+
+- WorkSuite Office Local AI policy pass-through (Local AI spec W10). After every bootstrap the app fetches the company's effective policy (GET /api/ai/office-policy, server Ai 1.19.0) and writes it where Office's local worksuite-ai service reads managed configuration: macOS user defaults lk.worksuite.office (AI* keys plus AIPolicy JSON), Windows HKCU\Software\Policies\WorkSuite\Office\AI, Linux ~/.config/worksuite/office/policy.json (0600, XDG_CONFIG_HOME respected). Each carries Source = worksuite-desktop; a policy deployed by MDM or Group Policy is never overwritten or removed.
+- An answer that is not exactly the GET /v1/policy shape is refused and the last policy stays; an unmanaged company, or signing out, removes what this app wrote.
+
 ## 1.4.0 — 2026-10-20
 
 **Added**

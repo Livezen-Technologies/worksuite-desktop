@@ -12,6 +12,8 @@ import { Icon } from '../components/Icon';
 import { useWindowButtons, WindowControls } from '../components/WindowControls';
 import { guardWindowClose } from '../core/closeGuard';
 import { flushDrafts } from '../core/drafts';
+import { macBarInsetFor } from '@shared/window-chrome';
+import { useFullScreen } from '../layouts/TitleBar';
 
 /**
  * Secondary windows (FR-NAV-05/09): a record, a mini chat, a call or a
@@ -46,6 +48,8 @@ export function WindowRoot({ hash }: { hash: string }) {
   const barHidden = useWindowBarHidden();
   // Linux: the bar's own minimise, maximise and close (#409).
   const { layout: buttons, maximized } = useWindowButtons();
+  // macOS: the traffic lights' room, given back in full screen where they hide (#424).
+  const fullScreen = useFullScreen();
 
   useEffect(() => {
     void call('windows:state').then(
@@ -69,7 +73,7 @@ export function WindowRoot({ hash }: { hash: string }) {
   }, [dockable, route, title]);
   return (
     <div className="flex h-full flex-col">
-      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'support-ring' || kind === 'call' || barHidden) && 'hidden')} style={{ paddingLeft: isMac ? 78 : buttons?.side === 'left' ? 6 : 12, paddingRight: isMac ? 8 : buttons ? (buttons.side === 'right' ? 6 : 12) : 140 }}>
+      <div className={cx('drag flex h-10 shrink-0 items-center gap-2 bg-navy text-[13px] font-semibold text-white', (kind === 'ring' || kind === 'support-ring' || kind === 'call' || barHidden) && 'hidden')} style={{ paddingLeft: isMac ? macBarInsetFor(kind, fullScreen) : buttons?.side === 'left' ? 6 : 12, paddingRight: isMac ? 8 : buttons ? (buttons.side === 'right' ? 6 : 12) : 140 }}>
         {buttons?.side === 'left' ? <WindowControls layout={buttons} maximized={maximized} height={28} /> : null}
         {dockable && windowId ? (
           <span
@@ -89,7 +93,8 @@ export function WindowRoot({ hash }: { hash: string }) {
           // The rest of the bar still moves the window.
           <span className="flex-1" />
         ) : (
-          <span className="flex-1 truncate">{title}</span>
+          // macOS centres a window's title, as its own windows do (#424); the traffic lights' room stays clear.
+          <span className={cx('min-w-0 flex-1 truncate', isMac && 'text-center')}>{title}</span>
         )}
         {dockable ? (
           <>
