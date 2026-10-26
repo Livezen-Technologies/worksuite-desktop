@@ -225,6 +225,7 @@ hiding in the App Store build before a public release.
 |---|---|
 | Remote control (`osascript` / Accessibility) | Blocked — Apple Events to System Events are not allowed |
 | Local AI (`node-llama-cpp` native binaries) | May fail to load; untested |
+| Start at login | The app registers itself (SMAppService), macOS 13 and later; *Start minimized* is not passed on |
 | In-app updater | Turned off automatically (`process.mas`); Settings › Updates says the App Store keeps WorkSuite up to date |
 | Default `mailto:` handler, opening `.eml`/`.msg` | Only for files macOS hands to the app |
 | Files outside Downloads | Only through the open/save dialog |
@@ -254,7 +255,7 @@ Adding a permission means adding a key there; Apple may ask why during review.
 | `ITMS-90237` / non-public API | Comes from a native module; the email names the binary. |
 | Build delivered but not in TestFlight after an hour | Processing failed. Check the uploading Apple ID's email for an *ITMS-* message. |
 | Signing in on the build Mac shows *The application can't be opened* | macOS sent the `worksuite://` sign-in link to the App Store copy left in `release/<version>/mas-universal/WorkSuite.app`, which only runs when installed by TestFlight. The build now deletes these copies itself; if one is still there (an older build, or `WS_MAS_KEEP_APP=1`), delete the `.app` and keep the `.pkg`. |
-| TestFlight: *Could not install … The requested app is not available or doesn't exist* | The build is not released to you yet: answer Export Compliance, add the build to an Internal Testing group that includes your Apple ID, wait for *Ready to Test*, then reopen TestFlight. |
+| TestFlight: *Could not install … The requested app is not available or doesn't exist* | First check the build is in an Internal Testing group that includes your Apple ID and shows *Ready to Test*. If it does, the build contains an app bundle TestFlight will not deliver: every bundle macOS launches on its own needs its own provisioning profile. Electron's `Contents/Library/LoginItems/… Login Helper.app` was one (builds 1 and 2 of 0.2.279); the build now removes it (`build/mas-cleanup.cjs`). To check a `.pkg`, unpack it (see *Check the result*) and list `find WorkSuite.app -name '*.app'`: only `Contents/Frameworks/WorkSuite Helper*.app` may appear. |
 
 ## Where the configuration lives
 
@@ -264,5 +265,5 @@ Adding a permission means adding a key there; Apple may ask why during review.
 | `build/electron-builder.config.cjs` → `mas` | App Store build settings: entitlements, provisioning profile, no hardened runtime, no notarization, build number from `WS_MAS_BUILD_NUMBER`. The bundle ID and product name are shared with the other builds (top of the file); the Info.plist keys come from the `mac` section. |
 | `build/entitlements.mas.plist`, `build/entitlements.mas.inherit.plist` | Sandbox permissions (see above). |
 | `build/embedded.provisionprofile` | Your local copy of the profile. Not in git. |
-| `build/mas-cleanup.cjs` | Runs after the `.pkg` is written: unregisters and deletes the leftover signed `.app` copies. |
+| `build/mas-cleanup.cjs` | Before signing, removes Electron's Login Helper (TestFlight refuses it); after the `.pkg` is written, unregisters and deletes the leftover signed `.app` copies. |
 | `.gitignore` | Ignores `*.provisionprofile`. |

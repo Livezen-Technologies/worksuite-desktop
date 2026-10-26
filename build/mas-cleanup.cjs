@@ -6,6 +6,11 @@
  * signed app only runs when the App Store or TestFlight installed it, so a browser sign-in on the build Mac then
  * opens one of these copies and fails with "The application can't be opened".
  *
+ *   afterPack              before signing, Electron's Contents/Library/LoginItems/<name> Login Helper.app is removed.
+ *                          macOS launches a login item on its own, so it would need its own App ID and provisioning
+ *                          profile; without them App Store Connect lists the build but TestFlight refuses to install
+ *                          it ("The requested app is not available or doesn't exist"). The app registers itself as
+ *                          the login item instead (electron/main/autostart.ts, SMAppService).
  *   afterAllArtifactBuild  once the .pkg is written, each leftover .app is unregistered from Launch Services and
  *                          deleted. Only the .pkg, the file that is uploaded, stays. WS_MAS_KEEP_APP=1 keeps them.
  */
@@ -24,6 +29,15 @@ function masDirs(outDir) {
     .map((name) => path.join(outDir, name));
 }
 
+async function afterPack(context) {
+  if (context.electronPlatformName !== 'mas') return;
+  const app = path.join(context.appOutDir, `${context.packager.appInfo.productFilename}.app`);
+  const loginItems = path.join(app, 'Contents', 'Library', 'LoginItems');
+  if (!existsSync(loginItems)) return;
+  rmSync(loginItems, { recursive: true, force: true });
+  console.log(`  • removed Login Helper  path=${path.relative(process.cwd(), loginItems)}`);
+}
+
 async function afterAllArtifactBuild(result) {
   if (process.env.WS_MAS_KEEP_APP === '1') return [];
   for (const dir of masDirs(result.outDir)) {
@@ -39,4 +53,4 @@ async function afterAllArtifactBuild(result) {
   return [];
 }
 
-module.exports = { afterAllArtifactBuild, masDirs };
+module.exports = { afterPack, afterAllArtifactBuild, masDirs };

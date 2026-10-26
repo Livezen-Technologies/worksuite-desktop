@@ -29,6 +29,12 @@ export function applyAutostart(enabled: boolean, minimized: boolean): void {
     );
     return;
   }
+  // Mac App Store build: the app itself is the login item (SMAppService, macOS 13+). It has no Login Helper bundle,
+  // which TestFlight refuses without its own provisioning profile (build/mas-cleanup.cjs); no launch arguments either.
+  if (process.mas) {
+    app.setLoginItemSettings({ openAtLogin: enabled, type: 'mainAppService' });
+    return;
+  }
   app.setLoginItemSettings({ openAtLogin: enabled, args });
 }
 

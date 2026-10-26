@@ -98,7 +98,11 @@ module.exports = {
   beforePack: macSigning.beforePack,
   afterSign: macSigning.afterSign,
   // Linux, only with WORKSUITE_LINUX_REPO=1: the package repository's marker, key and helper (worksuite-desktop#351).
-  afterPack: linuxRepo.afterPack,
+  // Mac App Store: no Login Helper, which TestFlight refuses without its own profile (build/mas-cleanup.cjs).
+  afterPack: async (context) => {
+    await linuxRepo.afterPack(context);
+    await masCleanup.afterPack(context);
+  },
   // Mac App Store: removes the signed .app copies left beside the .pkg, which take over worksuite:// links on the
   // build Mac and cannot run there (build/mas-cleanup.cjs).
   afterAllArtifactBuild: masCleanup.afterAllArtifactBuild,
