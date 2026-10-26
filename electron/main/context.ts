@@ -26,6 +26,7 @@ import type { OfflineCache } from '../services/offline-cache';
 import type { OfflineQueue } from '../services/offline-queue';
 import type { SecureStore } from '../services/secure-store';
 import type { SettingsService } from '../services/settings';
+import type { DesktopSettingsService } from '../services/desktop-settings';
 import type { ServiceSupervisor } from '../services/supervisor';
 import type { MeetRecorder } from '../services/meet-recorder';
 import type { SpeechService } from '../services/speech';
@@ -91,6 +92,8 @@ export interface AppContext {
   /** The image editor's offline edits, library cache and drag-out (Drive ENH-03). */
   imageLocal: ImageLocal;
   settings: SettingsService;
+  /** Desktop settings: features, apps and the startup screen with the organisation's policy (desktop-settings.ts). */
+  desktopSettings: DesktopSettingsService;
   http: HttpClient;
   auth: AuthService;
   device: DeviceService;

@@ -32,6 +32,7 @@ import {
   type WindowSize,
 } from '@shared/launcher';
 import { app } from '../../core/app-state';
+import { useFeature } from '../../core/desktop-settings';
 import { appColour } from '../../core/app-look';
 import { call, isMac } from '../../core/bridge';
 import { prettyAccelerator } from '../../core/commands';
@@ -140,6 +141,7 @@ type OpenHow = 'window' | 'new-tab' | 'current-tab';
 
 export function Launcher() {
   const apps = useStore(app, (s) => s.apps);
+  const searchOn = useFeature('launcherSearch');
   const sidebarPins = useSidebarPinnedKeys();
   const status = useStore(app, (s) => s.status);
   const userId = useStore(app, (s) => s.auth?.user?.id ?? null);
@@ -322,8 +324,8 @@ export function Launcher() {
       const r = grid.current?.querySelector<HTMLElement>(`[data-index="${selected}"]`)?.getBoundingClientRect();
       setMenu({ id: a.id, x: r ? r.left + r.width / 2 : 0, y: r ? r.bottom : 0, keyboard: true });
     } else if (!inInput && !menu && e.key.length === 1 && !e.metaKey && !e.ctrlKey && !e.altKey) {
-      // Typing anywhere in the launcher searches.
-      input.current?.focus();
+      // Typing anywhere in the launcher searches (where launcher search is on).
+      if (searchOn) input.current?.focus();
     }
   };
 
@@ -759,7 +761,10 @@ export function Launcher() {
       </div>
     );
 
-  const search = (
+  // `features.launcherSearch` off (desktop settings): no search box; the grid is all there is.
+  const search = !searchOn ? (
+    <div className="min-w-0 flex-1" />
+  ) : (
     <label
       className={cx(
         'flex min-w-0 flex-1 items-center gap-2.5 border bg-well text-ink-3',

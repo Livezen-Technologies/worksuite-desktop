@@ -272,6 +272,34 @@ start-up a stored refresh token resumes the session; if the server is
 unreachable the cached bootstrap starts the app offline and read-only until it
 revalidates.
 
+## Desktop settings and the Settings screens
+
+Features, apps and the startup screen, per person, with the organisation's policy (docs/BACKEND.md › Desktop
+settings):
+
+- `shared/desktop-settings.ts` — the keys, the desktop's own catalogue, `resolveSettings` (managed policy › the
+  person › a default policy entry › the catalogue), `preferenceOverlay`, `migrationValues` and `startupTarget`. Pure,
+  used by both processes.
+- `electron/services/desktop-settings.ts` — the server's document per account and person in the profile database
+  (`desktop_settings:<scope>`, with `asOf`, the ETag and the changes not yet sent), refreshed with every bootstrap, on
+  `desktop.settings.changed` and on a realtime resync. IPC: `desktopSettings:get|set|refresh`, event
+  `desktopSettings:changed`.
+- **Enforcement.** `SessionController.disabledApps` takes the apps whose server slug is turned off out of
+  `visibleApps()` (the tray, the menu, windows, links, notifications), and the renderer's `appsFor` out of `app.apps`
+  (the launcher, the sidebar, search, the palette, tabs — `closeTabsForApps` closes theirs).
+  `SettingsService.setDesktopOverlay` puts managed and synced `prefs.*` (mapped by `SYNCED_PREFS`) and a feature's
+  overlay (itemLinks: links open in the browser) over the preferences, with locks, so `settings:set` refuses them and
+  every service that reads `settings.effective()` follows. The features: launcherSearch in the launcher,
+  globalShortcut in `globalKeysOn` (main), itemLinks in the deep-link handler, officeEditing in `core/access`
+  (`office`) and `office:open` / `office:openInDesktopApp`, fileSync in `syncAllowed` and `desktop.files.sync`,
+  offlineFiles in `desktop.files.offline` and `office:readOffline|writeOffline`.
+- **Startup.** After the tabs are restored, `core/startup.ts` opens `startup.screen` in front (`last` keeps the tab
+  in front; an app turned off or not given opens Home and says so).
+- **Settings UI.** `src/modules/settings/kit.tsx` is the one look for every settings screen: `SectionHeader`,
+  `SettingsGroup` cards, `SettingRow` (label, description, control; `LockBadge` "Managed by your organization" with the
+  reason as tooltip; `ResetButton`), `RadioCards`, and the sidebar's search over `search-index.ts`. Rows written
+  straight under a header are joined into cards by `styles.css` (`[data-setting-row][data-loose]`).
+
 ## Server API families
 
 `probeServer` decides per server:

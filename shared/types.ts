@@ -376,6 +376,8 @@ export interface Preferences {
   appearance?: AppearancePrefs;
   density: Density;
   hardwareAcceleration: boolean;
+  /** Spelling is checked as you type in every window (desktop settings `prefs.spellcheck`). Unset: on. */
+  spellcheck?: boolean;
   notificationSounds: boolean;
   notificationPrivacy: NotificationPrivacy;
   notificationsEnabled: boolean;

@@ -18,7 +18,7 @@ import { Button, Modal } from '../../components/ui';
 
 function Card({ title, hint, aside, children }: { title: string; hint?: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex min-w-0 flex-col gap-3 rounded-[16px] border border-line bg-surface p-[18px]" aria-label={title}>
+    <section className="flex min-w-0 flex-col gap-3 rounded-[14px] border border-line bg-surface p-[18px] shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/0.04)]" aria-label={title}>
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 flex-col gap-0.5">
           <h3 className="text-[16px] font-bold text-ink">{title}</h3>
@@ -67,7 +67,7 @@ export function SidebarSettings() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex max-w-[560px] flex-col gap-1">
-          <h2 className="text-[22px] font-bold text-ink">{t('sidebar.title')}</h2>
+          <h2 className="text-[20px] leading-tight font-bold text-ink">{t('sidebar.title')}</h2>
           <p className="text-[13.5px] text-ink-3">{t('sidebar.hint')}</p>
           <p className="text-[12.5px] text-ink-3" data-sidebar-source={source}>
             {source === 'local' ? t('sidebar.local') : t('sidebar.synced')}

@@ -13,6 +13,7 @@ import { noteRecentApp } from '../core/recent-apps';
 import { useStore } from '../core/store';
 import { activateIndex, activateRelative, activeTab, closeTab, closeTabsForApps, detachTab, dockSide, insertTab, navigate, newRoute, openTab, resetTabs, restoreClosed, restoreTabs, suspendIdle, tabsStore, undockSide } from '../core/tabs';
 import { toast } from '../core/toasts';
+import { applyStartupScreen } from '../core/startup';
 import { aiWidget, closeOverlay, closeTopPanel, minimiseChatDrawer, openAssistant, openChatDrawer, openOverlay, toggleAssistant, toggleDock, ui, useAiDisplay } from '../core/ui';
 import { allowedModules, moduleFor } from '../modules/registry';
 import { PanelBoundary } from '../app/Boundaries';
@@ -101,6 +102,8 @@ export function Shell() {
       void call('windows:restoreDetached').catch(() => undefined);
       // Guest mode (#149) has no Home: it starts on Notes.
       if (!isGuest() && !tabsStore.get().tabs.some((t) => t.app === 'home')) openTab('/home', { background: true });
+      // Then the screen chosen to open at startup (desktop settings `startup.screen`), in front.
+      applyStartupScreen(ok);
       if (info?.restoredFromCrash) toast('info', 'WorkSuite closed unexpectedly. Your tabs, drafts and unsent changes have been restored.');
     });
   }, [apps, visible, info]);

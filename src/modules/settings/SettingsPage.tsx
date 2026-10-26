@@ -59,6 +59,12 @@ import { AccountsServers } from './AccountsServers';
 import { ADMIN_RINGING_ROUTE, AdminRinging } from './AdminRinging';
 import { ADMIN_PROTECTION_ROUTE, useHasPermission } from './AdminNav';
 import { AdminProtection } from '../mail/protection/admin/AdminProtection';
+import { syncedPrefOf } from '@shared/desktop-settings';
+import { setDesktopSettings, useDesktopSettings } from '../../core/desktop-settings';
+import { SectionHeader, SettingRow, SettingsGroup, SettingsQuery, SettingsSearchBox } from './kit';
+import { FeaturesSettings } from './FeaturesSettings';
+import { StartupSettings } from './StartupSettings';
+import { searchSettings } from './search-index';
 
 /** Pages laid out in cards side by side get the wider column. */
 const WIDE: ReadonlySet<string> = new Set(['updates', 'update-diagnostics', 'license', 'accounts']);
@@ -77,7 +83,10 @@ const SECTIONS = [
   { id: 'devices', label: 'Devices', icon: 'laptop', group: 'Account' },
   // Personal and Enterprise accounts side by side, and each one's connection health (Connection & Startup screen 15).
   { id: 'accounts', label: 'Accounts & Servers', icon: 'server', group: 'Desktop' },
-  { id: 'desktop', label: 'Desktop', icon: 'monitor', group: 'Desktop' },
+  // What WorkSuite opens on, how it starts and runs on this computer (desktop settings `startup.screen`).
+  { id: 'desktop', label: 'Desktop & startup', icon: 'monitor', group: 'Desktop' },
+  // Features and apps on or off, with the organisation's policy (desktop settings `features.*`, `modules.*`).
+  { id: 'features', label: 'Features & apps', icon: 'zap', group: 'Desktop' },
   { id: 'files', label: 'Files & Sync', icon: 'folder', group: 'Desktop' },
   { id: 'offline', label: 'Offline', icon: 'cloud-off', group: 'Desktop' },
   // Updates as its own page, with its Diagnostics (Updates & License design).
@@ -131,26 +140,60 @@ function SettingsSections(_props: ModuleProps) {
   const managesRinging = useManagesRinging();
   const seesProtection = useHasPermission('mail.security.view');
   const { ref: listRef, fades, onScroll: onListScroll } = useScrollFades<HTMLDivElement>();
+  const [find, setFind] = useState('');
   if (!prefs) return null;
+  const listed = shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts) && (s.id !== 'chat' || hasChat));
+  // Searching: the sections with something that matches, and under each what matched (search-index.ts).
+  const hits = find.trim() ? searchSettings(find, listed) : null;
+  const navItem = (s: (typeof SECTIONS)[number], sub?: string[]) => (
+    <div key={s.id}>
+      <button
+        type="button"
+        onClick={() => go(`/settings/${s.id}`)}
+        aria-current={section === s.id ? 'page' : undefined}
+        className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px] transition-colors', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}
+      >
+        <Icon name={s.icon} size={16} /> {s.label}
+      </button>
+      {sub?.length ? (
+        <ul className="mb-1 ms-[34px] flex flex-col">
+          {sub.slice(0, 4).map((l) => (
+            <li key={l}>
+              <button type="button" onClick={() => go(`/settings/${s.id}`)} className="w-full truncate rounded-[6px] px-2 py-0.5 text-start text-[12px] text-ink-3 hover:bg-subtle hover:text-ink">
+                {l}
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : null}
+    </div>
+  );
   return (
-    <div className="flex h-full">
+    <div className="flex h-full bg-ground">
       {/*
         The sidebar fills the tab's height (never 100vh) and only its list scrolls, 16px clear of the bottom; Admin Center
         is a footer under it, so it is always whole above the status bar (worksuite-desktop#246).
       */}
-      <nav className="flex h-full min-h-0 w-[230px] shrink-0 flex-col border-r border-line bg-surface" aria-label="Settings sections">
+      <nav className="flex h-full min-h-0 w-[240px] shrink-0 flex-col border-r border-line bg-surface" aria-label="Settings sections">
         <div className="relative flex min-h-0 flex-1 flex-col">
           <div ref={listRef} onScroll={onListScroll} data-settings-scroller className="min-h-0 flex-1 overflow-y-auto px-3 pt-3 pb-4 scroll-thin">
             <div>
               <h1 className="px-3 pt-1 pb-3 text-[20px] font-bold text-ink">Settings</h1>
-              {shown.filter((s) => (s.id !== 'mail' || hasMail) && (s.id !== 'contacts' || hasContacts) && (s.id !== 'chat' || hasChat)).map((s, i, list) => (
-                <div key={s.id}>
-                  {s.group !== list[i - 1]?.group ? <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{s.group}</div> : null}
-                  <button type="button" onClick={() => go(`/settings/${s.id}`)} aria-current={section === s.id ? 'page' : undefined} className={cx('flex h-9 w-full items-center gap-2.5 rounded-[8px] px-3 text-left text-[13.5px]', section === s.id ? 'bg-selection font-bold text-primary' : 'text-ink hover:bg-subtle')}>
-                    <Icon name={s.icon} size={16} /> {s.label}
-                  </button>
-                </div>
-              ))}
+              <SettingsSearchBox value={find} onChange={setFind} />
+              {hits ? (
+                hits.length ? (
+                  hits.map((h) => navItem(h.section, h.labels))
+                ) : (
+                  <p className="px-3 py-4 text-[12.5px] text-ink-3">No setting matches “{find.trim()}”.</p>
+                )
+              ) : (
+                listed.map((s, i, list) => (
+                  <div key={s.id}>
+                    {s.group !== list[i - 1]?.group ? <div className="px-3 pt-3 pb-1 text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{s.group}</div> : null}
+                    {navItem(s)}
+                  </div>
+                ))
+              )}
             </div>
           </div>
           {/* More below: the list fades into the sidebar's own background, never a dark band. */}
@@ -165,8 +208,9 @@ function SettingsSections(_props: ModuleProps) {
           </div>
         ) : null}
       </nav>
-      <div className="min-w-0 flex-1 overflow-y-auto px-10 py-8 scroll-thin">
-        <div className={WIDE.has(section) ? 'max-w-[1040px]' : 'max-w-[760px]'}>
+      <div className="min-w-0 flex-1 overflow-y-auto px-10 py-8 scroll-thin" data-settings-body>
+        <SettingsQuery.Provider value={find}>
+        <div className={cx('mx-auto', WIDE.has(section) ? 'max-w-[1040px]' : 'max-w-[780px]')}>
           {section === 'general' ? <General /> : null}
           {section === 'preferences' ? <PreferencesSection prefs={prefs} /> : null}
           {section === 'language' ? <SinhalaSettings /> : null}
@@ -193,48 +237,46 @@ function SettingsSections(_props: ModuleProps) {
           {section === 'license' ? <LicensePage /> : null}
           {section === 'local-profile' ? <LocalProfileSection /> : null}
           {section === 'local-data' ? <LocalDataSection /> : null}
+          {section === 'features' ? <FeaturesSettings /> : null}
         </div>
+        </SettingsQuery.Provider>
       </div>
     </div>
   );
 }
 
+/** A section's title (the Settings kit's header). */
 function H({ title, hint }: { title: string; hint?: string }) {
+  return <SectionHeader title={title} hint={hint} />;
+}
+
+/** One setting (the Settings kit's row): label, description, control; locked with the organisation's reason. */
+function Row({ label, hint, children, lock, onReset }: { label: string; hint?: ReactNode; children: ReactNode; lock?: { reason: string }; onReset?: (() => void) | null }) {
   return (
-    <div className="mb-5">
-      <h2 className="text-[22px] font-bold text-ink">{title}</h2>
-      {hint ? <p className="mt-1 text-[13.5px] text-ink-3">{hint}</p> : null}
-    </div>
+    <SettingRow label={label} hint={hint} lock={lock} onReset={onReset}>
+      {children}
+    </SettingRow>
   );
 }
 
-function Row({ label, hint, children, lock }: { label: string; hint?: ReactNode; children: ReactNode; lock?: { reason: string } }) {
-  return (
-    <div className="flex items-center gap-6 border-b border-line py-3.5">
-      <div className="min-w-0 flex-1">
-        <div className="flex items-center gap-2 text-[14px] font-semibold text-ink">
-          {label}
-          {lock ? (
-            <span title={lock.reason}>
-              <Chip tone="warning">
-                <Icon name="lock" size={11} /> Set by your organization
-              </Chip>
-            </span>
-          ) : null}
-        </div>
-        {hint ? <div className="mt-0.5 text-[12.5px] text-ink-3">{hint}</div> : null}
-        {lock ? <div className="mt-0.5 text-[12px] text-warning">{lock.reason}</div> : null}
-      </div>
-      {/* Never wider than 60%: a long value wraps instead of running over the label. */}
-      <div className="min-w-0 max-w-[60%] shrink-0 break-words">{children}</div>
-    </div>
-  );
+/**
+ * Reset to default for a preference that syncs (`prefs.<name>`): offered while the person's own choice differs from
+ * the default, and never for a key the organisation manages.
+ */
+function usePrefReset(k: keyof Preferences, _current?: unknown): (() => void) | null {
+  const ds = useDesktopSettings();
+  const p = syncedPrefOf(k);
+  const e = p ? ds.effective[p.key] : undefined;
+  // Offered while the value is the person's own synced choice; back to the organisation's default or the catalogue's.
+  if (!p || !e || e.locked || e.source !== 'user') return null;
+  return () => void setDesktopSettings({ [p.key]: null });
 }
 
 function Toggle({ k, prefs, label, hint, disabled }: { k: keyof Preferences; prefs: Preferences; label: string; hint?: string; disabled?: boolean }) {
   const lock = isLocked(k);
+  const onReset = usePrefReset(k, prefs[k]);
   return (
-    <Row label={label} hint={hint} lock={lock}>
+    <Row label={label} hint={hint} lock={lock} onReset={onReset}>
       <Switch label={label} checked={Boolean(prefs[k])} disabled={disabled || !!lock} onChange={(v) => void updatePrefs({ [k]: v } as Partial<Preferences>)} />
     </Row>
   );
@@ -296,12 +338,7 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
   const guest = useGuest();
   return (
     <>
-      <H title="Preferences" />
-      <Toggle k="startWithOs" prefs={prefs} label="Start with your computer" />
-      <Toggle k="startMinimized" prefs={prefs} label="Start minimized to the tray" />
-      <Toggle k="minimizeToTray" prefs={prefs} label="Closing the window keeps WorkSuite in the tray" hint="Off: closing the window quits WorkSuite." />
-      <Toggle k="restoreTabs" prefs={prefs} label="Reopen my tabs when WorkSuite starts" />
-      <H title="Appearance" />
+      <H title="Preferences" hint="How WorkSuite looks and behaves on this computer. How it starts is in Desktop & startup." />
       <Row label="Theme">
         <Select label="Theme" value={prefs.theme} options={[{ value: 'system', label: 'System' }, { value: 'light', label: 'Light' }, { value: 'dark', label: 'Dark' }]} onValueChange={(v) => void updatePrefs({ theme: v })} />
       </Row>
@@ -326,6 +363,7 @@ function PreferencesSection({ prefs }: { prefs: Preferences }) {
       )}
       <Toggle k="notificationSounds" prefs={prefs} label="Sounds" />
       <Toggle k="hardwareAcceleration" prefs={prefs} label="Hardware acceleration" hint="Turn off if the window flickers or draws badly. Takes effect after a restart." />
+      <Toggle k="spellcheck" prefs={{ ...prefs, spellcheck: prefs.spellcheck !== false }} label="Check spelling as you type" />
       <Shortcuts prefs={prefs} />
     </>
   );
@@ -679,7 +717,7 @@ export function WebchatRingingPrefs({ prefs }: { prefs: Preferences }) {
   const keys = (mac: string, other: string) => <kbd className="rounded-[6px] border border-line bg-subtle px-2 py-1 font-mono text-[12px] text-ink">{isMac ? mac : other}</kbd>;
   return (
     <>
-      <h3 className="mt-8 mb-1 text-[22px] font-bold text-ink">Website chat ringing on this computer</h3>
+      <h3 className="mt-8 mb-1 text-[20px] leading-tight font-bold text-ink">Website chat ringing on this computer</h3>
       <p className="mb-3 text-[14px] text-ink-2">A new website chat or visitor call rings here like a phone until someone joins.</p>
       {ring.ringHere === true ? (
         <p className="mb-3 flex items-center gap-3 rounded-[12px] border border-success/30 bg-success-bg px-4 py-3 text-[13px] text-success"><Icon name="check" size={18} /> This computer rings for you. Your browser tabs show the card silently.</p>
@@ -1257,7 +1295,15 @@ function DesktopSection({ prefs }: { prefs: Preferences }) {
   const info = useStore(app, (s) => s.info);
   return (
     <>
-      <H title="Desktop" />
+      <H title="Desktop & startup" hint="What WorkSuite opens on, how it starts and how it runs on this computer." />
+      <StartupSettings />
+      <SettingsGroup title="Starting and closing">
+        <Toggle k="startWithOs" prefs={prefs} label="Start with your computer" />
+        <Toggle k="startMinimized" prefs={prefs} label="Start minimized to the tray" />
+        <Toggle k="minimizeToTray" prefs={prefs} label="Closing the window keeps WorkSuite in the tray" hint="Off: closing the window quits WorkSuite." />
+        <Toggle k="restoreTabs" prefs={prefs} label="Reopen my tabs when WorkSuite starts" />
+      </SettingsGroup>
+      <SettingsGroup title="This computer">
       {/* Updates have their own page (Settings › Updates); this row says where they stand. */}
       <UpdatesRow />
       <Row label="Tab suspension" hint="Tabs you haven't looked at for this long are unloaded to save memory, and reload when you return.">
@@ -1269,6 +1315,7 @@ function DesktopSection({ prefs }: { prefs: Preferences }) {
       <Row label="Safe Mode" hint={info?.safeMode ? 'Running in Safe Mode: no hardware acceleration and no tab restore.' : 'Starts without hardware acceleration or tab restore, for troubleshooting.'}>
         <Button onClick={() => void call('diagnostics:restartSafeMode', { safe: !info?.safeMode })}>{info?.safeMode ? 'Restart normally' : 'Restart in Safe Mode'}</Button>
       </Row>
+      </SettingsGroup>
       <LinksSettings prefs={prefs} />
     </>
   );
