@@ -1057,6 +1057,8 @@ export interface StatusSnapshot {
     purchaseApprovals?: number;
     /** Unread bell entries about those: counted once, as Purchasing's queue, on the badge. */
     purchaseNotices?: number;
+    /** Hosting & Domains (HDM-DSK-04): monitors down plus domains, certificates and servers expiring within 7 days. */
+    hosting?: number;
   };
   /** Mail alerts are paused on this computer (MNA-TRY-02): the Mail footer says so. */
   mailAlertsPaused?: string | null;

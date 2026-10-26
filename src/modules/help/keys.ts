@@ -68,6 +68,7 @@ export const GUIDE_KEYS: Readonly<Record<string, string | null>> = {
   cheque: null,
   appointments: 'appointments',
   assets: 'assets',
+  hosting: 'hosting',
   admin: 'admin',
   ai: 'ai',
 };

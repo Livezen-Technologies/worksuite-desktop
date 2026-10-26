@@ -7,6 +7,7 @@ import { liveTitle } from '../services/live-desk';
 import type { SupportPulseFigures } from '../services/support-desk';
 import type { TrayMarketing } from '../services/marketing-pulse';
 import type { TrayAssets } from '@shared/assets';
+import { hostingBadge, type TrayHosting } from '@shared/hosting';
 import type { TrayMeet } from '../services/meet-next';
 import type { TrayMeetings } from '../services/meetings-desk';
 import { NEXT_CONTACT_LABEL } from '../services/marketing-shortcut';
@@ -82,6 +83,8 @@ export interface TrayModel {
   marketing?: TrayMarketing | null;
   /** Assets (D03): what waits for me — handovers to confirm, loans overdue, approvals. Null: no Assets lines. */
   assets?: TrayAssets | null;
+  /** Hosting & Domains (HDM-DSK-04): monitors down and items expiring within 7 days. Null: no Hosting lines. */
+  hosting?: TrayHosting | null;
   /** Meet's lines (WS-MEET-ENH-01 D04): the next meeting to join, and whether this computer is in one. Null: no Meet lines. */
   meet?: TrayMeet | null;
   /** Meetings' lines (Meetings D07): today's meetings and the invitations waiting. Null: no Meetings lines. */
@@ -322,6 +325,22 @@ export function trayAssetsItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'assets
   ];
 }
 
+/** Hosting's tray lines (HDM-DSK-04): monitors down and what expires within 7 days, each opening its screen. */
+export function trayHostingItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'hosting'>, a: Pick<TrayActions, 'openRoute'>): MenuItemConstructorOptions[] {
+  if (!m.signedIn || !m.apps.includes('hosting') || !m.hosting) return [];
+  const h = m.hosting;
+  return [
+    ...(h.down > 0 ? [{ label: `${h.down} monitor${h.down === 1 ? '' : 's'} down`, click: () => a.openRoute('/hosting?tab=monitors') }] : []),
+    ...(h.expiring > 0 ? [{ label: `${h.expiring} expiring within 7 days`, click: () => a.openRoute('/hosting?tab=expiring') }] : []),
+    { label: 'Open Hosting', click: () => a.openRoute('/hosting') },
+  ];
+}
+
+/** What Hosting adds to the app's badge: only for somebody who has Hosting. */
+export function hostingBadgeCount(m: Pick<TrayModel, 'signedIn' | 'apps' | 'hosting'>): number {
+  return m.signedIn && m.apps.includes('hosting') ? hostingBadge(m.hosting) : 0;
+}
+
 export function trayMarketingItems(m: Pick<TrayModel, 'signedIn' | 'apps' | 'marketing'>, a: Pick<TrayActions, 'openRoute' | 'marketingNextContact'>): MenuItemConstructorOptions[] {
   const mk = m.marketing;
   if (!m.signedIn || !m.apps.includes('marketing') || !mk) return [];
@@ -542,7 +561,7 @@ export class TrayService {
     const state = ringing ? 'unread' : trayState({ error: !!m.error, offline: m.offline && m.signedIn, monitoring: false, syncing: false, unread });
     try {
       // Ringing chats count too, until joined or silenced (R-05/R-06 dock and taskbar badge; RING-44).
-      app.setBadgeCount(m.signedIn && m.badge && process.platform !== 'darwin' ? unread + ringingCount(m) : 0);
+      app.setBadgeCount(m.signedIn && m.badge && process.platform !== 'darwin' ? unread + ringingCount(m) + hostingBadgeCount(m) : 0);
     } catch {
       /* not supported on this desktop */
     }

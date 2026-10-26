@@ -116,6 +116,9 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'inventory', label: 'Inventory', group: 'business', icon: 'package', app: 'inventory', perm: 'inventory.view', webPath: '/inventory', surface: 'native', sidebar: 'business', order: 128, keywords: 'inventory stock products warehouse movements catalogue sku barcode' },
   // Label Studio (WS-LABEL-SRS-001 FR-DSK-01, D01–D07): home, designer, print station, this computer's printers, the
   // interrupted batch and the Print Gateway. The rest of Label Studio (W02–W32) opens on the web from its rail.
+  // Hosting & Domains (Hosting & Domains SRS v1.0 HDM-DSK-01): the server's app `hosting`, opened with `hosting.view`.
+  // `/hosting?domain=`, `?server=` and `?certificate=` (the web's deep links, notifications) open here.
+  { id: 'hosting', label: 'Hosting', group: 'business', icon: 'globe', app: 'hosting', perm: 'hosting.view', webPath: '/hosting', surface: 'native', sidebar: 'business', order: 129.5, keywords: 'hosting domains dns records registrar expiry renew certificates ssl tls servers vps monitors uptime incidents costs providers accounts sync' },
   { id: 'label', label: 'Label Studio', group: 'business', icon: 'printer', app: 'label', perm: 'label.access', webPath: '/label', surface: 'native', sidebar: 'business', order: 129, keywords: 'label labels barcode qr sticker zebra zpl print station printer gateway templates serials' },
   // HR carries no app slug: there is no `hr` row in `applications`, and its
   // self-service screens answer for the caller alone (web/src/core/sidebar/apps.ts).
