@@ -11,6 +11,7 @@ import { Spinner } from '../../components/ui';
 import { asOf, fetchAccounts, fetchOrgs, fetchOverview, K, syncAccount, useAsOf } from './api';
 import { Btn, ReadOnly, useOnline, when } from './parts';
 import { HostingRail, RAIL, VIEWS, type HostingView } from './Rail';
+import { StepUpHost } from './StepUp';
 
 /** The registry's ModuleProps, of which the shell reads only whether its tab is in front. */
 interface ModuleProps {
@@ -36,10 +37,14 @@ const Monitors = lazy(() => import('./Monitors'));
 const Costs = lazy(() => import('./Costs'));
 const Accounts = lazy(() => import('./Accounts'));
 const AddDomain = lazy(() => import('./AddDomain'));
+const Register = lazy(() => import('./Register'));
+const ImportCsv = lazy(() => import('./Import'));
+const Reports = lazy(() => import('./Reports'));
 
 const TITLES: Record<HostingView, string> = {
   overview: 'Overview', domains: 'Domains', expiring: 'Expiring', dns: 'DNS', certificates: 'Certificates', servers: 'Servers', monitors: 'Monitors',
   costs: 'Costs', accounts: 'Accounts', history: 'Sync history', domain: 'Domain', server: 'Server', new: 'Add domain',
+  register: 'Register a domain', import: 'Import', reports: 'Reports',
 };
 const num = (v: string | null) => (v && /^\d{1,12}$/.test(v) ? Number(v) : null);
 
@@ -50,14 +55,15 @@ export interface Nav {
   to: (v: HostingView, extra?: string, newTab?: boolean) => void;
 }
 
-/** "Sync all": every connected account, one after the other; each says how it went. */
+/** "Sync all": every connected account, one after the other. A sync answers `{ok: false, why}` when it failed. */
 export async function syncAll(ids: number[]): Promise<{ ok: number; failed: number }> {
   let ok = 0;
   let failed = 0;
   for (const id of ids) {
     try {
-      await syncAccount(id);
-      ok++;
+      const r = await syncAccount(id);
+      if (r && r.ok === false) failed++;
+      else ok++;
     } catch {
       failed++;
     }
@@ -110,7 +116,7 @@ export default function HostingShell({ active }: ModuleProps) {
   const [syncing, setSyncing] = useState(false);
   const runSyncAll = async () => {
     if (!online || syncing) return;
-    const ids = (accounts.data ?? []).map((a) => a.id);
+    const ids = (accounts.data ?? []).filter((a) => a.connectable !== false && !a.paused).map((a) => a.id);
     if (!ids.length) return toast('info', text('No provider accounts are connected.'));
     setSyncing(true);
     try {
@@ -165,14 +171,18 @@ export default function HostingShell({ active }: ModuleProps) {
       registerCommand({ id: 'hosting-sync-all', label: text('Hosting: sync all accounts'), group: 'Module', source: 'module', keywords: 'hosting sync providers registrar refresh', hint: '⌘⇧S', when: () => keys.current.online, run: () => void keys.current.runSyncAll() }),
       registerCommand({ id: 'hosting-watch-host', label: text('Hosting: watch a certificate'), group: 'Create', source: 'module', keywords: 'hosting ssl tls certificate watch host', when: () => keys.current.online, run: () => keys.current.nav.to('certificates', '&watch=1') }),
       registerCommand({ id: 'hosting-add-monitor', label: text('Hosting: add a monitor'), group: 'Create', source: 'module', keywords: 'hosting monitor uptime check', when: () => keys.current.online, run: () => keys.current.nav.to('monitors', '&add=1') }),
+      registerCommand({ id: 'hosting-register', label: text('Hosting: find and register a domain'), group: 'Create', source: 'module', keywords: 'hosting domain search register buy available', when: () => keys.current.online, run: () => keys.current.nav.to('register') }),
+      registerCommand({ id: 'hosting-import', label: text('Hosting: import domains or servers from CSV'), group: 'Module', source: 'module', keywords: 'hosting import csv domains servers', when: () => keys.current.online, run: () => keys.current.nav.to('import') }),
+      registerCommand({ id: 'hosting-add-server', label: text('Hosting: add a server'), group: 'Create', source: 'module', keywords: 'hosting server add vps', when: () => keys.current.online, run: () => keys.current.nav.to('servers', '&add=1') }),
+      registerCommand({ id: 'hosting-reports', label: text('Hosting: reports'), group: 'Navigate', source: 'module', keywords: 'hosting reports renewals cost uptime print export', run: () => keys.current.nav.to('reports') }),
     ];
     return () => offs.forEach((off) => off());
   }, [active]);
 
   if (orgs.isPending && overview.isPending) return <Spinner />;
-  const k = overview.data?.kpi;
+  const o = overview.data;
   const companies = orgs.data ?? [];
-  const props = { org, nav, active };
+  const props = { org, nav, active, companies };
 
   return (
     <ReadOnly.Provider value={!online}>
@@ -180,7 +190,7 @@ export default function HostingShell({ active }: ModuleProps) {
         <SidePanel id="hosting" label="the Hosting menu">
           <HostingRail
             view={view}
-            counts={{ expiring: k?.expiring_30, certificates: k?.certs_at_risk, monitors: k?.monitors_down, accounts: (accounts.data ?? []).filter((a) => a.last_error).length }}
+            counts={{ expiring: o?.domains?.within_30, certificates: o?.certificates?.at_risk, monitors: o?.monitors?.down, accounts: o?.sync_failures?.length ?? (accounts.data ?? []).filter((a) => a.last_error).length }}
             onPick={(v, newTab) => nav.to(v, '', newTab)}
           />
         </SidePanel>
@@ -214,6 +224,12 @@ export default function HostingShell({ active }: ModuleProps) {
                 <Overview data={overview} org={org} nav={nav} syncing={syncing} onSyncAll={() => void runSyncAll()} />
               ) : view === 'domains' || view === 'expiring' ? (
                 <Domains key={view} {...props} expiring={view === 'expiring'} filter={query.get('filter') ?? ''} />
+              ) : view === 'register' ? (
+                <Register companies={companies} org={org} nav={nav} initial={query.get('name') ?? ''} />
+              ) : view === 'import' ? (
+                <ImportCsv companies={companies} org={org} nav={nav} />
+              ) : view === 'reports' ? (
+                <Reports org={org} nav={nav} />
               ) : view === 'domain' && domainId ? (
                 <DomainPage id={domainId} active={active} tab={query.get('view') ?? 'overview'} onTab={(t) => go(`/hosting?domain=${domainId}&view=${t}`)} nav={nav} />
               ) : view === 'dns' ? (
@@ -221,17 +237,17 @@ export default function HostingShell({ active }: ModuleProps) {
               ) : view === 'certificates' ? (
                 <Certificates {...props} selected={num(query.get('certificate'))} watch={query.get('watch') === '1'} />
               ) : view === 'servers' ? (
-                <Servers {...props} />
+                <Servers {...props} add={query.get('add') === '1'} />
               ) : view === 'server' && serverId ? (
                 <ServerPage id={serverId} nav={nav} />
               ) : view === 'monitors' ? (
                 <Monitors {...props} add={query.get('add') === '1'} />
               ) : view === 'costs' ? (
-                <Costs org={org} />
+                <Costs org={org} nav={nav} />
               ) : view === 'accounts' || view === 'history' ? (
                 <Accounts history={view === 'history'} />
               ) : (
-                <AddDomain companies={companies} org={org} onDone={(id) => nav.openDomain(id)} onCancel={() => nav.to('domains')} />
+                <AddDomain companies={companies} org={org} onDone={(id) => nav.openDomain(id)} onCancel={() => nav.to('domains')} onRegister={() => nav.to('register')} />
               )}
             </Suspense>
           </div>
@@ -240,12 +256,13 @@ export default function HostingShell({ active }: ModuleProps) {
               <span className={online ? 'size-2 rounded-full bg-success' : 'size-2 rounded-full bg-warning'} />
               {online ? 'Connected' : 'Offline · read-only'}
             </span>
-            {overview.data?.synced_at ? <span>{text('Synced {time}', { time: when(overview.data.synced_at) })}</span> : null}
+            {o?.as_of ? <span>{text('Read {time}', { time: when(o.as_of) })}</span> : null}
             <span className="flex-1" />
             <span>Hosting & Domains</span>
           </div>
         </main>
       </div>
+      <StepUpHost />
     </ReadOnly.Provider>
   );
 }

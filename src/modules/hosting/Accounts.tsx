@@ -9,12 +9,13 @@ import { fetchAccounts, fetchRuns, K, setSchedule, syncAccount, testAccount, typ
 import { Btn, Card, Chip, PageHead, Table, td, useReadOnly, when } from './parts';
 
 /**
- * Provider accounts and sync history (D-07, HDM-PRV-07/08/09). Keys never leave the server and this app never stores
- * them: an account shows its last four characters as the server masks them. Test and Sync per account, its schedule
- * (off, nightly, every 6 h) where the server has it, and the sync runs with added / updated / failed and the reason.
+ * Provider accounts and sync history (D-07, HDM-PRV-07/08/09) from `GET accounts` and `GET sync-runs`. Keys never
+ * leave the server and this app never stores them: an account shows the mask the server sends. Test and Sync per
+ * account — both answer `{ok, why}`, a failure included — its schedule (off, nightly, every 6 h) and Pause, and the
+ * sync runs with added / updated / failed and the reason.
  */
 const today = () => new Date().toISOString().slice(0, 10);
-export const runOk = (r: Pick<SyncRun, 'ok'>) => r.ok === true || r.ok === 1;
+export const runOk = (r: Pick<SyncRun, 'ok'>) => r.ok === true || (r.ok as unknown) === 1;
 
 export default function Accounts({ history }: { history: boolean }) {
   const ro = useReadOnly();
@@ -27,8 +28,15 @@ export default function Accounts({ history }: { history: boolean }) {
   const act = async (a: Account, what: 'test' | 'sync') => {
     setBusy(`${what}:${a.id}`);
     try {
-      const r = what === 'test' ? await testAccount(a.id) : await syncAccount(a.id);
-      toast('success', r?.message ?? (what === 'test' ? text('{name} answered.', { name: a.name }) : text('{name} synced.', { name: a.name })));
+      if (what === 'test') {
+        const r = await testAccount(a.id);
+        if (r?.ok === false) toast('error', text('{name}: {why}', { name: a.name, why: r.why || text('the provider refused the key.') }));
+        else toast('success', text('{name} answered.', { name: a.name }));
+      } else {
+        const r = await syncAccount(a.id);
+        if (r?.ok === false) toast('error', text('{name}: {why}', { name: a.name, why: r.why || text('the sync failed.') }));
+        else toast('success', text('{name} synced: {added} added, {updated} updated.', { name: a.name, added: r?.added ?? 0, updated: r?.updated ?? 0 }));
+      }
     } catch (e) {
       toast('error', errorMessage(e));
     } finally {
@@ -37,9 +45,9 @@ export default function Accounts({ history }: { history: boolean }) {
       void qc.invalidateQueries({ queryKey: ['hosting', 'runs'] });
     }
   };
-  const schedule = async (a: Account, v: 'off' | 'nightly' | '6h') => {
+  const schedule = async (a: Account, change: { schedule?: 'off' | 'nightly' | '6h'; paused?: boolean }) => {
     try {
-      const r = await setSchedule(a.id, v);
+      const r = await setSchedule(a.id, change);
       if (r === null) {
         setNoSchedule(true);
         toast('info', text('Sync schedules need a server update.'));
@@ -50,7 +58,7 @@ export default function Accounts({ history }: { history: boolean }) {
   };
   const off = ro ? 'Needs a connection' : undefined;
   const list = runs.data?.items ?? [];
-  const shown = history ? list : list.filter((r) => (r.created_at ?? '').slice(0, 10) === today());
+  const shown = history ? list : list.filter((r) => (r.at ?? '').slice(0, 10) === today());
   const pages = runs.data ? Math.max(1, Math.ceil(runs.data.total / Math.max(1, runs.data.per_page))) : 1;
   return (
     <div className="flex flex-col gap-4">
@@ -64,24 +72,30 @@ export default function Accounts({ history }: { history: boolean }) {
                 <span className="flex size-[34px] shrink-0 items-center justify-center rounded-[9px] bg-[#0891B2] text-[12px] font-bold text-white">{a.provider.slice(0, 2).toUpperCase()}</span>
                 <div className="min-w-0 flex-1">
                   <div className="truncate text-[13px] font-semibold text-ink">{a.name}</div>
-                  <div className="text-[11.5px] text-ink-3">{[a.provider, a.company].filter(Boolean).join(' · ')}</div>
+                  <div className="text-[11.5px] text-ink-3">{[a.label ?? a.provider, a.environment && a.environment !== 'live' ? a.environment : null, a.connectable === false ? text('no integration yet') : null, a.supports?.length ? a.supports.join(', ') : null].filter(Boolean).join(' · ')}</div>
                   <div className="text-[11.5px]">
-                    <span className="text-ink-2">{[a.domains_count ? text('{n} domains', { n: a.domains_count }) : null, a.servers_count ? text('{n} servers', { n: a.servers_count }) : null, a.dns_editable ? text('DNS editable') : null].filter(Boolean).join(' · ')}</span>{' '}
-                    <span className={a.last_error ? 'text-[#B42318]' : 'text-[#1F7A4D]'}>{a.last_error ?? (a.last_ok_at ? text('OK at {time}', { time: when(a.last_ok_at) }) : '')}</span>
+                    <span className={a.last_error ? 'text-[#B42318]' : 'text-[#1F7A4D]'}>{a.last_error ? text('{why} · {time}', { why: a.last_error, time: when(a.last_error_at) }) : a.last_ok_at ? text('OK at {time}', { time: when(a.last_ok_at) }) : ''}</span>
+                    {a.last_sync_at ? <span className="text-ink-3">{` · ${text('last synced {time}', { time: when(a.last_sync_at) })}`}</span> : null}
+                    {a.paused ? <span className="text-[#9A4A06]">{` · ${text('paused')}`}</span> : null}
                   </div>
                 </div>
-                <span className="font-mono text-[11.5px] text-ink-3">{a.key_hint ? `••••${a.key_hint.slice(-4)}` : '••••'}</span>
+                <span className="font-mono text-[11.5px] text-ink-3">{a.key || '••••'}</span>
                 {!noSchedule && a.sync_schedule !== undefined ? (
-                  <Select aria-label={text('Sync schedule for {name}', { name: a.name })} disabled={ro} value={a.sync_schedule ?? 'nightly'} onChange={(e) => void schedule(a, e.target.value as 'off' | 'nightly' | '6h')} className="h-8 rounded-[7px] border border-line bg-surface px-2 text-[12px]">
-                    <option value="off">Sync off</option>
-                    <option value="nightly">Nightly</option>
-                    <option value="6h">Every 6 h</option>
-                  </Select>
+                  <>
+                    <Select aria-label={text('Sync schedule for {name}', { name: a.name })} disabled={ro} value={a.sync_schedule ?? 'nightly'} onChange={(e) => void schedule(a, { schedule: e.target.value as 'off' | 'nightly' | '6h' })} className="h-8 rounded-[7px] border border-line bg-surface px-2 text-[12px]">
+                      <option value="off">Sync off</option>
+                      <option value="nightly">Nightly</option>
+                      <option value="6h">Every 6 h</option>
+                    </Select>
+                    <Btn disabled={ro} title={off} onClick={() => void schedule(a, { paused: !a.paused })}>
+                      {a.paused ? 'Resume' : 'Pause'}
+                    </Btn>
+                  </>
                 ) : null}
-                <Btn disabled={ro || !!busy} title={off} onClick={() => void act(a, 'test')}>
+                <Btn disabled={ro || !!busy || a.connectable === false} title={off} onClick={() => void act(a, 'test')}>
                   {busy === `test:${a.id}` ? 'Testing…' : 'Test'}
                 </Btn>
-                <Btn disabled={ro || !!busy} title={off} onClick={() => void act(a, 'sync')}>
+                <Btn disabled={ro || !!busy || a.connectable === false} title={off} onClick={() => void act(a, 'sync')}>
                   {busy === `sync:${a.id}` ? 'Syncing…' : 'Sync'}
                 </Btn>
               </div>
@@ -97,8 +111,8 @@ export default function Accounts({ history }: { history: boolean }) {
           <Table head={['Time', 'Account', 'Result', 'What changed']} label="Sync history">
             {shown.map((r) => (
               <tr key={r.id}>
-                <td className={cx(td, 'tabular-nums')}>{when(r.created_at)}</td>
-                <td className={td}>{[r.provider, r.account, r.kind].filter(Boolean).join(' · ')}</td>
+                <td className={cx(td, 'tabular-nums')}>{when(r.at)}</td>
+                <td className={td}>{[r.provider, r.account_name, r.kind, r.started_by ?? text('scheduled')].filter(Boolean).join(' · ')}</td>
                 <td className={td}>
                   <Chip tone={runOk(r) ? 'green' : 'red'}>{runOk(r) ? 'OK' : 'Failed'}</Chip>
                 </td>

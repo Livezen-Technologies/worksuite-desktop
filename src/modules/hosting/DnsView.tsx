@@ -1,13 +1,13 @@
 import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Spinner, cx } from '../../components/ui';
-import { fetchDomain, fetchDomains, K } from './api';
+import { fetchDomain, fetchDomains, K, type Org } from './api';
 import DnsEditor from './DnsEditor';
 import type { Nav } from './HostingShell';
 import { PageHead, input } from './parts';
 
 /** DNS (the rail's): pick a domain on the left, edit its zone on the right — the same editor as a domain's DNS tab. */
-export default function DnsView({ org, nav, active, picked, onPick }: { org: number; nav: Nav; active: boolean; picked: number | null; onPick: (id: number) => void }) {
+export default function DnsView({ org, nav, active, picked, onPick }: { org: number; nav: Nav; active: boolean; companies?: Org[]; picked: number | null; onPick: (id: number) => void }) {
   const [q, setQ] = useState('');
   const list = useQuery({ queryKey: K.domains({ q: q.trim() || undefined, org, per_page: 200, sort: 'name' }), queryFn: ({ signal }) => fetchDomains({ q: q.trim() || undefined, org: org || undefined, per_page: 200, sort: 'name' }, signal) });
   const id = picked ?? list.data?.items[0]?.id ?? null;

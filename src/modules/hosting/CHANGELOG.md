@@ -4,6 +4,31 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.1.0 — 2026-10-26
+
+**Added**
+
+- Register a domain — search every connected registrar that can (availability and price), and register with one, confirmed with the price and a step-up (register/search, register)
+- Import domains or servers from a CSV with a dry run — the server's column guess to change, what would be added, updated, skipped and why, Apply, and the error rows to save (import/preview, import/apply)
+- Reports — the renewal calendar with Export (CSV or Excel) and Print, cost by customer, provider spend, uptime; Export on Domains, Certificates and Servers with the list's filters (reports/{name}, export/{kind}, print/renewals)
+- Bulk changes to ticked rows (Space, ⌘-click, the checkboxes): link a customer or project, tags, the responsible person, remove; certificates checked again or no longer watched together (bulk)
+- The right-click menu on a domain (Re-read DNS, Watch certificate, Add monitor, Edit links, Create renewal task, Remove), a certificate and a server card
+- Look up live in the DNS editor — what public resolvers answer now beside the copy (domains/{id}/lookup)
+- Add and edit a server; a synced server's provider-owned fields are shown, not edited
+- Edit a domain's links — customer, project, server, responsible, tags, group, notes — from its own company's lists (domains/lookups)
+- Confirm it's you for renew, the transfer code, register and power off (428 step_up), and the same request sent again with the proof
+- Hosting's count (monitors down, expiring within 7 days) on the macOS Dock badge
+
+**Fixed**
+
+- Every screen reads the server's real answers ({status, message, data} with the list, summary and meta): the overview's counts, renewals and attention; domains' provider, links and supports; the DNS copy's host, can_edit and can_refresh, and a change sends the record as it was seen; certificates' problem, status words and warnings; servers' status, monthly cost and domains; monitors' state and uptime; accounts' Test and Sync, which answer ok false on failure; sync runs; costs grouped by customer, project or provider
+- Explain uses GET certificates/{id}/explain and domains/{id}/explain?record=, and says when the explanation is not AI's
+- Renew, auto-renew, lock and the transfer code are offered only where the registrar's API has them; auto-renew sends on and lock sends locked
+- Power actions follow server_actions; metrics and snapshots say why where the provider has none
+- Watch host, Add monitor and Add domain send the company; monitors check every 1, 5 or 15 minutes
+- Export zone saves as a .zone.txt file the save dialog accepts
+- The alerts read monitors' state (state=down) and the overview's monitors.down
+
 ## 1.0.0 — 2026-10-26
 
 **Added**

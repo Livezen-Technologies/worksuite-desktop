@@ -6,29 +6,30 @@ import { explain } from './api';
 import { Btn, Note, useReadOnly } from './parts';
 
 /**
- * "Explain with AI" (HDM-AI-01): a DNS record or a certificate check in plain words, from the server's AI route. Where
- * the server has none (a 404), the button goes away for the rest of the session rather than failing each time.
+ * "Explain with AI" (HDM-AI-01): a DNS record or a certificate check in plain words, from `GET …/explain` → `{text, ai}`.
+ * `ai` false is the server's own plain explanation (no AI for the company), said so under it. Where the server has no
+ * explain route (a 404), the button goes away for the rest of the session rather than failing each time.
  */
 export const aiMissing = createStore<{ dns: boolean; certificate: boolean }>({ dns: false, certificate: false });
 
 export function Explain({ kind, id, domain, label }: { kind: 'dns' | 'certificate'; id: number | string; domain?: number; label?: string }) {
   const ro = useReadOnly();
   const missing = useStore(aiMissing, (s) => s[kind]);
-  const [state, setState] = useState<{ key: string; busy: boolean; text: string | null; error: string | null }>({ key: '', busy: false, text: null, error: null });
+  const [state, setState] = useState<{ key: string; busy: boolean; text: string | null; ai: boolean; error: string | null }>({ key: '', busy: false, text: null, ai: false, error: null });
   const key = `${kind}:${domain ?? ''}:${id}`;
   if (missing || ro) return null;
-  const mine = state.key === key ? state : { key, busy: false, text: null, error: null };
+  const mine = state.key === key ? state : { key, busy: false, text: null, ai: false, error: null };
   const run = async () => {
-    setState({ key, busy: true, text: null, error: null });
+    setState({ key, busy: true, text: null, ai: false, error: null });
     try {
       const r = await explain(kind, id, domain);
       if (r === null) {
         aiMissing.set({ [kind]: true } as Partial<{ dns: boolean; certificate: boolean }>);
         return;
       }
-      setState({ key, busy: false, text: r || text('The server had nothing to add.'), error: null });
+      setState({ key, busy: false, text: r.text || text('The server had nothing to add.'), ai: r.ai, error: null });
     } catch (e) {
-      setState({ key, busy: false, text: null, error: errorMessage(e) });
+      setState({ key, busy: false, text: null, ai: false, error: errorMessage(e) });
     }
   };
   return (
@@ -41,6 +42,7 @@ export function Explain({ kind, id, domain, label }: { kind: 'dns' | 'certificat
       {mine.text ? (
         <Note tone="info">
           <span className="whitespace-pre-wrap">{mine.text}</span>
+          <span className="w-full text-[11px] opacity-75">{mine.ai ? text('Written by AI from what WorkSuite read. Check before acting on it.') : text('AI is not available for your company, so this is WorkSuite’s standard explanation.')}</span>
         </Note>
       ) : null}
       {mine.error ? <Note tone="error">{mine.error}</Note> : null}

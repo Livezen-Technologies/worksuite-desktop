@@ -1,7 +1,10 @@
-import { createContext, useContext, type ReactNode } from 'react';
+import { createContext, useContext, useRef, useState, type ReactNode } from 'react';
+import { Menu, type MenuItem } from '../../components/Menu';
 import { cx } from '../../components/ui';
+import type { Query } from '../../core/api';
 import { text } from '../../core/i18n';
-import { urgency } from './api';
+import { urgency, type ExportKind } from './api';
+import { saveExport } from './files';
 
 /**
  * Hosting's shared bits. The cards, tables, buttons and fields are the desktop modules' own (Assets' parts, the
@@ -37,15 +40,54 @@ export function Days({ days, long }: { days: number | null; long?: boolean }) {
 }
 
 const STATUS: Record<string, string> = {
-  active: 'green', ok: 'green', valid: 'green', up: 'green', running: 'green', on: 'green',
-  expiring: 'amber', pending: 'amber', unreachable: 'amber', paused: 'amber', stopped: 'grey', off: 'grey', unknown: 'grey',
-  expired: 'red', down: 'red', failed: 'red', mismatch: 'red', untrusted: 'red', error: 'red', suspended: 'red',
+  active: 'green', ok: 'green', valid: 'green', up: 'green', running: 'green', on: 'green', done: 'green',
+  expiring: 'amber', expiring_soon: 'amber', pending: 'amber', unreachable: 'amber', paused: 'amber', not_yet_valid: 'amber', stopped: 'grey', off: 'grey', unknown: 'grey', cancelled: 'grey',
+  expired: 'red', down: 'red', failed: 'red', refused: 'red', mismatch: 'red', untrusted: 'red', error: 'red', suspended: 'red',
 };
 export const statusTone = (s: string | null | undefined) => STATUS[(s ?? '').toLowerCase()] ?? 'grey';
 export const statusLabel = (s: string | null | undefined) => (s ? s.replace(/_/g, ' ').replace(/^./, (c) => c.toUpperCase()) : '—');
 
-export function Status({ value }: { value: string | null | undefined }) {
-  return <Chip tone={statusTone(value)}>{statusLabel(value)}</Chip>;
+/** A status pill. `label` is the server's own words for it (`status_label`, `status_words`) where it sent them. */
+export function Status({ value, label }: { value: string | null | undefined; label?: string | null }) {
+  return <Chip tone={statusTone(value)}>{label || statusLabel(value)}</Chip>;
+}
+
+/** A button that opens a menu below it (Export, More). */
+export function MenuButton({ label, items, primary, disabled, title }: { label: ReactNode; items: MenuItem[]; primary?: boolean; disabled?: boolean; title?: string }) {
+  const ref = useRef<HTMLButtonElement>(null);
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        ref={ref}
+        type="button"
+        aria-haspopup="menu"
+        aria-expanded={open}
+        disabled={disabled}
+        title={title}
+        onClick={() => setOpen(!open)}
+        className={cx('inline-flex h-8 items-center gap-1.5 rounded-[7px] px-3 text-[12.5px] font-bold whitespace-nowrap disabled:opacity-50', primary ? 'bg-primary text-white hover:bg-primary-hover' : 'border border-line bg-surface text-ink hover:bg-subtle')}
+      >
+        {label} <span aria-hidden>▾</span>
+      </button>
+      {open ? <Menu sections={[{ id: 'm', items }]} label={typeof label === 'string' ? label : text('Menu')} anchor={ref} prefer="bottom" align="end" width={230} onClose={() => setOpen(false)} /> : null}
+    </>
+  );
+}
+
+/** Export ▾: the list as the server's CSV or Excel file, with the list's own filters (HDM-IMP-01). */
+export function ExportButton({ kind, query, disabled }: { kind: ExportKind; query: Query; disabled?: boolean }) {
+  return (
+    <MenuButton
+      label={text('Export')}
+      disabled={disabled}
+      title={disabled ? OFFLINE_TITLE : undefined}
+      items={[
+        { id: 'csv', label: text('CSV file'), description: text('As the list is filtered now'), onSelect: () => void saveExport(kind, 'csv', query) },
+        { id: 'xlsx', label: text('Excel workbook'), description: text('As the list is filtered now'), onSelect: () => void saveExport(kind, 'xlsx', query) },
+      ]}
+    />
+  );
 }
 
 /** A route the SRS adds that this server does not have yet. */

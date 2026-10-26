@@ -32,17 +32,19 @@ export function daysUntil(iso: string | null | undefined, today: string): number
   return Math.round((b - a) / 86_400_000);
 }
 
-/** What the alerts read: the overview where the server has it, or the lists an older server answers. */
+/**
+ * What the alerts read: the lists (`domains`, `certificates`, `servers` at `expires_within=7`, `monitors` at
+ * `state=down`) and the overview (`monitors.down`, Overview::build), whose count covers every company the person is
+ * in. `last_state` is an older answer's name for a monitor's `state`.
+ */
 export interface HostingAlertInput {
   overview?: {
-    monitors_down?: number;
-    expiring_7?: number;
-    renewals?: Array<{ kind?: string; id?: number; name?: string; expires_on?: string | null; days_left?: number | null }>;
+    monitors?: { down?: number } | null;
   } | null;
   domains?: Array<{ id: number; name: string; expires_on?: string | null; auto_renew?: boolean | null }> | null;
   certificates?: Array<{ id: number; host: string; port?: number | null; expires_on?: string | null }> | null;
   servers?: Array<{ id: number; name: string; expires_on?: string | null }> | null;
-  monitors?: Array<{ id: number; name?: string | null; target?: string | null; last_state?: string | null; incident_id?: number | null; last_error?: string | null }> | null;
+  monitors?: Array<{ id: number; name?: string | null; target?: string | null; state?: string | null; last_state?: string | null; incident_id?: number | null; last_error?: string | null; last_checked_at?: string | null }> | null;
 }
 
 export interface HostingAlert {
@@ -81,14 +83,16 @@ export function hostingAlerts(input: HostingAlertInput, today: string): { alerts
   for (const x of input.servers ?? []) soon('server', x.id, x.name, x.expires_on, hostingServerRoute(x.id));
   let down = 0;
   for (const m of input.monitors ?? []) {
-    if (m.last_state !== 'down') continue;
+    if ((m.state ?? m.last_state) !== 'down') continue;
     down++;
     const name = m.name || m.target || `Monitor ${m.id}`;
-    alerts.push({ id: `hosting:monitor:${m.id}:${m.incident_id ?? 'down'}`, title: `${name} is down`, body: m.last_error || 'The last checks failed.', link: '/hosting?tab=monitors' });
+    // One alert per outage: the incident where an older answer named it, else the day it was seen down.
+    const spell = m.incident_id ?? today;
+    alerts.push({ id: `hosting:monitor:${m.id}:${spell}`, title: `${name} is down`, body: m.last_error || 'The last checks failed.', link: '/hosting?tab=monitors' });
   }
-  // The server's own counts win where it sent them: it sees every company, this computer only the pages it read.
-  if (typeof input.overview?.monitors_down === 'number') down = input.overview.monitors_down;
-  if (typeof input.overview?.expiring_7 === 'number') expiring = input.overview.expiring_7;
+  // The server's own count wins where it sent it: it sees every company, this computer only the pages it read.
+  const od = input.overview?.monitors?.down;
+  if (typeof od === 'number') down = od;
   return { alerts, tray: { down, expiring } };
 }
 

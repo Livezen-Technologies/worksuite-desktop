@@ -7,7 +7,7 @@ import { cx } from '../../components/ui';
  * Servers, Monitors, Costs, Accounts and Sync history, icon over label, with counts. ⌘-click (Ctrl-click) opens a
  * screen in a new tab.
  */
-export type HostingView = 'overview' | 'domains' | 'expiring' | 'dns' | 'certificates' | 'servers' | 'monitors' | 'costs' | 'accounts' | 'history' | 'domain' | 'server' | 'new';
+export type HostingView = 'overview' | 'domains' | 'expiring' | 'dns' | 'certificates' | 'servers' | 'monitors' | 'costs' | 'accounts' | 'history' | 'domain' | 'server' | 'new' | 'register' | 'import' | 'reports';
 
 export const RAIL: Array<{ id: HostingView; label: string; icon: string; key: string }> = [
   { id: 'overview', label: 'Overview', icon: 'grid', key: '1' },
@@ -22,8 +22,9 @@ export const RAIL: Array<{ id: HostingView; label: string; icon: string; key: st
   { id: 'history', label: 'Sync history', icon: 'history', key: '0' },
 ];
 
-export const VIEWS = new Set<string>([...RAIL.map((r) => r.id), 'domain', 'server', 'new']);
-const UNDER: Partial<Record<HostingView, HostingView>> = { domain: 'domains', server: 'servers', new: 'domains' };
+/** Screens reached from the others (and the command palette), drawn under the rail entry they belong to. */
+export const VIEWS = new Set<string>([...RAIL.map((r) => r.id), 'domain', 'server', 'new', 'register', 'import', 'reports']);
+const UNDER: Partial<Record<HostingView, HostingView>> = { domain: 'domains', server: 'servers', new: 'domains', register: 'domains', import: 'domains', reports: 'costs' };
 
 export function HostingRail({ view, counts, onPick }: { view: HostingView; counts: Partial<Record<HostingView, number>>; onPick: (v: HostingView, newTab: boolean) => void }) {
   const at = UNDER[view] ?? view;

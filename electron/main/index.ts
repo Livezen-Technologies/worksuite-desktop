@@ -2,7 +2,7 @@ import { PayrollReminders } from '../services/payroll-reminders';
 import { AssetAlerts } from '../services/assets-alerts';
 import { assetsCached, type TrayAssets } from '@shared/assets';
 import { HostingAlerts } from '../services/hosting-alerts';
-import { hostingCached, type TrayHosting } from '@shared/hosting';
+import { hostingBadge, hostingCached, type TrayHosting } from '@shared/hosting';
 import { lockedScope, lockedApi, lockedIpc } from '@shared/locked-access';
 import { lockedClickTarget } from '../services/locked-notifications';
 import { accessibilityDiagnostics } from '../services/remote-control/accessibility-diagnostics';
@@ -626,7 +626,12 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   const assetAlerts = new AssetAlerts(http, notifications, (t) => assetsTray?.(t));
   // Hosting & Domains (HDM-DSK-04): monitors down and what expires within 7 days, on the tray badge and as notices.
   let hostingTray: ((t: TrayHosting | null) => void) | null = null;
-  const hostingAlerts = new HostingAlerts(http, notifications, (t) => hostingTray?.(t));
+  // The last counts, for the status snapshot: the renderer paints them onto the macOS Dock icon with the rest.
+  let hostingCounts: TrayHosting | null = null;
+  const hostingAlerts = new HostingAlerts(http, notifications, (t) => {
+    hostingCounts = t;
+    hostingTray?.(t);
+  });
   const queue = new OfflineQueue(db, getVault, http, () => sessionCtl.capabilities().offlineQueue);
   // New-mail alerts (ENH-MAIL-05): one per message on this computer — the row's "New" in Mail, the in-app card while
   // WorkSuite is in front, the system's notification while it is not — and the tray's mail lines, pause and badge.
@@ -1872,7 +1877,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     // Counts only of apps the person has: the badge, tray and title bar never count an app they cannot open.
     const visible = sessionCtl?.visibleApps() ?? new Set<string>();
     const hasMail = canOpenApp('mail', visible);
-    const counts = { ...raw, mailBadge: hasMail ? mailAlerts.unread() : 0, mailNotices: hasMail ? raw.mailNotices : 0, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: hasMail ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0, salesApprovals: canOpenApp('sales', visible) ? raw.salesApprovals : 0, salesNotices: canOpenApp('sales', visible) ? raw.salesNotices : 0, purchaseApprovals: canOpenApp('purchase', visible) ? purchaseDesk.count() : 0, purchaseNotices: canOpenApp('purchase', visible) ? raw.purchaseNotices : 0 };
+    const counts = { ...raw, mailBadge: hasMail ? mailAlerts.unread() : 0, mailNotices: hasMail ? raw.mailNotices : 0, chat: canOpenApp('chat', visible) ? raw.chat : 0, mail: hasMail ? raw.mail : 0, tasks: canOpenApp('tasks', visible) ? raw.tasks : 0, webchat: canOpenApp('chat', visible) ? followUpCount : 0, ringing: canOpenApp('chat', visible) ? ringingCount : 0, support, supportNotices: canOpenApp('support', visible) ? supportBell : 0, salesApprovals: canOpenApp('sales', visible) ? raw.salesApprovals : 0, salesNotices: canOpenApp('sales', visible) ? raw.salesNotices : 0, purchaseApprovals: canOpenApp('purchase', visible) ? purchaseDesk.count() : 0, purchaseNotices: canOpenApp('purchase', visible) ? raw.purchaseNotices : 0, hosting: canOpenApp('hosting', visible) ? hostingBadge(hostingCounts) : 0 };
     const services: Record<string, ServiceHealth> = { ...supervisor.health() };
     return {
       internetOnline: electronNet.isOnline(),
@@ -2212,7 +2217,10 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     },
   });
   assetsTray = (t) => tray.update({ assets: t });
-  hostingTray = (t) => tray.update({ hosting: t });
+  hostingTray = (t) => {
+    tray.update({ hosting: t });
+    emitStatus();
+  };
 
   // ── website chats ring like calls (WS-WCHAT ENH-01, R3) ─────────────────
   const JOIN_SHORTCUT = 'CommandOrControl+Shift+J';

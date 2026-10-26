@@ -14,7 +14,7 @@ import { Btn, Card, Field, Kbd, Note, PageHead, input, useReadOnly } from './par
  */
 export const plausibleDomain = (v: string) => /^(?=.{3,253}$)([\p{L}\p{N}](?:[\p{L}\p{M}\p{N}-]{0,61}[\p{L}\p{M}\p{N}])?\.)+\p{L}[\p{L}\p{M}]{1,62}$/u.test(v.trim().replace(/\.$/, ''));
 
-export default function AddDomain({ companies, org, onDone, onCancel }: { companies: Org[]; org: number; onDone: (id: number) => void; onCancel: () => void }) {
+export default function AddDomain({ companies, org, onDone, onCancel, onRegister }: { companies: Org[]; org: number; onDone: (id: number) => void; onCancel: () => void; onRegister: () => void }) {
   const ro = useReadOnly();
   const qc = useQueryClient();
   const [name, setName] = useState('');
@@ -25,13 +25,13 @@ export default function AddDomain({ companies, org, onDone, onCancel }: { compan
   const [notes, setNotes] = useState('');
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const ok = plausibleDomain(name) && !ro;
+  const ok = plausibleDomain(name) && !ro && company > 0;
   const save = async () => {
     if (!ok) return;
     setBusy(true);
     setErr(null);
     try {
-      const d = await addDomain({ name: name.trim(), org_id: company || null, registrar: registrar.trim() || null, expires_on: expires || null, auto_renew: auto, notes: notes.trim() || null });
+      const d = await addDomain({ name: name.trim().replace(/\.$/, '').toLowerCase(), org_id: company, registrar: registrar.trim() || null, expires_on: expires || null, auto_renew: auto, notes: notes.trim() || null });
       toast('success', text('Added {name}.', { name: d?.name ?? name.trim() }));
       void qc.invalidateQueries({ queryKey: ['hosting'] });
       if (d?.id) onDone(d.id);
@@ -52,7 +52,9 @@ export default function AddDomain({ companies, org, onDone, onCancel }: { compan
         }
       }}
     >
-      <PageHead title="Add a domain" sub="A domain you keep track of by hand. Domains at a connected registrar arrive with its sync." />
+      <PageHead title="Add a domain" sub="A domain you keep track of by hand. Domains at a connected registrar arrive with its sync.">
+        <Btn disabled={ro} onClick={onRegister}>Register a new one instead…</Btn>
+      </PageHead>
       {ro ? <Note tone="warn">Adding a domain needs a connection.</Note> : null}
       <Card>
         <div className="flex flex-col gap-3 p-4">

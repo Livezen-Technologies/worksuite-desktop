@@ -4,9 +4,9 @@ import type { HttpClient } from './http';
 /**
  * Hosting & Domains' alerts and tray (HDM-DSK-04): every 10 minutes while signed in, what expires within 7 days and the
  * monitors that are down; each alert (shared/hosting.ts) is raised once as a native notification, even with the
- * Hosting tab closed, and the tray's line and badge follow the counts. The overview (new in the SRS) is asked first; an
- * older server's lists answer otherwise, and a server without monitors simply has none down. Somebody without Hosting
- * gets a 403 and nothing is shown.
+ * Hosting tab closed, and the tray's line and the badge (the tray, the taskbar and the Dock) follow the counts. The lists
+ * answer `{domains|certificates|servers|monitors: [...], summary, meta}`; the overview's `monitors.down` covers every
+ * company. A server without monitors simply has none down. Somebody without Hosting gets a 403 and nothing is shown.
  */
 export interface HostingAlertSink {
   addLocal(item: { id: string; title: string; body: string; link: string | null; module?: string }): boolean;
@@ -58,7 +58,7 @@ export class HostingAlerts {
       soft(this.http.get<NonNullable<HostingAlertInput['overview']>>('/api/hosting/overview')),
       soft(this.http.get<Rows<NonNullable<HostingAlertInput['certificates']>[number]>>(`/api/hosting/certificates?${q}`)),
       soft(this.http.get<Rows<NonNullable<HostingAlertInput['servers']>[number]>>(`/api/hosting/servers?${q}`)),
-      soft(this.http.get<Rows<NonNullable<HostingAlertInput['monitors']>[number]>>('/api/hosting/monitors?status=down&per_page=200')),
+      soft(this.http.get<Rows<NonNullable<HostingAlertInput['monitors']>[number]>>('/api/hosting/monitors?state=down&per_page=200')),
     ]);
     const { alerts, tray } = hostingAlerts(
       { overview, domains, certificates: rows(certificates, 'certificates'), servers: rows(servers, 'servers'), monitors: rows(monitors, 'monitors') },

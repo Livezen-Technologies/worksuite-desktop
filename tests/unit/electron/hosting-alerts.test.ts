@@ -21,8 +21,13 @@ describe('hosting alerts and the tray badge (HDM-DSK-04)', () => {
     expect(r.alerts[0]).toMatchObject({ title: 'creativefx.lk expires in 4 days', body: 'Domain · auto-renew off', link: '/hosting?domain=1' });
     expect(hostingBadge(r.tray)).toBe(3);
   });
-  it('takes the server’s overview counts over what this computer read', () => {
-    expect(hostingAlerts({ overview: { monitors_down: 2, expiring_7: 5 } }, today).tray).toEqual({ down: 2, expiring: 5 });
+  it('takes the overview’s monitors down (every company) over what this computer read', () => {
+    expect(hostingAlerts({ overview: { monitors: { down: 2 } }, domains: [{ id: 1, name: 'a.lk', expires_on: '2026-10-28' }] }, today).tray).toEqual({ down: 2, expiring: 1 });
+  });
+  it('reads a monitor’s state as the server names it, once per outage a day', () => {
+    const r = hostingAlerts({ monitors: [{ id: 3, name: 'db', state: 'down', last_error: 'timeout' }, { id: 4, state: 'up' }] }, today);
+    expect(r.tray.down).toBe(1);
+    expect(r.alerts[0]).toMatchObject({ id: 'hosting:monitor:3:2026-10-26', title: 'db is down', body: 'timeout' });
   });
 
   it('raises each alert once and keeps the tray up to date', async () => {
@@ -30,8 +35,11 @@ describe('hosting alerts and the tray badge (HDM-DSK-04)', () => {
     const sink = { addLocal: vi.fn((i: { id: string }) => (seen.has(i.id) ? false : (seen.add(i.id), true))), notify: vi.fn() };
     const tray = vi.fn();
     const get = vi.fn(async (p: string) => {
-      if (p.startsWith('/api/hosting/domains')) return { domains: [{ id: 1, name: 'creativefx.lk', expires_on: '2026-10-30' }] };
-      if (p.startsWith('/api/hosting/monitors')) return [{ id: 9, name: 'db', last_state: 'down', incident_id: 1 }];
+      if (p.startsWith('/api/hosting/domains')) return { domains: [{ id: 1, name: 'creativefx.lk', expires_on: '2026-10-30' }], summary: { total: 1 }, meta: { total: 1, page: 1, per_page: 200, pages: 1, sort: 'expires_on' } };
+      if (p.startsWith('/api/hosting/monitors')) {
+        expect(p).toContain('state=down');
+        return { monitors: [{ id: 9, name: 'db', state: 'down' }], summary: { total: 1, down: 1 }, meta: { total: 1, page: 1, per_page: 200, pages: 1, sort: 'name' } };
+      }
       throw Object.assign(new Error('nf'), { status: 404 });
     });
     const a = new HostingAlerts({ get } as never, sink, tray, () => today);
