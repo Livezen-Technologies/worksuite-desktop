@@ -334,6 +334,25 @@ const DEFS: Array<{ input: DesktopManifestInput; load: () => Promise<{ default: 
     load: () => import('./assets/AssetsShell'),
   },
   {
+    // Hosting & Domains (Hosting & Domains SRS v1.0 HDM-DSK-01…05, boards D-01…D-08) over `/api/hosting`: the overview,
+    // domains with the keyboard list and preview, a domain in its own tab or window with the DNS editor, certificates
+    // with AI explain, servers with typed power-off, monitors, costs, provider accounts and sync history. Alerts and
+    // the tray badge come from electron/services/hosting-alerts.ts.
+    input: defineDesktopManifest({
+      id: 'hosting', name: 'Hosting', icon: 'globe', contractVersion: 1, desktop: { enabled: true },
+      // Read-only offline from the encrypted cache with its "as of" time; every change waits for the connection.
+      offline: { mode: 'READ_CACHE', entities: ['domain', 'server', 'certificate'], cache: ['/api/hosting/overview', '/api/hosting/domains', '/api/hosting/servers', '/api/hosting/certificates', '/api/hosting/monitors', '/api/hosting/accounts', '/api/hosting/sync-runs'] },
+      native: ['notifications'],
+      windows: [{ id: 'hosting-domain', route: '/hosting?domain=:id' }, { id: 'hosting-server', route: '/hosting?server=:id' }],
+      quickActions: [
+        { id: 'hosting-add-domain', label: 'Add a domain', route: '/hosting?tab=new' },
+        { id: 'hosting-expiring', label: 'Expiring domains', route: '/hosting?tab=expiring' },
+      ],
+      deepLinks: ['hosting', 'hosting/domains/:id', 'hosting/servers/:id'],
+    }),
+    load: () => import('./hosting/HostingShell'),
+  },
+  {
     // Payroll (WS-PAYROLL-SRS-001 §D1, the desktop boards D01–D25) over `/api/payroll` (docs/payroll-api.md): home,
     // runs and the run workspace, approval with Touch ID and the journal, employees, inputs, loans, settlements,
     // payslips, disbursements with bank files, statutory, reports, setup and settings. My Payslips is HR › My pay.

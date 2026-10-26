@@ -688,6 +688,16 @@ answers 404 and the screen says so.
 | Offline | Done | READ_CACHE of the purchasing lists and documents opened; every write disabled offline |
 | G-24 AI | Partial · Server | the RFQ summary where the server answers; bill OCR, anomalies and vendor risk are the web's and mobile's |
 
+## Hosting & Domains (HDM-DSK)
+
+| ID | Status | Where / note |
+|---|---|---|
+| HDM-DSK-01 | Done | `shared/apps.ts` (`hosting`, Business, `globe`), `src/core/app-look.ts` (cyan `#0891B2`), `src/modules/registry.ts` |
+| HDM-DSK-02 | Done | `modules/hosting/Rail.tsx` — 88 px rail, ten screens |
+| HDM-DSK-03 | Done | Tabs and record windows per domain / server; ⌘N, ⌘⇧S, F5, Alt+1…0, ↑↓ ↵ ⌘↵ ⌘⇧↵; command palette entries while Hosting is open |
+| HDM-DSK-04 | Done | `electron/services/hosting-alerts.ts`, `shared/hosting.ts`, `electron/tray/tray.ts` (badge on Windows / Linux; the macOS Dock badge is not yet painted with it) |
+| HDM-DSK-05 | Done | READ_CACHE (`hostingCached`), `ReadOnly`, "as of" banner |
+
 ## Devices, security, updates (SEC, UPD)
 
 | ID | Status | Where / note |
