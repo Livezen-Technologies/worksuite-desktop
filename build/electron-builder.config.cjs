@@ -28,6 +28,9 @@
  * WS_RELEASE_BUILD=1) and warns loudly for any other build.
  */
 const macSigning = require('./mac-signing.cjs');
+
+/** The macOS zip and pkg: wanted on CI and on request, not on every local build. */
+const macExtraTargets = Boolean(process.env.CI) || process.env.WS_MAC_ALL === '1';
 const linuxRepo = require('./linux-repo.cjs');
 // Universal Links (worksuite-desktop#170): with a provisioning profile that grants Associated Domains for
 // app.worksuite.lk (Team ID + lk.worksuite.desktop), the app is signed with it and claims those links. Without one
@@ -109,10 +112,13 @@ module.exports = {
     // they are one-arch files carried in both. (These are the lockfile's only darwin-only packages besides
     // @napi-rs, which is left out above.)
     x64ArchFiles: '**/node_modules/{node-llama-cpp,@node-llama-cpp,@reflink}/**',
+    // The DMG is what the Update Center distributes and what a release ships.
+    // The zip and the pkg are other ways of installing the same app; each is
+    // another full copy (~344 MB) and several minutes, so they are built on CI
+    // and when asked for (WS_MAC_ALL=1), not on every local release build.
     target: [
       { target: 'dmg', arch: ['universal'] },
-      { target: 'zip', arch: ['universal'] },
-      { target: 'pkg', arch: ['universal'] },
+      ...(macExtraTargets ? [{ target: 'zip', arch: ['universal'] }, { target: 'pkg', arch: ['universal'] }] : []),
     ],
     // The remote-control input helper is Apple's /usr/bin/osascript, started as a direct child of the app: macOS
     // counts WorkSuite as responsible for it, so WorkSuite's own Accessibility entry covers it and nothing else
@@ -137,9 +143,13 @@ module.exports = {
   pkg: { isRelocatable: false, allowAnywhere: false, allowCurrentUserHome: false, installLocation: '/Applications' },
 
   win: {
+    // Both CPUs: the catalog lists windows x64 and windows arm64, and a release
+    // missing either one fails the publish checklist. MSI is built only where
+    // WiX can run — on Windows. Under wine on macOS its candle.exe cannot start,
+    // and that took the whole --win build down with it, NSIS included.
     target: [
-      { target: 'nsis', arch: ['x64'] },
-      { target: 'msi', arch: ['x64'] },
+      { target: 'nsis', arch: ['x64', 'arm64'] },
+      ...(process.platform === 'win32' ? [{ target: 'msi', arch: ['x64'] }] : []),
     ],
     ...(azure ? { azureSignOptions: azure } : {}),
     // Windows 10 22H2+ (NFR-CMP-01).
