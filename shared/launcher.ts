@@ -26,8 +26,8 @@ export const GROUP_NAME_MAX = 40;
 const ORDER_MAX = 300;
 const ID = /^[a-z][a-z0-9_-]{0,39}$/;
 
-/** Icon sizes, in px, per launcher size; the bottom sheet's own. */
-export const ICON_PX: Record<LauncherSize, number> = { compact: 44, comfortable: 52, large: 64 };
+/** Icon sizes, in px, per launcher size; the bottom sheet's own. Compact, the default, is the design's 48px tile. */
+export const ICON_PX: Record<LauncherSize, number> = { compact: 48, comfortable: 52, large: 64 };
 /** Full screen draws every size one step larger (worksuite-desktop#206). */
 export const FULL_ICON_PX: Record<LauncherSize, number> = { compact: 52, comfortable: 56, large: 72 };
 /** Full screen's tiles have room round the icon and a 14px name: 112px tall for a 52px icon. */
@@ -532,6 +532,12 @@ export interface LauncherParts {
   pinned: boolean;
   recent: boolean;
   chips: boolean;
+  /**
+   * The grid can read category by category, under headings (there are categories, nothing is searched). Its rows
+   * then no longer fall on one rhythm, so the popover's grid takes all the room it has rather than whole rows, and
+   * the bottom fade says there is more; the popover keeps one height as the person goes from category to category.
+   */
+  sections?: boolean;
 }
 
 /** The height of everything in the popover but the grid. */
@@ -591,7 +597,8 @@ export interface WindowSize {
  * part of it; if the Dock or a taskbar covers one side, narrower on both sides alike so it stays centred and clear of
  * it. Its top is 12% of the way down the window (Spotlight-style), at least 24px inside the visible area and 16px
  * under the top bar, so the search field does not move whatever is listed. Its height is the fixed parts plus as many
- * whole rows as fit in `min(640px, 100vh - 96px)` and 24px above the bottom of the visible area.
+ * whole rows as fit in `min(640px, 100vh - 96px)` and 24px above the bottom of the visible area; with the grid in
+ * sections (`parts.sections`), all of that room.
  */
 export function popoverRect(win: WindowSize, area: Rect, parts: LauncherParts, row: { height: number; gap?: number }): Rect & { grid: { height: number; rows: number } } {
   const W = win.width;
@@ -607,7 +614,8 @@ export function popoverRect(win: WindowSize, area: Rect, parts: LauncherParts, r
   const top = Math.max(area.top + EDGE_MARGIN, TOP_BAR_PX + 16, Math.round(H * POPOVER_TOP_FRACTION));
   const max = Math.min(POPOVER_MAX.height, H - POPOVER_GUTTER.y, visBottom - EDGE_MARGIN - top);
   const chrome = popoverChrome(parts);
-  const grid = wholeRows(max - chrome, row.height, row.gap ?? GRID_GAP_PX);
+  const whole = wholeRows(max - chrome, row.height, row.gap ?? GRID_GAP_PX);
+  const grid = parts.sections ? { rows: whole.rows, height: Math.max(whole.height, Math.floor(max - chrome)) } : whole;
   return { left, top, width, height: chrome + grid.height, grid };
 }
 
@@ -624,7 +632,7 @@ export function fullscreenRect(win: WindowSize, area: Rect): Rect & { column: nu
 /**
  * Where the launcher goes and how big it is: the popover (`popoverRect`), a bottom sheet in a window narrower than
  * 480px, or full screen (`fullscreenRect`). `area` is the part of the window the person can see (`visibleArea`);
- * `parts`, which of the fixed rows are showing.
+ * `parts`, which of the fixed rows are showing, and whether the grid is in sections.
  */
 export function launcherLayout(
   win: WindowSize,
