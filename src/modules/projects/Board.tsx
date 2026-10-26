@@ -80,7 +80,9 @@ export function Board({ projectId, display = 'board', prefs, onDisplay, onPrefs,
   /** A card moved — dragged, ⇧←/→, or a status picked in the list: one path, one outbox entry (acceptance #14). */
   const move = async (t: Task, status: TaskStatus, blockedReason?: string): Promise<boolean> => {
     if (t.status === status) return false;
-    // Shown in its new column at once; the server has the last word.
+    // Shown in its new column at once; the server has the last word. A poll already on its way is stopped first, or it
+    // lands after this with the old status and the card jumps back until the next one (#430).
+    await qc.cancelQueries({ queryKey: qk.tasks(projectId), exact: true });
     qc.setQueryData(qk.tasks(projectId), (old: typeof list.data) =>
       old ? { ...old, data: { ...old.data, tasks: old.data.tasks.map((x) => (x.id === t.id ? { ...x, status, ...(blockedReason ? { blocked_reason: blockedReason } : {}) } : x)) } } : old,
     );

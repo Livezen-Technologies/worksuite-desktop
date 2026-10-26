@@ -18,6 +18,8 @@ export const SECTIONS: readonly Section[] = ['profile', 'general', 'preferences'
 export interface MyProfile {
   id: number;
   name: string;
+  /** An additional name the person goes by (#432; Users 1.5.0). Absent from older servers; `name` stays as it is. */
+  preferred_name?: string | null;
   phone: string | null;
   email: string;
   avatar: string | null;
