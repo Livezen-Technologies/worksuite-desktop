@@ -38,6 +38,17 @@ jobs:
       - run: npm run build
         env:
           NODE_OPTIONS: --max-old-space-size=6144
+      - name: Chromium's sandbox helper
+        # Ubuntu 24.04 restricts unprivileged user namespaces, so Chromium falls back to its setuid sandbox helper,
+        # which npm cannot install setuid: without this the app aborts at start ("The SUID sandbox helper binary was
+        # found, but is not configured correctly"). The sandbox stays on; it is the helper that is set up.
+        shell: bash
+        run: |
+          ELECTRON_RUN_AS_NODE=1 npx electron --version
+          sandbox="node_modules/electron/dist/chrome-sandbox"
+          sudo chown root:root "$sandbox"
+          sudo chmod 4755 "$sandbox"
+          ls -l "$sandbox"
       - name: Connection & Startup against local servers
         shell: bash
         env:

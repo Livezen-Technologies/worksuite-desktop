@@ -201,6 +201,20 @@ await run([{ t: 'text', text }]);
 const typed = await waitFor((e) => e.e === 'text' && e.value === `Ab${text}`, 6_000);
 check('text is typed as it was written, accents and emoji too', typed, JSON.stringify(events.filter((e) => e.e === 'text').slice(-1)));
 
+// TEMPORARY probe (macOS): which way of putting characters on a key event the bridge honours, and what is at the pad.
+if (mac) {
+  const probe = (args) => spawnSync('/usr/bin/osascript', ['-l', 'JavaScript', join(here, 'probe-macos.js'), ...args], { encoding: 'utf8', timeout: 30_000 });
+  const at = probe(['at', String(c.x), String(c.y)]);
+  console.log(`  probe at: ${at.stdout.trim()} ${at.stderr.trim()}`);
+  for (const mode of ['js', 'data', 'ref', 'nsevent']) {
+    const before = events.filter((e) => e.e === 'text').slice(-1)[0]?.value ?? '';
+    const r = probe([mode, 'é😀x']);
+    await sleep(800);
+    const after = events.filter((e) => e.e === 'text').slice(-1)[0]?.value ?? '';
+    console.log(`  probe ${mode}: typed ${JSON.stringify(after.slice(before.length))} (${r.stdout.trim()} ${r.stderr.trim()})`);
+  }
+}
+
 // Stopping.
 inj.send([{ t: 'key', code: 'KeyC', down: true }, { t: 'key', code: 'KeyC', down: false }]);
 inj.stop();
