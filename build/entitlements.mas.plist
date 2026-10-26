@@ -22,6 +22,11 @@
     <true/>
     <key>com.apple.security.network.client</key>
     <true/>
+    <!-- Signing in through the browser answers the redirect on a one-shot listener on
+         127.0.0.1 (RFC 8252 §7.3, electron/services/cloud/oidc.ts). The sandbox refuses
+         a listening socket without this, loopback included, and sign-in never completes. -->
+    <key>com.apple.security.network.server</key>
+    <true/>
     <key>com.apple.security.device.camera</key>
     <true/>
     <key>com.apple.security.device.audio-input</key>
