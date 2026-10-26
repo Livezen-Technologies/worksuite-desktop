@@ -11,6 +11,17 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## Unreleased
+
+### Added
+
+- **Documents, Forms, Rental and Diagrams in the launcher.** The server's own apps with no desktop module yet are now in
+  the app launcher and search, marked *opens in your browser*: **Documents** (`/documents`,
+  with `docs.view`), **Forms** (`/forms`, with `forms.view`), **Rental** (`/rental`, with `rental.access`) and
+  **Diagrams** (`/diagrams`). Each shows only to people the server gives that app (its `docs`, `forms`, `rental` or
+  `diagram` app) and the permission its screens need — exactly where the web shows it — and a link into one of them
+  (a notification, a chat card) opens it in the browser.
+
 ## 0.2.282 — 2026-10-26
 
 Needs the server with **Hosting 1.1.0** (Hosting & Domains) and **Desktop 1.13.0** (desktop settings) for those screens; on an older server they stay hidden or show "needs a server update".

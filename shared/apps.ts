@@ -154,6 +154,13 @@ export const APP_CATALOGUE: AppDefinition[] = [
   { id: 'social-media', label: 'Social Media', group: 'business', icon: 'send', webPath: '/social-media', surface: 'native', sidebar: 'business', order: 167, keywords: 'social media manager facebook instagram linkedin x twitter youtube tiktok threads pinterest google business post schedule publish queue calendar inbox comments approvals campaigns analytics' },
   // Opened in the browser until their desktop modules ship (§14, §18).
   { id: 'social', label: 'Social', group: 'communication', icon: 'megaphone', app: 'social', webPath: '/social', surface: 'browser', order: 46 },
+  // The server's own apps with no desktop module yet: each its `applications` row's slug and web route, gated on the
+  // permission its own API demands (none for Diagrams, whose routes ask only for a session). Links into them —
+  // `/documents/…`, `/forms/…`, `/rental/…`, `/diagrams/…` — open there too.
+  { id: 'docs', label: 'Documents', group: 'business', icon: 'file-check', app: 'docs', perm: 'docs.view', webPath: '/documents', surface: 'browser', order: 168, keywords: 'documents templates letterhead contract agreement generate merge sign signature letter' },
+  { id: 'forms', label: 'Forms', group: 'work', icon: 'clipboard-check', app: 'forms', perm: 'forms.view', webPath: '/forms', surface: 'browser', order: 192, keywords: 'forms survey questionnaire quiz responses collect' },
+  { id: 'diagram', label: 'Diagrams', group: 'work', icon: 'shapes', app: 'diagram', webPath: '/diagrams', surface: 'browser', order: 194, keywords: 'diagrams flowchart draw.io visio chart shapes whiteboard' },
+  { id: 'rental', label: 'Rental', group: 'business', icon: 'key', app: 'rental', perm: 'rental.access', webPath: '/rental', surface: 'browser', order: 133.5, keywords: 'rental rent hire equipment gear camera vehicle tools reservation booking quote checkout return deposit fleet' },
 
   // WorkSuite Projects (WS-PROJECT-SRS-001 PRJ-DSK-01..04): native since 0.2.216 — the board with its keyboard, My work,
   // the tray timer and an offline outbox. `/projects/<id>`, `/projects/<id>/tasks/<task>`, `/projects?project=<id>` and
