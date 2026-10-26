@@ -8,7 +8,8 @@ import { toast } from '../../core/toasts';
 import { Button, Modal } from '../../components/ui';
 import { Select } from '../../components/Select';
 import { createTask, patchTask } from './actions';
-import { PRIORITIES, STATUSES, type TaskDetail as Detail, type TaskList } from './api';
+import { PRIORITIES, STATUSES, type Status, type TaskDetail as Detail, type TaskList } from './api';
+import { showStatus } from './queries';
 import { TaskReminders } from './Reminders';
 import { PeoplePanel, ReviewPanel, usePeople } from './People';
 import { Assignee, Attachments, Checklist, Conversation, Description, Organisation, Progress, Row, TaskEditorFrame, Tags, Title, When, aside, inputsOf, useSaving } from './editor';
@@ -35,6 +36,11 @@ export function TaskDetail({ id, lists, onClose, onOpen }: { id: number; lists: 
   const saver = useSaving(refresh);
   const save = async (field: string, value: unknown, label: string) => {
     if (!t) return;
+    // Complete / Reopen and the Status menu show at once in the lists behind, and no poll puts them back (#433).
+    if (field === 'status') {
+      await showStatus(qc, [t.id], value as Status);
+      qc.setQueryData<Detail>(['tasks', 'detail', id], (old) => (old ? { ...old, status: value as Status } : old));
+    }
     await saver.run(() => patchTask(t, field, value, label));
   };
 

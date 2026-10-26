@@ -29,7 +29,7 @@ export default function General({ onPick, onEdit }: { onPick: (s: Section) => vo
       <Head title="Profile settings" sub="Your name, picture and how people reach you." />
       <PhotoCard onPick={onPick} onEdit={onEdit} />
       <div className="grid items-start gap-4 xl:grid-cols-2">
-        <Details key={`${q.data!.name}|${q.data!.phone ?? ''}`} p={q.data!} />
+        <Details key={`${q.data!.name}|${q.data!.preferred_name ?? ''}|${q.data!.phone ?? ''}`} p={q.data!} />
         <Card title="Set by your organisation">
           <p className="m-0 -mt-2 mb-3 text-[12.5px] text-ink-3">Ask an administrator to change these.</p>
           <div className="flex flex-col">
@@ -121,13 +121,16 @@ function PhotoCard({ onPick, onEdit }: { onPick: (s: Section) => void; onEdit: O
   );
 }
 
-function Details({ p }: { p: MyProfile }) {
+export function Details({ p }: { p: MyProfile }) {
   const refresh = useRefreshMe();
   const [name, setName] = useState(p.name ?? '');
+  const [preferred, setPreferred] = useState(p.preferred_name ?? '');
   const [phone, setPhone] = useState(p.phone ?? '');
   const [busy, setBusy] = useState(false);
   const editable = p.editable ?? ['name', 'phone'];
-  const dirty = name !== (p.name ?? '') || phone !== (p.phone ?? '');
+  // The additional name (#432) is offered only by a server that keeps it (Users 1.5.0 lists it as editable).
+  const offersPreferred = editable.includes('preferred_name');
+  const dirty = name !== (p.name ?? '') || phone !== (p.phone ?? '') || (offersPreferred && preferred !== (p.preferred_name ?? ''));
   const regional = useRegional();
   const zones = useZones();
   const zone = useSaveRegional();
@@ -137,6 +140,7 @@ function Details({ p }: { p: MyProfile }) {
     try {
       const body: Record<string, string> = {};
       if (editable.includes('name')) body.name = name;
+      if (offersPreferred) body.preferred_name = preferred.trim();
       if (editable.includes('phone')) body.phone = phone;
       await apiPut('/api/users/me/profile', body);
       await refresh([K.profile]);
@@ -159,6 +163,11 @@ function Details({ p }: { p: MyProfile }) {
         <Field label="Name">
           <input className={input} value={name} disabled={!editable.includes('name')} maxLength={150} onChange={(e) => setName(e.target.value)} aria-label="Name" />
         </Field>
+        {offersPreferred ? (
+          <Field label="Preferred name" hint="An additional name you go by, shown beside your name. Your name above stays as it is. Leave it empty to go by your name alone.">
+            <input className={input} value={preferred} maxLength={150} onChange={(e) => setPreferred(e.target.value)} aria-label="Preferred name" />
+          </Field>
+        ) : null}
         <Field label="Phone" hint="Used as a fallback when a meeting invitation cannot reach you another way.">
           <input className={input} value={phone} disabled={!editable.includes('phone')} maxLength={40} placeholder="+94 7X XXX XXXX" onChange={(e) => setPhone(e.target.value)} aria-label="Phone" />
         </Field>
@@ -166,7 +175,7 @@ function Details({ p }: { p: MyProfile }) {
           <button type="button" className={btnPrimary} disabled={!dirty || busy || !name.trim()} onClick={() => void save()}>
             {busy ? 'Saving…' : 'Save'}
           </button>
-          <button type="button" className={btn} disabled={!dirty || busy} onClick={() => (setName(p.name ?? ''), setPhone(p.phone ?? ''))}>
+          <button type="button" className={btn} disabled={!dirty || busy} onClick={() => (setName(p.name ?? ''), setPreferred(p.preferred_name ?? ''), setPhone(p.phone ?? ''))}>
             Discard changes
           </button>
         </div>

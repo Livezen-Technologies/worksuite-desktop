@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 2.0.4 — 2026-10-26
+
+**Fixed**
+
+- a call card's Call back / Call again is a filled button with the call's icon; it was pale green text on pale green in the drawer and a bare outline in the thread (#431)
+
 ## 2.0.3 — 2026-10-22
 
 - Message text and link cards can be selected and copied; Copy link on link cards (#412)

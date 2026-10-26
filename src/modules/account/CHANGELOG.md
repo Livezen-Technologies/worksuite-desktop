@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.4.0 — 2026-10-26
+
+**Added**
+
+- Preferred name in Profile settings, an additional name you go by beside your own, which stays unchanged; shown on your profile (#432, needs server Users 1.5.0)
+
 ## 1.3.0 — 2026-10-13
 
 **Added**

@@ -11,6 +11,15 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
+## 0.2.281 — 2026-10-26
+### Added
+- **Preferred name** (#432): Profile settings has a field for an additional name you go by. Your name stays as it is; the preferred name is saved with your profile and shown under it ("Goes by …"). Empty means you go by your name alone. It needs a server with Users 1.5.0; an older server does not offer it. (desktop module account 1.4.0)
+
+### Fixed
+- **Dragging a task card** (#430): a card dropped on another column of the Tasks board or a project board could jump back to its old column for a moment, or until the next refresh, when the page's regular refresh was already on its way. That refresh is now stopped first, so the card stays where you drop it. (desktop modules tasks 1.4.1, projects 1.6.2)
+- **Completing a task** (#433): ticking a task, Mark complete, or Complete in the task could leave it showing as open for the same reason. It now shows as completed at once, in your tasks and in the shared ones. (desktop module tasks 1.4.1)
+- **Call back** (#431): the Call back and Call again buttons on a call card in chat were pale green on pale green, or a bare outline, and read as a label. They are now filled buttons with the call's icon. (desktop module chat 2.0.4)
+
 ## 0.2.280 — 2026-10-26
 ### Fixed
 - **Mail list layout** (#428): nothing in the message list reaches into the reading pane any more. The quick filters (Unread, Has files, Starred, Last 7 days) stay on one row and, when the list is too narrow, the ones that do not fit go into a **More filters** menu that says how many of them are on; "Date · Newest" keeps its own line and shortens with an ellipsis; a date band keeps its label at the left and its count at the right. The shared mailbox's Assigned to me / Unassigned / Snoozed filters and its Open / Pending / Done tabs behave the same way. The reading pane keeps at least 280 px beside a list you widened, and the width you set is still remembered. Every folder, shared mailbox and the combined inbox use the same list, so all of them get it. (desktop module mail 1.34.2)

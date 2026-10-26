@@ -95,6 +95,7 @@ export default function Profile({ onPick, onEdit }: { onPick: (s: Section) => vo
           </div>
           <div className="min-w-0 flex-1 pt-[58px]">
             <h1 className="m-0 truncate text-[24px] font-bold tracking-[-0.3px] text-ink">{me?.name ?? p.name}</h1>
+            {p.preferred_name && p.preferred_name !== (me?.name ?? p.name) ? <div className="mt-0.5 truncate text-[13.5px] text-ink-2">{`Goes by ${p.preferred_name}`}</div> : null}
             {job ? <div className="mt-0.5 truncate text-[13.5px] text-ink-2">{job}</div> : null}
             <div className="mt-2.5 flex flex-wrap gap-2">
               {hasHr && today?.check_in ? (
