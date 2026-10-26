@@ -222,7 +222,7 @@ hiding in the App Store build before a public release.
 
 What the sandboxed app may do is set in two files:
 
-- `build/entitlements.mas.plist` — the main app: network, camera, microphone, printing, files the person picks,
+- `build/entitlements.mas.plist` — the main app: network (outgoing, and a local listener on 127.0.0.1 that browser sign-in needs to receive its redirect), camera, microphone, printing, files the person picks,
   Downloads, and the app group Electron's processes need.
 - `build/entitlements.mas.inherit.plist` — every helper process and native binary inside the app; they inherit the
   main app's sandbox.
