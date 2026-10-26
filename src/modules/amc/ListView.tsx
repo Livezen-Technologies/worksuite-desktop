@@ -2,6 +2,7 @@ import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
 import { Button, cx, ErrorNote, OfflineNote, Spinner } from '../../components/ui';
 import { fetchPage, K, label, pages, read, type ListDef, type Row } from './api';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Contracts, renewals, estimates, units and warranties (and the requests list): the server's paged lists
@@ -42,7 +43,7 @@ export default function ListView({ def, selected, onSelect, onWeb }: { def: List
                 <thead className="sticky top-0 bg-surface text-left text-ink-3"><tr>{def.columns.map((c) => <th key={c.key} className="px-2.5 py-1.5 font-semibold">{c.label}</th>)}</tr></thead>
                 <tbody>
                   {list.data.data.items.map((r) => (
-                    <tr key={r.id} onClick={() => onSelect(r.id)} aria-selected={selected === r.id} className={cx('cursor-pointer border-t border-line hover:bg-subtle', selected === r.id ? 'bg-[#FEF3C7] dark:bg-selection' : '')}>
+                    <tr tabIndex={0} onKeyDown={clickOnKey} key={r.id} onClick={() => onSelect(r.id)} aria-selected={selected === r.id} className={cx('cursor-pointer border-t border-line hover:bg-subtle', selected === r.id ? 'bg-[#FEF3C7] dark:bg-selection' : '')}>
                       {def.columns.map((c) => <td key={c.key} className="max-w-[260px] truncate px-2.5 py-1.5">{label(r[c.key])}</td>)}
                     </tr>
                   ))}

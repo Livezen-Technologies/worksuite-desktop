@@ -9,6 +9,7 @@ import { toast } from '../../core/toasts';
 import { changeRecord, createRecord, deleteRecord, fetchDns, fetchLookup, fetchServers, hostOf, K, RECORD_TYPES, recordProblem, refreshDns, refusedCopy, type DnsCopy, type DnsRecord, type Domain, type LiveAnswer, type RecordInput } from './api';
 import { Explain } from './Explain';
 import { Btn, Chip, Field, Kbd, NeedsUpdate, Note, Table, input, td, useReadOnly, when } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * The DNS editor (D-03, HDM-DNS-01…06) over `GET domains/{id}/dns` — the copy, when it was read, whether it can be
@@ -133,7 +134,7 @@ export default function DnsEditor({ domain, active }: { domain: Domain; active: 
             {records.map((r, i) => {
               const may = canEdit && r.editable !== false;
               return (
-                <tr key={String(r.id)} aria-selected={i === at} onClick={() => setAt(i)} onDoubleClick={() => may && setForm({ rec: inputOf(r, domain.name), was: r })} className={cx('cursor-default', i === at ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : 'hover:bg-subtle')}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={String(r.id)} aria-selected={i === at} onClick={() => setAt(i)} onDoubleClick={() => may && setForm({ rec: inputOf(r, domain.name), was: r })} className={cx('cursor-default', i === at ? 'bg-[#EEF1FD] shadow-[inset_3px_0_0_#23349E] dark:bg-selection' : 'hover:bg-subtle')}>
                   <td className={cx(td, 'font-mono text-[11.5px] font-bold')}>{r.type}</td>
                   <td className={cx(td, 'font-mono text-[11.5px]')}>{hostOf(r, domain.name)}</td>
                   <td className={cx(td, 'max-w-[420px] truncate font-mono text-[11.5px]')} title={r.content}>

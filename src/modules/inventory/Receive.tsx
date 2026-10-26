@@ -14,6 +14,7 @@ import { num, qty } from './api';
 import { labelsToPrint, leftWords, knownSerialText, knownUnit, progress, serialLineFor } from './receiving';
 import { printLabels } from './labels';
 import { Pill } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Receiving with a scanner (the "Desktop receiving" design): scan the purchase order, then each item — or each unit's
@@ -267,7 +268,7 @@ export default function Receive({ org, orderId, onOrder, onReceipt, onOpenOrder 
                     const on = s.active === l.lineId;
                     const done = lineDone(l);
                     return (
-                      <tr key={l.lineId} data-line={l.lineId} onClick={() => dispatch({ type: 'focus', lineId: l.lineId })} className={cx('cursor-default border-b border-line/60 last:border-b-0', on && 'bg-[#eff6ff] dark:bg-selection/40')}>
+                      <tr tabIndex={0} onKeyDown={clickOnKey} key={l.lineId} data-line={l.lineId} onClick={() => dispatch({ type: 'focus', lineId: l.lineId })} className={cx('cursor-default border-b border-line/60 last:border-b-0', on && 'bg-[#eff6ff] dark:bg-selection/40')}>
                         <td className="px-3 py-2">
                           <span className="flex items-center gap-2">
                             <b className="text-ink">{l.name}</b>

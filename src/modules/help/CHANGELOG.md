@@ -4,11 +4,17 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.0.5 — 2026-10-26
+
+**Added**
+
+- Documents, Forms, Diagrams and Rental, new in the launcher, open their own user guides
+
 ## 1.0.4 — 2026-10-26
 
 **Fixed**
 
-- Documents, Forms, Diagrams and Rental, new in the launcher, open their own user guides
+- a guide's text is no longer announced as clickable; its links stay links (D-G21)
 
 ## 1.0.3 — 2026-10-26
 

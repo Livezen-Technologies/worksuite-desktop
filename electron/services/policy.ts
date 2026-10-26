@@ -182,17 +182,26 @@ export function verifySignature(payload: unknown, signatureB64: string, publicKe
 }
 
 /**
+ * Whether a build without a policy key still applies an unsigned policy (audit D-G05): a development build does, so
+ * it runs against any server; a release build (packaged) does not.
+ */
+export interface PolicyAcceptance {
+  /** A release build: no policy is applied without a signature checked against a key, so none without a key. */
+  requireSignature: boolean;
+}
+
+/**
  * Applies a policy document `{ ...policy, signature }`.
  *
- * With a policy key pinned in this build, the signature is required: a
- * missing or wrong one returns null and the caller keeps the last valid
- * policy (POLICY_SIGNATURE_INVALID). Without a pinned key there is nothing to
- * check a signature against, so the policy is applied as unsigned — the same
- * trust as the core API's policy: the authenticated TLS session.
+ * With a policy key — pinned in this build, or the account's own — the signature is required: a missing or wrong
+ * one returns null and the caller keeps the last valid policy (POLICY_SIGNATURE_INVALID). Without a key:
+ * a release build (`requireSignature`) refuses every policy the same way (POLICY_UNSIGNED_REFUSED), since nothing
+ * could tell a real one from a forged one; a development build applies it as unsigned (`signed: false`, shown so in
+ * Diagnostics) — the same trust as the core API's policy, the authenticated TLS session.
  */
-export function acceptSignedPolicy(doc: Record<string, unknown>, publicKeyPem: string | null): DesktopPolicy | null {
+export function acceptSignedPolicy(doc: Record<string, unknown>, publicKeyPem: string | null, opts: PolicyAcceptance = { requireSignature: false }): DesktopPolicy | null {
   const { signature, ...rest } = doc;
-  if (!publicKeyPem) return normalizePolicy(rest, false);
+  if (!publicKeyPem) return opts.requireSignature ? null : normalizePolicy(rest, false);
   if (typeof signature !== 'string') return null;
   if (!verifySignature(rest, signature, publicKeyPem)) return null;
   return normalizePolicy(rest, true);

@@ -209,7 +209,8 @@ function DayView({ date, today, clock, onOpen }: { date: string; today: string; 
                 const off = gaps(opens[0], opens[1], working);
                 const onLeave = (s.leave ?? []).length > 0;
                 const items = visits.flatMap((v) => v.items.filter((i) => i.provider_id === s.id).map((i) => ({ v, i })));
-                /* A tap on free time books it (CAL-04): that stylist, that day, the quarter hour tapped — still checked by the server. */
+                /* A tap on free time books it (CAL-04): that stylist, that day, the quarter hour tapped — still checked by the server.
+                   A pointer shortcut: from the keyboard, New booking above asks for the same. */
                 const tap = (e: MouseEvent<HTMLDivElement>) => {
                   if (e.target !== e.currentTarget || !book) return;
                   const m = start + Math.floor((e.nativeEvent.offsetY / PX_PER_MIN) / 15) * 15;
@@ -218,7 +219,7 @@ function DayView({ date, today, clock, onOpen }: { date: string; today: string; 
                   desk.walkIn({ provider_id: s.id, date, time: hm(m) }, true);
                 };
                 return (
-                  <div key={s.id} onClick={tap} title={book ? `Tap a free time to book ${s.name}` : undefined} className={cx('relative w-[220px] min-w-[200px] flex-1 border-l border-line', book && 'cursor-copy')}>
+                  <div key={s.id} role="presentation" onClick={tap} title={book ? `Tap a free time to book ${s.name}` : undefined} className={cx('relative w-[220px] min-w-[200px] flex-1 border-l border-line', book && 'cursor-copy')}>
                     {off.map(([a, b]) => {
                       const block = (s.blocks ?? []).find((x) => minutesOf(clockAt(x.starts_at, tz)) < b && (minutesOf(clockAt(x.ends_at, tz)) || 24 * 60) > a);
                       const first = a > opens[0];

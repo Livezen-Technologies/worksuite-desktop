@@ -5,6 +5,7 @@ import { daysLeft, fetchDomains, money, type Attention, type Overview as Data, t
 import type { Nav } from './HostingShell';
 import { Btn, Card, Days, Kbd, Kpi, MenuButton, NeedsUpdate, PageHead, Table, td, useReadOnly, when } from './parts';
 import { StatGrid } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 /**
  * The overview (D-01) from the server's `GET overview` (Overview::build): the domains, the 30-day expiries, the
@@ -67,7 +68,7 @@ export default function Overview({ data, org, nav, syncing, onSyncAll }: { data:
           {renewals.length ? (
             <Table head={['Name', 'Kind', 'Days left', 'Note']} label="Renewals">
               {renewals.map((r) => (
-                <tr
+                <tr tabIndex={0} onKeyDown={clickOnKey}
                   key={`${r.kind}-${r.id}`}
                   className="cursor-pointer hover:bg-subtle"
                   onClick={(e) => {

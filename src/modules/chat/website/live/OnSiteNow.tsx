@@ -1,6 +1,7 @@
 import { avatarTone, cx } from '../../../../components/ui';
 import { text } from '../../../../core/i18n';
 import { callClock, clock, groupOf, initialsOf, onCall, ordinal, pathOf, since, STATE, STATES, stateOf, whereOf, type Group, type OnlineVisitor } from './liveMap';
+import { clickOnKey } from '../../../../components/press';
 
 /**
  * "On the site now" (worksuite-desktop C-00, ported from the web's OnSiteNow, WS-WCHAT MAP-UI-01/02): everybody on the
@@ -103,6 +104,8 @@ export function OnSiteNow({ visitors, now, skew = 0, limit = 10, selected = null
                   aria-label={who}
                   aria-current={selected === v.id ? 'true' : undefined}
                   onClick={onSelect ? () => onSelect(v) : undefined}
+                  tabIndex={onSelect ? 0 : undefined}
+                  onKeyDown={onSelect ? clickOnKey : undefined}
                   className={cx('flex items-center gap-2.5 px-3.5 py-2', TINT[s] ?? (selected === v.id ? 'bg-selection' : 'hover:bg-subtle'), onSelect && 'cursor-pointer')}
                 >
                   <VisitorAvatar v={v} />

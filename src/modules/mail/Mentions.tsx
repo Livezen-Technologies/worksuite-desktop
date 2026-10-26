@@ -109,7 +109,13 @@ export function MentionPopup({ editor, onMention }: { editor: RefObject<HTMLDivE
         setTyping(null);
       }
     };
-    const leave = () => setTimeout(() => setTyping(null), 150);
+    // Closed a moment after the editor loses focus (a click on a suggestion lands first). The timer is the effect's:
+    // cleared when it goes, so it never sets state on an unmounted editor (audit D-G15: it outlived a test's jsdom).
+    let leaving: ReturnType<typeof setTimeout> | undefined;
+    const leave = () => {
+      clearTimeout(leaving);
+      leaving = setTimeout(() => setTyping(null), 150);
+    };
     el.addEventListener('input', look);
     el.addEventListener('keyup', look);
     el.addEventListener('keydown', key, true);
@@ -119,6 +125,7 @@ export function MentionPopup({ editor, onMention }: { editor: RefObject<HTMLDivE
       el.removeEventListener('keyup', look);
       el.removeEventListener('keydown', key, true);
       el.removeEventListener('blur', leave);
+      clearTimeout(leaving);
     };
   }, [editor]);
 

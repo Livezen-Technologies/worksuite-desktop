@@ -4,6 +4,12 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.3.2 — 2026-10-26
+
+**Fixed**
+
+- the order row's checkbox area is no longer announced as clickable (D-G21)
+
 ## 1.3.1 — 2026-10-26
 
 **Changed**

@@ -7,6 +7,7 @@ import { eGet, ePost, errorText, K, newKey, pct, toUtc, when, type Course, type 
 import { area, Bar, EnrolPill, Field, input, Refusal, useEl } from '../parts';
 import { useDepartments, usePeople } from './people';
 import { Checkbox } from '../../../components/Checkbox';
+import { clickOnKey } from '../../../components/press';
 
 const STATUSES = [
   { value: '', label: 'Every status' },
@@ -66,7 +67,7 @@ export function EnrollmentTable({ path, fixed, showCourse }: { path: string; fix
             </thead>
             <tbody>
               {data.items.map((e) => (
-                <tr key={e.id} className="cursor-pointer border-b border-line last:border-0 hover:bg-subtle" onClick={() => el.open.enrollment(e.id)}>
+                <tr tabIndex={0} onKeyDown={clickOnKey} key={e.id} className="cursor-pointer border-b border-line last:border-0 hover:bg-subtle" onClick={() => el.open.enrollment(e.id)}>
                   <td className="px-3 py-2">
                     <button type="button" className="text-left font-semibold text-ink hover:text-primary" onClick={() => el.open.enrollment(e.id)}>
                       {e.learner.name}

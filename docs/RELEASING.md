@@ -29,7 +29,7 @@ later".
 | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` | Authenticode certificate — or the Azure Trusted Signing set: |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, `AZURE_TRUSTED_SIGNING_PROFILE`, `AZURE_TRUSTED_SIGNING_ENDPOINT` | |
 | `WS_RELEASE_PRIVATE_KEY` | the Ed25519 release key (PEM) that signs manifests |
-| `WS_POLICY_PUBLIC_KEY` | optional: the server's policy-signing public key (PEM) |
+| `WS_POLICY_PUBLIC_KEY` | the server's policy-signing public key (PEM). Without it, a release build applies **no** desktop policy unless the account has its own `discovery_key` (`POLICY_UNSIGNED_REFUSED`, see BACKEND.md); the build says so in a warning |
 
 Without the platform secrets the builds are unsigned. Unsigned macOS builds
 are refused by Gatekeeper on other machines; unsigned Windows builds trigger
@@ -66,9 +66,15 @@ not public there falls back to Stable unless a tenant policy names it.
 
 Publish a build with the Update Center's script (from that repo; Node 20, no
 dependencies). Each `--file` is `platform:arch:type:path`; Windows x64, macOS
-arm64, macOS x64 and Linux x64 are required. Build one DMG per Mac architecture
-(`electron-builder --mac dmg --arm64 --x64`): the universal merge currently
-fails with "pattern is too long". The build number must rise per channel — use the patch number.
+arm64, macOS x64 and Linux x64 are required. **macOS is one universal DMG**: CI and
+`npm run dist:mac` build `WorkSuite-<version>-universal.dmg` (`mac.target` in
+`build/electron-builder.config.cjs`; the merge that once failed with "pattern is
+too long" works since `x64ArchFiles` names node-llama-cpp's and reflink's one-arch
+binaries). The app asks the Update Center for its own architecture (`arm64` or
+`x64`, never `universal`) and the Update Center matches the architecture exactly
+(`UpdateResolverService`), so **publish that same universal DMG twice**, as
+`macos:arm64:dmg` and `macos:x64:dmg`. A package published only as
+`macos:universal:dmg` is offered to no Mac. The build number must rise per channel — use the patch number.
 
 ```bash
 UC_CI_TOKEN_FILE=~/.config/worksuite-release/ci-token \
@@ -76,8 +82,8 @@ UC_CI_KEY_FILE=~/.config/worksuite-release/ci-attestation.key \
 node scripts/publish-release.mjs --app desktop --app-id lk.worksuite.desktop --channel BETA \
   --version 0.2.125 --build 125 --commit <sha> --summary "WorkSuite Desktop 0.2.125" --notes notes.md \
   --file windows:x64:exe:release/0.2.125/WorkSuite-Setup-0.2.125-x64.exe \
-  --file macos:arm64:dmg:release/0.2.125/WorkSuite-0.2.125-arm64.dmg \
-  --file macos:x64:dmg:release/0.2.125/WorkSuite-0.2.125-x64.dmg \
+  --file macos:arm64:dmg:release/0.2.125/WorkSuite-0.2.125-universal.dmg \
+  --file macos:x64:dmg:release/0.2.125/WorkSuite-0.2.125-universal.dmg \
   --file linux:x64:appimage:release/0.2.125/WorkSuite-0.2.125-x86_64.AppImage \
   --file linux:x64:deb:release/0.2.125/WorkSuite-0.2.125-amd64.deb \
   --file linux:x64:rpm:release/0.2.125/WorkSuite-0.2.125-x86_64.rpm
@@ -88,6 +94,34 @@ AppImage for an AppImage, a `.deb` for a `.deb` install (`resources/package-type
 never offered another. A release without the `.deb` leaves every `.deb` install where it is. A `.deb`/`.rpm` install
 updates with one password prompt (`pkexec apt-get install` / `dnf install` of the downloaded, SHA-256-checked
 package), or opens the package in the software installer when that prompt cannot be shown.
+
+### Signing Linux packages
+
+The `.deb` and `.rpm` name `Livezen Technologies <support@worksuitecloud.com>` as their maintainer
+(`linux.maintainer` in `build/electron-builder.config.cjs`).
+
+The packages are GPG-signed in CI by the optional step *Sign Linux packages (GPG)* in `build.yml`, which runs only
+when the `LINUX_GPG_PRIVATE_KEY` secret exists; without it the step says so in a notice and the packages go out
+unsigned, as before.
+
+| Secret | For |
+|---|---|
+| `LINUX_GPG_PRIVATE_KEY` | the ASCII-armoured **private** signing key (`gpg --armor --export-secret-keys <key id>`). Use the same key as the APT/DNF repositories so one public key (`WORKSUITE_REPO_GPG_PUBLIC_KEY`, `https://download.worksuitecloud.com/apt/worksuite.asc`) checks both |
+| `LINUX_GPG_PASSPHRASE` | its passphrase, if it has one |
+
+What it signs:
+
+- **`.rpm`**: an embedded signature (`rpmsign --addsign`). Check one with
+  `rpm --import worksuite.asc && rpm -K WorkSuite-*.rpm` (it says `digests signatures OK`). dnf and zypper check it
+  when `gpgcheck=1` and the key is imported, as the repository's `.repo` file sets up.
+- **`.deb` and AppImage**: a detached signature beside each (`WorkSuite-*.deb.asc`, `WorkSuite-*.AppImage.asc`),
+  checked with `gpg --verify WorkSuite-*.deb.asc WorkSuite-*.deb`. APT does not check signatures inside a `.deb`;
+  what it checks is the repository's signed `InRelease`, which the repository pipeline signs.
+
+The step signs after electron-builder and before the upload, so the SHA-256 the Update Center records is the signed
+file's. Publish the `.asc` files with the release so people can check a download by hand. Until packages are signed,
+the in-app update of an `.rpm` through zypper passes `--allow-unsigned-rpm` (`electron/updater/linux.ts`); the
+downloaded file is still checked against the SHA-256 in the Update Center's signed answer first.
 
 ### APT and DNF repositories (worksuite-desktop#351) — off until the repository is live
 

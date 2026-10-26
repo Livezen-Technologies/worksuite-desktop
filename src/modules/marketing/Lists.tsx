@@ -5,6 +5,7 @@ import { Checkbox } from '../../components/Checkbox';
 import { Icon } from '../../components/Icon';
 import type { MenuItem } from '../../components/Menu';
 import { Select } from '../../components/Select';
+import { StatCard } from '../../components/StatCard';
 import { Spinner } from '../../components/ui';
 import { refreshMarketing, send } from './api';
 import { act, ConfirmSheet, firstCompany, may, MoreMenu, Refused, useLists, useSegmentNames } from './audience-parts';
@@ -85,10 +86,17 @@ export default function Lists({ org, options, onContacts }: { org: string; optio
               {may(options, 'lists', l.org_id) ? <MoreMenu label={`What to do with ${l.name}`} items={menu(l)} /> : null}
             </div>
             <div className="mt-3 flex items-end justify-between gap-2">
-              <button type="button" onClick={() => onContacts(l.id)} className="text-left">
-                <span className="block text-[22px] leading-tight font-bold text-ink tabular-nums">{n(l.members)}</span>
-                <span className="text-[12px] font-bold text-primary hover:underline">{l.members === 1 ? 'contact' : 'contacts'} — see them</span>
-              </button>
+              <StatCard
+                size="sm"
+                className="min-w-0 flex-1"
+                label={l.members === 1 ? 'Contact' : 'Contacts'}
+                value={n(l.members)}
+                sub="see them"
+                icon="users"
+                tone="violet"
+                ariaLabel={`${l.name}: see the ${n(l.members)} ${l.members === 1 ? 'contact' : 'contacts'}`}
+                onClick={() => onContacts(l.id)}
+              />
               <span className="text-right text-[11.5px] text-ink-3">
                 {l.owner?.name ?? 'Nobody'}
                 <br />

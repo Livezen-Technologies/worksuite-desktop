@@ -6,6 +6,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { refusal, shortDate } from '../finance/api';
 import { BASE, assignSeat, fetchPeople, fetchSubscriptions, linkSubscription, releaseSeat, revealKey, type Can, type License } from './api';
 import { Badge, Btn, Card, Field, PageHead, Table, amt, input, td, tdr, useReadOnly } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Software licences (D16): seats used of bought, renewal and cost per year, the selected licence's seats with Assign
@@ -59,7 +60,7 @@ export default function Licences({ org, can }: { org: number; can: Can; active: 
         <Card>
           <Table head={['Software', ['Seats', 'r'], 'Renews', ['Cost', 'r']]}>
             {list.map((l) => (
-              <tr key={l.id} onClick={() => setSel(l.id)} className={cx('cursor-default', l.id === cur?.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={l.id} onClick={() => setSel(l.id)} className={cx('cursor-default', l.id === cur?.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
                 <td className={td}><b>{l.name}</b>{l.version ? <span className="text-ink-3">{` ${l.version}`}</span> : null}</td>
                 <td className={tdr}><span className={l.over_allocated ? 'text-danger' : ''}>{`${l.seats_used} / ${l.seats_total}`}</span></td>
                 <td className={td}>{l.days_left != null && l.days_left < 0 ? <Badge status="expired">Expired</Badge> : shortDate(l.expiry_date) || '—'}</td>

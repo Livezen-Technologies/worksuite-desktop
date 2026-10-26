@@ -23,6 +23,8 @@ export function RichView({ html, taskId, className }: { html: string | null | un
   return (
     <div
       className={cx('rich selectable break-words leading-[1.6] text-ink [&_a]:text-primary [&_a]:underline [&_blockquote]:border-l-2 [&_blockquote]:border-line [&_blockquote]:pl-2.5 [&_code]:rounded [&_code]:bg-subtle [&_code]:px-1 [&_h3]:font-bold [&_h4]:font-semibold [&_img]:my-1 [&_img]:max-h-72 [&_img]:rounded-[8px] [&_ol]:list-decimal [&_ol]:pl-5 [&_pre]:overflow-x-auto [&_pre]:rounded-[8px] [&_pre]:bg-subtle [&_pre]:p-2 [&_ul]:list-disc [&_ul]:pl-5', className)}
+      // Links are <a> elements: Tab reaches them and Enter's click bubbles here.
+      role="presentation"
       onClick={openLinks}
       dangerouslySetInnerHTML={{ __html: sanitizeRich(html, imageOf(taskId)) }}
     />

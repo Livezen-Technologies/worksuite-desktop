@@ -7,6 +7,7 @@ import { CompanySelect, useProjectCompany } from '../company';
 import { exportReport, gk, gov, type BudgetRow, type BudgetStep, type PortfolioBudget } from './gov-api';
 import { Kpi, Mono, PageHead, WAITS, WebButton, fmtDay, num, shortMoney, signed, usedTone } from './gov-kit';
 import { StatGrid } from '../../../components/StatCard';
+import { clickOnKey } from '../../../components/press';
 
 /**
  * W12 · Budget & cost (SRS p46, PRJ-BUD), the portfolio's (`/projects/budget`) and one project's
@@ -152,7 +153,7 @@ function Row({ r, on, single, onPick }: { r: BudgetRow; on: boolean; single: boo
   const fill = r.used_percent > 100 ? 'bg-danger' : r.used_percent >= r.warn_percent ? 'bg-warning' : 'bg-primary';
   const eacOver = r.eac !== null && Number(r.eac) > Number(r.budget);
   return (
-    <tr className={cx('border-t border-line/70', on && !single && 'bg-selection/60', !single && 'cursor-pointer hover:bg-subtle')} onClick={single ? undefined : onPick}>
+    <tr tabIndex={0} onKeyDown={clickOnKey} className={cx('border-t border-line/70', on && !single && 'bg-selection/60', !single && 'cursor-pointer hover:bg-subtle')} onClick={single ? undefined : onPick}>
       <td className="px-3 py-2">
         {single ? (
           <b className="text-ink">{r.name}</b>

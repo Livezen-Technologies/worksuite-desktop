@@ -14,6 +14,7 @@ import { fetchOrgs, K as EK } from '../expenses/api';
 import { K } from './api';
 import { amount, fetchLinkable, fetchTenderExpenses, KE, linkExpense, markRefunded, overBy, presetFor, statusOf, unlinkExpense, varianceLine, type TenderExpense, type TenderExpenses } from './bidcost';
 import { StatGrid } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 const NewClaim = lazy(() => import('../expenses/NewClaim'));
 const ClaimPanel = lazy(() => import('../expenses/ClaimPanel'));
@@ -182,7 +183,7 @@ function Row({ x, ccy, onOpen }: { x: TenderExpense; ccy: string | null; onOpen:
   const s = statusOf(x.status);
   const own = x.base_amount !== null ? amount(x.base_amount, x.base_currency || ccy) : amount(x.amount, x.currency);
   return (
-    <tr data-expense={x.id} onClick={onOpen} className={cx('cursor-pointer border-b border-line/60 last:border-b-0 hover:bg-subtle', x.status === 'rejected' && 'text-ink-3')}>
+    <tr tabIndex={0} onKeyDown={clickOnKey} data-expense={x.id} onClick={onOpen} className={cx('cursor-pointer border-b border-line/60 last:border-b-0 hover:bg-subtle', x.status === 'rejected' && 'text-ink-3')}>
       <td className="px-3.5 py-2 whitespace-nowrap text-ink-2">{x.spent_on ? dayWords(x.spent_on, { year: true }) : '—'}</td>
       <td className="px-2 py-2 text-ink-2">{x.category ?? '—'}</td>
       <td className="max-w-[280px] px-2 py-2">

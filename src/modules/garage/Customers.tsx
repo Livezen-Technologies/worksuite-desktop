@@ -7,6 +7,7 @@ import { PageHead } from '../hr/parts';
 import { errorText, gGet, gPost, K, money, nice, when, type CustomerRow, type CustomerView, type Vehicle360, type VehicleJob } from './api';
 import { Ask, input, Section, StatusPill, useGarage } from './parts';
 import { NewCustomer } from './WalkIn';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Customers (FR-CUS-01..04): CRM's clients who have a vehicle or a job in
@@ -73,7 +74,7 @@ export default function Customers({ open: asked }: { open: number | null }) {
               </thead>
               <tbody>
                 {d.customers.map((c) => (
-                  <tr key={c.id} className={cx('cursor-pointer border-t border-line hover:bg-subtle', open === c.id && 'bg-selection')} onClick={() => setPicked(c.id)}>
+                  <tr tabIndex={0} onKeyDown={clickOnKey} key={c.id} className={cx('cursor-pointer border-t border-line hover:bg-subtle', open === c.id && 'bg-selection')} onClick={() => setPicked(c.id)}>
                     <td className="px-3 py-2">
                       <button type="button" className="font-semibold text-ink" onClick={() => setPicked(c.id)}>
                         {c.name}

@@ -61,6 +61,8 @@ export function RowLead({ unread = false, checked = false, selecting = false, on
       {onPick ? (
         <span
           data-row-check
+          // A larger target for the checkbox inside it, which the keyboard reaches and ticks itself.
+          role="presentation"
           onClick={around}
           onDoubleClick={(e) => e.stopPropagation()}
           className={cx('absolute top-1/2 left-1/2 flex h-8 w-8 -translate-x-1/2 -translate-y-1/2 items-center justify-center', !boxed && 'opacity-0 group-focus-within:opacity-100 group-hover:opacity-100')}

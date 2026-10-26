@@ -46,6 +46,7 @@ import {
   type Sub,
 } from './suppliers';
 import { StatGrid } from '../../components/StatCard';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Vendor subscriptions: what the company pays for on a cycle, and when each
@@ -207,7 +208,7 @@ export default function Subscriptions({
                 return (
                   <div
                     key={s.id}
-                    onClick={() => open(s.id)}
+                    role="button" tabIndex={0} onKeyDown={clickOnKey} onClick={() => open(s.id)}
                     className={cx('flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-[9px] text-[13px] last:border-b-0 hover:bg-subtle', s.status !== 'active' && 'opacity-60', openSub === s.id && '!bg-selection !opacity-100')}
                   >
                     <span className="flex min-w-0 flex-1 flex-col">
@@ -243,7 +244,7 @@ export default function Subscriptions({
                       <SubPill status={s.status} />
                     </span>
                     {/* The write actions gate themselves: a button whose only outcome is a 403 teaches people to distrust the screen. */}
-                    <span className="flex w-[132px] shrink-0 justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
+                    <span role="presentation" className="flex w-[132px] shrink-0 justify-end gap-0.5" onClick={(e) => e.stopPropagation()}>
                       {write ? (
                         <>
                           <RowAction icon="compose" label={`Edit ${s.name}`} onClick={() => setEditor({ mode: 'edit', sub: s })} />

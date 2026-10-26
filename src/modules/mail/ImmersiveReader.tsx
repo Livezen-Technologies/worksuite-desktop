@@ -125,7 +125,7 @@ export function ImmersiveReader({ subject, from, plain, prefs, onPrefs, onClose 
           <h1 className="mb-1 text-[1.4em] font-bold leading-tight">{subject || text('(no subject)')}</h1>
           <p className="mb-8 text-[0.75em] text-ink-3">{from}</p>
           {paras.map((t, i) => (
-            <p key={i} data-para={i} onClick={() => setAt(i)} className={cx('mb-[1em] whitespace-pre-wrap motion-safe:transition-opacity', focusLine && i !== at && 'opacity-30', focusLine && i === at && 'rounded-[6px] bg-selection')}>
+            <p key={i} data-para={i} role="presentation" onClick={() => setAt(i)} className={cx('mb-[1em] whitespace-pre-wrap motion-safe:transition-opacity', focusLine && i !== at && 'opacity-30', focusLine && i === at && 'rounded-[6px] bg-selection')}>
               {t}
             </p>
           ))}

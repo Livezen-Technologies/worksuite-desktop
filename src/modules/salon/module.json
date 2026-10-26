@@ -1,6 +1,6 @@
 {
     "module": "salon",
-    "version": "2.0.1",
+    "version": "2.0.2",
     "paths": [
         "electron/services/salon-desk.ts",
         "electron/services/salon-outbox.ts",

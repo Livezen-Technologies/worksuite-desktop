@@ -727,4 +727,6 @@ answers 404 and the screen says so.
 - Policies are signed only where the server has `desktop.policySigningKey`
   and the build pins its public key; see [BACKEND.md](BACKEND.md).
 - Translations other than English need review by native speakers.
-- The deb/rpm maintainer address is a placeholder until a support mailbox is chosen.
+- Linux packages are GPG-signed only when the `LINUX_GPG_PRIVATE_KEY` secret is set (docs/RELEASING.md); until then
+  a zypper update installs the downloaded `.rpm` with `--allow-unsigned-rpm`, trusting its SHA-256 from the signed
+  Update Center answer.

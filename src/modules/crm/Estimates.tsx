@@ -14,6 +14,7 @@ import { DocStatus } from './Proposals';
 import { moneyFull, StatusBar } from './parts';
 import { ESTIMATE_STATUSES, estimateActions, estimateWebPath, listMeta, OFFLINE_HINT, recordOf, rowsOf, useOnline, type Estimate, type EstimateDetail } from './proposalLogic';
 import { useCrmScope } from './scope';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Estimates (CRM SRS v1.3 §17): the list for the company the CRM is showing,
@@ -73,7 +74,7 @@ export default function Estimates({ openId, onOpen, onOpenQuote, onOpenProposal,
         <div className="min-h-0 overflow-y-auto scroll-thin">
           {list.isLoading ? <Spinner /> : list.error ? <ErrorNote error={list.error} onRetry={() => void list.refetch()} /> : null}
           {rows.map((r) => (
-            <div key={r.id} data-estimate={r.id} className="flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle" onClick={() => onOpen(r.id)}>
+            <div key={r.id} data-estimate={r.id} className="flex cursor-pointer items-center gap-2.5 border-b border-line/60 px-3.5 py-2 text-[12.5px] hover:bg-subtle" role="button" tabIndex={0} onKeyDown={clickOnKey} onClick={() => onOpen(r.id)}>
               <b className="w-[110px] shrink-0 truncate font-mono text-ink">{r.number}</b>
               <span className="flex min-w-0 flex-1 flex-col">
                 <span className="truncate text-ink">{r.title}</span>

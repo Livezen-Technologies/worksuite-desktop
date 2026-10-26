@@ -8,6 +8,7 @@ import { PageHead } from '../hr/parts';
 import { day, errorText, K, labelled, newKey, pGet, pGetMeta, pPost, type Issue, type IssueList, type Rack } from './api';
 import { PersonPick } from './ops';
 import { NoAccess, Refusal, usePms } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /** Who reads maintenance, and who may report a fault (`MaintenanceController::READ`, `REPORT`). */
 export const MAINT_READ = ['pms.maintenance.manage', 'pms.housekeeping.view', 'pms.room.manage', 'pms.guest_request.manage', 'pms.room.view'];
@@ -104,7 +105,7 @@ export function IssueRows({ items }: { items: Issue[] }) {
         </thead>
         <tbody>
           {items.map((i) => (
-            <tr key={i.id} className="cursor-pointer border-t border-line hover:bg-subtle" onClick={() => pms.open({ kind: 'issue', id: i.id })}>
+            <tr tabIndex={0} onKeyDown={clickOnKey} key={i.id} className="cursor-pointer border-t border-line hover:bg-subtle" onClick={() => pms.open({ kind: 'issue', id: i.id })}>
               <td className="px-3 py-1.5">
                 <button type="button" className="text-left font-semibold text-primary" onClick={() => pms.open({ kind: 'issue', id: i.id })}>
                   {i.title}

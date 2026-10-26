@@ -10,6 +10,7 @@ import { ReasonSheet } from '../finance/parts';
 import { humanise } from '../hr/parts';
 import { approveLoan, cancelLoan, fetchLoans, type Loan } from './api';
 import { Badge, Card, Table, amt, td, tdr, useReadOnly } from './parts';
+import { clickOnKey } from '../../components/press';
 
 /**
  * Loans and advances (D16): every loan with what is left to recover, and one loan's detail. Approving is
@@ -44,7 +45,7 @@ export default function Loans({ figures }: { figures: boolean }) {
         <Card>
           <Table head={['Loan', 'Employee', 'Type', ['Instalment', 'r'], ['Balance', 'r'], 'Status']}>
             {loans.map((l) => (
-              <tr key={l.id} onClick={() => setSel(l.id)} aria-selected={pick?.id === l.id} className={cx('cursor-default', pick?.id === l.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
+              <tr tabIndex={0} onKeyDown={clickOnKey} key={l.id} onClick={() => setSel(l.id)} aria-selected={pick?.id === l.id} className={cx('cursor-default', pick?.id === l.id ? 'bg-[#EEF1FD] dark:bg-selection' : 'hover:bg-subtle')}>
                 <td className={cx(td, 'font-mono text-[11px]')}>{l.reference ?? `L-${l.id}`}</td>
                 <td className={td}><b>{l.employee_name}</b></td>
                 <td className={td}>{humanise(l.kind)}</td>

@@ -134,7 +134,8 @@ function openLinks(ev: React.MouseEvent) {
 export function Rich({ html, className }: { html: string | null | undefined; className?: string }) {
   const clean = useMemo(() => sanitizeHtml(html ?? '', { profile: 'rich' }), [html]);
   if (!clean.trim()) return null;
-  return <div className={cx(RICH, className)} onClick={openLinks} dangerouslySetInnerHTML={{ __html: clean }} />;
+  // Links are <a> elements: Tab reaches them and Enter's click bubbles here.
+  return <div className={cx(RICH, className)} role="presentation" onClick={openLinks} dangerouslySetInnerHTML={{ __html: clean }} />;
 }
 
 /** A course as a tile: its catalogue facts, and where the learner stands in it. */
