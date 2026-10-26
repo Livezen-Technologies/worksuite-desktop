@@ -4,6 +4,7 @@ import { Button, ErrorNote, OfflineNote, Spinner, cx } from '../../components/ui
 import { PageHead } from '../hr/parts';
 import { eGetMeta, K, when, type LearningItem, type MyLearning as Data } from './api';
 import { CourseTile, Pill, Section, Tile, WorkPill, useEl } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * My Learning (§4.3, FR-DSH-04): where to pick up, what was assigned and by
@@ -31,13 +32,13 @@ export default function MyLearning() {
           Browse the catalogue
         </Button>
       </PageHead>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-        <Tile label="Assigned" value={String(c.assigned)} />
-        <Tile label="In progress" value={String(c.in_progress)} />
-        <Tile label="Completed" value={String(c.completed)} />
-        <Tile label="Overdue" value={String(c.overdue)} />
-        <Tile label="Waiting for approval" value={String(c.pending)} />
-      </div>
+      <StatGrid min={190}>
+        <Tile icon="clipboard-list" tone="blue" label="Assigned" value={String(c.assigned)} />
+        <Tile icon="book-open" tone="violet" label="In progress" value={String(c.in_progress)} />
+        <Tile icon="graduation-cap" tone="green" label="Completed" value={String(c.completed)} />
+        <Tile icon="alert" tone={c.overdue ? 'red' : 'neutral'} label="Overdue" value={String(c.overdue)} />
+        <Tile icon="hourglass" tone="amber" label="Waiting for approval" value={String(c.pending)} />
+      </StatGrid>
 
       {nothing ? (
         <Section title="Nothing here yet">

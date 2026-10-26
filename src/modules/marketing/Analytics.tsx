@@ -11,6 +11,7 @@ import { Tabs } from './email-kit';
 import { Card, Cell, Empty, Field, Kpi, PageHeader, Sheet, THead, btn, btnPrimary, btnSmall, input, n, pct, row } from './parts';
 import { companiesWhere, fieldErrors, refusal, type Options } from './types';
 import { money, type Attribution, type FunnelStage, type Overview, type ReportSchedule, type TrackingSite, type UtmLink } from './wsd';
+import { StatGrid } from '../../components/StatCard';
 
 type Tab = 'overview' | 'funnel' | 'attribution' | 'utm' | 'tracking' | 'schedules';
 
@@ -81,14 +82,14 @@ function OverviewTab({ params }: { params: Params }) {
   return (
     <>
       {t ? (
-        <div className="grid grid-cols-3 gap-2.5 xl:grid-cols-6">
-          <Kpi label="Sent" value={n(t.sent)} />
-          <Kpi label="Delivered" value={n(t.delivered)} sub={t.sent ? pct((t.delivered / t.sent) * 100) : undefined} />
-          <Kpi label="Opened by a person" value={t.opened === null ? '—' : n(t.opened)} sub="email and WhatsApp" />
-          <Kpi label="Clicked or replied" value={n(t.clicked)} />
-          <Kpi label="Unsubscribed" value={n(t.unsubscribed)} tone={t.unsubscribed > 0 ? 'amber' : undefined} />
-          <Kpi label="Calls connected" value={n(t.connected)} sub={`of ${n(t.calls)} calls`} />
-        </div>
+        <StatGrid min={180}>
+          <Kpi icon="send" tone="blue" label="Sent" value={n(t.sent)} />
+          <Kpi icon="mail-check" tone="green" label="Delivered" value={n(t.delivered)} sub={t.sent ? pct((t.delivered / t.sent) * 100) : undefined} />
+          <Kpi icon="mail-open" tone="violet" label="Opened by a person" value={t.opened === null ? '—' : n(t.opened)} sub="email and WhatsApp" />
+          <Kpi icon="mouse-click" tone="cyan" label="Clicked or replied" value={n(t.clicked)} />
+          <Kpi icon="user-minus" label="Unsubscribed" value={n(t.unsubscribed)} tone={t.unsubscribed > 0 ? 'amber' : undefined} />
+          <Kpi icon="phone-call" tone="blue" label="Calls connected" value={n(t.connected)} sub={`of ${n(t.calls)} calls`} />
+        </StatGrid>
       ) : null}
       <Card padded={false} title="By" action={(
         <div className="flex gap-2">
@@ -147,11 +148,11 @@ function AttributionTab({ params }: { params: Params }) {
   return (
     <>
       {a ? (
-        <div className="grid grid-cols-3 gap-2.5">
-          <Kpi label="Won revenue" value={money(a.revenue)} sub={`${n(a.deals)} deals won in CRM`} />
-          <Kpi label="Credited to campaigns" value={money(a.revenue - a.unattributed)} />
-          <Kpi label="Not touched by marketing" value={money(a.unattributed)} />
-        </div>
+        <StatGrid min={200}>
+          <Kpi icon="trophy" tone="green" label="Won revenue" value={money(a.revenue)} sub={`${n(a.deals)} deals won in CRM`} />
+          <Kpi icon="megaphone" tone="violet" label="Credited to campaigns" value={money(a.revenue - a.unattributed)} />
+          <Kpi icon="circle-dot" label="Not touched by marketing" value={money(a.unattributed)} />
+        </StatGrid>
       ) : null}
       <Card padded={false} title="Revenue by campaign" action={<Select aria-label="Model" value={model} onValueChange={setModel} className="w-36" options={[{ value: 'first', label: 'First touch' }, { value: 'last', label: 'Last touch' }, { value: 'linear', label: 'Linear' }]} />}>
         <THead cols={[['Campaign', null], ['Channel', 100], ['Revenue', 120], ['Deals', 70], ['Touches', 80]]} />

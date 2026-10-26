@@ -5,6 +5,7 @@ import { Avatar, Button, DATA_TEXT, IconButton, Modal, cx, initials } from '../.
 import type { SalonCopy, SalonDeskInfo, SalonSyncStatus } from '@shared/types';
 import { amount, clockAt, greeting, minutesOf, type Options, type Reliability, type SalonLocation, type Severity, type Visit } from './api';
 import { MK, printSettings, type CheckoutResult } from './money';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /**
  * What every SalonMate screen reads: this computer's desk, its location and
@@ -359,14 +360,8 @@ export function AllergyChip({ allergy }: { allergy: { severity: Severity; substa
 }
 
 /** A figure with its label above it: points, store credit, what is owed. */
-export function Figure({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
-  return (
-    <div className="min-w-0 rounded-[14px] bg-ground px-3.5 py-3">
-      <div className="text-[12px] font-bold tracking-[.03em] text-ink-2 uppercase">{label}</div>
-      <div className="truncate text-[20px] leading-snug font-extrabold text-ink tabular-nums">{value}</div>
-      {sub ? <div className="truncate text-[12px] text-ink-2">{sub}</div> : null}
-    </div>
-  );
+export function Figure({ label, value, sub, icon, tone }: { label: string; value: ReactNode; sub?: ReactNode; icon?: string; tone?: StatTone }) {
+  return <StatCard size="sm" label={label} value={value} sub={sub} icon={icon} tone={tone} />;
 }
 
 /** A line across a screen that says something about the whole of it. */
@@ -498,8 +493,8 @@ export function MoneyLine({ label, value, currency = '', strong = false, tone }:
 }
 
 /** A figure in a box, for the register's tiles. */
-export function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return <Figure label={label} value={value} sub={sub} />;
+export function Tile({ label, value, sub, icon, tone }: { label: string; value: string; sub?: string; icon?: string; tone?: StatTone }) {
+  return <Figure label={label} value={value} sub={sub} icon={icon} tone={tone} />;
 }
 
 /** The keys as on a calculator: 7 8 9 on top. */

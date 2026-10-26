@@ -19,6 +19,7 @@ import { exportCrmCsv } from './exportCsv';
 import { NewDeal } from './Pipeline';
 import { ScheduleFollowUp } from './Schedule';
 import { CompanyField, orgIdFor, useCrmScope } from './scope';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Accounts (CrmAccounts, desk-account): the customers, prospects and
@@ -256,14 +257,14 @@ function Account360({ id, onBack, onChanged, onOpenDeal, onOpenQuote, onNewQuote
               </button>
             ) : null}
           </div>
-          <div className="grid grid-cols-3 gap-2 min-[1100px]:grid-cols-6">
-            <Tile label="Open deals" value={String(d.summary.open_deals)} sub={money(d.summary.open_value, a.currency)} />
-            <Tile label="Won" value={money(d.summary.won_value, a.currency)} sub={d.summary.lost_count ? `${d.summary.lost_count} lost` : 'none lost'} />
-            <Tile label="Projects" value={String(d.summary.projects)} />
-            <Tile label="Open tasks" value={String(d.summary.open_tasks)} />
-            <Tile label="Meetings" value={String(d.summary.meetings)} />
-            <Tile label="Quotes" value={String(d.summary.quotes)} />
-          </div>
+          <StatGrid min={150}>
+            <Tile icon="handshake" tone="blue" label="Open deals" value={String(d.summary.open_deals)} sub={money(d.summary.open_value, a.currency)} />
+            <Tile icon="trophy" tone="green" label="Won" value={money(d.summary.won_value, a.currency)} sub={d.summary.lost_count ? `${d.summary.lost_count} lost` : 'none lost'} />
+            <Tile icon="kanban" tone="violet" label="Projects" value={String(d.summary.projects)} />
+            <Tile icon="tasks" tone="amber" label="Open tasks" value={String(d.summary.open_tasks)} />
+            <Tile icon="calendar" tone="cyan" label="Meetings" value={String(d.summary.meetings)} />
+            <Tile icon="file-text" tone="neutral" label="Quotes" value={String(d.summary.quotes)} />
+          </StatGrid>
 
           <div className="grid min-h-0 items-start gap-3 min-[1000px]:grid-cols-[1fr_1.2fr]">
             <div className="flex min-w-0 flex-col gap-3">
@@ -376,14 +377,8 @@ function Account360({ id, onBack, onChanged, onOpenDeal, onOpenQuote, onNewQuote
   );
 }
 
-function Tile({ label, value, sub }: { label: string; value: string; sub?: string }) {
-  return (
-    <div data-tile={label} className="flex min-w-0 flex-col rounded-[10px] border border-line bg-surface px-3 py-2.5">
-      <span className="text-[12px] text-ink-3">{label}</span>
-      <b className="truncate text-[17px] text-ink tabular-nums">{value}</b>
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </div>
-  );
+function Tile({ label, value, sub, icon, tone }: { label: string; value: string; sub?: string; icon?: string; tone?: StatTone }) {
+  return <StatCard data-tile={label} size="sm" label={label} value={value} sub={sub} icon={icon} tone={tone} />;
 }
 
 function Section({ title, action, children }: { title: string; action?: ReactNode; children: ReactNode }) {

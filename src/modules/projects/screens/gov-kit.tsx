@@ -6,6 +6,7 @@ import { qk, read } from '../api';
 import { useProjectCompany } from '../company';
 import { openWeb } from '../parts';
 import { gk, gov } from './gov-api';
+import { StatCard, type StatTone } from '../../../components/StatCard';
 
 // The pieces every Projects screen shares come from the one kit (and the company selector from company.tsx).
 export { ChartTable, Field, Mono, NEEDS_CONNECTION as WAITS } from './kit';
@@ -100,14 +101,9 @@ export function Tone({ tone, children, className }: { tone: string; children: Re
 }
 
 /** A figure tile: label, value, a line under it. */
-export function Kpi({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'danger' }) {
-  return (
-    <div className="flex min-w-0 flex-col gap-0.5 rounded-[12px] border border-line bg-surface px-3.5 py-2.5">
-      <span className="truncate text-[11.5px] font-semibold text-ink-3">{label}</span>
-      <b className={cx('truncate text-[20px]', tone === 'danger' ? 'text-danger' : 'text-ink')}>{value}</b>
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </div>
-  );
+/** A figure tile, drawn as the shared StatCard: label, value, a line under it. */
+export function Kpi({ label, value, sub, tone, icon }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'danger' | StatTone; icon?: string }) {
+  return <StatCard label={label} value={value} sub={sub} tone={tone === 'danger' ? 'red' : tone} icon={icon} />;
 }
 
 /** A page's head: title (and what is above it), what sits beside it, the actions on the right. */

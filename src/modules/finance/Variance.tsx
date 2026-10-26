@@ -13,6 +13,7 @@ import { favourTone, fetchBudgetVariance, IK, missingSlugs, num, pctText, profit
 import type { ScreenProps } from './Rail';
 import { NotGranted, ReadFailed, ReportBar } from './ReportBar';
 import { ShareBar, type ShareTone } from './Trend';
+import { StatCard, StatGrid, type StatTone, type StatTrend } from '../../components/StatCard';
 
 /**
  * Budget against actual (FR-FIN-13.04).
@@ -99,19 +100,22 @@ function Body({ rows, totals, cur, note }: { rows: VarianceRow[]; totals: NonNul
   const worst = Math.max(...rows.map((r) => Math.abs(num(r.variance))), 1);
   return (
     <>
-      <div className="grid gap-2.5 lg:grid-cols-3">
-        <SideTile label="Income" side={totals.income} cur={cur} />
-        <SideTile label="Cost" side={totals.cost} cur={cur} />
-        <div className="flex flex-col gap-0.5 rounded-[12px] border border-line bg-subtle px-3.5 py-3">
-          <span className="text-[12px] font-semibold text-ink-3">Profit against plan</span>
-          <span className="flex flex-wrap items-baseline gap-2">
-            <b className="text-[18px] text-ink tabular-nums">{m(totals.profit.actual)}</b>
-            <span className="text-[11.5px] text-ink-3">of {m(totals.profit.budget)} planned</span>
-          </span>
-          <b className={cx('text-[13px] tabular-nums', TONE_TEXT[profitTone(totals.profit.variance)])}>{signedMoney(totals.profit.variance, cur)}</b>
-          <span className="text-[11.5px] text-ink-3">Income less cost, both against plan.</span>
-        </div>
-      </div>
+      <StatGrid>
+        <SideTile label="Income" side={totals.income} cur={cur} icon="trending-up" tone="blue" />
+        <SideTile label="Cost" side={totals.cost} cur={cur} icon="receipt" tone="amber" />
+        <StatCard
+          label="Profit against plan"
+          value={m(totals.profit.actual)}
+          trend={varianceTrend(totals.profit.variance, cur, profitTone(totals.profit.variance))}
+          sub={
+            <>
+              of {m(totals.profit.budget)} planned · Income less cost, both against plan.
+            </>
+          }
+          icon="scale"
+          tone="green"
+        />
+      </StatGrid>
       {note ? <p className="m-0 text-[11.5px] leading-relaxed text-ink-3">{note}</p> : null}
 
       <section className="overflow-hidden rounded-[12px] border border-line bg-surface">
@@ -180,19 +184,27 @@ function VarianceCell({ row: r, cur, tone }: { row: VarianceRow; cur: string; to
   );
 }
 
-function SideTile({ label, side, cur }: { label: string; side: VarianceSide; cur: string }) {
+/** A variance as the card's pill: its sign as the arrow, and whether it is good news as its colour and its words. */
+function varianceTrend(variance: string, cur: string, tone: Tone): StatTrend {
+  return { direction: isZero(variance) ? 'flat' : isNegative(variance) ? 'down' : 'up', text: signedMoney(variance, cur), good: tone === 'good', label: 'against plan' };
+}
+
+function SideTile({ label, side, cur, icon, tone }: { label: string; side: VarianceSide; cur: string; icon: string; tone: StatTone }) {
   const m = (v: string) => money(v, cur);
+  const t = favourTone(side.favourable);
   return (
-    <div className="flex flex-col gap-0.5 rounded-[12px] border border-line bg-surface px-3.5 py-3">
-      <span className="text-[12px] font-semibold text-ink-3">{label}</span>
-      <span className="flex flex-wrap items-baseline gap-2">
-        <b className="text-[18px] text-ink tabular-nums">{m(side.actual)}</b>
-        <span className="text-[11.5px] text-ink-3">of {m(side.budget)} planned</span>
-      </span>
-      <b className={cx('text-[13px] tabular-nums', TONE_TEXT[favourTone(side.favourable)])} data-favourable={side.favourable === null ? 'none' : String(side.favourable)}>
-        {signedMoney(side.variance, cur)}
-      </b>
-      <span className="text-[11.5px] text-ink-3">{m(side.remaining_plan)} of plan left</span>
-    </div>
+    <StatCard
+      data-favourable={side.favourable === null ? 'none' : String(side.favourable)}
+      label={label}
+      value={m(side.actual)}
+      trend={side.favourable === null ? { direction: 'flat', text: signedMoney(side.variance, cur), label: 'against plan' } : varianceTrend(side.variance, cur, t)}
+      sub={
+        <>
+          of {m(side.budget)} planned · {m(side.remaining_plan)} of plan left
+        </>
+      }
+      icon={icon}
+      tone={tone}
+    />
   );
 }

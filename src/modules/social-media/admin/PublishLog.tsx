@@ -12,6 +12,7 @@ import { ATTEMPT_OUTCOME, ERROR_CLASS } from '../lib/status';
 import { logStamp } from '../lib/time';
 import { Field, INPUT, Kpi, NetChip, OptionalView, PageBody, PageHeader, Panel, Pill, pct, full, Table, TD, TR, UnderlineTabs, useBrandScope } from '../parts';
 import { useReconnect } from './accounts/flows';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * A03 · Publishing log (SMM-PUB-003, PUB-011, WF-06, AC-03). Every publish attempt with its time, account, post,
@@ -240,12 +241,12 @@ export default function PublishLog() {
       <PageBody>
         <div className="flex min-w-0 flex-col gap-4">
           {log && t ? (
-            <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-              <Kpi label="Publish jobs · 30 days" value={full(t.jobs)} />
-              <Kpi label="Succeeded first try" value={t.first_try_rate === null ? null : pct(t.first_try_rate)} />
-              <Kpi label="Retried then succeeded" value={full(t.retried_then_succeeded)} />
-              <Kpi label="Failed" value={full(t.failed)} sub={t.failed_note ?? undefined} tone="danger" />
-            </div>
+            <StatGrid>
+              <Kpi icon="send" accent="blue" label="Publish jobs · 30 days" value={full(t.jobs)} />
+              <Kpi icon="check-circle" accent="green" label="Succeeded first try" value={t.first_try_rate === null ? null : pct(t.first_try_rate)} />
+              <Kpi icon="refresh" accent="amber" label="Retried then succeeded" value={full(t.retried_then_succeeded)} />
+              <Kpi icon="x-circle" accent="red" label="Failed" value={full(t.failed)} sub={t.failed_note ?? undefined} tone="danger" />
+            </StatGrid>
           ) : null}
           <UnderlineTabs
             label="Outcome"

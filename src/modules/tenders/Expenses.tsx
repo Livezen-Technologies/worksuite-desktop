@@ -13,6 +13,7 @@ import { Pill } from '../inventory/parts';
 import { fetchOrgs, K as EK } from '../expenses/api';
 import { K } from './api';
 import { amount, fetchLinkable, fetchTenderExpenses, KE, linkExpense, markRefunded, overBy, presetFor, statusOf, unlinkExpense, varianceLine, type TenderExpense, type TenderExpenses } from './bidcost';
+import { StatGrid } from '../../components/StatCard';
 
 const NewClaim = lazy(() => import('../expenses/NewClaim'));
 const ClaimPanel = lazy(() => import('../expenses/ClaimPanel'));
@@ -59,17 +60,18 @@ export default function Expenses({ id, tender }: { id: number; tender: { title: 
 
   return (
     <div className="flex flex-col gap-3.5" aria-label="Expenses">
-      <div className="grid grid-cols-4 gap-3" aria-label="Bid cost">
-        <Kpi label="Total spent" value={amount(t?.spent ?? '0', ccy)} sub={`${t?.count ?? 0} ${t?.count === 1 ? 'expense' : 'expenses'}, rejected ones left out`} />
-        <Kpi label="Pending approval" value={amount(t?.pending ?? '0', ccy)} tone={Number(t?.pending ?? 0) > 0 ? 'amber' : undefined} sub={`${t?.by_status.submitted?.count ?? 0} waiting`} />
-        <Kpi label="Reimbursable" value={amount(t?.reimbursable ?? '0', ccy)} sub="Approved, not yet paid back" />
+      <StatGrid label="Bid cost">
+        <Kpi icon="wallet" tone="blue" label="Total spent" value={amount(t?.spent ?? '0', ccy)} sub={`${t?.count ?? 0} ${t?.count === 1 ? 'expense' : 'expenses'}, rejected ones left out`} />
+        <Kpi icon="hourglass" label="Pending approval" value={amount(t?.pending ?? '0', ccy)} tone={Number(t?.pending ?? 0) > 0 ? 'amber' : undefined} sub={`${t?.by_status.submitted?.count ?? 0} waiting`} />
+        <Kpi icon="hand-coins" tone="cyan" label="Reimbursable" value={amount(t?.reimbursable ?? '0', ccy)} sub="Approved, not yet paid back" />
         <Kpi
+          icon="scale"
           label="Budget vs actual"
           value={v ? `${v.percent}%` : '—'}
           tone={v?.over ? 'red' : undefined}
           sub={v ? `of ${amount(v.planned, ccy)} planned` : 'No bid budget set on the Budget tab'}
         />
-      </div>
+      </StatGrid>
 
       {v ? (
         <p className={cx('m-0 text-[12.5px]', v.over ? 'text-danger' : 'text-ink-2')} aria-label="Budget variance">

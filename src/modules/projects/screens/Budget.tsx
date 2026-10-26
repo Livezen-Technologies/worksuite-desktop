@@ -6,6 +6,7 @@ import { Button, ErrorNote, Spinner, cx } from '../../../components/ui';
 import { CompanySelect, useProjectCompany } from '../company';
 import { exportReport, gk, gov, type BudgetRow, type BudgetStep, type PortfolioBudget } from './gov-api';
 import { Kpi, Mono, PageHead, WAITS, WebButton, fmtDay, num, shortMoney, signed, usedTone } from './gov-kit';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * W12 · Budget & cost (SRS p46, PRJ-BUD), the portfolio's (`/projects/budget`) and one project's
@@ -123,26 +124,26 @@ export function BudgetScreen({ projectId = null, offline, onOffline, onGo }: { p
 function PortfolioTiles({ d }: { d: PortfolioBudget }) {
   const t = d.totals;
   return (
-    <section aria-label="Totals" className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2.5">
-      <Kpi label="Budget (live projects)" value={shortMoney(t.budget)} sub={`${d.company ? `${d.company.name} · ` : ''}${d.currency}, ${t.live_projects} project${t.live_projects === 1 ? '' : 's'}`} />
-      <Kpi label="Spent" value={shortMoney(t.spent)} sub={`${t.used_percent}% used`} tone={t.used_percent > 100 ? 'danger' : undefined} />
-      <Kpi label="Labour" value={shortMoney(t.labour)} sub={`${num(t.billable_minutes / 60)} billable hours`} />
-      <Kpi label="Expenses" value={shortMoney(t.expenses)} sub={`${t.claims} claim${t.claims === 1 ? '' : 's'} charged`} />
-      <Kpi label="Over budget" value={t.over_budget} tone={t.over_budget ? 'danger' : undefined} sub={t.worst ? `${t.worst.code}${t.over_budget_by ? ` by ${shortMoney(t.over_budget_by)}` : ''}` : 'none'} />
-    </section>
+    <StatGrid min={200} label="Totals">
+      <Kpi icon="wallet" tone="blue" label="Budget (live projects)" value={shortMoney(t.budget)} sub={`${d.company ? `${d.company.name} · ` : ''}${d.currency}, ${t.live_projects} project${t.live_projects === 1 ? '' : 's'}`} />
+      <Kpi icon="banknote" label="Spent" value={shortMoney(t.spent)} sub={`${t.used_percent}% used`} tone={t.used_percent > 100 ? 'danger' : undefined} />
+      <Kpi icon="clock" tone="violet" label="Labour" value={shortMoney(t.labour)} sub={`${num(t.billable_minutes / 60)} billable hours`} />
+      <Kpi icon="receipt" tone="cyan" label="Expenses" value={shortMoney(t.expenses)} sub={`${t.claims} claim${t.claims === 1 ? '' : 's'} charged`} />
+      <Kpi icon="warning" label="Over budget" value={t.over_budget} tone={t.over_budget ? 'danger' : undefined} sub={t.worst ? `${t.worst.code}${t.over_budget_by ? ` by ${shortMoney(t.over_budget_by)}` : ''}` : 'none'} />
+    </StatGrid>
   );
 }
 
 function ProjectTiles({ row: r }: { row: BudgetRow }) {
   const spent = Number(r.labour) + Number(r.expenses);
   return (
-    <section aria-label="Totals" className="grid grid-cols-[repeat(auto-fill,minmax(160px,1fr))] gap-2.5">
-      <Kpi label="Budget" value={shortMoney(r.budget)} sub={r.currency} />
-      <Kpi label="Spent" value={shortMoney(spent)} sub={`${r.used_percent}% used`} tone={r.over ? 'danger' : undefined} />
-      <Kpi label="Labour" value={shortMoney(r.labour)} sub="billable time" />
-      <Kpi label="Expenses" value={shortMoney(r.expenses)} sub="claims charged" />
-      <Kpi label="At completion" value={r.eac ? shortMoney(r.eac) : '—'} sub={r.over ? 'over budget' : 'estimate'} tone={r.over ? 'danger' : undefined} />
-    </section>
+    <StatGrid min={200} label="Totals">
+      <Kpi icon="wallet" tone="blue" label="Budget" value={shortMoney(r.budget)} sub={r.currency} />
+      <Kpi icon="banknote" label="Spent" value={shortMoney(spent)} sub={`${r.used_percent}% used`} tone={r.over ? 'danger' : undefined} />
+      <Kpi icon="clock" tone="violet" label="Labour" value={shortMoney(r.labour)} sub="billable time" />
+      <Kpi icon="receipt" tone="cyan" label="Expenses" value={shortMoney(r.expenses)} sub="claims charged" />
+      <Kpi icon="target" label="At completion" value={r.eac ? shortMoney(r.eac) : '—'} sub={r.over ? 'over budget' : 'estimate'} tone={r.over ? 'danger' : undefined} />
+    </StatGrid>
   );
 }
 

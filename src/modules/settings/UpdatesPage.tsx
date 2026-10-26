@@ -15,6 +15,7 @@ import { Button, Chip, cx } from '../../components/ui';
 import { UpdateActions } from '../../app/screens/UpdateScreens';
 import { packageLine } from '../../app/screens/UpdateDialogs';
 import { ChannelRow, updateStateLabel } from './UpdatesCard';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Settings › Updates (Updates & License design): where updates stand, the four versions that matter, the download
@@ -23,14 +24,10 @@ import { ChannelRow, updateStateLabel } from './UpdatesCard';
  * arrive or install.
  */
 
-function Tile({ label, value, sub, tone }: { label: string; value: ReactNode; sub: ReactNode; tone?: 'primary' | 'success' | 'danger' }) {
-  return (
-    <div className="min-w-0 rounded-[12px] border border-line bg-surface p-4">
-      <div className="text-[11px] font-semibold tracking-wide text-ink-3 uppercase">{label}</div>
-      <div className={cx('mt-1 truncate font-mono text-[20px] font-bold', tone === 'primary' ? 'text-primary' : 'text-ink')}>{value}</div>
-      <div className={cx('truncate text-[12.5px]', tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : 'text-ink-3')}>{sub}</div>
-    </div>
-  );
+function Tile({ label, value, sub, tone, icon, accent }: { label: string; value: ReactNode; sub: ReactNode; tone?: 'primary' | 'success' | 'danger'; icon?: string; accent?: StatTone }) {
+  // `tone` says what the line under the figure means; the chip takes it too, or `accent` when there is nothing to say.
+  const chip: StatTone | undefined = tone === 'primary' ? 'blue' : tone === 'success' ? 'green' : tone === 'danger' ? 'red' : accent;
+  return <StatCard label={label} value={value} sub={<span className={cx(tone === 'success' ? 'text-success' : tone === 'danger' ? 'text-danger' : undefined)}>{sub}</span>} icon={icon} tone={chip} />;
 }
 
 const STEP_LABEL: Record<PipelineStep['id'], string> = { manifest: 'Manifest', download: 'Download', sha256: 'SHA-256', codesign: 'Code signature', stage: 'Stage' };
@@ -312,23 +309,27 @@ export function UpdatesPage({ onDiagnostics }: { onDiagnostics?: () => void }) {
       </div>
       {u?.failure ? <UpdateFailedPanel u={u} /> : null}
       {state.detail && !u?.failure && u?.state !== 'DOWNLOADING' ? <p className="text-[13px] text-ink-2">{state.detail}</p> : null}
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Tile label="Current version" value={u?.currentVersion ?? '—'} sub={u ? `${u.channel === 'org' ? 'Organization build' : CHANNEL_INFO[u.channel].label} channel` : ''} />
-        <Tile label="Latest version" value={u?.availableVersion ?? u?.currentVersion ?? '—'} sub={latestSub} tone={u?.availableVersion ? 'primary' : undefined} />
+      <StatGrid min={200}>
+        <Tile icon="badge-check" accent="blue" label="Current version" value={u?.currentVersion ?? '—'} sub={u ? `${u.channel === 'org' ? 'Organization build' : CHANNEL_INFO[u.channel].label} channel` : ''} />
+        <Tile icon="download" accent="violet" label="Latest version" value={u?.availableVersion ?? u?.currentVersion ?? '—'} sub={latestSub} tone={u?.availableVersion ? 'primary' : undefined} />
         {/* The channel is chosen in its own section below; this tile says how this copy updates (worksuite-desktop#345). */}
         <Tile
+          icon="package"
+          accent="cyan"
           label="Installed as"
           value={<span className="font-sans">{u?.installKind ? (INSTALLED_AS[u.installKind]?.label ?? u.installKind) : '—'}</span>}
           sub={u?.installKind ? (INSTALLED_AS[u.installKind]?.how ?? '') : u ? 'Cannot update itself' : ''}
           tone={u && !u.installKind ? 'danger' : undefined}
         />
         <Tile
+          icon="shield-check"
+          accent="neutral"
           label="Minimum supported"
           value={u?.minimumVersion ?? '—'}
           sub={m.required ? (m.locked ? 'Update required now' : `Update required within ${durationLeft(m.msLeft ?? 0)}`) : u?.minimumVersion ? 'You are supported' : 'No minimum set'}
           tone={m.required ? 'danger' : u?.minimumVersion ? 'success' : undefined}
         />
-      </div>
+      </StatGrid>
       {showDownload && u ? <DownloadCard u={u} /> : null}
       <div className="grid gap-4 lg:grid-cols-[1.4fr_1fr]">
         {u?.notes && u.availableVersion ? (

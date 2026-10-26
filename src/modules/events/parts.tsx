@@ -5,6 +5,7 @@ import { apiUrl } from '../../core/api';
 import type { ScanView } from '@shared/event-desk';
 import { at, type EventItem, type Options } from './api';
 import type { EventView, Screen } from './routes';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /** What every screen of an event shares: the event, the person's permissions in its company, the way round. */
 export interface EventCtx {
@@ -169,14 +170,8 @@ export function NoAccess({ what }: { what: string }) {
 }
 
 /** A big number with its words — the live counters (EV-POR-011). */
-export function Counter({ label, value, hint, big }: { label: string; value: number | string | null | undefined; hint?: string; big?: boolean }) {
-  return (
-    <div className="flex min-w-0 flex-col rounded-[12px] border border-line bg-surface px-4 py-3">
-      <span className="text-[11.5px] font-bold tracking-[.5px] text-ink-3 uppercase">{label}</span>
-      <span className={cx('font-extrabold text-ink tabular-nums', big ? 'text-[44px] leading-[1.1]' : 'text-[26px] leading-tight')}>{value ?? '—'}</span>
-      {hint ? <span className="text-[11.5px] text-ink-3">{hint}</span> : null}
-    </div>
-  );
+export function Counter({ label, value, hint, big, icon, tone }: { label: string; value: number | string | null | undefined; hint?: string; big?: boolean; icon?: string; tone?: StatTone }) {
+  return <StatCard size={big ? 'lg' : 'md'} label={label} value={value ?? '—'} sub={hint} icon={icon} tone={tone} />;
 }
 
 export function Header({ title, sub, actions }: { title: ReactNode; sub?: ReactNode; actions?: ReactNode }) {

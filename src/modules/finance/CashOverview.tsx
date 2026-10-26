@@ -28,6 +28,7 @@ import { Notice } from './parts';
 import type { ScreenProps } from './Rail';
 import { NotGranted, RangeFields, ReadFailed, ReportBar } from './ReportBar';
 import { ShareBar, TrendChart } from './Trend';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The cash flow overview (FR-FIN-15.03) and the forecast (FR-FIN-15.04).
@@ -104,13 +105,13 @@ function Body({ data, cur, translated }: { data: CashData; cur: string; translat
   return (
     <>
       {data.note ? <Notice tone="amber">{data.note}</Notice> : null}
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2.5">
-        <Kpi label="Opening balance" value={<span className="text-[18px]">{m(s.opening)}</span>} sub={`on ${shortDate(data.from)}`} />
-        <Kpi label="Cash in" tone="green" value={<span className="text-[18px]">{m(s.inflows)}</span>} />
-        <Kpi label="Cash out" tone="red" value={<span className="text-[18px]">{m(s.outflows)}</span>} />
-        <Kpi label="Net movement" value={<span className="text-[18px]">{m(s.net)}</span>} />
-        <Kpi label="Closing balance" value={<span className="text-[18px]">{m(s.closing)}</span>} sub={`on ${shortDate(data.to)}`} />
-      </div>
+      <StatGrid min={200}>
+        <Kpi icon="landmark" tone="blue" label="Opening balance" value={<span className="text-[18px]">{m(s.opening)}</span>} sub={`on ${shortDate(data.from)}`} />
+        <Kpi icon="arrow-down-line" label="Cash in" tone="green" value={<span className="text-[18px]">{m(s.inflows)}</span>} />
+        <Kpi icon="arrow-up-line" label="Cash out" tone="red" value={<span className="text-[18px]">{m(s.outflows)}</span>} />
+        <Kpi icon="arrow-left-right" tone="violet" label="Net movement" value={<span className="text-[18px]">{m(s.net)}</span>} />
+        <Kpi icon="landmark" tone="cyan" label="Closing balance" value={<span className="text-[18px]">{m(s.closing)}</span>} sub={`on ${shortDate(data.to)}`} />
+      </StatGrid>
       <FxNotice fx={data.fx} positionFx={data.position_fx} />
       <p className="m-0 flex flex-wrap gap-x-3 gap-y-1 text-[11.5px] leading-relaxed text-ink-3">
         {/* Translated, balances take the closing rate and movements the average, so the identity holds only in the books' own currency. */}

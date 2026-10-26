@@ -45,6 +45,7 @@ import {
   type EditorMode,
   type Sub,
 } from './suppliers';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Vendor subscriptions: what the company pays for on a cycle, and when each
@@ -147,12 +148,12 @@ export default function Subscriptions({
         <LoadFailed what="The subscriptions" onRetry={() => void q.refetch()} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            <Kpi label="Active" value={sum.active} />
-            <Kpi label="Monthly cost" value={<Costs costs={sum.costs} pick="monthly" />} sub={sum.costs.length > 1 ? 'One line per currency — not added across them' : undefined} />
-            <Kpi label="Annual cost" value={<Costs costs={sum.costs} pick="annual" />} sub="Twelve months at today’s prices" />
-            <Kpi label="Renewing in 30 days" value={sum.dueSoon} tone={sum.dueSoon ? 'amber' : undefined} sub={sum.overdue ? `${sum.overdue} overdue` : undefined} />
-          </div>
+          <StatGrid>
+            <Kpi icon="repeat" tone="blue" label="Active" value={sum.active} />
+            <Kpi icon="calendar" tone="violet" label="Monthly cost" value={<Costs costs={sum.costs} pick="monthly" />} sub={sum.costs.length > 1 ? 'One line per currency — not added across them' : undefined} />
+            <Kpi icon="calendar-days" tone="cyan" label="Annual cost" value={<Costs costs={sum.costs} pick="annual" />} sub="Twelve months at today’s prices" />
+            <Kpi icon="calendar-clock" label="Renewing in 30 days" value={sum.dueSoon} tone={sum.dueSoon ? 'amber' : undefined} sub={sum.overdue ? `${sum.overdue} overdue` : undefined} />
+          </StatGrid>
 
           {soon.length ? (
             <Panel title="Upcoming renewals" sub={sum.overdue ? 'Overdue first: a stated renewal date that has passed without a payment receipt.' : undefined}>

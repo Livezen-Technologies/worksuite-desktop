@@ -8,6 +8,7 @@ import { Icon } from '../../components/Icon';
 import { Select } from '../../components/Select';
 import { Spinner, cx } from '../../components/ui';
 import { Empty, input, Kpi, PageHead, Panel, Seg } from '../hr/parts';
+import { StatGrid, type StatTone } from '../../components/StatCard';
 import { Pill } from '../inventory/parts';
 import { can, longDate, MONTHS, refusal, shortDate, type Company } from './api';
 import { ConfirmSheet, LoadFailed, Notice } from './parts';
@@ -98,12 +99,12 @@ function Profile({ company, onGo }: { company: Company; onGo: (v: FinanceView, e
       </Notice>
     );
   }
-  const counts: Array<[string, number | undefined, FinanceView]> = [
-    ['Accounts', d.counts?.accounts, 'accounts'],
-    ['Journals', d.counts?.journals, 'journals'],
-    ['Posted', d.counts?.posted, 'journals'],
-    ['Tax codes', d.counts?.tax_codes, 'tax'],
-    ['Financial years', d.counts?.years, 'periods'],
+  const counts: Array<[string, number | undefined, FinanceView, string, StatTone]> = [
+    ['Accounts', d.counts?.accounts, 'accounts', 'list', 'blue'],
+    ['Journals', d.counts?.journals, 'journals', 'notebook', 'violet'],
+    ['Posted', d.counts?.posted, 'journals', 'check-check', 'green'],
+    ['Tax codes', d.counts?.tax_codes, 'tax', 'percent', 'amber'],
+    ['Financial years', d.counts?.years, 'periods', 'calendar-days', 'cyan'],
   ];
   return (
     <>
@@ -125,11 +126,11 @@ function Profile({ company, onGo }: { company: Company; onGo: (v: FinanceView, e
         ))}
       </Panel>
 
-      <div className="grid grid-cols-5 gap-2.5">
-        {counts.map(([label, n, go]) => (
-          <Kpi key={label} label={label} value={n ?? 0} onClick={() => onGo(go)} />
+      <StatGrid min={180}>
+        {counts.map(([label, n, go, icon, tone]) => (
+          <Kpi key={label} label={label} value={n ?? 0} icon={icon} tone={tone} onClick={() => onGo(go)} />
         ))}
-      </div>
+      </StatGrid>
 
       <Panel
         title="Default accounts"

@@ -7,6 +7,7 @@ import { shortDate } from '../finance/api';
 import { fetchRuns, K, STATUS_LABEL, runTitle, type Dashboard } from './api';
 import { Badge, Card, Kbd, NotYet, Table, amt, td, tdr, useReadOnly } from './parts';
 import type { PayView } from './Rail';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Payroll home (D01): the period, the current run's figures, what needs attention, this period's runs with the next
@@ -47,12 +48,12 @@ export default function Home({ data, figures, onNew, onGo, onRun }: { data: UseQ
       {data.data === null ? <Card><NotYet what="The payroll home" /></Card> : null}
 
       {d ? (
-        <div className="grid grid-cols-4 gap-2.5">
-          <Tile label="Current run · net pay" value={figures ? amt(d.current_run?.net_total) : '—'} sub={d.current_run ? `${d.current_run.employee_count} people · ${STATUS_LABEL[d.current_run.status] ?? d.current_run.status}` : 'No run yet'} onClick={d.current_run ? () => onRun(d.current_run!.id) : undefined} />
-          <Tile label="Waiting for approval" value={String(d.pending_approvals)} sub="Runs in review" onClick={() => onGo('runs')} />
-          <Tile label="Unposted" value={String(d.unposted.runs + d.unposted.payments)} sub={`${d.unposted.runs} runs · ${d.unposted.payments} payments`} />
-          <Tile label="Blocking issues" value={String(d.open_exceptions)} sub={d.open_exceptions ? 'Fix before approval' : 'None open'} bad={d.open_exceptions > 0} onClick={d.current_run ? () => onRun(d.current_run!.id) : undefined} />
-        </div>
+        <StatGrid>
+          <Tile icon="banknote" tone="blue" label="Current run · net pay" value={figures ? amt(d.current_run?.net_total) : '—'} sub={d.current_run ? `${d.current_run.employee_count} people · ${STATUS_LABEL[d.current_run.status] ?? d.current_run.status}` : 'No run yet'} onClick={d.current_run ? () => onRun(d.current_run!.id) : undefined} />
+          <Tile icon="hourglass" tone="amber" label="Waiting for approval" value={String(d.pending_approvals)} sub="Runs in review" onClick={() => onGo('runs')} />
+          <Tile icon="file-clock" tone="violet" label="Unposted" value={String(d.unposted.runs + d.unposted.payments)} sub={`${d.unposted.runs} runs · ${d.unposted.payments} payments`} />
+          <Tile icon="shield-alert" label="Blocking issues" value={String(d.open_exceptions)} sub={d.open_exceptions ? 'Fix before approval' : 'None open'} bad={d.open_exceptions > 0} onClick={d.current_run ? () => onRun(d.current_run!.id) : undefined} />
+        </StatGrid>
       ) : null}
 
       <div className="grid grid-cols-[minmax(0,1.7fr)_minmax(0,1fr)] gap-2.5">
@@ -129,22 +130,8 @@ export default function Home({ data, figures, onNew, onGo, onRun }: { data: UseQ
   );
 }
 
-function Tile({ label, value, sub, bad, onClick }: { label: string; value: string; sub: string; bad?: boolean; onClick?: () => void }) {
-  const body = (
-    <>
-      <div className="text-[11px] font-semibold text-ink-2">{label}</div>
-      <div className={cx('mt-0.5 text-[20px] font-extrabold tabular-nums', bad ? 'text-danger' : 'text-ink')}>{value}</div>
-      <div className={cx('text-[11px]', bad ? 'font-semibold text-danger' : 'text-ink-2')}>{sub}</div>
-    </>
-  );
-  const cls = cx('rounded-[10px] border bg-surface px-3.5 py-[11px] text-left', bad ? 'border-[#F2C4BE] dark:border-danger/40' : 'border-line');
-  return onClick ? (
-    <button type="button" className={cx(cls, 'hover:bg-subtle')} onClick={onClick}>
-      {body}
-    </button>
-  ) : (
-    <div className={cls}>{body}</div>
-  );
+function Tile({ label, value, sub, bad, onClick, icon, tone }: { label: string; value: string; sub: string; bad?: boolean; onClick?: () => void; icon?: string; tone?: StatTone }) {
+  return <StatCard label={label} value={value} sub={bad ? <span className="font-semibold text-danger">{sub}</span> : sub} onClick={onClick} icon={icon} tone={bad ? 'red' : tone} data-bad={bad ? '' : undefined} />;
 }
 
 function Attn({ tone, show, text, onClick }: { tone: 'red' | 'amber'; show: boolean; text: string; onClick?: () => void }) {

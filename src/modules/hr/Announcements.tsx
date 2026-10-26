@@ -11,6 +11,7 @@ import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, row, Sheet, 
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
 import { OrgSwitcher } from '../../components/OrgSwitcher';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Announcements (HrAdminSheet "Announcements"; the web's HrAnnouncements):
@@ -577,11 +578,11 @@ function ReportPanel({ row: r, onClose }: { row: AnnouncementRow; onClose: () =>
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {d ? (
         <>
-          <div className="grid grid-cols-3 gap-2">
-            <Kpi label="Sent to" value={d.stats.notified} />
-            <Kpi label="Read" value={d.stats.read} />
-            <Kpi label="Acknowledged" value={r.requires_ack ? d.stats.acknowledged : '—'} />
-          </div>
+          <StatGrid min={150}>
+            <Kpi icon="send" tone="blue" label="Sent to" value={d.stats.notified} />
+            <Kpi icon="eye" tone="violet" label="Read" value={d.stats.read} />
+            <Kpi icon="check-check" tone="green" label="Acknowledged" value={r.requires_ack ? d.stats.acknowledged : '—'} />
+          </StatGrid>
           <div className="flex flex-col">
             {d.people.map((p) => (
               <div key={p.id} className="flex items-center gap-2 border-b border-line/70 py-2 text-[12.5px] last:border-b-0">

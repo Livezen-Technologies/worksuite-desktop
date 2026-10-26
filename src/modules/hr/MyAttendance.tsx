@@ -60,10 +60,10 @@ export default function MyAttendance({ onPick }: { onPick: (v: HrView) => void }
             {phase !== 'none' ? <StatusChip className="self-start">{phase === 'working' ? 'Working' : phase === 'break' ? 'On break' : 'Complete'}</StatusChip> : null}
           </div>
         </div>
-        <Kpi label="This month" value={t ? `${t.days_present} days` : '—'} sub={t ? `${t.days_present} days of ${t.work_days} working days` : undefined} />
-        <Kpi label="Hours worked" value={t ? `${Math.round(t.net_seconds / 3600)} h` : '—'} />
-        <Kpi label="Overtime" value={t ? `${Math.round(t.overtime_minutes / 60)} h` : '—'} />
-        <Kpi label="Attendance" value={t?.attendance_rate != null ? `${Math.round(t.attendance_rate)}%` : '—'} tone={t?.attendance_rate != null && t.attendance_rate >= 90 ? 'green' : undefined} sub={t && t.late_days ? `${t.late_days} late · ${t.missing_check_outs} missing check-out` : undefined} />
+        <Kpi icon="calendar" tone="blue" label="This month" value={t ? `${t.days_present} days` : '—'} sub={t ? `${t.days_present} days of ${t.work_days} working days` : undefined} />
+        <Kpi icon="clock" tone="violet" label="Hours worked" value={t ? `${Math.round(t.net_seconds / 3600)} h` : '—'} />
+        <Kpi icon="timer" tone="amber" label="Overtime" value={t ? `${Math.round(t.overtime_minutes / 60)} h` : '—'} />
+        <Kpi icon="user-check" label="Attendance" value={t?.attendance_rate != null ? `${Math.round(t.attendance_rate)}%` : '—'} tone={t?.attendance_rate != null && t.attendance_rate >= 90 ? 'green' : undefined} sub={t && t.late_days ? `${t.late_days} late · ${t.missing_check_outs} missing check-out` : undefined} />
       </div>
       <div className="flex items-center gap-2">
         <b className="flex-1 text-[15px] text-ink">History</b>

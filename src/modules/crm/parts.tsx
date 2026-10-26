@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import { cx } from '../../components/ui';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /**
  * CRM's small shared pieces: money as the designs write it ("LKR 12.4M",
@@ -101,35 +102,11 @@ export function crmCan(perms: readonly string[] | undefined, slug: string): bool
   return perms.includes(slug) || perms.includes('*') || (slug !== 'crm.view' && perms.includes('crm.manage'));
 }
 
-const KPI_TONE: Record<string, [string, string]> = {
-  blue: ['bg-primary', 'text-primary'],
-  green: ['bg-[#1F7A4D] dark:bg-success', 'text-[#145C39] dark:text-success'],
-  red: ['bg-danger', 'text-[#B42318] dark:text-danger'],
-  amber: ['bg-[#B45309] dark:bg-warning', 'text-[#9A4A06] dark:text-warning'],
-  plain: ['bg-line', 'text-ink'],
-};
+const KPI_TONE: Record<string, StatTone> = { blue: 'blue', violet: 'violet', green: 'green', red: 'red', amber: 'amber', cyan: 'cyan', plain: 'neutral', neutral: 'neutral' };
 
-/** A figure tile (the shared Kpi): a 4 px accent rule on the left, the label, the figure and a line under it. */
-export function Kpi({ label, value, sub, tone = 'plain', onClick, size = 'lg' }: { label: string; value: ReactNode; sub?: ReactNode; tone?: keyof typeof KPI_TONE; onClick?: () => void; size?: 'lg' | 'sm' }) {
-  const [rule, text] = KPI_TONE[tone] ?? KPI_TONE.plain!;
-  const body = (
-    <>
-      <span aria-hidden className={cx('absolute top-0 bottom-0 left-0 w-1', rule)} />
-      <span className="text-[12px] font-semibold text-ink-3">{label}</span>
-      <b className={cx('truncate tabular-nums', size === 'lg' ? 'text-[22px] leading-tight' : 'text-[17px]', text)}>{value}</b>
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </>
-  );
-  const cls = 'relative flex min-w-0 flex-col gap-0.5 overflow-hidden rounded-[10px] border border-line bg-surface py-3 pr-3.5 pl-[18px] text-left';
-  return onClick ? (
-    <button type="button" data-kpi={label} onClick={onClick} className={cx(cls, 'hover:border-primary/50')}>
-      {body}
-    </button>
-  ) : (
-    <div data-kpi={label} className={cls}>
-      {body}
-    </div>
-  );
+/** A figure tile (the shared StatCard): the icon chip and label, the figure and a line under it. */
+export function Kpi({ label, value, sub, tone = 'plain', onClick, size = 'lg', icon }: { label: string; value: ReactNode; sub?: ReactNode; tone?: StatTone | 'plain'; onClick?: () => void; size?: 'lg' | 'sm'; icon?: string }) {
+  return <StatCard data-kpi={label} label={label} value={value} sub={sub} icon={icon} tone={KPI_TONE[tone] ?? 'neutral'} onClick={onClick} size={size === 'lg' ? 'md' : 'sm'} />;
 }
 
 /** The count line under a list or board ("300 leads · 60 new · 12 unassigned"). */

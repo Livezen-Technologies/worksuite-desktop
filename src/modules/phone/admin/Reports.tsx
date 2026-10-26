@@ -8,6 +8,7 @@ import { useAgentReport, useDepartmentReport, useQueueReport, useSummary, useVol
 import { toCsv } from '../lib/csv';
 import { clock, daysAgo, isoDay, money, talkTime } from '../lib/format';
 import { Kpi, Mono, PageBody, PageHeader, Panel, Refused, TD, TR, Table } from '../parts';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * A10 · Call reports (VOIP-RPT-01/02/03). The period's totals, calls per day (answered and missed), the busiest
@@ -103,13 +104,13 @@ export default function Reports() {
           <Refused error={summary.error} onRetry={() => void summary.refetch()} />
         ) : t ? (
           <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-5">
-              <Kpi label="Calls" value={t.calls.toLocaleString()} sub={`${t.inbound.toLocaleString()} in · ${t.outbound.toLocaleString()} out · ${t.internal.toLocaleString()} internal`} />
-              <Kpi label="Answered" value={t.answer_rate === null ? null : `${t.answer_rate}%`} tone="success" sub={`${t.answered.toLocaleString()} calls`} />
-              <Kpi label="Talk time" value={talkTime(t.talk_seconds)} sub={t.avg_talk_seconds !== null ? `avg ${clock(t.avg_talk_seconds)} per call` : undefined} />
-              <Kpi label="Unanswered" value={t.unanswered.toLocaleString()} tone={t.unanswered ? 'warning' : undefined} />
-              <Kpi label="Outbound cost" value={summary.data?.cost ? money(summary.data.cost.total) : null} sub={summary.data?.cost ? `${summary.data.cost.calls_priced} rated calls only` : 'No trunk has a rate'} />
-            </div>
+            <StatGrid min={200}>
+              <Kpi icon="phone" tone="blue" label="Calls" value={t.calls.toLocaleString()} sub={`${t.inbound.toLocaleString()} in · ${t.outbound.toLocaleString()} out · ${t.internal.toLocaleString()} internal`} />
+              <Kpi icon="phone-incoming" label="Answered" value={t.answer_rate === null ? null : `${t.answer_rate}%`} tone="success" sub={`${t.answered.toLocaleString()} calls`} />
+              <Kpi icon="clock" tone="violet" label="Talk time" value={talkTime(t.talk_seconds)} sub={t.avg_talk_seconds !== null ? `avg ${clock(t.avg_talk_seconds)} per call` : undefined} />
+              <Kpi icon="phone-missed" label="Unanswered" value={t.unanswered.toLocaleString()} tone={t.unanswered ? 'warning' : undefined} />
+              <Kpi icon="coins" tone="cyan" label="Outbound cost" value={summary.data?.cost ? money(summary.data.cost.total) : null} sub={summary.data?.cost ? `${summary.data.cost.calls_priced} rated calls only` : 'No trunk has a rate'} />
+            </StatGrid>
             {summary.data && summary.data.coverage.known && (summary.data.coverage.reachable_pct ?? 100) < 99.5 ? (
               <p className="rounded-[10px] border border-warning/30 bg-warning-bg px-3.5 py-2 text-[12.5px] text-warning-ink dark:text-warning">Coverage: {summary.data.coverage.message}</p>
             ) : summary.data && !summary.data.coverage.known ? (

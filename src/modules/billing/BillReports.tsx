@@ -15,6 +15,7 @@ import { rangeOf, RANGES, type RangePreset } from '../sales/manage';
 import { agingParts, amount, methodLabel } from './api';
 import { BILL_REPORTS, fetchBillReport, KB, type BillReport, type ReportAnswer } from './more';
 import { money } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Billing reports (BillReports, BillReportsSheet): how old the money is, what
@@ -198,12 +199,12 @@ function Revenue({ d }: { d: ReportAnswer }) {
   const top = Math.max(1, ...rows.map((r) => r.total));
   return (
     <>
-      <div className="grid grid-cols-4 gap-2.5">
-        <Kpi label="Billed" value={money(t.gross, cur)} sub={`${t.invoices ?? 0} ${t.invoices === 1 ? 'invoice' : 'invoices'}`} />
-        <Kpi label="Net of credits" value={money(t.net_of_credits, cur)} sub={`${t.credit_notes ?? 0} ${t.credit_notes === 1 ? 'credit note' : 'credit notes'}`} />
-        <Kpi label="Tax charged" value={money(t.tax, cur)} sub="included above" />
-        <Kpi label="Cash received" value={money(t.received, cur)} sub={`${t.receipts ?? 0} ${t.receipts === 1 ? 'receipt' : 'receipts'}`} tone="green" />
-      </div>
+      <StatGrid>
+        <Kpi icon="receipt" tone="blue" label="Billed" value={money(t.gross, cur)} sub={`${t.invoices ?? 0} ${t.invoices === 1 ? 'invoice' : 'invoices'}`} />
+        <Kpi icon="scale" tone="violet" label="Net of credits" value={money(t.net_of_credits, cur)} sub={`${t.credit_notes ?? 0} ${t.credit_notes === 1 ? 'credit note' : 'credit notes'}`} />
+        <Kpi icon="landmark" tone="amber" label="Tax charged" value={money(t.tax, cur)} sub="included above" />
+        <Kpi icon="banknote" label="Cash received" value={money(t.received, cur)} sub={`${t.receipts ?? 0} ${t.receipts === 1 ? 'receipt' : 'receipts'}`} tone="green" />
+      </StatGrid>
       <Panel title="Breakdown" bodyClassName="flex flex-col gap-2.5 p-3.5">
         {rows.length ? rows.map((r) => <BarRow key={r.key} label={r.label} value={`${money(r.total, cur)} · ${r.count}`} pct={(r.total / top) * 100} colour="#7C3AED" />) : <Empty text="Nothing billed in this window." />}
       </Panel>
@@ -216,12 +217,12 @@ function Tax({ d }: { d: ReportAnswer }) {
   const cur = d.base_currency;
   return (
     <>
-      <div className="grid grid-cols-4 gap-2.5">
-        <Kpi label="Tax charged" value={money(t.charged, cur)} />
-        <Kpi label="Credited back" value={money(t.credited, cur)} />
-        <Kpi label="Net tax" value={money(t.net, cur)} />
-        <Kpi label="Withheld by customers" value={money(t.withheld, cur)} />
-      </div>
+      <StatGrid>
+        <Kpi icon="landmark" tone="amber" label="Tax charged" value={money(t.charged, cur)} />
+        <Kpi icon="undo" tone="cyan" label="Credited back" value={money(t.credited, cur)} />
+        <Kpi icon="sigma" tone="violet" label="Net tax" value={money(t.net, cur)} />
+        <Kpi icon="shield" label="Withheld by customers" value={money(t.withheld, cur)} />
+      </StatGrid>
       <Panel title="By rate">
         <Table
           rows={d.rates ?? []}

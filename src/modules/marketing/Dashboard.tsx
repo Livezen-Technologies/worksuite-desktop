@@ -12,6 +12,7 @@ import { Refused, TABLE, TD, TH } from './audience-parts';
 import { btn, btnPrimary, CAMPAIGN_PILL, Card, CardLink, Kpi, Line, Meter, n, PageHeader, Panel, pct, Pill, Seg } from './parts';
 import type { Go } from './routes';
 import type { Campaign, DashboardWide, Options, Readiness, ReadinessItem } from './types';
+import { StatGrid } from '../../components/StatCard';
 
 const PERIODS = [7, 30, 90] as const;
 type Period = (typeof PERIODS)[number];
@@ -92,21 +93,21 @@ export default function Dashboard({ org, options, onGo }: { org: string; options
 
       {d.readiness ? <ReadinessCard readiness={d.readiness} onRoute={go} /> : null}
 
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Contacts" value={n(t.contacts)} sub={<span className="text-success">+{n(t.new)} in {d.days} days</span>} onClick={() => onGo({ view: 'contacts' })} />
-        <Kpi label="May be emailed" value={n(t.subscribed)} sub={`${share}% of contacts: consent given, not suppressed`} onClick={() => onGo({ view: 'contacts', filter: { subscribed: 'yes' } })} />
+      <StatGrid>
+        <Kpi icon="users" tone="blue" label="Contacts" value={n(t.contacts)} sub={<span className="text-success">+{n(t.new)} in {d.days} days</span>} onClick={() => onGo({ view: 'contacts' })} />
+        <Kpi icon="mail-check" tone="green" label="May be emailed" value={n(t.subscribed)} sub={`${share}% of contacts: consent given, not suppressed`} onClick={() => onGo({ view: 'contacts', filter: { subscribed: 'yes' } })} />
         {d.email ? (
           <>
-            <Kpi label="Human open rate" value={pct(d.email.human_open_rate)} sub="Proxy and scanner opens left out" />
-            <Kpi label="Bounce rate" value={pct(d.email.bounce_rate)} tone={guardHit ? 'red' : undefined} sub={<span className={guardHit ? 'text-danger' : undefined}>The guard pauses a campaign at {d.email.bounce_guard}%</span>} />
+            <Kpi icon="mail-open" tone="violet" label="Human open rate" value={pct(d.email.human_open_rate)} sub="Proxy and scanner opens left out" />
+            <Kpi icon="spam" label="Bounce rate" value={pct(d.email.bounce_rate)} tone={guardHit ? 'red' : undefined} sub={<span className={guardHit ? 'text-danger' : undefined}>The guard pauses a campaign at {d.email.bounce_guard}%</span>} />
           </>
         ) : (
           <>
-            <Kpi label="Qualified" value={n(t.qualified)} sub="Ready to hand to sales" onClick={() => onGo({ view: 'contacts', filter: { status: 'qualified' } })} />
-            <Kpi label="Suppressed" value={n(t.suppressed)} tone={t.suppressed > 0 ? 'red' : undefined} sub="Never to be contacted" onClick={() => onGo({ view: 'consent' })} />
+            <Kpi icon="badge-check" tone="cyan" label="Qualified" value={n(t.qualified)} sub="Ready to hand to sales" onClick={() => onGo({ view: 'contacts', filter: { status: 'qualified' } })} />
+            <Kpi icon="ban" label="Suppressed" value={n(t.suppressed)} tone={t.suppressed > 0 ? 'red' : undefined} sub="Never to be contacted" onClick={() => onGo({ view: 'consent' })} />
           </>
         )}
-      </div>
+      </StatGrid>
 
       {d.email || d.calls ? (
         <div className="grid items-start gap-4 lg:grid-cols-3">

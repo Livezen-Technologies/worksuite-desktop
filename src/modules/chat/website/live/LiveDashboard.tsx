@@ -24,6 +24,7 @@ import { agoWords, type LiveData } from './liveData';
 import { MapLegend } from './MapLegend';
 import { OnSiteNow } from './OnSiteNow';
 import { BrandMark } from '../../../../components/BrandMark';
+import { StatCard, StatGrid, type StatTone } from '../../../../components/StatCard';
 
 /*
  * The Live dashboard (worksuite-desktop C-00; the web's LiveDashboard, WS-WCHAT MAP-UI-01…03): who is on the sites right
@@ -428,21 +429,21 @@ function Tiles({ d, online, here, now, skew, onSection }: { d: Dashboard; online
   const waited = longestWait(d, here, now, skew);
   const calls = d.now.on_call?.count ?? 0;
   const call = calls ? since(d.now.on_call?.since, now, skew) : null;
-  const tiles: Array<{ label: string; value: string; sub: string; tone: Tone; live?: boolean; go: 'visitors' | Section; action: string }> = [
+  const tiles: Array<{ label: string; value: string; sub: string; tone: Tone; live?: boolean; go: 'visitors' | Section; action: string; icon: string; accent?: StatTone }> = [
     // Counted as the visitor list counts them once it is in, so this, the list's header and the sidebar agree (#248).
-    { label: 'On the site now', value: String(online ?? d.now.visitors_online), sub: d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) }), tone: 'plain', live: true, go: 'visitors', action: 'see who' },
-    { label: 'Waiting on us', value: String(d.now.waiting_on_us), sub: waited !== null ? text('longest {time}', { time: waitWords(waited) }) : text('visitor spoke last'), tone: d.now.waiting_on_us ? 'amber' : 'plain', go: 'awaiting', action: 'open those chats' },
-    { label: 'At risk', value: String(d.now.at_risk), sub: d.now.at_risk_after ? text('past {time}', { time: clock(d.now.at_risk_after) }) : text('nobody answered in time'), tone: d.now.at_risk ? 'red' : 'plain', go: 'awaiting', action: 'open those chats' },
-    { label: 'Open chats', value: String(d.now.open + d.now.pending), sub: text('{n} staff', { n: d.now.staff_in_chats ?? 0 }), tone: 'plain', go: 'inbox', action: 'open the inbox' },
-    { label: 'On a call', value: String(calls), sub: call !== null ? callClock(call) : text('no calls on'), tone: calls ? 'green' : 'plain', go: 'inbox', action: 'open the inbox' },
-    { label: 'First reply', value: d.today.first_response_median === null ? '—' : clock(d.today.first_response_median), sub: text('median today'), tone: 'plain', go: 'missed', action: 'open missed chats' },
+    { label: 'On the site now', icon: 'globe', accent: 'blue', value: String(online ?? d.now.visitors_online), sub: d.now.arrived_10m ? text('+{n} in 10 min', { n: d.now.arrived_10m }) : text('seen in {n} min', { n: Math.round(d.now.window_seconds / 60) }), tone: 'plain', live: true, go: 'visitors', action: 'see who' },
+    { label: 'Waiting on us', icon: 'hourglass', value: String(d.now.waiting_on_us), sub: waited !== null ? text('longest {time}', { time: waitWords(waited) }) : text('visitor spoke last'), tone: d.now.waiting_on_us ? 'amber' : 'plain', go: 'awaiting', action: 'open those chats' },
+    { label: 'At risk', icon: 'warning', value: String(d.now.at_risk), sub: d.now.at_risk_after ? text('past {time}', { time: clock(d.now.at_risk_after) }) : text('nobody answered in time'), tone: d.now.at_risk ? 'red' : 'plain', go: 'awaiting', action: 'open those chats' },
+    { label: 'Open chats', icon: 'messages', accent: 'violet', value: String(d.now.open + d.now.pending), sub: text('{n} staff', { n: d.now.staff_in_chats ?? 0 }), tone: 'plain', go: 'inbox', action: 'open the inbox' },
+    { label: 'On a call', icon: 'phone-call', value: String(calls), sub: call !== null ? callClock(call) : text('no calls on'), tone: calls ? 'green' : 'plain', go: 'inbox', action: 'open the inbox' },
+    { label: 'First reply', icon: 'reply', accent: 'cyan', value: d.today.first_response_median === null ? '—' : clock(d.today.first_response_median), sub: text('median today'), tone: 'plain', go: 'missed', action: 'open missed chats' },
   ];
   return (
-    <div className="grid grid-cols-6 gap-2.5" role="list" aria-label={text('Right now')}>
+    <StatGrid min={170} role="list" label={text('Right now')}>
       {tiles.map((t) => (
         <Tile key={t.label} {...t} onClick={() => onSection(t.go)} />
       ))}
-    </div>
+    </StatGrid>
   );
 }
 
@@ -461,12 +462,13 @@ const SUB: Record<SubTone, string> = { plain: 'text-ink-3', good: 'text-[#2b7a4b
 const WALL: Record<Tone, string> = { plain: 'text-[#f1f4fb]', amber: 'text-[#f3c77e]', red: 'text-[#ff8a7a]', green: 'text-[#8fe0b5]' };
 
 /**
- * One figure (C-00's six, the wall's; V-01's call tiles): its name, the number, and a line under it when there is one.
- * `wall` draws it for the dark wall screen, readable across a room (MAP-UI-03); `compact`, the four small figures of the
- * Live map window and the tray's mini-dashboard (MAP-UI-04/05); `stack`, the line under the number rather than beside
- * it, coloured by `subTone` — Insights' change against the previous period (L-07, UX-INS-01).
+ * One figure (C-00's six, the wall's; V-01's call tiles): its name, the number, and a line under it when there is one,
+ * coloured by `subTone` — Insights' change against the previous period (L-07, UX-INS-01). On the desk it is the shared
+ * StatCard: `icon` in a chip coloured by `tone`, or by `accent` when the tone is plain. `wall` draws it for the dark
+ * wall screen, readable across a room (MAP-UI-03); `compact`, the four small figures of the Live map window and the
+ * tray's mini-dashboard (MAP-UI-04/05). `stack` is kept for the callers: the line is always under the number now.
  */
-export function Tile({ label, value, sub, tone, live, big, wall, compact, stack, subTone, action, onClick }: { label: string; value: string; sub?: string; tone: Tone; live?: boolean; big?: boolean; wall?: boolean; compact?: boolean; stack?: boolean; subTone?: SubTone; action?: string; onClick?: () => void }) {
+export function Tile({ label, value, sub, tone, live, big, wall, compact, stack: _stack, subTone, action, onClick, icon, accent }: { label: string; value: string; sub?: string; tone: Tone; live?: boolean; big?: boolean; wall?: boolean; compact?: boolean; stack?: boolean; subTone?: SubTone; action?: string; onClick?: () => void; icon?: string; accent?: StatTone }) {
   if (compact) {
     return (
       <div role="listitem" aria-label={`${text(label)}: ${value}`} className={cx('flex min-w-0 flex-1 flex-col rounded-[10px] border px-2.5 py-[7px]', TILE[tone].box)}>
@@ -475,21 +477,42 @@ export function Tile({ label, value, sub, tone, live, big, wall, compact, stack,
       </div>
     );
   }
-  const body = (
-    <>
-      <span className={cx('flex items-center gap-1.5 font-bold whitespace-nowrap uppercase', wall ? 'text-[12px] tracking-[1.2px] text-[#9aa3c4]' : 'text-[10.5px] tracking-[0.8px] text-ink-3')}>
+  if (!wall) {
+    // The desk's figures are the shared StatCard (#modern-cards): the tone colours the chip, `accent` a plain one.
+    const label_ = (
+      <span className="inline-flex items-center gap-1.5">
         {live ? <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#2f9e67] shadow-[0_0_0_3px_#2f9e6733]" aria-hidden /> : null}
         {text(label)}
       </span>
-      <span className={cx('flex whitespace-nowrap', stack ? 'flex-col' : 'items-baseline', wall ? 'gap-2.5' : stack ? 'gap-0' : 'gap-2')}>
-        <span className={cx('font-bold tabular-nums', wall ? 'text-[44px] leading-[1.1]' : big ? 'text-[44px] leading-[1.15]' : 'text-[26px] leading-[1.15]', wall ? WALL[tone] : TILE[tone].value)}>{value}</span>
-        {sub ? <span className={cx('truncate', wall ? 'text-[13px] text-[#9aa3c4]' : cx('text-[11.5px]', SUB[subTone ?? 'plain']))}>{sub}</span> : null}
+    );
+    return (
+      <StatCard
+        role="listitem"
+        label={label_}
+        value={value}
+        sub={sub ? <span className={SUB[subTone ?? 'plain']}>{sub}</span> : undefined}
+        icon={icon}
+        tone={tone === 'plain' ? (accent ?? 'neutral') : tone}
+        size={big ? 'lg' : 'md'}
+        onClick={onClick}
+        ariaLabel={onClick ? `${text(label)}: ${value} — ${text(action ?? '')}` : undefined}
+      />
+    );
+  }
+  // The wall (MAP-UI-03) keeps its own TV look: white on navy, big figures, coloured where somebody waits.
+  const body = (
+    <>
+      <span className="flex items-center gap-1.5 text-[12px] font-bold tracking-[1.2px] whitespace-nowrap text-[#9aa3c4] uppercase">
+        {live ? <span className="h-[7px] w-[7px] shrink-0 rounded-full bg-[#2f9e67] shadow-[0_0_0_3px_#2f9e6733]" aria-hidden /> : null}
+        {text(label)}
+      </span>
+      <span className="flex items-baseline gap-2.5 whitespace-nowrap">
+        <span className={cx('text-[44px] leading-[1.1] font-bold tabular-nums', WALL[tone])}>{value}</span>
+        {sub ? <span className="truncate text-[13px] text-[#9aa3c4]">{sub}</span> : null}
       </span>
     </>
   );
-  const box = wall
-    ? 'flex min-w-0 flex-col rounded-[14px] border border-[#22306a] bg-[#111b3b] px-[18px] py-3.5 text-left'
-    : cx('flex min-w-0 flex-col gap-0.5 rounded-[12px] border px-3.5 py-2.5 text-left', TILE[tone].box);
+  const box = 'flex min-w-0 flex-col rounded-[14px] border border-[#22306a] bg-[#111b3b] px-[18px] py-3.5 text-left';
   return onClick ? (
     <button type="button" role="listitem" aria-label={`${text(label)}: ${value} — ${text(action ?? '')}`} onClick={onClick} className={cx(box, 'hover:border-primary focus-visible:outline-2 focus-visible:outline-primary')}>
       {body}

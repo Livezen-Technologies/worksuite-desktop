@@ -13,6 +13,7 @@ import { CallbackBoard, dial } from './Callbacks';
 import { Segmented, Tile } from './live/LiveDashboard';
 import { clock } from './Ringing';
 import { FilterPill, PANEL_HEADING, ROW_PICKED, TABLE_FRAME, TABLE_HEAD, Tag, useMe, whenLabel } from './rowParts';
+import { StatGrid } from '../../../components/StatCard';
 
 /**
  * Voice calls (V-01, X-UI-08; UX-CALL-01/02): the website widget's calls in one place — the calls on now in a green
@@ -281,14 +282,14 @@ export function VoiceCalls({ show = 'calls', selected, onSelect, onOpenChat, onC
         <>
           {d.live.map((c) => <LiveBanner key={c.id} c={c} onOpen={() => onOpenChat(c.conversation_id)} />)}
           {s ? (
-            <div className="grid grid-cols-6 gap-2.5" role="list" aria-label={text('Calls in this period')}>
-              <Tile label="Calls" value={String(s.requested)} tone="plain" action="show all calls" onClick={() => filter('all')} />
-              <Tile label="Answered" value={String(s.answered)} tone="green" action="show answered calls" onClick={() => filter('answered')} />
-              <Tile label="Missed" value={String(s.missed)} tone={s.missed ? 'red' : 'plain'} action="show missed calls" onClick={() => filter('missed')} />
-              <Tile label="Avg wait" value={span(s.avg_wait)} tone="plain" />
-              <Tile label="Avg length" value={span(s.avg_duration)} tone="plain" />
-              <Tile label="Call-backs open" value={String(cbOpen)} tone={cbOpen ? 'amber' : 'plain'} action="open call-backs" onClick={onCallbacks} />
-            </div>
+            <StatGrid min={170} role="list" label={text('Calls in this period')}>
+              <Tile icon="phone" accent="blue" label="Calls" value={String(s.requested)} tone="plain" action="show all calls" onClick={() => filter('all')} />
+              <Tile icon="phone-incoming" label="Answered" value={String(s.answered)} tone="green" action="show answered calls" onClick={() => filter('answered')} />
+              <Tile icon="phone-missed" label="Missed" value={String(s.missed)} tone={s.missed ? 'red' : 'plain'} action="show missed calls" onClick={() => filter('missed')} />
+              <Tile icon="hourglass" accent="violet" label="Avg wait" value={span(s.avg_wait)} tone="plain" />
+              <Tile icon="timer" accent="cyan" label="Avg length" value={span(s.avg_duration)} tone="plain" />
+              <Tile icon="phone-outgoing" label="Call-backs open" value={String(cbOpen)} tone={cbOpen ? 'amber' : 'plain'} action="open call-backs" onClick={onCallbacks} />
+            </StatGrid>
           ) : null}
           <div className="flex min-h-[360px] flex-1 gap-3">
             <div className={cx(TABLE_FRAME, 'flex min-w-0 flex-1 flex-col')}>

@@ -3,6 +3,7 @@ import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner } from '../../components/ui';
 import { eGet, K, type Gate, type Summary } from './api';
 import { Counter, Header, useEvent } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The event's live counters (EV-POR-011, EV-NFR-006): inside now, checked in
@@ -36,12 +37,12 @@ export default function Counters() {
         {summary.error ? <ErrorNote error={summary.error} onRetry={() => void summary.refetch()} /> : null}
         {s ? (
           <div className="flex flex-col gap-4">
-            <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-              <Counter label="Inside now" value={s.inside} big />
-              <Counter label="Checked in" value={s.checked_in} hint={`of ${s.expected} expected`} big />
-              <Counter label="In today" value={s.today.checked_in} hint={`${s.today.checked_out} out`} big />
-              <Counter label="Refused today" value={s.today.denied} hint={`${s.today.walk_ins} walk-ins`} big />
-            </div>
+            <StatGrid min={200}>
+              <Counter icon="door" tone="blue" label="Inside now" value={s.inside} big />
+              <Counter icon="ticket" tone="green" label="Checked in" value={s.checked_in} hint={`of ${s.expected} expected`} big />
+              <Counter icon="log-in" tone="violet" label="In today" value={s.today.checked_in} hint={`${s.today.checked_out} out`} big />
+              <Counter icon="ban" tone="red" label="Refused today" value={s.today.denied} hint={`${s.today.walk_ins} walk-ins`} big />
+            </StatGrid>
             <div className="grid grid-cols-1 gap-3 lg:grid-cols-[2fr_1fr]">
               <section className="rounded-[12px] border border-line bg-surface p-4">
                 <h2 className="mt-0 mb-2 text-[12px] font-bold tracking-[.5px] text-ink-3 uppercase">By gate, today</h2>

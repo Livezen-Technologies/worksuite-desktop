@@ -3,6 +3,7 @@ import { useEffect, useState } from 'react';
 import { Button, cx, initials } from '../../components/ui';
 import { fetchClient, fetchClientList, K, money } from './api';
 import { Chips, Head, input, Pill, Section, useDesk, useNow } from './parts';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * D14 · Clients: the customers with appointments, most recent first, searched by name, phone or email, with quick
@@ -67,11 +68,11 @@ export default function Clients() {
             <div className="p-4">
               <div className="text-[17px] font-extrabold text-ink">{h.customer.name}</div>
               <div className="text-[12.5px] text-ink-3">{[h.customer.phone, h.customer.email].filter(Boolean).join(' · ')}</div>
-              <div className="mt-3 grid grid-cols-3 gap-2 text-center">
-                <Tile k="Visits" v={h.tally.completed} />
-                <Tile k="No-shows" v={h.tally.no_show} />
-                <Tile k="Spend" v={h.revenue ? h.revenue.map((m) => money(m.amount, m.currency)).join(' · ') || '0' : '—'} />
-              </div>
+              <StatGrid min={110} className="mt-3 text-center">
+                <Tile icon="calendar-check" tone="blue" k="Visits" v={h.tally.completed} />
+                <Tile icon="user-x" tone="amber" k="No-shows" v={h.tally.no_show} />
+                <Tile icon="coins" tone="green" k="Spend" v={h.revenue ? h.revenue.map((m) => money(m.amount, m.currency)).join(' · ') || '0' : '—'} />
+              </StatGrid>
               {pinned ? <p className="mt-3 mb-0 rounded-[8px] bg-[#EEF1FD] px-3 py-2 text-[12.5px] text-[#23349E] dark:bg-selection dark:text-primary">{`Pinned · ${pinned.body}`}</p> : null}
               <div className="mt-3 text-[11px] font-bold tracking-[.06em] text-ink-3 uppercase">Coming up</div>
               {upcoming.map((v) => <div key={v.id} className="py-0.5 text-[12.5px] text-ink">{`${v.date} ${v.time} · ${v.service} · ${v.provider}`}</div>)}
@@ -90,11 +91,6 @@ export default function Clients() {
   );
 }
 
-function Tile({ k, v }: { k: string; v: string | number }) {
-  return (
-    <div className="rounded-[10px] border border-line px-2 py-2">
-      <div className="text-[11px] text-ink-3">{k}</div>
-      <div className="truncate text-[14px] font-bold text-ink tabular-nums">{v}</div>
-    </div>
-  );
+function Tile({ k, v, icon, tone }: { k: string; v: string | number; icon?: string; tone?: StatTone }) {
+  return <StatCard size="sm" label={k} value={v} icon={icon} tone={tone} />;
 }

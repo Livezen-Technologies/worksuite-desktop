@@ -5,6 +5,7 @@ import { Kpi, PageHead, Panel } from '../hr/parts';
 import { Line, ListPanel, Pill } from '../inventory/parts';
 import { fetchDetail, K, money, moneyList, type Dashboard as Data } from './api';
 import { Left, subline } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The Tenders front page: what is open and where, the win rate, the value in
@@ -25,17 +26,18 @@ export default function Dashboard({ data, org, onOpen, onGo }: { data: UseQueryR
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
       <PageHead title="Tenders" sub="What is coming in, what is going out, and what came back" />
-      <div className="grid grid-cols-4 gap-3">
-        <Kpi label="Open" value={c.open ?? 0} sub="Every stage before a decision" onClick={() => onGo('board')} />
-        <Kpi label="Being prepared" value={(c.preparing ?? 0) + (c.ready ?? 0)} sub={c.ready ? `${c.ready} ready to submit` : 'Documents, review, approval'} onClick={() => onGo('preparing')} />
-        <Kpi label="Awaiting a decision" value={(c.submitted ?? 0) + (c.evaluation ?? 0)} sub="Submitted or under evaluation" onClick={() => onGo('submitted')} />
+      <StatGrid>
+        <Kpi icon="file-text" tone="blue" label="Open" value={c.open ?? 0} sub="Every stage before a decision" onClick={() => onGo('board')} />
+        <Kpi icon="compose" tone="violet" label="Being prepared" value={(c.preparing ?? 0) + (c.ready ?? 0)} sub={c.ready ? `${c.ready} ready to submit` : 'Documents, review, approval'} onClick={() => onGo('preparing')} />
+        <Kpi icon="hourglass" tone="amber" label="Awaiting a decision" value={(c.submitted ?? 0) + (c.evaluation ?? 0)} sub="Submitted or under evaluation" onClick={() => onGo('submitted')} />
         <Kpi
+          icon="trophy"
           label="Win rate"
           value={d.win_rate.percent === null ? '—' : `${d.win_rate.percent}%`}
           sub={d.win_rate.decided ? `${d.win_rate.won} won of ${d.win_rate.decided} decided` : 'Nothing decided yet'}
           tone={d.win_rate.percent !== null && d.win_rate.percent >= 50 ? 'green' : undefined}
         />
-      </div>
+      </StatGrid>
 
       <div className="grid grid-cols-2 gap-3.5">
         <Panel title="Ready to go out" sub="Mandatory documents only · least time and most missing first" bodyClassName="flex flex-col">

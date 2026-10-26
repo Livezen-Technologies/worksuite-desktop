@@ -11,6 +11,7 @@ import { Button, Modal, Spinner, cx } from '../../components/ui';
 import { K, agents as agentsOf, meta as metaOf, views as viewsOf } from './api';
 import { useRealtimeLive } from './live';
 import { shortSpan } from './parts';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /**
  * The support wallboard on a second display (WS-SUPPORT-SRS-001 D-12; FR-RPT-01/02/03/06, FR-SLA-05/07, FR-ASN-06,
@@ -167,15 +168,9 @@ function Notice({ title, body }: { title: string; body: string }) {
   );
 }
 
-function Kpi({ label, value, hint, tone = 'plain' }: { label: string; value: string | number; hint?: string; tone?: 'plain' | 'red' | 'amber' | 'green' }) {
-  const colour = tone === 'red' ? 'text-[#F87171]' : tone === 'amber' ? 'text-[#FBBF24]' : tone === 'green' ? 'text-[#4ADE80]' : 'text-[#F8FAFC]';
-  return (
-    <div role="group" aria-label={label} className="rounded-[14px] border border-[#1E293B] bg-[#0F172A] px-4 py-3">
-      <p className="text-[13px] font-bold tracking-[.6px] text-[#94A3B8] uppercase">{label}</p>
-      <p className={cx('text-[44px] leading-tight font-extrabold tabular-nums', colour)}>{value}</p>
-      {hint ? <p className="text-[13px] text-[#94A3B8]">{hint}</p> : null}
-    </div>
-  );
+/** A wallboard figure: the shared StatCard at wallboard size, drawn in the dark theme whatever the app's is. */
+function Kpi({ label, value, hint, tone = 'plain', icon }: { label: string; value: string | number; hint?: string; tone?: 'plain' | 'red' | 'amber' | 'green' | StatTone; icon?: string }) {
+  return <StatCard size="lg" label={label} value={value} sub={hint} icon={icon} tone={tone === 'plain' ? 'neutral' : tone} />;
 }
 
 function Panel({ title, children, className }: { title: string; children: ReactNode; className?: string }) {
@@ -196,15 +191,15 @@ function Board({ d, views, people, now }: { d: Dashboard; views: ViewCount[]; pe
   const priorities = (['urgent', 'high', 'normal', 'low'] as const).filter((p) => d.sla_by_priority?.[p]);
   return (
     <>
-      <div className="grid grid-cols-8 gap-3">
-        <Kpi label={text('Open')} value={d.now.open} />
-        <Kpi label={text('Unassigned')} value={d.now.unassigned} tone={d.now.unassigned ? 'amber' : 'plain'} />
-        <Kpi label={text('Overdue')} value={d.now.overdue} tone={d.now.overdue ? 'red' : 'plain'} />
-        <Kpi label={text('Due today')} value={d.now.due_today} />
-        <Kpi label={text('Escalated')} value={d.now.escalated} tone={d.now.escalated ? 'red' : 'plain'} />
-        <Kpi label={text('First response')} value={minutesLabel(f.frt_median)} hint={text('median today')} />
-        <Kpi label={text('SLA today')} value={sla === null ? '—' : `${sla}%`} tone={sla === null ? 'plain' : sla >= 95 ? 'green' : sla >= 85 ? 'amber' : 'red'} />
-        <Kpi label={text('Resolved today')} value={f.resolved} hint={f.csat !== null ? text('CSAT {n}%', { n: f.csat }) : undefined} />
+      <div data-theme="dark" className="grid grid-cols-8 gap-3">
+        <Kpi icon="ticket" tone="blue" label={text('Open')} value={d.now.open} />
+        <Kpi icon="user-x" label={text('Unassigned')} value={d.now.unassigned} tone={d.now.unassigned ? 'amber' : 'plain'} />
+        <Kpi icon="alert" label={text('Overdue')} value={d.now.overdue} tone={d.now.overdue ? 'red' : 'plain'} />
+        <Kpi icon="calendar-clock" tone="violet" label={text('Due today')} value={d.now.due_today} />
+        <Kpi icon="siren" label={text('Escalated')} value={d.now.escalated} tone={d.now.escalated ? 'red' : 'plain'} />
+        <Kpi icon="reply" tone="cyan" label={text('First response')} value={minutesLabel(f.frt_median)} hint={text('median today')} />
+        <Kpi icon="gauge" label={text('SLA today')} value={sla === null ? '—' : `${sla}%`} tone={sla === null ? 'plain' : sla >= 95 ? 'green' : sla >= 85 ? 'amber' : 'red'} />
+        <Kpi icon="check-circle" tone="green" label={text('Resolved today')} value={f.resolved} hint={f.csat !== null ? text('CSAT {n}%', { n: f.csat }) : undefined} />
       </div>
       <div className="grid min-h-0 flex-1 grid-cols-[1fr_1.4fr_1.4fr] gap-3">
         <div className="flex min-h-0 flex-col gap-3">

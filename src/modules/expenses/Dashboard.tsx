@@ -28,6 +28,7 @@ import {
   type TrendMonth,
 } from './insight';
 import type { ExpenseView, ScreenProps } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The dashboard.
@@ -104,9 +105,10 @@ export default function Dashboard({ org, onGo }: ScreenProps) {
       {d.mixed && d.note ? <Notice tone="amber">{d.note}</Notice> : null}
 
       {/* No "File an expense" here: the rail carries it on every screen, and a second copy is the same control twice in one view. */}
-      <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
+      <StatGrid>
         <MonthKpi d={d} />
         <Kpi
+          icon="inbox"
           label="Waiting for me"
           value={String(d.awaitingMe)}
           sub={d.awaitingMe === 0 ? 'nothing to decide' : 'claims and advances to decide'}
@@ -114,19 +116,22 @@ export default function Dashboard({ org, onGo }: ScreenProps) {
           onClick={() => onGo('approvals')}
         />
         <Kpi
+          icon="hand-coins"
+          tone="green"
           label="Owed to you"
           value={d.mixed ? plural(d.myUnpaid.count, 'claim', 'claims') : money(d.myUnpaid.total, cur)}
           sub={d.mixed ? 'approved, not yet reimbursed · in several currencies' : `${d.myUnpaid.count} approved, not yet reimbursed`}
           onClick={() => onGo('mine')}
         />
         <Kpi
+          icon="wallet"
           label="Advances you hold"
           value={d.mixed ? plural(d.advances.count, 'advance', 'advances') : money(d.advances.total, cur)}
           sub={d.advances.count === 0 ? 'nothing outstanding' : d.mixed ? 'still to settle · in several currencies' : `${d.advances.count} still to settle`}
           tone={d.advances.count > 0 ? 'amber' : undefined}
           onClick={() => onGo('advances')}
         />
-      </div>
+      </StatGrid>
 
       <Problems d={d} cur={cur} currencyOf={currencyOf} onGo={onGo} />
 
@@ -169,6 +174,8 @@ function MonthKpi({ d }: { d: Dash }) {
   if (d.mixed) {
     return (
       <Kpi
+        icon="calendar"
+        tone="violet"
         label={d.month.label}
         value={
           <span className="flex flex-col text-[15px] leading-snug">
@@ -184,6 +191,7 @@ function MonthKpi({ d }: { d: Dash }) {
   const pct = d.month.changePct;
   return (
     <Kpi
+      icon="calendar"
       label={d.month.label}
       value={money(d.month.total, cur)}
       sub={pct === null ? 'nothing spent last month to compare with' : `${pct > 0 ? '+' : ''}${pct}% against ${money(d.month.lastMonth, cur)} last month`}

@@ -12,6 +12,7 @@ import { SAVE_REFUSED, saveServerFile, useMaySave } from './audience-files';
 import { firstCompany, Refused, TABLE, TD, TH, useLists } from './audience-parts';
 import { btn, btnPrimary, btnSmall, Card, Field, input, Kpi, n, PageHeader, Pill, type PillTone } from './parts';
 import { companiesWhere, LAWFUL_BASIS, MATCH_WORD, peopleOf, refusal, type ImportCounts, type ImportPreview, type ImportProgress, type ImportRecord, type ImportRow, type LawfulBasis, type Options } from './types';
+import { StatGrid } from '../../components/StatCard';
 
 const STEPS = ['Upload', 'Map columns', 'Preview', 'Consent & lists', 'Import'] as const;
 type Step = 1 | 2 | 3 | 4 | 5;
@@ -250,12 +251,12 @@ export default function Import({ org, options }: { org: string; options: Options
 
       {step === 3 && preview && c ? (
         <>
-          <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-            <Kpi label="New contacts" value={n(c.new)} sub={<span className="text-success">Will be created</span>} />
-            <Kpi label="Updates" value={n(c.existing)} sub={existing === 'skip' ? 'Already here — left as they are' : 'Matched on email or phone'} />
-            <Kpi label="Duplicates in file" value={n(c.duplicates)} tone={c.duplicates ? 'amber' : undefined} sub={<span className={c.duplicates ? 'text-[#9A4A06] dark:text-warning' : undefined}>Merged before import</span>} />
-            <Kpi label="Rejected rows" value={n(c.refused)} tone={c.refused ? 'red' : undefined} sub={<span className={c.refused ? 'text-danger' : undefined}>Cannot be imported</span>} />
-          </div>
+          <StatGrid min={200}>
+            <Kpi icon="user-plus" tone="green" label="New contacts" value={n(c.new)} sub={<span className="text-success">Will be created</span>} />
+            <Kpi icon="refresh" tone="blue" label="Updates" value={n(c.existing)} sub={existing === 'skip' ? 'Already here — left as they are' : 'Matched on email or phone'} />
+            <Kpi icon="copy" label="Duplicates in file" value={n(c.duplicates)} tone={c.duplicates ? 'amber' : undefined} sub={<span className={c.duplicates ? 'text-[#9A4A06] dark:text-warning' : undefined}>Merged before import</span>} />
+            <Kpi icon="x-circle" label="Rejected rows" value={n(c.refused)} tone={c.refused ? 'red' : undefined} sub={<span className={c.refused ? 'text-danger' : undefined}>Cannot be imported</span>} />
+          </StatGrid>
           <p className="m-0 text-[12px] text-ink-3">
             {n(c.invalid_emails)} addresses not valid · {n(c.invalid_phones)} numbers not valid · {n(c.suppressed)} suppressed · {n(c.missing_consent)} with nothing said about consent
           </p>

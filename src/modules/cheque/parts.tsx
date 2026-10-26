@@ -5,6 +5,7 @@ import { useStore } from '../../core/store';
 import { cx } from '../../components/ui';
 import { money } from '../finance/api';
 import { station } from './api';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /** The station's shared pieces: panels, tiles, badges, notes and check lines as the D01–D06 boards draw them. */
 
@@ -45,24 +46,10 @@ export function Panel({ title, action, children, className }: { title?: ReactNod
   );
 }
 
-const TILE: Record<string, string> = { violet: 'border-t-[#7C3AED]', amber: 'border-t-[#D97706]', red: 'border-t-[#DC2626]', green: 'border-t-[#16A34A]', slate: 'border-t-[#64748B]' };
+const TILE: Record<string, StatTone> = { violet: 'violet', amber: 'amber', red: 'red', green: 'green', slate: 'neutral' };
 
-export function Tile({ label, value, sub, tone = 'slate', onClick }: { label: string; value: ReactNode; sub?: ReactNode; tone?: keyof typeof TILE; onClick?: () => void }) {
-  const body = (
-    <>
-      <div className="text-[11.5px] font-semibold text-ink-2">{label}</div>
-      <div className="mt-1 text-[22px] font-extrabold text-ink tabular-nums">{value}</div>
-      {sub ? <div className="mt-0.5 truncate text-[11.5px] text-ink-3">{sub}</div> : null}
-    </>
-  );
-  const cls = cx('rounded-[10px] border border-t-[3px] border-line bg-surface px-3.5 py-3 text-left', TILE[tone]);
-  return onClick ? (
-    <button type="button" className={cx(cls, 'hover:bg-subtle')} onClick={onClick}>
-      {body}
-    </button>
-  ) : (
-    <div className={cls}>{body}</div>
-  );
+export function Tile({ label, value, sub, tone = 'slate', onClick, icon }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'violet' | 'amber' | 'red' | 'green' | 'slate'; onClick?: () => void; icon?: string }) {
+  return <StatCard label={label} value={value} sub={sub} tone={TILE[tone] ?? 'neutral'} onClick={onClick} icon={icon} />;
 }
 
 const BADGE: Record<string, string> = {

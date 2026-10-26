@@ -5,7 +5,7 @@ import { useStore } from '../../core/store';
 import { todayInZone } from '../../core/time';
 import { Icon } from '../../components/Icon';
 import { Spinner, cx } from '../../components/ui';
-import { Empty, Kpi, PageHead, Panel, Seg, THead, Cell, row } from '../hr/parts';
+import { Empty, PageHead, Panel, Seg, THead, Cell, row } from '../hr/parts';
 import { can, money, shortDate } from './api';
 import { CurrencyPicker, FxNotice } from './Currency';
 import { CostDimensions } from './Dimensions';
@@ -34,6 +34,7 @@ import { Notice } from './parts';
 import type { ScreenProps } from './Rail';
 import { NotGranted, RangeFields, ReadFailed, ReportBar } from './ReportBar';
 import { ShareBar, TrendChart } from './Trend';
+import { StatCard, StatGrid, type StatTone, type StatTrend } from '../../components/StatCard';
 
 /**
  * The financial overview (FR-FIN-15.02): KPIs, the monthly profit and loss,
@@ -128,11 +129,11 @@ function Body({ data, cur, onGo, mayClassify }: { data: OverviewData; cur: strin
 
   return (
     <>
-      <div className="grid grid-cols-[repeat(auto-fill,minmax(190px,1fr))] gap-2.5">
+      <StatGrid label="Key figures">
         {data.kpis.map((k) => (
           <KpiTile key={k.key} k={k} value={m(k.value)} to={data.to} previous={k.previous === null ? null : m(k.previous)} />
         ))}
-      </div>
+      </StatGrid>
       <FxNotice fx={data.fx} positionFx={data.position_fx} />
       <p className="m-0 text-[11.5px] leading-relaxed text-ink-3">
         Compared with {shortDate(data.previous.from)} to {shortDate(data.previous.to)} — the same length of time immediately before this period. {data.basis}
@@ -217,27 +218,31 @@ function Body({ data, cur, onGo, mayClassify }: { data: OverviewData; cur: strin
   );
 }
 
+const KPI_ICON: Record<string, [string, StatTone]> = {
+  revenue: ['trending-up', 'blue'],
+  expenses: ['receipt', 'amber'],
+  gross_profit: ['chart', 'green'],
+  operating_profit: ['chart-line', 'green'],
+  net_profit: ['coins', 'green'],
+  cash: ['banknote', 'cyan'],
+  receivable: ['hand-coins', 'violet'],
+  payable: ['wallet', 'red'],
+  assets: ['landmark', 'violet'],
+  liabilities: ['scale', 'red'],
+  equity: ['piggy-bank', 'cyan'],
+};
+
 function KpiTile({ k, value, previous, to }: { k: KpiCard; value: string; previous: string | null; to: string }) {
-  // For a cost, up is bad: the arrow shows the direction of the number and only the colour judges it.
+  // For a cost, up is bad: the arrow shows the direction of the number and the pill's colour judges it.
   const invert = k.key === 'expenses' || k.key === 'payable';
   const tone = deltaTone(k.change_pct, invert);
   const text = pctText(k.change_pct);
   const n = Number(k.change_pct);
+  const [icon, accent] = KPI_ICON[k.key] ?? ['chart', 'neutral'];
   const sub =
-    k.previous === null ? (
-      <span>A balance on {shortDate(to)} — not compared</span>
-    ) : text === null ? (
-      <span>No comparison — nothing in the previous period</span>
-    ) : (
-      <span className="inline-flex items-center gap-1">
-        <b className={cx('inline-flex items-center gap-0.5 font-semibold', TONE_TEXT[tone])}>
-          <Icon name={n > 0 ? 'arrow-up' : n < 0 ? 'arrow-down' : 'minus'} size={12} />
-          {text}
-        </b>
-        <span title={previous ?? undefined}>from {previous}</span>
-      </span>
-    );
-  return <Kpi label={k.label} value={<span className="text-[18px]">{value}</span>} sub={sub} />;
+    k.previous === null ? <span>A balance on {shortDate(to)} — not compared</span> : text === null ? <span>No comparison — nothing in the previous period</span> : <span title={previous ?? undefined}>from {previous}</span>;
+  const trend: StatTrend | null = k.previous === null || text === null ? null : { direction: n > 0 ? 'up' : n < 0 ? 'down' : 'flat', text, good: tone === 'good', label: 'against the previous period' };
+  return <StatCard label={k.label} value={value} sub={sub} trend={trend} icon={icon} tone={accent} />;
 }
 
 function Breakdown({ title, rows, money: m, tone }: { title: string; rows: AccountSeriesRow[]; money: (v: string) => string; tone: 'danger' | 'primary' }) {
