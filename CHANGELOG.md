@@ -70,9 +70,10 @@ its release and CI round (D-G01, D-G02, D-G06, D-G20).
 
 - **Remote control on a Mac types what was typed.** Text went through System Events, which can only type what is on
   the keyboard layout and sent key code 0 for anything else, so "Olá 😀" arrived as "Ola aa". It is now posted as key
-  events carrying the characters themselves (Return and Tab as their keys). Which window a click would reach is now
-  the window server's own hit test, so a click-through overlay above the shared window no longer makes WorkSuite
-  hold the click back. The macOS helper check on CI had failed on these two since 19 October.
+  events carrying the characters themselves, one UTF-16 unit each (an emoji as its two halves; Return and Tab as
+  their keys). Which window a click would reach is now the window server's own hit test: the window list put the
+  Dock's full-screen window (which clicks pass through) above every app, so WorkSuite held back every click on a
+  shared window. The macOS helper check on CI had failed on these two since 19 October.
 - **Search the CRM leaves no timer behind.** Like Mail's @mentions below, its list closed with a timer nothing
   cancelled; leaving the CRM in that moment set state on an unmounted rail. It is cleared now.
 

@@ -24,7 +24,7 @@ interface Posted {
   w2?: number;
 }
 
-function runScript(lines: string[], opts: { trusted?: boolean | (() => boolean); ax?: () => boolean; clock?: number[]; scroll2?: boolean; ownPid?: number; windows?: Array<Record<string, unknown>>; unicode?: boolean; hit?: (x: number, y: number, below: number) => number; screenHeight?: number } = {}) {
+function runScript(lines: string[], opts: { trusted?: boolean | (() => boolean); ax?: () => boolean; clock?: number[]; scroll2?: boolean; ownPid?: number; windows?: Array<Record<string, unknown>>; unicode?: boolean; hit?: (x: number, y: number, below: number) => number; screenHeight?: number; noApp?: boolean } = {}) {
   const posted: Posted[] = [];
   const said: string[] = [];
   const typed: string[] = [];
@@ -67,10 +67,12 @@ function runScript(lines: string[], opts: { trusted?: boolean | (() => boolean);
       ];
       return opt === 8 ? all.filter((w) => w.kCGWindowNumber === id) : all;
     },
-    ...(opts.unicode === false ? {} : { CGEventKeyboardSetUnicodeString: (e: Posted, n: number, units: number[]) => (e.chars = units.slice(0, n)) }),
+    // As the bridge on macOS 14: a UniChar goes in only through a Ref('S'), one unit.
+    ...(opts.unicode === false ? {} : { CGEventKeyboardSetUnicodeString: (e: Posted, n: number, r: { type: string; 0: number }) => (expect([r.type, n]).toEqual(['S', 1]), (e.chars = [r[0]])) }),
     ...(opts.hit
       ? {
           NSScreen: { screens: { objectAtIndex: () => ({ frame: { origin: { x: 0, y: 0 }, size: { width: 1440, height: opts.screenHeight ?? 900 } } }) } },
+          ...(opts.noApp ? {} : { NSApplication: { sharedApplication: {} } }),
           NSWindow: { windowNumberAtPointBelowWindowWithWindowNumber: (p: { x: number; y: number }, below: number) => opts.hit!(p.x, p.y, below) },
         }
       : {}),
@@ -78,9 +80,10 @@ function runScript(lines: string[], opts: { trusted?: boolean | (() => boolean);
   });
   const ObjC = { import: () => undefined, castRefToObject: (r: unknown) => r, deepUnwrap: (r: unknown) => r };
   const Application = () => ({ keystroke: (s: string) => typed.push(s) });
+  const Ref = (type: string) => ({ type });
   const times = [...(opts.clock ?? [])];
   const FakeDate = { now: () => (times.length > 1 ? times.shift()! : (times[0] ?? 0)) };
-  new Function('ObjC', '$', 'Application', 'Date', `${MAC_SCRIPT}\nrun();`)(ObjC, bridge, Application, FakeDate);
+  new Function('ObjC', '$', 'Application', 'Date', 'Ref', `${MAC_SCRIPT}\nrun();`)(ObjC, bridge, Application, FakeDate, Ref);
   return { posted, said, typed };
 }
 
@@ -152,11 +155,17 @@ describe('the macOS helper script', () => {
     expect(runScript(['?1 at 500 400'], { windows: tagOverShared }).said[1]).toBe('1 90');
   });
 
+  it('asks the window server only once connected to it, and reads the list otherwise', () => {
+    // Without NSApplication the window server answers 0 for every point (macOS 14), so the list is read instead.
+    const { said } = runScript(['?1 at 500 400'], { hit: () => 0, noApp: true });
+    expect(said[1]).toBe('1 51');
+  });
+
   it('asks the window server which window a mouse-down at the point reaches, in its bottom-left points', () => {
     const asked: Array<[number, number, number]> = [];
     const hit = (x: number, y: number, below: number) => (asked.push([x, y, below]), 24);
-    // A full-screen overlay listed above the window (on GitHub's macOS runners) does not take the click.
-    const overlay = [{ kCGWindowNumber: 3, kCGWindowLayer: 25, kCGWindowOwnerPID: 1, kCGWindowAlpha: 1, kCGWindowBounds: { X: 0, Y: 0, Width: 1440, Height: 900 } }];
+    // The Dock's full-screen window, listed above every app (seen on macOS 14), does not take the click.
+    const overlay = [{ kCGWindowNumber: 10, kCGWindowOwnerName: 'Dock', kCGWindowLayer: 20, kCGWindowOwnerPID: 315, kCGWindowAlpha: 1, kCGWindowBounds: { X: 0, Y: 0, Width: 1440, Height: 900 } }];
     expect(runScript(['?1 at 520 300'], { hit, windows: overlay }).said[1]).toBe('1 24');
     expect(asked).toEqual([[520, 600, 0]]);
     expect(runScript(['?1 at 5 5'], { hit: () => 0 }).said[1]).toBe('1 0');
@@ -175,8 +184,9 @@ describe('the macOS helper script', () => {
     const { posted, typed } = runScript(lines([{ t: 'text', text: 'Olá 😀\n\t' }]));
     expect(typed).toEqual([]);
     const chars = posted.filter((e) => e.chars).map((e) => [String.fromCharCode(...e.chars!), e.down, e.flags, e.code]);
-    // Each character down and up, no modifiers, the emoji's two UTF-16 units in one event.
-    expect(chars).toEqual(['O', 'l', 'á', ' ', '😀'].flatMap((c) => [[c, true, 0, 0], [c, false, 0, 0]]));
+    // Each character down and up, no modifiers, one UTF-16 unit per event: the emoji is its two surrogates down, then up.
+    const [hi, lo] = ['\ud83d', '\ude00'];
+    expect(chars).toEqual([...['O', 'l', 'á', ' '].flatMap((c) => [[c, true, 0, 0], [c, false, 0, 0]]), [hi, true, 0, 0], [lo, true, 0, 0], [hi, false, 0, 0], [lo, false, 0, 0]]);
     // A new line is Return and a tab is Tab, as apps expect them.
     expect(posted.filter((e) => !e.chars).map((e) => [e.code, e.down, e.flags])).toEqual([[36, true, 0], [36, false, 0], [48, true, 0], [48, false, 0]]);
   });

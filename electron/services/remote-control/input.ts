@@ -577,13 +577,17 @@ function run() {
   try { own = +($.NSProcessInfo.processInfo.environment.objectForKey('WS_OWNER_PID').js || 0); } catch (err) { }
   function b64(s) { return $(s).dataUsingEncoding($.NSUTF8StringEncoding).base64EncodedStringWithOptions(0).js; }
   // Typed text is posted as keyboard events that carry the characters themselves (CGEventKeyboardSetUnicodeString),
-  // one code point per event (an emoji is two UTF-16 units, sent together), so it does not depend on the keyboard
-  // layout. System Events' keystroke cannot do that: a character that is not on the layout goes out as key code 0,
-  // and "Olá 😀" arrived as "Ola aa". A new line and a tab are their own keys (Return, Tab), as apps expect them.
+  // so it does not depend on the keyboard layout. System Events' keystroke cannot do that: a character that is not on
+  // the layout goes out as key code 0, and "Olá 😀" arrived as "Ola aa". The bridge passes a UniChar only through a
+  // Ref('S') — one UTF-16 unit; a JS string or array is ignored and a two-unit Ref is refused (tried on macOS 14) —
+  // so each event carries one unit, and a character outside the BMP (an emoji) is its two surrogates in turn, which
+  // the text system puts back together. A new line and a tab are their own keys (Return, Tab), as apps expect them.
   // Only where the bridge lacks the call does System Events type, as before.
-  function unicodeKey(units, down) {
+  function unicodeKey(unit, down) {
     var e = $.CGEventCreateKeyboardEvent(null, 0, down);
-    $.CGEventKeyboardSetUnicodeString(e, units.length, units);
+    var r = Ref('S');
+    r[0] = unit;
+    $.CGEventKeyboardSetUnicodeString(e, 1, r);
     $.CGEventSetFlags(e, 0);
     $.CGEventPost(0, e);
   }
@@ -592,7 +596,7 @@ function run() {
     var u = $.CGEventCreateKeyboardEvent(null, code, false); $.CGEventSetFlags(u, 0); $.CGEventPost(0, u);
   }
   function text(s) {
-    if (typeof $.CGEventKeyboardSetUnicodeString !== 'function') {
+    if (typeof $.CGEventKeyboardSetUnicodeString !== 'function' || typeof Ref !== 'function') {
       Application('System Events').keystroke(s);
       return;
     }
@@ -601,14 +605,22 @@ function run() {
       if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) { var lo = s.charCodeAt(i + 1); if (lo >= 0xdc00 && lo <= 0xdfff) { units.push(lo); i++; } }
       if (c === 10) plainKey(36);
       else if (c === 9) plainKey(48);
-      else { unicodeKey(units, true); unicodeKey(units, false); }
+      else {
+        for (var k = 0; k < units.length; k++) unicodeKey(units[k], true);
+        for (var k2 = 0; k2 < units.length; k2++) unicodeKey(units[k2], false);
+      }
     }
   }
-  // The window a mouse-down at the point would reach, as the window server works it out (click-through overlays and
-  // windows that ignore the mouse are passed over), from the top-left global points the helper uses. WorkSuite's own
-  // capture-proof windows (the name tag) are looked past. null when the bridge cannot ask, and the list is read instead.
+  // The window a mouse-down at the point would reach, as the window server works it out, from the top-left global
+  // points the helper uses. The window list alone is not that: the Dock keeps a full-screen window (layer 20) above
+  // every app, which clicks pass through except over its tiles, so the first window listed at the point was the Dock
+  // and every click on a shared window was held back. The window server answers only a process connected to it, so
+  // the helper takes NSApplication.sharedApplication first (it is never activated, and shows nothing). WorkSuite's
+  // own capture-proof windows (the name tag) are looked past. null when the bridge cannot ask; the list is read then.
+  var connected = false;
+  try { connected = !!$.NSApplication.sharedApplication; } catch (err) { connected = false; }
   function hitWindow(px, py) {
-    if (!$.NSWindow || typeof $.NSWindow.windowNumberAtPointBelowWindowWithWindowNumber !== 'function') return null;
+    if (!connected || !$.NSWindow || typeof $.NSWindow.windowNumberAtPointBelowWindowWithWindowNumber !== 'function') return null;
     var top = $.NSScreen.screens.objectAtIndex(0).frame.size.height;
     var pt = $.CGPointMake(px, top - py), below = 0;
     for (var k = 0; k < 16; k++) {
