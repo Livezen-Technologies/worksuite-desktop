@@ -11,7 +11,9 @@ person who has to live with the change — what it does, and where it bites.
 > rather than published twice: the app's versions are one sequence, and these
 > come after what had already shipped.
 
-## Unreleased
+## 0.2.282 — 2026-10-26
+
+Needs the server with **Hosting 1.1.0** (Hosting & Domains) and **Desktop 1.13.0** (desktop settings) for those screens; on an older server they stay hidden or show "needs a server update".
 
 ### Added
 
