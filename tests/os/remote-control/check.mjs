@@ -21,9 +21,26 @@ const verbose = !!process.env.RC_VERBOSE;
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const results = [];
+
+// macOS: whether this machine lets a process it starts post input at all (Privacy & Security › Accessibility), asked
+// the way the helper asks. A hosted runner without it cannot pass the mouse and keyboard checks, and says so on each
+// failure instead of leaving a bare FAIL: the cause is the machine, not the helper.
+const macPermission = () => {
+  if (!mac) return null;
+  const r = spawnSync('/usr/bin/osascript', ['-l', 'JavaScript', '-e', 'ObjC.import("ApplicationServices"); ObjC.import("CoreGraphics"); JSON.stringify({ trusted: typeof $.CGPreflightPostEventAccess === "function" ? !!$.CGPreflightPostEventAccess() : !!$.AXIsProcessTrusted(), accessibility: !!$.AXIsProcessTrusted() })'], { encoding: 'utf8', timeout: 20_000 });
+  try {
+    return JSON.parse(r.stdout.trim());
+  } catch {
+    return { trusted: null, accessibility: null, error: (r.stderr || '').trim().slice(0, 200) };
+  }
+};
+const permission = macPermission();
+if (permission) console.log(`  this Mac lets the helper post input: ${JSON.stringify(permission)}`);
+const noPermission = permission && permission.trusted === false;
 const check = (what, ok, detail = '') => {
   results.push(!!ok);
-  console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}${detail ? ` — ${detail}` : ''}`);
+  const why = !ok && noPermission ? ' — this Mac has not given the helper Accessibility (Privacy & Security › Accessibility), so posted input is dropped; grant it to the runner, the helper is not at fault' : '';
+  console.log(`${ok ? 'ok  ' : 'FAIL'} ${what}${detail ? ` — ${detail}` : ''}${why}`);
   return !!ok;
 };
 
@@ -114,7 +131,9 @@ const fg = await inj.foreground();
 check('the window in front is the test window', fg?.window === ready.window, JSON.stringify(fg));
 const rect = await inj.windowBounds(ready.window);
 check('its place on screen holds the pad', rect && rect.x <= pad.x + 2 && rect.y <= pad.y + 2 && rect.x + rect.width >= pad.x + pad.width - 2 && rect.y + rect.height >= pad.y + pad.height - 2, JSON.stringify(rect));
-check('it is under the pointer over the pad', (await inj.isUnder(c.x, c.y, ready.window)) === true);
+// On a failure, the helper's own answer (the window it says a click there reaches) is shown; `query` is the helper's.
+const under = await inj.isUnder(c.x, c.y, ready.window);
+check('it is under the pointer over the pad', under === true, under === true || typeof inj.query !== 'function' ? '' : `the helper names window ${JSON.stringify(await inj.query(`at ${c.x} ${c.y}`))}, not ${ready.window}`);
 check('  and not beside it', (await inj.isUnder(Math.max(2, pad.x - 100), c.y, ready.window)) === false);
 
 // The mouse.

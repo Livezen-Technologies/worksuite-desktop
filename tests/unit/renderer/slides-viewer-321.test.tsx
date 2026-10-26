@@ -32,6 +32,10 @@ const bytes = new Uint8Array([80, 75, 3, 4]);
 async function open(props: Partial<Parameters<typeof SlidesViewer>[0]> = {}) {
   render(<SlidesViewer name="Q3 review.pptx" load={async () => bytes} {...props} />);
   await screen.findByText('Slide 1 of 8');
+  // The deck arrives from an async load, outside act: the slide can be on screen before React has run the effect that
+  // listens for the keys. Flush what React still has queued, so a key pressed next always reaches the viewer (a CI run
+  // under load sent ⌘= before the listener was there, and the zoom stayed at fit).
+  await act(async () => undefined);
 }
 
 describe('#321 the presentation viewer', () => {

@@ -49,6 +49,18 @@ diagnostics, the lock screen, sign-out — checks the security boundaries
 locked, no token in the diagnostic bundle) and saves a screenshot of each
 screen to `test-results/e2e/`.
 
+**In CI** (`.github/workflows/e2e.yml`): the Connection & Startup e2e
+(`tests/e2e/accounts.mjs`) runs on every pull request, on `main` and nightly
+against servers on the runner — `tests/e2e/mock-cloud.mjs` and an enterprise
+stand-in — so it needs no secrets; a check it skips fails the job. The smoke
+above needs a real server, so it runs nightly and by hand, and only with the
+`WS_E2E_SERVER`, `WS_E2E_EMAIL` and `WS_E2E_PASSWORD` secrets (a test account);
+without them the run says so in a notice and reports nothing as passed. Locally:
+
+```bash
+npm run build && WS_E2E_ACCOUNTS=1 ELECTRON_RUN_AS_NODE=1 xvfb-run -a npx electron tests/e2e/accounts.mjs
+```
+
 ### Display scaling
 
 ```bash

@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { apiGet } from '../../core/api';
 import { call } from '../../core/bridge';
 import { Icon } from '../../components/Icon';
@@ -133,9 +133,17 @@ export function CrmRail({ view, onPick, onNewLead, onOpenHit, counts }: { view: 
 }
 
 /** Search the CRM (W10): leads, deals, accounts, contacts and quotes as you type, grouped; each opens its record. */
-function CrmSearch({ onOpen, params, orgKey }: { onOpen: (hit: Hit) => void; params: Record<string, number>; orgKey: number }) {
+export function CrmSearch({ onOpen, params, orgKey }: { onOpen: (hit: Hit) => void; params: Record<string, number>; orgKey: number }) {
   const [q, setQ] = useState('');
   const [open, setOpen] = useState(false);
+  // The list closes a moment after the box loses focus (a click on a result lands first). The timer is cleared when
+  // the search goes, so it never sets state on an unmounted rail — the bug fixed in Mail's @mentions (audit D-G15).
+  const leaving = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  useEffect(() => () => clearTimeout(leaving.current), []);
+  const leave = () => {
+    clearTimeout(leaving.current);
+    leaving.current = setTimeout(() => setOpen(false), 150);
+  };
   const needle = q.trim();
   const res = useQuery({
     queryKey: ['crm', 'search', needle, orgKey],
@@ -152,7 +160,7 @@ function CrmSearch({ onOpen, params, orgKey }: { onOpen: (hit: Hit) => void; par
           value={q}
           onChange={(e) => (setQ(e.target.value), setOpen(true))}
           onFocus={() => setOpen(true)}
-          onBlur={() => setTimeout(() => setOpen(false), 150)}
+          onBlur={leave}
           onKeyDown={(e) => e.key === 'Escape' && (setQ(''), setOpen(false))}
           placeholder="Search the CRM"
           aria-label="Search the CRM"

@@ -1,6 +1,9 @@
-# CI and release builds (§16.1): check → build per OS → package → sign →
-# signed manifest. Signing steps run only when their secrets are configured;
-# without them the job still proves the code builds and packages.
+# CI and release builds (§16.1): check → build per OS → package → sign → publish to the WorkSuite Update Center.
+#
+# A release is a pushed v* tag (which must be package.json's version) or a manual run on the STABLE channel
+# (WS_RELEASE=1). A release fails without its macOS and Windows signing secrets; any other build packages unsigned
+# with a warning. A tag or a manual run then publishes the installers to the Update Center (job `publish`), which stops
+# at READY_FOR_TEST for people to approve. docs/RELEASING.md; the steps' logic is build/release-ci.mjs.
 name: Build
 
 on:
@@ -11,13 +14,20 @@ on:
   workflow_dispatch:
     inputs:
       channel:
-        description: Release channel for the manifest
-        default: dev
+        description: Update Center channel to publish to (STABLE also makes this a release build that must be signed)
+        default: BETA
         type: choice
-        options: [dev, beta, stable]
+        options: [BETA, DEV, INTERNAL, STABLE]
 
 permissions:
   contents: read
+
+env:
+  # The channel a tag or a manual run publishes to: BETA unless a manual run picks another.
+  WS_CHANNEL: ${{ inputs.channel || 'BETA' }}
+  # A release build: a v* tag, or a manual run for STABLE. build/mac-signing.cjs (as WS_RELEASE_BUILD) and
+  # build/release-ci.mjs then refuse to go on unsigned.
+  WS_RELEASE: ${{ (startsWith(github.ref, 'refs/tags/v') || (github.event_name == 'workflow_dispatch' && inputs.channel == 'STABLE')) && '1' || '0' }}
 
 concurrency:
   group: build-${{ github.ref }}
@@ -33,6 +43,9 @@ jobs:
         with:
           node-version: 22
           cache: npm
+      - name: The tag is the app's version
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: node build/release-ci.mjs tag "$GITHUB_REF_NAME"
       - run: npm ci
       - run: npm run typecheck
       - run: npm run lint
@@ -56,6 +69,25 @@ jobs:
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v5
+      - name: Signing secrets
+        # Before anything is built: a release without its platform's signing fails here, saying what is missing.
+        shell: bash
+        run: node build/release-ci.mjs signing "$RUNNER_OS"
+        env:
+          MAC_CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+          MAC_CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          WIN_CSC_LINK: ${{ secrets.WIN_CSC_LINK }}
+          WIN_CSC_KEY_PASSWORD: ${{ secrets.WIN_CSC_KEY_PASSWORD }}
+          AZURE_TENANT_ID: ${{ secrets.AZURE_TENANT_ID }}
+          AZURE_CLIENT_ID: ${{ secrets.AZURE_CLIENT_ID }}
+          AZURE_CLIENT_SECRET: ${{ secrets.AZURE_CLIENT_SECRET }}
+          AZURE_TRUSTED_SIGNING_ACCOUNT: ${{ secrets.AZURE_TRUSTED_SIGNING_ACCOUNT }}
+          AZURE_TRUSTED_SIGNING_PROFILE: ${{ secrets.AZURE_TRUSTED_SIGNING_PROFILE }}
+          AZURE_TRUSTED_SIGNING_ENDPOINT: ${{ secrets.AZURE_TRUSTED_SIGNING_ENDPOINT }}
+          LINUX_GPG_PRIVATE_KEY: ${{ secrets.LINUX_GPG_PRIVATE_KEY }}
       - uses: actions/setup-node@v5
         with:
           node-version: 22
@@ -90,6 +122,13 @@ jobs:
           for v in CSC_LINK CSC_KEY_PASSWORD CSC_NAME WIN_CSC_LINK WIN_CSC_KEY_PASSWORD APPLE_API_KEY APPLE_API_KEY_ID APPLE_API_ISSUER APPLE_TEAM_ID; do
             if [ -z "${!v}" ]; then unset "$v"; fi
           done
+          # Notarization reads APPLE_API_KEY as the path of the .p8 key (@electron/notarize); the secret holds the
+          # key itself, so it is written to a file only this job can read.
+          if [ -n "${APPLE_API_KEY:-}" ] && [ ! -f "$APPLE_API_KEY" ]; then
+            key="$RUNNER_TEMP/AuthKey_${APPLE_API_KEY_ID:-ci}.p8"
+            (umask 077 && printf '%s\n' "$APPLE_API_KEY" > "$key")
+            export APPLE_API_KEY="$key"
+          fi
           npx electron-builder --config build/electron-builder.config.cjs ${{ matrix.target }} --publish never
         env:
           # macOS signing + notarization (Developer ID Application). Unset → an ad-hoc build, refused for releases.
@@ -97,7 +136,8 @@ jobs:
           CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
           CSC_NAME: ${{ secrets.MAC_CSC_NAME }}
           APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
-          WS_RELEASE_BUILD: ${{ startsWith(github.ref, 'refs/tags/v') && '1' || '0' }}
+          # A release (WS_RELEASE: a v* tag, or the STABLE channel) must be Developer ID-signed: build/mac-signing.cjs.
+          WS_RELEASE_BUILD: ${{ env.WS_RELEASE }}
           APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
           APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -116,6 +156,22 @@ jobs:
           # and WORKSUITE_REPO_GPG_PUBLIC_KEY (the ASCII-armoured public key). Unset, the .deb/.rpm add no package source.
           WORKSUITE_LINUX_REPO: ${{ vars.WORKSUITE_LINUX_REPO }}
           WORKSUITE_REPO_GPG_PUBLIC_KEY: ${{ vars.WORKSUITE_REPO_GPG_PUBLIC_KEY }}
+      - name: Check the Windows signatures
+        if: runner.os == 'Windows'
+        shell: pwsh
+        # Read back from the files, as Windows will: a release's installers must carry a valid Authenticode
+        # signature; any other build only lists what it has.
+        run: |
+          $bad = @()
+          foreach ($f in Get-ChildItem release/*/* -Include *.exe,*.msi) {
+            $s = Get-AuthenticodeSignature $f.FullName
+            Write-Output "$($f.Name): $($s.Status) $($s.SignerCertificate.Subject)"
+            if ($s.Status -ne 'Valid') { $bad += $f.Name }
+          }
+          if ($bad.Count -gt 0) {
+            if ($env:WS_RELEASE -eq '1') { Write-Output "::error title=Unsigned installer::Not validly signed: $($bad -join ', ')"; exit 1 }
+            Write-Output "::warning title=Unsigned installer::Not signed (not a release build): $($bad -join ', ')"
+          }
       - name: Sign Linux packages (GPG)
         if: runner.os == 'Linux'
         shell: bash
@@ -131,7 +187,8 @@ jobs:
             echo "::notice title=Linux packages unsigned::LINUX_GPG_PRIVATE_KEY is not set: the .deb, .rpm and AppImage are not GPG-signed."
             exit 0
           fi
-          export GNUPGHOME="$(mktemp -d)"
+          GNUPGHOME="$(mktemp -d)"
+          export GNUPGHOME
           chmod 700 "$GNUPGHOME"
           trap 'gpgconf --kill all || true; rm -rf "$GNUPGHOME"' EXIT
           printf '%s\n' "$LINUX_GPG_PRIVATE_KEY" | gpg --batch --import
@@ -164,27 +221,114 @@ jobs:
             release/*/*.asc
           if-no-files-found: error
 
-  manifest:
-    # A signed manifest for tagged releases and manual runs. Needs the
-    # offline release key as the WS_RELEASE_PRIVATE_KEY secret.
+  # The legacy `manifest` job (scripts/release-manifest.mjs, signed with WS_RELEASE_PRIVATE_KEY) is retired: the app
+  # has asked the Update Center since it moved there, and reads no self-hosted manifest (electron/updater/keys.ts,
+  # update-center.ts). docs/RELEASING.md §4.
+
+  publish:
+    # Tags and manual runs only; a run without the Update Center's secrets says so and publishes nothing.
     needs: package
     if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
+    timeout-minutes: 90
+    # One publish per channel at a time; a newer tag waits rather than cancelling an upload half-way.
+    concurrency:
+      group: update-center-${{ inputs.channel || 'BETA' }}
+      cancel-in-progress: false
     env:
-      WS_RELEASE_PRIVATE_KEY: ${{ secrets.WS_RELEASE_PRIVATE_KEY }}
+      # publish-release.mjs, from Livezen-Technologies/worksite-download at a reviewed commit. It is handed the CI
+      # token and attestation key, so it is pinned; move UC_SCRIPT_REF (a repository variable) to take a newer one.
+      UC_SCRIPT_REF: ${{ vars.UC_SCRIPT_REF || 'd5c23724f4e47a1e159cd36c3523793ea74643ae' }}
     steps:
+      - name: Update Center secrets
+        id: secrets
+        shell: bash
+        env:
+          UC_CI_TOKEN: ${{ secrets.UC_CI_TOKEN }}
+          UC_CI_KEY: ${{ secrets.UC_CI_KEY }}
+          UC_SCRIPT_TOKEN: ${{ secrets.UC_SCRIPT_TOKEN }}
+        run: |
+          missing=()
+          [ -n "$UC_CI_TOKEN" ] || missing+=(UC_CI_TOKEN)
+          [ -n "$UC_CI_KEY" ] || missing+=(UC_CI_KEY)
+          [ -n "$UC_SCRIPT_TOKEN" ] || missing+=(UC_SCRIPT_TOKEN)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::warning title=Not published::${missing[*]} not set: the build is not published to the Update Center (docs/RELEASING.md §4). Its installers are this run's artifacts."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
       - uses: actions/checkout@v5
+        if: steps.secrets.outputs.ready == 'true'
+      - name: The publish script
+        if: steps.secrets.outputs.ready == 'true'
+        uses: actions/checkout@v5
+        with:
+          repository: Livezen-Technologies/worksite-download
+          ref: ${{ env.UC_SCRIPT_REF }}
+          token: ${{ secrets.UC_SCRIPT_TOKEN }}
+          path: .uc
+          sparse-checkout: scripts/publish-release.mjs
+          sparse-checkout-cone-mode: false
+          persist-credentials: false
       - uses: actions/setup-node@v5
+        if: steps.secrets.outputs.ready == 'true'
         with:
-          node-version: 22
+          # publish-release.mjs: Node 20, no dependencies.
+          node-version: 20
       - uses: actions/download-artifact@v7
+        if: steps.secrets.outputs.ready == 'true'
         with:
+          pattern: worksuite-*
           path: dist
           merge-multiple: true
-      - name: Sign release manifest
-        if: env.WS_RELEASE_PRIVATE_KEY != ''
-        run: node scripts/release-manifest.mjs --dir dist --channel ${{ inputs.channel || 'stable' }} --base-url ./
-      - uses: actions/upload-artifact@v6
+      - name: Publish to the Update Center (stops at READY_FOR_TEST)
+        if: steps.secrets.outputs.ready == 'true'
+        shell: bash
+        env:
+          UC_CI_TOKEN: ${{ secrets.UC_CI_TOKEN }}
+          UC_CI_KEY: ${{ secrets.UC_CI_KEY }}
+        run: |
+          set -euo pipefail
+          # The version, the patch as the build number, the channel, the commit, the CHANGELOG section as the notes,
+          # and Windows x64, the universal DMG as macos:arm64 and macos:x64, and Linux x64 (build/release-ci.mjs).
+          args_file="$RUNNER_TEMP/uc-args"
+          node build/release-ci.mjs publish dist "$RUNNER_TEMP/release-notes.md" > "$args_file"
+          mapfile -t args < "$args_file"
+          echo "Publishing to $WS_CHANNEL:"; printf '  %s\n' "${args[@]}"
+          node .uc/scripts/publish-release.mjs "${args[@]}"
+
+  module-tags:
+    # Each module release is tagged <module>/vX.Y.Z on main (docs/MODULES.md), as `npm run module -- tag --create`
+    # makes them by hand. Idempotent: a tag that exists here or on origin is left as it is, and nothing is forced.
+    needs: check
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    concurrency:
+      group: module-tags
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v5
         with:
-          name: worksuite-release
-          path: dist
+          fetch-depth: 0
+          fetch-tags: true
+      - name: Create and push the missing module tags
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git fetch --tags --force origin
+          before="$(git tag -l '*/v*' | sort)"
+          node scripts/module.mjs tag --create
+          created="$(comm -13 <(printf '%s\n' "$before") <(git tag -l '*/v*' | sort))"
+          if [ -z "$created" ]; then echo "Every module version is tagged."; exit 0; fi
+          while read -r t; do
+            if git ls-remote --exit-code --tags origin "refs/tags/$t" > /dev/null; then
+              echo "already on origin: $t"
+            else
+              git push origin "refs/tags/$t"
+            fi
+          done <<< "$created"

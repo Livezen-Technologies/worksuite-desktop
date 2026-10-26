@@ -60,11 +60,13 @@ describe('sending', () => {
     expect(screen.getByText('Offer for')).toBeTruthy();
     expect(screen.getByText(/Some people have no value for: \{\{first_name\}\}, \{\{name\}\}/)).toBeTruthy();
     fireEvent.click(screen.getByRole('button', { name: 'Send 2 separate messages' }));
-    await waitFor(() => expect(screen.getByText('1 of 2 sent.')).toBeTruthy());
+    // "1 of 2 sent." is on screen as soon as the first one has gone, before the pause and the second (failing) send:
+    // waiting for it raced the rest of the run. The run is over when the second one's failure is shown.
+    expect(await screen.findByText('kim@x.org: Mailbox full')).toBeTruthy();
+    expect(screen.getByText('1 of 2 sent.')).toBeTruthy();
     expect(sendOne.mock.calls.map(([r, m]) => [r.email, m.subject, m.html])).toEqual([
       ['pat@client.lk', 'Offer for Pat', '<p>Dear Pat Silva</p>'],
       ['kim@x.org', 'Offer for ', '<p>Dear </p>'],
     ]);
-    expect(screen.getByText('kim@x.org: Mailbox full')).toBeTruthy();
   });
 });

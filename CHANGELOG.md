@@ -13,7 +13,8 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
-The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G19, D-G21, D-G22, D-G24, D-G25).
+The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G19, D-G21, D-G22, D-G24, D-G25), and
+its release and CI round (D-G01, D-G02, D-G06, D-G20).
 
 ### Security
 
@@ -46,8 +47,39 @@ The fixes from the desktop audit's first round (D-G05, D-G15, D-G16, D-G18, D-G1
   the check job, the Linux packages and the Linux OS checks run on `ubuntu-24.04` rather than `ubuntu-latest`. (D-G25)
 - **RELEASING.md on the Mac DMG:** one universal DMG is built and is published to the Update Center twice, as
   `macos:arm64` and `macos:x64`; the "pattern is too long" merge failure it described is gone. (D-G19)
+- **A pushed tag is the release.** Pushing `vX.Y.Z` builds, signs and publishes it: the tag must be `package.json`'s
+  version (the run stops otherwise), and the Build workflow's new `publish` job sends the Windows x64 installer, the
+  universal DMG (as `macos:arm64` and `macos:x64`) and the Linux x64 AppImage, `.deb` and `.rpm` to the WorkSuite
+  Update Center with `publish-release.mjs` — BETA by default, build number the patch number, notes from this
+  changelog — and stops at READY_FOR_TEST for people to approve. A manual run picks the channel. Without the
+  `UC_CI_TOKEN`, `UC_CI_KEY` and `UC_SCRIPT_TOKEN` secrets it warns and publishes nothing. The `manifest` job, which
+  signed a self-hosted manifest the app stopped reading when it moved to the Update Center, is gone. (D-G01)
+- **Release builds fail unsigned.** A tag build or a STABLE run stops before building when the macOS Developer ID and
+  notarization secrets or the Windows signing secrets are missing (STABLE also needs Linux GPG), and a release's
+  Windows installers are checked for a valid Authenticode signature. Branch builds still package unsigned, with a
+  warning. The App Store Connect key is now written to the file notarization reads, rather than passed as a path it
+  is not. (D-G02)
+- **End-to-end checks in CI.** A new E2E workflow runs Connection & Startup against servers on the runner (the mock
+  Cloud and an enterprise stand-in) on every pull request, on `main` and nightly; a skipped check fails it. The smoke
+  against a real server runs nightly and by hand when `WS_E2E_SERVER`, `WS_E2E_EMAIL` and `WS_E2E_PASSWORD` are set,
+  and says it did not run when they are not. (D-G06)
+- **Module versions are tagged by CI.** Each push to `main` creates and pushes the `<module>/vX.Y.Z` tags origin is
+  missing, as `npm run module -- tag --create` does; tags already there are left alone. (D-G20)
 
 ### Fixed
+
+- **Remote control on a Mac types what was typed.** Text went through System Events, which can only type what is on
+  the keyboard layout and sent key code 0 for anything else, so "Olá 😀" arrived as "Ola aa". It is now posted as key
+  events carrying the characters themselves, one UTF-16 unit each (an emoji as its two halves; Return and Tab as
+  their keys). Which window a click would reach is now the window server's own hit test: the window list put the
+  Dock's full-screen window (which clicks pass through) above every app, so WorkSuite held back every click on a
+  shared window. The macOS helper check on CI had failed on these two since 19 October.
+- **Two more timing-dependent tests made exact.** The mail-merge test waited for "1 of 2 sent.", which shows after
+  the first message and before the second's failure, so it could check the end of the run too early; it now waits for
+  that failure. The slides viewer test pressed ⌘= as soon as the slide showed, which could be before React had added
+  the key listener; it now lets React finish first. Both failed once in CI on this branch's run, not in the app.
+- **Search the CRM leaves no timer behind.** Like Mail's @mentions below, its list closed with a timer nothing
+  cancelled; leaving the CRM in that moment set state on an unmounted rail. It is cleared now.
 
 - **A flaky test run ("window is not defined").** Mail's @mention list closed itself 150 ms after the editor lost
   focus with a timer nothing cancelled, so closing the composer in that moment set state on an unmounted editor — in

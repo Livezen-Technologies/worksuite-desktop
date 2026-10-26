@@ -6,6 +6,8 @@ name: Remote control helpers
 
 on:
   push:
+    # Branches only: a module tag (settings/v1.41.0 …) is not a change to the helpers.
+    branches: ['**']
     paths:
       - electron/services/remote-control/input.ts
       - electron/services/remote-control/keys.ts

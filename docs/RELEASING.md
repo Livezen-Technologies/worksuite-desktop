@@ -2,9 +2,25 @@
 
 ## 1. Version
 
-Bump `version` in `package.json`, add a CHANGELOG entry, commit, tag `vX.Y.Z`
-and push the tag. The **Build** workflow checks, packages every platform, and
-— for tags — signs a release manifest.
+Bump `version` in `package.json`, add a CHANGELOG entry (`## X.Y.Z — date`),
+commit, tag `vX.Y.Z` and push the tag. The **Build** workflow
+(`.github/workflows/build.yml`; its release steps are `build/release-ci.mjs`)
+then:
+
+1. **checks the tag**: it must be `v` + `package.json`'s version, or the run
+   stops before anything is built. The patch number is the Update Center build
+   number (`0.2.283` → build 283), so it must be above 0;
+2. checks, tests and **packages every platform, signed**: a tag is a release
+   build, which fails without its macOS and Windows signing secrets (§2);
+3. **publishes to the Update Center** (§4) on the **BETA** channel, stopping at
+   READY_FOR_TEST.
+
+A manual run (*Actions › Build › Run workflow*) picks the channel — BETA
+(default), DEV, INTERNAL or STABLE — and publishes the branch or tag it is run
+on. **STABLE is a release build too**: it must be signed on every platform,
+Linux GPG included, whatever the ref. Publish STABLE by running the workflow on
+the release's tag. Branch and pull-request builds are never published, and may
+be unsigned (each says so in a warning).
 
 **Minimum server version (worksuite-desktop#259).** A release that uses new
 server endpoints lists the minimum WorkSuite module versions it needs in its
@@ -28,12 +44,31 @@ later".
 | `APPLE_API_KEY`, `APPLE_API_KEY_ID`, `APPLE_API_ISSUER` | notarization (App Store Connect API key) |
 | `WIN_CSC_LINK`, `WIN_CSC_KEY_PASSWORD` | Authenticode certificate — or the Azure Trusted Signing set: |
 | `AZURE_TENANT_ID`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `AZURE_TRUSTED_SIGNING_ACCOUNT`, `AZURE_TRUSTED_SIGNING_PROFILE`, `AZURE_TRUSTED_SIGNING_ENDPOINT` | |
-| `WS_RELEASE_PRIVATE_KEY` | the Ed25519 release key (PEM) that signs manifests |
+| `UC_CI_TOKEN` | the Update Center CI API client, `<client_id>.<secret>` (kind CI: release.view, release.create, release.upload, release.file.upload, changelog.manage, release.edit) |
+| `UC_CI_KEY` | the base64 libsodium Ed25519 **secret** key whose public half the Update Center pins as the CI_ATTESTATION key `ws-ci-1` |
+| `UC_SCRIPT_TOKEN` | a read-only token for `Livezen-Technologies/worksite-download` (a fine-grained token or GitHub App token with *Contents: read* on that repository): the publish script lives there, and that repository is private |
 | `WS_POLICY_PUBLIC_KEY` | the server's policy-signing public key (PEM). Without it, a release build applies **no** desktop policy unless the account has its own `discovery_key` (`POLICY_UNSIGNED_REFUSED`, see BACKEND.md); the build says so in a warning |
 
-Without the platform secrets the builds are unsigned. Unsigned macOS builds
-are refused by Gatekeeper on other machines; unsigned Windows builds trigger
-SmartScreen; and no unsigned build can update itself.
+`APPLE_API_KEY` holds the **contents** of the App Store Connect `.p8` key; the
+Package step writes it to a file for notarization, which reads a path. Set
+`APPLE_TEAM_ID` too: the signed app's Team ID is checked against it.
+
+**Which builds must be signed (audit D-G02).** A *release build* — a pushed
+`v*` tag, or a manual run on the STABLE channel (`WS_RELEASE=1`, passed to
+electron-builder as `WS_RELEASE_BUILD`) — fails in the package job's first step
+when its platform's secrets are missing:
+
+| Platform | A release needs |
+|---|---|
+| macOS | `MAC_CSC_LINK` + `MAC_CSC_KEY_PASSWORD`, and `APPLE_API_KEY` + `APPLE_API_KEY_ID` + `APPLE_API_ISSUER`. After signing, `build/mac-signing.cjs` reads the app back with `codesign` and fails a release that is not Developer ID-signed with the hardened runtime. |
+| Windows | `WIN_CSC_LINK` + `WIN_CSC_KEY_PASSWORD`, or the six `AZURE_*` secrets. After packaging, every `.exe` and `.msi` is checked with `Get-AuthenticodeSignature`; a release fails unless each is `Valid`. |
+| Linux | `LINUX_GPG_PRIVATE_KEY` on STABLE only (the Update Center takes unsigned Linux packages on BETA, DEV and INTERNAL). |
+
+Every other build (branches, pull requests, manual BETA/DEV/INTERNAL runs on a
+branch) packages unsigned and says so in a warning. Unsigned macOS builds are
+refused by Gatekeeper on other machines; unsigned Windows builds trigger
+SmartScreen; and an unsigned build updates itself only from a test channel
+(§4).
 
 **A test DMG without an Apple certificate:** `npm run dist:mac:unsigned`
 writes `release/<version>/WorkSuite-<version>-universal.dmg`. It is signed
@@ -45,13 +80,16 @@ ID build keeps the hardened runtime (`npm run dist:mac` with the secrets
 above). On another Mac, the first open of an unsigned DMG's app needs
 right-click → Open, or `xattr -dr com.apple.quarantine /Applications/WorkSuite.app`.
 
-## 3. The release key
+## 3. The legacy release key (no longer used by CI)
 
-Generated once with `npm run release:keygen`: the private key goes to
-`~/.worksuite-desktop-release/release-ed25519.pem` (mode 600) and must be moved
-to the release vault and the `WS_RELEASE_PRIVATE_KEY` secret; the public key
-is written into `electron/updater/keys.ts`. Rotating it means shipping one
-release, signed with the old key, whose app pins the new one.
+`npm run release:keygen` made the Ed25519 key that signed the self-hosted
+manifests of `scripts/release-manifest.mjs`; its public half is still
+`RELEASE_PUBLIC_KEY` in `electron/updater/keys.ts`. The app no longer reads
+those manifests — it asks the Update Center (§4), whose response keys are
+pinned in `electron/updater/update-center.ts` — so the Build workflow's
+`manifest` job, which signed one for tags with `WS_RELEASE_PRIVATE_KEY`, is
+retired (audit D-G01). The `WS_RELEASE_PRIVATE_KEY` secret can be deleted. The
+scripts stay for their tests and for a self-hosted mirror.
 
 ## 4. Publish — the WorkSuite Update Center
 
@@ -64,7 +102,27 @@ size and SHA-256 sit inside the signed answer, and the download comes from its
 15-minute signed URL (the download grant buys a fresh one). A channel that is
 not public there falls back to Stable unless a tenant policy names it.
 
-Publish a build with the Update Center's script (from that repo; Node 20, no
+**CI publishes it** (audit D-G01). The Build workflow's `publish` job runs on a
+`v*` tag and on a manual run, after every platform has packaged. It checks out
+`scripts/publish-release.mjs` from `Livezen-Technologies/worksite-download` at a
+pinned commit (the repository variable `UC_SCRIPT_REF` moves it; the script is
+given the CI token and key, so it is not taken from a moving branch), and runs
+it on Node 20 with `UC_CI_TOKEN` and `UC_CI_KEY` (§2). It publishes:
+
+| `--file` | From the build |
+|---|---|
+| `windows:x64:exe` | `WorkSuite-Setup-<version>-x64.exe` |
+| `macos:arm64:dmg` and `macos:x64:dmg` | the one `WorkSuite-<version>-universal.dmg`, twice |
+| `linux:x64:appimage`, `linux:x64:deb`, `linux:x64:rpm` | `WorkSuite-<version>-x86_64.AppImage`, `-amd64.deb`, `-x86_64.rpm` |
+
+with `--version` from `package.json`, `--build` the patch number, `--channel`
+BETA (or the manual run's choice), `--commit` the built commit, and the
+version's CHANGELOG section as `--notes`. A missing installer stops the job
+before anything is sent. **Without `UC_CI_TOKEN`, `UC_CI_KEY` or
+`UC_SCRIPT_TOKEN` the job warns and publishes nothing**; the installers are
+still the run's artifacts, and can be published by hand as below.
+
+By hand: the Update Center's script (from that repo; Node 20, no
 dependencies). Each `--file` is `platform:arch:type:path`; Windows x64, macOS
 arm64, macOS x64 and Linux x64 are required. **macOS is one universal DMG**: CI and
 `npm run dist:mac` build `WorkSuite-<version>-universal.dmg` (`mac.target` in
@@ -184,7 +242,7 @@ tell people when a new version is available or ready.
 
 The older self-hosted manifest (`scripts/release-manifest.mjs`, the
 `RELEASE_PUBLIC_KEY` in `electron/updater/keys.ts`) is no longer read by the
-app.
+app, and CI no longer signs one (§3).
 
 ## 4a. Channels, notices and the first run (worksuite-desktop#205)
 
@@ -276,9 +334,8 @@ sent no highlights. A rollback shows the Update Failed panel in Settings › Upd
 **Signing and installer formats.** Nothing here changes signing. macOS updates still need Developer ID +
 notarisation for Stable (section 2); the updater checks the new app's Team ID against the running one. Windows
 updates download the full NSIS installer and run it silently (`/S`): NSIS differential downloads
-(`.blockmap`) belong to electron-updater, which this app does not use, so they do not apply. Publish one DMG per
-Mac architecture as above (`build/electron-builder.config.cjs` still lists `universal` targets; the release
-command overrides them with `--arm64 --x64`).
+(`.blockmap`) belong to electron-updater, which this app does not use, so they do not apply. Publish the one
+universal DMG as both `macos:arm64` and `macos:x64`, as above.
 
 ## 5. Enterprise deployment (§16.2)
 
