@@ -55,7 +55,9 @@ branch someone else has checked out).
 4. Bump the app's version and root `CHANGELOG.md` as before when this goes into an installer.
 5. Open the pull request. **Module versions** (`.github/workflows/modules.yml`) runs the check, and the pull request
    cannot pass while a module it changes has no new version and changelog section.
-6. After the merge, on `main`: `npm run module -- tag --create`, then push the tags it names.
+6. After the merge, CI tags it: the Build workflow's `module-tags` job runs `npm run module -- tag --create` on every
+   push to `main` and pushes the `<module>/vX.Y.Z` tags origin does not have yet (never forced; a tag already there is
+   left alone). By hand, the same command and then `git push origin <tag> …` for the tags it names.
 
 ## The commands
 

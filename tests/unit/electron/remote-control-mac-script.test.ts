@@ -19,11 +19,12 @@ interface Posted {
   flags?: number;
   fields: Record<number, number>;
   units?: number;
+  chars?: number[];
   w1?: number;
   w2?: number;
 }
 
-function runScript(lines: string[], opts: { trusted?: boolean | (() => boolean); ax?: () => boolean; clock?: number[]; scroll2?: boolean; ownPid?: number; windows?: Array<Record<string, unknown>> } = {}) {
+function runScript(lines: string[], opts: { trusted?: boolean | (() => boolean); ax?: () => boolean; clock?: number[]; scroll2?: boolean; ownPid?: number; windows?: Array<Record<string, unknown>>; unicode?: boolean; hit?: (x: number, y: number, below: number) => number; screenHeight?: number } = {}) {
   const posted: Posted[] = [];
   const said: string[] = [];
   const typed: string[] = [];
@@ -66,6 +67,13 @@ function runScript(lines: string[], opts: { trusted?: boolean | (() => boolean);
       ];
       return opt === 8 ? all.filter((w) => w.kCGWindowNumber === id) : all;
     },
+    ...(opts.unicode === false ? {} : { CGEventKeyboardSetUnicodeString: (e: Posted, n: number, units: number[]) => (e.chars = units.slice(0, n)) }),
+    ...(opts.hit
+      ? {
+          NSScreen: { screens: { objectAtIndex: () => ({ frame: { origin: { x: 0, y: 0 }, size: { width: 1440, height: opts.screenHeight ?? 900 } } }) } },
+          NSWindow: { windowNumberAtPointBelowWindowWithWindowNumber: (p: { x: number; y: number }, below: number) => opts.hit!(p.x, p.y, below) },
+        }
+      : {}),
     ...(opts.scroll2 ? { CGEventCreateScrollWheelEvent2: (_s: null, units: number, _n: number, w1: number, w2: number) => ({ kind: 'scroll2', type: 22, units, w1, w2, fields: {} }) } : {}),
   });
   const ObjC = { import: () => undefined, castRefToObject: (r: unknown) => r, deepUnwrap: (r: unknown) => r };
@@ -144,7 +152,41 @@ describe('the macOS helper script', () => {
     expect(runScript(['?1 at 500 400'], { windows: tagOverShared }).said[1]).toBe('1 90');
   });
 
-  it('types text through System Events as it was written', () => {
-    expect(runScript(lines([{ t: 'text', text: 'Olá 😀' }])).typed).toEqual(['Olá 😀']);
+  it('asks the window server which window a mouse-down at the point reaches, in its bottom-left points', () => {
+    const asked: Array<[number, number, number]> = [];
+    const hit = (x: number, y: number, below: number) => (asked.push([x, y, below]), 24);
+    // A full-screen overlay listed above the window (on GitHub's macOS runners) does not take the click.
+    const overlay = [{ kCGWindowNumber: 3, kCGWindowLayer: 25, kCGWindowOwnerPID: 1, kCGWindowAlpha: 1, kCGWindowBounds: { X: 0, Y: 0, Width: 1440, Height: 900 } }];
+    expect(runScript(['?1 at 520 300'], { hit, windows: overlay }).said[1]).toBe('1 24');
+    expect(asked).toEqual([[520, 600, 0]]);
+    expect(runScript(['?1 at 5 5'], { hit: () => 0 }).said[1]).toBe('1 0');
+  });
+
+  it('looks past WorkSuite’s own capture-proof windows in the window server’s answer too', () => {
+    const win = (n: number, pid: number, sharing: number) => ({ kCGWindowNumber: n, kCGWindowLayer: 0, kCGWindowOwnerPID: pid, kCGWindowAlpha: 1, kCGWindowSharingState: sharing, kCGWindowBounds: { X: 0, Y: 0, Width: 1000, Height: 800 } });
+    const stack = [90, 51];
+    const hit = (_x: number, _y: number, below: number) => stack[below ? stack.indexOf(below) + 1 : 0] ?? 0;
+    expect(runScript(['?1 at 500 400'], { ownPid: 700, hit, windows: [win(90, 700, 0), win(51, 42, 1)] }).said[1]).toBe('1 51');
+    expect(runScript(['?1 at 500 400'], { ownPid: 700, hit, windows: [win(90, 700, 1), win(51, 42, 1)] }).said[1]).toBe('1 90');
+    expect(runScript(['?1 at 500 400'], { ownPid: 700, hit, windows: [win(90, 333, 0), win(51, 42, 1)] }).said[1]).toBe('1 90');
+  });
+
+  it('types text as key events carrying the characters, whatever the keyboard layout', () => {
+    const { posted, typed } = runScript(lines([{ t: 'text', text: 'Olá 😀\n\t' }]));
+    expect(typed).toEqual([]);
+    const chars = posted.filter((e) => e.chars).map((e) => [String.fromCharCode(...e.chars!), e.down, e.flags, e.code]);
+    // Each character down and up, no modifiers, the emoji's two UTF-16 units in one event.
+    expect(chars).toEqual(['O', 'l', 'á', ' ', '😀'].flatMap((c) => [[c, true, 0, 0], [c, false, 0, 0]]));
+    // A new line is Return and a tab is Tab, as apps expect them.
+    expect(posted.filter((e) => !e.chars).map((e) => [e.code, e.down, e.flags])).toEqual([[36, true, 0], [36, false, 0], [48, true, 0], [48, false, 0]]);
+  });
+
+  it('does not let a held modifier turn typed text into a shortcut', () => {
+    const { posted } = runScript(lines([{ t: 'key', code: 'MetaLeft', down: true }, { t: 'text', text: 'q' }]));
+    expect(posted.filter((e) => e.chars).map((e) => e.flags)).toEqual([0, 0]);
+  });
+
+  it('falls back to System Events only where the bridge cannot set a key event’s characters', () => {
+    expect(runScript(lines([{ t: 'text', text: 'Olá 😀' }]), { unicode: false }).typed).toEqual(['Olá 😀']);
   });
 });

@@ -147,8 +147,9 @@ Being controlled is the main process's business, never a page's:
   files wait for unlock.
 - **Input helpers** are the system's own — PowerShell hosting a fixed C#
   class calling SendInput (Windows), osascript posting CGEvents (macOS, needs
-  Accessibility; typed text goes through System Events, so the app declares
-  Apple Events and macOS asks once, as Automation), xdotool (X11) — started
+  Accessibility; typed text is posted as key events carrying its characters,
+  and only a bridge without that call types through System Events, which is
+  why the app still declares Apple Events), xdotool (X11) — started
   only while control is live, with
   fixed scripts. They take numbers, key names from a prototype-free table and
   base64 text; nothing from the controller is put into a command line. One

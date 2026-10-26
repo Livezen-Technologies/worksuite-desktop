@@ -534,8 +534,10 @@ class WindowsInjector extends LineHelper {
 /**
  * macOS: CGEvents posted from osascript's JavaScript. Needs WorkSuite in
  * Privacy & Security › Accessibility (macOS asks WorkSuite, the app that
- * started it), and typed text goes through System Events, which macOS asks
- * about once as Automation. Moves while a button is held are sent as drags;
+ * started it). Typed text is posted as keyboard events carrying the characters,
+ * whatever the keyboard layout; only a bridge without that call falls back to
+ * System Events, which macOS asks about once as Automation. Which window a
+ * click reaches is the window server's own hit test. Moves while a button is held are sent as drags;
  * a click says which click of a double- or triple-click it is (macOS does
  * not work that out from posted events, so without it nothing opens on a
  * double-click); keys carry exactly the modifiers held for the controller,
@@ -574,9 +576,49 @@ function run() {
   var own = 0;
   try { own = +($.NSProcessInfo.processInfo.environment.objectForKey('WS_OWNER_PID').js || 0); } catch (err) { }
   function b64(s) { return $(s).dataUsingEncoding($.NSUTF8StringEncoding).base64EncodedStringWithOptions(0).js; }
+  // Typed text is posted as keyboard events that carry the characters themselves (CGEventKeyboardSetUnicodeString),
+  // one code point per event (an emoji is two UTF-16 units, sent together), so it does not depend on the keyboard
+  // layout. System Events' keystroke cannot do that: a character that is not on the layout goes out as key code 0,
+  // and "Olá 😀" arrived as "Ola aa". A new line and a tab are their own keys (Return, Tab), as apps expect them.
+  // Only where the bridge lacks the call does System Events type, as before.
+  function unicodeKey(units, down) {
+    var e = $.CGEventCreateKeyboardEvent(null, 0, down);
+    $.CGEventKeyboardSetUnicodeString(e, units.length, units);
+    $.CGEventSetFlags(e, 0);
+    $.CGEventPost(0, e);
+  }
+  function plainKey(code) {
+    var d = $.CGEventCreateKeyboardEvent(null, code, true); $.CGEventSetFlags(d, 0); $.CGEventPost(0, d);
+    var u = $.CGEventCreateKeyboardEvent(null, code, false); $.CGEventSetFlags(u, 0); $.CGEventPost(0, u);
+  }
   function text(s) {
-    var se = Application('System Events');
-    se.keystroke(s);
+    if (typeof $.CGEventKeyboardSetUnicodeString !== 'function') {
+      Application('System Events').keystroke(s);
+      return;
+    }
+    for (var i = 0; i < s.length; i++) {
+      var c = s.charCodeAt(i), units = [c];
+      if (c >= 0xd800 && c <= 0xdbff && i + 1 < s.length) { var lo = s.charCodeAt(i + 1); if (lo >= 0xdc00 && lo <= 0xdfff) { units.push(lo); i++; } }
+      if (c === 10) plainKey(36);
+      else if (c === 9) plainKey(48);
+      else { unicodeKey(units, true); unicodeKey(units, false); }
+    }
+  }
+  // The window a mouse-down at the point would reach, as the window server works it out (click-through overlays and
+  // windows that ignore the mouse are passed over), from the top-left global points the helper uses. WorkSuite's own
+  // capture-proof windows (the name tag) are looked past. null when the bridge cannot ask, and the list is read instead.
+  function hitWindow(px, py) {
+    if (!$.NSWindow || typeof $.NSWindow.windowNumberAtPointBelowWindowWithWindowNumber !== 'function') return null;
+    var top = $.NSScreen.screens.objectAtIndex(0).frame.size.height;
+    var pt = $.CGPointMake(px, top - py), below = 0;
+    for (var k = 0; k < 16; k++) {
+      var num = +$.NSWindow.windowNumberAtPointBelowWindowWithWindowNumber(pt, below);
+      if (!num) return '0';
+      var info = own ? (ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(8, num))) || [])[0] : null;
+      if (info && info.kCGWindowOwnerPID === own && info.kCGWindowSharingState === 0) { below = num; continue; }
+      return String(num);
+    }
+    return '0';
   }
   if (!inputTrusted()) { say('permission-denied'); return; }
   say('ready');
@@ -629,8 +671,10 @@ function run() {
           a = permissionReport();
         } else if (p[1] === 'at') {
           // Front to back: the first window with something on screen at the point is the one a click reaches.
-          var px = +p[2], py = +p[3], all = ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(17, 0))) || [];
-          a = '0';
+          var px = +p[2], py = +p[3], hit = null;
+          try { hit = hitWindow(px, py); } catch (err) { hit = null; }
+          var all = hit === null ? ObjC.deepUnwrap(ObjC.castRefToObject($.CGWindowListCopyWindowInfo(17, 0))) || [] : [];
+          a = hit === null ? '0' : hit;
           for (var j = 0; j < all.length; j++) {
             var b = all[j].kCGWindowBounds;
             if (own && all[j].kCGWindowOwnerPID === own && all[j].kCGWindowSharingState === 0) continue;

@@ -1,0 +1,109 @@
+# End-to-end checks of the built app (audit D-G06), driven over the DevTools protocol under Xvfb.
+#
+#   accounts  Connection & Startup against servers on this machine: tests/e2e/mock-cloud.mjs (self-signed TLS, which
+#             must be refused) and an enterprise stand-in serving a discovery document. No secrets; runs on every
+#             pull request, on main and nightly.
+#   smoke     tests/e2e/smoke.mjs against a real WorkSuite server: sign-in, the bridge, each screen. It needs a test
+#             account, so it runs nightly and by hand, and only when WS_E2E_SERVER, WS_E2E_EMAIL and
+#             WS_E2E_PASSWORD are set; otherwise it says so in a notice and does not run (nothing is reported passed).
+name: E2E
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  schedule:
+    - cron: '17 2 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: e2e-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  accounts:
+    # ubuntu-24.04, as the Build workflow's check: Electron runs under xvfb on that image's libraries.
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+      - name: Connection & Startup against local servers
+        shell: bash
+        env:
+          WS_E2E_ACCOUNTS: '1'
+          WS_E2E_OUT: ${{ runner.temp }}/e2e-accounts
+          ELECTRON_RUN_AS_NODE: '1'
+        run: |
+          set -o pipefail
+          xvfb-run -a npx electron tests/e2e/accounts.mjs 2>&1 | tee "$RUNNER_TEMP/accounts.log"
+          # The script exits 0 when it skips (no accounts main process, no openssl). Here everything it needs is on
+          # the machine, so a skip is a check that did not run, and fails the job rather than passing it.
+          if grep -q '^SKIP' "$RUNNER_TEMP/accounts.log"; then
+            grep '^SKIP' "$RUNNER_TEMP/accounts.log" | while read -r line; do echo "::error title=E2E check skipped::$line"; done
+            exit 1
+          fi
+      - uses: actions/upload-artifact@v6
+        if: always()
+        with:
+          name: e2e-accounts
+          path: ${{ runner.temp }}/e2e-accounts
+          if-no-files-found: ignore
+
+  smoke:
+    if: github.event_name == 'schedule' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: A test server
+        id: server
+        shell: bash
+        env:
+          WS_E2E_SERVER: ${{ secrets.WS_E2E_SERVER }}
+          WS_E2E_EMAIL: ${{ secrets.WS_E2E_EMAIL }}
+          WS_E2E_PASSWORD: ${{ secrets.WS_E2E_PASSWORD }}
+        run: |
+          missing=()
+          [ -n "$WS_E2E_SERVER" ] || missing+=(WS_E2E_SERVER)
+          [ -n "$WS_E2E_EMAIL" ] || missing+=(WS_E2E_EMAIL)
+          [ -n "$WS_E2E_PASSWORD" ] || missing+=(WS_E2E_PASSWORD)
+          if [ ${#missing[@]} -gt 0 ]; then
+            echo "::notice title=Live e2e smoke not run::${missing[*]} not set: the smoke against a real WorkSuite server did not run. Set them (a test account) to run it."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+      - uses: actions/checkout@v5
+        if: steps.server.outputs.ready == 'true'
+      - uses: actions/setup-node@v5
+        if: steps.server.outputs.ready == 'true'
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+        if: steps.server.outputs.ready == 'true'
+      - name: Smoke against the test server
+        if: steps.server.outputs.ready == 'true'
+        env:
+          NODE_OPTIONS: --max-old-space-size=6144
+          WS_E2E_SERVER: ${{ secrets.WS_E2E_SERVER }}
+          WS_E2E_EMAIL: ${{ secrets.WS_E2E_EMAIL }}
+          WS_E2E_PASSWORD: ${{ secrets.WS_E2E_PASSWORD }}
+          WS_E2E_OUT: ${{ runner.temp }}/e2e-smoke
+        run: xvfb-run -a npm run e2e
+      - uses: actions/upload-artifact@v6
+        if: always() && steps.server.outputs.ready == 'true'
+        with:
+          name: e2e-smoke
+          path: ${{ runner.temp }}/e2e-smoke
+          if-no-files-found: ignore

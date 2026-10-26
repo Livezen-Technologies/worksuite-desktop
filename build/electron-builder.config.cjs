@@ -137,7 +137,8 @@ module.exports = {
     extendInfo: {
       NSCameraUsageDescription: 'WorkSuite uses the camera only in video calls and meetings you join.',
       NSMicrophoneUsageDescription: 'WorkSuite uses the microphone only during calls and voice notes you record.',
-      // Remote control types the controller's text through System Events, only while you let them control this Mac.
+      // Remote control posts the controller's typing as key events; only a Mac whose scripting bridge lacks that call
+      // types through System Events instead, which is what this Automation prompt is for.
       NSAppleEventsUsageDescription: 'WorkSuite types text for someone you let control this Mac, and only while control lasts.',
       LSMultipleInstancesProhibited: true,
     },
