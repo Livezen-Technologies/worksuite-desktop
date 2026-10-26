@@ -24,6 +24,9 @@ person who has to live with the change — what it does, and where it bites.
 ### Security
 - Mail's message parser (`postal-mime`) is updated to 4.1.4: a mail header made of many encoded words could keep the app busy decoding it for a long time (GHSA-f2hq-32vh-53cc).
 ### Fixed
+- **macOS title bars** (#424): the traffic lights sat 18 px down in every window, centred for the main window's 52 px bar but low in the 40 px bar of a meeting, a shared screen, a record or a chat window, with the title close behind them. They are now centred in the bar each window has, the bar's content starts a fixed gap after them (given back in full screen, where macOS hides them), and a secondary window's title is centred as macOS centres its own. The geometry is one shared definition (`shared/window-chrome.ts`) used by the main process and the bars.
+- **Mail's quick filters and sort** (#423): in a narrow message list the chips and "Date · Newest" ran past the list's edge, the sort label could not shorten and sat out of line with the chips. The chips now wrap, the sort control moves to its own line when there is no room, is as tall as the chips and shortens its label with an ellipsis. (desktop module mail 1.34.1)
+- **Resizing a panel** (#415): the system tooltip "Drag to resize · double-click to reset" opened over the text beside the divider of every resizable panel (Mail's message list, My Day, the side panel) and followed the pointer while dragging. The divider no longer shows it; the resize cursor and highlight say what it does, and screen readers still read the hint.
 - The desktop built again: Meet's push to talk read the shortcut map from outside the meeting room, and the loading-mark test was not type-checked against its JSON. (desktop module meet 1.27.1)
 
 ## 0.2.278 — 2026-10-24

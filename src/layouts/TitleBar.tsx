@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useCanOpen } from '../core/access';
 import { app } from '../core/app-state';
 import { call, isMac, on } from '../core/bridge';
+import { macBarInsetFor } from '@shared/window-chrome';
 import { topBarPaddingRight } from '../core/window-chrome';
 import { t } from '../core/i18n';
 import { useStore } from '../core/store';
@@ -70,7 +71,7 @@ export function TitleBar() {
   const { layout: buttons, maximized } = useWindowButtons();
 
   return (
-    <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac && !fullScreen ? 84 : buttons?.side === 'left' ? 10 : 14, paddingRight: buttons?.side === 'right' ? 10 : topBarPaddingRight(12) }}>
+    <header className="drag flex h-[52px] shrink-0 items-center gap-3 bg-navy pr-3 text-white" style={{ paddingLeft: isMac ? macBarInsetFor('main', fullScreen) : buttons?.side === 'left' ? 10 : 14, paddingRight: buttons?.side === 'right' ? 10 : topBarPaddingRight(12) }}>
       {buttons?.side === 'left' ? <WindowControls layout={buttons} maximized={maximized} className="me-1" /> : null}
       <div className="flex w-[150px] shrink-0 items-center gap-2.5">
         <BrandLogo height={21} tone="dark" />
@@ -140,7 +141,7 @@ export function TitleBar() {
 }
 
 /** Whether this window is in full screen: asked once, then told when it changes. */
-function useFullScreen(): boolean {
+export function useFullScreen(): boolean {
   const [full, setFull] = useState(false);
   useEffect(() => {
     let live = true;

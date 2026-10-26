@@ -1,6 +1,7 @@
 import { app, BrowserWindow, powerSaveBlocker, screen, webContents, type Rectangle, type WebContents } from 'electron';
 import { join } from 'node:path';
 import type { DetachedWindow, WindowKind } from '@shared/types';
+import { barHeightFor, trafficLightPositionFor } from '@shared/window-chrome';
 import type { Database } from '../services/db';
 import { APP_ORIGIN, devOrigin } from '../security/hardening';
 import { logger } from '../main/log';
@@ -904,7 +905,8 @@ export class WindowManager {
       // with the OS window controls drawn over it (snap layouts keep working).
       titleBarStyle: 'hidden',
       // A ring has no window controls at all: it is answered or declined.
-      ...(mac ? { trafficLightPosition: { x: 18, y: 18 } } : own ? { frame: false } : { titleBarOverlay: ring ? false : { color: this.look.chrome, symbolColor: '#FFFFFF', height: kind === 'main' ? 52 : 40 } }),
+      // The traffic lights are centred in the bar they sit in: 52 px on the main window, 40 px elsewhere (#424).
+      ...(mac ? { trafficLightPosition: trafficLightPositionFor(kind) } : own ? { frame: false } : { titleBarOverlay: ring ? false : { color: this.look.chrome, symbolColor: '#FFFFFF', height: barHeightFor(kind) } }),
       alwaysOnTop: !!opts.alwaysOnTop && ALWAYS_ON_TOP_ALLOWED.has(kind),
       ...(ring ? { resizable: false, maximizable: false, minimizable: false, fullscreenable: false, skipTaskbar: true } : {}),
       icon: mac ? undefined : join(app.isPackaged ? process.resourcesPath : join(__dirname, '../../resources'), 'icons', '256x256.png'),

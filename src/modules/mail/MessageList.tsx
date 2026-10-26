@@ -287,7 +287,8 @@ export function MessageList(p: MessageListProps) {
               <Checkbox aria-label={text('Select all')} title={text('Select all')} checked={p.selectAll.state === 'all'} indeterminate={p.selectAll.state === 'some'} disabled={flat.length === 0} onChange={p.selectAll.onToggle} />
             </span>
           ) : null}
-          <div className="flex min-w-0 flex-1 items-center gap-1.5" role="group" aria-label="Quick filters">
+          {/* The chips wrap and the sort control goes to its own line rather than past the list's edge in a narrow list (#423). */}
+          <div className="flex min-w-0 flex-1 flex-wrap items-center gap-x-1.5 gap-y-1.5" role="group" aria-label="Quick filters">
             {CHIPS.map((c) => {
               const on = p.chips.includes(c.id);
               return (
@@ -302,10 +303,9 @@ export function MessageList(p: MessageListProps) {
                 {text('Clear filters')}
               </button>
             ) : null}
-            <span className="flex-1" />
-            <button ref={sortChip} type="button" aria-haspopup="menu" aria-expanded={menu === 'sort' && sortAt === 'chip'} onClick={() => toggleSort('chip')} title={text('Sort and group')} className={cx('inline-flex shrink-0 items-center gap-1 rounded-[6px] px-1 text-[12.5px] text-ink-3 hover:bg-subtle hover:text-ink', menu === 'sort' && sortAt === 'chip' && 'bg-subtle text-ink')}>
-              <Icon name="transfers" size={13} />
-              <span className="truncate">{sortLabel(p.prefs)}</span>
+            <button ref={sortChip} type="button" data-sort-chip aria-haspopup="menu" aria-expanded={menu === 'sort' && sortAt === 'chip'} onClick={() => toggleSort('chip')} title={text('Sort and group')} className={cx('ml-auto inline-flex h-[26px] min-w-0 max-w-full items-center gap-1 rounded-[6px] px-1.5 text-[12.5px] leading-none text-ink-3 hover:bg-subtle hover:text-ink', menu === 'sort' && sortAt === 'chip' && 'bg-subtle text-ink')}>
+              <Icon name="transfers" size={13} className="shrink-0" />
+              <span className="min-w-0 truncate">{sortLabel(p.prefs)}</span>
             </button>
           </div>
         </div>

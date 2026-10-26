@@ -1,6 +1,7 @@
 import type { CSSProperties, ReactNode } from 'react';
 import { cx } from '../../components/ui';
 import { isMac } from '../../core/bridge';
+import { macBarInsetFor } from '@shared/window-chrome';
 
 /**
  * The window frame of the connect screens (Connection & Startup screens 2–9): a title bar with the window's title
@@ -27,7 +28,7 @@ export interface ConnectFrameProps {
 export function ConnectFrame({ title, accent, aside, children, footer, className }: ConnectFrameProps) {
   return (
     <div className={cx('flex h-full flex-col bg-ground text-ink', className)} data-testid="connect-frame">
-      <div className={cx('drag flex h-[52px] shrink-0 items-center border-b border-line bg-subtle px-4', isMac ? 'pl-[84px]' : 'pr-[140px]')}>
+      <div className={cx('drag flex h-[52px] shrink-0 items-center border-b border-line bg-subtle px-4', isMac ? undefined : 'pr-[140px]')} style={isMac ? { paddingLeft: macBarInsetFor('main') } : undefined}>
         <span className="flex-1 truncate text-center text-[13px] font-semibold text-ink-3">{title}</span>
       </div>
       {accent ? <div className="h-1.5 shrink-0" style={{ background: accent }} data-testid="connect-accent" /> : null}

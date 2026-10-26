@@ -4,6 +4,13 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.34.1 — 2026-10-26
+
+**Fixed**
+
+- the quick filters wrap and the sort control ("Date · Newest") moves to its own line in a narrow message list instead of running past its edge; it is as tall as the chips and shortens with an ellipsis (#423).
+- the message list's divider no longer opens a tooltip over the text beside it (#415).
+
 ## 1.34.0 — 2026-10-22
 
 **Added**
