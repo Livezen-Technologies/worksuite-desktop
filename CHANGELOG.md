@@ -74,6 +74,10 @@ its release and CI round (D-G01, D-G02, D-G06, D-G20).
   their keys). Which window a click would reach is now the window server's own hit test: the window list put the
   Dock's full-screen window (which clicks pass through) above every app, so WorkSuite held back every click on a
   shared window. The macOS helper check on CI had failed on these two since 19 October.
+- **Two more timing-dependent tests made exact.** The mail-merge test waited for "1 of 2 sent.", which shows after
+  the first message and before the second's failure, so it could check the end of the run too early; it now waits for
+  that failure. The slides viewer test pressed ⌘= as soon as the slide showed, which could be before React had added
+  the key listener; it now lets React finish first. Both failed once in CI on this branch's run, not in the app.
 - **Search the CRM leaves no timer behind.** Like Mail's @mentions below, its list closed with a timer nothing
   cancelled; leaving the CRM in that moment set state on an unmounted rail. It is cleared now.
 
