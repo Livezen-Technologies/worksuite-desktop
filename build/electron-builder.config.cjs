@@ -29,6 +29,7 @@
  */
 const macSigning = require('./mac-signing.cjs');
 const linuxRepo = require('./linux-repo.cjs');
+const masCleanup = require('./mas-cleanup.cjs');
 // Universal Links (worksuite-desktop#170): with a provisioning profile that grants Associated Domains for
 // app.worksuite.lk (Team ID + lk.worksuite.desktop), the app is signed with it and claims those links. Without one
 // the build is as before: worksuite:// still works, and the web fallback page hands links over through it.
@@ -98,6 +99,9 @@ module.exports = {
   afterSign: macSigning.afterSign,
   // Linux, only with WORKSUITE_LINUX_REPO=1: the package repository's marker, key and helper (worksuite-desktop#351).
   afterPack: linuxRepo.afterPack,
+  // Mac App Store: removes the signed .app copies left beside the .pkg, which take over worksuite:// links on the
+  // build Mac and cannot run there (build/mas-cleanup.cjs).
+  afterAllArtifactBuild: masCleanup.afterAllArtifactBuild,
 
   mac: {
     category: 'public.app-category.business',

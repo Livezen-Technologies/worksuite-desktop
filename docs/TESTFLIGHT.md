@@ -162,13 +162,23 @@ TMPDIR="/Volumes/<drive>/.build-tmp/" CSC_NAME="…" WS_MAS_BUILD_NUMBER=1 npm r
 
 ### Check the result before uploading
 
+When the build finishes, only the `.pkg` is left in `release/<version>/mas-universal/`. The build deletes the signed
+`WorkSuite.app` copies it made on the way (`build/mas-cleanup.cjs`): an App Store-signed app cannot run on the build
+Mac, yet macOS would send `worksuite://` sign-in links to it ("The application can't be opened"). To check the app,
+unpack it from the `.pkg`:
+
 ```bash
 cd release/*/mas-universal
 pkgutil --check-signature *.pkg                    # 3rd Party Mac Developer Installer: Livezen … (7KQULK6DSS)
-codesign --verify --deep --strict WorkSuite.app && echo OK
-codesign -d --entitlements - WorkSuite.app | grep app-sandbox
-lipo -archs WorkSuite.app/Contents/MacOS/WorkSuite # x86_64 arm64
+rm -rf /tmp/ws-check && pkgutil --expand-full *.pkg /tmp/ws-check
+APP=$(find /tmp/ws-check -maxdepth 3 -name WorkSuite.app | head -1)
+codesign --verify --deep --strict "$APP" && echo OK
+codesign -d --entitlements - "$APP" | grep -E "app-sandbox|network.server"
+lipo -archs "$APP/Contents/MacOS/WorkSuite"        # x86_64 arm64
+rm -rf /tmp/ws-check
 ```
+
+To keep the `.app` copies next to the `.pkg` instead, build with `WS_MAS_KEEP_APP=1`, and delete them when done.
 
 `pkgutil` describes the installer certificate as *"(Development)"*. That is how macOS labels this certificate type;
 App Store Connect accepts it.
@@ -243,7 +253,7 @@ Adding a permission means adding a key there; Apple may ask why during review.
 | *The bundle version must be higher than the previously uploaded version* | Raise `WS_MAS_BUILD_NUMBER`. |
 | `ITMS-90237` / non-public API | Comes from a native module; the email names the binary. |
 | Build delivered but not in TestFlight after an hour | Processing failed. Check the uploading Apple ID's email for an *ITMS-* message. |
-| Signing in on the build Mac shows *The application can't be opened* | macOS sent the `worksuite://` sign-in link to the App Store copy left in `release/<version>/mas-universal/WorkSuite.app`, which only runs when installed by TestFlight. After uploading, delete that `.app` (keep the `.pkg`). |
+| Signing in on the build Mac shows *The application can't be opened* | macOS sent the `worksuite://` sign-in link to the App Store copy left in `release/<version>/mas-universal/WorkSuite.app`, which only runs when installed by TestFlight. The build now deletes these copies itself; if one is still there (an older build, or `WS_MAS_KEEP_APP=1`), delete the `.app` and keep the `.pkg`. |
 | TestFlight: *Could not install … The requested app is not available or doesn't exist* | The build is not released to you yet: answer Export Compliance, add the build to an Internal Testing group that includes your Apple ID, wait for *Ready to Test*, then reopen TestFlight. |
 
 ## Where the configuration lives
@@ -254,4 +264,5 @@ Adding a permission means adding a key there; Apple may ask why during review.
 | `build/electron-builder.config.cjs` → `mas` | App Store build settings: entitlements, provisioning profile, no hardened runtime, no notarization, build number from `WS_MAS_BUILD_NUMBER`. The bundle ID and product name are shared with the other builds (top of the file); the Info.plist keys come from the `mac` section. |
 | `build/entitlements.mas.plist`, `build/entitlements.mas.inherit.plist` | Sandbox permissions (see above). |
 | `build/embedded.provisionprofile` | Your local copy of the profile. Not in git. |
+| `build/mas-cleanup.cjs` | Runs after the `.pkg` is written: unregisters and deletes the leftover signed `.app` copies. |
 | `.gitignore` | Ignores `*.provisionprofile`. |
