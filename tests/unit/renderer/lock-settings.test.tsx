@@ -47,7 +47,7 @@ it('keeps absent preferences off and disables automatic triggers without an orga
   expect(screen.getByRole('switch', { name: 'Enable Lock Screen' }).getAttribute('aria-checked')).toBe('false');
   expect(screen.getByRole('combobox', { name: 'App lock' })).toHaveProperty('disabled', true);
   for (const name of ['Lock after computer sleep', 'Lock after operating-system lock']) expect(screen.getByRole('switch', { name })).toHaveProperty('disabled', true);
-  expect(screen.queryByText(/Set by your organization/)).toBeNull();
+  expect(screen.queryByText(/Managed by your organization/)).toBeNull();
   fireEvent.click(screen.getByRole('switch', { name: 'Enable Lock Screen' }));
   expect(bridge.call).toHaveBeenCalledWith('settings:set', { appLockEnabled: true });
 });

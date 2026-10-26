@@ -1449,6 +1449,55 @@ about it beyond "Saved on this computer" in Settings › Sidebar.
 those (`PUT …/pin`, in their order), once; the setting stays in the settings file but the sidebar no longer reads it.
 The server's own one-time import of the web's `shell.sidebar` pins runs first, so where the web had pins, those stand.
 
+## Desktop settings: features, apps and the startup screen
+
+Which features and apps a person has on the desktop, and which screen it opens on, with the organisation's policy
+over them (WorkSuite Desktop – Feature Enable/Disable Settings; server branch `feature/desktop-settings`). One
+document per person; every call is authenticated. The desktop's side is `shared/desktop-settings.ts` (the keys and
+resolution) and `electron/services/desktop-settings.ts` (the calls, the copy kept here).
+
+| Call | Body | What it answers |
+| --- | --- | --- |
+| `GET /api/desktop/settings` | | The document. `ETag` on its `version`; the desktop sends `If-None-Match` and takes `304` as "unchanged". |
+| `PUT /api/desktop/settings/preferences` | `{values: {<key>: value \| null}, device_id?}` | The document after the change. `409 {error: "policy_locked", keys}` when a key is managed. |
+
+```json
+{ "status": "success", "message": "", "data": {
+  "mode": "enterprise", "org_id": 7, "version": 12,
+  "catalogue": [ { "key": "modules.crm.enabled", "type": "boolean", "default": true, "label": "CRM", "group": "modules" } ],
+  "policy": { "modules.crm.enabled": { "value": false, "enforcement": "managed" },
+              "startup.screen": { "value": "app:mail", "enforcement": "default" } },
+  "preferences": { "features.command_palette": false },
+  "effective": { "modules.crm.enabled": { "value": false, "source": "policy", "locked": true } },
+  "updated_at": "2026-10-26T09:00:00+00:00" } }
+```
+
+Keys: `features.<id>`, `modules.<appId>.enabled` (the id is `AppDefinition.id`, as the sidebar's), `startup.screen`
+(`home` | `last` | `app:<appId>` | `route:<path>`, a path inside the app) and `prefs.<name>` (a `Preferences` field).
+The realtime event `desktop.settings.changed {version}` makes the desktop read the document again when the version is
+newer than its copy.
+
+What the desktop relies on:
+
+- **Who decides.** Enterprise: a `managed` policy entry, locked; else the person's preference; else a `default`
+  policy entry (only a default — the person may change it); else the catalogue's default. Personal: no policy at all.
+  The desktop resolves this itself from `catalogue`, `policy` and `preferences` (so a change made offline takes effect
+  at once) and does not need `effective`; it should agree with it. A value that does not fit its key's `type` and
+  `options` is passed over, never applied.
+- **Reset to default** is a `null` value in `values`: the preference is removed.
+- **What is enforced here.** An app with `modules.<id>.enabled` false is treated exactly as an app the person is not
+  given (launcher, sidebar, links, deep links, shortcuts, the command palette, the tray, notifications). Home,
+  Settings and the other shell screens cannot be turned off. The features the desktop knows are listed in
+  `DESKTOP_FEATURES`; others the server adds are shown and synced. `prefs.*` are applied for the scalar preferences in
+  `SYNCED_PREFS`; the colour profile keeps its own sync (`/api/prefs/desktop.appearance`).
+- **First sync.** The first time a person's document is read on a computer, the preferences that computer already
+  had (those that differ from their defaults), and anything chosen there before the server had desktop settings, are
+  sent — except keys the policy manages and keys the server already has a preference for.
+
+**Without it** (`404`, an older server), personal mode on that computer alone: nothing more is sent. Offline, the last
+copy is used and Settings says "as of" when; changes wait and are sent when the server answers again (a key that has
+become managed meanwhile is dropped).
+
 ## Not provided yet
 
 - `monitoring_policy` is always `null`, and every `feature_flags` entry is

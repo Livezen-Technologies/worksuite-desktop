@@ -15,7 +15,7 @@ import { billingExportPath } from '@shared/billing';
 import { purchaseExportPath } from '@shared/purchase';
 import { projectReportPath, projectsReportPath } from '@shared/projects';
 import { safeFileName } from '@shared/filename';
-import type { AppInfo, BusyReport, DetachedWindow, SyncPolicy } from '@shared/types';
+import type { AppInfo, BusyReport, DetachedWindow, Preferences, SyncPolicy } from '@shared/types';
 import { assertRoute, assertWebPath } from './access';
 import { windowRoute } from '../windows/manager';
 import { attachmentRisk } from '@shared/attachments';
@@ -1408,6 +1408,13 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
 
   // ── settings ───────────────────────────────────────────────────────────
   router.handle('settings:get', () => ({ preferences: ctx.settings.effective(), locks: ctx.settings.locks() }));
+  // Desktop settings (shared/desktop-settings.ts): what takes effect, the person's choices (a managed key is refused).
+  router.handle('desktopSettings:get', () => ctx.desktopSettings.view());
+  router.handle('desktopSettings:set', (input) => ctx.desktopSettings.set(input.values));
+  router.handle('desktopSettings:refresh', async () => {
+    await ctx.desktopSettings.refresh();
+    return ctx.desktopSettings.view();
+  });
   router.handle('settings:set', async (input) => {
     const { verificationPassword, ...choices } = input;
     if (choices.appLockEnabled === false && ctx.settings.effective().appLockEnabled === true) {
@@ -1416,6 +1423,8 @@ export function registerHandlers(router: IpcRouter, ctx: AppContext): void {
     const locked = new Set(ctx.settings.locks().map((l) => l.key));
     const patch = Object.fromEntries(Object.entries(choices).filter(([k]) => k === 'appLockMinutes' || !locked.has(k as never)));
     const before = ctx.settings.raw();
+    // The synced ones wait to go up to the person's desktop settings first, so what takes effect is the new choice.
+    ctx.desktopSettings.notePreferences(patch as Partial<Preferences>);
     const prefs = ctx.settings.update(patch);
     if (before.startWithOs !== prefs.startWithOs || before.startMinimized !== prefs.startMinimized) applyAutostart(prefs.startWithOs, prefs.startMinimized);
     if (before.hardwareAcceleration !== prefs.hardwareAcceleration) writeBootConfig(paths().bootConfig, { hardwareAcceleration: prefs.hardwareAcceleration });

@@ -4,6 +4,20 @@ This desktop module's own versions, newest first (docs/MODULES.md). MAJOR: anoth
 a saved offline shape has to change with it. MINOR: something new. PATCH: a fix. The app's release notes stay in
 the root CHANGELOG.md.
 
+## 1.44.0 — 2026-10-26
+
+**Added**
+
+- Desktop settings — features, apps and the startup screen, with the organisation's policy over them (shared/desktop-settings.ts, electron/services/desktop-settings.ts). Enterprise: a managed policy entry decides and is locked, a default one is only a default; personal: everything on and the person's to change. Synced across the person's computers through api/desktop/settings, kept here with when it was last read for offline; a server without it (404) leaves this computer's choices alone.
+- Settings › Features & apps — features and every app on or off, what the organisation manages locked with its badge, its defaults marked, Reset to default, and whether it is synced or offline as of when.
+- Settings › Desktop & startup — Open at startup (Home, where I left off, an app or a page), applied when WorkSuite starts; the start and close switches moved here from Preferences.
+- An app turned off is gone from the launcher, the sidebar, links, deep links, shortcuts, the command palette and the tray; a feature turned off (the palette, search, the launcher, notifications, the tray, start with the computer, tab restore, Quick Ask) is off everywhere.
+- The first sync uploads this computer's own preferences where the organisation does not manage them and no other computer chose.
+
+**Changed**
+
+- Every settings screen in one look (kit.tsx): a left section list with search across settings, grouped cards, the same row everywhere (label, description, control), radio cards, 'Managed by your organization' lock badges with why as the tooltip, Reset to default; light and dark from the same tokens.
+
 ## 1.43.0 — 2026-10-24
 
 **Added**

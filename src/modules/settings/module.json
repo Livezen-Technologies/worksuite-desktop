@@ -1,6 +1,6 @@
 {
     "module": "settings",
-    "version": "1.43.0",
+    "version": "1.44.0",
     "paths": [
         "electron/services/settings.ts",
         "shared/localization.ts",
@@ -12,6 +12,10 @@
         "src/app/onboarding/Onboarding.tsx",
         "build-tools/localization.mjs",
         "src/app/overlays/SearchOverlay.tsx",
-        "shared/remote-control/stop-chord.ts"
+        "shared/remote-control/stop-chord.ts",
+        "electron/services/desktop-settings.ts",
+        "shared/desktop-settings.ts",
+        "src/core/desktop-settings.ts",
+        "src/core/startup.ts"
     ]
 }

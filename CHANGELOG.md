@@ -13,6 +13,28 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+### Added
+
+- **Features & apps, and the startup screen.** Settings has a new **Features & apps** section: the command palette,
+  search, the app launcher, desktop notifications, the tray, starting with the computer, tab restore and AI Quick Ask
+  can each be turned off, and so can every app. An app you turn off is gone from the launcher, the sidebar, search,
+  links, shortcuts, the command palette and the tray until you turn it on again; its data stays on the server.
+  **Desktop & startup** says what WorkSuite opens on — Home, where you left off, an app or a page — and has the start
+  and close switches that were under Preferences. On a personal account everything is on until you turn it off. In an
+  organisation, IT can set any of this: what it manages is shown with a **Managed by your organization** lock (hover
+  it for why) and cannot be changed; what it only suggests is marked as your organization's default and is yours to
+  change. Your choices follow you to your other computers; offline, WorkSuite uses the settings as of the last sync
+  and says so, and sends your changes when it is back. The first time, the preferences you already had on this
+  computer go up with them — unless your organization manages them or another computer already chose. A WorkSuite
+  server without desktop settings keeps all of this on this computer. (desktop module settings 1.44.0)
+
+### Changed
+
+- **Settings, redone.** Every settings screen now looks the same: the sections on the left with a search that finds a
+  setting in any of them (and marks it when you open the section), settings grouped in cards, each row with its name,
+  what it does and its control on the right, switches, menus and cards to pick from, and Reset to default beside a
+  choice you changed. Light and dark alike. (desktop module settings 1.44.0)
+
 ### Fixed
 
 - Sign out of an account: the Sign out button was drawn white on white, so the dialog seemed to offer only Cancel. It is now the dialog's primary button, next to Cancel.

@@ -75,6 +75,7 @@ import { salesContract, type SalesOutputs } from '../sales';
 import { labelContract, type LabelOutputs } from '../label';
 import { chequeContract, type ChequeOutputs } from '../cheque';
 import { sinhalaContract, type SinhalaOutputs } from '../sinhala';
+import type { DesktopSettingsView } from '../desktop-settings';
 import { phoneContract, type PhoneOutputs } from '../phone';
 import { accountsContract, type AccountsOutputs, type ServiceHealthState } from '../accounts';
 import { pdfEditOpSchema, pdfPrintSchema, pdfSearchOptionsSchema, pdfSourceSchema, SEARCH_MAX_QUERY, type PdfAnnotView, type PdfAttachmentView, type PdfBitmap, type PdfDiagnosticCheck, type PdfDriveDetails, type PdfFailureReport, type PdfLinkView, type PdfLocalPick, type PdfOutlineNode, type PdfRect, type PdfSessionView } from '../pdf';
@@ -1556,6 +1557,17 @@ export const contract = {
 
   'settings:get': ch(none, { whileLocked: true }),
   'settings:set': ch(preferencesPatchSchema.extend({ verificationPassword: z.string().min(1).max(512).optional() }), { sensitive: true, rate: 10 }),
+  // Desktop settings (shared/desktop-settings.ts): what takes effect, and the person's choices — a managed key is refused.
+  'desktopSettings:get': ch(none, { whileLocked: true }),
+  'desktopSettings:set': ch(
+    z.object({
+      values: z
+        .record(z.string().regex(/^(features\.[a-z0-9_]{1,48}|modules\.[a-z0-9_-]{1,40}\.enabled|startup\.screen|prefs\.[A-Za-z0-9_]{1,48})$/), z.union([z.boolean(), z.number().finite(), z.string().max(2048), z.null()]))
+        .refine((r) => Object.keys(r).length >= 1 && Object.keys(r).length <= 200),
+    }),
+    { sensitive: true, rate: 20 },
+  ),
+  'desktopSettings:refresh': ch(none, { rate: 5 }),
   // The organization's app launcher defaults (#201): two keys of its desktop policy, for whoever may set that policy.
   'settings:launcherDefaults': ch(
     z.object({ organizationId: z.string().regex(/^\d{1,12}$/), pinned: z.array(launcherAppId).max(8), order: z.array(launcherAppId).max(300) }),
@@ -2135,6 +2147,9 @@ export interface Outputs extends PosOutputs, PhoneOutputs, PmsLocksOutputs, Cont
   'settings:get': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:set': { preferences: Preferences; locks: PreferenceLock[] };
   'settings:launcherDefaults': { pinned: string[]; order: string[] };
+  'desktopSettings:get': DesktopSettingsView;
+  'desktopSettings:set': DesktopSettingsView;
+  'desktopSettings:refresh': DesktopSettingsView;
   'settings:appearanceDefaults': { accent: string | null; tint: 'neutral' | 'accent' | 'custom'; tintColor: string | null; locked: boolean };
   'status:snapshot': StatusSnapshot;
   'diagnostics:run': DiagnosticCheck[];

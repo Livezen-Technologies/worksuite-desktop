@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
 import type { AiDisplay, ChatDrawerMode } from '@shared/types';
+import { featureOn } from '@shared/desktop-settings';
 import { app, type AppState } from './app-state';
 import { createStore, useStore } from './store';
 
@@ -40,7 +41,12 @@ export function putAssistantAway(): void {
   }
 }
 
+/** Overlays that are a feature of their own (desktop settings `features.<id>`): turned off, they do not open. */
+const OVERLAY_FEATURES: Partial<Record<Exclude<Overlay, null>, string>> = { palette: 'command_palette', search: 'global_search', launcher: 'app_launcher' };
+
 export function openOverlay(o: Overlay, seed = ''): void {
+  const feature = o ? OVERLAY_FEATURES[o] : undefined;
+  if (feature && !featureOn(app.get().desktopSettings?.effective, feature)) return;
   if (o !== null && ui.get().overlay !== o) putAwayAllBut('overlay');
   ui.set((s) => ({ overlay: s.overlay === o ? null : o, searchSeed: seed }));
 }

@@ -131,7 +131,9 @@ import { RealtimeService } from '../services/realtime';
 import { ConnectionMonitor, tcpHandshake, timeFetch } from '../services/connection-quality';
 import { ApiTimings } from '@shared/connection';
 import { SecureStore } from '../services/secure-store';
-import { SettingsService } from '../services/settings';
+import { SettingsService, defaultPreferences } from '../services/settings';
+import { DesktopSettingsService } from '../services/desktop-settings';
+import { preferenceOverlay, withoutDisabledIds } from '@shared/desktop-settings';
 import { DriveSync } from '../services/sync/engine';
 import { ServiceSupervisor } from '../services/supervisor';
 import { MeetRecorder } from '../services/meet-recorder';
@@ -536,6 +538,24 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   // between the person's devices.
   installAppearance({ settings, windows, ipc: ipcMain, nativeTheme });
   const appearanceSync = new AppearanceSync({ http, settings, online: () => sessionCtl.isReady() });
+  // Desktop settings (shared/desktop-settings.ts): features, apps and the startup screen, with the organisation's
+  // policy over them, synced for the person and kept here "as of" the last read for offline. Kept per person in the
+  // account's database.
+  const desktopSettingsScope = (): string | null => {
+    const s = sessionCtl?.get();
+    return s && (s.stage === 'ready' || s.stage === 'expired') && s.user?.id ? `${registry.activeId() ?? s.server?.origin ?? ''}:${s.user.id}` : null;
+  };
+  const desktopSettings = new DesktopSettingsService({
+    http,
+    db,
+    online: () => !!sessionCtl?.isReady(),
+    scope: desktopSettingsScope,
+    deviceId: () => device.current()?.id ?? null,
+    prefs: () => settings.raw(),
+    defaults: () => defaultPreferences(),
+    resetPrefs: (patch) => void settings.update(patch),
+  });
+  settings.setDesktopOverlay(preferenceOverlay(desktopSettings.effective()));
   // A call rings only for whoever may open Chat (calls are part of it).
   const calls = new CallService(
     windows,
@@ -1965,6 +1985,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     }
     // `access.changed` (the person's apps changed) and `profile.updated`: fetch the bootstrap again.
     accessWatch.onEvent(e);
+    // `desktop.settings.changed` {version}: the policy or the person's choices changed elsewhere.
+    desktopSettings.handleRealtime(e as { type?: string; version?: unknown });
     // A desktop release was published: ask the Update Center now rather than at the next 4-hourly check.
     if ((e as { type?: string }).type === 'desktop.release.published') void updater.check();
   };
@@ -1972,6 +1994,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     broadcast('realtime:resync');
     // Events may have been missed while the socket was down, `access.changed` among them.
     if (sessionCtl.isReady()) void accessWatch.refresh('resync');
+    if (sessionCtl.isReady()) void desktopSettings.refresh();
     // Announcing what the push missed, chat included: not just taking it as already seen (#114).
     void notifications.refreshList(true);
     void notifications.catchUpChat();
@@ -2539,7 +2562,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
     allowed: () => {
       const b = sessionCtl.isReady() && !lock.isLocked() ? sessionCtl.current() : null;
       const may = !!b && (b.permissions.includes('*') || b.permissions.includes('ai.write') || b.permissions.includes('ai.assistant.use'));
-      return may && ai.rules().quickAsk;
+      return may && ai.rules().quickAsk && desktopSettings.feature('ai_quick_ask');
     },
     register: (acc, fn) => globalShortcut.register(acc, fn),
     unregister: (acc) => globalShortcut.unregister(acc),
@@ -2842,7 +2865,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
    * (Every window gets it as `session:changed`; the Shell closes those tabs.)
    */
   const applyAccess = (b: Bootstrap | null): void => {
-    const visible = visibleAppIds(b);
+    const visible = withoutDisabledIds(visibleAppIds(b), desktopSettings.disabledModules());
     tray.update({ apps: [...visible] });
     rebuildMenu(visible);
     // Marketing given or taken away (or another organisation): its counts, reminders and key follow.
@@ -3049,6 +3072,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
         officeFiles.forget();
         // The app-lock PIN goes with the rest of what this computer kept for the person.
         lockPin.clear(uid);
+        // And their desktop settings' copy; waiting choices go only when unsynced work goes too.
+        if (!keepUnsynced) desktopSettings.forget(`${registry.activeId() ?? auth.getServer()?.origin ?? ''}:${uid}`);
         // PDF Studio's working copies and thumbnails (PDF-OFF-005).
         void pdfStudio.wipe();
       }
@@ -3092,6 +3117,8 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       lockPin.setServerScope(s.server?.origin ?? null);
       // Per person and account (`<account>:<uid>`, §1.5 step 4); the server's origin before any account exists.
       settings.setUserLanguageScope(registry.activeId() ?? s.server?.origin ?? null, s.user?.id ?? null);
+      // Whose desktop settings apply: this person's copy, at once (before the server is asked).
+      desktopSettings.load();
       accountFollowsSession(s);
       broadcast('auth:changed', s);
       emitStatus();
@@ -3105,6 +3132,9 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
       desktopAccounts.update(desktopAccountOf(sessionCtl.isReady()));
       if (b) settings.setPolicy(b.policy);
       if (b) void appearanceSync.pull();
+      // The person's desktop settings and their organisation's policy, with every bootstrap (sign-in, a switch, the
+      // periodic check); offline the copy kept here stands.
+      if (b) void desktopSettings.refresh();
       // Office's Local AI policy follows the session: refreshed with the bootstrap, cleared when nobody is signed in.
       void (b ? officeAiPolicy.sync() : officeAiPolicy.clear()).catch(() => undefined);
       // Policy or trust may have turned sync on or off.
@@ -3135,6 +3165,24 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
   });
 
   auth.onDeviceRevoked = (message) => void sessionCtl.wipe(message);
+
+  // Apps turned off leave what the person may open; a change is enforced at once — the tray, the menu, windows and
+  // every window's navigation (`desktopSettings:changed`) — and preferences a feature holds off follow.
+  sessionCtl.disabledApps = () => desktopSettings.disabledModules();
+  let lastOff = [...desktopSettings.disabledModules()].sort().join(',');
+  desktopSettings.onChange((view) => {
+    const before = settings.effective();
+    settings.setDesktopOverlay(preferenceOverlay(view.effective));
+    const after = settings.effective();
+    if (before.startWithOs !== after.startWithOs || before.startMinimized !== after.startMinimized) applyAutostart(after.startWithOs, after.startMinimized);
+    broadcast('desktopSettings:changed', view);
+    const off = [...desktopSettings.disabledModules()].sort().join(',');
+    if (off !== lastOff) {
+      lastOff = off;
+      applyAccess(sessionCtl.isReady() ? sessionCtl.current() : null);
+    }
+    quickAsk.sync();
+  });
 
   // Torn-off windows (FR-NAV-05/07) are remembered per person, encrypted like the tabs.
   windows.onRecordsChanged = (list) => {
@@ -3420,6 +3468,7 @@ function start(boot: ReturnType<typeof evaluateBoot>, pendingLinks: string[], se
 
   const ctx: AppContext = {
     boot,
+    desktopSettings,
     osMode: OS_MODE ? { signIn: () => openOsSession() } : undefined,
     db,
     vault: getVault,

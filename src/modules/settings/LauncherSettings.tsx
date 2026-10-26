@@ -73,7 +73,7 @@ const DRAG_TYPE = 'application/x-worksuite-app';
 
 function Card({ title, aside, children }: { title: string; aside?: ReactNode; children: ReactNode }) {
   return (
-    <section className="flex min-w-0 flex-col gap-3 rounded-[16px] border border-line bg-surface p-[18px]" aria-label={title}>
+    <section className="flex min-w-0 flex-col gap-3 rounded-[14px] border border-line bg-surface p-[18px] shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/0.04)]" aria-label={title}>
       <div className="flex items-center justify-between gap-3">
         <h3 className="text-[16px] font-bold text-ink">{title}</h3>
         {aside ? <span className="text-[12px] text-ink-3">{aside}</span> : null}
@@ -130,7 +130,7 @@ export function LauncherSettings() {
     <div className="flex flex-col gap-4">
       <div className="flex flex-wrap items-end justify-between gap-3">
         <div className="flex flex-col gap-1">
-          <h2 className="text-[22px] font-bold text-ink">App launcher</h2>
+          <h2 className="text-[20px] leading-tight font-bold text-ink">App launcher</h2>
           <p className="text-[13.5px] text-ink-3">Choose which apps you see, their order and how the launcher looks. Synced to all your devices.</p>
         </div>
         <div className="flex gap-2">
@@ -172,7 +172,7 @@ export function LauncherSettings() {
         <ShowHide prefs={prefs} all={ordered} shown={shownCount} set={set} />
       </div>
 
-      <section aria-label="Order and behaviour" className="grid gap-4 rounded-[16px] border border-line bg-surface p-[18px] [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
+      <section aria-label="Order and behaviour" className="grid gap-4 rounded-[14px] border border-line bg-surface p-[18px] shadow-[0_1px_2px_rgb(var(--ws-shadow-rgb)/0.04)] [grid-template-columns:repeat(auto-fit,minmax(220px,1fr))]">
         <Field label="Group apps by">
           <Select<LauncherGroupBy>
             label="Group apps by"

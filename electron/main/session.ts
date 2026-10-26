@@ -1,5 +1,6 @@
 import { app } from 'electron';
 import { visibleAppIds } from '@shared/access';
+import { withoutDisabledIds } from '@shared/desktop-settings';
 import type { AuthState, Bootstrap, DeviceClassification, DeviceTrust, ServerApi, ServerInfo } from '@shared/types';
 import { DesktopError, isDesktopError, UNREACHABLE_MESSAGE } from './errors';
 import { logger } from './log';
@@ -163,7 +164,13 @@ export class SessionController {
     return this.boot;
   }
 
-  private visible: { boot: Bootstrap | null; ids: Set<string> } = { boot: null, ids: new Set() };
+  private visible: { boot: Bootstrap | null; off: string; ids: Set<string> } = { boot: null, off: '', ids: new Set() };
+
+  /**
+   * The apps turned off in desktop settings (`modules.<id>.enabled`, by the organisation or the person): they leave
+   * `visibleApps`, so every way in — the tray, the menu, links, windows, notifications — treats them as not given.
+   */
+  disabledApps: () => ReadonlySet<string> = () => new Set();
 
   /**
    * The catalogue ids of the apps the person may open (shared/access.ts):
@@ -172,7 +179,9 @@ export class SessionController {
    * None without a bootstrap.
    */
   visibleApps(): Set<string> {
-    if (this.visible.boot !== this.boot) this.visible = { boot: this.boot, ids: visibleAppIds(this.boot) };
+    const offSet = this.disabledApps();
+    const off = [...offSet].sort().join(',');
+    if (this.visible.boot !== this.boot || this.visible.off !== off) this.visible = { boot: this.boot, off, ids: withoutDisabledIds(visibleAppIds(this.boot), offSet) };
     return this.visible.ids;
   }
 

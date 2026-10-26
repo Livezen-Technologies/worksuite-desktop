@@ -3,6 +3,7 @@ import type { InputOf, LockState } from '@shared/ipc/contract';
 import type { AppInfo, AuthState, Bootstrap, Preferences, PreferenceLock, StatusSnapshot, SyncStatus, Transfer, UpdateStatus } from '@shared/types';
 import { grantOf } from '@shared/access';
 import { visibleApps, type AppDefinition } from '@shared/apps';
+import { disabledModules, withoutDisabled, type DesktopSettingsView } from '@shared/desktop-settings';
 import type { LocalStatus } from '@shared/local-workspace';
 import type { AccountKind, AccountsState, AddingAccount, UnknownLink } from '@shared/accounts';
 import type { BrowserSignIn, CloudStatus } from '@shared/cloud';
@@ -26,6 +27,11 @@ export interface AppState {
   status: StatusSnapshot | null;
   prefs: Preferences | null;
   locks: PreferenceLock[];
+  /**
+   * Desktop settings (shared/desktop-settings.ts): features, apps and the startup screen as they take effect, with the
+   * organisation's policy. Null until the desktop answers (a browser preview never does).
+   */
+  desktopSettings: DesktopSettingsView | null;
   lock: LockState | null;
   update: UpdateStatus | null;
   /** A manual check suppresses the automatic offer until its result is ready. */
@@ -65,6 +71,7 @@ export const app = createStore<AppState>({
   status: null,
   prefs: null,
   locks: [],
+  desktopSettings: null,
   lock: null,
   update: null,
   manualUpdateCheck: null,
@@ -183,10 +190,19 @@ function refreshSinhala(): void {
   );
 }
 
+/**
+ * The apps a bootstrap gives, less the ones turned off in desktop settings (by the organisation or the person): those
+ * are not there, exactly like apps not given — the launcher, the sidebar, links, shortcuts, the palette.
+ */
+export function appsFor(b: Bootstrap, settings: DesktopSettingsView | null, sinhala = false): AppDefinition[] {
+  const off = disabledModules(settings?.effective);
+  return withoutDisabled(visibleApps(grantOf(b)).filter((a) => a.id !== SINHALA_APP || sinhala), off);
+}
+
 function applyBootstrap(b: Bootstrap | null): void {
   // Guest mode's apps stand until an account signs in.
   if (!b && isGuest()) return;
-  const apps = b ? visibleApps(grantOf(b)).filter((a) => a.id !== SINHALA_APP || sinhalaOffered) : [];
+  const apps = b ? appsFor(b, app.get().desktopSettings, sinhalaOffered) : [];
   if (b) setRegional({ timezone: b.user.timezone, locale: b.user.locale, timeFormat: b.user.timeFormat });
   const current = app.get().organizationId;
   const orgId = b && current && b.organizations.some((o) => o.id === current) ? current : null;
@@ -206,7 +222,9 @@ export async function initAppState(): Promise<void> {
     call('updates:status'),
     call('security:state'),
   ]);
-  app.set({ info, auth, prefs: settings.preferences, locks: settings.locks, status, update, lock });
+  // Desktop settings before the first bootstrap, so the apps turned off are never shown and the startup screen is known.
+  const desktopSettings = await call('desktopSettings:get').catch(() => null);
+  app.set({ info, auth, prefs: settings.preferences, locks: settings.locks, status, update, lock, desktopSettings });
   applyTheme(settings.preferences);
   setLanguage(settings.preferences.language);
   on('sinhala:changed', refreshSinhala);
@@ -274,6 +292,12 @@ export async function initAppState(): Promise<void> {
     sync();
     app.subscribe(sync);
   }
+  on<DesktopSettingsView>('desktopSettings:changed', (v) => {
+    if (!v || typeof v !== 'object') return;
+    app.set({ desktopSettings: v });
+    // An app turned on or off: the one list of what the person may open follows (the Shell closes its tabs).
+    if (!isGuest()) applyBootstrap(app.get().bootstrap);
+  });
   on<Preferences>('settings:changed', (p) => {
     app.set({ prefs: p });
     applyTheme(p);

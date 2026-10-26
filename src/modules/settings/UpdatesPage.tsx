@@ -303,7 +303,7 @@ export function UpdatesPage({ onDiagnostics }: { onDiagnostics?: () => void }) {
   return (
     <div className="space-y-4">
       <div className="flex items-center gap-3">
-        <h2 className="text-[22px] font-bold text-ink">Updates</h2>
+        <h2 className="text-[20px] leading-tight font-bold text-ink">Updates</h2>
         <Chip tone={state.tone}>{state.word.toUpperCase()}</Chip>
         <div className="flex-1" />
         <Button loading={checking || u?.state === 'CHECKING'} disabled={u?.state === 'DOWNLOADING' || u?.state === 'INSTALLING'} onClick={check}>
