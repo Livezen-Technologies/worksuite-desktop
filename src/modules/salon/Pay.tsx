@@ -31,6 +31,7 @@ import {
 } from './money';
 import { Failed, Figure, firstName, Keypad, MoneyLine, Note, Page, Panel, servicesOf, shortName, stylistsOf, TierTag, TouchButton, useDesk, usePrintSettings } from './parts';
 import { SendReceipt } from './SendReceipt';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Taking payment at the counter (D06, D07, D14, CHK-01…06, PAY-01…09).
@@ -878,12 +879,12 @@ export function Paid() {
         ) : null}
 
         {paid ? (
-          <div className="grid grid-cols-2 gap-2.5 lg:grid-cols-4">
-            <Figure label="Drawer" value={cashIn > 0 ? `+ ${amount(cashIn)}` : '—'} sub={cashIn > 0 ? `cash in · change ${amount(change).replace(/\.00$/, '')}` : 'no cash taken'} />
-            <Figure label="Store credit" value={paid.store_credit !== undefined ? amount(paid.store_credit, currency) : '—'} sub={paid.credit_kept ? `${amount(paid.credit_kept)} kept, as asked` : 'unchanged'} />
-            <Figure label="Points" value={paid.points ? paid.points.balance.toLocaleString() : '—'} sub={paid.points ? `+${paid.points.earned} earned${r?.points ? ` · −${r.points} used` : ''}` : 'no loyalty'} />
-            <Figure label="Advance" value={visit.money.advance > 0 ? 'Applied' : 'None'} sub={visit.money.advance > 0 ? `${amount(visit.money.advance, currency).replace(/\.00$/, '')} · once only` : 'nothing held'} />
-          </div>
+          <StatGrid min={160}>
+            <Figure icon="banknote" tone="blue" label="Drawer" value={cashIn > 0 ? `+ ${amount(cashIn)}` : '—'} sub={cashIn > 0 ? `cash in · change ${amount(change).replace(/\.00$/, '')}` : 'no cash taken'} />
+            <Figure icon="wallet" tone="violet" label="Store credit" value={paid.store_credit !== undefined ? amount(paid.store_credit, currency) : '—'} sub={paid.credit_kept ? `${amount(paid.credit_kept)} kept, as asked` : 'unchanged'} />
+            <Figure icon="star" tone="amber" label="Points" value={paid.points ? paid.points.balance.toLocaleString() : '—'} sub={paid.points ? `+${paid.points.earned} earned${r?.points ? ` · −${r.points} used` : ''}` : 'no loyalty'} />
+            <Figure icon="hand-coins" tone="cyan" label="Advance" value={visit.money.advance > 0 ? 'Applied' : 'None'} sub={visit.money.advance > 0 ? `${amount(visit.money.advance, currency).replace(/\.00$/, '')} · once only` : 'nothing held'} />
+          </StatGrid>
         ) : null}
 
         <ul className="flex flex-col gap-2.5">

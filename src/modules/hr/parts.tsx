@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { Icon } from '../../components/Icon';
 import { cx } from '../../components/ui';
 import { topBarPaddingRight } from '../../core/window-chrome';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /**
  * The HR designs' shared pieces: the status chip (one colour per meaning,
@@ -37,18 +38,9 @@ export function humanise(v: string | null | undefined): string {
   return s.charAt(0).toUpperCase() + s.slice(1);
 }
 
-export function Kpi({ label, value, sub, tone, onClick, className }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'amber' | 'red' | 'green'; onClick?: () => void; className?: string }) {
-  const Tag = onClick ? 'button' : 'div';
-  return (
-    <Tag
-      {...(onClick ? { type: 'button' as const, onClick } : {})}
-      className={cx('flex min-w-0 flex-col gap-0.5 rounded-[12px] border border-line bg-surface px-3.5 py-3 text-left', onClick && 'hover:border-primary/40', className)}
-    >
-      <span className="text-[12px] font-semibold text-ink-3">{label}</span>
-      <b className={cx('text-[21px] leading-tight tabular-nums', tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : tone === 'red' ? 'text-danger' : tone === 'green' ? 'text-success' : 'text-ink')}>{value}</b>
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </Tag>
-  );
+/** A figure tile, drawn as the shared StatCard. `tone` colours its icon chip. */
+export function Kpi({ label, value, sub, tone, icon, onClick, className }: { label: string; value: ReactNode; sub?: ReactNode; tone?: StatTone; icon?: string; onClick?: () => void; className?: string }) {
+  return <StatCard label={label} value={value} sub={sub} tone={tone} icon={icon} onClick={onClick} className={className} />;
 }
 
 export function Panel({ title, sub, action, children, className, bodyClassName }: { title: ReactNode; sub?: ReactNode; action?: ReactNode; children: ReactNode; className?: string; bodyClassName?: string }) {

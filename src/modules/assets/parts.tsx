@@ -4,6 +4,7 @@ import { useStore } from '../../core/store';
 import { cx } from '../../components/ui';
 import { money } from '../finance/api';
 import { statusLabel } from './api';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /**
  * Assets' shared bits: whether a screen may act (offline the module reads its last copy and every act is off — the
@@ -146,14 +147,9 @@ export function Field({ label, children, className }: { label: string; children:
 
 export const input = 'h-8 w-full rounded-[7px] border border-line bg-surface px-2.5 text-[12.5px] font-normal text-ink outline-none focus:border-primary';
 
-export function Kpi({ label, value, sub, tone }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'warn' }) {
-  return (
-    <div className="flex flex-col gap-0.5 rounded-[10px] border border-line bg-surface px-3.5 py-3">
-      <span className="text-[11.5px] text-ink-3">{label}</span>
-      <span className={cx('text-[19px] font-extrabold tabular-nums', tone === 'warn' ? 'text-[#B45309]' : 'text-ink')}>{value}</span>
-      {sub ? <span className="text-[11px] text-ink-3">{sub}</span> : null}
-    </div>
-  );
+/** A figure tile, drawn as the shared StatCard. */
+export function Kpi({ label, value, sub, tone, icon }: { label: string; value: ReactNode; sub?: ReactNode; tone?: 'warn' | StatTone; icon?: string }) {
+  return <StatCard label={label} value={value} sub={sub} tone={tone === 'warn' ? 'amber' : tone} icon={icon} />;
 }
 
 /** "LKR 9.11M": a compact figure for a tile; the full one is a title away. */

@@ -32,6 +32,7 @@ import {
   type ProposalEvents,
 } from './proposalLogic';
 import { useCrmScope } from './scope';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Proposals (CRM SRS v1.3 §17, desk-proposals): the list for the company the
@@ -315,11 +316,11 @@ export function ProposalPreview({ id, onClose, onOpen, onOpenDeal, onOpenEstimat
         </div>
       ) : null}
 
-      <div className="grid grid-cols-3 gap-2">
-        <Figure label="Opens" value={`${e?.opens ?? 0}${viewers.length ? ` · ${viewers.length} ${viewers.length === 1 ? 'person' : 'people'}` : ''}`} sub={e?.last_opened_at ? `last ${relative(e.last_opened_at)}` : 'not opened yet'} />
-        <Figure label="Time reading" value={readingTime(e?.time_seconds)} />
-        <Figure label="Total" value={moneyFull(p.total, p.currency)} sub={p.valid_until ? `valid until ${dateLabel(p.valid_until)}` : undefined} />
-      </div>
+      <StatGrid min={140}>
+        <Figure icon="eye" tone="blue" label="Opens" value={`${e?.opens ?? 0}${viewers.length ? ` · ${viewers.length} ${viewers.length === 1 ? 'person' : 'people'}` : ''}`} sub={e?.last_opened_at ? `last ${relative(e.last_opened_at)}` : 'not opened yet'} />
+        <Figure icon="clock" tone="violet" label="Time reading" value={readingTime(e?.time_seconds)} />
+        <Figure icon="coins" tone="green" label="Total" value={moneyFull(p.total, p.currency)} sub={p.valid_until ? `valid until ${dateLabel(p.valid_until)}` : undefined} />
+      </StatGrid>
 
       <div className="grid gap-2.5 @min-[720px]:grid-cols-2">
         <Box title="Time per section">
@@ -393,14 +394,8 @@ function PreviewFrame({ children, onClose, label = 'Proposal' }: { children: Rea
   );
 }
 
-function Figure({ label, value, sub }: { label: string; value: ReactNode; sub?: ReactNode }) {
-  return (
-    <div data-figure={label} className="flex min-w-0 flex-col gap-0.5 rounded-[10px] border border-line px-3 py-2.5">
-      <span className="text-[12px] font-semibold text-ink-3">{label}</span>
-      <b className="truncate text-[17px] text-ink tabular-nums">{value}</b>
-      {sub ? <span className="truncate text-[11.5px] text-ink-3">{sub}</span> : null}
-    </div>
-  );
+function Figure({ label, value, sub, icon, tone }: { label: string; value: ReactNode; sub?: ReactNode; icon?: string; tone?: StatTone }) {
+  return <StatCard data-figure={label} size="sm" label={label} value={value} sub={sub} icon={icon} tone={tone} />;
 }
 
 function Box({ title, children }: { title: string; children: ReactNode }) {

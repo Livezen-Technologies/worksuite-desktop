@@ -6,6 +6,7 @@ import { call } from '../../core/bridge';
 import { toast } from '../../core/toasts';
 import { at, eGet, ePost, errorText, K, money, nice, type When } from './api';
 import { Header, Refusal, useEvent } from './parts';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Event 360 as the organiser reads it at the desk (EV-EVT-030, EV-RPT-001,
@@ -41,6 +42,20 @@ interface Override {
   requested_at: When | null;
   version: number;
 }
+
+const KPI_ICON: Record<string, [string, StatTone]> = {
+  registered: ['users', 'blue'],
+  confirmed: ['badge-check', 'green'],
+  pending: ['hourglass', 'amber'],
+  waitlisted: ['list-todo', 'violet'],
+  cancelled: ['ban', 'neutral'],
+  checked_in: ['ticket', 'green'],
+  inside: ['door', 'blue'],
+  checked_out: ['logout', 'neutral'],
+  sessions_today: ['calendar-clock', 'violet'],
+  speakers: ['mic', 'cyan'],
+  seats_left: ['concierge', 'cyan'],
+};
 
 const KPI_LABEL: Record<string, string> = {
   registered: 'Registered',
@@ -94,19 +109,14 @@ export default function Overview() {
         {o.error ? <ErrorNote error={o.error} onRetry={() => void o.refetch()} /> : null}
         {data ? (
           <>
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4 xl:grid-cols-6">
+            <StatGrid min={180}>
               {Object.entries(KPI_LABEL).map(([k, label]) => {
                 const kpi = data.kpis[k];
                 if (!kpi) return null;
-                return (
-                  <div key={k} className="flex flex-col rounded-[12px] border border-line bg-surface px-3 py-2.5" title={kpi.means}>
-                    <span className="text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">{label}</span>
-                    <span className="text-[24px] font-extrabold text-ink tabular-nums">{kpi.value === null && k === 'seats_left' ? 'No limit' : show(kpi.value)}</span>
-                    {kpi.means ? <span className="text-[11px] leading-tight text-ink-3">{kpi.means}</span> : null}
-                  </div>
-                );
+                const [icon, tone] = KPI_ICON[k] ?? ['chart', 'neutral'];
+                return <StatCard key={k} title={kpi.means} label={label} value={kpi.value === null && k === 'seats_left' ? 'No limit' : show(kpi.value)} sub={kpi.means || undefined} icon={icon} tone={tone} />;
               })}
-            </div>
+            </StatGrid>
             <Card title="Capacity">
               <p className="m-0 text-[13px] text-ink-2">
                 {data.capacity.limit === null ? `${data.capacity.taken} seats taken; the event has no limit.` : `${data.capacity.taken} of ${data.capacity.limit} seats taken.`}
@@ -142,16 +152,21 @@ export default function Overview() {
         ) : null}
         {d.data?.live ? (
           <Card title="Live event">
-            <div className="grid grid-cols-2 gap-2 md:grid-cols-4">
+            <StatGrid min={160}>
               {Object.entries(d.data.live)
                 .filter(([, v]) => !Array.isArray(v))
                 .map(([k, v]) => (
-                  <div key={k} className="flex flex-col rounded-[10px] border border-line px-3 py-2" title={typeof v === 'object' && v ? String((v as { means?: string }).means ?? '') : undefined}>
-                    <span className="text-[11px] font-bold tracking-[.4px] text-ink-3 uppercase">{nice(k)}</span>
-                    <span className="text-[20px] font-extrabold text-ink tabular-nums">{show(v)}</span>
-                  </div>
+                  <StatCard
+                    key={k}
+                    size="sm"
+                    title={typeof v === 'object' && v ? String((v as { means?: string }).means ?? '') : undefined}
+                    label={nice(k)}
+                    value={show(v)}
+                    icon={KPI_ICON[k]?.[0] ?? 'activity'}
+                    tone={KPI_ICON[k]?.[1] ?? 'blue'}
+                  />
                 ))}
-            </div>
+            </StatGrid>
           </Card>
         ) : null}
         {may('events.screen.override') ? <Emergency /> : null}

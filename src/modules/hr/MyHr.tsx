@@ -8,6 +8,7 @@ import { dayLong, dayShort, minutesLabel } from './dates';
 import { btn, btnPrimary, Cell, Empty, Facts, Grid, humanise, Kpi, Panel, row, StatusChip, THead } from './parts';
 import type { HrView } from './Rail';
 import { NewRequestSheet } from './Requests';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * My HR (HrProfile, HrProfilePersonal; `ProfileWorkspace self` on the web):
@@ -91,12 +92,12 @@ export default function MyHr({ onPick }: { onPick: (v: HrView) => void }) {
 
       {tab === 'overview' ? (
         <>
-          <div className="grid grid-cols-4 gap-2.5">
-            <Kpi label="This month" value={att ? `${att.days_present} / ${att.work_days}` : '—'} sub="days present" />
-            <Kpi label="Hours worked" value={att ? `${Math.round(att.net_seconds / 3600)} h` : '—'} sub={att ? `${Math.round(att.overtime_minutes / 60)} h overtime` : undefined} />
-            <Kpi label="Leave available" value={Math.round(available * 10) / 10} sub="days, all types" onClick={() => onPick('leave')} />
-            <Kpi label="Open requests" value={open.length} sub={open[0]?.kind_label ?? 'Nothing waiting'} onClick={() => onPick('requests')} />
-          </div>
+          <StatGrid min={180}>
+            <Kpi icon="calendar" tone="blue" label="This month" value={att ? `${att.days_present} / ${att.work_days}` : '—'} sub="days present" />
+            <Kpi icon="clock" tone="violet" label="Hours worked" value={att ? `${Math.round(att.net_seconds / 3600)} h` : '—'} sub={att ? `${Math.round(att.overtime_minutes / 60)} h overtime` : undefined} />
+            <Kpi icon="plane" tone="cyan" label="Leave available" value={Math.round(available * 10) / 10} sub="days, all types" onClick={() => onPick('leave')} />
+            <Kpi icon="inbox" tone="amber" label="Open requests" value={open.length} sub={open[0]?.kind_label ?? 'Nothing waiting'} onClick={() => onPick('requests')} />
+          </StatGrid>
           <div className="grid min-h-0 flex-1 grid-cols-[1fr_1.3fr_1fr] gap-3">
             <Panel title="Employment" bodyClassName="px-3.5 py-2">
               <Facts

@@ -6,6 +6,7 @@ import { text } from '../../core/i18n';
 import { fetchCosts, K, money } from './api';
 import type { Nav } from './HostingShell';
 import { Btn, Card, Kpi, NeedsUpdate, PageHead, Pills, Table, td, tdr } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Costs (HDM-CST-02) from `GET costs?by=client|project|provider&currency=`: the monthly total in the reporting
@@ -43,12 +44,12 @@ export default function Costs({ org, nav }: { org: number; nav?: Nav }) {
         ) : null}
         {nav ? <Btn onClick={() => nav.to('reports')}>Reports</Btn> : null}
       </PageHead>
-      <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-        <Kpi label={text('Per month · {currency}', { currency: cur })} value={money(c.total ?? 0, cur)} />
+      <StatGrid>
+        <Kpi icon="coins" tone="cyan" label={text('Per month · {currency}', { currency: cur })} value={money(c.total ?? 0, cur)} />
         {(c.unconverted ?? []).map((u) => (
-          <Kpi key={u.currency} label={text('Not converted · {currency}', { currency: u.currency })} value={money(u.monthly, u.currency)} sub={text('No rate to {currency}', { currency: cur })} />
+          <Kpi icon="arrow-left-right" tone="amber" key={u.currency} label={text('Not converted · {currency}', { currency: u.currency })} value={money(u.monthly, u.currency)} sub={text('No rate to {currency}', { currency: cur })} />
         ))}
-      </div>
+      </StatGrid>
       <Card
         title={text('By {group}', { group: by === 'client' ? text('customer') : by === 'project' ? text('project') : text('provider') })}
         action={<Pills<By> label="Group by" value={by} onChange={setBy} options={[{ id: 'client', label: text('Customer') }, { id: 'project', label: text('Project') }, { id: 'provider', label: text('Provider') }]} />}

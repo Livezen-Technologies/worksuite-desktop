@@ -5,6 +5,7 @@ import { Icon } from '../../components/Icon';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { K } from './api';
 import { Card, Head, Note, Pill } from './parts';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * My access (`GET /access/me`, the web's /account/access): which modules
@@ -60,12 +61,12 @@ export default function Access() {
   return (
     <div className="flex max-w-[980px] flex-col gap-4">
       <Head title="My access" sub="Which parts of WorkSuite you can open, and why. Nothing here changes anything." />
-      <div className="grid grid-cols-4 gap-3">
-        <Stat label="You can open" value={d.totals.reachable} tone="green" />
-        <Stat label="Not for you" value={d.totals.blocked} />
-        <Stat label="Hidden, still open" value={d.totals.hidden} tone={d.totals.hidden ? 'amber' : undefined} />
-        <Stat label="Modules" value={d.totals.total} />
-      </div>
+      <StatGrid min={180}>
+        <Stat icon="unlock" label="You can open" value={d.totals.reachable} tone="green" />
+        <Stat icon="lock" tone="neutral" label="Not for you" value={d.totals.blocked} />
+        <Stat icon="eye-off" label="Hidden, still open" value={d.totals.hidden} tone={d.totals.hidden ? 'amber' : undefined} />
+        <Stat icon="grid" tone="blue" label="Modules" value={d.totals.total} />
+      </StatGrid>
       {d.star ? <Note tone="amber">You hold the administrator grant, which passes every check — so nothing below can be closed to you. It is not what a normal account sees.</Note> : null}
       {d.apps_mode === 'unrestricted' && !d.star ? <Note tone="amber">No apps are assigned to your account, so the app check is not applied to you and every module shows as open. That is how a new installation starts — it does not mean somebody reviewed your access.</Note> : null}
       {d.totals.hidden > 0 ? <Note tone="amber">{d.totals.hidden} module{d.totals.hidden === 1 ? ' is' : 's are'} left out of your launcher because the app is not assigned to you, but still answer for the permissions you hold. Your permissions remain the real gate.</Note> : null}
@@ -117,11 +118,6 @@ export default function Access() {
   );
 }
 
-function Stat({ label, value, tone }: { label: string; value: number; tone?: 'green' | 'amber' }) {
-  return (
-    <div className="flex flex-col rounded-[14px] border border-line bg-surface px-4 py-3">
-      <b className={cx('text-[22px] tabular-nums', tone === 'green' ? 'text-success' : tone === 'amber' ? 'text-warning' : 'text-ink')}>{value}</b>
-      <span className="text-[11.5px] font-semibold tracking-[.3px] text-ink-3 uppercase">{label}</span>
-    </div>
-  );
+function Stat({ label, value, tone, icon }: { label: string; value: number; tone?: StatTone; icon?: string }) {
+  return <StatCard label={label} value={value} tone={tone} icon={icon} />;
 }

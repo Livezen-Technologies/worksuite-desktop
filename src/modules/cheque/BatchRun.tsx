@@ -7,6 +7,7 @@ import { refusal } from '../finance/api';
 import { confirmPrint, fetchBatch, has, interruptBatch, K, pauseBatch, printQueued, reconcileBatch, resumeBatch, startBatch, type Access, type Batch, type BatchItem, type LeafFound, type PrintResult } from './api';
 import { BATCH_STATUS } from './Batches';
 import { Badge, Check, Note, PageHead, Panel, Tile, amt, btn, btnDanger, btnPrimary, num, td, th } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * D05 — Batch print run and D06 — Batch interrupted: reconcile leaves (CHQ-BAT-02..05, BR-19, WF-14; the server's
@@ -172,11 +173,11 @@ export default function BatchRun({ id, access, onBack }: { id: number; access: A
               <div className="h-3 overflow-hidden rounded-full bg-subtle" role="progressbar" aria-label="Leaves printed" aria-valuemin={0} aria-valuemax={b.items.length} aria-valuenow={printed.length}>
                 <i className="block h-full bg-[#23349E]" style={{ width: `${(printed.length / Math.max(1, b.items.length)) * 100}%` }} />
               </div>
-              <div className="grid grid-cols-3 gap-2.5">
-                <Tile tone="green" label="Printed" value={printed.length} sub={range(printed)} />
-                <Tile tone="violet" label="Sending" value={sending ? 1 : 0} sub={sending?.cheque_number ?? '—'} />
-                <Tile tone="slate" label="Waiting" value={waiting.length} sub={range(waiting)} />
-              </div>
+              <StatGrid min={160}>
+                <Tile icon="check-circle" tone="green" label="Printed" value={printed.length} sub={range(printed)} />
+                <Tile icon="printer" tone="violet" label="Sending" value={sending ? 1 : 0} sub={sending?.cheque_number ?? '—'} />
+                <Tile icon="hourglass" tone="slate" label="Waiting" value={waiting.length} sub={range(waiting)} />
+              </StatGrid>
               {check ? (
                 <div className="flex flex-wrap items-center gap-2 rounded-[10px] border border-primary bg-[#EEF1FD] p-3 dark:bg-selection" role="group" aria-label={`How did ${check.cheque_number} print?`}>
                   <span className="min-w-0 flex-1 text-[13px]">

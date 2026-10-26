@@ -7,6 +7,7 @@ import { attention, fetchDetail, K, moveLabel, num, qty, short, signed, WEB_VIEW
 import { HeadLink, Line, ListPanel } from './parts';
 import { openWeb, type InvView } from './Rail';
 import { ComputerCard } from './ThisComputer';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The Inventory dashboard (InvDashboard; on the desktop the "Desktop inventory
@@ -89,13 +90,13 @@ export default function Dashboard({
           </button>
         ) : null}
       </PageHead>
-      <div className="grid grid-cols-5 gap-3">
-        <Kpi label="Stock value" value={t.value === null ? '—' : short(t.value, currency)} sub={t.value === null ? 'Needs permission to see costs' : `${t.stocked_products.toLocaleString()} products holding stock`} />
-        <Kpi label="Units on hand" value={qty(t.units)} sub={`${qty(t.reserved)} reserved`} onClick={() => onGo('stock')} />
-        <Kpi label="Low stock" value={t.low_stock} sub="At or below minimum" tone={t.low_stock ? 'amber' : undefined} onClick={() => onStock('low')} />
-        <Kpi label="Out of stock" value={t.out_of_stock} sub="Nothing available" tone={t.out_of_stock ? 'red' : undefined} onClick={() => onStock('out')} />
-        <Kpi label="To approve" value={d.pending.adjustments} sub={d.pending.adjustments === 1 ? 'Adjustment waiting' : 'Adjustments waiting'} onClick={() => onGo('adj', HERE.adj)} />
-      </div>
+      <StatGrid min={200}>
+        <Kpi icon="coins" tone="blue" label="Stock value" value={t.value === null ? '—' : short(t.value, currency)} sub={t.value === null ? 'Needs permission to see costs' : `${t.stocked_products.toLocaleString()} products holding stock`} />
+        <Kpi icon="boxes" tone="violet" label="Units on hand" value={qty(t.units)} sub={`${qty(t.reserved)} reserved`} onClick={() => onGo('stock')} />
+        <Kpi icon="trending-down" label="Low stock" value={t.low_stock} sub="At or below minimum" tone={t.low_stock ? 'amber' : undefined} onClick={() => onStock('low')} />
+        <Kpi icon="package-x" label="Out of stock" value={t.out_of_stock} sub="Nothing available" tone={t.out_of_stock ? 'red' : undefined} onClick={() => onStock('out')} />
+        <Kpi icon="clipboard-check" tone="amber" label="To approve" value={d.pending.adjustments} sub={d.pending.adjustments === 1 ? 'Adjustment waiting' : 'Adjustments waiting'} onClick={() => onGo('adj', HERE.adj)} />
+      </StatGrid>
       <div className="grid grid-cols-3 gap-3.5">
         <Panel title="Coming in and going out" sub="units, the last 14 days" className="col-span-2" bodyClassName="flex flex-col">
           <div className="flex h-[200px] items-end gap-2 px-4 pt-4" role="img" aria-label="Units received and issued each day, the last fourteen days">
@@ -118,12 +119,12 @@ export default function Dashboard({
         </Panel>
         <ComputerCard copy={{ products: c.products, warehouses: c.warehouses }} onOpen={onComputer} />
       </div>
-      <div className="grid grid-cols-4 gap-2.5">
-        <Kpi label="Products" value={c.products.toLocaleString()} sub={`${c.stocked.toLocaleString()} tracked for stock`} onClick={() => onGo('prod')} />
-        <Kpi label="Categories" value={c.categories.toLocaleString()} sub={busiest ? `Busiest holds ${busiest.product_count}` : 'None yet'} />
-        <Kpi label="Vendors" value={c.vendors.toLocaleString()} sub="Shared across companies" />
-        <Kpi label="Warehouses" value={c.warehouses.toLocaleString()} sub={warehouse ? 'One chosen' : 'Holding stock'} />
-      </div>
+      <StatGrid min={200}>
+        <Kpi icon="package" tone="blue" label="Products" value={c.products.toLocaleString()} sub={`${c.stocked.toLocaleString()} tracked for stock`} onClick={() => onGo('prod')} />
+        <Kpi icon="tag" tone="violet" label="Categories" value={c.categories.toLocaleString()} sub={busiest ? `Busiest holds ${busiest.product_count}` : 'None yet'} />
+        <Kpi icon="truck" tone="cyan" label="Vendors" value={c.vendors.toLocaleString()} sub="Shared across companies" />
+        <Kpi icon="warehouse" label="Warehouses" value={c.warehouses.toLocaleString()} sub={warehouse ? 'One chosen' : 'Holding stock'} />
+      </StatGrid>
       {chips.length ? (
         <section aria-label="Needs attention" className="flex flex-col gap-2 rounded-[12px] border border-line bg-surface px-3.5 py-3">
           <b className="text-ink">Needs attention</b>

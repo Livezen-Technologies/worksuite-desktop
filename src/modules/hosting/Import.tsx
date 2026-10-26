@@ -8,6 +8,7 @@ import { importApply, importPreview, type ImportKind, type ImportPreview, type I
 import { chooseCsv, saveCsvText } from './files';
 import type { Nav } from './HostingShell';
 import { Btn, Card, Chip, Field, Kpi, Note, PageHead, Pills, Table, input, td, useReadOnly } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Import domains or servers from a CSV (HDM-IMP-02, WF-10, the W13 board's steps): choose the file in the system's
@@ -121,12 +122,12 @@ export default function ImportCsv({ companies, org, nav }: { companies: Org[]; o
       ) : null}
       {step === 'preview' && plan ? (
         <>
-          <div className="grid grid-cols-2 gap-3 md:grid-cols-4">
-            <Kpi label="Will be added" value={plan.counts.add} />
-            <Kpi label="Will be updated" value={plan.counts.update} />
-            <Kpi label="Skipped" value={plan.counts.skip} />
-            <Kpi label="Errors" value={plan.counts.error} tone={plan.counts.error ? 'warn' : undefined} />
-          </div>
+          <StatGrid min={180}>
+            <Kpi icon="plus" tone="green" label="Will be added" value={plan.counts.add} />
+            <Kpi icon="refresh" tone="blue" label="Will be updated" value={plan.counts.update} />
+            <Kpi icon="ban" tone="neutral" label="Skipped" value={plan.counts.skip} />
+            <Kpi icon="x-circle" label="Errors" value={plan.counts.error} tone={plan.counts.error ? 'warn' : undefined} />
+          </StatGrid>
           <Card title="Match columns">
             <div className="grid grid-cols-2 gap-3 px-3.5 pb-3 md:grid-cols-4">
               {plan.headers.map((h, i) => (

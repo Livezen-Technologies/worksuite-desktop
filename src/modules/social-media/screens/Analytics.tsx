@@ -9,6 +9,7 @@ import { HeatmapGrid } from './measure/Heatmap';
 import { AudienceTab, CampaignsTab, InboxTab, PostsTab } from './measure/AnalyticsTabs';
 import { ExportButton, ScheduleReportDialog } from './measure/Reports';
 import { TrendChart, TrendLegend } from './measure/TrendChart';
+import { StatGrid, type StatTone } from '../../../components/StatCard';
 
 /**
  * W07 — Analytics (WS-SMM-SRS-001 SMM-ANL-001…009, AC-15, WF-12): KPIs against the previous period, the daily trend,
@@ -125,13 +126,13 @@ function OverviewTab({ q, brandId }: { q: OverviewQ; brandId: number | null }) {
   );
 }
 
-const KPIS: Array<{ key: keyof AnalyticsOverview['kpis']; label: string; show: (v: number) => string; lowerIsBetter?: boolean }> = [
-  { key: 'followers', label: 'Followers', show: full },
-  { key: 'reach', label: 'Reach', show: compact },
-  { key: 'impressions', label: 'Impressions', show: compact },
-  { key: 'engagement_rate', label: 'Engagement rate', show: (v) => pct(v) },
-  { key: 'link_clicks', label: 'Link clicks', show: full },
-  { key: 'median_reply_minutes', label: 'Median reply time', show: (v) => `${Math.round(v)} min`, lowerIsBetter: true },
+const KPIS: Array<{ key: keyof AnalyticsOverview['kpis']; label: string; show: (v: number) => string; lowerIsBetter?: boolean; icon: string; accent: StatTone }> = [
+  { key: 'followers', label: 'Followers', show: full, icon: 'users', accent: 'blue' },
+  { key: 'reach', label: 'Reach', show: compact, icon: 'radar', accent: 'violet' },
+  { key: 'impressions', label: 'Impressions', show: compact, icon: 'eye', accent: 'cyan' },
+  { key: 'engagement_rate', label: 'Engagement rate', show: (v) => pct(v), icon: 'heart', accent: 'red' },
+  { key: 'link_clicks', label: 'Link clicks', show: full, icon: 'mouse-click', accent: 'green' },
+  { key: 'median_reply_minutes', label: 'Median reply time', show: (v) => `${Math.round(v)} min`, lowerIsBetter: true, icon: 'reply', accent: 'amber' },
 ];
 
 /** Green when the change is for the better — for reply time, a shorter one (SMM-ANL-001). */
@@ -142,13 +143,15 @@ function deltaTone(k: KpiData, lowerIsBetter?: boolean): 'success' | 'danger' | 
 
 function KpiRow({ kpis }: { kpis: AnalyticsOverview['kpis'] }) {
   return (
-    <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
+    <StatGrid min={180}>
       {KPIS.map((d) => {
         const k = kpis[d.key] ?? { value: null, delta: null };
         return (
           <Kpi
             key={d.key}
             label={d.label}
+            icon={d.icon}
+            accent={d.accent}
             value={k.value === null ? null : d.show(k.value)}
             sub={k.value === null ? undefined : delta(k.delta, k.delta_kind ?? (d.key === 'median_reply_minutes' ? 'min' : 'pct'))}
             tone={deltaTone(k, d.lowerIsBetter)}
@@ -156,7 +159,7 @@ function KpiRow({ kpis }: { kpis: AnalyticsOverview['kpis'] }) {
           />
         );
       })}
-    </div>
+    </StatGrid>
   );
 }
 

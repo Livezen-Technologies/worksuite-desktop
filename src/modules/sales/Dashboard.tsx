@@ -5,6 +5,7 @@ import { Empty, Kpi, PageHead, Panel } from '../hr/parts';
 import { MOVING, SOURCE, statusOf, type Overview } from './api';
 import { money, PriorityPill, StatusPill } from './parts';
 import type { SalesView } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The Orders dashboard (OmsDashboard): how many, how much is still open (per
@@ -43,12 +44,12 @@ export default function Dashboard({ overview, onOpen, onList, onPick }: {
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
       <PageHead title="Orders" sub="Where every order stands, and what is waiting on somebody. Refreshed every 30 seconds." />
-      <div className="grid grid-cols-4 gap-2.5">
-        <Kpi label="Orders" value={o.total} sub={`${o.today} raised today`} />
-        <Kpi label="Still moving" value={stillMoving} sub="not yet delivered or invoiced" onClick={() => onList(null)} />
-        <Kpi label="Open order value" value={open.length === 1 ? money(open[0]!.value, open[0]!.currency) : open.length ? `${open.length} currencies` : '—'} sub={open.length > 1 ? byCur(open) : `${open[0]?.orders ?? 0} orders committed`} />
-        <Kpi label="Delivered or completed" value={finished} sub={done.length ? `${byCur(done)} finished` : 'none yet'} />
-      </div>
+      <StatGrid>
+        <Kpi icon="cart" tone="blue" label="Orders" value={o.total} sub={`${o.today} raised today`} />
+        <Kpi icon="truck" tone="amber" label="Still moving" value={stillMoving} sub="not yet delivered or invoiced" onClick={() => onList(null)} />
+        <Kpi icon="coins" tone="violet" label="Open order value" value={open.length === 1 ? money(open[0]!.value, open[0]!.currency) : open.length ? `${open.length} currencies` : '—'} sub={open.length > 1 ? byCur(open) : `${open[0]?.orders ?? 0} orders committed`} />
+        <Kpi icon="package-check" tone="green" label="Delivered or completed" value={finished} sub={done.length ? `${byCur(done)} finished` : 'none yet'} />
+      </StatGrid>
       <div className="grid grid-cols-3 gap-3">
         <Panel title="Where the orders are" sub={`${stillMoving} still moving`} className="col-span-2" bodyClassName="flex flex-col gap-2 px-3.5 py-3">
           {moving.map((s) => (

@@ -228,7 +228,7 @@ describe('Home organisation switcher (#214)', () => {
   it('draws the stat numbers in the app font with tabular figures', async () => {
     show();
     const due = await screen.findByRole('button', { name: 'Due today: 2' });
-    const n = due.querySelector('[data-stat-number]')!;
+    const n = due.querySelector('[data-stat-value]')!;
     expect(n.classList.contains('stat-number')).toBe(true);
     expect(n.className).not.toMatch(/font-mono/);
     const css = readFileSync(join(__dirname, '../../../src/styles.css'), 'utf8');
@@ -538,8 +538,8 @@ describe('Customize (#104, optimized)', () => {
     expect(cls('[data-home-main]')).toEqual(expect.arrayContaining(['grid-cols-1', '@min-[1000px]:grid-cols-9']));
     // Two columns: the side cards under the main ones, two by two, an odd one out taking the row; one column at 1400.
     expect(cls('[data-home-rail]')).toEqual(expect.arrayContaining(['grid-cols-1', '@min-[1000px]:grid-cols-2', '@min-[1000px]:[&>:last-child:nth-child(odd)]:col-span-2', '@min-[1400px]:grid-cols-1']));
-    // The four numbers: four across where they fit, two by two below that, then one under another.
-    expect(cls('[data-home-tiles]')).toEqual(expect.arrayContaining(['grid-cols-1', '@min-[520px]:grid-cols-2', '@min-[1000px]:grid-cols-4']));
+    // The four numbers: a stat grid, as many across as fit by the page's own width (auto-fill, not a window breakpoint).
+    expect(cls('[data-home-tiles]')).toEqual(expect.arrayContaining(['ws-stat-grid', 'grid']));
     // Customize stays whole: beside the greeting when there is room (the greeting truncates), under it when tight.
     const header = page.querySelector('header')!;
     expect(header.className.split(' ')).toEqual(expect.arrayContaining(['flex-col', '@min-[760px]:flex-row']));

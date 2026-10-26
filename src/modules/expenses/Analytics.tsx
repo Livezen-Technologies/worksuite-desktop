@@ -38,6 +38,7 @@ import {
 } from './insight';
 import { Note } from './parts';
 import type { ScreenProps } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Analytics and Reports: the fourteen named reports, run by name, in one
@@ -351,12 +352,12 @@ function ClassicSummary({ orgId, org, orgs, acts, actsFailed, onNamed }: { orgId
         <ReadFailed what="The claims summary" error={q.error} onRetry={() => void q.refetch()} />
       ) : (
         <>
-          <div className="grid grid-cols-2 gap-3 xl:grid-cols-4">
-            <Kpi label="Total" value={money(t.total, cur)} sub={t.rejected > 0 ? `not counting ${plural(t.rejected, 'rejected claim', 'rejected claims')}` : 'everything claimed'} />
-            <Kpi label="Outstanding" value={money(d.outstanding.total, cur)} sub={`${plural(d.outstanding.count, 'claim', 'claims')} approved, not yet paid`} tone={d.outstanding.count > 0 ? 'amber' : undefined} />
-            <Kpi label="Paid" value={money(d.byStatus.paid?.total ?? '0.00', cur)} sub={plural(d.byStatus.paid?.count ?? 0, 'claim', 'claims')} />
-            <Kpi label="Submitted" value={money(d.byStatus.submitted?.total ?? '0.00', cur)} sub="awaiting a decision" />
-          </div>
+          <StatGrid>
+            <Kpi icon="sigma" tone="blue" label="Total" value={money(t.total, cur)} sub={t.rejected > 0 ? `not counting ${plural(t.rejected, 'rejected claim', 'rejected claims')}` : 'everything claimed'} />
+            <Kpi icon="hourglass" label="Outstanding" value={money(d.outstanding.total, cur)} sub={`${plural(d.outstanding.count, 'claim', 'claims')} approved, not yet paid`} tone={d.outstanding.count > 0 ? 'amber' : undefined} />
+            <Kpi icon="check-circle" tone="green" label="Paid" value={money(d.byStatus.paid?.total ?? '0.00', cur)} sub={plural(d.byStatus.paid?.count ?? 0, 'claim', 'claims')} />
+            <Kpi icon="send" tone="violet" label="Submitted" value={money(d.byStatus.submitted?.total ?? '0.00', cur)} sub="awaiting a decision" />
+          </StatGrid>
 
           <div className="grid gap-3.5 lg:grid-cols-2">
             <Panel title="Top spending categories" bodyClassName="flex flex-col gap-2 px-3.5 py-3">

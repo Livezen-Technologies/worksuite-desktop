@@ -67,6 +67,7 @@ import {
 import { Organizations } from './Organizations';
 import type { ExpenseView, ScreenProps } from './Rail';
 import { Checkbox } from '../../components/Checkbox';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Expenses' settings, as the web draws them: the standard settings shell's
@@ -1092,6 +1093,9 @@ function MyAccess({ orgId, orgs, onGo }: { orgId: number; orgs: Org[]; onGo: (v:
  * addressed to a role nobody holds is delivered to no one, and nothing else
  * in the product would say so.
  */
+
+const ROLE_ICON: Record<(typeof ROLE_WORDS)[number][0], string> = { admin: 'shield-check', finance: 'landmark', approver: 'badge-check', member: 'users' };
+
 function WhoGetsTold({ orgId }: { orgId: number }) {
   const q = useQuery({ queryKey: KA.events(orgId), queryFn: ({ signal }) => fetchCatalogue(orgId, signal), retry: false });
   if (q.isLoading) return <Spinner />;
@@ -1101,11 +1105,11 @@ function WhoGetsTold({ orgId }: { orgId: number }) {
 
   return (
     <div className="flex flex-col gap-3.5">
-      <div className="grid grid-cols-4 gap-2.5">
+      <StatGrid min={180}>
         {ROLE_WORDS.map(([k, label]) => (
-          <Kpi key={k} label={label} value={c.roles[k]} tone={c.roles[k] === 0 ? 'amber' : undefined} />
+          <Kpi key={k} label={label} value={c.roles[k]} icon={ROLE_ICON[k]} tone={c.roles[k] === 0 ? 'amber' : 'blue'} />
         ))}
-      </div>
+      </StatGrid>
       {silent.length ? (
         <Notice tone="amber">
           Nobody holds {silent.join(', ')} in this organization, so any event below addressed to them is computed and then delivered to no one. That is not an error — it is what an empty role means — but it is the reason a notification somebody expected never arrived.

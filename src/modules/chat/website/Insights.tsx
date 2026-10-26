@@ -9,6 +9,7 @@ import { toast } from '../../../core/toasts';
 import { WEBSITE } from './api';
 import { Segmented, Tile, type SubTone, type Tone } from './live/LiveDashboard';
 import { clock } from './live/liveMap';
+import { StatGrid, type StatTone } from '../../../components/StatCard';
 
 /**
  * Insights (worksuite-desktop L-07; WS-WCHAT X-UI-13, UX-INS-01…03, closing RPT-04): how website chat is doing across
@@ -237,19 +238,20 @@ function Report({ d, all }: { d: Insights; all: boolean }) {
   const conv = conversationsChange(d.conversations.value, d.conversations.previous);
   const first = timeChange(d.first_response.value, d.first_response.previous, 's');
   const res = timeChange(d.resolution.value, d.resolution.previous, 'min');
-  const tiles: Array<{ label: string; value: string; sub?: string; tone: Tone; subTone: SubTone }> = [
-    { label: 'Conversations', value: count(d.conversations.value), sub: conv.sub, tone: 'plain', subTone: conv.tone },
-    { label: 'Avg first response', value: d.first_response.value === null ? '—' : clock(d.first_response.value), sub: first.sub, tone: 'plain', subTone: first.tone },
-    { label: 'Avg resolution', value: d.resolution.value === null ? '—' : minutes(d.resolution.value), sub: res.sub, tone: 'plain', subTone: res.tone },
-    { label: 'Avg rating', value: d.rating.value === null ? '—' : d.rating.value.toFixed(1), sub: text('from {n} rated', { n: count(d.rating.rated) }), tone: 'plain', subTone: 'plain' },
+  const tiles: Array<{ label: string; value: string; sub?: string; tone: Tone; subTone: SubTone; icon: string; accent?: StatTone }> = [
+    { label: 'Conversations', icon: 'messages', accent: 'blue', value: count(d.conversations.value), sub: conv.sub, tone: 'plain', subTone: conv.tone },
+    { label: 'Avg first response', icon: 'reply', accent: 'violet', value: d.first_response.value === null ? '—' : clock(d.first_response.value), sub: first.sub, tone: 'plain', subTone: first.tone },
+    { label: 'Avg resolution', icon: 'check-circle', accent: 'green', value: d.resolution.value === null ? '—' : minutes(d.resolution.value), sub: res.sub, tone: 'plain', subTone: res.tone },
+    { label: 'Avg rating', icon: 'star', accent: 'amber', value: d.rating.value === null ? '—' : d.rating.value.toFixed(1), sub: text('from {n} rated', { n: count(d.rating.rated) }), tone: 'plain', subTone: 'plain' },
     {
       label: 'Missed',
+      icon: 'phone-missed',
       value: count(d.missed.value),
       sub: d.missed.share === null ? undefined : text('{pct}% of chats', { pct: d.missed.share }),
       tone: d.missed.value ? 'red' : 'plain',
       subTone: d.missed.value ? 'bad' : 'plain',
     },
-    { label: 'Visitors', value: count(d.visitors.value), sub: d.visitors.returning_share === null ? undefined : text('{pct}% returning', { pct: d.visitors.returning_share }), tone: 'plain', subTone: 'plain' },
+    { label: 'Visitors', icon: 'users', accent: 'cyan', value: count(d.visitors.value), sub: d.visitors.returning_share === null ? undefined : text('{pct}% returning', { pct: d.visitors.returning_share }), tone: 'plain', subTone: 'plain' },
   ];
   return (
     <>
@@ -261,11 +263,11 @@ function Report({ d, all }: { d: Insights; all: boolean }) {
           <span className="text-ink-3">{text('Try a longer period or another widget.')}</span>
         </div>
       ) : null}
-      <div className="grid grid-cols-6 gap-2.5" role="list" aria-label={text('Figures')}>
+      <StatGrid min={170} role="list" label={text('Figures')}>
         {tiles.map((t) => (
           <Tile key={t.label} stack {...t} />
         ))}
-      </div>
+      </StatGrid>
       <div className="grid gap-3 [grid-template-columns:minmax(0,2fr)_minmax(0,1fr)]">
         <PerDay days={d.days} />
         <section aria-label={text('Traffic sources')} className="flex flex-col gap-[9px] rounded-[12px] border border-line bg-surface px-4 py-3.5 text-[12.5px]">

@@ -225,6 +225,24 @@ so focus, Space, labels, form values and screen-reader state come from the platf
 Clicks, double-clicks and Space on the box do not reach the element around it, so ticking a row never opens it.
 Size and colour come from the component; pass only layout classes (margins, opacity) in `className`.
 
+## Stat cards
+
+Every KPI, stat or summary figure is `StatCard`, laid out by `StatGrid` (`src/components/StatCard.tsx`, styles
+`.ws-stat*` and the `--ws-tone-*` tokens in `src/styles.css`). A module's own `Kpi` / `Tile` / `Figure` / `Stat`
+helpers are thin wrappers that map their old tone names onto it; new screens use `StatCard` directly.
+
+- `label`, `value`, `sub` — the label (medium, muted), the figure (tabular, in the text colour, never the tone's),
+  the muted line under it. A figure of 0, "LKR 0.00", "—" or nothing is drawn muted; `empty` says so explicitly.
+- `icon` (a name from `Icon.tsx`) and `tone` — `blue`, `violet`, `green`, `amber`, `red`, `cyan` or `neutral` — draw
+  the tinted chip. The tone colours the chip only; what a card means is said by its label and icon.
+- `onClick` or `href` make it a button or a link with the focus ring and a one-pixel lift on hover (none with
+  reduced motion). A group is named by its label; a button by the label and the figure, or `ariaLabel`.
+- `trend` — `{ direction, text, good?, label? }` — a pill with an arrow and words as well as green or red.
+  `sparkline` is a slot beside the figure. `loading` keeps the label and draws a skeleton. `size` is `md` (the
+  default: 16 px in, at least 96 px tall), `sm` for a second row or a drawer, `lg` for a wallboard.
+- `StatGrid` is auto-fill columns of at least 220 px (`min` lowers it for narrow panels), 12 px apart. With a
+  `label` it is a region of that name; `role="list"` with `role="listitem"` cards for a list of figures.
+
 ## Opening documents from other modules
 
 A module that shows a document opens it on this computer, never in the browser. `openDocument()`

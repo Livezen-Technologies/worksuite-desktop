@@ -7,6 +7,7 @@ import { Empty, input, Kpi, PageHead, Panel } from '../hr/parts';
 import { moneyList } from './api';
 import { bars, fetchReport, KA, PERIODS, periodOf, type PeriodPreset } from './admin';
 import { amount, fetchBidCostReport, KE } from './bidcost';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * What came in and what came back, over a period. Two questions on their
@@ -46,14 +47,14 @@ export default function Reports({ org }: { org: string }) {
         <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
       ) : (
         <>
-          <div className="grid grid-cols-6 gap-3" aria-label="The period">
-            <Kpi label="Came in" value={r.total} sub="Added in the period" />
-            <Kpi label="Still open" value={r.open} sub="Of those that came in" />
-            <Kpi label="Won" value={r.won} tone={r.won ? 'green' : undefined} sub="Decided in the period" />
-            <Kpi label="Lost" value={r.lost} tone={r.lost ? 'red' : undefined} sub="Decided in the period" />
-            <Kpi label="Cancelled" value={r.cancelled} sub="Not in the win rate" />
-            <Kpi label="Win rate" value={r.win_rate === null ? '—' : `${r.win_rate}%`} sub={r.won + r.lost ? `${r.won} of ${r.won + r.lost} decided` : 'Nothing decided'} />
-          </div>
+          <StatGrid min={180} label="The period">
+            <Kpi icon="inbox" tone="blue" label="Came in" value={r.total} sub="Added in the period" />
+            <Kpi icon="folder-open" tone="violet" label="Still open" value={r.open} sub="Of those that came in" />
+            <Kpi icon="trophy" label="Won" value={r.won} tone={r.won ? 'green' : undefined} sub="Decided in the period" />
+            <Kpi icon="x-circle" label="Lost" value={r.lost} tone={r.lost ? 'red' : undefined} sub="Decided in the period" />
+            <Kpi icon="ban" label="Cancelled" value={r.cancelled} sub="Not in the win rate" />
+            <Kpi icon="percent" tone="cyan" label="Win rate" value={r.win_rate === null ? '—' : `${r.win_rate}%`} sub={r.won + r.lost ? `${r.won} of ${r.won + r.lost} decided` : 'Nothing decided'} />
+          </StatGrid>
           <p className="m-0 text-[12.5px] text-ink-3">{r.note}</p>
           <div className="grid grid-cols-3 gap-3.5">
             <Panel title="Awarded to us" sub="The award value on each tender won, per currency" bodyClassName="px-3.5 py-3">
@@ -116,12 +117,12 @@ export function BidCost({ org, from, to }: { org: string; from: string; to: stri
   const ccy = r.currency;
   return (
     <Panel title="Bid cost by tender" sub={ccy ? `In ${ccy}, from the expenses linked to each tender` : 'Across companies that keep different currencies — the figures are not one total'} bodyClassName="flex flex-col gap-3 px-3.5 py-3">
-      <div className="grid grid-cols-4 gap-3" aria-label="Bid cost">
-        <Kpi label="Total bid cost" value={amount(r.total, ccy)} sub={`${r.rows.length} ${r.rows.length === 1 ? 'tender' : 'tenders'}`} />
-        <Kpi label="On bids won" value={amount(r.by_outcome.won.cost, ccy)} tone={r.by_outcome.won.count ? 'green' : undefined} sub={`${r.by_outcome.won.count} won`} />
-        <Kpi label="On bids lost" value={amount(r.by_outcome.lost.cost, ccy)} tone={r.by_outcome.lost.count ? 'red' : undefined} sub={`${r.by_outcome.lost.count} lost`} />
-        <Kpi label="Cost per win" value={r.cost_per_win === null ? '—' : amount(r.cost_per_win, ccy)} sub="Won and lost, over the wins" />
-      </div>
+      <StatGrid label="Bid cost">
+        <Kpi icon="coins" tone="blue" label="Total bid cost" value={amount(r.total, ccy)} sub={`${r.rows.length} ${r.rows.length === 1 ? 'tender' : 'tenders'}`} />
+        <Kpi icon="badge-check" label="On bids won" value={amount(r.by_outcome.won.cost, ccy)} tone={r.by_outcome.won.count ? 'green' : undefined} sub={`${r.by_outcome.won.count} won`} />
+        <Kpi icon="x-circle" label="On bids lost" value={amount(r.by_outcome.lost.cost, ccy)} tone={r.by_outcome.lost.count ? 'red' : undefined} sub={`${r.by_outcome.lost.count} lost`} />
+        <Kpi icon="calculator" tone="violet" label="Cost per win" value={r.cost_per_win === null ? '—' : amount(r.cost_per_win, ccy)} sub="Won and lost, over the wins" />
+      </StatGrid>
       {r.note ? <p className="m-0 text-[12px] text-ink-3">{r.note}</p> : null}
       {r.rows.length ? (
         <table className="w-full border-collapse text-[12.5px]" aria-label="Tender pipeline with bid cost">

@@ -9,6 +9,7 @@ import { send, withOrg } from './api';
 import { Card, Cell, Empty, Field, Kpi, PageHeader, Sheet, THead, btn, btnBad, btnPrimary, btnSmall, input, row } from './parts';
 import { companiesWhere, fieldErrors, refusal, type Options } from './types';
 import { money, type Budget, type BudgetTotals, type CalendarItem } from './wsd';
+import { StatGrid } from '../../components/StatCard';
 
 const TONE: Record<CalendarItem['type'], string> = {
   email: 'bg-primary/15 text-primary', channel: 'bg-success/15 text-success', call: 'bg-warning/20 text-ink', journey: 'bg-[#7C3AED]/15 text-[#6D28D9] dark:text-[#C4B5FD]', event: 'bg-ground text-ink',
@@ -106,13 +107,13 @@ export function Budgets({ org, options }: { org: string; options: Options }) {
       <PageHeader crumbs={['Planning']} title="Budgets & ROI" sub="Planned against actual, cost per lead and return."
         actions={may ? <button type="button" className={btnPrimary} onClick={() => setEditing('new')}><Icon name="plus" size={15} /> Budget</button> : null} />
       {t ? (
-        <div className="grid grid-cols-5 gap-2.5">
-          <Kpi label="Planned" value={money(t.planned)} />
-          <Kpi label="Spent" value={money(t.cost)} tone={t.cost > t.planned ? 'red' : undefined} />
-          <Kpi label="Leads" value={t.leads === null ? '—' : String(t.leads)} />
-          <Kpi label="Cost per lead" value={money(t.cost_per_lead)} />
-          <Kpi label="ROI" value={t.roi === null ? '—' : `${t.roi}%`} tone={t.roi === null ? undefined : t.roi < 0 ? 'red' : 'green'} />
-        </div>
+        <StatGrid min={180}>
+          <Kpi icon="target" tone="blue" label="Planned" value={money(t.planned)} />
+          <Kpi icon="wallet" label="Spent" value={money(t.cost)} tone={t.cost > t.planned ? 'red' : undefined} />
+          <Kpi icon="user-plus" tone="violet" label="Leads" value={t.leads === null ? '—' : String(t.leads)} />
+          <Kpi icon="calculator" tone="cyan" label="Cost per lead" value={money(t.cost_per_lead)} />
+          <Kpi icon="trending-up" label="ROI" value={t.roi === null ? '—' : `${t.roi}%`} tone={t.roi === null ? undefined : t.roi < 0 ? 'red' : 'green'} />
+        </StatGrid>
       ) : null}
       <Card padded={false}>
         {q.isLoading ? <Spinner label="Loading budgets…" /> : q.error ? <div className="p-4"><ErrorNote error={new Error(refusal(q.error, 'Budgets could not be loaded.'))} onRetry={() => void q.refetch()} /></div> : (

@@ -31,6 +31,7 @@ import {
 } from './manage';
 import { Checkbox } from '../../components/Checkbox';
 import { SyncButton } from '../../components/SyncButton';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Sales channels (OmsChannelSheet): where orders come from. Every kind the
@@ -337,11 +338,11 @@ function ChannelPanel({ id, org, can, onClose }: { id: number; org: string; can:
                 <SyncPanel id={id} name={c.name} canSync={!!can.sync} sync={sync} />
               ) : (
                 <>
-                  <div className="grid grid-cols-3 gap-2.5">
-                    <Kpi label="Imported" value={c.imported.toLocaleString()} />
-                    <Kpi label="Failed" value={c.failed.toLocaleString()} tone={c.failed ? 'red' : undefined} />
-                    <Kpi label="Last delivery" value={c.last_sync_at ? relative(c.last_sync_at) : 'Never'} />
-                  </div>
+                  <StatGrid min={150}>
+                    <Kpi icon="download" tone="blue" label="Imported" value={c.imported.toLocaleString()} />
+                    <Kpi icon="x-circle" label="Failed" value={c.failed.toLocaleString()} tone={c.failed ? 'red' : undefined} />
+                    <Kpi icon="clock" label="Last delivery" value={c.last_sync_at ? relative(c.last_sync_at) : 'Never'} />
+                  </StatGrid>
                   <span className="text-[11.5px] text-ink-3">From the last delivery, not a lifetime total — so a count that starts failing shows.</span>
                 </>
               )}
@@ -506,12 +507,12 @@ function SyncPanel({ id, name, canSync, sync }: { id: number; name: string; canS
             <b className="flex-1 text-ink">Last sync</b>
             <span className="text-[11.5px] text-ink-3">{d.last_done_at ? `Last successful sync ${relative(d.last_done_at)}` : 'No successful sync yet'}</span>
           </div>
-          <div className="grid grid-cols-4 gap-2">
-            <Kpi label="Orders" value={last.created.toLocaleString()} sub={`new · ${last.duplicate} already here`} />
-            <Kpi label="Customers" value={last.customers_new.toLocaleString()} sub={`new · ${last.customers_matched} known`} />
-            <Kpi label="Order lines" value={last.lines.toLocaleString()} sub="with the new orders" />
-            <Kpi label="Needs a look" value={last.refused.toLocaleString()} sub={`refused · ${last.skipped} carts skipped`} tone={last.refused ? 'red' : undefined} />
-          </div>
+          <StatGrid min={150}>
+            <Kpi icon="cart" tone="blue" label="Orders" value={last.created.toLocaleString()} sub={`new · ${last.duplicate} already here`} />
+            <Kpi icon="users" tone="violet" label="Customers" value={last.customers_new.toLocaleString()} sub={`new · ${last.customers_matched} known`} />
+            <Kpi icon="list" tone="cyan" label="Order lines" value={last.lines.toLocaleString()} sub="with the new orders" />
+            <Kpi icon="warning" label="Needs a look" value={last.refused.toLocaleString()} sub={`refused · ${last.skipped} carts skipped`} tone={last.refused ? 'red' : undefined} />
+          </StatGrid>
           <div className={cx('flex items-center gap-2 rounded-[10px] px-3 py-2 text-[12.5px]', last.status === 'done' ? TONE_CHIP.ok : last.status === 'cancelled' ? TONE_CHIP.idle : TONE_CHIP.bad)}>
             <span className="min-w-0 flex-1">
               {last.status === 'done'

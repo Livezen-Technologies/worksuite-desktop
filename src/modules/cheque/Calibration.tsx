@@ -232,7 +232,7 @@ export default function Calibration({ access, versionId, profileId, onPick }: { 
             </div>
             {lastRun ? (
               <>
-                <Tile tone={lastRun.residual_mm <= RESIDUAL_TARGET_MM ? 'green' : 'red'} label="Residual" value={`${lastRun.residual_mm.toFixed(2)} mm`} sub={`target ≤ ${RESIDUAL_TARGET_MM} mm${lastRun.residual_after_fit_mm != null ? ` · ${lastRun.residual_after_fit_mm.toFixed(2)} mm after the correction` : ''}`} />
+                <Tile icon="target" tone={lastRun.residual_mm <= RESIDUAL_TARGET_MM ? 'green' : 'red'} label="Residual" value={`${lastRun.residual_mm.toFixed(2)} mm`} sub={`target ≤ ${RESIDUAL_TARGET_MM} mm${lastRun.residual_after_fit_mm != null ? ` · ${lastRun.residual_after_fit_mm.toFixed(2)} mm after the correction` : ''}`} />
                 <Check tone={lastRun.result === 'pass' ? 'ok' : 'warn'}>{`Measured shift X ${signedMm(lastRun.proposal.offset_x_mm)} · Y ${signedMm(lastRun.proposal.offset_y_mm)} mm; applying it makes the offsets X ${signedMm(profile.offset_x_mm - lastRun.proposal.offset_x_mm)} · Y ${signedMm(profile.offset_y_mm - lastRun.proposal.offset_y_mm)} mm`}</Check>
                 <button
                   type="button"

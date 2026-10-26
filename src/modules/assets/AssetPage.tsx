@@ -10,6 +10,7 @@ import { BASE, fetchAsset, returnAsset, statusLabel, type AssetFull, type Can } 
 import { printLabels } from './labelSheets';
 import { Badge, Btn, Card, Field, Kpi, Table, amt, input, td, tdr, useReadOnly } from './parts';
 import type { AssetView } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * One asset (D05 overview, D06 custody & handover, D07 depreciation vs ledger) with its upkeep, documents and history.
@@ -125,12 +126,12 @@ export default function AssetPage({ id, can, active, tab, onTab, onEdit, onGo }:
 
         {t === 'overview' ? (
           <>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-2.5">
-              <Kpi label="Cost" value={amt(dep.cost || a.purchase_price, a.currency)} sub={a.purchase_date ? shortDate(a.purchase_date) : undefined} />
-              <Kpi label="Book value" value={amt(dep.net_book_value, a.currency)} />
-              <Kpi label="Upkeep" value={amt(d.upkeep_total, a.currency)} />
-              <Kpi label="Warranty" value={a.warranty_days_left == null ? '—' : a.warranty_days_left < 0 ? 'Ended' : `${a.warranty_days_left} days`} tone={(a.warranty_days_left ?? 99) <= 30 ? 'warn' : undefined} />
-            </div>
+            <StatGrid min={170}>
+              <Kpi icon="banknote" tone="blue" label="Cost" value={amt(dep.cost || a.purchase_price, a.currency)} sub={a.purchase_date ? shortDate(a.purchase_date) : undefined} />
+              <Kpi icon="scale" tone="cyan" label="Book value" value={amt(dep.net_book_value, a.currency)} />
+              <Kpi icon="wrench" tone="amber" label="Upkeep" value={amt(d.upkeep_total, a.currency)} />
+              <Kpi icon="shield-check" label="Warranty" value={a.warranty_days_left == null ? '—' : a.warranty_days_left < 0 ? 'Ended' : `${a.warranty_days_left} days`} tone={(a.warranty_days_left ?? 99) <= 30 ? 'warn' : undefined} />
+            </StatGrid>
             <div className="grid grid-cols-[repeat(auto-fit,minmax(280px,1fr))] gap-3">
               <Card title="Holder & location">
                 <Dl rows={[['Holder', d.holder ? `${d.holder.name ?? '—'}${d.holder.acknowledged_at ? ' · confirmed' : ''}` : '—'], ['Since', d.holder ? `${shortDate(d.holder.assigned_at)}${d.holder.expected_return_at ? ` · due ${shortDate(d.holder.expected_return_at)}` : ' · due on exit'}` : '—'], ['Site', a.location ?? '—'], ['Company', a.company ?? 'No company']]} />
@@ -175,12 +176,12 @@ export default function AssetPage({ id, can, active, tab, onTab, onEdit, onGo }:
           </>
         ) : t === 'depreciation' ? (
           <>
-            <div className="grid grid-cols-[repeat(auto-fit,minmax(160px,1fr))] gap-2.5">
-              <Kpi label="Monthly" value={amt(dep.monthly)} />
-              <Kpi label="Accumulated" value={amt(dep.accumulated)} />
-              <Kpi label="Book value" value={amt(dep.net_book_value)} />
-              <Kpi label="Life" value={`${dep.months_elapsed} of ${dep.life_months} months`} sub={dep.fully_depreciated ? 'Fully depreciated' : undefined} />
-            </div>
+            <StatGrid min={170}>
+              <Kpi icon="calendar" tone="violet" label="Monthly" value={amt(dep.monthly)} />
+              <Kpi icon="trending-down" label="Accumulated" value={amt(dep.accumulated)} />
+              <Kpi icon="scale" tone="cyan" label="Book value" value={amt(dep.net_book_value)} />
+              <Kpi icon="hourglass" tone="violet" label="Life" value={`${dep.months_elapsed} of ${dep.life_months} months`} sub={dep.fully_depreciated ? 'Fully depreciated' : undefined} />
+            </StatGrid>
             {dep.note ? <p className="m-0 text-[12px] text-ink-3">{dep.note}</p> : null}
             <Card title="Schedule">
               <Table head={['Month', ['Charge', 'r'], ['Accumulated', 'r'], ['Book value', 'r'], 'In the accounts']}>

@@ -19,6 +19,7 @@ import { fetchCustomer, fetchCustomers, frequencyLabel, KB } from './more';
 import { money, StatusChip } from './parts';
 import { Section } from './Payments';
 import { Checkbox } from '../../components/Checkbox';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Customers (BillCustomers): who owes what, largest first — outstanding,
@@ -132,12 +133,12 @@ function CustomerPanel({ id, org, onClose, onOpenInvoice, onOpenPayment, onOpenP
         <ErrorNote error={q.error} onRetry={() => void q.refetch()} />
       ) : d ? (
         <>
-          <div className="grid grid-cols-2 gap-2">
-            <Kpi label="Outstanding" value={amount(d.summary.outstanding, cur)} sub={`${d.summary.invoice_count} ${d.summary.invoice_count === 1 ? 'invoice' : 'invoices'}`} />
-            <Kpi label="Overdue" value={amount(d.summary.overdue, cur)} sub={d.summary.overdue > 0 ? 'needs chasing' : 'nothing late'} tone={d.summary.overdue > 0 ? 'red' : undefined} />
-            <Kpi label="Billed" value={money(d.summary.billed, cur)} sub="all time" />
-            <Kpi label="On account" value={amount(d.summary.on_account, cur)} sub="unallocated" tone={d.summary.on_account > 0 ? 'amber' : undefined} />
-          </div>
+          <StatGrid min={150}>
+            <Kpi icon="hourglass" tone="blue" label="Outstanding" value={amount(d.summary.outstanding, cur)} sub={`${d.summary.invoice_count} ${d.summary.invoice_count === 1 ? 'invoice' : 'invoices'}`} />
+            <Kpi icon="alert" label="Overdue" value={amount(d.summary.overdue, cur)} sub={d.summary.overdue > 0 ? 'needs chasing' : 'nothing late'} tone={d.summary.overdue > 0 ? 'red' : undefined} />
+            <Kpi icon="receipt" tone="violet" label="Billed" value={money(d.summary.billed, cur)} sub="all time" />
+            <Kpi icon="wallet" label="On account" value={amount(d.summary.on_account, cur)} sub="unallocated" tone={d.summary.on_account > 0 ? 'amber' : undefined} />
+          </StatGrid>
           {d.customer.billing_address ? <span className="text-[12px] text-ink-3">{d.customer.billing_address}</span> : null}
           <Statement customer={d.customer} org={org} canSend={can(perms, 'billing.invoice')} />
           <Section title="How old the money is">

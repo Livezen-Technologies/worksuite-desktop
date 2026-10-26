@@ -45,6 +45,7 @@ import {
 import { Note, StatusPill } from './parts';
 import type { ScreenProps } from './Rail';
 import { Checkbox } from '../../components/Checkbox';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Paying people back, and handing the figures to accounting.
@@ -139,9 +140,9 @@ function Runs({ orgId, orgs, onGo }: ScreenProps & { orgId: number }) {
   return (
     <div className="flex flex-col gap-3.5 px-6 py-5">
       <PageHead title="Reimbursements" sub="Approved claims, grouped by person, paid in runs." />
-      <div className="grid max-w-[320px] grid-cols-1">
-        <Kpi label="Waiting to be paid" value={money(payable.data?.total, cur)} sub={`${plural(all.length, 'claim', 'claims')} across ${plural(people.length, 'person', 'people')}`} />
-      </div>
+      <StatGrid className="max-w-[320px]">
+        <Kpi icon="hourglass" tone="amber" label="Waiting to be paid" value={money(payable.data?.total, cur)} sub={`${plural(all.length, 'claim', 'claims')} across ${plural(people.length, 'person', 'people')}`} />
+      </StatGrid>
 
       <Panel
         title="Payable now"

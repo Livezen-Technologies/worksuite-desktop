@@ -7,6 +7,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, btnPrimary, Empty, Field, input, Kpi, PageHead, Panel, Seg, Sheet, StatusChip } from './parts';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Attendance devices (HrAdminSheet "Devices"; the web's Devices):
@@ -94,14 +95,14 @@ export default function Devices() {
         </div>
       ) : null}
       {c ? (
-        <div className="grid grid-cols-6 gap-2">
-          <Kpi label="Devices" value={c.total} />
-          <Kpi label="Online" value={c.online} tone="green" />
-          <Kpi label="Offline" value={c.offline} tone={c.offline ? 'amber' : undefined} />
-          <Kpi label="Punches today" value={c.punches_today} />
-          <Kpi label="Unidentified" value={c.unmatched} tone={c.unmatched ? 'red' : undefined} />
-          <Kpi label="Waiting" value={c.pending} tone={c.pending ? 'amber' : undefined} />
-        </div>
+        <StatGrid min={170}>
+          <Kpi icon="fingerprint" tone="blue" label="Devices" value={c.total} />
+          <Kpi icon="wifi" label="Online" value={c.online} tone="green" />
+          <Kpi icon="wifi-off" label="Offline" value={c.offline} tone={c.offline ? 'amber' : undefined} />
+          <Kpi icon="hand" tone="violet" label="Punches today" value={c.punches_today} />
+          <Kpi icon="user-x" label="Unidentified" value={c.unmatched} tone={c.unmatched ? 'red' : undefined} />
+          <Kpi icon="hourglass" label="Waiting" value={c.pending} tone={c.pending ? 'amber' : undefined} />
+        </StatGrid>
       ) : null}
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       <div className={cx('grid gap-3', current ? 'grid-cols-[340px_1fr]' : 'grid-cols-1')}>

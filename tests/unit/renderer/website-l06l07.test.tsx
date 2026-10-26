@@ -257,7 +257,7 @@ describe('L-07 · Insights (X-UI-13; UX-INS-01…03)', () => {
     // Better is green; Missed is the red tile.
     expect(within(tiles[0]!).getByText('+18% vs previous').className).toContain('text-[#2b7a4b]');
     expect(within(tiles[1]!).getByText('−12 s').className).toContain('text-[#2b7a4b]');
-    expect(tiles[4]!.className).toContain('bg-[#fff6f5]');
+    expect(tiles[4]!.getAttribute('data-tone')).toBe('red');
     expect(within(tiles[4]!).getByText('4.1% of chats').className).toContain('text-[#a63224]');
 
     const chart = screen.getByRole('region', { name: 'Conversations per day' });

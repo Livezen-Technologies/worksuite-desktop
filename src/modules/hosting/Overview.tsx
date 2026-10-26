@@ -4,6 +4,7 @@ import { text } from '../../core/i18n';
 import { daysLeft, fetchDomains, money, type Attention, type Overview as Data, type Renewal } from './api';
 import type { Nav } from './HostingShell';
 import { Btn, Card, Days, Kbd, Kpi, MenuButton, NeedsUpdate, PageHead, Table, td, useReadOnly, when } from './parts';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The overview (D-01) from the server's `GET overview` (Overview::build): the domains, the 30-day expiries, the
@@ -52,14 +53,14 @@ export default function Overview({ data, org, nav, syncing, onSyncAll }: { data:
       </PageHead>
       {missing ? <NeedsUpdate what={text('The overview')} /> : null}
       {o ? (
-        <div className="grid grid-cols-2 gap-3 md:grid-cols-3 xl:grid-cols-6">
-          <Kpi label="Domains" value={n(o.domains?.total)} sub={o.domains?.manual ? text('{n} added by hand', { n: o.domains.manual }) : undefined} />
-          <Kpi label="Expiring 30 d" value={n(o.domains?.within_30)} tone={o.domains?.within_30 ? 'warn' : undefined} sub={o.domains?.renew_off_30 ? text('{n} with auto-renew off', { n: o.domains.renew_off_30 }) : undefined} />
-          <Kpi label="Certs at risk" value={n(o.certificates?.at_risk)} tone={o.certificates?.at_risk ? 'warn' : undefined} />
-          <Kpi label="Servers" value={n(o.servers?.total)} sub={o.servers?.stopped ? text('{n} stopped', { n: o.servers.stopped }) : undefined} />
-          <Kpi label="Monitors down" value={n(o.monitors?.down)} tone={o.monitors?.down ? 'warn' : undefined} sub={o.monitors?.open_incidents ? text('{n} open incidents', { n: o.monitors.open_incidents }) : undefined} />
-          <Kpi label="Per month" value={typeof o.cost?.monthly === 'number' ? money(o.cost.monthly, o.cost.currency ?? o.currency) : '—'} sub={o.cost?.unconverted?.length ? text('plus {list} not converted', { list: o.cost.unconverted.map((u) => money(u.monthly, u.currency)).join(', ') }) : undefined} />
-        </div>
+        <StatGrid min={180}>
+          <Kpi icon="globe" tone="blue" label="Domains" value={n(o.domains?.total)} sub={o.domains?.manual ? text('{n} added by hand', { n: o.domains.manual }) : undefined} />
+          <Kpi icon="calendar-clock" label="Expiring 30 d" value={n(o.domains?.within_30)} tone={o.domains?.within_30 ? 'warn' : undefined} sub={o.domains?.renew_off_30 ? text('{n} with auto-renew off', { n: o.domains.renew_off_30 }) : undefined} />
+          <Kpi icon="shield-alert" label="Certs at risk" value={n(o.certificates?.at_risk)} tone={o.certificates?.at_risk ? 'warn' : undefined} />
+          <Kpi icon="server" tone="violet" label="Servers" value={n(o.servers?.total)} sub={o.servers?.stopped ? text('{n} stopped', { n: o.servers.stopped }) : undefined} />
+          <Kpi icon="activity" label="Monitors down" value={n(o.monitors?.down)} tone={o.monitors?.down ? 'red' : undefined} sub={o.monitors?.open_incidents ? text('{n} open incidents', { n: o.monitors.open_incidents }) : undefined} />
+          <Kpi icon="coins" tone="cyan" label="Per month" value={typeof o.cost?.monthly === 'number' ? money(o.cost.monthly, o.cost.currency ?? o.currency) : '—'} sub={o.cost?.unconverted?.length ? text('plus {list} not converted', { list: o.cost.unconverted.map((u) => money(u.monthly, u.currency)).join(', ') }) : undefined} />
+        </StatGrid>
       ) : null}
       <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(0,1fr)]">
         <Card title="Renewals · next 90 days">

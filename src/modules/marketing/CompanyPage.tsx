@@ -5,6 +5,7 @@ import { Spinner } from '../../components/ui';
 import { Refused } from './audience-parts';
 import { btnPrimary, Card, Kpi, Line, n, PageHeader, Pill } from './parts';
 import type { CompanyDetail } from './types';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * One organisation whole (DK04, the web's W04; MKT-AUD-03): its details, the
@@ -44,12 +45,12 @@ export default function CompanyPage({ id, onBack, onEdit, onOpenContact, onConta
         sub={[c.industry, [c.city, c.country_name].filter(Boolean).join(', ')].filter(Boolean).join(' · ') || undefined}
         actions={onEdit ? <button type="button" className={btnPrimary} onClick={onEdit}>Edit</button> : null}
       />
-      <div className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi label="Contacts" value={n(c.contacts_count)} onClick={() => onContacts(c.id)} />
-        <Kpi label="May be emailed" value={n(c.reachable.email)} />
-        <Kpi label="May be called" value={n(c.reachable.call)} />
-        <Kpi label="May get WhatsApp" value={n(c.reachable.whatsapp)} />
-      </div>
+      <StatGrid min={200}>
+        <Kpi icon="users" tone="blue" label="Contacts" value={n(c.contacts_count)} onClick={() => onContacts(c.id)} />
+        <Kpi icon="mail" tone="green" label="May be emailed" value={n(c.reachable.email)} />
+        <Kpi icon="phone" tone="violet" label="May be called" value={n(c.reachable.call)} />
+        <Kpi icon="chat" tone="cyan" label="May get WhatsApp" value={n(c.reachable.whatsapp)} />
+      </StatGrid>
       <div className="grid items-start gap-4 lg:grid-cols-[minmax(280px,340px)_minmax(0,1fr)]">
         <div className="flex min-w-0 flex-col gap-4">
           <Card title="Details">

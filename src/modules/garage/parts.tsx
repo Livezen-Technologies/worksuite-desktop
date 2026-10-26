@@ -6,6 +6,7 @@ import { Button, Modal, cx } from '../../components/ui';
 import { toast } from '../../core/toasts';
 import { Pill } from '../inventory/parts';
 import { download, errorText, lateBy, mediaSrc, type JobCard, type Options } from './api';
+import { StatCard, type StatTone } from '../../components/StatCard';
 
 /** What every Garage screen shares: the company, its options, and the way round the module. */
 export type GarageView = 'overview' | 'board' | 'jobs' | 'walkin' | 'mywork' | 'parts' | 'vehicles' | 'customers' | 'reports' | 'workshop' | 'setup' | 'settings';
@@ -127,13 +128,8 @@ export function Field({ label, hint, children, className }: { label: string; hin
 }
 
 /** A figure on the overview, a way into its list. */
-export function Tile({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="rounded-[12px] border border-line bg-surface p-3.5">
-      <div className="text-[10.5px] font-bold tracking-[.6px] text-ink-3 uppercase">{label}</div>
-      <div className="mt-1 text-[19px] leading-snug font-extrabold text-ink tabular-nums">{value}</div>
-    </div>
-  );
+export function Tile({ label, value, icon, tone, onClick }: { label: string; value: string; icon?: string; tone?: StatTone; onClick?: () => void }) {
+  return <StatCard label={label} value={value} icon={icon} tone={tone} onClick={onClick} />;
 }
 
 export const input = 'h-9 w-full rounded-[8px] border border-line bg-surface px-3 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:border-primary';

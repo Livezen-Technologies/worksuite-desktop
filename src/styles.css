@@ -48,6 +48,15 @@
   --ws-edge: rgba(15, 27, 61, 0.07);
   /* A card set into a surface: a shade below it on light, a shade above it on dark. */
   --ws-well: #f4f5f9;
+  /* Stat cards (components/StatCard): each tone's colour, drawn as the icon chip on a tint of itself (--ws-tone-mix). */
+  --ws-tone-blue: #2f55d4;
+  --ws-tone-violet: #6d3fd6;
+  --ws-tone-green: #1f7a4d;
+  --ws-tone-amber: #b45309;
+  --ws-tone-red: #c0392b;
+  --ws-tone-cyan: #0e7c86;
+  --ws-tone-neutral: #5b6275;
+  --ws-tone-mix: 11%;
   /* Mail accounts: the colour each mailbox is drawn in (its avatar, its tag on a row). White text on all of them. */
   --ws-acct-blue: #2563eb;
   --ws-acct-sky: #0369a1;
@@ -98,6 +107,14 @@
   --ws-shadow-rgb: 0 0 0;
   --ws-edge: rgba(160, 176, 225, 0.16);
   --ws-well: #1a2447;
+  --ws-tone-blue: #8da2fb;
+  --ws-tone-violet: #b197fc;
+  --ws-tone-green: #5cc795;
+  --ws-tone-amber: #f0a04b;
+  --ws-tone-red: #f28b82;
+  --ws-tone-cyan: #5ccfd8;
+  --ws-tone-neutral: #9aa3bd;
+  --ws-tone-mix: 16%;
   --ws-acct-blue: #3b6ff0;
   --ws-acct-sky: #1683c4;
   --ws-acct-indigo: #4c63e6;
@@ -344,6 +361,109 @@ html[data-contrast='more'] :focus-visible {
   font-family: 'Plus Jakarta Sans Variable', var(--font-sans);
   font-variant-numeric: tabular-nums;
   font-feature-settings: 'tnum' 1;
+}
+
+/*
+ * Stat cards (components/StatCard). `data-tone` picks the tone; the chip is the tone on a tint of itself, the figure
+ * stays in the text colour. A card that leads somewhere lifts a pixel on hover (not with reduced motion), its edge
+ * takes the tone, and its chevron shows.
+ */
+.ws-stat {
+  --stat-tone: var(--ws-tone-neutral);
+}
+/* Stat cards side by side: as many columns of at least --stat-min (220px) as fit, never wider than the row. */
+.ws-stat-grid {
+  grid-template-columns: repeat(auto-fill, minmax(min(var(--stat-min, 220px), 100%), 1fr));
+}
+.ws-stat[data-tone='blue'] {
+  --stat-tone: var(--ws-tone-blue);
+}
+.ws-stat[data-tone='violet'] {
+  --stat-tone: var(--ws-tone-violet);
+}
+.ws-stat[data-tone='green'] {
+  --stat-tone: var(--ws-tone-green);
+}
+.ws-stat[data-tone='amber'] {
+  --stat-tone: var(--ws-tone-amber);
+}
+.ws-stat[data-tone='red'] {
+  --stat-tone: var(--ws-tone-red);
+}
+.ws-stat[data-tone='cyan'] {
+  --stat-tone: var(--ws-tone-cyan);
+}
+.ws-stat-chip {
+  color: var(--stat-tone);
+  background: color-mix(in srgb, var(--stat-tone) var(--ws-tone-mix), transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--stat-tone) 14%, transparent);
+}
+.ws-stat[data-empty] .ws-stat-chip {
+  opacity: 0.7;
+}
+.ws-stat-action {
+  cursor: pointer;
+  transition:
+    transform 150ms ease,
+    box-shadow 150ms ease,
+    border-color 150ms ease;
+}
+.ws-stat-action:hover:not(:disabled) {
+  border-color: color-mix(in srgb, var(--stat-tone) 38%, var(--ws-line));
+  box-shadow:
+    0 6px 18px -10px rgb(var(--ws-shadow-rgb) / 0.35),
+    0 1px 2px rgb(var(--ws-shadow-rgb) / 0.06);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ws-stat-action:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+  .ws-stat-action:active:not(:disabled) {
+    transform: none;
+  }
+}
+.ws-stat-action:focus-visible {
+  outline: 2px solid var(--ws-focus);
+  outline-offset: 2px;
+}
+.ws-stat-action:disabled {
+  cursor: default;
+  opacity: 0.6;
+}
+.ws-stat-go {
+  opacity: 0;
+  transition: opacity 150ms ease;
+}
+.ws-stat-action:hover .ws-stat-go,
+.ws-stat-action:focus-visible .ws-stat-go {
+  opacity: 1;
+}
+.ws-stat-trend.is-good {
+  color: var(--ws-tone-green);
+  background: color-mix(in srgb, var(--ws-tone-green) var(--ws-tone-mix), transparent);
+}
+.ws-stat-trend.is-bad {
+  color: var(--ws-tone-red);
+  background: color-mix(in srgb, var(--ws-tone-red) var(--ws-tone-mix), transparent);
+}
+.ws-stat-trend.is-flat {
+  color: var(--ws-ink-3);
+  background: var(--ws-subtle);
+}
+
+/* A placeholder while something loads: a soft block that breathes (still, with reduced motion). */
+.ws-skeleton {
+  background: var(--ws-subtle);
+}
+@media (prefers-reduced-motion: no-preference) {
+  .ws-skeleton {
+    animation: ws-skeleton 1.4s ease-in-out infinite;
+  }
+}
+@keyframes ws-skeleton {
+  50% {
+    opacity: 0.55;
+  }
 }
 
 /* Menus open with a short fade and scale (worksuite-desktop#168); `motion-safe:` leaves it out for reduced motion. */

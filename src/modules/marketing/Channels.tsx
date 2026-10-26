@@ -13,6 +13,7 @@ import {
   CHANNEL_STATUS_WORD, CHANNEL_WORD, money,
   type ChannelCampaign, type ChannelEstimate, type ChannelKind, type ChannelMessage, type ChannelSetup, type ChannelStatus, type SmsCount,
 } from './wsd';
+import { StatGrid } from '../../components/StatCard';
 
 const STATUS_TONE: Record<ChannelStatus, PillTone> = { draft: 'slate', scheduled: 'violet', sending: 'blue', sent: 'green', cancelled: 'amber', failed: 'red' };
 
@@ -222,11 +223,11 @@ function ChannelView({ id, onBack }: { id: number; onBack: () => void }) {
         <Card title="Before it goes">
           {e.gateway?.problem ? <p role="alert" className="m-0 mb-2.5 rounded-[8px] bg-danger-bg p-2.5 text-[12.5px] text-danger">{e.gateway.problem}</p> : null}
           {e.gateway?.test ? <p className="m-0 mb-2.5 rounded-[8px] bg-warning-bg p-2.5 text-[12.5px] text-ink">The SMS gateway is the test one: messages are written to the log, not sent. Choose a gateway under Settings › SMS.</p> : null}
-          <div className="grid grid-cols-3 gap-2.5">
-            <Kpi label="May be messaged" value={n(e.final)} sub={`${n(e.left_out)} of ${n(e.named)} left out`} />
-            <Kpi label="Parts per message" value={String(e.text.segments)} sub={`${e.text.encoding}, ${e.text.characters} characters`} />
-            {c.channel === 'sms' ? <Kpi label="Estimated cost" value={money(e.cost, e.currency)} sub={`${money(e.price, e.currency)} a part`} /> : null}
-          </div>
+          <StatGrid min={180}>
+            <Kpi icon="messages" tone="blue" label="May be messaged" value={n(e.final)} sub={`${n(e.left_out)} of ${n(e.named)} left out`} />
+            <Kpi icon="hash" label="Parts per message" value={String(e.text.segments)} sub={`${e.text.encoding}, ${e.text.characters} characters`} />
+            {c.channel === 'sms' ? <Kpi icon="calculator" tone="violet" label="Estimated cost" value={money(e.cost, e.currency)} sub={`${money(e.price, e.currency)} a part`} /> : null}
+          </StatGrid>
           <p className="m-0 mt-3 text-[11.5px] font-semibold text-ink-3">What the first person gets</p>
           <p className="m-0 mt-1 rounded-[8px] bg-ground p-2.5 text-[12.5px] whitespace-pre-line text-ink">{e.preview}</p>
         </Card>
@@ -234,14 +235,14 @@ function ChannelView({ id, onBack }: { id: number; onBack: () => void }) {
 
       {c.status !== 'draft' && s ? (
         <>
-          <div className="grid grid-cols-3 gap-2.5 xl:grid-cols-6">
-            <Kpi label="Sent" value={n(s.sent)} sub={`${n(s.pending)} waiting`} />
-            <Kpi label="Delivered" value={n(s.delivered)} />
-            {c.channel === 'whatsapp' ? <Kpi label="Read" value={n(s.read)} /> : <Kpi label="Cost" value={money(s.cost)} sub={`${n(s.segments)} parts`} />}
-            <Kpi label="Replied" value={n(s.replied)} />
-            <Kpi label="Opted out" value={n(s.opted_out)} tone={s.opted_out > 0 ? 'amber' : undefined} />
-            <Kpi label="Failed" value={n(s.failed)} tone={s.failed > 0 ? 'red' : undefined} sub={`${n(s.skipped)} left out at send`} />
-          </div>
+          <StatGrid min={180}>
+            <Kpi icon="send" tone="blue" label="Sent" value={n(s.sent)} sub={`${n(s.pending)} waiting`} />
+            <Kpi icon="check-check" tone="green" label="Delivered" value={n(s.delivered)} />
+            {c.channel === 'whatsapp' ? <Kpi icon="eye" tone="violet" label="Read" value={n(s.read)} /> : <Kpi icon="coins" tone="cyan" label="Cost" value={money(s.cost)} sub={`${n(s.segments)} parts`} />}
+            <Kpi icon="reply" tone="green" label="Replied" value={n(s.replied)} />
+            <Kpi icon="user-minus" label="Opted out" value={n(s.opted_out)} tone={s.opted_out > 0 ? 'amber' : undefined} />
+            <Kpi icon="x-circle" label="Failed" value={n(s.failed)} tone={s.failed > 0 ? 'red' : undefined} sub={`${n(s.skipped)} left out at send`} />
+          </StatGrid>
           <Card title="Messages" padded={false} action={(
             <Select aria-label="Show" value={filter} onValueChange={setFilter} className="w-36"
               options={[{ value: '', label: 'All' }, ...['delivered', 'read', 'replied', 'failed', 'skipped', 'pending'].map((v) => ({ value: v, label: v[0]!.toUpperCase() + v.slice(1) }))]} />

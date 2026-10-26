@@ -211,8 +211,9 @@ describe('the rest of the panel', () => {
 
   it('marks days late in amber, naming the period the server counted', async () => {
     show({ canDecide: true });
-    const late = (await screen.findByText('Days late')).parentElement!;
+    await screen.findByText('Days late');
+    const late = screen.getByRole('group', { name: 'Days late' });
     expect(late.getAttribute('title')).toBe('Late on 16 days in the last 30 days');
-    expect(late.className).toContain('bg-[#FFF4E0]');
+    expect(late.getAttribute('data-tone')).toBe('amber');
   });
 });

@@ -15,6 +15,7 @@ import { fetchReport, GROUPS, KM, periodLabel, rangeOf, RANGES, REPORTS, type Ra
 import { money, moneyFull, StatusPill } from './parts';
 import { saveReportPdf } from './print';
 import { cx } from '../../components/ui';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Reports (OmsReports, OmsReportsSales): seven reports over a date window,
@@ -197,15 +198,17 @@ function Summary({ d, status, aging }: { d: ReportData; status?: ReportData; agi
   const topBucket = Math.max(1, ...buckets.map((b) => b.orders));
   return (
     <>
-      <Panel title={windowTitle(d)} bodyClassName="grid grid-cols-4 gap-2.5 p-3.5">
-        <Kpi label="Orders" value={Number(d.orders ?? 0).toLocaleString()} />
-        <Kpi label="Today" value={Number(d.today ?? 0).toLocaleString()} />
-        <Kpi label="Pending" value={Number(d.by_status?.pending ?? 0).toLocaleString()} tone="amber" />
-        <Kpi label="Completed" value={Number(d.by_status?.completed ?? 0).toLocaleString()} tone="green" />
-        <Kpi label="Cancelled" value={Number(d.by_status?.cancelled ?? 0).toLocaleString()} />
-        <Kpi label="Returned" value={Number(d.by_status?.returned ?? 0).toLocaleString()} tone="red" />
-        <Kpi label="Invoiced" value={money(m.invoiced ?? 0, one)} sub={`${m.invoiced_orders ?? 0} ${m.invoiced_orders === 1 ? 'order' : 'orders'} billed`} />
-        <Kpi label="Outstanding" value={money(m.outstanding ?? 0, one)} sub={`${money(m.paid ?? 0, one)} received`} tone={Number(m.outstanding) > 0 ? 'red' : undefined} />
+      <Panel title={windowTitle(d)} bodyClassName="p-3.5">
+        <StatGrid min={180}>
+          <Kpi icon="cart" tone="blue" label="Orders" value={Number(d.orders ?? 0).toLocaleString()} />
+          <Kpi icon="calendar-check" tone="violet" label="Today" value={Number(d.today ?? 0).toLocaleString()} />
+          <Kpi icon="hourglass" label="Pending" value={Number(d.by_status?.pending ?? 0).toLocaleString()} tone="amber" />
+          <Kpi icon="check-circle" label="Completed" value={Number(d.by_status?.completed ?? 0).toLocaleString()} tone="green" />
+          <Kpi icon="ban" label="Cancelled" value={Number(d.by_status?.cancelled ?? 0).toLocaleString()} />
+          <Kpi icon="undo" label="Returned" value={Number(d.by_status?.returned ?? 0).toLocaleString()} tone="red" />
+          <Kpi icon="receipt" tone="blue" label="Invoiced" value={money(m.invoiced ?? 0, one)} sub={`${m.invoiced_orders ?? 0} ${m.invoiced_orders === 1 ? 'order' : 'orders'} billed`} />
+          <Kpi icon="clock" label="Outstanding" value={money(m.outstanding ?? 0, one)} sub={`${money(m.paid ?? 0, one)} received`} tone={Number(m.outstanding) > 0 ? 'red' : undefined} />
+        </StatGrid>
       </Panel>
       <Panel title="Order value, by currency">
         <Table
@@ -313,11 +316,11 @@ function Payment({ d }: { d: ReportData }) {
   return (
     <>
       {d.counts ? (
-        <div className="grid grid-cols-3 gap-2.5">
-          <Kpi label="Unpaid" value={Number(c.unpaid ?? 0).toLocaleString()} tone="red" />
-          <Kpi label="Partly paid" value={Number(c.partial ?? 0).toLocaleString()} tone="amber" />
-          <Kpi label="Settled" value={Number(c.settled ?? 0).toLocaleString()} tone="green" />
-        </div>
+        <StatGrid min={180}>
+          <Kpi icon="alert" label="Unpaid" value={Number(c.unpaid ?? 0).toLocaleString()} tone="red" />
+          <Kpi icon="percent" label="Partly paid" value={Number(c.partial ?? 0).toLocaleString()} tone="amber" />
+          <Kpi icon="check-check" label="Settled" value={Number(c.settled ?? 0).toLocaleString()} tone="green" />
+        </StatGrid>
       ) : null}
       <Panel title="Outstanding, largest first">
         <Table

@@ -14,6 +14,7 @@ import { usePhoneJobs } from './phone-jobs';
 import SearchPanel from './SearchPanel';
 import TakePayment from './TakePayment';
 import WalkIn from './WalkIn';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Event Desk Mode (Events SRS §15.2, EV-POR-010..012; §9.1–9.3): the event's
@@ -320,10 +321,10 @@ export default function Desk({ active }: { active: boolean }) {
         </div>
 
         <aside className="flex flex-col gap-3" aria-label="Counters and actions">
-          <div className="grid grid-cols-2 gap-2">
-            <Counter label="Inside" value={summary.data?.inside} big />
-            <Counter label="Checked in" value={summary.data?.checked_in} hint={summary.data ? `of ${summary.data.expected} expected` : undefined} big />
-          </div>
+          <StatGrid min={150}>
+            <Counter icon="door" tone="blue" label="Inside" value={summary.data?.inside} big />
+            <Counter icon="ticket" tone="green" label="Checked in" value={summary.data?.checked_in} hint={summary.data ? `of ${summary.data.expected} expected` : undefined} big />
+          </StatGrid>
           {summary.data ? (
             <div className="rounded-[12px] border border-line bg-surface px-4 py-2.5 text-[12.5px] text-ink-2">
               Today: <b className="text-ink">{summary.data.today.checked_in}</b> in · <b className="text-ink">{summary.data.today.checked_out}</b> out · <b className="text-ink">{summary.data.today.denied}</b> refused · <b className="text-ink">{summary.data.today.walk_ins}</b> walk-ins

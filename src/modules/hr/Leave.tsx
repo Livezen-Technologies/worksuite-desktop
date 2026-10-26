@@ -16,6 +16,7 @@ import { addDays, dayShort, monthGrid, monthLabel, parseYmd, rangeLabel, shiftMo
 import { btn, btnBad, btnGhost, btnGood, btnPrimary, btnSmall, Empty, Field, humanise, Initials, input, PageHead, Seg, Sheet, StatusChip } from './parts';
 import { can } from './Rail';
 import { Select } from '../../components/Select';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * Leave · Requests & calendar (HrLeave, HrLeaveCalendar): my balances, the
@@ -567,11 +568,11 @@ export function ReviewLeave({ id, canDecide, onClose, onDone }: { id: number; ca
                   {v.request.type_name} · {rangeLabel(v.request.starts_on, v.request.ends_on)} · {v.request.days} {Number(v.request.days) === 1 ? 'day' : 'days'}
                   {v.request.reason ? ` · “${v.request.reason}”` : ''}
                 </span>
-                <div className="grid grid-cols-3 gap-2">
-                  <Stat label="Pending requests" value={String(v.pending.count)} sub={`${v.pending.days} day(s) total`} />
-                  <Stat label="Notice" value={v.request.notice_days != null ? `${v.request.notice_days} days` : '—'} sub={v.request.requested_on ? `asked on ${dayShort(v.request.requested_on)}` : undefined} />
-                  <Stat label={`Taken in ${v.history.year}`} value={String(v.history.approved_days)} sub={`${v.history.approved_count} approved · ${v.history.rejected_count} refused`} />
-                </div>
+                <StatGrid min={130}>
+                  <Stat icon="inbox" tone="blue" label="Pending requests" value={String(v.pending.count)} sub={`${v.pending.days} day(s) total`} />
+                  <Stat icon="calendar-clock" tone="violet" label="Notice" value={v.request.notice_days != null ? `${v.request.notice_days} days` : '—'} sub={v.request.requested_on ? `asked on ${dayShort(v.request.requested_on)}` : undefined} />
+                  <Stat icon="plane" tone="cyan" label={`Taken in ${v.history.year}`} value={String(v.history.approved_days)} sub={`${v.history.approved_count} approved · ${v.history.rejected_count} refused`} />
+                </StatGrid>
                 <div>
                   <b className="text-ink">Who else is off then</b>
                   <div className="mt-0.5 text-[12.5px] text-ink-2">
@@ -653,11 +654,11 @@ export function ReviewLeave({ id, canDecide, onClose, onDone }: { id: number; ca
                   </ul>
                 </div>
                 {v.attendance ? (
-                  <div className="grid grid-cols-3 gap-2">
-                    <Stat label="Days present" value={String(v.attendance.days_present)} hint={`In the last ${v.attendance.window_days} days`} />
-                    <Stat label="Days late" value={String(v.attendance.days_late)} hint={`Late on ${v.attendance.days_late} ${v.attendance.days_late === 1 ? 'day' : 'days'} in the last ${v.attendance.window_days} days`} tone={v.attendance.days_late ? 'amber' : undefined} />
-                    <Stat label="Missing check-outs" value={String(v.attendance.missing_check_outs)} hint={`In the last ${v.attendance.window_days} days`} tone={v.attendance.missing_check_outs ? 'red' : undefined} />
-                  </div>
+                  <StatGrid min={130}>
+                    <Stat icon="user-check" tone="green" label="Days present" value={String(v.attendance.days_present)} hint={`In the last ${v.attendance.window_days} days`} />
+                    <Stat icon="snooze" label="Days late" value={String(v.attendance.days_late)} hint={`Late on ${v.attendance.days_late} ${v.attendance.days_late === 1 ? 'day' : 'days'} in the last ${v.attendance.window_days} days`} tone={v.attendance.days_late ? 'amber' : undefined} />
+                    <Stat icon="door" label="Missing check-outs" value={String(v.attendance.missing_check_outs)} hint={`In the last ${v.attendance.window_days} days`} tone={v.attendance.missing_check_outs ? 'red' : undefined} />
+                  </StatGrid>
                 ) : null}
               </>
             ) : null}
@@ -746,14 +747,8 @@ function ChangeCover({ id, employeeId, current, onDone }: { id: number; employee
   );
 }
 
-function Stat({ label, value, sub, tone, hint }: { label: string; value: string; sub?: string; tone?: 'amber' | 'red'; hint?: string }) {
-  return (
-    <div title={hint} className={cx('rounded-[9px] px-2.5 py-2', tone === 'amber' ? 'bg-[#FFF4E0] dark:bg-warning-bg' : 'bg-ground')}>
-      <div className="text-[11px] font-semibold text-ink-3">{label}</div>
-      <b className={cx('text-[16px] text-ink', tone === 'amber' ? 'text-[#9A4A06] dark:text-warning' : tone === 'red' ? 'text-danger' : undefined)}>{value}</b>
-      {sub ? <div className="text-[11px] text-ink-3">{sub}</div> : null}
-    </div>
-  );
+function Stat({ label, value, sub, tone, hint, icon }: { label: string; value: string; sub?: string; tone?: 'amber' | 'red' | StatTone; hint?: string; icon?: string }) {
+  return <StatCard size="sm" label={label} value={value} sub={sub} tone={tone} title={hint} icon={icon} />;
 }
 
 /**

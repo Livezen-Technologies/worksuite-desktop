@@ -6,6 +6,7 @@ import { ErrorNote, Spinner, cx } from '../../components/ui';
 import { btn, Empty, PageHead, Panel } from '../hr/parts';
 import { agingParts, amount, type Dashboard as Data } from './api';
 import { money } from './parts';
+import { StatCard, StatGrid, type StatTone } from '../../components/StatCard';
 
 /**
  * The Billing dashboard (D01, BillDashboard): eight tiles — what is owed and
@@ -59,16 +60,16 @@ export default function Dashboard({
           </button>
         ) : null}
       </PageHead>
-      <div className="grid grid-cols-4 gap-2.5">
-        <Tile label="Outstanding" value={money(k.outstanding, cur)} sub={n(k.outstanding_count, 'invoice', 'invoices')} tone="primary" onClick={() => onList('unpaid')} />
-        <Tile label="Overdue" value={money(k.overdue, cur)} sub={n(k.overdue_count, 'invoice', 'invoices')} tone={k.overdue > 0 ? 'red' : undefined} onClick={() => onList('overdue')} />
-        <Tile label="Billed this month" value={money(k.billed_month, cur)} sub={n(k.billed_month_count, 'invoice', 'invoices')} />
-        <Tile label="Received this month" value={money(k.received_month, cur)} sub={`Today ${money(k.received_today, cur)}`} tone="green" />
-        <Tile label="Drafts" value={k.draft_count} sub={`${money(k.draft, cur)} not issued`} tone={k.draft_count ? 'amber' : undefined} onClick={() => onList('draft')} />
-        <Tile label="Unallocated" value={money(k.unallocated, cur)} sub={n(k.unallocated_count, 'payment', 'payments')} />
-        <Tile label="Credit balance" value={money(k.credit_balance, cur)} sub="unspent credit notes" />
-        <Tile label="Recurring due" value={recurringDue} sub={recurringDue ? 'raise them from Recurring' : 'next 30 days'} tone={recurringDue ? 'red' : undefined} />
-      </div>
+      <StatGrid>
+        <Tile icon="hourglass" label="Outstanding" value={money(k.outstanding, cur)} sub={n(k.outstanding_count, 'invoice', 'invoices')} tone="primary" onClick={() => onList('unpaid')} />
+        <Tile icon="alert" label="Overdue" value={money(k.overdue, cur)} sub={n(k.overdue_count, 'invoice', 'invoices')} tone={k.overdue > 0 ? 'red' : undefined} onClick={() => onList('overdue')} />
+        <Tile icon="receipt" tone="violet" label="Billed this month" value={money(k.billed_month, cur)} sub={n(k.billed_month_count, 'invoice', 'invoices')} />
+        <Tile icon="banknote" label="Received this month" value={money(k.received_month, cur)} sub={`Today ${money(k.received_today, cur)}`} tone="green" />
+        <Tile icon="compose" label="Drafts" value={k.draft_count} sub={`${money(k.draft, cur)} not issued`} tone={k.draft_count ? 'amber' : undefined} onClick={() => onList('draft')} />
+        <Tile icon="wallet" tone="cyan" label="Unallocated" value={money(k.unallocated, cur)} sub={n(k.unallocated_count, 'payment', 'payments')} />
+        <Tile icon="piggy-bank" tone="violet" label="Credit balance" value={money(k.credit_balance, cur)} sub="unspent credit notes" />
+        <Tile icon="repeat" label="Recurring due" value={recurringDue} sub={recurringDue ? 'raise them from Recurring' : 'next 30 days'} tone={recurringDue ? 'red' : undefined} />
+      </StatGrid>
       <div className="grid grid-cols-2 gap-2.5">
         <section className="flex flex-col gap-2.5 rounded-[10px] border border-line bg-surface p-3.5">
           <b className="text-ink">How old the money is</b>
@@ -157,18 +158,11 @@ export default function Dashboard({
   );
 }
 
-const TONE = { primary: 'text-primary', red: 'text-danger', green: 'text-[#1F7A4D] dark:text-success', amber: 'text-[#B45309] dark:text-warning' } as const;
+const TONE: Record<string, StatTone> = { primary: 'blue', red: 'red', green: 'green', amber: 'amber' };
 
 /** A D01 tile: the label in small capitals, the figure in its colour, a line under it. */
-function Tile({ label, value, sub, tone, onClick }: { label: string; value: ReactNode; sub: ReactNode; tone?: keyof typeof TONE; onClick?: () => void }) {
-  const Tag = onClick ? 'button' : 'div';
-  return (
-    <Tag {...(onClick ? { type: 'button' as const, onClick } : {})} className={cx('flex flex-col rounded-[10px] border border-line bg-surface px-3.5 py-3 text-left', onClick && 'hover:border-primary/50')}>
-      <span className="text-[11px] font-semibold tracking-[.4px] text-ink-3 uppercase">{label}</span>
-      <b className={cx('mt-1 text-[19px] tabular-nums', tone ? TONE[tone] : 'text-ink')}>{value}</b>
-      <span className="text-[11.5px] text-ink-3">{sub}</span>
-    </Tag>
-  );
+function Tile({ label, value, sub, tone, onClick, icon }: { label: string; value: ReactNode; sub: ReactNode; tone?: 'primary' | StatTone; onClick?: () => void; icon?: string }) {
+  return <StatCard label={label} value={value} sub={sub} tone={tone ? (TONE[tone] ?? (tone as StatTone)) : undefined} onClick={onClick} icon={icon} />;
 }
 
 function ListPanel({ title, empty, children }: { title: string; empty: string; children: ReactNode[] }) {

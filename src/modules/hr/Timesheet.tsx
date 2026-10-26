@@ -10,6 +10,7 @@ import { addDays, dayShort, hoursLabel, monthLabel, parseYmd, rangeLabel, weekDa
 import { btn, btnPrimary, Cell, Empty, Field, input, Kpi, PageHead, Panel, row, Seg, Sheet, StatusChip, THead } from './parts';
 import { Select } from '../../components/Select';
 import { Checkbox } from '../../components/Checkbox';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Timesheet (HrTimesheet): what I worked on — day, week or month — as work
@@ -100,11 +101,11 @@ export default function Timesheet() {
           {sheet.decision_note ? `: “${sheet.decision_note}”` : '.'} Change it and submit the week again.
         </div>
       ) : null}
-      <div className="grid grid-cols-3 gap-2.5">
-        <Kpi label="Logged" value={data ? `${hoursLabel(data.totals.minutes / 60).replace('h', ' h')}` : '—'} />
-        <Kpi label="Billable" value={data ? `${hoursLabel(data.totals.billable_minutes / 60).replace('h', ' h')}` : '—'} />
-        <Kpi label="Entries" value={data?.totals.entries ?? '—'} />
-      </div>
+      <StatGrid min={180}>
+        <Kpi icon="clock" tone="blue" label="Logged" value={data ? `${hoursLabel(data.totals.minutes / 60).replace('h', ' h')}` : '—'} />
+        <Kpi icon="banknote" tone="green" label="Billable" value={data ? `${hoursLabel(data.totals.billable_minutes / 60).replace('h', ' h')}` : '—'} />
+        <Kpi icon="list" tone="violet" label="Entries" value={data?.totals.entries ?? '—'} />
+      </StatGrid>
       {logs.isLoading ? <Spinner /> : logs.error ? <ErrorNote error={logs.error} onRetry={() => void logs.refetch()} /> : null}
       {data ? (
         <div className="grid min-h-0 flex-1 grid-cols-[2.2fr_1fr] gap-3">

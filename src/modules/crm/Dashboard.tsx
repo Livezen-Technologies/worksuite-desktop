@@ -3,6 +3,7 @@ import { useState, type ReactNode } from 'react';
 import { apiGet } from '../../core/api';
 import { relative } from '../../core/time';
 import { ErrorNote, Spinner, cx } from '../../components/ui';
+import { StatGrid } from '../../components/StatCard';
 import { btn, btnPrimary, PageHead, Panel, Seg, StatusChip } from '../hr/parts';
 import { useDashboard, type DashboardDetail } from './api';
 import { BarRow, Kpi, ListLine, money, stageColour } from './parts';
@@ -54,18 +55,18 @@ export default function Dashboard({ onPick, onNewLead, onOpenDeal, onOpenLead, o
 
       <ApprovalsPanel onOpen={(r) => (r.doc === 'proposal' ? onOpenProposal?.(r.doc_id) : onOpenEstimate?.(r.doc_id))} />
 
-      <div className="grid grid-cols-2 gap-2.5 @min-[760px]:grid-cols-4">
-        <Kpi label="Open deals" value={k.open_deals} sub={money(k.open_value, currency)} onClick={() => onPick('pipe')} />
-        <Kpi label="Weighted forecast" value={money(k.forecast, currency)} sub="value × stage probability" tone="blue" />
-        <Kpi label="Won this month" value={money(k.won_month, currency)} sub={`${k.won_month_count} ${k.won_month_count === 1 ? 'deal' : 'deals'}`} tone="green" />
-        <Kpi label="Win rate" value={k.win_rate === null ? '—' : `${k.win_rate}%`} sub={k.win_rate === null ? 'nothing decided yet' : `${k.won_month_count} won · ${k.lost_month_count} lost`} />
-      </div>
-      <div className="grid grid-cols-2 gap-2.5 @min-[760px]:grid-cols-4">
-        <Kpi size="sm" label="New leads" value={k.leads_new} sub={`${k.leads_open} being worked`} onClick={() => onPick('leads')} />
-        <Kpi size="sm" label="Stalled deals" value={d.stalled.length} sub={`no stage change in ${staleDays} days`} tone={d.stalled.length ? 'red' : 'plain'} onClick={() => onPick('pipe')} />
-        <Kpi size="sm" label="Tasks due today" value={k.tasks_today} sub="from the Tasks module" />
-        <Kpi size="sm" label="Meetings today" value={k.meetings_today} sub="from the Meetings module" />
-      </div>
+      <StatGrid label="Pipeline figures">
+        <Kpi icon="handshake" tone="blue" label="Open deals" value={k.open_deals} sub={money(k.open_value, currency)} onClick={() => onPick('pipe')} />
+        <Kpi icon="target" tone="violet" label="Weighted forecast" value={money(k.forecast, currency)} sub="value × stage probability" />
+        <Kpi icon="trophy" tone="green" label="Won this month" value={money(k.won_month, currency)} sub={`${k.won_month_count} ${k.won_month_count === 1 ? 'deal' : 'deals'}`} />
+        <Kpi icon="percent" tone="cyan" label="Win rate" value={k.win_rate === null ? '—' : `${k.win_rate}%`} sub={k.win_rate === null ? 'nothing decided yet' : `${k.won_month_count} won · ${k.lost_month_count} lost`} />
+      </StatGrid>
+      <StatGrid label="Leads and today">
+        <Kpi size="sm" icon="user-plus" tone="blue" label="New leads" value={k.leads_new} sub={`${k.leads_open} being worked`} onClick={() => onPick('leads')} />
+        <Kpi size="sm" icon="hourglass" label="Stalled deals" value={d.stalled.length} sub={`no stage change in ${staleDays} days`} tone={d.stalled.length ? 'red' : 'plain'} onClick={() => onPick('pipe')} />
+        <Kpi size="sm" icon="tasks" tone="amber" label="Tasks due today" value={k.tasks_today} sub="from the Tasks module" />
+        <Kpi size="sm" icon="calendar" tone="violet" label="Meetings today" value={k.meetings_today} sub="from the Meetings module" />
+      </StatGrid>
 
       <div className="grid items-start gap-3 @min-[900px]:grid-cols-[1.3fr_1fr]">
         <Panel title="Pipeline by stage" action={<Link onClick={() => onPick('pipe')}>Open board</Link>} bodyClassName="flex flex-col px-3.5 py-1.5">

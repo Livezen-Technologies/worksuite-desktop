@@ -20,6 +20,7 @@ import { can } from './Rail';
 import { NewRequestSheet } from './Requests';
 import { SheetDetail } from './TimesheetApprovals';
 import { Select } from '../../components/Select';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * An employee's profile (HrProfile, HrProfilePersonal, HrProfileSheet; the
@@ -186,12 +187,12 @@ function Overview({ p, onTab }: { p: Profile; onTab: (t: Tab) => void }) {
   const open = p.requests.filter((r) => r.status === 'pending');
   return (
     <>
-      <div className="grid grid-cols-4 gap-2.5">
-        <Kpi label="This month" value={att ? `${att.days_present} / ${att.work_days}` : '—'} sub="days present" onClick={p.can.attendance ? () => onTab('attendance') : undefined} />
-        <Kpi label="Hours worked" value={att ? `${Math.round(att.net_seconds / 3600)} h` : '—'} sub={att ? `${Math.round(att.overtime_minutes / 60)} h overtime` : undefined} />
-        <Kpi label="Leave available" value={p.leave ? Math.round(available * 10) / 10 : '—'} sub="days, all types" onClick={p.can.leave ? () => onTab('leave') : undefined} />
-        <Kpi label="Open requests" value={open.length} sub={open[0]?.kind_label ?? open[0]?.kind ?? 'Nothing waiting'} onClick={() => onTab('requests')} />
-      </div>
+      <StatGrid min={180}>
+        <Kpi icon="calendar" tone="blue" label="This month" value={att ? `${att.days_present} / ${att.work_days}` : '—'} sub="days present" onClick={p.can.attendance ? () => onTab('attendance') : undefined} />
+        <Kpi icon="clock" tone="violet" label="Hours worked" value={att ? `${Math.round(att.net_seconds / 3600)} h` : '—'} sub={att ? `${Math.round(att.overtime_minutes / 60)} h overtime` : undefined} />
+        <Kpi icon="plane" tone="cyan" label="Leave available" value={p.leave ? Math.round(available * 10) / 10 : '—'} sub="days, all types" onClick={p.can.leave ? () => onTab('leave') : undefined} />
+        <Kpi icon="inbox" tone="amber" label="Open requests" value={open.length} sub={open[0]?.kind_label ?? open[0]?.kind ?? 'Nothing waiting'} onClick={() => onTab('requests')} />
+      </StatGrid>
       <div className="grid min-h-0 grid-cols-[1fr_1.3fr_1fr] gap-3">
         <Panel title="Employment" bodyClassName="px-3.5 py-2">
           <Facts
@@ -475,13 +476,13 @@ function AttendanceTab({ id, name, self }: { id: number; name: string; self: boo
         </button>
       </div>
       {t ? (
-        <div className="grid grid-cols-5 gap-2.5">
-          <Kpi label="Present" value={`${t.days_present} / ${t.work_days}`} sub={t.attendance_rate != null ? `${t.attendance_rate}% attendance` : undefined} />
-          <Kpi label="Worked" value={minutesLabel(t.net_seconds / 60)} sub={`${minutesLabel(t.overtime_minutes)} overtime`} />
-          <Kpi label="Late days" value={t.late_days} tone={t.late_days ? 'amber' : undefined} />
-          <Kpi label="Early departures" value={t.early_days} />
-          <Kpi label="No check-out" value={t.missing_check_outs} tone={t.missing_check_outs ? 'red' : undefined} />
-        </div>
+        <StatGrid min={160}>
+          <Kpi icon="user-check" tone="green" label="Present" value={`${t.days_present} / ${t.work_days}`} sub={t.attendance_rate != null ? `${t.attendance_rate}% attendance` : undefined} />
+          <Kpi icon="clock" tone="violet" label="Worked" value={minutesLabel(t.net_seconds / 60)} sub={`${minutesLabel(t.overtime_minutes)} overtime`} />
+          <Kpi icon="snooze" label="Late days" value={t.late_days} tone={t.late_days ? 'amber' : undefined} />
+          <Kpi icon="logout" label="Early departures" value={t.early_days} />
+          <Kpi icon="door" label="No check-out" value={t.missing_check_outs} tone={t.missing_check_outs ? 'red' : undefined} />
+        </StatGrid>
       ) : null}
       {q.isLoading ? <Spinner /> : q.error ? <ErrorNote error={q.error} onRetry={() => void q.refetch()} /> : null}
       {q.data ? (
@@ -526,10 +527,10 @@ function TimesheetTab({ p }: { p: Profile }) {
   if (!t.linked) return <Empty text="No login is linked, so no time can be logged against this person." />;
   return (
     <div className="flex max-w-[760px] flex-col gap-3">
-      <div className="grid grid-cols-2 gap-2.5">
-        <Kpi label="Logged this month" value={minutesLabel(t.minutes_this_month)} />
-        <Kpi label="Recent weeks" value={t.sheets.length} sub={t.sheets.filter((s) => s.status === 'submitted').length ? `${t.sheets.filter((s) => s.status === 'submitted').length} awaiting review` : 'none waiting'} />
-      </div>
+      <StatGrid min={150}>
+        <Kpi icon="timer" tone="blue" label="Logged this month" value={minutesLabel(t.minutes_this_month)} />
+        <Kpi icon="chart" tone="cyan" label="Recent weeks" value={t.sheets.length} sub={t.sheets.filter((s) => s.status === 'submitted').length ? `${t.sheets.filter((s) => s.status === 'submitted').length} awaiting review` : 'none waiting'} />
+      </StatGrid>
       <Panel title="Timesheets">
         <THead cols={[['Period', null], ['Submitted', 130], ['Status', 140], ['', 60]]} />
         {t.sheets.map((s) => (

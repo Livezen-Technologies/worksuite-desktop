@@ -49,6 +49,7 @@ import {
 } from './approvals-api';
 import { StatusPill, words } from './parts';
 import type { ScreenProps } from './Rail';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * Cash advances: asking for money before a trip, and squaring up after it.
@@ -135,9 +136,9 @@ function AdvancesIn({ orgId, orgs, onGo, openAdvance }: ScreenProps & { orgId: n
 
       {data ? (
         <>
-          <div className="grid grid-cols-3 gap-3">
-            <Kpi label="You are holding" value={money(data.outstanding.total, base)} sub={`${data.outstanding.count} advance(s) not yet settled`} tone={data.outstanding.count > 0 ? 'amber' : undefined} />
-          </div>
+          <StatGrid min={200}>
+            <Kpi icon="wallet" label="You are holding" value={money(data.outstanding.total, base)} sub={`${data.outstanding.count} advance(s) not yet settled`} tone={data.outstanding.count > 0 ? 'amber' : undefined} />
+          </StatGrid>
 
           <div className="flex flex-wrap items-center gap-2">
             {finance ? (
@@ -578,12 +579,12 @@ function Standing({ p }: { p: Position }) {
     const b = settledBalance(a);
     return (
       <section className="flex flex-col gap-2">
-        <div className="grid grid-cols-2 gap-2.5">
-          <Kpi label="Advanced" value={m(a.base_amount)} />
-          <Kpi label="Accounted for" value={m(a.settled_amount)} />
-          <Kpi label="Due back to the company" value={m(a.refund_amount)} tone={b.side === 'due_back' ? 'amber' : undefined} />
-          <Kpi label="Company owes them" value={m(a.topup_amount)} tone={b.side === 'owed' ? 'green' : undefined} />
-        </div>
+        <StatGrid min={150}>
+          <Kpi icon="banknote" tone="blue" label="Advanced" value={m(a.base_amount)} />
+          <Kpi icon="receipt-text" tone="violet" label="Accounted for" value={m(a.settled_amount)} />
+          <Kpi icon="undo" label="Due back to the company" value={m(a.refund_amount)} tone={b.side === 'due_back' ? 'amber' : undefined} />
+          <Kpi icon="hand-coins" label="Company owes them" value={m(a.topup_amount)} tone={b.side === 'owed' ? 'green' : undefined} />
+        </StatGrid>
         <span className="text-[12px] text-ink-3">
           Settled{a.settled_at ? ` on ${shortDate(a.settled_at)}` : ''}. These are the figures it was settled at; a later correction to a claim does not change them.
         </span>
@@ -592,12 +593,12 @@ function Standing({ p }: { p: Position }) {
   }
   return (
     <section className="flex flex-col gap-2">
-      <div className="grid grid-cols-2 gap-2.5">
-        <Kpi label="Advanced" value={m(p.advanced)} />
-        <Kpi label="Accounted for" value={m(p.accounted)} />
-        <Kpi label="Due back to the company" value={m(p.refund_due)} tone={positive(p.refund_due) ? 'amber' : undefined} />
-        <Kpi label="Company owes them" value={m(p.company_due)} tone={positive(p.company_due) ? 'green' : undefined} />
-      </div>
+      <StatGrid min={150}>
+        <Kpi icon="banknote" tone="blue" label="Advanced" value={m(p.advanced)} />
+        <Kpi icon="receipt-text" tone="violet" label="Accounted for" value={m(p.accounted)} />
+        <Kpi icon="undo" label="Due back to the company" value={m(p.refund_due)} tone={positive(p.refund_due) ? 'amber' : undefined} />
+        <Kpi icon="hand-coins" label="Company owes them" value={m(p.company_due)} tone={positive(p.company_due) ? 'green' : undefined} />
+      </StatGrid>
       {positive(p.pending) && p.blocked_by ? <Notice tone="amber">{p.blocked_by}</Notice> : null}
     </section>
   );

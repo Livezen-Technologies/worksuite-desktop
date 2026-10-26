@@ -15,6 +15,7 @@ import { K, type Company } from './api';
 import { fetchLibrary, filterLibrary, KA, LIBRARY_KINDS, libraryBody, libraryDraft, libraryKind, removeLibraryDoc, removeLibraryDocs, saveLibraryDoc, type LibraryDoc, type LibraryDraft, type LibraryFilter } from './admin';
 import { saveTenderFile } from './files';
 import { Checkbox } from '../../components/Checkbox';
+import { StatGrid } from '../../components/StatCard';
 
 /**
  * The company's own documents — registration, tax clearance, audited
@@ -61,12 +62,12 @@ export default function Library({ org, companies, canManage }: { org: string; co
           </button>
         ) : null}
       </PageHead>
-      <div className="grid grid-cols-4 gap-3">
-        <Kpi label="In the library" value={lib.summary.total} onClick={() => setFilter('all')} />
-        <Kpi label="Expired" value={lib.summary.expired} tone={lib.summary.expired ? 'red' : undefined} sub="Fails every bid it is filed on" onClick={() => setFilter('expired')} />
-        <Kpi label="Expiring within 60 days" value={lib.summary.expiring} tone={lib.summary.expiring ? 'amber' : undefined} sub="Renewing takes time" onClick={() => setFilter('expiring')} />
-        <Kpi label="No file" value={noFile} tone={noFile ? 'amber' : undefined} sub="Details only — satisfies nothing" onClick={() => setFilter('nofile')} />
-      </div>
+      <StatGrid>
+        <Kpi icon="book-open" tone="blue" label="In the library" value={lib.summary.total} onClick={() => setFilter('all')} />
+        <Kpi icon="calendar-x" label="Expired" value={lib.summary.expired} tone={lib.summary.expired ? 'red' : undefined} sub="Fails every bid it is filed on" onClick={() => setFilter('expired')} />
+        <Kpi icon="calendar-clock" label="Expiring within 60 days" value={lib.summary.expiring} tone={lib.summary.expiring ? 'amber' : undefined} sub="Renewing takes time" onClick={() => setFilter('expiring')} />
+        <Kpi icon="file-warning" label="No file" value={noFile} tone={noFile ? 'amber' : undefined} sub="Details only — satisfies nothing" onClick={() => setFilter('nofile')} />
+      </StatGrid>
       <div className="flex flex-wrap items-center gap-2">
         <input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search name, reference, kind" aria-label="Search the library" className={input + ' !w-[240px]'} />
         <div className="flex flex-wrap gap-1.5" role="tablist" aria-label="Show">
