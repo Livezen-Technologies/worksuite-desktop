@@ -13,6 +13,10 @@ person who has to live with the change — what it does, and where it bites.
 
 ## Unreleased
 
+### Changed
+
+- **The app launcher, redrawn** (light and dark): the popover is one 16px-rounded card over the dimmed, blurred app. The search has a focus ring and the launcher's shortcut at its end, with a square close button beside it. Pinned and Recent are chips with each app's icon. The categories are pills with their counts, **All** first, the one shown solid in the primary colour. Under All, the apps are listed category by category, each under its name in capitals and its count, and the grid then uses all the room the popover has (at most 640px), at one height whichever category you pick. Compact tiles have 48px icons. A pinned app has a star at its top left; click the star on any tile, shown when you point at it or select it, to pin or unpin the app. The footer lists the keys (arrows move, ↵ opens, Tab changes the category, Esc closes) and says how to pin and reorder. The launcher's settings button is now at the footer's right end. ⌘↵ / Ctrl+↵ still opens an app in a new window, and the tile's menu still has it. The menu key, or Shift+F10, opens the selected tile's menu with its first item focused. Full screen and the bottom sheet keep their layout, and get the stars too.
+
 ### Fixed
 
 - Sign out of an account: the Sign out button was drawn white on white, so the dialog seemed to offer only Cancel. It is now the dialog's primary button, next to Cancel.

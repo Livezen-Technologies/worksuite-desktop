@@ -51,7 +51,7 @@ try {
   await t.shot('l1-launcher');
   const cats = await t.evaluate(`[...${dialog('Apps')}.querySelectorAll('[role="tab"]')].map(b => b.textContent.trim())`);
   const tiles = await t.evaluate(`${dialog('Apps')}.querySelectorAll('[role="option"]').length`);
-  t.check('the launcher shows every app as a tile, with categories and their counts', tiles >= 6 && cats[0]?.startsWith('All apps') && cats.some((c) => c.startsWith('Communication')), JSON.stringify({ tiles, cats }));
+  t.check('the launcher shows every app as a tile, with categories and their counts', tiles >= 6 && cats[0]?.startsWith('All') && cats.some((c) => c.startsWith('Communication')), JSON.stringify({ tiles, cats }));
   const web = await t.evaluate(`[...${dialog('Apps')}.querySelectorAll('[role="option"]')].some(b => !!b.querySelector('[title="Opens in your browser"]'))`);
   t.check('apps without a desktop screen carry the browser mark, and no tile says "Desktop app"', web && !(await t.evaluate(`${dialog('Apps')}.innerText.includes('Desktop app')`)));
   const box = await t.evaluate(`(() => { const r = ${dialog('Apps')}.getBoundingClientRect(); return { w: r.width, h: r.height, b: r.bottom, vw: innerWidth, vh: innerHeight }; })()`);
